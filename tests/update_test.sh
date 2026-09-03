@@ -22,6 +22,9 @@ echo "update_test: $T"
 # changes, one commit on top of HEAD carries them, so the test proves the
 # tree at hand (the pre-commit case), not only what was last committed
 git clone -q --bare "$REPO" "$T/origin.git"
+# the real repository carries release tags; the fixture makes its own, so
+# drop the inherited ones first (a name collision would fail `git tag`)
+for t in $(git -C "$T/origin.git" tag -l); do git -C "$T/origin.git" tag -d "$t" >/dev/null; done
 if [ -n "$(git -C "$REPO" status --porcelain)" ]; then
     tree=$(GIT_INDEX_FILE="$T/index" sh -c 'cd "$1" && git add -A >/dev/null && git write-tree' sh "$REPO")
     commit=$(git -C "$REPO" commit-tree "$tree" -p HEAD -m "update_test: the working tree")
