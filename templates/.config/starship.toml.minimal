@@ -1,0 +1,21 @@
+# rendered by spark install.sh (SITE_PROMPT_STYLE=minimal) -- edit site.env or the template
+# The blank line above the prompt is where spark prints its hint; keep it.
+add_newline = true
+format = "$directory$git_branch$git_status$character"
+
+[directory]
+style = "bold @THEME_ACCENT@"
+truncation_length = 3
+truncate_to_repo = true
+
+[git_branch]
+format = "[$branch]($style) "
+style = "@THEME_ANSI_5@"
+
+[git_status]
+format = "[$all_status$ahead_behind]($style) "
+style = "@THEME_ANSI_3@"
+
+[character]
+success_symbol = "[>](@THEME_ANSI_2@)"
+error_symbol = "[>](@THEME_ANSI_1@)"

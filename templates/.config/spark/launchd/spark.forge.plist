@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- rendered by spark install.sh; installed into ~/Library/LaunchAgents by
+     bootstrap.sh when SPARK_FORGE=on, or auto and the model server is
+     installed too. The FORGE starts without the engine and waits for it. -->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>spark.forge</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>@HOME@/.local/bin/spark</string>
+		<string>forge</string>
+		<string>--foreground</string>
+	</array>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>HOME</key>
+		<string>@HOME@</string>
+		<key>PATH</key>
+		<string>@HOME@/.local/bin:@BREW_PREFIX@/bin:/usr/bin:/bin</string>
+	</dict>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>ThrottleInterval</key>
+	<integer>15</integer>
+	<key>StandardOutPath</key>
+	<string>@HOME@/.local/state/spark/forge.log</string>
+	<key>StandardErrorPath</key>
+	<string>@HOME@/.local/state/spark/forge.log</string>
+</dict>
+</plist>

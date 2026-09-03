@@ -1,0 +1,21 @@
+# spark-forge.service -- the served agent: API + page for this LAN (Linux).
+# Enabled by bootstrap.sh when SPARK_FORGE=on, or auto and the model server
+# is enabled too. `spark forge off` disables it on purpose. It only orders
+# after spark-serve: the FORGE starts without the engine and waits for it.
+[Unit]
+Description=spark forge -- the served agent for this LAN
+After=network-online.target spark-serve.service
+
+[Service]
+# the user's tools (starship, the engine, spark itself) live in ~/.local/bin
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Type=simple
+ExecStart=%h/.local/bin/spark forge --foreground
+Restart=on-failure
+RestartSec=15
+# 78 = EX_CONFIG: a bad SPARK_FORGE_* value or an unwritable state dir.
+# Not a crash, so no restart loop; the services row names it instead.
+SuccessExitStatus=78
+
+[Install]
+WantedBy=default.target

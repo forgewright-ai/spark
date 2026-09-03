@@ -1,0 +1,172 @@
+# spark CI -- the second net. The first is .githooks on the workstation.
+# linux: every hermetic test, then a REAL bootstrap on the runner (a fresh
+# Ubuntu with sudo, the shell layer on), which must converge to "Nothing to
+# do" and pass `spark check`.
+# debian: the README's first-named platform, as a stranger meets it -- a
+# Debian 13 container, a user made for the run, the one-liner in pipe form
+# from the tree under test, the AI layer only; converges the same way.
+# macos: syntax, the selftest and the zsh pty test under Apple's python 3.9;
+# then (not on a pull request) the real core bootstrap, and the shell layer
+# on top of it (the Brewfile, the font cask).
+# No job downloads a model: SITE_AI_MODEL=none everywhere; the engine
+# tarball is the one real download.
+name: ci
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # spark ver derives from git describe: get_test and update_test need real tags
+      - name: syntax
+        run: |
+          sh -n bootstrap.sh install.sh lib/env.sh get .githooks/pre-commit .githooks/pre-push tests/install_test.sh
+          bash -n home/.config/spark/widget.bash linux/home/.bashrc
+          python3 -m py_compile bin/spark lib/spark/*.py tests/*.py
+          sudo apt-get install -y -qq shellcheck >/dev/null && shellcheck -S warning bootstrap.sh install.sh lib/env.sh get .githooks/pre-commit .githooks/pre-push
+      - name: privacy gate over the whole tree
+        # the personal word list is a repository secret (one word per line);
+        # a fork without it gets a NOTICE and the generic patterns only
+        env:
+          SPARK_PRIVACY_TERMS_SECRET: ${{ secrets.SPARK_PRIVACY_TERMS }}
+        run: |
+          printf '%s\n' "$SPARK_PRIVACY_TERMS_SECRET" > "$RUNNER_TEMP/privacy-terms"
+          terms=$(cat .privacy-terms "$RUNNER_TEMP/privacy-terms" | grep -v '^#' | grep -v '^[[:space:]]*$' | sort -u | paste -sd'|' -)
+          if [ -z "$terms" ]; then echo "NOTICE: no privacy word list -- generic patterns only"; else
+            ! git grep -i -w -E "$terms" -- . ':(exclude).privacy-terms'; fi
+          ! git grep -n -E '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' -- . | grep -v 'you@example.com'
+          ! git grep -n -E '\b(10\.[0-9]+\.[0-9]+\.[0-9]+|192\.168\.[0-9]+\.[0-9]+|172\.(1[6-9]|2[0-9]|3[01])\.[0-9]+\.[0-9]+)\b' -- .
+      - name: hermetic tests
+        run: |
+          sh tests/install_test.sh
+          sh tests/get_test.sh
+          sh tests/update_test.sh
+          python3 tests/smoke.py
+          python3 tests/serve_smoke.py
+          python3 tests/forge_smoke.py
+          python3 tests/bench_smoke.py
+          python3 tests/widget_pty.py bash home/.config/spark/widget.bash
+          python3 bin/spark check --selftest
+      - name: real bootstrap on the runner
+        env:
+          SITE_AI_MODEL: none
+        run: |
+          mkdir -p ~/.config/spark
+          # the shell layer on: its rows (starship, font, tmux) are proved here too
+          printf 'SITE_AI_MODEL=none\nSITE_SHELL=on\nSITE_GIT_NAME=ci\nSITE_GIT_EMAIL=you@example.com\n' > ~/.config/spark/site.env
+          ./bootstrap.sh
+          ./bootstrap.sh --dry-run | tee /tmp/dry.txt
+          grep -q '^Nothing to do$' /tmp/dry.txt
+          # no model here: serve stays on demand and the forge (auto) stays off -- a skip, never a fail
+          grep -qE '^skip +(spark-forge|systemd) ' /tmp/dry.txt
+          ~/.local/bin/spark check --fresh || true
+          ~/.local/bin/spark check --porcelain --fresh | awk -F'\t' '$1=="SOFTWARE" && $2=="fail" && $3!="services" { bad=1; print } END { exit bad }'
+  debian:
+    # the stranger's first ten minutes, on the platform the README names
+    # first: a user who is not root, sudo without a password (so setup's
+    # `sudo -n true` says yes and bootstrap's apt row runs), stdin a pipe
+    # (setup takes every default, asks nothing), no model. There is no
+    # systemd in a container: the services rows skip, and `spark check`
+    # reads `na` for services, as INSTALL.md's Container note promises.
+    runs-on: ubuntu-latest
+    container: debian:13
+    timeout-minutes: 20
+    env:
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      # git first: without it in the container, actions/checkout downloads a
+      # tarball with no .git, and the stranger's clone has nothing to clone
+      - run: apt-get update -qq && apt-get install -y -qq git ca-certificates >/dev/null
+      - uses: actions/checkout@v4
+        with:
+          # a full history: the stranger's clone comes from this tree, and
+          # `spark ver` describes it
+          fetch-depth: 0
+      - name: a stranger with sudo
+        run: |
+          apt-get update -qq && apt-get install -y -qq sudo git curl ca-certificates python3 >/dev/null
+          useradd -m -s /bin/bash stranger
+          echo 'stranger ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/stranger && chmod 440 /etc/sudoers.d/stranger
+          # the checkout is root-owned; a file:// clone runs upload-pack in it as stranger
+          git config --system safe.directory '*'
+          # the clone takes the branch HEAD points at: give a detached checkout one
+          git -C "$GITHUB_WORKSPACE" symbolic-ref -q HEAD >/dev/null || git -C "$GITHUB_WORKSPACE" checkout -q -B ci
+      - name: the one-liner, pipe form, from the tree under test
+        run: |
+          # SPARK_REF: a stranger lands on the newest tag, which is the release
+          # before this one -- the job proves the tree under test, so name its branch
+          ref=$(git -C "$GITHUB_WORKSPACE" symbolic-ref -q --short HEAD || echo ci)
+          sudo -u stranger -H env SITE_AI_MODEL=none SITE_GIT_NAME=ci SITE_GIT_EMAIL=you@example.com SPARK_URL="file://$GITHUB_WORKSPACE" SPARK_REF="$ref" \
+            sh -c 'cat "$1" | sh' _ "$GITHUB_WORKSPACE/get"
+      - name: converged, checked, hooked
+        run: |
+          sudo -u stranger -H sh -c '~/.spark/bootstrap.sh --dry-run' | tee /tmp/dry.txt
+          grep -q '^Nothing to do$' /tmp/dry.txt
+          # no systemd in a container: the units skip, never fail
+          grep -qE '^skip +systemd ' /tmp/dry.txt
+          sudo -u stranger -H sh -c '~/.local/bin/spark check --fresh' || true
+          sudo -u stranger -H sh -c '~/.local/bin/spark check --porcelain --fresh' > /tmp/porcelain.txt
+          awk -F'\t' '$1=="SOFTWARE" && $2=="fail" && $3!="services" { bad=1; print } END { exit bad }' /tmp/porcelain.txt
+          # INSTALL.md, Container: without a user systemd session the services row reads na
+          awk -F'\t' '$3=="services" { print; found=1; if ($2!="na") bad=1 } END { exit bad || !found }' /tmp/porcelain.txt
+          # the core rc hook: one marked line at the end of the stranger's .bashrc
+          sudo -u stranger -H sh -c 'grep -q "config/spark/hook\." ~/.bashrc'
+  macos:
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # spark ver derives from git describe: get_test and update_test need real tags
+      - name: syntax under Apple's python
+        run: |
+          /usr/bin/python3 --version
+          zsh -n home/.config/spark/widget.zsh macos/home/.zshrc macos/home/.zprofile
+          /usr/bin/python3 -m py_compile bin/spark lib/spark/*.py tests/*.py
+      - name: hermetic tests
+        run: |
+          sh tests/install_test.sh
+          sh tests/get_test.sh
+          sh tests/update_test.sh
+          /usr/bin/python3 tests/smoke.py
+          /usr/bin/python3 tests/serve_smoke.py
+          /usr/bin/python3 tests/forge_smoke.py
+          /usr/bin/python3 tests/bench_smoke.py
+          /usr/bin/python3 tests/widget_pty.py zsh home/.config/spark/widget.zsh
+          /usr/bin/python3 bin/spark check --selftest
+      - name: real core bootstrap on the runner
+        # the AI layer as a Mac user gets it: the engine tarball, the token,
+        # the tools, one line in ~/.zshrc, no Homebrew, no model. Not on a
+        # pull request. SHELL names the Mac user's login shell; the runner's
+        # own is bash 3, which cannot host the widget (a todo row, by design).
+        if: github.event_name != 'pull_request'
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+          SHELL: /bin/zsh
+        run: |
+          mkdir -p ~/.config/spark
+          printf 'SITE_AI_MODEL=none\nSITE_GIT_NAME=ci\nSITE_GIT_EMAIL=you@example.com\n' > ~/.config/spark/site.env
+          time ./bootstrap.sh
+          ./bootstrap.sh --dry-run | tee /tmp/dry.txt
+          [ "$(tail -1 /tmp/dry.txt)" = 'Nothing to do' ]
+          grep -q 'config/spark/hook\.' ~/.zshrc
+          ~/.local/bin/spark check --fresh || true
+          # a runner may have no gui launchd domain: the launchd rows skip and services may fail; nothing else may
+          ~/.local/bin/spark check --porcelain --fresh | awk -F'\t' '$1=="SOFTWARE" && $2=="fail" && $3!="services" { bad=1; print } END { exit bad }'
+      - name: the shell layer on top
+        # spark shell on, as bootstrap does it: the Brewfile (the font cask
+        # included), the rc files become spark's, the terminfo; a second
+        # dry-run must converge on top of the first
+        if: github.event_name != 'pull_request'
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: '1'
+          SHELL: /bin/zsh
+        run: |
+          echo 'SITE_SHELL=on' >> ~/.config/spark/site.env
+          time ./bootstrap.sh
+          ./bootstrap.sh --dry-run | tee /tmp/dry.txt
+          [ "$(tail -1 /tmp/dry.txt)" = 'Nothing to do' ]
+          brew bundle check --file Brewfile --no-upgrade
+          ~/.local/bin/spark check --porcelain --fresh | awk -F'\t' '$1=="SOFTWARE" && $2=="fail" && $3!="services" { bad=1; print } END { exit bad }'

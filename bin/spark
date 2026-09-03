@@ -1,0 +1,168 @@
+#!/usr/bin/env python3
+# spark -- your own AI, on your own machine, at no cost
+#
+#   spark chat                 a conversation; spark @FILE words asks about a file
+#   spark <words>              ask; a streamed answer
+#   spark do <words>           a task, one confirmed command at a time
+#   ? how big is this dir?     at the prompt: the answer lands in your line
+#   cmd 2>&1 | explain         what went wrong (explain is a symlink to spark)
+#   spark serve | stop         the local model server
+#   spark check                is this machine still what its repo says?
+#   spark bar                  the tmux status line
+#
+# Python 3.9+, stdlib only. The package lives in lib/spark/ beside the real
+# location of this file; ~/.local/bin/spark is a symlink into the repo.
+
+import os
+import signal
+import sys
+
+# `spark ... | head` must end quietly: default SIGPIPE, not a traceback.
+signal.signal(signal.SIGPIPE, signal.SIG_DFL)
+
+_HERE = os.path.dirname(os.path.realpath(__file__))
+_LIB = os.path.join(os.path.dirname(_HERE), "lib")
+if _LIB not in sys.path:
+    sys.path.insert(0, _LIB)
+
+from spark import MARK, say  # noqa: E402
+
+USAGE_HEAD = """%s -- your own AI, on your own machine, at no cost
+
+the AI
+  spark chat [words]          a conversation (/help lists verbs, Ctrl-D ends)
+  spark [@FILE] <words>       ask about anything, or a file; a streamed answer
+  spark do <words>            a task, one command at a time; you confirm each
+  ?? words                    follow up on the last answer (same thread)
+  spark                       status: brain, widget, server, soul, memory, last
+  spark off | on              silence / restore the prompt, every pane at once
+
+at the prompt: the surprise -- your question becomes a command in your line
+  ? words   or   words?   Enter   the command lands in your line, hint above
+  Esc a                       ask about the line you are on, no ? needed
+  cmd 2>&1 | explain          what went wrong, and the fix
+
+the FORGE: the agent spark keeps on this machine, one identity
+  spark soul [edit|reset]     who it is: ~/.config/spark/soul, yours
+  spark remember <words>      a fact it keeps; spark forget N; spark memory
+  spark ember [NAME|auto|none]  a second brain for conversations (opt-in)
+  spark forge [on|off]        the FORGE on the LAN: API + page (-h: the tokens)
+
+the server
+  spark model [NAME|list]     the table, or choose one (download, restart)
+  spark serve | stop          start it (one LAN address, token required); stop
+""" % MARK
+
+USAGE_MACHINE = """the machine
+  spark setup                 the guided first run: name, model, light it up
+  spark check                 drift report; exit 0 = every promise kept
+  spark update                the newest tag, or main on a developer clone
+  spark shell [on|off]        the shell layer: off = the prompt widget only
+  spark headless [on|off]     the FORGE up from boot, never asleep (a brain)
+  spark ver                   logo, version, credits
+
+less often (spark <sub> -h has every flag: check --watch, stop --force ...)
+  spark last | history        the last exchange, with its tok/s; the threads
+  spark stats | bench | tune  the numbers; llama-bench; the best settings
+  spark brain                 what answers right now: a FORGE or a llama-server
+"""
+
+USAGE_SHELL = """the shell (spark shell on)
+  spark bar [on|off]          show / hide tmux's status line (a toggle)
+  spark theme [NAME|show]     the palettes; choose one; show = its colours
+  spark font [FACE SIZE]      the console font (Linux) / Terminal.app's (macOS)
+  spark bootconfig [quiet|loud]   Linux: motd, kernel line, GRUB menu
+"""
+# with the layer off, the block above folds into this one line
+USAGE_SHELL_OFF = """  spark shell on              tmux, starship, micro ... + bar, font, bootconfig
+"""
+
+USAGE_TAIL = """what leaves this machine: the line you typed, the directory path, the shell
+and OS name; with a conversation your soul, your remembered facts and the
+thread's earlier turns (the prompt line sends machine facts only); for
+explain the piped text (last 6 kB); for @FILE its first 4 kB and last 12 kB;
+for spark do each step's output (last 4 kB). Nothing else, and only to the
+FORGE or llama-server you configured.                           version %s
+"""
+
+
+def usage():
+    """The help, with the shell block only when the layer is on. Reading
+    the config must never break help: no site.env means off. The version is
+    formatted here, not at import: nothing on the `spark line` path may call
+    git, and version() (lib/spark/version.py) does, on a cache miss."""
+    try:
+        from spark import config
+        shell = config.load().shell
+    except Exception:
+        shell = False
+    from spark import version
+    tail = USAGE_TAIL % version.version()
+    return USAGE_HEAD + "\n" + USAGE_MACHINE + (USAGE_SHELL_OFF if not shell else "\n" + USAGE_SHELL) + "\n" + tail
+
+
+def main(argv):
+    sub = argv[0] if argv else ""
+    rest = argv[1:]
+    if sub in ("-h", "--help", "help"):
+        say(usage().rstrip())
+        return 0
+    if sub == "setup":
+        from spark import setup
+        return setup.main(rest)
+    if sub == "check":
+        from spark import check
+        return check.main(rest)
+    if sub == "update":
+        from spark import update
+        return update.cmd_update(rest)
+    if sub == "bar":
+        from spark import bar
+        return bar.main(rest)
+    if sub == "theme":
+        from spark import theme
+        return theme.main(rest)
+    if sub in ("bench", "tune"):
+        from spark import bench
+        return bench.main(sub, rest)
+    if sub == "stats":
+        from spark import stats
+        return stats.main(rest)
+    if sub in ("shell", "font", "bootconfig", "model", "headless", "ember"):
+        from spark import site
+        return site.main(sub, rest)
+    if sub in ("serve", "stop"):
+        from spark import serve
+        return serve.main(sub, rest)
+    if sub == "forge":
+        from spark import forgeserve
+        return forgeserve.main(rest)
+    from spark import cli
+    if len(argv) == 1 and " " not in sub and not sub.endswith("?") and not sub.startswith("@") and sub not in cli.COMMANDS:
+        # one word that is not a command: a slip, not a question -- questions
+        # are several words (quoted or not), end with ?, or name a file (@FILE)
+        return misplaced(sub)
+    return cli.main(argv)
+
+
+def misplaced(word):
+    from spark import REPO, config
+    themes = sorted(f[:-4] for f in os.listdir(os.path.join(REPO, "themes")) if f.endswith(".env"))
+    if word in themes or word == "none":
+        say("spark: %s is a palette -- spark theme %s" % (word, word))
+    elif word in {r[0] for r in config.models_table()} or word == "auto":
+        say("spark: %s is a model -- spark model %s" % (word, word))
+    else:
+        say("spark: no command named %s -- spark help lists them; a question is several words, or ends with ?" % word)
+    return 2
+
+
+if __name__ == "__main__":
+    argv = sys.argv[1:]
+    # `explain` on PATH is a symlink to this file: the name picks the mode.
+    if os.path.basename(sys.argv[0]) == "explain":
+        argv = ["explain"] + argv
+    try:
+        sys.exit(main(argv))
+    except KeyboardInterrupt:
+        sys.exit(130)

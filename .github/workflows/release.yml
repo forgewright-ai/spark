@@ -1,0 +1,41 @@
+# spark release -- a v* tag on a green commit becomes a GitHub Release whose
+# notes are that version's CHANGELOG section. The tag must agree with the
+# code: the `## vX.Y` heading, and `spark ver` (which derives the version
+# from the tag itself, via git describe -- lib/spark/version.py) saying the
+# same thing. Nothing is rerun here; the Releasing section of CLAUDE.md
+# says to tag only after ci is green.
+name: release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # spark ver needs the tag reachable to describe it
+      - name: the tag agrees with the CHANGELOG
+        run: |
+          v=${GITHUB_REF_NAME#v}
+          grep -qx "## v$v" CHANGELOG.md \
+            || { echo "release: tag $GITHUB_REF_NAME but CHANGELOG.md has no '## v$v' heading"; exit 1; }
+      - name: the tag agrees with spark ver
+        run: |
+          v=${GITHUB_REF_NAME#v}
+          line=$(python3 bin/spark ver | grep '^spark ')
+          [ "$line" = "spark $v" ] \
+            || { echo "release: tag $GITHUB_REF_NAME but spark ver says: $line"; exit 1; }
+      - name: the notes are the CHANGELOG section
+        run: |
+          v=${GITHUB_REF_NAME#v}
+          awk -v h="## v$v" '$0 == h { on = 1; next } on && /^## / { exit } on' CHANGELOG.md > notes.md
+          [ -s notes.md ] || { echo "release: the '## v$v' section of CHANGELOG.md is empty"; exit 1; }
+          cat notes.md
+      - name: create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --title "spark $GITHUB_REF_NAME" --notes-file notes.md --verify-tag

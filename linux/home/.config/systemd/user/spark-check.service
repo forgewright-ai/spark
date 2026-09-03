@@ -1,0 +1,11 @@
+# spark-check.service -- one `spark check`, run by spark-check.timer, so the
+# status line always has a fresh verdict (state/check.json) to show.
+[Unit]
+Description=spark check -- drift report snapshot
+
+[Service]
+# the user's tools (starship, the engine, spark itself) live in ~/.local/bin
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Type=oneshot
+ExecStart=%h/.local/bin/spark check --porcelain
+StandardOutput=null

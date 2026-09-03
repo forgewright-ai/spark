@@ -1,0 +1,72 @@
+SPARK CHEATSHEET                                          lp CHEATSHEET.txt
+
+THE AI
+  spark chat [words]              one more turn, or a chat (/help for verbs)
+  spark <words>                   a streamed answer     spark last  the last
+  spark do <words>                a task, one confirmed command at a time
+  ?? words                        follow up on the last answer (same thread)
+  spark @FILE words               ask about a file (first 4 kB, last 12 kB)
+  spark soul [edit|reset]         who it is: default soul, replace with edit
+  spark remember WORDS            a fact it keeps    spark forget N  drops it
+  spark memory [on|off|clear]     the facts it recalls on every answer
+  spark ember [NAME|auto|none]    a second brain for conversations (opt-in)
+  spark                           status: brain, widget, server, soul, last
+
+AT THE PROMPT
+  ? words   or   words?   Enter   the command lands in your line, hint above
+  Enter again                     runs it (! = read it first; it deletes)
+  Esc a                           ask about the line you are on, no ?
+  cmd 2>&1 | explain              what went wrong, and the fix
+  spark off | spark on            silence / restore every pane at once
+
+THE SERVER
+  spark model [NAME|list]         the table; choose one (download + restart)
+  spark model add URL             add your own (--sha256, --license required)
+  spark model verify              sha256 every downloaded file now, exit 1 bad
+  spark serve | spark stop        one LAN address, token required; stop
+  spark stop --force [--noreload] also the unit's server; and keep it down
+  spark brain                     what answers now: a FORGE or a llama-server
+  spark stats [--week]            tok/s, latency, cache hits, GPU, baseline
+  spark bench [--tune]            llama-bench; --tune finds the best settings
+  spark tune show | apply         the winner; apply writes spark.env, restarts
+  spark forge [on|off]            the FORGE: the agent's API + page, on the LAN
+  spark forge --print-client      the URL + user token a peer machine needs
+  spark forge --print-url [--user]  the login URL; that role's token on a tty
+  spark forge token --new [--user]  rotate the admin (or user) token
+
+THE MACHINE
+  spark setup                     the guided first run: name, model, light it
+  spark check                     drift report; exit 0 = every promise kept
+  spark check --watch 5           redraw every 5 s     --selftest  prove rows
+  spark shell [on|off]            spark's own shell: tmux, starship, micro ...
+                                  on links the rc files (yours -> .bak)
+  spark headless [on|off]         the FORGE up from boot, never asleep (brain)
+  spark ver                       logo, version, credits (the login greeting)
+  spark update                       the newest tag; main pulls on a dev clone
+  ./bootstrap.sh --dry-run        what a rebuild would change (never sudo)
+  ./bootstrap.sh                  apply; converged = Nothing to do
+  curl -fsSL .../spark/main/get | sh     update: pull, then spark setup again
+  ~/.config/spark/site.env  name, user, model, ember, budget, shell, peer, theme
+  ~/.config/spark/spark.env       ports, URLs, engine, history, memory, forge
+
+THE SHELL (spark shell on)
+  spark bar [on|off]              tmux's status line (a toggle)
+  spark theme NAME | list | show  a palette; none = the terminal's own
+  spark font FACE SIZE            console font (Terminus 16x32) / Terminal.app
+  spark bootconfig quiet | loud   Linux: motd, kernel line, GRUB menu
+  tmux (prefix C-b)  c new window   n/p next/prev   | split right  - below
+                     h j k l panes  d detach  r reload  [ scroll/copy (vi)
+  z DIR (zoxide)   C-r history (fzf)   C-t files (fzf)   rg PATTERN
+  fd NAME  eza -la  bat FILE  btop  micro FILE (C-s save, C-q quit)
+
+LINUX
+  systemctl --user status spark-serve spark-forge spark-check.timer
+  journalctl --user -u spark-serve -n 50     (spark-forge likewise)
+  ~/.local/state/spark/forge.log             the FORGE's own log (both OSes)
+  fd/bat are fdfind/batcat on Debian; the shell layer's rc aliases them
+
+MACOS
+  launchctl print gui/$UID/spark.serve         is the agent loaded? (.forge too)
+  launchctl kickstart -k gui/$UID/spark.serve  restart it
+  spark headless on: both live in system/; restart and stop need sudo launchctl
+  Option is not Meta in Terminal.app: press Esc, then a

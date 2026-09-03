@@ -1,0 +1,108 @@
+#!/bin/sh
+# spark pre-commit gate. Fast (< 5 s). A tool that is missing on this machine
+# prints a NOTICE and is skipped; it never silently passes and never disables
+# the gate. The privacy gate has no skip path.
+set -eu
+cd "$(git rev-parse --show-toplevel)"
+fail=0
+notice() { printf 'NOTICE: %s\n' "$*"; }
+bad() { printf 'pre-commit: %s\n' "$*"; fail=1; }
+
+# --- 1. privacy gate: staged content only -------------------------------
+# Banned words (whole word, any case) from the union of .privacy-terms and
+# the local list -- $SPARK_PRIVACY_TERMS, else ~/.config/spark/privacy-terms
+# -- plus e-mail addresses, private IPv4 ranges and home-directory paths
+# that name a user. The three patterns always run; a missing word list is a
+# NOTICE, never silence, and an empty list never becomes grep -E "".
+staged_files=$(git diff --cached --name-only --diff-filter=ACMR)
+if [ -n "$staged_files" ]; then
+    local_terms=${SPARK_PRIVACY_TERMS:-${XDG_CONFIG_HOME:-$HOME/.config}/spark/privacy-terms}
+    terms=$(cat .privacy-terms "$local_terms" 2>/dev/null \
+            | sed 's/#.*//; s/^[[:space:]]*//; s/[[:space:]]*$//' | grep -v '^$' | sort -u | paste -sd'|' -)
+    [ -n "$terms" ] || notice "no privacy word list ($(printf '%s' "$local_terms" | sed "s|^$HOME|~|")) -- generic patterns only"
+    # .privacy-terms is the one tracked file allowed to contain the words.
+    added=$(git diff --cached --diff-filter=ACMR -U0 -- . ':(exclude).privacy-terms' \
+            | grep '^+' | grep -v '^+++' || true)
+    if [ -n "$added" ]; then
+        if [ -n "$terms" ]; then
+            hit=$(printf '%s\n' "$added" | grep -iEn "\\b($terms)\\b" || true)
+            [ -z "$hit" ] || bad "banned word in staged change:
+$hit"
+        fi
+        hit=$(printf '%s\n' "$added" | grep -En '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' \
+              | grep -v 'you@example.com' || true)
+        [ -z "$hit" ] || bad "e-mail address in staged change:
+$hit"
+        hit=$(printf '%s\n' "$added" \
+              | grep -En '\b(10\.[0-9]+\.[0-9]+\.[0-9]+|192\.168\.[0-9]+\.[0-9]+|172\.(1[6-9]|2[0-9]|3[01])\.[0-9]+\.[0-9]+)\b' || true)
+        [ -z "$hit" ] || bad "private IPv4 address in staged change:
+$hit"
+        # absolute paths only: a repo-relative `linux/home/...` is fine
+        hit=$(printf '%s\n' "$added" | grep -En '(^.|[^[:alnum:]/._-])/(home|Users)/[A-Za-z0-9_-]+' || true)
+        [ -z "$hit" ] || bad "home path naming a user in staged change:
+$hit"
+    fi
+fi
+
+# --- 2. syntax ------------------------------------------------------------
+for f in bootstrap.sh install.sh get .githooks/pre-commit .githooks/pre-push tests/install_test.sh; do
+    [ -f "$f" ] || continue
+    sh -n "$f" || bad "sh -n $f"
+done
+if [ -f home/.config/spark/widget.bash ]; then
+    bash -n home/.config/spark/widget.bash linux/home/.bashrc linux/home/.bash_profile 2>/dev/null \
+        || bad "bash -n widget.bash / .bashrc"
+fi
+if command -v zsh >/dev/null 2>&1; then
+    for f in home/.config/spark/widget.zsh macos/home/.zshrc macos/home/.zprofile; do
+        [ -f "$f" ] || continue
+        zsh -n "$f" || bad "zsh -n $f"
+    done
+else
+    notice "zsh not found; zsh syntax not checked"
+fi
+if ls bin/spark lib/spark/*.py tests/*.py >/dev/null 2>&1; then
+    python3 -m py_compile bin/spark lib/spark/*.py tests/*.py || bad "py_compile"
+fi
+
+# --- 3. tests for this OS ------------------------------------------------
+for t in tests/smoke.py tests/serve_smoke.py tests/forge_smoke.py tests/bench_smoke.py; do
+    [ -f "$t" ] && { python3 "$t" >/dev/null || bad "$t"; }
+done
+if [ -f tests/widget_pty.py ]; then
+    case "$(uname -s)" in
+        Darwin) python3 tests/widget_pty.py zsh home/.config/spark/widget.zsh >/dev/null || bad "widget_pty zsh" ;;
+        *)      python3 tests/widget_pty.py bash home/.config/spark/widget.bash >/dev/null || bad "widget_pty bash" ;;
+    esac
+fi
+if [ -f bin/spark ] && [ -f lib/spark/check.py ]; then
+    python3 bin/spark check --selftest >/dev/null || bad "spark check --selftest"
+fi
+
+# --- 4. the printed cheatsheet must fit 80 columns -----------------------
+if [ -f CHEATSHEET.txt ]; then
+    long=$(awk 'length > 80 { printf "  line %d (%d cols)\n", NR, length }' CHEATSHEET.txt)
+    [ -z "$long" ] || bad "CHEATSHEET.txt wider than 80 columns:
+$long"
+fi
+
+# --- 4b. docs stay ASCII: they are read on the console too; so does the
+#         FORGE page (served bytes, curl-able from that console) -----------
+for f in README.md INSTALL.md CLAUDE.md CHANGELOG.md CHEATSHEET.txt LICENSE \
+         CREDITS.md AGENTS.md CONTRIBUTING.md ROADMAP.md get \
+         lib/spark/forge/index.html lib/spark/forge/spark.css lib/spark/forge/spark.js; do
+    [ -f "$f" ] || continue
+    hit=$(LC_ALL=C grep -n '[^[:print:][:space:]]' "$f" | head -3 || true)   # bytes >= 0x80, BSD and GNU grep alike
+    [ -z "$hit" ] || bad "non-ASCII in $f (docs are read on the console):
+$hit"
+done
+
+# --- 5. shellcheck --------------------------------------------------------
+if command -v shellcheck >/dev/null 2>&1; then
+    shellcheck -S warning bootstrap.sh install.sh get .githooks/pre-commit .githooks/pre-push 2>/dev/null \
+        || bad "shellcheck"
+else
+    notice "shellcheck not found; skipped"
+fi
+
+[ "$fail" -eq 0 ] || { printf 'pre-commit: refused\n'; exit 1; }

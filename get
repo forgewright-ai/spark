@@ -1,0 +1,116 @@
+#!/bin/sh
+# spark get -- the one-liner: clone spark to ~/.spark, then spark setup.
+#
+#   curl -fsSL https://raw.githubusercontent.com/forgewright-ai/spark/main/get | sh
+#   sh get [--clone-only]          the same from a file you read first
+#
+# SPARK_HOME is where the clone goes (default ~/.spark); SPARK_URL where it
+# comes from (default the public https URL); SPARK_REF checks out a ref
+# right after a fresh clone (developers: SPARK_REF=main) -- with no ref, a
+# fresh clone detaches at the newest v* tag on origin, or stays on the
+# default branch when there is none. An existing spark clone: fetch tags,
+# then pull --ff-only on a branch, or move to the newest tag when detached
+# -- so this line is also the updater (`spark update` is the same, from
+# inside a checkout). Any other non-empty directory is refused. It never
+# runs sudo: apt is spark setup's, asked once. The whole body is one
+# function called on the last line, so a download cut short runs nothing.
+set -eu
+
+notice() { printf 'NOTICE: %s\n' "$*"; }
+refuse() { printf 'spark get: %s\n' "$*" >&2; exit 1; }
+
+main() {
+    dir=${SPARK_HOME:-$HOME/.spark}
+    url=${SPARK_URL:-https://github.com/forgewright-ai/spark.git}
+    ref=${SPARK_REF:-}
+    clone_only=0
+    for a in "$@"; do
+        case $a in
+            --clone-only) clone_only=1 ;;
+            *) refuse "no option $a (only --clone-only)" ;;
+        esac
+    done
+    case $dir in "$HOME"/*) show="~${dir#"$HOME"}" ;; *) show=$dir ;; esac
+    printf 'spark get -- clone %s to %s, then spark setup (no sudo)\n' "$url" "$show"
+
+    os=$(uname -s)
+    case $os in
+        Darwin)
+            # before git: without the command line tools, `git` itself pops
+            # Apple's install dialog
+            xcode-select -p >/dev/null 2>&1 \
+                || refuse "the command line tools are missing -- xcode-select --install, then run this again"
+            ;;
+        Linux)
+            command -v apt-get >/dev/null 2>&1 || refuse "no apt-get -- Debian-family only in this version"
+            case $(uname -m) in
+                x86_64|aarch64) ;;
+                *) notice "no prebuilt engine for $(uname -m): bootstrap skips it (SPARK_ENGINE_DIR names a build of your own)" ;;
+            esac
+            ;;
+        *) refuse "$os: Linux (Debian-family) or macOS only" ;;
+    esac
+    missing=''
+    command -v git >/dev/null 2>&1 || missing="$missing git"
+    if ! command -v python3 >/dev/null 2>&1 \
+       || ! python3 -c 'import sys; sys.exit(sys.version_info < (3, 9))' 2>/dev/null; then
+        missing="$missing python3>=3.9"
+    fi
+    if [ -n "$missing" ]; then
+        case $os in Darwin) fix="xcode-select --install" ;; *) fix="sudo apt-get install -y git python3 curl" ;; esac
+        refuse "missing:$missing -- $fix, then run this again"
+    fi
+    # Homebrew is the shell layer's (spark shell on), not the AI's: on PATH
+    # for bootstrap's brew row when it is there, a NOTICE when it is not
+    if [ "$os" = Darwin ]; then
+        for d in /opt/homebrew/bin /usr/local/bin; do
+            if [ -x "$d/brew" ]; then PATH="$d:$PATH"; export PATH; break; fi
+        done
+        command -v brew >/dev/null 2>&1 \
+            || notice "no Homebrew: fine for the AI; spark shell on wants it (https://brew.sh)"
+    fi
+
+    if [ -x "$dir/bin/spark" ] && [ -d "$dir/.git" ]; then
+        git -C "$dir" fetch -q --tags origin || refuse "git fetch --tags failed in $show -- git -C $show status says why"
+        if git -C "$dir" symbolic-ref -q HEAD >/dev/null 2>&1; then
+            git -C "$dir" pull -q --ff-only || refuse "git pull --ff-only failed in $show -- git -C $show status says why"
+            printf 'ok     clone        %s is spark already: pulled\n' "$show"
+        else
+            newest=$(git -C "$dir" tag -l 'v[0-9]*' --sort=-v:refname | head -1)
+            cur=$(git -C "$dir" describe --tags --exact-match 2>/dev/null) || cur=""
+            if [ -n "$newest" ] && [ "$newest" != "$cur" ]; then
+                git -C "$dir" checkout -q --detach "$newest" || refuse "git checkout --detach $newest failed in $show"
+                printf 'ok     clone        %s is spark already: moved to %s\n' "$show" "$newest"
+            else
+                printf 'ok     clone        %s is spark already: at %s\n' "$show" "${cur:-no tag}"
+            fi
+        fi
+    elif [ -e "$dir" ] && [ -n "$(ls -A "$dir" 2>/dev/null)" ]; then
+        refuse "$show exists and is not spark -- move it or set SPARK_HOME"
+    else
+        git clone -q "$url" "$dir" || refuse "git clone failed -- is $url reachable?"
+        if [ -n "$ref" ]; then
+            git -C "$dir" checkout -q "$ref" || refuse "git checkout $ref failed in $show"
+            printf 'ok     clone        %s at %s\n' "$show" "$ref"
+        else
+            newest=$(git -C "$dir" tag -l 'v[0-9]*' --sort=-v:refname | head -1)
+            if [ -n "$newest" ]; then
+                git -C "$dir" checkout -q --detach "$newest" || refuse "git checkout --detach $newest failed in $show"
+                printf 'ok     clone        %s at %s\n' "$show" "$newest"
+            else
+                printf 'ok     clone        %s\n' "$show"
+            fi
+        fi
+    fi
+    if [ "$clone_only" = 1 ]; then
+        printf 'next: %s/bin/spark setup\n' "$show"
+        exit 0
+    fi
+    # under `curl | sh` stdin is this script: the questions read the terminal
+    if [ -t 1 ] && [ -c /dev/tty ] && (: < /dev/tty) 2>/dev/null; then
+        exec "$dir/bin/spark" setup < /dev/tty
+    fi
+    exec "$dir/bin/spark" setup
+}
+
+main "$@"

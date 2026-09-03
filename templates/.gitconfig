@@ -1,0 +1,15 @@
+# rendered by spark install.sh from templates/.gitconfig -- edit site.env, not this
+[user]
+	name = @GIT_NAME@
+	email = @GIT_EMAIL@
+[init]
+	defaultBranch = main
+[pull]
+	rebase = false
+[push]
+	autoSetupRemote = true
+[core]
+	editor = micro
+[alias]
+	st = status -sb
+	lg = log --oneline --graph --decorate -20

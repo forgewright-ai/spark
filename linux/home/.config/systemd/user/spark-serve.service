@@ -1,0 +1,20 @@
+# spark-serve.service -- the always-on local model server (Linux).
+# Enabled by bootstrap.sh only when engine, model and token all exist and
+# SPARK_SERVICE=auto. `spark stop --force --noreload` disables it on purpose.
+[Unit]
+Description=spark serve -- local llama-server for this LAN
+After=network-online.target
+
+[Service]
+# the user's tools (starship, the engine, spark itself) live in ~/.local/bin
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Type=simple
+ExecStart=%h/.local/bin/spark serve --foreground
+Restart=on-failure
+RestartSec=15
+# 78 = EX_CONFIG: a missing engine, model or token. Not a crash, so no
+# restart loop; the services row names it instead.
+SuccessExitStatus=78
+
+[Install]
+WantedBy=default.target

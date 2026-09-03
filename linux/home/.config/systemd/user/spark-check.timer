@@ -1,0 +1,11 @@
+# spark-check.timer -- every five minutes. Enabled by bootstrap.sh.
+[Unit]
+Description=spark check every five minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

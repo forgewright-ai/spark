@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- rendered by spark install.sh; installed into ~/Library/LaunchAgents by
+     bootstrap.sh only when engine, model and token all exist, so that a
+     half-configured agent never relaunch-loops under KeepAlive. -->
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>spark.serve</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>@HOME@/.local/bin/spark</string>
+		<string>serve</string>
+		<string>--foreground</string>
+	</array>
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>HOME</key>
+		<string>@HOME@</string>
+		<key>PATH</key>
+		<string>@HOME@/.local/bin:@BREW_PREFIX@/bin:/usr/bin:/bin</string>
+	</dict>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>KeepAlive</key>
+	<true/>
+	<key>ThrottleInterval</key>
+	<integer>15</integer>
+	<key>StandardOutPath</key>
+	<string>@HOME@/.local/state/spark/serve.log</string>
+	<key>StandardErrorPath</key>
+	<string>@HOME@/.local/state/spark/serve.log</string>
+</dict>
+</plist>
