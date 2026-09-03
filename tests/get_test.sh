@@ -29,6 +29,11 @@ echo "get_test: $T"
 # changes, one commit on top of HEAD carries them, so the test proves the
 # tree at hand (the pre-commit case), not only what was last committed
 git clone -q --bare "$REPO" "$T/origin.git"
+# a detached source (a CI checkout at a tag) clones with no branch at all:
+# the fixture origin always has a main, so SPARK_REF=main has something to land on
+git -C "$T/origin.git" rev-parse -q --verify refs/heads/main >/dev/null 2>&1 \
+    || git -C "$T/origin.git" update-ref refs/heads/main "$(git -C "$T/origin.git" rev-parse HEAD)"
+git -C "$T/origin.git" symbolic-ref HEAD refs/heads/main 2>/dev/null || true
 if [ -n "$(git -C "$REPO" status --porcelain)" ]; then
     tree=$(GIT_INDEX_FILE="$T/index" sh -c 'cd "$1" && git add -A >/dev/null && git write-tree' sh "$REPO")
     commit=$(git -C "$REPO" commit-tree "$tree" -p HEAD -m "get_test: the working tree")
