@@ -20,6 +20,7 @@ import json
 import os
 import re
 import signal
+import struct
 import subprocess
 import sys
 import threading
@@ -27,6 +28,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from . import (BAR_CACHE, CHECK_JSON, CONFIG_DIR, EMBER_TOKEN_FILE, FORGE_LOCK, FORGE_LOG, FORGE_PID,
@@ -47,7 +49,9 @@ FAILS_PER_MIN = 10              # wrong logins from one address before 429
 BODY_MAX = 1_000_000            # a request body larger than this is 413
 LOG_MAX = 1_000_000             # forge.log rotates here, like serve.log
 STATIC = {"index.html": "text/html; charset=utf-8", "spark.css": "text/css; charset=utf-8",
-          "spark.js": "text/javascript; charset=utf-8"}
+          "spark.js": "text/javascript; charset=utf-8",
+          "manifest.webmanifest": "application/manifest+json; charset=utf-8",
+          "favicon.svg": "image/svg+xml; charset=utf-8"}
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "forge")
 UPSTREAM_TTL = 60               # a resolved upstream is trusted this long
 UPSTREAM_MISS_TTL = 5           # a failed resolution is not retried sooner
@@ -61,7 +65,7 @@ RUN_ARG = re.compile(r"^[A-Za-z0-9._/:@+= -]{0,200}$")
 # The verbs the page may run, and what their arguments must be (None: any
 # that match RUN_ARG). The verb itself validates and applies; nothing else
 # from the LAN writes config.
-RUN_VERBS = {"theme": None, "model": None, "font": None, "bootconfig": None, "bench": None, "on": None, "off": None,
+RUN_VERBS = {"theme": None, "model": None, "ember": None, "font": None, "bootconfig": None, "bench": None, "on": None, "off": None,
              "serve": None, "stop": None, "remember": None, "forget": None,
              "tune": lambda a: a[:1] == ["apply"], "history": lambda a: a == ["clear"],
              "forge": lambda a: a in (["token", "--new"], ["token", "--new", "--user"])}
@@ -134,6 +138,63 @@ def log_tail(n=40):
             return f.read().splitlines()[-n:]
     except OSError:
         return []
+
+
+# ------------------------------------------------------------- touch icon
+# The banner's S (columns 0-7) as an ASCII grid -- # a full block, = | F T
+# L J the box-drawing pieces -- with the fire gradient on the page's
+# ground. Drawn once into a PNG with the same cell geometry as landing's
+# banner-svg.py, so it is the favicon at 180x180, no binary in the repo.
+ICON_GRID = ("#######T", "##F====J", "#######T", "L====##|", "#######|", "L======J")
+ICON_INKS = ((255, 224, 102), (255, 224, 102), (224, 180, 0), (224, 180, 0), (210, 74, 42), (210, 74, 42))
+ICON_BG = (16, 14, 12)
+ICON_SIZE, ICON_MARGIN = 180, 20
+_icon = {}
+
+
+def _icon_rects():
+    """[(x0, y0, x1, y1, rgb)] of the mark in the favicon's 108-unit
+    square: 10x18 cells, a 3-unit stroke, the art 80 wide at x=14."""
+    cw, ch, ln = 10.0, 18.0, 3.0
+    mx, my = 0.5 - ln / cw / 2, 0.5 - ln / ch / 2
+    pieces = {"#": [(0, 0, 1, 1)], "=": [(0, my, 1, ln / ch)], "|": [(mx, 0, ln / cw, 1)],
+              "F": [(mx, my, 1 - mx, ln / ch), (mx, my, ln / cw, 1 - my)],
+              "T": [(0, my, mx + ln / cw, ln / ch), (mx, my, ln / cw, 1 - my)],
+              "L": [(mx, 0, ln / cw, my + ln / ch), (mx, my, 1 - mx, ln / ch)],
+              "J": [(mx, 0, ln / cw, my + ln / ch), (0, my, mx + ln / cw, ln / ch)]}
+    out = []
+    for row, line in enumerate(ICON_GRID):
+        for col, piece in enumerate(line):
+            for fx, fy, fw, fh in pieces[piece]:
+                x, y = 14 + (col + fx) * cw, (row + fy) * ch
+                out.append((x, y, x + fw * cw + 0.4, y + fh * ch + 0.4, ICON_INKS[row]))
+    return out
+
+
+def touch_icon():
+    """(png bytes, etag) of the 180x180 apple-touch-icon, kept in memory
+    after the first request."""
+    if "v" in _icon:
+        return _icon["v"]
+    rects = _icon_rects()
+    scale = (ICON_SIZE - 2.0 * ICON_MARGIN) / 108.0
+    raw = bytearray()
+    for py in range(ICON_SIZE):
+        v = (py + 0.5 - ICON_MARGIN) / scale
+        here = [r for r in rects if r[1] <= v < r[3]]
+        raw += b"\x00"                      # PNG filter: none
+        for px in range(ICON_SIZE):
+            u = (px + 0.5 - ICON_MARGIN) / scale
+            raw += bytes(next((c for x0, _y0, x1, _y1, c in here if x0 <= u < x1), ICON_BG))
+
+    def chunk(tag, data):
+        body = tag + data
+        return struct.pack(">I", len(data)) + body + struct.pack(">I", zlib.crc32(body))
+    png = (b"\x89PNG\r\n\x1a\n"
+           + chunk(b"IHDR", struct.pack(">IIBBBBB", ICON_SIZE, ICON_SIZE, 8, 2, 0, 0, 0))
+           + chunk(b"IDAT", zlib.compress(bytes(raw), 9)) + chunk(b"IEND", b""))
+    _icon["v"] = png, '"%s"' % hashlib.sha256(png).hexdigest()[:16]
+    return _icon["v"]
 
 
 # --------------------------------------------------------------- upstream
@@ -437,6 +498,10 @@ class Handler(BaseHTTPRequestHandler):
             return self.api_login()
         if method == "GET" and path in ("/", "/login"):
             return self.static("index.html")
+        if method == "GET" and path == "/manifest.webmanifest":
+            return self.static("manifest.webmanifest")
+        if method == "GET" and path == "/apple-touch-icon.png":
+            return self.apple_touch_icon()
         if method == "GET" and path.startswith("/static/"):
             return self.static(path[8:])
         if not path.startswith(("/api/", "/v1/")):
@@ -537,6 +602,19 @@ class Handler(BaseHTTPRequestHandler):
         self._start(200, STATIC[name], h, len(data))
         if self.command != "HEAD":
             self.wfile.write(data)
+        self._status = 200
+        return None
+
+    def apple_touch_icon(self):
+        png, etag = touch_icon()
+        h = {"ETag": etag, "Cache-Control": "no-cache"}
+        if self.headers.get("If-None-Match") == etag:
+            self._start(304, "image/png", h)
+            self._status = 304
+            return None
+        self._start(200, "image/png", h, len(png))
+        if self.command != "HEAD":
+            self.wfile.write(png)
         self._status = 200
         return None
 

@@ -284,10 +284,12 @@ def reply(cfg, thread, text, files=(), cwd="", shell="", mode="chat", on_delta=N
     the turn is recorded. `brain` goes to the Session (the FORGE's own
     upstream). Returns (thread, answer, ms). Raises RefError before any
     request, wire.BrainError from the request. A KeyboardInterrupt during
-    the request appends the user line and, when any text arrived, the
-    partial reply (partial=True); the thread id rides on the exception
-    (`e.thread`) so the caller can keep going with it. Nothing is printed
-    here -- that is the caller's job."""
+    the request (Ctrl-C at the prompt), or a BrokenPipeError /
+    ConnectionResetError from on_delta (a page or desktop client pressing
+    stop mid-stream), appends the user line and, when any text arrived,
+    the partial reply (partial=True), then re-raises; the thread id rides
+    on the exception (`e.thread`) so the caller can keep going with it.
+    Nothing is printed here -- that is the caller's job."""
     from . import session          # session imports forge: resolved late on purpose
     context = "\n\n".join(c for c in (context, file_context(files, cwd)) if c)
     if not text and files:
@@ -306,7 +308,7 @@ def reply(cfg, thread, text, files=(), cwd="", shell="", mode="chat", on_delta=N
 
     try:
         answer, ms = s.ask_stream(text, context, on_delta_tap)
-    except KeyboardInterrupt as e:
+    except (KeyboardInterrupt, BrokenPipeError, ConnectionResetError) as e:
         append(cfg, thread, "user", line, mode=mode, cwd=cwd)
         partial = "".join(collected)
         if partial:

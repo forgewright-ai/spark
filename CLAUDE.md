@@ -84,7 +84,8 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 forgeserve (the FORGE server: spark forge, the API, the page) do (spark do)
                 version (the version, from git, cached: spark ver, check's header, forgeserve)
                 update (spark update: the newest tag, or main; converges)
-lib/spark/forge/  index.html spark.css spark.js -- the page, ASCII, no inline script
+lib/spark/forge/  index.html spark.css spark.js manifest.webmanifest favicon.svg
+                  -- the page, ASCII, no inline script
 home/           shared $HOME mirror (linked): micro bindings, the two widgets, the two rc hooks
                 (.config/spark/hook.bash hook.zsh: PATH, the widget, the blank row), the banner, spark.env.example
 linux/home/     .bashrc .bash_profile, the systemd user units (spark-serve spark-forge spark-check)
@@ -190,8 +191,9 @@ may change freely.
    `GET /api/health` answers without a token: `{status, forge: true, name,
    version, model, upstream, models, roles}` (`models` = `{role: loaded|
    unloaded}`, `roles` = `{role: model file stem}` per served role) -- the client's FORGE detector and the
-   `forge` row's probe. `GET /`, `/login`, `/static/<f>` are the page, no
-   token. Auth is two tokens, two roles: the forge-token is admin (the
+   `forge` row's probe. `GET /`, `/login`, `/static/<f>`,
+   `/manifest.webmanifest` and `/apple-touch-icon.png` (a 180x180 PNG the
+   server draws) are the page, no token. Auth is two tokens, two roles: the forge-token is admin (the
    whole box), the ember-token is user. `POST /api/login` takes `{token}`,
    matches it against both, sets the cookie derived from the matching
    token and answers `{ok, name, role}` (1 s and 401 when wrong; 429
@@ -214,7 +216,10 @@ may change freely.
    otherwise).
    Streams are SSE: `/api/chat` (mode `chat|talk|ask`; `talk` is the old
    name for `chat` and records write `chat`) emits `queued` (when the model is busy),
-   `delta {t}`, `done {thread, ms, model}`, `error {kind, hint}`; `/api/run` emits
+   `delta {t}`, `done {thread, ms, model}`, `error {kind, hint}`; a
+   client that hangs up mid-stream (the stop button) still lands the
+   turn -- the user line and any partial answer (`partial: true`) go on
+   the thread, and the log line says 499; `/api/run` emits
    `line {s}` then `done {rc}`; `/api/events` emits `check`, `bar`, `serve`
    on change (`log` too, for an admin) and a `:keepalive` comment every
    15 s. `/v1/chat/completions` and `/v1/models` are OpenAI-shaped and

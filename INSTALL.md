@@ -376,6 +376,20 @@ cannot mint a certificate without a new dependency, a self-signed one
 trains people to click through warnings, and the trust model is your LAN.
 The API is contract 9 in `CLAUDE.md`.
 
+On a phone, open the page once and add it to the home screen (iOS:
+share -> add to home screen; Android: menu -> add to home screen). On
+iOS the page becomes an app: its own icon, full screen, no browser
+chrome. Android grants that standalone install only to a secure
+context -- the same rule that bars the service worker below -- so over
+LAN http the shortcut keeps its icon but opens in an ordinary browser
+tab. Either way the page still needs the FORGE reachable when it
+opens: there is no service worker and no offline copy, and that
+follows from the no-TLS decision above -- browsers grant service
+workers only to a secure context (https, or localhost), and the page
+lives on LAN http. Pretending otherwise with a cache that cannot exist
+would be a lie; the page is small and loads from the FORGE in one
+round trip.
+
 ## Headless
 
 Install spark on the machine that stays on, then `spark headless on`

@@ -88,11 +88,16 @@ fi
 
 # --- 4b. docs stay ASCII: they are read on the console too; so does the
 #         FORGE page (served bytes, curl-able from that console) -----------
+# The pattern is an explicit byte range, not [:print:][:space:]: macOS grep
+# decodes UTF-8 for the named classes even under LC_ALL=C, so multibyte
+# characters slipped through. Bytes outside tab + printable ASCII fail.
+tab=$(printf '\t')
 for f in README.md INSTALL.md CLAUDE.md CHANGELOG.md CHEATSHEET.txt LICENSE \
          CREDITS.md AGENTS.md CONTRIBUTING.md ROADMAP.md get \
-         lib/spark/forge/index.html lib/spark/forge/spark.css lib/spark/forge/spark.js; do
+         lib/spark/forge/index.html lib/spark/forge/spark.css lib/spark/forge/spark.js \
+         lib/spark/forge/manifest.webmanifest lib/spark/forge/favicon.svg; do
     [ -f "$f" ] || continue
-    hit=$(LC_ALL=C grep -n '[^[:print:][:space:]]' "$f" | head -3 || true)   # bytes >= 0x80, BSD and GNU grep alike
+    hit=$(LC_ALL=C grep -n "[^ -~${tab}]" "$f" | head -3 || true)
     [ -z "$hit" ] || bad "non-ASCII in $f (docs are read on the console):
 $hit"
 done

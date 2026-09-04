@@ -92,10 +92,14 @@ What comes next: `ROADMAP.md`.
   line you are on. `cmd 2>&1 | explain` says what went wrong. `spark off`
   gives Enter back.
 - **The FORGE.** `spark forge` serves the same agent on the LAN: an
-  OpenAI-shaped API for any program, and a plain client page in the
-  browser. `spark headless on` keeps it up from boot on the machine that
-  stays on. `spark client URL` makes another machine of yours a client of
-  it: the same prompt, chat and explain there, no model of its own.
+  OpenAI-shaped API for any program, and a client page in the browser
+  that wears spark's own ember look by default (`spark theme` recolours
+  it). On an iPhone, share -> add to home screen makes the page an app:
+  its own icon, full screen (Android keeps the icon but opens a browser
+  tab -- `INSTALL.md` says why). `spark headless on` keeps it up from boot
+  on the machine that stays on. `spark client URL` makes another machine
+  of yours a client of it: the same prompt, chat and explain there, no
+  model of its own.
 - **Yours.** spark ships with a default soul; `spark soul edit` writes your
   own. `spark remember` adds a fact it keeps. Both live under
   `~/.config/spark/`, 0600, read by the model and never written by it.

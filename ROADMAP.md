@@ -48,6 +48,15 @@ Debian-family only today (`apt`). Fedora and Arch need a package table
 and a CI job each; Linux arm64 already has an engine pin. A `.deb` and a
 Homebrew tap wait until the clone-and-tag path has been lived with.
 
+## The FORGE from anywhere
+
+The page and the API stop at the LAN today, on purpose: LAN http is the
+trust model. An overlay network -- Tailscale, or any WireGuard mesh --
+extends that boundary to your own devices wherever they are, without
+opening a port to the world. Its https endpoints are also the real PWA
+path: a secure context at last, so a service worker and a true offline
+shell become possible without spark minting certificates.
+
 ## The bigger ember
 
 A machine with 32 GB earns a mixture-of-experts model (the 30B-A3B row:

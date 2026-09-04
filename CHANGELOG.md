@@ -1,5 +1,34 @@
 # Changelog
 
+## v1.2
+
+The page wears the brand. The FORGE's client page is redesigned around
+the ember palette: dark is the default, light answers the browser's
+preference, and everything is mono. The old neutral default is gone --
+there is no plain look to fall back to; a `spark theme` palette still
+overrides every colour, as it always did. Transcript rows carry marks
+instead of labels (`*` the answer, `>` you, `!` an error), a caret
+blinks while an answer streams, every fenced block has a copy button, a
+stop button (and Esc) ends an answer and keeps what arrived, and the
+keyboard grows `n` (a new thread) and `j`/`k` (the next and previous
+one). On the config page the ember picker now really runs `spark ember`
+on the box (`ember` joined the `/api/run` allowlist), and the headless
+switch is gone: it could never work through `/api/run` -- `spark
+headless` needs sudo on macOS -- so the verb at the prompt is the way.
+On an iPhone, share -> add to home screen makes the page an app:
+the server now answers `/manifest.webmanifest` and draws its own
+`/apple-touch-icon.png` from the banner grid -- no binary in the repo.
+Android grants a standalone install only to a secure context, so over
+LAN http the home-screen shortcut keeps its icon but opens the page in
+the browser; `INSTALL.md` explains.
+
+The same page now also runs inside sparkchat, the desktop app for macOS
+and Windows: there the login card asks for the FORGE's address as well
+as the token, log out forgets the stored token, and `q` quits the app;
+pointed at a bare llama-server instead of a FORGE it falls back to chat
+only, threads and the other tabs waiting for a FORGE. In a browser
+nothing changes -- the desktop parts stay hidden.
+
 ## v1.1
 
 The `peer` check row understands a FORGE: `SITE_PEER_AI_URL` pointing at

@@ -34,6 +34,14 @@ THE SERVER
   spark forge --print-url [--user]  the login URL; that role's token on a tty
   spark forge token --new [--user]  rotate the admin (or user) token
 
+THE PAGE (spark forge --print-url)  keys work when no input has focus
+  1..5                            the tabs      r  refresh      ?  help
+  /                               focus the input (Esc blurs it)
+  Enter | Shift+Enter             send | a new line
+  n                               a new thread  j / k  next / prev thread
+  Esc                             stop the answer; else blur; else close
+  share -> add to home screen     an app on iOS; a browser shortcut on Android
+
 THE MACHINE
   spark setup                     the guided first run: name, model, light it
   spark check                     drift report; exit 0 = every promise kept

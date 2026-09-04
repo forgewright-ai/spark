@@ -10,6 +10,7 @@ import json
 import os
 import signal
 import socket
+import struct
 import subprocess
 import sys
 import tempfile
@@ -35,8 +36,26 @@ class Peek(smoke.Stub):
         raw = self.rfile.read(n)
         SEEN["auth"] = self.headers.get("Authorization", "")
         SEEN["body"] = json.loads(raw or b"{}")
+        msgs = SEEN["body"].get("messages") or [{}]
+        if SEEN["body"].get("stream") and "dripfeed" in (msgs[-1].get("content") or ""):
+            return self.drip()
         self.rfile = io.BytesIO(raw)
         smoke.Stub.do_POST(self)
+
+    def drip(self):
+        """One letter at a time, slowly, so a client can hang up
+        mid-answer; the pipe breaking when it does is the point."""
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.end_headers()
+            for _ in range(40):
+                self.wfile.write(("data: " + json.dumps({"choices": [{"delta": {"content": "a"}}]}) + "\n\n").encode())
+                self.wfile.flush()
+                time.sleep(0.05)
+            self.wfile.write(b"data: [DONE]\n\n")
+        except (BrokenPipeError, ConnectionResetError):
+            self.close_connection = True
 
 
 def free_port():
@@ -355,6 +374,30 @@ def main():
             st, _, _ = req(url, "GET", "/static/nope.js")
             ok(st == 404, "unknown static name -> 404")
 
+            # the standalone face: manifest, favicon, the drawn touch icon
+            # (the two files ride with the page; the icon is always there)
+            if os.path.isfile(os.path.join(REPO, "lib", "spark", "forge", "manifest.webmanifest")):
+                st, h, raw = req(url, "GET", "/manifest.webmanifest")
+                d = {}
+                try:
+                    d = json.loads(raw)
+                except ValueError:
+                    pass
+                ok(st == 200 and h.get("Content-Type", "").startswith("application/manifest+json")
+                   and d.get("start_url") == "/", "/manifest.webmanifest: 200, its type, start_url /, no token", (st, h, raw[:200]))
+                st, _, _ = req(url, "GET", "/manifest.webmanifest", headers={"If-None-Match": h.get("ETag", "")})
+                ok(st == 304, "manifest ETag round trip -> 304", st)
+            if os.path.isfile(os.path.join(REPO, "lib", "spark", "forge", "favicon.svg")):
+                st, h, raw = req(url, "GET", "/static/favicon.svg")
+                ok(st == 200 and h.get("Content-Type", "").startswith("image/svg+xml"),
+                   "/static/favicon.svg: 200, image/svg+xml, no token", (st, h))
+            st, h, raw = req(url, "GET", "/apple-touch-icon.png")
+            dims = struct.unpack(">II", raw[16:24]) if len(raw) >= 24 else (0, 0)
+            ok(st == 200 and h.get("Content-Type") == "image/png" and raw[:8] == b"\x89PNG\r\n\x1a\n" and dims == (180, 180),
+               "/apple-touch-icon.png: 200, a real 180x180 PNG, no token", (st, h.get("Content-Type"), dims))
+            st, _, _ = req(url, "GET", "/apple-touch-icon.png", headers={"If-None-Match": h.get("ETag", "")})
+            ok(st == 304, "touch icon ETag round trip -> 304", st)
+
 
             # the page's food: threads, chat, soul, memory, do, the verb runner
             post = dict(bearer, **{"X-Spark": "1", "Origin": url})
@@ -405,6 +448,39 @@ def main():
             ok(st == 200 and any(e == "done" for e, _d in sse(raw)), "mode chat works", st)
             st, _, raw = req(url, "POST", "/api/chat", {"thread": tid, "text": "count", "mode": "talk"}, headers=post, timeout=30)
             ok(st == 200 and any(e == "done" for e, _d in sse(raw)), "mode talk still accepted (the old name of chat)", st)
+
+            # the stop button: a client that hangs up mid-stream still
+            # lands the turn -- the user line and the partial (partial=True)
+            u2 = urllib.parse.urlsplit(url)
+            c2 = http.client.HTTPConnection(u2.hostname, u2.port, timeout=10)
+            c2.request("POST", "/api/chat", json.dumps({"text": "dripfeed"}).encode(),
+                       dict(post, **{"Content-Type": "application/json"}))
+            r2 = c2.getresponse()
+            buf, t_end = b"", time.time() + 10
+            while b"event: delta" not in buf and time.time() < t_end:
+                chunk = r2.read1(512)
+                if not chunk:
+                    break
+                buf += chunk
+            # stop: the socket just goes away (RST, like a browser abort);
+            # the OS socket sits under the response once the SSE detaches
+            r2.fp.raw._sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+            r2.close()
+            c2.close()
+            got, t_end = None, time.time() + 10
+            while got is None and time.time() < t_end:
+                time.sleep(0.2)
+                st, _, raw = req(url, "GET", "/api/threads?n=10", headers=bearer)
+                for t in json.loads(raw).get("threads", []):
+                    st2, _, raw2 = req(url, "GET", "/api/threads/" + t["id"], headers=bearer)
+                    ms2 = json.loads(raw2).get("messages", [])
+                    if (any(m["role"] == "user" and m["text"] == "dripfeed" for m in ms2)
+                            and ms2[-1]["role"] == "assistant"):
+                        got = ms2
+                        break
+            ok(got is not None and got[-1]["role"] == "assistant" and got[-1].get("partial") is True
+               and got[-1]["text"] and set(got[-1]["text"]) == {"a"},
+               "a hung-up chat records the user line and the partial reply, partial=True", got)
 
             st, _, raw = req(url, "GET", "/api/soul", headers=bearer)
             d = json.loads(raw)
@@ -489,6 +565,12 @@ def main():
             ok(st == 200 and any(l.startswith("ok     site") and "SITE_AI_MODEL=none" in l for l in lines) and ("done", {"rc": 0}) in evs,
                "/api/run model none: streams the verb's lines, done rc 0", evs)
             ok("SITE_AI_MODEL=none" in open(home + "/.config/spark/site.env").read(), "site.env has SITE_AI_MODEL=none (SPARK_NO_APPLY)")
+            st, h, raw = req(url, "POST", "/api/run", {"verb": "ember", "args": ["none"]}, headers=post, timeout=60)
+            evs = sse(raw)
+            lines = [d["s"] for e, d in evs if e == "line"]
+            ok(st == 200 and any(l.startswith("ok     site") and "SITE_EMBER_MODEL=none" in l for l in lines) and ("done", {"rc": 0}) in evs,
+               "/api/run ember none: streams the verb's lines, done rc 0", evs)
+            ok("SITE_EMBER_MODEL=none" in open(home + "/.config/spark/site.env").read(), "site.env has SITE_EMBER_MODEL=none (SPARK_NO_APPLY)")
             st, _, raw = req(url, "POST", "/api/run", {"verb": "history", "args": ["clear"]}, headers=post, timeout=60)
             ok(st == 200 and ("done", {"rc": 0}) in sse(raw) and not os.listdir(state + "/threads"), "/api/run history clear empties the threads", raw[:200])
             st, _, _ = req(url, "POST", "/api/run", {"verb": "check", "args": []}, headers=post)

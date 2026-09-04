@@ -6,10 +6,17 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#100e0c">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="spark">
 <title>spark</title>
 <link rel="stylesheet" href="/static/spark.css">
+<link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="manifest" href="/manifest.webmanifest">
 </head>
 <body>
 <a class="skip" href="#main">skip to content</a>
@@ -36,14 +43,20 @@
 <main id="main">
 
 <section id="login" class="card login" hidden>
+  <img class="s-mark" src="/static/favicon.svg" alt="" width="54" height="54">
   <h2>forge token</h2>
-  <p class="muted">A token from the box: <code>forge-token</code> (admin) or
+  <p class="muted web">A token from the box: <code>forge-token</code> (admin) or
     <code>ember-token</code> (user) under <code>~/.local/state/spark/</code>
     (<code>spark forge --print-url [--user]</code> shows it).</p>
+  <p class="muted tauri">The FORGE's address and a token from the box
+    (<code>spark forge --print-url</code> shows both).</p>
   <form id="login-form">
+    <label for="server-url" class="tauri">server url</label>
+    <input id="server-url" class="tauri" type="text" placeholder="http://box:8081"
+      autocomplete="off" spellcheck="false" inputmode="url">
     <label for="token">token</label>
     <input id="token" type="password" autocomplete="off" spellcheck="false" required>
-    <button type="submit">log in</button>
+    <button type="submit" class="primary">log in</button>
   </form>
   <p id="login-error" class="err" role="alert"></p>
 </section>
@@ -97,12 +110,13 @@
     <ul id="thread-list" class="list"></ul>
   </aside>
   <div class="talk">
-    <div id="transcript" class="transcript mono" aria-live="polite" aria-label="transcript"></div>
+    <div id="transcript" class="transcript mono" tabindex="0" aria-live="polite" aria-label="transcript"></div>
     <form id="chat-form" class="ask">
       <textarea id="chat-text" rows="1" data-main placeholder="ask (Enter sends, Shift+Enter newline)" aria-label="message"></textarea>
-      <button type="submit">send</button>
+      <button id="chat-stop" type="button" class="danger stop" hidden>stop</button>
+      <button id="chat-send" type="submit" class="primary">send</button>
     </form>
-    <p id="chat-status" class="muted small"></p>
+    <p id="chat-status" class="muted small" aria-live="polite"></p>
   </div>
 </section>
 
@@ -125,7 +139,7 @@
       <h2>theme</h2>
       <form id="theme-form" class="row">
         <select id="theme-pick" data-main aria-label="theme"></select>
-        <button type="submit">apply</button>
+        <button type="submit" class="primary">apply</button>
       </form>
     </div>
     <div class="card">
@@ -133,7 +147,7 @@
       <form id="font-form" class="row">
         <input id="font-face" type="text" placeholder="face" aria-label="face" autocomplete="off">
         <input id="font-size" type="text" placeholder="size" aria-label="size" autocomplete="off" class="short">
-        <button type="submit">apply</button>
+        <button type="submit" class="primary">apply</button>
       </form>
     </div>
   </div>
@@ -162,11 +176,7 @@
       <button type="button" data-run="bootconfig" data-args="loud">loud</button>
       <span class="lbl">tune</span>
       <button type="button" data-run="tune" data-args="apply">apply winner</button>
-      <span class="lbl">headless</span>
-      <button type="button" data-run="headless" data-args="on">on</button>
-      <button type="button" data-run="headless" data-args="off">off</button>
     </div>
-    <p class="muted small">headless keeps the FORGE up from boot and awake</p>
     <dl id="config-facts" class="facts"></dl>
   </div>
   <div class="card adm" id="tokens-card">
@@ -218,10 +228,13 @@
     <table class="keys">
       <tr><td><kbd>1</kbd> .. <kbd>5</kbd></td><td>monitor, chat, do, config, help</td></tr>
       <tr><td><kbd>/</kbd></td><td>focus the page's main input</td></tr>
+      <tr><td><kbd>n</kbd></td><td>new thread (chat)</td></tr>
+      <tr><td><kbd>j</kbd> / <kbd>k</kbd></td><td>next / previous thread (chat)</td></tr>
       <tr><td><kbd>r</kbd></td><td>refresh the current page</td></tr>
       <tr><td><kbd>?</kbd></td><td>this page</td></tr>
-      <tr><td><kbd>Esc</kbd></td><td>leave the input</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>stop the answer or the running command, else leave the input, else close the drawer</td></tr>
       <tr><td><kbd>Enter</kbd></td><td>send (chat); <kbd>Shift</kbd>+<kbd>Enter</kbd> newline</td></tr>
+      <tr class="tauri"><td><kbd>q</kbd></td><td>quit the app</td></tr>
       <tr><td><kbd>Tab</kbd></td><td>every control, in order</td></tr>
     </table>
   </div>
