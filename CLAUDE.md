@@ -97,6 +97,7 @@ tests/          install_test.sh get_test.sh update_test.sh smoke.py serve_smoke.
 .github/        ci.yml: the same on ubuntu (plus a real bootstrap) and macOS (python 3.9)
                 release.yml: the GitHub Release from the CHANGELOG section, on a v* tag
 LICENSE         MIT, verbatim, ASCII (the hook checks it with the docs)
+assets/         banner.svg -- the banner as rectangles, for the README and the site
 CREDITS.md      every third-party project spark downloads or installs,
                 with its license; spark's own code is LICENSE
 ROADMAP.md      what comes after the current release, in order

@@ -1,5 +1,7 @@
 # spark
 
+<img src="assets/banner.svg" alt="spark" width="400">
+
 AI on the edge, at no cost. spark turns a Linux or macOS machine you own
 into a private AI: no account, no cloud, nothing leaves. `spark chat` is
 the front door. The prompt line is the surprise: ask, press Enter, and the
