@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.1
+
+The `peer` check row understands a FORGE: `SITE_PEER_AI_URL` pointing at
+another machine's `:8081` (the shape `spark forge --print-client` hands
+out) showed `down` because a FORGE answers `/api/health`, not a
+llama-server's `/health`. The row now asks the FORGE first and reports
+`forge <host> ok`, or `up, its model loading|down` when the FORGE stands
+but its model does not; a raw `spark serve` URL reads as before.
+
 ## v1.0
 
 The ignition. One line -- `curl -fsSL .../get | sh` -- or a clone and

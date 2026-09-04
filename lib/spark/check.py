@@ -626,8 +626,16 @@ def row_peer(ctx):
     from . import wire
     parts, worst = [], OK
     if ctx.cfg.peer_ai_url:
-        h = wire.health(ctx.cfg.peer_ai_url)
-        parts.append("ai %s %s" % (ctx.cfg.peer_ai_url.split("//")[-1], h))
+        # a FORGE answers /api/health (and 404 to /health); a raw llama-server the reverse
+        host = ctx.cfg.peer_ai_url.split("//")[-1]
+        fh = wire.forge_health(ctx.cfg.peer_ai_url)
+        if isinstance(fh, dict):
+            up = fh.get("upstream", "down")
+            h = "ok" if up == "ok" else "up, its model %s" % up
+            parts.append("forge %s %s" % (host, h))
+        else:
+            h = "down" if fh == "down" else wire.health(ctx.cfg.peer_ai_url)
+            parts.append("ai %s %s" % (host, h))
         if h != "ok":
             worst = WARN
     if ctx.cfg.peer_ssh:
