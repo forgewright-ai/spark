@@ -22,8 +22,9 @@ Android grants a standalone install only to a secure context, so over
 LAN http the home-screen shortcut keeps its icon but opens the page in
 the browser; `INSTALL.md` explains.
 
-The same page now also runs inside sparkchat, the desktop app for macOS
-and Windows: there the login card asks for the FORGE's address as well
+The same page now also runs inside sparkapp, the desktop shell for
+macOS and Windows (the app it ships is simply named spark): there the
+login card asks for the FORGE's address as well
 as the token, log out forgets the stored token, and `q` quits the app;
 pointed at a bare llama-server instead of a FORGE it falls back to chat
 only, threads and the other tabs waiting for a FORGE. In a browser
