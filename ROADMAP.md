@@ -3,6 +3,19 @@
 What comes after v1.0, in the order it is likely to happen. Nothing here
 is a promise; a row in `CHANGELOG.md` is. A better idea is an issue away.
 
+## spark token: one verb for the keys
+
+Three clients hold the same secret three ways: the CLI reads files under
+`~/.local/state/spark/`, the desktop app keeps the OS keychain, the
+browser a cookie. When the box rotates a token, only the file copies go
+quietly stale, and the hint points at the wrong door. `spark token` makes
+the keys first-class: bare, it names which tokens this machine holds and
+whether the brain accepts each (status only, never a value); `spark token
+sync` refreshes a client's copies from its peer over SSH; `spark token
+rotate` rotates on the box and says what must change where. The landing
+rule applies: the help line, the verb, a check row (a held token the
+brain rejects is a warn with the sync remedy), the docs.
+
 ## Chaos: rehearse the failures
 
 Every failure spark met on the way to v1.0 was met by accident -- a model
