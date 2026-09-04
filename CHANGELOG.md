@@ -9,6 +9,11 @@ llama-server's `/health`. The row now asks the FORGE first and reports
 `forge <host> ok`, or `up, its model loading|down` when the FORGE stands
 but its model does not; a raw `spark serve` URL reads as before.
 
+`spark check` over a plain ssh command (`ssh host '~/.spark/bin/spark
+check'`) no longer reports spark and starship missing: a non-interactive
+shell never sourced the hook that puts `~/.local/bin` on PATH, so the
+check now looks there, and in Homebrew's bin, itself.
+
 ## v1.0
 
 The ignition. One line -- `curl -fsSL .../get | sh` -- or a clone and

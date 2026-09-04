@@ -223,7 +223,7 @@ def row_pinned(ctx):
     (llama-server is the engine row's). Linux fetches them by version and
     sha256; on macOS Homebrew provides starship, so bootstrap skips the pin."""
     missing = []
-    if not shutil.which("starship"):
+    if not which("starship"):
         missing.append("starship")
     if not os.path.isdir(os.path.join(ctx.home, ".config", "micro", "plug", "aspell")):
         missing.append("micro-aspell")
@@ -430,11 +430,25 @@ def row_ai(ctx):
         missing.append("a model in %s" % ctx.short(ctx.cfg.models_dir))
     if m and not e and engine.chosen_model_name(ctx.cfg, "ember"):
         missing.append("the ember %s" % engine.chosen_model_name(ctx.cfg, "ember").replace(".gguf", ""))
-    if not shutil.which("spark"):
+    if not which("spark"):
         missing.append("spark on PATH")
     if missing:
         return warn("missing: %s" % ", ".join(missing), "./bootstrap.sh   (or SITE_AI_MODEL / SPARK_ENGINE_DIR in your config)")
     return ok(SEP.join(parts))
+
+
+def which(name):
+    """shutil.which, then ~/.local/bin and Homebrew's bin: a non-interactive
+    shell (ssh host 'spark check', a cron) never sourced the hook that puts
+    them on PATH, and a tool that is there is not missing."""
+    found = shutil.which(name)
+    if found:
+        return found
+    for d in (os.path.join(os.path.expanduser("~"), ".local", "bin"), "/opt/homebrew/bin"):
+        c = os.path.join(d, name)
+        if os.access(c, os.X_OK):
+            return c
+    return None
 
 
 def _short_age(seconds):
@@ -521,7 +535,7 @@ def row_shell(ctx):
         if not site._spark_link(os.path.join(ctx.home, name)):
             problems.append("~/%s is not spark's link" % name)
     for tool in ("starship", "tmux"):
-        if not shutil.which(tool):
+        if not which(tool):
             problems.append("no " + tool)
     if problems:
         return warn("on but: " + ", ".join(problems), "spark shell on")
