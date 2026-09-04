@@ -94,7 +94,8 @@ What comes next: `ROADMAP.md`.
 - **The FORGE.** `spark forge` serves the same agent on the LAN: an
   OpenAI-shaped API for any program, and a plain client page in the
   browser. `spark headless on` keeps it up from boot on the machine that
-  stays on.
+  stays on. `spark client URL` makes another machine of yours a client of
+  it: the same prompt, chat and explain there, no model of its own.
 - **Yours.** spark ships with a default soul; `spark soul edit` writes your
   own. `spark remember` adds a fact it keeps. Both live under
   `~/.config/spark/`, 0600, read by the model and never written by it.

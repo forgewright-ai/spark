@@ -59,6 +59,7 @@ USAGE_MACHINE = """the machine
   spark update                the newest tag, or main on a developer clone
   spark shell [on|off]        the shell layer: off = the prompt widget only
   spark headless [on|off]     the FORGE up from boot, never asleep (a brain)
+  spark client [URL|off]      answer from another machine's FORGE; none here
   spark ver                   logo, version, credits
 
 less often (spark <sub> -h has every flag: check --watch, stop --force ...)
@@ -128,7 +129,7 @@ def main(argv):
     if sub == "stats":
         from spark import stats
         return stats.main(rest)
-    if sub in ("shell", "font", "bootconfig", "model", "headless", "ember"):
+    if sub in ("shell", "font", "bootconfig", "model", "headless", "ember", "client"):
         from spark import site
         return site.main(sub, rest)
     if sub in ("serve", "stop"):

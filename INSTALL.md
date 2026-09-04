@@ -101,7 +101,7 @@ layer's git identity).
 |---|---|---|
 | `SITE_NAME` | this machine's display name | short hostname |
 | `SITE_USER` | your display name | your login |
-| `SITE_AI_MODEL` | `auto`, `none`, or a name from `spark model` -- later, `spark model NAME` | `auto` |
+| `SITE_AI_MODEL` | `auto`, `none`, or a name from `spark model` -- later, `spark model NAME`; `none` beside a peer URL is a client (`spark client URL`) | `auto` |
 | `SITE_EMBER_MODEL` | `none`, `auto`, or a name: a second model for conversations; `none` = one model does both -- later, `spark ember NAME` | `none` |
 | `SITE_AI_BUDGET` | 10..95: percent of RAM+GPU memory `auto` may use -- later, `spark model budget N` | `60` |
 | `SITE_AI_BUILD` | `auto`, `cpu` or `vulkan`: the Linux engine build; `auto` = `vulkan` when a GPU reports its memory in `/sys/class/drm`, else `cpu` (macOS ignores it, its tarball has Metal) | `auto` |
@@ -335,10 +335,19 @@ FORGE has two of its own, one per role. `spark forge --print-client`
 prints what another machine's `spark` needs: `SITE_PEER_AI_URL` for its
 `site.env` and the `scp` of the ember-token -- the user token -- to its
 `~/.local/state/spark/ember-token`. A peer only talks to the ember; a
-client prefers the peer while it answers and falls back to its own server
-silently; `spark brain` says which answers. The raw-model path still
-exists: `spark serve --print-client` prints the `:8080` URL and the
-api-token's `scp`.
+machine with a model of its own prefers the peer while it answers and
+falls back to its own server silently; `spark brain` says which answers.
+The raw-model path still exists: `spark serve --print-client` prints the
+`:8080` URL and the api-token's `scp`.
+
+`spark client URL` on the other machine is the short form: it writes the
+peer URL and `SITE_AI_MODEL=none`, applies the prompt hook and the
+widgets, and says the `scp` line for the token. A client runs nothing --
+no engine, no model, no units -- and `spark check` there says so: the
+engine, services, watchdog, ai, serve and forge rows read `na`, the
+peer row says whether the FORGE answers. `spark client` shows that state; `spark client
+off` is `spark model auto`: a model of its own again, the peer still
+first while it answers.
 
 Any program talks to the same FORGE with the OpenAI shape; a request that
 names no `model` gets the ember with the identity injected (`model: spark`

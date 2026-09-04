@@ -1063,6 +1063,14 @@ def row_cost(ctx):
 SHELL_ROWS = ("pinned", "font", "terminfo", "console", "bar", "git", "backup", "swap",
               "encryption", "pending", "battery", "disk")
 SHELL_OFF = "SITE_SHELL=off (spark shell on)"
+# a client's rows: nothing runs here (SITE_AI_MODEL=none + SITE_PEER_AI_URL),
+# so the engine, the units, their snapshot, the local AI and its two servers
+# are na before they look; the peer row says whether the peer answers
+CLIENT_ROWS = ("engine", "services", "watchdog", "ai", "serve", "forge")
+
+
+def client_of(cfg):
+    return "a client of %s (spark client off serves here again)" % cfg.peer_ai_url.split("//")[-1]
 
 
 def run_rows(ctx, names=None):
@@ -1072,7 +1080,12 @@ def run_rows(ctx, names=None):
         if names and spec.name not in names:
             continue
         try:
-            r = na(SHELL_OFF) if spec.name in SHELL_ROWS and not ctx.cfg.shell else spec.fn(ctx)
+            if spec.name in SHELL_ROWS and not ctx.cfg.shell:
+                r = na(SHELL_OFF)
+            elif spec.name in CLIENT_ROWS and ctx.cfg.client:
+                r = na(client_of(ctx.cfg))
+            else:
+                r = spec.fn(ctx)
         except SystemExit:
             raise
         except Exception as e:   # a crashed row is a red row, never a missing one
@@ -1385,7 +1398,8 @@ def _stub_server():
 def selftest():
     """Run the check against a good and a bad fixture; every fixture-testable
     row must be ok in the good one and not ok in the bad one. A third pass,
-    the good fixture with SITE_SHELL=off, must make every shell row na."""
+    the good fixture with SITE_SHELL=off, must make every shell row na; a
+    fourth, the good fixture as a client of the stub, every client row."""
     base = {k: v for k, v in os.environ.items()
             if not k.startswith(("GIT_", "SPARK_", "XDG_", "SITE_"))}
     results = {}
@@ -1422,6 +1436,21 @@ def selftest():
             parts = line.split("\t")
             if len(parts) == 5:
                 results["off"][parts[2]] = (parts[1], parts[3])
+        # the fourth pass: the good fixture as a client of the stub -- the
+        # engine, the units, the snapshot, the local AI and its servers answer na
+        root = os.path.join(tmp, "client")
+        os.makedirs(root)
+        env = dict(base)
+        env.update(make_fixture(root, True, stub_url))
+        env["SITE_AI_MODEL"] = "none"
+        env["SITE_PEER_AI_URL"] = stub_url
+        p = subprocess.run([sys.executable, os.path.join(REPO, "bin", "spark"), "check", "--porcelain", "--fresh"],
+                           env=env, capture_output=True, text=True, timeout=180)
+        results["client"] = {}
+        for line in p.stdout.splitlines():
+            parts = line.split("\t")
+            if len(parts) == 5:
+                results["client"][parts[2]] = (parts[1], parts[3])
     srv.shutdown()
     bad = 0
     say("%s check --selftest" % MARK)
@@ -1443,6 +1472,12 @@ def selftest():
     say("  %s shell-off: %d rows na%s" % (GLYPH[OK] if not not_na else GLYPH[FAIL], len(gated) - len(not_na),
                                          "" if not not_na else "   not na: " + " ".join(not_na)))
     bad += bool(not_na)
+    not_na = [n for n in CLIENT_ROWS if results["client"].get(n, ("missing", ""))[0] != NA]
+    peer = results["client"].get("peer", ("missing", ""))[0]
+    say("  %s client: %d rows na, peer %s%s" % (GLYPH[OK] if not not_na and peer == OK else GLYPH[FAIL],
+                                              len(CLIENT_ROWS) - len(not_na), peer,
+                                              "" if not not_na else "   not na: " + " ".join(not_na)))
+    bad += bool(not_na) or peer != OK
     say("  %d row%s failed to flip" % (bad, "" if bad == 1 else "s") if bad else "  every fixture-testable row flips")
     return 1 if bad else 0
 

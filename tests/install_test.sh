@@ -48,6 +48,14 @@ esac
 out=$(run)
 [ "$(printf '%s\n' "$out" | tail -1)" = "Nothing to do" ] && ok "AI layer, second run: Nothing to do" || bad "not idempotent: $(printf '%s\n' "$out" | grep -v '^ok' | head -3)"
 
+# 2c. a client (SITE_AI_MODEL=none + SITE_PEER_AI_URL): the widgets and the
+#     hooks as before, no unit and no plist, on either OS
+C=$T/client; mkdir -p "$C/.config/spark"
+printf 'SITE_AI_MODEL=none\nSITE_PEER_AI_URL=http://192.0.2.10:8081\n' > "$C/.config/spark/site.env"
+out=$(HOME=$C XDG_CONFIG_HOME=$C/.config sh "$REPO/install.sh" --dry-run 2>&1)
+printf '%s\n' "$out" | grep -q '^would link .*\.config/spark/widget\.zsh$' && ok "client: would link the widget" || bad "client: widget"
+if printf '%s\n' "$out" | grep -qE 'spark[-.](serve|forge|check)'; then bad "client: a unit or plist announced: $(printf '%s\n' "$out" | grep -E 'spark[-.](serve|forge|check)' | head -1)"; else ok "client: no unit, no plist"; fi
+
 # 2b. SITE_SHELL=on adds the shell layer on top: the rc files linked, the
 #     templates rendered; then Nothing to do again
 printf 'SITE_SHELL=on\n' > "$HOME/.config/spark/site.env"

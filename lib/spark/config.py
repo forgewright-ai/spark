@@ -185,6 +185,14 @@ class Config:
         return self.get("SITE_PEER_AI_URL", "")
 
     @property
+    def client(self):
+        """a client: no model of its own (SITE_AI_MODEL=none) and another
+        machine's FORGE or server (SITE_PEER_AI_URL) answering. Nothing runs
+        here: no engine, no units; the prompt, chat and explain still do.
+        spark client URL sets it, spark client off serves here again."""
+        return self.model_choice.strip().lower() == "none" and bool(self.peer_ai_url)
+
+    @property
     def peer_ssh(self):
         return self.get("SITE_PEER_SSH", "")
 

@@ -41,6 +41,7 @@ THE MACHINE
   spark shell [on|off]            spark's own shell: tmux, starship, micro ...
                                   on links the rc files (yours -> .bak)
   spark headless [on|off]         the FORGE up from boot, never asleep (brain)
+  spark client [URL|off]          answer from another machine's FORGE; none here
   spark ver                       logo, version, credits (the login greeting)
   spark update                       the newest tag; main pulls on a dev clone
   ./bootstrap.sh --dry-run        what a rebuild would change (never sudo)

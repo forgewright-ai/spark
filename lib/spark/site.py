@@ -273,6 +273,67 @@ def cmd_headless(args):
     return apply(HEADLESS_ROWS)
 
 
+# ----------------------------------------------------------------- client
+CLIENT_USAGE = """%s client -- a machine that answers from another machine's FORGE
+
+  spark client                  what is set here, and whether the peer answers
+  spark client URL              answer from the FORGE at URL: no model, no
+                                engine, nothing runs here; the prompt, chat and
+                                explain do (spark forge --print-client on the
+                                other machine prints the URL and the scp of
+                                its ember-token, the user token)
+  spark client off              serve here again: spark model auto picks one
+""" % MARK
+
+
+def cmd_client(args):
+    from . import wire
+    from . import EMBER_TOKEN_FILE
+    cfg = config.load()
+    if args and args[0] in ("-h", "--help", "help"):
+        say(CLIENT_USAGE.rstrip())
+        return 0
+    if not args or args[0] == "status":
+        if not cfg.client:
+            say("%s client -- not a client: SITE_AI_MODEL=%s, SITE_PEER_AI_URL=%s" % (
+                MARK, cfg.model_choice, cfg.peer_ai_url or "unset"))
+            say("  spark client URL answers from another machine's FORGE, nothing served here")
+            return 0
+        say("%s client -- of %s (SITE_AI_MODEL=none: nothing runs here)" % (MARK, cfg.peer_ai_url))
+        fh = wire.forge_health(cfg.peer_ai_url)
+        if isinstance(fh, dict):
+            up = fh.get("upstream", "down")
+            peer = "forge %s%s" % ("ok, " + fh.get("model", "?") if up == "ok" else "up, its model " + up, "")
+        else:
+            peer = "down" if fh == "down" else "server " + wire.health(cfg.peer_ai_url)
+        say("  %s %-12s %s" % (glyph("ok") if "ok" in peer else "!", "peer", peer))
+        have = os.path.isfile(EMBER_TOKEN_FILE)
+        say("  %s %-12s %s" % (glyph("ok") if have else "!", "ember-token",
+                               "here (0600)" if have else "missing -- " + _token_scp(cfg.peer_ai_url)))
+        return 0
+    if args[0] == "off":
+        say("the peer stays first while it answers; this machine's own model is the fallback")
+        return cmd_model(["auto"])
+    url = args[0].rstrip("/")
+    if not re.match(r"^https?://[^/\s]+$", url):
+        say("%s client -- URL is http://host:port, the FORGE's (spark forge --print-client there)" % MARK)
+        return 2
+    set_keys(SITE_PEER_AI_URL=url, SITE_AI_MODEL="none")
+    rc = apply(["configs", "rc", "engine", "model", "services", "token"])
+    if rc == 0:
+        if not os.path.isfile(EMBER_TOKEN_FILE):
+            say("then the user token: " + _token_scp(url))
+        from . import engine
+        if engine.server_pids(cfg.port):
+            say("the server that ran here keeps running: spark stop ends it")
+    return rc
+
+
+def _token_scp(url):
+    host = urlsplit(url).hostname or url
+    return "scp %s:~/.local/state/spark/ember-token ~/.local/state/spark/ember-token" % host
+
+
 # ------------------------------------------------------------------ model
 MODEL_USAGE = """%s model -- which model this machine serves
 
@@ -847,4 +908,6 @@ def main(sub, args):
         return cmd_ember(args)
     if sub == "headless":
         return cmd_headless(args)
+    if sub == "client":
+        return cmd_client(args)
     return cmd_font(args) if sub == "font" else cmd_bootconfig(args)

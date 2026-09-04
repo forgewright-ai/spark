@@ -279,6 +279,14 @@ may change freely.
   that. `spark shell on|off` (`site.cmd_shell`, `site.SHELL_ROWS`) is the
   only switch; `spark theme` stays outside the gate (the FORGE page reads
   `theme.env` too).
+- **The client shape.** `SITE_AI_MODEL=none` beside `SITE_PEER_AI_URL`
+  (`config.client`; `spark client URL|off`, `site.cmd_client`) means
+  nothing runs here: bootstrap skips the `engine` and `services` rows
+  (`$client`), `install.sh` links no unit and renders no plist, and the
+  rows in `check.CLIENT_ROWS` (engine, services, watchdog, ai, serve,
+  forge) read `na`;
+  `--selftest`'s fourth pass asserts that with the peer row ok. The peer
+  row is where a client's health lives.
 - **A model.** Three lists, by what it is:
   - Curated (`models.env`, the only source `auto` reads): an open
     license, proven on the line -- size and sha256 from the file's LFS
@@ -314,7 +322,8 @@ sh tests/update_test.sh         # spark update: pull, move to a tag, dirty refus
 `spark check` has 34 rows today: 11 SOFTWARE, 15 CAPABILITY, 8
 NONFUNCTIONAL (`grep -c '^@row' lib/spark/check.py`). With `SITE_SHELL=off`
 the 12 rows in `check.SHELL_ROWS` and the `shell` row answer `na`;
-`--selftest` runs a third pass to prove it.
+`--selftest` runs a third pass to prove it, and a fourth for the client
+shape (the 6 rows in `check.CLIENT_ROWS`).
 
 ## Releasing
 

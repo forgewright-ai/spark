@@ -14,6 +14,18 @@ check'`) no longer reports spark and starship missing: a non-interactive
 shell never sourced the hook that puts `~/.local/bin` on PATH, so the
 check now looks there, and in Homebrew's bin, itself.
 
+The client shape. A machine with `SITE_AI_MODEL=none` and a peer URL
+runs nothing of its own and is now treated that way end to end: `spark
+client URL` writes both keys, applies the prompt hook and the widgets,
+and says the `scp` of the ember-token; `spark client` shows the state and
+whether the peer answers; `spark client off` is `spark model auto`.
+bootstrap skips the engine and the units, `install.sh` links no unit and
+renders no plist, and `spark check` reads the engine, services, watchdog,
+ai, serve and forge rows as `na` (a fourth `--selftest` pass proves it) -- the peer row
+is where a client's health lives. `spark forge --print-client` names the
+verb. Before this a client's check showed three red rows for things a
+client should not have.
+
 ## v1.0
 
 The ignition. One line -- `curl -fsSL .../get | sh` -- or a clone and

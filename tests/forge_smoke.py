@@ -589,7 +589,8 @@ def main():
             ls = out.splitlines()
             ok(rc == 0 and ls[0] == "SITE_PEER_AI_URL=" + url
                and ls[1] == "scp fixture:~/.local/state/spark/ember-token ~/.local/state/spark/ember-token"
-               and "the admin token stays on this machine" in ls[2], "--print-client: the user token's lines", out)
+               and "the admin token stays on this machine" in ls[2]
+               and ls[3].startswith("spark client " + url), "--print-client: the user token's lines, the verb", out)
             ok(token not in out and "forge-token" not in out, "--print-client never hands out the admin token", out)
             rc, out, _ = spark("forge")
             ok(rc == 0 and url in out and "health   ok" in out and "stub-7b-q4" in out

@@ -1244,6 +1244,7 @@ def cmd_print_client(args):
     say("SITE_PEER_AI_URL=%s" % url)
     say("scp %s:~/.local/state/spark/ember-token ~/.local/state/spark/ember-token" % cfg.name)
     say("the admin token stays on this machine (spark forge --print-url)")
+    say("spark client %s   on the other machine writes the key and says the rest" % url)
     return 0
 
 

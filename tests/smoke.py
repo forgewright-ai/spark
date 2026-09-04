@@ -922,6 +922,30 @@ def main():
         rc, out, _ = spark("shell", "sideways", extra=off)
         t.ok(rc == 2 and out.startswith("spark shell -- "), "spark shell sideways is refused with the usage", out)
 
+        # the client shape: spark client (state, URL, off); the check's client rows
+        rc, out, _ = spark("client", extra=off)
+        t.ok(rc == 0 and "not a client" in out and "SITE_PEER_AI_URL=unset" in out, "spark client: not a client", out)
+        rc, out, _ = spark("client", "192.0.2.10:8081", extra=off)
+        t.ok(rc == 2 and out.startswith("spark client -- URL is http://"), "spark client without a scheme is refused", out)
+        rc, out, _ = spark("client", "http://192.0.2.10:8081/", extra=off)
+        site_env = open(home + "/.config/spark/site.env").read()
+        t.ok(rc == 0 and "SITE_PEER_AI_URL=http://192.0.2.10:8081\n" in site_env and "SITE_AI_MODEL=none\n" in site_env
+             and "scp 192.0.2.10:~/.local/state/spark/ember-token" in out,
+             "spark client URL writes the peer and none, says the scp of the token", out)
+        rc, out, _ = spark("client", extra=off)
+        t.ok(rc == 0 and "of http://192.0.2.10:8081" in out and "peer" in out and "ember-token" in out,
+             "spark client: the state, a client", out)
+        rc, outp, _ = spark("check", "--porcelain", "--fresh", extra=dict(off, SITE_PEER_AI_URL="http://192.0.2.10:8081"))
+        t.ok(all(re.search(r"^\w+\tna\t%s\ta client of 192.0.2.10:8081" % r, outp, re.M) for r in ("engine", "services", "watchdog", "ai", "serve", "forge")),
+             "spark check as a client: engine, services, watchdog, ai, serve, forge are na", outp)
+        rc, out, _ = spark("client", "off", extra=off)
+        site_env = open(home + "/.config/spark/site.env").read()
+        t.ok(rc == 0 and "SITE_AI_MODEL=auto\n" in site_env and "the peer stays first" in out,
+             "spark client off hands the model choice back to auto", out)
+        rc, out, _ = spark("client", "-h")
+        t.ok(rc == 0 and out.splitlines()[0] == "spark client -- a machine that answers from another machine's FORGE",
+             "spark client -h signs (contract 8)", out)
+
         # spark setup: the guided first run, non-interactive, nothing applied
         os.remove(home + "/.config/spark/site.env")
         rc, out, _ = spark("setup", "-h")

@@ -35,6 +35,9 @@ case $OS in Darwin) OSDIR=macos ;; *) OSDIR=linux ;; esac
 
 site_load
 theme_load "$REPO"
+# a client (SITE_AI_MODEL=none + SITE_PEER_AI_URL, spark client URL) runs no
+# units: the systemd units and the launchd plists stay out
+client=0; [ "$SITE_AI_MODEL" = none ] && [ -n "$SITE_PEER_AI_URL" ] && client=1
 
 changes=0
 row() { printf '%-14s %s\n' "$1" "$2"; }
@@ -106,6 +109,8 @@ for tree in "$REPO/home" "$REPO/$OSDIR/home"; do
         case $rel in
             .bashrc|.bash_profile|.zshrc|.zprofile|.config/micro/*)
                 [ "$SITE_SHELL" = on ] || continue ;;
+            .config/systemd/user/*)
+                [ "$client" = 0 ] || continue ;;
         esac
         link_one "$src" "$HOME/$rel"
     done
@@ -116,7 +121,8 @@ for src in $(find "$REPO/templates" -type f | sort); do
     rel=${src#"$REPO"/templates/}
     case $rel in
         .config/spark/launchd/*)
-            [ "$OS" = Darwin ] || continue ;;
+            [ "$OS" = Darwin ] || continue
+            [ "$client" = 0 ] || continue ;;
         .gitconfig|.tmux.conf|.config/btop/*)
             [ "$SITE_SHELL" = on ] || continue ;;
         .config/starship.toml.*)

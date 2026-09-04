@@ -120,6 +120,11 @@ AI_BUILD=$(ai_build)
 # daily tools, the font, the rc files, the console) only with SITE_SHELL=on
 shell=0; [ "$SITE_SHELL" = on ] && shell=1
 SHELL_OFF="SITE_SHELL=off (spark shell on)"
+# a client: no model of its own and a peer answering (SITE_AI_MODEL=none +
+# SITE_PEER_AI_URL; spark client URL). No engine and no units here -- the
+# widget, the hook and the tokens are all a client needs
+client=0; [ "$SITE_AI_MODEL" = none ] && [ -n "$SITE_PEER_AI_URL" ] && client=1
+CLIENT_OF="a client of $SITE_PEER_AI_URL (spark client off serves here again)"
 
 # ------------------------------------------------------------- the lists
 list_packages() {
@@ -474,7 +479,9 @@ if [ -z "$have" ] && [ -x "$ENGINE_DIR/llama-server" ] && [ -n "$flavour" ]; the
     fi
     echo "$have" > "$ENGINE_DIR/flavour"
 fi
-if [ -n "${SPARK_ENGINE_DIR:-}" ] && [ -x "$SPARK_ENGINE_DIR/llama-server" ]; then
+if [ "$client" = 1 ]; then
+    skip engine "$CLIENT_OF"
+elif [ -n "${SPARK_ENGINE_DIR:-}" ] && [ -x "$SPARK_ENGINE_DIR/llama-server" ]; then
     ok engine "your build in $SPARK_ENGINE_DIR (SPARK_ENGINE_DIR)"
 elif [ -x "$ENGINE_DIR/llama-server" ] && { [ -z "$sha" ] || [ "$have" = "$flavour" ]; }; then
     ok engine "llama.cpp $LLAMA_VERSION $have"
@@ -611,7 +618,9 @@ forge_why="SPARK_FORGE=${SPARK_FORGE:-auto}, server $([ "$serve_ready" = 1 ] && 
 # a box that is the brain: the units run from boot with nobody logged in
 # and the box never sleeps (SITE_HEADLESS=yes; `spark headless on`)
 headless=0; [ "$SITE_HEADLESS" = yes ] && headless=1
-if [ "$OS" = Darwin ]; then
+if [ "$client" = 1 ]; then
+    skip services "$CLIENT_OF"
+elif [ "$OS" = Darwin ]; then
     dom="gui/$(id -u)"; agents="$HOME/Library/LaunchAgents"; src="$SPARK_CONFIG_DIR/launchd"
     daemons=/Library/LaunchDaemons; me=$(id -un)
     agent() {   # agent LABEL WANTED(0|1) [WHY]
