@@ -57,10 +57,22 @@ def profile_dict(name, pal, font_name="JetBrainsMonoNFM-Regular", font_size=13.0
          "CursorColor": ns_color(pal["THEME_ACCENT"]),
          "SelectionColor": ns_color(pal["THEME_ANSI_0"]),
          "Font": ns_font(font_name, float(font_size)),
-         "columnCount": 120, "rowCount": 36, "useOptionAsMetaKey": True}
+         "columnCount": 120, "rowCount": 36, "useOptionAsMetaKey": True,
+         "keyMapBoundKeys": KEY_MAP}
     for i, k in enumerate(keys):
         d["ANSI%sColor" % k] = ns_color(pal["THEME_ANSI_%d" % i])
     return d
+
+
+# Terminal.app sends nothing for Shift+Up/Down (Shift+Left/Right it does),
+# so micro cannot select by line there; nor for Ctrl+arrows. The profile
+# binds the xterm sequences micro's terminfo already knows. Keys: $ Shift,
+# ^ Control; F700..F703 = Up, Down, Left, Right. Values are the literal
+# text Terminal.app stores ("\033" spelled out, as its own editor does).
+KEY_MAP = {
+    "$F700": "\\033[1;2A", "$F701": "\\033[1;2B", "$F702": "\\033[1;2D", "$F703": "\\033[1;2C",
+    "^F700": "\\033[1;5A", "^F701": "\\033[1;5B", "^F702": "\\033[1;5D", "^F703": "\\033[1;5C",
+}
 
 
 def read_back(path):
@@ -123,7 +135,9 @@ def profile(cfg, dry):
     is_default = rc == 0 and out.strip() == name
     rc, out = run(["defaults", "read", "com.apple.Terminal", "Window Settings"], timeout=10)
     imported = rc == 0 and ('"%s"' % name in out or "%s =" % name in out)
-    if have == want and imported and is_default:
+    live_keys = rc == 0 and "keyMapBoundKeys" in out.split('"%s" =' % name, 1)[-1][:4000]
+    stale_dup = rc == 0 and ('"%s 1"' % name in out)
+    if have == want and imported and is_default and live_keys and not stale_dup:
         say("ok     profile      Terminal.app profile %s is the default" % name)
         return 0
     if dry:
@@ -136,13 +150,44 @@ def profile(cfg, dry):
     if colours.get("BackgroundColor") is None:
         say("skip   profile      wrote %s but could not read it back -- not importing" % path)
         return 1
-    if not imported:
-        # `open` hands the file to Terminal.app, which adds the profile
-        subprocess.run(["open", "-g", path], check=False)
-    for key in ("Default Window Settings", "Startup Window Settings"):
-        run(["defaults", "write", "com.apple.Terminal", key, "-string", name])
+    if not _install_profile(name, profile_dict(name, pal, cfg.font_face, cfg.font_size), path):
+        say("skip   profile      wrote %s but could not write Terminal.app's preferences" % path)
+        return 1
     say("ok     profile      %s written, imported and set as default (new windows use it)" % name)
     return 0
+
+
+def _install_profile(name, d, path):
+    """Put the profile into Terminal.app's preferences under its name --
+    replacing an older one of that name -- and make it the default. Through
+    `defaults export` / `defaults import` (cfprefsd), never `open`: handing
+    Terminal.app the .terminal file imports a duplicate ("NAME 1") when the
+    name exists, and a duplicate is exactly what a changed profile made.
+    Earlier duplicates of that shape are removed on the way."""
+    rc, out = run(["defaults", "export", "com.apple.Terminal", "-"], timeout=10)
+    try:
+        prefs = plistlib.loads(out.encode("utf-8")) if rc == 0 and out.strip() else {}
+    except (ValueError, plistlib.InvalidFileException):
+        prefs = {}
+    ws = prefs.get("Window Settings")
+    if not isinstance(ws, dict):
+        ws = prefs["Window Settings"] = {}
+    ws[name] = d
+    for k in list(ws):
+        rest = k[len(name):]
+        if k.startswith(name) and rest.startswith(" ") and rest.strip().isdigit():
+            del ws[k]
+    prefs["Default Window Settings"] = name
+    prefs["Startup Window Settings"] = name
+    tmp = path + ".prefs"
+    with open(tmp, "wb") as f:
+        plistlib.dump(prefs, f)
+    rc, _ = run(["defaults", "import", "com.apple.Terminal", tmp], timeout=10)
+    try:
+        os.remove(tmp)
+    except OSError:
+        pass
+    return rc == 0
 
 
 def palettes():

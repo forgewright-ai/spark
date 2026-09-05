@@ -508,7 +508,10 @@ macOS:
   com.apple.quarantine ~/.local/share/spark/engine`.
 - The shell layer is Homebrew's (`Brewfile`, no pinning worth trusting)
   plus a Terminal.app profile: `spark theme profile` writes and imports
-  one with the palette and the font (`spark font FACE SIZE` sets them).
+  one with the palette, the font (`spark font FACE SIZE` sets them) and
+  the keys micro needs -- Terminal.app sends nothing for Shift+Up/Down or
+  Ctrl+arrows by default, so the profile binds them (select by line in
+  micro works in a new window).
   the profile makes Option the Meta key, so `Alt-s` is Option-s (Cmd-s is
   Terminal's own Export sheet); `Esc` then `s`, quickly, is the same keys.
 - Apple's `tmux-256color` terminfo predates modified arrow keys, so micro
