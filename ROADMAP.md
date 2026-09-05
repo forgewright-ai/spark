@@ -1,20 +1,26 @@
 # Roadmap
 
-What comes after v1.3, in the order it is likely to happen. Nothing here
+What comes after v1.4, in the order it is likely to happen. Nothing here
 is a promise; a row in `CHANGELOG.md` is. A better idea is an issue away.
 
-## spark token: one verb for the keys
+## spark token: status for the keys that remain
 
-Three clients hold the same secret three ways: the CLI reads files under
-`~/.local/state/spark/`, the desktop app keeps the OS keychain, the
-browser a cookie. When the box rotates a token, only the file copies go
-quietly stale, and the hint points at the wrong door. `spark token` makes
-the keys first-class: bare, it names which tokens this machine holds and
-whether the brain accepts each (status only, never a value); `spark token
-sync` refreshes a client's copies from its peer over SSH; `spark token
-rotate` rotates on the box and says what must change where. The landing
-rule applies: the help line, the verb, a check row (a held token the
-brain rejects is a warn with the sync remedy), the docs.
+v1.4 made user tokens personal (`spark user`: mint, login, rotate --
+shown once, never stored server-side), which absorbed the rotation half
+of the old `spark token` idea. What remains is status: bare `spark
+token` naming which keys this machine holds (the api-token, the admin
+token, the login) and whether the brain accepts each -- status only,
+never a value -- with the right remedy per stale key. The landing rule
+applies: the help line, the verb, a check row, the docs.
+
+## OS-user accounts on one box
+
+v1.4's users are FORGE accounts: one OS login, many named people, each
+with a sealed store. The second layer is real OS users on the box, each
+running their own spark against one shared engine: a package of the
+port story (two servers cannot bind one :8080), a shared model cache
+with per-user config, and a system unit serving all of them. Deferred
+on purpose until the account layer has been lived with.
 
 ## Chaos: rehearse the failures
 

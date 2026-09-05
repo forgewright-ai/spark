@@ -2,7 +2,13 @@
 
 ## v1.4
 
-The multi-user wave, in progress. Named users arrive: `spark user add
+The multi-user wave. One break, first: **the shared ember-token is
+gone** -- the FORGE no longer accepts it, and every client and browser
+logs in again with a personal token (`spark user add NAME` on the box,
+`spark user login NAME` where you sit). The `users` check row names the
+leftover file until it is removed.
+
+Named users arrive: `spark user add
 NAME` mints an account whose token is shown once and never stored; each
 user's threads, memory and chat history are sealed with
 ChaCha20-Poly1305 (written from RFC 8439, pinned to its test vectors)
