@@ -47,7 +47,7 @@ _spark_complete() {
         words="chat do serve stop check update shell headless client setup
                ver last status brain history stats bench tune model ember
                forge soul remember forget memory quiet theme font bar off
-               on explain help"
+               on user explain help"
         COMPREPLY=($(compgen -W "$words" -- "$cur"))
         return 0
     fi
@@ -66,6 +66,7 @@ _spark_complete() {
         tune)    words="show apply" ;;
         font)    words="list none status" ;;
         client)  words="off status" ;;
+        user)    words="list add remove login logout token status" ;;
         *)       return 0 ;;
     esac
     COMPREPLY=($(compgen -W "$words" -- "$cur"))

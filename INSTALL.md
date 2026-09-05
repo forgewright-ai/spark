@@ -602,7 +602,7 @@ get -> spark setup -> bootstrap.sh (apply) -> install.sh (links, renders)
                       the engine tarball, the model, the token, the units,
                       one rc line; SITE_SHELL=on adds the workstation
 
-spark check   36 rows: every promise the machine makes, fixture-tested
+spark check   37 rows: every promise the machine makes, fixture-tested
 spark update  the newest tag (a stranger), or main (a developer); converge
 
 what leaves the machine: pinned downloads in, your questions to the brain

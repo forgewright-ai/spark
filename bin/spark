@@ -56,6 +56,8 @@ the FORGE: the agent spark keeps on this machine, one identity
   spark forge --print-url     the page's login URL and token (--user: user's)
   spark forge --print-client  what a peer machine needs: URL and user token
   spark forge token --new     rotate the admin token (--user: the user one)
+  spark user [add NAME]       the named users, each with their own sealed
+                              threads (list, login, logout, remove, token --new)
 
 the server
   spark model [NAME|auto|none]  choose the served model: download, restart
@@ -158,6 +160,9 @@ def main(argv):
     if sub == "forge":
         from spark import forgeserve
         return forgeserve.main(rest)
+    if sub == "user":
+        from spark import users
+        return users.main(rest)
     from spark import cli
     if len(argv) == 1 and " " not in sub and not sub.endswith("?") and not sub.startswith("@") and sub not in cli.COMMANDS:
         # one word that is not a command: a slip, not a question -- questions
@@ -175,7 +180,7 @@ def main(argv):
 
 VERBS = ("help", "setup", "check", "update", "bar", "theme", "bench", "tune", "stats",
          "shell", "font", "quiet", "model", "headless", "ember", "client", "serve",
-         "stop", "forge")
+         "stop", "forge", "user")
 
 
 def near_verb(word, cli):

@@ -13,7 +13,7 @@ import sys
 import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
-from spark import chacha  # noqa: E402
+from spark import chacha, vault  # noqa: E402
 
 FAILED = 0
 
@@ -132,6 +132,43 @@ def test_throughput_floor():
     check("throughput floor (>= 100 kB/s)", per_sec >= 100 * 1024, True)
 
 
+def test_vault():
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        # the key file: wrap, unwrap, wrong token and wrong name refused
+        dk = vault.new_key()
+        keyfile = os.path.join(d, "key")
+        vault.write_private(keyfile, vault.wrap_key(dk, "tok-1", "alice").encode())
+        check("wrap/unwrap round-trip", vault.unwrap_key(keyfile, "tok-1", "alice"), dk)
+        refuse("wrong token refused", lambda: vault.unwrap_key(keyfile, "tok-2", "alice"))
+        refuse("wrong user refused", lambda: vault.unwrap_key(keyfile, "tok-1", "bob"))
+        check("mode 0600 on write_private", os.stat(keyfile).st_mode & 0o777, 0o600)
+
+        # a sealed thread: append, read, tail, and the AAD binding
+        t = os.path.join(d, "t.sealed")
+        msgs = [b'{"role":"user","text":"m%d"}' % i for i in range(9)]
+        for m in msgs:
+            vault.append_sealed(t, dk, "thread", "2000-01-01-000000", m)
+        check("append/read_sealed", vault.read_sealed(t, dk), msgs)
+        tail = vault.read_sealed_tail(t, dk, len(msgs[0]) * 3)
+        check("tail is the newest", tail, msgs[-3:])
+        check("tail of a big cap", vault.read_sealed_tail(t, dk, 10 ** 6), msgs)
+        check("is_sealed", vault.is_sealed(t), True)
+        check("header read back", vault.read_header(t), ("thread", "2000-01-01-000000"))
+        renamed = os.path.join(d, "r.sealed")
+        with open(t, encoding="utf-8") as f:
+            body = f.read().split("\n", 1)[1]
+        with open(renamed, "w", encoding="utf-8") as f:
+            f.write(vault.header("thread", "2001-01-01-000000") + "\n" + body)
+        refuse("renamed thread refused", lambda: vault.read_sealed(renamed, dk))
+
+        # a whole-blob file (memory, chat-history)
+        m = os.path.join(d, "memory")
+        vault.write_sealed(m, dk, "memory", "alice", b"a fact\nanother\n")
+        check("whole-blob round-trip", vault.read_sealed(m, dk), [b"a fact\nanother\n"])
+        check("plaintext is not sealed", vault.is_sealed(keyfile), False)
+
+
 def main():
     test_block_2_3_2()
     test_stream_2_4_2()
@@ -140,6 +177,7 @@ def main():
     test_aead_2_8_2()
     test_round_trips()
     test_refusals()
+    test_vault()
     test_throughput_floor()
     if FAILED:
         print("%d failed" % FAILED)

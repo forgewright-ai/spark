@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.4
+
+The multi-user wave, in progress. Named users arrive: `spark user add
+NAME` mints an account whose token is shown once and never stored; each
+user's threads, memory and chat history are sealed with
+ChaCha20-Poly1305 (written from RFC 8439, pinned to its test vectors)
+under a data key only that user's token opens. The box keeps a sha256
+verifier and a wrapped key -- the admin cannot read your messages, a
+stolen disk is ciphertext, and a lost token is lost history, by design.
+A new `users` check row watches the store: 0700 dirs, 0600 keys, the
+sealed magic on every file.
+
 ## v1.3
 
 The CLI experience wave. A few days of living with spark taught one

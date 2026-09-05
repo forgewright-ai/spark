@@ -88,6 +88,10 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 update (spark update: the newest tag, or main; converges)
                 chacha (ChaCha20-Poly1305 written from RFC 8439, pinned to its
                 vectors in tests/vault_test.py: the sealed stores' cipher)
+                vault (the sealed-file format and the key custody: a per-user
+                data key wrapped by the token; sha256 verifier; pbkdf2)
+                users (the named users, their store under state/users/, and
+                this machine's login: spark user)
 lib/spark/forge/  index.html spark.css spark.js manifest.webmanifest favicon.svg
                   -- the page, ASCII, no inline script
 home/           shared $HOME mirror (linked): micro bindings, the two widgets, the two rc hooks
@@ -125,7 +129,12 @@ state `~/.local/state/spark/` (0700: `api-token` 0600, `serve-url`,
 `router/` (`spark.gguf`, `ember.gguf`, `presets.ini` -- the router's
 models dir, written by `spark serve`), `off`, `widgets/`, `turns/`,
 `threads/` (0600 files), `chat-history` 0600, `brain`, `check.json`, `bar`,
-`bench.jsonl`, `tune.json`); data `~/.local/share/spark/{engine,models}`;
+`bench.jsonl`, `tune.json`,
+`users/<name>/` (0700 per user: `token.hash` and `key` 0600 -- the sha256
+token verifier and the wrapped data key -- plus that user's sealed
+`threads/`, `memory`, `chat-history`), `account` 0600 (this machine's
+login: name and token), `account-key` 0600 (the unwrapped data key, so
+the hot paths never pay the KDF)); data `~/.local/share/spark/{engine,models}`;
 tools linked into `~/.local/bin`.
 
 ## Contracts
@@ -397,7 +406,7 @@ sh tests/get_test.sh            # the one-liner: clone, pull, refusals, the hand
 sh tests/update_test.sh         # spark update: pull, move to a tag, dirty refused, --dry-run
 ```
 
-`spark check` has 36 rows today: 12 SOFTWARE, 16 CAPABILITY, 8
+`spark check` has 37 rows today: 12 SOFTWARE, 16 CAPABILITY, 9
 NONFUNCTIONAL (`grep -c '^@row' lib/spark/check.py`). With `SITE_SHELL=off`
 the 11 rows in `check.SHELL_ROWS` and the `shell` row answer `na`;
 `--selftest` runs a third pass to prove it, and a fourth for the client

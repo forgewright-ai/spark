@@ -46,7 +46,7 @@ _spark() {
         comp=(chat do serve stop check update shell headless client setup
               ver last status brain history stats bench tune model ember
               forge soul remember forget memory quiet theme font bar off
-              on explain help)
+              on user explain help)
     elif (( CURRENT == 3 )); then
         case ${words[2]} in
             quiet)   comp=(start login boot on off status) ;;
@@ -62,6 +62,7 @@ _spark() {
             tune)    comp=(show apply) ;;
             font)    comp=(list none status) ;;
             client)  comp=(off status) ;;
+            user)    comp=(list add remove login logout token status) ;;
         esac
     fi
     (( ${#comp} )) && compadd -- "${comp[@]}"

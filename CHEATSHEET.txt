@@ -40,6 +40,10 @@ THE SERVER
   spark forge --print-client      the URL + user token a peer machine needs
   spark forge --print-url [--user]  the login URL; that role's token on a tty
   spark forge token --new [--user]  rotate the admin (or user) token
+  spark user [list]               the named users, each a sealed store
+  spark user add NAME             mint an account; the token shows once
+  spark user login [NAME] | logout  act as NAME here; forget the login
+  spark user token --new          rotate your token; old logins die
 
 THE PAGE (spark forge --print-url)  keys work when no input has focus
   1..5                            the tabs      r  refresh      ?  help

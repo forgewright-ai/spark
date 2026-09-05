@@ -1035,6 +1035,58 @@ def row_privacy(ctx):
     return ok("state 0700, token 0600, site.env private, %s, one address" % words)
 
 
+@row("NONFUNCTIONAL")
+def row_users(ctx):
+    """The named users' sealed stores: every dir 0700, every key file
+    0600, every data file carrying the sealed magic, the local login
+    consistent. The promise is `eyes only to the owner`; a plaintext file
+    inside a user's store is the drift this row exists to catch."""
+    from . import ACCOUNT_FILE, ACCOUNT_KEY_FILE, USERS_DIR, users, vault
+    names = users.list_users()
+    me = users.account()[0]
+    if not names and not me:
+        return na("no users yet (spark user add NAME)")
+    if not names:
+        return ok("no store here; this machine is %s" % me)
+    problems, unsealed = [], 0
+    if os.stat(USERS_DIR).st_mode & 0o077:
+        problems.append("users dir not 0700")
+    for n in names:
+        d = os.path.join(USERS_DIR, n)
+        if os.stat(d).st_mode & 0o077:
+            problems.append("%s: dir not 0700" % n)
+        for fn in ("token.hash", "key"):
+            p = os.path.join(d, fn)
+            if not os.path.isfile(p):
+                problems.append("%s: no %s" % (n, fn))
+            elif os.stat(p).st_mode & 0o077:
+                problems.append("%s: %s not 0600" % (n, fn))
+        data = []
+        try:
+            data = [os.path.join(d, "threads", f) for f in os.listdir(os.path.join(d, "threads"))]
+        except OSError:
+            pass
+        data += [os.path.join(d, f) for f in ("memory", "chat-history")]
+        for p in data:
+            if os.path.isfile(p):
+                if not vault.is_sealed(p):
+                    unsealed += 1
+                if os.stat(p).st_mode & 0o077:
+                    problems.append("%s: store file not 0600" % n)
+    if unsealed:
+        problems.append("%d plaintext file%s inside a sealed store" % (unsealed, "" if unsealed == 1 else "s"))
+    for p in (ACCOUNT_FILE, ACCOUNT_KEY_FILE):
+        if os.path.exists(p) and os.stat(p).st_mode & 0o077:
+            problems.append("%s not 0600" % os.path.basename(p))
+    if me and not users.exists(me):
+        problems.append("login %s has no user here" % me)
+    if problems:
+        return warn("; ".join(problems[:4]),
+                    "chmod 700 %s and its dirs, 600 the files; spark user list" % ctx.short(USERS_DIR))
+    who = ("this machine is %s" % me) if me else "no login here"
+    return ok("%d user%s, sealed, keys wrapped; %s" % (len(names), "" if len(names) == 1 else "s", who))
+
+
 def _repos(ws):
     out = []
     try:
@@ -1405,6 +1457,32 @@ def make_fixture(root, good, stub_url=""):
     with open(os.path.join(state, "chat-history"), "w") as f:
         f.write("write a haiku\n")
     os.chmod(os.path.join(state, "chat-history"), 0o600 if good else 0o644)
+    # the users store: a sealed account and a live login (good), or a loose
+    # dir holding a plaintext thread and no key file (bad)
+    from . import vault
+    udir = os.path.join(state, "users", "fixture")
+    os.makedirs(os.path.join(udir, "threads"), mode=0o700)
+    for d in (os.path.join(state, "users"), udir):
+        os.chmod(d, 0o700 if good else 0o755)
+    if good:
+        fdk = vault.new_key()
+        vault.write_private(os.path.join(udir, "token.hash"),
+                            (vault.token_hash("fixture-token") + "\n").encode())
+        vault.write_private(os.path.join(udir, "key"),
+                            vault.wrap_key(fdk, "fixture-token", "fixture").encode())
+        vault.append_sealed(os.path.join(udir, "threads", "2000-01-01-000001.sealed"), fdk,
+                            "thread", "2000-01-01-000001",
+                            json.dumps({"ts": "2000-01-01 00:00:01", "role": "user", "text": "sealed?"}).encode())
+        vault.write_sealed(os.path.join(udir, "memory"), fdk, "memory", "fixture", b"a sealed fact\n")
+        vault.write_private(os.path.join(state, "account"), b"name=fixture\ntoken=fixture-token\n")
+        import base64 as _b64
+        vault.write_private(os.path.join(state, "account-key"), _b64.b64encode(fdk) + b"\n")
+    else:
+        with open(os.path.join(udir, "token.hash"), "w") as f:
+            f.write("0" * 64 + "\n")
+        os.chmod(os.path.join(udir, "token.hash"), 0o644)
+        with open(os.path.join(udir, "threads", "2000-01-01-000001.jsonl"), "w") as f:
+            f.write(json.dumps({"ts": "2000-01-01 00:00:01", "role": "user", "text": "leaked?"}) + "\n")
     if not good:
         with open(os.path.join(cfgd, "spark.env"), "w") as f:
             f.write("SPARK_PERSONA_EXTRA=old\n")
