@@ -371,16 +371,15 @@ CLIENT_USAGE = """%s client -- a machine that answers from another machine's FOR
   spark client                  what is set here, and whether the peer answers
   spark client URL              answer from the FORGE at URL: no model, no
                                 engine, nothing runs here; the prompt, chat and
-                                explain do (spark forge --print-client on the
-                                other machine prints the URL and the scp of
-                                its ember-token, the user token)
+                                explain do (spark user add NAME on the other
+                                machine mints your token, spark user login
+                                NAME here presents it)
   spark client off              serve here again: spark model auto picks one
 """ % MARK
 
 
 def cmd_client(args):
-    from . import wire
-    from . import EMBER_TOKEN_FILE
+    from . import users, wire
     cfg = config.load()
     if args and args[0] in ("-h", "--help", "help"):
         say(CLIENT_USAGE.rstrip())
@@ -399,9 +398,9 @@ def cmd_client(args):
         else:
             peer = "down" if fh == "down" else "server " + wire.health(cfg.peer_ai_url)
         say("  %s %-12s %s" % (glyph("ok") if "ok" in peer else "!", "peer", peer))
-        have = os.path.isfile(EMBER_TOKEN_FILE)
-        say("  %s %-12s %s" % (glyph("ok") if have else "!", "ember-token",
-                               "here (0600)" if have else "missing -- " + _token_scp(cfg.peer_ai_url)))
+        me = users.account()[0]
+        say("  %s %-12s %s" % (glyph("ok") if me else "!", "account",
+                               "this machine is %s" % me if me else "no login -- " + _login_hint(cfg.peer_ai_url)))
         return 0
     if args[0] == "off":
         say("the peer stays first while it answers; this machine's own model is the fallback")
@@ -413,17 +412,17 @@ def cmd_client(args):
     set_keys(SITE_PEER_AI_URL=url, SITE_AI_MODEL="none")
     rc = apply(["configs", "rc", "engine", "model", "services", "token"])
     if rc == 0:
-        if not os.path.isfile(EMBER_TOKEN_FILE):
-            say("then the user token: " + _token_scp(url))
+        if not users.account()[0]:
+            say("then log in as yourself: " + _login_hint(url))
         from . import engine
         if engine.server_pids(cfg.port):
             say("the server that ran here keeps running: spark stop ends it")
     return rc
 
 
-def _token_scp(url):
+def _login_hint(url):
     host = urlsplit(url).hostname or url
-    return "scp %s:~/.local/state/spark/ember-token ~/.local/state/spark/ember-token" % host
+    return "spark user add NAME on %s (the token shows once), then spark user login NAME here" % host
 
 
 # ------------------------------------------------------------------ model

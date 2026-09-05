@@ -186,9 +186,29 @@
     </div>
     <div class="actions">
       <button type="button" class="danger" data-run="forge" data-args="token --new">rotate admin token</button>
-      <button type="button" class="danger" data-run="forge" data-args="token --new --user">rotate user token</button>
     </div>
-    <p class="muted small">rotating logs that role out everywhere</p>
+    <p class="muted small">rotating logs the admin out everywhere; a user rotates their own below</p>
+  </div>
+  <div class="card adm" id="users-card">
+    <div class="head">
+      <h2>users</h2>
+      <span class="muted small">counts only -- the messages are sealed, there is no key here</span>
+    </div>
+    <table class="keys" id="users-table"></table>
+    <p class="muted small">spark user add NAME on the box mints an account; the token shows once</p>
+  </div>
+  <div class="card usr" id="account-card" hidden>
+    <div class="head">
+      <h2>account</h2>
+      <span id="account-name" class="mono muted"></span>
+    </div>
+    <div class="actions">
+      <button id="user-rotate" type="button" class="danger">rotate my token</button>
+      <button id="user-clear" type="button" class="danger">clear my threads</button>
+      <span id="account-note" class="muted small"></span>
+    </div>
+    <p id="account-status" class="muted small mono"></p>
+    <p class="muted small">your token is the only key to your history -- rotating logs your other devices out</p>
   </div>
   <div class="card usr" id="pal-card" hidden>
     <h2>palette</h2>
@@ -199,7 +219,7 @@
     <div class="card">
       <div class="head">
         <h2>soul</h2>
-        <button id="soul-save" type="button">save</button>
+        <button id="soul-save" type="button" class="adm">save</button>
       </div>
       <textarea id="soul-text" rows="10" class="mono wide" aria-label="soul" spellcheck="false"></textarea>
       <p id="soul-status" class="muted small"></p>

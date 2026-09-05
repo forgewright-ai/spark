@@ -667,17 +667,17 @@ def row_serve(ctx):
 
 @row("CAPABILITY")
 def row_forge(ctx):
-    from . import EMBER_TOKEN_FILE, engine, forge_url, lan_ip, wire
+    from . import engine, forge_url, lan_ip, wire
     url = forge_url()
     if not url:
         if ctx.cfg.forge == "off":
             return na("off on purpose (spark forge on)")
         return na("not started (spark forge start)")
     problems, loose = [], []
-    for label, tok in (("forge-token", ctx.cfg.forge_token_file), ("ember-token", EMBER_TOKEN_FILE)):
-        if not os.path.exists(tok) or os.stat(tok).st_mode & 0o077:
-            problems.append("%s is not 0600" % label)
-            loose.append(ctx.short(tok))
+    tok = ctx.cfg.forge_token_file
+    if not os.path.exists(tok) or os.stat(tok).st_mode & 0o077:
+        problems.append("forge-token is not 0600")
+        loose.append(ctx.short(tok))
     if "0.0.0.0" in url:
         problems.append("bound to 0.0.0.0")
     if problems:
@@ -1084,14 +1084,21 @@ def row_users(ctx):
     legacy = users.legacy_threads()
     if legacy:
         problems.append("%d pre-v1.4 plaintext thread%s" % (legacy, "" if legacy == 1 else "s"))
+    from . import EMBER_TOKEN_FILE
+    if os.path.exists(EMBER_TOKEN_FILE):
+        problems.append("the v1.3 shared ember-token survives (no longer accepted)")
     for p in (ACCOUNT_FILE, ACCOUNT_KEY_FILE):
         if os.path.exists(p) and os.stat(p).st_mode & 0o077:
             problems.append("%s not 0600" % os.path.basename(p))
     if me and not users.exists(me):
         problems.append("login %s has no user here" % me)
     if problems:
-        fix = "spark user claim" if legacy else \
-            "chmod 700 %s and its dirs, 600 the files; spark user list" % ctx.short(USERS_DIR)
+        if legacy:
+            fix = "spark user claim"
+        elif os.path.exists(EMBER_TOKEN_FILE):
+            fix = "rm %s -- personal tokens replace it (spark user)" % ctx.short(EMBER_TOKEN_FILE)
+        else:
+            fix = "chmod 700 %s and its dirs, 600 the files; spark user list" % ctx.short(USERS_DIR)
         return warn("; ".join(problems[:4]), fix)
     who = ("this machine is %s" % me) if me else "no login here"
     return ok("%d user%s, sealed, keys wrapped; %s" % (len(names), "" if len(names) == 1 else "s", who))
@@ -1534,11 +1541,10 @@ def make_fixture(root, good, stub_url=""):
         os.close(fd_)
         with open(os.path.join(state, "serve-url"), "w") as f:
             f.write(stub_url + "\n")
-        # the FORGE: two private tokens and a URL the stub answers /api/health at
-        for tname, tval in (("forge-token", b"stub-forge-token\n"), ("ember-token", b"stub-ember-token\n")):
-            fd_ = os.open(os.path.join(state, tname), os.O_WRONLY | os.O_CREAT, 0o600)
-            os.write(fd_, tval)
-            os.close(fd_)
+        # the FORGE: the private admin token and a URL the stub answers /api/health at
+        fd_ = os.open(os.path.join(state, "forge-token"), os.O_WRONLY | os.O_CREAT, 0o600)
+        os.write(fd_, b"stub-forge-token\n")
+        os.close(fd_)
         with open(os.path.join(state, "forge-url"), "w") as f:
             f.write(stub_url + "\n")
         origin = os.path.join(root, "work-origin.git")

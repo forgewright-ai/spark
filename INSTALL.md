@@ -365,20 +365,22 @@ confirmation.
 
 The FORGE is the agent this machine serves: the model plus its soul,
 memory and threads behind one HTTP API on `http://<host>:8081`, started
-beside the model server (`SPARK_FORGE=auto`). Three tokens, on purpose:
-the api-token is the model server's and never leaves the machine; the
-FORGE has two of its own, one per role. `spark forge --print-client`
-prints what another machine's `spark` needs: `SITE_PEER_AI_URL` for its
-`site.env` and the `scp` of the ember-token -- the user token -- to its
-`~/.local/state/spark/ember-token`. A peer only talks to the ember; a
-machine with a model of its own prefers the peer while it answers and
-falls back to its own server silently; `spark brain` says which answers.
-The raw-model path still exists: `spark serve --print-client` prints the
-`:8080` URL and the api-token's `scp`.
+beside the model server (`SPARK_FORGE=auto`). The api-token is the
+model server's and never leaves the machine; the forge-token is the
+admin's and stays here too. Everyone else is a named user: `spark user
+add NAME` mints an account whose token is shown once and never stored
+-- it is the only key to that user's sealed threads and memory, and
+there is no reset. `spark forge --print-client` says the flow: mint the
+user here, `spark client URL` and `spark user login NAME` on the other
+machine. A peer only talks to the ember; a machine with a model of its
+own prefers the peer while it answers and falls back to its own server
+silently; `spark brain` says which answers. The raw-model path still
+exists: `spark serve --print-client` prints the `:8080` URL and the
+api-token's `scp`.
 
 `spark client URL` on the other machine is the short form: it writes the
 peer URL and `SITE_AI_MODEL=none`, applies the prompt hook and the
-widgets, and says the `scp` line for the token. A client runs nothing --
+widgets, and names the login step. A client runs nothing --
 no engine, no model, no units -- and `spark check` there says so: the
 engine, services, watchdog, ai, serve and forge rows read `na`, the
 peer row says whether the FORGE answers. `spark client` shows that state; `spark client
@@ -391,23 +393,27 @@ reaches the bare line model, no identity):
 
 ```sh
 curl -sN http://<host>:8081/v1/chat/completions \
-  -H "Authorization: Bearer $(cat ~/.local/state/spark/ember-token)" \
+  -H "Authorization: Bearer $YOUR_SPARK_USER_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"messages":[{"role":"user","content":"what is this machine for?"}],"stream":true}'
 ```
 
-The page: a plain client page in the browser. `spark forge --print-url
-[--user]` prints `http://<host>:8081/login` and, on a terminal, that
-role's token; type it once and the browser keeps a cookie (90 days). Any
+The page: a plain client page in the browser. `spark forge --print-url`
+prints `http://<host>:8081/login` and, on a terminal, the admin token;
+type a token once and the browser keeps a cookie (90 days; a server
+restart asks again -- a user's key lives in memory only). Any
 machine's browser works -- a phone is just one client among many. The
 forge-token logs in as admin -- the whole machine: every verb, `do`, the
-config, serve, bench, the log; the ember-token as user: chat, threads, the
-soul and the memory, the palette, a read-only monitor. Give the household
-the user token; the admin token stays here. `spark forge token --new
-[--user]` rotates one role; exactly that role's clients and browsers log
-in again. `spark forge` alone is the status (URL, health, model, unit,
-tokens, log tail); `spark forge on|off` writes `SPARK_FORGE` and enables
-or disables the unit. There is no TLS on the LAN: the standard library
+config, serve, bench, the log, and the box account's own threads; a
+personal token logs in as that user: their own sealed chat, threads and
+memory, the palette, a read-only monitor. Give each of the household
+their own `spark user add NAME`; the admin token stays here, and nobody
+-- the admin included -- holds a key to another user's messages.
+`spark forge token --new` rotates the admin; `spark user token --new`
+(or the page's account card) rotates a user; exactly that principal's
+clients and browsers log in again. `spark forge` alone is the status
+(URL, health, model, unit, tokens, users, log tail); `spark forge
+on|off` writes `SPARK_FORGE` and enables or disables the unit. There is no TLS on the LAN: the standard library
 cannot mint a certificate without a new dependency, a self-signed one
 trains people to click through warnings, and the trust model is your LAN.
 The API is contract 9 in `CLAUDE.md`.

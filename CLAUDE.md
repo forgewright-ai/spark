@@ -234,19 +234,35 @@ may change freely.
    unloaded}`, `roles` = `{role: model file stem}` per served role) -- the client's FORGE detector and the
    `forge` row's probe. `GET /`, `/login`, `/static/<f>`,
    `/manifest.webmanifest` and `/apple-touch-icon.png` (a 180x180 PNG the
-   server draws) are the page, no token. Auth is two tokens, two roles: the forge-token is admin (the
-   whole box), the ember-token is user. `POST /api/login` takes `{token}`,
-   matches it against both, sets the cookie derived from the matching
-   token and answers `{ok, name, role}` (1 s and 401 when wrong; 429
-   after 10 wrong per minute from one address). Every other `/api/*` and
-   `/v1/*` route needs the cookie or either token as a bearer, else 401;
-   whichever token matched decides the role, per request. Admin-only:
-   `GET` `/api/serve`, `/api/gpu`, `/api/bench`, `/api/config`,
-   `/api/log` and `POST` `/api/run`, `/api/do/propose`, `/api/do/run`,
-   `/api/check/refresh` -- a user there gets 403 `{error: {kind: role}}`;
-   every other authed route is user-or-admin, and `GET /api/me` answers
-   `{role, name, version}`, which is how the page decides which console
-   to draw. Every `POST` and `DELETE` under `/api/` except `/api/login`
+   server draws) are the page, no token. Auth: the forge-token is admin
+   (the whole box, and the box account's own store); every other caller
+   is a named user (`spark user add NAME`) presenting their personal
+   token -- verified against its stored sha256, and unwrapping their
+   data key in memory only. `POST /api/login` takes `{token}`, sets the
+   cookie derived from it and answers `{ok, name, role, user}` (1 s and
+   401 when wrong; 429 after 10 wrong per minute from one address); a
+   user cookie lives in an in-memory session, so a server restart sends
+   browsers back to the login (the key cannot come back from a cookie),
+   while a bearer is stateless. A wrong bearer costs 1 s and is
+   counted; an unknown cookie is only a 401 (after a restart every
+   browser holds one). The v1.3 shared ember-token is not accepted.
+   Every other `/api/*` and `/v1/*` route needs the cookie or a token
+   as a bearer, else 401. Admin-only: `GET` `/api/serve`, `/api/gpu`,
+   `/api/bench`, `/api/config`, `/api/log`, `/api/users` and `POST`
+   `/api/run`, `/api/do/propose`, `/api/do/run`, `/api/check/refresh`,
+   `/api/soul` (the soul is the box's one identity) -- a user there
+   gets 403 `{error: {kind: role}}`; every other authed route is
+   user-or-admin, and `GET /api/me` answers `{role, user, name,
+   version}`, which is how the page decides which console to draw and
+   whom to greet. The chat, thread and memory routes are scoped to the
+   requester's own sealed store -- a user's to their
+   `users/<name>/`, the admin's to the box account's; nobody holds a
+   key to anyone else's. `GET /api/users` (admin) answers `{users:
+   [{name, threads, last}]}` -- counts and stamps, never a title, a
+   body or a token: the whole of admin visibility. `POST
+   /api/user/token` (user) rotates the requester's own token, returned
+   once, never stored; `DELETE /api/threads` clears the requester's own
+   store and answers `{cleared}`. Every `POST` and `DELETE` under `/api/` except `/api/login`
    also needs `X-Spark: 1`, a JSON object body, a `Host` this machine
    answers to and, when sent, an `Origin` matching it (400/403); `POST
    /v1/chat/completions` needs only the bearer or cookie. `GET
@@ -266,9 +282,10 @@ may change freely.
    15 s. `/v1/chat/completions` and `/v1/models` are OpenAI-shaped and
    proxied to the llama-server with the api-token; the request's `model`
    field routes -- a missing `model` means `ember` -- and the identity
-   (soul, memory) is injected into the system message only for an ember
-   request, a `spark` request passing through untouched; JSON or SSE
-   bytes come back as they are. Every `/api/*` answer is `Cache-Control:
+   (the soul, plus the requester's own remembered facts: a user's
+   sealed memory, the box account's for the admin) is injected into the
+   system message only for an ember request, a `spark` request passing
+   through untouched; JSON or SSE bytes come back as they are. Every `/api/*` answer is `Cache-Control:
    no-store`; the page is served with `Content-Security-Policy:
    default-src 'self'` and depends on nothing else. Errors are
    `{error: {kind, hint}}`.

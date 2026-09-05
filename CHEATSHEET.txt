@@ -37,9 +37,10 @@ THE SERVER
   spark bench [--tune]            llama-bench; --tune finds the best settings
   spark tune show | apply         the winner; apply writes spark.env, restarts
   spark forge [on|off]            the FORGE: the agent's API + page, on the LAN
-  spark forge --print-client      the URL + user token a peer machine needs
-  spark forge --print-url [--user]  the login URL; that role's token on a tty
-  spark forge token --new [--user]  rotate the admin (or user) token
+  spark forge --print-client      what a peer needs: URL + a user minted here
+  spark forge --print-url         the login URL; the admin token on a tty
+  spark forge token --new         rotate the admin token; a user rotates
+                                  their own: spark user token --new
   spark user [list]               the named users, each a sealed store
   spark user add NAME             mint an account; the token shows once
   spark user login [NAME] | logout  act as NAME here; forget the login

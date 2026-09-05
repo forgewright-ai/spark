@@ -53,9 +53,9 @@ the FORGE: the agent spark keeps on this machine, one identity
   spark remember <words>      a fact it keeps; spark forget N; spark memory
   spark ember [NAME|auto|none]  a second brain for conversations (opt-in)
   spark forge [on|off]        the FORGE on the LAN: the API and the page
-  spark forge --print-url     the page's login URL and token (--user: user's)
-  spark forge --print-client  what a peer machine needs: URL and user token
-  spark forge token --new     rotate the admin token (--user: the user one)
+  spark forge --print-url     the page's login URL, and the admin token
+  spark forge --print-client  what a peer machine needs: URL + a user there
+  spark forge token --new     rotate the admin token; users rotate their own
   spark user [add NAME]       the named users, each with their own sealed
                               threads (list, login, logout, remove, token --new)
 

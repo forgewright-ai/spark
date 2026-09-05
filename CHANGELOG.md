@@ -12,6 +12,20 @@ stolen disk is ciphertext, and a lost token is lost history, by design.
 A new `users` check row watches the store: 0700 dirs, 0600 keys, the
 sealed magic on every file.
 
+The FORGE becomes multi-user, and the shared ember-token is gone -- the
+server no longer accepts it. Every caller is either the admin
+(forge-token: the whole box, and the box account's own threads) or a
+named user presenting their personal token: verified against a stored
+hash, the data key unwrapped in memory only, chat and threads and
+memory scoped to their own sealed store. Nobody -- the admin included
+-- holds a key to another user's messages; `GET /api/users` shows the
+admin names and counts, never a word. Browser logins live in an
+in-memory session (a restart asks again; a key cannot come back from a
+cookie); bearers are stateless. The page greets you by name, a user
+rotates their own token and clears their own threads from the account
+card, and `spark client` + `spark user login` replace the old scp of a
+shared secret -- no token ever leaves the box it was minted on.
+
 The rest of what you say follows the threads into the seal. The
 remembered facts move from the plaintext config file into the account's
 sealed store (the first `spark remember` claims the old file away); the

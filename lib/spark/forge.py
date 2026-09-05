@@ -42,19 +42,21 @@ class RefError(Exception):
 
 
 # --------------------------------------------------------------- identity
-def identity(cfg):
-    """The soul, then the remembered facts when there are any."""
+def identity(cfg, mem=None):
+    """The soul, then the remembered facts when there are any. `mem`
+    names whose facts (a memory.store_of tuple): the FORGE passes the
+    requesting user's; None is this machine's own account."""
     t = soul.text(cfg)
-    m = memory.block(cfg)
+    m = memory.block(cfg, mem)
     return t + ("\n\n" + m if m else "")
 
 
-def system(cfg, mode, shell):
+def system(cfg, mode, shell, mem=None):
     """The whole system message: machine facts, identity, the mode's task.
     Byte-stable per machine, shell and mode until the soul or memory
     changes. A conversation (chat) gets one machine line, not the shell
     brief -- see persona.mode_prefix."""
-    return persona.mode_prefix(cfg, mode, shell) + "\n\n" + identity(cfg) + "\n\n" + persona.MODES[mode]
+    return persona.mode_prefix(cfg, mode, shell) + "\n\n" + identity(cfg, mem) + "\n\n" + persona.MODES[mode]
 
 
 # ---------------------------------------------------------------- threads
@@ -465,7 +467,8 @@ def read_refs(words, cwd=""):
 
 
 # ------------------------------------------------------------------ reply
-def reply(cfg, thread, text, files=(), cwd="", shell="", mode="chat", on_delta=None, context="", line=None, brain=None):
+def reply(cfg, thread, text, files=(), cwd="", shell="", mode="chat", on_delta=None, context="", line=None, brain=None,
+          store=None, mem=None):
     """One turn, no terminal: the answer streams through on_delta(text).
     `thread` None starts one (None stays None when history is off);
     `files` are @FILE names as typed, read here relative to cwd and sent
@@ -485,9 +488,10 @@ def reply(cfg, thread, text, files=(), cwd="", shell="", mode="chat", on_delta=N
         text = SUMMARISE
     if line is None:
         line = " ".join(["@" + f for f in files] + ([text] if text else []))
+    st = store if store is not None else local_store(provision=cfg.history > 0)
     if thread is None:
-        thread = new_thread(cfg)
-    s = session.Session(cfg, mode, shell, cwd, history(thread) if thread else None, brain)
+        thread = st.new_thread(cfg)
+    s = session.Session(cfg, mode, shell, cwd, st.history(thread) if thread else None, brain, mem=mem)
     tap = on_delta or (lambda d: None)
     collected = []
 
@@ -498,15 +502,15 @@ def reply(cfg, thread, text, files=(), cwd="", shell="", mode="chat", on_delta=N
     try:
         answer, ms = s.ask_stream(text, context, on_delta_tap)
     except (KeyboardInterrupt, BrokenPipeError, ConnectionResetError) as e:
-        append(cfg, thread, "user", line, mode=mode, cwd=cwd)
+        st.append(cfg, thread, "user", line, mode=mode, cwd=cwd)
         partial = "".join(collected)
         if partial:
-            append(cfg, thread, "assistant", partial, kind="answer", partial=True)
+            st.append(cfg, thread, "assistant", partial, kind="answer", partial=True)
         e.thread = thread
         raise
-    s.record(kind="answer", line=line, answer=answer, ms=ms, thread=thread)
-    append(cfg, thread, "user", line, mode=mode, cwd=cwd)
-    append(cfg, thread, "assistant", answer, kind="answer")
+    s.record(kind="answer", ms=ms, thread=thread)
+    st.append(cfg, thread, "user", line, mode=mode, cwd=cwd)
+    st.append(cfg, thread, "assistant", answer, kind="answer")
     return thread, answer, ms
 
 

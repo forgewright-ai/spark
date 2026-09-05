@@ -44,21 +44,22 @@ def api_key(cfg):
 
 def forge_token(cfg):
     """The token a FORGE client sends: SPARK_FORGE_TOKEN from the
-    environment, else the 0600 forge-token file (admin), else the 0600
-    ember-token file (user) -- a machine that only received the user token
-    still talks /v1 and chat. Empty when there is none."""
+    environment, else this machine's own login (spark user login -- the
+    personal token, so threads land in your store over there), else the
+    0600 forge-token file (admin, on the box itself). Empty when there
+    is none."""
     key = os.environ.get("SPARK_FORGE_TOKEN", "")
     if key:
         return key
-    for path in (cfg.forge_token_file, EMBER_TOKEN_FILE):
-        try:
-            with open(path, encoding="utf-8") as f:
-                tok = f.read().strip()
-            if tok:
-                return tok
-        except OSError:
-            pass
-    return ""
+    from . import users
+    tok = users.account()[1]
+    if tok:
+        return tok
+    try:
+        with open(cfg.forge_token_file, encoding="utf-8") as f:
+            return f.read().strip()
+    except OSError:
+        return ""
 
 
 def ensure_token(cfg):
@@ -103,7 +104,7 @@ def _headers(cfg, extra=None, forge=False):
 
 def _auth_hint(cfg, url, forge):
     if forge:
-        return ("token rejected by %s -- copy that machine's ember-token here (spark forge --print-client there), or set SPARK_FORGE_TOKEN"
+        return ("token rejected by %s -- spark user add NAME there (the token shows once), spark user login NAME here; or set SPARK_FORGE_TOKEN"
                 % url)
     return "token rejected by %s -- copy the serving machine's %s here, or set SPARK_API_KEY" % (url, cfg.token_file)
 

@@ -30,15 +30,22 @@ MEMORY_USAGE = """%s memory -- what it keeps
 """ % (MARK, FACT_MAX, FACTS_MAX)
 
 
+def store_of(name, dk):
+    """The (sealed path, dk, name) triple of one named user's memory --
+    what the FORGE passes for the requesting user."""
+    from . import users
+    return os.path.join(users.user_dir(name), "memory"), dk, name
+
+
 def _store():
-    """(sealed path, dk, name) of the account's memory, or None -- no
-    account, or its key not held here (a client machine)."""
+    """(sealed path, dk, name) of this machine's own account, or None --
+    no account, or its key not held here (a client machine)."""
     from . import users
     name, _ = users.account()
     if name and users.exists(name):
         dk = users.account_key()
         if dk:
-            return os.path.join(users.user_dir(name), "memory"), dk, name
+            return store_of(name, dk)
     return None
 
 
@@ -48,16 +55,19 @@ def sealed_exists():
     return bool(st) and os.path.isfile(st[0])
 
 
-def _lines():
+def _lines(st=None):
     """Every line of the memory, as written (comments and blanks too):
-    the sealed store first, the pre-v1.4 plaintext as the fallback."""
-    st = _store()
+    the sealed store first, the pre-v1.4 plaintext as the fallback.
+    `st` names whose (store_of); None is this machine's own account."""
+    st = st or _store()
     if st and os.path.isfile(st[0]):
         try:
             recs = vault.read_sealed(st[0], st[1])
             return recs[0].decode("utf-8", "replace").splitlines() if recs else []
         except (OSError, vault.SealError):
             return []
+    if st and st != _store():
+        return []                  # a named user with no memory yet: never the box's file
     try:
         with open(MEMORY_FILE, encoding="utf-8", errors="replace") as f:
             return f.read().splitlines()
@@ -65,18 +75,18 @@ def _lines():
         return []
 
 
-def _all_facts():
+def _all_facts(st=None):
     """The facts in the file, uncapped, ignoring the on/off switch."""
-    return [ln.strip() for ln in _lines() if ln.strip() and not ln.lstrip().startswith("#")]
+    return [ln.strip() for ln in _lines(st) if ln.strip() and not ln.lstrip().startswith("#")]
 
 
-def facts(cfg):
+def facts(cfg, st=None):
     """The facts that go into a request: [] when memory is off; at most
     FACTS_MAX of them and TOTAL_MAX characters, oldest first."""
     if cfg is not None and not cfg.memory:
         return []
     out, total = [], 0
-    for fact in _all_facts()[:FACTS_MAX]:
+    for fact in _all_facts(st)[:FACTS_MAX]:
         fact = fact[:FACT_MAX]
         if total + len(fact) > TOTAL_MAX:
             break
@@ -85,11 +95,13 @@ def facts(cfg):
     return out
 
 
-def _write(lines):
-    """Seal the memory into the account's store (minting the account on a
-    machine that has none) and claim the plaintext away."""
+def _write(lines, st=None):
+    """Seal the memory into the named store (minting this machine's own
+    account when none is named and none exists) and claim the plaintext
+    away."""
     from . import forge
-    st = _store()
+    own = st is None
+    st = st or _store()
     if st is None:
         forge.local_store(provision=True)
         st = _store()
@@ -99,18 +111,21 @@ def _write(lines):
     path, dk, name = st
     os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
     vault.write_sealed(path, dk, "memory", name, "".join(ln + "\n" for ln in lines).encode("utf-8"))
-    try:
-        os.remove(MEMORY_FILE)
-    except OSError:
-        pass
+    if own:
+        try:
+            os.remove(MEMORY_FILE)
+        except OSError:
+            pass
 
 
-def block(cfg):
-    """The paragraph for the system prompt, or "" when there is nothing."""
-    fs = facts(cfg)
+def block(cfg, st=None):
+    """The paragraph for the system prompt, or "" when there is nothing.
+    A named user's block carries their name; the box's carries SITE_USER."""
+    fs = facts(cfg, st)
     if not fs:
         return ""
-    return "About %s, remembered:\n" % cfg.user + "\n".join("- " + f for f in fs)
+    who = st[2] if st else (cfg.user if cfg else "")
+    return "About %s, remembered:\n" % who + "\n".join("- " + f for f in fs)
 
 
 def _refresh():
@@ -127,9 +142,9 @@ class Refused(Exception):
         self.reason, self.hint = reason, hint
 
 
-def remember(text):
+def remember(text, st=None):
     """Keep one fact (whitespace folded); returns it as written. Raises
-    Refused. The prompt and the page share this."""
+    Refused. The prompt and the page share this; `st` names whose memory."""
     fact = " ".join((text or "").split())
     if not fact:
         raise Refused("empty", "nothing to keep -- say it in words")
@@ -137,26 +152,26 @@ def remember(text):
         raise Refused("long", "%d chars -- a fact is at most %d" % (len(fact), FACT_MAX))
     if fact.startswith("#"):
         raise Refused("comment", "a fact cannot start with # -- that is a comment")
-    have = _all_facts()
+    have = _all_facts(st)
     if fact.lower() in (h.lower() for h in have):
         raise Refused("duplicate", "already kept: %s" % fact)
     if len(have) >= FACTS_MAX:
         raise Refused("full", "%d facts already -- spark forget one first" % FACTS_MAX)
-    _write(_lines() + [fact])
+    _write(_lines(st) + [fact], st)
     _refresh()
     return fact
 
 
-def forget_n(n):
+def forget_n(n, st=None):
     """Drop fact N as `spark memory` numbers them; the fact, or None when
     there is no such number."""
-    lines = _lines()
+    lines = _lines(st)
     idx = [i for i, ln in enumerate(lines) if ln.strip() and not ln.lstrip().startswith("#")]
     if not 1 <= n <= len(idx):
         return None
     fact = lines[idx[n - 1]].strip()
     del lines[idx[n - 1]]
-    _write(lines)
+    _write(lines, st)
     _refresh()
     return fact
 

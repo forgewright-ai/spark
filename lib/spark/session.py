@@ -86,11 +86,13 @@ def _resolve(cfg, fresh):
 
 
 class Session:
-    def __init__(self, cfg, mode, shell, cwd="", history=None, brain=None):
+    def __init__(self, cfg, mode, shell, cwd="", history=None, brain=None, mem=None):
         """`brain` is a callable(fresh) -> wire.Brain, else wire.resolve_brain:
         the FORGE passes its own upstream so an in-process reply never
-        resolves to the FORGE itself."""
+        resolves to the FORGE itself. `mem` names whose remembered facts
+        ride the identity (memory.store_of); None is this machine's own."""
         self.cfg, self.mode, self.shell, self.cwd = cfg, mode, shell, cwd
+        self.mem = mem
         # The rule: the prompt line is spark; every sentence is an ember.
         # Every request names its role in the `model` field.
         self.role = "spark" if mode == "line" else "ember"
@@ -107,7 +109,7 @@ class Session:
         an ember against a raw server gets the whole thing."""
         if self.role == "spark" or self.forge:
             return persona.mode_prefix(self.cfg, self.mode, self.shell) + "\n\n" + persona.MODES[self.mode]
-        return forge.system(self.cfg, self.mode, self.shell)
+        return forge.system(self.cfg, self.mode, self.shell, self.mem)
 
     def _messages(self, text, context=""):
         return ([{"role": "system", "content": self._system()}]

@@ -117,11 +117,10 @@ def unlock(name, token):
     return vault.unwrap_key(os.path.join(user_dir(name), "key"), token, name)
 
 
-def rotate(name, token):
-    """A new token for the same data key; the old token dies. Returns the
-    new token or raises vault.SealError."""
+def rewrap(name, dk):
+    """A new token wrapping an existing data key (the FORGE holds the key
+    from the session); the old token dies with its hash."""
     import secrets
-    dk = unlock(name, token)
     new = secrets.token_urlsafe(32)
     d = user_dir(name)
     vault.write_private(os.path.join(d, "token.hash"),
@@ -129,6 +128,12 @@ def rotate(name, token):
     vault.write_private(os.path.join(d, "key"),
                         vault.wrap_key(dk, new, name).encode())
     return new
+
+
+def rotate(name, token):
+    """A new token for the same data key; the old token dies. Returns the
+    new token or raises vault.SealError."""
+    return rewrap(name, unlock(name, token))
 
 
 # ------------------------------------------------------------ the login
@@ -241,7 +246,9 @@ def cmd_add(args):
         say("")
     else:
         say("spark user: the token is shown only at a terminal (--show-token to print it here)")
-    if not account()[0]:
+    # the first user on a machine with no login is its owner: log in.
+    # later adds mint guests and leave the login alone.
+    if not account()[0] and len(list_users()) == 1:
         try:
             write_login(name, token, unlock(name, token))
             say("ok     account      this machine is %s" % name)

@@ -5,13 +5,16 @@
 # api-token. /v1/chat/completions is OpenAI-compatible; /api/* is the
 # monitor and the page's food; /, /login, /static/* are the page.
 #
-# Auth: two tokens, two roles. The forge-token (state/forge-token, 0600)
-# is admin: the whole box. The ember-token (state/ember-token, 0600) is
-# user: chat, threads, soul, memory, and the read-only monitor. Either as
-# a bearer, or the cookie a login with it sets; whichever token matches
-# decides the role, per request. No TLS: the trust model is your LAN, and
-# the token already crosses it in clear -- see README "What leaves this
-# machine".
+# Auth: the forge-token (state/forge-token, 0600) is admin -- the whole
+# box, and the box account's own threads and memory. Every other caller
+# is a named user (spark user add NAME): their personal token, verified
+# against its sha256 and unwrapping their data key, scopes chat, threads
+# and memory to their own sealed store -- the server holds the key in
+# memory only. Bearer auth is stateless; a cookie login lives in an
+# in-memory session, so a restart sends browsers back to the login (the
+# key cannot come back from a cookie). The v1.3 shared ember-token is
+# gone: the server no longer accepts it. No TLS: the trust model is your
+# LAN -- see README "What leaves this machine".
 
 import fcntl
 import hashlib
@@ -67,12 +70,12 @@ RUN_ARG = re.compile(r"^[A-Za-z0-9._/:@+= -]{0,200}$")
 # from the LAN writes config.
 RUN_VERBS = {"theme": None, "model": None, "ember": None, "font": None, "quiet": None, "bench": None, "on": None, "off": None,
              "serve": None, "stop": None, "remember": None, "forget": None,
-             "tune": lambda a: a[:1] == ["apply"], "history": lambda a: a == ["clear"],
-             "forge": lambda a: a in (["token", "--new"], ["token", "--new", "--user"])}
+             "tune": lambda a: a[:1] == ["apply"],
+             "forge": lambda a: a == ["token", "--new"]}
 # Admin-only routes (class A). Everything else under /api and /v1 that
 # needs auth is class U: user or admin. A user hitting A gets 403 "role".
-ADMIN_GET = frozenset(("/api/serve", "/api/gpu", "/api/bench", "/api/config", "/api/log"))
-ADMIN_POST = frozenset(("/api/run", "/api/do/propose", "/api/do/run", "/api/check/refresh"))
+ADMIN_GET = frozenset(("/api/serve", "/api/gpu", "/api/bench", "/api/config", "/api/log", "/api/users"))
+ADMIN_POST = frozenset(("/api/run", "/api/do/propose", "/api/do/run", "/api/check/refresh", "/api/soul"))
 
 USAGE = """%s forge -- the served agent
 
@@ -81,21 +84,21 @@ USAGE = """%s forge -- the served agent
   spark forge start | stop     by hand (a managed unit needs stop --force)
   spark forge --foreground     what the unit runs; exit 78 = misconfigured
                                (--host ADDR, --port N override the config)
-  spark forge --print-url [--user]    the page's login URL; that role's
-                               token on a tty (or with --show-token)
-  spark forge --print-client   what a peer machine needs: the URL and the
-                               user token (the admin token stays here)
-  spark forge token --new [--user]    rotate the admin (or user) token;
-                               its logins die
+  spark forge --print-url      the page's login URL; the admin token on
+                               a tty (or with --show-token); a user logs
+                               in with their own (spark user add NAME)
+  spark forge --print-client   what a peer machine needs: the URL, and
+                               how to mint a user there
+  spark forge token --new      rotate the admin token; its logins die
+                               (a user rotates with spark user token --new)
 """ % MARK
 
 
 # ------------------------------------------------------------------ token
-def ensure_token(cfg, role="admin"):
-    """Create the named role's token if missing (O_EXCL, 0600); repair its
-    mode. admin = forge-token, user = ember-token. Returns the token.
-    Never prints it."""
-    return wire.ensure_token_file(cfg.forge_token_file if role == "admin" else EMBER_TOKEN_FILE)
+def ensure_token(cfg):
+    """Create the admin token if missing (O_EXCL, 0600); repair its mode.
+    Returns the token. Never prints it."""
+    return wire.ensure_token_file(cfg.forge_token_file)
 
 
 def _read_token(path):
@@ -108,6 +111,17 @@ def _read_token(path):
 
 def cookie_value(token):
     return hmac.new(token.encode(), COOKIE_SALT, hashlib.sha256).hexdigest()
+
+
+def _hash_current(name, h):
+    """Whether hash h is still the named user's token verifier -- a
+    rotation or removal kills every cached key and session for them."""
+    from . import users
+    try:
+        with open(os.path.join(users.user_dir(name), "token.hash"), encoding="utf-8") as f:
+            return hmac.compare_digest(h, f.read().strip())
+    except OSError:
+        return False
 
 
 # -------------------------------------------------------------------- log
@@ -275,31 +289,64 @@ class ForgeServer(ThreadingHTTPServer):
         self.upstream = Upstream(cfg, url)
         self.chat_lock = threading.Lock()      # one generation at a time: the model is one
         self.run_lock = threading.Lock()       # one verb at a time
-        self._tokens, self._tokens_t = ("", ""), None
+        self._admin, self._admin_t = "", None
+        self._user_keys = {}                    # sha256(token) -> (name, dk), unlocked once
+        self.sessions = {}                      # cookie -> (name, dk, token hash); memory only
+        self._auth_lock = threading.Lock()
         self._models = (0.0, [])               # (epoch, [(alias, stem, loaded)])
         self._fails = {}                        # ip -> [epoch of wrong login]
         self._fails_lock = threading.Lock()
         names = {self.host, "127.0.0.1", "localhost"} | own_hostnames() | {lan_ip()}
         self.hosts = {n for n in names if n} | {"%s:%d" % (n, self.port) for n in names if n}
 
-    def tokens(self):
-        """(admin, user): the forge-token and the ember-token, each read
-        strictly from its own file and re-read when one changes: `spark
-        forge token --new [--user]` takes effect without a restart, and
-        every cookie minted from the old token dies with it."""
-        paths = (self.cfg.forge_token_file, EMBER_TOKEN_FILE)
-        mts = []
-        for p in paths:
-            try:
-                mts.append(os.stat(p).st_mtime)
-            except OSError:
-                mts.append(-2.0)
-        mts = tuple(mts)
-        if mts != self._tokens_t:
-            admin = os.environ.get("SPARK_FORGE_TOKEN", "") or _read_token(paths[0])
-            self._tokens = (admin, _read_token(paths[1]))
-            self._tokens_t = mts
-        return self._tokens
+    def admin_token(self):
+        """The forge-token, re-read when its file changes: `spark forge
+        token --new` takes effect without a restart, and every cookie
+        minted from the old token dies with it."""
+        p = self.cfg.forge_token_file
+        try:
+            mt = os.stat(p).st_mtime
+        except OSError:
+            mt = -2.0
+        if mt != self._admin_t:
+            self._admin = os.environ.get("SPARK_FORGE_TOKEN", "") or _read_token(p)
+            self._admin_t = mt
+        return self._admin
+
+    def user_by_bearer(self, tok):
+        """(name, dk) for a user's bearer, or None. The first sight of a
+        token pays one KDF unwrap; after that it is a hash lookup, and a
+        rotation invalidates the cache because the stored hash changed."""
+        from . import users, vault
+        h = vault.token_hash(tok)
+        with self._auth_lock:
+            hit = self._user_keys.get(h)
+        if hit and _hash_current(hit[0], h):
+            return hit
+        name = users.find_by_token(tok)
+        if not name:
+            return None
+        try:
+            dk = users.unlock(name, tok)
+        except vault.SealError:
+            return None
+        with self._auth_lock:
+            self._user_keys[h] = (name, dk)
+        return (name, dk)
+
+    def session_user(self, cookie):
+        """(name, dk) of a logged-in browser, or None -- sessions live in
+        memory only: a restart sends every browser back to the login."""
+        with self._auth_lock:
+            s = self.sessions.get(cookie)
+        if s and _hash_current(s[0], s[2]):
+            return s[0], s[1]
+        return None
+
+    def remember_session(self, token, name, dk):
+        from . import vault
+        with self._auth_lock:
+            self.sessions[cookie_value(token)] = (name, dk, vault.token_hash(token))
 
     def models_list(self, url):
         """[(alias, stem, loaded)] of the upstream, best-effort: [] when
@@ -404,29 +451,34 @@ class Handler(BaseHTTPRequestHandler):
                 return v.strip()
         return ""
 
-    def _role(self):
-        """"admin" | "user" | "" for this request's bearer or cookie: the
-        forge-token is admin, the ember-token user; whichever matches
-        decides, per request. A wrong one costs a second and is counted;
-        none at all is just 401."""
-        admin, user = self.server.tokens()
+    def _auth(self):
+        """(role, user name, data key) for this request's bearer or
+        cookie: the forge-token is admin; a personal token names its
+        user and unwraps their key. A wrong bearer costs a second and is
+        counted; an unknown cookie is only a 401 -- after a restart every
+        browser holds one, and punishing that would lock the door on the
+        way back to the login."""
+        srv = self.server
+        admin = srv.admin_token()
         auth = self.headers.get("Authorization") or ""
         if auth.startswith("Bearer "):
             given = auth[7:].strip()
             if admin and hmac.compare_digest(given, admin):
-                return "admin"
-            if user and hmac.compare_digest(given, user):
-                return "user"
+                return "admin", "", None
+            hit = srv.user_by_bearer(given)
+            if hit:
+                return "user", hit[0], hit[1]
             self._punish("bearer")
-            return ""
+            return "", "", None
         c = self._cookie()
         if c:
             if admin and hmac.compare_digest(c, cookie_value(admin)):
-                return "admin"
-            if user and hmac.compare_digest(c, cookie_value(user)):
-                return "user"
-            self._punish("cookie")
-        return ""
+                return "admin", "", None
+            s = srv.session_user(c)
+            if s:
+                return "user", s[0], s[1]
+            log("%s unknown cookie" % self._ip())
+        return "", "", None
 
     def _punish(self, what):
         log("%s wrong %s" % (self._ip(), what))
@@ -473,7 +525,7 @@ class Handler(BaseHTTPRequestHandler):
     def _dispatch(self, method):
         t0 = time.time()
         self._status = 0
-        self.role = ""
+        self.role, self.user, self.dk = "", "", None
         parts = urllib.parse.urlsplit(self.path)
         path, self.query = parts.path, urllib.parse.parse_qs(parts.query)
         try:
@@ -506,10 +558,10 @@ class Handler(BaseHTTPRequestHandler):
             return self.static(path[8:])
         if not path.startswith(("/api/", "/v1/")):
             return self._error(404, "missing", "no such page")
-        # bearer or cookie; whichever token matched decides the role
-        self.role = self._role()
+        # bearer or cookie; whichever token matched decides role and user
+        self.role, self.user, self.dk = self._auth()
         if not self.role:
-            return self._error(401, "auth", "log in with the forge-token (spark forge --print-url on %s)" % srv.cfg.name)
+            return self._error(401, "auth", "log in with your token (spark user add NAME mints one on %s; the admin's is spark forge --print-url)" % srv.cfg.name)
         admin_only = path in (ADMIN_GET if method == "GET" else ADMIN_POST if method == "POST" else ())
         if admin_only and self.role != "admin":
             return self._error(403, "role", "this needs the admin token")
@@ -519,7 +571,8 @@ class Handler(BaseHTTPRequestHandler):
                   "/api/bar": self.api_bar, "/api/serve": self.api_serve, "/api/gpu": self.api_gpu,
                   "/api/bench": self.api_bench, "/api/config": self.api_config, "/api/theme": self.api_theme,
                   "/api/log": self.api_log, "/api/events": self.api_events, "/api/threads": self.api_threads,
-                  "/api/soul": self.api_soul, "/api/memory": self.api_memory}.get(path)
+                  "/api/soul": self.api_soul, "/api/memory": self.api_memory,
+                  "/api/users": self.api_users}.get(path)
             if fn:
                 return fn()
             if path.startswith("/api/threads/"):
@@ -536,11 +589,14 @@ class Handler(BaseHTTPRequestHandler):
         if method == "DELETE":
             if path.startswith("/api/memory/"):
                 return self.api_memory_delete(path[12:])
+            if path == "/api/threads":
+                return self.api_threads_clear()
             return self._error(404, "missing", "no such route")
         fn = {("POST", "/api/logout"): self.api_logout, ("POST", "/api/check/refresh"): self.api_check_refresh,
               ("POST", "/api/chat"): self.api_chat, ("POST", "/api/soul"): self.api_soul_write,
               ("POST", "/api/memory"): self.api_memory_add, ("POST", "/api/do/propose"): self.api_do_propose,
-              ("POST", "/api/do/run"): self.api_do_run, ("POST", "/api/run"): self.api_run}.get((method, path))
+              ("POST", "/api/do/run"): self.api_do_run, ("POST", "/api/run"): self.api_run,
+              ("POST", "/api/user/token"): self.api_user_token}.get((method, path))
         if not fn:
             return self._error(404, "missing", "no such route")
         body = self._body()
@@ -565,22 +621,26 @@ class Handler(BaseHTTPRequestHandler):
         body = self._body()
         if body is None:
             return None
-        admin, user = self.server.tokens()
+        admin = self.server.admin_token()
         given = body.get("token")
-        tok, role = "", ""
-        if isinstance(given, str):
+        tok, role, uname = "", "", ""
+        if isinstance(given, str) and given:
             if admin and hmac.compare_digest(given, admin):
-                tok, role = admin, "admin"
-            elif user and hmac.compare_digest(given, user):
-                tok, role = user, "user"
+                tok, role = given, "admin"
+            else:
+                hit = self.server.user_by_bearer(given)
+                if hit:
+                    tok, role, uname = given, "user", hit[0]
+                    self.server.remember_session(given, hit[0], hit[1])
         if not tok:
             log("%s login failed" % ip)
             self.server.failed(ip)
             time.sleep(1)
             return self._error(401, "auth", "wrong token")
-        log("%s login ok %s" % (ip, role))
+        log("%s login ok %s%s" % (ip, role, " " + uname if uname else ""))
         cookie = "%s=%s; HttpOnly; SameSite=Strict; Path=/; Max-Age=%d" % (COOKIE, cookie_value(tok), COOKIE_AGE)
-        return self._json(200, {"ok": True, "name": self.server.cfg.name, "role": role}, {"Set-Cookie": cookie})
+        return self._json(200, {"ok": True, "name": self.server.cfg.name, "role": role, "user": uname},
+                          {"Set-Cookie": cookie})
 
     def static(self, name):
         if name not in STATIC:
@@ -651,12 +711,13 @@ class Handler(BaseHTTPRequestHandler):
         model = body.get("model") or "ember"
         body["model"] = model
         if model == "ember":
+            mem = self._mstore()        # a user's own memory rides their request
             if msgs and msgs[0].get("role") == "system":
                 prefix = msgs[0].get("content")
                 prefix = prefix if isinstance(prefix, str) else ""
-                msgs[0] = {"role": "system", "content": forge.identity(cfg) + ("\n\n" + prefix if prefix else "")}
+                msgs[0] = {"role": "system", "content": forge.identity(cfg, mem) + ("\n\n" + prefix if prefix else "")}
             else:
-                msgs.insert(0, {"role": "system", "content": forge.system(cfg, "ask", "sh")})
+                msgs.insert(0, {"role": "system", "content": forge.system(cfg, "ask", "sh", mem)})
         body["messages"] = msgs
         stream = bool(body.get("stream"))
         try:
@@ -691,8 +752,10 @@ class Handler(BaseHTTPRequestHandler):
     # ---- the monitor ----
     def api_me(self):
         """Who the presented token makes this client (class U): the page
-        renders the admin or the user console from this."""
-        self._json(200, {"role": self.role, "name": self.server.cfg.name, "version": VERSION})
+        renders the admin or the user console from this, and greets the
+        user by name."""
+        self._json(200, {"role": self.role, "user": self.user,
+                         "name": self.server.cfg.name, "version": VERSION})
 
     def api_check(self):
         try:
@@ -853,25 +916,72 @@ class Handler(BaseHTTPRequestHandler):
         self._json(200, {"ok": True}, {"Set-Cookie": "%s=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0" % COOKIE})
 
     # ---- threads and chat ----
-    def api_threads(self):
+    def _ustore(self):
+        """The requester's sealed thread store: a user's own; the admin
+        works the box account's (the owner's) -- never anyone else's,
+        there is no key for those."""
         from . import forge
+        if self.role == "user":
+            return forge.store_for(self.user, self.dk)
+        return forge.local_store(provision=True)
+
+    def _mstore(self):
+        """The requester's memory store for the memory routes, or None:
+        the module default (the box account) serves the admin."""
+        from . import memory
+        if self.role == "user":
+            return memory.store_of(self.user, self.dk)
+        return None
+
+    def api_threads(self):
         try:
             n = max(1, min(1000, int((self.query.get("n") or ["30"])[0])))
         except ValueError:
             n = 30
-        self._json(200, {"threads": forge.list_threads(n)})
+        self._json(200, {"threads": self._ustore().list_threads(n)})
 
     def api_thread(self, tid):
         from . import forge
+        st = self._ustore()
         if not forge.valid_id(tid):
             return self._error(400, "bad", "a thread id is letters, digits, - and _")
-        if not forge.exists(tid):
+        if not st.exists(tid):
             return self._error(404, "missing", "no thread %s" % tid)
-        return self._json(200, {"id": tid, "messages": forge.load(tid)})
+        return self._json(200, {"id": tid, "messages": st.load(tid)})
+
+    def api_threads_clear(self):
+        """DELETE /api/threads: clear the requester's own threads."""
+        n = self._ustore().clear()
+        log("%s threads clear %d" % (self._ip(), n))
+        return self._json(200, {"cleared": n})
+
+    def api_users(self):
+        """The named users, counts and stamps only -- never a title, a
+        body, or a token. The whole of admin visibility into user data."""
+        from . import users
+        out = []
+        for n in users.list_users():
+            count, newest = users._thread_stats(n)
+            out.append({"name": n, "threads": count,
+                        "last": time.strftime("%Y-%m-%d %H:%M", time.localtime(newest)) if newest else ""})
+        self._json(200, {"users": out})
+
+    def api_user_token(self, body):
+        """POST /api/user/token: rotate the requesting user's own token.
+        The session already holds their key; the new token is returned
+        once and never stored."""
+        from . import users
+        if self.role != "user":
+            return self._error(403, "role", "the admin rotates with spark forge token --new")
+        new = users.rewrap(self.user, self.dk)
+        self.server.remember_session(new, self.user, self.dk)
+        log("%s user token rotated %s" % (self._ip(), self.user))
+        cookie = "%s=%s; HttpOnly; SameSite=Strict; Path=/; Max-Age=%d" % (COOKIE, cookie_value(new), COOKIE_AGE)
+        return self._json(200, {"token": new}, {"Set-Cookie": cookie})
 
     def _thread_of(self, body):
-        """The thread a body names, checked: (id or None, ok). A response
-        was sent when not ok."""
+        """The thread a body names, checked against the requester's own
+        store: (id or None, ok). A response was sent when not ok."""
         from . import forge
         tid = body.get("thread")
         if tid is None or tid == "":
@@ -879,7 +989,7 @@ class Handler(BaseHTTPRequestHandler):
         if not forge.valid_id(tid):
             self._error(400, "bad", "a thread id is letters, digits, - and _")
             return None, False
-        if not forge.exists(tid):
+        if not self._ustore().exists(tid):
             self._error(404, "missing", "no thread %s" % tid)
             return None, False
         return tid, True
@@ -926,7 +1036,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             try:
                 thread, _answer, ms = forge.reply(cfg, thread, text, cwd=cwd, shell=_shell(), mode=mode,
-                                                  on_delta=lambda d: self._emit("delta", {"t": d}), brain=self.server.upstream.brain)
+                                                  on_delta=lambda d: self._emit("delta", {"t": d}), brain=self.server.upstream.brain,
+                                                  store=self._ustore(), mem=self._mstore())
             except wire.BrainError as e:
                 if e.kind == "down":
                     self.server.upstream.resolve(fresh=True)
@@ -961,7 +1072,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def api_memory(self):
         from . import memory
-        self._json(200, {"facts": [{"n": i, "text": f} for i, f in enumerate(memory._all_facts(), 1)],
+        self._json(200, {"facts": [{"n": i, "text": f} for i, f in enumerate(memory._all_facts(self._mstore()), 1)],
                          "on": self.server.cfg.memory})
 
     def api_memory_add(self, body):
@@ -970,16 +1081,16 @@ class Handler(BaseHTTPRequestHandler):
         if not isinstance(text, str):
             return self._error(400, "bad", "text must be a string")
         try:
-            fact = memory.remember(text)
+            fact = memory.remember(text, self._mstore())
         except memory.Refused as e:
             return self._error(409 if e.reason in ("duplicate", "full") else 400, e.reason, e.hint)
-        return self._json(200, {"n": len(memory._all_facts()), "text": fact})
+        return self._json(200, {"n": len(memory._all_facts(self._mstore())), "text": fact})
 
     def api_memory_delete(self, rest):
         from . import memory
         if not rest.isdigit():
             return self._error(400, "bad", "DELETE /api/memory/N, N as spark memory lists it")
-        fact = memory.forget_n(int(rest))
+        fact = memory.forget_n(int(rest), self._mstore())
         if fact is None:
             return self._error(404, "missing", "no fact %s" % rest)
         return self._json(200, {"text": fact})
@@ -1157,7 +1268,6 @@ def cmd_foreground(args):
     if why:
         return _die(why + " -- ./bootstrap.sh, or spark serve", EX_CONFIG)
     ensure_token(cfg)
-    ensure_token(cfg, "user")
     url = "http://%s:%d" % (host, port)
     _write_url(url)
     try:
@@ -1299,12 +1409,17 @@ def cmd_status(args):
         say("  model    %s" % (fh.get("model") or "-"))
     st = engine.forge_service_state(cfg)
     say("  unit     %s (SPARK_FORGE=%s)" % ({"loaded": "always-on", "disabled": "disabled on purpose", "absent": "none (spark forge on installs one)"}[st], cfg.forge))
-    for label, tok in (("admin", cfg.forge_token_file), ("user", EMBER_TOKEN_FILE)):
-        if os.path.exists(tok):
-            mode = os.stat(tok).st_mode & 0o777
-            say("  token    %-5s %s %s" % (label, tok, "0600" if mode == 0o600 else "%04o -- chmod 600 it" % mode))
-        else:
-            say("  token    %-5s none yet (written at the first start)" % label)
+    tok = cfg.forge_token_file
+    if os.path.exists(tok):
+        mode = os.stat(tok).st_mode & 0o777
+        say("  token    admin %s %s" % (tok, "0600" if mode == 0o600 else "%04o -- chmod 600 it" % mode))
+    else:
+        say("  token    admin none yet (written at the first start)")
+    from . import users
+    names = users.list_users()
+    say("  users    %d (spark user list)" % len(names) if names else "  users    none yet (spark user add NAME)")
+    if os.path.exists(EMBER_TOKEN_FILE):
+        say("  !        the v1.3 shared ember-token is no longer accepted -- rm %s" % EMBER_TOKEN_FILE)
     tail = log_tail(3)
     if tail:
         say("  log      " + "\n           ".join(tail))
@@ -1313,43 +1428,46 @@ def cmd_status(args):
 
 def cmd_print_url(args):
     cfg = config.load()
-    role = "user" if "--user" in args else "admin"
+    if "--user" in args:
+        say("%s forge -- user tokens are personal now: spark user add NAME mints one, shown once" % MARK)
+        return 2
     url = _url_of(cfg)
     say(url + "/login")
     if "--show-token" in args or sys.stdout.isatty():
-        say("token  " + ensure_token(cfg, role))
+        say("token  " + ensure_token(cfg))
     return 0
 
 
 def cmd_print_client(args):
-    """What a peer machine needs: the URL and the user token -- a peer's
-    spark only talks /v1 and chat. The admin token stays on this box."""
+    """What a peer machine needs: the URL and a personal user. No secret
+    ever leaves this box -- the token is shown once at the mint."""
     cfg = config.load()
     url = _url_of(cfg)
-    ensure_token(cfg, "user")
     say("SITE_PEER_AI_URL=%s" % url)
-    say("scp %s:~/.local/state/spark/ember-token ~/.local/state/spark/ember-token" % cfg.name)
+    say("here:   spark user add NAME        the token is shown once -- carry it")
+    say("there:  spark client %s" % url)
+    say("then:   spark user login NAME      paste the token; chats land in your own sealed store here")
     say("the admin token stays on this machine (spark forge --print-url)")
-    say("spark client %s   on the other machine writes the key and says the rest" % url)
     return 0
 
 
 def cmd_token(args):
     cfg = config.load()
     flags = set(args)
-    if "--new" not in flags or flags - {"--new", "--user"}:
+    if "--user" in flags:
+        say("%s forge -- user tokens are personal now: spark user token --new rotates your own" % MARK)
+        return 2
+    if "--new" not in flags or flags - {"--new"}:
         say(USAGE.rstrip())
         return 2
-    role = "user" if "--user" in flags else "admin"
-    path = EMBER_TOKEN_FILE if role == "user" else cfg.forge_token_file
+    path = cfg.forge_token_file
     try:
         os.remove(path)
     except OSError:
         pass
-    ensure_token(cfg, role)
-    flag = " --user" if role == "user" else ""
-    say("%s forge -- new %s token in %s -- every %s client and browser must log in again (spark forge --print-url%s)"
-        % (MARK, role, path, role, flag))
+    ensure_token(cfg)
+    say("%s forge -- new admin token in %s -- every admin client and browser must log in again (spark forge --print-url)"
+        % (MARK, path))
     return 0
 
 

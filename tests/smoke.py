@@ -1122,11 +1122,11 @@ def main():
         rc, out, _ = spark("client", "http://192.0.2.10:8081/", extra=off)
         site_env = open(home + "/.config/spark/site.env").read()
         t.ok(rc == 0 and "SITE_PEER_AI_URL=http://192.0.2.10:8081\n" in site_env and "SITE_AI_MODEL=none\n" in site_env
-             and "scp 192.0.2.10:~/.local/state/spark/ember-token" in out,
-             "spark client URL writes the peer and none, says the scp of the token", out)
+             and "ember-token" not in out,
+             "spark client URL writes the peer and none; no scp of any secret", out)
         rc, out, _ = spark("client", extra=off)
-        t.ok(rc == 0 and "of http://192.0.2.10:8081" in out and "peer" in out and "ember-token" in out,
-             "spark client: the state, a client", out)
+        t.ok(rc == 0 and "of http://192.0.2.10:8081" in out and "peer" in out and "account" in out,
+             "spark client: the state, a client, the account row", out)
         rc, outp, _ = spark("check", "--porcelain", "--fresh", extra=dict(off, SITE_PEER_AI_URL="http://192.0.2.10:8081"))
         t.ok(all(re.search(r"^\w+\tna\t%s\ta client of 192.0.2.10:8081" % r, outp, re.M) for r in ("engine", "services", "watchdog", "ai", "serve", "forge")),
              "spark check as a client: engine, services, watchdog, ai, serve, forge are na", outp)

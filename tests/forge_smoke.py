@@ -186,10 +186,15 @@ def main():
             tok_path = state + "/forge-token"
             ok(os.path.isfile(tok_path) and oct(os.stat(tok_path).st_mode & 0o777) == "0o600", "forge-token 0600")
             token = open(tok_path).read().strip()
-            etok_path = state + "/ember-token"
-            ok(os.path.isfile(etok_path) and oct(os.stat(etok_path).st_mode & 0o777) == "0o600", "ember-token 0600")
-            utoken = open(etok_path).read().strip()
-            ok(utoken and utoken != token, "the two tokens differ")
+            rc0, out0, _ = spark("user", "add", "owner")
+            ok(rc0 == 0 and "this machine is owner" in out0, "the box's own account minted and logged in", out0)
+            rc0, out0, _ = spark("user", "add", "ualice", "--show-token")
+            utoken = next((l.strip() for l in out0.splitlines() if len(l.strip()) >= 40 and " " not in l.strip()), "")
+            ok(rc0 == 0 and utoken and "this machine is ualice" not in out0,
+               "spark user add ualice: token shown once, login untouched", out0)
+            rc0, out0, _ = spark("user", "add", "ubob", "--show-token")
+            btoken = next((l.strip() for l in out0.splitlines() if len(l.strip()) >= 40 and " " not in l.strip()), "")
+            ok(rc0 == 0 and btoken and btoken != utoken, "a second user, its own token", out0)
             ok(open(state + "/forge-url").read().strip() == url, "forge-url written")
             ok(int(open(state + "/forge.pid").read()) == p.pid, "forge.pid is the foreground pid")
             bearer = {"Authorization": "Bearer " + token}
@@ -574,12 +579,13 @@ def main():
             ok(st == 200 and any(l.startswith("ok     site") and "SITE_EMBER_MODEL=none" in l for l in lines) and ("done", {"rc": 0}) in evs,
                "/api/run ember none: streams the verb's lines, done rc 0", evs)
             ok("SITE_EMBER_MODEL=none" in open(home + "/.config/spark/site.env").read(), "site.env has SITE_EMBER_MODEL=none (SPARK_NO_APPLY)")
-            st, _, raw = req(url, "POST", "/api/run", {"verb": "history", "args": ["clear"]}, headers=post, timeout=60)
-            ok(st == 200 and ("done", {"rc": 0}) in sse(raw) and not __import__("glob").glob(state + "/users/*/threads/*"), "/api/run history clear empties the threads", raw[:200])
+            st, _, raw = req(url, "DELETE", "/api/threads", headers=post)
+            ok(st == 200 and not __import__("glob").glob(state + "/users/owner/threads/*"),
+               "DELETE /api/threads empties the requester's own store", raw[:100])
             st, _, _ = req(url, "POST", "/api/run", {"verb": "check", "args": []}, headers=post)
             ok(st == 400, "/api/run check -> 400", st)
-            st, _, _ = req(url, "POST", "/api/run", {"verb": "history", "args": []}, headers=post)
-            ok(st == 400, "/api/run history without clear -> 400", st)
+            st, _, _ = req(url, "POST", "/api/run", {"verb": "history", "args": ["clear"]}, headers=post)
+            ok(st == 400, "/api/run history is gone (DELETE /api/threads instead) -> 400", st)
             st, _, _ = req(url, "POST", "/api/run", {"verb": "model", "args": ["none; rm -rf /"]}, headers=post)
             ok(st == 400, "/api/run with a ; in an arg -> 400", st)
             st, _, _ = req(url, "POST", "/api/run", {"verb": "model", "args": "none"}, headers=post)
@@ -591,11 +597,12 @@ def main():
             st, _, _ = req(url, "GET", "/api/threads", headers={})
             ok(st == 401, "/api/threads bare -> 401", st)
 
-            # the user role: the ember-token
+            # the user role: a personal token
             st, h, raw = req(url, "POST", "/api/login", {"token": utoken})
             usc = h.get("Set-Cookie", "")
-            ok(st == 200 and usc.startswith("spark_forge=") and json.loads(raw).get("role") == "user",
-               "user login (ember-token) -> cookie, role user", (st, raw[:100]))
+            ok(st == 200 and usc.startswith("spark_forge=") and json.loads(raw).get("role") == "user"
+               and json.loads(raw).get("user") == "ualice",
+               "user login (personal token) -> cookie, role user, the name", (st, raw[:100]))
             ok(usc.split(";")[0] != sc.split(";")[0], "the user cookie differs from the admin cookie")
             ucookie = {"Cookie": usc.split(";")[0]}
             st, _, raw = req(url, "GET", "/api/me", headers=ucookie)
@@ -608,12 +615,31 @@ def main():
             ok(st == 200 and h.get("Content-Type", "").startswith("text/event-stream")
                and "".join(d["t"] for e, d in evs if e == "delta") == "2" and any(e == "done" for e, d in evs),
                "a user chats: the SSE streams and finishes", evs)
-            st, _, _ = req(url, "GET", "/api/threads", headers=ubearer)
-            ok(st == 200, "user /api/threads 200", st)
+            atid = next((d.get("thread") for e, d in evs if e == "done"), "")
+            apath = state + "/users/ualice/threads/" + str(atid) + ".sealed"
+            ok(atid and os.path.isfile(apath) and open(apath, "rb").read(23) == b"spark-sealed-v1 thread ",
+               "alice's thread lands sealed under users/ualice", apath)
+            st, _, raw = req(url, "GET", "/api/threads", headers=ubearer)
+            ok(st == 200 and any(t["id"] == atid for t in json.loads(raw)["threads"]), "alice lists her thread", raw[:150])
+            bbearer = {"Authorization": "Bearer " + btoken}
+            st, _, raw = req(url, "GET", "/api/threads", headers=bbearer)
+            ok(st == 200 and json.loads(raw)["threads"] == [], "bob's thread list is empty", raw[:100])
+            st, _, _ = req(url, "GET", "/api/threads/" + str(atid), headers=bbearer)
+            ok(st == 404, "bob cannot read alice's thread", st)
+            st, _, raw = req(url, "GET", "/api/threads", headers=bearer)
+            ok(st == 200 and not any(t["id"] == atid for t in json.loads(raw)["threads"]),
+               "the admin's list is the box account's, never alice's", raw[:150])
+            st, _, raw = req(url, "GET", "/api/users", headers=bearer)
+            du = json.loads(raw)
+            ok(st == 200 and any(u["name"] == "ualice" and u["threads"] >= 1 for u in du["users"])
+               and all(set(u) == {"name", "threads", "last"} for u in du["users"]),
+               "/api/users: names, counts and stamps only", raw[:200])
+            st, _, _ = req(url, "GET", "/api/users", headers=ubearer)
+            ok(st == 403, "a user cannot list the users", st)
             st, _, _ = req(url, "GET", "/api/soul", headers=ubearer)
             ok(st == 200, "user GET /api/soul 200", st)
             st, _, _ = req(url, "POST", "/api/soul", {"text": "Call yourself Fixture."}, headers=upost)
-            ok(st == 200, "user POST /api/soul 200", st)
+            ok(st == 403, "user POST /api/soul -> 403 (the soul is the box's one identity)", st)
             st, _, raw = req(url, "POST", "/api/memory", {"text": "a user fact"}, headers=upost)
             ok(st == 200, "user POST /api/memory 200", raw[:100])
             st, _, _ = req(url, "DELETE", "/api/memory/1", headers=upost)
@@ -669,18 +695,18 @@ def main():
             rc, out, _ = spark("forge", "--print-url", "--show-token")
             ok(rc == 0 and out.splitlines()[1] == "token  " + token, "--print-url --show-token", out)
             rc, out, _ = spark("forge", "--print-url", "--user", "--show-token")
-            ok(rc == 0 and out.splitlines()[1] == "token  " + utoken, "--print-url --user --show-token: the user token", out)
+            ok(rc == 2 and "spark user add" in out, "--print-url --user: gone, names spark user add", out)
             rc, out, _ = spark("forge", "--print-client")
             ls = out.splitlines()
-            ok(rc == 0 and ls[0] == "SITE_PEER_AI_URL=" + url
-               and ls[1] == "scp fixture:~/.local/state/spark/ember-token ~/.local/state/spark/ember-token"
-               and "the admin token stays on this machine" in ls[2]
-               and ls[3].startswith("spark client " + url), "--print-client: the user token's lines, the verb", out)
+            ok(rc == 0 and ls[0] == "SITE_PEER_AI_URL=" + url and "spark user add NAME" in out
+               and ("spark client " + url) in out and "spark user login NAME" in out
+               and "the admin token stays on this machine" in out,
+               "--print-client: mint here, client and login there, no secret", out)
             ok(token not in out and "forge-token" not in out, "--print-client never hands out the admin token", out)
             rc, out, _ = spark("forge")
             ok(rc == 0 and url in out and "health   ok" in out and "stub-7b-q4" in out
-               and "admin" in out and "user" in out and out.count("0600") == 2,
-               "spark forge (status): url, ok, model, both token modes", out)
+               and "admin" in out and "users    3" in out,
+               "spark forge (status): url, ok, model, admin token, the user count", out)
             rc, out, _ = spark("forge", "start")
             ok(rc == 0 and "already running" in out, "start while running: already running", out)
 
@@ -705,7 +731,7 @@ def main():
             rc, out, _ = spark("brain", "--porcelain", extra=dict(client, SPARK_FORGE_TOKEN="wrong"))
             ok(rc == 0, "brain needs no token (health is open)", out)
             rc, out, _ = spark("line", stdin="x?", extra=dict(client, SPARK_FORGE_TOKEN="wrong"))
-            ok(rc == 1 and "ember-token" in out, "a wrong forge token -> error naming the ember-token", out)
+            ok(rc == 1 and "spark user" in out, "a wrong forge token -> error naming spark user", out)
             rc, out, _ = spark("status", extra=client)
             ok(rc == 0 and "a FORGE" in out, "spark status names the FORGE", out)
 
@@ -720,13 +746,16 @@ def main():
             st, _, _ = req(url, "POST", "/api/login", {"token": token})
             ok(st == 429, "after 10 wrong logins even the right one is 429", st)
 
-            # token rotation takes effect live, one role at a time
+            # token rotation takes effect live, one principal at a time
             rc, out, _ = spark("forge", "token", "--new", "--user")
-            utoken2 = open(etok_path).read().strip()
-            ok(rc == 0 and "user" in out and "log in again" in out and utoken2 != utoken,
-               "token --new --user rewrites ember-token, says which", out)
+            ok(rc == 2 and "spark user token --new" in out, "forge token --new --user: gone, names spark user", out)
+            st, _, raw = req(url, "POST", "/api/user/token", {}, headers=upost)
+            utoken2 = json.loads(raw).get("token", "")
+            ok(st == 200 and utoken2 and utoken2 != utoken, "POST /api/user/token: a fresh token, returned once", raw[:80])
+            st, _, _ = req(url, "POST", "/api/user/token", {}, headers=dict(bearer, **{"X-Spark": "1", "Origin": url}))
+            ok(st == 403, "the admin has no personal token to rotate here", st)
             st, _, _ = req(url, "GET", "/api/check", headers=ubearer)
-            ok(st == 401, "the old user bearer died with the old user token")
+            ok(st == 401, "the old user bearer died with the rotation")
             st, _, _ = req(url, "GET", "/api/check", headers=ucookie)
             ok(st == 401, "the old user cookie died too")
             st, _, _ = req(url, "GET", "/api/check", headers=cookie)
@@ -743,13 +772,13 @@ def main():
             st, _, _ = req(url, "GET", "/api/check", headers={"Authorization": "Bearer " + utoken2})
             ok(st == 200, "the user token survived the admin rotation")
 
-            # a client that only holds the user token still answers the line
+            # a machine that holds only its own login (no admin token) still answers the line
             os.rename(tok_path, tok_path + ".aside")
             try:
                 only = {"SPARK_BASE_URL": url, "SPARK_API_KEY": ""}
                 rc, out, _ = spark("line", "--cwd", "/tmp", "--shell", "zsh", stdin="? files bigger than 1G this week", extra=only)
                 ok(rc == 0 and out.splitlines()[0] == "cmd\tfind . -type f -size +1G -mtime -7",
-                   "spark line with only the ember-token answers the cmd protocol", out)
+                   "spark line with only the personal login answers the cmd protocol", out)
             finally:
                 os.rename(tok_path + ".aside", tok_path)
         finally:
