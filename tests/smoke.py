@@ -542,6 +542,9 @@ def main():
         t.ok("the box is called forge" in esys and "remembered" in esys, "the remembered fact goes in the ember's system message", esys[:200])
         t.ok(home not in sent, "the ember request carries no HOME path either")
         t.ok("Flags that exist" in esys and "Preferred when installed" in esys, "ask keeps the full shell prefix", esys[:200])
+        t.ok("spark's own commands" in esys and "spark quiet start|login|boot on|off" in esys,
+             "ask knows spark's own commands (the machine can explain itself)", esys[:200])
+        t.ok("spark's own commands" in system1, "the line prompt knows spark's own commands too", system1[:200])
         # chat sheds the shell costume: one machine line + identity + the mode
         spark("chat", "hello", extra={"SPARK_BASE_URL": url2})
         csys = req["body"]["messages"][0]["content"]
@@ -550,6 +553,8 @@ def main():
              "chat: one machine line + identity + the chat mode", csys[:200])
         t.ok("Preferred when installed" not in csys and "Flags that exist" not in csys and "Package manager" not in csys
              and "System tools" not in csys, "chat sheds the shell costume", csys[:200])
+        t.ok("spark's own commands" in csys and "The look: spark theme NAME" in csys,
+             "chat knows spark's own commands, grouped with meanings", csys[:200])
         spark("chat", "hello again", extra={"SPARK_BASE_URL": url2})
         t.ok(req["body"]["messages"][0]["content"] == csys, "the chat system message is byte-identical across requests")
         spark("tell", "me", "again", extra={"SPARK_BASE_URL": url2, "SPARK_MEMORY": "off"})

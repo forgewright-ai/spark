@@ -88,7 +88,9 @@ What comes next: `ROADMAP.md`.
 - **The AI.** `spark chat` is a conversation (`/help` lists its verbs).
   `spark <words>` streams a one-off answer, `spark do <words>` runs a task
   one confirmed command at a time, `spark @FILE words` reads a file, `??
-  words` follows up on the last answer.
+  words` follows up on the last answer. The machine can explain itself:
+  ask it how to change or run spark and it answers with spark's own
+  commands (`?? how do I change the theme` names `spark theme`).
 - **The prompt line, the surprise.** `? words` or `words?`, Enter, and the
   command lands in your line with a hint above it. `Esc a` asks about the
   line you are on. `cmd 2>&1 | explain` says what went wrong. `spark off`
