@@ -1,6 +1,11 @@
 # spark.update -- `spark update`: move this checkout to the newest tag (a
 # release clone) or pull main (a developer clone on a branch), then
 # converge -- bootstrap.sh applies whatever changed and check re-reads.
+# The converge runs in a fresh exec of the NEW tree: this process was
+# imported from the old one, and mixing the two ends in ImportError.
+
+import os
+import sys
 
 from . import MARK, REPO, run, say
 
@@ -25,8 +30,13 @@ def cmd_update(args):
         if a == "--dry-run":
             dry = True
             continue
+        if a == "--converge":
+            # internal: the post-move half, running in the new tree
+            from . import site
+            return site.apply((), stream=True)
         say("spark update: no option %s -- spark update -h" % a)
         return 2
+    moved = False
 
     rc, out = _git(["status", "--porcelain"])
     if rc != 0:
@@ -61,6 +71,7 @@ def cmd_update(args):
                 say("spark update: git pull --ff-only failed -- git -C %s status says why" % REPO)
                 return 1
             say("%s update -- %s: %d new commit%s" % (MARK, branch, n, "" if n == 1 else "s"))
+            moved = True
     else:
         rc, cur = _git(["describe", "--tags", "--exact-match"])
         cur = cur.strip() if rc == 0 else ""
@@ -79,8 +90,12 @@ def cmd_update(args):
                 say("spark update: git checkout --detach %s failed" % newest)
                 return 1
             say("%s update -- %s (was %s)" % (MARK, newest, cur or "an untagged commit"))
+            moved = True
 
     if dry:
         return 0
+    if moved:
+        os.execv(sys.executable, [sys.executable, os.path.join(REPO, "bin", "spark"),
+                                  "update", "--converge"])
     from . import site
     return site.apply((), stream=True)
