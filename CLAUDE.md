@@ -115,7 +115,8 @@ tests/          install_test.sh get_test.sh update_test.sh smoke.py serve_smoke.
                 pages.yml: www/ rendered and published to GitHub Pages on a doc change
 LICENSE         MIT, verbatim, ASCII (the hook checks it with the docs)
 assets/         banner.svg -- the banner as rectangles, for the README and the page;
-                banner-svg.py makes it from home/.config/spark/banner
+                banner-svg.py makes it from home/.config/spark/banner; icon-svg.py
+                makes the favicon, the app icons and the social card the same way
 www/            the page, spark.forgewright.ai: build.py (stdlib) renders the docs
                 (INSTALL, CHEATSHEET, the three lists, CHANGELOG, ROADMAP,
                 CONTRIBUTING, CREDITS) into www/dist/ with template.html; index.html
