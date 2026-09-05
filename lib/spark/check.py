@@ -238,8 +238,36 @@ def _font_dirs(home):
     return [os.path.join(home, ".local", "share", "fonts"), "/usr/share/fonts", "/usr/local/share/fonts"]
 
 
+def _console_font_row(ctx):
+    """The Linux console-setup half of the font row: ok/fail against
+    SITE_FONT_FACE, or None when nothing is chosen there."""
+    if IS_MAC or not ctx.cfg.font_face:
+        return None
+    want = "%s %s" % (ctx.cfg.font_face, ctx.cfg.font_size)
+    cur = ""
+    try:
+        with open("/etc/default/console-setup", encoding="utf-8") as f:
+            kv = dict(l.strip().split("=", 1) for l in f if "=" in l and not l.startswith("#"))
+        cur = "%s %s" % (kv.get("FONTFACE", "").strip('"'), kv.get("FONTSIZE", "").strip('"'))
+    except (OSError, ValueError):
+        pass
+    if cur != want:
+        return fail("console font is %s, site.env says %s" % (cur or "unset", want), "./bootstrap.sh   (sudo)")
+    return ok("console %s" % want)
+
+
 @row("SOFTWARE")
 def row_font(ctx):
+    """Core now, like the verb: the console font choice (SITE_FONT_FACE,
+    Linux) is judged with the shell layer off too; the Nerd Font is still
+    the layer's, so it is only demanded when the layer is on."""
+    console = _console_font_row(ctx)
+    if not ctx.cfg.shell:
+        if console:
+            return console
+        if IS_MAC:
+            return na("Terminal.app profile: %s %s (spark font FACE SIZE sets it)" % (ctx.cfg.font_face, ctx.cfg.font_size))
+        return na("console not managed (spark font FACE SIZE; spark font list)")
     where = ""
     for d in _font_dirs(ctx.home):
         for root, _dirs, files in os.walk(d):
@@ -250,18 +278,10 @@ def row_font(ctx):
             break
     if not where:
         return fail("JetBrainsMono Nerd Font not installed", "./bootstrap.sh; then pick it in your terminal's settings")
-    if not IS_MAC and ctx.cfg.font_face:
-        want = "%s %s" % (ctx.cfg.font_face, ctx.cfg.font_size)
-        cur = ""
-        try:
-            with open("/etc/default/console-setup", encoding="utf-8") as f:
-                kv = dict(l.strip().split("=", 1) for l in f if "=" in l and not l.startswith("#"))
-            cur = "%s %s" % (kv.get("FONTFACE", "").strip('"'), kv.get("FONTSIZE", "").strip('"'))
-        except (OSError, ValueError):
-            pass
-        if cur != want:
-            return fail("console font is %s, site.env says %s" % (cur or "unset", want), "./bootstrap.sh   (sudo)")
-        return ok("Nerd Font in %s; console %s" % (ctx.short(where), want))
+    if console:
+        if console.status != OK:
+            return console
+        return ok("Nerd Font in %s; %s" % (ctx.short(where), console.value))
     return ok("JetBrainsMono Nerd Font in %s" % ctx.short(where))
 
 
@@ -1130,8 +1150,9 @@ def row_cost(ctx):
 
 # ------------------------------------------------------------------- runner
 # The shell layer's rows: with SITE_SHELL=off they are na before they look,
-# the same answer bootstrap.sh gives (the `shell` row itself says what on adds).
-SHELL_ROWS = ("pinned", "font", "terminfo", "quiet", "bar", "git", "backup", "swap",
+# the same answer bootstrap.sh gives (the `shell` row itself says what on
+# adds). `font` is core now, like `theme`: its row runs either way.
+SHELL_ROWS = ("pinned", "terminfo", "quiet", "bar", "git", "backup", "swap",
               "encryption", "pending", "battery", "disk")
 SHELL_OFF = "SITE_SHELL=off (spark shell on)"
 # a client's rows: nothing runs here (SITE_AI_MODEL=none + SITE_PEER_AI_URL),

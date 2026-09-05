@@ -967,10 +967,10 @@ def main():
         t.ok(rc == 0 and out.splitlines()[0] == "spark shell -- spark's own shell: tmux, starship, micro, fzf, eza, bat, btop",
              "spark shell -h signs (contract 8)", out)
         rc, out, _ = spark("help", extra=off)
-        t.ok(rc == 0 and "spark font" not in out and "spark shell on" in out,
-             "spark help with the layer off: no spark font, one spark shell on line", out)
+        t.ok(rc == 0 and "spark font" in out and "spark bar" not in out and "spark shell on" in out,
+             "spark help with the layer off: font stays (core), bar folds into spark shell on", out)
         rc, out, _ = spark("help", extra=dict(off, SITE_SHELL="on"))
-        t.ok(rc == 0 and "spark font" in out and "the shell (spark shell on)" in out,
+        t.ok(rc == 0 and "spark bar" in out and "the shell (spark shell on)" in out,
              "spark help with SITE_SHELL=on lists the shell block", out)
 
         # the pager: piped output never touches $PAGER -- a pager that would
@@ -981,10 +981,21 @@ def main():
         rc, out, _ = spark("check", "memory", extra={"PAGER": "/bin/false"})
         t.ok(rc == 0 and out.startswith("spark check ") and "memory" in out,
              "spark check piped with PAGER=/bin/false: the report prints", out)
-        for verb in ("font", "bar"):
-            rc, out, _ = spark(verb, extra=off)
-            t.ok(rc == 2 and out.strip() == "spark %s -- the shell layer is off (spark shell on)" % verb,
-                 "spark %s refuses while the layer is off, signing" % verb, out)
+        rc, out, _ = spark("bar", extra=off)
+        t.ok(rc == 2 and out.strip() == "spark bar -- the shell layer is off (spark shell on)",
+             "spark bar refuses while the layer is off, signing", out)
+        # spark font left the shell gate: it shows, lists and sets either way
+        rc, out, _ = spark("font", extra=off)
+        t.ok(rc == 0 and out.startswith("spark font -- "), "spark font shows with the layer off (core)", out)
+        rc, out, _ = spark("font", "-h", extra=off)
+        t.ok(rc == 0 and out.splitlines()[0] == "spark font -- the terminal's font",
+             "spark font -h signs (contract 8)", out)
+        rc, out, _ = spark("font", "list", extra=off)
+        t.ok(rc == 0 and out.startswith("spark font list -- "), "spark font list answers on either OS", out)
+        if sys.platform != "darwin" and os.path.isdir("/usr/share/consolefonts"):
+            rc, out, _ = spark("font", "NoSuchFace", "16x32", extra=off)
+            t.ok(rc == 2 and "spark font list" in out,
+                 "a console face consolefonts lacks is refused, naming spark font list", out)
         rc, out, _ = spark("bootconfig", extra=off)
         t.ok(rc == 2 and out.strip() == "spark bootconfig -- gone: spark quiet (login|boot)",
              "spark bootconfig is gone: one line naming spark quiet, exit 2", out)

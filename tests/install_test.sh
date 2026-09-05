@@ -210,11 +210,13 @@ out=$(PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootst
 printf '%s\n' "$out" | grep -qE "^ok +rc +~/$rc sources the hook\$" && ok "rc: with the line: ok rc sources the hook" || bad "rc: no ok row: $(printf '%s\n' "$out" | grep -E ' rc ')"
 out=$(SHELL=/usr/local/bin/fish PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (fish) failed"
 printf '%s\n' "$out" | grep -qE '^todo +rc +shell fish' && ok "rc: an unknown login shell is a todo naming it" || bad "rc: fish: $(printf '%s\n' "$out" | grep -E ' rc ')"
-# the shell layer off (SITE_SHELL unset): every shell row is a skip naming the key
-case $(uname -s) in Darwin) srows="dir hostname theme pinned micro-aspell terminfo console quiet-login quiet-boot" ;; *) srows="dir hostname theme starship font micro-aspell terminfo console quiet-login quiet-boot" ;; esac
+# the shell layer off (SITE_SHELL unset): every shell row is a skip naming
+# the key (the console-font row is core now and skips for its own reason)
+case $(uname -s) in Darwin) srows="dir hostname theme pinned micro-aspell terminfo quiet-login quiet-boot" ;; *) srows="dir hostname theme starship font micro-aspell terminfo quiet-login quiet-boot" ;; esac
 for r in $srows; do
     printf '%s\n' "$out" | grep -qE "^skip +$r +SITE_SHELL=off" && ok "SITE_SHELL unset: skip $r" || bad "SITE_SHELL unset: no skip row for $r: $(printf '%s\n' "$out" | grep -E " $r " | head -1)"
 done
+printf '%s\n' "$out" | grep -qE '^skip +console +(macOS:|SITE_FONT_FACE unset)' && ok "SITE_SHELL unset: the console row is core, its skip names its own reason" || bad "console row: $(printf '%s\n' "$out" | grep -E ' console ' | head -1)"
 printf '%s\n' "$out" | grep -qE "^would +dir +mkdir .*/projects" && bad "SITE_SHELL unset: the workspace folder would be made" || ok "SITE_SHELL unset: no workspace folder for a stranger"
 [ "$(uname -s)" = Darwin ] && { printf '%s\n' "$out" | grep -qE '^ok +brew +nothing required' && ok "SITE_SHELL unset: brew row is ok, nothing required" || bad "brew row with the shell off"; }
 [ -z "$(sh "$REPO/bootstrap.sh" --list-packages | grep -E '^(tmux|starship|micro|bat|eza|fzf|btop|shellcheck)$')" ] && ok "SITE_SHELL unset: --list-packages has no shell package" || bad "--list-packages lists shell packages with the shell off"

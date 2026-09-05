@@ -208,11 +208,12 @@ may change freely.
    `spark shell --` is that line for the shell layer's switch; `spark
    setup --` is the offer bare `spark` prints, after the banner, on a
    clone with no `site.env` at a terminal; and a refusal signs the same
-   way: with `SITE_SHELL=off`, `spark bar` and `spark font` print
-   `spark <sub> -- the shell layer is off (spark shell on)` and exit 2,
+   way: with `SITE_SHELL=off`, `spark bar` prints
+   `spark bar -- the shell layer is off (spark shell on)` and exits 2,
    and the set forms `spark quiet login|boot on|off` refuse with the
    same line (showing still answers, saying the layer is off); `spark
    help` then folds the shell block into one `spark shell on` line.
+   `spark theme` and `spark font` are core: they answer either way.
 9. The FORGE's HTTP API (`lib/spark/forgeserve.py`, on
    `SPARK_FORGE_HOST:SPARK_FORGE_PORT`, one LAN address, never `0.0.0.0`).
    `GET /api/health` answers without a token: `{status, forge: true, name,
@@ -273,7 +274,7 @@ One grammar for every verb; a verb that breaks a rule is a bug.
    in `site.env`; the verb translates. Choices keep their value grammars
    (`theme NAME|none`, `model NAME|auto|none`, `client URL|off`).
 3. `status` is an alias of bare for every stateful verb; `list` is the
-   table word (theme, model, ember).
+   table word (theme, model, ember, font).
 4. Every verb answers `-h|--help|help` first -- before any gate or
    config read -- signed per contract 8.
 5. One confirm shape: `<question>? yes/NO: ` -- only `y` or `yes`
@@ -339,9 +340,11 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   that. `spark shell on|off` (`site.cmd_shell`, `site.SHELL_ROWS`) is the
   only switch; `spark shell off` hands back what the layer rendered
   (`restore_rc`, `restore_rendered`: `.bak` or gone, never a husk).
-  `spark theme` stays outside the gate (the FORGE page reads `theme.env`
-  too, and the VT console palette rides the core rc hook); its `theme`
-  check row is core for the same reason.
+  `spark theme` and `spark font` stay outside the gate (the FORGE page
+  reads `theme.env`, the VT console palette and font are the machine's
+  face with the layer off too); their `theme` and `font` check rows are
+  core for the same reason -- only the Nerd Font piece of `font` waits
+  for the layer.
 - **The client shape.** `SITE_AI_MODEL=none` beside `SITE_PEER_AI_URL`
   (`config.client`; `spark client URL|off`, `site.cmd_client`) means
   nothing runs here: bootstrap skips the `engine` and `services` rows
@@ -390,7 +393,7 @@ sh tests/update_test.sh         # spark update: pull, move to a tag, dirty refus
 
 `spark check` has 36 rows today: 12 SOFTWARE, 16 CAPABILITY, 8
 NONFUNCTIONAL (`grep -c '^@row' lib/spark/check.py`). With `SITE_SHELL=off`
-the 12 rows in `check.SHELL_ROWS` and the `shell` row answer `na`;
+the 11 rows in `check.SHELL_ROWS` and the `shell` row answer `na`;
 `--selftest` runs a third pass to prove it, and a fourth for the client
 shape (the 6 rows in `check.CLIENT_ROWS`).
 

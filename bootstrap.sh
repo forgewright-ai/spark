@@ -808,11 +808,10 @@ fi
 # ============================================================ 11. terminal
 section terminal
 if [ "$shell" = 0 ]; then
-    # the whole section is the shell layer: the palette, the terminfo, the
-    # console font, the login and boot noise -- one skip row per block
-    for r in theme terminfo; do skip "$r" "$SHELL_OFF"; done
-    if [ "$OS" = Darwin ]; then for r in console quiet-login quiet-boot; do skip "$r" "$SHELL_OFF"; done
-    else for r in console quiet-login quiet-boot; do skip "$r" "$SHELL_OFF"; done; fi
+    # the palette render, the terminfo and the login/boot noise are the
+    # shell layer -- one skip row per block. The console-font row is core
+    # (spark font works with the layer off) and runs below either way.
+    for r in theme terminfo quiet-login quiet-boot; do skip "$r" "$SHELL_OFF"; done
 elif [ "$SITE_THEME" = none ]; then
     skip theme "SITE_THEME=none: your terminal keeps its colours"
 else
@@ -846,26 +845,28 @@ elif [ "$OS" = Darwin ]; then
 else
     skip terminfo "tmux-256color lacks kUP here; install a newer ncurses-term (Debian 13's is fine)"
 fi
-if [ "$shell" = 0 ]; then
-    :   # skipped above
-elif [ "$OS" = Darwin ]; then
+# the text console's font (console-setup), when chosen: core, not the
+# shell layer -- spark font sets SITE_FONT_FACE with the layer off too
+if [ "$OS" = Darwin ]; then
     skip console "macOS: the font is in the Terminal.app profile (spark theme profile)"
+elif [ -z "$SITE_FONT_FACE" ]; then
+    skip console "SITE_FONT_FACE unset: the console keeps its font"
+else
+    size=${SITE_FONT_SIZE:-16x32}
+    cur=$(sed -n 's/^FONTFACE="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p; s/^FONTSIZE="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' /etc/default/console-setup 2>/dev/null | paste -sd' ' -)
+    if [ "$cur" = "$SITE_FONT_FACE $size" ]; then ok console "$SITE_FONT_FACE $size"
+    elif need console "set $SITE_FONT_FACE $size in /etc/default/console-setup (sudo)"; then
+        as_root sed -i "s/^FONTFACE=.*/FONTFACE=\"$SITE_FONT_FACE\"/; s/^FONTSIZE=.*/FONTSIZE=\"$size\"/" /etc/default/console-setup
+        as_root setupcon --force 2>/dev/null || true
+        ok console "$SITE_FONT_FACE $size"
+    fi
+fi
+if [ "$shell" = 0 ]; then
+    :   # quiet-login and quiet-boot skipped above
+elif [ "$OS" = Darwin ]; then
     skip quiet-login "macOS: no motd"
     skip quiet-boot "macOS: no GRUB"
 else
-    # the text console's font (console-setup), when chosen
-    if [ -z "$SITE_FONT_FACE" ]; then
-        skip console "SITE_FONT_FACE unset: the console keeps its font"
-    else
-        size=${SITE_FONT_SIZE:-16x32}
-        cur=$(sed -n 's/^FONTFACE="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p; s/^FONTSIZE="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' /etc/default/console-setup 2>/dev/null | paste -sd' ' -)
-        if [ "$cur" = "$SITE_FONT_FACE $size" ]; then ok console "$SITE_FONT_FACE $size"
-        elif need console "set $SITE_FONT_FACE $size in /etc/default/console-setup (sudo)"; then
-            as_root sed -i "s/^FONTFACE=.*/FONTFACE=\"$SITE_FONT_FACE\"/; s/^FONTSIZE=.*/FONTSIZE=\"$size\"/" /etc/default/console-setup
-            as_root setupcon --force 2>/dev/null || true
-            ok console "$SITE_FONT_FACE $size"
-        fi
-    fi
     # a quiet login: no distro notice, no kernel line before the greeting
     if [ "$SITE_QUIET_LOGIN" != yes ]; then
         if [ ! -s /etc/motd ] && [ -f /usr/share/base-files/motd ] || [ -f /etc/update-motd.d/10-uname ] && [ ! -x /etc/update-motd.d/10-uname ]; then

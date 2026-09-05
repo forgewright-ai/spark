@@ -64,7 +64,7 @@ _spark_complete() {
         soul)    words="show edit reset" ;;
         history) words="clear" ;;
         tune)    words="show apply" ;;
-        font)    words="none status" ;;
+        font)    words="list none status" ;;
         client)  words="off status" ;;
         *)       return 0 ;;
     esac

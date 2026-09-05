@@ -101,8 +101,8 @@ def _announce_downloads(pend):
 
 
 def shell_off(sub):
-    """The guard of a shell-layer verb (bar, font, and quiet's login/boot
-    set forms): when the layer is off, say so in the signing shape and
+    """The guard of a shell-layer verb (bar, and quiet's login/boot set
+    forms): when the layer is off, say so in the signing shape and
     return 2; else None."""
     if config.load().shell:
         return None
@@ -111,21 +111,75 @@ def shell_off(sub):
 
 
 # ------------------------------------------------------------------- font
+# Core, not the shell layer: the console is the machine's face whether or
+# not spark owns the shell (the Nerd Font download stays with the layer).
 FONT_USAGE = """%s font -- the terminal's font
 
   spark font                    what is set
-  spark font FACE SIZE          Linux console: Terminus|VGA|Fixed and 16x32/8x16
-                                macOS: a font's PostScript name; points (13)
+  spark font list               Linux: the console faces and sizes installed
+                                (/usr/share/consolefonts); macOS: common
+                                PostScript names, and how to find any
+  spark font FACE SIZE          Linux console: a face and size from the list
+                                (e.g. Terminus 16x32); macOS: a font's
+                                PostScript name and points (13)
   spark font none               Linux: leave the console's font alone
 """ % MARK
+CONSOLEFONTS_DIR = "/usr/share/consolefonts"
+_FONT_FILE = re.compile(r"^[A-Za-z0-9]+-([A-Za-z]+?)(\d+(?:x\d+)?)\.psfu?(?:\.gz)?$")
+
+
+def console_fonts():
+    """{face: set of sizes} parsed from /usr/share/consolefonts file names
+    (<codeset>-<Face><Size>.psf.gz -- the sizes there are HxW). {} when the
+    directory is unreadable (then nothing can be validated)."""
+    out = {}
+    try:
+        names = os.listdir(CONSOLEFONTS_DIR)
+    except OSError:
+        return {}
+    for n in names:
+        m = _FONT_FILE.match(n)
+        if m:
+            out.setdefault(m.group(1), set()).add(m.group(2))
+    return out
+
+
+def _size_spellings(size):
+    """The file-name spellings one chosen size may match: as given, flipped
+    (console-setup writes WxH, the font files say HxW), and the height
+    alone (Fixed16.psf serves FONTSIZE=8x16)."""
+    names = {size}
+    if "x" in size:
+        w, h = size.split("x", 1)
+        names.add("%sx%s" % (h, w))
+        names.add(h)
+    return names
+
+
+def font_list():
+    """`spark font list`: what FACE SIZE may name here."""
+    if IS_MAC:
+        say("%s font list -- macOS: a font's PostScript name; the size is points" % MARK)
+        say("  JetBrainsMonoNFM-Regular      the Nerd Font spark installs (Brewfile)")
+        say("  Menlo-Regular  Monaco  SFMono-Regular      always on a Mac")
+        say("  Font Book shows any font's PostScript name (select it, Cmd-I)")
+        return 0
+    fonts = console_fonts()
+    if not fonts:
+        say("%s font list -- nothing in %s (console-setup not installed?)" % (MARK, CONSOLEFONTS_DIR))
+        return 0
+    say("%s font list -- the console faces in %s" % (MARK, CONSOLEFONTS_DIR))
+    for face in sorted(fonts):
+        sizes = sorted(fonts[face], key=lambda s: tuple(int(p) for p in s.split("x")))
+        say("  %-16s %s" % (face, " ".join(sizes)))
+    say("  spark font FACE SIZE sets one; a WxH size such as 16x32 matches its HxW file")
+    return 0
 
 
 def cmd_font(args):
     if args and args[0] in ("-h", "--help", "help"):
         say(FONT_USAGE.rstrip())
         return 0
-    if shell_off("font"):
-        return 2
     cfg = config.load()
     if not args or args[0] == "status":
         if IS_MAC:
@@ -135,6 +189,8 @@ def cmd_font(args):
         else:
             say("%s font -- console: not managed (SITE_FONT_FACE unset)" % MARK)
         return 0
+    if args[0] == "list":
+        return font_list()
     if args[0] == "none":
         set_keys(SITE_FONT_FACE="", SITE_FONT_SIZE="")
         say("the console keeps whatever font it has now")
@@ -147,9 +203,19 @@ def cmd_font(args):
         if not re.match(r"^\d+(\.\d+)?$", size):
             say("spark font: %s is not a size -- points on macOS, e.g. 13" % size)
             return 2
-    elif not re.match(r"^\d+x\d+$", size):
-        say("spark font: %s is not a size -- WxH on the Linux console, e.g. 16x32" % size)
-        return 2
+    else:
+        if not re.match(r"^\d+(x\d+)?$", size):
+            say("spark font: %s is not a size -- WxH on the Linux console, e.g. 16x32 (spark font list)" % size)
+            return 2
+        # refuse a face or size consolefonts does not hold, before anything
+        # is written; an unreadable consolefonts dir validates nothing
+        fonts = console_fonts()
+        if fonts and face not in fonts:
+            say("spark font: no console face named %s -- spark font list shows them" % face)
+            return 2
+        if fonts and not (_size_spellings(size) & fonts[face]):
+            say("spark font: %s has no size %s -- spark font list shows them" % (face, size))
+            return 2
     set_keys(SITE_FONT_FACE=face, SITE_FONT_SIZE=size)
     if IS_MAC:
         from . import theme
@@ -905,9 +971,11 @@ SHELL_USAGE = """%s shell -- spark's own shell: tmux, starship, micro, fzf, eza,
                                 look (tmux, starship, btop, micro) come back
                                 from .bak, or go; the packages stay installed
 """ % MARK
-# the bootstrap rows the switch flips (bootstrap.sh gates them on SITE_SHELL)
-SHELL_ROWS = ["identity", "hostname", "dir", "apt", "brew", "starship", "font", "micro-aspell", "pinned",
-              "configs", "rc", "theme", "terminfo", "console", "quiet-login", "quiet-boot"]
+# the bootstrap rows the switch flips (bootstrap.sh gates them on
+# SITE_SHELL). The console-font row is core now (spark font owns it), so
+# `font` and `console` are no longer filtered for here.
+SHELL_ROWS = ["identity", "hostname", "dir", "apt", "brew", "starship", "micro-aspell", "pinned",
+              "configs", "rc", "theme", "terminfo", "quiet-login", "quiet-boot"]
 SHELL_TOOLS = "tmux, starship, micro, fzf, zoxide, eza, bat, btop"
 
 

@@ -121,12 +121,12 @@ layer's git identity).
 | `SITE_EMBER_MODEL` | `none`, `auto`, or a name: a second model for conversations; `none` = one model does both -- later, `spark ember NAME` | `none` |
 | `SITE_AI_BUDGET` | 10..95: percent of RAM+GPU memory `auto` may use -- later, `spark model budget N` | `60` |
 | `SITE_AI_BUILD` | `auto`, `cpu` or `vulkan`: the Linux engine build; `auto` = `vulkan` when a GPU reports its memory in `/sys/class/drm`, else `cpu` (macOS ignores it, its tarball has Metal) | `auto` |
-| `SITE_SHELL` | `off`: the AI only; `on`: tmux, starship, micro, fzf, zoxide, eza, bat, btop, the Nerd Font, the console, and the rc files become spark's -- later, `spark shell on|off` | `off` |
+| `SITE_SHELL` | `off`: the AI only; `on`: tmux, starship, micro, fzf, zoxide, eza, bat, btop, the Nerd Font, and the rc files become spark's -- later, `spark shell on|off` | `off` |
 | `SITE_PEER_AI_URL` | another machine's FORGE URL (`spark forge --print-client` there), or its raw `spark serve` URL | unset |
 | `SITE_HEADLESS` | `yes`: the FORGE up from boot with nobody logged in, never asleep -- later, `spark headless on|off` | `no` |
 | `SITE_THEME` | `none`, or a palette from `themes/` (`spark theme` lists them) -- later, `spark theme NAME` | `none` |
 | `SITE_PROMPT` / `SITE_PROMPT_STYLE` | `starship`/`plain`; `minimal`/`full` (the shell layer) | `starship`, `minimal` |
-| `SITE_FONT_FACE` / `SITE_FONT_SIZE` | Linux console: `Terminus`/`VGA`/`Fixed` and `16x32`; macOS profile: font name and points -- later, `spark font FACE SIZE` | unset / `13` |
+| `SITE_FONT_FACE` / `SITE_FONT_SIZE` | Linux console: a face and size `spark font list` shows (e.g. `Terminus` `16x32`); macOS profile: a font's PostScript name and points -- later, `spark font FACE SIZE`; core, shell layer or not | unset / `13` |
 | `SITE_QUIET_LOGIN` / `SITE_QUIET_BOOT` | Linux: `yes` empties the motd and kernel line / hides GRUB's menu -- later, `spark quiet login|boot on` | `no` |
 | `SITE_QUIET_START` | both OSes: `yes` silences spark's own start -- no login banner, one-line `spark serve` and `spark forge`, one-line bare `spark` (`spark status` stays full) -- later, `spark quiet start on`. The login path greps `site.env` directly (no python there), so the usual environment-over-file precedence does not apply to the banner | `no` |
 | `SITE_SET_HOSTNAME` | `yes`: the OS hostname follows `SITE_NAME` (sudo; the shell layer) | `no` |
@@ -264,8 +264,9 @@ changes, or once a day, whichever comes first.
 
 `spark shell on` (`SITE_SHELL=on`) puts spark's own shell on top of the AI:
 tmux, starship, micro, fzf, zoxide, eza, bat, btop, the Nerd Font, and on
-Linux the console font and the quiet login and boot when their keys say
-so. With a theme chosen, one palette lands on every surface in the same
+Linux the quiet login and boot when their keys say so (the console font is
+core: `spark font` sets it with the layer off too). With a theme chosen,
+one palette lands on every surface in the same
 move: tmux and starship are rendered from it, micro gets a `spark`
 colorscheme (plus a seeded `settings.json` choosing it, and
 `MICRO_TRUECOLOR=1` from the hook), and the text console wears it through
@@ -284,14 +285,16 @@ none (that was the pre-spark state; never an empty husk). `~/.gitconfig`
 hook line lands in a restored rc file; the packages stay installed
 (`apt` or `brew` removes them). `spark shell` prints the state.
 
-With the layer off, `spark bar`, `spark font` and the set forms of
+With the layer off, `spark bar` and the set forms of
 `spark quiet login|boot` refuse (`the shell layer is off`), `spark help`
 folds the shell block into one line, and the check rows that stand on it
-(`pinned font terminfo quiet bar git backup swap encryption pending
+(`pinned terminfo quiet bar git backup swap encryption pending
 battery disk`) read `na`; the `shell` row says what `on` adds. `spark
-theme` works either way (the FORGE page reads the palette too), and
-`spark quiet start` works either way: it is spark's own noise, not the
-shell's.
+theme` and `spark font` work either way -- the palette and the console
+font are the machine's face, shell layer or not (the Nerd Font download
+alone stays with the layer; `spark font list` shows the console faces
+this box has) -- and `spark quiet start` works either way: it is spark's
+own noise, not the shell's.
 
 Most linked files are symlinks into the repo, so an edit anywhere is a
 `git status` line. Some apps rewrite their own config on exit; those are
@@ -516,12 +519,17 @@ Linux:
   terminal emulators stay yours: apply the colours in `theme.env` in their
   settings by hand. The `theme` check row watches that `theme.env` and
   `console-colors` still match the chosen palette.
-- The console rows are the shell layer: `SITE_FONT_FACE=Terminus` with
-  `SITE_FONT_SIZE=16x32` gives the text console a readable font on a 1080p
-  screen (`VGA` for the installer's look); `spark quiet login on` empties
-  the motd and `spark quiet boot on` hides GRUB's menu. The console font cannot draw the check
-  and arrow glyphs; spark notices (`TERM=linux`, also inside a tmux whose
-  client is the console) and prints ASCII. `SPARK_ASCII=1` forces that.
+- The console font is core, not the shell layer: `spark font Terminus
+  16x32` gives the text console a readable font on a 1080p screen (`VGA`
+  for the installer's look). `spark font list` reads
+  `/usr/share/consolefonts` -- the real faces and sizes this box has --
+  and a face or size not there is refused before anything is written (a
+  WxH size such as `16x32` matches its HxW file name). The quiet rows stay
+  with the shell layer: `spark quiet login on` empties the motd and
+  `spark quiet boot on` hides GRUB's menu. The console font cannot draw
+  the check and arrow glyphs; spark notices (`TERM=linux`, also inside a
+  tmux whose client is the console) and prints ASCII. `SPARK_ASCII=1`
+  forces that.
 - Units: `systemctl --user status spark-serve spark-forge
   spark-check.timer`; `journalctl --user -u spark-serve -n 50`. Without a
   user systemd session (a container) the `services` row reads `na`; run
