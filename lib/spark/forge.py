@@ -324,13 +324,16 @@ def reply(cfg, thread, text, files=(), cwd="", shell="", mode="chat", on_delta=N
 # ------------------------------------------------------------------- chat
 CHAT_USAGE = """%s chat -- a conversation
 
-  spark chat <words>   one more turn on the newest thread, streamed
-  spark chat           a conversation at the `chat> ` prompt
+  spark chat <words>             one more turn on the newest thread, streamed
+  spark chat --thread N [words]  an older thread instead: N from the /resume
+                                 or spark history list (1 = newest), or a
+                                 literal thread id
+  spark chat                     a conversation at the `chat> ` prompt
 
   Inside it: @FILE words asks about a file; /help lists the verbs (/new,
-  /last, /model); /q (or /quit, /exit, :q, quit, exit, bye, Ctrl-D) ends,
-  silently; Ctrl-C cancels a reply in progress without ending the chat.
-  Every turn is kept as a thread (spark history).
+  /resume, /clear, /last, /model); /q (or /quit, /exit, :q, quit, exit,
+  bye, Ctrl-D) ends, silently; Ctrl-C cancels a reply in progress without
+  ending the chat. Every turn is kept as a thread (spark history).
 """
 
 # Any of these alone ends the conversation, silently. Generous on purpose:
@@ -339,46 +342,97 @@ CHAT_USAGE = """%s chat -- a conversation
 QUIT_WORDS = ("/q", "/quit", "/exit", ":q", ":quit", ":wq", "quit", "exit", "bye")
 
 
-def _slash_help(cfg, thread):
+def resolve_thread(tok, threads=None):
+    """The thread id `tok` names: a 1-based index into the newest threads
+    (the /resume listing, 1 = newest) or a literal thread id. None when
+    it names nothing."""
+    if threads is None:
+        threads = list_threads(5)
+    if tok.isdigit():
+        n = int(tok)
+        return threads[n - 1]["id"] if 1 <= n <= len(threads) else None
+    return tok if exists(tok) else None
+
+
+def _slash_help(cfg, thread, args):
     from . import say
-    say("/help   this list")
-    say("/new    a fresh thread")
-    say("/last   the last turn, with its tok/s")
-    say("/model  which model is answering")
-    say("/q      end the conversation (Ctrl-D works too)")
+    say("/help    this list")
+    say("/new     a fresh thread")
+    say("/resume  an older thread: bare lists the newest 5, /resume N picks")
+    say("/clear   wipe the screen; the thread goes on")
+    say("/last    the last turn, with its tok/s")
+    say("/model   which model is answering")
+    say("/q       end the conversation (Ctrl-D works too)")
     return thread
 
 
-def _slash_new(cfg, thread):
+def _slash_new(cfg, thread, args):
     from . import MARK, say
     say("%s: a fresh thread" % MARK)
     return None
 
 
-def _slash_last(cfg, thread):
+def _slash_resume(cfg, thread, args):
+    from . import say
+    if cfg.history <= 0:
+        print("spark: history is off", file=sys.stderr, flush=True)
+        return thread
+    threads = list_threads(5)
+    if not args:
+        if not threads:
+            say("(no threads yet)")
+        for i, th in enumerate(threads, 1):
+            say("%d) %d turn%s  %s" % (i, th["turns"], "" if th["turns"] == 1 else "s", th["title"]))
+        return thread
+    tid = resolve_thread(args[0], threads)
+    if not tid:
+        print("spark: no thread %s -- /resume lists them" % args[0], file=sys.stderr, flush=True)
+        return thread
+    users = [m for m in load(tid) if m["role"] == "user"]
+    title = _title(users[0]["text"]) if users else tid
+    say("* resuming: %s (%d turn%s)" % (title, len(users), "" if len(users) == 1 else "s"))
+    return tid
+
+
+def _slash_clear(cfg, thread, args):
+    # The screen only: at a terminal the escapes wipe it (scrollback too)
+    # and nothing else is printed -- the intro opens the conversation
+    # exactly once. Piped, the escapes would be garbage, so nothing is
+    # written at all. The thread goes on either way.
+    if sys.stdout.isatty():
+        sys.stdout.write("\033[2J\033[3J\033[H")
+        sys.stdout.flush()
+    return thread
+
+
+def _slash_last(cfg, thread, args):
     from . import cli, say, session
     say(cli._fmt_turn(session.last_turn()))
     return thread
 
 
-def _slash_model(cfg, thread):
+def _slash_model(cfg, thread, args):
     from . import cli, say, wire
     try:
         url, model, is_forge = wire.resolve_brain(cfg)
     except wire.BrainError as e:
         print("spark: " + e.hint, file=sys.stderr, flush=True)
         return thread
-    stem = model
+    # `ember:` only when an ember role is actually served; a one-model
+    # machine (_role_rows says []) answers with that model, unlabelled.
+    stem, label = model, "model"
     for role, s, _loaded in cli._role_rows(cfg, url, is_forge):
         if role == "ember":
-            stem = s
+            stem, label = s, "ember"
             break
-    say("ember: %s via %s" % (stem, url))
+    say("%s: %s via %s" % (label, stem, url))
     return thread
 
 
 # /q is not here: QUIT_WORDS is checked first, so it never reaches this dict.
-SLASH_VERBS = {"/help": _slash_help, "/new": _slash_new, "/last": _slash_last, "/model": _slash_model}
+# Every verb takes (cfg, thread, args) and returns the thread to go on with.
+SLASH_VERBS = {"/help": _slash_help, "/new": _slash_new, "/resume": _slash_resume,
+               "/clear": _slash_clear, "/last": _slash_last, "/model": _slash_model}
 
 
 def cmd_chat(args):
@@ -387,8 +441,23 @@ def cmd_chat(args):
     if args and args[0] in ("-h", "--help", "help"):
         say(CHAT_USAGE.rstrip() % MARK)
         return 0
+    picked = None
+    if args and args[0] == "--thread":
+        if len(args) < 2:
+            say(CHAT_USAGE.rstrip() % MARK)
+            return 2
+        picked, args = args[1], args[2:]
     cfg = config.load()
-    thread = last_thread() if cfg.history > 0 else None    # `more`: go on with the newest
+    if picked is not None:
+        if cfg.history <= 0:
+            say("%s chat -- history is off (SPARK_HISTORY)" % MARK)
+            return 2
+        thread = resolve_thread(picked)
+        if thread is None:
+            say("%s chat -- no thread %s (spark history lists them)" % (MARK, picked))
+            return 2
+    else:
+        thread = last_thread() if cfg.history > 0 else None    # `more`: go on with the newest
     if args:
         words, paths = refs(args)
         return cli._stream("chat", " ".join(words), paths, thread=thread)
@@ -432,13 +501,15 @@ def cmd_chat(args):
             if text in QUIT_WORDS:
                 break
             if text.startswith("/"):
-                verb = text.split()[0]
+                parts = text.split()
+                verb = parts[0]
                 fn = SLASH_VERBS.get(verb)
                 if fn:
-                    thread = fn(cfg, thread)
+                    thread = fn(cfg, thread, parts[1:])
                 else:
                     print("spark: no %s -- /help lists them" % verb, file=sys.stderr, flush=True)
-                say()          # a blank line between turns
+                if verb != "/clear":
+                    say()      # a blank line between turns; /clear starts clean
                 continue
             words, paths = refs(text.split())
             try:

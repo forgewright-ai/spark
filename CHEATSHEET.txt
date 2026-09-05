@@ -2,6 +2,7 @@ SPARK CHEATSHEET                                          lp CHEATSHEET.txt
 
 THE AI
   spark chat [words]              one more turn, or a chat (/help for verbs)
+  spark chat --thread N [words]   go on with an older thread (spark history)
   spark <words>                   a streamed answer     spark last  the last
   spark do <words>                a task, one confirmed command at a time
   ?? words                        follow up on the last answer (same thread)

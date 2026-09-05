@@ -309,11 +309,15 @@ and never touches a fact.
 
 `? words` and `spark <words>` start a thread; `?? words` continues the
 newest one -- a rule, not a guess -- and `spark chat <words>` is one more
-turn on it. `spark chat` alone is a conversation at a `chat> ` prompt:
-`/help` lists its verbs (`/new` a fresh thread, `/last` the last turn with
-its tok/s, `/model` which one is answering); `/q` (or `quit`, `exit`,
-Ctrl-D) ends it, silently, and Ctrl-C cancels a reply in progress without
-ending the chat. At a terminal it keeps a readline history,
+turn on it. `spark chat --thread N [words]` continues an older thread
+instead: N counts down the `spark history` (or `/resume`) list, 1 the
+newest, and a literal thread id works too. `spark chat` alone is a
+conversation at a `chat> ` prompt: `/help` lists its verbs (`/new` a
+fresh thread, `/resume` an older one -- bare lists the newest five,
+`/resume N` switches to one -- `/clear` wipes the screen while the
+thread goes on, `/last` the last turn with its tok/s, `/model` which one
+is answering); `/q` (or `quit`, `exit`, Ctrl-D) ends it, silently, and
+Ctrl-C cancels a reply in progress without ending the chat. At a terminal it keeps a readline history,
 `~/.local/state/spark/chat-history` (0600, off with every other
 conversation trace when `SPARK_HISTORY=off`); two `spark chat` sessions
 open at once share that history file and the newest thread the same way

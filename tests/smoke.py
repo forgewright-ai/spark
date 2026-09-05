@@ -55,10 +55,11 @@ class Stub(BaseHTTPRequestHandler):
         if self.path == "/v1/models":
             if not self._auth():
                 return self._send(401, {"error": "unauthorized"})
-            # the router's shape: one entry per role, aliased, with a status
-            return self._send(200, {"data": [
-                {"id": "stub-7b-q4.gguf", "aliases": ["spark"], "status": {"value": "loaded"}},
-                {"id": "stub-ember-q4.gguf", "aliases": ["ember"], "status": {"value": "loaded"}}]})
+            # the router's shape: one entry per role, aliased, with a
+            # status; single_model plays a one-model machine (no ember)
+            data = [{"id": "stub-7b-q4.gguf", "aliases": ["spark"], "status": {"value": "loaded"}},
+                    {"id": "stub-ember-q4.gguf", "aliases": ["ember"], "status": {"value": "loaded"}}]
+            return self._send(200, {"data": data[:1] if STATE.get("single_model") else data})
         self._send(404, {})
 
     def do_HEAD(self):
@@ -420,7 +421,7 @@ def main():
         hits0 = STATE["hits"]
         rc, out, err = spark("chat", stdin="/help\n:q\n")
         t.ok(rc == 0 and STATE["hits"] == hits0, "chat: /help hits the stub zero times", out + err)
-        for v in ("/help", "/new", "/last", "/model", "/q"):
+        for v in ("/help", "/new", "/resume", "/clear", "/last", "/model", "/q"):
             t.ok(v in out, "chat: /help lists %s" % v, out)
 
         # an unknown slash verb is refused on stderr, not sent to the model
@@ -437,6 +438,49 @@ def main():
         # /model: names the stub's ember (see the stub's /v1/models fixture)
         rc, out, err = spark("chat", stdin="/model\n:q\n")
         t.ok(rc == 0 and ("ember: stub-ember-q4 via " + url) in out, "chat: /model names the stub's ember", out)
+
+        # /model on a one-model machine: no ember is served, so no ember
+        # label -- the single model answers everything
+        STATE["single_model"] = True
+        rc, out, err = spark("chat", stdin="/model\n:q\n")
+        t.ok(rc == 0 and ("model: stub-7b-q4 via " + url) in out and "ember:" not in out,
+             "chat: /model with one model served says model:, never ember:", out + err)
+        STATE["single_model"] = False
+
+        # /resume and --thread: picking up an older thread. Two seeded
+        # threads: "older" gets 2 turns, "newer" 1 -- the stub's `count`
+        # answer (system + history + line) proves which history was sent.
+        spark("history", "clear")
+        spark("line", stdin="? older")
+        spark("line", stdin="?? more")            # the older thread: 2 turns
+        spark("line", stdin="? newer")            # the newer thread: 1 turn
+        hits0 = STATE["hits"]
+        rc, out, err = spark("chat", stdin="/resume\n:q\n")
+        t.ok(rc == 0 and "1) 1 turn  newer" in out and "2) 2 turns  older" in out and STATE["hits"] == hits0,
+             "chat: /resume lists the newest threads, numbered, no model call", out + err)
+        rc, out, err = spark("chat", stdin="/resume 9\n:q\n")
+        t.ok(rc == 0 and STATE["hits"] == hits0 and "no thread 9 -- /resume lists them" in err,
+             "chat: /resume with an unknown N is refused on stderr", out + err)
+        rc, out, err = spark("chat", stdin="/resume 2\ncount\n")
+        t.ok(rc == 0 and "* resuming: older (2 turns)" in out and re.findall(r"chat> \* (\d+)", out) == ["6"],
+             "chat: /resume 2 goes on with the older thread (system + 4 + line)", out + err)
+        rc, out, err = spark("chat", stdin="/resume\n:q\n", extra={"SPARK_HISTORY": "off"})
+        t.ok(rc == 0 and "spark: history is off" in err, "chat: /resume with history off says so", out + err)
+        rc, out, _ = spark("chat", "--thread", "1", "count")
+        t.ok(rc == 0 and out.strip() == "* 8", "spark chat --thread 1 count goes on with the newest thread", out)
+        rc, out, _ = spark("chat", "--thread", "9", "count")
+        t.ok(rc == 2 and out.strip() == "spark chat -- no thread 9 (spark history lists them)",
+             "chat --thread with an unknown N refuses, signed, exit 2", out)
+        rc, out, _ = spark("chat", "--thread", "1", "count", extra={"SPARK_HISTORY": "off"})
+        t.ok(rc == 2 and out.strip() == "spark chat -- history is off (SPARK_HISTORY)",
+             "chat --thread with history off refuses, signed, exit 2", out)
+
+        # /clear piped: a silent no-op -- no escapes on stdout, the thread lives
+        rc, out, err = spark("chat", stdin="count\n/clear\ncount\n")
+        answers = [int(n) for n in re.findall(r"chat> \* (\d+)", out)]
+        t.ok(rc == 0 and "\033[" not in out and len(answers) == 2 and answers[1] == answers[0] + 2,
+             "chat: /clear piped prints no escapes and the thread goes on", repr(out))
+        spark("history", "clear")
 
         # wrap at 80 columns when piped: a long canned answer breaks into
         # short lines (the leading `chat> ` of the first one is not part of
