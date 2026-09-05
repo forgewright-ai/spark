@@ -30,7 +30,11 @@ from spark import MARK, page, say  # noqa: E402
 USAGE_HEAD = """%s -- your own AI, on your own machine, at no cost
 
 the AI
-  spark chat [words]          a conversation (/help lists verbs, Ctrl-D ends)
+  spark chat [words]          a conversation (/help lists its verbs, Ctrl-D
+                              ends): /resume picks up an older thread,
+                              /clear wipes the screen while the thread goes on
+  spark chat --thread N       one more turn on an older thread, straight from
+                              the command line (N from the /resume listing)
   spark [@FILE] <words>       ask about anything, or a file; a streamed answer
   spark do <words>            a task, one command at a time; you confirm each
   ?? words                    follow up on the last answer (same thread)
@@ -41,22 +45,35 @@ at the prompt: the surprise -- your question becomes a command in your line
   ? words   or   words?   Enter   the command lands in your line, hint above
   Esc a                       ask about the line you are on, no ? needed
   cmd 2>&1 | explain          what went wrong, and the fix
+  spark <TAB>                 completes the verbs, then each verb's words --
+                              theme and model names included, offline
 
 the FORGE: the agent spark keeps on this machine, one identity
   spark soul [edit|reset]     who it is: ~/.config/spark/soul, yours
   spark remember <words>      a fact it keeps; spark forget N; spark memory
   spark ember [NAME|auto|none]  a second brain for conversations (opt-in)
-  spark forge [on|off]        the FORGE on the LAN: API + page (-h: the tokens)
+  spark forge [on|off]        the FORGE on the LAN: the API and the page
+  spark forge --print-url     the page's login URL and token (--user: user's)
+  spark forge --print-client  what a peer machine needs: URL and user token
+  spark forge token --new     rotate the admin token (--user: the user one)
 
 the server
-  spark model [NAME|list]     the table, or choose one (download, restart)
-  spark serve | stop          start it (one LAN address, token required); stop
+  spark model [NAME|auto|none]  choose the served model: download, restart
+  spark model list            the table: size, RAM, downloaded, serving, tok/s
+  spark model budget [N]      percent of RAM+GPU memory auto may use (10-95)
+  spark model add URL         your own row (--sha256 HEX, --license "NAME URL")
+  spark model verify | rm NAME  re-hash every download; delete an unused file
+  spark serve                 start it, one LAN address, token required
+                              (-h: --foreground, --host, --print-client)
+  spark stop [--force]        stop it; --force also the unit's server
 """ % MARK
 
 USAGE_MACHINE = """the machine
-  spark setup                 the guided first run: name, model, light it up
+  spark setup                 the guided first run: name, model, theme; -h:
+                              --yes --model --name --user --theme --no-serve
   spark check                 drift report; exit 0 = every promise kept
-  spark update                the newest tag, or main on a developer clone
+                              (--watch N, --porcelain, --selftest; -h: more)
+  spark update [--dry-run]    the newest tag, or main on a developer clone
   spark shell [on|off]        the shell layer: off = the prompt widget only
   spark headless [on|off]     the FORGE up from boot, never asleep (a brain)
   spark client [URL|off]      answer from another machine's FORGE; none here
@@ -64,9 +81,12 @@ USAGE_MACHINE = """the machine
   spark font [FACE SIZE|list]  the console font (Linux) / Terminal.app's
   spark ver                   logo, version, credits
 
-less often (spark <sub> -h has every flag: check --watch, stop --force ...)
-  spark last | history        the last exchange, with its tok/s; the threads
-  spark stats | bench | tune  the numbers; llama-bench; the best settings
+less often (long output pages via $PAGER at a terminal; piped stays plain)
+  spark last                  the last exchange, with its tok/s
+  spark history [clear]       the threads kept here; clear removes them all
+  spark stats [--week]        tok/s, latency, cache hits from real turns
+  spark bench [--tune]        llama-bench; --tune hunts the best settings
+  spark tune [show|apply]     the winner; apply writes spark.env, restarts
   spark brain                 what answers right now: a FORGE or a llama-server
 """
 

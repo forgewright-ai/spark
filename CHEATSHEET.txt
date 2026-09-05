@@ -3,6 +3,7 @@ SPARK CHEATSHEET                                          lp CHEATSHEET.txt
 THE AI
   spark chat [words]              one more turn, or a chat (/help for verbs)
   spark chat --thread N [words]   go on with an older thread (spark history)
+  /resume [N]   /clear   /new     in the chat: an older thread, wipe, fresh
   spark <words>                   a streamed answer     spark last  the last
   spark do <words>                a task, one confirmed command at a time
   ?? words                        follow up on the last answer (same thread)
@@ -12,6 +13,7 @@ THE AI
   spark remember WORDS            a fact it keeps    spark forget N  drops it
   spark memory [on|off|clear]     the facts it recalls on every answer
   spark ember [NAME|auto|none]    a second brain for conversations (opt-in)
+  spark history [clear]           the threads kept here; clear removes them
   spark                           status: brain, widget, server, soul, last
 
 AT THE PROMPT
@@ -25,6 +27,7 @@ AT THE PROMPT
 
 THE SERVER
   spark model [NAME|list]         the table; choose one (download + restart)
+  spark model budget [N]          percent of RAM+GPU auto may use (10-95)
   spark model add URL             add your own (--sha256, --license required)
   spark model verify              sha256 every downloaded file now, exit 1 bad
   spark serve | spark stop        one LAN address, token required; stop
@@ -60,7 +63,7 @@ THE MACHINE
   spark quiet login|boot on|off   Linux: motd + kernel line; GRUB's menu
   spark font FACE SIZE | list     console font (Linux) / Terminal.app's font
   spark ver                       logo, version, credits (the login greeting)
-  spark update                       the newest tag; main pulls on a dev clone
+  spark update [--dry-run]        the newest tag; main pulls on a dev clone
   ./bootstrap.sh --dry-run        what a rebuild would change (never sudo)
   ./bootstrap.sh                  apply; converged = Nothing to do
   curl -fsSL .../spark/main/get | sh     update: pull, then spark setup again
