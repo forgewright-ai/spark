@@ -311,9 +311,10 @@ may change freely.
     rewritten (at most 12 kB, else refused: the output replaces the
     input, so head+tail makes no sense), `? [words]` answers about it
     (head 4 kB + tail 12 kB, a visible cut mark; `?` alone reviews);
-    `--type FT`, `--name NAME` and `--about TEXT` are hints that ride in
-    the user message (the name is a basename, never a path; no `[cwd]`
-    line, ever). Output is raw streamed text: no mark, no wrap, a code
+    `--type FT`, `--name NAME`, `--about TEXT` and `--part` (the text is a
+    selection from a larger file: the rewrite replaces exactly it) are
+    hints that ride in the user message (the name is a basename, never a
+    path; no `[cwd]` line, ever). Output is raw streamed text: no mark, no wrap, a code
     fence around the answer removed, a rewrite ending the way the input
     ended. Exit 0; 1 when nothing came in or no brain answers; 2 for the
     usage. No thread is kept; the turn record is numbers (`kind`,

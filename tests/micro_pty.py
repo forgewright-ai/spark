@@ -145,14 +145,14 @@ def main():
             except OSError:
                 return "(no log.txt)"
 
-        # A. Alt-s, words: a rewrite with nothing selected writes at the cursor
+        # A. Alt-s, words: a rewrite with nothing selected rewrites the whole file
         m = Micro(argv, env, work)
         ok(m.expect("hello world"), "micro draws the file", debug_log())
         m.mark()
         m.send("\x1bs")
         ok(m.expect("spark>"), "Alt-s opens the spark> prompt", debug_log())
         m.send("make it shine\r")
-        ok(m.expect("STUB-EDIT"), "the answer lands in the buffer", debug_log())
+        ok(m.expect("rewritten"), "the whole file is rewritten in place", debug_log())
         m.send("\x13")               # Ctrl-s: save
         time.sleep(0.5)
         m.send("\x11")               # Ctrl-q: quit
@@ -160,10 +160,10 @@ def main():
         m.close()
         with open(note) as f:
             saved = f.read()
-        ok("STUB-EDIT" in saved, "the saved file holds the answer", repr(saved))
+        ok(saved in ("STUB-EDIT", "STUB-EDIT\n"), "the saved file is the answer, nothing doubled", repr(saved))
         got = logged()
-        ok("edit --type markdown --name note.md --about a note make it shine" in got,
-           "spark edit got the filetype, the name, the about-option and the words", got)
+        ok("edit --type markdown --name note.md --about a note make it shine" in got and "--part" not in got,
+           "spark edit got the filetype, the name, the about-option and the words, no --part", got)
         ok(work not in got, "the file's path never reaches spark", got)
         try:
             with open(log + ".stdin") as f:
@@ -232,6 +232,7 @@ def main():
         ok(saved in ("STUB-EDIT", "STUB-EDIT\n"), "the whole selection became the answer, nothing else (micro adds the final newline)", repr(saved))
         with open(log + ".stdin") as f:
             ok(f.read() == "hello world\n", "the selection travelled on stdin")
+        ok("--part shorter" in logged(), "a selection travels with --part", logged())
 
         # E. an unchanged rewrite splices nothing
         os.unlink(log)

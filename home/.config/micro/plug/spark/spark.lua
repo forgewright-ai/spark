@@ -174,8 +174,13 @@ local function on_exit(_, args)
         end
         state.buf:Remove(state.sel_a, state.sel_b)
         state.buf:Insert(state.sel_a, state.acc)
-        select_region(state.bp, state.sel_a, advance(state.sel_a, state.acc))
-        notice("spark: rewritten -- Backspace discards, Ctrl-z undoes")
+        if state.whole then
+            state.buf:GetActiveCursor():GotoLoc(state.sel_a)
+            notice("spark: the file is rewritten -- Ctrl-z undoes")
+        else
+            select_region(state.bp, state.sel_a, advance(state.sel_a, state.acc))
+            notice("spark: rewritten -- Backspace discards, Ctrl-z undoes")
+        end
     elseif state.kind == "ask" then
         state.buf.Type.Readonly = true
         notice("spark: Ctrl-q closes the pane")
@@ -222,22 +227,28 @@ local function complete(bp)
     spawn(bp, argv(bp, {"--at", tostring(at)}), util.String(buf:Bytes()), state)
 end
 
+-- The selection is what gets rewritten; nothing selected means the whole
+-- file, replaced in place (the brief asks for the whole rewritten text, so
+-- inserting it at the cursor would double the file). A selection travels
+-- with --part: a fragment must come back as exactly that fragment.
 local function rewrite(bp, words)
     local buf = bp.Buf
     local c = buf:GetActiveCursor()
+    local a, b, text, extra
     if c:HasSelection() then
-        local a, b = ordered(c)
-        local text = util.String(c:GetSelection())
-        local state = {kind = "rewrite", bp = bp, buf = buf, acc = "", sel_text = text,
-                       sel_a = buffer.Loc(a.X, a.Y), sel_b = buffer.Loc(b.X, b.Y)}
-        spawn(bp, argv(bp, words), text, state)
-        return
+        a, b = ordered(c)
+        text = util.String(c:GetSelection())
+        extra = {"--part"}
+        for _, w in ipairs(words) do extra[#extra + 1] = w end
+    else
+        a, b = buf:Start(), buf:End()
+        text = util.String(buf:Bytes())
+        extra = words
     end
-    -- nothing selected: the words write at the cursor, the whole text as context
-    local loc = c.Loc
-    local state = {kind = "generate", bp = bp, buf = buf, loc = buffer.Loc(loc.X, loc.Y),
-                   start = buffer.Loc(loc.X, loc.Y)}
-    spawn(bp, argv(bp, words), util.String(buf:Bytes()), state)
+    local state = {kind = "rewrite", bp = bp, buf = buf, acc = "", sel_text = text,
+                   sel_a = buffer.Loc(a.X, a.Y), sel_b = buffer.Loc(b.X, b.Y),
+                   whole = not c:HasSelection()}
+    spawn(bp, argv(bp, extra), text, state)
 end
 
 local function ask(bp, words)

@@ -635,6 +635,9 @@ def main():
         t.ok(STATE["bodies"][-1]["messages"][0]["content"] == sys_py, "edit: one brief for every filetype -- the system message is byte-identical (prompt cache)")
         rc, out, _ = spark("edit", "--name", "notes.txt", "tighten", stdin="x\n")
         t.ok(STATE["bodies"][-1]["messages"][-1]["content"].startswith("tighten\n\nFile notes.txt:\n"), "edit: no --type, no parenthesis")
+        rc, out, _ = spark("edit", "--part", "--type", "python", "--name", "s.py", "add", "a", "docstring", stdin="def f():\n    pass\n")
+        umsg = STATE["bodies"][-1]["messages"][-1]["content"]
+        t.ok(rc == 0 and umsg.startswith("add a docstring\n\nSelected part of s.py (python):\ndef f():") and "Output:" not in umsg, "edit: --part labels a selection", repr(umsg[:80]))
         rc, out, err = spark("edit", "tighten")
         t.ok(rc == 1 and "stdin" in err, "edit: refuses without stdin", err)
         rc, out, err = spark("edit", stdin="text")

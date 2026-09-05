@@ -274,7 +274,8 @@ colorscheme (plus a seeded `settings.json` choosing it, and
 spark itself: the plugin under `~/.config/micro/plug/spark/` (linked,
 like the bindings) puts `spark> ` on `Alt-s` -- Enter alone completes at
 the cursor, words rewrite the selection, `? words` asks in a pane on the
-right, `?` alone reviews; `> help spark` inside micro says the rest. The
+right, `?` alone reviews; nothing selected means the whole file; `> help
+spark` inside micro says the rest. The
 plugin is one client of `spark edit` (the text on stdin, raw text out;
 `spark edit -h`), which works from a pipe too. spark reads what the text
 is and answers as that kind deserves; when it should not guess, `setlocal

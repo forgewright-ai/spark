@@ -108,8 +108,9 @@ What comes next: `ROADMAP.md`.
   gives Enter back.
 - **In the editor.** With the shell layer on, micro has spark under one
   key: `Alt-s` (Option-s on a Mac) opens `spark> `. Enter alone completes at the cursor;
-  words rewrite the selection (`shorter`, `fix grammar`, `add a
-  docstring`); `? words` asks in a pane; `?` alone reviews. spark reads
+  words rewrite the selection, or the whole file when nothing is
+  selected (`shorter`, `fix grammar`, `add a docstring`); `? words` asks
+  in a pane; `?` alone reviews. spark reads
   what the text is -- code or prose, a poem or a chapter or a README --
   and answers as that kind of text deserves, in its own language; the
   new text is left selected, a proposal you keep or discard. The same

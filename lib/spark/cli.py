@@ -39,6 +39,8 @@ EDIT_USAGE = """spark edit -- the editor's protocol (contract 10): the text on s
   --name NAME                 the file's name, a hint -- never its path
   --about TEXT                what the author says the text is, when it
                               should not guess ("a novel chapter")
+  --part                      the text is a selection from a larger file:
+                              a rewrite replaces exactly that part
 
   raw streamed text: no mark, no wrap, a code fence around the answer is
   removed; exit 1 when nothing came in or no brain answers. In micro,
@@ -264,11 +266,13 @@ def cmd_explain(words):
 # ------------------------------------------------------------------- edit
 def _edit_args(args):
     """(options, words) -- ValueError names a flag that lacks its value."""
-    opts = {"type": "", "name": "", "about": "", "at": None}
+    opts = {"type": "", "name": "", "about": "", "at": None, "part": False}
     words, rest = [], list(args)
     while rest:
         a = rest.pop(0)
-        if a in ("--type", "--name", "--about", "--at"):
+        if a == "--part":
+            opts["part"] = True
+        elif a in ("--type", "--name", "--about", "--at"):
             if not rest:
                 raise ValueError(a)
             opts[a[2:]] = rest.pop(0)
@@ -277,8 +281,10 @@ def _edit_args(args):
     return opts, words
 
 
-def _edit_label(name, ftype):
+def _edit_label(name, ftype, part=False):
     what = "File %s" % name if name else "Text"
+    if part:
+        what = "Selected part of %s" % name if name else "Selected text"
     return what + (" (%s):" % ftype if ftype else ":")
 
 
@@ -328,7 +334,7 @@ def cmd_edit(args):
     if not data:
         die("edit reads stdin -- spark edit --type FT words < FILE")
     ftype = opts["type"].strip() if opts["type"].strip() != "unknown" else ""
-    label = _edit_label(os.path.basename(opts["name"].strip()), ftype)
+    label = _edit_label(os.path.basename(opts["name"].strip()), ftype, opts["part"])
     about = opts["about"].strip()
     head = "The author says: %s\n" % about if about else ""
     cfg = config.load()

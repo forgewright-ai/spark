@@ -148,8 +148,11 @@ MODE_EDIT_REWRITE = (
     "instruction does not touch them, their language. Reply with the whole rewritten text "
     "and nothing else: no preamble, no explanation, no code fences, no quotation marks "
     "around it. Keep the indentation, the line breaks and the final newline as they are; "
-    "change only what the instruction asks; never leave a placeholder. If the instruction "
-    "cannot be done to this text, return the text exactly as it was.")
+    "change only what the instruction asks; never leave a placeholder. When the label says "
+    "a selected part, the text is a fragment of a larger file -- a word, a line, a "
+    "paragraph, a function -- and you reply with exactly what replaces that fragment: not a "
+    "line before it, not a line after it, nothing the fragment did not cover. If the "
+    "instruction cannot be done to this text, return the text exactly as it was.")
 MODE_EDIT_ASK = (
     "The user asks about the text shown below, inside an editor, their own file as written. " + _READ +
     "You are a good reader in the room, not a report generator: plain text for a narrow "
@@ -265,7 +268,7 @@ def user_message(text, cwd, context=""):
     head = "[cwd %s]\n" % cwd if cwd else ""
     if context:
         # an @FILE block and the editor's blocks carry their own label
-        labelled = context.startswith(("File ", "Text", "The author says", "You read this as"))
+        labelled = context.startswith(("File ", "Text", "Selected ", "The author says", "You read this as"))
         label = "" if labelled else "Output:\n"
         return head + (text + "\n\n" if text else "") + label + context
     return head + text

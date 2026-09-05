@@ -11,9 +11,12 @@ or Esc then s, quickly. What you type there decides what happens:
                          begins exactly where the cursor is
     words                rewrite the selection as the words ask ("shorter",
                          "fix grammar", "add a docstring", "translate to
-                         Portuguese"); with nothing selected, the words are
-                         written at the cursor. The new text is left
-                         selected: it is a proposal, never applied silently
+                         Portuguese"); with nothing selected, the whole file
+                         is rewritten in place. The new text is left
+                         selected: it is a proposal, never applied silently.
+                         Select the whole unit you mean -- the paragraph,
+                         the function -- not a word of it: a fragment comes
+                         back as exactly that fragment
     ? words              ask about the selection (or the whole file) in a
                          pane on the right; Ctrl-q closes it
     ?                    review the selection or the file: a few sentences,
