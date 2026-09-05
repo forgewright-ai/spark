@@ -67,11 +67,13 @@ def profile_dict(name, pal, font_name="JetBrainsMonoNFM-Regular", font_size=13.0
 # Terminal.app sends nothing for Shift+Up/Down (Shift+Left/Right it does),
 # so micro cannot select by line there; nor for Ctrl+arrows. The profile
 # binds the xterm sequences micro's terminfo already knows. Keys: $ Shift,
-# ^ Control; F700..F703 = Up, Down, Left, Right. Values are the literal
-# text Terminal.app stores ("\033" spelled out, as its own editor does).
+# ^ Control; F700..F703 = Up, Down, Left, Right. Values hold the real ESC
+# byte, the way Apple's own keyMappings.plist stores "$F702" (Shift+Left,
+# one of the two it does map) -- the text "\\033" would be typed as text.
+ESC = "\x1b"
 KEY_MAP = {
-    "$F700": "\\033[1;2A", "$F701": "\\033[1;2B", "$F702": "\\033[1;2D", "$F703": "\\033[1;2C",
-    "^F700": "\\033[1;5A", "^F701": "\\033[1;5B", "^F702": "\\033[1;5D", "^F703": "\\033[1;5C",
+    "$F700": ESC + "[1;2A", "$F701": ESC + "[1;2B", "$F702": ESC + "[1;2D", "$F703": ESC + "[1;2C",
+    "^F700": ESC + "[1;5A", "^F701": ESC + "[1;5B", "^F702": ESC + "[1;5D", "^F703": ESC + "[1;5C",
 }
 
 
@@ -124,7 +126,8 @@ def profile(cfg, dry):
         return 0
     name = "spark-" + cfg.theme
     path = os.path.join(CONFIG_DIR, name + ".terminal")
-    want = plistlib.dumps(profile_dict(name, pal, cfg.font_face, cfg.font_size))
+    # binary: an XML plist cannot hold the ESC byte the key map needs
+    want = plistlib.dumps(profile_dict(name, pal, cfg.font_face, cfg.font_size), fmt=plistlib.FMT_BINARY)
     have = b""
     try:
         with open(path, "rb") as f:
@@ -157,6 +160,32 @@ def profile(cfg, dry):
     return 0
 
 
+def _terminal_prefs(path):
+    """Terminal.app's preferences as a dict, {} when there are none.
+    `defaults export` writes XML that carries the key map's ESC byte raw --
+    which no XML parser accepts -- so plutil (lenient) turns it into a
+    binary plist first."""
+    xml, bin_ = path + ".export", path + ".bin"
+    try:
+        rc, _ = run(["defaults", "export", "com.apple.Terminal", xml], timeout=10)
+        if rc != 0 or not os.path.exists(xml):
+            return {}
+        rc, _ = run(["plutil", "-convert", "binary1", "-o", bin_, xml], timeout=10)
+        if rc != 0:
+            return {}
+        with open(bin_, "rb") as f:
+            prefs = plistlib.load(f)
+        return prefs if isinstance(prefs, dict) else {}
+    except Exception:
+        return {}
+    finally:
+        for f in (xml, bin_):
+            try:
+                os.remove(f)
+            except OSError:
+                pass
+
+
 def _install_profile(name, d, path):
     """Put the profile into Terminal.app's preferences under its name --
     replacing an older one of that name -- and make it the default. Through
@@ -164,11 +193,7 @@ def _install_profile(name, d, path):
     Terminal.app the .terminal file imports a duplicate ("NAME 1") when the
     name exists, and a duplicate is exactly what a changed profile made.
     Earlier duplicates of that shape are removed on the way."""
-    rc, out = run(["defaults", "export", "com.apple.Terminal", "-"], timeout=10)
-    try:
-        prefs = plistlib.loads(out.encode("utf-8")) if rc == 0 and out.strip() else {}
-    except (ValueError, plistlib.InvalidFileException):
-        prefs = {}
+    prefs = _terminal_prefs(path)
     ws = prefs.get("Window Settings")
     if not isinstance(ws, dict):
         ws = prefs["Window Settings"] = {}
@@ -181,7 +206,7 @@ def _install_profile(name, d, path):
     prefs["Startup Window Settings"] = name
     tmp = path + ".prefs"
     with open(tmp, "wb") as f:
-        plistlib.dump(prefs, f)
+        plistlib.dump(prefs, f, fmt=plistlib.FMT_BINARY)
     rc, _ = run(["defaults", "import", "com.apple.Terminal", tmp], timeout=10)
     try:
         os.remove(tmp)

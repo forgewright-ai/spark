@@ -665,7 +665,7 @@ def main():
         fixture_pal = dict(("THEME_ANSI_%d" % i, "#%02x%02x%02x" % (i, i, i)) for i in range(16))
         fixture_pal.update({"THEME_BG": "#111111", "THEME_FG": "#eeeeee", "THEME_ACCENT": "#ff0000", "THEME_MUTED": "#888888", "THEME_BTOP": "Default"})
         pd = thememod.profile_dict("spark-fixture", fixture_pal, "Menlo", 13)
-        t.ok(pd.get("useOptionAsMetaKey") is True and pd["keyMapBoundKeys"]["$F701"] == "\\033[1;2B" and len(pd["keyMapBoundKeys"]) == 8,
+        t.ok(pd.get("useOptionAsMetaKey") is True and pd["keyMapBoundKeys"]["$F701"] == "\x1b[1;2B" and len(pd["keyMapBoundKeys"]) == 8,
              "profile: Option is Meta and Shift/Ctrl arrows are bound", json.dumps(pd.get("keyMapBoundKeys")))
 
         # the privacy claim: what the request contains
