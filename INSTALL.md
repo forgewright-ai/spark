@@ -347,10 +347,10 @@ fresh thread, `/resume` an older one -- bare lists the newest five,
 thread goes on, `/last` the last turn with its tok/s, `/model` which one
 is answering); `/q` (or `quit`, `exit`, Ctrl-D) ends it, silently, and
 Ctrl-C cancels a reply in progress without ending the chat. At a terminal it keeps a readline history,
-`~/.local/state/spark/chat-history` (0600, off with every other
-conversation trace when `SPARK_HISTORY=off`); two `spark chat` sessions
-open at once share that history file and the newest thread the same way
-two shells share one file -- last writer wins. `spark @FILE words`
+sealed in your account's store (`users/<name>/chat-history`; off with
+every other conversation trace when `SPARK_HISTORY=off`); two
+`spark chat` sessions open at once share that history and the newest
+thread the same way two shells share one file -- last writer wins. `spark @FILE words`
 sends a text file's first 4 kB and last 12 kB along with the question (a
 directory or a binary is refused). Quote words the shell would glob (a
 trailing `?`, parentheses) -- zsh eats them first. `spark do <words>`
@@ -413,7 +413,17 @@ their own `spark user add NAME`; the admin token stays here, and nobody
 (or the page's account card) rotates a user; exactly that principal's
 clients and browsers log in again. `spark forge` alone is the status
 (URL, health, model, unit, tokens, users, log tail); `spark forge
-on|off` writes `SPARK_FORGE` and enables or disables the unit. There is no TLS on the LAN: the standard library
+on|off` writes `SPARK_FORGE` and enables or disables the unit.
+
+Each user's threads, memory and chat history are sealed --
+ChaCha20-Poly1305, written from RFC 8439, under a per-user data key
+wrapped by that user's token. The box stores a sha256 verifier and the
+wrap, never the token: no token, no key, no plaintext, and there is no
+reset -- a lost token is lost history. Coming from v1.3, `spark user
+claim` seals the old plaintext threads, memory and chat history into
+your store and removes them (`spark setup` and the first `spark user
+add` offer it at a terminal); the `users` check row nags until every
+plaintext file and the old shared ember-token are gone. There is no TLS on the LAN: the standard library
 cannot mint a certificate without a new dependency, a self-signed one
 trains people to click through warnings, and the trust model is your LAN.
 The API is contract 9 in `CLAUDE.md`.

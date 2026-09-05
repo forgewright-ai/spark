@@ -100,8 +100,9 @@ USAGE_SHELL = """the shell (spark shell on)
 USAGE_SHELL_OFF = """  spark shell on              tmux, starship, micro ... + bar
 """
 
-USAGE_TAIL = """what leaves this machine: the line you typed, the directory path, the shell
-and OS name; with a conversation your soul, your remembered facts and the
+USAGE_TAIL = """what leaves this machine: the line you typed, the shell and OS name, and --
+only where a command is proposed (the prompt line, do, explain) -- the
+directory path; with a conversation your soul, your remembered facts and the
 thread's earlier turns (the prompt line sends machine facts only); for
 explain the piped text (last 6 kB); for @FILE its first 4 kB and last 12 kB;
 for spark do each step's output (last 4 kB). Nothing else, and only to the

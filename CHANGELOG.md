@@ -32,6 +32,12 @@ rotates their own token and clears their own threads from the account
 card, and `spark client` + `spark user login` replace the old scp of a
 shared secret -- no token ever leaves the box it was minted on.
 
+Less leaves the machine, too: the `[cwd ...]` line now rides only the
+modes that propose a command relative to it (the prompt line, `do`,
+`explain`). A conversation sends no directory path at all -- and a
+chatty model stops narrating "your current working directory is ..."
+mid-chat, which is how the leak was noticed.
+
 The rest of what you say follows the threads into the seal. The
 remembered facts move from the plaintext config file into the account's
 sealed store (the first `spark remember` claims the old file away); the

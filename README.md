@@ -138,8 +138,10 @@ What comes next: `ROADMAP.md`.
 ## What leaves this machine
 
 Exactly this, and only to the FORGE or llama-server you configured: the
-line you typed; the directory's path, not its contents; the shell and OS
-name; with a conversation, your soul, your remembered facts and the
+line you typed; the shell and OS name; the directory's path -- never its
+contents, and only where a command is proposed (the prompt line, `do`,
+`explain`): a conversation sends no path at all; with a conversation,
+your soul, your remembered facts and the
 thread's earlier turns; for `explain`, the piped text (last 6 kB); for
 `@FILE`, its first 4 kB and last 12 kB, under the name you typed; for
 `spark do`, each step's output (last 4 kB). No telemetry, no analytics, no
@@ -149,7 +151,7 @@ the engine (one pinned llama.cpp release, sha256) from github.com and the
 model you chose from huggingface.co (size and sha256 in `models.env`).
 Nothing else. The server and the FORGE bind one LAN address, never
 `0.0.0.0`, behind 0600 tokens that are never printed; turns and threads
-live 30 days under `~/.local/state/spark/` (0600), `SPARK_HISTORY=off`
+live 30 days under `~/.local/state/spark/` and `SPARK_HISTORY=off`
 keeps none; turns are telemetry -- numbers, never words, the said things
 live only in the sealed threads. Named users (`spark user add NAME`) each get their own sealed
 store: threads, memory and chat history encrypted (ChaCha20-Poly1305,
