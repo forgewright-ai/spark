@@ -173,7 +173,8 @@ def main():
         ok(stdin == "hello world\n", "the whole buffer travelled on stdin", repr(stdin))
 
         # B. command mode (no Alt), a question: a pane on the right
-        os.unlink(log)
+        if os.path.exists(log):
+            os.unlink(log)
         with open(note, "w") as f:
             f.write("hello world\n")
         m = Micro(argv, env, work)
@@ -194,7 +195,8 @@ def main():
             ok(f.read() == "hello world\n", "a question changes nothing in the file")
 
         # C. Alt-s, Enter: a completion at the cursor
-        os.unlink(log)
+        if os.path.exists(log):
+            os.unlink(log)
         m = Micro(argv, env, work)
         ok(m.expect("hello world"), "micro draws the file once more")
         m.mark()
@@ -211,7 +213,8 @@ def main():
         m.close()
 
         # D. a real selection (Ctrl-a selects all): the rewrite replaces it
-        os.unlink(log)
+        if os.path.exists(log):
+            os.unlink(log)
         with open(note, "w") as f:
             f.write("hello world\n")
         m = Micro(argv, env, work)
@@ -235,7 +238,8 @@ def main():
         ok("--part shorter" in logged(), "a selection travels with --part", logged())
 
         # E. an unchanged rewrite splices nothing
-        os.unlink(log)
+        if os.path.exists(log):
+            os.unlink(log)
         with open(note, "w") as f:
             f.write("hello world\n")
         m = Micro(argv, env, work)

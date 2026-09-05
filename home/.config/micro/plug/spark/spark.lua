@@ -241,7 +241,11 @@ local function rewrite(bp, words)
         extra = {"--part"}
         for _, w in ipairs(words) do extra[#extra + 1] = w end
     else
-        a, b = buf:Start(), buf:End()
+        -- the whole buffer: (0,0) to the end of the last line, computed
+        -- here (buf:End() misbehaves on micro 2.0.14)
+        local last = buf:LinesNum() - 1
+        a = buffer.Loc(0, 0)
+        b = buffer.Loc(runes(buf:Line(last)), last)
         text = util.String(buf:Bytes())
         extra = words
     end
