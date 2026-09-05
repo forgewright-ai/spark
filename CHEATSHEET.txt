@@ -5,6 +5,7 @@ THE AI
   spark <words>                   a streamed answer     spark last  the last
   spark do <words>                a task, one confirmed command at a time
   ?? words                        follow up on the last answer (same thread)
+  ?? how do I change the theme    spark knows itself: it names its own verbs
   spark @FILE words               ask about a file (first 4 kB, last 12 kB)
   spark soul [edit|reset]         who it is: default soul, replace with edit
   spark remember WORDS            a fact it keeps    spark forget N  drops it

@@ -77,6 +77,32 @@ MODE_CHAT = (
     "command only when they ask for one or it is clearly what they want, in backticks, with a word on "
     "what it does. If you cannot know something from here, say so."
 )
+# What spark knows about itself. Two static ASCII constants -- nothing
+# dynamic, no version -- so the system prompt stays byte-stable and the
+# prompt cache keeps working. KNOW_SHELL is the compressed map for the
+# shell modes; KNOW_CHAT the same surface, grouped, for a conversation.
+KNOW_SHELL = (
+    "spark's own commands -- when the user asks how to change or run spark itself, "
+    "answer with these: spark chat; spark do WORDS; spark serve|stop; spark check; "
+    "spark update; spark theme NAME; spark model NAME|list; spark ember NAME; "
+    "spark font FACE SIZE; spark quiet start|login|boot on|off; spark shell on|off; "
+    "spark bar on|off; spark soul edit; spark remember WORDS; spark history; "
+    "spark stats|bench; spark forge on|off; spark setup."
+)
+KNOW_CHAT = (
+    "You run as spark; when asked how to change or run spark itself, these are "
+    "spark's own commands.\n"
+    "The AI: spark chat -- a conversation; spark do WORDS -- a task, one command at "
+    "a time; spark soul edit -- who it is; spark remember WORDS -- a fact it keeps; "
+    "spark ember NAME -- the conversational model; spark forge on|off -- the FORGE "
+    "on the LAN; spark history -- the threads; spark stats|bench -- the numbers.\n"
+    "The machine: spark serve|stop -- the model server; spark model NAME|list -- "
+    "the table, or choose one; spark check -- the drift report; spark update -- "
+    "the newest version; spark setup -- the guided first run; spark shell on|off "
+    "-- the shell layer; spark quiet start|login|boot on|off -- a quieter machine.\n"
+    "The look: spark theme NAME -- the palette; spark font FACE SIZE -- the "
+    "console font; spark bar on|off -- the tmux status line."
+)
 MODE_DO = (
     "You are completing a task in steps. Propose ONE shell command as kind=cmd with a one-line `hint` "
     "(at most 70 characters) saying what it does, or reply kind=done with the result in `hint` when the "
@@ -110,6 +136,7 @@ def prefix(cfg, shell):
     if t:
         lines.append(t)
     lines.append(FLAGS)
+    lines.append(KNOW_SHELL)
     lines.append("Never invent flags or paths.")
     return "\n".join(lines)
 
@@ -122,9 +149,10 @@ def machine_line(cfg):
 
 def mode_prefix(cfg, mode, shell):
     """The stable part of the system prompt for a mode: one machine line
-    for a conversation (chat), the whole shell brief for everything else."""
+    plus spark's own commands for a conversation (chat), the whole shell
+    brief for everything else."""
     if mode in ("chat", "talk"):
-        return machine_line(cfg)
+        return machine_line(cfg) + "\n" + KNOW_CHAT
     return prefix(cfg, shell)
 
 
