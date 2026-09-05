@@ -143,18 +143,38 @@ def main(argv):
         # one word that is not a command: a slip, not a question -- questions
         # are several words (quoted or not), end with ?, or name a file (@FILE)
         return misplaced(sub)
+    if len(argv) > 1 and sub not in cli.COMMANDS and "?" not in sub and not sub.startswith("@"):
+        # a near-miss of a verb with arguments is a typo, not a question:
+        # `spark quite start on` must not become a conversation
+        near = near_verb(sub, cli)
+        if near:
+            say("spark: no command named %s -- spark %s? (to ask the AI, end with ?)" % (sub, near))
+            return 2
     return cli.main(argv)
 
 
+VERBS = ("help", "setup", "check", "update", "bar", "theme", "bench", "tune", "stats",
+         "shell", "font", "quiet", "model", "headless", "ember", "client", "serve",
+         "stop", "forge")
+
+
+def near_verb(word, cli):
+    import difflib
+    hits = difflib.get_close_matches(word, VERBS + tuple(cli.COMMANDS), n=1, cutoff=0.8)
+    return hits[0] if hits else None
+
+
 def misplaced(word):
-    from spark import REPO, config
+    from spark import REPO, cli, config
     themes = sorted(f[:-4] for f in os.listdir(os.path.join(REPO, "themes")) if f.endswith(".env"))
     if word in themes or word == "none":
         say("spark: %s is a palette -- spark theme %s" % (word, word))
     elif word in {r[0] for r in config.models_table()} or word == "auto":
         say("spark: %s is a model -- spark model %s" % (word, word))
     else:
-        say("spark: no command named %s -- spark help lists them; a question is several words, or ends with ?" % word)
+        near = near_verb(word, cli)
+        hint = "spark %s?" % near if near else "spark help lists them"
+        say("spark: no command named %s -- %s; a question is several words, or ends with ?" % (word, hint))
     return 2
 
 
