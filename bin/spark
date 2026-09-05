@@ -97,8 +97,8 @@ less often (long output pages via $PAGER at a terminal; piped stays plain)
 USAGE_SHELL = """the shell (spark shell on)
   spark bar [on|off]          tmux's status line: shown or hidden; set it
   spark theme [NAME|show]     the palettes; choose one; show = its colours
-  micro FILE                  Alt-s: spark in the editor -- Enter completes,
-                              words rewrite the selection, ? asks, ? reviews
+  micro FILE                  Alt-s (Mac: Option-s): spark in the editor --
+                              Enter completes, words rewrite, ? asks/reviews
 """
 # with the layer off, the block above folds into this one line
 USAGE_SHELL_OFF = """  spark shell on              tmux, starship, micro ... + bar

@@ -83,7 +83,7 @@ THE SHELL (spark shell on)
                      h j k l panes  d detach  r reload  [ scroll/copy (vi)
   z DIR (zoxide)   C-r history (fzf)   C-t files (fzf)   rg PATTERN
   fd NAME  eza -la  bat FILE  btop  micro FILE (C-s save, C-q quit)
-  micro: Alt-s  Enter=complete  words=rewrite  ? words=ask  ?=review
+  micro: Alt-s (Mac: Option-s)  Enter=complete  words=rewrite  ?=ask/review
          setlocal spark.about "a poem"   tell it, when it should not guess
 
 LINUX
@@ -96,4 +96,4 @@ MACOS
   launchctl print gui/$UID/spark.serve         is the agent loaded? (.forge too)
   launchctl kickstart -k gui/$UID/spark.serve  restart it
   spark headless on: both live in system/; restart and stop need sudo launchctl
-  Option is not Meta in Terminal.app: press Esc, then s (shell and micro)
+  Alt is Option (spark's Terminal profile makes it Meta): Option-s, not Cmd-s

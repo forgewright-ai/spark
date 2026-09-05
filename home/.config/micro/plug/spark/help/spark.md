@@ -1,7 +1,8 @@
 # spark -- your own AI, in this editor
 
-Alt-s opens the `spark> ` prompt (Esc s is the same keys). What you
-type there decides what happens:
+Alt-s opens the `spark> ` prompt -- Option-s on a Mac (spark's Terminal
+profile makes Option the Meta key; Cmd-s is Terminal's own Export sheet),
+or Esc then s, quickly. What you type there decides what happens:
 
     (nothing) Enter      complete at the cursor: the rest of the sentence,
                          statement or block, left selected -- Backspace

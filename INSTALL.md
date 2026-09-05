@@ -508,7 +508,8 @@ macOS:
 - The shell layer is Homebrew's (`Brewfile`, no pinning worth trusting)
   plus a Terminal.app profile: `spark theme profile` writes and imports
   one with the palette and the font (`spark font FACE SIZE` sets them).
-  Option is not Meta in Terminal.app: press Esc, then a.
+  the profile makes Option the Meta key, so `Alt-s` is Option-s (Cmd-s is
+  Terminal's own Export sheet); `Esc` then `s`, quickly, is the same keys.
 - Apple's `tmux-256color` terminfo predates modified arrow keys, so micro
   types junk on Shift+Right; bootstrap compiles a complete entry from
   Homebrew's ncurses into `~/.terminfo` (the `terminfo` row).

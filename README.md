@@ -107,7 +107,7 @@ What comes next: `ROADMAP.md`.
   line you are on. `cmd 2>&1 | explain` says what went wrong. `spark off`
   gives Enter back.
 - **In the editor.** With the shell layer on, micro has spark under one
-  key: `Alt-s` opens `spark> `. Enter alone completes at the cursor;
+  key: `Alt-s` (Option-s on a Mac) opens `spark> `. Enter alone completes at the cursor;
   words rewrite the selection (`shorter`, `fix grammar`, `add a
   docstring`); `? words` asks in a pane; `?` alone reviews. spark reads
   what the text is -- code or prose, a poem or a chapter or a README --
