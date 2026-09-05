@@ -109,7 +109,8 @@ def _write(lines, st=None):
         log_exc("memory store")
         raise OSError("no account to hold the memory")
     path, dk, name = st
-    os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
+    from . import users
+    users.make_dirs(name)
     vault.write_sealed(path, dk, "memory", name, "".join(ln + "\n" for ln in lines).encode("utf-8"))
     if own:
         try:

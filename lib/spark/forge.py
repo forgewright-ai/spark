@@ -78,6 +78,10 @@ class Store:
         self.tdir, self.dk, self.name = tdir, dk, name
 
     def _dir(self):
+        if self.name:
+            from . import users
+            users.make_dirs(self.name)
+            return self.tdir
         state_dir()
         os.makedirs(self.tdir, mode=0o700, exist_ok=True)
         try:
@@ -297,7 +301,7 @@ def local_store(provision=False):
                 users.write_login(name, token)      # keep the login
                 d = users.user_dir(name)
                 if not os.path.isdir(d):
-                    os.makedirs(os.path.join(d, "threads"), mode=0o700)
+                    users.make_dirs(name)
                     vault.write_private(os.path.join(d, "token.hash"),
                                         (vault.token_hash(token) + "\n").encode())
                     vault.write_private(os.path.join(d, "key"),

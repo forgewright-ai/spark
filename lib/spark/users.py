@@ -76,15 +76,24 @@ def exists(name):
     return os.path.isfile(os.path.join(user_dir(name), "key"))
 
 
+def make_dirs(name):
+    """The user's store directories, every level 0700 -- os.makedirs
+    applies its mode only to the leaf, so each level is made and
+    chmodded explicitly."""
+    state_dir()
+    d = user_dir(name)
+    for p in (USERS_DIR, d, os.path.join(d, "threads")):
+        os.makedirs(p, mode=0o700, exist_ok=True)
+        os.chmod(p, 0o700)
+    return d
+
+
 def add(name):
     """Mint the account; returns the token -- shown once, never stored."""
     import secrets
-    state_dir()
-    os.makedirs(USERS_DIR, mode=0o700, exist_ok=True)
-    os.chmod(USERS_DIR, 0o700)
-    d = user_dir(name)
-    os.makedirs(d, mode=0o700)
-    os.makedirs(os.path.join(d, "threads"), mode=0o700)
+    if os.path.isdir(user_dir(name)):
+        raise FileExistsError(user_dir(name))
+    d = make_dirs(name)
     token = secrets.token_urlsafe(32)
     vault.write_private(os.path.join(d, "token.hash"),
                         (vault.token_hash(token) + "\n").encode())
