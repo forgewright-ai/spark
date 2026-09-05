@@ -3,6 +3,58 @@
 What comes after v1.0, in the order it is likely to happen. Nothing here
 is a promise; a row in `CHANGELOG.md` is. A better idea is an issue away.
 
+## v1.3: the CLI experience wave
+
+A month of living with spark taught one lesson: the machine works, the
+conversation with it is rough. v1.3 is four passes over the same
+surface, the command line, in this order.
+
+### One grammar for every verb
+
+A code review of every verb, parameter and mechanic, then a
+harmonization: bare verb = show, `on|off` toggles read the same way
+everywhere, the same words mean the same things. The first casualty is
+the quiet family: `SITE_QUIET_LOGIN`, `SITE_QUIET_BOOT` (today the
+confusing `spark bootconfig quiet|loud`) and the missing quiet start
+become one verb -- `spark quiet` bare shows the three states, `spark
+quiet boot|login|start [on|off]` sets one. Quiet start silences what
+spark prints when it comes up: the login banner, the serve/forge
+startup chatter, and a one-line answer from bare `spark`. The same pass
+sets the interaction language: confirms are `yes/NO` and read the same
+in every verb, downloads draw one progress bar, refusals and hints
+share one shape and one voice.
+
+### spark knows itself
+
+Two gaps, one theme. First, the brain: asking `?? how do I change the
+theme` should answer `spark theme`, but the model has never heard of
+spark -- the line and chat prompts learn spark's own command surface,
+so the machine can explain itself. Second, the shell: `spark th<TAB>`
+completes nothing -- bash and zsh completion for the verbs and their
+arguments (theme names, model names, the words each verb takes),
+shipped with the rc hooks.
+
+### Reading long output
+
+`spark help` outgrew one screen and there is no way to scroll it; the
+same is true of `check`, `history` and the model table. Long output
+goes through a pager when stdout is a terminal (`$PAGER`, else `less
+-R`), and never when piped or `--porcelain` -- text-first means the
+pipe contract is untouched. Chat gets the same care within the same
+principle: scrolling that works everywhere the terminal's own
+scrollback does (tmux on the box included), `/clear` to wipe the screen
+and continue, and a way back into an earlier thread (`/resume`, and
+`spark chat --thread N`), without turning the REPL into a curses app.
+
+### The first run looks right
+
+The shell layer is nice; setting it up is not. `spark setup` on a
+fresh machine lands gruvbox-dark as the default answer -- terminal,
+micro and tmux all reading the same palette, consistent from minute
+one -- while the theme question keeps the user choosing. More palettes
+in `themes/`, and `spark font` grows easier: name a face and size once
+and every surface that draws text follows.
+
 ## spark token: one verb for the keys
 
 Three clients hold the same secret three ways: the CLI reads files under
