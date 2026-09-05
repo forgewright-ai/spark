@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#100e0c">
+<meta name="description" content="AI on the edge, at no cost. spark turns a Linux or macOS machine you own into a private AI.">
+<link rel="icon" type="image/svg+xml" href="{{BASE}}favicon.svg">
+<meta property="og:title" content="spark -- your own AI, on your own machine, at no cost">
+<meta property="og:description" content="AI on the edge, at no cost. spark turns a Linux or macOS machine you own into a private AI: no account, no cloud, nothing leaves.">
+<meta property="og:image" content="https://spark.forgewright.ai/og.png">
+<meta property="og:url" content="https://spark.forgewright.ai/{{SLUG}}">
+<meta name="twitter:card" content="summary_large_image">
+<title>{{TITLE}}</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap">
+<style>
+  :root {
+    /* lockstep: these values mirror lib/spark/forge/spark.css :root (the
+       ember palette) -- change one there, change it here too */
+    --ground: #100e0c;
+    --panel: #171412;
+    --rule: #2b2622;
+    --ink: #e6dfd2;
+    --muted: #8f877a;
+    --y1: #ffe066;
+    --y2: #e0b400;
+    --red: #d24a2a;
+    --ok: #9ccf6a;
+    --mono: "JetBrains Mono", "JetBrainsMono Nerd Font", ui-monospace, "SF Mono", Menlo, Consolas, "Cascadia Mono", "DejaVu Sans Mono", "Liberation Mono", monospace;
+  }
+  html { color-scheme: dark; }
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: var(--mono); font-size: 15px; line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--y2); text-decoration: none; border-bottom: 1px solid var(--rule); }
+  a:hover, a:focus-visible { color: var(--y1); border-color: var(--y1); outline: none; }
+  main { max-width: 84ch; margin: 0 auto; padding: 3rem 1.25rem 5rem; }
+  pre { margin: 0; font: inherit; white-space: pre; overflow-x: auto; }
+  code { font: inherit; }
+  .banner { display: block; width: 400px; max-width: 100%; height: auto; margin: 0 0 1.5rem; }
+  .sign { color: var(--muted); margin: 0 0 1rem; }
+  .sign b { color: var(--ink); font-weight: 400; }
+  nav { color: var(--muted); margin: 0 0 3rem; }
+  nav a { border: 0; }
+  nav a.here { color: var(--ink); }
+  section { margin: 0 0 3.25rem; }
+  .cmd { margin: 0 0 .75rem; color: var(--ink); font-weight: 700; }
+  .cmd .p { color: var(--muted); font-weight: 400; }
+  .cmd .k { color: var(--y1); }
+  p { margin: 0 0 1rem; max-width: 72ch; text-wrap: pretty; }
+  .mark { color: var(--y1); }
+  .warn { color: var(--red); }
+  .hint { color: var(--muted); }
+  .oneliner {
+    display: flex; align-items: center; gap: 1ch; flex-wrap: wrap;
+    background: var(--panel); border: 1px solid var(--rule); padding: .8rem 1rem;
+    margin: 0 0 1rem;
+  }
+  .oneliner code { flex: 1 1 auto; overflow-x: auto; white-space: nowrap; }
+  .oneliner button {
+    font: inherit; font-size: 13px; color: var(--ground); background: var(--y2);
+    border: 0; padding: .3rem .7rem; cursor: pointer;
+  }
+  .oneliner button:hover, .oneliner button:focus-visible { background: var(--y1); outline: none; }
+  .demo { background: var(--panel); border: 1px solid var(--rule); padding: .8rem 1rem; margin: 0 0 1rem; }
+  .demo .c { color: var(--muted); }
+  .caret::after {
+    content: ""; display: inline-block; width: .6ch; height: 1.1em; vertical-align: -.2em;
+    background: var(--y1); margin-left: .3ch; animation: blink 1.1s steps(1) infinite;
+  }
+  @media (prefers-reduced-motion: reduce) { .caret::after { animation: none; } }
+  @keyframes blink { 50% { opacity: 0; } }
+  /* the docs, rendered: headings in ink, code on the panel, tables ruled */
+  .doc h1 { font-size: 1.2em; margin: 0 0 1.5rem; }
+  .doc h2 { font-size: 1em; margin: 2.5rem 0 1rem; padding-top: 1rem; border-top: 1px solid var(--rule); }
+  .doc h3 { font-size: 1em; margin: 1.75rem 0 .75rem; color: var(--y2); }
+  .doc h1::before, .doc h2::before, .doc h3::before { content: "# "; color: var(--muted); font-weight: 400; }
+  .doc h2::before { content: "## "; }
+  .doc h3::before { content: "### "; }
+  .doc pre { background: var(--panel); border: 1px solid var(--rule); padding: .8rem 1rem; margin: 0 0 1rem; }
+  .doc p code, .doc li code, .doc td code { color: var(--y1); }
+  .doc ul, .doc ol { margin: 0 0 1rem; padding-left: 2.5ch; max-width: 72ch; }
+  .doc li { margin: 0 0 .35rem; }
+  .doc ul ul { margin: .35rem 0 0; }
+  .doc table { border-collapse: collapse; margin: 0 0 1rem; display: block; overflow-x: auto; }
+  .doc th, .doc td { text-align: left; vertical-align: top; padding: .25rem 1.25ch .25rem 0; border-bottom: 1px solid var(--rule); }
+  .doc th { color: var(--muted); font-weight: 400; }
+  .doc td:not(:last-child), .doc th:not(:last-child) { white-space: nowrap; }
+  .doc td.r, .doc th.r { text-align: right; }
+  .doc td.q { color: var(--muted); }
+  .doc b { color: var(--ink); }
+  footer { color: var(--muted); border-top: 1px solid var(--rule); padding-top: 1.25rem; font-size: 13px; }
+  footer p { margin: 0 0 .4rem; }
+  @media (max-width: 640px) { body { font-size: 14px; } }
+</style>
+</head>
+<body>
+<main>
+<a href="{{BASE}}" style="border:0"><img class="banner" src="{{BASE}}banner.svg" alt="spark" width="400" height="108"></a>
+<p class="sign"><b>spark {{VERSION}}</b> . by forgewright-ai . <a href="https://github.com/forgewright-ai/spark">github.com/forgewright-ai/spark</a></p>
+<nav>{{NAV}}</nav>
+
+{{BODY}}
+
+<footer>
+  <p>MIT. Every project spark downloads or installs is named in <a href="{{BASE}}credits/">CREDITS.md</a> with its license. Built with Claude.</p>
+  <p>forgewright-ai . <a href="https://www.forgewright.ai">www.forgewright.ai</a> . <a href="https://github.com/forgewright-ai">github.com/forgewright-ai</a></p>
+</footer>
+</main>
+
+<script>
+  (function () {
+    var b = document.getElementById("copy"), c = document.getElementById("ol");
+    if (!b || !c || !navigator.clipboard) return;
+    b.addEventListener("click", function () {
+      navigator.clipboard.writeText(c.textContent).then(function () {
+        b.textContent = "copied"; setTimeout(function () { b.textContent = "copy"; }, 1500);
+      });
+    });
+  })();
+</script>
+</body>
+</html>

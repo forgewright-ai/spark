@@ -18,6 +18,8 @@ Try it at the prompt:
 Nothing runs until you press Enter again. A command that deletes comes back
 marked `!` -- one mark, every OS, every terminal.
 
+The page: https://spark.forgewright.ai -- the docs, the model lists.
+
 ## Quickstart
 
 One line, either OS (Debian 13 / Ubuntu 24.04 or newer; macOS with the

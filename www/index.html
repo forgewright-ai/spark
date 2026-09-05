@@ -1,0 +1,30 @@
+<section>
+  <p class="cmd"><span class="p">~ &gt; </span>spark<span class="k"> -- your own AI, on your own machine, at no cost</span></p>
+  <div class="oneliner">
+    <code id="ol">curl -fsSL https://raw.githubusercontent.com/forgewright-ai/spark/main/get | sh</code>
+    <button type="button" id="copy">copy</button>
+  </div>
+  <p class="hint">Debian 13 or macOS (for more details check <a href="install/">INSTALL.md</a>).</p>
+</section>
+
+<section>
+  <p class="cmd"><span class="p">~ &gt; </span>spark chat</p>
+  <div class="demo"><pre><span class="c">chat -- /help, Ctrl-D or /q ends</span>
+chat&gt; write a haiku about a machine that thinks for itself
+<span class="mark">*</span> A hum in the dark,
+  no wire runs to the city:
+  the answer is here.
+
+chat&gt; <span class="caret"></span></pre></div>
+</section>
+
+<section>
+  <p class="cmd"><span class="p">~ &gt; </span>files bigger than 1G modified this week?</p>
+  <div class="demo"><pre><span class="mark">*</span> Finds files &gt;1G modified in last 7 days               <span class="c">&lt;- the hint, above the prompt</span>
+~ &gt; find . -type f -size +1G -mtime -7                  <span class="c">&lt;- the command, in your line</span></pre></div>
+</section>
+
+<section>
+  <p class="cmd"><span class="p">~ &gt; </span>open spark.app</p>
+  <p class="hint">The same page as a macOS and Windows app: <a href="https://github.com/forgewright-ai/sparkapp/releases">github.com/forgewright-ai/sparkapp/releases</a>.</p>
+</section>

@@ -67,7 +67,7 @@ if ls bin/spark lib/spark/*.py tests/*.py >/dev/null 2>&1; then
 fi
 
 # --- 3. tests for this OS ------------------------------------------------
-for t in tests/smoke.py tests/serve_smoke.py tests/forge_smoke.py tests/bench_smoke.py tests/vault_test.py; do
+for t in tests/smoke.py tests/serve_smoke.py tests/forge_smoke.py tests/bench_smoke.py tests/vault_test.py tests/site_test.py; do
     [ -f "$t" ] && { python3 "$t" >/dev/null || bad "$t"; }
 done
 if [ -f tests/widget_pty.py ]; then
@@ -99,7 +99,8 @@ tab=$(printf '\t')
 for f in README.md INSTALL.md CLAUDE.md CHANGELOG.md CHEATSHEET.txt LICENSE \
          CREDITS.md AGENTS.md CONTRIBUTING.md ROADMAP.md get \
          lib/spark/forge/index.html lib/spark/forge/spark.css lib/spark/forge/spark.js \
-         lib/spark/forge/manifest.webmanifest lib/spark/forge/favicon.svg; do
+         lib/spark/forge/manifest.webmanifest lib/spark/forge/favicon.svg \
+         www/template.html www/index.html www/build.py; do
     [ -f "$f" ] || continue
     hit=$(LC_ALL=C grep -n "[^ -~${tab}]" "$f" | head -3 || true)
     [ -z "$hit" ] || bad "non-ASCII in $f (docs are read on the console):
