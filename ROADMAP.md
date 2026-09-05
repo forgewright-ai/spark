@@ -6,7 +6,7 @@ is a promise; a row in `CHANGELOG.md` is. A better idea is an issue away.
 ## v1.3: the CLI experience wave
 
 A month of living with spark taught one lesson: the machine works, the
-conversation with it is rough. v1.3 is four passes over the same
+conversation with it is rough. v1.3 is five passes over the same
 surface, the command line, in this order.
 
 ### One grammar for every verb
@@ -45,6 +45,18 @@ principle: scrolling that works everywhere the terminal's own
 scrollback does (tmux on the box included), `/clear` to wipe the screen
 and continue, and a way back into an earlier thread (`/resume`, and
 `spark chat --thread N`), without turning the REPL into a curses app.
+
+### The help and the docs, caught up
+
+`spark help` grew by accretion and misses a lot of what spark can do;
+it gets a rewrite, not a patch -- every verb, every flag that matters,
+grouped so a new user reads the top and a daily user finds the bottom.
+Behind it, a comprehensive review of every doc -- `README.md`,
+`INSTALL.md`, `CLAUDE.md`, `CHEATSHEET.txt`, `AGENTS.md` -- against the
+code as it is today: stale counts, renamed verbs, missing keys, sections
+the last three releases outgrew. The landing rule keeps docs current
+per change; this pass pays down what accrued before the rule and what
+this wave's renames create.
 
 ### The first run looks right
 
