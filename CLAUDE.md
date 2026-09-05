@@ -107,7 +107,9 @@ templates/      rendered, not linked: .gitconfig .tmux.conf .config/btop/btop.co
 tests/          install_test.sh get_test.sh update_test.sh smoke.py serve_smoke.py
                 forge_smoke.py bench_smoke.py widget_pty.py check_selftest.py
                 vault_test.py (RFC 8439 vectors, round-trips, refusals)
-.githooks/      pre-commit (privacy gate, syntax, tests, 80-col), pre-push (install test, selftest)
+.githooks/      pre-commit (privacy gate, syntax, tests, 80-col), commit-msg (the
+                same privacy patterns over the message -- history is public too),
+                pre-push (install test, selftest)
 .github/        ci.yml: the same on ubuntu (plus a real bootstrap) and macOS (python 3.9)
                 release.yml: the GitHub Release from the CHANGELOG section, on a v* tag
 LICENSE         MIT, verbatim, ASCII (the hook checks it with the docs)
@@ -459,7 +461,9 @@ when a pin or a model row changes.
    on a developer clone (`main`, via `SPARK_REF=main`).
 
 Author metadata (the name and e-mail on commits) is outside the privacy
-gate, which reads the tree, not the log: use the GitHub noreply address.
+gate: use the GitHub noreply address. The gate itself reads both the
+tree (pre-commit) and the message (commit-msg) -- the history is as
+public as the tree.
 
 Re-derive every count in the docs before trusting it; counts go stale.
 Follow every cross-reference; sections get deleted. Be most suspicious of a

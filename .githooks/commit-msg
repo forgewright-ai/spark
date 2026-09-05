@@ -1,0 +1,40 @@
+#!/bin/sh
+# spark commit-msg gate. The pre-commit gate reads the tree; this reads
+# the message itself, with the same patterns: the banned-word union,
+# e-mail addresses, private IPv4 ranges, home paths naming a user. The
+# history is as public as the tree. Author metadata stays outside (use
+# the noreply address); the noreply addresses themselves are allowed.
+set -eu
+cd "$(git rev-parse --show-toplevel)"
+msg=$1
+fail=0
+notice() { printf 'NOTICE: %s\n' "$*"; }
+bad() { printf 'commit-msg: %s\n' "$*"; fail=1; }
+
+local_terms=${SPARK_PRIVACY_TERMS:-${XDG_CONFIG_HOME:-$HOME/.config}/spark/privacy-terms}
+terms=$(cat .privacy-terms "$local_terms" 2>/dev/null \
+        | sed 's/#.*//; s/^[[:space:]]*//; s/[[:space:]]*$//' | grep -v '^$' | sort -u | paste -sd'|' -)
+[ -n "$terms" ] || notice "no privacy word list -- generic patterns only"
+body=$(grep -v '^#' "$msg" || true)
+if [ -n "$terms" ]; then
+    hit=$(printf '%s\n' "$body" | grep -iEn "\\b($terms)\\b" || true)
+    [ -z "$hit" ] || bad "banned word in the commit message:
+$hit"
+fi
+# the allowed senders (the two noreply hosts) are erased from the text
+# before matching, not their whole lines -- a real address beside an
+# allowed one still trips; the escaped dots also keep the tree gate's
+# own e-mail pattern off this file
+scrubbed=$(printf '%s\n' "$body" \
+           | sed -E 's/[A-Za-z0-9._%+-]+@users\.noreply\.github\.com//g; s/noreply@anthropic\.com//g')
+hit=$(printf '%s\n' "$scrubbed" | grep -En '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' || true)
+[ -z "$hit" ] || bad "e-mail address in the commit message:
+$hit"
+hit=$(printf '%s\n' "$body" \
+      | grep -En '\b(10\.[0-9]+\.[0-9]+\.[0-9]+|192\.168\.[0-9]+\.[0-9]+|172\.(1[6-9]|2[0-9]|3[01])\.[0-9]+\.[0-9]+)\b' || true)
+[ -z "$hit" ] || bad "private IPv4 address in the commit message:
+$hit"
+hit=$(printf '%s\n' "$body" | grep -En '(^.|[^[:alnum:]/._-])/(home|Users)/[A-Za-z0-9_-]+' || true)
+[ -z "$hit" ] || bad "home path naming a user in the commit message:
+$hit"
+exit $fail
