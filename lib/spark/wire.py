@@ -343,16 +343,17 @@ def _post(cfg, url, body, timeout, stream=False, forge=False):
         raise BrainError("down", "%s: %s" % (url, e))
 
 
-def chat_json(cfg, url, messages, schema, max_tokens=200, temperature=0.2, forge=False, model=None):
+def chat_json(cfg, url, messages, schema, max_tokens=200, temperature=0.2, forge=False, model=None, timeout=None):
     """One JSON object shaped by `schema`, parsed. `model` names the role
     the request is for (spark | ember); the caller decides, the wire
-    only carries it. None sends no model field at all."""
+    only carries it. None sends no model field at all. `timeout` (seconds)
+    overrides SPARK_TIMEOUT for this one request."""
     body = {"messages": messages, "max_tokens": max_tokens, "temperature": temperature,
             "stream": False, "cache_prompt": True,
             "response_format": {"type": "json_schema", "json_schema": {"name": "spark_line", "schema": schema}}}
     if model is not None:
         body["model"] = model
-    with _post(cfg, url, body, cfg.timeout, forge=forge) as r:
+    with _post(cfg, url, body, timeout or cfg.timeout, forge=forge) as r:
         try:
             d = json.load(r)
             text = d["choices"][0]["message"]["content"]
@@ -379,15 +380,17 @@ def timings_of(d):
     return out
 
 
-def chat_stream(cfg, url, messages, on_delta, max_tokens=600, temperature=0.3, forge=False, model=None):
+def chat_stream(cfg, url, messages, on_delta, max_tokens=600, temperature=0.3, forge=False, model=None, timeout=None):
     """Stream the answer through on_delta(text); returns (text, timings).
-    `model` as in chat_json: the role, or None for no model field."""
+    `model` as in chat_json: the role, or None for no model field;
+    `timeout` as in chat_json (the socket timeout: the connect, then each
+    read -- a long answer that keeps streaming never trips it)."""
     body = {"messages": messages, "max_tokens": max_tokens, "temperature": temperature,
             "stream": True, "cache_prompt": True}
     if model is not None:
         body["model"] = model
     out, timings = [], {}
-    with _post(cfg, url, body, cfg.timeout, stream=True, forge=forge) as r:
+    with _post(cfg, url, body, timeout or cfg.timeout, stream=True, forge=forge) as r:
         for raw in r:
             line = raw.decode("utf-8", errors="replace").strip()
             if not line.startswith("data:"):

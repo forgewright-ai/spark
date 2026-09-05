@@ -2,7 +2,7 @@
 # spark tests/widget_pty.py -- a real shell in a pty, driven through the
 # widget. Proves the contract the widget makes: a question's command lands
 # in the line and does NOT run; a plain line runs at once; a glob is not a
-# question; the off flag hands Enter back; Esc a asks; the liveness marker
+# question; the off flag hands Enter back; Esc s asks; the liveness marker
 # comes and goes with the shell. Then, in a 40-column tmux pane (skipped
 # without tmux): a question that wraps still gets its hint in the row above
 # an intact prompt.
@@ -343,21 +343,21 @@ def main(shell, widget):
         ok(asked() == n + 1, "flag removed: asked exactly once")
         sh.send("\x15")
 
-        # 7. Esc a asks about a plain line
+        # 7. Esc s asks about a plain line
         n = asked()
         sh.mark()
         sh.send("how do I list files")
         time.sleep(0.2)
-        sh.send("\x1ba")
-        ok(sh.expect("A hint about it"), "Esc a asks")
-        ok(asked() == n + 1, "Esc a asked once")
+        sh.send("\x1bs")
+        ok(sh.expect("A hint about it"), "Esc s asks")
+        ok(asked() == n + 1, "Esc s asked once")
         sh.send("\x15")
 
-        # 7b. Esc a on an empty line says so instead of doing nothing
+        # 7b. Esc s on an empty line says so instead of doing nothing
         n = asked()
         sh.mark()
-        sh.send("\x1ba")
-        ok(sh.expect("type something first"), "Esc a on an empty line explains itself")
+        sh.send("\x1bs")
+        ok(sh.expect("type something first"), "Esc s on an empty line explains itself")
         ok(asked() == n, "and does not ask")
 
         # 8. exit removes the marker

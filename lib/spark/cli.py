@@ -12,6 +12,11 @@ from . import engine, forge, persona, session, version, wire
 
 HINT_COLS = 80
 STDIN_TAIL = 6000          # what `explain` sends at most: the last 6 kB
+# spark edit (contract 10): what the editor sends at most
+EDIT_BEFORE, EDIT_AFTER = 4000, 2000   # a completion: around the cursor
+EDIT_MAX = 12000                        # a rewrite: the whole text, or nothing
+EDIT_READ = 800                         # the reading before a question
+EDIT_TIMEOUT = 180                      # a big selection takes a while to read
 
 # Grammar rule 4: every verb answers -h first, signed per contract 8.
 LINE_USAGE = """spark line -- the widget's protocol (contract 4)
@@ -24,6 +29,20 @@ EXPLAIN_USAGE = """spark explain -- what went wrong in the piped output, and the
 
   cmd 2>&1 | explain [words]  reads stdin (the last 6 kB); explain on PATH
                               is a symlink to spark
+"""
+EDIT_USAGE = """spark edit -- the editor's protocol (contract 10): the text on stdin
+
+  spark edit --at N           prints what goes at byte offset N (a completion)
+  spark edit <words>          prints the text rewritten as the words ask
+  spark edit ? [words]        answers about the text; ? alone reviews it
+  --type FT                   the editor's filetype, a hint (markdown, python)
+  --name NAME                 the file's name, a hint -- never its path
+  --about TEXT                what the author says the text is, when it
+                              should not guess ("a novel chapter")
+
+  raw streamed text: no mark, no wrap, a code fence around the answer is
+  removed; exit 1 when nothing came in or no brain answers. In micro,
+  Alt-s (spark shell on). From a pipe: spark edit fix grammar < draft.md
 """
 LAST_USAGE = """spark last -- the last exchange, with its tok/s
 
@@ -43,7 +62,7 @@ BRAIN_USAGE = """spark brain -- what answers right now: a FORGE or a llama-serve
 """
 OFF_USAGE = """spark off -- silence the prompt widget, every pane at once
 
-  spark off                   Enter is the shell's again; Esc a and
+  spark off                   Enter is the shell's again; Esc s and
                               spark <words> still work; spark on restores
 """
 ON_USAGE = """spark on -- the prompt widget answers again
@@ -242,6 +261,115 @@ def cmd_explain(words):
     return _stream("explain", " ".join(words).strip(), context=ctx, line="[explain] " + " ".join(words))
 
 
+# ------------------------------------------------------------------- edit
+def _edit_args(args):
+    """(options, words) -- ValueError names a flag that lacks its value."""
+    opts = {"type": "", "name": "", "about": "", "at": None}
+    words, rest = [], list(args)
+    while rest:
+        a = rest.pop(0)
+        if a in ("--type", "--name", "--about", "--at"):
+            if not rest:
+                raise ValueError(a)
+            opts[a[2:]] = rest.pop(0)
+        else:
+            words.append(a)
+    return opts, words
+
+
+def _edit_label(name, ftype):
+    what = "File %s" % name if name else "Text"
+    return what + (" (%s):" % ftype if ftype else ":")
+
+
+def _edit_reading(cfg, data):
+    """(`You read this as: LANGUAGE, KIND.\n`, `\n\nAnswer in LANGUAGE.`) --
+    the model's own reading of the text's first 800 chars
+    (persona.MODE_EDIT_READ), restated to it above the text, and the
+    language it named repeated as the last line of the request: a small
+    model answers a Portuguese draft in English otherwise, whatever the
+    brief says. Any failure is two empty strings: the question goes on."""
+    try:
+        s = session.Session(cfg, "edit-read", _shell_default(), "", role="spark")
+        reply, _ms = s.ask_json(data[:EDIT_READ], persona.READ_SCHEMA, max_tokens=30, timeout=EDIT_TIMEOUT)
+        lang, kind = [" ".join(str(reply.get(k, "")).split()) for k in ("language", "kind")]
+    except Exception:
+        return "", ""
+    parts = [p for p in (lang, kind) if p]
+    if not parts:
+        return "", ""
+    tail = "\n\nAnswer in %s." % lang if lang and lang.lower() not in ("code", "source code", "none", "n/a") else ""
+    return "You read this as: %s.\n" % ", ".join(parts), tail
+
+
+def cmd_edit(args):
+    """The editor's protocol: the text on stdin, raw text out (no mark, no
+    wrap -- the text goes back into a buffer). Three kinds by the words:
+    --at N completes at that byte offset, words rewrite, `?` asks. No
+    thread is kept and no path is sent: the turn record is numbers only."""
+    if _help(args, EDIT_USAGE):
+        return 0
+    try:
+        opts, words = _edit_args(args)
+    except ValueError as e:
+        say("%s edit -- %s needs a value" % (MARK, e))
+        return 2
+    at = opts["at"]
+    if at is not None:
+        try:
+            at = max(0, int(at))
+        except ValueError:
+            say("%s edit -- --at N is a byte offset" % MARK)
+            return 2
+    if at is None and not words:
+        say(EDIT_USAGE.rstrip())
+        return 2
+    data = "" if sys.stdin.isatty() else sys.stdin.read()
+    if not data:
+        die("edit reads stdin -- spark edit --type FT words < FILE")
+    ftype = opts["type"].strip() if opts["type"].strip() != "unknown" else ""
+    label = _edit_label(os.path.basename(opts["name"].strip()), ftype)
+    about = opts["about"].strip()
+    head = "The author says: %s\n" % about if about else ""
+    cfg = config.load()
+    if at is not None:
+        kind, role, max_tokens = "complete", "spark", 160
+        text = "Continue at the cursor."
+        before, after = data[max(0, at - EDIT_BEFORE):at], data[at:at + EDIT_AFTER]
+        context = head + label + "\nBefore the cursor:\n" + before
+        if after:
+            context += "\n\nAfter the cursor:\n" + after
+    elif words[0] == "?":
+        kind, role, max_tokens = "ask", "ember", 600
+        text = " ".join(words[1:]).strip() or persona.REVIEW
+        reading, tail = _edit_reading(cfg, data)
+        context = head + reading + label + "\n" + forge.clip(data) + tail
+    else:
+        kind, role = "rewrite", "ember"
+        if len(data) > EDIT_MAX:
+            die("the text is %d chars; a rewrite takes at most %d -- select less" % (len(data), EDIT_MAX))
+        max_tokens = min(6000, len(data) // 2 + 200)
+        text = " ".join(words).strip()
+        context = head + label + "\n" + data
+    from . import text as textmod
+    # a rewrite keeps the text's own final-newline shape: the editor splices
+    # the reply over the selection, and a model that drops or adds the last
+    # newline would join or split lines
+    fence = textmod.Fence(sys.stdout, newline=data.endswith("\n") if kind == "rewrite" else None)
+    try:
+        s = session.Session(cfg, "edit-" + kind, _shell_default(), "", role=role)
+        _out, ms = s.ask_stream(text, context, fence.feed, max_tokens=max_tokens, timeout=EDIT_TIMEOUT)
+    except wire.BrainError as e:
+        fence.close()
+        die(e.hint)
+    except KeyboardInterrupt:
+        fence.close()
+        raise
+    fence.close()
+    s.record(kind=kind, chars=len(data), ms=ms)
+    return 0
+
+
 # ------------------------------------------------------------ last/status
 def _fmt_turn(t):
     # a turn is numbers only (session.TEXT_FIELDS); the words come from
@@ -398,7 +526,7 @@ def cmd_off(args):
         return 0
     state_dir()
     open(OFF_FLAG, "a").close()
-    say("%s off -- Enter is the shell's again (Esc a and spark <words> still work) -- spark on restores" % MARK)
+    say("%s off -- Enter is the shell's again (Esc s and spark <words> still work) -- spark on restores" % MARK)
     from . import check
     check.refresh()
     return 0
@@ -529,7 +657,7 @@ def cmd_do(args):
 # --------------------------------------------------------------- dispatch
 COMMANDS = {
     "line": cmd_line, "last": cmd_last, "status": cmd_status, "brain": cmd_brain,
-    "explain": cmd_explain, "off": cmd_off, "on": cmd_on, "history": cmd_history,
+    "explain": cmd_explain, "edit": cmd_edit, "off": cmd_off, "on": cmd_on, "history": cmd_history,
     "soul": cmd_soul, "remember": cmd_remember, "forget": cmd_forget, "memory": cmd_memory,
     "chat": cmd_chat, "talk": cmd_talk, "do": cmd_do,
     "ver": cmd_ver, "version": cmd_ver, "--version": cmd_ver,

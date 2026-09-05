@@ -51,6 +51,7 @@ jobs:
           python3 tests/widget_pty.py bash home/.config/spark/widget.bash
           python3 tests/widget_pty.py completion bash home/.config/spark/completion.bash
           python3 tests/widget_pty.py pager
+          python3 tests/micro_pty.py
           python3 bin/spark check --selftest
       - name: real bootstrap on the runner
         env:
@@ -141,6 +142,7 @@ jobs:
           /usr/bin/python3 tests/widget_pty.py zsh home/.config/spark/widget.zsh
           /usr/bin/python3 tests/widget_pty.py completion zsh home/.config/spark/completion.zsh
           /usr/bin/python3 tests/widget_pty.py pager
+          /usr/bin/python3 tests/micro_pty.py
           /usr/bin/python3 bin/spark check --selftest
       - name: real core bootstrap on the runner
         # the AI layer as a Mac user gets it: the engine tarball, the token,

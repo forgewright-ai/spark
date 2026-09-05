@@ -86,16 +86,18 @@ def _resolve(cfg, fresh):
 
 
 class Session:
-    def __init__(self, cfg, mode, shell, cwd="", history=None, brain=None, mem=None):
+    def __init__(self, cfg, mode, shell, cwd="", history=None, brain=None, mem=None, role=None):
         """`brain` is a callable(fresh) -> wire.Brain, else wire.resolve_brain:
         the FORGE passes its own upstream so an in-process reply never
         resolves to the FORGE itself. `mem` names whose remembered facts
-        ride the identity (memory.store_of); None is this machine's own."""
+        ride the identity (memory.store_of); None is this machine's own.
+        `role` overrides the rule below (the editor's completion is spark:
+        fast, no identity)."""
         self.cfg, self.mode, self.shell, self.cwd = cfg, mode, shell, cwd
         self.mem = mem
         # The rule: the prompt line is spark; every sentence is an ember.
         # Every request names its role in the `model` field.
-        self.role = "spark" if mode == "line" else "ember"
+        self.role = role or ("spark" if mode == "line" else "ember")
         self.history = list(history or [])      # earlier turns of a continued thread
         self.timings = {}
         self._brain = brain or (lambda fresh: _resolve(cfg, fresh))
@@ -131,16 +133,20 @@ class Session:
             self.url, self.model, self.forge = self._brain(True)
             return fn()
 
-    def ask_json(self, text, schema=None):
+    def ask_json(self, text, schema=None, max_tokens=None, timeout=None):
         """One JSON reply shaped by `schema` (the line's by default)."""
         t0 = time.time()
         schema = schema or persona.LINE_SCHEMA
-        reply, self.timings = self._retry_fresh(lambda: wire.chat_json(self.cfg, self.url, self._messages(text), schema, forge=self.forge, model=self.role))
+        reply, self.timings = self._retry_fresh(lambda: wire.chat_json(
+            self.cfg, self.url, self._messages(text), schema, max_tokens=max_tokens or 200,
+            forge=self.forge, model=self.role, timeout=timeout))
         return reply, int((time.time() - t0) * 1000)
 
-    def ask_stream(self, text, context, on_delta):
+    def ask_stream(self, text, context, on_delta, max_tokens=None, timeout=None):
         t0 = time.time()
-        out, self.timings = self._retry_fresh(lambda: wire.chat_stream(self.cfg, self.url, self._messages(text, context), on_delta, forge=self.forge, model=self.role))
+        out, self.timings = self._retry_fresh(lambda: wire.chat_stream(
+            self.cfg, self.url, self._messages(text, context), on_delta, max_tokens=max_tokens or 600,
+            forge=self.forge, model=self.role, timeout=timeout))
         return out, int((time.time() - t0) * 1000)
 
     def answered_model(self):

@@ -66,6 +66,8 @@ printf '%s\n' "$out" | grep -q "^would link .*/$rc\$" && ok "SITE_SHELL=on: woul
 run >/dev/null
 [ -L "$HOME/$rc" ] && ok "$rc is a symlink" || bad "$rc not linked"
 [ -L "$HOME/.config/micro/bindings.json" ] && ok "micro bindings linked" || bad "micro bindings"
+[ -L "$HOME/.config/micro/plug/spark/spark.lua" ] && [ -L "$HOME/.config/micro/plug/spark/help/spark.md" ] \
+    && ok "micro spark plugin linked" || bad "micro spark plugin"
 [ -f "$HOME/.gitconfig" ] && [ ! -L "$HOME/.gitconfig" ] && ok ".gitconfig is a regular file" || bad ".gitconfig"
 grep -q "name = $(id -un)" "$HOME/.gitconfig" && ok "git name defaulted to the login" || bad "git name default"
 [ -f "$HOME/.config/starship.toml" ] && grep -q 'bold blue' "$HOME/.config/starship.toml" && ok "starship minimal with neutral colours" || bad "starship render"

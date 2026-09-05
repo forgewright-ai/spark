@@ -4,7 +4,7 @@
 #   ? words    or    words?     Enter sends the line to `spark line`; the
 #              command it returns lands IN your line with a hint in the row
 #              above the prompt. Nothing runs until you press Enter again.
-#   Esc a      asks about whatever line you are on, question mark or not.
+#   Esc s      asks about whatever line you are on, question mark or not.
 #   spark off / spark on        silence / restore (a flag file, checked at
 #              every Enter, so one `spark off` reaches every pane at once)
 #   SPARK_OFF=1                 in the environment: bind nothing at all
@@ -97,11 +97,11 @@ bind '"\C-x\C-a": accept-line'
 bind '"\C-m": "\C-x\C-s\C-x\C-a"'
 bind '"\C-j": "\C-x\C-s\C-x\C-a"'
 
-# --- Esc a: ask about this line, no question mark needed -------------------
+# --- Esc s: ask about this line, no question mark needed -------------------
 _spark_ask_line() {
     if [[ -n $READLINE_LINE ]]; then _spark_ask "$READLINE_LINE"
-    else _spark_say "$_spark_h type something first, then Esc a  (or end the line with ?)"; fi
+    else _spark_say "$_spark_h type something first, then Esc s  (or end the line with ?)"; fi
 }
-bind -x '"\ea": _spark_ask_line'
-# Esc and a are two keystrokes: give them a full second to be one chord
+bind -x '"\es": _spark_ask_line'
+# Esc and s are two keystrokes: give them a full second to be one chord
 bind 'set keyseq-timeout 1000'

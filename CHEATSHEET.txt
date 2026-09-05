@@ -9,6 +9,7 @@ THE AI
   ?? words                        follow up on the last answer (same thread)
   ?? how do I change the theme    spark knows itself: it names its own verbs
   spark @FILE words               ask about a file (first 4 kB, last 12 kB)
+  spark edit [?] words < FILE     rewrite / complete (--at N) / ask (?) stdin
   spark soul [edit|reset]         who it is: default soul, replace with edit
   spark remember WORDS            a fact it keeps    spark forget N  drops it
   spark memory [on|off|clear]     the facts it recalls on every answer
@@ -19,7 +20,7 @@ THE AI
 AT THE PROMPT
   ? words   or   words?   Enter   the command lands in your line, hint above
   Enter again                     runs it (! = read it first; it deletes)
-  Esc a                           ask about the line you are on, no ?
+  Esc s                           ask about the line you are on, no ?
   cmd 2>&1 | explain              what went wrong, and the fix
   spark off | spark on            silence / restore every pane at once
   spark <TAB>                     completes the verbs; second word too
@@ -82,6 +83,8 @@ THE SHELL (spark shell on)
                      h j k l panes  d detach  r reload  [ scroll/copy (vi)
   z DIR (zoxide)   C-r history (fzf)   C-t files (fzf)   rg PATTERN
   fd NAME  eza -la  bat FILE  btop  micro FILE (C-s save, C-q quit)
+  micro: Alt-s  Enter=complete  words=rewrite  ? words=ask  ?=review
+         setlocal spark.about "a poem"   tell it, when it should not guess
 
 LINUX
   systemctl --user status spark-serve spark-forge spark-check.timer
@@ -93,4 +96,4 @@ MACOS
   launchctl print gui/$UID/spark.serve         is the agent loaded? (.forge too)
   launchctl kickstart -k gui/$UID/spark.serve  restart it
   spark headless on: both live in system/; restart and stop need sudo launchctl
-  Option is not Meta in Terminal.app: press Esc, then a
+  Option is not Meta in Terminal.app: press Esc, then s (shell and micro)

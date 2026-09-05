@@ -46,7 +46,7 @@ _spark() {
         comp=(chat do serve stop check update shell headless client setup
               ver last status brain history stats bench tune model ember
               forge soul remember forget memory quiet theme font bar off
-              on user explain help)
+              on user explain edit help)
     elif (( CURRENT == 3 )); then
         case ${words[2]} in
             quiet)   comp=(start login boot on off status) ;;

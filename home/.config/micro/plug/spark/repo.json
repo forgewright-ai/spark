@@ -1,0 +1,15 @@
+[{
+  "Name": "spark",
+  "Description": "spark in micro: complete at the cursor, rewrite the selection, ask about the text -- your own AI, on your own machine",
+  "Tags": ["ai", "writing", "code", "spark"],
+  "Website": "https://github.com/forgewright-ai/spark",
+  "Versions": [
+    {
+      "Version": "1.0.0",
+      "Url": "https://github.com/forgewright-ai/spark",
+      "Require": {
+        "micro": ">=2.0.7"
+      }
+    }
+  ]
+}]

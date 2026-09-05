@@ -79,6 +79,10 @@ if [ -f tests/widget_pty.py ]; then
     esac
     python3 tests/widget_pty.py pager >/dev/null || bad "widget_pty pager"
 fi
+if [ -f tests/micro_pty.py ]; then
+    # spark in micro, against a stub spark; skips itself where micro is absent
+    python3 tests/micro_pty.py >/dev/null || bad "micro_pty"
+fi
 if [ -f bin/spark ] && [ -f lib/spark/check.py ]; then
     python3 bin/spark check --selftest >/dev/null || bad "spark check --selftest"
 fi

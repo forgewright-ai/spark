@@ -121,7 +121,7 @@ layer's git identity).
 | `SITE_EMBER_MODEL` | `none`, `auto`, or a name: a second model for conversations; `none` = one model does both -- later, `spark ember NAME` | `none` |
 | `SITE_AI_BUDGET` | 10..95: percent of RAM+GPU memory `auto` may use -- later, `spark model budget N` | `60` |
 | `SITE_AI_BUILD` | `auto`, `cpu` or `vulkan`: the Linux engine build; `auto` = `vulkan` when a GPU reports its memory in `/sys/class/drm`, else `cpu` (macOS ignores it, its tarball has Metal) | `auto` |
-| `SITE_SHELL` | `off`: the AI only; `on`: tmux, starship, micro, fzf, zoxide, eza, bat, btop, the Nerd Font, and the rc files become spark's -- later, `spark shell on|off` | `off` |
+| `SITE_SHELL` | `off`: the AI only; `on`: tmux, starship, micro (with the spark plugin: Alt-s), fzf, zoxide, eza, bat, btop, the Nerd Font, and the rc files become spark's -- later, `spark shell on|off` | `off` |
 | `SITE_PEER_AI_URL` | another machine's FORGE URL (`spark forge --print-client` there), or its raw `spark serve` URL | unset |
 | `SITE_HEADLESS` | `yes`: the FORGE up from boot with nobody logged in, never asleep -- later, `spark headless on|off` | `no` |
 | `SITE_THEME` | `none`, or a palette from `themes/` (`spark theme` lists them) -- later, `spark theme NAME` | `none` |
@@ -270,7 +270,17 @@ one palette lands on every surface in the same
 move: tmux and starship are rendered from it, micro gets a `spark`
 colorscheme (plus a seeded `settings.json` choosing it, and
 `MICRO_TRUECOLOR=1` from the hook), and the text console wears it through
-`console-colors` -- TTY, tmux and micro, the same look. The rc files
+`console-colors` -- TTY, tmux and micro, the same look. micro also gets
+spark itself: the plugin under `~/.config/micro/plug/spark/` (linked,
+like the bindings) puts `spark> ` on `Alt-s` -- Enter alone completes at
+the cursor, words rewrite the selection, `? words` asks in a pane on the
+right, `?` alone reviews; `> help spark` inside micro says the rest. The
+plugin is one client of `spark edit` (the text on stdin, raw text out;
+`spark edit -h`), which works from a pipe too. spark reads what the text
+is and answers as that kind deserves; when it should not guess, `setlocal
+spark.about "a novel chapter"` says so for a buffer, or a path glob in
+`settings.json` for a folder. `set spark false` switches the plugin off;
+the `editor` check row reports all of it. The rc files
 become spark's -- `~/.bashrc` and `~/.bash_profile` on Linux, `~/.zshrc`
 and `~/.zprofile` on macOS turn into symlinks into the repo, yours moved
 to `<file>.bak`, never overwritten. It runs bootstrap (sudo once for
@@ -288,7 +298,7 @@ hook line lands in a restored rc file; the packages stay installed
 With the layer off, `spark bar` and the set forms of
 `spark quiet login|boot` refuse (`the shell layer is off`), `spark help`
 folds the shell block into one line, and the check rows that stand on it
-(`pinned terminfo quiet bar git backup swap encryption pending
+(`pinned terminfo quiet bar git backup swap editor encryption pending
 battery disk`) read `na`; the `shell` row says what `on` adds. `spark
 theme` and `spark font` work either way -- the palette and the console
 font are the machine's face, shell layer or not (the Nerd Font download
@@ -303,7 +313,8 @@ rendered once as regular files and left to the app:
 | file | why it is not a symlink |
 |---|---|
 | `~/.config/btop/btop.conf` | btop rewrites it on every exit |
-| `~/.config/micro/bindings.json` | micro rewrites it (through the link) when a plugin adds keys |
+| `~/.config/micro/bindings.json` | micro rewrites it (through the link) when a plugin adds keys -- spark's own plugin never binds from inside for that reason; `Alt-s` is a tracked line here |
+| `~/.config/micro/plug/spark/` | linked file by file; micro loads it from there, `set spark false` switches it off |
 | `~/.config/micro/settings.json` | micro rewrites it on every option change; seeded once (`"colorscheme": "spark"`), then it is micro's -- never re-rendered, never backed up |
 | `~/.gitconfig`, `~/.tmux.conf`, `~/.config/starship.toml`, `~/.config/micro/colorschemes/spark.micro` | carry your name / palette / choices |
 | `~/.config/spark/launchd/*.plist` | launchd needs absolute paths |
@@ -602,6 +613,7 @@ NOPASSWD:ALL' | sudo tee /etc/sudoers.d/you`, fine for a test bench).
 your shell                    this machine                        the LAN
 ----------                    ------------                        -------
 ? words ---- widget -------> spark line ---+
+micro Alt-s - plugin ------> spark edit ---+
 spark chat | do | explain -> spark <verb> -+-> the FORGE :8081 ---> another
 (readline, wrapped)                        |   identity: soul,         machine's
                                            |   memory, threads; /v1     spark, a
@@ -618,7 +630,7 @@ get -> spark setup -> bootstrap.sh (apply) -> install.sh (links, renders)
                       the engine tarball, the model, the token, the units,
                       one rc line; SITE_SHELL=on adds the workstation
 
-spark check   37 rows: every promise the machine makes, fixture-tested
+spark check   38 rows: every promise the machine makes, fixture-tested
 spark update  the newest tag (a stranger), or main (a developer); converge
 
 what leaves the machine: pinned downloads in, your questions to the brain

@@ -37,13 +37,15 @@ the AI
                               the command line (N from the /resume listing)
   spark [@FILE] <words>       ask about anything, or a file; a streamed answer
   spark do <words>            a task, one command at a time; you confirm each
+  spark edit [?] [words]      the text on stdin: rewrite, complete (--at N)
+                              or ask (?) -- what micro's Alt-s calls (-h)
   ?? words                    follow up on the last answer (same thread)
   spark                       status: brain, widget, server, soul, memory, last
   spark off | on              silence / restore the prompt, every pane at once
 
 at the prompt: the surprise -- your question becomes a command in your line
   ? words   or   words?   Enter   the command lands in your line, hint above
-  Esc a                       ask about the line you are on, no ? needed
+  Esc s                       ask about the line you are on, no ? needed
   cmd 2>&1 | explain          what went wrong, and the fix
   spark <TAB>                 completes the verbs, then each verb's words --
                               theme and model names included, offline
@@ -95,6 +97,8 @@ less often (long output pages via $PAGER at a terminal; piped stays plain)
 USAGE_SHELL = """the shell (spark shell on)
   spark bar [on|off]          tmux's status line: shown or hidden; set it
   spark theme [NAME|show]     the palettes; choose one; show = its colours
+  micro FILE                  Alt-s: spark in the editor -- Enter completes,
+                              words rewrite the selection, ? asks, ? reviews
 """
 # with the layer off, the block above folds into this one line
 USAGE_SHELL_OFF = """  spark shell on              tmux, starship, micro ... + bar
@@ -105,8 +109,10 @@ only where a command is proposed (the prompt line, do, explain) -- the
 directory path; with a conversation your soul, your remembered facts and the
 thread's earlier turns (the prompt line sends machine facts only); for
 explain the piped text (last 6 kB); for @FILE its first 4 kB and last 12 kB;
-for spark do each step's output (last 4 kB). Nothing else, and only to the
-FORGE or llama-server you configured.                           version %s
+for spark do each step's output (last 4 kB); from the editor (spark edit)
+the file's name and its text -- 6 kB around the cursor, 12 kB for a rewrite,
+16 kB for a question -- never its path. Nothing else, and only to the FORGE
+or llama-server you configured.                           version %s
 """
 
 

@@ -16,6 +16,10 @@ they came to be.
 
 - **Simple.** One command (`spark`), one bootstrap, one install script, one
   config format (`KEY=value`), python3 stdlib >= 3.9 or POSIX sh, nothing else.
+- **Two arcs.** Foundation: OS -> local AI (spark) -> smart shell and
+  chat. Productivity: tools -> local AI (spark) -> smart tools. The same
+  spark sits in the middle of both; a tool becomes smart by being a client
+  of one spark verb (micro is the first: `spark edit`, contract 10).
 - **The seed and the FORGE.** spark is the seed; the FORGE is the agent it
   builds and keeps. One identity per box (`soul`, `memory`); every client --
   the prompt here, a laptop's `spark`, a script, a phone -- talks to the same
@@ -94,7 +98,9 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 this machine's login: spark user)
 lib/spark/forge/  index.html spark.css spark.js manifest.webmanifest favicon.svg
                   -- the page, ASCII, no inline script
-home/           shared $HOME mirror (linked): micro bindings, the two widgets, the two rc hooks
+home/           shared $HOME mirror (linked): micro bindings and the spark plugin
+                (.config/micro/plug/spark/: spark.lua, repo.json, help/spark.md -- the
+                editor's client of spark edit), the two widgets, the two rc hooks
                 (.config/spark/hook.bash hook.zsh: PATH, the widget, the blank row, completion,
                 the VT palette -- TERM=linux only -- and MICRO_TRUECOLOR),
                 the two completion files (.config/spark/completion.bash completion.zsh:
@@ -105,6 +111,7 @@ templates/      rendered, not linked: .gitconfig .tmux.conf .config/btop/btop.co
                 .config/micro/colorschemes/spark.micro .config/micro/settings.json (seeded once)
                 .config/starship.toml.{minimal,full} .config/spark/launchd/spark.{serve,forge,check}.plist
 tests/          install_test.sh get_test.sh update_test.sh smoke.py serve_smoke.py
+                micro_pty.py (micro in a pty against a stub spark; skips without micro)
                 forge_smoke.py bench_smoke.py widget_pty.py check_selftest.py
                 vault_test.py (RFC 8439 vectors, round-trips, refusals)
 .githooks/      pre-commit (privacy gate, syntax, tests, 80-col), commit-msg (the
@@ -291,6 +298,22 @@ may change freely.
    no-store`; the page is served with `Content-Security-Policy:
    default-src 'self'` and depends on nothing else. Errors are
    `{error: {kind, hint}}`.
+10. `spark edit` is the editor's protocol: the text on stdin; `--at N`
+    prints what goes at byte offset N (a completion: 4 kB before the
+    cursor and 2 kB after it are sent), `<words>` prints the whole text
+    rewritten (at most 12 kB, else refused: the output replaces the
+    input, so head+tail makes no sense), `? [words]` answers about it
+    (head 4 kB + tail 12 kB, a visible cut mark; `?` alone reviews);
+    `--type FT`, `--name NAME` and `--about TEXT` are hints that ride in
+    the user message (the name is a basename, never a path; no `[cwd]`
+    line, ever). Output is raw streamed text: no mark, no wrap, a code
+    fence around the answer removed, a rewrite ending the way the input
+    ended. Exit 0; 1 when nothing came in or no brain answers; 2 for the
+    usage. No thread is kept; the turn record is numbers (`kind`,
+    `chars`, `ms`). A `?` is two requests: the reading (`edit-read`, a
+    JSON `{language, kind}` from the first 800 chars, restated as `You
+    read this as: ...`; any failure is silence) and the answer. The
+    micro plugin depends on nothing else.
 
 ## The grammar
 
@@ -384,6 +407,22 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   face with the layer off too); their `theme` and `font` check rows are
   core for the same reason -- only the Nerd Font piece of `font` waits
   for the layer.
+- **An editor thing.** A tool becomes smart by being a client of one
+  spark verb, the way the widget is a client of `spark line`: micro's
+  plugin (`home/.config/micro/plug/spark/`) only spawns `spark edit` with
+  the text on stdin and streams the answer back; it never speaks HTTP,
+  never sees a token, never sends a path. The briefs live in
+  `persona.MODES` (`edit-complete`, `edit-rewrite`, `edit-ask`,
+  `edit-read`): no table routes by filetype or genre -- the model reads
+  what the text is, and for a `?` its own reading is restated to it
+  (small models drift otherwise; the reading keeps the judgment the
+  model's). The plugin ships under the shell layer (install.sh links it
+  with the other `.config/micro/*` files), binds no key itself (a rebind
+  from inside makes micro rewrite `bindings.json` and detach the link:
+  `Alt-s` is a tracked line there), and its row is `editor`
+  (`check.SHELL_ROWS`). `tests/micro_pty.py` drives a real micro against
+  a stub spark. Another editor joins the same way: one client of
+  `spark edit`, nothing new in spark.
 - **The client shape.** `SITE_AI_MODEL=none` beside `SITE_PEER_AI_URL`
   (`config.client`; `spark client URL|off`, `site.cmd_client`) means
   nothing runs here: bootstrap skips the `engine` and `services` rows
@@ -433,9 +472,9 @@ sh tests/get_test.sh            # the one-liner: clone, pull, refusals, the hand
 sh tests/update_test.sh         # spark update: pull, move to a tag, dirty refused, --dry-run
 ```
 
-`spark check` has 37 rows today: 12 SOFTWARE, 16 CAPABILITY, 9
+`spark check` has 38 rows today: 12 SOFTWARE, 17 CAPABILITY, 9
 NONFUNCTIONAL (`grep -c '^@row' lib/spark/check.py`). With `SITE_SHELL=off`
-the 11 rows in `check.SHELL_ROWS` and the `shell` row answer `na`;
+the 12 rows in `check.SHELL_ROWS` and the `shell` row answer `na`;
 `--selftest` runs a third pass to prove it, and a fourth for the client
 shape (the 6 rows in `check.CLIENT_ROWS`).
 

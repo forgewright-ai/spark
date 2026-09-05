@@ -1,5 +1,56 @@
 # Changelog
 
+## v1.5
+
+The editor wave: the first smart tool. spark's vision now has two arcs
+with the same local AI in the middle of each -- OS -> spark -> a smart
+shell and chat (the foundation), and tools -> spark -> smart tools (the
+productivity) -- and micro is the first tool. With the shell layer on,
+`Alt-s` in micro opens `spark> `: Enter alone completes at the cursor,
+words rewrite the selection (or write at the cursor when nothing is
+selected), `? words` asks in a pane on the right, `?` alone reviews. The
+new text is left selected -- Backspace discards it, Ctrl-z undoes it: a
+proposal, never applied silently. spark reads what the text is -- code or
+prose, a poem or a chapter or a README -- and answers as that kind of
+text deserves, in its own language; no filetype or genre table routes
+anything. When it should not guess, `setlocal spark.about "a novel
+chapter"` says so for a buffer, or a path glob in micro's `settings.json`
+for a folder. `> help spark` inside micro says the rest; `set spark
+false` switches the plugin off.
+
+Underneath, one new protocol verb, `spark edit` (contract 10): the text
+on stdin, raw text out, `--at N` / `<words>` / `? [words]`, hints
+`--type`, `--name` (a basename, never a path) and `--about`. It works
+from a pipe as well (`spark edit fix grammar < draft.md`; `cat main.py |
+spark edit ?`), the editor is one client of it, and any other editor can
+be the next. Caps are loud, never silent: 6 kB around the cursor, 12 kB
+for a rewrite (more is refused: select less), 16 kB for a question with
+a visible cut mark. No thread is kept and the turn record is numbers.
+Before a `?`, spark asks the model for a 20-token reading of the text
+(language, kind) and restates that reading in the request: small models
+answer an English draft in Portuguese and review an essay as "the poem"
+until the fact is stated, and stating the model's own reading keeps the
+judgment its own. A rewrite comes back ending the way the input ended,
+whatever the model did with the last newline.
+
+The plugin (`home/.config/micro/plug/spark/`, linked by install.sh like
+the bindings) binds no key from inside the editor -- micro would rewrite
+`bindings.json` and detach the tracked link -- so `Alt-s` is a tracked
+line there. `s` is now spark's letter at the prompt too: **`Esc a`
+became `Esc s`** (the widgets, the docs, the pty test); one gesture in
+the shell and in the editor, and micro's own `Alt-a` stays what it was.
+The `editor` check row (CAPABILITY, `na` with the shell layer off)
+reports micro's version, the plugin link, the key and micro's own
+switch; 38 rows now. `tests/micro_pty.py` drives a real micro in a pty
+against a stub spark -- the prompt, the words, the pane, a selection
+replaced, an unchanged reply left alone, a failure's hint in the
+infobar -- and skips itself where micro is absent. `Session` takes a
+`role` and `ask_stream`/`ask_json` a `max_tokens` and a `timeout`;
+`wire.chat_stream`/`chat_json` take `timeout`; `forge.clip` is the
+head+tail cut `@FILE` always did; `text.Fence` is the editor's stream.
+Two earlier writing coaches were read for this wave; their field
+lessons are in `CLAUDE.md` under "An editor thing" and in the roadmap.
+
 ## v1.4
 
 The multi-user wave. One break, first: **the shared ember-token is

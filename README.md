@@ -5,7 +5,9 @@
 AI on the edge, at no cost. spark turns a Linux or macOS machine you own
 into a private AI: no account, no cloud, nothing leaves. `spark chat` is
 the front door. The prompt line is the surprise: ask, press Enter, and the
-command is in your line.
+command is in your line. Two arcs, the same local AI in the middle of
+each: OS -> spark -> a smart shell and chat (the foundation); tools ->
+spark -> smart tools (the productivity), starting with micro.
 
 Try it at the prompt:
 
@@ -74,7 +76,8 @@ open a new shell (exec $SHELL), then:
   spark chat                      a conversation
   ? how big is this dir           a command in your line, a hint above it
   cmd 2>&1 | explain              what went wrong, and the fix
-spark shell on adds spark's own shell: tmux, starship, micro, fzf ...
+spark shell on adds spark's own shell: tmux, starship, micro (Alt-s: spark
+                                inside the editor), fzf ...
 ```
 
 `INSTALL.md` is the runbook; the percent is `SITE_AI_BUDGET` (`spark model
@@ -98,9 +101,17 @@ What comes next: `ROADMAP.md`.
   answers with spark's own commands (`?? how do I change the theme`
   names `spark theme`).
 - **The prompt line, the surprise.** `? words` or `words?`, Enter, and the
-  command lands in your line with a hint above it. `Esc a` asks about the
+  command lands in your line with a hint above it. `Esc s` asks about the
   line you are on. `cmd 2>&1 | explain` says what went wrong. `spark off`
   gives Enter back.
+- **In the editor.** With the shell layer on, micro has spark under one
+  key: `Alt-s` opens `spark> `. Enter alone completes at the cursor;
+  words rewrite the selection (`shorter`, `fix grammar`, `add a
+  docstring`); `? words` asks in a pane; `?` alone reviews. spark reads
+  what the text is -- code or prose, a poem or a chapter or a README --
+  and answers as that kind of text deserves, in its own language; the
+  new text is left selected, a proposal you keep or discard. The same
+  verb works from a pipe: `spark edit fix grammar < draft.md`.
 - **The FORGE.** `spark forge` serves the same agent on the LAN: an
   OpenAI-shaped API for any program, and a client page in the browser
   that wears spark's own ember look by default (`spark theme` recolours
@@ -120,9 +131,9 @@ What comes next: `ROADMAP.md`.
 - **`spark check`.** Every promise this machine makes, one row each; exit 0
   when all are kept. `./bootstrap.sh --dry-run` says what a rebuild would
   change and never asks for sudo.
-- **`spark shell on`.** Off by default. On: tmux, starship, micro, fzf, eza,
-  bat, btop, the Nerd Font, and the rc files become spark's (yours move to
-  `.bak`). With a theme chosen, one palette lands on every surface at once:
+- **`spark shell on`.** Off by default. On: tmux, starship, micro (with
+  spark inside it), fzf, eza, bat, btop, the Nerd Font, and the rc files
+  become spark's (yours move to `.bak`). With a theme chosen, one palette lands on every surface at once:
   the text console, tmux and micro share the same look, and `spark theme
   NAME` switches all of them. `off` hands everything back -- rc files and
   the rendered look alike, each from its `.bak` or removed. Off, your
@@ -144,7 +155,10 @@ contents, and only where a command is proposed (the prompt line, `do`,
 your soul, your remembered facts and the
 thread's earlier turns; for `explain`, the piped text (last 6 kB); for
 `@FILE`, its first 4 kB and last 12 kB, under the name you typed; for
-`spark do`, each step's output (last 4 kB). No telemetry, no analytics, no
+`spark do`, each step's output (last 4 kB); from the editor (`spark
+edit`), the file's name and its text -- 6 kB around the cursor for a
+completion, 12 kB for a rewrite, 16 kB for a question -- never its path,
+and no thread is kept. No telemetry, no analytics, no
 crash reports, no account. The one-liner fetches two things: `get` from
 raw.githubusercontent.com and the clone from github.com; bootstrap fetches
 the engine (one pinned llama.cpp release, sha256) from github.com and the

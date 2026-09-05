@@ -7,6 +7,7 @@
 # Every case runs bin/spark as a subprocess with a throwaway HOME and a
 # scrubbed environment, exactly as a shell would.
 
+import glob
 import hashlib
 import json
 import os
@@ -102,6 +103,14 @@ class Stub(BaseHTTPRequestHandler):
             return self._send(200, b"<html>not json</html>", "text/html")
         messages = body["messages"]
         user = messages[-1]["content"]
+        STATE.setdefault("bodies", []).append(body)   # every request, for the editor's checks
+        system = messages[0]["content"]
+        if "Say what this text is" in system:        # the editor's reading (spark edit ?)
+            if STATE.get("read_fail"):
+                return self._send(500, {"error": "no reading today"})
+            return self._send(200, {"choices": [{"message": {"content": json.dumps({"language": "Portuguese", "kind": "fiction"})}}], "timings": TIMINGS})
+        if body.get("stream") and "inside an editor" in system:
+            return self._sse(edit_pieces(system, user))
         if body.get("stream"):
             # `count` streams how many messages arrived, as the JSON shape does;
             # `wraptest` streams a long plain answer to prove the 80-col wrap
@@ -113,6 +122,19 @@ class Stub(BaseHTTPRequestHandler):
                 pieces = ("The ", "output ", "means ", "X.")
             return self._sse(pieces)
         self._send(200, {"choices": [{"message": {"content": json.dumps(answer_json(messages))}}], "timings": TIMINGS})
+
+
+def edit_pieces(system, user):
+    """spark edit's replies: a rewrite comes fenced (the fence must go), or
+    echoes the text when asked to `keep it`; a completion is a tail; a
+    question gets a numbered note."""
+    if "You are editing text" in system:
+        if user.startswith("keep it"):
+            return (user.split(":\n", 1)[1],)
+        return ("```markdown\n", "Fixed ", "text.\n", "```\n")
+    if "You are completing text" in system:
+        return (" and so on.",)
+    return ("1. line 2: ", "typo\n")
 
 
 def is_do(messages):
@@ -571,6 +593,69 @@ def main():
         t.ok(rc == 2 and "SPARK_MEMORY" in err, "SPARK_MEMORY=maybe is refused by name", err)
         rc, out, _ = spark("status")
         t.ok(rc == 0 and "  soul     yours, " in out and "  memory   1 fact" in out and " threads" in out, "status shows soul, memory, threads", out)
+
+        # spark edit: the editor's protocol (contract 10)
+        rc, out, err = spark("edit", "--type", "markdown", "--name", "a/b/draft.md", "fix", "grammar", stdin="Bad text.\n")
+        t.ok(rc == 0 and out == "Fixed text.\n", "edit: a rewrite streams raw text, the fence stripped", repr(out) + err)
+        t.ok(STATE.get("model") == "ember", "edit: a rewrite names the ember role", str(STATE.get("model")))
+        body = STATE["bodies"][-1]
+        sent = json.dumps(body)
+        umsg = body["messages"][-1]["content"]
+        t.ok(umsg.startswith("fix grammar\n\nFile draft.md (markdown):\nBad text.\n"), "edit: words, then the labelled text", repr(umsg[:80]))
+        t.ok("a/b/draft.md" not in sent and "[cwd" not in sent and home not in sent, "edit: no path, no cwd, no HOME in the request", sent[:200])
+        t.ok("Output:" not in umsg, "edit: the editor's block carries its own label", repr(umsg[:80]))
+        rc, out, _ = spark("edit", "keep", "it", stdin="one\n  two\n\nthree")
+        t.ok(rc == 0 and out == "one\n  two\n\nthree", "edit: an unchanged rewrite comes back byte for byte", repr(out))
+        rc, out, _ = spark("edit", "--type", "text", "--at", "4", stdin="Once upon a time")
+        t.ok(rc == 0 and out == " and so on.", "edit: --at N completes", repr(out))
+        t.ok(STATE.get("model") == "spark", "edit: a completion names the spark role", str(STATE.get("model")))
+        umsg = STATE["bodies"][-1]["messages"][-1]["content"]
+        t.ok("Before the cursor:\nOnce\n\nAfter the cursor:\n upon a time" in umsg, "edit: the completion sends before and after", repr(umsg))
+        n0 = len(STATE["bodies"])
+        rc, out, _ = spark("edit", "--type", "markdown", "?", "why", stdin="Some prose.\n")
+        t.ok(rc == 0 and out == "1. line 2: typo\n", "edit: ? streams the answer", repr(out))
+        t.ok(len(STATE["bodies"]) == n0 + 2, "edit: a question is two requests -- the reading, then the answer", str(len(STATE["bodies"]) - n0))
+        reading, answer = STATE["bodies"][-2], STATE["bodies"][-1]
+        t.ok(reading.get("model") == "spark" and "json_schema" in json.dumps(reading.get("response_format", {})), "edit: the reading is a spark-role JSON request", json.dumps(reading)[:200])
+        t.ok(reading["messages"][-1]["content"] == "Some prose.\n", "edit: the reading gets the text alone", repr(reading["messages"][-1]["content"]))
+        umsg = answer["messages"][-1]["content"]
+        t.ok(umsg.startswith("why\n\nYou read this as: Portuguese, fiction.\nText (markdown):\nSome prose."), "edit: the answer restates the reading", repr(umsg[:120]))
+        t.ok(umsg.endswith("Some prose.\n\n\nAnswer in Portuguese."), "edit: the language the model read is the request's last line", repr(umsg[-60:]))
+        STATE["read_fail"] = True
+        rc, out, _ = spark("edit", "?", stdin="Some prose.\n")
+        STATE["read_fail"] = False
+        umsg = STATE["bodies"][-1]["messages"][-1]["content"]
+        t.ok(rc == 0 and out == "1. line 2: typo\n" and "You read this as" not in umsg and "Answer in" not in umsg, "edit: a failed reading is silent, the answer still streams", repr(umsg[:120]))
+        t.ok(umsg.startswith("Review this.\n\n"), "edit: ? alone is a review", repr(umsg[:40]))
+        rc, out, _ = spark("edit", "--type", "python", "--about", "a poem", "tighten", stdin="x = 1\n")
+        body = STATE["bodies"][-1]
+        t.ok(body["messages"][-1]["content"].startswith("tighten\n\nThe author says: a poem\nText (python):\n"), "edit: --about rides above the label", repr(body["messages"][-1]["content"][:80]))
+        sys_py = body["messages"][0]["content"]
+        rc, out, _ = spark("edit", "--type", "markdown", "tighten", stdin="x = 1\n")
+        t.ok(STATE["bodies"][-1]["messages"][0]["content"] == sys_py, "edit: one brief for every filetype -- the system message is byte-identical (prompt cache)")
+        rc, out, _ = spark("edit", "--name", "notes.txt", "tighten", stdin="x\n")
+        t.ok(STATE["bodies"][-1]["messages"][-1]["content"].startswith("tighten\n\nFile notes.txt:\n"), "edit: no --type, no parenthesis")
+        rc, out, err = spark("edit", "tighten")
+        t.ok(rc == 1 and "stdin" in err, "edit: refuses without stdin", err)
+        rc, out, err = spark("edit", stdin="text")
+        t.ok(rc == 2 and "spark edit --" in out, "edit: no words and no --at is the usage, exit 2", out[:60] + err)
+        rc, out, err = spark("edit", "--at", stdin="text")
+        t.ok(rc == 2 and "needs a value" in out, "edit: a flag without its value", out + err)
+        rc, out, err = spark("edit", "shorten", stdin="x" * 13000)
+        t.ok(rc == 1 and "select less" in err and out == "", "edit: a 13 kB rewrite is refused, nothing sent", err)
+        rc, out, _ = spark("edit", "?", stdin="y" * 40000)
+        umsg = STATE["bodies"][-1]["messages"][-1]["content"]
+        t.ok(rc == 0 and "[... 24000 chars cut ...]" in umsg and len(umsg) < 17000, "edit: a 40 kB question sends head, cut mark, tail", str(len(umsg)))
+        rc, out, _ = spark("edit", "-h")
+        t.ok(rc == 0 and out.startswith("spark edit -- "), "edit -h is signed", out[:40])
+        threads_before = sum(len(fs) for _d, _s, fs in os.walk(home + "/.local/state/spark/users"))
+        rc, out, _ = spark("edit", "fix", stdin="t\n")
+        threads_after = sum(len(fs) for _d, _s, fs in os.walk(home + "/.local/state/spark/users"))
+        t.ok(threads_after == threads_before, "edit: no thread is written", "%d -> %d" % (threads_before, threads_after))
+        turns = sorted(glob.glob(home + "/.local/state/spark/turns/*.jsonl"))
+        last_turn = json.loads(open(turns[-1]).read().splitlines()[-1]) if turns else {}
+        t.ok(last_turn.get("mode") == "edit-rewrite" and last_turn.get("kind") == "rewrite" and not any(k in last_turn for k in ("line", "answer", "context", "command")),
+             "edit: the turn is numbers and enums only", json.dumps(last_turn)[:200])
 
         # the privacy claim: what the request contains
         req = {}

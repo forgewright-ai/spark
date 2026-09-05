@@ -1,7 +1,24 @@
 # Roadmap
 
-What comes after v1.4, in the order it is likely to happen. Nothing here
+What comes after v1.5, in the order it is likely to happen. Nothing here
 is a promise; a row in `CHANGELOG.md` is. A better idea is an issue away.
+
+## The editor, next
+
+v1.5 put spark in micro through one verb, `spark edit`. What the first
+weeks of use decide: anchor verification -- every span a `?` answer
+quotes checked against the buffer, the unverifiable ones marked, and a
+key that jumps to the quote (a misquote is the small model's commonest
+fabrication); a per-file ledger in memory so a suggestion the author
+declined retires instead of returning; a whole-file context around a
+selection for `?`; threads in the pane (`??`); a key that applies a code
+block from the pane; Escape and `q` closing the pane; the audition -- a
+handful of fixtures (a poem, a chapter, a README, a commit message,
+Portuguese prose, Go, Python, shell) with mechanical lints (quotes
+present, no fences, five notes at most, unchanged when impossible) run
+against a live brain, so a change to a brief is judged blind, not by
+feel. Then the other editors: vim, helix, VS Code -- each one client of
+`spark edit`, nothing new in spark.
 
 ## spark token: status for the keys that remain
 

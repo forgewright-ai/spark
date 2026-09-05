@@ -119,6 +119,72 @@ MODE_DO = (
 # so it stays an accepted alias for one version.
 MODES = {"line": MODE_LINE, "ask": MODE_ASK, "explain": MODE_EXPLAIN, "chat": MODE_CHAT, "talk": MODE_CHAT, "do": MODE_DO}
 
+# The editor (spark edit, contract 10): three briefs, one per kind. No
+# table routes by filetype or genre -- each brief tells the model to read
+# what it has in front of it and act as that kind of text deserves; the
+# filetype and the file name ride in the user message as hints. Static
+# strings, so each system prompt stays byte-stable for the prompt cache.
+_READ = ("First read what this is: source code, or prose -- and which kind of prose "
+         "(fiction, a poem, an essay, academic writing, an article, a letter, notes, "
+         "documentation, a commit message). Then act as that kind deserves: code keeps "
+         "its language, indentation, naming and behaviour; fiction keeps the narrator's "
+         "person and tense, the dialogue punctuation and the voice; a poem keeps every "
+         "line break and stanza; academic writing stays precise and formal and its "
+         "citations exact; notes may stay fragments; documentation keeps every command "
+         "and path as written. Prose keeps its own language unless asked to translate. "
+         "If the user says what the text is, believe them over your reading. ")
+MODE_EDIT_COMPLETE = (
+    "You are completing text inside an editor; the text before and after the cursor "
+    "follows. " + _READ +
+    "Write only what goes at the cursor -- the rest of the sentence, statement, paragraph "
+    "or block, at most a short paragraph or a few lines -- matching the voice, style and "
+    "indentation around it. Begin exactly where the cursor is: when a space or a line "
+    "break belongs between the text before the cursor and yours, write it first. No "
+    "preamble, no explanation, no code fences, never repeat the text before the cursor.")
+MODE_EDIT_REWRITE = (
+    "You are editing text inside an editor; the instruction comes first, then the text. "
+    + _READ +
+    "The text is the author's, not yours: keep their voice, their word choices where the "
+    "instruction does not touch them, their language. Reply with the whole rewritten text "
+    "and nothing else: no preamble, no explanation, no code fences, no quotation marks "
+    "around it. Keep the indentation, the line breaks and the final newline as they are; "
+    "change only what the instruction asks; never leave a placeholder. If the instruction "
+    "cannot be done to this text, return the text exactly as it was.")
+MODE_EDIT_ASK = (
+    "The user asks about the text shown below, inside an editor, their own file as written. " + _READ +
+    "You are a good reader in the room, not a report generator: plain text for a narrow "
+    "editor pane, no markdown marks (no **, no #, no tables, no headings), a line of code "
+    "on its own line indented four spaces. Every note must be impossible to write about a "
+    "different draft: point at the text by quoting it, character for character, at most "
+    "twelve words -- a misquote is a fabrication. When asked to review: two or three "
+    "sentences on the whole, then at most five numbered notes, each a quote and what to "
+    "change and why -- bugs and correctness before style in code; voice, pacing, clarity "
+    "and structure in prose, grammar only where it gets in the way. Do not open with "
+    "praise and do not spend a note on what is fine: the sentences say what the text does "
+    "and where it is weakest, every note names a change. When little needs saying, say "
+    "little; 'nothing I would change' is an answer. Do not rewrite unless asked; when asked for wording, offer one "
+    "version, theirs to discard. Never claim to remember earlier drafts or turns. Answer "
+    "in the text's own language.")
+# The reading that precedes a question: the model says what the text is
+# (language, kind) from its first 800 chars, and that reading is restated
+# in the request. A small model drifts -- an English draft answered in
+# Portuguese, an essay reviewed as "the poem" -- until the fact is stated;
+# stating the model's own reading keeps the judgment its own.
+MODE_EDIT_READ = (
+    "Say what this text is, in two short fields: `language` (the natural language it is "
+    "written in, or 'code') and `kind` (source code, fiction, poem, essay, academic, "
+    "article, letter, notes, documentation, commit message, or your own word). Weigh the "
+    "form as well as the content: short lines and stanza breaks mean a poem even when the "
+    "sentences read as prose. Nothing else.")
+READ_SCHEMA = {
+    "type": "object",
+    "properties": {"language": {"type": "string"}, "kind": {"type": "string"}},
+    "required": ["language", "kind"],
+}
+REVIEW = "Review this."
+MODES.update({"edit-complete": MODE_EDIT_COMPLETE, "edit-rewrite": MODE_EDIT_REWRITE,
+              "edit-ask": MODE_EDIT_ASK, "edit-read": MODE_EDIT_READ})
+
 
 def _tools_line():
     have = [t for t in PREFERRED if shutil.which(t)]
@@ -157,6 +223,10 @@ def mode_prefix(cfg, mode, shell):
     brief for everything else."""
     if mode in ("chat", "talk"):
         return machine_line(cfg) + "\n" + KNOW_CHAT
+    if mode.startswith("edit-"):
+        # inside an editor the shell brief (tools, flags, spark's verbs)
+        # is noise for prose and code alike, and it costs prompt
+        return machine_line(cfg)
     return prefix(cfg, shell)
 
 
@@ -194,6 +264,8 @@ def user_message(text, cwd, context=""):
     @FILEs named (forge.file_context labels those itself). Nothing else."""
     head = "[cwd %s]\n" % cwd if cwd else ""
     if context:
-        label = "" if context.startswith("File ") else "Output:\n"
+        # an @FILE block and the editor's blocks carry their own label
+        labelled = context.startswith(("File ", "Text", "The author says", "You read this as"))
+        label = "" if labelled else "Output:\n"
         return head + (text + "\n\n" if text else "") + label + context
     return head + text

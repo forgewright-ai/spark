@@ -38,6 +38,7 @@ shellcheck -S warning bootstrap.sh install.sh lib/env.sh
 /usr/bin/python3 tests/widget_pty.py zsh home/.config/spark/widget.zsh
 /usr/bin/python3 tests/widget_pty.py pager
 /usr/bin/python3 tests/widget_pty.py completion zsh home/.config/spark/completion.zsh
+/usr/bin/python3 tests/micro_pty.py
 /usr/bin/python3 bin/spark check --selftest
 sh tests/install_test.sh
 sh tests/get_test.sh

@@ -4,6 +4,7 @@
 # already-formatted output). The mark (glyph("hammer") + " ") prints once,
 # before the first character; close() writes it alone when nothing arrived.
 
+import re
 import shutil
 import sys
 
@@ -126,3 +127,72 @@ class Wrap:
         self._start()
         self.stream.write("\n")
         self.stream.flush()
+
+
+class Fence:
+    """The editor's stream: raw text, no mark, no width -- only a code
+    fence the model wrapped the answer in is removed. feed(delta) holds the
+    first line back until its newline (a first line that is only a fence,
+    with or without a language word, is dropped) and always keeps a short
+    tail unwritten in case it is the start of a closing fence; close()
+    drops a closing fence at the very end and writes the rest."""
+
+    HOLD = 4          # "\n```" -- the longest prefix of a closing fence
+
+    def __init__(self, stream=sys.stdout, newline=None):
+        """newline=True ends the output with exactly one newline, False with
+        none, None leaves it as the model sent it -- a rewrite keeps the
+        selection's own final-newline shape, whatever the model did."""
+        self.stream = stream
+        self.newline = newline
+        self.buf = ""
+        self.first = True     # still deciding about the first line
+        self.last = ""        # the last character written
+
+    def _write(self, s):
+        if s:
+            self.stream.write(s)
+            self.stream.flush()
+            self.last = s[-1]
+
+    FENCE = re.compile(r"^\s*```[A-Za-z0-9_+.-]*\s*$")
+
+    @classmethod
+    def _is_fence(cls, line):
+        return bool(cls.FENCE.match(line))
+
+    def feed(self, delta):
+        self.buf += delta
+        if self.first:
+            nl = self.buf.find("\n")
+            if nl < 0:
+                return
+            self.first = False
+            if self._is_fence(self.buf[:nl]):
+                self.buf = self.buf[nl + 1:]
+        if len(self.buf) > self.HOLD:
+            self._write(self.buf[:-self.HOLD])
+            self.buf = self.buf[-self.HOLD:]
+
+    def close(self):
+        rest = self.buf
+        self.buf = ""
+        if self.first and self._is_fence(rest):
+            rest = ""
+        stripped = rest.rstrip()
+        if stripped.endswith("```"):
+            cut = stripped[:-3]
+            nl = cut.rfind("\n")
+            if nl >= 0 and cut[nl + 1:].strip() == "":
+                rest = cut[:nl + 1]
+            elif cut.strip() == "":
+                rest = ""
+        if self.newline is False:
+            rest = rest.rstrip("\n")
+        elif self.newline is True:
+            rest = rest.rstrip("\n")
+            if rest:
+                rest += "\n"
+            elif self.last and self.last != "\n":
+                rest = "\n"
+        self._write(rest)

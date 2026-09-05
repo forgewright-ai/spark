@@ -4,7 +4,7 @@
 #   ? words    or    words?     Enter sends the line to `spark line`; the
 #              command it returns lands IN your line with a hint in the row
 #              above the prompt. Nothing runs until you press Enter again.
-#   Esc a      asks about whatever line you are on, question mark or not.
+#   Esc s      asks about whatever line you are on, question mark or not.
 #   spark off / spark on        silence / restore (a flag file, checked at
 #              every Enter, so one `spark off` reaches every pane at once)
 #   SPARK_OFF=1                 in the environment: bind nothing at all
@@ -97,12 +97,12 @@ zle -N spark-accept-line
 bindkey '^M' spark-accept-line
 bindkey '^J' spark-accept-line
 
-# --- Esc a: ask about this line, no question mark needed --------------------
+# --- Esc s: ask about this line, no question mark needed --------------------
 spark-ask() {
     if [[ -n $BUFFER ]]; then _spark_ask "$BUFFER"
-    else _spark_say "$_spark_h type something first, then Esc a  (or end the line with ?)"; zle -R; fi
+    else _spark_say "$_spark_h type something first, then Esc s  (or end the line with ?)"; zle -R; fi
 }
 zle -N spark-ask
-bindkey '\ea' spark-ask
-# Esc and a are two keystrokes: give them a full second to be one chord
+bindkey '\es' spark-ask
+# Esc and s are two keystrokes: give them a full second to be one chord
 KEYTIMEOUT=100

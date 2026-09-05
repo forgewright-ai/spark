@@ -452,6 +452,13 @@ def read_file(name, cwd=""):
         raise RefError("@%s: no such file" % name)
     except OSError as e:
         raise RefError("@%s: %s" % (name, e.strerror or e))
+    return clip(data)
+
+
+def clip(data):
+    """At most FILE_MAX chars: the head, a cut mark that says how much is
+    missing, the tail. The cut is always visible -- llama-server would
+    otherwise drop the excess silently."""
     if len(data) > FILE_MAX:
         data = data[:FILE_HEAD] + "\n[... %d chars cut ...]\n" % (len(data) - FILE_MAX) + data[-FILE_TAIL:]
     return data
