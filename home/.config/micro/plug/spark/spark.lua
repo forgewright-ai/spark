@@ -258,6 +258,9 @@ local function ask(bp, words)
     -- never nags on quit; Readonly only once the stream is over (Insert
     -- refuses a readonly buffer)
     pane.Type.Scratch = true
+    -- a narrow pane of prose: wrap on screen, between words
+    pane:SetOptionNative("softwrap", true)
+    pane:SetOptionNative("wordwrap", true)
     bp:VSplitBuf(pane)
     local state = {kind = "ask", bp = bp, buf = pane, loc = buffer.Loc(0, 0)}
     spawn(bp, argv(bp, words), text, state)
