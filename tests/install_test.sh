@@ -116,8 +116,12 @@ run >/dev/null
 [ -f "$HOME/.tmux.conf" ] && [ ! -L "$HOME/.tmux.conf" ] && ok "stale symlink replaced by a render" || bad "stale link"
 
 # 5. every palette and both prompt styles render without a leftover
-#    placeholder (the shell layer on: that is where the palette lands)
-for theme in none catppuccin-mocha selenized-dark gruvbox-dark solarized-light; do
+#    placeholder (the shell layer on: that is where the palette lands).
+#    The list is a glob over themes/*.env, `none` first: a new palette is
+#    exercised here without being hand-listed anywhere.
+themes=none
+for f in "$REPO"/themes/*.env; do t=${f##*/}; themes="$themes ${t%.env}"; done
+for theme in $themes; do
     for style in minimal full; do
         printf 'SITE_SHELL=on\nSITE_THEME=%s\nSITE_PROMPT_STYLE=%s\n' "$theme" "$style" > "$HOME/.config/spark/site.env"
         if out=$(run); then
@@ -127,7 +131,11 @@ for theme in none catppuccin-mocha selenized-dark gruvbox-dark solarized-light; 
         fi
     done
 done
-grep -q '#fdf6e3' "$HOME/.tmux.conf" && ok "last palette (solarized-light) reached tmux" || bad "palette not rendered"
+# one named palette's colour reaching tmux, pinned by name so the glob
+# order cannot move it
+printf 'SITE_SHELL=on\nSITE_THEME=solarized-light\nSITE_PROMPT_STYLE=minimal\n' > "$HOME/.config/spark/site.env"
+run >/dev/null
+grep -q '#fdf6e3' "$HOME/.tmux.conf" && ok "a chosen palette (solarized-light) reached tmux" || bad "palette not rendered"
 
 # 6. plain prompt renders no starship.toml; a bad theme name is refused
 rm -f "$HOME/.config/starship.toml"

@@ -170,7 +170,9 @@ may change freely.
    embers.env) and `MODEL_<NAME>_LICENSE`/`MODEL_<NAME>_NOTE` (LICENSE
    required in community.env and yours; NOTE optional). A name in two
    files is refused, naming both;
-   `themes/<name>.env` -- `THEME_BG THEME_FG THEME_ACCENT THEME_ANSI_0..15`.
+   `themes/<name>.env` -- `THEME_BG THEME_FG THEME_ACCENT THEME_MUTED
+   THEME_BTOP THEME_ANSI_0..15` (the same 21 keys in `lib/env.sh`
+   `THEME_KEYS` and `config.theme_palette`: the two validators agree).
    Precedence: environment > file > default.
 4. `spark line --cwd D --shell S` reads the prompt buffer on stdin and prints
    line 1 = `cmd<TAB>command` | `danger<TAB>command` | `answer` | `error`,
@@ -346,8 +348,14 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   LFS headers, any other host needs `--sha256`; `--license "NAME URL"` is
   always required there. `spark model verify` (and the `models` check
   row, cached) re-hashes every downloaded file (`lib/spark/verify.py`).
-- **A palette.** `themes/<name>.env` with the full `THEME_*` key set;
-  `tests/install_test.sh` renders every palette and will notice a gap.
+- **A palette.** Two files, nothing else hand-listed: `themes/<name>.env`
+  with the full 21-key `THEME_*` set (contract 3; the header comment names
+  the upstream project and its license; `THEME_BTOP` names a theme btop
+  ships, else `Default`), and its flat 20-value row in `spark.js`'s
+  `theme.builtin` map (the page has no build step). `tests/install_test.sh`
+  renders every palette by glob, and `tests/smoke.py` asserts the
+  `theme.builtin` map matches `themes/*.env` value for value -- a gap in
+  either goes loud.
 
 ## Verifying a claim
 

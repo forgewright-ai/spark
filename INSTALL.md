@@ -118,7 +118,7 @@ layer's git identity).
 | `SITE_SHELL` | `off`: the AI only; `on`: tmux, starship, micro, fzf, zoxide, eza, bat, btop, the Nerd Font, the console, and the rc files become spark's -- later, `spark shell on|off` | `off` |
 | `SITE_PEER_AI_URL` | another machine's FORGE URL (`spark forge --print-client` there), or its raw `spark serve` URL | unset |
 | `SITE_HEADLESS` | `yes`: the FORGE up from boot with nobody logged in, never asleep -- later, `spark headless on|off` | `no` |
-| `SITE_THEME` | `none`, `catppuccin-mocha`, `selenized-dark`, `gruvbox-dark`, `solarized-light` -- later, `spark theme NAME` | `none` |
+| `SITE_THEME` | `none`, or a palette from `themes/` (`spark theme` lists them) -- later, `spark theme NAME` | `none` |
 | `SITE_PROMPT` / `SITE_PROMPT_STYLE` | `starship`/`plain`; `minimal`/`full` (the shell layer) | `starship`, `minimal` |
 | `SITE_FONT_FACE` / `SITE_FONT_SIZE` | Linux console: `Terminus`/`VGA`/`Fixed` and `16x32`; macOS profile: font name and points -- later, `spark font FACE SIZE` | unset / `13` |
 | `SITE_QUIET_LOGIN` / `SITE_QUIET_BOOT` | Linux: `yes` empties the motd and kernel line / hides GRUB's menu -- later, `spark quiet login|boot on` | `no` |

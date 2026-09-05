@@ -1117,6 +1117,29 @@ def main():
     t.ok(not missing, "completion.bash names every dispatch verb and cli command",
          "missing: " + " ".join(missing))
 
+    # palette drift guard: the page's theme.builtin map is a hand copy of
+    # themes/*.env (the page has no build step) -- parse spark.js and
+    # compare, name for name and value for value. A palette added to
+    # themes/ without its spark.js row, or the reverse, goes loud here.
+    js = open(os.path.join(REPO, "lib", "spark", "forge", "spark.js")).read()
+    block = re.search(r"builtin: \{(.*?)\n    \}", js, re.S).group(1)
+    js_map = {m.group(1): re.findall(r'"(#[0-9a-fA-F]{6})"', m.group(2))
+              for m in re.finditer(r'"([a-z0-9-]+)":\s*\[([^\]]*)\]', block)}
+    env_map = {}
+    tdir = os.path.join(REPO, "themes")
+    for fname in sorted(os.listdir(tdir)):
+        if not fname.endswith(".env"):
+            continue
+        with open(os.path.join(tdir, fname)) as f:
+            kv = dict(line.strip().split("=", 1) for line in f
+                      if "=" in line and not line.startswith("#"))
+        env_map[fname[:-4]] = ([kv["THEME_BG"], kv["THEME_FG"], kv["THEME_ACCENT"], kv["THEME_MUTED"]]
+                               + [kv["THEME_ANSI_%d" % i] for i in range(16)])
+    t.ok(js_map == env_map, "spark.js theme.builtin matches themes/*.env, value for value",
+         "js only: %s; themes only: %s; differing: %s" % (
+             sorted(set(js_map) - set(env_map)), sorted(set(env_map) - set(js_map)),
+             sorted(k for k in set(js_map) & set(env_map) if js_map[k] != env_map[k])))
+
     srv.shutdown()
     print("smoke: %s" % ("all ok" if not t.fail else "%d FAILED" % t.fail))
     return 1 if t.fail else 0
