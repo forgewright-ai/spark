@@ -373,7 +373,10 @@ def row_git(ctx):
 @row("SOFTWARE")
 def row_hooks(ctx):
     rc, out = ctx.sh(["git", "-C", ctx.repo, "config", "core.hooksPath"], 10)
-    if rc == 0 and out.strip() == ".githooks":
+    # relative or absolute, the same directory is the same promise
+    want = os.path.join(ctx.repo, ".githooks")
+    got = out.strip()
+    if rc == 0 and (got == ".githooks" or os.path.abspath(os.path.join(ctx.repo, got)) == want):
         return ok("commits gated by .githooks")
     return fail("core.hooksPath is not .githooks", "./bootstrap.sh   (or: git -C %s config core.hooksPath .githooks)" % ctx.short(ctx.repo))
 

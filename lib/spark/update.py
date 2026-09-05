@@ -50,6 +50,14 @@ def cmd_update(args):
     if rc != 0:
         say("spark update: git fetch --tags origin failed")
         return 1
+    # a fetched tag can land on the sha already cached: drop the version
+    # cache so `spark ver` says the release, not <old>+N (the box said
+    # 1.2+29 at the very commit v1.3 pointed to)
+    try:
+        from . import STATE_DIR
+        os.unlink(os.path.join(STATE_DIR, "version"))
+    except OSError:
+        pass
 
     rc, _ = _git(["symbolic-ref", "-q", "HEAD"])
     if rc == 0:
