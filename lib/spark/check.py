@@ -782,7 +782,8 @@ def row_quiet(ctx):
     parts, bad = [start], []
     if ctx.cfg.quiet_login:
         quiet = (not os.path.getsize("/etc/motd") if os.path.exists("/etc/motd") else True) \
-            and not os.access("/etc/update-motd.d/10-uname", os.X_OK)
+            and not os.access("/etc/update-motd.d/10-uname", os.X_OK) \
+            and (not os.path.getsize("/etc/issue") if os.path.exists("/etc/issue") else True)
         parts.append("login quiet" if quiet else "login LOUD")
         if not quiet:
             bad.append("login")

@@ -130,9 +130,10 @@ What comes next: `ROADMAP.md`.
 - **`spark quiet`.** What stays silent, three switches: `spark quiet start
   on` silences spark itself -- no login banner, `spark serve` and bare
   `spark` answer with one line (`spark status` stays full); on Linux,
-  `spark quiet login|boot on` empties the motd and makes the boot itself
-  silent: GRUB's menu hidden, the kernel line quiet, systemd showing
-  errors only (one removable drop-in; hold Shift at boot for the menu).
+  `spark quiet login on` bares the login (no distro notice, no kernel
+  line, an empty pre-login banner) and `spark quiet boot on` makes the
+  boot itself silent -- BIOS splash, then the login prompt, nothing
+  between (one removable GRUB drop-in; hold Shift at boot for the menu).
 
 ## What leaves this machine
 

@@ -867,23 +867,28 @@ elif [ "$OS" = Darwin ]; then
     skip quiet-login "macOS: no motd"
     skip quiet-boot "macOS: no GRUB"
 else
-    # a quiet login: no distro notice, no kernel line before the greeting
+    # a quiet login: no distro notice, no kernel line before the greeting,
+    # and a bare `login:` -- /etc/issue (the pre-login OS banner) empties
+    # with the motd, so the console shows the prompt and nothing else
     if [ "$SITE_QUIET_LOGIN" != yes ]; then
         if [ ! -s /etc/motd ] && [ -f /usr/share/base-files/motd ] || [ -f /etc/update-motd.d/10-uname ] && [ ! -x /etc/update-motd.d/10-uname ]; then
-            if need quiet-login "restore the distro notice and the kernel line (sudo)"; then
+            if need quiet-login "restore the distro notice, kernel line and login banner (sudo)"; then
                 if [ -f /etc/motd.orig ]; then as_root cp /etc/motd.orig /etc/motd
                 elif [ -f /usr/share/base-files/motd ]; then as_root cp /usr/share/base-files/motd /etc/motd; fi
                 [ -f /etc/update-motd.d/10-uname ] && as_root chmod +x /etc/update-motd.d/10-uname
-                ok quiet-login "loud: distro notice and kernel line back"
+                [ -f /etc/issue.orig ] && as_root cp /etc/issue.orig /etc/issue
+                ok quiet-login "loud: distro notice, kernel line and login banner back"
             fi
         else skip quiet-login "loud (SITE_QUIET_LOGIN=no)"; fi
-    elif [ ! -s /etc/motd ] && [ ! -x /etc/update-motd.d/10-uname ]; then
-        ok quiet-login "motd empty, no kernel line"
-    elif need quiet-login "empty /etc/motd, disable update-motd.d/10-uname (sudo)"; then
+    elif [ ! -s /etc/motd ] && [ ! -x /etc/update-motd.d/10-uname ] && [ ! -s /etc/issue ]; then
+        ok quiet-login "motd empty, no kernel line, bare login prompt"
+    elif need quiet-login "empty /etc/motd and /etc/issue, disable update-motd.d/10-uname (sudo)"; then
         [ -s /etc/motd ] && as_root cp -n /etc/motd /etc/motd.orig 2>/dev/null
         as_root truncate -s 0 /etc/motd
         [ -x /etc/update-motd.d/10-uname ] && as_root chmod -x /etc/update-motd.d/10-uname
-        ok quiet-login "motd empty, no kernel line (the original: /etc/motd.orig)"
+        [ -s /etc/issue ] && as_root cp -n /etc/issue /etc/issue.orig 2>/dev/null
+        as_root truncate -s 0 /etc/issue
+        ok quiet-login "motd empty, no kernel line, bare login prompt (originals: *.orig)"
     fi
     # a quiet boot: straight past GRUB's menu, a silent kernel line, and
     # only errors from systemd. One drop-in spark owns -- the user's
@@ -891,8 +896,9 @@ else
     # /etc/default/grub.d/*.cfg after the main file, zz- sorts it last so
     # it wins. quiet+loglevel=3 silence the kernel, splash hands plymouth
     # the boot when it is installed (inert otherwise),
-    # systemd.show_status=auto keeps mount/fsck status lines off the
-    # console unless something fails, udev.log_level=3 quiets the
+    # systemd.show_status=false keeps mount/fsck status lines off the
+    # console entirely (failures still land in the journal; loglevel=3
+    # keeps a broken kernel able to say so), udev.log_level=3 quiets the
     # initramfs, vt.global_cursor_default=0 stops the early blinking
     # cursor, fbcon=nodefer stops the framebuffer's mid-boot flicker.
     # update-grub is the Debian-family guard: no update-grub, no touch.
@@ -901,7 +907,7 @@ else
     # shellcheck disable=SC2016
     grub_want='GRUB_TIMEOUT=0
 GRUB_TIMEOUT_STYLE=hidden
-GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT quiet splash loglevel=3 systemd.show_status=auto udev.log_level=3 vt.global_cursor_default=0 fbcon=nodefer"'
+GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT quiet splash loglevel=3 systemd.show_status=false udev.log_level=3 vt.global_cursor_default=0 fbcon=nodefer"'
     if [ "$SITE_QUIET_BOOT" != yes ]; then
         if [ -f "$grub_dropin" ] || grep -q '^GRUB_TIMEOUT=0$' /etc/default/grub 2>/dev/null; then
             if need quiet-boot "show GRUB's menu again, 5 s; kernel messages back (sudo)"; then
