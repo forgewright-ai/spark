@@ -3,6 +3,10 @@
 # prerequisite is missing; never silently pass.
 set -eu
 cd "$(git rev-parse --show-toplevel)"
+# git hands a hook GIT_DIR; the clone-based tests below must see the
+# tree as a user does (from a linked worktree GIT_DIR names the worktree
+# git dir, and every git -C in them would answer for that instead)
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
 fail=0
 if [ -f tests/install_test.sh ]; then
     sh tests/install_test.sh >/dev/null || { echo "pre-push: tests/install_test.sh failed"; fail=1; }

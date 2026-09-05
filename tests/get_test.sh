@@ -28,12 +28,15 @@ echo "get_test: $T"
 # the origin: a bare clone of this repository; when the working tree has
 # changes, one commit on top of HEAD carries them, so the test proves the
 # tree at hand (the pre-commit case), not only what was last committed
-git clone -q --bare "$REPO" "$T/origin.git"
-# a detached source (a CI checkout at a tag) clones with no branch at all:
-# the fixture origin always has a main, so SPARK_REF=main has something to land on
-git -C "$T/origin.git" rev-parse -q --verify refs/heads/main >/dev/null 2>&1 \
-    || git -C "$T/origin.git" update-ref refs/heads/main "$(git -C "$T/origin.git" rev-parse HEAD)"
-git -C "$T/origin.git" symbolic-ref HEAD refs/heads/main 2>/dev/null || true
+# a bare clone of this repository's common git dir, not of $REPO: from a
+# linked worktree a clone of the worktree path aliases the real repository
+# (a run from one wrote a branch and a commit into it, 2026-09-05). The
+# tested tree is $REPO's HEAD, published as the fixture's main, so a
+# detached source (a CI checkout at a tag) and a worktree land the same.
+common=$(cd "$REPO" && cd "$(git rev-parse --git-common-dir)" && pwd)
+git clone -q --bare "$common" "$T/origin.git"
+git -C "$T/origin.git" update-ref refs/heads/main "$(git -C "$REPO" rev-parse HEAD)"
+git -C "$T/origin.git" symbolic-ref HEAD refs/heads/main
 if [ -n "$(git -C "$REPO" status --porcelain)" ]; then
     tree=$(GIT_INDEX_FILE="$T/index" sh -c 'cd "$1" && git add -A >/dev/null && git write-tree' sh "$REPO")
     commit=$(git -C "$REPO" commit-tree "$tree" -p HEAD -m "get_test: the working tree")

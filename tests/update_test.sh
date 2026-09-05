@@ -21,7 +21,15 @@ echo "update_test: $T"
 # the origin: a bare clone of this repository; when the working tree has
 # changes, one commit on top of HEAD carries them, so the test proves the
 # tree at hand (the pre-commit case), not only what was last committed
-git clone -q --bare "$REPO" "$T/origin.git"
+# a bare clone of this repository's common git dir, not of $REPO: from a
+# linked worktree a clone of the worktree path aliases the real repository
+# (a run from one wrote a branch and a commit into it, 2026-09-05). The
+# tested tree is $REPO's HEAD, published as the fixture's main, so a
+# detached source (a CI checkout at a tag) and a worktree land the same.
+common=$(cd "$REPO" && cd "$(git rev-parse --git-common-dir)" && pwd)
+git clone -q --bare "$common" "$T/origin.git"
+git -C "$T/origin.git" update-ref refs/heads/main "$(git -C "$REPO" rev-parse HEAD)"
+git -C "$T/origin.git" symbolic-ref HEAD refs/heads/main
 # the real repository carries release tags; the fixture makes its own, so
 # drop the inherited ones first (a name collision would fail `git tag`)
 for t in $(git -C "$T/origin.git" tag -l); do git -C "$T/origin.git" tag -d "$t" >/dev/null; done

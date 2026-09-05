@@ -119,8 +119,15 @@ tests/          install_test.sh get_test.sh update_test.sh smoke.py serve_smoke.
                 pre-push (install test, selftest)
 .github/        ci.yml: the same on ubuntu (plus a real bootstrap) and macOS (python 3.9)
                 release.yml: the GitHub Release from the CHANGELOG section, on a v* tag
+                pages.yml: www/ rendered and published to GitHub Pages on a doc change
 LICENSE         MIT, verbatim, ASCII (the hook checks it with the docs)
-assets/         banner.svg -- the banner as rectangles, for the README and the site
+assets/         banner.svg -- the banner as rectangles, for the README and the page;
+                banner-svg.py makes it from home/.config/spark/banner; icon-svg.py
+                makes the favicon, the app icons and the social card the same way
+www/            the page, spark.forgewright.ai: build.py (stdlib) renders the docs
+                (INSTALL, CHEATSHEET, the three lists, CHANGELOG, ROADMAP,
+                CONTRIBUTING, CREDITS) into www/dist/ with template.html; index.html
+                is the front: the banner, the one-liner, two demos, no prose
 CREDITS.md      every third-party project spark downloads or installs,
                 with its license; spark's own code is LICENSE
 ROADMAP.md      what comes after the current release, in order
@@ -345,6 +352,13 @@ One grammar for every verb; a verb that breaks a rule is a bug.
 
 ## Adding things
 
+- **A doc.** The page (`www/`, spark.forgewright.ai) is the docs rendered:
+  a change in INSTALL.md, CHEATSHEET.txt, a model list, CHANGELOG.md,
+  ROADMAP.md, CONTRIBUTING.md or CREDITS.md ships on the next push to main,
+  nothing to do. The look lives in `www/template.html`; the front in
+  `www/index.html` (demos and one-line hints, never a paragraph); the
+  markdown subset in `www/build.py` (tests/site_test.py holds its
+  invariants -- a new construct in a doc needs both).
 - **A package.** Linux: the right `PKG_*` group in `bootstrap.sh` with a
   comment saying why (`PKG_CORE`/`PKG_ENGINE`/`PKG_AI` are the AI, always
   installed; the rest is the shell layer, `SITE_SHELL=on`). macOS:

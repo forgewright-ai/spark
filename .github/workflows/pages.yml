@@ -1,0 +1,45 @@
+# pages.yml -- spark.forgewright.ai: the repository's own docs rendered into
+# one static site (www/build.py, stdlib) and published with GitHub Pages.
+# A doc change on main ships the site; nothing is written twice and no
+# secret is involved (the job's own token deploys). CI proves the build
+# (tests/site_test.py) before a merge; this only publishes.
+name: pages
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'www/**'
+      - 'assets/**'
+      - '*.md'
+      - 'CHEATSHEET.txt'
+      - 'models.env'
+      - 'embers.env'
+      - 'community.env'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: true
+jobs:
+  pages:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the sign line names the newest tag
+      - name: render
+        run: python3 www/build.py
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: www/dist
+      - id: deploy
+        uses: actions/deploy-pages@v4
