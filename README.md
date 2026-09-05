@@ -120,7 +120,11 @@ What comes next: `ROADMAP.md`.
   change and never asks for sudo.
 - **`spark shell on`.** Off by default. On: tmux, starship, micro, fzf, eza,
   bat, btop, the Nerd Font, and the rc files become spark's (yours move to
-  `.bak`; `off` hands them back). Off, your shell stays yours.
+  `.bak`). With a theme chosen, one palette lands on every surface at once:
+  the text console, tmux and micro share the same look, and `spark theme
+  NAME` switches all of them. `off` hands everything back -- rc files and
+  the rendered look alike, each from its `.bak` or removed. Off, your
+  shell stays yours.
 - **`spark quiet`.** What stays silent, three switches: `spark quiet start
   on` silences spark itself -- no login banner, `spark serve` and bare
   `spark` answer with one line (`spark status` stays full); on Linux,

@@ -259,15 +259,24 @@ changes, or once a day, whichever comes first.
 `spark shell on` (`SITE_SHELL=on`) puts spark's own shell on top of the AI:
 tmux, starship, micro, fzf, zoxide, eza, bat, btop, the Nerd Font, and on
 Linux the console font and the quiet login and boot when their keys say
-so. The rc files become spark's -- `~/.bashrc` and `~/.bash_profile` on
-Linux, `~/.zshrc` and `~/.zprofile` on macOS turn into symlinks into the
-repo, yours moved to `<file>.bak`, never overwritten. It runs bootstrap
-(sudo once for `apt` on Linux; Homebrew on macOS), then says `open a new
-shell`. `spark shell off` hands the rc files back -- each `.bak` moved
-into place, an empty file when there was none -- and re-runs the `configs`
-and `rc` rows so the one hook line lands in the restored file; the
-packages stay installed (`apt` or `brew` removes them). `spark shell`
-prints the state.
+so. With a theme chosen, one palette lands on every surface in the same
+move: tmux and starship are rendered from it, micro gets a `spark`
+colorscheme (plus a seeded `settings.json` choosing it, and
+`MICRO_TRUECOLOR=1` from the hook), and the text console wears it through
+`console-colors` -- TTY, tmux and micro, the same look. The rc files
+become spark's -- `~/.bashrc` and `~/.bash_profile` on Linux, `~/.zshrc`
+and `~/.zprofile` on macOS turn into symlinks into the repo, yours moved
+to `<file>.bak`, never overwritten. It runs bootstrap (sudo once for
+`apt` on Linux; Homebrew on macOS), then says `open a new shell`.
+`spark shell off` hands everything back the same way, look included:
+each rc file and each rendered config -- `.tmux.conf`,
+`.config/starship.toml`, btop's conf, micro's colorscheme and
+`settings.json` -- is restored from its `.bak`, or removed when there was
+none (that was the pre-spark state; never an empty husk). `~/.gitconfig`
+(your identity, not the look) and the core palette files under
+`~/.config/spark/` stay; the `configs` and `rc` rows re-run so the one
+hook line lands in a restored rc file; the packages stay installed
+(`apt` or `brew` removes them). `spark shell` prints the state.
 
 With the layer off, `spark bar`, `spark font` and the set forms of
 `spark quiet login|boot` refuse (`the shell layer is off`), `spark help`
@@ -286,6 +295,7 @@ rendered once as regular files and left to the app:
 |---|---|
 | `~/.config/btop/btop.conf` | btop rewrites it on every exit |
 | `~/.config/micro/bindings.json` | micro rewrites it (through the link) when a plugin adds keys |
+| `~/.config/micro/settings.json` | micro rewrites it on every option change; seeded once (`"colorscheme": "spark"`), then it is micro's -- never re-rendered, never backed up |
 | `~/.gitconfig`, `~/.tmux.conf`, `~/.config/starship.toml` | carry your name / palette / choices |
 | `~/.config/spark/launchd/*.plist` | launchd needs absolute paths |
 
@@ -493,6 +503,13 @@ Linux:
   has none): bootstrap adds you to it on a vulkan build and under `spark
   headless on`; log out of every session and in again for the units to
   see it.
+- The theme reaches the text console: `spark theme NAME` (and `spark
+  setup`'s theme answer) writes `~/.config/spark/console-colors`, the
+  precomputed VT palette escapes, and the rc hook applies it only when
+  `TERM=linux` -- an xterm-family terminal never sees the escapes. GUI
+  terminal emulators stay yours: apply the colours in `theme.env` in their
+  settings by hand. The `theme` check row watches that `theme.env` and
+  `console-colors` still match the chosen palette.
 - The console rows are the shell layer: `SITE_FONT_FACE=Terminus` with
   `SITE_FONT_SIZE=16x32` gives the text console a readable font on a 1080p
   screen (`VGA` for the installer's look); `spark quiet login on` empties

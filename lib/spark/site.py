@@ -862,15 +862,48 @@ def restore_rc():
     return done
 
 
+# The shell layer's rendered look: what install.sh renders only with
+# SITE_SHELL=on and what `spark shell off` therefore hands back. The
+# user-owned runtime palette (~/.config/spark/theme.env, console-colors)
+# is core -- `spark theme` owns it, outside the gate -- and stays.
+RENDERED_FILES = (".tmux.conf", ".config/starship.toml", ".config/btop/btop.conf",
+                  ".config/micro/colorschemes/spark.micro", ".config/micro/settings.json")
+
+
+def restore_rendered():
+    """spark shell off: every shell-layer rendered config goes back the way
+    restore_rc hands back the rc files -- <path>.bak moved back when it
+    exists, the file removed when there was none (that was the pre-spark
+    state), never an empty husk left behind. Only regular files go: a
+    symlink in one of these spots is not a render of ours. Returns
+    [(path, what)]."""
+    done = []
+    for rel in RENDERED_FILES:
+        path = os.path.join(HOME, rel)
+        if os.path.islink(path) or not os.path.isfile(path):
+            continue
+        os.unlink(path)
+        bak = path + ".bak"
+        name = os.path.basename(path)
+        if os.path.lexists(bak):
+            os.rename(bak, path)
+            done.append((path, "restored from %s.bak" % name))
+        else:
+            done.append((path, "removed (no %s.bak: there was no file before)" % name))
+    return done
+
+
 # ------------------------------------------------------------------ shell
 SHELL_USAGE = """%s shell -- spark's own shell: tmux, starship, micro, fzf, eza, bat, btop
 
   spark shell                   the state: off (the prompt widget only) or on
   spark shell on                SITE_SHELL=on: the tools, the Nerd Font, the
                                 console; the rc files become spark's (yours
-                                move to .bak)
-  spark shell off               SITE_SHELL=off: the rc files come back (.bak);
-                                the packages stay installed
+                                move to .bak); with a theme set, tmux, micro
+                                and the console wear the same palette
+  spark shell off               SITE_SHELL=off: the rc files and the rendered
+                                look (tmux, starship, btop, micro) come back
+                                from .bak, or go; the packages stay installed
 """ % MARK
 # the bootstrap rows the switch flips (bootstrap.sh gates them on SITE_SHELL)
 SHELL_ROWS = ["identity", "hostname", "dir", "apt", "brew", "starship", "font", "micro-aspell", "pinned",
@@ -915,8 +948,17 @@ def cmd_shell(args):
             say("open a new shell (exec $SHELL)")
         return rc
     set_keys(SITE_SHELL="off")
-    for path, what in restore_rc():
+    for path, what in restore_rc() + restore_rendered():
         say("ok     restore      ~%s -- %s" % (path[len(HOME):], what))
+    if not os.environ.get("SPARK_NO_APPLY"):
+        from . import run
+        trc, _ = run(["tmux", "list-sessions"])
+        if trc == 0:
+            if os.path.isfile(os.path.join(HOME, ".tmux.conf")):
+                run(["tmux", "source-file", os.path.join(HOME, ".tmux.conf")])
+                say("ok     tmux         reloaded (your .tmux.conf)")
+            else:
+                say("ok     tmux         running sessions keep the look until tmux restarts")
     rc = apply(["configs", "rc"])
     say("packages stay installed -- apt or brew removes them if you want")
     return rc

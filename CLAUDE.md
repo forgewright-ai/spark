@@ -89,12 +89,14 @@ lib/spark/      __init__ config wire engine serve session persona cli check
 lib/spark/forge/  index.html spark.css spark.js manifest.webmanifest favicon.svg
                   -- the page, ASCII, no inline script
 home/           shared $HOME mirror (linked): micro bindings, the two widgets, the two rc hooks
-                (.config/spark/hook.bash hook.zsh: PATH, the widget, the blank row, completion),
+                (.config/spark/hook.bash hook.zsh: PATH, the widget, the blank row, completion,
+                the VT palette -- TERM=linux only -- and MICRO_TRUECOLOR),
                 the two completion files (.config/spark/completion.bash completion.zsh:
                 TAB completes the verbs and their names, offline), the banner, spark.env.example
 linux/home/     .bashrc .bash_profile, the systemd user units (spark-serve spark-forge spark-check)
 macos/home/     .zshrc .zprofile
 templates/      rendered, not linked: .gitconfig .tmux.conf .config/btop/btop.conf
+                .config/micro/colorschemes/spark.micro .config/micro/settings.json (seeded once)
                 .config/starship.toml.{minimal,full} .config/spark/launchd/spark.{serve,forge,check}.plist
 tests/          install_test.sh get_test.sh update_test.sh smoke.py serve_smoke.py
                 forge_smoke.py bench_smoke.py widget_pty.py check_selftest.py
@@ -108,8 +110,12 @@ CREDITS.md      every third-party project spark downloads or installs,
 ROADMAP.md      what comes after the current release, in order
 ```
 
-Runtime paths: config `~/.config/spark/{site.env,spark.env,theme.env,soul,memory}`
-(`soul` and `memory` are prose, 0600, yours: never linked from `home/`);
+Runtime paths: config `~/.config/spark/{site.env,spark.env,theme.env,
+console-colors,soul,memory}` (`console-colors` is the precomputed Linux VT
+palette -- `\033]P<n><rrggbb>` per ansi colour, `\033]R` after `none` --
+written by `spark theme`/`spark setup` only, applied by the rc hooks only
+when `TERM=linux`; `soul` and `memory` are prose, 0600, yours: never
+linked from `home/`);
 state `~/.local/state/spark/` (0700: `api-token` 0600, `serve-url`,
 `serve.pid`, `serve.log`, `serve.lock`, `forge-token` 0600, `ember-token`
 0600, `forge-url`, `forge.pid`, `forge.log`, `forge.lock`,
@@ -148,7 +154,15 @@ may change freely.
    a symlink that points outside the repo, is moved to `<path>.bak`, never
    overwritten (a stale symlink into the repo is replaced). The rc files,
    micro's bindings and the shell templates (`.gitconfig`, `.tmux.conf`,
-   btop, starship) are installed only with `SITE_SHELL=on`.
+   btop, starship, micro's colorscheme and `settings.json`) are installed
+   only with `SITE_SHELL=on`; micro's `settings.json` is seeded once and
+   never re-rendered (micro rewrites it). `spark shell off` hands the
+   rendered look back the way it hands the rc files back
+   (`site.restore_rendered`): each of `.tmux.conf`,
+   `.config/starship.toml`, btop's conf and the two micro files is
+   restored from its `.bak` or removed -- never an empty husk;
+   `.gitconfig` (identity, not look) and the core palette files under
+   `~/.config/spark/` stay.
 3. Config files are `KEY=value` lines; any other non-blank, non-comment line
    is refused by every reader (`^[A-Z_0-9]+=[^;`$()|&<>]*$`). Keys:
    `site.env` -- `SITE_NAME SITE_USER SITE_SET_HOSTNAME SITE_GIT_NAME
@@ -323,8 +337,11 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   (bin/spark), and its check row's name goes into `check.SHELL_ROWS` so
   it reads `na` when the layer is off; `--selftest`'s third pass asserts
   that. `spark shell on|off` (`site.cmd_shell`, `site.SHELL_ROWS`) is the
-  only switch; `spark theme` stays outside the gate (the FORGE page reads
-  `theme.env` too).
+  only switch; `spark shell off` hands back what the layer rendered
+  (`restore_rc`, `restore_rendered`: `.bak` or gone, never a husk).
+  `spark theme` stays outside the gate (the FORGE page reads `theme.env`
+  too, and the VT console palette rides the core rc hook); its `theme`
+  check row is core for the same reason.
 - **The client shape.** `SITE_AI_MODEL=none` beside `SITE_PEER_AI_URL`
   (`config.client`; `spark client URL|off`, `site.cmd_client`) means
   nothing runs here: bootstrap skips the `engine` and `services` rows
@@ -371,7 +388,7 @@ sh tests/get_test.sh            # the one-liner: clone, pull, refusals, the hand
 sh tests/update_test.sh         # spark update: pull, move to a tag, dirty refused, --dry-run
 ```
 
-`spark check` has 35 rows today: 11 SOFTWARE, 16 CAPABILITY, 8
+`spark check` has 36 rows today: 12 SOFTWARE, 16 CAPABILITY, 8
 NONFUNCTIONAL (`grep -c '^@row' lib/spark/check.py`). With `SITE_SHELL=off`
 the 12 rows in `check.SHELL_ROWS` and the `shell` row answer `na`;
 `--selftest` runs a third pass to prove it, and a fourth for the client

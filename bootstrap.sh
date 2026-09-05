@@ -818,10 +818,13 @@ elif [ "$SITE_THEME" = none ]; then
 else
     theme_load "$REPO"
     want=$(for k in $THEME_KEYS; do eval "printf '%s=%s\n' $k \"\$$k\""; done)
+    # console-colors (the Linux VT palette) has one writer: spark theme /
+    # spark setup (lib/spark/theme.py write_runtime); this row only notes it
+    cc=""; [ -f "$SPARK_CONFIG_DIR/console-colors" ] && cc=" + console-colors"
     if [ -f "$SPARK_CONFIG_DIR/theme.env" ] && [ "$(cat "$SPARK_CONFIG_DIR/theme.env")" = "$want" ]; then
-        ok theme "$SITE_THEME -> $SPARK_CONFIG_DIR/theme.env"
+        ok theme "$SITE_THEME -> $SPARK_CONFIG_DIR/theme.env$cc"
     elif need theme "write $SPARK_CONFIG_DIR/theme.env ($SITE_THEME)"; then
-        mkdir -p "$SPARK_CONFIG_DIR"; printf '%s\n' "$want" > "$SPARK_CONFIG_DIR/theme.env"; ok theme "$SITE_THEME"
+        mkdir -p "$SPARK_CONFIG_DIR"; printf '%s\n' "$want" > "$SPARK_CONFIG_DIR/theme.env"; ok theme "$SITE_THEME$cc"
     fi
     if [ "$OS" = Darwin ] && [ -x "$HOME/.local/bin/spark" ]; then
         if [ "$MODE" = dry ]; then "$HOME/.local/bin/spark" theme profile --dry-run | sed 's/^/       /' || true

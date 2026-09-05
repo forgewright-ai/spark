@@ -68,7 +68,7 @@ THE MACHINE
 
 THE SHELL (spark shell on)
   spark bar [on|off]              tmux's status line: bare shows, on|off sets
-  spark theme NAME | list | show  a palette; none = the terminal's own
+  spark theme NAME | list | show  one palette: console, tmux, micro; none=off
   spark font FACE SIZE            console font (Terminus 16x32) / Terminal.app
   tmux (prefix C-b)  c new window   n/p next/prev   | split right  - below
                      h j k l panes  d detach  r reload  [ scroll/copy (vi)

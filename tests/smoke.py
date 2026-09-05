@@ -1023,23 +1023,58 @@ def main():
             spark("quiet", "login", "off", extra=dict(off, SITE_SHELL="on"))
         rc, out, _ = spark("theme", "-h", extra=off)
         t.ok(rc == 0 and out.startswith("spark theme -- "), "spark theme stays usable with the layer off", out)
+        # the palette's two runtime files, one writer: spark theme NAME
+        # writes theme.env and console-colors (the VT escapes); none removes
+        # theme.env and turns console-colors into the one reset escape
+        rc, out, _ = spark("theme", "gruvbox-dark", extra=off)
+        theme_env = open(home + "/.config/spark/theme.env").read()
+        cc = open(home + "/.config/spark/console-colors").read()
+        t.ok(rc == 0 and "THEME_BG=#282828\n" in theme_env and "THEME_BTOP=gruvbox_dark\n" in theme_env,
+             "spark theme NAME writes theme.env from the palette", theme_env)
+        t.ok(cc.startswith("\033]P0282828") and "\033]P9fb4934" in cc and "\033]Pfebdbb2" in cc,
+             "console-colors holds the sixteen VT escapes, ansi 0-15 in hex", repr(cc))
+        rc, out, _ = spark("theme", "none", extra=off)
+        t.ok(rc == 0 and not os.path.exists(home + "/.config/spark/theme.env")
+             and open(home + "/.config/spark/console-colors").read() == "\033]R\n",
+             "spark theme none removes theme.env and leaves the VT reset", out)
+        rc, out, _ = spark("theme", "nosuch", extra=off)
+        t.ok(rc == 2 and out.startswith("spark theme -- "), "spark theme nosuch: usage, exit 2", out)
         rc, out, _ = spark("shell", "on", extra=off)
         site_env = open(home + "/.config/spark/site.env").read()
         t.ok(rc == 0 and "SITE_SHELL=on\n" in site_env and "open a new shell" in out,
              "spark shell on writes SITE_SHELL=on and says to open a new shell", out)
         rc, out, _ = spark("shell", extra=off)
         t.ok(rc == 0 and "SITE_SHELL=on" in out and "rc files:" in out, "spark shell: the state, on", out)
-        # off hands the rc files back: spark's links go, the .bak comes back
+        # off hands the rc files AND the rendered look back: spark's links
+        # go, a .bak comes back, a render with no .bak is removed -- never
+        # an empty husk; the core palette files (theme.env) stay
         rcname = ".zshrc" if sys.platform == "darwin" else ".bashrc"
         os.symlink(os.path.join(REPO, "macos" if sys.platform == "darwin" else "linux", "home", rcname), home + "/" + rcname)
         with open(home + "/" + rcname + ".bak", "w") as f:
             f.write("# mine\n")
+        with open(home + "/.tmux.conf", "w") as f:               # a spark render, no .bak
+            f.write("# rendered by spark\n")
+        os.makedirs(home + "/.config/btop", exist_ok=True)
+        with open(home + "/.config/btop/btop.conf", "w") as f:   # a render shadowing a .bak
+            f.write("# rendered by spark\n")
+        with open(home + "/.config/btop/btop.conf.bak", "w") as f:
+            f.write("# pre-spark btop\n")
+        with open(home + "/.config/spark/theme.env", "w") as f:  # core: spark theme owns it
+            f.write("THEME_BG=#282828\n")
         rc, out, _ = spark("shell", "off", extra=off)
         site_env = open(home + "/.config/spark/site.env").read()
         t.ok(rc == 0 and "SITE_SHELL=off\n" in site_env and "packages stay installed" in out,
              "spark shell off writes SITE_SHELL=off and says the packages stay", out)
         t.ok("restore" in out and not os.path.islink(home + "/" + rcname) and open(home + "/" + rcname).read() == "# mine\n",
              "spark shell off moves the .bak rc file back over spark's link", out)
+        t.ok(not os.path.exists(home + "/.tmux.conf") and "tmux.conf" in out,
+             "spark shell off removes a rendered .tmux.conf with no .bak (no husk)", out)
+        t.ok(open(home + "/.config/btop/btop.conf").read() == "# pre-spark btop\n",
+             "spark shell off restores btop.conf from its .bak", out)
+        t.ok(os.path.exists(home + "/.config/spark/theme.env"),
+             "spark shell off leaves theme.env alone (the theme is core)", out)
+        os.remove(home + "/.config/spark/theme.env")
+        os.remove(home + "/.config/btop/btop.conf")
         rc, out, _ = spark("shell", "sideways", extra=off)
         t.ok(rc == 2 and out.startswith("spark shell -- "), "spark shell sideways is refused with the usage", out)
 

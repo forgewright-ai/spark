@@ -98,6 +98,7 @@ def show(cfg):
     say("  ansi          " + " ".join(pal["THEME_ANSI_%d" % i] for i in range(8)))
     say("  bright        " + " ".join(pal["THEME_ANSI_%d" % i] for i in range(8, 16)))
     say("  written to    %s (by bootstrap.sh or spark theme NAME)" % os.path.join(CONFIG_DIR, "theme.env"))
+    say("  console       %s (TERM=linux only: the rc hook applies it)" % os.path.join(CONFIG_DIR, "console-colors"))
     return 0
 
 
@@ -151,14 +152,54 @@ def palettes():
         return []
 
 
+def write_runtime(name):
+    """The palette's two runtime files under ~/.config/spark, written by
+    `spark theme NAME` and `spark setup` only (one writer; bootstrap's
+    theme row writes theme.env too when the shell layer is on, and notes
+    console-colors when it sees it):
+      theme.env       KEY=value, what tmux/starship/btop were rendered from
+                      and what the FORGE page reads (removed for `none`)
+      console-colors  the Linux VT palette, precomputed: \\033]P<n><rrggbb>
+                      per ansi colour 0-15. hook.bash/.zsh cat it only when
+                      TERM=linux, so an xterm's scrollback is never touched.
+                      For `none` an existing file becomes the one reset
+                      escape \\033]R: the console lets the palette go at the
+                      next login."""
+    theme_env = os.path.join(CONFIG_DIR, "theme.env")
+    console = os.path.join(CONFIG_DIR, "console-colors")
+    os.makedirs(CONFIG_DIR, exist_ok=True)
+    if name == "none":
+        try:
+            os.remove(theme_env)
+        except OSError:
+            pass
+        if os.path.exists(console):
+            with open(console, "w", encoding="utf-8") as f:
+                f.write("\033]R\n")
+        return
+    pal = config.theme_palette(name, REPO)
+    order = ["THEME_BG", "THEME_FG", "THEME_ACCENT", "THEME_MUTED", "THEME_BTOP"] + ["THEME_ANSI_%d" % i for i in range(16)]
+    with open(theme_env, "w", encoding="utf-8") as f:       # bootstrap's order, so it agrees
+        f.write("".join("%s=%s\n" % (k, pal[k]) for k in order if k in pal))
+    esc = "".join("\033]P%x%s" % (i, pal["THEME_ANSI_%d" % i].lstrip("#").lower()) for i in range(16))
+    with open(console, "w", encoding="utf-8") as f:
+        f.write(esc + "\n")
+
+
 def set_theme(name):
     """`spark theme NAME`: choose it in site.env, render the files that carry
-    it, write theme.env, reload tmux; macOS also gets the Terminal profile."""
+    it (install.sh; micro and tmux with the shell layer on), write theme.env
+    and console-colors, reload tmux; macOS also gets the Terminal profile.
+    SPARK_NO_APPLY=1 (tests) writes the key and the two runtime files only:
+    nothing outside $HOME/.config/spark, no tmux, no Terminal.app."""
     if name != "none" and name not in palettes():
         say("spark theme: no palette named %s -- one of: none %s" % (name, " ".join(palettes())))
         return 2
     from . import site
     site.set_keys(SITE_THEME=name)
+    if os.environ.get("SPARK_NO_APPLY"):
+        write_runtime(name)
+        return 0
     rc, out = run(["sh", os.path.join(REPO, "install.sh")], timeout=120)
     for line in out.splitlines():
         if not line.startswith("ok ") and not line.endswith("to do") and line != "Nothing to do":
@@ -166,17 +207,7 @@ def set_theme(name):
     if rc != 0:
         say("spark theme: install.sh failed -- sh %s says why" % os.path.join(REPO, "install.sh"))
         return 1
-    theme_env = os.path.join(CONFIG_DIR, "theme.env")
-    if name == "none":
-        try:
-            os.remove(theme_env)
-        except OSError:
-            pass
-    else:
-        pal = config.theme_palette(name, REPO)
-        order = ["THEME_BG", "THEME_FG", "THEME_ACCENT", "THEME_MUTED", "THEME_BTOP"] + ["THEME_ANSI_%d" % i for i in range(16)]
-        with open(theme_env, "w", encoding="utf-8") as f:       # bootstrap's order, so it agrees
-            f.write("".join("%s=%s\n" % (k, pal[k]) for k in order if k in pal))
+    write_runtime(name)
     rc, _ = run(["tmux", "list-sessions"])
     if rc == 0:
         run(["tmux", "source-file", os.path.join(HOME, ".tmux.conf")])

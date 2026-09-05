@@ -72,8 +72,17 @@ grep -q "name = $(id -un)" "$HOME/.gitconfig" && ok "git name defaulted to the l
 grep -q 'bg=default,fg=default' "$HOME/.tmux.conf" && ok "tmux neutral colours" || bad "tmux neutral"
 grep -q '@' "$HOME/.tmux.conf" && bad "unrendered placeholder in .tmux.conf" || ok "no placeholders left"
 [ -f "$HOME/.config/btop/btop.conf" ] && ok "btop.conf rendered" || bad "btop.conf"
+[ -f "$HOME/.config/micro/colorschemes/spark.micro" ] && [ ! -L "$HOME/.config/micro/colorschemes/spark.micro" ] \
+    && ok "micro colorscheme rendered" || bad "micro colorscheme"
+grep -q '"colorscheme": "spark"' "$HOME/.config/micro/settings.json" && ok "micro settings.json seeded" || bad "micro settings.json"
 out=$(run)
 [ "$(printf '%s\n' "$out" | tail -1)" = "Nothing to do" ] && ok "shell layer, second run: Nothing to do" || bad "not idempotent: $(printf '%s\n' "$out" | grep -v '^ok' | head -3)"
+# settings.json is seeded once, then micro's own: an edited file (micro
+# rewrites it on every option change) is never re-rendered, never backed up
+printf '{\n    "colorscheme": "spark",\n    "tabsize": 2\n}\n' > "$HOME/.config/micro/settings.json"
+run >/dev/null
+grep -q tabsize "$HOME/.config/micro/settings.json" && [ ! -e "$HOME/.config/micro/settings.json.bak" ] \
+    && ok "micro settings.json seeded once, then micro's own" || bad "settings.json was re-rendered or backed up"
 
 # 3. a regular file in the way is backed up, never overwritten; so is a
 #    symlink that points outside the repo (the link itself moves to .bak);
@@ -115,6 +124,23 @@ rm "$HOME/.tmux.conf"; ln -s /nonexistent "$HOME/.tmux.conf"
 run >/dev/null
 [ -f "$HOME/.tmux.conf" ] && [ ! -L "$HOME/.tmux.conf" ] && ok "stale symlink replaced by a render" || bad "stale link"
 
+# 4b. spark shell off hands the whole look back, not only the rc files: a
+#     rendered config with a .bak is restored, one without is removed --
+#     never an empty husk -- and the core palette files under
+#     ~/.config/spark (spark theme's) stay
+printf '# pre-spark btop\n' > "$HOME/.config/btop/btop.conf.bak"
+printf 'THEME_BG=#282828\n' > "$HOME/.config/spark/theme.env"
+out=$(SPARK_NO_APPLY=1 SPARK_NO_REFRESH=1 python3 "$REPO/bin/spark" shell off 2>&1) || bad "spark shell off failed: $out"
+grep -q '^SITE_SHELL=off$' "$HOME/.config/spark/site.env" && ok "shell off wrote SITE_SHELL=off" || bad "SITE_SHELL not off"
+[ ! -e "$HOME/.tmux.conf" ] && [ ! -e "$HOME/.config/starship.toml" ] \
+    && [ ! -e "$HOME/.config/micro/colorschemes/spark.micro" ] && [ ! -e "$HOME/.config/micro/settings.json" ] \
+    && ok "shell off removed every rendered look file with no .bak (no husk)" \
+    || bad "a spark-rendered look file survived shell off"
+[ "$(cat "$HOME/.config/btop/btop.conf")" = "# pre-spark btop" ] && ok "shell off restored btop.conf from its .bak" || bad "btop.conf not restored"
+[ -f "$HOME/.config/spark/theme.env" ] && ok "shell off left theme.env (the theme is core)" || bad "theme.env removed"
+printf '%s\n' "$out" | grep -q '^ok     restore' && ok "shell off names what it restored or removed" || bad "no restore rows: $out"
+rm -f "$HOME/.config/spark/theme.env" "$HOME/.config/btop/btop.conf" "$HOME/.config/btop/btop.conf.bak"
+
 # 5. every palette and both prompt styles render without a leftover
 #    placeholder (the shell layer on: that is where the palette lands).
 #    The list is a glob over themes/*.env, `none` first: a new palette is
@@ -125,7 +151,8 @@ for theme in $themes; do
     for style in minimal full; do
         printf 'SITE_SHELL=on\nSITE_THEME=%s\nSITE_PROMPT_STYLE=%s\n' "$theme" "$style" > "$HOME/.config/spark/site.env"
         if out=$(run); then
-            grep -q '@[A-Z_0-9]*@' "$HOME/.config/starship.toml" "$HOME/.tmux.conf" && bad "$theme/$style placeholder" || ok "$theme / $style"
+            grep -q '@[A-Z_0-9]*@' "$HOME/.config/starship.toml" "$HOME/.tmux.conf" "$HOME/.config/micro/colorschemes/spark.micro" \
+                && bad "$theme/$style placeholder" || ok "$theme / $style"
         else
             bad "$theme/$style: $out"
         fi
@@ -136,6 +163,13 @@ done
 printf 'SITE_SHELL=on\nSITE_THEME=solarized-light\nSITE_PROMPT_STYLE=minimal\n' > "$HOME/.config/spark/site.env"
 run >/dev/null
 grep -q '#fdf6e3' "$HOME/.tmux.conf" && ok "a chosen palette (solarized-light) reached tmux" || bad "palette not rendered"
+# the acceptance shape: one palette, every surface -- with a theme chosen,
+# tmux and micro carry the same background (the console gets the same one
+# via ~/.config/spark/console-colors, written by spark theme / spark setup)
+printf 'SITE_SHELL=on\nSITE_THEME=gruvbox-dark\nSITE_PROMPT_STYLE=minimal\n' > "$HOME/.config/spark/site.env"
+run >/dev/null
+grep -q '#282828' "$HOME/.tmux.conf" && grep -q '"#ebdbb2,#282828"' "$HOME/.config/micro/colorschemes/spark.micro" \
+    && ok "one palette, both surfaces: gruvbox-dark's colours in tmux and micro" || bad "tmux and micro disagree on the palette"
 
 # 6. plain prompt renders no starship.toml; a bad theme name is refused
 rm -f "$HOME/.config/starship.toml"
