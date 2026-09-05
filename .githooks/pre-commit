@@ -67,7 +67,7 @@ if ls bin/spark lib/spark/*.py tests/*.py >/dev/null 2>&1; then
 fi
 
 # --- 3. tests for this OS ------------------------------------------------
-for t in tests/smoke.py tests/serve_smoke.py tests/forge_smoke.py tests/bench_smoke.py; do
+for t in tests/smoke.py tests/serve_smoke.py tests/forge_smoke.py tests/bench_smoke.py tests/vault_test.py; do
     [ -f "$t" ] && { python3 "$t" >/dev/null || bad "$t"; }
 done
 if [ -f tests/widget_pty.py ]; then

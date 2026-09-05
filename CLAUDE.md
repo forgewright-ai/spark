@@ -86,6 +86,8 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 forgeserve (the FORGE server: spark forge, the API, the page) do (spark do)
                 version (the version, from git, cached: spark ver, check's header, forgeserve)
                 update (spark update: the newest tag, or main; converges)
+                chacha (ChaCha20-Poly1305 written from RFC 8439, pinned to its
+                vectors in tests/vault_test.py: the sealed stores' cipher)
 lib/spark/forge/  index.html spark.css spark.js manifest.webmanifest favicon.svg
                   -- the page, ASCII, no inline script
 home/           shared $HOME mirror (linked): micro bindings, the two widgets, the two rc hooks
@@ -100,6 +102,7 @@ templates/      rendered, not linked: .gitconfig .tmux.conf .config/btop/btop.co
                 .config/starship.toml.{minimal,full} .config/spark/launchd/spark.{serve,forge,check}.plist
 tests/          install_test.sh get_test.sh update_test.sh smoke.py serve_smoke.py
                 forge_smoke.py bench_smoke.py widget_pty.py check_selftest.py
+                vault_test.py (RFC 8439 vectors, round-trips, refusals)
 .githooks/      pre-commit (privacy gate, syntax, tests, 80-col), pre-push (install test, selftest)
 .github/        ci.yml: the same on ubuntu (plus a real bootstrap) and macOS (python 3.9)
                 release.yml: the GitHub Release from the CHANGELOG section, on a v* tag
