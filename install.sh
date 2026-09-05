@@ -119,11 +119,17 @@ done
 # --- 2. templates ---------------------------------------------------------
 for src in $(find "$REPO/templates" -type f | sort); do
     rel=${src#"$REPO"/templates/}
+    seed=0
     case $rel in
         .config/spark/launchd/*)
             [ "$OS" = Darwin ] || continue
             [ "$client" = 0 ] || continue ;;
-        .gitconfig|.tmux.conf|.config/btop/*)
+        .config/micro/settings.json)
+            # seeded once, then micro's own: micro rewrites it on every
+            # option change, so a file that exists is never re-rendered
+            [ "$SITE_SHELL" = on ] || continue
+            seed=1 ;;
+        .gitconfig|.tmux.conf|.config/btop/*|.config/micro/*)
             [ "$SITE_SHELL" = on ] || continue ;;
         .config/starship.toml.*)
             [ "$SITE_SHELL" = on ] || continue
@@ -131,6 +137,10 @@ for src in $(find "$REPO/templates" -type f | sort); do
             [ "${rel##*.}" = "$SITE_PROMPT_STYLE" ] || continue
             rel=.config/starship.toml ;;
     esac
+    if [ "$seed" = 1 ] && { [ -e "$HOME/$rel" ] || [ -L "$HOME/$rel" ]; }; then
+        row ok "$HOME/$rel"
+        continue
+    fi
     render_one "$src" "$HOME/$rel"
 done
 

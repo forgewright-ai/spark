@@ -238,8 +238,36 @@ def _font_dirs(home):
     return [os.path.join(home, ".local", "share", "fonts"), "/usr/share/fonts", "/usr/local/share/fonts"]
 
 
+def _console_font_row(ctx):
+    """The Linux console-setup half of the font row: ok/fail against
+    SITE_FONT_FACE, or None when nothing is chosen there."""
+    if IS_MAC or not ctx.cfg.font_face:
+        return None
+    want = "%s %s" % (ctx.cfg.font_face, ctx.cfg.font_size)
+    cur = ""
+    try:
+        with open("/etc/default/console-setup", encoding="utf-8") as f:
+            kv = dict(l.strip().split("=", 1) for l in f if "=" in l and not l.startswith("#"))
+        cur = "%s %s" % (kv.get("FONTFACE", "").strip('"'), kv.get("FONTSIZE", "").strip('"'))
+    except (OSError, ValueError):
+        pass
+    if cur != want:
+        return fail("console font is %s, site.env says %s" % (cur or "unset", want), "./bootstrap.sh   (sudo)")
+    return ok("console %s" % want)
+
+
 @row("SOFTWARE")
 def row_font(ctx):
+    """Core now, like the verb: the console font choice (SITE_FONT_FACE,
+    Linux) is judged with the shell layer off too; the Nerd Font is still
+    the layer's, so it is only demanded when the layer is on."""
+    console = _console_font_row(ctx)
+    if not ctx.cfg.shell:
+        if console:
+            return console
+        if IS_MAC:
+            return na("Terminal.app profile: %s %s (spark font FACE SIZE sets it)" % (ctx.cfg.font_face, ctx.cfg.font_size))
+        return na("console not managed (spark font FACE SIZE; spark font list)")
     where = ""
     for d in _font_dirs(ctx.home):
         for root, _dirs, files in os.walk(d):
@@ -250,19 +278,57 @@ def row_font(ctx):
             break
     if not where:
         return fail("JetBrainsMono Nerd Font not installed", "./bootstrap.sh; then pick it in your terminal's settings")
-    if not IS_MAC and ctx.cfg.font_face:
-        want = "%s %s" % (ctx.cfg.font_face, ctx.cfg.font_size)
-        cur = ""
-        try:
-            with open("/etc/default/console-setup", encoding="utf-8") as f:
-                kv = dict(l.strip().split("=", 1) for l in f if "=" in l and not l.startswith("#"))
-            cur = "%s %s" % (kv.get("FONTFACE", "").strip('"'), kv.get("FONTSIZE", "").strip('"'))
-        except (OSError, ValueError):
-            pass
-        if cur != want:
-            return fail("console font is %s, site.env says %s" % (cur or "unset", want), "./bootstrap.sh   (sudo)")
-        return ok("Nerd Font in %s; console %s" % (ctx.short(where), want))
+    if console:
+        if console.status != OK:
+            return console
+        return ok("Nerd Font in %s; %s" % (ctx.short(where), console.value))
     return ok("JetBrainsMono Nerd Font in %s" % ctx.short(where))
+
+
+def _env_lines(path):
+    """KEY -> value from a KEY=value file, tolerant (a check row must judge
+    a broken file, not die on it); None when the file cannot be read."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            lines = f.read().splitlines()
+    except OSError:
+        return None
+    out = {}
+    for line in lines:
+        if "=" in line and not line.lstrip().startswith("#"):
+            k, v = line.split("=", 1)
+            out[k.strip()] = v.strip()
+    return out
+
+
+THEME_KEYS = (["THEME_BG", "THEME_FG", "THEME_ACCENT", "THEME_MUTED", "THEME_BTOP"]
+              + ["THEME_ANSI_%d" % i for i in range(16)])
+
+
+@row("SOFTWARE")
+def row_theme(ctx):
+    """The chosen palette actually applied: ~/.config/spark/theme.env (what
+    tmux, starship, btop, micro and the FORGE page were fed) matches
+    themes/<SITE_THEME>.env key for key, and on Linux console-colors (the
+    VT palette the rc hook applies) is in place. Core: the theme is chosen
+    outside the shell gate. `spark theme NAME` writes all of it."""
+    from . import CONFIG_DIR
+    name = ctx.cfg.theme
+    if name == "none":
+        return na("none -- the terminal keeps its own colours (spark theme NAME)")
+    want = _env_lines(os.path.join(ctx.repo, "themes", name + ".env"))
+    if want is None:
+        return fail("SITE_THEME=%s: no themes/%s.env in the repository" % (name, name), "spark theme list")
+    have = _env_lines(os.path.join(CONFIG_DIR, "theme.env"))
+    if have is None:
+        return fail("%s chosen but theme.env was never written" % name, "spark theme %s" % name)
+    stale = [k for k in THEME_KEYS if have.get(k) != want.get(k)]
+    if stale:
+        return fail("%s -- theme.env is stale: %s differ%s" % (name, " ".join(stale[:3]), "s" if len(stale) == 1 else ""),
+                    "spark theme %s" % name)
+    if not IS_MAC and not os.path.isfile(os.path.join(CONFIG_DIR, "console-colors")):
+        return fail("%s -- theme.env current, but no console-colors for the VT" % name, "spark theme %s" % name)
+    return ok("%s -- theme.env current" % name)
 
 
 @row("SOFTWARE")
@@ -1084,8 +1150,9 @@ def row_cost(ctx):
 
 # ------------------------------------------------------------------- runner
 # The shell layer's rows: with SITE_SHELL=off they are na before they look,
-# the same answer bootstrap.sh gives (the `shell` row itself says what on adds).
-SHELL_ROWS = ("pinned", "font", "terminfo", "quiet", "bar", "git", "backup", "swap",
+# the same answer bootstrap.sh gives (the `shell` row itself says what on
+# adds). `font` is core now, like `theme`: its row runs either way.
+SHELL_ROWS = ("pinned", "terminfo", "quiet", "bar", "git", "backup", "swap",
               "encryption", "pending", "battery", "disk")
 SHELL_OFF = "SITE_SHELL=off (spark shell on)"
 # a client's rows: nothing runs here (SITE_AI_MODEL=none + SITE_PEER_AI_URL),
@@ -1226,6 +1293,14 @@ def make_fixture(root, good, stub_url=""):
                 'MODEL_FIXTURE_EMBER="fixture-ember.gguf https://models.invalid/fixture-ember.gguf 4096 %s 2"\n'
                 'MODEL_QWEN3_30B_A3B="qwen3-30b-a3b.gguf https://models.invalid/qwen3-30b-a3b.gguf 4096 %s 21"\n'
                 % (fixture_sha, fixture_sha, zero_sha))
+    # a palette for the theme row: SITE_THEME=fixture below; the good
+    # machine's theme.env matches it, the bad one's is stale
+    os.makedirs(os.path.join(repo, "themes"))
+    fixture_theme = ["%s=#%06x" % (k, 0x101010 + n) for n, k in enumerate(
+        ["THEME_BG", "THEME_FG", "THEME_ACCENT", "THEME_MUTED"] + ["THEME_ANSI_%d" % i for i in range(16)])]
+    fixture_theme.append("THEME_BTOP=Default")
+    with open(os.path.join(repo, "themes", "fixture.env"), "w") as f:
+        f.write("\n".join(fixture_theme) + "\n")
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
     env.update({"HOME": home, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"})
     g = ["git", "-C", repo]
@@ -1262,6 +1337,7 @@ def make_fixture(root, good, stub_url=""):
     with open(os.path.join(home, ".config", "spark", "site.env"), "w") as f:
         f.write("SITE_WORKSPACE=%s\nSITE_PEER_AI_URL=%s\n" % (ws, stub_url if good else "http://127.0.0.1:9"))
         f.write("SITE_SHELL=on\n")     # both fixtures carry the shell layer: its rows must flip too
+        f.write("SITE_THEME=fixture\n")     # the theme row: applied (good) or stale (bad)
         if good:
             f.write("SITE_EMBER_MODEL=auto\n")     # the default is none; auto fits an ember beside the spark row
         else:
@@ -1286,9 +1362,18 @@ def make_fixture(root, good, stub_url=""):
     for mf in ("fixture.gguf", "fixture-ember.gguf"):
         with open(os.path.join(home, ".local", "share", "spark", "models", mf), "w") as f:
             f.write("x" * 4096)
+    # the theme: the good machine's theme.env matches themes/fixture.env
+    # and console-colors is in place; the bad one's theme.env is stale
+    cfgd = os.path.join(home, ".config", "spark")
+    with open(os.path.join(cfgd, "theme.env"), "w") as f:
+        if good:
+            f.write("\n".join(fixture_theme) + "\n")
+        else:
+            f.write("\n".join(["THEME_BG=#000000"] + fixture_theme[1:]) + "\n")
+    with open(os.path.join(cfgd, "console-colors"), "w") as f:
+        f.write("".join("\033]P%x101010" % i for i in range(16)) + "\n")
     # soul and memory: the user's files, private (good) or world-readable and
     # the old key still set (bad); one thread, 0600 or not
-    cfgd = os.path.join(home, ".config", "spark")
     with open(os.path.join(cfgd, "soul"), "w") as f:
         f.write("The fixture's spark.\n")
     with open(os.path.join(cfgd, "memory"), "w") as f:

@@ -47,7 +47,7 @@ THE PAGE (spark forge --print-url)  keys work when no input has focus
   share -> add to home screen     an app on iOS; a browser shortcut on Android
 
 THE MACHINE
-  spark setup                     the guided first run: name, model, light it
+  spark setup                     first run: name, user, model, theme, light it
   spark check                     drift report; exit 0 = every promise kept
   spark check --watch 5           redraw every 5 s     --selftest  prove rows
   long output (help, check, lists) pages via $PAGER (less); piped stays plain
@@ -58,6 +58,7 @@ THE MACHINE
   spark quiet                     the three states: start, login, boot
   spark quiet start on|off        no banner, one-line serve/forge + bare spark
   spark quiet login|boot on|off   Linux: motd + kernel line; GRUB's menu
+  spark font FACE SIZE | list     console font (Linux) / Terminal.app's font
   spark ver                       logo, version, credits (the login greeting)
   spark update                       the newest tag; main pulls on a dev clone
   ./bootstrap.sh --dry-run        what a rebuild would change (never sudo)
@@ -68,8 +69,7 @@ THE MACHINE
 
 THE SHELL (spark shell on)
   spark bar [on|off]              tmux's status line: bare shows, on|off sets
-  spark theme NAME | list | show  a palette; none = the terminal's own
-  spark font FACE SIZE            console font (Terminus 16x32) / Terminal.app
+  spark theme NAME | list | show  one palette: console, tmux, micro; none=off
   tmux (prefix C-b)  c new window   n/p next/prev   | split right  - below
                      h j k l panes  d detach  r reload  [ scroll/copy (vi)
   z DIR (zoxide)   C-r history (fzf)   C-t files (fzf)   rg PATTERN

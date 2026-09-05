@@ -355,7 +355,8 @@ def theme_palette(name, repo=REPO):
     if not os.path.isfile(path):
         die("SITE_THEME=%s: no such palette (themes/*.env)" % name, 2)
     pal = parse_env(path)
-    for k in ("THEME_BG", "THEME_FG", "THEME_ACCENT", "THEME_MUTED") + tuple("THEME_ANSI_%d" % i for i in range(16)):
+    # the same 21 keys lib/env.sh THEME_KEYS requires: the two validators agree
+    for k in ("THEME_BG", "THEME_FG", "THEME_ACCENT", "THEME_MUTED", "THEME_BTOP") + tuple("THEME_ANSI_%d" % i for i in range(16)):
         if k not in pal:
             die("theme %s lacks %s" % (name, k), 2)
     return pal

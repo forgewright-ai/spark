@@ -60,7 +60,7 @@ _spark() {
             soul)    comp=(show edit reset) ;;
             history) comp=(clear) ;;
             tune)    comp=(show apply) ;;
-            font)    comp=(none status) ;;
+            font)    comp=(list none status) ;;
             client)  comp=(off status) ;;
         esac
     fi

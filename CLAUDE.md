@@ -89,12 +89,14 @@ lib/spark/      __init__ config wire engine serve session persona cli check
 lib/spark/forge/  index.html spark.css spark.js manifest.webmanifest favicon.svg
                   -- the page, ASCII, no inline script
 home/           shared $HOME mirror (linked): micro bindings, the two widgets, the two rc hooks
-                (.config/spark/hook.bash hook.zsh: PATH, the widget, the blank row, completion),
+                (.config/spark/hook.bash hook.zsh: PATH, the widget, the blank row, completion,
+                the VT palette -- TERM=linux only -- and MICRO_TRUECOLOR),
                 the two completion files (.config/spark/completion.bash completion.zsh:
                 TAB completes the verbs and their names, offline), the banner, spark.env.example
 linux/home/     .bashrc .bash_profile, the systemd user units (spark-serve spark-forge spark-check)
 macos/home/     .zshrc .zprofile
 templates/      rendered, not linked: .gitconfig .tmux.conf .config/btop/btop.conf
+                .config/micro/colorschemes/spark.micro .config/micro/settings.json (seeded once)
                 .config/starship.toml.{minimal,full} .config/spark/launchd/spark.{serve,forge,check}.plist
 tests/          install_test.sh get_test.sh update_test.sh smoke.py serve_smoke.py
                 forge_smoke.py bench_smoke.py widget_pty.py check_selftest.py
@@ -108,8 +110,12 @@ CREDITS.md      every third-party project spark downloads or installs,
 ROADMAP.md      what comes after the current release, in order
 ```
 
-Runtime paths: config `~/.config/spark/{site.env,spark.env,theme.env,soul,memory}`
-(`soul` and `memory` are prose, 0600, yours: never linked from `home/`);
+Runtime paths: config `~/.config/spark/{site.env,spark.env,theme.env,
+console-colors,soul,memory}` (`console-colors` is the precomputed Linux VT
+palette -- `\033]P<n><rrggbb>` per ansi colour, `\033]R` after `none` --
+written by `spark theme`/`spark setup` only, applied by the rc hooks only
+when `TERM=linux`; `soul` and `memory` are prose, 0600, yours: never
+linked from `home/`);
 state `~/.local/state/spark/` (0700: `api-token` 0600, `serve-url`,
 `serve.pid`, `serve.log`, `serve.lock`, `forge-token` 0600, `ember-token`
 0600, `forge-url`, `forge.pid`, `forge.log`, `forge.lock`,
@@ -148,7 +154,15 @@ may change freely.
    a symlink that points outside the repo, is moved to `<path>.bak`, never
    overwritten (a stale symlink into the repo is replaced). The rc files,
    micro's bindings and the shell templates (`.gitconfig`, `.tmux.conf`,
-   btop, starship) are installed only with `SITE_SHELL=on`.
+   btop, starship, micro's colorscheme and `settings.json`) are installed
+   only with `SITE_SHELL=on`; micro's `settings.json` is seeded once and
+   never re-rendered (micro rewrites it). `spark shell off` hands the
+   rendered look back the way it hands the rc files back
+   (`site.restore_rendered`): each of `.tmux.conf`,
+   `.config/starship.toml`, btop's conf and the two micro files is
+   restored from its `.bak` or removed -- never an empty husk;
+   `.gitconfig` (identity, not look) and the core palette files under
+   `~/.config/spark/` stay.
 3. Config files are `KEY=value` lines; any other non-blank, non-comment line
    is refused by every reader (`^[A-Z_0-9]+=[^;`$()|&<>]*$`). Keys:
    `site.env` -- `SITE_NAME SITE_USER SITE_SET_HOSTNAME SITE_GIT_NAME
@@ -170,7 +184,9 @@ may change freely.
    embers.env) and `MODEL_<NAME>_LICENSE`/`MODEL_<NAME>_NOTE` (LICENSE
    required in community.env and yours; NOTE optional). A name in two
    files is refused, naming both;
-   `themes/<name>.env` -- `THEME_BG THEME_FG THEME_ACCENT THEME_ANSI_0..15`.
+   `themes/<name>.env` -- `THEME_BG THEME_FG THEME_ACCENT THEME_MUTED
+   THEME_BTOP THEME_ANSI_0..15` (the same 21 keys in `lib/env.sh`
+   `THEME_KEYS` and `config.theme_palette`: the two validators agree).
    Precedence: environment > file > default.
 4. `spark line --cwd D --shell S` reads the prompt buffer on stdin and prints
    line 1 = `cmd<TAB>command` | `danger<TAB>command` | `answer` | `error`,
@@ -192,11 +208,12 @@ may change freely.
    `spark shell --` is that line for the shell layer's switch; `spark
    setup --` is the offer bare `spark` prints, after the banner, on a
    clone with no `site.env` at a terminal; and a refusal signs the same
-   way: with `SITE_SHELL=off`, `spark bar` and `spark font` print
-   `spark <sub> -- the shell layer is off (spark shell on)` and exit 2,
+   way: with `SITE_SHELL=off`, `spark bar` prints
+   `spark bar -- the shell layer is off (spark shell on)` and exits 2,
    and the set forms `spark quiet login|boot on|off` refuse with the
    same line (showing still answers, saying the layer is off); `spark
    help` then folds the shell block into one `spark shell on` line.
+   `spark theme` and `spark font` are core: they answer either way.
 9. The FORGE's HTTP API (`lib/spark/forgeserve.py`, on
    `SPARK_FORGE_HOST:SPARK_FORGE_PORT`, one LAN address, never `0.0.0.0`).
    `GET /api/health` answers without a token: `{status, forge: true, name,
@@ -257,7 +274,7 @@ One grammar for every verb; a verb that breaks a rule is a bug.
    in `site.env`; the verb translates. Choices keep their value grammars
    (`theme NAME|none`, `model NAME|auto|none`, `client URL|off`).
 3. `status` is an alias of bare for every stateful verb; `list` is the
-   table word (theme, model, ember).
+   table word (theme, model, ember, font).
 4. Every verb answers `-h|--help|help` first -- before any gate or
    config read -- signed per contract 8.
 5. One confirm shape: `<question>? yes/NO: ` -- only `y` or `yes`
@@ -321,8 +338,13 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   (bin/spark), and its check row's name goes into `check.SHELL_ROWS` so
   it reads `na` when the layer is off; `--selftest`'s third pass asserts
   that. `spark shell on|off` (`site.cmd_shell`, `site.SHELL_ROWS`) is the
-  only switch; `spark theme` stays outside the gate (the FORGE page reads
-  `theme.env` too).
+  only switch; `spark shell off` hands back what the layer rendered
+  (`restore_rc`, `restore_rendered`: `.bak` or gone, never a husk).
+  `spark theme` and `spark font` stay outside the gate (the FORGE page
+  reads `theme.env`, the VT console palette and font are the machine's
+  face with the layer off too); their `theme` and `font` check rows are
+  core for the same reason -- only the Nerd Font piece of `font` waits
+  for the layer.
 - **The client shape.** `SITE_AI_MODEL=none` beside `SITE_PEER_AI_URL`
   (`config.client`; `spark client URL|off`, `site.cmd_client`) means
   nothing runs here: bootstrap skips the `engine` and `services` rows
@@ -346,8 +368,14 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   LFS headers, any other host needs `--sha256`; `--license "NAME URL"` is
   always required there. `spark model verify` (and the `models` check
   row, cached) re-hashes every downloaded file (`lib/spark/verify.py`).
-- **A palette.** `themes/<name>.env` with the full `THEME_*` key set;
-  `tests/install_test.sh` renders every palette and will notice a gap.
+- **A palette.** Two files, nothing else hand-listed: `themes/<name>.env`
+  with the full 21-key `THEME_*` set (contract 3; the header comment names
+  the upstream project and its license; `THEME_BTOP` names a theme btop
+  ships, else `Default`), and its flat 20-value row in `spark.js`'s
+  `theme.builtin` map (the page has no build step). `tests/install_test.sh`
+  renders every palette by glob, and `tests/smoke.py` asserts the
+  `theme.builtin` map matches `themes/*.env` value for value -- a gap in
+  either goes loud.
 
 ## Verifying a claim
 
@@ -363,9 +391,9 @@ sh tests/get_test.sh            # the one-liner: clone, pull, refusals, the hand
 sh tests/update_test.sh         # spark update: pull, move to a tag, dirty refused, --dry-run
 ```
 
-`spark check` has 35 rows today: 11 SOFTWARE, 16 CAPABILITY, 8
+`spark check` has 36 rows today: 12 SOFTWARE, 16 CAPABILITY, 8
 NONFUNCTIONAL (`grep -c '^@row' lib/spark/check.py`). With `SITE_SHELL=off`
-the 12 rows in `check.SHELL_ROWS` and the `shell` row answer `na`;
+the 11 rows in `check.SHELL_ROWS` and the `shell` row answer `na`;
 `--selftest` runs a third pass to prove it, and a fourth for the client
 shape (the 6 rows in `check.CLIENT_ROWS`).
 

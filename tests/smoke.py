@@ -967,10 +967,10 @@ def main():
         t.ok(rc == 0 and out.splitlines()[0] == "spark shell -- spark's own shell: tmux, starship, micro, fzf, eza, bat, btop",
              "spark shell -h signs (contract 8)", out)
         rc, out, _ = spark("help", extra=off)
-        t.ok(rc == 0 and "spark font" not in out and "spark shell on" in out,
-             "spark help with the layer off: no spark font, one spark shell on line", out)
+        t.ok(rc == 0 and "spark font" in out and "spark bar" not in out and "spark shell on" in out,
+             "spark help with the layer off: font stays (core), bar folds into spark shell on", out)
         rc, out, _ = spark("help", extra=dict(off, SITE_SHELL="on"))
-        t.ok(rc == 0 and "spark font" in out and "the shell (spark shell on)" in out,
+        t.ok(rc == 0 and "spark bar" in out and "the shell (spark shell on)" in out,
              "spark help with SITE_SHELL=on lists the shell block", out)
 
         # the pager: piped output never touches $PAGER -- a pager that would
@@ -981,10 +981,21 @@ def main():
         rc, out, _ = spark("check", "memory", extra={"PAGER": "/bin/false"})
         t.ok(rc == 0 and out.startswith("spark check ") and "memory" in out,
              "spark check piped with PAGER=/bin/false: the report prints", out)
-        for verb in ("font", "bar"):
-            rc, out, _ = spark(verb, extra=off)
-            t.ok(rc == 2 and out.strip() == "spark %s -- the shell layer is off (spark shell on)" % verb,
-                 "spark %s refuses while the layer is off, signing" % verb, out)
+        rc, out, _ = spark("bar", extra=off)
+        t.ok(rc == 2 and out.strip() == "spark bar -- the shell layer is off (spark shell on)",
+             "spark bar refuses while the layer is off, signing", out)
+        # spark font left the shell gate: it shows, lists and sets either way
+        rc, out, _ = spark("font", extra=off)
+        t.ok(rc == 0 and out.startswith("spark font -- "), "spark font shows with the layer off (core)", out)
+        rc, out, _ = spark("font", "-h", extra=off)
+        t.ok(rc == 0 and out.splitlines()[0] == "spark font -- the terminal's font",
+             "spark font -h signs (contract 8)", out)
+        rc, out, _ = spark("font", "list", extra=off)
+        t.ok(rc == 0 and out.startswith("spark font list -- "), "spark font list answers on either OS", out)
+        if sys.platform != "darwin" and os.path.isdir("/usr/share/consolefonts"):
+            rc, out, _ = spark("font", "NoSuchFace", "16x32", extra=off)
+            t.ok(rc == 2 and "spark font list" in out,
+                 "a console face consolefonts lacks is refused, naming spark font list", out)
         rc, out, _ = spark("bootconfig", extra=off)
         t.ok(rc == 2 and out.strip() == "spark bootconfig -- gone: spark quiet (login|boot)",
              "spark bootconfig is gone: one line naming spark quiet, exit 2", out)
@@ -1023,23 +1034,58 @@ def main():
             spark("quiet", "login", "off", extra=dict(off, SITE_SHELL="on"))
         rc, out, _ = spark("theme", "-h", extra=off)
         t.ok(rc == 0 and out.startswith("spark theme -- "), "spark theme stays usable with the layer off", out)
+        # the palette's two runtime files, one writer: spark theme NAME
+        # writes theme.env and console-colors (the VT escapes); none removes
+        # theme.env and turns console-colors into the one reset escape
+        rc, out, _ = spark("theme", "gruvbox-dark", extra=off)
+        theme_env = open(home + "/.config/spark/theme.env").read()
+        cc = open(home + "/.config/spark/console-colors").read()
+        t.ok(rc == 0 and "THEME_BG=#282828\n" in theme_env and "THEME_BTOP=gruvbox_dark\n" in theme_env,
+             "spark theme NAME writes theme.env from the palette", theme_env)
+        t.ok(cc.startswith("\033]P0282828") and "\033]P9fb4934" in cc and "\033]Pfebdbb2" in cc,
+             "console-colors holds the sixteen VT escapes, ansi 0-15 in hex", repr(cc))
+        rc, out, _ = spark("theme", "none", extra=off)
+        t.ok(rc == 0 and not os.path.exists(home + "/.config/spark/theme.env")
+             and open(home + "/.config/spark/console-colors").read() == "\033]R\n",
+             "spark theme none removes theme.env and leaves the VT reset", out)
+        rc, out, _ = spark("theme", "nosuch", extra=off)
+        t.ok(rc == 2 and out.startswith("spark theme -- "), "spark theme nosuch: usage, exit 2", out)
         rc, out, _ = spark("shell", "on", extra=off)
         site_env = open(home + "/.config/spark/site.env").read()
         t.ok(rc == 0 and "SITE_SHELL=on\n" in site_env and "open a new shell" in out,
              "spark shell on writes SITE_SHELL=on and says to open a new shell", out)
         rc, out, _ = spark("shell", extra=off)
         t.ok(rc == 0 and "SITE_SHELL=on" in out and "rc files:" in out, "spark shell: the state, on", out)
-        # off hands the rc files back: spark's links go, the .bak comes back
+        # off hands the rc files AND the rendered look back: spark's links
+        # go, a .bak comes back, a render with no .bak is removed -- never
+        # an empty husk; the core palette files (theme.env) stay
         rcname = ".zshrc" if sys.platform == "darwin" else ".bashrc"
         os.symlink(os.path.join(REPO, "macos" if sys.platform == "darwin" else "linux", "home", rcname), home + "/" + rcname)
         with open(home + "/" + rcname + ".bak", "w") as f:
             f.write("# mine\n")
+        with open(home + "/.tmux.conf", "w") as f:               # a spark render, no .bak
+            f.write("# rendered by spark\n")
+        os.makedirs(home + "/.config/btop", exist_ok=True)
+        with open(home + "/.config/btop/btop.conf", "w") as f:   # a render shadowing a .bak
+            f.write("# rendered by spark\n")
+        with open(home + "/.config/btop/btop.conf.bak", "w") as f:
+            f.write("# pre-spark btop\n")
+        with open(home + "/.config/spark/theme.env", "w") as f:  # core: spark theme owns it
+            f.write("THEME_BG=#282828\n")
         rc, out, _ = spark("shell", "off", extra=off)
         site_env = open(home + "/.config/spark/site.env").read()
         t.ok(rc == 0 and "SITE_SHELL=off\n" in site_env and "packages stay installed" in out,
              "spark shell off writes SITE_SHELL=off and says the packages stay", out)
         t.ok("restore" in out and not os.path.islink(home + "/" + rcname) and open(home + "/" + rcname).read() == "# mine\n",
              "spark shell off moves the .bak rc file back over spark's link", out)
+        t.ok(not os.path.exists(home + "/.tmux.conf") and "tmux.conf" in out,
+             "spark shell off removes a rendered .tmux.conf with no .bak (no husk)", out)
+        t.ok(open(home + "/.config/btop/btop.conf").read() == "# pre-spark btop\n",
+             "spark shell off restores btop.conf from its .bak", out)
+        t.ok(os.path.exists(home + "/.config/spark/theme.env"),
+             "spark shell off leaves theme.env alone (the theme is core)", out)
+        os.remove(home + "/.config/spark/theme.env")
+        os.remove(home + "/.config/btop/btop.conf")
         rc, out, _ = spark("shell", "sideways", extra=off)
         t.ok(rc == 2 and out.startswith("spark shell -- "), "spark shell sideways is refused with the usage", out)
 
@@ -1080,6 +1126,14 @@ def main():
         t.ok(re.search(r"^SITE_NAME=\S", site_env, re.M) and re.search(r"^SITE_USER=\S", site_env, re.M)
              and "SITE_AI_MODEL=none\n" in site_env and "SITE_SHELL=off\n" in site_env,
              "setup wrote SITE_NAME, SITE_USER, SITE_AI_MODEL=none, SITE_SHELL=off", site_env)
+        t.ok("SITE_THEME=gruvbox-dark\n" in site_env,
+             "setup --yes takes the theme question's default answer (gruvbox-dark)", site_env)
+        rc, out, _ = spark("setup", "--yes", "--no-serve", "--model", "none", "--theme", "nosuch", extra=off)
+        t.ok(rc == 2 and "no palette named nosuch" in out and "none" in out,
+             "setup --theme nosuch exits 2 naming the palettes", out)
+        rc, out, _ = spark("setup", "--yes", "--no-serve", "--model", "none", "--theme", "none", extra=off)
+        t.ok(rc == 0 and "SITE_THEME=none\n" in open(home + "/.config/spark/site.env").read(),
+             "setup --theme none writes none (the user chooses; nothing forced)", out)
         t.ok("\u2588" in out and "GB for models" in out and "SITE_AI_MODEL=none" in out and "open a new shell" in out
              and "spark ember NAME adds a second brain" in out,
              "setup printed the logo, the table header, the model line and the closing block", out)
@@ -1116,6 +1170,29 @@ def main():
                      if not re.search(r"(?<![A-Za-z-])%s(?![A-Za-z-])" % re.escape(w), comp))
     t.ok(not missing, "completion.bash names every dispatch verb and cli command",
          "missing: " + " ".join(missing))
+
+    # palette drift guard: the page's theme.builtin map is a hand copy of
+    # themes/*.env (the page has no build step) -- parse spark.js and
+    # compare, name for name and value for value. A palette added to
+    # themes/ without its spark.js row, or the reverse, goes loud here.
+    js = open(os.path.join(REPO, "lib", "spark", "forge", "spark.js")).read()
+    block = re.search(r"builtin: \{(.*?)\n    \}", js, re.S).group(1)
+    js_map = {m.group(1): re.findall(r'"(#[0-9a-fA-F]{6})"', m.group(2))
+              for m in re.finditer(r'"([a-z0-9-]+)":\s*\[([^\]]*)\]', block)}
+    env_map = {}
+    tdir = os.path.join(REPO, "themes")
+    for fname in sorted(os.listdir(tdir)):
+        if not fname.endswith(".env"):
+            continue
+        with open(os.path.join(tdir, fname)) as f:
+            kv = dict(line.strip().split("=", 1) for line in f
+                      if "=" in line and not line.startswith("#"))
+        env_map[fname[:-4]] = ([kv["THEME_BG"], kv["THEME_FG"], kv["THEME_ACCENT"], kv["THEME_MUTED"]]
+                               + [kv["THEME_ANSI_%d" % i] for i in range(16)])
+    t.ok(js_map == env_map, "spark.js theme.builtin matches themes/*.env, value for value",
+         "js only: %s; themes only: %s; differing: %s" % (
+             sorted(set(js_map) - set(env_map)), sorted(set(env_map) - set(js_map)),
+             sorted(k for k in set(js_map) & set(env_map) if js_map[k] != env_map[k])))
 
     srv.shutdown()
     print("smoke: %s" % ("all ok" if not t.fail else "%d FAILED" % t.fail))

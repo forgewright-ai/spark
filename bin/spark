@@ -61,6 +61,7 @@ USAGE_MACHINE = """the machine
   spark headless [on|off]     the FORGE up from boot, never asleep (a brain)
   spark client [URL|off]      answer from another machine's FORGE; none here
   spark quiet [SUB on|off]    start (the banner), login (motd), boot (GRUB)
+  spark font [FACE SIZE|list]  the console font (Linux) / Terminal.app's
   spark ver                   logo, version, credits
 
 less often (spark <sub> -h has every flag: check --watch, stop --force ...)
@@ -72,10 +73,9 @@ less often (spark <sub> -h has every flag: check --watch, stop --force ...)
 USAGE_SHELL = """the shell (spark shell on)
   spark bar [on|off]          tmux's status line: shown or hidden; set it
   spark theme [NAME|show]     the palettes; choose one; show = its colours
-  spark font [FACE SIZE]      the console font (Linux) / Terminal.app's (macOS)
 """
 # with the layer off, the block above folds into this one line
-USAGE_SHELL_OFF = """  spark shell on              tmux, starship, micro ... + bar, font
+USAGE_SHELL_OFF = """  spark shell on              tmux, starship, micro ... + bar
 """
 
 USAGE_TAIL = """what leaves this machine: the line you typed, the directory path, the shell

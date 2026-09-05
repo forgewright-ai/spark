@@ -1,11 +1,11 @@
-# spark.setup -- `spark setup`: the guided first run. Greet, ask three
-# things (this machine's name, yours, the model), write site.env, sudo once
-# when apt has something to install, run bootstrap on the terminal, wait
-# for the brain, ask the first question live, print the measured speed and
-# the three things to try. Every step reuses code that exists: cmd_ver,
-# print_model_table's rows, set_keys, apply, cmd_serve, `spark line`.
-# Re-runnable: bootstrap's rows are idempotent, and a key site.env already
-# holds is never asked again.
+# spark.setup -- `spark setup`: the guided first run. Greet, ask four
+# things (this machine's name, yours, the model, the theme), write
+# site.env, sudo once when apt has something to install, run bootstrap on
+# the terminal, wait for the brain, ask the first question live, print the
+# measured speed and the three things to try. Every step reuses code that
+# exists: cmd_ver, print_model_table's rows, set_keys, apply, cmd_serve,
+# theme.write_runtime, `spark line`. Re-runnable: bootstrap's rows are
+# idempotent, and a key site.env already holds is never asked again.
 
 import os
 import re
@@ -20,13 +20,16 @@ from . import engine, session, site, wire
 SIGN = "%s setup -- pick the model this machine earns and light it up" % MARK
 USAGE = SIGN + """
 
-  spark setup                   ask this machine's name, yours, the model; apply
+  spark setup                   ask this machine's name, yours, the model,
+                                the theme; apply
   spark setup --yes             every default, no questions (stdin not a tty
                                 implies it); SITE_NAME SITE_USER SITE_AI_MODEL
-                                in the environment pre-answer the same things
+                                SITE_THEME in the environment pre-answer them
   spark setup --model NAME      a name from the table, auto, or none
   spark setup --name NAME       this machine's display name (SITE_NAME)
   spark setup --user NAME       your name (SITE_USER)
+  spark setup --theme NAME      a palette from themes/, or none (the question's
+                                default answer is gruvbox-dark)
   spark setup --no-serve        write and apply; leave the server down
 """
 # the bootstrap rows that are the AI layer, by their names in bootstrap.sh
@@ -48,14 +51,14 @@ class Abort(Exception):
 
 
 def _parse(args):
-    opts = {"yes": False, "model": None, "name": None, "user": None, "serve": True}
+    opts = {"yes": False, "model": None, "name": None, "user": None, "theme": None, "serve": True}
     it = iter(args)
     for a in it:
         if a == "--yes":
             opts["yes"] = True
         elif a == "--no-serve":
             opts["serve"] = False
-        elif a in ("--model", "--name", "--user"):
+        elif a in ("--model", "--name", "--user", "--theme"):
             val = next(it, None)
             if val is None:
                 raise Abort("%s needs a value (spark setup -h)" % a, 2)
@@ -149,7 +152,28 @@ def _model(cfg, opts, default, yes):
         say("spark setup: no model named %s -- %s" % (name, choices))
 
 
-def _write(name, user, model):
+def _theme(cfg, opts, yes):
+    """The fourth question: `theme [gruvbox-dark]:` -- validated against
+    themes/*.env plus none. The default is only the default ANSWER
+    (site.env.example keeps SITE_THEME=none): the user chooses. _decide
+    semantics: the flag, else the environment or site.env (no question),
+    else the prompt."""
+    from . import theme
+    valid = ["none"] + theme.palettes()
+    choices = "one of: none " + " ".join(theme.palettes())
+    if opts["theme"] is not None or "SITE_THEME" in os.environ or "SITE_THEME" in cfg.site_file:
+        name = opts["theme"] if opts["theme"] is not None else cfg.theme
+        if name not in valid:
+            raise Abort("no palette named %s -- %s" % (name, choices), 2)
+        return name
+    while True:
+        name = _ask("theme", "gruvbox-dark", yes)
+        if name in valid:
+            return name
+        say("spark setup: no palette named %s -- %s" % (name, choices))
+
+
+def _write(name, user, model, theme):
     """site.env: the documented example first when there is none, then the
     keys decided here. SITE_SHELL=off is written so the file says which
     layer this is; an `on` already there is kept."""
@@ -157,7 +181,7 @@ def _write(name, user, model):
         os.makedirs(os.path.dirname(SITE_ENV), exist_ok=True)
         shutil.copy(os.path.join(REPO, "site.env.example"), SITE_ENV)
         os.chmod(SITE_ENV, 0o600)
-    keys = {"SITE_NAME": name, "SITE_USER": user, "SITE_AI_MODEL": model}
+    keys = {"SITE_NAME": name, "SITE_USER": user, "SITE_AI_MODEL": model, "SITE_THEME": theme}
     if config.parse_env(SITE_ENV).get("SITE_SHELL") != "on":
         keys["SITE_SHELL"] = "off"
     site.set_keys(_quiet=True, **keys)
@@ -281,8 +305,9 @@ def _run(opts):
         say()          # one blank line after the questions; none when there were none
     default = _table(cfg)
     model = _model(cfg, opts, default, yes)
+    theme_name = _theme(cfg, opts, yes)
     say()
-    _write(name, user, model)
+    _write(name, user, model, theme_name)
     cfg = config.load()
     waiting = _sudo(_apt_packages(), yes)
     pend = [] if os.environ.get("SPARK_NO_APPLY") else site._downloads_pending(cfg)
@@ -294,6 +319,14 @@ def _run(opts):
         say("                    (without libgomp1, llama-server will not start)")
     if rc != 0:
         return rc
+    if theme_name != "none" and not os.environ.get("SPARK_NO_APPLY"):
+        # the palette's runtime files (theme is core: this happens with the
+        # shell layer off too); macOS also gets the Terminal.app profile
+        from . import theme
+        theme.write_runtime(theme_name)
+        say("ok     theme        %s -> ~/.config/spark/theme.env (+ console-colors)" % theme_name)
+        if IS_MAC:
+            theme.profile(config.load(), False)
     _rc_line()
     if model == "none":
         say("no model chosen -- spark model NAME later, or SITE_PEER_AI_URL for another machine's brain")

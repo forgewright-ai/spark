@@ -10,4 +10,8 @@ case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) PATH="$HOME/.local/bin:$PATH" ;;
 export PATH
 [[ -r ~/.config/spark/widget.zsh ]] && source ~/.config/spark/widget.zsh
 if [[ -z ${STARSHIP_SHELL:-} && $PROMPT != $'\n'* ]]; then PROMPT=$'\n'$PROMPT; fi
+# the Linux VT palette (`spark theme` writes it) -- strictly TERM=linux, so
+# an xterm-family terminal's scrollback is never garbled by the escapes
+[ "$TERM" = linux ] && [ -r ~/.config/spark/console-colors ] && cat ~/.config/spark/console-colors
+export MICRO_TRUECOLOR=1   # micro draws the palette's real colours
 [[ -r "$HOME/.config/spark/completion.zsh" ]] && source "$HOME/.config/spark/completion.zsh"
