@@ -89,7 +89,9 @@ lib/spark/      __init__ config wire engine serve session persona cli check
 lib/spark/forge/  index.html spark.css spark.js manifest.webmanifest favicon.svg
                   -- the page, ASCII, no inline script
 home/           shared $HOME mirror (linked): micro bindings, the two widgets, the two rc hooks
-                (.config/spark/hook.bash hook.zsh: PATH, the widget, the blank row), the banner, spark.env.example
+                (.config/spark/hook.bash hook.zsh: PATH, the widget, the blank row, completion),
+                the two completion files (.config/spark/completion.bash completion.zsh:
+                TAB completes the verbs and their names, offline), the banner, spark.env.example
 linux/home/     .bashrc .bash_profile, the systemd user units (spark-serve spark-forge spark-check)
 macos/home/     .zshrc .zprofile
 templates/      rendered, not linked: .gitconfig .tmux.conf .config/btop/btop.conf
@@ -356,7 +358,7 @@ sh tests/get_test.sh            # the one-liner: clone, pull, refusals, the hand
 sh tests/update_test.sh         # spark update: pull, move to a tag, dirty refused, --dry-run
 ```
 
-`spark check` has 34 rows today: 11 SOFTWARE, 15 CAPABILITY, 8
+`spark check` has 35 rows today: 11 SOFTWARE, 16 CAPABILITY, 8
 NONFUNCTIONAL (`grep -c '^@row' lib/spark/check.py`). With `SITE_SHELL=off`
 the 12 rows in `check.SHELL_ROWS` and the `shell` row answer `na`;
 `--selftest` runs a third pass to prove it, and a fourth for the client

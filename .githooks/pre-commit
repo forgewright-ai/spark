@@ -50,11 +50,12 @@ for f in bootstrap.sh install.sh get .githooks/pre-commit .githooks/pre-push tes
     sh -n "$f" || bad "sh -n $f"
 done
 if [ -f home/.config/spark/widget.bash ]; then
-    bash -n home/.config/spark/widget.bash linux/home/.bashrc linux/home/.bash_profile 2>/dev/null \
-        || bad "bash -n widget.bash / .bashrc"
+    bash -n home/.config/spark/widget.bash home/.config/spark/completion.bash \
+        linux/home/.bashrc linux/home/.bash_profile 2>/dev/null \
+        || bad "bash -n widget.bash / completion.bash / .bashrc"
 fi
 if command -v zsh >/dev/null 2>&1; then
-    for f in home/.config/spark/widget.zsh macos/home/.zshrc macos/home/.zprofile; do
+    for f in home/.config/spark/widget.zsh home/.config/spark/completion.zsh macos/home/.zshrc macos/home/.zprofile; do
         [ -f "$f" ] || continue
         zsh -n "$f" || bad "zsh -n $f"
     done
@@ -71,8 +72,10 @@ for t in tests/smoke.py tests/serve_smoke.py tests/forge_smoke.py tests/bench_sm
 done
 if [ -f tests/widget_pty.py ]; then
     case "$(uname -s)" in
-        Darwin) python3 tests/widget_pty.py zsh home/.config/spark/widget.zsh >/dev/null || bad "widget_pty zsh" ;;
-        *)      python3 tests/widget_pty.py bash home/.config/spark/widget.bash >/dev/null || bad "widget_pty bash" ;;
+        Darwin) python3 tests/widget_pty.py zsh home/.config/spark/widget.zsh >/dev/null || bad "widget_pty zsh"
+                python3 tests/widget_pty.py completion zsh home/.config/spark/completion.zsh >/dev/null || bad "widget_pty completion zsh" ;;
+        *)      python3 tests/widget_pty.py bash home/.config/spark/widget.bash >/dev/null || bad "widget_pty bash"
+                python3 tests/widget_pty.py completion bash home/.config/spark/completion.bash >/dev/null || bad "widget_pty completion bash" ;;
     esac
     python3 tests/widget_pty.py pager >/dev/null || bad "widget_pty pager"
 fi

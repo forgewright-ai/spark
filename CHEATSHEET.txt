@@ -18,6 +18,8 @@ AT THE PROMPT
   Esc a                           ask about the line you are on, no ?
   cmd 2>&1 | explain              what went wrong, and the fix
   spark off | spark on            silence / restore every pane at once
+  spark <TAB>                     completes the verbs; second word too
+                                  (theme and model names included, offline)
 
 THE SERVER
   spark model [NAME|list]         the table; choose one (download + restart)

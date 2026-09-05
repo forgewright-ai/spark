@@ -523,6 +523,29 @@ def row_prompt(ctx):
 
 
 @row("CAPABILITY")
+def row_completion(ctx):
+    """TAB completion: the two files install.sh links, each hook sourcing
+    its own. Static verbs always; theme and model names offline, from the
+    repository the spark symlink points into. Core -- the hooks are core."""
+    d = os.path.join(ctx.home, ".config", "spark")
+    missing = []
+    for sh in ("bash", "zsh"):
+        if not os.path.isfile(os.path.join(d, "completion." + sh)):
+            missing.append("completion." + sh)
+    for sh in ("bash", "zsh"):
+        hook = os.path.join(d, "hook." + sh)
+        try:
+            with open(hook, encoding="utf-8", errors="replace") as f:
+                if ("completion." + sh) not in f.read():
+                    missing.append("hook.%s lacks its completion line" % sh)
+        except OSError:
+            missing.append("hook." + sh)
+    if missing:
+        return warn("missing: %s" % ", ".join(missing), "sh install.sh")
+    return ok("bash and zsh: the verbs, their words, theme and model names")
+
+
+@row("CAPABILITY")
 def row_shell(ctx):
     """The shell layer: off (the default) is the prompt widget only; on
     means the rc files are spark's own symlinks and starship and tmux are
@@ -1303,6 +1326,11 @@ def make_fixture(root, good, stub_url=""):
         _stub(os.path.join(bin_, "starship"), "#!/bin/sh\nexit 0\n")
         for sh in ("bash", "zsh"):
             open(os.path.join(home, ".config", "spark", "widget." + sh), "w").close()
+            # the completion row: the two files plus a hook that sources its
+            # own (the bad fixture has neither, so the row flips to warn)
+            open(os.path.join(home, ".config", "spark", "completion." + sh), "w").close()
+            with open(os.path.join(home, ".config", "spark", "hook." + sh), "w") as f:
+                f.write('[ -r "$HOME/.config/spark/completion.%s" ] && . "$HOME/.config/spark/completion.%s"\n' % (sh, sh))
 
         fd_ = os.open(os.path.join(state, "api-token"), os.O_WRONLY | os.O_CREAT, 0o600)
         os.write(fd_, b"stub-token\n")
