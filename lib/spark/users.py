@@ -296,7 +296,12 @@ def cmd_claim():
         say("spark user: no login here -- spark user login NAME first")
         return 2
     if not exists(name):
-        say("spark user: %s's sealed store is not on this machine -- claim on the box" % name)
+        # a logged-in client with no store yet: the login's token seals a
+        # fresh local one, and the claim proceeds into it
+        from . import forge
+        forge.local_store(provision=True)
+    if not exists(name):
+        say("spark user: no sealed store for %s could be made here" % name)
         return 2
     dk = account_key()
     if dk is None:
