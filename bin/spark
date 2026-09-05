@@ -148,7 +148,7 @@ def main(argv):
         # `spark quite start on` must not become a conversation
         near = near_verb(sub, cli)
         if near:
-            say("spark: no command named %s -- spark %s? (to ask the AI, end with ?)" % (sub, near))
+            say("spark: no command named %s -- try: spark %s   (a question ends with ?)" % (sub, near))
             return 2
     return cli.main(argv)
 
@@ -173,7 +173,7 @@ def misplaced(word):
         say("spark: %s is a model -- spark model %s" % (word, word))
     else:
         near = near_verb(word, cli)
-        hint = "spark %s?" % near if near else "spark help lists them"
+        hint = "try: spark %s" % near if near else "spark help lists them"
         say("spark: no command named %s -- %s; a question is several words, or ends with ?" % (word, hint))
     return 2
 

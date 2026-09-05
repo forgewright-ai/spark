@@ -352,9 +352,9 @@ def main():
         rc, out, _ = spark("frobnicate?")
         t.ok(rc == 0 and out.startswith("* "), "one word ending in ? is still a question, marked", out)
         rc, out, _ = spark("quite", "start", "on")
-        t.ok(rc == 2 and "spark quiet?" in out, "a misspelled verb with arguments is a typo, not a question", out)
+        t.ok(rc == 2 and "try: spark quiet" in out, "a misspelled verb with arguments is a typo, not a question", out)
         rc, out, _ = spark("quiett")
-        t.ok(rc == 2 and "spark quiet?" in out, "a misspelled verb alone points at the right spelling", out)
+        t.ok(rc == 2 and "try: spark quiet" in out, "a misspelled verb alone points at the right spelling", out)
 
         # config hygiene
         with open(home + "/.config/spark/spark.env", "w") as f:
