@@ -723,12 +723,12 @@ def row_quiet(ctx):
     else:
         parts.append("login loud")
     if ctx.cfg.quiet_boot:
-        try:
-            with open("/etc/default/grub", encoding="utf-8") as f:
-                g = f.read()
-            quiet = "\nGRUB_TIMEOUT=0\n" in "\n" + g and "GRUB_TIMEOUT_STYLE=hidden" in g
-        except OSError:
-            quiet = True
+        # the promise is spark's GRUB drop-in (menu hidden + silent kernel
+        # line); a pre-drop-in machine with the old sed'd GRUB_TIMEOUT=0
+        # counts as boot LOUD until bootstrap writes the drop-in
+        quiet = os.path.isfile("/etc/default/grub.d/zz-spark-quiet.cfg")
+        if not os.path.isfile("/etc/default/grub"):
+            quiet = True  # no GRUB here: nothing promised
         parts.append("boot quiet" if quiet else "boot LOUD")
         if not quiet:
             bad.append("boot")

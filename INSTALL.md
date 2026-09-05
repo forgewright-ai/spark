@@ -121,7 +121,7 @@ layer's git identity).
 | `SITE_THEME` | `none`, `catppuccin-mocha`, `selenized-dark`, `gruvbox-dark`, `solarized-light` -- later, `spark theme NAME` | `none` |
 | `SITE_PROMPT` / `SITE_PROMPT_STYLE` | `starship`/`plain`; `minimal`/`full` (the shell layer) | `starship`, `minimal` |
 | `SITE_FONT_FACE` / `SITE_FONT_SIZE` | Linux console: `Terminus`/`VGA`/`Fixed` and `16x32`; macOS profile: font name and points -- later, `spark font FACE SIZE` | unset / `13` |
-| `SITE_QUIET_LOGIN` / `SITE_QUIET_BOOT` | Linux: `yes` empties the motd and kernel line / hides GRUB's menu -- later, `spark quiet login|boot on` | `no` |
+| `SITE_QUIET_LOGIN` / `SITE_QUIET_BOOT` | Linux: `yes` empties the motd and kernel line / makes the boot silent (GRUB menu hidden, quiet kernel line, systemd errors-only; one drop-in at `/etc/default/grub.d/zz-spark-quiet.cfg`) -- later, `spark quiet login|boot on` | `no` |
 | `SITE_QUIET_START` | both OSes: `yes` silences spark's own start -- no login banner, one-line `spark serve` and `spark forge`, one-line bare `spark` (`spark status` stays full) -- later, `spark quiet start on`. The login path greps `site.env` directly (no python there), so the usual environment-over-file precedence does not apply to the banner | `no` |
 | `SITE_SET_HOSTNAME` | `yes`: the OS hostname follows `SITE_NAME` (sudo; the shell layer) | `no` |
 
@@ -496,7 +496,7 @@ Linux:
 - The console rows are the shell layer: `SITE_FONT_FACE=Terminus` with
   `SITE_FONT_SIZE=16x32` gives the text console a readable font on a 1080p
   screen (`VGA` for the installer's look); `spark quiet login on` empties
-  the motd and `spark quiet boot on` hides GRUB's menu. The console font cannot draw the check
+  the motd and `spark quiet boot on` makes the boot silent (the GRUB drop-in). The console font cannot draw the check
   and arrow glyphs; spark notices (`TERM=linux`, also inside a tmux whose
   client is the console) and prints ASCII. `SPARK_ASCII=1` forces that.
 - Units: `systemctl --user status spark-serve spark-forge
@@ -516,7 +516,7 @@ lists exactly which of these it would do:
   macOS nothing.
 - the shell (`SITE_SHELL=on`): Linux `apt` for tmux and the tools, the
   hostname (`SITE_SET_HOSTNAME=yes`), the console font, the quiet login
-  (motd) and the quiet boot (GRUB), each only when its key says so; macOS
+  (motd) and the quiet boot (the GRUB drop-in), each only when its key says so; macOS
   the hostname only.
 - headless (`SITE_HEADLESS=yes`): Linux `loginctl enable-linger` and the
   `render` group (also on any vulkan build), the sleep targets masked, the

@@ -881,24 +881,43 @@ else
         [ -x /etc/update-motd.d/10-uname ] && as_root chmod -x /etc/update-motd.d/10-uname
         ok quiet-login "motd empty, no kernel line (the original: /etc/motd.orig)"
     fi
-    # a quiet boot: straight past GRUB's menu
+    # a quiet boot: straight past GRUB's menu, a silent kernel line, and
+    # only errors from systemd. One drop-in spark owns -- the user's
+    # GRUB_CMDLINE_LINUX_DEFAULT is never sed'd; grub-mkconfig sources
+    # /etc/default/grub.d/*.cfg after the main file, zz- sorts it last so
+    # it wins. quiet+loglevel=3 silence the kernel, splash hands plymouth
+    # the boot when it is installed (inert otherwise),
+    # systemd.show_status=auto keeps mount/fsck status lines off the
+    # console unless something fails, udev.log_level=3 quiets the
+    # initramfs, vt.global_cursor_default=0 stops the early blinking
+    # cursor, fbcon=nodefer stops the framebuffer's mid-boot flicker.
+    # update-grub is the Debian-family guard: no update-grub, no touch.
+    grub_dropin=/etc/default/grub.d/zz-spark-quiet.cfg
+    # the $GRUB_CMDLINE reference below is grub's to expand, not ours
+    # shellcheck disable=SC2016
+    grub_want='GRUB_TIMEOUT=0
+GRUB_TIMEOUT_STYLE=hidden
+GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT quiet splash loglevel=3 systemd.show_status=auto udev.log_level=3 vt.global_cursor_default=0 fbcon=nodefer"'
     if [ "$SITE_QUIET_BOOT" != yes ]; then
-        if grep -q '^GRUB_TIMEOUT=0$' /etc/default/grub 2>/dev/null; then
-            if need quiet-boot "show GRUB's menu again, 5 s (sudo)"; then
+        if [ -f "$grub_dropin" ] || grep -q '^GRUB_TIMEOUT=0$' /etc/default/grub 2>/dev/null; then
+            if need quiet-boot "show GRUB's menu again, 5 s; kernel messages back (sudo)"; then
+                as_root rm -f "$grub_dropin"
                 as_root sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=5/; s/^GRUB_TIMEOUT_STYLE=.*/GRUB_TIMEOUT_STYLE=menu/' /etc/default/grub
                 as_root update-grub >/dev/null 2>&1
-                ok quiet-boot "loud: GRUB menu shown for 5 s"
+                ok quiet-boot "loud: GRUB menu shown for 5 s, kernel messages back"
             fi
         else skip quiet-boot "loud (SITE_QUIET_BOOT=no)"; fi
     elif [ ! -f /etc/default/grub ]; then
         skip quiet-boot "no /etc/default/grub here"
-    elif grep -q '^GRUB_TIMEOUT=0$' /etc/default/grub && grep -q '^GRUB_TIMEOUT_STYLE=hidden$' /etc/default/grub; then
-        ok quiet-boot "GRUB menu hidden (hold Shift at boot for it)"
-    elif need quiet-boot "GRUB_TIMEOUT=0, hidden; update-grub (sudo)"; then
-        as_root sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=0/; s/^#\{0,1\}GRUB_TIMEOUT_STYLE=.*/GRUB_TIMEOUT_STYLE=hidden/' /etc/default/grub
-        grep -q '^GRUB_TIMEOUT_STYLE=' /etc/default/grub || echo 'GRUB_TIMEOUT_STYLE=hidden' | as_root tee -a /etc/default/grub >/dev/null
+    elif ! command -v update-grub >/dev/null 2>&1; then
+        skip quiet-boot "no update-grub: not a Debian-family GRUB -- left alone"
+    elif [ -f "$grub_dropin" ] && [ "$(cat "$grub_dropin" 2>/dev/null)" = "$grub_want" ]; then
+        ok quiet-boot "silent: menu hidden, kernel line quiet ($grub_dropin)"
+    elif need quiet-boot "GRUB drop-in $grub_dropin; update-grub (sudo)"; then
+        as_root mkdir -p /etc/default/grub.d
+        printf '%s\n' "$grub_want" | as_root tee "$grub_dropin" >/dev/null
         as_root update-grub >/dev/null 2>&1
-        ok quiet-boot "GRUB menu hidden (hold Shift at boot for it)"
+        ok quiet-boot "silent: menu hidden, kernel line quiet (hold Shift at boot for the menu)"
     fi
 fi
 
