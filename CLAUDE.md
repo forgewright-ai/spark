@@ -136,7 +136,12 @@ may change freely.
    end of the login shell's rc file -- `~/.bashrc` or `~/.zshrc`, by
    `$SHELL` else the passwd entry -- creating it if absent and never
    truncating it; a rc file that is spark's own symlink is `ok` as it is;
-   another shell, or bash < 4, is a `todo` naming the fix.
+   another shell, or bash < 4, is a `todo` naming the fix. On bash, a
+   regular `~/.bash_profile` that neither sources `~/.bashrc` nor holds
+   the marker shadows the hook on a console login -- the `rc-login` row
+   appends the same marked line there. `spark shell off` restores an rc
+   file from its `.bak`, or removes it when there was no file before --
+   never an empty husk.
 2. `install.sh --dry-run` prints rows `ok|would link|would render|would back
    up  <path>` and the same final line. Link = symlink into the repo; render
    = a regular file written from `templates/`. An existing regular file, or

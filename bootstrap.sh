@@ -586,6 +586,20 @@ elif need rc "add one line to ~${rc#"$HOME"}"; then
     ok rc "~${rc#"$HOME"} sources the hook"
 fi
 
+# a ~/.bash_profile that never reaches ~/.bashrc shadows the hook on a
+# console login (bash reads only it, and stops); give it the same marked
+# line so spark survives every login shape. zsh has no shadow: a login
+# zsh reads .zprofile and .zshrc both.
+rc_prof="$HOME/.bash_profile"
+if [ "$rc_shell" = bash ] && [ "${rc_major:-0}" -ge 4 ] && [ -f "$rc_prof" ] && [ ! -L "$rc_prof" ] \
+   && ! grep -qF 'config/spark/hook.' "$rc_prof" 2>/dev/null \
+   && ! grep -qE '\.bashrc|\.profile' "$rc_prof" 2>/dev/null; then
+    if need rc-login "add one line to ~${rc_prof#"$HOME"} (it shadows ~/.profile)"; then
+        printf '\n%s\n' "$rc_line" >> "$rc_prof"
+        ok rc-login "~${rc_prof#"$HOME"} sources the hook (it shadowed ~/.profile)"
+    fi
+fi
+
 # =============================================================== 8. tools
 section tools
 "$0" --list-tools | while IFS='	' read -r rel name; do

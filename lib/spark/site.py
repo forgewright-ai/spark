@@ -841,7 +841,12 @@ def rc_hook_state(shell):
 def restore_rc():
     """spark shell off: every rc file of this OS that is spark's symlink goes
     back to the user -- the link removed, <file>.bak moved back when it
-    exists, else an empty file. Returns [(path, what)]."""
+    exists, else the file is gone (that was the pre-spark state). An empty
+    ~/.bash_profile is a trap, not a restore: a bash login shell stops
+    there and ~/.profile -- the one that sources ~/.bashrc and the hook --
+    never runs, so spark vanishes from a console login. The rc row
+    recreates ~/.bashrc with the hook line right after. Returns
+    [(path, what)]."""
     done = []
     for name in RC_FILES:
         path = os.path.join(HOME, name)
@@ -853,8 +858,7 @@ def restore_rc():
             os.rename(bak, path)
             done.append((path, "restored from %s.bak" % name))
         else:
-            open(path, "a", encoding="utf-8").close()
-            done.append((path, "empty file (no %s.bak to restore)" % name))
+            done.append((path, "removed (no %s.bak: there was no file before)" % name))
     return done
 
 
