@@ -1,6 +1,8 @@
-# spark.memory -- the facts spark recalls on every answer: one per line in
-# ~/.config/spark/memory (0600), written only by the user. Config, not
-# state: it survives `spark history clear` and the pruning of turns.
+# spark.memory -- the facts spark recalls on every answer: one per line,
+# sealed in the account's store (users/<name>/memory), written only by
+# the user. Config, not state: it survives `spark history clear` and the
+# pruning of turns. The pre-v1.4 plaintext ~/.config/spark/memory is
+# read as the fallback until the first write seals and removes it.
 #
 #   spark remember <words>     keep a fact
 #   spark forget N | <words>   drop one, by number or by substring
@@ -8,7 +10,7 @@
 
 import os
 
-from . import CONFIG_DIR, MARK, MEMORY_FILE, SPARK_ENV, config, say
+from . import MARK, MEMORY_FILE, SPARK_ENV, config, log_exc, say, vault
 
 FACT_MAX = 200        # characters per fact
 FACTS_MAX = 40        # facts kept
@@ -28,8 +30,34 @@ MEMORY_USAGE = """%s memory -- what it keeps
 """ % (MARK, FACT_MAX, FACTS_MAX)
 
 
+def _store():
+    """(sealed path, dk, name) of the account's memory, or None -- no
+    account, or its key not held here (a client machine)."""
+    from . import users
+    name, _ = users.account()
+    if name and users.exists(name):
+        dk = users.account_key()
+        if dk:
+            return os.path.join(users.user_dir(name), "memory"), dk, name
+    return None
+
+
+def sealed_exists():
+    """Whether the account's sealed memory file is on this machine."""
+    st = _store()
+    return bool(st) and os.path.isfile(st[0])
+
+
 def _lines():
-    """Every line of the file, as written (comments and blanks included)."""
+    """Every line of the memory, as written (comments and blanks too):
+    the sealed store first, the pre-v1.4 plaintext as the fallback."""
+    st = _store()
+    if st and os.path.isfile(st[0]):
+        try:
+            recs = vault.read_sealed(st[0], st[1])
+            return recs[0].decode("utf-8", "replace").splitlines() if recs else []
+        except (OSError, vault.SealError):
+            return []
     try:
         with open(MEMORY_FILE, encoding="utf-8", errors="replace") as f:
             return f.read().splitlines()
@@ -58,11 +86,23 @@ def facts(cfg):
 
 
 def _write(lines):
-    os.makedirs(CONFIG_DIR, exist_ok=True)
-    fd = os.open(MEMORY_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
-        f.write("".join(ln + "\n" for ln in lines))
-    os.chmod(MEMORY_FILE, 0o600)
+    """Seal the memory into the account's store (minting the account on a
+    machine that has none) and claim the plaintext away."""
+    from . import forge
+    st = _store()
+    if st is None:
+        forge.local_store(provision=True)
+        st = _store()
+    if st is None:
+        log_exc("memory store")
+        raise OSError("no account to hold the memory")
+    path, dk, name = st
+    os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
+    vault.write_sealed(path, dk, "memory", name, "".join(ln + "\n" for ln in lines).encode("utf-8"))
+    try:
+        os.remove(MEMORY_FILE)
+    except OSError:
+        pass
 
 
 def block(cfg):
@@ -172,7 +212,9 @@ def cmd_memory(args):
     cfg = config.load()
     if not args:
         fs = _all_facts()
-        say("%s  %s  %d fact%s  %s" % ("memory", "on" if cfg.memory else "off", len(fs), "" if len(fs) == 1 else "s", MEMORY_FILE))
+        st = _store()
+        where = (st[0] + " (sealed)") if st and os.path.isfile(st[0]) else MEMORY_FILE
+        say("%s  %s  %d fact%s  %s" % ("memory", "on" if cfg.memory else "off", len(fs), "" if len(fs) == 1 else "s", where))
         for n, f in enumerate(fs, 1):
             say("  %-3d %s" % (n, f))
         return 0
@@ -185,14 +227,19 @@ def cmd_memory(args):
         _refresh()
         return 0
     if args[0] == "clear":
+        removed = False
+        st = _store()
         try:
-            os.remove(MEMORY_FILE)
-            say("ok     memory       cleared")
-        except FileNotFoundError:
-            say("ok     memory       nothing was kept")
+            if st and os.path.isfile(st[0]):
+                os.remove(st[0])
+                removed = True
+            if os.path.isfile(MEMORY_FILE):
+                os.remove(MEMORY_FILE)
+                removed = True
         except OSError as e:
-            say("spark memory: cannot remove %s: %s" % (MEMORY_FILE, e))
+            say("spark memory: cannot clear: %s" % e)
             return 1
+        say("ok     memory       cleared" if removed else "ok     memory       nothing was kept")
         _refresh()
         return 0
     say(MEMORY_USAGE.rstrip())

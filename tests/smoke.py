@@ -709,7 +709,9 @@ def main():
         t.ok(len(lines) == 4 and [l["role"] for l in lines] == ["user", "assistant"] * 2 and "Output of `echo STEP-ONE` (exit 0)" in lines[2]["text"], "spark do: one thread, goal / step / output / done", lines)
         turns = [json.loads(l) for f in os.listdir(home + "/.local/state/spark/turns") for l in open(home + "/.local/state/spark/turns/" + f) if l.strip()]
         dos = [x for x in turns if x.get("mode") == "do"]
-        t.ok(len(dos) == 2 and dos[0]["kind"] == "cmd" and dos[0]["rc"] == 0 and dos[0]["command"] == "echo STEP-ONE" and dos[1]["kind"] == "done", "spark do: the turn log has the step with its rc, then the done", dos)
+        t.ok(len(dos) == 2 and dos[0]["kind"] == "cmd" and dos[0]["rc"] == 0 and dos[1]["kind"] == "done", "spark do: the turn log has the step with its rc, then the done", dos)
+        t.ok(all(k not in x for x in turns for k in ("line", "command", "hint", "answer", "cwd", "context")),
+             "turns are numbers only: no free text survives the strip", [sorted(x) for x in turns[:3]])
         os.mkdir(work + "/junk")
         rc, out, err = spark("do", "rm-plain", "junk", stdin="no\n", extra=hook, cwd=work)
         t.ok(rc == 0 and "type yes to run it" in out and os.path.isdir(work + "/junk"), "spark do: an unflagged rm -rf asks for yes; `no` does not run it", out + err)

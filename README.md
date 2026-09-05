@@ -150,7 +150,8 @@ model you chose from huggingface.co (size and sha256 in `models.env`).
 Nothing else. The server and the FORGE bind one LAN address, never
 `0.0.0.0`, behind 0600 tokens that are never printed; turns and threads
 live 30 days under `~/.local/state/spark/` (0600), `SPARK_HISTORY=off`
-keeps none. Named users (`spark user add NAME`) each get their own sealed
+keeps none; turns are telemetry -- numbers, never words, the said things
+live only in the sealed threads. Named users (`spark user add NAME`) each get their own sealed
 store: threads, memory and chat history encrypted (ChaCha20-Poly1305,
 written from RFC 8439) under a key only that user's token opens. The box
 keeps a hash and a wrapped key, never the token -- the admin cannot read

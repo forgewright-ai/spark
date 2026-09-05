@@ -244,13 +244,20 @@ def cmd_explain(words):
 
 # ------------------------------------------------------------ last/status
 def _fmt_turn(t):
+    # a turn is numbers only (session.TEXT_FIELDS); the words come from
+    # the sealed thread it names, when this machine can open it
     if not t:
         return "(no turns yet)"
-    head = "%s  %s  %s" % (t.get("ts", "?"), t.get("kind", "?"), t.get("line", ""))
-    if t.get("command"):
-        body = "  %s %s\n  %s" % (glyph("warn") if t.get("kind") == "danger" else glyph("hammer"), t["command"], t.get("hint", ""))
-    else:
-        body = "  " + (t.get("answer") or "")
+    line = body = ""
+    if t.get("thread"):
+        msgs = forge.load(t["thread"])
+        asked = [m for m in msgs if m.get("role") == "user"]
+        replied = [m for m in msgs if m.get("role") == "assistant"]
+        line = asked[-1]["text"] if asked else ""
+        body = replied[-1]["text"] if replied else ""
+    head = "%s  %s  %s" % (t.get("ts", "?"), t.get("kind", "?"), line)
+    mark = glyph("warn") if t.get("kind") == "danger" else glyph("hammer")
+    body = "  %s %s" % (mark, body) if body else "  (the thread is gone -- numbers only)"
     tail = "  via %s (%s) %s" % (t.get("backend", "?"), t.get("model", "?"), speed(t))
     if t.get("thread"):
         tail += "  thread %s" % t["thread"]

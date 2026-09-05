@@ -19,11 +19,19 @@ def _turns_dir():
     return TURNS_DIR
 
 
+# Turns are telemetry: numbers, enums, ids -- never what was said. The
+# words live only in the sealed threads; this is the one choke point that
+# keeps free text out of the turn log, whatever a caller passes.
+TEXT_FIELDS = ("line", "command", "hint", "answer", "cwd", "context")
+
+
 def record(cfg, **fields):
     """Append one turn to today's JSONL (0600). SPARK_HISTORY=off keeps none."""
     if cfg.history <= 0:
         return
     try:
+        for k in TEXT_FIELDS:
+            fields.pop(k, None)
         fields["ts"] = time.strftime("%Y-%m-%d %H:%M:%S")
         path = os.path.join(_turns_dir(), time.strftime("%Y-%m-%d") + ".jsonl")
         fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)

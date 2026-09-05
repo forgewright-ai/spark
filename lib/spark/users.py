@@ -256,6 +256,33 @@ def cmd_add(args):
     return 0
 
 
+def _claim_files(name, dk):
+    """Seal the pre-v1.4 plaintext memory and chat-history into a user's
+    store (merging with anything already sealed), then remove them."""
+    from . import CHAT_HISTORY_FILE, MEMORY_FILE
+    moved = []
+    for src, fname, kind in ((MEMORY_FILE, "memory", "memory"),
+                             (CHAT_HISTORY_FILE, "chat-history", "chathist")):
+        if not os.path.isfile(src):
+            continue
+        try:
+            with open(src, encoding="utf-8", errors="replace") as f:
+                legacy = [ln for ln in f.read().splitlines()]
+            path = os.path.join(user_dir(name), fname)
+            have = []
+            if os.path.isfile(path):
+                recs = vault.read_sealed(path, dk)
+                have = recs[0].decode("utf-8", "replace").splitlines() if recs else []
+            merged = have + [ln for ln in legacy if ln not in have]
+            vault.write_sealed(path, dk, kind, name,
+                               "".join(ln + "\n" for ln in merged).encode("utf-8"))
+            os.remove(src)
+            moved.append(fname)
+        except (OSError, vault.SealError):
+            continue
+    return moved
+
+
 def cmd_claim():
     name, token = account()
     if not name:
@@ -273,6 +300,8 @@ def cmd_claim():
             return 1
     from . import forge
     moved = forge.claim_legacy(name, dk)
+    for what in _claim_files(name, dk):
+        say("ok     claim        %s sealed into %s" % (what, name))
     left = legacy_threads()
     if moved or not left:
         say("ok     claim        %d thread%s sealed into %s%s"

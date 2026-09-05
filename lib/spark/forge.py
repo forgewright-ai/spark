@@ -510,6 +510,50 @@ def reply(cfg, thread, text, files=(), cwd="", shell="", mode="chat", on_delta=N
     return thread, answer, ms
 
 
+# ------------------------------------------------------------ chat history
+def _chat_history_lines():
+    """The prompt lines of earlier chats, decrypted from the account's
+    sealed chat-history; the pre-v1.4 plaintext file is the fallback
+    until the first sealed write removes it."""
+    from . import CHAT_HISTORY_FILE, users
+    try:
+        name, _ = users.account()
+        if name and users.exists(name):
+            path = os.path.join(users.user_dir(name), "chat-history")
+            dk = users.account_key()
+            if dk and os.path.isfile(path):
+                recs = vault.read_sealed(path, dk)
+                return recs[0].decode("utf-8", "replace").splitlines() if recs else []
+        with open(CHAT_HISTORY_FILE, encoding="utf-8", errors="replace") as f:
+            return [ln for ln in f.read().splitlines() if ln]
+    except (OSError, vault.SealError):
+        pass
+    return []
+
+
+def _write_chat_history(readline):
+    """The newest 500 prompt lines, sealed into the account's store; the
+    legacy plaintext file is removed once the sealed copy is written --
+    no plaintext of what you typed ever touches the disk again."""
+    from . import CHAT_HISTORY_FILE
+    try:
+        n = readline.get_current_history_length()
+        lines = [readline.get_history_item(i) for i in range(max(1, n - 499), n + 1)]
+        blob = ("\n".join(ln for ln in lines if ln) + "\n").encode("utf-8")
+        st = local_store(provision=True)
+        if isinstance(st, _NullStore):
+            return
+        st._dir()
+        vault.write_sealed(os.path.join(os.path.dirname(st.tdir), "chat-history"),
+                           st.dk, "chathist", st.name, blob)
+        try:
+            os.remove(CHAT_HISTORY_FILE)
+        except OSError:
+            pass
+    except Exception:
+        log_exc("chat history")
+
+
 # ------------------------------------------------------------------- chat
 CHAT_USAGE = """%s chat -- a conversation
 
@@ -625,7 +669,7 @@ SLASH_VERBS = {"/help": _slash_help, "/new": _slash_new, "/resume": _slash_resum
 
 
 def cmd_chat(args):
-    from . import CHAT_HISTORY_FILE, MARK, glyph, config, say, state_dir, wire
+    from . import MARK, glyph, config, say, wire
     from . import cli
     if args and args[0] in ("-h", "--help", "help"):
         say(CHAT_USAGE.rstrip() % MARK)
@@ -661,10 +705,8 @@ def cmd_chat(args):
             readline = None
         if readline and hist_on:
             readline.set_history_length(500)
-            try:
-                readline.read_history_file(CHAT_HISTORY_FILE)
-            except OSError:
-                pass
+            for ln in _chat_history_lines():
+                readline.add_history(ln)
     say("chat -- /help, Ctrl-D or /q ends")
     try:
         while True:
@@ -712,10 +754,5 @@ def cmd_chat(args):
             say()              # a blank line between turns
     finally:
         if readline and hist_on:
-            state_dir()
-            try:
-                readline.write_history_file(CHAT_HISTORY_FILE)
-                os.chmod(CHAT_HISTORY_FILE, 0o600)
-            except OSError:
-                pass
+            _write_chat_history(readline)
     return 0

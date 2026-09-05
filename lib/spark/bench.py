@@ -69,7 +69,8 @@ def run_one(cfg, model, s, size):
 
 def record(cfg, model, s, size, pp, tg):
     state_dir()
-    with open(BENCH_LOG, "a", encoding="utf-8") as f:
+    fd = os.open(BENCH_LOG, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    with os.fdopen(fd, "a", encoding="utf-8") as f:
         f.write(json.dumps({"ts": time.strftime("%Y-%m-%d %H:%M:%S"), "model": os.path.basename(model),
                             "engine": engine.engine_dir(cfg), "settings": key_of(s), "size": size,
                             "pp": round(pp, 1), "tg": round(tg, 1)}) + "\n")

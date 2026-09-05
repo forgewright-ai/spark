@@ -103,8 +103,9 @@ class Ctx:
                 pass
         v = fn()
         try:
-            os.makedirs(CACHE_DIR, exist_ok=True)
-            with open(path, "w", encoding="utf-8") as f:
+            os.makedirs(CACHE_DIR, mode=0o700, exist_ok=True)
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
                 json.dump({"t": time.time(), "v": v}, f)
         except OSError:
             pass
@@ -913,13 +914,18 @@ def row_memory(ctx):
     from . import MEMORY_FILE, memory
     if not ctx.cfg.memory:
         return na("off (spark memory on)")
+    sealed = memory.sealed_exists()
     try:
         st = os.stat(MEMORY_FILE)
     except OSError:
+        st = None
+    if st is None and not sealed:
         return ok("nothing kept yet (spark remember ...)")
     problems = []
-    if st.st_mode & 0o044:
+    if st is not None and st.st_mode & 0o044:
         problems.append("readable by others")
+    if st is not None and sealed:
+        problems.append("pre-v1.4 plaintext beside the sealed memory")
     facts = memory._all_facts()
     if len(facts) > memory.FACTS_MAX:
         problems.append("%d facts, %d are sent" % (len(facts), memory.FACTS_MAX))
@@ -929,7 +935,7 @@ def row_memory(ctx):
         problems.append("%d chars, %d are sent" % (sum(len(f) for f in facts), memory.TOTAL_MAX))
     if problems:
         return warn("; ".join(problems), "chmod 600 %s; spark forget N" % ctx.short(MEMORY_FILE))
-    return ok("%d fact%s" % (len(facts), "" if len(facts) == 1 else "s"))
+    return ok("%d fact%s%s" % (len(facts), "" if len(facts) == 1 else "s", ", sealed" if sealed else ""))
 
 
 @row("CAPABILITY", fixture=False, reason="reads the live battery")
@@ -1450,8 +1456,10 @@ def make_fixture(root, good, stub_url=""):
     # the old key still set (bad); one thread, 0600 or not
     with open(os.path.join(cfgd, "soul"), "w") as f:
         f.write("The fixture's spark.\n")
-    with open(os.path.join(cfgd, "memory"), "w") as f:
-        f.write("the box is a fixture\nthe fixture has two facts\n")
+    # legacy plaintext memory: bad only (good keeps its facts sealed below)
+    if not good:
+        with open(os.path.join(cfgd, "memory"), "w") as f:
+            f.write("the box is a fixture\nthe fixture has two facts\n")
     # the legacy plaintext thread exists only in the bad fixture: loose
     # perms flip row_privacy, its very existence flips row_users (claim)
     os.makedirs(os.path.join(state, "threads"), mode=0o700, exist_ok=True)
@@ -1459,11 +1467,12 @@ def make_fixture(root, good, stub_url=""):
         with open(os.path.join(state, "threads", "2000-01-01-000000.jsonl"), "w") as f:
             f.write(json.dumps({"ts": "2000-01-01 00:00:00", "role": "user", "text": "fixture?", "mode": "line", "cwd": "/"}) + "\n")
         os.chmod(os.path.join(state, "threads", "2000-01-01-000000.jsonl"), 0o644)
-    for name in ("soul", "memory"):
+    for name in (("soul",) if good else ("soul", "memory")):
         os.chmod(os.path.join(cfgd, name), 0o600 if good else 0o644)
-    with open(os.path.join(state, "chat-history"), "w") as f:
-        f.write("write a haiku\n")
-    os.chmod(os.path.join(state, "chat-history"), 0o600 if good else 0o644)
+    if not good:
+        with open(os.path.join(state, "chat-history"), "w") as f:
+            f.write("write a haiku\n")
+        os.chmod(os.path.join(state, "chat-history"), 0o644)
     # the users store: a sealed account and a live login (good), or a loose
     # dir holding a plaintext thread and no key file (bad)
     from . import vault

@@ -331,12 +331,19 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   is ok in the good fixture and not ok in the bad one; `--selftest` refuses
   otherwise. CAPABILITY rows use `warn`/`na`, never `fail`, so `spark
   check`'s exit code keeps meaning "something reproducible is broken".
-- **A prose data file.** The soul and the memory are the pattern:
-  user-owned text under `~/.config/spark/`, never linked from `home/`,
-  written 0600 by a `spark` verb (and by the page through the same code),
-  capped (`SOUL_MAX`, `FACT_MAX`/`FACTS_MAX`/`TOTAL_MAX`), sent to the brain
-  on every request, and reported by its own check row (mode, size, cap).
-  It is config, not state: pruning and `history clear` never touch it.
+- **A prose data file.** The soul is the pattern: user-owned text under
+  `~/.config/spark/`, never linked from `home/`, written 0600 by a
+  `spark` verb (and by the page through the same code), capped
+  (`SOUL_MAX`), sent to the brain on every request, and reported by its
+  own check row (mode, size, cap). It is config, not state: pruning and
+  `history clear` never touch it. The memory follows the same rules but
+  lives sealed in the account's store since v1.4
+  (`users/<name>/memory`, `FACT_MAX`/`FACTS_MAX`/`TOTAL_MAX`); the
+  pre-v1.4 plaintext file is read as a fallback until the first write
+  or `spark user claim` seals it away. Turns are the opposite pattern:
+  telemetry, numbers only -- `session.record` strips every free-text
+  field (`session.TEXT_FIELDS`), and the words live only in the sealed
+  threads.
 - **A route.** In `forgeserve.py`: pick its auth class (none; U = user
   or admin; A = admin-only, added to `ADMIN_GET`/`ADMIN_POST`; plus the
   POST rules) and put it in the matching branch of `_route`;

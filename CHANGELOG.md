@@ -12,6 +12,19 @@ stolen disk is ciphertext, and a lost token is lost history, by design.
 A new `users` check row watches the store: 0700 dirs, 0600 keys, the
 sealed magic on every file.
 
+The rest of what you say follows the threads into the seal. The
+remembered facts move from the plaintext config file into the account's
+sealed store (the first `spark remember` claims the old file away); the
+chat prompt history is decrypted straight into readline and sealed back
+on exit -- no plaintext of what you typed touches the disk again. Turns
+become telemetry in the strict sense: one choke point strips the line,
+the command, the hint, the answer and the directory from every record
+-- numbers, enums and thread ids survive, so `spark stats` and the
+throughput row are untouched, and `spark last` now reads the words from
+the sealed thread instead. `spark user claim` moves memory and chat
+history too, and the check cache and bench log land 0600 like
+everything else under state.
+
 ## v1.3
 
 The CLI experience wave. A few days of living with spark taught one
