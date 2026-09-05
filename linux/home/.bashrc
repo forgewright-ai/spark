@@ -41,6 +41,7 @@ fi
 # --- spark at the prompt: `? words` or `words?` + Enter; Esc a on any line -
 # After fzf, so its Enter macro is the one that wins.
 [ -r ~/.config/spark/widget.bash ] && . ~/.config/spark/widget.bash
+[ -r ~/.config/spark/completion.bash ] && . ~/.config/spark/completion.bash
 
 # zoxide last: its prompt hook has to be the final one, or it complains
 command -v zoxide >/dev/null && eval "$(zoxide init bash)"

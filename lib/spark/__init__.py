@@ -112,6 +112,10 @@ def page(text):
     if shutil.which(cmd[0]) is None:
         say(text)
         return
+    # colour was drawn for the live terminal; inside a pager it is either
+    # rendered or garbage, and plain is fine -- strip it, waste nothing
+    import re
+    text = re.sub("\033\\[[0-9;]*m", "", text)
     try:
         subprocess.run(cmd, input=text.encode())
     except (OSError, BrokenPipeError):

@@ -41,6 +41,7 @@ fi
 # --- spark at the prompt: `? words` or `words?` + Enter; Esc a on any line
 # After fzf, so its accept-line wrapper is the one spark wraps.
 [[ -r ~/.config/spark/widget.zsh ]] && source ~/.config/spark/widget.zsh
+[[ -r ~/.config/spark/completion.zsh ]] && source ~/.config/spark/completion.zsh
 
 # zoxide last: its prompt hook has to be the final one, or it complains
 command -v zoxide >/dev/null && eval "$(zoxide init zsh)"
