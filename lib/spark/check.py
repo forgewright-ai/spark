@@ -1075,14 +1075,18 @@ def row_users(ctx):
                     problems.append("%s: store file not 0600" % n)
     if unsealed:
         problems.append("%d plaintext file%s inside a sealed store" % (unsealed, "" if unsealed == 1 else "s"))
+    legacy = users.legacy_threads()
+    if legacy:
+        problems.append("%d pre-v1.4 plaintext thread%s" % (legacy, "" if legacy == 1 else "s"))
     for p in (ACCOUNT_FILE, ACCOUNT_KEY_FILE):
         if os.path.exists(p) and os.stat(p).st_mode & 0o077:
             problems.append("%s not 0600" % os.path.basename(p))
     if me and not users.exists(me):
         problems.append("login %s has no user here" % me)
     if problems:
-        return warn("; ".join(problems[:4]),
-                    "chmod 700 %s and its dirs, 600 the files; spark user list" % ctx.short(USERS_DIR))
+        fix = "spark user claim" if legacy else \
+            "chmod 700 %s and its dirs, 600 the files; spark user list" % ctx.short(USERS_DIR)
+        return warn("; ".join(problems[:4]), fix)
     who = ("this machine is %s" % me) if me else "no login here"
     return ok("%d user%s, sealed, keys wrapped; %s" % (len(names), "" if len(names) == 1 else "s", who))
 
@@ -1448,12 +1452,15 @@ def make_fixture(root, good, stub_url=""):
         f.write("The fixture's spark.\n")
     with open(os.path.join(cfgd, "memory"), "w") as f:
         f.write("the box is a fixture\nthe fixture has two facts\n")
+    # the legacy plaintext thread exists only in the bad fixture: loose
+    # perms flip row_privacy, its very existence flips row_users (claim)
     os.makedirs(os.path.join(state, "threads"), mode=0o700, exist_ok=True)
-    with open(os.path.join(state, "threads", "2000-01-01-000000.jsonl"), "w") as f:
-        f.write(json.dumps({"ts": "2000-01-01 00:00:00", "role": "user", "text": "fixture?", "mode": "line", "cwd": "/"}) + "\n")
+    if not good:
+        with open(os.path.join(state, "threads", "2000-01-01-000000.jsonl"), "w") as f:
+            f.write(json.dumps({"ts": "2000-01-01 00:00:00", "role": "user", "text": "fixture?", "mode": "line", "cwd": "/"}) + "\n")
+        os.chmod(os.path.join(state, "threads", "2000-01-01-000000.jsonl"), 0o644)
     for name in ("soul", "memory"):
         os.chmod(os.path.join(cfgd, name), 0o600 if good else 0o644)
-    os.chmod(os.path.join(state, "threads", "2000-01-01-000000.jsonl"), 0o600 if good else 0o644)
     with open(os.path.join(state, "chat-history"), "w") as f:
         f.write("write a haiku\n")
     os.chmod(os.path.join(state, "chat-history"), 0o600 if good else 0o644)

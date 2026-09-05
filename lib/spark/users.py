@@ -19,8 +19,8 @@ import re
 import shutil
 import time
 
-from . import (ACCOUNT_FILE, ACCOUNT_KEY_FILE, MARK, USERS_DIR, confirm, say,
-               state_dir, vault)
+from . import (ACCOUNT_FILE, ACCOUNT_KEY_FILE, MARK, THREADS_DIR, USERS_DIR,
+               confirm, say, state_dir, vault)
 
 NAME_RE = re.compile(r"^[a-z][a-z0-9-]{0,31}$")
 
@@ -33,10 +33,20 @@ USAGE = """%s user -- the named users of this FORGE
   spark user login [NAME]     paste a token: this machine acts as NAME
   spark user logout           forget the login (the sealed data stays)
   spark user token --new      rotate your token; other logins die
+  spark user claim            seal the pre-v1.4 plaintext history into
+                              your store (re-runnable, verifies first)
 
   A name is a-z, 0-9 and -, starting with a letter, at most 32 chars.
   The token is the only key to the data: keep it, there is no reset.
 """ % MARK
+
+
+def legacy_threads():
+    """How many pre-v1.4 plaintext thread files still sit in the old dir."""
+    try:
+        return sum(1 for f in os.listdir(THREADS_DIR) if f.endswith(".jsonl"))
+    except OSError:
+        return 0
 
 
 # ------------------------------------------------------------ the store
@@ -46,6 +56,12 @@ def user_dir(name):
 
 def valid_name(name):
     return bool(NAME_RE.match(name or ""))
+
+
+def sanitize(name):
+    """A display name folded into a valid user name, else 'owner'."""
+    base = re.sub(r"[^a-z0-9-]+", "-", (name or "").lower()).strip("-")[:32]
+    return base if valid_name(base) else "owner"
 
 
 def list_users():
@@ -231,7 +247,40 @@ def cmd_add(args):
             say("ok     account      this machine is %s" % name)
         except vault.SealError:
             pass
+    n = legacy_threads()
+    if n and account()[0] == name and os.isatty(0):
+        if confirm("claim the %d existing plaintext thread%s into %s -- sealed, then removed"
+                   % (n, "" if n == 1 else "s", name)):
+            return cmd_claim()
+        say("spark user: left as they are -- spark user claim moves them later")
     return 0
+
+
+def cmd_claim():
+    name, token = account()
+    if not name:
+        say("spark user: no login here -- spark user login NAME first")
+        return 2
+    if not exists(name):
+        say("spark user: %s's sealed store is not on this machine -- claim on the box" % name)
+        return 2
+    dk = account_key()
+    if dk is None:
+        try:
+            dk = unlock(name, token)
+        except vault.SealError:
+            say("spark user: the stored token no longer opens %s's key -- spark user login again" % name)
+            return 1
+    from . import forge
+    moved = forge.claim_legacy(name, dk)
+    left = legacy_threads()
+    if moved or not left:
+        say("ok     claim        %d thread%s sealed into %s%s"
+            % (moved, "" if moved == 1 else "s", name,
+               "" if not left else "; %d left (unreadable)" % left))
+        return 0
+    say("spark user: nothing moved -- %d plaintext thread%s left" % (left, "" if left == 1 else "s"))
+    return 1
 
 
 def cmd_remove(args):
@@ -341,5 +390,7 @@ def main(args):
         return cmd_logout()
     if sub == "token":
         return cmd_token(rest)
+    if sub == "claim":
+        return cmd_claim()
     say(USAGE.rstrip())
     return 2

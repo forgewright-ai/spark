@@ -62,7 +62,7 @@ _spark() {
             tune)    comp=(show apply) ;;
             font)    comp=(list none status) ;;
             client)  comp=(off status) ;;
-            user)    comp=(list add remove login logout token status) ;;
+            user)    comp=(list add remove login logout token claim status) ;;
         esac
     fi
     (( ${#comp} )) && compadd -- "${comp[@]}"

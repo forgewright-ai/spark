@@ -283,6 +283,31 @@ def _first_question(cfg):
             "~" if kind == "estimate" else "", speed, "an estimate" if kind == "estimate" else "measured"))
 
 
+def _account(user):
+    """The box's own sealed account, minted here so the very first chat
+    is encrypted at rest. The token prints once -- it is the key to log
+    in from other machines, and there is no reset."""
+    from . import users
+    have = users.account()[0]
+    if have:
+        say("ok     account      this machine is %s" % have)
+        return
+    base = users.sanitize(user)
+    name, n = base, 2
+    while users.exists(name):
+        name, n = "%s-%d" % (base, n), n + 1
+    token = users.add(name)
+    users.write_login(name, token, users.unlock(name, token))
+    say("ok     account      %s -- the token, shown once; it logs you in elsewhere:" % name)
+    say("                    %s" % token)
+    left = users.legacy_threads()
+    if left and sys.stdin.isatty():
+        from . import confirm
+        if confirm("claim the %d existing plaintext thread%s into %s -- sealed, then removed"
+                   % (left, "" if left == 1 else "s", name)):
+            users.cmd_claim()
+
+
 def _closing():
     say()
     say("open a new shell (exec $SHELL), then:")
@@ -308,6 +333,7 @@ def _run(opts):
     theme_name = _theme(cfg, opts, yes)
     say()
     _write(name, user, model, theme_name)
+    _account(user)
     cfg = config.load()
     waiting = _sudo(_apt_packages(), yes)
     pend = [] if os.environ.get("SPARK_NO_APPLY") else site._downloads_pending(cfg)

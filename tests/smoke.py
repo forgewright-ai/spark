@@ -19,6 +19,16 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SPARK = os.path.join(REPO, "bin", "spark")
+sys.path.insert(0, os.path.join(REPO, "lib"))
+from spark import vault  # noqa: E402  -- to open sealed threads in assertions
+
+
+def read_thread(home, path):
+    """The messages of a sealed thread, via the throwaway HOME's login."""
+    import base64
+    with open(home + "/.local/state/spark/account-key") as f:
+        dk = base64.b64decode(f.read().strip())
+    return [json.loads(r.decode("utf-8")) for r in vault.read_sealed(path, dk)]
 TOKEN = "stub-token"
 TIMINGS = {"prompt_n": 40, "prompt_per_second": 96.5, "predicted_n": 12, "predicted_per_second": 12.3, "cache_n": 30}
 STATE = {"mode": "ok", "hits": 0}
@@ -364,21 +374,33 @@ def main():
         t.ok(rc == 2 and "spark.env:2" in err, "shell syntax in spark.env refused with the line number", err)
         os.remove(home + "/.config/spark/spark.env")
 
-        # threads: `?` starts one, `??` goes on with it (the stub counts the messages)
-        threads = home + "/.local/state/spark/threads"
+        # threads: `?` starts one, `?? ` goes on with it (the stub counts the
+        # messages). v1.4: threads live sealed in the auto-minted account's
+        # store, users/<name>/threads/<id>.sealed
+        import glob as _glob
+
+        def tdir():
+            ds = _glob.glob(home + "/.local/state/spark/users/*/threads")
+            return ds[0] if ds else ""
+
         spark("history", "clear")
         rc, out, _ = spark("line", stdin="? a")
         rc, out, _ = spark("line", stdin="?? count")
         t.ok(rc == 0 and out.splitlines() == ["answer", "4"], "?? sends system + the 2 earlier messages + the line", out)
         rc, out, _ = spark("line", stdin="? count")
         t.ok(rc == 0 and out.splitlines() == ["answer", "2"], "? starts afresh: system + the line", out)
+        threads = tdir()
+        t.ok(bool(threads), "an account store was auto-minted", home)
         names = sorted(os.listdir(threads))
         t.ok(len(names) == 2 and all(oct(os.stat(threads + "/" + n).st_mode & 0o777) == "0o600" for n in names), "thread files are 0600", names)
         t.ok(oct(os.stat(threads).st_mode & 0o777) == "0o700", "threads dir is 0700")
+        with open(threads + "/" + names[0], "rb") as f:
+            blob = f.read()
+        t.ok(blob.startswith(b"spark-sealed-v1 thread ") and b"count" not in blob, "the thread file is sealed: magic, no plaintext", blob[:40])
         rc, out, _ = spark("history")
         t.ok(rc == 0 and "2 turns  a" in out and "1 turn  count" in out, "history lists the threads with their turns and title", out)
         rc, out, _ = spark("last")
-        t.ok(rc == 0 and "thread " + names[-1][:-6] in out, "last names the thread of the turn", out)
+        t.ok(rc == 0 and "thread " + names[-1][:-7] in out, "last names the thread of the turn", out)
         rc, out, _ = spark("history", "clear")
         t.ok(rc == 0 and "2 threads" in out and not os.listdir(threads), "history clear empties the threads too", out)
         rc, out, _ = spark("line", stdin="?? count", extra={"SPARK_HISTORY": "off"})
@@ -683,7 +705,7 @@ def main():
         t.ok(rc == 0 and "STEP-ONE" in out and "done  all done" in out, "spark do: proposes, Enter runs it, the output ends it", out + err)
         t.ok("1  echo STEP-ONE   say hello" in out and "Enter runs it" in out, "spark do: the step line and the prompt", out)
         names = os.listdir(threads)
-        lines = [json.loads(l) for l in open(threads + "/" + names[0]) if l.strip()] if len(names) == 1 else []
+        lines = read_thread(home, threads + "/" + names[0]) if len(names) == 1 else []
         t.ok(len(lines) == 4 and [l["role"] for l in lines] == ["user", "assistant"] * 2 and "Output of `echo STEP-ONE` (exit 0)" in lines[2]["text"], "spark do: one thread, goal / step / output / done", lines)
         turns = [json.loads(l) for f in os.listdir(home + "/.local/state/spark/turns") for l in open(home + "/.local/state/spark/turns/" + f) if l.strip()]
         dos = [x for x in turns if x.get("mode") == "do"]

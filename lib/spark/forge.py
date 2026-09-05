@@ -3,15 +3,18 @@
 # facts; it changes only when the user edits one of them, so the system
 # message stays byte-stable and llama-server's prompt cache keeps hitting.
 #
-# A thread is one conversation: ~/.local/state/spark/threads/<id>.jsonl
-# (dir 0700, files 0600), one message per line {"ts","role","text",...}.
-# `? words` and `spark <words>` start one; `?? words` and `spark chat`
-# continue the newest. SPARK_HISTORY=off keeps no threads at all, so `??`
-# behaves like `?`.
+# A thread is one conversation, sealed: one file per thread under the
+# owning user's store, ~/.local/state/spark/users/<name>/threads/
+# <id>.sealed (dir 0700, files 0600) -- the vault format, one encrypted
+# {"ts","role","text",...} record per line. The module-level functions
+# below work on this machine's own account (auto-minted on first use);
+# a Store works on any user's. `? words` and `spark <words>` start a
+# thread; `?? words` and `spark chat` continue the newest.
+# SPARK_HISTORY=off keeps no threads at all, so `??` behaves like `?`.
 #
 # reply() is one turn of the FORGE without a terminal: the prompt, the
-# REPL and (later) the page all go through it. `@FILE` words name files
-# whose text rides along in the request's context slot.
+# REPL and the page all go through it. `@FILE` words name files whose
+# text rides along in the request's context slot.
 
 import json
 import os
@@ -19,7 +22,7 @@ import re
 import sys
 import time
 
-from . import THREADS_DIR, log_exc, state_dir
+from . import THREADS_DIR, log_exc, state_dir, vault
 from . import memory, persona, soul
 
 HISTORY_MAX_CHARS = 20000     # what a continued thread sends at most; oldest pairs go first
@@ -55,132 +58,8 @@ def system(cfg, mode, shell):
 
 
 # ---------------------------------------------------------------- threads
-def _dir():
-    state_dir()
-    os.makedirs(THREADS_DIR, exist_ok=True)
-    try:
-        os.chmod(THREADS_DIR, 0o700)
-    except OSError:
-        pass
-    return THREADS_DIR
-
-
 def valid_id(tid):
     return bool(tid) and isinstance(tid, str) and bool(_ID.match(tid))
-
-
-def _path(tid):
-    if not valid_id(tid):
-        raise ValueError("bad thread id: %r" % (tid,))
-    return os.path.join(THREADS_DIR, tid + ".jsonl")
-
-
-def exists(tid):
-    """Whether a thread file is there (valid id only)."""
-    return valid_id(tid) and os.path.isfile(_path(tid))
-
-
-def new_thread(cfg):
-    """A fresh id, its (empty) file created now so two threads born in the
-    same second get -2, -3. None when SPARK_HISTORY is off."""
-    if cfg.history <= 0:
-        return None
-    base = time.strftime("%Y-%m-%d-%H%M%S")
-    try:
-        d = _dir()
-        for n in range(1, 100):
-            tid = base if n == 1 else "%s-%d" % (base, n)
-            try:
-                fd = os.open(os.path.join(d, tid + ".jsonl"), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-                os.close(fd)
-                return tid
-            except FileExistsError:
-                continue
-    except OSError:
-        log_exc("new thread")
-    return None
-
-
-def _files():
-    """[(mtime_ns, id)] of every thread file, unsorted."""
-    out = []
-    try:
-        for name in os.listdir(THREADS_DIR):
-            if name.endswith(".jsonl") and _ID.match(name[:-6]):
-                try:
-                    out.append((os.stat(os.path.join(THREADS_DIR, name)).st_mtime_ns, name[:-6]))
-                except OSError:
-                    pass
-    except OSError:
-        pass
-    return out
-
-
-def last_thread():
-    """The id of the thread touched last, or None."""
-    fs = _files()
-    return max(fs)[1] if fs else None
-
-
-def load(tid):
-    """Every message of a thread, as written: [{"ts","role","text",...}]."""
-    out = []
-    try:
-        with open(_path(tid), encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    d = json.loads(line)
-                except ValueError:
-                    continue
-                if isinstance(d, dict) and d.get("role") and isinstance(d.get("text"), str):
-                    out.append(d)
-    except OSError:
-        pass
-    return out
-
-
-def append(cfg, tid, role, text, **fields):
-    """One message onto a thread (0600). Nothing when history is off."""
-    if cfg.history <= 0 or not tid:
-        return
-    d = {"ts": time.strftime("%Y-%m-%d %H:%M:%S"), "role": role, "text": text}
-    d.update(fields)
-    try:
-        _dir()
-        fd = os.open(_path(tid), os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
-        with os.fdopen(fd, "a", encoding="utf-8") as f:
-            f.write(json.dumps(d, ensure_ascii=False) + "\n")
-    except OSError:
-        log_exc("append thread")
-
-
-def history(tid):
-    """The thread as chat messages [{"role","content"}], the oldest pairs
-    dropped until at most HISTORY_MAX_CHARS remain. [] for no thread."""
-    if not tid:
-        return []
-    msgs = [{"role": m["role"], "content": m["text"]} for m in load(tid) if m["role"] in ("user", "assistant")]
-    total = sum(len(m["content"]) for m in msgs)
-    while msgs and total > HISTORY_MAX_CHARS:
-        total -= len(msgs.pop(0)["content"])
-        if msgs and msgs[0]["role"] == "assistant":
-            total -= len(msgs.pop(0)["content"])
-    return msgs
-
-
-def pick(cfg, more):
-    """(thread id, history) for a turn: the newest thread continued when
-    `more` asks for it, else a new one. (None, []) when history is off."""
-    if cfg.history <= 0:
-        return None, []
-    if more:
-        tid = last_thread()
-        if tid:
-            return tid, history(tid)
-    return new_thread(cfg), []
 
 
 def _title(s):
@@ -188,43 +67,353 @@ def _title(s):
     return s if len(s) <= TITLE_COLS else s[:TITLE_COLS - 3] + "..."
 
 
+class Store:
+    """One user's sealed thread store: the directory and the data key.
+    Every read decrypts, every write seals; a caller without the key has
+    no store. The module-level functions below are this machine's own."""
+
+    def __init__(self, tdir, dk, name=""):
+        self.tdir, self.dk, self.name = tdir, dk, name
+
+    def _dir(self):
+        state_dir()
+        os.makedirs(self.tdir, mode=0o700, exist_ok=True)
+        try:
+            os.chmod(self.tdir, 0o700)
+        except OSError:
+            pass
+        return self.tdir
+
+    def _path(self, tid):
+        if not valid_id(tid):
+            raise ValueError("bad thread id: %r" % (tid,))
+        return os.path.join(self.tdir, tid + ".sealed")
+
+    def exists(self, tid):
+        return valid_id(tid) and os.path.isfile(self._path(tid))
+
+    def new_thread(self, cfg):
+        """A fresh id, its file (header only) created now so two threads
+        born in the same second get -2, -3. None when history is off."""
+        if cfg.history <= 0:
+            return None
+        base = time.strftime("%Y-%m-%d-%H%M%S")
+        try:
+            d = self._dir()
+            for n in range(1, 100):
+                tid = base if n == 1 else "%s-%d" % (base, n)
+                try:
+                    fd = os.open(os.path.join(d, tid + ".sealed"),
+                                 os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                    with os.fdopen(fd, "w") as f:
+                        f.write(vault.header("thread", tid) + "\n")
+                    return tid
+                except FileExistsError:
+                    continue
+        except OSError:
+            log_exc("new thread")
+        return None
+
+    def _files(self):
+        """[(mtime_ns, id)] of every thread file, unsorted."""
+        out = []
+        try:
+            for name in os.listdir(self.tdir):
+                if name.endswith(".sealed") and _ID.match(name[:-7]):
+                    try:
+                        out.append((os.stat(os.path.join(self.tdir, name)).st_mtime_ns, name[:-7]))
+                    except OSError:
+                        pass
+        except OSError:
+            pass
+        return out
+
+    def last_thread(self):
+        fs = self._files()
+        return max(fs)[1] if fs else None
+
+    def load(self, tid):
+        """Every message of a thread: [{"ts","role","text",...}]. A record
+        that does not open (or parse) is dropped, never fatal."""
+        out = []
+        try:
+            for rec in vault.read_sealed(self._path(tid), self.dk):
+                try:
+                    d = json.loads(rec.decode("utf-8"))
+                except ValueError:
+                    continue
+                if isinstance(d, dict) and d.get("role") and isinstance(d.get("text"), str):
+                    out.append(d)
+        except (OSError, vault.SealError):
+            pass
+        return out
+
+    def append(self, cfg, tid, role, text, **fields):
+        """One sealed message onto a thread. Nothing when history is off."""
+        if cfg.history <= 0 or not tid:
+            return
+        d = {"ts": time.strftime("%Y-%m-%d %H:%M:%S"), "role": role, "text": text}
+        d.update(fields)
+        try:
+            self._dir()
+            vault.append_sealed(self._path(tid), self.dk, "thread", tid,
+                                json.dumps(d, ensure_ascii=False).encode("utf-8"))
+        except (OSError, vault.SealError):
+            log_exc("append thread")
+
+    def history(self, tid):
+        """The thread as chat messages [{"role","content"}], the oldest
+        pairs dropped until at most HISTORY_MAX_CHARS remain."""
+        if not tid:
+            return []
+        msgs = [{"role": m["role"], "content": m["text"]}
+                for m in self.load(tid) if m["role"] in ("user", "assistant")]
+        total = sum(len(m["content"]) for m in msgs)
+        while msgs and total > HISTORY_MAX_CHARS:
+            total -= len(msgs.pop(0)["content"])
+            if msgs and msgs[0]["role"] == "assistant":
+                total -= len(msgs.pop(0)["content"])
+        return msgs
+
+    def pick(self, cfg, more):
+        if cfg.history <= 0:
+            return None, []
+        if more:
+            tid = self.last_thread()
+            if tid:
+                return tid, self.history(tid)
+        return self.new_thread(cfg), []
+
+    def list_threads(self, n=5):
+        """The newest n threads that hold a turn: [{"id","ts","title","turns"}]."""
+        out = []
+        for _, tid in sorted(self._files(), reverse=True):
+            msgs = self.load(tid)
+            users = [m for m in msgs if m["role"] == "user"]
+            if not users:
+                continue
+            out.append({"id": tid, "ts": users[0].get("ts", ""),
+                        "title": _title(users[0]["text"]), "turns": len(users)})
+            if len(out) >= n:
+                break
+        return out
+
+    def clear(self):
+        """Remove every thread; how many."""
+        n = 0
+        try:
+            for name in os.listdir(self.tdir):
+                if name.endswith(".sealed"):
+                    os.remove(os.path.join(self.tdir, name))
+                    n += 1
+        except OSError:
+            pass
+        return n
+
+    def prune(self, cfg):
+        """Delete threads untouched for more than SPARK_HISTORY days."""
+        try:
+            cutoff = time.time() - cfg.history * 86400
+            for name in os.listdir(self.tdir):
+                p = os.path.join(self.tdir, name)
+                if name.endswith(".sealed") and os.path.getmtime(p) < cutoff:
+                    os.remove(p)
+        except OSError:
+            pass
+
+
+class _NullStore:
+    """No account and none mintable: reads answer empty, writes vanish
+    (logged). The line path must never crash on store trouble."""
+
+    def exists(self, tid):
+        return False
+
+    def new_thread(self, cfg):
+        return None
+
+    def last_thread(self):
+        return None
+
+    def load(self, tid):
+        return []
+
+    def append(self, cfg, tid, role, text, **fields):
+        pass
+
+    def history(self, tid):
+        return []
+
+    def pick(self, cfg, more):
+        return None, []
+
+    def list_threads(self, n=5):
+        return []
+
+    def clear(self):
+        return 0
+
+    def prune(self, cfg):
+        pass
+
+
+def store_for(name, dk):
+    """The sealed store of one named user (the FORGE serves these)."""
+    from . import users
+    return Store(os.path.join(users.user_dir(name), "threads"), dk, name)
+
+
+def _provision():
+    """Mint this machine's own account, named after the OS user, and log
+    in -- silently: this runs deep inside the line path. The token lands
+    in the account file (login-grade custody); `spark user token --new`
+    prints a fresh one to carry elsewhere."""
+    from . import users
+    base = users.sanitize(os.environ.get("USER") or "owner")
+    name = base
+    for n in range(2, 100):
+        if not users.exists(name):
+            break
+        name = "%s-%d" % (base, n)
+    token = users.add(name)
+    users.write_login(name, token, users.unlock(name, token))
+    return name
+
+
+def local_store(provision=False):
+    """This machine's own store: the logged-in account's, unlocked by the
+    account-key file. With provision=True a machine with no account mints
+    one (write paths); without, reads answer empty instead. Returns a
+    Store, or a _NullStore when there is none to be had."""
+    from . import users
+    try:
+        name, token = users.account()
+        if name and not users.exists(name) and token:
+            # a login without a store (a client, or a wiped users/): the
+            # same token seals a fresh local store on first write
+            if provision:
+                users.write_login(name, token)      # keep the login
+                d = users.user_dir(name)
+                if not os.path.isdir(d):
+                    os.makedirs(os.path.join(d, "threads"), mode=0o700)
+                    vault.write_private(os.path.join(d, "token.hash"),
+                                        (vault.token_hash(token) + "\n").encode())
+                    vault.write_private(os.path.join(d, "key"),
+                                        vault.wrap_key(vault.new_key(), token, name).encode())
+            else:
+                return _NullStore()
+        if not name:
+            if not provision:
+                return _NullStore()
+            name = _provision()
+        dk = users.account_key()
+        if dk is None:
+            _, token = users.account()
+            if not token:
+                return _NullStore()
+            dk = users.unlock(name, token)
+            users.write_login(name, token, dk)
+        return store_for(name, dk)
+    except Exception:
+        log_exc("local store")
+        return _NullStore()
+
+
+def exists(tid):
+    """Whether a thread file is there (valid id only)."""
+    return local_store().exists(tid)
+
+
+def new_thread(cfg):
+    """A fresh id on this machine's own store. None when history is off."""
+    if cfg.history <= 0:
+        return None
+    return local_store(provision=True).new_thread(cfg)
+
+
+def last_thread():
+    """The id of the thread touched last, or None."""
+    return local_store().last_thread()
+
+
+def load(tid):
+    """Every message of a thread, decrypted: [{"ts","role","text",...}]."""
+    return local_store().load(tid)
+
+
+def append(cfg, tid, role, text, **fields):
+    """One sealed message onto a thread. Nothing when history is off."""
+    if cfg.history <= 0 or not tid:
+        return
+    local_store(provision=True).append(cfg, tid, role, text, **fields)
+
+
+def history(tid):
+    """The thread as chat messages [{"role","content"}], capped."""
+    return local_store().history(tid)
+
+
+def pick(cfg, more):
+    """(thread id, history) for a turn: the newest thread continued when
+    `more` asks for it, else a new one. (None, []) when history is off."""
+    if cfg.history <= 0:
+        return None, []
+    return local_store(provision=True).pick(cfg, more)
+
+
 def list_threads(n=5):
     """The newest n threads that hold a turn: [{"id","ts","title","turns"}]."""
-    out = []
-    for _, tid in sorted(_files(), reverse=True):
-        msgs = load(tid)
-        users = [m for m in msgs if m["role"] == "user"]
-        if not users:
-            continue
-        out.append({"id": tid, "ts": users[0].get("ts", ""), "title": _title(users[0]["text"]), "turns": len(users)})
-        if len(out) >= n:
-            break
-    return out
+    return local_store().list_threads(n)
 
 
 def clear():
     """Remove every thread; how many."""
-    n = 0
-    try:
-        for name in os.listdir(THREADS_DIR):
-            if name.endswith(".jsonl"):
-                os.remove(os.path.join(THREADS_DIR, name))
-                n += 1
-    except OSError:
-        pass
-    return n
+    return local_store().clear()
 
 
 def prune(cfg):
     """Delete threads untouched for more than SPARK_HISTORY days."""
+    local_store().prune(cfg)
+
+
+# ------------------------------------------------------------------ claim
+def claim_legacy(name, dk):
+    """Move the pre-v1.4 plaintext threads into a user's sealed store:
+    seal every message, prove the sealed copy opens, then remove the
+    plaintext. Re-runnable; returns how many threads moved."""
+    st = store_for(name, dk)
+    moved = 0
     try:
-        cutoff = time.time() - cfg.history * 86400
-        for name in os.listdir(THREADS_DIR):
-            p = os.path.join(THREADS_DIR, name)
-            if name.endswith(".jsonl") and os.path.getmtime(p) < cutoff:
-                os.remove(p)
+        names = [f for f in os.listdir(THREADS_DIR) if f.endswith(".jsonl") and _ID.match(f[:-6])]
     except OSError:
-        pass
+        return 0
+    for fname in sorted(names):
+        tid, src = fname[:-6], os.path.join(THREADS_DIR, fname)
+        msgs = []
+        try:
+            with open(src, encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        d = json.loads(line)
+                    except ValueError:
+                        continue
+                    if isinstance(d, dict) and d.get("role") and isinstance(d.get("text"), str):
+                        msgs.append(d)
+        except OSError:
+            continue
+        st._dir()
+        if st.exists(tid):                     # a crashed earlier claim: re-seal fresh
+            os.remove(st._path(tid))
+        for d in msgs:
+            vault.append_sealed(st._path(tid), dk, "thread", tid,
+                                json.dumps(d, ensure_ascii=False).encode("utf-8"))
+        if len(st.load(tid)) >= len(msgs):     # the sealed copy opens: safe to drop
+            os.remove(src)
+            moved += 1
+    return moved
 
 
 # ------------------------------------------------------------------ @FILE

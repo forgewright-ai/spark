@@ -345,7 +345,7 @@ def main():
             time.sleep(1.0)
             st, _, raw = req(url, "GET", "/api/health")
             ok(st == 200 and b"forge" in raw, "the forge outlives a client that hung up mid-stream", st)
-            for f in __import__("glob").glob(state + "/threads/*.jsonl"):
+            for f in __import__("glob").glob(state + "/users/*/threads/*.sealed"):
                 os.remove(f)  # the hung-up chat's thread; later cases start clean
             # the header's food: /api/health names each role's model
             st, _, raw = req(url, "GET", "/api/health")
@@ -357,7 +357,7 @@ def main():
             dn = [d for e, d in sse(raw) if e == "done"]
             ok(st == 200 and dn and dn[0].get("model") == hj["roles"]["ember"],
                "the chat's done event names the ember's model", dn)
-            for f in __import__("glob").glob(state + "/threads/*.jsonl"):
+            for f in __import__("glob").glob(state + "/users/*/threads/*.sealed"):
                 os.remove(f)
 
             # the page, when the sibling has written it
@@ -420,8 +420,11 @@ def main():
                "chat through the forge sheds the shell costume", sys0[:200])
             ok(SEEN.get("body", {}).get("model") == "ember", "chat goes upstream as the ember", SEEN.get("body", {}).get("model"))
             tid = done[0]["thread"] if done else ""
-            tpath = state + "/threads/" + tid + ".jsonl"
-            ok(os.path.isfile(tpath) and oct(os.stat(tpath).st_mode & 0o777) == "0o600", "the thread file exists, 0600", tpath)
+            tpaths = __import__("glob").glob(state + "/users/*/threads/" + tid + ".sealed")
+            tpath = tpaths[0] if tpaths else ""
+            ok(bool(tpath) and oct(os.stat(tpath).st_mode & 0o777) == "0o600"
+               and open(tpath, "rb").read(23) == b"spark-sealed-v1 thread ",
+               "the thread file exists, 0600, sealed", tpath)
             st, _, raw = req(url, "GET", "/api/threads", headers=bearer)
             d = json.loads(raw)
             ok(st == 200 and len(d["threads"]) == 1 and d["threads"][0]["id"] == tid and d["threads"][0]["turns"] == 1, "/api/threads lists it with 1 turn", raw[:200])
@@ -572,7 +575,7 @@ def main():
                "/api/run ember none: streams the verb's lines, done rc 0", evs)
             ok("SITE_EMBER_MODEL=none" in open(home + "/.config/spark/site.env").read(), "site.env has SITE_EMBER_MODEL=none (SPARK_NO_APPLY)")
             st, _, raw = req(url, "POST", "/api/run", {"verb": "history", "args": ["clear"]}, headers=post, timeout=60)
-            ok(st == 200 and ("done", {"rc": 0}) in sse(raw) and not os.listdir(state + "/threads"), "/api/run history clear empties the threads", raw[:200])
+            ok(st == 200 and ("done", {"rc": 0}) in sse(raw) and not __import__("glob").glob(state + "/users/*/threads/*"), "/api/run history clear empties the threads", raw[:200])
             st, _, _ = req(url, "POST", "/api/run", {"verb": "check", "args": []}, headers=post)
             ok(st == 400, "/api/run check -> 400", st)
             st, _, _ = req(url, "POST", "/api/run", {"verb": "history", "args": []}, headers=post)

@@ -128,7 +128,8 @@ state `~/.local/state/spark/` (0700: `api-token` 0600, `serve-url`,
 0600, `forge-url`, `forge.pid`, `forge.log`, `forge.lock`,
 `router/` (`spark.gguf`, `ember.gguf`, `presets.ini` -- the router's
 models dir, written by `spark serve`), `off`, `widgets/`, `turns/`,
-`threads/` (0600 files), `chat-history` 0600, `brain`, `check.json`, `bar`,
+`threads/` (pre-v1.4 plaintext threads only; `spark user claim` seals them
+away), `chat-history` 0600, `brain`, `check.json`, `bar`,
 `bench.jsonl`, `tune.json`,
 `users/<name>/` (0700 per user: `token.hash` and `key` 0600 -- the sha256
 token verifier and the wrapped data key -- plus that user's sealed

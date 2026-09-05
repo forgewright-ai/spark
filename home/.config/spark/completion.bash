@@ -66,7 +66,7 @@ _spark_complete() {
         tune)    words="show apply" ;;
         font)    words="list none status" ;;
         client)  words="off status" ;;
-        user)    words="list add remove login logout token status" ;;
+        user)    words="list add remove login logout token claim status" ;;
         *)       return 0 ;;
     esac
     COMPREPLY=($(compgen -W "$words" -- "$cur"))
