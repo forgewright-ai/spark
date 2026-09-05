@@ -341,8 +341,11 @@ def cmd_status(args, _bare=False):
         # SITE_QUIET_START=yes: bare spark is one line; spark status stays full
         try:
             url, model, is_forge = wire.resolve_brain(cfg)
-            stem = next((s for role, s, _l in _role_rows(cfg, url, is_forge) if role == "ember"), model)
-            say("%s -- ember %s at %s (spark status for the rest)" % (MARK, stem, url))
+            # only a machine that really serves an ember role says "ember";
+            # a single model is just the model
+            ember = next((s for role, s, _l in _role_rows(cfg, url, is_forge) if role == "ember"), None)
+            what = ("ember %s" % ember) if ember else ("model %s" % model)
+            say("%s -- %s at %s (spark status for the rest)" % (MARK, what, url))
         except wire.BrainError as e:
             say("%s -- %s (spark status for the rest)" % (MARK, e.hint))
         return 0
