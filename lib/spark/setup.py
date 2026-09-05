@@ -14,7 +14,7 @@ import subprocess
 import sys
 import time
 
-from . import HOME, IS_MAC, MARK, REPO, SITE_ENV, config, mem_total_gb, say
+from . import HOME, IS_MAC, MARK, REPO, SITE_ENV, config, mem_total_gb, say, wait_ready
 from . import engine, session, site, wire
 
 SIGN = "%s setup -- pick the model this machine earns and light it up" % MARK
@@ -212,18 +212,10 @@ def _serve(cfg):
     from . import serve
     if engine.service_state(cfg) != "loaded":
         return serve.cmd_serve([])
-    sys.stdout.write("ok     server       loading the model ...")
-    sys.stdout.flush()
-    end = time.time() + 180
-    while time.time() < end:
-        url = wire.serve_url() or cfg.loopback_url()
-        if wire.health(url) == "ok":
-            sys.stdout.write(" ready\n")
-            return 0
-        sys.stdout.write(".")
-        sys.stdout.flush()
-        time.sleep(5)
-    sys.stdout.write("\n")
+    if wait_ready("ok     server       loading the model ...",
+                  lambda: wire.health(wire.serve_url() or cfg.loopback_url()) == "ok", 180, 5):
+        sys.stdout.write(" ready\n")
+        return 0
     say("todo   server       not ready yet -- spark check --watch 5 follows it")
     return 1
 

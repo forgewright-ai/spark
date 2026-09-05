@@ -50,6 +50,9 @@ THE MACHINE
                                   on links the rc files (yours -> .bak)
   spark headless [on|off]         the FORGE up from boot, never asleep (brain)
   spark client [URL|off]          answer from another machine's FORGE; none here
+  spark quiet                     the three states: start, login, boot
+  spark quiet start on|off        no banner, one-line serve/forge + bare spark
+  spark quiet login|boot on|off   Linux: motd + kernel line; GRUB's menu
   spark ver                       logo, version, credits (the login greeting)
   spark update                       the newest tag; main pulls on a dev clone
   ./bootstrap.sh --dry-run        what a rebuild would change (never sudo)
@@ -59,10 +62,9 @@ THE MACHINE
   ~/.config/spark/spark.env       ports, URLs, engine, history, memory, forge
 
 THE SHELL (spark shell on)
-  spark bar [on|off]              tmux's status line (a toggle)
+  spark bar [on|off]              tmux's status line: bare shows, on|off sets
   spark theme NAME | list | show  a palette; none = the terminal's own
   spark font FACE SIZE            console font (Terminus 16x32) / Terminal.app
-  spark bootconfig quiet | loud   Linux: motd, kernel line, GRUB menu
   tmux (prefix C-b)  c new window   n/p next/prev   | split right  - below
                      h j k l panes  d detach  r reload  [ scroll/copy (vi)
   z DIR (zoxide)   C-r history (fzf)   C-t files (fzf)   rg PATTERN

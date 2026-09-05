@@ -8,7 +8,7 @@ import os
 import plistlib
 import subprocess
 
-from . import CONFIG_DIR, HOME, IS_MAC, MARK, REPO, SITE_ENV, config, glyph, run, say
+from . import CONFIG_DIR, HOME, IS_MAC, MARK, REPO, config, glyph, run, say
 
 
 
@@ -151,27 +151,6 @@ def palettes():
         return []
 
 
-def _set_site_theme(name):
-    """Rewrite SITE_THEME= in site.env (append when absent); keep it 0600."""
-    lines = []
-    try:
-        with open(SITE_ENV, encoding="utf-8") as f:
-            lines = f.read().splitlines()
-    except OSError:
-        pass
-    done = False
-    for i, line in enumerate(lines):
-        if line.startswith("SITE_THEME="):
-            lines[i] = "SITE_THEME=" + name
-            done = True
-    if not done:
-        lines.append("SITE_THEME=" + name)
-    os.makedirs(CONFIG_DIR, exist_ok=True)
-    with open(SITE_ENV, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines) + "\n")
-    os.chmod(SITE_ENV, 0o600)
-
-
 def set_theme(name):
     """`spark theme NAME`: choose it in site.env, render the files that carry
     it, write theme.env, reload tmux; macOS also gets the Terminal profile."""
@@ -222,7 +201,7 @@ USAGE = """%s theme -- the palette SITE_THEME chose
 
 def main(argv):
     cfg = config.load()
-    if not argv or argv[0] == "list":
+    if not argv or argv[0] in ("list", "status"):
         return table(cfg)
     if argv[0] in ("-h", "--help", "help"):
         say(USAGE.rstrip())

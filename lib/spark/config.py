@@ -16,8 +16,8 @@ PLACEHOLDERS = {"SITE_GIT_NAME": "Your Name", "SITE_GIT_EMAIL": "you@example.com
 SITE_KEYS = ("SITE_NAME", "SITE_USER", "SITE_SET_HOSTNAME", "SITE_GIT_NAME", "SITE_GIT_EMAIL",
              "SITE_WORKSPACE", "SITE_PEER_AI_URL", "SITE_PEER_SSH", "SITE_THEME", "SITE_PROMPT",
              "SITE_PROMPT_STYLE", "SITE_AI_MODEL", "SITE_EMBER_MODEL", "SITE_AI_BUDGET", "SITE_AI_BUILD",
-             "SITE_FONT_FACE", "SITE_FONT_SIZE", "SITE_QUIET_LOGIN", "SITE_QUIET_BOOT", "SITE_HEADLESS",
-             "SITE_SHELL")
+             "SITE_FONT_FACE", "SITE_FONT_SIZE", "SITE_QUIET_LOGIN", "SITE_QUIET_BOOT", "SITE_QUIET_START",
+             "SITE_HEADLESS", "SITE_SHELL")
 SPARK_KEYS = ("SPARK_PORT", "SPARK_BASE_URL", "SPARK_PREFER_URL", "SPARK_SERVE_HOST", "SPARK_ENGINE_DIR",
               "SPARK_MODELS_DIR", "SPARK_MODEL", "SPARK_NGL", "SPARK_CTX", "SPARK_FLASH_ATTN", "SPARK_KV",
               "SPARK_THREADS", "SPARK_EXTRA_ARGS", "SPARK_MEM_NEEDED_GB", "SPARK_API_KEY_FILE",
@@ -167,6 +167,13 @@ class Config:
     @property
     def quiet_boot(self):
         return self.get("SITE_QUIET_BOOT", "no") == "yes"
+
+    @property
+    def quiet_start(self):
+        """yes: spark itself starts quietly -- no login banner, a one-line
+        `spark serve` / `spark forge`, a one-line bare `spark` (explicit
+        `spark status` stays the full report). Both OSes; core."""
+        return self.get("SITE_QUIET_START", "no") == "yes"
 
     @property
     def headless(self):

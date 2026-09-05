@@ -33,7 +33,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from . import (BAR_CACHE, CHECK_JSON, CONFIG_DIR, EMBER_TOKEN_FILE, FORGE_LOCK, FORGE_LOG, FORGE_PID,
                FORGE_URL_FILE, HOME, IS_MAC, MARK, OFF_FLAG, REPO, SERVE_URL_FILE, SPARK_ENV,
-               config, forge_url, lan_ip, log_exc, own_hostnames, say, state_dir)
+               config, forge_url, lan_ip, log_exc, own_hostnames, say, state_dir, wait_ready)
 from . import engine, wire
 from . import version as _version
 
@@ -65,7 +65,7 @@ RUN_ARG = re.compile(r"^[A-Za-z0-9._/:@+= -]{0,200}$")
 # The verbs the page may run, and what their arguments must be (None: any
 # that match RUN_ARG). The verb itself validates and applies; nothing else
 # from the LAN writes config.
-RUN_VERBS = {"theme": None, "model": None, "ember": None, "font": None, "bootconfig": None, "bench": None, "on": None, "off": None,
+RUN_VERBS = {"theme": None, "model": None, "ember": None, "font": None, "quiet": None, "bench": None, "on": None, "off": None,
              "serve": None, "stop": None, "remember": None, "forget": None,
              "tune": lambda a: a[:1] == ["apply"], "history": lambda a: a == ["clear"],
              "forge": lambda a: a in (["token", "--new"], ["token", "--new", "--user"])}
@@ -1220,23 +1220,31 @@ def cmd_start(args):
     finally:
         os.close(out)
         os.close(lock)
-    sys.stdout.write("starting")
-    sys.stdout.flush()
-    end = time.time() + 30
-    while time.time() < end:
-        time.sleep(0.5)
+    quiet = cfg.quiet_start
+
+    class Exited(Exception):
+        pass
+
+    def probe():
         if wire.forge_health(url) not in (None, "down"):
-            sys.stdout.write(" ready (pid %d)\n" % p.pid)
-            say("%s forge -- %s/login   (spark forge --print-url for the token)" % (MARK, url))
-            return 0
+            return True
         if p.poll() is not None:
-            sys.stdout.write("\n")
-            return _die("exited %d while starting:\n%s" % (p.returncode, "\n".join(log_tail(5))), p.returncode or 1)
-        sys.stdout.write(".")
-        sys.stdout.flush()
-    sys.stdout.write("\n")
-    engine.terminate([p.pid])
-    return _die("no answer in 30 s -- stopped; the log tail:\n" + "\n".join(log_tail(5)))
+            raise Exited()
+        return False
+
+    try:
+        up = wait_ready("" if quiet else "starting", probe, 30, 0.5)
+    except Exited:
+        return _die("exited %d while starting:\n%s" % (p.returncode, "\n".join(log_tail(5))), p.returncode or 1)
+    if not up:
+        engine.terminate([p.pid])
+        return _die("no answer in 30 s -- stopped; the log tail:\n" + "\n".join(log_tail(5)))
+    if quiet:
+        say("%s forge -- ready (pid %d) at %s" % (MARK, p.pid, url))
+        return 0
+    sys.stdout.write(" ready (pid %d)\n" % p.pid)
+    say("%s forge -- %s/login   (spark forge --print-url for the token)" % (MARK, url))
+    return 0
 
 
 def cmd_stop(args):

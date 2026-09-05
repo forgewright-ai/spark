@@ -111,7 +111,8 @@ layer's git identity).
 | `SITE_THEME` | `none`, `catppuccin-mocha`, `selenized-dark`, `gruvbox-dark`, `solarized-light` -- later, `spark theme NAME` | `none` |
 | `SITE_PROMPT` / `SITE_PROMPT_STYLE` | `starship`/`plain`; `minimal`/`full` (the shell layer) | `starship`, `minimal` |
 | `SITE_FONT_FACE` / `SITE_FONT_SIZE` | Linux console: `Terminus`/`VGA`/`Fixed` and `16x32`; macOS profile: font name and points -- later, `spark font FACE SIZE` | unset / `13` |
-| `SITE_QUIET_LOGIN` / `SITE_QUIET_BOOT` | Linux: `yes` empties the motd and kernel line / hides GRUB's menu -- later, `spark bootconfig quiet` | `no` |
+| `SITE_QUIET_LOGIN` / `SITE_QUIET_BOOT` | Linux: `yes` empties the motd and kernel line / hides GRUB's menu -- later, `spark quiet login|boot on` | `no` |
+| `SITE_QUIET_START` | both OSes: `yes` silences spark's own start -- no login banner, one-line `spark serve` and `spark forge`, one-line bare `spark` (`spark status` stays full) -- later, `spark quiet start on`. The login path greps `site.env` directly (no python there), so the usual environment-over-file precedence does not apply to the banner | `no` |
 | `SITE_SET_HOSTNAME` | `yes`: the OS hostname follows `SITE_NAME` (sudo; the shell layer) | `no` |
 
 Runtime knobs live in `~/.config/spark/spark.env` (`spark.env.example`
@@ -258,12 +259,14 @@ and `rc` rows so the one hook line lands in the restored file; the
 packages stay installed (`apt` or `brew` removes them). `spark shell`
 prints the state.
 
-With the layer off, `spark bar`, `spark font` and `spark bootconfig`
-refuse (`the shell layer is off`), `spark help` folds them into one line,
-and the check rows that stand on it (`pinned font terminfo console bar git
-backup swap encryption pending battery disk`) read `na`; the `shell` row
-says what `on` adds. `spark theme` works either way: the FORGE page reads
-the palette too.
+With the layer off, `spark bar`, `spark font` and the set forms of
+`spark quiet login|boot` refuse (`the shell layer is off`), `spark help`
+folds the shell block into one line, and the check rows that stand on it
+(`pinned font terminfo quiet bar git backup swap encryption pending
+battery disk`) read `na`; the `shell` row says what `on` adds. `spark
+theme` works either way (the FORGE page reads the palette too), and
+`spark quiet start` works either way: it is spark's own noise, not the
+shell's.
 
 Most linked files are symlinks into the repo, so an edit anywhere is a
 `git status` line. Some apps rewrite their own config on exit; those are
@@ -478,8 +481,8 @@ Linux:
   see it.
 - The console rows are the shell layer: `SITE_FONT_FACE=Terminus` with
   `SITE_FONT_SIZE=16x32` gives the text console a readable font on a 1080p
-  screen (`VGA` for the installer's look); `spark bootconfig quiet` empties
-  the motd and hides GRUB's menu. The console font cannot draw the check
+  screen (`VGA` for the installer's look); `spark quiet login on` empties
+  the motd and `spark quiet boot on` hides GRUB's menu. The console font cannot draw the check
   and arrow glyphs; spark notices (`TERM=linux`, also inside a tmux whose
   client is the console) and prints ASCII. `SPARK_ASCII=1` forces that.
 - Units: `systemctl --user status spark-serve spark-forge

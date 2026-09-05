@@ -14,6 +14,17 @@ the machine makes, and every doc (`README.md` / `INSTALL.md` /
 `bootstrap.sh` / `install.sh`, detect it in a check row, explain it in
 every doc -- or it is not done.
 
+## The grammar
+
+Bare verb = show, never mutate (`spark bar` piped still prints the bar
+line -- tmux depends on it); `on|off` is the only switch vocabulary at
+the CLI (storage stays `yes|no`); `status` = bare, `list` = the table;
+`-h` answers first, signed `spark <sub> -- <one line>`; confirms are
+`<question>? yes/NO: ` (`confirm()`); waits are one dot-spinner
+(`wait_ready()`), downloads curl's bar; exit codes: 0 ok/show, 1 the
+world (stderr), 2 the invocation (stdout, signed), 78 config, 130
+SIGINT. `CLAUDE.md`'s "The grammar" is the full text.
+
 ## The gate, before every commit
 
 ```sh

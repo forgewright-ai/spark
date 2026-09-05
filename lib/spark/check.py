@@ -685,10 +685,12 @@ def row_bar(ctx):
 
 
 @row("SOFTWARE", fixture=False, reason="reads /etc")
-def row_console(ctx):
+def row_quiet(ctx):
+    # `start` is a config echo (the key IS the behavior): never fail-worthy
+    start = "start %s" % ("on" if ctx.cfg.quiet_start else "off")
     if IS_MAC:
-        return na("macOS: no motd, no GRUB")
-    parts, bad = [], []
+        return na("%s; macOS: no motd, no GRUB" % start)
+    parts, bad = [start], []
     if ctx.cfg.quiet_login:
         quiet = (not os.path.getsize("/etc/motd") if os.path.exists("/etc/motd") else True) \
             and not os.access("/etc/update-motd.d/10-uname", os.X_OK)
@@ -1060,7 +1062,7 @@ def row_cost(ctx):
 # ------------------------------------------------------------------- runner
 # The shell layer's rows: with SITE_SHELL=off they are na before they look,
 # the same answer bootstrap.sh gives (the `shell` row itself says what on adds).
-SHELL_ROWS = ("pinned", "font", "terminfo", "console", "bar", "git", "backup", "swap",
+SHELL_ROWS = ("pinned", "font", "terminfo", "quiet", "bar", "git", "backup", "swap",
               "encryption", "pending", "battery", "disk")
 SHELL_OFF = "SITE_SHELL=off (spark shell on)"
 # a client's rows: nothing runs here (SITE_AI_MODEL=none + SITE_PEER_AI_URL),

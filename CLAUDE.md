@@ -146,7 +146,8 @@ may change freely.
    SITE_GIT_EMAIL SITE_WORKSPACE SITE_PEER_AI_URL SITE_PEER_SSH SITE_THEME
    SITE_PROMPT SITE_PROMPT_STYLE SITE_AI_MODEL SITE_EMBER_MODEL SITE_AI_BUDGET
    SITE_AI_BUILD SITE_FONT_FACE
-   SITE_FONT_SIZE SITE_QUIET_LOGIN SITE_QUIET_BOOT SITE_HEADLESS SITE_SHELL`;
+   SITE_FONT_SIZE SITE_QUIET_LOGIN SITE_QUIET_BOOT SITE_QUIET_START
+   SITE_HEADLESS SITE_SHELL`;
    `spark.env` -- `SPARK_PORT SPARK_BASE_URL SPARK_PREFER_URL SPARK_SERVE_HOST
    SPARK_ENGINE_DIR SPARK_MODELS_DIR SPARK_MODEL SPARK_NGL SPARK_CTX
    SPARK_FLASH_ATTN SPARK_KV SPARK_THREADS SPARK_EXTRA_ARGS SPARK_MEM_NEEDED_GB
@@ -182,10 +183,11 @@ may change freely.
    `spark shell --` is that line for the shell layer's switch; `spark
    setup --` is the offer bare `spark` prints, after the banner, on a
    clone with no `site.env` at a terminal; and a refusal signs the same
-   way: with `SITE_SHELL=off`, `spark bar`, `spark
-   font` and `spark bootconfig` print `spark <sub> -- the shell layer is
-   off (spark shell on)` and exit 2; `spark help` then folds their block
-   into one `spark shell on` line.
+   way: with `SITE_SHELL=off`, `spark bar` and `spark font` print
+   `spark <sub> -- the shell layer is off (spark shell on)` and exit 2,
+   and the set forms `spark quiet login|boot on|off` refuse with the
+   same line (showing still answers, saying the layer is off); `spark
+   help` then folds the shell block into one `spark shell on` line.
 9. The FORGE's HTTP API (`lib/spark/forgeserve.py`, on
    `SPARK_FORGE_HOST:SPARK_FORGE_PORT`, one LAN address, never `0.0.0.0`).
    `GET /api/health` answers without a token: `{status, forge: true, name,
@@ -232,6 +234,34 @@ may change freely.
    default-src 'self'` and depends on nothing else. Errors are
    `{error: {kind, hint}}`.
 
+## The grammar
+
+One grammar for every verb; a verb that breaks a rule is a bug.
+
+1. A bare verb shows; it never mutates. The one carve-out: `spark bar`
+   with stdout not a tty still prints the bar line itself -- tmux's
+   status-right runs `spark bar` and must always get the line, never a
+   state change.
+2. `on|off` is the only switch vocabulary at the CLI (shell, bar,
+   headless, forge, quiet, memory). Stored values are storage, not
+   interface: `SITE_HEADLESS` and the `SITE_QUIET_*` keys stay `yes|no`
+   in `site.env`; the verb translates. Choices keep their value grammars
+   (`theme NAME|none`, `model NAME|auto|none`, `client URL|off`).
+3. `status` is an alias of bare for every stateful verb; `list` is the
+   table word (theme, model, ember).
+4. Every verb answers `-h|--help|help` first -- before any gate or
+   config read -- signed per contract 8.
+5. One confirm shape: `<question>? yes/NO: ` -- only `y` or `yes`
+   proceeds; Enter or EOF is no (`confirm()` in `lib/spark/__init__.py`,
+   beside `say()`). The one deliberate second shape: `spark do`'s danger
+   step requires the typed word `yes`.
+6. One progress vocabulary: curl's bar for downloads, and one
+   dot-spinner -- `wait_ready(label, probe, timeout, interval)` in
+   `lib/spark/__init__.py` -- for every wait on a server coming up.
+7. Exit codes: 0 ok or show; 1 the world failed (stderr, via `die()`);
+   2 the invocation -- usage, an unknown name, a gate refusal (stdout,
+   signed); 78 misconfiguration (`EX_CONFIG`); 130 SIGINT.
+
 ## Adding things
 
 - **A package.** Linux: the right `PKG_*` group in `bootstrap.sh` with a
@@ -248,7 +278,7 @@ may change freely.
   path: still a symlink, or now a regular file?
 - **A choice.** A `SITE_*` key with a default in `site.env.example`, applied
   by `bootstrap.sh` or rendered by `install.sh`, **and** a `spark <verb>`
-  that sets and applies it (`spark theme`, `spark font`, `spark bootconfig`;
+  that sets and applies it (`spark theme`, `spark font`, `spark quiet`;
   `lib/spark/site.py` has `set_keys` and `apply`). Editing `site.env` by hand
   is the fallback, never the interface.
 - **The landing rule.** Nothing is done until it is in all of: `spark help`

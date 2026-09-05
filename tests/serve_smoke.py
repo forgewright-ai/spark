@@ -6,6 +6,7 @@
 
 import json
 import os
+import re
 import signal
 import socket
 import subprocess
@@ -164,6 +165,15 @@ def main():
         ok(not os.path.exists(state + "/serve-url") and not os.path.exists(state + "/serve.pid"), "serve-url and pidfile removed")
         rc, out, _ = spark("stop")
         ok(rc == 0 and "not running" in out, "stop again: not running, exit 0", out)
+
+        # SITE_QUIET_START=yes: the whole start collapses to one line
+        rc, out, err = spark("serve", extra={"SITE_QUIET_START": "yes"})
+        lines = [l for l in out.splitlines() if l.strip()]
+        ok(rc == 0 and len(lines) == 1 and re.match(r"^spark serve -- ready \(pid \d+\) at %s$" % re.escape(url), lines[0]),
+           "quiet start: spark serve answers with exactly one line", out + err)
+        rc, out, err = spark("stop")
+        ok(rc == 0 and "stopped pid" in out, "stop the quiet server", out + err)
+        time.sleep(0.5)
 
         # a foreign server on the port
         foreign = subprocess.Popen([sys.executable, os.path.join(eng, "llama-server"), "--host", "127.0.0.1", "--port", str(port), "-m", "foreign"],

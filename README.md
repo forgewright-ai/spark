@@ -113,6 +113,10 @@ What comes next: `ROADMAP.md`.
 - **`spark shell on`.** Off by default. On: tmux, starship, micro, fzf, eza,
   bat, btop, the Nerd Font, and the rc files become spark's (yours move to
   `.bak`; `off` hands them back). Off, your shell stays yours.
+- **`spark quiet`.** What stays silent, three switches: `spark quiet start
+  on` silences spark itself -- no login banner, `spark serve` and bare
+  `spark` answer with one line (`spark status` stays full); on Linux,
+  `spark quiet login|boot on` empties the motd and skips GRUB's menu.
 
 ## What leaves this machine
 

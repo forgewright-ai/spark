@@ -98,7 +98,7 @@ def main():
         rc, out, _ = spark("model", "nope")
         ok(rc == 2 and "no model named" in out, "unknown model refused", out)
         rc, out, _ = spark("model", "rm", "qwen3-8b")
-        ok(rc == 1 and "not downloaded" in out, "rm of a model not on disk", out)
+        ok(rc == 2 and "not downloaded" in out, "rm of a model not on disk: exit 2 (the invocation)", out)
 
         # the two roles: the ember is measured by default, --spark the line model
         rc, out, _ = spark("bench", "--ember")

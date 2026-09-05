@@ -97,6 +97,48 @@ def die(s, code=1):
     sys.exit(code)
 
 
+def confirm(question):
+    """The one confirm shape (grammar rule 5): `<question>? yes/NO: ` --
+    only y or yes proceeds; Enter, anything else, or EOF is no."""
+    try:
+        return input("%s? yes/NO: " % question).strip().lower() in ("y", "yes")
+    except EOFError:
+        return False
+
+
+def wait_ready(label, probe, timeout, interval=1.0):
+    """The one dot-spinner (grammar rule 6): write `label`, then call
+    probe() every `interval` seconds until it returns something truthy
+    (returned, the line left open for the caller's ` ready` tail) or
+    `timeout` seconds pass (the line is closed, None returned). An empty
+    label waits silently on the same clock. A probe that raises gets the
+    line closed first."""
+    drawn = bool(label)
+    if drawn:
+        sys.stdout.write(label)
+        sys.stdout.flush()
+    end = time.time() + timeout
+    while True:
+        try:
+            v = probe()
+        except BaseException:
+            if drawn:
+                sys.stdout.write("\n")
+                sys.stdout.flush()
+            raise
+        if v:
+            return v
+        if time.time() >= end:
+            if drawn:
+                sys.stdout.write("\n")
+                sys.stdout.flush()
+            return None
+        time.sleep(interval)
+        if drawn:
+            sys.stdout.write(".")
+            sys.stdout.flush()
+
+
 def state_dir():
     """The 0700 state directory, created on first use."""
     os.makedirs(STATE_DIR, exist_ok=True)

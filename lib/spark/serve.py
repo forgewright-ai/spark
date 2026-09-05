@@ -6,7 +6,7 @@ import subprocess
 import sys
 import time
 
-from . import IS_MAC, MARK, REPO, config, glyph, lan_ip, own_hostnames, say
+from . import IS_MAC, MARK, REPO, config, glyph, lan_ip, own_hostnames, say, wait_ready
 from . import engine, wire
 
 USAGE = """%s serve -- start the local model server for this LAN
@@ -108,11 +108,16 @@ def cmd_serve(args):
     wire.ensure_token(cfg)
     url = "http://%s:%d" % (host, cfg.port)
 
+    quiet = cfg.quiet_start
     st = wire.health(url)
     if st == "ok":
+        engine.write_serve_url(url)
+        if quiet:
+            engine.warm(cfg, url)
+            say("%s serve -- already serving at %s" % (MARK, url))
+            return 0
         say("%s serve -- already serving at %s" % (MARK, url))
         say("\n".join(client_lines(cfg, url)))
-        engine.write_serve_url(url)
         _warm(cfg, url)
         return 0
     others = engine.server_pids(cfg.port)
@@ -127,9 +132,10 @@ def cmd_serve(args):
     if avail >= 0 and need > avail:
         say("%s serve -- %s needs ~%.1f GB, %.1f GB free (%s)" % (MARK, " + ".join(os.path.basename(f) for f in served), need, avail, engine.top_consumers()))
     sep = glyph("sep")
-    what = sep.join("%s %s (%.1f GB)" % (role, os.path.basename(files[role]), os.path.getsize(files[role]) / 2**30)
-                    for role in engine.ROLES if files[role])
-    say("%s serve%sengine %s%s%s%s%s (token required)" % (MARK, sep, engine.engine_dir(cfg), sep, what, sep, url))
+    if not quiet:
+        what = sep.join("%s %s (%.1f GB)" % (role, os.path.basename(files[role]), os.path.getsize(files[role]) / 2**30)
+                        for role in engine.ROLES if files[role])
+        say("%s serve%sengine %s%s%s%s%s (token required)" % (MARK, sep, engine.engine_dir(cfg), sep, what, sep, url))
     engine.write_serve_url(url)
     if fg:
         _spawn_warmer()
@@ -138,31 +144,38 @@ def cmd_serve(args):
         pid = engine.spawn(cfg, host)
     except engine.EngineError as e:
         return _die(str(e), e.code)
-    sys.stdout.write("loading")
-    sys.stdout.flush()
-    end = time.time() + 180
-    while time.time() < end:
-        time.sleep(1)
-        st = wire.health(url)
-        if st == "ok":
-            sys.stdout.write(" ready (pid %d)\n" % pid)
-            _warm(cfg, url)
-            say("\n".join(client_lines(cfg, url)))
-            from . import check
-            check.refresh()
-            return 0
+
+    class Exited(Exception):
+        pass
+
+    def probe():
+        if wire.health(url) == "ok":
+            return True
         try:
             os.kill(pid, 0)
         except OSError:
-            sys.stdout.write("\n")
-            engine.forget()
-            return _die("llama-server exited while loading:\n" + engine.log_tail())
-        sys.stdout.write(".")
-        sys.stdout.flush()
-    sys.stdout.write("\n")
-    engine.terminate([pid])
-    engine.forget()
-    return _die("no answer from llama-server in 180 s -- stopped; the log tail:\n" + engine.log_tail())
+            raise Exited()
+        return False
+
+    try:
+        up = wait_ready("" if quiet else "loading", probe, 180, 1)
+    except Exited:
+        engine.forget()
+        return _die("llama-server exited while loading:\n" + engine.log_tail())
+    if not up:
+        engine.terminate([pid])
+        engine.forget()
+        return _die("no answer from llama-server in 180 s -- stopped; the log tail:\n" + engine.log_tail())
+    if quiet:
+        say("%s serve -- ready (pid %d) at %s" % (MARK, pid, url))
+        engine.warm(cfg, url)
+    else:
+        sys.stdout.write(" ready (pid %d)\n" % pid)
+        _warm(cfg, url)
+        say("\n".join(client_lines(cfg, url)))
+    from . import check
+    check.refresh()
+    return 0
 
 
 def cmd_stop(args):

@@ -256,6 +256,24 @@ def main():
         rc, out, _ = spark("on")
         t.ok(rc == 0 and not os.path.exists(home + "/.local/state/spark/off"), "on removes the flag")
 
+        # grammar rule 4: the loop verbs answer -h first, signed (contract 8)
+        for sub, first in (("last", "spark last -- the last exchange, with its tok/s"),
+                           ("status", "spark status -- the full picture: brain, widget, service, soul, memory, last"),
+                           ("brain", "spark brain -- what answers right now: a FORGE or a llama-server"),
+                           ("off", "spark off -- silence the prompt widget, every pane at once"),
+                           ("on", "spark on -- the prompt widget answers again"),
+                           ("history", "spark history -- the threads kept on this machine"),
+                           ("ver", "spark ver -- logo, version, credits")):
+            rc, out, _ = spark(sub, "-h")
+            t.ok(rc == 0 and out.splitlines()[0] == first, "spark %s -h signs (contract 8)" % sub, out)
+
+        # SITE_QUIET_START=yes: bare spark is one line; spark status stays full
+        rc, out, _ = spark(extra={"SITE_QUIET_START": "yes"})
+        t.ok(rc == 0 and out.strip() == "spark -- ember stub-ember-q4 at %s (spark status for the rest)" % url,
+             "SITE_QUIET_START=yes: bare spark answers with one line", out)
+        rc, out, _ = spark("status", extra={"SITE_QUIET_START": "yes"})
+        t.ok(rc == 0 and "brain    " in out, "spark status stays the full report under quiet start", out)
+
         # the brain cache is keyed on the candidates
         rc, out, _ = spark("brain", "--porcelain", extra={"SPARK_BASE_URL": "http://127.0.0.1:9"})
         t.ok(rc == 1 and out == "", "a different SPARK_BASE_URL is not answered from the cache", out)
@@ -379,7 +397,8 @@ def main():
         rc, out, _ = spark("chat", "-h")
         t.ok(rc == 0 and out.splitlines()[0] == "spark chat -- a conversation", "spark chat -h signs (contract 8)", out)
         rc, out, _ = spark("talk", "count")
-        t.ok(rc == 0 and out.strip() == "* 4", "spark talk still works, a silent alias of chat (marked, continues the newest thread)", out)
+        t.ok(rc == 2 and out.strip() == "spark talk -- gone: spark chat",
+             "spark talk is gone: one line naming spark chat, exit 2, no model call", out)
         # the quit grammar: all silent, rc 0, nothing sent to the model
         hits0 = STATE["hits"]
         rc, out, err = spark("chat", stdin=":q\n")
@@ -868,6 +887,10 @@ def main():
              and "spark model rm tiny-model; spark model tiny-model" in outv2,
              "spark model verify: a corrupted file is bad, with the remedy, exit 1", outv2)
 
+        # model rm of a file that is not here: the invocation is wrong, exit 2
+        rc, outr, _ = spark("model", "rm", "qwen3-4b", extra={"SPARK_NO_APPLY": "1"})
+        t.ok(rc == 2 and "not downloaded" in outr, "spark model rm of an absent file: exit 2", outr)
+
         # spark check --porcelain: the models row follows the same file
         with open(model_path, "wb") as f:
             f.write(content)
@@ -896,10 +919,46 @@ def main():
         rc, out, _ = spark("help", extra=dict(off, SITE_SHELL="on"))
         t.ok(rc == 0 and "spark font" in out and "the shell (spark shell on)" in out,
              "spark help with SITE_SHELL=on lists the shell block", out)
-        for verb in ("font", "bootconfig", "bar"):
+        for verb in ("font", "bar"):
             rc, out, _ = spark(verb, extra=off)
             t.ok(rc == 2 and out.strip() == "spark %s -- the shell layer is off (spark shell on)" % verb,
                  "spark %s refuses while the layer is off, signing" % verb, out)
+        rc, out, _ = spark("bootconfig", extra=off)
+        t.ok(rc == 2 and out.strip() == "spark bootconfig -- gone: spark quiet (login|boot)",
+             "spark bootconfig is gone: one line naming spark quiet, exit 2", out)
+
+        # spark quiet: core start round-trip; login/boot per OS (grammar law)
+        rc, out, _ = spark("quiet", "-h", extra=off)
+        t.ok(rc == 0 and out.splitlines()[0].startswith("spark quiet -- "), "spark quiet -h signs (contract 8)", out)
+        rc, out, _ = spark("quiet", extra=off)
+        t.ok(rc == 0 and out.startswith("spark quiet -- start off"), "spark quiet bare: shows, start first", out)
+        rc, out, _ = spark("quiet", "start", "on", extra=off)
+        t.ok(rc == 0 and "SITE_QUIET_START=yes" in open(home + "/.config/spark/site.env").read(),
+             "spark quiet start on writes the key (stored yes|no, spoken on|off)", out)
+        rc, out, _ = spark("quiet", "start", extra=off)
+        t.ok(rc == 0 and out.splitlines()[0] == "spark quiet start -- on", "spark quiet start bare: shows the one state", out)
+        rc, out, _ = spark("quiet", "start", "off", extra=off)
+        t.ok(rc == 0 and "SITE_QUIET_START=no" in open(home + "/.config/spark/site.env").read(),
+             "spark quiet start off writes it back", out)
+        rc, out, _ = spark("quiet", "sideways", extra=off)
+        t.ok(rc == 2 and out.startswith("spark quiet -- "), "spark quiet sideways: usage, exit 2", out)
+        if sys.platform == "darwin":
+            rc, out, _ = spark("quiet", "login", extra=off)
+            t.ok(rc == 0 and out.strip() == "spark quiet login -- macOS: no motd, no GRUB",
+                 "spark quiet login shows on macOS: nothing there, exit 0", out)
+            rc, out, _ = spark("quiet", "login", "on", extra=off)
+            t.ok(rc == 2 and out.strip() == "spark quiet login -- macOS: no motd, no GRUB",
+                 "spark quiet login on on macOS: nothing to set, exit 2", out)
+        else:
+            rc, out, _ = spark("quiet", "login", extra=off)
+            t.ok(rc == 0 and "the shell layer is off" in out, "spark quiet login shows with the layer off", out)
+            rc, out, _ = spark("quiet", "login", "on", extra=off)
+            t.ok(rc == 2 and out.strip() == "spark quiet -- the shell layer is off (spark shell on)",
+                 "spark quiet login on refuses while the layer is off, signing", out)
+            rc, out, _ = spark("quiet", "login", "on", extra=dict(off, SITE_SHELL="on"))
+            t.ok(rc == 0 and "SITE_QUIET_LOGIN=yes" in open(home + "/.config/spark/site.env").read(),
+                 "spark quiet login on writes the key with the layer on", out)
+            spark("quiet", "login", "off", extra=dict(off, SITE_SHELL="on"))
         rc, out, _ = spark("theme", "-h", extra=off)
         t.ok(rc == 0 and out.startswith("spark theme -- "), "spark theme stays usable with the layer off", out)
         rc, out, _ = spark("shell", "on", extra=off)

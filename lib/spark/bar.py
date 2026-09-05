@@ -219,8 +219,8 @@ def line(cfg):
 
 USAGE = """spark bar -- tmux's status line
 
-  spark bar            show or hide it (a toggle), inside tmux
-  spark bar on | off   set it
+  spark bar            shown or hidden, and the line it draws
+  spark bar on | off   show / hide it
   spark bar line       print the line itself -- what .tmux.conf's status-right runs
 """
 
@@ -245,19 +245,25 @@ def main(argv):
     if sub == "line":
         say(line(config.load()))
         return 0
-    if sub not in ("", "on", "off", "toggle"):
+    if sub not in ("", "status", "on", "off", "toggle"):
         say(USAGE.rstrip())
         return 2
     if sub == "" and not sys.stdout.isatty():
         # tmux runs status-right without a tty; a config that says
-        # "#(spark bar)" must draw the bar, never toggle it off
+        # "#(spark bar)" must draw the bar, never show or set anything else
         say(line(config.load()))
         return 0
     rc, _ = _tmux("list-sessions")
     if rc != 0:
         say("spark bar: no tmux running -- the status line is tmux's (tmux starts one)")
         return 1
-    want = {"on": True, "off": False}.get(sub, not _status_on())
+    if sub in ("", "status"):
+        # bare = show (grammar rule 1): the state and the line it would draw
+        say("spark bar -- %s" % ("shown (spark bar off hides it)" if _status_on()
+                                 else "hidden (spark bar on brings it back)"))
+        say("  " + line(config.load()).rstrip())
+        return 0
+    want = {"on": True, "off": False}.get(sub, not _status_on())    # toggle: accepted, undocumented
     _tmux("set", "-g", "status", "on" if want else "off")
     say("spark bar -- %s" % ("shown (spark bar off hides it)" if want else "hidden (spark bar on brings it back)"))
     return 0

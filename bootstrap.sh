@@ -797,7 +797,7 @@ if [ "$shell" = 0 ]; then
     # the whole section is the shell layer: the palette, the terminfo, the
     # console font, the login and boot noise -- one skip row per block
     for r in theme terminfo; do skip "$r" "$SHELL_OFF"; done
-    if [ "$OS" = Darwin ]; then for r in console quiet; do skip "$r" "$SHELL_OFF"; done
+    if [ "$OS" = Darwin ]; then for r in console quiet-login quiet-boot; do skip "$r" "$SHELL_OFF"; done
     else for r in console quiet-login quiet-boot; do skip "$r" "$SHELL_OFF"; done; fi
 elif [ "$SITE_THEME" = none ]; then
     skip theme "SITE_THEME=none: your terminal keeps its colours"
@@ -833,7 +833,8 @@ if [ "$shell" = 0 ]; then
     :   # skipped above
 elif [ "$OS" = Darwin ]; then
     skip console "macOS: the font is in the Terminal.app profile (spark theme profile)"
-    skip quiet "macOS: no motd, no GRUB"
+    skip quiet-login "macOS: no motd"
+    skip quiet-boot "macOS: no GRUB"
 else
     # the text console's font (console-setup), when chosen
     if [ -z "$SITE_FONT_FACE" ]; then

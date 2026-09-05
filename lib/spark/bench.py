@@ -310,7 +310,7 @@ def cmd_tune(args):
     if sub == "apply":
         from . import site
         w = t["winner"]
-        site.set_keys(SPARK_ENV, SPARK_NGL=w["ngl"], SPARK_FLASH_ATTN=w["fa"], SPARK_KV=w["kv"], SPARK_THREADS=w.get("t", ""))
+        site.set_keys(_file=SPARK_ENV, SPARK_NGL=w["ngl"], SPARK_FLASH_ATTN=w["fa"], SPARK_KV=w["kv"], SPARK_THREADS=w.get("t", ""))
         site._restart_server(cfg)     # narrates: restarting ... ready
         return 0
     say(USAGE.rstrip())

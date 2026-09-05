@@ -1,5 +1,5 @@
 # spark.site -- the commands that change a site.env choice and apply it:
-# `spark shell`, `spark font`, `spark bootconfig`, `spark model`,
+# `spark shell`, `spark font`, `spark quiet`, `spark model`,
 # `spark ember`, `spark headless` (and `spark theme`, in theme.py). Each
 # writes the key, then runs bootstrap.sh so the machine follows; editing
 # site.env by hand and running bootstrap does the same thing.
@@ -11,12 +11,12 @@ import re
 import shutil
 import subprocess
 import sys
-import time
 from urllib.error import URLError
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
-from . import CONFIG_DIR, HOME, IS_MAC, MARK, REPO, SITE_ENV, config, glyph, mem_total_gb, say
+from . import (CONFIG_DIR, HOME, IS_MAC, MARK, REPO, SITE_ENV, config, confirm, glyph,
+               mem_total_gb, say, wait_ready)
 
 
 def set_keys(_file=None, _quiet=False, **kv):
@@ -101,8 +101,9 @@ def _announce_downloads(pend):
 
 
 def shell_off(sub):
-    """The guard of a shell-layer verb (bar, font, bootconfig): when the
-    layer is off, say so in the signing shape and return 2; else None."""
+    """The guard of a shell-layer verb (bar, font, and quiet's login/boot
+    set forms): when the layer is off, say so in the signing shape and
+    return 2; else None."""
     if config.load().shell:
         return None
     say("%s %s -- the shell layer is off (spark shell on)" % (MARK, sub))
@@ -126,7 +127,7 @@ def cmd_font(args):
     if shell_off("font"):
         return 2
     cfg = config.load()
-    if not args:
+    if not args or args[0] == "status":
         if IS_MAC:
             say("%s font -- Terminal.app profile: %s %s   (spark theme profile applies it)" % (MARK, cfg.font_face, cfg.font_size))
         elif cfg.font_face:
@@ -156,40 +157,65 @@ def cmd_font(args):
     return apply(["console", "font"])
 
 
-# ------------------------------------------------------------- bootconfig
-BOOT_USAGE = """%s bootconfig -- how the machine boots and logs in (Linux)
+# ------------------------------------------------------------------ quiet
+QUIET_USAGE = """%s quiet -- what spark and the machine keep silent
 
-  spark bootconfig              what is set
-  spark bootconfig quiet        no distro notice, no kernel line, no GRUB menu
-  spark bootconfig loud         all of them back (Debian's defaults)
-  spark bootconfig login yes|no
-  spark bootconfig boot yes|no
+  spark quiet                   the three states: start, login, boot
+  spark quiet start [on|off]    spark's own noise, both OSes: no login banner,
+                                one-line serve and forge, one-line bare spark
+  spark quiet login [on|off]    Linux: no distro notice, no kernel line
+  spark quiet boot [on|off]     Linux: straight past GRUB's menu
 """ % MARK
+QUIET_KEYS = {"start": "SITE_QUIET_START", "login": "SITE_QUIET_LOGIN", "boot": "SITE_QUIET_BOOT"}
+MAC_NO_QUIET = "macOS: no motd, no GRUB"
 
 
-def cmd_bootconfig(args):
+def _quiet_state(cfg, sub):
+    return "on" if {"start": cfg.quiet_start, "login": cfg.quiet_login, "boot": cfg.quiet_boot}[sub] else "off"
+
+
+def cmd_quiet(args):
     if args and args[0] in ("-h", "--help", "help"):
-        say(BOOT_USAGE.rstrip())
+        say(QUIET_USAGE.rstrip())
         return 0
-    if shell_off("bootconfig"):
-        return 2
     cfg = config.load()
-    if IS_MAC:
-        say("%s bootconfig -- macOS has no motd and no GRUB -- nothing to set" % MARK)
+    if not args or args[0] == "status":
+        start = _quiet_state(cfg, "start")
+        if IS_MAC:
+            say("%s quiet -- start %s (login, boot: macOS has no motd, no GRUB)" % (MARK, start))
+        elif not cfg.shell:
+            say("%s quiet -- start %s (login, boot: the shell layer is off)" % (MARK, start))
+        else:
+            say("%s quiet -- start %s, login %s, boot %s" % (
+                MARK, start, _quiet_state(cfg, "login"), _quiet_state(cfg, "boot")))
         return 0
-    if not args:
-        say("%s bootconfig -- login %s, boot %s" % (MARK, "quiet" if cfg.quiet_login else "loud", "quiet" if cfg.quiet_boot else "loud"))
-        return 0
-    if args[0] == "quiet":
-        set_keys(SITE_QUIET_LOGIN="yes", SITE_QUIET_BOOT="yes")
-    elif args[0] == "loud":
-        set_keys(SITE_QUIET_LOGIN="no", SITE_QUIET_BOOT="no")
-    elif len(args) == 2 and args[0] in ("login", "boot") and args[1] in ("yes", "no"):
-        set_keys(**{"SITE_QUIET_LOGIN" if args[0] == "login" else "SITE_QUIET_BOOT": args[1]})
-    else:
-        say(BOOT_USAGE.rstrip())
+    sub = args[0]
+    if sub not in QUIET_KEYS or len(args) > 2 or (len(args) == 2 and args[1] not in ("on", "off")):
+        say(QUIET_USAGE.rstrip())
         return 2
-    return apply(["quiet-login", "quiet-boot"])
+    if len(args) == 1:                                     # show one state
+        if sub != "start" and IS_MAC:
+            say("%s quiet %s -- %s" % (MARK, sub, MAC_NO_QUIET))
+            return 0
+        if sub != "start" and not cfg.shell:
+            say("%s quiet %s -- the shell layer is off (spark shell on)" % (MARK, sub))
+            return 0
+        say("%s quiet %s -- %s" % (MARK, sub, _quiet_state(cfg, sub)))
+        return 0
+    if sub != "start" and IS_MAC:                          # nothing to set there
+        say("%s quiet %s -- %s" % (MARK, sub, MAC_NO_QUIET))
+        return 2
+    if sub != "start" and shell_off("quiet"):
+        return 2
+    set_keys(**{QUIET_KEYS[sub]: "yes" if args[1] == "on" else "no"})
+    if sub == "start":
+        # the key is the behavior: nothing on disk to converge, no bootstrap row
+        say("start is %s" % ("quiet: no login banner, one line from serve, forge and bare spark"
+                             if args[1] == "on" else "loud again: the banner and the full narration are back"))
+        from . import check
+        check.refresh()
+        return 0
+    return apply(["quiet-" + sub])
 
 
 # --------------------------------------------------------------- headless
@@ -369,10 +395,7 @@ def _restart_server(cfg):
         engine.wait_gone(engine.server_pids(cfg.port), 30)
         engine.kickstart(cfg)
         url = wire.serve_url() or cfg.loopback_url()
-        end = time.time() + 180
-        while time.time() < end and wire.health(url) != "ok":
-            time.sleep(2)
-        if wire.health(url) == "ok":
+        if wait_ready("", lambda: wire.health(url) == "ok", 180, 2):
             say("ok     server       ready")
         else:
             say("todo   server       not ready yet -- spark check --watch 5 follows it")
@@ -497,11 +520,7 @@ def _license_ok(row, verb):
         say("  " + note)
     if os.environ.get("SPARK_YES") == "1" or not sys.stdin.isatty():
         return True
-    try:
-        ans = input("download it? [y/N] ").strip().lower()
-    except EOFError:
-        ans = ""
-    if ans not in ("y", "yes"):
+    if not confirm("download it"):
         say("spark %s: cancelled" % verb)
         return False
     return True
@@ -639,7 +658,7 @@ def cmd_model(args):
                     "bad", width, r["name"], r["name"], r["name"]))
         return 1 if bad else 0
     rows = config.model_tables()
-    if not args or args[0] == "list":
+    if not args or args[0] in ("list", "status"):
         return print_model_table(cfg)
     if args[0] == "budget":
         if len(args) == 1:
@@ -671,7 +690,7 @@ def cmd_model(args):
         path = os.path.join(cfg.models_dir, fname)
         if not os.path.isfile(path):
             say("spark model: %s is not downloaded -- nothing to remove" % fname)
-            return 1
+            return 2
         if fname == engine.chosen_model_name(cfg) or path == engine.model_file(cfg):
             say("spark model: %s is in use -- choose another first" % fname)
             return 1
@@ -721,7 +740,7 @@ def cmd_ember(args):
         return 0
     if args and args[0] == "list":
         return print_model_table(cfg, embers=True)
-    if not args:
+    if not args or args[0] == "status":
         pair = engine.chosen_rows(cfg)
         files = engine.roles(cfg)
         url = wire.serve_url()
@@ -851,7 +870,7 @@ SHELL_USAGE = """%s shell -- spark's own shell: tmux, starship, micro, fzf, eza,
 """ % MARK
 # the bootstrap rows the switch flips (bootstrap.sh gates them on SITE_SHELL)
 SHELL_ROWS = ["identity", "hostname", "dir", "apt", "brew", "starship", "font", "micro-aspell", "pinned",
-              "configs", "rc", "theme", "terminfo", "console", "quiet-login", "quiet-boot", "quiet"]
+              "configs", "rc", "theme", "terminfo", "console", "quiet-login", "quiet-boot"]
 SHELL_TOOLS = "tmux, starship, micro, fzf, zoxide, eza, bat, btop"
 
 
@@ -910,4 +929,8 @@ def main(sub, args):
         return cmd_headless(args)
     if sub == "client":
         return cmd_client(args)
-    return cmd_font(args) if sub == "font" else cmd_bootconfig(args)
+    if sub == "bootconfig":
+        # removed in v1.3: one line naming the new verb, no forwarding
+        say("%s bootconfig -- gone: spark quiet (login|boot)" % MARK)
+        return 2
+    return cmd_font(args) if sub == "font" else cmd_quiet(args)

@@ -459,6 +459,3 @@ def cmd_chat(args):
             except OSError:
                 pass
     return 0
-
-
-cmd_talk = cmd_chat    # the old name dispatches identically for one version

@@ -13,6 +13,61 @@ from . import engine, forge, persona, session, version, wire
 HINT_COLS = 80
 STDIN_TAIL = 6000          # what `explain` sends at most: the last 6 kB
 
+# Grammar rule 4: every verb answers -h first, signed per contract 8.
+LINE_USAGE = """spark line -- the widget's protocol (contract 4)
+
+  spark line --cwd D --shell S   reads the prompt buffer on stdin; prints
+                                 cmd|danger<TAB>command, answer or error,
+                                 then the hint / answer / reason
+"""
+EXPLAIN_USAGE = """spark explain -- what went wrong in the piped output, and the fix
+
+  cmd 2>&1 | explain [words]  reads stdin (the last 6 kB); explain on PATH
+                              is a symlink to spark
+"""
+LAST_USAGE = """spark last -- the last exchange, with its tok/s
+
+  spark last                  the newest turn: the line, the answer, the
+                              model that answered and its speed
+"""
+STATUS_USAGE = """spark status -- the full picture: brain, widget, service, soul, memory, last
+
+  spark status                what bare spark shows (SITE_QUIET_START=yes makes
+                              bare spark one line; spark status stays full)
+"""
+BRAIN_USAGE = """spark brain -- what answers right now: a FORGE or a llama-server
+
+  spark brain                 the url, the model, the roles it serves
+  spark brain --porcelain     url<TAB>model<TAB>forge|model; exit 1 when none
+  spark brain --fresh         ignore the cached answer
+"""
+OFF_USAGE = """spark off -- silence the prompt widget, every pane at once
+
+  spark off                   Enter is the shell's again; Esc a and
+                              spark <words> still work; spark on restores
+"""
+ON_USAGE = """spark on -- the prompt widget answers again
+
+  spark on                    ? words and words? go to the model again
+"""
+HISTORY_USAGE = """spark history -- the threads kept on this machine
+
+  spark history               where they live, and the newest five
+  spark history clear         remove every turn and thread kept so far
+"""
+VER_USAGE = """spark ver -- logo, version, credits
+
+  spark ver                   the banner, the version (from git), the credits
+"""
+
+
+def _help(args, usage):
+    """True (and the usage printed) when args ask for help."""
+    if args[:1] and args[0] in ("-h", "--help", "help"):
+        say(usage.rstrip())
+        return True
+    return False
+
 
 def _one_line(s, width=HINT_COLS):
     s = " ".join((s or "").split())
@@ -37,6 +92,8 @@ def _last_proposed(history):
 def cmd_line(args):
     """Contract 4. stdin = the prompt buffer. stdout line 1 = cmd<TAB>command
     | danger<TAB>command | answer | error; line 2 = hint / answer / reason."""
+    if _help(args, LINE_USAGE):
+        return 0
     cwd, shell = "", _shell_default()
     it = iter(args)
     for a in it:
@@ -177,6 +234,8 @@ def cmd_ask(words):
 
 
 def cmd_explain(words):
+    if _help(words, EXPLAIN_USAGE):
+        return 0
     ctx = _stdin_context()
     if not ctx:
         die("explain reads stdin -- cmd 2>&1 | explain")
@@ -208,6 +267,8 @@ def speed(t):
 
 
 def cmd_last(args):
+    if _help(args, LAST_USAGE):
+        return 0
     say(_fmt_turn(session.last_turn()))
     return 0
 
@@ -226,6 +287,8 @@ def _role_rows(cfg, url, is_forge):
 
 
 def cmd_brain(args):
+    if _help(args, BRAIN_USAGE):
+        return 0
     porcelain = "--porcelain" in args
     cfg = config.load()
     try:
@@ -263,7 +326,9 @@ def live_widgets():
     return out
 
 
-def cmd_status(args):
+def cmd_status(args, _bare=False):
+    if _help(args, STATUS_USAGE):
+        return 0
     # a clone with no site.env yet, at a terminal: the offer, not a status
     from . import SITE_ENV
     if not os.path.exists(SITE_ENV) and sys.stdout.isatty():
@@ -272,6 +337,15 @@ def cmd_status(args):
         say(setup.SIGN)
         return 0
     cfg = config.load()
+    if _bare and cfg.quiet_start:
+        # SITE_QUIET_START=yes: bare spark is one line; spark status stays full
+        try:
+            url, model, is_forge = wire.resolve_brain(cfg)
+            stem = next((s for role, s, _l in _role_rows(cfg, url, is_forge) if role == "ember"), model)
+            say("%s -- ember %s at %s (spark status for the rest)" % (MARK, stem, url))
+        except wire.BrainError as e:
+            say("%s -- %s (spark status for the rest)" % (MARK, e.hint))
+        return 0
     say("%s -- %s's AI on %s" % (MARK, cfg.user, cfg.name))
     t0 = time.time()
     try:
@@ -310,6 +384,8 @@ def _short(path):
 
 
 def cmd_off(args):
+    if _help(args, OFF_USAGE):
+        return 0
     state_dir()
     open(OFF_FLAG, "a").close()
     say("%s off -- Enter is the shell's again (Esc a and spark <words> still work) -- spark on restores" % MARK)
@@ -319,6 +395,8 @@ def cmd_off(args):
 
 
 def cmd_on(args):
+    if _help(args, ON_USAGE):
+        return 0
     try:
         os.remove(OFF_FLAG)
     except OSError:
@@ -330,6 +408,8 @@ def cmd_on(args):
 
 
 def cmd_history(args):
+    if _help(args, HISTORY_USAGE):
+        return 0
     if args[:1] == ["clear"]:
         n = session.clear()
         m = forge.clear()
@@ -373,6 +453,8 @@ def _llama_version():
 
 def cmd_ver(args):
     """logo, version, credits"""
+    if _help(args, VER_USAGE):
+        return 0
     for path in (os.path.join(CONFIG_DIR, "banner"), os.path.join(REPO, "home", ".config", "spark", "banner")):
         try:
             with open(path, encoding="utf-8") as f:
@@ -420,8 +502,9 @@ def cmd_chat(args):
 
 
 def cmd_talk(args):
-    # the old name, silent alias for one version -- not in help
-    return forge.cmd_talk(args)
+    # removed in v1.3: one line naming the new verb, no forwarding
+    say("%s talk -- gone: spark chat" % MARK)
+    return 2
 
 
 def cmd_do(args):
@@ -441,6 +524,6 @@ COMMANDS = {
 
 def main(argv):
     if not argv:
-        return cmd_status([])
+        return cmd_status([], _bare=True)
     head, rest = argv[0], argv[1:]
     return COMMANDS.get(head, lambda _r: cmd_ask(argv))(rest)

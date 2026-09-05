@@ -5,7 +5,7 @@ is a promise; a row in `CHANGELOG.md` is. A better idea is an issue away.
 
 ## v1.3: the CLI experience wave
 
-A month of living with spark taught one lesson: the machine works, the
+A few days of living with spark taught one lesson: the machine works, the
 conversation with it is rough. v1.3 is five passes over the same
 surface, the command line, in this order.
 
@@ -14,7 +14,7 @@ surface, the command line, in this order.
 A code review of every verb, parameter and mechanic, then a
 harmonization: bare verb = show, `on|off` toggles read the same way
 everywhere, the same words mean the same things. The first casualty is
-the quiet family: `SITE_QUIET_LOGIN`, `SITE_QUIET_BOOT` (today the
+the quiet family: `SITE_QUIET_LOGIN`, `SITE_QUIET_BOOT` (until v1.3 the
 confusing `spark bootconfig quiet|loud`) and the missing quiet start
 become one verb -- `spark quiet` bare shows the three states, `spark
 quiet boot|login|start [on|off]` sets one. Quiet start silences what
