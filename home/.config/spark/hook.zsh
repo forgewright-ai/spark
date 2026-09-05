@@ -10,3 +10,4 @@ case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) PATH="$HOME/.local/bin:$PATH" ;;
 export PATH
 [[ -r ~/.config/spark/widget.zsh ]] && source ~/.config/spark/widget.zsh
 if [[ -z ${STARSHIP_SHELL:-} && $PROMPT != $'\n'* ]]; then PROMPT=$'\n'$PROMPT; fi
+[[ -r "$HOME/.config/spark/completion.zsh" ]] && source "$HOME/.config/spark/completion.zsh"

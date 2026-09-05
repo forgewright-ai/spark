@@ -90,6 +90,16 @@ login shell cannot host the widget (another shell, or macOS's bash 3.2):
 the rc file of a bash 4+ or zsh you do use. Open a new shell (`exec
 $SHELL`) and the prompt is live.
 
+The hook also sources TAB completion
+(`~/.config/spark/completion.bash` / `.zsh`, linked by `install.sh`):
+the first word completes the verbs, the second each verb's words --
+theme and model names included, resolved offline from the repository
+the `spark` symlink points into. It binds no key of its own. One zsh
+note: registration needs `compinit`; with the shell layer off nothing
+runs it for you, so a bare zsh without your own
+`autoload -Uz compinit && compinit` in `~/.zshrc` gets no completion --
+silently, by design.
+
 ## The keys
 
 Everything else in `site.env` is optional and has a verb of its own;
@@ -561,7 +571,7 @@ get -> spark setup -> bootstrap.sh (apply) -> install.sh (links, renders)
                       the engine tarball, the model, the token, the units,
                       one rc line; SITE_SHELL=on adds the workstation
 
-spark check   34 rows: every promise the machine makes, fixture-tested
+spark check   35 rows: every promise the machine makes, fixture-tested
 spark update  the newest tag (a stranger), or main (a developer); converge
 
 what leaves the machine: pinned downloads in, your questions to the brain

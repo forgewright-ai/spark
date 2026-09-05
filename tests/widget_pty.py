@@ -13,6 +13,11 @@
 # widget_pty.py pager: the same pty machinery, 10 rows, around the real
 # `spark help` -- long output goes through $PAGER at a terminal, and an
 # absent $PAGER falls back to plain output.
+#
+# widget_pty.py completion <shell> <file>: the same pty machinery around
+# the completion file -- `spark th<TAB>` completes to `theme`, and
+# `spark theme gr<TAB>` to `gruvbox-dark` (the dynamic names, resolved
+# offline through a spark symlink into the real repository).
 
 import fcntl
 import os
@@ -178,6 +183,54 @@ def pager_main():
     return 1 if fails else 0
 
 
+def completion_main(shell, comp):
+    """The completion file in a real interactive shell: a symlink named
+    spark on PATH points into the real repository (as ~/.local/bin/spark
+    does), so the dynamic names resolve offline through readlink."""
+    comp = os.path.abspath(comp)
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    fails = 0
+
+    def ok(cond, what, extra=""):
+        nonlocal fails
+        print("  %s %s%s" % ("ok  " if cond else "FAIL", what, ("   " + repr(extra)[:300]) if extra and not cond else ""))
+        fails += not cond
+
+    with tempfile.TemporaryDirectory(prefix="spark-comp-") as tmp:
+        home = os.path.join(tmp, "home")
+        os.makedirs(os.path.join(home, "bin"))
+        os.symlink(os.path.join(repo, "bin", "spark"), os.path.join(home, "bin", "spark"))
+        env = {"HOME": home, "PATH": os.path.join(home, "bin") + ":" + os.environ.get("PATH", ""),
+               "TERM": "xterm-256color", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "ZDOTDIR": home}
+        if shell == "bash":
+            sh = Shell(["bash", "--norc", "--noprofile", "-i"], env, tmp)
+            sh.send("source %s && echo SOURCED\n" % comp)
+        else:
+            sh = Shell(["zsh", "-f", "-i"], env, tmp)
+            sh.send("autoload -Uz compinit; compinit -u; source %s && echo SOURCED\n" % comp)
+        ok(sh.expect("SOURCED"), "completion sourced")
+
+        # 1. the first word: `spark th<TAB>` becomes `spark theme `
+        since = sh.mark()
+        sh.send("spark th\t")
+        ok(sh.expect("theme"), "spark th<TAB> completes to theme", since())
+        sh.send("\x15")     # C-u: clear the line
+        time.sleep(0.2)
+
+        # 2. a dynamic name, offline: `spark theme gr<TAB>` -> gruvbox-dark
+        since = sh.mark()
+        sh.send("spark theme gr\t")
+        ok(sh.expect("gruvbox-dark"), "spark theme gr<TAB> completes to gruvbox-dark", since())
+        sh.send("\x15")
+        time.sleep(0.2)
+        sh.send("exit\r")
+        sh.read(0.5)
+        sh.close()
+
+    print("widget_pty completion %s: %s" % (shell, "all ok" if not fails else "%d FAILED" % fails))
+    return 1 if fails else 0
+
+
 def main(shell, widget):
     widget = os.path.abspath(widget)
     fails = 0
@@ -324,7 +377,9 @@ def main(shell, widget):
 if __name__ == "__main__":
     if len(sys.argv) == 2 and sys.argv[1] == "pager":
         sys.exit(pager_main())
+    if len(sys.argv) == 4 and sys.argv[1] == "completion" and sys.argv[2] in ("bash", "zsh"):
+        sys.exit(completion_main(sys.argv[2], sys.argv[3]))
     if len(sys.argv) != 3 or sys.argv[1] not in ("bash", "zsh"):
-        print(__doc__ or "usage: widget_pty.py bash|zsh WIDGET | pager")
+        print(__doc__ or "usage: widget_pty.py bash|zsh WIDGET | pager | completion bash|zsh FILE")
         sys.exit(2)
     sys.exit(main(sys.argv[1], sys.argv[2]))

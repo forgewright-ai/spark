@@ -1101,6 +1101,22 @@ def main():
         t.ok("SITE_AI_MODEL=qwen3-1-7b\n" in open(home + "/.config/spark/site.env").read(),
              "setup --model NAME writes the name", out)
 
+    # completion drift guard: every verb the CLI dispatches (bin/spark's
+    # VERBS tuple + cli.COMMANDS' keys) appears in completion.bash -- a new
+    # verb without a completion word goes loud here. The zsh file shares
+    # the same tables; the pty completion test proves both live. Verbs
+    # excluded from completion on purpose are named in a comment there,
+    # which counts: the guard is about forgetting, not about policy.
+    comp = open(os.path.join(REPO, "home", ".config", "spark", "completion.bash")).read()
+    verbs_src = re.search(r"^VERBS = \((.*?)\)$", open(SPARK).read(), re.S | re.M).group(1)
+    commands_src = re.search(r"^COMMANDS = \{(.*?)\}$", open(os.path.join(REPO, "lib", "spark", "cli.py")).read(),
+                             re.S | re.M).group(1)
+    wanted = set(re.findall(r'"([^"]+)"', verbs_src)) | set(re.findall(r'"([^"]+)":', commands_src))
+    missing = sorted(w for w in wanted
+                     if not re.search(r"(?<![A-Za-z-])%s(?![A-Za-z-])" % re.escape(w), comp))
+    t.ok(not missing, "completion.bash names every dispatch verb and cli command",
+         "missing: " + " ".join(missing))
+
     srv.shutdown()
     print("smoke: %s" % ("all ok" if not t.fail else "%d FAILED" % t.fail))
     return 1 if t.fail else 0

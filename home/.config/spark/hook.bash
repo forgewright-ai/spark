@@ -10,3 +10,4 @@ case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) PATH="$HOME/.local/bin:$PATH" ;;
 export PATH
 [ -r ~/.config/spark/widget.bash ] && . ~/.config/spark/widget.bash
 if [[ -z ${STARSHIP_SHELL:-} && $PS1 != \\n* && $PS1 != $'\n'* ]]; then PS1='\n'$PS1; fi
+[ -r "$HOME/.config/spark/completion.bash" ] && . "$HOME/.config/spark/completion.bash"
