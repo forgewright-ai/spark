@@ -869,7 +869,11 @@ elif [ "$OS" = Darwin ]; then
 else
     # a quiet login: no distro notice, no kernel line before the greeting,
     # and a bare `login:` -- /etc/issue (the pre-login OS banner) empties
-    # with the motd, so the console shows the prompt and nothing else
+    # with the motd, so the console shows the prompt and nothing else.
+    # The one thing issue keeps is invisible: the cursor-on escape
+    # (ESC [?25h), because quiet boot's vt.global_cursor_default=0 is
+    # global and would leave the login prompt cursorless without it
+    cursor_on=$(printf '\033[?25h')
     if [ "$SITE_QUIET_LOGIN" != yes ]; then
         if [ ! -s /etc/motd ] && [ -f /usr/share/base-files/motd ] || [ -f /etc/update-motd.d/10-uname ] && [ ! -x /etc/update-motd.d/10-uname ]; then
             if need quiet-login "restore the distro notice, kernel line and login banner (sudo)"; then
@@ -880,15 +884,15 @@ else
                 ok quiet-login "loud: distro notice, kernel line and login banner back"
             fi
         else skip quiet-login "loud (SITE_QUIET_LOGIN=no)"; fi
-    elif [ ! -s /etc/motd ] && [ ! -x /etc/update-motd.d/10-uname ] && [ ! -s /etc/issue ]; then
-        ok quiet-login "motd empty, no kernel line, bare login prompt"
-    elif need quiet-login "empty /etc/motd and /etc/issue, disable update-motd.d/10-uname (sudo)"; then
+    elif [ ! -s /etc/motd ] && [ ! -x /etc/update-motd.d/10-uname ] && [ "$(cat /etc/issue 2>/dev/null)" = "$cursor_on" ]; then
+        ok quiet-login "motd empty, no kernel line, bare login prompt (cursor kept)"
+    elif need quiet-login "empty /etc/motd and /etc/issue (cursor escape only), disable update-motd.d/10-uname (sudo)"; then
         [ -s /etc/motd ] && as_root cp -n /etc/motd /etc/motd.orig 2>/dev/null
         as_root truncate -s 0 /etc/motd
         [ -x /etc/update-motd.d/10-uname ] && as_root chmod -x /etc/update-motd.d/10-uname
-        [ -s /etc/issue ] && as_root cp -n /etc/issue /etc/issue.orig 2>/dev/null
-        as_root truncate -s 0 /etc/issue
-        ok quiet-login "motd empty, no kernel line, bare login prompt (originals: *.orig)"
+        [ -s /etc/issue ] && ! grep -q '25h' /etc/issue && as_root cp -n /etc/issue /etc/issue.orig 2>/dev/null
+        printf '\033[?25h' | as_root tee /etc/issue >/dev/null
+        ok quiet-login "motd empty, no kernel line, bare login prompt (cursor kept; originals: *.orig)"
     fi
     # a quiet boot: straight past GRUB's menu, a silent kernel line, and
     # only errors from systemd. One drop-in spark owns -- the user's

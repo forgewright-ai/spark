@@ -13,5 +13,7 @@ if [[ -z ${STARSHIP_SHELL:-} && $PROMPT != $'\n'* ]]; then PROMPT=$'\n'$PROMPT; 
 # the Linux VT palette (`spark theme` writes it) -- strictly TERM=linux, so
 # an xterm-family terminal's scrollback is never garbled by the escapes
 [ "$TERM" = linux ] && [ -r ~/.config/spark/console-colors ] && cat ~/.config/spark/console-colors
+# quiet boot turns the VT cursor off globally; a human session turns it back on
+[ "$TERM" = linux ] && printf '\033[?25h'
 export MICRO_TRUECOLOR=1   # micro draws the palette's real colours
 [[ -r "$HOME/.config/spark/completion.zsh" ]] && source "$HOME/.config/spark/completion.zsh"

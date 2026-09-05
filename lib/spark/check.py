@@ -784,9 +784,14 @@ def row_quiet(ctx):
         return na("%s; macOS: no motd, no GRUB" % start)
     parts, bad = [start], []
     if ctx.cfg.quiet_login:
+        try:
+            with open("/etc/issue", encoding="utf-8", errors="replace") as f:
+                issue = f.read().strip()
+        except OSError:
+            issue = ""
         quiet = (not os.path.getsize("/etc/motd") if os.path.exists("/etc/motd") else True) \
             and not os.access("/etc/update-motd.d/10-uname", os.X_OK) \
-            and (not os.path.getsize("/etc/issue") if os.path.exists("/etc/issue") else True)
+            and issue in ("", "\033[?25h")
         parts.append("login quiet" if quiet else "login LOUD")
         if not quiet:
             bad.append("login")
