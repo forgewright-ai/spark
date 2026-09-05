@@ -16,7 +16,7 @@ from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 from . import (CONFIG_DIR, HOME, IS_MAC, MARK, REPO, SITE_ENV, config, confirm, glyph,
-               mem_total_gb, say, wait_ready)
+               mem_total_gb, paged, say, wait_ready)
 
 
 def set_keys(_file=None, _quiet=False, **kv):
@@ -659,7 +659,7 @@ def cmd_model(args):
         return 1 if bad else 0
     rows = config.model_tables()
     if not args or args[0] in ("list", "status"):
-        return print_model_table(cfg)
+        return paged(lambda: print_model_table(cfg))
     if args[0] == "budget":
         if len(args) == 1:
             gb = mem_total_gb() * cfg.ai_budget / 100.0
@@ -739,7 +739,7 @@ def cmd_ember(args):
         say(EMBER_USAGE.rstrip())
         return 0
     if args and args[0] == "list":
-        return print_model_table(cfg, embers=True)
+        return paged(lambda: print_model_table(cfg, embers=True))
     if not args or args[0] == "status":
         pair = engine.chosen_rows(cfg)
         files = engine.roles(cfg)

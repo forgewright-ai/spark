@@ -25,7 +25,7 @@ _LIB = os.path.join(os.path.dirname(_HERE), "lib")
 if _LIB not in sys.path:
     sys.path.insert(0, _LIB)
 
-from spark import MARK, say  # noqa: E402
+from spark import MARK, page, say  # noqa: E402
 
 USAGE_HEAD = """%s -- your own AI, on your own machine, at no cost
 
@@ -106,7 +106,7 @@ def main(argv):
     sub = argv[0] if argv else ""
     rest = argv[1:]
     if sub in ("-h", "--help", "help"):
-        say(usage().rstrip())
+        page(usage().rstrip())
         return 0
     if sub == "setup":
         from spark import setup

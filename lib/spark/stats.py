@@ -5,7 +5,7 @@ import json
 import os
 import time
 
-from . import IS_MAC, MARK, TURNS_DIR, config, glyph, say
+from . import IS_MAC, MARK, TURNS_DIR, config, glyph, paged, say
 from . import bench, engine, wire
 
 WINDOWS = {"--today": 1, "--week": 7, "--all": 3650}
@@ -78,6 +78,12 @@ def main(argv):
     if argv and argv[0] in ("-h", "--help", "help"):
         say(USAGE.rstrip())
         return 0
+    if "--porcelain" in argv:
+        return _report(argv)        # porcelain never pages
+    return paged(lambda: _report(argv))
+
+
+def _report(argv):
     days = 1
     for a in argv:
         if a in WINDOWS:

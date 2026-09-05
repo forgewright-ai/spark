@@ -46,6 +46,7 @@ THE MACHINE
   spark setup                     the guided first run: name, model, light it
   spark check                     drift report; exit 0 = every promise kept
   spark check --watch 5           redraw every 5 s     --selftest  prove rows
+  long output (help, check, lists) pages via $PAGER (less); piped stays plain
   spark shell [on|off]            spark's own shell: tmux, starship, micro ...
                                   on links the rc files (yours -> .bak)
   spark headless [on|off]         the FORGE up from boot, never asleep (brain)

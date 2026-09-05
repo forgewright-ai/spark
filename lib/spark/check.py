@@ -22,7 +22,7 @@ import tempfile
 import time
 
 from . import (BIN_DIR, CACHE_DIR, CHECK_JSON, HOME, IS_MAC, MARK, OS, REPO,
-               STATE_DIR, config, glyph, log_exc, run, say, state_dir, version)
+               STATE_DIR, config, glyph, log_exc, page, run, say, state_dir, version)
 
 OK, WARN, FAIL, NA = "ok", "warn", "fail", "na"
 GLYPH = {OK: glyph("ok"), WARN: "!", FAIL: glyph("fail"), NA: glyph("na")}
@@ -1543,5 +1543,8 @@ def main(argv):
             sys.stdout.flush()
             time.sleep(watch)
             continue
-        say(text)
+        if porcelain_out:
+            say(text)
+        else:
+            page(text)      # the report pages at a terminal; piped stays plain
         return 1 if any(r.status == FAIL for r in rows) else 0

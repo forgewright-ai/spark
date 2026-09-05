@@ -515,7 +515,9 @@ NOPASSWD:ALL' | sudo tee /etc/sudoers.d/you`, fine for a test bench).
 
 ## When something stops working
 
-1. `spark check` -- it names the row and the remedy.
+1. `spark check` -- it names the row and the remedy. The report -- like
+   every long output: the help, the model table -- pages through `$PAGER`
+   (`less` when unset) at a terminal, and stays plain when piped.
 2. `./bootstrap.sh --dry-run` -- what a rebuild would change.
 3. `spark` -- which brain answers, which shells have the widget.
 4. A stale server after a DHCP move shows as `moved` on the `serve` row

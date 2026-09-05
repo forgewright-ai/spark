@@ -97,6 +97,42 @@ def die(s, code=1):
     sys.exit(code)
 
 
+def page(text):
+    """say(text), through a pager when stdout is a terminal and the text is
+    taller than it: $PAGER, else `less -R -F -X` (-F: a short text prints
+    and returns; -X: the screen survives). Piped output never sees a pager
+    -- text-first means the pipe contract is untouched. A pager that is
+    not installed (less is not guaranteed), fails to start, or quits early
+    falls back to plain print; its exit code means nothing."""
+    if not sys.stdout.isatty() or text.count("\n") + 1 <= shutil.get_terminal_size((80, 24)).lines:
+        say(text)
+        return
+    import shlex
+    cmd = shlex.split(os.environ.get("PAGER") or "") or ["less", "-R", "-F", "-X"]
+    if shutil.which(cmd[0]) is None:
+        say(text)
+        return
+    try:
+        subprocess.run(cmd, input=text.encode())
+    except (OSError, BrokenPipeError):
+        say(text)
+
+
+def paged(fn):
+    """Run a printer through the pager: at a terminal, capture what fn
+    prints and page it; anywhere else call fn unchanged, so piped output
+    stays byte-identical. Returns fn's return value."""
+    if not sys.stdout.isatty():
+        return fn()
+    import contextlib
+    import io
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        rc = fn()
+    page(buf.getvalue().rstrip("\n"))
+    return rc
+
+
 def confirm(question):
     """The one confirm shape (grammar rule 5): `<question>? yes/NO: ` --
     only y or yes proceeds; Enter, anything else, or EOF is no."""

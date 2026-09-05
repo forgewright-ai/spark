@@ -74,6 +74,7 @@ if [ -f tests/widget_pty.py ]; then
         Darwin) python3 tests/widget_pty.py zsh home/.config/spark/widget.zsh >/dev/null || bad "widget_pty zsh" ;;
         *)      python3 tests/widget_pty.py bash home/.config/spark/widget.bash >/dev/null || bad "widget_pty bash" ;;
     esac
+    python3 tests/widget_pty.py pager >/dev/null || bad "widget_pty pager"
 fi
 if [ -f bin/spark ] && [ -f lib/spark/check.py ]; then
     python3 bin/spark check --selftest >/dev/null || bad "spark check --selftest"

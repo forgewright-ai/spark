@@ -33,7 +33,9 @@ they came to be.
   `~/.config/spark/privacy-terms` (or `SPARK_PRIVACY_TERMS`), 0600, one per
   line, and the hook and the `privacy` row read the union of both lists.
 - **Text-first.** Plain-text output that pipes; `--porcelain` for machines;
-  no curses; keyboard-only. Every character spark prints is drawable on the
+  no curses; keyboard-only. Long output pages at a terminal (`$PAGER`, else
+  `less`; `page()`/`paged()` in `lib/spark/__init__.py`) and is always
+  plain when piped. Every character spark prints is drawable on the
   Linux console: the mark is the word `spark`, the answer and warn marks are
   `*` and `!` on every OS and terminal (one mark, both OSes), and on the
   console (also inside a tmux running on it, or with `SPARK_ASCII=1`) the

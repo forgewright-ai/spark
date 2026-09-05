@@ -9,6 +9,10 @@
 #
 #   widget_pty.py bash home/.config/spark/widget.bash
 #   widget_pty.py zsh  home/.config/spark/widget.zsh
+#
+# widget_pty.py pager: the same pty machinery, 10 rows, around the real
+# `spark help` -- long output goes through $PAGER at a terminal, and an
+# absent $PAGER falls back to plain output.
 
 import fcntl
 import os
@@ -36,7 +40,7 @@ esac
 
 
 class Shell:
-    def __init__(self, argv, env, cwd):
+    def __init__(self, argv, env, cwd, rows=40, cols=200):
         self.buf = b""
         self.pos = 0
         pid, fd = pty.fork()
@@ -44,7 +48,7 @@ class Shell:
             os.chdir(cwd)
             os.execvpe(argv[0], argv, env)
         self.pid, self.fd = pid, fd
-        fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", 40, 200, 0, 0))
+        fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
 
     def read(self, timeout):
         end = time.time() + timeout
@@ -132,6 +136,46 @@ def wrapped(shell, widget, tmp, env, prompt, ok):
             print("       screen:\n" + "\n".join("       |%s|" % r for r in rows))
     finally:
         subprocess.run(t + ["kill-server"], stderr=subprocess.DEVNULL)
+
+
+def pager_main():
+    """`spark help` (the real one) in a 10-row pty: taller than the screen,
+    so it goes through $PAGER -- a stub that logs its stdin and prints a
+    marker. Then again with an absent $PAGER: plain output, no error."""
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    spark = os.path.join(repo, "bin", "spark")
+    first = "spark -- your own AI, on your own machine, at no cost"
+    fails = 0
+
+    def ok(cond, what, extra=""):
+        nonlocal fails
+        print("  %s %s%s" % ("ok  " if cond else "FAIL", what, ("   " + repr(extra)[:300]) if extra and not cond else ""))
+        fails += not cond
+
+    with tempfile.TemporaryDirectory(prefix="spark-pager-") as tmp:
+        home = os.path.join(tmp, "home")
+        os.makedirs(home)
+        log = os.path.join(tmp, "paged.log")
+        stub = os.path.join(tmp, "pager.sh")
+        with open(stub, "w") as f:
+            f.write('#!/bin/sh\ncat >> "$STUB_LOG"\nprintf \'PAGER-MARK\\n\'\n')
+        os.chmod(stub, 0o755)
+        env = {"HOME": home, "PATH": os.environ.get("PATH", ""), "TERM": "xterm-256color",
+               "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "STUB_LOG": log, "PAGER": stub}
+
+        sh = Shell([sys.executable, spark, "help"], env, tmp, rows=10, cols=80)
+        ok(sh.expect("PAGER-MARK"), "the pager's output reached the screen", sh.buf.decode("utf-8", "replace"))
+        sh.close()
+        logged = open(log).read() if os.path.exists(log) else ""
+        ok(first in logged, "the usage went through the pager", logged)
+
+        sh = Shell([sys.executable, spark, "help"], dict(env, PAGER="some-absent-command-xyz"), tmp, rows=10, cols=80)
+        ok(sh.expect("your own AI, on your own machine"), "an absent $PAGER falls back to plain output",
+           sh.buf.decode("utf-8", "replace"))
+        sh.close()
+
+    print("widget_pty pager: %s" % ("all ok" if not fails else "%d FAILED" % fails))
+    return 1 if fails else 0
 
 
 def main(shell, widget):
@@ -278,7 +322,9 @@ def main(shell, widget):
 
 
 if __name__ == "__main__":
+    if len(sys.argv) == 2 and sys.argv[1] == "pager":
+        sys.exit(pager_main())
     if len(sys.argv) != 3 or sys.argv[1] not in ("bash", "zsh"):
-        print(__doc__ or "usage: widget_pty.py bash|zsh WIDGET")
+        print(__doc__ or "usage: widget_pty.py bash|zsh WIDGET | pager")
         sys.exit(2)
     sys.exit(main(sys.argv[1], sys.argv[2]))

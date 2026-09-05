@@ -919,6 +919,15 @@ def main():
         rc, out, _ = spark("help", extra=dict(off, SITE_SHELL="on"))
         t.ok(rc == 0 and "spark font" in out and "the shell (spark shell on)" in out,
              "spark help with SITE_SHELL=on lists the shell block", out)
+
+        # the pager: piped output never touches $PAGER -- a pager that would
+        # fail (/bin/false) proves page() never ran it off a tty
+        rc, out, _ = spark("help", extra={"PAGER": "/bin/false"})
+        t.ok(rc == 0 and "your own AI, on your own machine" in out,
+             "spark help piped with PAGER=/bin/false: rc 0, the usage prints", out)
+        rc, out, _ = spark("check", "memory", extra={"PAGER": "/bin/false"})
+        t.ok(rc == 0 and out.startswith("spark check ") and "memory" in out,
+             "spark check piped with PAGER=/bin/false: the report prints", out)
         for verb in ("font", "bar"):
             rc, out, _ = spark(verb, extra=off)
             t.ok(rc == 2 and out.strip() == "spark %s -- the shell layer is off (spark shell on)" % verb,

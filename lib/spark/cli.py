@@ -7,7 +7,7 @@ import re
 import sys
 import time
 
-from . import CONFIG_DIR, MARK, OFF_FLAG, REPO, STATE_DIR, WIDGETS_DIR, config, die, glyph, say, state_dir
+from . import CONFIG_DIR, MARK, OFF_FLAG, REPO, STATE_DIR, WIDGETS_DIR, config, die, glyph, paged, say, state_dir
 from . import engine, forge, persona, session, version, wire
 
 HINT_COLS = 80
@@ -415,6 +415,10 @@ def cmd_history(args):
         m = forge.clear()
         say("%s history: removed %d day file%s and %d thread%s" % (MARK, n, "" if n == 1 else "s", m, "" if m == 1 else "s"))
         return 0
+    return paged(_history_show)
+
+
+def _history_show():
     cfg = config.load()
     say("%s history: %s" % (MARK, "off" if cfg.history <= 0 else "%d days under %s" % (cfg.history, _short(STATE_DIR))))
     say("  spark history clear   removes every turn and thread kept so far")

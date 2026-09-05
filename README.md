@@ -75,8 +75,10 @@ open a new shell (exec $SHELL), then:
 spark shell on adds spark's own shell: tmux, starship, micro, fzf ...
 ```
 
-`INSTALL.md` is the runbook; `spark help` fits one screen; the percent is
-`SITE_AI_BUDGET` (`spark model budget N`).
+`INSTALL.md` is the runbook; the percent is `SITE_AI_BUDGET` (`spark model
+budget N`). Long output -- the help, the check report, the tables -- pages
+through `$PAGER` (`less` when unset) at a terminal, and stays plain when
+piped.
 
 Contributing: `CONTRIBUTING.md`; the short brief for agents: `AGENTS.md`.
 What comes next: `ROADMAP.md`.
