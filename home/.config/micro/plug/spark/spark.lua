@@ -21,6 +21,7 @@ local buffer = import("micro/buffer")
 local util   = import("micro/util")
 
 local pending = false      -- one run at a time
+local noticed = 0          -- a notice is on the infobar: 1 = just posted, 2 = shown
 
 -- ------------------------------------------------------------- helpers --
 local function trim(s)
@@ -151,6 +152,11 @@ local function on_err(chunk, args)
     state.err = state.err .. (chunk or "")
 end
 
+local function notice(msg)
+    micro.InfoBar():Message(msg)
+    noticed = 1
+end
+
 local function on_exit(_, args)
     local state = args[1]
     pending = false
@@ -163,19 +169,32 @@ local function on_exit(_, args)
     end
     if state.kind == "rewrite" then
         if state.acc == state.sel_text then
-            ib:Message("spark: unchanged")
+            notice("spark: unchanged")
             return
         end
         state.buf:Remove(state.sel_a, state.sel_b)
         state.buf:Insert(state.sel_a, state.acc)
         select_region(state.bp, state.sel_a, advance(state.sel_a, state.acc))
-        ib:Message("spark: rewritten -- Backspace discards, Ctrl-z undoes")
+        notice("spark: rewritten -- Backspace discards, Ctrl-z undoes")
     elseif state.kind == "ask" then
         state.buf.Type.Readonly = true
-        ib:Message("spark: Ctrl-q closes the pane")
+        notice("spark: Ctrl-q closes the pane")
     else
         select_region(state.bp, state.start, state.loc)
-        ib:Message("spark: done -- Backspace discards, Ctrl-z undoes")
+        notice("spark: done -- Backspace discards, Ctrl-z undoes")
+    end
+end
+
+-- micro keeps an infobar message until another replaces it; a notice about
+-- a finished run is stale the moment you type, so the next key clears it.
+-- The job's own completion event reaches this hook right after the notice
+-- is posted (that is event one, which must not clear it); the next is yours.
+function onAnyEvent()
+    if noticed == 1 then
+        noticed = 2
+    elseif noticed == 2 then
+        noticed = 0
+        micro.InfoBar():Message("")
     end
 end
 

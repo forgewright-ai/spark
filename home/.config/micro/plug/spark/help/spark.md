@@ -5,7 +5,9 @@ type there decides what happens:
 
     (nothing) Enter      complete at the cursor: the rest of the sentence,
                          statement or block, left selected -- Backspace
-                         discards it, Ctrl-z undoes it
+                         discards it, Ctrl-z undoes it. End your text with
+                         a space (or a new line) first: the continuation
+                         begins exactly where the cursor is
     words                rewrite the selection as the words ask ("shorter",
                          "fix grammar", "add a docstring", "translate to
                          Portuguese"); with nothing selected, the words are
