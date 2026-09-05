@@ -85,10 +85,12 @@ What comes next: `ROADMAP.md`.
 
 ## What you get
 
-- **The AI.** `spark chat` is a conversation (`/help` lists its verbs).
-  `spark <words>` streams a one-off answer, `spark do <words>` runs a task
-  one confirmed command at a time, `spark @FILE words` reads a file, `??
-  words` follows up on the last answer.
+- **The AI.** `spark chat` is a conversation (`/help` lists its verbs:
+  `/resume` picks up an older thread, `/clear` wipes the screen), and
+  `spark chat --thread N [words]` continues an older thread straight from
+  the command line. `spark <words>` streams a one-off answer, `spark do
+  <words>` runs a task one confirmed command at a time, `spark @FILE
+  words` reads a file, `?? words` follows up on the last answer.
 - **The prompt line, the surprise.** `? words` or `words?`, Enter, and the
   command lands in your line with a hint above it. `Esc a` asks about the
   line you are on. `cmd 2>&1 | explain` says what went wrong. `spark off`
