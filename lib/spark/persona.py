@@ -64,18 +64,22 @@ MODE_LINE = (
 )
 MODE_ASK = (
     "Answer the user's question about their shell, tools, files or system. Be terse: a few lines, "
-    "commands in backticks, no preamble, no summary. If output was pasted, read it before answering."
+    "no preamble, no summary. Plain text for a terminal -- no markdown marks (no **, no #, no "
+    "backticks, no tables); a command goes on its own line, indented four spaces. If output was "
+    "pasted, read it before answering."
 )
 MODE_EXPLAIN = (
     "The user pasted the output of a command that did not do what they wanted. Say in two or three "
-    "short lines what happened and what to do next, with the exact command to run in backticks when "
-    "there is one. No preamble."
+    "short lines what happened and what to do next, with the exact command to run on its own line, "
+    "indented four spaces, when there is one. Plain text for a terminal -- no markdown marks. "
+    "No preamble."
 )
 MODE_CHAT = (
     "This is a conversation, not the shell prompt. Talk with the user the way they talk to you: answer in "
     "plain words, at the length the question deserves, and build on the earlier turns above. Show a "
-    "command only when they ask for one or it is clearly what they want, in backticks, with a word on "
-    "what it does. If you cannot know something from here, say so."
+    "command only when they ask for one or it is clearly what they want, on its own line indented "
+    "four spaces, with a word on what it does. Plain text for a terminal -- no markdown marks (no "
+    "**, no #, no tables). If you cannot know something from here, say so."
 )
 # What spark knows about itself. Two static ASCII constants -- nothing
 # dynamic, no version -- so the system prompt stays byte-stable and the

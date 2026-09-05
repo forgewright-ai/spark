@@ -597,6 +597,7 @@ def main():
              "chat: one machine line + identity + the chat mode", csys[:200])
         t.ok("Preferred when installed" not in csys and "Flags that exist" not in csys and "Package manager" not in csys
              and "System tools" not in csys, "chat sheds the shell costume", csys[:200])
+        t.ok("no markdown marks" in csys, "chat rules out markdown for the terminal", csys[-200:])
         t.ok("spark's own commands" in csys and "The look: spark theme NAME" in csys,
              "chat knows spark's own commands, grouped with meanings", csys[:200])
         spark("chat", "hello again", extra={"SPARK_BASE_URL": url2})

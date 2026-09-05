@@ -85,6 +85,10 @@ And `spark shell off` could strand a console login by leaving an empty
 `rc-login` bootstrap row gives a regular `~/.bash_profile` that never
 reaches `~/.bashrc` the same marked hook line.
 
+The conversational modes now rule out markdown at the source: replies
+are plain text for a terminal, commands on their own indented line --
+no renderer, no pandoc, no wasted marks.
+
 ## v1.2
 
 The page wears the brand. The FORGE's client page is redesigned around
