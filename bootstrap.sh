@@ -908,26 +908,44 @@ else
     grub_want='GRUB_TIMEOUT=0
 GRUB_TIMEOUT_STYLE=hidden
 GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT quiet splash loglevel=3 systemd.show_status=false udev.log_level=3 vt.global_cursor_default=0 fbcon=nodefer"'
+    # /usr/sbin is not in a user's PATH on Debian: look for update-grub
+    # there too (sudo's secure_path finds it at run time either way) --
+    # `command -v` alone once mis-skipped a real Debian as "not GRUB"
+    have_update_grub() { command -v update-grub >/dev/null 2>&1 || [ -x /usr/sbin/update-grub ]; }
+    # the row is only ok when the ARTIFACT agrees: the generated
+    # /boot/grub/grub.cfg carries our kernel line (update-grub failures
+    # were once swallowed and the row lied ok). Reading it needs root on
+    # newer Debians (0600): the action path verifies as root right after
+    # update-grub; the steady state and --dry-run verify only when the
+    # file is readable without sudo (dry-run never calls sudo).
+    grub_live_quiet() { as_root grep -q 'loglevel=3' /boot/grub/grub.cfg 2>/dev/null; }
+    grub_user_ok() { [ ! -r /boot/grub/grub.cfg ] || grep -q 'loglevel=3' /boot/grub/grub.cfg 2>/dev/null; }
     if [ "$SITE_QUIET_BOOT" != yes ]; then
         if [ -f "$grub_dropin" ] || grep -q '^GRUB_TIMEOUT=0$' /etc/default/grub 2>/dev/null; then
             if need quiet-boot "show GRUB's menu again, 5 s; kernel messages back (sudo)"; then
                 as_root rm -f "$grub_dropin"
                 as_root sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=5/; s/^GRUB_TIMEOUT_STYLE=.*/GRUB_TIMEOUT_STYLE=menu/' /etc/default/grub
-                as_root update-grub >/dev/null 2>&1
-                ok quiet-boot "loud: GRUB menu shown for 5 s, kernel messages back"
+                if as_root update-grub >/dev/null 2>&1; then
+                    ok quiet-boot "loud: GRUB menu shown for 5 s, kernel messages back"
+                else
+                    row todo quiet-boot "update-grub failed -- run: sudo update-grub"
+                fi
             fi
         else skip quiet-boot "loud (SITE_QUIET_BOOT=no)"; fi
     elif [ ! -f /etc/default/grub ]; then
         skip quiet-boot "no /etc/default/grub here"
-    elif ! command -v update-grub >/dev/null 2>&1; then
+    elif ! have_update_grub; then
         skip quiet-boot "no update-grub: not a Debian-family GRUB -- left alone"
-    elif [ -f "$grub_dropin" ] && [ "$(cat "$grub_dropin" 2>/dev/null)" = "$grub_want" ]; then
+    elif [ -f "$grub_dropin" ] && [ "$(cat "$grub_dropin" 2>/dev/null)" = "$grub_want" ] && grub_user_ok; then
         ok quiet-boot "silent: menu hidden, kernel line quiet ($grub_dropin)"
     elif need quiet-boot "GRUB drop-in $grub_dropin; update-grub (sudo)"; then
         as_root mkdir -p /etc/default/grub.d
         printf '%s\n' "$grub_want" | as_root tee "$grub_dropin" >/dev/null
-        as_root update-grub >/dev/null 2>&1
-        ok quiet-boot "silent: menu hidden, kernel line quiet (hold Shift at boot for the menu)"
+        if as_root update-grub >/dev/null 2>&1 && grub_live_quiet; then
+            ok quiet-boot "silent: menu hidden, kernel line quiet (hold Shift at boot for the menu)"
+        else
+            row todo quiet-boot "grub.cfg does not carry the quiet line -- run: sudo update-grub, then spark check"
+        fi
     fi
 fi
 
