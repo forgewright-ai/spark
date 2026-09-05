@@ -47,7 +47,7 @@ THE PAGE (spark forge --print-url)  keys work when no input has focus
   share -> add to home screen     an app on iOS; a browser shortcut on Android
 
 THE MACHINE
-  spark setup                     the guided first run: name, model, light it
+  spark setup                     first run: name, user, model, theme, light it
   spark check                     drift report; exit 0 = every promise kept
   spark check --watch 5           redraw every 5 s     --selftest  prove rows
   long output (help, check, lists) pages via $PAGER (less); piped stays plain

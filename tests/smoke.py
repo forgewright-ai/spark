@@ -1115,6 +1115,14 @@ def main():
         t.ok(re.search(r"^SITE_NAME=\S", site_env, re.M) and re.search(r"^SITE_USER=\S", site_env, re.M)
              and "SITE_AI_MODEL=none\n" in site_env and "SITE_SHELL=off\n" in site_env,
              "setup wrote SITE_NAME, SITE_USER, SITE_AI_MODEL=none, SITE_SHELL=off", site_env)
+        t.ok("SITE_THEME=gruvbox-dark\n" in site_env,
+             "setup --yes takes the theme question's default answer (gruvbox-dark)", site_env)
+        rc, out, _ = spark("setup", "--yes", "--no-serve", "--model", "none", "--theme", "nosuch", extra=off)
+        t.ok(rc == 2 and "no palette named nosuch" in out and "none" in out,
+             "setup --theme nosuch exits 2 naming the palettes", out)
+        rc, out, _ = spark("setup", "--yes", "--no-serve", "--model", "none", "--theme", "none", extra=off)
+        t.ok(rc == 0 and "SITE_THEME=none\n" in open(home + "/.config/spark/site.env").read(),
+             "setup --theme none writes none (the user chooses; nothing forced)", out)
         t.ok("\u2588" in out and "GB for models" in out and "SITE_AI_MODEL=none" in out and "open a new shell" in out
              and "spark ember NAME adds a second brain" in out,
              "setup printed the logo, the table header, the model line and the closing block", out)

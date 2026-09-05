@@ -43,12 +43,14 @@ git clone https://github.com/forgewright-ai/spark.git ~/.spark
 ~/.spark/bin/spark setup
 ```
 
-`spark setup` asks three things and never more: this machine's name (the
-short hostname by default), yours (your login), and the model, from the
+`spark setup` asks four things and never more: this machine's name (the
+short hostname by default), yours (your login), the model, from the
 table with the row this machine earns marked `*` -- the largest that fits
 in the SITE_AI_BUDGET percent (default 60) of RAM plus GPU memory and
-stays usable on this engine build (the speed cap under Models). It never
-asks about the hostname, the shell
+stays usable on this engine build (the speed cap under Models) -- and the
+theme (`theme [gruvbox-dark]:`, any name from `themes/` or `none`; the
+default is only the default answer, `site.env.example` stays
+`SITE_THEME=none`). It never asks about the hostname, the shell
 layer or headless: those have verbs of their own. Then, in order:
 
 1. writes `~/.config/spark/site.env` (created from `site.env.example`,
@@ -61,17 +63,21 @@ layer or headless: those have verbs of their own. Then, in order:
    curl's progress bar, the api-token, the widgets, the one rc line, the
    units (`spark-serve` / `spark.serve` and the FORGE's, plus a 5-minute
    check timer);
-4. brings the server up (the unit, or `spark serve`) and waits for it;
-5. asks `? how big is this dir` for you, shows the answer as the widget
+4. writes the chosen palette's runtime files (`theme.env`,
+   `console-colors`) unless the answer was `none` -- the theme is core,
+   shell layer or not; on macOS the Terminal.app profile is imported too;
+5. brings the server up (the unit, or `spark serve`) and waits for it;
+6. asks `? how big is this dir` for you, shows the answer as the widget
    shows it, and prints the tok/s that question measured;
-6. prints the three things to try. `spark shell on` is mentioned, never
+7. prints the three things to try. `spark shell on` is mentioned, never
    offered.
 
 Flags: `--yes` takes every default without asking (implied when stdin is
-not a terminal); `--model NAME|auto|none`, `--name`, `--user` and
-`--no-serve` pre-answer; `SITE_NAME`, `SITE_USER`, `SITE_AI_MODEL` in the
-environment do the same, and a key `site.env` already holds is not asked
-again. It is re-runnable: every bootstrap row is idempotent.
+not a terminal); `--model NAME|auto|none`, `--name`, `--user`, `--theme`
+and `--no-serve` pre-answer; `SITE_NAME`, `SITE_USER`, `SITE_AI_MODEL`,
+`SITE_THEME` in the environment do the same, and a key `site.env` already
+holds is not asked again. It is re-runnable: every bootstrap row is
+idempotent.
 
 The rc line: bootstrap's `rc` row appends exactly one line to the end of
 your login shell's rc file -- `~/.bashrc` for bash, `~/.zshrc` for zsh --
