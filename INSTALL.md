@@ -305,7 +305,7 @@ rendered once as regular files and left to the app:
 | `~/.config/btop/btop.conf` | btop rewrites it on every exit |
 | `~/.config/micro/bindings.json` | micro rewrites it (through the link) when a plugin adds keys |
 | `~/.config/micro/settings.json` | micro rewrites it on every option change; seeded once (`"colorscheme": "spark"`), then it is micro's -- never re-rendered, never backed up |
-| `~/.gitconfig`, `~/.tmux.conf`, `~/.config/starship.toml` | carry your name / palette / choices |
+| `~/.gitconfig`, `~/.tmux.conf`, `~/.config/starship.toml`, `~/.config/micro/colorschemes/spark.micro` | carry your name / palette / choices |
 | `~/.config/spark/launchd/*.plist` | launchd needs absolute paths |
 
 `install.sh` never overwrites a regular file: it moves it to `<file>.bak`.

@@ -1,5 +1,90 @@
 # Changelog
 
+## v1.3
+
+The CLI experience wave. A few days of living with spark taught one
+lesson: the machine works, the conversation with it was rough. This
+release is one grammar for every verb, a machine that explains itself,
+and long output you can actually read.
+
+The grammar, written into `CLAUDE.md` beside the contracts: a bare verb
+shows and never mutates (`spark bar` included -- bare shows now,
+`on|off` sets; tmux still always gets its line); `on|off` is the only
+switch vocabulary at the CLI while the stored keys stay `yes|no` --
+the verb translates; `status` is an alias of bare and `list` the table
+word; every verb answers `-h` first, signed; one confirm shape
+(`<question>? yes/NO: `, `confirm()`), one progress vocabulary (curl's
+bar for downloads, one dot-spinner -- `wait_ready()` -- for every wait
+on a server coming up), and one exit-code law (0 ok or show, 1 the
+world, 2 the invocation, 78 misconfiguration, 130 SIGINT). A verb that
+breaks a rule is a bug now, not a style choice.
+
+`spark quiet` replaces `spark bootconfig`, which exits 2 naming the new
+verb (`spark talk` goes the same way, naming `spark chat`; the API
+keeps accepting the old mode word). Bare `spark quiet` shows three
+states. `login` and `boot` are the old Linux motd and kernel-line
+switches, and `boot on` now means a genuinely silent boot: one
+removable drop-in in `/etc/default/grub.d` hides GRUB's menu, quiets
+the kernel line and asks systemd for errors only (hold Shift at boot
+for the menu). The new `start` switch (`SITE_QUIET_START`, both OSes)
+silences spark itself: no login banner, one-line `spark serve` and
+`spark forge`, one-line bare `spark` -- `spark status` stays full.
+
+Long output pages. The help, the check report, the model and theme
+tables, the history and the stats go through `$PAGER` (`less -R -F -X`
+when unset) at a terminal, colour stripped on the way in -- inside a
+pager it is either rendered or garbage; piped output never sees a pager
+and stays byte-identical, and an absent pager falls back to plain print
+(less is not guaranteed). Text-first means the pipe contract is
+untouched. `spark help` itself is rewritten, not patched: every verb
+and the flags that matter, grouped so a new user reads the top and a
+daily user finds the bottom; the pager carries the length.
+
+Chat finds its way back. `/resume` lists the newest five threads and
+`/resume N` (or a thread id) switches to one; `/clear` wipes the screen
+while the thread goes on; `spark chat --thread N [words]` continues an
+older thread straight from the command line, the one-shot form
+included.
+
+The machine explains itself, twice over. The line and chat prompts
+learn spark's own command surface, so `?? how do I change the theme`
+answers naming `spark theme` -- proven live on a box, the same way a
+model row is proven on the line. And TAB completes: the first word
+offers the verbs, the second each verb's words -- theme and model names
+included, resolved offline through the `spark` symlink -- in bash and
+zsh, wired by the core hook, no key bound. A `completion` check row
+watches the wiring.
+
+The first run looks right. `spark setup` asks a fourth question,
+`theme [gruvbox-dark]:` (the default is only the default answer;
+`site.env.example` stays `SITE_THEME=none`), and the chosen palette
+lands on every surface at once: the Linux text console (a precomputed
+`console-colors` palette the rc hooks apply only when `TERM=linux`),
+micro (a rendered `spark` colorscheme plus a seeded `settings.json`)
+and tmux -- one look from minute one, watched by a new `theme` check
+row. Two palettes join, nord and tokyonight-night, and the two theme
+validators (`lib/env.sh` and `config.py`) now require the same 21 keys;
+the tests render every palette by glob, so a gap in a new one goes
+loud. `spark shell off` hands the look back too: tmux, starship, btop
+and the micro files come back from `.bak` or go, the way the rc files
+always did. And `spark font` leaves the shell gate -- the console font
+is the machine's face with the layer off too; the new `spark font list`
+shows the real faces and sizes in `/usr/share/consolefonts` and a face
+or size not there is refused before anything is written. 36 check rows
+now.
+
+Fixes from first-session use. A misspelled verb with arguments (`spark
+quite start on`) became a question to the model; it is a did-you-mean
+at exit 2 now. Bare `spark` under quiet start said `ember` when a
+single model serves both roles; it names the truth. `spark update`
+twice mixed the running process with the tree it had just pulled (an
+ImportError mid-deploy); after a move it now execs the fresh
+`bin/spark`, so bootstrap and the recheck always run in the new code.
+And `spark shell off` could strand a console login by leaving an empty
+`~/.bash_profile`: a restore never leaves a husk now, and a new
+`rc-login` bootstrap row gives a regular `~/.bash_profile` that never
+reaches `~/.bashrc` the same marked hook line.
+
 ## v1.2
 
 The page wears the brand. The FORGE's client page is redesigned around

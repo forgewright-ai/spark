@@ -20,6 +20,8 @@ shellcheck -S warning bootstrap.sh install.sh lib/env.sh
 /usr/bin/python3 tests/forge_smoke.py
 /usr/bin/python3 tests/bench_smoke.py
 /usr/bin/python3 tests/widget_pty.py zsh home/.config/spark/widget.zsh
+/usr/bin/python3 tests/widget_pty.py pager
+/usr/bin/python3 tests/widget_pty.py completion zsh home/.config/spark/completion.zsh
 /usr/bin/python3 bin/spark check --selftest
 sh tests/install_test.sh
 sh tests/get_test.sh
@@ -74,5 +76,5 @@ one for a bug; anything else is a blank issue.
 
 ## Roadmap
 
-`ROADMAP.md` lists what comes next, the chaos wave first; an idea that
+`ROADMAP.md` lists what comes next, the token wave first; an idea that
 is not there is an issue away.

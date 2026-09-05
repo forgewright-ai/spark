@@ -40,7 +40,7 @@ the theme -- does the rest, and asks the first question for you. A Debian
 box with 16 GB between RAM and GPU:
 
 ```
-spark 1.0
+spark 1.3
 by forgewright-ai . github.com/forgewright-ai/spark
 
 this machine's name [mini]:

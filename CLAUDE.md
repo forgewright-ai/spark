@@ -385,6 +385,9 @@ spark check                     # must exit 0
 spark check --selftest          # every fixture-testable row flips
 spark forge                     # the FORGE: up, at one LAN address, upstream ok
 python3 tests/forge_smoke.py    # the API and the page, against a stub model
+python3 tests/widget_pty.py pager        # $PAGER at a tty; plain when absent
+python3 tests/widget_pty.py completion zsh home/.config/spark/completion.zsh
+                                # TAB completes verbs and names (bash likewise)
 git status -sb                  # clean, not ahead of origin
 spark check --porcelain | grep privacy   # the tree contains no banned word
 sh tests/get_test.sh            # the one-liner: clone, pull, refusals, the hand-off to setup
