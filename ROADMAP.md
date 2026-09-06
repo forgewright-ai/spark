@@ -14,18 +14,6 @@ is a promise; a row in `CHANGELOG.md` is. A better idea is an issue away.
   Portuguese prose, Go, Python, shell) with mechanical lints, run against
   a live brain, so a brief is judged blind.
 
-## spark token: status for the keys that remain
-
-Bare `spark token` names which keys this machine holds (api-token, admin
-token, login) and whether the brain accepts each -- status only, never a
-value, with the remedy per stale key.
-
-## OS-user accounts on one box
-
-Real OS users, each running their own spark against one shared engine:
-the port story, a shared model cache with per-user config, a system unit
-serving all of them. After the account layer has been lived with.
-
 ## Chaos: rehearse the failures
 
 `spark chaos` (or `spark check --chaos`) breaks the machine one known way
@@ -55,21 +43,14 @@ chooses on quality and speed, not size alone.
 The misses so far are macOS knowledge (`free` for `vm_stat`). A short
 block of per-OS examples in the line's prefix is the cheapest gain.
 
-## More distros, more machines
+## Per-OS user accounts
 
-Debian-family only today. Fedora and Arch need a package table and a CI
-job each; Linux arm64 already has an engine pin. A `.deb` and a Homebrew
-tap wait until the clone-and-tag path has been lived with.
+Real OS users, each running their own spark against one shared engine:
+the port story, a shared model cache with per-user config, a system unit
+serving all of them. After the account layer has been lived with.
 
-## The FORGE from anywhere
+## spark token: status for the keys that remain
 
-The page and the API stop at the LAN on purpose. An overlay network
-(Tailscale, any WireGuard mesh) extends that boundary to your own devices
-without opening a port; its https endpoints are the real PWA path (a
-service worker, a true offline shell).
-
-## The bigger second model
-
-A machine with 32 GB earns a mixture-of-experts model (the 30B-A3B rows:
-near-4B speed, near-flagship answers) as its second model. The table
-already says when it fits; the proof and the tuning are the work.
+Bare `spark token` names which keys this machine holds (api-token, admin
+token, login) and whether the brain accepts each -- status only, never a
+value, with the remedy per stale key.
