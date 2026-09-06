@@ -118,13 +118,42 @@ FONT_USAGE = """%s font -- the terminal's font
 
   spark font                    what is set
   spark font list               Linux: the console faces and sizes installed
-                                (/usr/share/consolefonts); macOS: common
-                                PostScript names, and how to find any
+                                (/usr/share/consolefonts); macOS: the
+                                monospace faces installed here, by PostScript
+                                name, and how to find any other
   spark font FACE SIZE          Linux console: a face and size from the list
-                                (e.g. Terminus 16x32); macOS: a font's
-                                PostScript name and points (13)
+                                (e.g. Terminus 16x32); macOS: an installed
+                                font's PostScript name and points (13); one
+                                face and size for every spark profile
   spark font none               Linux: leave the console's font alone
 """ % MARK
+# monospace faces a Mac may hold, by PostScript name: the list shows the installed ones
+MAC_MONO = ("JetBrainsMonoNFM-Regular", "JetBrainsMono-Regular", "Menlo-Regular", "Monaco", "SFMono-Regular",
+            "Courier", "CourierNewPSMT", "AndaleMono", "PTMono-Regular", "FiraCode-Regular", "Hack-Regular",
+            "SourceCodePro-Regular", "CascadiaCode-Regular", "UbuntuMono-Regular", "DejaVuSansMono",
+            "Inconsolata-Regular", "RobotoMono-Regular", "IBMPlexMono", "VictorMono-Regular")
+
+
+# the monospace faces every Mac ships (/System/Library/Fonts, outside Spotlight's index)
+MAC_SYSTEM = {"Menlo-Regular", "Menlo-Bold", "Monaco", "SFMono-Regular", "SFMono-Bold", "Courier", "Courier-Bold",
+              "CourierNewPSMT", "AndaleMono"}
+
+
+def mac_font_installed(face):
+    """True for a face every Mac ships or one Spotlight finds (kMDItemFonts
+    holds PostScript names, 20 ms); False when Spotlight indexes and has
+    no such face; None when indexing is off, or not a Mac -- so a caller
+    never refuses on no evidence."""
+    if not IS_MAC:
+        return None
+    if face in MAC_SYSTEM:
+        return True
+    from . import run
+    rc, out = run(["mdfind", "kMDItemFonts == '%s'" % face.replace("'", "")], timeout=5)
+    if rc == 0 and out.strip():
+        return True
+    rc, out = run(["mdutil", "-s", "/"], timeout=5)
+    return False if rc == 0 and "Indexing enabled" in out else None
 CONSOLEFONTS_DIR = "/usr/share/consolefonts"
 _FONT_FILE = re.compile(r"^[A-Za-z0-9]+-([A-Za-z]+?)(\d+(?:x\d+)?)\.psfu?(?:\.gz)?$")
 
@@ -160,10 +189,17 @@ def _size_spellings(size):
 def font_list():
     """`spark font list`: what FACE SIZE may name here."""
     if IS_MAC:
-        say("%s font list -- macOS: a font's PostScript name; the size is points" % MARK)
-        say("  JetBrainsMonoNFM-Regular      the Nerd Font spark installs (Brewfile)")
-        say("  Menlo-Regular  Monaco  SFMono-Regular      always on a Mac")
-        say("  Font Book shows any font's PostScript name (select it, Cmd-I)")
+        say("%s font list -- macOS: the monospace faces installed here, by PostScript name; the size is points" % MARK)
+        notes = {"JetBrainsMonoNFM-Regular": "the Nerd Font spark installs (Brewfile): the default"}
+        seen = 0
+        for face in MAC_MONO:
+            here = mac_font_installed(face)
+            if here or (here is None and face in MAC_MONO[:5]):
+                say("  %-28s %s" % (face, notes.get(face, "")))
+                seen += 1
+        if not seen:
+            say("  (Spotlight has no font index here: Menlo-Regular, Monaco and SFMono-Regular are always on a Mac)")
+        say("  any other: Font Book shows a font's PostScript name (select it, Cmd-I)")
         return 0
     fonts = console_fonts()
     if not fonts:
@@ -201,8 +237,13 @@ def cmd_font(args):
         return 2
     face, size = args
     if IS_MAC:
-        if not re.match(r"^\d+(\.\d+)?$", size):
-            say("spark font: %s is not a size -- points on macOS, e.g. 13" % size)
+        if not re.match(r"^\d+(\.\d+)?$", size) or not 6 <= float(size) <= 72:
+            say("spark font: %s is not a size -- points on macOS, 6 to 72, e.g. 13" % size)
+            return 2
+        # refuse a face this Mac does not have (a console face such as VGA,
+        # a typo): Terminal.app would fall back to its own font in silence
+        if mac_font_installed(face) is False:
+            say("spark font: no font named %s is installed here -- spark font list shows the monospace ones" % face)
             return 2
     else:
         if not re.match(r"^\d+(x\d+)?$", size):
@@ -219,6 +260,9 @@ def cmd_font(args):
             return 2
     set_keys(SITE_FONT_FACE=face, SITE_FONT_SIZE=size)
     if IS_MAC:
+        if os.environ.get("SPARK_NO_APPLY"):
+            say("ok     font         %s %s written (SPARK_NO_APPLY: no profile)" % (face, size))
+            return 0
         from . import theme
         return theme.profile(config.load(), False)
     return apply(["console", "font"])

@@ -1224,6 +1224,23 @@ def main():
             rc, out, _ = spark("font", "NoSuchFace", "16x32", extra=off)
             t.ok(rc == 2 and "spark font list" in out,
                  "a console face consolefonts lacks is refused, naming spark font list", out)
+        if sys.platform == "darwin":
+            from spark import site as _site
+            if _site.mac_font_installed("VGA") is False:       # Spotlight indexes here
+                rc, out, _ = spark("font", "VGA", "16", extra=dict(off, SPARK_NO_APPLY="1"))
+                t.ok(rc == 2 and "no font named VGA is installed here" in out and "spark font list" in out,
+                     "macOS: a face this Mac lacks (a console face) is refused, naming spark font list", out)
+                rc, out, _ = spark("font", "Menlo-Regular", "13", extra=dict(off, SPARK_NO_APPLY="1"))
+                with open(home + "/.config/spark/site.env") as f:
+                    site_env = f.read()
+                t.ok(rc == 0 and "SITE_FONT_FACE=Menlo-Regular\n" in site_env and "SITE_FONT_SIZE=13\n" in site_env,
+                     "macOS: an installed face and points are written", out + site_env)
+                rc, out, _ = spark("font", "Menlo-Regular", "99", extra=dict(off, SPARK_NO_APPLY="1"))
+                t.ok(rc == 2 and "6 to 72" in out, "macOS: a size outside 6..72 points is refused", out)
+                rc, out, _ = spark("font", "list", extra=off)
+                t.ok("Menlo-Regular" in out and "JetBrainsMonoNFM-Regular" in out, "macOS: spark font list names installed faces", out)
+            else:
+                print("  skip macOS font guard: Spotlight indexing is off here")
         rc, out, _ = spark("bootconfig", extra=off)
         t.ok(rc == 2 and out.strip() == "spark bootconfig -- gone: spark quiet (login|boot)",
              "spark bootconfig is gone: one line naming spark quiet, exit 2", out)

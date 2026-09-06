@@ -263,6 +263,13 @@ def row_font(ctx):
     Linux) is judged with the shell layer off too; the Nerd Font is still
     the layer's, so it is only demanded when the layer is on."""
     console = _console_font_row(ctx)
+    if IS_MAC:
+        # a face this Mac does not have makes Terminal.app fall back to its
+        # own font in silence (a console face such as VGA carried over)
+        from . import site
+        if site.mac_font_installed(ctx.cfg.font_face) is False:
+            return warn("SITE_FONT_FACE=%s is not installed here: Terminal.app falls back to its own font" % ctx.cfg.font_face,
+                        "spark font list; spark font FACE %s" % ctx.cfg.font_size)
     if not ctx.cfg.shell:
         if console:
             return console

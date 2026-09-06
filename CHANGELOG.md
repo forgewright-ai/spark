@@ -90,6 +90,12 @@ The server keeps no prompt cache in RAM.
 - `spark theme NAME` on macOS switches the open Terminal.app windows to
   the new profile as well as new ones; before, the cursor and the colours
   of the window you typed in stayed the old theme's.
+- `spark font` on macOS refuses a face this Mac does not have (Spotlight
+  answers in 20 ms), `spark font list` there shows the monospace faces
+  actually installed, and the `font` check row warns when the chosen face
+  is missing -- before, a console face such as `VGA` carried into a Mac's
+  `site.env` made Terminal.app fall back to SF Mono 11 in silence. The
+  default stays the Nerd Font at 13; one face and size for every profile.
 - Something small runs in the dark. Those who look will find it.
 
 ## v1.6
