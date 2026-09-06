@@ -15,6 +15,15 @@
   the VT at the next login. `SITE_THEME` is still recorded; the files, and
   the macOS Terminal profile, now land with `spark shell on` or an
   explicit `spark theme NAME`.
+- A palette change reaches the console it is typed on. `spark theme NAME`
+  and `spark theme none` wrote `console-colors` and left it for the rc hook
+  to cat at the next login, so turning a theme off looked stuck until a
+  logout and a `clear`. One helper (`theme.apply_console`) now sends that
+  file to a running `TERM=linux` VT, and `spark theme`, `spark shell on`
+  and `spark shell off` all go through it. An emulator is never repainted.
+- The `theme` check row reads `na`, not `fail`, when `SITE_THEME` names a
+  palette that nothing has painted yet and the shell layer is off -- the
+  state every fresh install is now in.
 - `spark shell off` hands the terminal back. It restored the rc files and
   the rendered configs but said nothing about opening a new shell, and it
   left the palette on: a VT holds its own colours, so no `exec $SHELL`

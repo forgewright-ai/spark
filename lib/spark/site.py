@@ -1167,6 +1167,7 @@ def cmd_shell(args):
             if cfg.theme != "none" and not os.environ.get("SPARK_NO_APPLY"):
                 from . import theme
                 theme.write_runtime(cfg.theme)
+                theme.apply_console()
                 say("ok     theme        %s -> ~/.config/spark/theme.env (+ console-colors)" % cfg.theme)
                 if IS_MAC:
                     theme.profile(cfg, False)
@@ -1183,10 +1184,7 @@ def cmd_shell(args):
     if any(os.path.exists(os.path.join(CONFIG_DIR, f)) for f in ("theme.env", "console-colors")):
         from . import theme
         theme.write_runtime("none")     # config, so SPARK_NO_APPLY does it too
-        if not os.environ.get("SPARK_NO_APPLY") and sys.stdout.isatty() \
-                and os.environ.get("TERM") == "linux":
-            sys.stdout.write("\033]R")
-            sys.stdout.flush()
+        theme.apply_console()           # the running VT, not just the next login
         say("ok     theme        the console palette is back to its own"
             + ("; Terminal.app keeps the spark profile until you change it there" if IS_MAC else ""))
     if not os.environ.get("SPARK_NO_APPLY"):

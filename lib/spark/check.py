@@ -319,8 +319,10 @@ def row_theme(ctx):
     tmux, starship, btop, micro and the FORGE page were fed) matches
     the palette's file -- yours under ~/.config/spark/themes/ first, else
     themes/<SITE_THEME>.env -- key for key, and on Linux console-colors (the
-    VT palette the rc hook applies) is in place. Core: the theme is chosen
-    outside the shell gate. `spark theme NAME` writes all of it."""
+    VT palette the rc hook applies) is in place. SITE_THEME is chosen
+    outside the shell gate, but the palette is only PAINTED with the layer
+    on or by `spark theme NAME`: a key naming a palette nothing has applied
+    yet is `na`, not a fault."""
     from . import CONFIG_DIR
     name = ctx.cfg.theme
     if name == "none":
@@ -332,6 +334,8 @@ def row_theme(ctx):
         return fail("SITE_THEME=%s: no %s.env in themes/ or ~/.config/spark/themes/" % (name, name), "spark theme list")
     have = _env_lines(os.path.join(CONFIG_DIR, "theme.env"))
     if have is None:
+        if not ctx.cfg.shell:
+            return na("%s chosen, not painted (spark shell on, or spark theme %s)" % (name, name))
         return fail("%s chosen but theme.env was never written" % name, "spark theme %s" % name)
     stale = [k for k in THEME_KEYS if have.get(k) != want.get(k)]
     if stale:

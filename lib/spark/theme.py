@@ -7,6 +7,7 @@
 import os
 import plistlib
 import subprocess
+import sys
 import time
 
 from . import CONFIG_DIR, HOME, IS_MAC, MARK, REPO, config, glyph, run, say
@@ -296,6 +297,26 @@ def write_runtime(name):
         f.write(esc + "\n")
 
 
+def apply_console():
+    """Send ~/.config/spark/console-colors to a RUNNING Linux VT, and say so.
+    The rc hook cats that file at the next login; without this a palette --
+    or the reset `none` leaves there -- waited for one, which is why turning
+    a theme off looked stuck until logout. Only TERM=linux, only a tty: an
+    emulator's scrollback must never be repainted under the user."""
+    if os.environ.get("SPARK_NO_APPLY") or not sys.stdout.isatty():
+        return False
+    if os.environ.get("TERM") != "linux":
+        return False
+    try:
+        with open(os.path.join(CONFIG_DIR, "console-colors"), encoding="utf-8") as f:
+            data = f.read()
+    except OSError:
+        return False
+    sys.stdout.write(data)
+    sys.stdout.flush()
+    return True
+
+
 MICRO_SETTINGS = os.path.join(HOME, ".config", "micro", "settings.json")
 
 
@@ -343,6 +364,9 @@ def set_theme(name):
         say("spark theme: install.sh failed -- sh %s says why" % os.path.join(REPO, "install.sh"))
         return 1
     write_runtime(name)
+    if apply_console():
+        say("ok     console      this console took the palette now" if name != "none"
+            else "ok     console      this console has its own colours back")
     if config.load().shell:
         was = micro_colorscheme()
         if was:
