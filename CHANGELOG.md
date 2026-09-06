@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.9
+
+- The page really does rebuild on a release now. `release.yml` creates the
+  Release with the job's own `GITHUB_TOKEN`, and GitHub raises no event for
+  what that token does, so the `release: published` trigger v1.8 shipped
+  never fired: v1.8 was published and the page went on naming v1.7.
+  `pages.yml` waits for the release WORKFLOW to finish instead, and
+  publishes only when it succeeded.
+
 ## v1.8
 
 A rendered file stops moving with the network; the page stands on its own.

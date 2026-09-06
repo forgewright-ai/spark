@@ -1,6 +1,6 @@
 # pages.yml -- spark.forgewright.ai: the repository's own docs rendered into
 # one static site (www/build.py, stdlib) and published with GitHub Pages.
-# A doc change on main ships the site, and so does a published release
+# A doc change on main ships the site, and so does a finished release run
 # (release.yml): the sign line names the newest tag and links its release,
 # so the page and the GitHub release never disagree. Nothing is written
 # twice and no secret is involved (the job's own token deploys). CI proves
@@ -16,8 +16,12 @@ on:
       - 'CHEATSHEET.txt'
       - 'models.env'
       - '.github/workflows/pages.yml'
-  release:
-    types: [published]
+  # release.yml creates the Release with the job's own GITHUB_TOKEN, and
+  # GitHub raises no event for what that token does -- a `release: published`
+  # trigger here never fires. Waiting for the release WORKFLOW instead does.
+  workflow_run:
+    workflows: [release]
+    types: [completed]
   workflow_dispatch:
 permissions:
   contents: read
@@ -28,6 +32,8 @@ concurrency:
   cancel-in-progress: true
 jobs:
   pages:
+    # workflow_run fires on a FAILED release too: publish only what succeeded
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment:
