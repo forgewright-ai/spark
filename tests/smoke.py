@@ -138,7 +138,7 @@ def edit_pieces(system, user):
         # a review with quotes: one true, one misquote, one across the
         # text's line break, one curly with the comma tucked inside
         return ('1. "Some prose." reads flat\n2. "Sum prose" is mis', 'spelled\n3. "prose. And more" runs on\n',
-                '4. “more here,” drifts\nno newline')
+                '4. “more here,” drifts\n5. "Sum prose" -> "Some verse" reads better\nno newline')
     return ("1. line 2: ", "typo\n")
 
 
@@ -633,15 +633,21 @@ def main():
         t.ok(rc == 0 and out == "1. line 2: typo\n" and "You read this as" not in umsg and "Answer in" not in umsg, "edit: a failed reading is silent, the answer still streams", repr(umsg[:120]))
         t.ok(umsg.startswith("Review this.\n\n"), "edit: ? alone is a review", repr(umsg[:40]))
         # anchors: every quoted span of a ? answer is checked against the text
+        import io
+        from spark import text as textmod
+        an = textmod.Anchors(io.StringIO(), 'He said "hum" and\nleft the room.\n')
+        an.write("1. \"said 'hum' and\" is dry\n2. \"HE SAID\" shouts\n3. \"and left\" runs on\n4. \"He sad\" typo\n5. \"was\" -> \"is\" tense\n")
+        an.close()
+        t.ok((an.quoted, an.missed) == (5, 2), "anchors: quote marks, case and line breaks fold; a typo and a misquote do not; a proposal is skipped", str((an.quoted, an.missed)))
         STATE["ask_quotes"] = True
         rc, out, _ = spark("edit", "?", stdin="Some prose.\nAnd more here.\n")
         STATE["ask_quotes"] = False
         t.ok(rc == 0 and out == '1. "Some prose." reads flat\n2. "Sum prose" [not in the text] is misspelled\n'
-             '3. "prose. And more" runs on\n4. “more here,” drifts\nno newline',
-             "edit ?: a misquote is marked where it stands; verbatim, folded and curly quotes anchor; the last line flushes", repr(out))
+             '3. "prose. And more" runs on\n4. “more here,” drifts\n5. "Sum prose" [not in the text] -> "Some verse" reads better\nno newline',
+             "edit ?: a misquote is marked where it stands; verbatim, folded and curly quotes anchor; a proposal after -> is not checked; the last line flushes", repr(out))
         turns = sorted(glob.glob(home + "/.local/state/spark/turns/*.jsonl"))
         lt = json.loads(open(turns[-1]).read().splitlines()[-1]) if turns else {}
-        t.ok(lt.get("kind") == "ask" and lt.get("quotes") == 4 and lt.get("unanchored") == 1,
+        t.ok(lt.get("kind") == "ask" and lt.get("quotes") == 5 and lt.get("unanchored") == 2,
              "edit ?: the turn counts the quotes and the unanchored ones", json.dumps(lt)[:200])
         # --sel: the whole file on stdin, the question about one part of it
         big = "".join("line %03d of the file\n" % i for i in range(1, 41))

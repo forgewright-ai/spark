@@ -34,11 +34,12 @@ The server keeps no prompt cache in RAM.
   one release ahead of the tag. The sign line and the changelog agree.
 - Every quote in a `?` answer is checked against the text. The answer
   streams line by line; a quoted span the text does not hold -- verbatim,
-  with whitespace folded, or with the punctuation tucked inside the quote
-  stripped -- is followed by `[not in the text]` where it stands, so a
+  or with whitespace, quote marks and case folded, or with the punctuation
+  tucked inside the quote stripped -- is followed by `[not in the text]` where it stands, so a
   misquote (an earlier tool of ours turned "plum" into "plume") never
-  reads as the author's words. The brief asks for double quotes, never
-  across a line; the turn record counts `quotes` and `unanchored`.
+  reads as the author's words. A span after an arrow (`"was" -> "should
+  be"`) is the model's proposal and is left alone. The brief asks for
+  double quotes, never across a line, and for proposals plain; the turn record counts `quotes` and `unanchored`.
 - A `?` about a selection sees the file around it: `spark edit ? --sel A
   B` takes the whole file on stdin and sends one 16 kB window -- the
   selection between two mark lines the brief knows, the file before and

@@ -330,9 +330,12 @@ may change freely.
     read this as: ...`; any failure is silence) and the answer. A `?`
     answer streams line by line through `text.Anchors`: every quoted
     span (double quotes, curly quotes, backticks; 3..200 chars) is
-    checked against the text on stdin -- verbatim, then whitespace
-    folded, then trailing punctuation stripped -- and one that does not
-    anchor is followed by ` [not in the text]` where it stands; the turn
+    checked against the text on stdin -- verbatim, then folded
+    (whitespace, quote marks, case), then trailing punctuation stripped
+    -- and one that does not
+    anchor is followed by ` [not in the text]` where it stands (a span
+    right after `->`, a Unicode arrow or `=>` is the model's proposal: not checked,
+    not counted); the turn
     records `quotes` and `unanchored`. `--sel A B` (a `?`; stdin is the
     whole file) sends one window of at most 16 kB (`cli._edit_window`):
     the selection whole (head + cut + tail past 12 kB) between the lines

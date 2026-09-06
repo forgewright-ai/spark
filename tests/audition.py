@@ -129,7 +129,7 @@ def lint_ask(out, inp, fx, sel):
     yield "at most five notes", len(notes) <= 5
     yield "no markdown marks", not re.search(r"\*\*|^#|^\|", out, re.M)
     yield "every quote anchors", textmod.ANCHOR_MARK not in out
-    yield "quotes at all", bool(textmod.quotes(out.replace("\n", " "))) or "nothing I would change" in out.lower()
+    yield "quotes at all", bool(textmod.quotes(out.replace("\n", " "))) or bool(re.search(r"nothing (i would|to) change|change nothing", out, re.I))
     yield "no praise opener", not PRAISE.match(out)
     yield "no X -> X", not DEGENERATE.search(out)
     if fx["lang"] != "code":

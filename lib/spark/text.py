@@ -209,22 +209,34 @@ QUOTE = re.compile(r'"([^"\n]{3,200})"|“([^”\n]{3,200})”|`([^`\n]{3,200})`
 ANCHOR_MARK = " [not in the text]"
 
 
+PROPOSAL = re.compile(r"(->|→|=>)\s*$")
+
+
 def quotes(line):
-    """[(span, end)] -- every quoted span on one line (double quotes,
-    curly double quotes or backticks; 3..200 chars) and the index just
-    past its closing mark."""
-    return [(m.group(m.lastindex), m.end()) for m in QUOTE.finditer(line)]
+    """[(span, start, end)] -- every quoted span on one line (double
+    quotes, curly double quotes or backticks; 3..200 chars) with the index
+    of its opening mark and the one just past its closing mark. A span
+    right after an arrow (`"was" -> "should be"`) is the model's own
+    proposal, not a quote of the text: left out."""
+    return [(m.group(m.lastindex), m.start(), m.end()) for m in QUOTE.finditer(line)
+            if not PROPOSAL.search(line[:m.start()])]
+
+
+_MARKS = str.maketrans({"\u201c": '"', "\u201d": '"', "\u2018": "'", "\u2019": "'", "'": '"'})
 
 
 def _fold(s):
-    return " ".join(s.split())
+    """Whitespace runs to one space, every quote mark to ", lower case:
+    the shapes a faithful quote may still differ in (a line break, a
+    capital at the start of a sentence, "hum" written 'hum')."""
+    return " ".join(s.split()).translate(_MARKS).lower()
 
 
 def anchor(span, data, folded=None):
-    """Is `span` in `data`: verbatim; else with whitespace folded on both
-    sides (a quote across a line break); else with the punctuation the
-    model tucked inside the closing quote stripped. `folded` is
-    _fold(data) when the caller has it already."""
+    """Is `span` in `data`: verbatim; else folded on both sides
+    (whitespace, quote marks, case); else with the punctuation the model
+    tucked inside the closing quote stripped. `folded` is _fold(data)
+    when the caller has it already."""
     if span in data:
         return True
     folded = _fold(data) if folded is None else folded
@@ -249,7 +261,7 @@ class Anchors:
 
     def _mark(self, line):
         out, last = [], 0
-        for span, end in quotes(line):
+        for span, _start, end in quotes(line):
             self.quoted += 1
             if not anchor(span, self.data, self.folded):
                 self.missed += 1
