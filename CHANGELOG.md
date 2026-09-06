@@ -2,117 +2,45 @@
 
 ## v1.7
 
-The server keeps no prompt cache in RAM.
+The editor grows up; the shell learns your palettes; a client stays a client.
 
-- `spark serve` passes `--cache-ram 0` (single server and both router
-  presets). llama-server's default keeps every replaced prompt's KV state
-  in host memory up to 8 GiB, more than a small box has: a 12B model on a
-  16 GB APU climbed from 32 % to 90 % RAM in a day and started swapping.
-  The four slots still hold the recent prompts on the GPU; a prompt that
-  comes back after four others costs its prefill again (about 8 s per
-  1000 tokens on that box). `SPARK_EXTRA_ARGS=--cache-ram N` in
-  `spark.env` sets a budget in MiB for those who want one.
-- The `serve` check row reads the running server's arguments: `no host
-  cache`, or the budget you set, or a warning when an older start still
-  caches (restart the unit).
-- The micro plugin (1.0.1) survives its own mistakes: every job callback
-  runs protected, so a Lua error becomes an infobar line instead of a dead
-  editor with a stack trace. A rewrite checks that the text it was given
-  is still where it was; when the buffer was edited meanwhile the answer
-  opens in a read-only pane instead of being spliced over a stale range.
-  Two pty cases prove both.
-- The docs keep themselves true: `tests/docs_test.py` (pre-commit, CI)
-  checks every palette's and every model's upstream is in `CREDITS.md`,
-  the check-row and model counts the docs state are the tree's, every
-  page has its source file, and no retired list word survives.
-- `CREDITS.md` names all six palettes with their own license (Tokyo Night
-  is Apache-2.0) and every model family's upstream.
-- The page's models table drops the note column; `models.env` ships no
-  notes (the key stays, optional, for your own rows).
-- The page renders a CHANGELOG section above the newest tag as
-  `vX.Y (unreleased)`; `tests/docs_test.py` refuses a heading more than
-  one release ahead of the tag. The sign line and the changelog agree.
-- Every quote in a `?` answer is checked against the text. The answer
-  streams line by line; a quoted span the text does not hold -- verbatim,
-  or with whitespace, quote marks and case folded, or with the punctuation
-  tucked inside the quote stripped -- is followed by `[not in the text]` where it stands, so a
-  misquote (an earlier tool of ours turned "plum" into "plume") never
-  reads as the author's words. A span after an arrow (`"was" -> "should
-  be"`) is the model's proposal and is left alone. The brief asks for
-  double quotes, never across a line, and for proposals plain; the turn record counts `quotes` and `unanchored`.
-- A `?` about a selection sees the file around it: `spark edit ? --sel A
-  B` takes the whole file on stdin and sends one 16 kB window -- the
-  selection between two mark lines the brief knows, the file before and
-  after it -- so a question about a paragraph is answered in the light
-  of the chapter.
-- A `?` can go on: `spark edit ? words --thread ID` keeps the exchange
-  under an id of the client's choosing, sealed in your account's store
-  like a chat thread and pruned with it; the same id again continues it,
-  sending the words alone while the text is unchanged and the text again
-  when it is not. Without the flag nothing is kept, as before.
-- A declined note retires. `spark edit --decline --name NAME` keeps the
-  note on stdin in a ledger, sealed in your account's store by file name;
-  the next `?` about that file is told not to raise it again. A note
-  leaves by itself once the words it quoted have left the file, or after
-  `SPARK_HISTORY` days. `spark ledger [NAME]` lists them, `spark ledger
-  clear [NAME]` drops them.
-- The micro plugin (1.1.0): the pane has keys. `q` and Escape close it,
-  Enter jumps to the quote on the line in your file (selected, or "not
-  in the text as written"), `a` applies the code block under the cursor
-  (over the selection the question was about, else at your cursor), `d`
-  declines the note under the cursor into the ledger. A `?` about a
-  selection sends the whole file around it; `?? words` goes on in the
-  newest pane's thread, the answer under the first. Each pane has its own
-  name, so two open panes hold two answers.
-- The audition: `tests/audition.py` runs eight fixtures (a poem, a
-  chapter, a README, a commit message, Portuguese prose, Go, Python,
-  shell) through the real `spark edit` against a live brain and scores
-  every answer with mechanical lints, so a change to a brief is judged by
-  numbers, before and after, never by taste. Not part of the gate.
-- A client stays a client. `spark model` on a client showed its own RAM
-  and a budget for a machine that serves nothing, and `spark model NAME`
-  there quietly made it a server (the same steps as `spark client off`).
-  Now `spark model`, `ember list` and `model budget` on a client print
-  the peer's table -- the FORGE's new `GET /api/models` (any logged-in
-  user): its RAM, budget, picks and speeds -- or the rows alone, without
-  a verdict, when the peer is a bare server, down, or older; `bootstrap.sh
-  --list-models` does the same. `spark model NAME|auto|none`, `model
-  budget N`, `model rm` and `spark ember NAME` are refused on a client
-  with one line; `spark client off` remains the one way to serve again.
+- `spark serve` passes `--cache-ram 0`: llama-server no longer keeps
+  replaced prompts in host RAM (a 12B model on a 16 GB box had climbed
+  from 32 % to 90 % in a day). `SPARK_EXTRA_ARGS=--cache-ram N` sets a
+  budget in MiB; the `serve` row reports it.
+- `spark edit ?` checks every quote against the text: a span the text
+  does not hold is followed by `[not in the text]`. `--sel A B` answers
+  about a selection in the light of the file around it; `--thread ID`
+  keeps an exchange going, sealed like a chat thread; `--decline --name
+  NAME` retires a note so the next `?` does not raise it, until the words
+  it quoted leave the file.
+- The micro plugin (1.3.0): a Lua error is an infobar line, never a dead
+  editor; an answer over text that moved opens in a pane instead of being
+  spliced. The pane has keys -- `q` closes, Enter jumps to the quote, `a`
+  applies a code block, `d` declines a note -- and `?? words` goes on in
+  it. `ledger` and `ledger clear` at the `spark>` prompt list or drop the
+  file's declined notes; the shell verb `spark ledger` is gone.
+- A client stays a client: `spark model`, `ember list` and `model budget`
+  on a client print the peer's table (`GET /api/models`), and the verbs
+  that would make it a server are refused with one line; `spark client
+  off` remains the way back.
 - Your own palettes: a `~/.config/spark/themes/<name>.env` with the 21
-  `THEME_*` keys is listed by `spark theme`, chosen by `spark theme NAME`,
-  completed by TAB and kept by the `theme` check row, exactly like the six
-  in the repository; yours wins on a name clash. `config.theme_path` and
-  `lib/env.sh theme_load` are the twins.
-- A palette may name `THEME_LOGO`: six colour names, one per banner row,
-  and `spark ver` (the login greeting) draws the logo in them. The six
-  built-in palettes leave the logo its own.
-- `spark theme NAME` on macOS switches the open Terminal.app windows to
-  the new profile as well as new ones; before, the cursor and the colours
-  of the window you typed in stayed the old theme's.
-- `spark font` on macOS refuses a face this Mac does not have (Spotlight
-  answers in 20 ms), `spark font list` there shows the monospace faces
-  actually installed, and the `font` check row warns when the chosen face
-  is missing -- before, a console face such as `VGA` carried into a Mac's
-  `site.env` made Terminal.app fall back to SF Mono 11 in silence. The
-  default stays the Nerd Font at 13; one face and size for every profile.
-- `spark theme NAME` sets micro's `colorscheme` back to `spark` when
-  micro had changed it (a `set colorscheme gruvbox` inside micro made the
-  palette invisible there), and the `theme` check row warns while it
-  differs; it also says when tmux is not running to take the palette.
-- The ledger is the editor's: `ledger` and `ledger clear` at micro's
-  `spark>` prompt list or drop the notes declined for the file, through
-  `spark edit --ledger [clear] --name NAME`; the shell verb `spark ledger`
-  is gone (one line says where it went).
-- `spark quiet audio on|off` (`SITE_QUIET_AUDIO`, both OSes, core): spark
-  plays no sound while it is on. The `audio` check row (a capability,
-  never a failure) names the player spark would use -- afplay on macOS,
-  aplay or paplay on Linux -- or says there is none. 39 rows.
-- `spark font list` on Linux spells sizes the way `spark font` takes
-  them, width by height (`16x32`), instead of the font files' height by
-  width (`32x16`); an 8-wide face's bare height reads `8x16`.
-- Something small runs in the dark. Those who look will find it. It has
-  nights now, and no potion on the first.
+  `THEME_*` keys is listed, chosen, completed and checked like the six in
+  the repository, and wins on a name clash. `THEME_LOGO`, optional, paints
+  the banner's six rows in a palette's colours.
+- `spark theme NAME` reaches everything at once: the open Terminal.app
+  windows on macOS (profile, font and cursor), micro's `colorscheme` when
+  micro had changed it, and tmux when it runs.
+- `spark font` on macOS refuses a face the Mac does not have and lists
+  the monospace faces installed; the default is the Nerd Font at 13, one
+  face and size for every profile. On Linux the list spells sizes the way
+  the command takes them, width by height.
+- `spark quiet audio on|off` silences every sound spark makes; the
+  `audio` row names the player it would use. 39 check rows.
+- `tests/docs_test.py` keeps the docs true (credits, counts, pages); the
+  page shows a section above the newest tag as `vX.Y (unreleased)`;
+  `tests/audition.py` scores the editor's briefs against a live brain,
+  outside the gate.
 
 ## v1.6
 

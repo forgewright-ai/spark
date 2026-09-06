@@ -497,7 +497,7 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   first quote, whitespace loosened, then selects and activates it),
   `preQuit` (forgets a pane; a closed file leaves its panes without an
   origin). `?? words` goes on in the newest pane's thread. Version
-  1.1.0. `tests/micro_pty.py` drives a real micro against a stub spark
+  1.3.0. `tests/micro_pty.py` drives a real micro against a stub spark
   (cases I..P are the pane). Another editor joins the same way: one
   client of `spark edit`, nothing new in spark.
 - **The client shape.** `SITE_AI_MODEL=none` beside `SITE_PEER_AI_URL`

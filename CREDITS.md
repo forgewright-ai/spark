@@ -35,9 +35,7 @@ Lua -- https://www.lua.org -- MIT
 micro's spark plugin (`home/.config/micro/plug/spark/spark.lua`) is written
 in it; micro embeds the interpreter (gopher-lua), spark ships no copy.
 
-O Urubu-Rei e a Lua (`home/.config/spark/tale`) -- a retelling of a Karaja
-tale of how night and day began, by the maintainer -- CC BY-NC-ND 4.0;
-the passages spark shows are quoted from it.
+The text in `home/.config/spark/tale` is the maintainer's own, CC BY-NC-ND 4.0.
 
 ## Fonts
 
