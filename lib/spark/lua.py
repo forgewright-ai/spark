@@ -338,8 +338,10 @@ def finish(g, st, tl):
     """After a run, at the shell: what was taken, the numbers, the ending."""
     st["got"] = g.got
     st["best"] = max(st["best"], int(g.dist))
+    path = None
     if g.over == "won":
         st["won"] = True
+        path = write_palette()      # before a word is printed: a closed pipe must not lose the prize
     save_state(st)
     say()
     say("%s lua -- %s" % (MARK, moon_line()))
@@ -357,7 +359,6 @@ def finish(g, st, tl):
         say()
         say("  %s" % fold(pt))
         say("  %s" % fold(en))
-        path = write_palette()
         say()
         say("  a palette of your own: %s" % path.replace(os.path.expanduser("~"), "~"))
         say("  spark theme %s" % PALETTE_NAME)
