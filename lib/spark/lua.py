@@ -1186,6 +1186,8 @@ def cmd_lua(args):
         say(USAGE.rstrip())
         return 0
     tl = tale()
+    if os.path.exists(os.path.join(CONFIG_DIR, "themes", PALETTE_NAME + ".env")):
+        write_palette()                      # a prize written before the logo line existed gets it
     if args and args[0] == "--moon":
         day = date.fromisoformat(args[1]) if len(args) > 1 else None
         say(moon_line(day))
@@ -1200,8 +1202,6 @@ def cmd_lua(args):
         say("%s lua: the night starts over" % MARK)
         return 0
     st = load_state()
-    if os.path.exists(os.path.join(CONFIG_DIR, "themes", PALETTE_NAME + ".env")):
-        write_palette()                      # a prize written before the logo line existed gets it
     if args and args[0] == "--sim":
         seed = int(args[1]) if len(args) > 1 else 1
         tape = args[2] if len(args) > 2 else "auto"
