@@ -1559,6 +1559,21 @@ def main():
             t.ok(wv.getnchannels() == 1 and wv.getsampwidth() == 1 and wv.getframerate() == 22050
                  and abs(wv.getnframes() - sum(ms for _, ms in _lua.SOUNDS["won"]) * 22.05) < 10,
                  "lua: the success fanfare is an 8-bit mono WAV of the notes' length")
+        _w1 = _lua.World(1)
+        t.ok([sum(1 for hl in _w1.heals if _w1.zone_of(hl["x"]) == z) for z in range(1, 9)] == [0, 1, 1, 1, 2, 2, 2, 2],
+             "lua: heals on the ground -- none in zone 1, one in zones 2 to 4, two from the fifth")
+        _g = _lua.Game(80, seed=1)
+        _g.key("d")
+        for _ in range(400):
+            _g.step()
+            if _g.hero.run == 0 and _g.hero.resume:
+                break
+        _x = _g.hero.x
+        _g.key("w")
+        for _ in range(15):
+            _g.step()
+        t.ok(_g.hero.resume == 0 and _g.hero.run == 1 and _g.hero.x > _x + 3,
+             "lua: a log stops the run; the jump over it resumes the run", "x %.1f -> %.1f" % (_x, _g.hero.x))
         art = _lua.letters("GAME OVER")
         t.ok(len(art) == 5 and len(set(len(r) for r in art)) == 1 and len(art[0]) < 60, "lua: GAME OVER is five even rows under 60 columns", str(art))
         import fcntl

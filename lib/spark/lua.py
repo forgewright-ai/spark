@@ -270,8 +270,10 @@ class World:
                 self._bat(x + w // 2)
             x += w + 3                       # landing room after a feature
         self.stars.append({"x": x1 - 12, "n": z, "taken": False})
-        if z >= 5:                           # a heal midway, on plain ground
-            for hx in range(x0 + ZONE_W // 2, x1 - 30):
+        # the heals: none in the first zone, one in zones 2 to 4, two from the fifth on
+        spots = () if z == 1 else (ZONE_W // 2,) if z <= 4 else (ZONE_W // 3, 2 * ZONE_W // 3)
+        for at in spots:
+            for hx in range(x0 + at, x1 - 30):
                 if self.floor[hx] == LAND and hx not in self.logs and hx not in self.briars \
                         and not any(o["x0"] - 2 <= hx <= o["x1"] + 2 for o in self.oncas):
                     self.heals.append({"x": hx, "taken": False})
@@ -309,7 +311,7 @@ class World:
             self.briars.update(range(x, x + w))
         else:                                # an onca's stretch: flat, it patrols it
             self.oncas.append({"x": float(x + 7), "x0": x, "x1": x + w - 1, "d": 1, "alive": True,
-                               "charge": 1.25 if z >= 7 else 1.1 if z >= 6 else 0.9, "tell": 0, "seen": False})
+                               "charge": 1.25 if z >= 7 else 1.1 if z >= 6 else 1.0, "tell": 0, "seen": False})
 
     def _bat(self, ax):
         self.bats.append({"ax": ax, "x": float(ax), "y": float(CANOPY), "t": self.rng.randint(0, 60),
@@ -386,6 +388,7 @@ class Hero:
         self.y = float(LANE)
         self.vy = 0.0
         self.run = 0             # -1 0 1: tap to run, tap to stop
+        self.resume = 0          # the run a log stopped: the jump over it resumes it
         self.facing = 1
         self.ground = True
         self.hp = HP_MAX
@@ -448,13 +451,15 @@ class Game:
         if self.first_key is None:
             self.first_key = self.tick
         if k == "d":
-            h.run, h.facing = 1, 1
+            h.run, h.facing, h.resume = 1, 1, 0
         elif k == "a":
-            h.run, h.facing = -1, -1
+            h.run, h.facing, h.resume = -1, -1, 0
         elif k == "s":
-            h.run = 0
+            h.run, h.resume = 0, 0
         elif k == "w":
             self.want_jump = True
+            if h.resume and not h.run:
+                h.run, h.facing, h.resume = h.resume, h.resume, 0
         elif k == "f":
             self.want_shot = True
         elif k == "v" and self.sweep is None and self.sweep_cool == 0:
@@ -501,8 +506,8 @@ class Game:
         nx = h.x + vx
         if not w.solid(int(round(nx)), h.row, self.stars):
             h.x = max(1.0, min(WORLD_W - 2.0, nx))
-        elif h.ground and int(round(nx)) in w.logs and not w.gate_shut(int(round(nx))):
-            h.vy, h.ground = JUMP_V, False   # ran into a log: hop it, keep running
+        elif h.ground and h.run and int(round(nx)) in w.logs:
+            h.resume, h.run = h.run, 0       # ran into a log: stop; the jump over it resumes the run
         # vertical
         h.vy = min(2.0, h.vy + GRAVITY)
         ny = h.y + h.vy
@@ -582,7 +587,7 @@ class Game:
                     b["x"] += max(-0.6, min(0.6, b["ax"] - b["x"]))
                     b["y"] += max(-0.5, min(0.5, CANOPY - b["y"]))
                 else:
-                    b["dive"], b["rest"] = None, (50 if self.zone >= 6 else 80)
+                    b["dive"], b["rest"] = None, (50 if self.zone >= 6 else 60)
             if abs(b["x"] - h.x) < 1.0 and abs(b["y"] - h.y) < 0.8:
                 self._hurt(1, 1 if h.x >= b["x"] else -1, "bat")
         # the arrows
