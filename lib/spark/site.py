@@ -1175,6 +1175,20 @@ def cmd_shell(args):
     set_keys(SITE_SHELL="off")
     for path, what in restore_rc() + restore_rendered():
         say("ok     restore      ~%s -- %s" % (path[len(HOME):], what))
+    # the palette came with the layer, so it goes with it. SITE_THEME stays
+    # in site.env (spark shell on paints it again); theme.env goes and
+    # console-colors becomes the VT reset the hook cats at the next login --
+    # and the running console gets that reset now, since no shell restart
+    # can undo a palette the terminal itself is holding.
+    if any(os.path.exists(os.path.join(CONFIG_DIR, f)) for f in ("theme.env", "console-colors")):
+        from . import theme
+        theme.write_runtime("none")     # config, so SPARK_NO_APPLY does it too
+        if not os.environ.get("SPARK_NO_APPLY") and sys.stdout.isatty() \
+                and os.environ.get("TERM") == "linux":
+            sys.stdout.write("\033]R")
+            sys.stdout.flush()
+        say("ok     theme        the console palette is back to its own"
+            + ("; Terminal.app keeps the spark profile until you change it there" if IS_MAC else ""))
     if not os.environ.get("SPARK_NO_APPLY"):
         from . import run
         trc, _ = run(["tmux", "list-sessions"])
@@ -1186,6 +1200,10 @@ def cmd_shell(args):
                 say("ok     tmux         running sessions keep the look until tmux restarts")
     rc = apply(["configs", "rc"])
     say("packages stay installed -- apt or brew removes them if you want")
+    if rc == 0:
+        # the same line `on` prints: this shell still has spark's prompt
+        # loaded, and only a new one reads the rc file that was put back
+        say("open a new shell (exec $SHELL)")
     return rc
 
 

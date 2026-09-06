@@ -128,8 +128,8 @@ run >/dev/null
 
 # 4b. spark shell off hands the whole look back, not only the rc files: a
 #     rendered config with a .bak is restored, one without is removed --
-#     never an empty husk -- and the core palette files under
-#     ~/.config/spark (spark theme's) stay
+#     never an empty husk -- and the palette goes with the layer that
+#     brought it (theme.env removed, console-colors left as the VT reset)
 printf '# pre-spark btop\n' > "$HOME/.config/btop/btop.conf.bak"
 printf 'THEME_BG=#282828\n' > "$HOME/.config/spark/theme.env"
 out=$(SPARK_NO_APPLY=1 SPARK_NO_REFRESH=1 python3 "$REPO/bin/spark" shell off 2>&1) || bad "spark shell off failed: $out"
@@ -139,7 +139,7 @@ grep -q '^SITE_SHELL=off$' "$HOME/.config/spark/site.env" && ok "shell off wrote
     && ok "shell off removed every rendered look file with no .bak (no husk)" \
     || bad "a spark-rendered look file survived shell off"
 [ "$(cat "$HOME/.config/btop/btop.conf")" = "# pre-spark btop" ] && ok "shell off restored btop.conf from its .bak" || bad "btop.conf not restored"
-[ -f "$HOME/.config/spark/theme.env" ] && ok "shell off left theme.env (the palette stays chosen)" || bad "theme.env removed"
+[ ! -f "$HOME/.config/spark/theme.env" ] && ok "shell off gave the palette back (theme.env removed)" || bad "theme.env survived shell off"
 printf '%s\n' "$out" | grep -q '^ok     restore' && ok "shell off names what it restored or removed" || bad "no restore rows: $out"
 rm -f "$HOME/.config/spark/theme.env" "$HOME/.config/btop/btop.conf" "$HOME/.config/btop/btop.conf.bak"
 

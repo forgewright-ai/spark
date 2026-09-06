@@ -1350,9 +1350,10 @@ def main():
              "spark shell off removes a rendered .tmux.conf with no .bak (no husk)", out)
         t.ok(open(home + "/.config/btop/btop.conf").read() == "# pre-spark btop\n",
              "spark shell off restores btop.conf from its .bak", out)
-        t.ok(os.path.exists(home + "/.config/spark/theme.env"),
-             "spark shell off leaves theme.env alone (unchoosing the layer is not unchoosing the palette)", out)
-        os.remove(home + "/.config/spark/theme.env")
+        t.ok(not os.path.exists(home + "/.config/spark/theme.env") and "console palette is back" in out,
+             "spark shell off gives the console palette back (the palette came with the layer)", out)
+        t.ok("open a new shell" in out,
+             "spark shell off says to open a new shell, as spark shell on does", out)
         os.remove(home + "/.config/btop/btop.conf")
         rc, out, _ = spark("shell", "sideways", extra=off)
         t.ok(rc == 2 and out.startswith("spark shell -- "), "spark shell sideways is refused with the usage", out)

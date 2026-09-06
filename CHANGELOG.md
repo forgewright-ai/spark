@@ -15,6 +15,14 @@
   the VT at the next login. `SITE_THEME` is still recorded; the files, and
   the macOS Terminal profile, now land with `spark shell on` or an
   explicit `spark theme NAME`.
+- `spark shell off` hands the terminal back. It restored the rc files and
+  the rendered configs but said nothing about opening a new shell, and it
+  left the palette on: a VT holds its own colours, so no `exec $SHELL`
+  could undo them and only a fresh login looked clean. It now writes the
+  reset into `console-colors` for the next login, sends it to a running
+  Linux console at once, and prints the `open a new shell (exec $SHELL)`
+  line that `spark shell on` always printed. `SITE_THEME` stays in
+  `site.env`, so `spark shell on` paints it again.
 - `spark font list` on Linux names the Nerd Font. The console takes `.psf`
   faces from `/usr/share/consolefonts`; the JetBrainsMono Nerd Font that
   `spark shell on` unzips into `~/.local/share/fonts` is a `.ttf` for a

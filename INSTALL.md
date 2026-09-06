@@ -356,10 +356,15 @@ each rc file and each rendered config -- `.tmux.conf`,
 `.config/starship.toml`, btop's conf, micro's colorscheme and
 `settings.json` -- is restored from its `.bak`, or removed when there was
 none (that was the pre-spark state; never an empty husk). `~/.gitconfig`
-(your identity, not the look) and the core palette files under
-`~/.config/spark/` stay; the `configs` and `rc` rows re-run so the one
-hook line lands in a restored rc file; the packages stay installed
-(`apt` or `brew` removes them). `spark shell` prints the state.
+(your identity, not the look) stays. The palette goes with the layer that
+brought it: `theme.env` is removed and `console-colors` becomes the VT
+reset, which a running Linux console is sent at once -- a terminal holds
+its own colours, so no `exec $SHELL` could undo them. `SITE_THEME` stays
+in `site.env`, so `spark shell on` paints it again. The `configs` and `rc`
+rows re-run so the one hook line lands in a restored rc file, and the
+packages stay installed (`apt` or `brew` removes them). It ends with
+`open a new shell (exec $SHELL)`: this one still has spark's prompt
+loaded. `spark shell` prints the state.
 
 With the layer off, `spark bar` and the set forms of
 `spark quiet login|boot` refuse (`the shell layer is off`), `spark help`
