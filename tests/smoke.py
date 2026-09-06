@@ -1488,6 +1488,14 @@ def main():
         shut_before = _w.solid(gate, _lua.LANE, 0)
         _w.stars[0]["taken"] = True
         t.ok(shut_before and not _w.solid(gate, _lua.LANE, 1), "lua: a zone's gate is shut until the star before it is taken")
+        _g = _lua.Game(80, seed=4)
+        _g.world.bats[:] = [{"ax": _g.hero.x + 8, "x": _g.hero.x + 8, "y": 0.0, "t": 0, "dive": None, "aim": None,
+                             "rest": 0, "alive": True}]
+        _g.key("v")
+        for _ in range(25):
+            _g.step()
+        t.ok(not _g.world.bats[0]["alive"] and _g.chased == 1 and _g.sweep_cool > 0,
+             "lua: v calls the vulture; a bat in the canopy ahead is chased away, then he rests")
         art = _lua.letters("GAME OVER")
         t.ok(len(art) == 5 and len(set(len(r) for r in art)) == 1 and len(art[0]) < 60, "lua: GAME OVER is five even rows under 60 columns", str(art))
         import fcntl
@@ -1525,7 +1533,7 @@ def main():
         _, status = os.waitpid(pid, 0)
         t.ok(os.WEXITSTATUS(status) == 0 and b"\x1b[?1049h" not in data and b"\x1b[?25l" in data and b"\x1b[?25h" in data,
              "lua on a pty: no alternate screen, the cursor hidden and shown again", repr(data[-300:]))
-        t.ok(b"HP" in data and b"@" in data and b"zone 1/8 the river" in data and b"\x1b[9A" in data and b"d runs" in data,
+        t.ok(b"HP" in data and b"@" in data and b"zone 1/8 the river" in data and b"\x1b[9A" in data and b"v calls the vulture" in data,
              "lua on a pty: the status, the hero, the zone and the hint in a nine-line band redrawn in place", repr(data[:600]))
         t.ok(sent == 2 and len(data) > mark_len + 400, "lua on a pty: the arrow keys run the hero (the forest scrolls)", str(len(data) - mark_len))
         t.ok(b"\x1b[38;5" not in data and b"spark lua -- left in zone" in data, "lua on a pty: eight colours only, and q leaves with one line", repr(data[-200:]))

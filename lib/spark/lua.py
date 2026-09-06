@@ -410,10 +410,14 @@ class Game:
         self.zone_max = 1
         self.hurts = []                      # (tick, cause): the sim's post-mortem
         self.vulture = float(self.hero.x + 12)
+        self.sweep = None                    # the vulture's sweep: (ticks left, direction, x)
+        self.sweep_cool = 0                  # ticks until he answers again
+        self.chased = 0                      # bats chased away this run
 
     # -- input -----------------------------------------------------------
     def key(self, k):
-        """d a (run right / left, until s), s (stop), w (jump), f (fire)."""
+        """d a (run right / left, until s), s (stop), w (jump), f (fire),
+        v (call the vulture: he sweeps the canopy and the bats flee)."""
         h = self.hero
         if self.first_key is None:
             self.first_key = self.tick
@@ -427,6 +431,8 @@ class Game:
             self.want_jump = True
         elif k == "f":
             self.want_shot = True
+        elif k == "v" and self.sweep is None and self.sweep_cool == 0:
+            self.sweep, self.sweep_cool = (22, h.facing, h.x - 3 * h.facing), 70   # from just behind the hero, ahead
 
     # -- one tick --------------------------------------------------------
     def step(self):
@@ -503,7 +509,22 @@ class Game:
             if abs(o["x"] - h.x) < 1.0 and h.row == LANE:
                 self._hurt(2, 1 if h.x >= o["x"] else -1, "onca")
         # the bats
+        if self.sweep_cool:
+            self.sweep_cool -= 1
+        if self.sweep:
+            n, d, x = self.sweep
+            x1 = x + d * 2.5
+            for b in w.bats:
+                if b["alive"] and b["y"] <= 1.5 and min(x, x1) - 1.5 <= b["x"] <= max(x, x1) + 1.5:
+                    b["alive"], b["flee"] = False, 10
+                    self.chased += 1
+            self.sweep = (n - 1, d, x1) if n > 1 else None
+            if self.sweep is None:
+                self.vulture = x1
         for b in w.bats:
+            if b.get("flee"):
+                b["flee"] -= 1
+                b["x"] += 1.5 * (1 if b["x"] >= h.x else -1)
             if not b["alive"]:
                 continue
             b["t"] += 1
@@ -568,8 +589,9 @@ class Game:
                 setattr(self, name, (v[0] - 1, v[1]) if v[0] > 1 else None)
         if self.sparkle:
             self.sparkle -= 1
-        # the vulture glides ahead of the hero
-        self.vulture += (h.x + 10 * h.facing + 5 * math.sin(self.tick / 17.0) - self.vulture) * 0.08
+        # the vulture glides ahead of the hero (unless he is sweeping)
+        if self.sweep is None:
+            self.vulture += (h.x + 10 * h.facing + 5 * math.sin(self.tick / 17.0) - self.vulture) * 0.08
         # the camera
         lead = self.cols // 3 if h.facing > 0 else 2 * self.cols // 3
         target = max(0.0, min(float(WORLD_W - self.cols), h.x - lead))
@@ -621,9 +643,10 @@ class Game:
         put(0, 12, "HP " + "[" + G("hp_on") * hp + G("hp_off") * (HP_MAX - hp) + "]",
             (GREEN if hp > 5 else YELLOW if hp > 2 else RED, "b"))
         put(0, 27, "* %d/8" % self.stars, (YELLOW, "b"))
-        put(0, 35, "zone %d/8 %s" % (self.zone, zn), PLAIN)
+        put(0, 35, "V", (WHITE, "b") if self.sweep_cool == 0 else (DEFAULT, "d"))
+        put(0, 38, "zone %d/8 %s" % (self.zone, zn), PLAIN)
         ml = moon_line(self.day)
-        if cols >= 35 + len(zn) + 12 + len(ml) + 2:
+        if cols >= 38 + len(zn) + 12 + len(ml) + 2:
             put(0, cols - len(ml) - 1, ml, (CYAN, ""))
         # the forest, column by column
         for sx in range(cols):
@@ -667,13 +690,18 @@ class Game:
         for b in w.bats:
             if b["alive"]:
                 wput(int(round(b["y"])), int(round(b["x"])), "v", (MAGENTA, "b"))
+            elif b.get("flee"):
+                wput(CANOPY, int(round(b["x"])), "^", (MAGENTA, ""))
         for a in self.arrows:
             wput(a[1], int(round(a[0])), ">" if a[2] > 0 else "<", (WHITE, "b"))
         # the vulture, the hero, the ending
         hr, hc = h.row, h.col - cam
         wings = "-V-" if self.tick % 12 == 0 else "~V~"
         if self.ending is None:
-            put(CANOPY + 1, int(round(self.vulture)) - cam - 1, wings, (WHITE, "b"))
+            if self.sweep:
+                put(CANOPY + 1, int(round(self.sweep[2])) - cam - 1, "-V-" if self.tick % 2 else "~V~", (WHITE, "b"))
+            else:
+                put(CANOPY + 1, int(round(self.vulture)) - cam - 1, wings, (WHITE, "b"))
             if self.dying is not None:
                 put(hr + 1, hc, "x", (RED, "b"))
             elif not (h.immune and self.tick % 2):
@@ -700,7 +728,7 @@ class Game:
             centre(AIR2, "-- %s --" % fold(ZONE_NAMES[self.callout[1] - 1][0]), (WHITE, "b"))
         if self.first_key is None and self.ending is None:
             centre(AIR2, "the forest of O Urubu-Rei e a Lua", (WHITE, "b"))
-            centre(AIR1, "d runs   w jumps   Space fires   q leaves", (CYAN, ""))
+            centre(AIR1, "d runs   w jumps   Space fires   v calls the vulture   q leaves", (CYAN, ""))
         # the memory, in English; the newest piece bold for a moment
         taken = set(self.taken)
         fresh = tl.get(self.fresh[1], ("", ""))[0] if self.fresh else None
@@ -762,12 +790,14 @@ class Pilot:
         for b in w.bats:
             if b["alive"] and abs(b["x"] - h.x) < 8 and abs(b["y"] - h.y) < 1.5:
                 out.append("f")
+            if b["alive"] and b["y"] <= 1.5 and (b["x"] - h.x) * d > 0 and abs(b["x"] - h.x) < 14 and g.sweep_cool == 0:
+                out.append("v")
         return out
 
 
 def sim(seed, tape, day=None):
     """Headless: a fixed seed and a key tape (per tick, repeating: a d s w
-    f .) or `auto`, the Pilot. Returns the finished Game."""
+    f v .) or `auto`, the Pilot. Returns the finished Game."""
     g = Game(80, seed=seed, day=day)
     pilot = Pilot(g) if tape == "auto" else None
     for i in range(6000):
@@ -776,7 +806,7 @@ def sim(seed, tape, day=None):
                 g.key(k)
         else:
             k = tape[i % len(tape)]
-            if k in "adswf":
+            if k in "adswfv":
                 g.key(k)
         g.step()
         if g.over:
@@ -900,8 +930,8 @@ def read_keys(fd):
             keys.append(arrows[data[i + 2:i + 3]])
             i += 3
             continue
-        keys.append({b"a": "a", b"d": "d", b"s": "s", b"w": "w", b" ": "f", b"f": "f", b"p": "p", b"q": "q",
-                     b"A": "a", b"D": "d", b"S": "s", b"W": "w", b"F": "f", b"P": "p", b"Q": "q", b"\x03": "q"}.get(b))
+        keys.append({b"a": "a", b"d": "d", b"s": "s", b"w": "w", b" ": "f", b"f": "f", b"v": "v", b"p": "p",
+                     b"q": "q", b"\x03": "q"}.get(b.lower()))
         i += 1
     return [k for k in keys if k]
 
@@ -1012,7 +1042,8 @@ def finish(g, st, tl):
 USAGE = """%s lua -- the forest, a bow, eight stars, a moon
 
   spark lua                 d / Right runs, a / Left runs back, s / Down stops,
-                            w / Up jumps, Space fires, p pauses, q leaves
+                            w / Up jumps, Space fires an arrow, v calls the
+                            king vulture down on the bats, p pauses, q leaves
   spark lua --moon [DATE]   tonight's moon, or a date's (YYYY-MM-DD)
   spark lua --reset         forget the best run
 """ % MARK
