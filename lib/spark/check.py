@@ -1496,7 +1496,8 @@ def make_fixture(root, good, stub_url=""):
         f.write("SITE_WORKSPACE=%s\nSITE_PEER_AI_URL=%s\n" % (ws, stub_url if good else "http://127.0.0.1:9"))
         f.write("SITE_SHELL=on\n")     # both fixtures carry the shell layer: its rows must flip too
         f.write("SITE_THEME=fixture\n")     # the theme row: applied (good) or stale (bad)
-        f.write("SITE_FONT_FACE=Menlo-Regular\nSITE_FONT_SIZE=13\n")   # a face every Mac ships: the font row judges the Nerd Font, not Spotlight
+        if IS_MAC:                      # a face every Mac ships: the font row judges the Nerd Font, not Spotlight
+            f.write("SITE_FONT_FACE=Menlo-Regular\nSITE_FONT_SIZE=13\n")
         if good:
             f.write("SITE_EMBER_MODEL=auto\n")     # the default is none; auto fits an ember beside the spark row
         else:
