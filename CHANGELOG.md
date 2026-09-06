@@ -8,6 +8,11 @@
   about tmux and starship colours is one a user who never turns the shell
   layer on has no way to answer. `--theme` and `SITE_THEME` still
   pre-answer it.
+- The setup table says it is not the whole list. Only rows proven on the
+  line and under an open license are offered, which today is the five
+  qwen3 rows, so the first run read as though spark served nothing else --
+  one line under the table now counts the other 21 and points at `spark
+  model list`. Naming any of them with `--model` always worked.
 - INSTALL.md opens with two numbered walkthroughs instead of prose: a
   machine from zero (the Debian image, the empty root password that earns
   you `sudo`, the packages) and spark on a machine you have (one check for

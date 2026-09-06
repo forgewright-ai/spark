@@ -109,21 +109,28 @@ def _decide(cfg, key, flag, cfg_value, label, yes):
 
 def _table(cfg):
     """The header and the rows auto may pick (tested on the line, open
-    license -- setup never offers the others; naming one with --model is
-    still allowed, it just is not in this table), the default row (the
-    spark pick) marked *; the name of that row, or none."""
+    license), the default row (the spark pick) marked *; the name of that
+    row, or none. The rest of `models.env` is counted in one line under
+    the table, not printed: a first run is no place for twenty rows, and
+    naming any of them with --model still works."""
     budget = mem_total_gb() * cfg.ai_budget / 100.0
     say("%.0f GB for models (RAM + GPU), budget %.0f GB (%d%%), %s" % (mem_total_gb(), budget, cfg.ai_budget, engine.backend(cfg)))
     note = engine.cap_note(cfg)
     if note:
         say(note)
     default = "none"
+    rest = 0
     for r in site.model_rows(cfg):
         if not (r["tested"] and r["open"]):
+            rest += 1
             continue
         say(site.model_line(r))
         if r["role"] == "spark":
             default = r["name"]
+    if rest:
+        # the table stays the proven few -- a first run is no place for
+        # twenty rows -- but nobody should read it as the whole list
+        say("     %d more: spark model list (unproven, or a license that asks)" % rest)
     return default
 
 

@@ -88,9 +88,11 @@ spark shell on   # optional: tmux, starship, micro, fzf, the Nerd Font
 short hostname by default), yours (your login), and the model, from the
 table with the row this machine earns marked `*` -- the largest that fits
 in the SITE_AI_BUDGET percent (default 60) of RAM plus GPU memory and
-stays usable on this engine build (the speed cap under Models). It never
-asks about the palette, the hostname, the shell layer or headless: those
-have verbs of their own. The palette is `gruvbox-dark` unless `--theme`,
+stays usable on this engine build (the speed cap under Models). That table
+is the proven few; one line under it counts the rest, and `spark model
+list` shows every row. It never asks about the palette, the hostname, the
+shell layer or headless: those have verbs of their own. The palette is
+`gruvbox-dark` unless `--theme`,
 `SITE_THEME` in the environment or a `site.env` that already holds the key
 says otherwise -- spark ships wearing its look, and `spark theme NAME` or
 `spark theme none` changes it at any time. Then, in order:

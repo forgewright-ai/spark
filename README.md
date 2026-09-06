@@ -58,6 +58,7 @@ your name [ana]:
   *  qwen3-8b      4.7 GB file 7 GB RAM fits ~9 tok/s
      qwen3-14b     8.4 GB file 11 GB RAM too big
      qwen3-30b-a3b 17.4 GB file 21 GB RAM too big
+     21 more: spark model list (unproven, or a license that asks)
 model [qwen3-8b]:
 
 ok     site         SITE_NAME=mini SITE_USER=ana SITE_AI_MODEL=qwen3-8b SITE_THEME=gruvbox-dark

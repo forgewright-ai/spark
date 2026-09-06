@@ -88,6 +88,12 @@ def main():
     listed = re.split(r",\s+", " ".join(m.group(1).split())) if m else []
     check(listed == named["CLIENT_ROWS"],
           "CLAUDE.md names check.CLIENT_ROWS in order (%s)" % ", ".join(named["CLIENT_ROWS"]))
+    # the README's setup transcript counts the rows setup does NOT offer
+    offered = len(config.auto_rows(config.model_tables(ROOT)))
+    rest = len(config.model_tables(ROOT)) - offered
+    for m in re.finditer(r"(\d+) more: spark model list", read("README.md")):
+        check(int(m.group(1)) == rest,
+              "README.md: '%s' is models.env minus what setup offers (%d)" % (m.group(0), rest))
     n_models = len(rows)
     for doc in ("README.md", "INSTALL.md"):
         for m in re.finditer(r"(\d+) (models|rows), each with its license", read(doc)):
