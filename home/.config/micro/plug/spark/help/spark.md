@@ -21,13 +21,30 @@ or Esc then s, quickly. What you type there decides what happens:
                          or changed meanwhile opens in a pane instead of
                          being spliced over the wrong place
     ? words              ask about the selection (or the whole file) in a
-                         pane on the right; Ctrl-q closes it
+                         pane on the right; with a selection, the file
+                         around it goes along as context
     ?                    review the selection or the file: a few sentences,
                          then a handful of quoted notes. Every quote is
                          checked against your text; one it does not hold
                          is followed by [not in the text]
+    ?? words             go on: one more question in the newest pane's
+                         thread; the answer lands under the first
 
-The same thing from command mode (Ctrl-e): `spark shorter`, `spark ? why`.
+In a spark pane (read-only), single keys act:
+
+    q, Escape            close the pane (Ctrl-q too)
+    Enter                jump to the quote on this line in your file,
+                         selected -- or "not in the text as written"
+    a                    apply the code block under the cursor: it replaces
+                         the selection the question was about when that is
+                         still there, else lands at your cursor, selected
+    d                    decline the note under the cursor: it leaves the
+                         pane and spark's ledger keeps it under the file's
+                         name, so the next ? about this file is told not to
+                         raise it again (spark ledger lists them)
+
+The same thing from command mode (Ctrl-e): `spark shorter`, `spark ? why`,
+`spark ?? and then`.
 
 spark reads what the text is -- code or prose, a poem or a chapter or a
 README -- and answers as that kind of text deserves, in its own language.
@@ -43,7 +60,9 @@ then PATH). `set spark false` switches the plugin off.
 What leaves this machine: the file's name and its text -- at most 6 kB
 around the cursor for a completion, 12 kB for a rewrite (more is refused:
 select less), 16 kB for a question -- never its path, and only to the
-FORGE or llama-server spark is configured for. No thread is kept.
+FORGE or llama-server spark is configured for. A question's thread is
+kept sealed in your spark account like a chat thread (`??` goes on in it;
+`spark history` lists it); a declined note is kept sealed by file name.
 
 Every run is one call to `spark edit` (the text on stdin); `spark edit -h`
 says the rest, and `spark edit fix grammar < draft.md` works from a pipe.

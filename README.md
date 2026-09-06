@@ -110,7 +110,9 @@ What comes next: `ROADMAP.md`.
   key: `Alt-s` (Option-s on a Mac) opens `spark> `. Enter alone completes at the cursor;
   words rewrite the selection, or the whole file when nothing is
   selected (`shorter`, `fix grammar`, `add a docstring`); `? words` asks
-  in a pane; `?` alone reviews. spark reads
+  in a pane; `?` alone reviews; `??` goes on. In the pane, Enter jumps to
+  a quote (every quote is checked against your text), `a` applies a code
+  block, `d` declines a note for good, `q` closes. spark reads
   what the text is -- code or prose, a poem or a chapter or a README --
   and answers as that kind of text deserves, in its own language; the
   new text is left selected, a proposal you keep or discard. The same

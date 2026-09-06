@@ -472,9 +472,20 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   with the other `.config/micro/*` files), binds no key itself (a rebind
   from inside makes micro rewrite `bindings.json` and detach the link:
   `Alt-s` is a tracked line there), and its row is `editor`
-  (`check.SHELL_ROWS`). `tests/micro_pty.py` drives a real micro against
-  a stub spark. Another editor joins the same way: one client of
-  `spark edit`, nothing new in spark.
+  (`check.SHELL_ROWS`). A `?` sends the WHOLE buffer, a selection as
+  `--sel A B`, and names its own `--thread` id; every pane has its own
+  name (`spark:N` -- micro shares one text between buffers opened under
+  one path) and a registry entry (origin pane, selection, thread). The
+  pane's keys are callbacks, never bindings: `preRune` (`q` closes, `a`
+  applies the code block under the cursor, `d` declines the note under
+  it via `spark edit --decline`), `preEscape` (closes),
+  `preInsertNewline` (Enter: `FindNext` on the origin for the line's
+  first quote, whitespace loosened, then selects and activates it),
+  `preQuit` (forgets a pane; a closed file leaves its panes without an
+  origin). `?? words` goes on in the newest pane's thread. Version
+  1.1.0. `tests/micro_pty.py` drives a real micro against a stub spark
+  (cases I..P are the pane). Another editor joins the same way: one
+  client of `spark edit`, nothing new in spark.
 - **The client shape.** `SITE_AI_MODEL=none` beside `SITE_PEER_AI_URL`
   (`config.client`; `spark client URL|off`, `site.cmd_client`) means
   nothing runs here: bootstrap skips the `engine` and `services` rows

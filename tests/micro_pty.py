@@ -32,7 +32,8 @@ STUB = r'''#!/bin/sh
 printf '%s\n' "$*" >> "$STUB_LOG"
 cat > "$STUB_LOG.stdin"
 case " $* " in
-    *" ? "*)      printf 'STUB-ASK\n'; exit 0 ;;
+    *" --decline "*) exit 0 ;;
+    *" ? "*)      printf '1. "hello" is plain -- say more\n2. "nothing here" drifts\n\n    print("fixed")\n\nASKED %s\nSTUB-ASK\n' "$(printf '%s' "$*" | sed 's/.* ? //; s/ --thread.*//')"; exit 0 ;;
     *" --at "*)   printf 'STUB-DONE'; exit 0 ;;
     *" keep it "*) cat "$STUB_LOG.stdin"; exit 0 ;;
     *" fail "*)   printf 'spark: no brain today -- spark serve\n' >&2; exit 1 ;;
@@ -313,6 +314,161 @@ def main():
         m.send("\x11")
         time.sleep(0.4)
         m.send("n\r")
+        m.read(1.0)
+        m.close()
+
+        # I. q closes the pane (then Ctrl-q, with nothing modified, ends micro)
+        def ask_pane(text="hello world\n"):
+            if os.path.exists(log):
+                os.unlink(log)
+            with open(note, "w") as f:
+                f.write(text)
+            mm = Micro(argv, env, work)
+            ok(mm.expect(text.splitlines()[0]), "micro draws the file")
+            mm.mark()
+            mm.send("\x1bs")
+            mm.expect("spark>")
+            mm.send("? why\r")
+            ok(mm.expect("STUB-ASK"), "the pane answers", debug_log())
+            return mm
+
+        def gone(mm, what):
+            # micro ends within a moment; the pty must be drained meanwhile
+            end = time.time() + 6
+            left = False
+            while time.time() < end and not left:
+                mm.read(0.3)
+                left = os.waitpid(mm.pid, os.WNOHANG) != (0, 0)
+            ok(left, what, mm.plain()[-300:])
+            mm.close()
+
+        m = ask_pane()
+        m.send("q")
+        time.sleep(0.5)
+        m.read(0.3)
+        m.send("\x11")
+        gone(m, "q closes the pane: the next Ctrl-q ends micro")
+
+        # J. Escape closes the pane
+        m = ask_pane()
+        m.send("\x1b")
+        time.sleep(0.6)
+        m.read(0.3)
+        m.send("\x11")
+        gone(m, "Escape closes the pane: the next Ctrl-q ends micro")
+
+        # K. Enter on a note jumps to its quote in the file, selected; a typed
+        # rune then replaces the selection
+        m = ask_pane()
+        for _ in range(8):
+            m.send("\x1b[A")            # Up: to the pane's first line
+        m.send("\r")
+        time.sleep(0.4)
+        m.send("X")
+        time.sleep(0.3)
+        m.send("\x13")                  # save
+        time.sleep(0.5)
+        m.send("\x11")                  # the file's pane
+        time.sleep(0.4)
+        m.send("\x11")                  # the spark pane, last: micro ends
+        m.read(1.0)
+        m.close()
+        with open(note) as f:
+            saved = f.read()
+        ok(saved == "X world\n", "Enter jumps to the quote: X replaced the selected hello", repr(saved))
+
+        # L. a applies the code block under the cursor at the file's cursor
+        m = ask_pane()
+        for _ in range(8):
+            m.send("\x1b[A")
+        for _ in range(3):
+            m.send("\x1b[B")            # Down: to the indented line
+        m.send("a")
+        ok(m.expect("applied"), "a says applied", debug_log())
+        m.send("\x13")
+        time.sleep(0.5)
+        m.send("\x11")
+        time.sleep(0.4)
+        m.send("\x11")
+        m.read(1.0)
+        m.close()
+        with open(note) as f:
+            saved = f.read()
+        ok(saved == 'print("fixed")\nhello world\n', "a spliced the dedented block at the cursor", repr(saved))
+
+        # M. d declines the note under the cursor: spark edit --decline gets
+        # the note on stdin under the file's name; the note leaves the pane
+        m = ask_pane()
+        for _ in range(8):
+            m.send("\x1b[A")
+        m.mark()
+        m.send("d")
+        ok(m.expect("declined"), "d declines the note (the infobar says so)", debug_log())
+        got = logged()
+        ok("edit --decline --name note.md" in got, "the decline names the file, never its path", got)
+        with open(log + ".stdin") as f:
+            ok(f.read() == '1. "hello" is plain -- say more\n', "the note travelled on stdin")
+        m.send("\x11")
+        time.sleep(0.4)
+        m.send("\x11")
+        m.read(1.0)
+        m.close()
+
+        # N. ?? goes on in the pane's thread: the same --thread id, the
+        # question and a second answer under the first
+        m = ask_pane()
+        m.send("\x1bs")                 # from inside the pane: the file is meant
+        m.expect("spark>")
+        m.send("?? and then\r")
+        ok(m.expect("ASKED and then"), "?? answers in the same pane", debug_log())
+        ids = re.findall(r"--thread (edit-\d+-\d+)", logged())
+        ok(len(ids) == 2 and ids[0] == ids[1], "? and ?? name one thread id", str(ids))
+        ok("> and then" in m.plain(), "the pane shows the follow-up question", m.plain()[-300:])
+        m.send("\x11")
+        time.sleep(0.4)
+        m.send("\x11")
+        m.read(1.0)
+        m.close()
+
+        # O. a selection question sends the whole buffer with --sel
+        if os.path.exists(log):
+            os.unlink(log)
+        with open(note, "w") as f:
+            f.write("hello world\n")
+        m = Micro(argv, env, work)
+        ok(m.expect("hello world"), "micro draws the file for --sel")
+        m.mark()
+        m.send("\x01")                  # select all
+        m.send("\x1bs")
+        m.expect("spark>")
+        m.send("? why\r")
+        ok(m.expect("STUB-ASK"), "a selection question answers")
+        got = logged()
+        ok("--sel 0 12" in got and "--part" not in got, "a selection travels as --sel A B, never --part", got)
+        with open(log + ".stdin") as f:
+            ok(f.read() == "hello world\n", "the whole buffer travelled on stdin with --sel")
+        m.send("\x11")
+        time.sleep(0.4)
+        m.send("\x11")
+        m.read(1.0)
+        m.close()
+
+        # P. two panes at once hold two answers (each pane has its own name:
+        # micro shares one text between buffers opened under one path)
+        m = ask_pane()
+        m.send("\x1bs")
+        m.expect("spark>")
+        m.send("? again\r")
+        ok(m.expect("ASKED again"), "a second ? opens a second pane", debug_log())
+        m.mark()
+        m.send("q")                      # the second pane goes
+        time.sleep(0.6)
+        m.read(0.5)
+        shown = m.plain()
+        ok("ASKED why" in shown and "ASKED again" not in shown, "the first pane kept its own answer", shown[-400:])
+        m.send("\x11")
+        time.sleep(0.4)
+        m.send("\x11")
         m.read(1.0)
         m.close()
 

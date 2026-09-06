@@ -55,6 +55,14 @@ The server keeps no prompt cache in RAM.
   leaves by itself once the words it quoted have left the file, or after
   `SPARK_HISTORY` days. `spark ledger [NAME]` lists them, `spark ledger
   clear [NAME]` drops them.
+- The micro plugin (1.1.0): the pane has keys. `q` and Escape close it,
+  Enter jumps to the quote on the line in your file (selected, or "not
+  in the text as written"), `a` applies the code block under the cursor
+  (over the selection the question was about, else at your cursor), `d`
+  declines the note under the cursor into the ledger. A `?` about a
+  selection sends the whole file around it; `?? words` goes on in the
+  newest pane's thread, the answer under the first. Each pane has its own
+  name, so two open panes hold two answers.
 - A client stays a client. `spark model` on a client showed its own RAM
   and a budget for a machine that serves nothing, and `spark model NAME`
   there quietly made it a server (the same steps as `spark client off`).
