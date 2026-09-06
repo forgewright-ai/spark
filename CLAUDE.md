@@ -541,7 +541,10 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   `~/.config/spark/themes/<name>.env`, the same 21 keys, and lives nowhere
   else: not on the page, not in `CREDITS.md`, not in that map. On macOS
   `spark theme NAME` also switches every open Terminal.app window to the
-  profile (`theme._switch_windows`, osascript), not only new ones.
+  profile (`theme._switch_windows`): the running app reads its
+  preferences only at launch, so a profile it does not know yet is
+  imported live by opening the `.terminal` file (one window opens with
+  it), then made the default and set on every tab by osascript.
 
 ## Verifying a claim
 

@@ -7,6 +7,7 @@
 import os
 import plistlib
 import subprocess
+import time
 
 from . import CONFIG_DIR, HOME, IS_MAC, MARK, REPO, config, glyph, run, say
 
@@ -142,7 +143,7 @@ def profile(cfg, dry):
     live_keys = rc == 0 and "keyMapBoundKeys" in out.split('"%s" =' % name, 1)[-1][:4000]
     stale_dup = rc == 0 and ('"%s 1"' % name in out)
     if have == want and imported and is_default and live_keys and not stale_dup:
-        say("ok     profile      Terminal.app profile %s is the default%s" % (name, _switch_windows(name)))
+        say("ok     profile      Terminal.app profile %s is the default%s" % (name, _switch_windows(name, path)))
         return 0
     if dry:
         say("would  profile      write %s, import it, make it Terminal.app's default" % path)
@@ -157,15 +158,36 @@ def profile(cfg, dry):
     if not _install_profile(name, profile_dict(name, pal, cfg.font_face, cfg.font_size), path):
         say("skip   profile      wrote %s but could not write Terminal.app's preferences" % path)
         return 1
-    say("ok     profile      %s written, imported and set as default%s" % (name, _switch_windows(name)))
+    say("ok     profile      %s written, imported and set as default%s" % (name, _switch_windows(name, path)))
     return 0
 
 
-def _switch_windows(name):
-    """Every open Terminal.app window and tab takes the profile now (a
-    profile set as default reaches only new windows). Returns the note for
-    the row: switched, or what to do by hand."""
-    script = 'tell application "Terminal" to set current settings of every tab of every window to settings set "%s"' % name
+def _live_sets():
+    """The settings sets the RUNNING Terminal.app knows -- its own list,
+    not the preferences file, which it reads only at launch. [] when it is
+    not running or refuses the script."""
+    rc, out = run(["osascript", "-e", 'tell application "Terminal" to get name of every settings set'], timeout=8)
+    return [n.strip() for n in out.split(",")] if rc == 0 else []
+
+
+def _switch_windows(name, path):
+    """The running Terminal.app takes the profile now: imported live by
+    opening the .terminal file when its list lacks the name (that is the
+    one live import there is; it opens a window with the profile, and
+    never a duplicate since the name was absent), then made the default
+    and set on every tab of every window by script. Returns the row's
+    note: switched, or what remains by hand."""
+    live = _live_sets()
+    if not live:
+        return " (new windows use it)"
+    if name not in live:
+        run(["open", "-g", path], timeout=8)
+        time.sleep(1.5)
+        if name not in _live_sets():
+            return " (new windows use it; quit and reopen Terminal.app for the open ones)"
+    script = ('tell application "Terminal"\nset s to settings set "%s"\nset default settings to s\n'
+              'repeat with w in windows\nrepeat with t in tabs of w\nset current settings of t to s\n'
+              'end repeat\nend repeat\nend tell') % name
     rc, _ = run(["osascript", "-e", script], timeout=8)
     return "; open windows switched" if rc == 0 else " (new windows use it; open ones: Terminal > Shell > Show Inspector)"
 
