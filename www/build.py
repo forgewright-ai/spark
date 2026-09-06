@@ -48,6 +48,9 @@ ITEM_RE = re.compile(r"^( *)([-*]|\d+\.) (.*)$")
 FENCE = "```"
 
 
+RELEASES = "https://github.com/forgewright-ai/spark/releases"
+
+
 def version():
     """The newest tag: the version the one-liner installs (get lands a
     stranger there), so the sign line and the install agree."""
@@ -239,6 +242,7 @@ def page(template, slug, title, body, base, ver):
             .replace("{{NAV}}", nav_html(slug, base))
             .replace("{{BODY}}", body)
             .replace("{{VERSION}}", html.escape(ver))
+            .replace("{{RELEASE}}", RELEASES + ("/tag/v" + ver if re.match(r"^\d+\.\d+$", ver) else ""))
             .replace("{{SLUG}}", slug + "/" if slug else "")
             .replace("{{BASE}}", base))
 

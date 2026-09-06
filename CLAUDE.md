@@ -123,6 +123,7 @@ tests/          install_test.sh get_test.sh update_test.sh smoke.py serve_smoke.
 .github/        ci.yml: the same on ubuntu (plus a real bootstrap) and macOS (python 3.9)
                 release.yml: the GitHub Release from the CHANGELOG section, on a v* tag
                 pages.yml: www/ rendered and published to GitHub Pages on a doc change
+                and on a published release (the sign line links the release)
 LICENSE         MIT, verbatim, ASCII (the hook checks it with the docs)
 assets/         banner.svg -- the banner as rectangles, for the README and the page;
                 banner-svg.py makes it from home/.config/spark/banner; icon-svg.py

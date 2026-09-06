@@ -2,6 +2,8 @@
 
 ## v1.8
 
+- The page rebuilds when a release is published, and its sign line links
+  that release: the page and the GitHub release never disagree.
 - The page loads no font from Google: the local stack (the Nerd Font
   where spark installed it, else the system's monospace) draws it, and a
   browser no longer waits on fonts.googleapis.com to render it.

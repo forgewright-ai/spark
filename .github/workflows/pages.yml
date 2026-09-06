@@ -1,8 +1,10 @@
 # pages.yml -- spark.forgewright.ai: the repository's own docs rendered into
 # one static site (www/build.py, stdlib) and published with GitHub Pages.
-# A doc change on main ships the site; nothing is written twice and no
-# secret is involved (the job's own token deploys). CI proves the build
-# (tests/site_test.py) before a merge; this only publishes.
+# A doc change on main ships the site, and so does a published release
+# (release.yml): the sign line names the newest tag and links its release,
+# so the page and the GitHub release never disagree. Nothing is written
+# twice and no secret is involved (the job's own token deploys). CI proves
+# the build (tests/site_test.py) before a merge; this only publishes.
 name: pages
 on:
   push:
@@ -14,6 +16,8 @@ on:
       - 'CHEATSHEET.txt'
       - 'models.env'
       - '.github/workflows/pages.yml'
+  release:
+    types: [published]
   workflow_dispatch:
 permissions:
   contents: read
