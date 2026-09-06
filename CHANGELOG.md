@@ -29,6 +29,9 @@ The server keeps no prompt cache in RAM.
   is Apache-2.0) and every model family's upstream.
 - The page's models table drops the note column; `models.env` ships no
   notes (the key stays, optional, for your own rows).
+- The page renders a CHANGELOG section above the newest tag as
+  `vX.Y (unreleased)`; `tests/docs_test.py` refuses a heading more than
+  one release ahead of the tag. The sign line and the changelog agree.
 
 ## v1.6
 

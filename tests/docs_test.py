@@ -70,6 +70,21 @@ def main():
     build = read(os.path.join("www", "build.py"))
     for src in re.findall(r'\("[a-z]+", "[a-z]+", "([A-Za-z.]+)", "(?:md|text)"\)', build):
         check(os.path.exists(os.path.join(ROOT, src)), "www/build.py renders %s, which exists" % src)
+    # the CHANGELOG's top section is the newest tag or the one right after it
+    # (written before its tag, CLAUDE.md Releasing) -- never further ahead,
+    # never behind
+    import subprocess
+    try:
+        tag = subprocess.run(["git", "describe", "--tags", "--abbrev=0", "--match", "v*"], cwd=ROOT,
+                             capture_output=True, text=True, check=True).stdout.strip()[1:]
+    except (OSError, subprocess.CalledProcessError):
+        tag = ""
+    top = re.search(r"^## v(\d+)\.(\d+)$", read("CHANGELOG.md"), re.M)
+    if tag and top and re.match(r"^\d+\.\d+$", tag):
+        major, minor = int(top.group(1)), int(top.group(2))
+        tmaj, tmin = (int(x) for x in tag.split("."))
+        check((major, minor) in ((tmaj, tmin), (tmaj, tmin + 1), (tmaj + 1, 0)),
+              "CHANGELOG.md: the top section v%d.%d is the newest tag v%s or the next release" % (major, minor, tag))
     # the lists that are gone stay gone
     for doc in ("README.md", "INSTALL.md", "CLAUDE.md", "CHEATSHEET.txt", "CREDITS.md", "CONTRIBUTING.md",
                 "AGENTS.md", "ROADMAP.md", "site.env.example"):

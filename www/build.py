@@ -179,6 +179,24 @@ def read(name):
         return f.read()
 
 
+def unreleased(text, ver):
+    """The CHANGELOG's top section is written before its tag (CLAUDE.md,
+    Releasing), so a `## vX.Y` above the newest tag is work not yet
+    released: the page says so in the heading, and the sign line (the
+    newest tag) and the changelog never disagree."""
+    def key(v):
+        try:
+            return tuple(int(x) for x in v.split("."))
+        except ValueError:
+            return ()
+    cur = key(ver)
+    if not cur:
+        return text
+    return re.sub(r"^## v(\d+\.\d+)$",
+                  lambda m: m.group(0) + (" (unreleased)" if key(m.group(1)) > cur else ""),
+                  text, flags=re.M)
+
+
 def models_page(base):
     """The one list as spark's own parser reads it (config.model_tables),
     the user's file left out: this is the repository's page. One table:
@@ -241,7 +259,10 @@ def main():
     for slug, title, source, kind in PAGES:
         base = "../"
         if kind == "md":
-            body = '<section class="doc">%s</section>' % markdown(read(source), base)
+            text = read(source)
+            if source == "CHANGELOG.md":
+                text = unreleased(text, ver)
+            body = '<section class="doc">%s</section>' % markdown(text, base)
         elif kind == "text":
             body = '<section class="doc"><pre>%s</pre></section>' % html.escape(read(source).rstrip("\n"), quote=False)
         else:

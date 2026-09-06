@@ -87,6 +87,12 @@ def main():
                if re.match(r'^MODEL_[A-Z0-9_]+="', l) and not re.match(r'^MODEL_[A-Z0-9_]+_(LICENSE|NOTE|TESTED)=', l))
     check(pages["models"].count("<tr>") == rows + 1, "models: every row of models.env is on the page (%d)" % rows)
     check("banner.svg" in pages[""] and 'id="ol"' in pages[""], "index: the banner and the one-liner")
+    # a CHANGELOG section above the newest tag is marked unreleased on the page
+    sys.path.insert(0, os.path.join(ROOT, "www"))
+    import build
+    marked = build.unreleased("## v9.9\n\n## v1.0\n", "1.5")
+    check(marked == "## v9.9 (unreleased)\n\n## v1.0\n", "changelog: a section above the newest tag reads (unreleased)")
+    check(build.unreleased("## v1.5\n", "dev") == "## v1.5\n", "changelog: no tag, no mark")
     return finish()
 
 

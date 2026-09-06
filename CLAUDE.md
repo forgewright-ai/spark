@@ -508,8 +508,10 @@ constant -- `spark ver` derives it from git (`lib/spark/version.py`, cached:
 `1.0` exactly at a tag, `1.0+3` three commits past it). Update `CREDITS.md`
 when a pin or a model row changes.
 
-1. Write the `## vX.Y` section at the top of `CHANGELOG.md` (prose, newest
-   first). The full gate, then `sh tests/install_test.sh`, `sh
+1. Write the `## vX.Y` section at the top of `CHANGELOG.md` (bullets, newest
+   first; until the tag exists the page renders that heading as
+   `vX.Y (unreleased)`, and `tests/docs_test.py` refuses a heading more
+   than one release ahead of the newest tag). The full gate, then `sh tests/install_test.sh`, `sh
    tests/get_test.sh` and `sh tests/update_test.sh`. Commit, push, `gh
    run watch` until green.
 2. `git tag -a vX.Y -m 'spark vX.Y' && git push origin vX.Y`. The tag
