@@ -238,6 +238,7 @@ class World:
         self.stars = []                      # {"x", "n", "taken"}
         self.oncas = []                      # {"x", "x0", "x1", "d", "alive"}
         self.bats = []                       # {"ax", "x", "y", "t", "dive", "aim", "rest", "alive"}
+        self.heals = []                      # {"x", "taken"}: a + on the lane, two HP, zones 5-8
         self.posts = []                      # a zone starts here; from the second on, a gate
                                              # that opens with the zone before's star
         self.palm_x = WORLD_W - 22
@@ -266,6 +267,12 @@ class World:
                 self._bat(x + w // 2)
             x += w + 3                       # landing room after a feature
         self.stars.append({"x": x1 - 12, "n": z, "taken": False})
+        if z >= 5:                           # a heal midway, on plain ground
+            for hx in range(x0 + ZONE_W // 2, x1 - 30):
+                if self.floor[hx] == LAND and hx not in self.logs and hx not in self.briars \
+                        and not any(o["x0"] - 2 <= hx <= o["x1"] + 2 for o in self.oncas):
+                    self.heals.append({"x": hx, "taken": False})
+                    break
 
     def _pick(self, mix):
         total = sum(w for _, w in mix)
@@ -299,7 +306,7 @@ class World:
             self.briars.update(range(x, x + w))
         else:                                # an onca's stretch: flat, it patrols it
             self.oncas.append({"x": float(x + 7), "x0": x, "x1": x + w - 1, "d": 1, "alive": True,
-                               "charge": 1.1 if z >= 6 else 0.9})
+                               "charge": 1.25 if z >= 7 else 1.1 if z >= 6 else 0.9, "tell": 0, "seen": False})
 
     def _bat(self, ax):
         self.bats.append({"ax": ax, "x": float(ax), "y": float(CANOPY), "t": self.rng.randint(0, 60),
@@ -514,9 +521,16 @@ class Game:
                 continue
             d = h.x - o["x"]
             if abs(d) < 12:
-                o["x"] += o["charge"] if d > 0 else -o["charge"]
-                o["d"] = 1 if d > 0 else -1
+                if not o["seen"]:
+                    o["seen"], o["tell"] = True, 8       # it sees the hero: a beat of warning, then the charge
+                if o["tell"]:
+                    o["tell"] -= 1
+                    o["d"] = 1 if d > 0 else -1
+                else:
+                    o["x"] += o["charge"] if d > 0 else -o["charge"]
+                    o["d"] = 1 if d > 0 else -1
             else:
+                o["seen"] = False
                 o["x"] += o["d"] * 0.4
             if o["x"] <= o["x0"]:
                 o["x"], o["d"] = float(o["x0"]), 1
@@ -559,7 +573,7 @@ class Game:
                     b["x"] += max(-0.6, min(0.6, b["ax"] - b["x"]))
                     b["y"] += max(-0.5, min(0.5, CANOPY - b["y"]))
                 else:
-                    b["dive"], b["rest"] = None, 80
+                    b["dive"], b["rest"] = None, (50 if self.zone >= 6 else 80)
             if abs(b["x"] - h.x) < 1.0 and abs(b["y"] - h.y) < 0.8:
                 self._hurt(1, 1 if h.x >= b["x"] else -1, "bat")
         # the arrows
@@ -585,6 +599,12 @@ class Game:
             if not hit:
                 keep.append(a)
         self.arrows = keep
+        # the heals
+        for hl in w.heals:
+            if not hl["taken"] and abs(hl["x"] - h.x) < 1.0 and h.row == LANE and h.hp < HP_MAX:
+                hl["taken"] = True
+                h.hp = min(HP_MAX, h.hp + 2)
+                self.events.append("heal")
         # the stars
         for s in w.stars:
             if not s["taken"] and abs(s["x"] - h.x) < 1.3 and abs(AIR1 - h.y) < 0.9:
@@ -734,6 +754,11 @@ class Game:
         for o in w.oncas:
             if o["alive"]:
                 wput(LANE, int(round(o["x"])), "M", (RED, "b"))
+                if o["tell"]:
+                    wput(AIR1, int(round(o["x"])), "!", (RED, "b" if self.tick % 2 else ""))
+        for hl in w.heals:
+            if not hl["taken"]:
+                wput(LANE, hl["x"], "+", (GREEN, "b"))
         for b in w.bats:
             if b["alive"]:
                 wput(int(round(b["y"])), int(round(b["x"])), "v", (MAGENTA, "b"))
@@ -919,6 +944,7 @@ SOUNDS = {                       # (Hz, ms) per note, 0 Hz a rest: square waves,
     "hit": ((196, 60), (147, 110)),
     "jump": ((523, 35), (784, 45)),
     "vulture": ((659, 45), (880, 45), (1175, 90)),
+    "heal": ((659, 50), (880, 90)),
     "dead": ((523, 140), (440, 140), (349, 140), (262, 420)),
     "won": ((523, 110), (659, 110), (784, 110), (1047, 160), (0, 40), (1047, 110), (1319, 380)),
 }

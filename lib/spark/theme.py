@@ -143,7 +143,7 @@ def profile(cfg, dry):
     live_keys = rc == 0 and "keyMapBoundKeys" in out.split('"%s" =' % name, 1)[-1][:4000]
     stale_dup = rc == 0 and ('"%s 1"' % name in out)
     if have == want and imported and is_default and live_keys and not stale_dup:
-        say("ok     profile      Terminal.app profile %s is the default%s" % (name, _switch_windows(name, path)))
+        say("ok     profile      Terminal.app profile %s is the default%s" % (name, _switch_windows(name, path, cfg.font_face, cfg.font_size)))
         return 0
     if dry:
         say("would  profile      write %s, import it, make it Terminal.app's default" % path)
@@ -158,7 +158,7 @@ def profile(cfg, dry):
     if not _install_profile(name, profile_dict(name, pal, cfg.font_face, cfg.font_size), path):
         say("skip   profile      wrote %s but could not write Terminal.app's preferences" % path)
         return 1
-    say("ok     profile      %s written, imported and set as default%s" % (name, _switch_windows(name, path)))
+    say("ok     profile      %s written, imported and set as default%s" % (name, _switch_windows(name, path, cfg.font_face, cfg.font_size)))
     return 0
 
 
@@ -170,7 +170,7 @@ def _live_sets():
     return [n.strip() for n in out.split(",")] if rc == 0 else []
 
 
-def _switch_windows(name, path):
+def _switch_windows(name, path, face=None, size=None):
     """The running Terminal.app takes the profile now: imported live by
     opening the .terminal file when its list lacks the name (that is the
     one live import there is; it opens a window with the profile, and
@@ -185,9 +185,11 @@ def _switch_windows(name, path):
         time.sleep(1.5)
         if name not in _live_sets():
             return " (new windows use it; quit and reopen Terminal.app for the open ones)"
-    script = ('tell application "Terminal"\nset s to settings set "%s"\nset default settings to s\n'
+    # the live copy may predate a font change: the face and size go in by script too
+    font = ('set font name of s to "%s"\nset font size of s to %s\n' % (face, int(float(size)))) if face and size else ""
+    script = ('tell application "Terminal"\nset s to settings set "%s"\n%sset default settings to s\n'
               'repeat with w in windows\nrepeat with t in tabs of w\nset current settings of t to s\n'
-              'end repeat\nend repeat\nend tell') % name
+              'end repeat\nend repeat\nend tell') % (name, font)
     rc, _ = run(["osascript", "-e", script], timeout=8)
     return "; open windows switched" if rc == 0 else " (new windows use it; open ones: Terminal > Shell > Show Inspector)"
 
