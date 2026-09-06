@@ -54,7 +54,7 @@ _spark_complete() {
     fi
     [ "$COMP_CWORD" -eq 2 ] || return 0
     case ${COMP_WORDS[1]} in
-        quiet)   words="start login boot on off status" ;;
+        quiet)   words="start login boot audio on off status" ;;
         theme)   words="list show none status $(_spark_theme_names)" ;;
         model)   words="list verify budget rm add auto none status $(_spark_model_names)" ;;
         ember)   words="list auto none status $(_spark_model_names)" ;;

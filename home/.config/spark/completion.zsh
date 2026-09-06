@@ -50,7 +50,7 @@ _spark() {
               on user explain edit help)
     elif (( CURRENT == 3 )); then
         case ${words[2]} in
-            quiet)   comp=(start login boot on off status) ;;
+            quiet)   comp=(start login boot audio on off status) ;;
             theme)   comp=(list show none status ${(f)"$(_spark_theme_names)"}) ;;
             model)   comp=(list verify budget rm add auto none status ${(f)"$(_spark_model_names)"}) ;;
             ember)   comp=(list auto none status ${(f)"$(_spark_model_names)"}) ;;

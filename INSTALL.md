@@ -129,6 +129,7 @@ layer's git identity).
 | `SITE_FONT_FACE` / `SITE_FONT_SIZE` | Linux console: a face and size `spark font list` shows (e.g. `Terminus` `16x32`); macOS profile: an installed font's PostScript name and points (`spark font list` shows the monospace ones; a face this Mac lacks is refused, and the `font` row warns) -- later, `spark font FACE SIZE`; one face and size for every spark profile; core, shell layer or not | unset (Linux), the Nerd Font (macOS) / `16x32` (Linux), `13` (macOS) |
 | `SITE_QUIET_LOGIN` / `SITE_QUIET_BOOT` | Linux: `yes` bares the login (motd, kernel line and `/etc/issue` emptied, originals kept as `*.orig`) / makes the boot silent -- BIOS splash to login prompt (GRUB menu hidden, quiet kernel line, systemd silent; one drop-in at `/etc/default/grub.d/zz-spark-quiet.cfg`) -- later, `spark quiet login|boot on` | `no` |
 | `SITE_QUIET_START` | both OSes: `yes` silences spark's own start -- no login banner, one-line `spark serve` and `spark forge`, one-line bare `spark` (`spark status` stays full) -- later, `spark quiet start on`. The login path greps `site.env` directly (no python there), so the usual environment-over-file precedence does not apply to the banner | `no` |
+| `SITE_QUIET_AUDIO` | both OSes: `yes` and spark plays no sound (the `audio` check row names the player it would use: afplay, aplay, paplay) -- later, `spark quiet audio on|off`; core | `no` |
 | `SITE_SET_HOSTNAME` | `yes`: the OS hostname follows `SITE_NAME` (sudo; the shell layer) | `no` |
 
 Runtime knobs live in `~/.config/spark/spark.env` (`spark.env.example`
@@ -643,7 +644,7 @@ get -> spark setup -> bootstrap.sh (apply) -> install.sh (links, renders)
                       the engine tarball, the model, the token, the units,
                       one rc line; SITE_SHELL=on adds the workstation
 
-spark check   38 rows: every promise the machine makes, fixture-tested
+spark check   39 rows: every promise the machine makes, fixture-tested
 spark update  the newest tag (a stranger), or main (a developer); converge
 
 what leaves the machine: pinned downloads in, your questions to the brain

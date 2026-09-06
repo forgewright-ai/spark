@@ -271,18 +271,22 @@ def cmd_font(args):
 # ------------------------------------------------------------------ quiet
 QUIET_USAGE = """%s quiet -- what spark and the machine keep silent
 
-  spark quiet                   the three states: start, login, boot
+  spark quiet                   the four states: start, login, boot, audio
   spark quiet start [on|off]    spark's own noise, both OSes: no login banner,
                                 one-line serve and forge, one-line bare spark
   spark quiet login [on|off]    Linux: no distro notice, no kernel line
   spark quiet boot [on|off]     Linux: straight past GRUB's menu
+  spark quiet audio [on|off]    both OSes: no sound from spark (the audio row
+                                says which player it would use)
 """ % MARK
-QUIET_KEYS = {"start": "SITE_QUIET_START", "login": "SITE_QUIET_LOGIN", "boot": "SITE_QUIET_BOOT"}
+QUIET_KEYS = {"start": "SITE_QUIET_START", "login": "SITE_QUIET_LOGIN", "boot": "SITE_QUIET_BOOT",
+              "audio": "SITE_QUIET_AUDIO"}
 MAC_NO_QUIET = "macOS: no motd, no GRUB"
 
 
 def _quiet_state(cfg, sub):
-    return "on" if {"start": cfg.quiet_start, "login": cfg.quiet_login, "boot": cfg.quiet_boot}[sub] else "off"
+    return "on" if {"start": cfg.quiet_start, "login": cfg.quiet_login, "boot": cfg.quiet_boot,
+                    "audio": cfg.quiet_audio}[sub] else "off"
 
 
 def cmd_quiet(args):
@@ -291,34 +295,41 @@ def cmd_quiet(args):
         return 0
     cfg = config.load()
     if not args or args[0] == "status":
-        start = _quiet_state(cfg, "start")
+        start, audio = _quiet_state(cfg, "start"), _quiet_state(cfg, "audio")
         if IS_MAC:
-            say("%s quiet -- start %s (login, boot: macOS has no motd, no GRUB)" % (MARK, start))
+            say("%s quiet -- start %s, audio %s (login, boot: macOS has no motd, no GRUB)" % (MARK, start, audio))
         elif not cfg.shell:
-            say("%s quiet -- start %s (login, boot: the shell layer is off)" % (MARK, start))
+            say("%s quiet -- start %s, audio %s (login, boot: the shell layer is off)" % (MARK, start, audio))
         else:
-            say("%s quiet -- start %s, login %s, boot %s" % (
-                MARK, start, _quiet_state(cfg, "login"), _quiet_state(cfg, "boot")))
+            say("%s quiet -- start %s, login %s, boot %s, audio %s" % (
+                MARK, start, _quiet_state(cfg, "login"), _quiet_state(cfg, "boot"), audio))
         return 0
     sub = args[0]
     if sub not in QUIET_KEYS or len(args) > 2 or (len(args) == 2 and args[1] not in ("on", "off")):
         say(QUIET_USAGE.rstrip())
         return 2
+    linux_only = sub in ("login", "boot")                  # start and audio are both OSes, core
     if len(args) == 1:                                     # show one state
-        if sub != "start" and IS_MAC:
+        if linux_only and IS_MAC:
             say("%s quiet %s -- %s" % (MARK, sub, MAC_NO_QUIET))
             return 0
-        if sub != "start" and not cfg.shell:
+        if linux_only and not cfg.shell:
             say("%s quiet %s -- the shell layer is off (spark shell on)" % (MARK, sub))
             return 0
         say("%s quiet %s -- %s" % (MARK, sub, _quiet_state(cfg, sub)))
         return 0
-    if sub != "start" and IS_MAC:                          # nothing to set there
+    if linux_only and IS_MAC:                              # nothing to set there
         say("%s quiet %s -- %s" % (MARK, sub, MAC_NO_QUIET))
         return 2
-    if sub != "start" and shell_off("quiet"):
+    if linux_only and shell_off("quiet"):
         return 2
     set_keys(**{QUIET_KEYS[sub]: "yes" if args[1] == "on" else "no"})
+    if sub == "audio":
+        # the key is the behavior: what spark plays reads it at start
+        say("audio is %s" % ("quiet: spark plays no sound" if args[1] == "on" else "on: the sounds spark has play again"))
+        from . import check
+        check.refresh()
+        return 0
     if sub == "start":
         # the key is the behavior: nothing on disk to converge, no bootstrap row
         say("start is %s" % ("quiet: no login banner, one line from serve, forge and bare spark"

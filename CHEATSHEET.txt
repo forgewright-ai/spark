@@ -65,9 +65,10 @@ THE MACHINE
                                   on links the rc files (yours -> .bak)
   spark headless [on|off]         the FORGE up from boot, never asleep (brain)
   spark client [URL|off]          answer from another machine's FORGE; none here
-  spark quiet                     the three states: start, login, boot
+  spark quiet                     the four states: start, login, boot, audio
   spark quiet start on|off        no banner, one-line serve/forge + bare spark
   spark quiet login|boot on|off   Linux: motd + kernel line; GRUB's menu
+  spark quiet audio on|off        no sound from spark (both OSes)
   spark font FACE SIZE | list     console font (Linux) / Terminal.app's font
   spark ver                       logo, version, credits (the login greeting)
   spark update [--dry-run]        the newest tag; main pulls on a dev clone

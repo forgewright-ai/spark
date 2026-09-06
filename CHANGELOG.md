@@ -104,6 +104,10 @@ The server keeps no prompt cache in RAM.
   `spark>` prompt list or drop the notes declined for the file, through
   `spark edit --ledger [clear] --name NAME`; the shell verb `spark ledger`
   is gone (one line says where it went).
+- `spark quiet audio on|off` (`SITE_QUIET_AUDIO`, both OSes, core): spark
+  plays no sound while it is on. The `audio` check row (a capability,
+  never a failure) names the player spark would use -- afplay on macOS,
+  aplay or paplay on Linux -- or says there is none. 39 rows.
 - Something small runs in the dark. Those who look will find it.
 
 ## v1.6

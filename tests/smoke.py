@@ -1246,6 +1246,18 @@ def main():
                      "macOS: spark font list names the faces every Mac ships, and the Nerd Font when installed", out)
             else:
                 print("  skip macOS font guard: Spotlight indexing is off here")
+        # quiet audio: both OSes, core, the key is the behaviour
+        rc, out, _ = spark("quiet", "audio", "on", extra=off)
+        with open(home + "/.config/spark/site.env") as f:
+            site_env = f.read()
+        t.ok(rc == 0 and "audio is quiet" in out and "SITE_QUIET_AUDIO=yes\n" in site_env,
+             "spark quiet audio on writes the key and says so, shell layer off or not", out)
+        rc, out, _ = spark("quiet", extra=off)
+        t.ok(rc == 0 and "audio on" in out, "spark quiet shows the audio state with the others", out)
+        rc, out, _ = spark("quiet", "audio", "off", extra=off)
+        rc2, out2, _ = spark("quiet", "audio", extra=off)
+        t.ok(rc == 0 and "audio is on" in out and rc2 == 0 and out2.strip().endswith("audio -- off"),
+             "spark quiet audio off, and the one state shows", out + out2)
         rc, out, _ = spark("bootconfig", extra=off)
         t.ok(rc == 2 and out.strip() == "spark bootconfig -- gone: spark quiet (login|boot)",
              "spark bootconfig is gone: one line naming spark quiet, exit 2", out)

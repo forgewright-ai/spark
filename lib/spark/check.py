@@ -842,6 +842,19 @@ def row_bar(ctx):
     return ok("ticking (last tick %ds ago)" % age)
 
 
+@row("CAPABILITY", fixture=False, reason="looks for a player on this machine's PATH")
+def row_audio(ctx):
+    """The sounds spark plays (a bell, and what a game of its has): a
+    player on PATH -- afplay on macOS, aplay or paplay on Linux -- unless
+    quiet audio is on. A capability: never fail."""
+    player = next((c for c in (("afplay",) if IS_MAC else ("aplay", "paplay")) if shutil.which(c)), None)
+    if ctx.cfg.quiet_audio:
+        return na("quiet audio on: spark plays no sound%s" % ((" (%s is here)" % player) if player else ""))
+    if player:
+        return ok("%s -- sounds play (spark quiet audio on silences them)" % player)
+    return warn("no player on PATH: the terminal bell at most", "apt install alsa-utils (aplay), or spark quiet audio on")
+
+
 @row("SOFTWARE", fixture=False, reason="reads /etc")
 def row_quiet(ctx):
     # `start` is a config echo (the key IS the behavior): never fail-worthy

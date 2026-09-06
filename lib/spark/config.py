@@ -169,6 +169,12 @@ class Config:
         return self.get("SITE_QUIET_BOOT", "no") == "yes"
 
     @property
+    def quiet_audio(self):
+        """yes: spark plays no sound (the sounds it has are a game's and a
+        bell); the audio row reads na. Both OSes; core."""
+        return self.get("SITE_QUIET_AUDIO", "no") == "yes"
+
+    @property
     def quiet_start(self):
         """yes: spark itself starts quietly -- no login banner, a one-line
         `spark serve` / `spark forge`, a one-line bare `spark` (explicit
