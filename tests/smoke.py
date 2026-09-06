@@ -1223,10 +1223,16 @@ def main():
              "spark font -h signs (contract 8)", out)
         rc, out, _ = spark("font", "list", extra=off)
         t.ok(rc == 0 and out.startswith("spark font list -- "), "spark font list answers on either OS", out)
+        from spark import site as _site2
+        t.ok([_site2.size_as_taken(x) for x in ("32x16", "16", "12x6")] == ["16x32", "8x16", "6x12"],
+             "font list: a file's HxW (or bare height) is spelled as the command takes it, WxH")
         if sys.platform != "darwin" and os.path.isdir("/usr/share/consolefonts"):
             rc, out, _ = spark("font", "NoSuchFace", "16x32", extra=off)
             t.ok(rc == 2 and "spark font list" in out,
                  "a console face consolefonts lacks is refused, naming spark font list", out)
+            rc, out, _ = spark("font", "list", extra=off)
+            pairs = [tuple(int(v) for v in tok.split("x")) for ln in out.splitlines()[1:] for tok in ln.split() if re.match(r"^\d+x\d+$", tok)]
+            t.ok(rc == 0 and pairs and all(w <= h for w, h in pairs), "font list: every size printed is width by height", out[:200])
         if sys.platform == "darwin":
             from spark import site as _site
             if _site.mac_font_installed("VGA") is False:       # Spotlight indexes here

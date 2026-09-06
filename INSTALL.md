@@ -565,8 +565,10 @@ Linux:
   16x32` gives the text console a readable font on a 1080p screen (`VGA`
   for the installer's look). `spark font list` reads
   `/usr/share/consolefonts` -- the real faces and sizes this box has --
-  and a face or size not there is refused before anything is written (a
-  WxH size such as `16x32` matches its HxW file name). The quiet rows stay
+  and a face or size not there is refused before anything is written. The
+  list spells sizes the way the command takes them, width by height
+  (console-setup's `FONTSIZE`); the font files spell them the other way
+  round, `Terminus32x16` being `16x32`. The quiet rows stay
   with the shell layer: `spark quiet login on` empties the motd and
   `spark quiet boot on` makes the boot silent (the GRUB drop-in). The
   console font cannot draw the check and arrow glyphs; spark notices

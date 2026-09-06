@@ -205,12 +205,22 @@ def font_list():
     if not fonts:
         say("%s font list -- nothing in %s (console-setup not installed?)" % (MARK, CONSOLEFONTS_DIR))
         return 0
-    say("%s font list -- the console faces in %s" % (MARK, CONSOLEFONTS_DIR))
+    say("%s font list -- the console faces in %s, sizes as spark font takes them (WxH)" % (MARK, CONSOLEFONTS_DIR))
     for face in sorted(fonts):
-        sizes = sorted(fonts[face], key=lambda s: tuple(int(p) for p in s.split("x")))
+        sizes = sorted({size_as_taken(x) for x in fonts[face]}, key=lambda s: tuple(int(p) for p in s.split("x")[::-1]))
         say("  %-16s %s" % (face, " ".join(sizes)))
-    say("  spark font FACE SIZE sets one; a WxH size such as 16x32 matches its HxW file")
+    say("  spark font FACE SIZE sets one, e.g. spark font Terminus 16x32")
     return 0
+
+
+def size_as_taken(file_size):
+    """A font file's size the way spark font (console-setup's FONTSIZE)
+    spells it: the files say HxW, or the height alone for an 8-wide face
+    -- 32x16 is taken as 16x32, 16 as 8x16."""
+    if "x" in file_size:
+        h, w = file_size.split("x", 1)
+        return "%sx%s" % (w, h)
+    return "8x%s" % file_size
 
 
 def cmd_font(args):

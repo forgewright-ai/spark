@@ -108,6 +108,9 @@ The server keeps no prompt cache in RAM.
   plays no sound while it is on. The `audio` check row (a capability,
   never a failure) names the player spark would use -- afplay on macOS,
   aplay or paplay on Linux -- or says there is none. 39 rows.
+- `spark font list` on Linux spells sizes the way `spark font` takes
+  them, width by height (`16x32`), instead of the font files' height by
+  width (`32x16`); an 8-wide face's bare height reads `8x16`.
 - Something small runs in the dark. Those who look will find it. It has
   nights now, and no potion on the first.
 
