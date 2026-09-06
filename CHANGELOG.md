@@ -108,7 +108,8 @@ The server keeps no prompt cache in RAM.
   plays no sound while it is on. The `audio` check row (a capability,
   never a failure) names the player spark would use -- afplay on macOS,
   aplay or paplay on Linux -- or says there is none. 39 rows.
-- Something small runs in the dark. Those who look will find it.
+- Something small runs in the dark. Those who look will find it. It has
+  nights now, and no potion on the first.
 
 ## v1.6
 

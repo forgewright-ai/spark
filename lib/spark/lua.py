@@ -270,13 +270,14 @@ class World:
                 self._bat(x + w // 2)
             x += w + 3                       # landing room after a feature
         self.stars.append({"x": x1 - 12, "n": z, "taken": False})
-        # the heals: none in the first zone, one in zones 2 to 4, two from the fifth on
-        spots = () if z == 1 else (ZONE_W // 2,) if z <= 4 else (ZONE_W // 3, 2 * ZONE_W // 3)
-        for at in spots:
-            for hx in range(x0 + at, x1 - 30):
+        # a heal spot midway in every zone but the first; the NIGHT decides how
+        # many the forest holds (Game: none the first night, one on nights
+        # 2 to 4, two from the fifth)
+        if z > 1:
+            for hx in range(x0 + ZONE_W // 2, x1 - 30):
                 if self.floor[hx] == LAND and hx not in self.logs and hx not in self.briars \
                         and not any(o["x0"] - 2 <= hx <= o["x1"] + 2 for o in self.oncas):
-                    self.heals.append({"x": hx, "taken": False})
+                    self.heals.append({"x": hx, "taken": False, "zone": z})
                     break
 
     def _pick(self, mix):
@@ -416,6 +417,10 @@ class Game:
         self.day = day
         self.seed = seed if seed is not None else (day or date.today()).toordinal()
         self.world = World(self.seed)
+        # the potions the night allows: none the first night (it is easy enough),
+        # one on nights 2 to 4 (the fourth zone), two from the fifth (zones 3 and 6)
+        allowed = () if self.night == 1 else (4,) if self.night <= 4 else (3, 6)
+        self.world.heals = [h for h in self.world.heals if h["zone"] in allowed]
         self.rng = random.Random(self.seed * 7 + 1)
         self.p = phase(day)
         self.hero = Hero(6)

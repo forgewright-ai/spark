@@ -1571,9 +1571,8 @@ def main():
             t.ok(wv.getnchannels() == 1 and wv.getsampwidth() == 1 and wv.getframerate() == 22050
                  and abs(wv.getnframes() - sum(ms for _, ms in _lua.SOUNDS["won"]) * 22.05) < 10,
                  "lua: the success fanfare is an 8-bit mono WAV of the notes' length")
-        _w1 = _lua.World(1)
-        t.ok([sum(1 for hl in _w1.heals if _w1.zone_of(hl["x"]) == z) for z in range(1, 9)] == [0, 1, 1, 1, 2, 2, 2, 2],
-             "lua: heals on the ground -- none in zone 1, one in zones 2 to 4, two from the fifth")
+        t.ok([len(_lua.Game(80, seed=1, night=n).world.heals) for n in (1, 2, 4, 5, 6)] == [0, 1, 1, 2, 2],
+             "lua: potions by night -- none the first night, one on nights 2 to 4, two from the fifth")
         _g = _lua.Game(80, seed=1)
         _g.key("d")
         for _ in range(400):
