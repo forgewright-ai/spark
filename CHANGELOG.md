@@ -15,6 +15,12 @@
   the VT at the next login. `SITE_THEME` is still recorded; the files, and
   the macOS Terminal profile, now land with `spark shell on` or an
   explicit `spark theme NAME`.
+- `spark theme` stopped asking for a shell restart it never needed.
+  Nothing in a running shell holds the palette: starship re-reads its
+  config on every prompt, the widget draws no colour of its own, and the
+  rc hook reads `console-colors` alone. With that file now sent to the
+  console directly, a theme is live everywhere it can be -- the next
+  prompt, tmux, the VT -- and only a running micro must be reopened.
 - A palette change reaches the console it is typed on. `spark theme NAME`
   and `spark theme none` wrote `console-colors` and left it for the rc hook
   to cat at the next login, so turning a theme off looked stuck until a

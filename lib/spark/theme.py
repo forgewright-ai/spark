@@ -381,7 +381,11 @@ def set_theme(name):
         profile(config.load(), False)
     from . import check
     check.refresh()
-    say("open a new shell for the prompt colours (exec $SHELL); a running micro: reopen it")
+    # nothing in a running shell holds the palette: starship re-reads its
+    # config on every prompt, the widget draws no colour of its own, and the
+    # hook reads console-colors alone -- so no shell restart is owed. Only a
+    # running editor is, and a terminal emulator keeps its own colours.
+    say("the next prompt has it, and tmux; a running micro: reopen it")
     return 0
 
 
