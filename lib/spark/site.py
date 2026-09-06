@@ -4,6 +4,7 @@
 # writes the key, then runs bootstrap.sh so the machine follows; editing
 # site.env by hand and running bootstrap does the same thing.
 
+import json
 import math
 import os
 import pwd
@@ -403,7 +404,11 @@ def cmd_client(args):
                                "this machine is %s" % me if me else "no login -- " + _login_hint(cfg.peer_ai_url)))
         return 0
     if args[0] == "off":
+        # the one deliberate promotion: the client shape ends here, then
+        # `spark model auto` runs as on any server (cmd_model refuses a
+        # choice while the shape holds)
         say("the peer stays first while it answers; this machine's own model is the fallback")
+        set_keys(SITE_AI_MODEL="auto")
         return cmd_model(["auto"])
     url = args[0].rstrip("/")
     if not re.match(r"^https?://[^/\s]+$", url):
@@ -445,7 +450,33 @@ MODEL_USAGE = """%s model -- which model this machine serves
   spark model verify            sha256 every downloaded file now; exit 1 on
                                 a mismatch (spark check's models row is the
                                 cached, daily version of this)
+
+  On a client (spark client URL) the table is the peer's and every choice
+  is refused: choose there, or spark client off to serve here again.
 """ % MARK
+
+
+def _client_no(cfg, what):
+    """The one line a client answers to a model choice: nothing is served
+    here, so a budget, a model or an ember chosen here would silently
+    make this machine a server (that is spark client off, by name)."""
+    say("%s %s -- a client of %s serves nothing; choose on the peer, or spark client off to serve here again"
+        % (MARK, what, cfg.peer_ai_url))
+    return 2
+
+
+def peer_models(cfg):
+    """The peer's own model table: GET /api/models on the FORGE, with the
+    login token (any role). None when the peer is down, a bare
+    llama-server, or a FORGE older than this route."""
+    from . import wire
+    try:
+        req = Request(cfg.peer_ai_url.rstrip("/") + "/api/models", headers=wire._headers(cfg, forge=True))
+        with urlopen(req, timeout=wire.HEALTH_TIMEOUT) as r:
+            d = json.load(r)
+        return d if isinstance(d, dict) and isinstance(d.get("models"), list) else None
+    except (HTTPError, URLError, OSError, ValueError):
+        return None
 
 
 def _restart_server(cfg):
@@ -489,7 +520,8 @@ def model_rows(cfg, serving=None):
     asks the brain (the FORGE passes its own). `speed` is tok/s and
     `speed_kind` "measured" or "estimate" (engine.speed_of)."""
     from . import engine, wire
-    budget = mem_total_gb() * cfg.ai_budget / 100.0
+    # a client serves nothing: its own RAM is no budget, so `fits` is None
+    budget = None if cfg.client else mem_total_gb() * cfg.ai_budget / 100.0
     pair = engine.chosen_rows(cfg)
     chosen = pair["spark"][1] if pair.get("spark") else ""
     role_of = {}
@@ -507,7 +539,7 @@ def model_rows(cfg, serving=None):
     for row in config.model_tables():
         name, fname, _url, nbytes, _sha, ram, source, tested, license_, note = row
         speed, kind = engine.speed_of(cfg, row)
-        out.append({"name": name, "gb": round(nbytes / 2**30, 1), "ram_gb": ram, "fits": ram <= budget,
+        out.append({"name": name, "gb": round(nbytes / 2**30, 1), "ram_gb": ram, "fits": (ram <= budget) if budget is not None else None,
                     "downloaded": os.path.isfile(os.path.join(cfg.models_dir, fname)),
                     "chosen": fname == chosen, "role": role_of.get(fname, ""),
                     "serving": bool(serving) and fname.replace(".gguf", "") == serving,
@@ -527,7 +559,10 @@ def model_line(r, marks=None, width=13):
     13 for a longer name). Every row stays within 80 columns."""
     marks = marks or {"spark": "*", "ember": "+"}
     state = "serving" if r["serving"] else ("downloaded" if r["downloaded"] else "")
-    speed = ("%s%d tok/s" % ("~" if r["speed_kind"] == "estimate" else "", r["speed"])) if r["fits"] else "too big"
+    if r["fits"] is None:
+        speed = ""                       # a client: the peer's business
+    else:
+        speed = ("%s%d tok/s" % ("~" if r["speed_kind"] == "estimate" else "", r["speed"])) if r["fits"] else "too big"
     lic = ((r["license"] or "").split() or [""])[0][:10]
     # padded columns, right-aligned numbers: the eye reads a table, not a
     # sentence; 57 + width columns, so a 23-char name still fits 80
@@ -547,13 +582,30 @@ def print_model_table(cfg):
     bench, or a real turn); nothing for a row that does not fit. A row's
     note follows it, indented. Every row stays within 80 columns."""
     from . import engine
-    budget = mem_total_gb() * cfg.ai_budget / 100.0
-    say("%s model%sSITE_AI_MODEL=%s SITE_EMBER_MODEL=%s%s%.0f GB for models (RAM + GPU), budget %.0f GB (%d%%), %s" % (
-        MARK, glyph("sep"), cfg.model_choice, cfg.ember_model, glyph("sep"), mem_total_gb(), budget, cfg.ai_budget, engine.backend(cfg)))
-    note = engine.cap_note(cfg)
-    if note:
-        say("  " + note)
-    rows = model_rows(cfg)
+    if cfg.client:
+        # a client: never this machine's RAM. The peer's table when its
+        # FORGE answers /api/models (the box's RAM, budget, picks,
+        # speeds); else the rows alone, no verdict
+        peer = peer_models(cfg)
+        if peer:
+            say("%s model%sa client of %s -- the peer's table: %.0f GB for models, budget %.0f GB (%d%%), %s" % (
+                MARK, glyph("sep"), cfg.peer_ai_url, peer.get("total_gb", 0), peer.get("budget_gb", 0),
+                peer.get("budget_pct", 0), peer.get("backend", "?")))
+            if peer.get("cap_note"):
+                say("  " + peer["cap_note"])
+            rows = peer["models"]
+        else:
+            say("%s model%sa client of %s -- nothing is served here; what fits is the peer's business (spark model there)" % (
+                MARK, glyph("sep"), cfg.peer_ai_url))
+            rows = model_rows(cfg)
+    else:
+        budget = mem_total_gb() * cfg.ai_budget / 100.0
+        say("%s model%sSITE_AI_MODEL=%s SITE_EMBER_MODEL=%s%s%.0f GB for models (RAM + GPU), budget %.0f GB (%d%%), %s" % (
+            MARK, glyph("sep"), cfg.model_choice, cfg.ember_model, glyph("sep"), mem_total_gb(), budget, cfg.ai_budget, engine.backend(cfg)))
+        note = engine.cap_note(cfg)
+        if note:
+            say("  " + note)
+        rows = model_rows(cfg)
     width = max([13] + [len(r["name"]) for r in rows])
     say("     %-*s %8s %5s %-10s %-4s %-10s %9s" % (width, "model", "file", "RAM", "license", "line", "", "fits"))
     for r in rows:
@@ -739,12 +791,16 @@ def cmd_model(args):
         return paged(lambda: print_model_table(cfg))
     if args[0] == "budget":
         if len(args) == 1:
+            if cfg.client:
+                return print_model_table(cfg)
             gb = mem_total_gb() * cfg.ai_budget / 100.0
             say("%s model budget%s%d%% of %.0f GB = %.0f GB" % (MARK, glyph("sep"), cfg.ai_budget, mem_total_gb(), gb))
             return print_model_table(cfg)
         if len(args) != 2 or not args[1].isdigit() or not 10 <= int(args[1]) <= 95:
             say(MODEL_USAGE.rstrip())
             return 2
+        if cfg.client:
+            return _client_no(cfg, "model budget")
         set_keys(SITE_AI_BUDGET=args[1])
         pend = [] if os.environ.get("SPARK_NO_APPLY") else _downloads_pending(config.load())
         _announce_downloads(pend)
@@ -762,6 +818,8 @@ def cmd_model(args):
         if len(args) != 2:
             say(MODEL_USAGE.rstrip())
             return 2
+        if cfg.client:
+            return _client_no(cfg, "model rm")
         match = [r for r in rows if r[0] == args[1]]
         fname = match[0][1] if match else args[1]
         path = os.path.join(cfg.models_dir, fname)
@@ -779,6 +837,8 @@ def cmd_model(args):
     if name not in ("auto", "none") and not match:
         say("spark model: no model named %s -- one of: auto none %s" % (name, " ".join(r[0] for r in rows)))
         return 2
+    if cfg.client:
+        return _client_no(cfg, "model")
     if match and not _license_ok(match[0], "model"):
         return 1
     set_keys(SITE_AI_MODEL=name)
@@ -840,6 +900,8 @@ def cmd_ember(args):
     if name not in ("auto", "none") and not match:
         say("spark ember: no model named %s -- one of: auto none %s   (spark ember list)" % (name, " ".join(r[0] for r in rows)))
         return 2
+    if cfg.client:
+        return _client_no(cfg, "ember")
     if match and not _license_ok(match[0], "ember"):
         return 1
     set_keys(SITE_EMBER_MODEL=name)

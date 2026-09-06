@@ -37,7 +37,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from . import (BAR_CACHE, CHECK_JSON, CONFIG_DIR, EMBER_TOKEN_FILE, FORGE_LOCK, FORGE_LOG, FORGE_PID,
                FORGE_URL_FILE, HOME, IS_MAC, MARK, OFF_FLAG, REPO, SERVE_URL_FILE, SPARK_ENV,
                config, forge_url, lan_ip, log_exc, own_hostnames, say, state_dir, wait_ready)
-from . import engine, wire
+from . import engine, mem_total_gb, wire
 from . import version as _version
 
 # resolved once, at daemon import: `spark forge` is a long-running process,
@@ -572,7 +572,7 @@ class Handler(BaseHTTPRequestHandler):
                   "/api/bench": self.api_bench, "/api/config": self.api_config, "/api/theme": self.api_theme,
                   "/api/log": self.api_log, "/api/events": self.api_events, "/api/threads": self.api_threads,
                   "/api/soul": self.api_soul, "/api/memory": self.api_memory,
-                  "/api/users": self.api_users}.get(path)
+                  "/api/users": self.api_users, "/api/models": self.api_models}.get(path)
             if fn:
                 return fn()
             if path.startswith("/api/threads/"):
@@ -822,6 +822,19 @@ class Handler(BaseHTTPRequestHandler):
         from . import bench
         cfg = self.server.cfg
         self._json(200, {"baseline": bench.baseline(cfg) or None, "tune": bench.load_tune(), "now": bench.settings_of(cfg)})
+
+    def api_models(self):
+        """The model table as this box sees it (user-or-admin): its RAM,
+        its budget, the picks, the speeds -- what `spark model` on a
+        client prints instead of its own numbers. No key, no token, no
+        path: names, sizes and verdicts."""
+        from . import site
+        cfg = self.server.cfg
+        _url, model, st = self.server.upstream.resolve()
+        total = mem_total_gb()
+        self._json(200, {"name": cfg.name, "total_gb": total, "budget_gb": total * cfg.ai_budget / 100.0,
+                         "budget_pct": cfg.ai_budget, "backend": engine.backend(cfg), "cap_note": engine.cap_note(cfg),
+                         "models": site.model_rows(cfg, model if st == "ok" else "")})
 
     def api_config(self):
         from . import site, theme

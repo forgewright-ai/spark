@@ -1225,6 +1225,25 @@ def main():
         rc, outp, _ = spark("check", "--porcelain", "--fresh", extra=dict(off, SITE_PEER_AI_URL="http://192.0.2.10:8081"))
         t.ok(all(re.search(r"^\w+\tna\t%s\ta client of 192.0.2.10:8081" % r, outp, re.M) for r in ("engine", "services", "watchdog", "ai", "serve", "forge")),
              "spark check as a client: engine, services, watchdog, ai, serve, forge are na", outp)
+        # a client's model table is the peer's, never this machine's RAM;
+        # a choice made here is refused (it would make a server of a client)
+        cl = dict(off, SPARK_MEM_TOTAL_GB="24")
+        rc, out, _ = spark("model", extra=cl)
+        t.ok(rc == 0 and out.splitlines()[0].startswith("spark model") and "a client of http://192.0.2.10:8081" in out.splitlines()[0]
+             and "24 GB" not in out and "budget" not in out.splitlines()[0],
+             "spark model on a client (peer down): no local RAM, no budget, the peer named", out)
+        crow = [ln for ln in out.splitlines() if re.match(r"^  [ *+][ u] \S+ +\d+\.\d GB ", ln)]
+        t.ok(crow and not any("tok/s" in ln or "too big" in ln for ln in crow), "a client's rows carry no verdict", out)
+        rc, outb, _ = spark("model", "budget", extra=cl)
+        t.ok(rc == 0 and outb == out, "spark model budget on a client prints the same table, no local percent", outb)
+        for verb in (("model", "budget", "40"), ("model", "qwen3-1-7b"), ("model", "auto"), ("model", "rm", "qwen3-1-7b"),
+                     ("ember", "qwen3-1-7b"), ("ember", "auto")):
+            rc, outv, _ = spark(*verb, extra=cl)
+            t.ok(rc == 2 and "serves nothing" in outv and "spark client off" in outv and outv.startswith("spark " + verb[0]),
+                 "spark %s on a client is refused with the one line" % " ".join(verb), outv)
+        site_env = open(home + "/.config/spark/site.env").read()
+        t.ok("SITE_AI_MODEL=none\n" in site_env and "SITE_AI_BUDGET=40" not in site_env and "SITE_EMBER_MODEL=qwen3" not in site_env,
+             "the refusals wrote nothing", site_env)
         rc, out, _ = spark("client", "off", extra=off)
         site_env = open(home + "/.config/spark/site.env").read()
         t.ok(rc == 0 and "SITE_AI_MODEL=auto\n" in site_env and "the peer stays first" in out,

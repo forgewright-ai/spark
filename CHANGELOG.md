@@ -32,6 +32,16 @@ The server keeps no prompt cache in RAM.
 - The page renders a CHANGELOG section above the newest tag as
   `vX.Y (unreleased)`; `tests/docs_test.py` refuses a heading more than
   one release ahead of the tag. The sign line and the changelog agree.
+- A client stays a client. `spark model` on a client showed its own RAM
+  and a budget for a machine that serves nothing, and `spark model NAME`
+  there quietly made it a server (the same steps as `spark client off`).
+  Now `spark model`, `ember list` and `model budget` on a client print
+  the peer's table -- the FORGE's new `GET /api/models` (any logged-in
+  user): its RAM, budget, picks and speeds -- or the rows alone, without
+  a verdict, when the peer is a bare server, down, or older; `bootstrap.sh
+  --list-models` does the same. `spark model NAME|auto|none`, `model
+  budget N`, `model rm` and `spark ember NAME` are refused on a client
+  with one line; `spark client off` remains the one way to serve again.
 
 ## v1.6
 

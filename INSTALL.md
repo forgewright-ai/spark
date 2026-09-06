@@ -400,9 +400,13 @@ peer URL and `SITE_AI_MODEL=none`, applies the prompt hook and the
 widgets, and names the login step. A client runs nothing --
 no engine, no model, no units -- and `spark check` there says so: the
 engine, services, watchdog, ai, serve and forge rows read `na`, the
-peer row says whether the FORGE answers. `spark client` shows that state; `spark client
-off` is `spark model auto`: a model of its own again, the peer still
-first while it answers.
+peer row says whether the FORGE answers. `spark client` shows that state.
+On a client `spark model` prints the peer's table (its RAM, its budget,
+its picks -- asked of the FORGE; the rows alone when the peer is a bare
+server or down), never this machine's; choosing a model, an ember or a
+budget there is refused, since it would quietly make a server of the
+client. `spark client off` is that step made on purpose: `spark model
+auto` again, a model of its own, the peer still first while it answers.
 
 Any program talks to the same FORGE with the OpenAI shape; a request that
 names no `model` gets the ember with the identity injected (`model: spark`

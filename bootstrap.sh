@@ -266,6 +266,18 @@ cap_note() {
 }
 
 list_models() {
+    if [ "$client" = 1 ]; then
+        # a client: never this machine's RAM as a budget; the rows alone
+        # (spark model asks the peer's FORGE for its table)
+        printf 'this machine is %s\n' "$CLIENT_OF"
+        echo "nothing is served here; what fits is the peer's business (spark model there)"
+        model_rows_all | while read -r name file _url _bytes _sha ram src; do
+            [ "$src" = - ] && src=' '
+            printf ' %s %-20s %6s GB  %s\n' "$src" "$name" "$ram" "$file"
+        done
+        echo "u = yours"
+        return
+    fi
     total=$(mem_gb); budget=$(( total * ${SITE_AI_BUDGET:-60} / 100 ))
     spick=$(model_pick spark | awk '{ print $1 }')
     epick=$(model_pick ember | awk '{ print $1 }')

@@ -283,6 +283,20 @@ def main():
             st, _, raw = req(url, "GET", "/api/bar", headers=bearer, timeout=30)
             d = json.loads(raw)
             ok(st == 200 and "line" in d and "#[" not in d["line"], "/api/bar has a line without tmux sequences", raw[:200])
+            # /api/models: the box's table for a client's `spark model`, any role
+            st, _, raw = req(url, "GET", "/api/models", headers={"Authorization": "Bearer " + utoken}, timeout=30)
+            dm = json.loads(raw)
+            ok(st == 200 and dm.get("name") == "fixture" and dm.get("total_gb", 0) > 0 and dm.get("backend")
+               and isinstance(dm.get("models"), list) and dm["models"] and "fits" in dm["models"][0],
+               "/api/models (a user): name, total_gb, backend, the rows with a verdict", raw[:200])
+            ok(token not in raw.decode() and utoken not in raw.decode() and home not in raw.decode(), "/api/models carries no token, no path")
+            rc0, out0, _ = spark("model", extra={"SITE_AI_MODEL": "none", "SITE_PEER_AI_URL": url,
+                                                 "SPARK_FORGE_TOKEN": utoken, "SPARK_MEM_TOTAL_GB": "1"})
+            head0 = out0.splitlines()[0] if out0 else ""
+            ok(rc0 == 0 and "a client of " + url in head0 and "the peer's table" in head0 and "%.0f GB for models" % dm["total_gb"] in head0
+               and " 1 GB" not in head0,
+               "spark model on a client of this FORGE prints the peer's table, not its own 1 GB", out0[:300])
+            ok(any(ln.endswith("tok/s") or ln.endswith("too big") for ln in out0.splitlines()), "the peer's rows carry the peer's verdicts", out0[:300])
             st, _, raw = req(url, "GET", "/api/config", headers=bearer, timeout=30)
             d = json.loads(raw)
 

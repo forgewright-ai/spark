@@ -271,7 +271,10 @@ may change freely.
    gets 403 `{error: {kind: role}}`; every other authed route is
    user-or-admin, and `GET /api/me` answers `{role, user, name,
    version}`, which is how the page decides which console to draw and
-   whom to greet. The chat, thread and memory routes are scoped to the
+   whom to greet. `GET /api/models` (user-or-admin) answers this box's
+   model table `{name, total_gb, budget_gb, budget_pct, backend,
+   cap_note, models: site.model_rows}` -- what `spark model` on a client
+   prints instead of its own numbers. The chat, thread and memory routes are scoped to the
    requester's own sealed store -- a user's to their
    `users/<name>/`, the admin's to the box account's; nobody holds a
    key to anyone else's. `GET /api/users` (admin) answers `{users:
@@ -451,7 +454,16 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   rows in `check.CLIENT_ROWS` (engine, services, watchdog, ai, serve,
   forge) read `na`;
   `--selftest`'s fourth pass asserts that with the peer row ok. The peer
-  row is where a client's health lives.
+  row is where a client's health lives. A client stays a client until
+  `spark client off`: `spark model` / `ember list` / `model budget` there
+  print the PEER's table (`site.peer_models`, `GET /api/models` with the
+  login token; the rows alone, no verdict, when the peer is down, a bare
+  server or an older FORGE; `bootstrap.sh --list-models` likewise) and
+  never this machine's RAM as a budget; `spark model NAME|auto|none`,
+  `model budget N`, `model rm`, `spark ember NAME` are refused with one
+  line (`site._client_no`) -- each would have made a server of the
+  client in silence. `spark client off` is the one deliberate promotion
+  (it ends the shape, then runs `spark model auto`).
 - **A model.** One list, `models.env`: a row (`MODEL_<NAME>`, the
   five fields), its `_LICENSE` (always), a `_NOTE` when one line helps,
   and `_TESTED="line"` only once the row has answered `spark line` with
