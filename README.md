@@ -39,9 +39,11 @@ git clone https://github.com/forgewright-ai/spark.git ~/.spark && ~/.spark/bin/s
 
 Read it first: `curl -fsSLO https://raw.githubusercontent.com/forgewright-ai/spark/main/get; sh get`.
 
-`spark setup` asks four things -- this machine's name, yours, the model,
-the theme -- does the rest, and asks the first question for you. A Debian
-box with 16 GB between RAM and GPU:
+`spark setup` asks three things -- this machine's name, yours, the model
+-- does the rest, and asks the first question for you. The palette is not
+one of them: spark ships wearing gruvbox-dark, and `spark theme NAME` or
+`spark theme none` changes it whenever you like. A Debian box with 16 GB
+between RAM and GPU:
 
 ```
 spark 1.3
@@ -57,7 +59,6 @@ your name [ana]:
      qwen3-14b     8.4 GB file 11 GB RAM too big
      qwen3-30b-a3b 17.4 GB file 21 GB RAM too big
 model [qwen3-8b]:
-theme [gruvbox-dark]:
 
 ok     site         SITE_NAME=mini SITE_USER=ana SITE_AI_MODEL=qwen3-8b SITE_THEME=gruvbox-dark
 ok     engine       llama.cpp b10689 ubuntu-vulkan-x64

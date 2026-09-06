@@ -1,5 +1,5 @@
-# spark.setup -- `spark setup`: the guided first run. Greet, ask four
-# things (this machine's name, yours, the model, the theme), write
+# spark.setup -- `spark setup`: the guided first run. Greet, ask three
+# things (this machine's name, yours, the model), write
 # site.env, sudo once when apt has something to install, run bootstrap on
 # the terminal, wait for the brain, ask the first question live, print the
 # measured speed and the three things to try. Every step reuses code that
@@ -20,18 +20,22 @@ from . import engine, session, site, wire
 SIGN = "%s setup -- pick the model this machine earns and light it up" % MARK
 USAGE = SIGN + """
 
-  spark setup                   ask this machine's name, yours, the model,
-                                the theme; apply
+  spark setup                   ask this machine's name, yours and the
+                                model; apply
   spark setup --yes             every default, no questions (stdin not a tty
                                 implies it); SITE_NAME SITE_USER SITE_AI_MODEL
                                 SITE_THEME in the environment pre-answer them
   spark setup --model NAME      a name from the table, auto, or none
   spark setup --name NAME       this machine's display name (SITE_NAME)
   spark setup --user NAME       your name (SITE_USER)
-  spark setup --theme NAME      a palette from themes/, or none (the question's
-                                default answer is gruvbox-dark)
+  spark setup --theme NAME      a palette from themes/, or none; never asked,
+                                gruvbox-dark unless it is said here
   spark setup --no-serve        write and apply; leave the server down
 """
+# the look spark ships wearing when nothing has said otherwise -- never a
+# question, `spark theme NAME|none` is the choice
+DEFAULT_THEME = "gruvbox-dark"
+
 # the bootstrap rows that are the AI layer, by their names in bootstrap.sh
 # (the filter apply() uses when its output is captured; at a terminal the
 # whole bootstrap shows, progress bars included)
@@ -153,12 +157,12 @@ def _model(cfg, opts, default, yes):
         say("spark setup: no model named %s -- %s" % (name, choices))
 
 
-def _theme(cfg, opts, yes):
-    """The fourth question: `theme [gruvbox-dark]:` -- validated against
-    themes/*.env plus none. The default is only the default ANSWER
-    (site.env.example keeps SITE_THEME=none): the user chooses. _decide
-    semantics: the flag, else the environment or site.env (no question),
-    else the prompt."""
+def _theme(cfg, opts):
+    """Not a question. spark has a look and ships wearing it; `spark theme
+    NAME|none` changes it, like every other choice. Asking cost a first-run
+    question that a user who never turns the shell layer on has no way to
+    answer -- the palette dresses tmux, starship and btop, which are that
+    layer. The flag, else the environment or site.env, else DEFAULT_THEME."""
     from . import theme
     valid = ["none"] + theme.palettes()
     choices = "one of: none " + " ".join(theme.palettes())
@@ -167,11 +171,7 @@ def _theme(cfg, opts, yes):
         if name not in valid:
             raise Abort("no palette named %s -- %s" % (name, choices), 2)
         return name
-    while True:
-        name = _ask("theme", "gruvbox-dark", yes)
-        if name in valid:
-            return name
-        say("spark setup: no palette named %s -- %s" % (name, choices))
+    return DEFAULT_THEME
 
 
 def _write(name, user, model, theme):
@@ -331,7 +331,7 @@ def _run(opts):
         say()          # one blank line after the questions; none when there were none
     default = _table(cfg)
     model = _model(cfg, opts, default, yes)
-    theme_name = _theme(cfg, opts, yes)
+    theme_name = _theme(cfg, opts)
     say()
     _write(name, user, model, theme_name)
     _account(user)

@@ -1,57 +1,99 @@
 # Installing spark
 
 spark is AI on the edge, at no cost: `spark chat` is the front door, the
-prompt line is the surprise. This is the runbook: what the first run does,
-every key, the models, the shell layer, the FORGE from other machines,
-headless, updating, and what to do when something stops working. The
-README is the short form.
+prompt line is the surprise.
 
-## Before you start
+Start at **section 1** if the machine does not exist yet, at **section 2**
+if you have one and want spark on it. The rest is the runbook: what the
+first run does, every key, the models, the shell layer, the FORGE from
+other machines, headless, updating, and what to do when something stops
+working. The README is the short form.
 
-- Linux: a Debian-family system with `apt` (Debian 13 or Ubuntu 24.04 or
-  newer -- older ones lack `eza` for the shell layer), `git`, `python3`
-  >= 3.9, `curl`, and sudo once for `apt`. x86_64 or arm64.
-- macOS: the command line tools (`xcode-select --install`); Apple's own
+## 1. A machine from zero
+
+A bare box to a working spark. Most of the time is downloads.
+
+1. Get Debian 13 (trixie), the small installer image, from
+   https://www.debian.org/CD/netinst/ -- `amd64` for a PC, `arm64` for an
+   ARM board. Write it to a USB stick and boot it.
+
+2. Run the installer. Two answers matter:
+
+   - **Leave the root password empty.** Debian puts your user in the
+     `sudo` group only when you do. Set one and you have no `sudo`, and
+     spark's single `apt` step cannot run.
+   - At *Software selection*, keep **SSH server** and **standard system
+     utilities**. A desktop is optional -- spark never needs one.
+
+3. Log in and install what spark needs:
+
+   ```sh
+   sudo apt-get update && sudo apt-get install -y git curl python3
+   ```
+
+4. Continue at section 2.
+
+## 2. spark on a machine you have
+
+spark needs four things: `sudo` once for `apt`, `git`, `curl`, and
+`python3` 3.9 or newer. Check all four:
+
+```sh
+for c in sudo git curl python3; do
+    command -v "$c" >/dev/null || echo "missing: $c"
+done
+python3 -c 'import sys; sys.exit(sys.version_info < (3, 9))' \
+    || echo "python3 is older than 3.9"
+```
+
+Silence means you are ready. Otherwise:
+
+- Linux: `sudo apt-get install -y git curl python3`. No `sudo` at all?
+  `su -c 'apt-get install -y sudo && usermod -aG sudo YOURNAME'`, then log
+  out and back in. Debian 13 or Ubuntu 24.04 or newer (older ones lack
+  `eza` for the shell layer); x86_64 or arm64.
+- macOS: `xcode-select --install` brings `git` and `curl`, and Apple's own
   `python3` (3.9) is enough. No Homebrew for the AI -- the engine is a
   pinned tarball here too; Homebrew only for `spark shell on`.
-- Either: a terminal, and bash 4+ or zsh as your login shell (the prompt
-  widget lives in one of them; macOS ships zsh, its bash is 3.2).
+- Either: bash 4+ or zsh as your login shell, since the prompt widget
+  lives in one of them (macOS ships zsh; its bash is 3.2).
 
-## The first run
-
-The one-liner clones spark to `~/.spark` and runs `spark setup`:
+Then one line installs spark:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/forgewright-ai/spark/main/get | sh
 ```
 
-`get` checks the ground first -- the command line tools on macOS (before
-`git` can pop the dialog), `apt-get` on Linux, `git`, `python3` >= 3.9 --
-and refuses with the install line when one is missing. It never runs sudo,
-and its whole body is one function called on its last line, so a download
-cut short runs nothing. `SPARK_HOME` moves the clone, `SPARK_URL` points it
-elsewhere, `SPARK_REF` checks out a ref right after a fresh clone
-(developers: `SPARK_REF=main`; with none, it lands on the newest release
-tag, or stays on the default branch when there is none). A `~/.spark` that
-is spark already: fetches tags, then pulls `--ff-only` on a branch or
-moves to the newest tag when detached; any other non-empty directory is
-refused. `sh get --clone-only` stops after the clone. By hand, the same
-two steps:
+It clones spark to `~/.spark`, lands on the newest release, and runs
+`spark setup`. To read it before running it:
+`curl -fsSLO https://raw.githubusercontent.com/forgewright-ai/spark/main/get; sh get`.
+By hand, the same two steps:
 
 ```sh
 git clone https://github.com/forgewright-ai/spark.git ~/.spark
 ~/.spark/bin/spark setup
 ```
 
-`spark setup` asks four things and never more: this machine's name (the
-short hostname by default), yours (your login), the model, from the
+When it finishes:
+
+```sh
+exec $SHELL      # the prompt widget goes live
+spark check      # every row green
+spark shell on   # optional: tmux, starship, micro, fzf, the Nerd Font
+```
+
+## What the first run does
+
+`spark setup` asks three things and never more: this machine's name (the
+short hostname by default), yours (your login), and the model, from the
 table with the row this machine earns marked `*` -- the largest that fits
 in the SITE_AI_BUDGET percent (default 60) of RAM plus GPU memory and
-stays usable on this engine build (the speed cap under Models) -- and the
-theme (`theme [gruvbox-dark]:`, any name from `themes/` or `none`; the
-default is only the default answer, `site.env.example` stays
-`SITE_THEME=none`). It never asks about the hostname, the shell
-layer or headless: those have verbs of their own. Then, in order:
+stays usable on this engine build (the speed cap under Models). It never
+asks about the palette, the hostname, the shell layer or headless: those
+have verbs of their own. The palette is `gruvbox-dark` unless `--theme`,
+`SITE_THEME` in the environment or a `site.env` that already holds the key
+says otherwise -- spark ships wearing its look, and `spark theme NAME` or
+`spark theme none` changes it at any time. Then, in order:
 
 1. writes `~/.config/spark/site.env` (created from `site.env.example`,
    0600, with `SITE_SHELL=off`: the AI only, your shell stays yours);
@@ -63,25 +105,38 @@ layer or headless: those have verbs of their own. Then, in order:
    curl's progress bar, the api-token, the widgets, the one rc line, the
    units (`spark-serve` / `spark.serve` and the FORGE's, plus a 5-minute
    check timer);
-4. writes the chosen palette's runtime files (`theme.env`,
-   `console-colors`) unless the answer was `none` -- the theme is core,
-   shell layer or not; on macOS the Terminal.app profile is imported too;
+4. writes the palette's runtime files (`theme.env`, `console-colors`)
+   unless it is `none` -- the theme is core, shell layer or not; on macOS
+   the Terminal.app profile is imported too;
 5. brings the server up (the unit, or `spark serve`) and waits for it;
 6. asks `? how big is this dir` for you, shows the answer as the widget
    shows it, and prints the tok/s that question measured;
 7. prints the three things to try. `spark shell on` is mentioned, never
    offered.
 
-Flags: `--yes` takes every default without asking (implied when stdin is
-not a terminal); `--model NAME|auto|none`, `--name`, `--user`, `--theme`
-and `--no-serve` pre-answer; `SITE_NAME`, `SITE_USER`, `SITE_AI_MODEL`,
-`SITE_THEME` in the environment do the same, and a key `site.env` already
-holds is not asked again. It is re-runnable: every bootstrap row is
-idempotent.
+It is re-runnable: every bootstrap row is idempotent. Flags: `--yes` takes
+every default without asking (implied when stdin is not a terminal);
+`--model NAME|auto|none`, `--name`, `--user`, `--theme` and `--no-serve`
+pre-answer, as do `SITE_NAME`, `SITE_USER`, `SITE_AI_MODEL` and
+`SITE_THEME` in the environment; a key `site.env` already holds is not
+asked again.
 
-The rc line: bootstrap's `rc` row appends exactly one line to the end of
-your login shell's rc file -- `~/.bashrc` for bash, `~/.zshrc` for zsh --
-and only when the file does not already contain `config/spark/hook.`:
+`get` itself checks the ground before it touches anything -- the command
+line tools on macOS (before `git` can pop the dialog), `apt-get` on Linux,
+`git`, `python3` >= 3.9 -- and refuses with the install line when one is
+missing. It never runs sudo, and its whole body is one function called on
+its last line, so a download cut short runs nothing. `SPARK_HOME` moves
+the clone, `SPARK_URL` points it elsewhere, `SPARK_REF` checks out a ref
+right after a fresh clone (developers: `SPARK_REF=main`; with none, it
+lands on the newest release tag). A `~/.spark` that is spark already gets
+fetched and moved forward; any other non-empty directory is refused.
+`sh get --clone-only` stops after the clone.
+
+## The rc line
+
+bootstrap's `rc` row appends exactly one line to the end of your login
+shell's rc file -- `~/.bashrc` for bash, `~/.zshrc` for zsh -- and only
+when the file does not already contain `config/spark/hook.`:
 
 ```sh
 [ -r ~/.config/spark/hook.bash ] && . ~/.config/spark/hook.bash   # spark: the AI at the prompt

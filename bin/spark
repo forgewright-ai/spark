@@ -73,7 +73,7 @@ the server
 """ % MARK
 
 USAGE_MACHINE = """the machine
-  spark setup                 the guided first run: name, model, theme; -h:
+  spark setup                 the guided first run: name, user, model; -h:
                               --yes --model --name --user --theme --no-serve
   spark check                 drift report; exit 0 = every promise kept
                               (--watch N, --porcelain, --selftest; -h: more)

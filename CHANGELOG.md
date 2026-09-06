@@ -2,6 +2,17 @@
 
 ## v1.9
 
+- `spark setup` asks three things, not four: the palette is no longer a
+  question. spark ships wearing `gruvbox-dark`, and `spark theme NAME` or
+  `spark theme none` changes it whenever you like -- a first-run question
+  about tmux and starship colours is one a user who never turns the shell
+  layer on has no way to answer. `--theme` and `SITE_THEME` still
+  pre-answer it.
+- INSTALL.md opens with two numbered walkthroughs instead of prose: a
+  machine from zero (the Debian image, the empty root password that earns
+  you `sudo`, the packages) and spark on a machine you have (one check for
+  `sudo`, `git`, `curl` and `python3`, then the one-liner). The runbook
+  follows; `get`'s own internals moved out of the first-run path.
 - The page really does rebuild on a release now. `release.yml` creates the
   Release with the job's own `GITHUB_TOKEN`, and GitHub raises no event for
   what that token does, so the `release: published` trigger v1.8 shipped
