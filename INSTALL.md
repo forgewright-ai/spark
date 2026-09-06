@@ -124,7 +124,7 @@ layer's git identity).
 | `SITE_SHELL` | `off`: the AI only; `on`: tmux, starship, micro (with the spark plugin: Alt-s), fzf, zoxide, eza, bat, btop, the Nerd Font, and the rc files become spark's -- later, `spark shell on|off` | `off` |
 | `SITE_PEER_AI_URL` | another machine's FORGE URL (`spark forge --print-client` there), or its raw `spark serve` URL | unset |
 | `SITE_HEADLESS` | `yes`: the FORGE up from boot with nobody logged in, never asleep -- later, `spark headless on|off` | `no` |
-| `SITE_THEME` | `none`, or a palette from `themes/` (`spark theme` lists them) -- later, `spark theme NAME` | `none` |
+| `SITE_THEME` | `none`, or a palette from `themes/` or your own in `~/.config/spark/themes/` (`spark theme` lists both) -- later, `spark theme NAME` | `none` |
 | `SITE_PROMPT` / `SITE_PROMPT_STYLE` | `starship`/`plain`; `minimal`/`full` (the shell layer) | `starship`, `minimal` |
 | `SITE_FONT_FACE` / `SITE_FONT_SIZE` | Linux console: a face and size `spark font list` shows (e.g. `Terminus` `16x32`); macOS profile: a font's PostScript name and points -- later, `spark font FACE SIZE`; core, shell layer or not | unset / `13` |
 | `SITE_QUIET_LOGIN` / `SITE_QUIET_BOOT` | Linux: `yes` bares the login (motd, kernel line and `/etc/issue` emptied, originals kept as `*.orig`) / makes the boot silent -- BIOS splash to login prompt (GRUB menu hidden, quiet kernel line, systemd silent; one drop-in at `/etc/default/grub.d/zz-spark-quiet.cfg`) -- later, `spark quiet login|boot on` | `no` |

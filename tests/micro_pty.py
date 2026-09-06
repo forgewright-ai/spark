@@ -472,6 +472,25 @@ def main():
         m.read(1.0)
         m.close()
 
+        # Q. one word at the prompt is not an instruction: the infobar says
+        # where it lives, nothing runs (no spark call is logged)
+        if os.path.exists(log):
+            os.unlink(log)
+        with open(note, "w") as f:
+            f.write("hello world\n")
+        m = Micro(argv, env, work)
+        ok(m.expect("hello world"), "micro draws the file for the word")
+        m.mark()
+        m.send("\x1bs")
+        m.expect("spark>")
+        m.send("lua\r")
+        ok(m.expect("dark"), "the word lua at the prompt points to the shell", debug_log())
+        time.sleep(0.4)
+        ok(not os.path.exists(log), "and runs nothing")
+        m.send("\x11")
+        m.read(1.0)
+        m.close()
+
     print("micro_pty: %s" % ("all ok" if not fail else "%d FAILED" % fail))
     return 1 if fail else 0
 

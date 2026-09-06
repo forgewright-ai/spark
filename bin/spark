@@ -98,7 +98,8 @@ less often (long output pages via $PAGER at a terminal; piped stays plain)
 
 USAGE_SHELL = """the shell (spark shell on)
   spark bar [on|off]          tmux's status line: shown or hidden; set it
-  spark theme [NAME|show]     the palettes; choose one; show = its colours
+  spark theme [NAME|show]     the palettes, and yours in ~/.config/spark/themes;
+                              choose one; show = its colours
 """
 # with the layer off, the block above folds into this one line
 USAGE_SHELL_OFF = """  spark shell on              tmux, starship, micro ... + bar
@@ -198,8 +199,7 @@ def near_verb(word, cli):
 
 def misplaced(word):
     from spark import REPO, cli, config
-    themes = sorted(f[:-4] for f in os.listdir(os.path.join(REPO, "themes")) if f.endswith(".env"))
-    if word in themes or word == "none":
+    if word in config.theme_names(REPO) or word == "none":
         say("spark: %s is a palette -- spark theme %s" % (word, word))
     elif word in {r[0] for r in config.model_tables()} or word == "auto":
         say("spark: %s is a model -- spark model %s" % (word, word))

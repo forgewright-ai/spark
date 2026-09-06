@@ -219,7 +219,9 @@ may change freely.
    optional). A name in both files is refused, naming both;
    `themes/<name>.env` -- `THEME_BG THEME_FG THEME_ACCENT THEME_MUTED
    THEME_BTOP THEME_ANSI_0..15` (the same 21 keys in `lib/env.sh`
-   `THEME_KEYS` and `config.theme_palette`: the two validators agree).
+   `THEME_KEYS` and `config.theme_palette`: the two validators agree);
+   `~/.config/spark/themes/<name>.env` is yours, the same keys, and wins
+   on a name clash (`config.theme_path`, `lib/env.sh theme_load`).
    Precedence: environment > file > default.
 4. `spark line --cwd D --shell S` reads the prompt buffer on stdin and prints
    line 1 = `cmd<TAB>command` | `danger<TAB>command` | `answer` | `error`,
@@ -531,7 +533,9 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   `theme.builtin` map (the page has no build step). `tests/install_test.sh`
   renders every palette by glob, and `tests/smoke.py` asserts the
   `theme.builtin` map matches `themes/*.env` value for value -- a gap in
-  either goes loud.
+  either goes loud. A palette of the user's own is one file,
+  `~/.config/spark/themes/<name>.env`, the same 21 keys, and lives nowhere
+  else: not on the page, not in `CREDITS.md`, not in that map.
 
 ## Verifying a claim
 

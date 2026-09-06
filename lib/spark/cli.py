@@ -741,6 +741,11 @@ def cmd_chat(args):
     return forge.cmd_chat(args)
 
 
+def cmd_lua(args):
+    from . import lua
+    return lua.cmd_lua(args)
+
+
 def cmd_talk(args):
     # removed in v1.3: one line naming the new verb, no forwarding
     say("%s talk -- gone: spark chat" % MARK)
@@ -759,6 +764,7 @@ COMMANDS = {
     "soul": cmd_soul, "remember": cmd_remember, "forget": cmd_forget, "memory": cmd_memory, "ledger": ledger.cmd_ledger,
     "chat": cmd_chat, "talk": cmd_talk, "do": cmd_do,
     "ver": cmd_ver, "version": cmd_ver, "--version": cmd_ver,
+    "lua": cmd_lua,
 }
 
 

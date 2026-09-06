@@ -97,7 +97,8 @@ def table(cfg):
     notes = {"none": "the terminal's own colours", "gruvbox-dark": "preferred: it matches the logo"}
     say("%s theme%sSITE_THEME=%s" % (MARK, glyph("sep"), cfg.theme))
     for p in ["none"] + palettes():
-        say("  %-18s %-34s %s" % (p, notes.get(p, ""), "current" if p == cfg.theme else ""))
+        note = notes.get(p, "yours: ~/.config/spark/themes/%s.env" % p if yours(p) else "")
+        say("  %-18s %-34s %s" % (p, note, "current" if p == cfg.theme else ""))
     return 0
 
 
@@ -216,10 +217,15 @@ def _install_profile(name, d, path):
 
 
 def palettes():
-    try:
-        return sorted(f[:-4] for f in os.listdir(os.path.join(REPO, "themes")) if f.endswith(".env"))
-    except OSError:
-        return []
+    """Every palette name: the repository's themes/*.env and your own
+    ~/.config/spark/themes/*.env (config.theme_names)."""
+    return config.theme_names(REPO)
+
+
+def yours(name):
+    """True when the palette's file is in your config dir, not the repo's."""
+    path = config.theme_path(name, REPO)
+    return bool(path) and path.startswith(os.path.join(CONFIG_DIR, "themes") + os.sep)
 
 
 def write_runtime(name):

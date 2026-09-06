@@ -77,9 +77,12 @@ theme_load() {
         THEME_ANSI_8=black THEME_ANSI_9=red THEME_ANSI_10=green THEME_ANSI_11=yellow
         THEME_ANSI_12=blue THEME_ANSI_13=magenta THEME_ANSI_14=cyan THEME_ANSI_15=white
     else
-        f="$1/themes/$SITE_THEME.env"
+        # yours first (~/.config/spark/themes), then the repository's:
+        # config.theme_path is the python twin
+        f="$SPARK_CONFIG_DIR/themes/$SITE_THEME.env"
+        [ -f "$f" ] || f="$1/themes/$SITE_THEME.env"
         if [ ! -f "$f" ]; then
-            printf 'spark: SITE_THEME=%s: no such palette (themes/*.env)\n' "$SITE_THEME" >&2
+            printf 'spark: SITE_THEME=%s: no such palette (themes/*.env, ~/.config/spark/themes/*.env)\n' "$SITE_THEME" >&2
             return 1
         fi
         load_env "$f" || return 1

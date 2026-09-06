@@ -79,6 +79,12 @@ The server keeps no prompt cache in RAM.
   --list-models` does the same. `spark model NAME|auto|none`, `model
   budget N`, `model rm` and `spark ember NAME` are refused on a client
   with one line; `spark client off` remains the one way to serve again.
+- Your own palettes: a `~/.config/spark/themes/<name>.env` with the 21
+  `THEME_*` keys is listed by `spark theme`, chosen by `spark theme NAME`,
+  completed by TAB and kept by the `theme` check row, exactly like the six
+  in the repository; yours wins on a name clash. `config.theme_path` and
+  `lib/env.sh theme_load` are the twins.
+- Something small runs in the dark. Those who look will find it.
 
 ## v1.6
 

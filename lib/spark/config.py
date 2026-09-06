@@ -347,13 +347,35 @@ def load():
     return Config()
 
 
+def theme_path(name, repo=REPO):
+    """The file behind a palette name: yours (`~/.config/spark/themes/
+    <name>.env`) first, then the repository's `themes/<name>.env`; None
+    when neither exists. lib/env.sh theme_load is the twin."""
+    for d in (os.path.join(CONFIG_DIR, "themes"), os.path.join(repo, "themes")):
+        path = os.path.join(d, name + ".env")
+        if os.path.isfile(path):
+            return path
+    return None
+
+
+def theme_names(repo=REPO):
+    """Every palette name: the repository's and yours, sorted, each once."""
+    names = set()
+    for d in (os.path.join(repo, "themes"), os.path.join(CONFIG_DIR, "themes")):
+        try:
+            names.update(f[:-4] for f in os.listdir(d) if f.endswith(".env"))
+        except OSError:
+            pass
+    return sorted(names)
+
+
 def theme_palette(name, repo=REPO):
     """dict of THEME_* for a palette name, or None for `none`."""
     if name == "none":
         return None
-    path = os.path.join(repo, "themes", name + ".env")
-    if not os.path.isfile(path):
-        die("SITE_THEME=%s: no such palette (themes/*.env)" % name, 2)
+    path = theme_path(name, repo)
+    if path is None:
+        die("SITE_THEME=%s: no such palette (themes/*.env, ~/.config/spark/themes/*.env)" % name, 2)
     pal = parse_env(path)
     # the same 21 keys lib/env.sh THEME_KEYS requires: the two validators agree
     for k in ("THEME_BG", "THEME_FG", "THEME_ACCENT", "THEME_MUTED", "THEME_BTOP") + tuple("THEME_ANSI_%d" % i for i in range(16)):

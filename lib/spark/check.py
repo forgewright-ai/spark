@@ -310,16 +310,19 @@ THEME_KEYS = (["THEME_BG", "THEME_FG", "THEME_ACCENT", "THEME_MUTED", "THEME_BTO
 def row_theme(ctx):
     """The chosen palette actually applied: ~/.config/spark/theme.env (what
     tmux, starship, btop, micro and the FORGE page were fed) matches
-    themes/<SITE_THEME>.env key for key, and on Linux console-colors (the
+    the palette's file -- yours under ~/.config/spark/themes/ first, else
+    themes/<SITE_THEME>.env -- key for key, and on Linux console-colors (the
     VT palette the rc hook applies) is in place. Core: the theme is chosen
     outside the shell gate. `spark theme NAME` writes all of it."""
     from . import CONFIG_DIR
     name = ctx.cfg.theme
     if name == "none":
         return na("none -- the terminal keeps its own colours (spark theme NAME)")
-    want = _env_lines(os.path.join(ctx.repo, "themes", name + ".env"))
+    from . import config
+    path = config.theme_path(name, ctx.repo)
+    want = _env_lines(path) if path else None
     if want is None:
-        return fail("SITE_THEME=%s: no themes/%s.env in the repository" % (name, name), "spark theme list")
+        return fail("SITE_THEME=%s: no %s.env in themes/ or ~/.config/spark/themes/" % (name, name), "spark theme list")
     have = _env_lines(os.path.join(CONFIG_DIR, "theme.env"))
     if have is None:
         return fail("%s chosen but theme.env was never written" % name, "spark theme %s" % name)
@@ -1438,7 +1441,11 @@ def make_fixture(root, good, stub_url=""):
     fixture_theme = ["%s=#%06x" % (k, 0x101010 + n) for n, k in enumerate(
         ["THEME_BG", "THEME_FG", "THEME_ACCENT", "THEME_MUTED"] + ["THEME_ANSI_%d" % i for i in range(16)])]
     fixture_theme.append("THEME_BTOP=Default")
-    with open(os.path.join(repo, "themes", "fixture.env"), "w") as f:
+    # the good machine keeps the palette as its own (~/.config/spark/themes/),
+    # the bad one in the repository: the row must find it in either place
+    pal_dir = os.path.join(home, ".config", "spark", "themes") if good else os.path.join(repo, "themes")
+    os.makedirs(pal_dir, exist_ok=True)
+    with open(os.path.join(pal_dir, "fixture.env"), "w") as f:
         f.write("\n".join(fixture_theme) + "\n")
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
     env.update({"HOME": home, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"})

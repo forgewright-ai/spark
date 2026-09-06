@@ -1,4 +1,4 @@
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 
 -- spark.lua -- spark in micro (the first smart tool). One key, Alt-s, opens
 -- the `spark> ` prompt; Enter alone completes at the cursor, words rewrite
@@ -645,6 +645,9 @@ local function run(bp, line)
         local words = words_of(line:sub(2))
         table.insert(words, 1, "?")
         ask(bp, words, false)
+    elseif line == "lua" then
+        -- the one word that is not an instruction: the shell has it
+        micro.InfoBar():Message("spark lua -- this one runs in the dark; ask your shell")
     else
         rewrite(bp, words_of(line))
     end

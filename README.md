@@ -141,7 +141,9 @@ What comes next: `ROADMAP.md`.
   spark inside it), fzf, eza, bat, btop, the Nerd Font, and the rc files
   become spark's (yours move to `.bak`). With a theme chosen, one palette lands on every surface at once:
   the text console, tmux and micro share the same look, and `spark theme
-  NAME` switches all of them. `off` hands everything back -- rc files and
+  NAME` switches all of them. A palette of your own is one file in
+  `~/.config/spark/themes/`, listed and chosen like the built-in six.
+  `off` hands everything back -- rc files and
   the rendered look alike, each from its `.bak` or removed. Off, your
   shell stays yours.
 - **`spark quiet`.** What stays silent, three switches: `spark quiet start

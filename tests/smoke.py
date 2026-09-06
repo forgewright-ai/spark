@@ -12,10 +12,12 @@ import hashlib
 import json
 import os
 import re
+import select
 import subprocess
 import sys
 import tempfile
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -1399,6 +1401,98 @@ def main():
              "setup prints the measured tok/s of that question", out)
         t.ok("SITE_AI_MODEL=qwen3-1-7b\n" in open(home + "/.config/spark/site.env").read(),
              "setup --model NAME writes the name", out)
+
+        # your own palettes: ~/.config/spark/themes/<name>.env, found by
+        # config.theme_path (python) and lib/env.sh theme_load (POSIX),
+        # listed as yours, and winning over the repository's on a clash
+        mine_dir = home + "/.config/spark/themes"
+        os.makedirs(mine_dir, exist_ok=True)
+        with open(os.path.join(REPO, "themes", "nord.env")) as f:
+            mine = f.read().replace("#2e3440", "#101010")
+        with open(mine_dir + "/mine.env", "w") as f:
+            f.write(mine)
+        rc, out, _ = spark("theme")
+        t.ok(rc == 0 and "mine" in out and "yours: ~/.config/spark/themes/mine.env" in out,
+             "theme: a palette in ~/.config/spark/themes is listed as yours", out)
+        rc, out, err = spark("theme", "mine", extra={"SPARK_NO_APPLY": "1"})
+        with open(home + "/.config/spark/theme.env") as f:
+            theme_env = f.read()
+        t.ok(rc == 0 and "THEME_BG=#101010" in theme_env, "theme mine: chosen and written from your file", out + err + theme_env)
+        with open(mine_dir + "/nord.env", "w") as f:
+            f.write(mine.replace("#101010", "#202020"))
+        rc, out, err = spark("theme", "nord", extra={"SPARK_NO_APPLY": "1"})
+        with open(home + "/.config/spark/theme.env") as f:
+            theme_env = f.read()
+        t.ok(rc == 0 and "THEME_BG=#202020" in theme_env, "theme: yours wins over the repository's on a name clash", out + err)
+        os.remove(mine_dir + "/nord.env")
+        sh = subprocess.run(["sh", "-c", '. "$1/lib/env.sh"; SITE_THEME=mine; theme_load "$1" && printf %s "$THEME_BG"', "x", REPO],
+                            capture_output=True, text=True, env=env, timeout=30)
+        t.ok(sh.stdout == "#101010", "lib/env.sh theme_load reads your palette too", sh.stdout + sh.stderr)
+        rc, out, _ = spark("mine")
+        t.ok(rc == 2 and "is a palette -- spark theme mine" in out, "a bare palette name of yours is a slip, not a question", out)
+
+        # the egg (lib/spark/lua.py): headless through --sim, then a pty
+        rc, out, _ = spark("lua", "--sim", "1", "auto")
+        first = out.splitlines()[0] if out else ""
+        t.ok(rc == 0 and first.startswith("distance ") and "sparks 8" in first and "over won" in first,
+             "lua --sim: the autopilot takes the eight and the run ends won", out)
+        t.ok("Preguiça" in out and "Cobra Computadores" in out and "spark theme canarinho" in out,
+             "lua: the passages, the card and the invitation print after the run", out)
+        rc, out2, _ = spark("lua", "--sim", "1", "auto", extra={"XDG_STATE_HOME": home + "/.local/state-b",
+                                                                 "XDG_CONFIG_HOME": home + "/.config-b"})
+        t.ok(out2.splitlines()[0] == first, "lua --sim: the same seed gives the same numbers", out2)
+        t.ok(os.path.exists(mine_dir + "/canarinho.env"), "lua: the eighth spark writes canarinho.env into your palettes")
+        rc, out, err = spark("theme", "canarinho", extra={"SPARK_NO_APPLY": "1"})
+        with open(home + "/.config/spark/theme.env") as f:
+            theme_env = f.read()
+        t.ok(rc == 0 and "THEME_ACCENT=#ffdf00" in theme_env and theme_env.count("THEME_") == 21,
+             "spark theme canarinho: the prize applies like any palette", out + err)
+        rc, out, _ = spark("lua", "--sim", "2", "auto")
+        t.ok(rc == 0 and "sparks 0" in out and "8/8" in out and "Cobra" not in out,
+             "lua after the win: a plain run, nothing left to take, no card", out)
+        rc, out, _ = spark("lua", "--sim", "3", "j", extra={"SPARK_ASCII": "1", "XDG_STATE_HOME": home + "/.local/state-c"})
+        t.ok(rc == 0 and all(ord(c) < 128 for c in out) and "Preguica" in out,
+             "lua on the console: every character ASCII, the passages folded", out)
+        rc, out, _ = spark("lua")
+        t.ok(rc == 2 and "a terminal, please" in out and "Karaj" in out and "\x1b" not in out,
+             "lua without a tty: one line and the tale's opening, never a frame", out)
+        rc, out, _ = spark("lua", "--moon", "2026-09-26")
+        t.ok(rc == 0 and out.startswith("Rando: cheia / full (100%)"), "lua --moon: 2026-09-26 is a full moon", out)
+        rc, out, _ = spark("help")
+        t.ok("lua" not in out.split(), "lua is in no help line")
+        import fcntl
+        import pty
+        import struct
+        import termios
+        pid, mfd = pty.fork()
+        if pid == 0:                          # the child: spark lua on a real tty
+            os.environ.clear()
+            os.environ.update(env)
+            os.execv(sys.executable, [sys.executable, SPARK, "lua"])
+        fcntl.ioctl(mfd, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0))
+        data, deadline, sent = b"", time.time() + 15, 0
+        while time.time() < deadline:
+            r, _, _ = select.select([mfd], [], [], 0.2)
+            if r:
+                try:
+                    chunk = os.read(mfd, 65536)
+                except OSError:
+                    break
+                if not chunk:
+                    break
+                data += chunk
+            if sent == 0 and b"spark lua" in data:
+                os.write(mfd, b" ")           # one jump
+                sent = 1
+            elif sent == 1 and time.time() > deadline - 13:
+                os.write(mfd, b"q")
+                sent = 2
+        _, status = os.waitpid(pid, 0)
+        t.ok(os.WEXITSTATUS(status) == 0 and b"\x1b[?1049h" in data and b"\x1b[?1049l" in data and b"\x1b[?25h" in data,
+             "lua on a pty: alternate screen in, and out again with the cursor back", repr(data[-300:]))
+        t.ok(b"Rando:" in data and b"@" in data and b"distancia" in data, "lua on a pty: the moon, the hero and the distance are drawn", repr(data[:600]))
+        t.ok(b"* 0/8" not in data.split(b"\x1b[?1049l")[-1] and b"spark lua -- distancia" in data,
+             "lua on a pty: q leaves with one line at the shell", repr(data[-200:]))
 
     # completion drift guard: every verb the CLI dispatches (bin/spark's
     # VERBS tuple + cli.COMMANDS' keys) appears in completion.bash -- a new

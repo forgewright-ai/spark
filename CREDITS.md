@@ -27,6 +27,18 @@ micro's aspell plugin, installed by `micro -plugin install aspell` from
 micro's own plugin channel -- not pinned by spark; the shell layer only
 (`spark shell on`).
 
+## The editor's language
+
+Lua -- https://www.lua.org -- MIT
+(c) Lua.org, PUC-Rio
+
+micro's spark plugin (`home/.config/micro/plug/spark/spark.lua`) is written
+in it; micro embeds the interpreter (gopher-lua), spark ships no copy.
+
+O Urubu-Rei e a Lua (`home/.config/spark/tale`) -- a retelling of a Karaja
+tale of how night and day began, by the maintainer -- CC BY-NC-ND 4.0;
+the passages spark shows are quoted from it.
+
 ## Fonts
 
 JetBrains Mono -- https://github.com/JetBrains/JetBrainsMono -- SIL Open

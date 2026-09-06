@@ -19,13 +19,14 @@ _spark_repo() {
 }
 
 _spark_theme_names() {
+    # the repository's palettes and yours (~/.config/spark/themes)
     local repo f
     repo=$(_spark_repo) || return 0
-    for f in "$repo"/themes/*.env; do
+    for f in "$repo"/themes/*.env "${XDG_CONFIG_HOME:-$HOME/.config}"/spark/themes/*.env; do
         [ -f "$f" ] || continue
         f=${f##*/}
         printf '%s\n' "${f%.env}"
-    done
+    done | sort -u
 }
 
 _spark_model_names() {
@@ -38,6 +39,7 @@ _spark_model_names() {
         | sed -e '/_LICENSE$/d' -e '/_NOTE$/d' -e '/_TESTED$/d' | tr 'A-Z_' 'a-z-'
 }
 
+# lua: excluded on purpose -- not a verb anyone is told about
 _spark_complete() {
     local cur words
     cur=${COMP_WORDS[COMP_CWORD]}

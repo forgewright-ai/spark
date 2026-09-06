@@ -80,6 +80,7 @@ THE MACHINE
 THE SHELL (spark shell on)
   spark bar [on|off]              tmux's status line: bare shows, on|off sets
   spark theme NAME | list | show  one palette: console, tmux, micro; none=off
+  ~/.config/spark/themes/NAME.env your own palette: the same 21 THEME_* keys
   tmux (prefix C-b)  c new window   n/p next/prev   | split right  - below
                      h j k l panes  d detach  r reload  [ scroll/copy (vi)
   z DIR (zoxide)   C-r history (fzf)   C-t files (fzf)   rg PATTERN
