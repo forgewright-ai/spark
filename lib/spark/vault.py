@@ -25,7 +25,7 @@ from .chacha import SealError  # noqa: F401  -- the vault's error is the cipher'
 
 MAGIC = "spark-sealed-v1"
 KEY_MAGIC = "spark-key-v1"
-KINDS = ("thread", "memory", "chathist")
+KINDS = ("thread", "memory", "chathist", "ledger")
 # PBKDF2-HMAC-SHA256, not scrypt: Apple's system python (the 3.9 floor)
 # links an OpenSSL without scrypt, and pbkdf2_hmac is guaranteed on both
 # OSes. The token is a 256-bit random spark minted -- never a human

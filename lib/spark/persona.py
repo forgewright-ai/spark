@@ -272,7 +272,7 @@ def user_message(text, cwd, context=""):
     head = "[cwd %s]\n" % cwd if cwd else ""
     if context:
         # an @FILE block and the editor's blocks carry their own label
-        labelled = context.startswith(("File ", "Text", "Selected ", "The author says", "You read this as"))
+        labelled = context.startswith(("File ", "Text", "Selected ", "The author says", "You read this as", "Declined before"))
         label = "" if labelled else "Output:\n"
         return head + (text + "\n\n" if text else "") + label + context
     return head + text

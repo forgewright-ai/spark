@@ -53,6 +53,8 @@ at the prompt: the surprise -- your question becomes a command in your line
 the FORGE: the agent spark keeps on this machine, one identity
   spark soul [edit|reset]     who it is: ~/.config/spark/soul, yours
   spark remember <words>      a fact it keeps; spark forget N; spark memory
+  spark ledger [NAME|clear]   the notes you declined in micro's pane (d), per
+                              file; a later ? is told not to raise them
   spark ember [NAME|auto|none]  a second model for conversations (opt-in)
   spark forge [on|off]        the FORGE on the LAN: the API and the page
   spark forge --print-url     the page's login URL, and the admin token

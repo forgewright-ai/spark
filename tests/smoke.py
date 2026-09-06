@@ -686,6 +686,47 @@ def main():
              "edit ? --thread with history off: accepted, nothing kept, every turn alone", str(len(STATE["bodies"][-1]["messages"])))
         rc7, out7, _ = spark("edit", "?", "x", "--thread", "bad id!", stdin="A.\n")
         t.ok(rc7 == 2 and "--thread ID is" in out7, "edit ? --thread with a bad id is refused", out7)
+        # the ledger: a declined note is kept per file name and rides the next ?
+        rc, out, _ = spark("edit", "--decline", stdin='2. "Some prose." reads flat -- cut it\n')
+        t.ok(rc == 2 and "needs --name" in out, "edit --decline without a name is refused", out)
+        rc, out, err = spark("edit", "--decline", "--name", "a/b/t.md", stdin='2. "Some prose." reads flat -- cut it\n')
+        t.ok(rc == 0 and out == "" and err == "", "edit --decline --name keeps the note, silently", out + err)
+        rc, out, _ = spark("edit", "--decline", "--name", "t.md", stdin="3. the ending drags\n")
+        lfiles = [os.path.join(d, f) for d, _s, fs in os.walk(home + "/.local/state/spark/users") for f in fs if f == "ledger"]
+        t.ok(rc == 0 and len(lfiles) == 1 and oct(os.stat(lfiles[0]).st_mode & 0o777) == "0o600"
+             and b"drags" not in open(lfiles[0], "rb").read(),
+             "the ledger is one sealed 0600 file under the account", str(lfiles))
+        rc, out, _ = spark("ledger")
+        t.ok(rc == 0 and out.splitlines()[0].startswith("spark ledger: 2 notes") and "t.md" in out and "the ending drags" in out
+             and out.index("drags") < out.index("reads flat"), "spark ledger lists the notes, newest first, by file", out)
+        rc, out, _ = spark("ledger", "other.md")
+        t.ok(rc == 0 and "no declined note" in out, "spark ledger NAME: another file has none", out)
+        rc, out, _ = spark("edit", "--name", "t.md", "?", stdin="Some prose.\n")
+        umsg = STATE["bodies"][-1]["messages"][-1]["content"]
+        t.ok(rc == 0 and "\nDeclined before -- do not raise these again:\n- 3. the ending drags\n- 2. \"Some prose.\" reads flat -- cut it\nFile t.md:\n" in umsg,
+             "edit ?: the file's declined notes ride above the text, newest first", repr(umsg[:300]))
+        rc, out, _ = spark("edit", "--name", "u.md", "?", stdin="Some prose.\n")
+        umsg = STATE["bodies"][-1]["messages"][-1]["content"]
+        t.ok(rc == 0 and "Declined before" not in umsg, "edit ?: another file's question carries none", repr(umsg[:120]))
+        rc, out, _ = spark("edit", "--name", "t.md", "?", stdin="Other words.\n")
+        umsg = STATE["bodies"][-1]["messages"][-1]["content"]
+        t.ok(rc == 0 and "reads flat" not in umsg and "- 3. the ending drags" in umsg,
+             "edit ?: a note whose quote left the text retires; one without a quote rides on", repr(umsg[:200]))
+        rc, out, _ = spark("ledger", "t.md")
+        t.ok(rc == 0 and "1 note" in out and "reads flat" not in out, "the retired note left the file", out)
+        for i in range(35):
+            spark("edit", "--decline", "--name", "cap.md", stdin="note %02d\n" % i)
+        rc, out, _ = spark("ledger", "cap.md")
+        t.ok(rc == 0 and out.splitlines()[0].startswith("spark ledger cap.md: 30 notes") and "note 04" not in out and "note 34" in out,
+             "a file keeps its newest 30 notes", out.splitlines()[0])
+        rc, out, _ = spark("ledger", "clear", "cap.md")
+        rc2, out2, _ = spark("ledger")
+        t.ok(rc == 0 and "dropped 30 notes" in out and rc2 == 0 and "1 note" in out2, "spark ledger clear NAME drops one file's", out + out2)
+        rc, out, _ = spark("ledger", "clear")
+        rc2, out2, _ = spark("ledger")
+        t.ok(rc == 0 and "dropped 1 note" in out and "no declined note" in out2, "spark ledger clear drops them all", out + out2)
+        rc, out, _ = spark("ledger", "-h")
+        t.ok(rc == 0 and out.splitlines()[0] == "spark ledger -- the notes you declined in the editor, per file name", "spark ledger -h signs", out)
         rc, out, _ = spark("edit", "--type", "python", "--about", "a poem", "tighten", stdin="x = 1\n")
         body = STATE["bodies"][-1]
         t.ok(body["messages"][-1]["content"].startswith("tighten\n\nThe author says: a poem\nText (python):\n"), "edit: --about rides above the label", repr(body["messages"][-1]["content"][:80]))

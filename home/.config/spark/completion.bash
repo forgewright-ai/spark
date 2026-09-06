@@ -45,7 +45,7 @@ _spark_complete() {
     if [ "$COMP_CWORD" -eq 1 ]; then
         words="chat do serve stop check update shell headless client setup
                ver last status brain history stats bench tune model ember
-               forge soul remember forget memory quiet theme font bar off
+               forge soul remember forget memory ledger quiet theme font bar off
                on user explain edit help"
         COMPREPLY=($(compgen -W "$words" -- "$cur"))
         return 0

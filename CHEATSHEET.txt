@@ -13,6 +13,7 @@ THE AI
   spark soul [edit|reset]         who it is: default soul, replace with edit
   spark remember WORDS            a fact it keeps    spark forget N  drops it
   spark memory [on|off|clear]     the facts it recalls on every answer
+  spark ledger [NAME|clear]       notes declined in micro (d): not raised again
   spark ember [NAME|auto|none]    a second model for conversations (opt-in)
   spark history [clear]           the threads kept here; clear removes them
   spark                           status: brain, widget, server, soul, last

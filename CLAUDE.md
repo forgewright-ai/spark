@@ -85,7 +85,8 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 verify (sha256, cached: spark model verify, check's models row) bar theme site
                 setup (spark setup: the guided first run)
                 stats (turns -> numbers) bench (llama-bench, --tune, tune apply)
-                soul memory (the identity files) forge (identity, threads, reply, the chat REPL, @FILE)
+                soul memory (the identity files) ledger (the editor's declined notes, per file name)
+                forge (identity, threads, reply, the chat REPL, @FILE)
                 forgeserve (the FORGE server: spark forge, the API, the page) do (spark do)
                 version (the version, from git, cached: spark ver, check's header, forgeserve)
                 update (spark update: the newest tag, or main; converges)
@@ -149,7 +150,7 @@ away), `chat-history` 0600, `brain`, `check.json`, `bar`,
 `bench.jsonl`, `tune.json`,
 `users/<name>/` (0700 per user: `token.hash` and `key` 0600 -- the sha256
 token verifier and the wrapped data key -- plus that user's sealed
-`threads/`, `memory`, `chat-history`), `account` 0600 (this machine's
+`threads/`, `memory`, `chat-history`, `ledger`), `account` 0600 (this machine's
 login: name and token), `account-key` 0600 (the unwrapped data key, so
 the hot paths never pay the KDF)); data `~/.local/share/spark/{engine,models}`;
 tools linked into `~/.local/bin`.
@@ -344,7 +345,15 @@ may change freely.
     (`text_sha` on that message), else `File NAME, as it is now:` and the
     text; the reading runs on the first turn only; anchors always check
     the text on stdin now. Without `--thread`, or with history off, no
-    thread is kept. The micro plugin depends on nothing else.
+    thread is kept. `--decline --name NAME` (the pane's `d`) keeps the
+    note on stdin in the ledger (`lib/spark/ledger.py`: the account's
+    sealed `users/<name>/ledger`, by file NAME, 300 chars a note, 30 a
+    name, 200 in all); a later `?` about NAME carries `Declined before --
+    do not raise these again:` and the notes, newest first, 1200 chars at
+    most; a note whose first quoted span is no longer in the text has
+    retired (dropped there and then), and every note leaves after
+    `SPARK_HISTORY` days. `spark ledger [NAME]`, `spark ledger clear
+    [NAME]`. The micro plugin depends on nothing else.
 
 ## The grammar
 

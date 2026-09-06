@@ -8,7 +8,7 @@ import sys
 import time
 
 from . import CONFIG_DIR, MARK, OFF_FLAG, REPO, STATE_DIR, WIDGETS_DIR, config, die, glyph, paged, say, state_dir
-from . import engine, forge, persona, session, version, wire
+from . import engine, forge, ledger, persona, session, version, wire
 
 HINT_COLS = 80
 STDIN_TAIL = 6000          # what `explain` sends at most: the last 6 kB
@@ -47,6 +47,8 @@ EDIT_USAGE = """spark edit -- the editor's protocol (contract 10): the text on s
                               about bytes A..B, the file around it context
   --thread ID                 ?: keep the exchange under ID (yours to name,
                               [A-Za-z0-9_-]); the same ID again continues it
+  --decline --name NAME       keep the note on stdin as declined for NAME: a
+                              later ? about NAME is told not to raise it
 
   raw streamed text: no mark, no wrap, a code fence around the answer is
   removed; exit 1 when nothing came in or no brain answers. In micro,
@@ -272,12 +274,14 @@ def cmd_explain(words):
 # ------------------------------------------------------------------- edit
 def _edit_args(args):
     """(options, words) -- ValueError names a flag that lacks its value."""
-    opts = {"type": "", "name": "", "about": "", "at": None, "part": False, "sel": None, "thread": ""}
+    opts = {"type": "", "name": "", "about": "", "at": None, "part": False, "sel": None, "thread": "", "decline": False}
     words, rest = [], list(args)
     while rest:
         a = rest.pop(0)
         if a == "--part":
             opts["part"] = True
+        elif a == "--decline":
+            opts["decline"] = True
         elif a == "--sel":
             if len(rest) < 2:
                 raise ValueError(a)
@@ -363,12 +367,22 @@ def cmd_edit(args):
         except ValueError:
             say("%s edit -- --at N is a byte offset" % MARK)
             return 2
-    if at is None and not words:
+    if at is None and not words and not opts["decline"]:
         say(EDIT_USAGE.rstrip())
         return 2
     data = "" if sys.stdin.isatty() else sys.stdin.read()
     if not data:
         die("edit reads stdin -- spark edit --type FT words < FILE")
+    if opts["decline"]:
+        # the pane's d key: the note on stdin retires for this file name
+        try:
+            ledger.decline(opts["name"], data, config.load())
+        except ledger.Refused as e:
+            say("%s edit --decline -- %s" % (MARK, e.hint))
+            return 2
+        except OSError as e:
+            die("the ledger could not be written: %s" % e)
+        return 0
     sel = None
     if opts["sel"] is not None:
         try:
@@ -408,11 +422,12 @@ def cmd_edit(args):
         elif sel:
             start = max(0, sel[0] - 200)
             reading, tail = _edit_reading(cfg, data[start:start + EDIT_READ])
-            context = (head + reading + label[:-1] + " -- the question is about the part between the marks:\n"
+            context = (head + reading + ledger.block(cfg, opts["name"], data) + label[:-1]
+                       + " -- the question is about the part between the marks:\n"
                        + _edit_window(data, sel[0], sel[1]) + tail)
         else:
             reading, tail = _edit_reading(cfg, data)
-            context = head + reading + label + "\n" + forge.clip(data) + tail
+            context = head + reading + ledger.block(cfg, opts["name"], data) + label + "\n" + forge.clip(data) + tail
     else:
         kind, role = "rewrite", "ember"
         if len(data) > EDIT_MAX:
@@ -741,7 +756,7 @@ def cmd_do(args):
 COMMANDS = {
     "line": cmd_line, "last": cmd_last, "status": cmd_status, "brain": cmd_brain,
     "explain": cmd_explain, "edit": cmd_edit, "off": cmd_off, "on": cmd_on, "history": cmd_history,
-    "soul": cmd_soul, "remember": cmd_remember, "forget": cmd_forget, "memory": cmd_memory,
+    "soul": cmd_soul, "remember": cmd_remember, "forget": cmd_forget, "memory": cmd_memory, "ledger": ledger.cmd_ledger,
     "chat": cmd_chat, "talk": cmd_talk, "do": cmd_do,
     "ver": cmd_ver, "version": cmd_ver, "--version": cmd_ver,
 }

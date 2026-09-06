@@ -49,6 +49,12 @@ The server keeps no prompt cache in RAM.
   like a chat thread and pruned with it; the same id again continues it,
   sending the words alone while the text is unchanged and the text again
   when it is not. Without the flag nothing is kept, as before.
+- A declined note retires. `spark edit --decline --name NAME` keeps the
+  note on stdin in a ledger, sealed in your account's store by file name;
+  the next `?` about that file is told not to raise it again. A note
+  leaves by itself once the words it quoted have left the file, or after
+  `SPARK_HISTORY` days. `spark ledger [NAME]` lists them, `spark ledger
+  clear [NAME]` drops them.
 - A client stays a client. `spark model` on a client showed its own RAM
   and a budget for a machine that serves nothing, and `spark model NAME`
   there quietly made it a server (the same steps as `spark client off`).
