@@ -63,6 +63,11 @@ The server keeps no prompt cache in RAM.
   selection sends the whole file around it; `?? words` goes on in the
   newest pane's thread, the answer under the first. Each pane has its own
   name, so two open panes hold two answers.
+- The audition: `tests/audition.py` runs eight fixtures (a poem, a
+  chapter, a README, a commit message, Portuguese prose, Go, Python,
+  shell) through the real `spark edit` against a live brain and scores
+  every answer with mechanical lints, so a change to a brief is judged by
+  numbers, before and after, never by taste. Not part of the gate.
 - A client stays a client. `spark model` on a client showed its own RAM
   and a budget for a machine that serves nothing, and `spark model NAME`
   there quietly made it a server (the same steps as `spark client off`).

@@ -1,0 +1,9 @@
+tally: count bytes as well as characters
+
+A file in UTF-8 has more bytes than characters, and the bytes column is
+what `wc -c` prints, so people comparing the two tools were confused. The
+column is off by default; `TALLY_COLUMNS=lines,words,chars,bytes` turns
+it on. The README says so.
+
+The reader keeps the raw length before decoding, so the count costs
+nothing extra.

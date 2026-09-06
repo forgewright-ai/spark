@@ -113,6 +113,8 @@ templates/      rendered, not linked: .gitconfig .tmux.conf .config/btop/btop.co
 tests/          install_test.sh get_test.sh update_test.sh smoke.py serve_smoke.py
                 docs_test.py (the docs say what the tree holds: credits, counts, pages)
                 micro_pty.py (micro in a pty against a stub spark; skips without micro)
+                audition.py + audition/ (the editor's briefs against a live brain, lints as the
+                judge; not in the gate) vault_test.py site_test.py check_selftest.py
                 forge_smoke.py bench_smoke.py widget_pty.py check_selftest.py
                 vault_test.py (RFC 8439 vectors, round-trips, refusals)
 .githooks/      pre-commit (privacy gate, syntax, tests, 80-col), commit-msg (the

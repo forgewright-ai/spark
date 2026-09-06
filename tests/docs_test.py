@@ -37,7 +37,17 @@ def upstream(url):
     return m.group(1) if m else url
 
 
+def tests_named():
+    """Every tests/*.py and tests/*.sh is named in AGENTS.md (the gate list
+    or the audition section): a test nobody is told to run drifts."""
+    agents = read("AGENTS.md")
+    for name in sorted(os.listdir(os.path.join(ROOT, "tests"))):
+        if name.endswith((".py", ".sh")):
+            check(name in agents, "AGENTS.md names tests/%s" % name)
+
+
 def main():
+    tests_named()
     credits = read("CREDITS.md")
     # palettes: the header comment of every themes/*.env names its upstream URL
     for f in sorted(os.listdir(os.path.join(ROOT, "themes"))):

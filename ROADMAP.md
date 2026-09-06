@@ -1,18 +1,7 @@
 # Roadmap
 
-What comes after v1.6, in the order it is likely to happen. Nothing here
+What comes after v1.7, in the order it is likely to happen. Nothing here
 is a promise; a row in `CHANGELOG.md` is. A better idea is an issue away.
-
-## The editor, next
-
-- Anchor verification: every span a `?` answer quotes is checked against
-  the buffer; the unverifiable ones marked; a key jumps to the quote.
-- A per-file ledger in memory: a declined suggestion retires.
-- Whole-file context around a selection for `?`; threads in the pane
-  (`??`); a key that applies a code block; Escape and `q` close the pane.
-- The audition: fixtures (a poem, a chapter, a README, a commit message,
-  Portuguese prose, Go, Python, shell) with mechanical lints, run against
-  a live brain, so a brief is judged blind.
 
 ## Chaos: rehearse the failures
 

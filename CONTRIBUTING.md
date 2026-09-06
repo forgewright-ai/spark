@@ -29,7 +29,10 @@ sh tests/get_test.sh
 sh tests/update_test.sh
 ```
 
-The full list, and why each step matters, is in `AGENTS.md`.
+The full list, and why each step matters, is in `AGENTS.md`. Changing
+one of the editor's briefs (`persona.MODE_EDIT_*`)? Run
+`tests/audition.py` against a live brain and put its before and after
+totals in the pull request -- the briefs are judged by lints, not taste.
 
 ## Branch model
 

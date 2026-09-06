@@ -36,6 +36,8 @@ shellcheck -S warning bootstrap.sh install.sh lib/env.sh
 /usr/bin/python3 tests/forge_smoke.py
 /usr/bin/python3 tests/bench_smoke.py
 /usr/bin/python3 tests/docs_test.py
+/usr/bin/python3 tests/vault_test.py
+/usr/bin/python3 tests/site_test.py
 /usr/bin/python3 tests/widget_pty.py zsh home/.config/spark/widget.zsh
 /usr/bin/python3 tests/widget_pty.py pager
 /usr/bin/python3 tests/widget_pty.py completion zsh home/.config/spark/completion.zsh
@@ -45,6 +47,26 @@ sh tests/install_test.sh
 sh tests/get_test.sh
 sh tests/update_test.sh
 ```
+
+(`tests/check_selftest.py` is the hook's entry to `spark check --selftest`.)
+
+## The audition: the editor's briefs, judged blind
+
+Not in the gate -- it needs a live brain -- and the one test that judges
+words. `tests/audition.py` runs eight fixtures (`tests/audition/`: a poem,
+a chapter, a README, a commit message, Portuguese prose, Go, Python,
+shell) through the real `spark edit` -- complete, rewrite, `?` -- against
+the brain this machine answers from, and scores every answer with
+mechanical lints only (no fence, no preamble, a poem keeps its lines,
+code still compiles, the language holds, at most five notes, every quote
+anchors, no `"X" -> "X"`, no praise opener). It prints a table and never
+an answer unless `-v`.
+
+The rule: a change to any `edit-*` brief in `persona.py` carries the
+audition's before and after totals in the PR (`--times 3`: a small model
+is not deterministic). `--json` appends the model, the briefs' hashes
+and the totals to `STATE_DIR/audition.jsonl`, so two briefs are compared
+by number, never by taste.
 
 ## Contracts
 
