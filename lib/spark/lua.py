@@ -1,13 +1,13 @@
 # lua.py -- the egg. `spark lua` is a micro side-scroller drawn right at the
-# prompt: eleven lines, one sprite high each, redrawn in place. The hero of
+# prompt: nine lines, one sprite high each, redrawn in place. The hero of
 # O Urubu-Rei e a Lua runs the forest of the tale through eight short
 # zones -- the river, the forest, the hunt, the wind, the rain, the
 # thunder, the lightning, the strength -- and the star at the end of each
 # is one of the eight memories of the line he remembers himself by:
 # "Ele lembrou do rio, da mata, da cacada, do vento, da chuva, do trovao e
 # do raio, e seu corpo foi se enchendo de uma forca que ele havia
-# esquecido." The line assembles under the band as he collects it, English
-# first, then Portuguese. Eight stars open the Great Palm; the king vulture
+# esquecido." The line assembles under the band, in English, as he collects
+# it; each zone's gate opens with its star. Eight stars open the Great Palm; the king vulture
 # carries him up, SUCCESS in the flag's colours, a palette of your own in
 # ~/.config/spark/themes/, and a card that explains the word you typed.
 #
@@ -23,8 +23,8 @@
 # tale's opening, never a frame; every glyph has an ASCII face for the
 # console (spark.ASCII); the text folds to ASCII there; eight colours plus
 # bold, nothing else. The moon is real: tonight's phase comes from the date
-# (no network) and sets how far around the hero the forest is lit. The
-# forest is seeded by the day. stdlib only.
+# (no network) and sits in the status line. The forest is seeded by the
+# day. stdlib only.
 
 import json
 import math
@@ -109,8 +109,8 @@ def moon_art(p):
 
 def moon_line(day=None):
     p = phase(day)
-    en, pt = PHASES[phase_index(p)]
-    return "Rando: %s / %s (%d%%)" % (en, pt, int(round(illumination(p) * 100)))
+    en, _ = PHASES[phase_index(p)]
+    return "Rando: %s (%d%%)" % (en, int(round(illumination(p) * 100)))
 
 
 # ------------------------------------------------------------- the tale --
@@ -227,7 +227,8 @@ class World:
         self.stars = []                      # {"x", "n", "taken"}
         self.oncas = []                      # {"x", "x0", "x1", "d", "alive"}
         self.bats = []                       # {"ax", "x", "y", "t", "dive", "aim", "rest", "alive"}
-        self.posts = []                      # a zone starts here
+        self.posts = []                      # a zone starts here; from the second on, a gate
+                                             # that opens with the zone before's star
         self.palm_x = WORLD_W - 22
         for z in range(1, ZONES + 1):
             self._zone(z, START_W + (z - 1) * ZONE_W)
@@ -302,12 +303,22 @@ class World:
             return GROUND
         return AIR1 if x in self.logs else LANE
 
+    def gate_shut(self, x):
+        """A zone's post is a gate until the star of the zone before it is
+        taken: the memory opens the way."""
+        if x in self.posts:
+            n = self.posts.index(x)
+            return n > 0 and not self.stars[n - 1]["taken"]
+        return False
+
     def solid(self, x, row, stars):
-        """A cell the hero cannot enter: a log's body on the lane, the palm's
-        trunk while it is shut, the world's ends."""
+        """A cell the hero cannot enter: a log's body on the lane, a shut
+        gate, the palm's trunk while it is shut, the world's ends."""
         if x < 0 or x >= WORLD_W:
             return True
         if row == LANE and x in self.logs:
+            return True
+        if AIR2 <= row <= LANE and self.gate_shut(x):
             return True
         if stars < 8 and self.palm_x <= x <= self.palm_x + 1 and AIR2 <= row <= LANE:
             return True
@@ -379,8 +390,12 @@ class Game:
         self.world = World(self.seed)
         self.rng = random.Random(self.seed * 7 + 1)
         self.p = phase(day)
-        self.lit = 24 + int((self.cols - 24) * illumination(self.p))
         self.hero = Hero(6)
+        self.first_key = None                # the tick of the first key: the hint shows before it
+        self.callout = None                  # (ticks left, zone) when a zone is entered
+        self.sparkle = 0                     # ticks of sparkle after a star
+        self.fresh = None                    # (ticks left, tag): the newest piece, bold
+        self.zone_seen = 1
         self.arrows = []                     # [x, row, dir, range]
         self.want_jump = False
         self.want_shot = False
@@ -400,6 +415,8 @@ class Game:
     def key(self, k):
         """d a (run right / left, until s), s (stop), w (jump), f (fire)."""
         h = self.hero
+        if self.first_key is None:
+            self.first_key = self.tick
         if k == "d":
             h.run, h.facing = 1, 1
         elif k == "a":
@@ -447,8 +464,8 @@ class Game:
         nx = h.x + vx
         if not w.solid(int(round(nx)), h.row, self.stars):
             h.x = max(1.0, min(WORLD_W - 2.0, nx))
-        elif not h.knock:
-            h.run = 0                        # walked into a log: stop there, jump it
+        elif h.ground and int(round(nx)) in w.logs and not w.gate_shut(int(round(nx))):
+            h.vy, h.ground = JUMP_V, False   # ran into a log: hop it, keep running
         # vertical
         h.vy = min(2.0, h.vy + GRAVITY)
         ny = h.y + h.vy
@@ -533,14 +550,24 @@ class Game:
         self.arrows = keep
         # the stars
         for s in w.stars:
-            if not s["taken"] and abs(s["x"] - h.x) < 1.3 and abs(AIR2 - h.y) < 0.7:
+            if not s["taken"] and abs(s["x"] - h.x) < 1.3 and abs(AIR1 - h.y) < 0.9:
                 s["taken"] = True
                 self.stars += 1
                 self.taken.append(str(s["n"]))
+                self.sparkle, self.fresh = 12, (40, str(s["n"]))
         # the palm
         if h.col >= w.palm_x - 2 and self.stars >= 8:
             self.ending = 0
-        self.zone_max = max(self.zone_max, w.zone_of(h.col))
+        z = w.zone_of(h.col)
+        self.zone_max = max(self.zone_max, z)
+        if z != self.zone_seen:
+            self.zone_seen, self.callout = z, (45, z)
+        for name in ("callout", "fresh"):
+            v = getattr(self, name)
+            if v:
+                setattr(self, name, (v[0] - 1, v[1]) if v[0] > 1 else None)
+        if self.sparkle:
+            self.sparkle -= 1
         # the vulture glides ahead of the hero
         self.vulture += (h.x + 10 * h.facing + 5 * math.sin(self.tick / 17.0) - self.vulture) * 0.08
         # the camera
@@ -570,10 +597,10 @@ class Game:
 
     # -- the picture -----------------------------------------------------
     def frame(self, tl):
-        """Eleven rows of (char, attr): the status, the six world rows, the
-        memory in English (two rows), then in Portuguese (two rows)."""
+        """Nine rows of (char, attr): the status, the six world rows, the
+        memory in English (two rows)."""
         w, h, cols = self.world, self.hero, self.cols
-        rows = [[(" ", PLAIN)] * cols for _ in range(11)]
+        rows = [[(" ", PLAIN)] * cols for _ in range(9)]
         cam = int(round(self.cam))
 
         def put(r, c, s, attr=PLAIN):
@@ -582,14 +609,17 @@ class Game:
                     rows[r][c + i] = (ch, attr)
 
         def wput(row, wx, ch, attr=PLAIN):
-            if abs(wx - h.x) <= self.lit:
-                put(row + 1, wx - cam, ch, attr)
+            put(row + 1, wx - cam, ch, attr)
+
+        def centre(row, s, attr):
+            put(row + 1, max(0, (cols - len(s)) // 2), s, attr)
 
         # the status
         hp = max(0, h.hp)
-        zn = fold("%s / %s" % ZONE_NAMES[self.zone - 1])
+        zn = fold(ZONE_NAMES[self.zone - 1][0])
         put(0, 1, "%s lua" % MARK, (WHITE, "b"))
-        put(0, 12, "HP " + "[" + G("hp_on") * hp + G("hp_off") * (HP_MAX - hp) + "]", (GREEN if hp > 3 else RED, "b"))
+        put(0, 12, "HP " + "[" + G("hp_on") * hp + G("hp_off") * (HP_MAX - hp) + "]",
+            (GREEN if hp > 5 else YELLOW if hp > 2 else RED, "b"))
         put(0, 27, "* %d/8" % self.stars, (YELLOW, "b"))
         put(0, 35, "zone %d/8 %s" % (self.zone, zn), PLAIN)
         ml = moon_line(self.day)
@@ -598,7 +628,7 @@ class Game:
         # the forest, column by column
         for sx in range(cols):
             wx = cam + sx
-            if wx < 0 or wx >= WORLD_W or abs(wx - h.x) > self.lit:
+            if wx < 0 or wx >= WORLD_W:
                 continue
             if w.canopy[wx]:
                 put(CANOPY + 1, sx, G("canopy"), (GREEN, ""))
@@ -610,8 +640,12 @@ class Game:
                 put(GROUND + 1, sx, G("log"), (YELLOW, ""))
                 put(SOIL + 1, sx, G("water"), (BLUE, ""))
             else:
-                put(GROUND + 1, sx, "|" if wx in w.posts else G("ground"), (WHITE, "b") if wx in w.posts else PLAIN)
+                put(GROUND + 1, sx, G("ground"), (DEFAULT, "d"))
                 put(SOIL + 1, sx, G("soil"), (DEFAULT, "d"))
+            if wx in w.posts and wx > START_W:
+                shut = w.gate_shut(wx)
+                for row in (AIR2, AIR1, LANE, GROUND):
+                    put(row + 1, sx, "|", (WHITE, "b") if shut else (DEFAULT, "d"))
             if wx in w.logs:
                 put(LANE + 1, sx, G("log"), (YELLOW, ""))
             if wx in w.briars:
@@ -626,7 +660,7 @@ class Game:
         blink = (self.tick // 4) % 2 == 0
         for s in w.stars:
             if not s["taken"]:
-                wput(AIR2, s["x"], "*", (YELLOW, "b" if blink else ""))
+                wput(AIR1, s["x"], "*", (YELLOW, "b" if blink else ""))
         for o in w.oncas:
             if o["alive"]:
                 wput(LANE, int(round(o["x"])), "M", (RED, "b"))
@@ -637,7 +671,7 @@ class Game:
             wput(a[1], int(round(a[0])), ">" if a[2] > 0 else "<", (WHITE, "b"))
         # the vulture, the hero, the ending
         hr, hc = h.row, h.col - cam
-        wings = "~V~" if (self.tick // 4) % 2 else "-V-"
+        wings = "-V-" if self.tick % 12 == 0 else "~V~"
         if self.ending is None:
             put(CANOPY + 1, int(round(self.vulture)) - cam - 1, wings, (WHITE, "b"))
             if self.dying is not None:
@@ -657,12 +691,23 @@ class Game:
                 r = self.rng
                 for _ in range(min(e, 30)):
                     put(r.randint(CANOPY, LANE) + 1, r.randint(0, cols - 1), "*", (YELLOW, "b" if r.random() < 0.5 else ""))
-        # the memory: English, then Portuguese
+        # feedback: the sparkle, the zone callout, the hint before the first key
+        if self.sparkle:
+            r = random.Random(self.tick)
+            for _ in range(6):
+                put(r.choice((AIR2, AIR1)) + 1, hc + r.randint(-4, 4), r.choice("*.+"), (YELLOW, "b"))
+        if self.callout and self.ending is None:
+            centre(AIR2, "-- %s --" % fold(ZONE_NAMES[self.callout[1] - 1][0]), (WHITE, "b"))
+        if self.first_key is None and self.ending is None:
+            centre(AIR2, "the forest of O Urubu-Rei e a Lua", (WHITE, "b"))
+            centre(AIR1, "d runs   w jumps   Space fires   q leaves", (CYAN, ""))
+        # the memory, in English; the newest piece bold for a moment
         taken = set(self.taken)
+        fresh = tl.get(self.fresh[1], ("", ""))[0] if self.fresh else None
         for i, ln in enumerate(textwrap.wrap(memory(tl, taken, 0), cols - 4)[:2]):
             put(7 + i, 2, ln, (WHITE, ""))
-        for i, ln in enumerate(textwrap.wrap(memory(tl, taken, 1), cols - 4)[:2]):
-            put(9 + i, 2, ln, (YELLOW, ""))
+            if fresh and fold(fresh) in ln:
+                put(7 + i, 2 + ln.index(fold(fresh)), fold(fresh), (YELLOW, "b"))
         return rows
 
 
@@ -695,7 +740,7 @@ class Pilot:
                     jump = True
         for s in want:
             dx = abs(s["x"] - h.x)
-            if dx < 1.0 and h.y > AIR2:
+            if dx < 1.0 and h.y > AIR1:
                 jump = True
                 out = ["s"]
             elif dx < 4 and (s["x"] - h.x) * d > 0:
@@ -796,7 +841,7 @@ class Band:
     written only when it changed; SGR codes only where the attribute
     changes; eight colours, bold, dim, nothing else."""
 
-    N = 11
+    N = 9
 
     def __init__(self, out):
         self.out = out
@@ -933,8 +978,8 @@ def _remember(g, st):
 
 
 def finish(g, st, tl):
-    """After a run, at the shell: one line, the memory in English, then in
-    Portuguese; a win adds the ending, the palette and the card."""
+    """After a run, at the shell: one line and the memory; a win adds the
+    ending, the palette and the card."""
     path = None
     if g.over == "won":
         path = write_palette()       # before a word is printed: a closed pipe must not lose the prize
@@ -947,19 +992,14 @@ def finish(g, st, tl):
     else:
         say("%s lua -- GAME OVER in zone %d, %s; * %d/8; best zone %d with %d" % (
             MARK, g.zone_max, zone, g.stars, st["best"]["zone"], st["best"]["stars"]))
-    for lang, attr in ((0, ""), (1, "")):
-        for ln in textwrap.wrap(memory(tl, taken, lang), 76):
-            say("  " + ln)
+    for ln in textwrap.wrap(memory(tl, taken, 0), 76):
+        say("  " + ln)
     if g.over == "dead":
-        en, pt = tl.get("queda", ("", ""))
         say()
-        say("  %s" % fold(en))
-        say("  %s" % fold(pt))
+        say("  %s" % fold(tl.get("queda", ("", ""))[0]))
     if g.over == "won":
-        en, pt = tl.get("fim", ("", ""))
         say()
-        say("  %s" % fold(en))
-        say("  %s" % fold(pt))
+        say("  %s" % fold(tl.get("fim", ("", ""))[0]))
         say()
         say("  a palette of your own: %s" % path.replace(os.path.expanduser("~"), "~"))
         say("  spark theme %s" % PALETTE_NAME)
@@ -1006,9 +1046,7 @@ def cmd_lua(args):
         finish(g, st, tl)
         return 0
     if not sys.stdin.isatty() or not sys.stdout.isatty():
-        en, pt = tl.get("abertura", ("", ""))
         say("%s lua: a terminal, please -- this one runs in the dark" % MARK)
-        say("  %s" % fold(en))
-        say("  %s" % fold(pt))
+        say("  %s" % fold(tl.get("abertura", ("", ""))[0]))
         return 2
     return play(st, tl)

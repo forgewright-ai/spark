@@ -1454,9 +1454,8 @@ def main():
         t.ok(bool(wins), "lua: the pilot wins at least one seed in 1..20", "no win")
         if wins:
             seed, out = wins[0]
-            t.ok("SUCCESS" in out and "He remembered the river, the forest," in out and "Ele lembrou do rio, da mata," in out
-                 and out.index("He remembered") < out.index("Ele lembrou"),
-                 "lua: a win prints the whole memory, English first, then Portuguese (seed %d)" % seed, out)
+            t.ok("SUCCESS" in out and "He remembered the river, the forest," in out and "Ele lembrou" not in out,
+                 "lua: a win prints the whole memory, in English only (seed %d)" % seed, out)
             t.ok("Cobra Computadores" in out and "spark theme canarinho" in out and "....." not in out,
                  "lua: the card and the invitation after a win, no gap left in the line", out)
         t.ok(os.path.exists(mine_dir + "/canarinho.env"), "lua: the win writes canarinho.env into your palettes")
@@ -1475,7 +1474,7 @@ def main():
         t.ok(rc == 2 and "a terminal, please" in out and "Karaj" in out and "\x1b" not in out,
              "lua without a tty: one line and the tale's opening, never a frame", out)
         rc, out, _ = spark("lua", "--moon", "2026-09-26")
-        t.ok(rc == 0 and out.startswith("Rando: full / cheia (100%)"), "lua --moon: 2026-09-26 is a full moon", out)
+        t.ok(rc == 0 and out.startswith("Rando: full (100%)"), "lua --moon: 2026-09-26 is a full moon", out)
         rc, out, _ = spark("help")
         t.ok("lua" not in out.split(), "lua is in no help line")
         # the forest is fair by construction, on thirty seeds, in-process
@@ -1484,6 +1483,11 @@ def main():
         unfair = {seed: _lua.World(seed).check() for seed in range(1, 31)}
         unfair = {k: v for k, v in unfair.items() if v}
         t.ok(not unfair, "lua: World(seed).check() passes on seeds 1..30", str(unfair)[:400])
+        _w = _lua.World(1)
+        gate = _w.posts[1]
+        shut_before = _w.solid(gate, _lua.LANE, 0)
+        _w.stars[0]["taken"] = True
+        t.ok(shut_before and not _w.solid(gate, _lua.LANE, 1), "lua: a zone's gate is shut until the star before it is taken")
         art = _lua.letters("GAME OVER")
         t.ok(len(art) == 5 and len(set(len(r) for r in art)) == 1 and len(art[0]) < 60, "lua: GAME OVER is five even rows under 60 columns", str(art))
         import fcntl
@@ -1521,11 +1525,11 @@ def main():
         _, status = os.waitpid(pid, 0)
         t.ok(os.WEXITSTATUS(status) == 0 and b"\x1b[?1049h" not in data and b"\x1b[?25l" in data and b"\x1b[?25h" in data,
              "lua on a pty: no alternate screen, the cursor hidden and shown again", repr(data[-300:]))
-        t.ok(b"HP" in data and b"@" in data and b"zone 1/8 the river" in data and b"\x1b[11A" in data,
-             "lua on a pty: the status, the hero and the zone in an eleven-line band redrawn in place", repr(data[:600]))
+        t.ok(b"HP" in data and b"@" in data and b"zone 1/8 the river" in data and b"\x1b[9A" in data and b"d runs" in data,
+             "lua on a pty: the status, the hero, the zone and the hint in a nine-line band redrawn in place", repr(data[:600]))
         t.ok(sent == 2 and len(data) > mark_len + 400, "lua on a pty: the arrow keys run the hero (the forest scrolls)", str(len(data) - mark_len))
         t.ok(b"\x1b[38;5" not in data and b"spark lua -- left in zone" in data, "lua on a pty: eight colours only, and q leaves with one line", repr(data[-200:]))
-        t.ok(b"He remembered" in data or b"....." in data, "lua on a pty: the memory panel is on screen from the start", repr(data[:900]))
+        t.ok(b"....." in data and b"Ele lembrou" not in data, "lua on a pty: the memory panel is on screen from the start, English only", repr(data[:900]))
 
     # completion drift guard: every verb the CLI dispatches (bin/spark's
     # VERBS tuple + cli.COMMANDS' keys) appears in completion.bash -- a new
