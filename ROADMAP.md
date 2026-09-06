@@ -1,7 +1,25 @@
 # Roadmap
 
-What comes after v1.7, in the order it is likely to happen. Nothing here
+What comes after v1.8, in the order it is likely to happen. Nothing here
 is a promise; a row in `CHANGELOG.md` is. A better idea is an issue away.
+
+## Onboarding: a stranger's path from a bare OS
+
+The docs begin where spark can already run. A vanilla Debian 13 with ssh
+and the standard utilities has neither `git` nor `curl`, so the one-liner
+dies as `curl: command not found` before spark says a word, and "Before
+you start" is a prose list rather than the first step. Someone meeting us
+for the first time should be walked from a fresh OS to a first answer in
+numbered steps, each saying what it looks like when it worked.
+
+- step 0 is the `apt` line, in README and INSTALL both, ahead of the
+  one-liner rather than beside it
+- `sudo` is absent when Debian's installer was given a root password --
+  say so, and say the fix
+- `get` cannot check for `curl`: it needed `curl` to arrive at all. A
+  `wget` form of the one-liner, or the by-hand clone, is the answer we owe
+- what it will cost, up front: about ten minutes, 4.7 GB down, one sudo
+- the same walk for macOS, where the command line tools are the gate
 
 ## Chaos: rehearse the failures
 
