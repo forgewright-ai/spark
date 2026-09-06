@@ -33,7 +33,7 @@ printf '%s\n' "$*" >> "$STUB_LOG"
 cat > "$STUB_LOG.stdin"
 case " $* " in
     *" --decline "*) exit 0 ;;
-    *" ? "*)      printf '1. "hello" is plain -- say more\n2. "nothing here" drifts\n\n    print("fixed")\n\nASKED %s\nSTUB-ASK\n' "$(printf '%s' "$*" | sed 's/.* ? //; s/ --thread.*//')"; exit 0 ;;
+    *" ? "*)      printf '1. "hello" is plain -- say more\n2. "nothing here" drifts\n\n    print("fixed")\n\nASKED-%s\nSTUB-ASK\n' "$(printf '%s' "$*" | sed 's/.* ? //; s/ --thread.*//; s/ /-/g')"; exit 0 ;;
     *" --at "*)   printf 'STUB-DONE'; exit 0 ;;
     *" keep it "*) cat "$STUB_LOG.stdin"; exit 0 ;;
     *" fail "*)   printf 'spark: no brain today -- spark serve\n' >&2; exit 1 ;;
@@ -419,11 +419,11 @@ def main():
         m = ask_pane()
         m.send("\x1bs")                 # from inside the pane: the file is meant
         m.expect("spark>")
-        m.send("?? and then\r")
-        ok(m.expect("ASKED and then"), "?? answers in the same pane", debug_log())
+        m.send("?? furthermore\r")
+        ok(m.expect("ASKED-furthermore"), "?? answers in the same pane", debug_log())
         ids = re.findall(r"--thread (edit-\d+-\d+)", logged())
         ok(len(ids) == 2 and ids[0] == ids[1], "? and ?? name one thread id", str(ids))
-        ok("> and then" in m.plain(), "the pane shows the follow-up question", m.plain()[-300:])
+        ok("furthermore" in m.plain().split("ASKED-furthermore")[0], "the pane shows the follow-up question above its answer", m.plain()[-300:])
         m.send("\x11")
         time.sleep(0.4)
         m.send("\x11")
@@ -459,13 +459,13 @@ def main():
         m.send("\x1bs")
         m.expect("spark>")
         m.send("? again\r")
-        ok(m.expect("ASKED again"), "a second ? opens a second pane", debug_log())
+        ok(m.expect("ASKED-again"), "a second ? opens a second pane", debug_log())
         m.mark()
         m.send("q")                      # the second pane goes
         time.sleep(0.6)
         m.read(0.5)
         shown = m.plain()
-        ok("ASKED why" in shown and "ASKED again" not in shown, "the first pane kept its own answer", shown[-400:])
+        ok("ASKED-why" in shown and "ASKED-again" not in shown, "the first pane kept its own answer", shown[-400:])
         m.send("\x11")
         time.sleep(0.4)
         m.send("\x11")
