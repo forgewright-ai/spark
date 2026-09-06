@@ -203,7 +203,8 @@ def _preset(name, path, ctx, cfg, reasoning):
     lines = ["[%s]" % name, "model = %s" % path, "ctx-size = %s" % ctx, "n-gpu-layers = %s" % cfg.ngl]
     if reasoning:
         lines.append("reasoning = %s" % reasoning)
-    lines += ["webui = 0", "flash-attn = %s" % cfg.flash_attn, "cache-type-k = %s" % cfg.kv, "cache-type-v = %s" % cfg.kv]
+    lines += ["webui = 0", "cache-ram = 0", "flash-attn = %s" % cfg.flash_attn,
+              "cache-type-k = %s" % cfg.kv, "cache-type-v = %s" % cfg.kv]
     if cfg.threads:
         lines.append("threads = %s" % cfg.threads)
     return "\n".join(lines) + "\n"
@@ -256,7 +257,12 @@ def server_cmd(cfg, host):
     server as v0.3, aliased spark and by its file stem, so `model: spark`
     (or anything) is accepted and /v1/models still names the file."""
     files = roles(cfg)
-    common = ["--host", host, "--port", str(cfg.port)]
+    # no prompt cache in RAM: llama-server would keep every replaced
+    # prompt's KV state in host memory up to 8 GiB by default, more than a
+    # small box has (a 12B on a 16 GB APU reached 90 % RAM in a day); the
+    # slots already hold the recent prompts on the GPU. SPARK_EXTRA_ARGS
+    # comes last and may set a budget (--cache-ram N, MiB).
+    common = ["--host", host, "--port", str(cfg.port), "--cache-ram", "0"]
     if files["ember"]:
         d, ini = write_router(cfg)
         return ([engine_bin(cfg), "--models-dir", d, "--models-preset", ini, "--models-max", "2"] + common
@@ -269,6 +275,33 @@ def server_cmd(cfg, host):
     return ([engine_bin(cfg), "-m", m, "--alias", "spark," + model_stem(m)] + common
             + ["-c", cfg.ctx, "--reasoning", "off", "--api-key-file", cfg.token_file, "--no-webui", "--no-slots"]
             + tuning_args(cfg) + cfg.extra_args)
+
+
+def live_args(cfg):
+    """The argv of the llama-server that runs now (the unit's or spark
+    serve's), from ps on both OSes; None when none runs or ps fails."""
+    want = engine_bin(cfg)
+    try:
+        out = subprocess.run(["ps", "-axo", "args="], capture_output=True, text=True, timeout=5).stdout
+    except (OSError, subprocess.SubprocessError):
+        return None
+    for line in out.splitlines():
+        argv = line.split()
+        if argv and (argv[0] == want or os.path.basename(argv[0]) == os.path.basename(want)):
+            return argv
+    return None
+
+
+def host_cache(argv):
+    """The prompt cache budget in MiB the running server was given (the
+    last --cache-ram wins): "0" is off, "" when the flag is absent."""
+    val = ""
+    for i, a in enumerate(argv):
+        if a in ("--cache-ram", "-cram") and i + 1 < len(argv):
+            val = argv[i + 1]
+        elif a.startswith("--cache-ram="):
+            val = a.split("=", 1)[1]
+    return val
 
 
 # ------------------------------------------------------------------- warm

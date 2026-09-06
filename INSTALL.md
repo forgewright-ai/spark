@@ -227,6 +227,13 @@ the child. `spark ember auto` makes spark the smallest tested row and the
 ember the largest that fits beside it in the budget, under the same
 speed cap; `spark ember none` (the default) runs one model in both roles.
 
+The server keeps no prompt cache in RAM (`--cache-ram 0`). llama-server
+would otherwise keep every replaced prompt's KV state in host memory, up
+to 8 GiB by default, more than a small box has; its slots already hold
+the recent prompts on the GPU, so a prompt only costs its prefill again
+when it comes back after four others. `SPARK_EXTRA_ARGS=--cache-ram N`
+in `spark.env` sets a budget in MiB; the `serve` check row says which.
+
 Speed: `spark bench` measures with llama-bench (pp512 / tg128; the ember
 when one serves, `--spark` / `--ember` force a role) and keeps the result
 as the file's baseline; `spark check`'s `throughput` row warns when real

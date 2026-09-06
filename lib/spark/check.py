@@ -695,7 +695,17 @@ def row_serve(ctx):
             served = []
         stem = next((s for a, s, _l in served if a == "spark"), served[0][1] if served else "?")
         shape = "router, %d models" % len(served) if len(served) > 1 else "single"
-        return ok("serving at %s (%s, %s)" % (url.split("//")[-1], stem, shape))
+        where = "serving at %s (%s, %s" % (url.split("//")[-1], stem, shape)
+        argv = engine.live_args(ctx.cfg)
+        if argv is None:
+            return ok(where + ")")
+        cache = engine.host_cache(argv)
+        if cache == "0":
+            return ok(where + ", no host cache)")
+        if cache and "--cache-ram" in ctx.cfg.extra_args:
+            return ok(where + ", host cache %s MiB from SPARK_EXTRA_ARGS)" % cache)
+        return warn(where + ") but the prompt cache in RAM is on: an older start",
+                    "spark stop; spark serve" if st == "absent" else "restart the unit")
     if h == "loading":
         return warn("loading the model at %s" % url.split("//")[-1])
     return warn("serve-url says %s but nothing answers" % url.split("//")[-1], "spark stop   (clears it)")

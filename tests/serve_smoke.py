@@ -148,6 +148,7 @@ def main():
         argv = json.load(open(home + "/spawned.json"))
         ok("--api-key-file" in argv and tok in argv and "--api-key" not in argv, "server got --api-key-file, never the value", argv)
         ok("--no-webui" in argv and "--no-slots" in argv and "--host" in argv and "0.0.0.0" not in argv, "no webui, no slots, one address", argv)
+        ok("--cache-ram" in argv and argv[argv.index("--cache-ram") + 1] == "0", "no prompt cache in RAM (--cache-ram 0)", argv)
         ok("SPARK_BASE_URL=" + url in out, "client lines printed", out)
         ok("for another machine to use this server:" in out,
            "the client-lines heading says who it is for (not where it serves)", out)
@@ -227,6 +228,7 @@ def main():
         spark_sec, ember_sec = ini.split("[ember]")
         ok("reasoning = off" in spark_sec and "ctx-size = 4096" in spark_sec, "spark preset: reasoning off, ctx 4096", ini)
         ok("reasoning" not in ember_sec and "ctx-size = 8192" in ember_sec, "ember preset: no reasoning line, SPARK_CTX", ini)
+        ok("cache-ram = 0" in spark_sec and "cache-ram = 0" in ember_sec, "both presets: no prompt cache in RAM", ini)
         rc, out, _ = spark("brain", "--porcelain", "--fresh", extra=renv)
         ok(rc == 0 and out.strip() == url + "\tQwen3-1.7B-Q4_K_M\tmodel", "brain names the spark role's file stem", out)
         rc, out, err = spark("stop", extra=renv)

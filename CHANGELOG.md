@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.7
+
+The server keeps no prompt cache in RAM.
+
+- `spark serve` passes `--cache-ram 0` (single server and both router
+  presets). llama-server's default keeps every replaced prompt's KV state
+  in host memory up to 8 GiB, more than a small box has: a 12B model on a
+  16 GB APU climbed from 32 % to 90 % RAM in a day and started swapping.
+  The four slots still hold the recent prompts on the GPU; a prompt that
+  comes back after four others costs its prefill again (about 8 s per
+  1000 tokens on that box). `SPARK_EXTRA_ARGS=--cache-ram N` in
+  `spark.env` sets a budget in MiB for those who want one.
+- The `serve` check row reads the running server's arguments: `no host
+  cache`, or the budget you set, or a warning when an older start still
+  caches (restart the unit).
+
 ## v1.6
 
 One model list. The three lists (curated, embers, community) are one
