@@ -1431,28 +1431,43 @@ def main():
         rc, out, _ = spark("mine")
         t.ok(rc == 2 and "is a palette -- spark theme mine" in out, "a bare palette name of yours is a slip, not a question", out)
 
-        # the egg (lib/spark/lua.py): headless through --sim, then a pty
+        # the egg (lib/spark/lua.py): the forest, headless through --sim, then a pty
         rc, out, _ = spark("lua", "--sim", "1", "auto")
         first = out.splitlines()[0] if out else ""
-        t.ok(rc == 0 and first.startswith("distance ") and "sparks 8" in first and "over won" in first,
-             "lua --sim: the autopilot takes the eight and the run ends won", out)
-        t.ok("Preguiça" in out and "Cobra Computadores" in out and "spark theme canarinho" in out,
-             "lua: the passages, the card and the invitation print after the run", out)
+        t.ok(rc == 0 and first.startswith("zone ") and " over " in first, "lua --sim: one machine-readable line first", out)
         rc, out2, _ = spark("lua", "--sim", "1", "auto", extra={"XDG_STATE_HOME": home + "/.local/state-b",
                                                                  "XDG_CONFIG_HOME": home + "/.config-b"})
         t.ok(out2.splitlines()[0] == first, "lua --sim: the same seed gives the same numbers", out2)
-        t.ok(os.path.exists(mine_dir + "/canarinho.env"), "lua: the eighth spark writes canarinho.env into your palettes")
+        rc, out3, _ = spark("lua", "--sim", "1", "auto", "2026-09-26")
+        t.ok(rc == 0 and out3.splitlines()[0] == first, "lua --sim: the moon changes the light, not the numbers", out3)
+        # the pilot takes star 1 on every seed, and wins some seed
+        wins, star1 = [], []
+        for seed in range(1, 21):
+            rc, out, _ = spark("lua", "--sim", str(seed), "auto")
+            line = out.splitlines()[0] if out else ""
+            m = re.match(r"zone (\d+) stars (\d+) over (\w+)", line)
+            if m and int(m.group(2)) >= 1:
+                star1.append(seed)
+            if m and m.group(3) == "won":
+                wins.append((seed, out))
+        t.ok(len(star1) == 20, "lua: the pilot takes star 1 on every seed 1..20 (zone 1 is gentle)", "took it on: %s" % star1)
+        t.ok(bool(wins), "lua: the pilot wins at least one seed in 1..20", "no win")
+        if wins:
+            seed, out = wins[0]
+            t.ok("Cobra Computadores" in out and "spark theme canarinho" in out and "Preguiça" in out,
+                 "lua: the passages, the card and the invitation print after a win (seed %d)" % seed, out)
+        t.ok(os.path.exists(mine_dir + "/canarinho.env"), "lua: the win writes canarinho.env into your palettes")
         rc, out, err = spark("theme", "canarinho", extra={"SPARK_NO_APPLY": "1"})
         with open(home + "/.config/spark/theme.env") as f:
             theme_env = f.read()
         t.ok(rc == 0 and "THEME_ACCENT=#ffdf00" in theme_env and theme_env.count("THEME_") == 21,
              "spark theme canarinho: the prize applies like any palette", out + err)
-        rc, out, _ = spark("lua", "--sim", "2", "auto")
-        t.ok(rc == 0 and "sparks 0" in out and "8/8" in out and "Cobra" not in out,
-             "lua after the win: a plain run, nothing left to take, no card", out)
-        rc, out, _ = spark("lua", "--sim", "3", "j", extra={"SPARK_ASCII": "1", "XDG_STATE_HOME": home + "/.local/state-c"})
-        t.ok(rc == 0 and all(ord(c) < 128 for c in out) and "Preguica" in out,
-             "lua on the console: every character ASCII, the passages folded", out)
+        # a death: walking and jumping, never shooting (a walk alone stops at the first log)
+        rc, out, _ = spark("lua", "--sim", "1", "dddw")
+        t.ok(rc == 0 and "over dead" in out.splitlines()[0] and "GAME OVER" in out and "Preguiça" in out,
+             "lua: a run that never shoots dies, and says so with the tale's line", out)
+        rc, out, _ = spark("lua", "--sim", "2", "auto", extra={"SPARK_ASCII": "1", "XDG_STATE_HOME": home + "/.local/state-c"})
+        t.ok(rc == 0 and all(ord(c) < 128 for c in out), "lua on the console: every character ASCII, the passages folded", out)
         rc, out, _ = spark("lua")
         t.ok(rc == 2 and "a terminal, please" in out and "Karaj" in out and "\x1b" not in out,
              "lua without a tty: one line and the tale's opening, never a frame", out)
@@ -1460,6 +1475,12 @@ def main():
         t.ok(rc == 0 and out.startswith("Rando: cheia / full (100%)"), "lua --moon: 2026-09-26 is a full moon", out)
         rc, out, _ = spark("help")
         t.ok("lua" not in out.split(), "lua is in no help line")
+        # the forest is fair by construction, on thirty seeds, in-process
+        # (World only: no state, no config dir, no finish)
+        from spark import lua as _lua
+        unfair = {seed: _lua.World(seed).check() for seed in range(1, 31)}
+        unfair = {k: v for k, v in unfair.items() if v}
+        t.ok(not unfair, "lua: World(seed).check() passes on seeds 1..30", str(unfair)[:400])
         import fcntl
         import pty
         import struct
@@ -1470,7 +1491,7 @@ def main():
             os.environ.update(env)
             os.execv(sys.executable, [sys.executable, SPARK, "lua"])
         fcntl.ioctl(mfd, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 80, 0, 0))
-        data, deadline, sent = b"", time.time() + 15, 0
+        data, deadline, sent = b"", time.time() + 20, 0
         while time.time() < deadline:
             r, _, _ = select.select([mfd], [], [], 0.2)
             if r:
@@ -1481,18 +1502,21 @@ def main():
                 if not chunk:
                     break
                 data += chunk
-            if sent == 0 and b"spark lua" in data:
-                os.write(mfd, b" ")           # one jump
+            if sent == 0 and b"HP" in data:
+                mark_len = len(data)
+                os.write(mfd, b"\x1bOC\x1bOC\x1bOC")     # Right as a keypad-mode terminal sends it
+                time.sleep(0.4)
+                os.write(mfd, b"\x1b[C\x1b[C\x1b[C")      # and as one that ignores keypad mode does
                 sent = 1
-            elif sent == 1 and time.time() > deadline - 13:
+            elif sent == 1 and time.time() > deadline - 17:
                 os.write(mfd, b"q")
                 sent = 2
         _, status = os.waitpid(pid, 0)
-        t.ok(os.WEXITSTATUS(status) == 0 and b"\x1b[?1049h" in data and b"\x1b[?1049l" in data and b"\x1b[?25h" in data,
-             "lua on a pty: alternate screen in, and out again with the cursor back", repr(data[-300:]))
-        t.ok(b"Rando:" in data and b"@" in data and b"distancia" in data, "lua on a pty: the moon, the hero and the distance are drawn", repr(data[:600]))
-        t.ok(b"* 0/8" not in data.split(b"\x1b[?1049l")[-1] and b"spark lua -- distancia" in data,
-             "lua on a pty: q leaves with one line at the shell", repr(data[-200:]))
+        t.ok(os.WEXITSTATUS(status) == 0 and b"\x1b[?1049h" in data and b"\x1b[?1049l" in data,
+             "lua on a pty: curses enters the alternate screen and leaves it", repr(data[-300:]))
+        t.ok(b"HP" in data and b"@" in data and b"zone" in data, "lua on a pty: the status row, the hero and the zone are drawn", repr(data[:600]))
+        t.ok(sent == 2 and len(data) > mark_len + 250, "lua on a pty: the arrow keys scroll the forest (cells redrawn, far beyond the blink)", str(len(data) - mark_len))
+        t.ok(b"\x1b[38;5" not in data and b"spark lua -- zone" in data, "lua on a pty: eight colours only, and q leaves with one line", repr(data[-200:]))
 
     # completion drift guard: every verb the CLI dispatches (bin/spark's
     # VERBS tuple + cli.COMMANDS' keys) appears in completion.bash -- a new

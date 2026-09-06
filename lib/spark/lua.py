@@ -1,29 +1,31 @@
-# lua.py -- the egg. `spark lua` runs a small ASCII runner: the hero of
-# O Urubu-Rei e a Lua runs the night, jumping trunks and stones while the
-# king vulture glides overhead, and every `*` he takes is one line of the
-# tale (home/.config/spark/tale). Eight of them end it: the bird carries
-# him up, the stars come out, a palette of your own lands in
+# lua.py -- the egg. `spark lua` is a side-scrolling ASCII action-adventure
+# in the rain forest of O Urubu-Rei e a Lua: eight zones, one Star of
+# Memory in each (a line of the tale, home/.config/spark/tale), fallen
+# logs, rivers, briars, prowling oncas and diving bats, and a bow. Eight
+# stars open the Great Palm at the far end; the king vulture carries the
+# hero up, the stars come out, a palette of your own lands in
 # ~/.config/spark/themes/ and a card explains the word you have been typing.
 #
 # This is the ONE feature deliberately outside the landing rule: no help
-# line, no cheatsheet row, no check row, no page, no AGENTS.md mention.
+# line, no cheatsheet row, no check row, no page, no AGENTS.md mention,
+# and the one use of curses in spark (CLAUDE.md names it as the exception).
 # The completion files name it in a comment (the drift guard in
 # tests/smoke.py accepts that on purpose) and tests/smoke.py exercises it
-# through --sim and a pty. Do not document it further; it is meant to be
-# found, not read about. The moon is real: tonight's phase comes from the
-# date (no network) and sets how far ahead the track is lit.
+# headless (--sim) and on a pty. Do not document it further; it is meant
+# to be found, not read about.
 #
-# Text-first still holds: without a tty it prints one line and the tale's
-# opening, never a frame; every glyph is ASCII; the passages fold to ASCII
-# on the console. stdlib only, no curses.
+# Text-first still holds where it matters: without a tty it prints one
+# line and the tale's opening, never a frame; every glyph has an ASCII face
+# for the console (spark.ASCII); the passages fold to ASCII there. The moon
+# is real: tonight's phase comes from the date (no network) and sets how
+# far around the hero the forest is lit. The forest is seeded by the day.
+# stdlib only; curses is imported inside play(), never at import time.
 
 import json
 import math
 import os
 import random
-import select
 import sys
-import time
 import unicodedata
 from datetime import date
 
@@ -33,7 +35,7 @@ STATE_FILE = os.path.join(STATE_DIR, "lua")
 TALE_FILES = (os.path.join(CONFIG_DIR, "tale"), os.path.join(REPO, "home", ".config", "spark", "tale"))
 PALETTE_NAME = "canarinho"
 PALETTE = (
-    "# Canarinho -- spark's own, written by the one who ran the night (MIT, like spark)",
+    "# Canarinho -- spark's own, written by the one who crossed the forest (MIT, like spark)",
     "THEME_BG=#0a1a33", "THEME_FG=#f4f4ec", "THEME_ACCENT=#ffdf00", "THEME_MUTED=#4c6e5a", "THEME_BTOP=Default",
     "THEME_ANSI_0=#11233f", "THEME_ANSI_1=#d94f4f", "THEME_ANSI_2=#009c3b", "THEME_ANSI_3=#ffdf00",
     "THEME_ANSI_4=#2e6fd6", "THEME_ANSI_5=#a86fcf", "THEME_ANSI_6=#3aa6a6", "THEME_ANSI_7=#d8dccf",
@@ -47,6 +49,19 @@ CARD = (
     "machines were rented by the hour. This one is yours.",
     "You have been typing the word all along.",
 )
+
+# glyphs: (terminal, console) -- every one drawable on the Linux console
+_G = {"canopy": ("♣", "Y"), "log": ("■", "="), "hp_on": ("█", "#"), "hp_off": ("░", "."),
+      "soil": ("#", "#"), "water": ("~", "~"), "ground": ("_", "_")}
+
+
+def G(name):
+    return _G[name][1 if ASCII else 0]
+
+
+# colours for the frame: (colour 0-7, bold); curses maps them to pairs
+DIM, RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN, WHITE = range(8)
+PLAIN = (0, False)
 
 # ------------------------------------------------------------- the moon --
 SYNODIC = 29.530588853
@@ -94,7 +109,7 @@ def fold(s):
     """The console has no accents: NFKD, then ASCII only. Curly quotes too."""
     if not ASCII:
         return s
-    s = s.replace("\u201c", '"').replace("\u201d", '"').replace("\u2018", "'").replace("\u2019", "'").replace("\u2026", "...")
+    s = s.replace("“", '"').replace("”", '"').replace("‘", "'").replace("’", "'").replace("…", "...")
     return unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode("ascii")
 
 
@@ -122,15 +137,16 @@ def tale():
 
 # ------------------------------------------------------------ the state --
 def load_state():
+    st = {"best": {"zone": 0, "stars": 0}, "won": False}
     try:
         with open(STATE_FILE, encoding="utf-8") as f:
-            st = json.load(f)
-        st.setdefault("got", [])
-        st.setdefault("best", 0)
-        st.setdefault("won", False)
-        return st
-    except (OSError, ValueError):
-        return {"got": [], "best": 0, "won": False}
+            got = json.load(f)
+        if isinstance(got.get("best"), dict):
+            st["best"].update(got["best"])
+        st["won"] = bool(got.get("won"))
+    except (OSError, ValueError, AttributeError):
+        pass
+    return st
 
 
 def save_state(st):
@@ -152,208 +168,733 @@ def write_palette():
     return path
 
 
+# ------------------------------------------------------------ the world --
+ZONES = 8
+ZONE_W = 320
+START_W = 40
+END_W = 60
+WORLD_W = START_W + ZONES * ZONE_W + END_W
+FLOOR = 13                 # the row of the ground line; the hero stands on FLOOR - 1
+SOIL = 14                  # the row under it; the deep water
+PLAY_H = 15                # world rows 0..14
+STAND = FLOOR - 1          # 12
+LAND, WATER, STONE = "land", "water", "stone"
+JUMP_REACH = 7             # cells of water a plain jump clears
+JUMP_ROWS = 4              # rows a plain jump rises
+
+
+class World:
+    """The forest for one seed: a floor kind per column, canopy per column,
+    and lists of logs, briars, stars, oncas, bats; the palm at the end.
+    Beatable by construction (check() proves the invariants)."""
+
+    def __init__(self, seed):
+        self.seed = seed
+        r = self.rng = random.Random(seed)
+        self.floor = [LAND] * WORLD_W
+        self.canopy = [0] * WORLD_W          # 0 = none, else the row
+        self.logs = []                       # [x0, x1, height]
+        self.briars = set()
+        self.stars = []                      # {"x", "y", "n", "taken"}
+        self.oncas = []                      # {"x", "x0", "x1", "d", "alive"}
+        self.bats = []                       # {"ax", "ay", "x", "y", "t", "dive", "alive"}
+        self.palm_x = WORLD_W - 30
+        for x in range(WORLD_W):
+            if r.random() < 0.28:
+                self.canopy[x] = r.randint(1, 3)
+        for z in range(1, ZONES + 1):
+            self._zone(z, START_W + (z - 1) * ZONE_W)
+
+    # -- generation ------------------------------------------------------
+    def _zone(self, z, x0):
+        """A zone: the star's spot is reserved first (over flat ground in
+        zones 1-3, over a log in 4-6, over a river's stone in 7-8), then a
+        walk of flat land and features fills the rest around it."""
+        r = self.rng
+        x1 = x0 + ZONE_W
+        sx = r.randint(x0 + 60, x1 - 80)          # the reserved span starts here
+        if z <= 3:
+            self.stars.append({"x": sx + 4, "y": STAND - 3, "n": z, "taken": False})
+            reserve = (sx, sx + 8)
+        elif z <= 6:
+            self.logs.append([sx + 4, sx + 8, 2])
+            self.stars.append({"x": sx + 6, "y": STAND - 2 - 3, "n": z, "taken": False})
+            reserve = (sx, sx + 14)
+        else:
+            for i in range(sx + 4, sx + 18):
+                self.floor[i] = WATER
+            for i in range(sx + 10, sx + 12):
+                self.floor[i] = STONE
+            self.stars.append({"x": sx + 11, "y": STAND - 3, "n": z, "taken": False})
+            reserve = (sx, sx + 24)
+        x = x0 + 12                                # a flat start
+        while x + 40 < x1:
+            x += r.randint(10, 22)                 # flat land
+            kind = self._pick(z)
+            w = self._width(kind, z)
+            if x + w + 3 > reserve[0] and x < reserve[1]:
+                x = reserve[1] + 3                 # step over the star's span
+                continue
+            self._feature(kind, x, w, z)
+            x += w + 3                             # landing room after a feature
+
+    def _pick(self, z):
+        table = [("log", 3), ("river", 2 + z // 2), ("briar", 1 + z // 3), ("onca", 1 + z // 2)]
+        total = sum(w for _, w in table)
+        pick = self.rng.random() * total
+        for kind, w in table:
+            pick -= w
+            if pick <= 0:
+                return kind
+        return "log"
+
+    def _width(self, kind, z):
+        r = self.rng
+        if kind == "log":
+            return r.randint(4, 6)
+        if kind == "river":
+            return r.randint(4, 7) if z <= 2 or r.random() < 0.5 else r.randint(9, 13)
+        if kind == "briar":
+            return r.randint(2, 4)
+        return 20                                  # an onca's stretch
+
+    def _feature(self, kind, x, w, z):
+        r = self.rng
+        if kind == "log":
+            self.logs.append([x, x + w - 1, 1 if z <= 3 or r.random() < 0.5 else 2])
+            if z >= 3 and r.random() < 0.3:
+                self._bat(x + w // 2)
+        elif kind == "river":
+            for i in range(x, x + w):
+                self.floor[i] = WATER
+            if w > JUMP_REACH:                     # a stone splits it into jumpable runs
+                mid = x + w // 2
+                for i in range(mid - 1, mid + 1):
+                    self.floor[i] = STONE
+            if z >= 3 and r.random() < 0.4:
+                self._bat(x + w // 2)
+        elif kind == "briar":
+            for i in range(x, x + w):
+                self.briars.add(i)
+        else:                                      # an onca's stretch: flat, it patrols it
+            self.oncas.append({"x": float(x + 10), "x0": x, "x1": x + w - 1, "d": 1, "alive": True})
+            if z >= 2 and r.random() < 0.3:
+                self._bat(x + 10)
+
+    def _bat(self, ax):
+        ay = self.rng.randint(3, 6)
+        self.bats.append({"ax": ax, "ay": ay, "x": float(ax), "y": float(ay), "t": self.rng.randint(0, 60),
+                          "dive": None, "alive": True})
+
+    # -- geometry --------------------------------------------------------
+    def log_at(self, x):
+        for x0, x1, h in self.logs:
+            if x0 <= x <= x1:
+                return h
+        return 0
+
+    def stand_row(self, x):
+        """The row the hero stands on at column x: STAND on land, less a
+        log's height, FLOOR (the surface) on water."""
+        x = max(0, min(WORLD_W - 1, x))
+        if self.floor[x] == WATER:
+            return FLOOR
+        return STAND - self.log_at(x)
+
+    def solid(self, x, y, stars):
+        """A cell the hero cannot enter: a log's body, the palm's trunk
+        while it is shut, the world's ends."""
+        if x < 0 or x >= WORLD_W:
+            return True
+        h = self.log_at(x)
+        if h and STAND - h < y <= STAND:
+            return True
+        if stars < 8 and self.palm_x <= x <= self.palm_x + 1 and 3 <= y <= STAND:
+            return True
+        return False
+
+    def zone_of(self, x):
+        return max(1, min(ZONES, int((x - START_W) // ZONE_W) + 1))
+
+    def check(self):
+        """The beatable-by-construction promise: every stretch of water is
+        at most JUMP_REACH wide, every log at most JUMP_ROWS - 2 high, every
+        star over a floor the hero can stand under it and within a jump.
+        Returns a list of complaints, empty when the forest is fair."""
+        bad = []
+        run = 0
+        for x in range(WORLD_W):
+            run = run + 1 if self.floor[x] == WATER else 0
+            if run > JUMP_REACH:
+                bad.append("water run wider than %d at %d" % (JUMP_REACH, x))
+                run = 0
+        for x0, x1, h in self.logs:
+            if h > JUMP_ROWS - 2:
+                bad.append("log at %d too high (%d)" % (x0, h))
+            if x1 - x0 + 1 > 6:
+                bad.append("log at %d too wide" % x0)
+        for s in self.stars:
+            if self.floor[s["x"]] == WATER:
+                bad.append("star %d over water" % s["n"])
+            elif self.stand_row(s["x"]) - s["y"] > JUMP_ROWS:
+                bad.append("star %d out of reach" % s["n"])
+        return bad
+
+
 # ------------------------------------------------------------- the game --
-HERO_X = 6
-GROUND = 8                       # the row of `_`; the hero stands on GROUND - 1
-JUMP = (1, 2, 3, 3, 2, 1)        # height per tick after the key
-ROCK, TRUNK, SPARK = "^", "|", "*"
-FPS = 15.0
-SHOW_TICKS = 45                  # a taken passage stays in the footer this long
+FPS = 20
+RUN = 0.9
+WADE = 0.45
+GRAVITY = 0.25
+JUMP_V = -1.4
+HOLD = 4
+SHOW_TICKS = 70
+HP_MAX = 8
+
+
+class Hero:
+    def __init__(self, x):
+        self.x = float(x)
+        self.y = float(STAND)
+        self.vy = 0.0
+        self.facing = 1
+        self.ground = True
+        self.hp = HP_MAX
+        self.immune = 0
+        self.knock = 0
+        self.knock_d = 0
+        self.wet = 0
+
+    @property
+    def col(self):
+        return int(round(self.x))
+
+    @property
+    def row(self):
+        return int(round(self.y))
 
 
 class Game:
-    def __init__(self, width, seed=None, day=None, got=None):
-        self.w = max(60, min(width, 100))
-        self.rng = random.Random(seed)
+    def __init__(self, cols, seed=None, day=None):
+        self.cols = max(60, min(int(cols), 120))
+        self.day = day
+        self.seed = seed if seed is not None else (day or date.today()).toordinal()
+        self.world = World(self.seed)
+        self.rng = random.Random(self.seed * 7 + 1)
         self.p = phase(day)
-        self.lit = 20 + int((self.w - HERO_X - 20) * illumination(self.p))
-        self.got = list(got or [])
-        self.items = []          # [x (float), kind]
-        self.next_x = float(self.w + 10)
-        self.since_spark = 0
-        self.h = 0               # the hero's height
-        self.air = -1            # index into JUMP, -1 on the ground
-        self.speed = 0.6
-        self.dist = 0.0
+        self.lit = 24 + int((self.cols - 24) * illumination(self.p))
+        self.hero = Hero(8)
+        self.arrows = []                     # [x, y, dir, range]
+        self.hold = {"a": 0, "d": 0}
+        self.want_jump = False
+        self.want_shot = False
+        self.cool = 0
         self.tick = 0
-        self.taken = []          # passages taken this run, in order
-        self.show = None         # (ticks left, tag)
-        self.over = None         # "hit" | "won" | "quit"
-        self.bird_x = float(self.w - 12)
-        self.bird_dx = -0.2
-        self.dive = None         # the ending's frame counter
+        self.cam = 0.0
+        self.stars = 0
+        self.taken = []                      # passage tags this run, in order
+        self.show = None                     # (ticks, pt, en)
+        self.over = None                     # dead | won | quit
+        self.dying = None
+        self.ending = None                   # the vulture's frame counter
+        self.zone_max = 1
+        self.hurts = []                      # (tick, cause) -- the sim's post-mortem
 
-    # -- the world ---------------------------------------------------------
-    def spawn(self):
-        while self.next_x < self.w + 2:
-            self.since_spark += 1
-            if self.since_spark >= 3 and len(self.got) < 8:
-                kind, self.since_spark = SPARK, 0
-            else:
-                kind = ROCK if self.rng.random() < 0.6 else TRUNK
-            self.items.append([self.next_x, kind])
-            self.next_x += 14 + self.rng.randint(0, 16)
+    # -- input -----------------------------------------------------------
+    def key(self, k):
+        """a d (move, a short hold refreshed by autorepeat), w (jump), s (shoot)."""
+        if k in self.hold:
+            self.hold[k] = HOLD
+        elif k == "w":
+            self.want_jump = True
+        elif k == "s":
+            self.want_shot = True
 
-    def jump(self):
-        if self.air < 0:
-            self.air = 0
-
-    def step(self, key=None):
-        """One tick. key: 'j' jump, None nothing."""
+    # -- one tick --------------------------------------------------------
+    def step(self):
         self.tick += 1
-        if key == "j":
-            self.jump()
-        if self.air >= 0:
-            self.h = JUMP[self.air]
-            self.air = self.air + 1 if self.air + 1 < len(JUMP) else -1
+        if self.over or self.ending is not None:
+            self._ending()
+            return
+        if self.dying is not None:
+            self.dying -= 1
+            if self.dying <= 0:
+                self.over = "dead"
+            return
+        h, w = self.hero, self.world
+        for k in self.hold:
+            if self.hold[k]:
+                self.hold[k] -= 1
+        move = (1 if self.hold["d"] else 0) - (1 if self.hold["a"] else 0)
+        if move:
+            h.facing = move
+        in_water = w.floor[h.col] == WATER and h.y >= FLOOR - 0.5
+        if self.want_jump and h.ground:
+            h.vy = JUMP_V
+            h.ground = False
+        self.want_jump = False
+        if self.want_shot and self.cool == 0 and len(self.arrows) < 3:
+            self.arrows.append([h.x + h.facing, h.row, h.facing, 30])
+            self.cool = 6
+        self.want_shot = False
+        if self.cool:
+            self.cool -= 1
+        # horizontal
+        if h.knock:
+            vx = h.knock_d * 1.2
+            h.knock -= 1
         else:
-            self.h = 0
-        for it in self.items:
-            it[0] -= self.speed
-        self.next_x -= self.speed
-        self.dist += self.speed
-        self.speed = min(1.4, 0.6 + int(self.dist) // 100 * 0.05)
-        self.bird_x += self.bird_dx
-        if self.bird_x < HERO_X + 8 or self.bird_x > self.w - 13:
-            self.bird_dx = -self.bird_dx
+            vx = move * (WADE if in_water else RUN)
+        nx = h.x + vx
+        if not w.solid(int(round(nx)), h.row, self.stars):
+            h.x = max(1.0, min(WORLD_W - 2.0, nx))
+        # vertical
+        h.vy = min(2.0, h.vy + GRAVITY)
+        ny = h.y + h.vy
+        floor = w.stand_row(h.col)
+        if h.vy >= 0 and ny >= floor:
+            # landing -- or a bank: wading out of a river, the hero is one
+            # row under the land's floor and steps up onto it
+            h.y = float(floor)
+            h.vy = 0.0
+            h.ground = True
+        else:
+            h.y = max(0.0, ny)
+            h.ground = False
+            if h.y == 0.0:
+                h.vy = 0.0
+        in_water = w.floor[h.col] == WATER and h.y >= FLOOR - 0.5
+        # damage: water, briars
+        if in_water:
+            h.wet += 1
+            if h.wet % 20 == 0:
+                self._hurt(1, 0, "water")
+        else:
+            h.wet = 0
+        if h.row == STAND and h.col in w.briars:
+            self._hurt(1, -h.facing, "briar")
+        if h.immune:
+            h.immune -= 1
+        # fauna
+        for o in w.oncas:
+            if not o["alive"]:
+                continue
+            d = h.x - o["x"]
+            if abs(d) < 12:
+                o["x"] += (1.0 if d > 0 else -1.0)
+                o["d"] = 1 if d > 0 else -1
+            else:
+                o["x"] += o["d"] * 0.4
+            if o["x"] <= o["x0"]:
+                o["x"], o["d"] = float(o["x0"]), 1
+            elif o["x"] >= o["x1"]:
+                o["x"], o["d"] = float(o["x1"]), -1
+            if abs(o["x"] - h.x) < 1.0 and h.row == STAND:
+                self._hurt(2, 1 if h.x >= o["x"] else -1, "onca")
+        for b in w.bats:
+            if not b["alive"]:
+                continue
+            b["t"] += 1
+            if b["dive"] is None:
+                b["x"] = b["ax"] + 6 * math.sin(b["t"] / 10.0)
+                b["y"] = b["ay"] + 1.5 * math.sin(b["t"] / 7.0)
+                b["rest"] = max(0, b.get("rest", 0) - 1)
+                if abs(b["x"] - h.x) < 10 and abs(h.y - b["y"]) > 1 and not b["rest"]:
+                    b["dive"] = 0
+                    b["aim"] = (h.x, h.y)                # a swoop at where the hero is: keep moving
+            else:
+                b["dive"] += 1
+                if b["dive"] <= 14:
+                    b["x"] += max(-0.9, min(0.9, b["aim"][0] - b["x"]))
+                    b["y"] += max(-0.9, min(0.9, b["aim"][1] - b["y"]))
+                elif b["dive"] <= 30:
+                    b["x"] += max(-0.6, min(0.6, b["ax"] - b["x"]))
+                    b["y"] += max(-0.6, min(0.6, b["ay"] - b["y"]))
+                else:
+                    b["dive"], b["rest"] = None, 80
+            if abs(b["x"] - h.x) < 1.0 and abs(b["y"] - h.y) < 1.0:
+                self._hurt(1, 1 if h.x >= b["x"] else -1, "bat")
+        # arrows
+        keep = []
+        for a in self.arrows:
+            x0 = a[0]
+            a[0] += a[2] * 2
+            a[3] -= 2
+            ax, ay = int(round(a[0])), a[1]
+            lo, hi = min(x0, a[0]) - 1.0, max(x0, a[0]) + 1.0
+            if a[3] <= 0 or ax < 0 or ax >= WORLD_W or w.solid(ax, ay, self.stars):
+                continue
+            hit = False
+            if ay == STAND:
+                for bx in [x for x in w.briars if lo <= x <= hi]:
+                    w.briars.discard(bx)
+            for o in w.oncas:
+                if o["alive"] and ay == STAND and lo <= o["x"] <= hi:
+                    o["alive"], hit = False, True
+            for b in w.bats:
+                if b["alive"] and lo <= b["x"] <= hi and abs(b["y"] - ay) < 1.5:
+                    b["alive"], hit = False, True
+            if not hit:
+                keep.append(a)
+        self.arrows = keep
+        # the stars
+        for s in w.stars:
+            if not s["taken"] and abs(s["x"] - h.x) < 1.3 and abs(s["y"] - h.y) < 1.2:
+                s["taken"] = True
+                self.stars += 1
+                self.taken.append(str(s["n"]))
+                self.show = (SHOW_TICKS, str(s["n"]))
+        # the palm
+        if h.col >= w.palm_x - 2:
+            if self.stars >= 8:
+                self.ending = 0
+            elif self.show is None or self.show[1] != "palma":
+                self.show = (40, "palma")
         if self.show:
             self.show = (self.show[0] - 1, self.show[1]) if self.show[0] > 1 else None
-        # what reaches the hero's column this tick
-        keep = []
-        for x, kind in self.items:
-            if x < -2:
-                continue
-            if x <= HERO_X < x + self.speed or int(round(x)) == HERO_X:
-                if kind == SPARK:
-                    if self.h >= 2:
-                        self.take()
-                        continue
-                elif kind == ROCK and self.h == 0 or kind == TRUNK and self.h <= 1:
-                    self.over = "hit"
-            keep.append([x, kind])
-        self.items = keep
-        self.spawn()
-        if self.over is None and self.taken and len(self.got) >= 8 and self.dive is None:
-            self.dive = 0          # the eighth, taken tonight: the bird comes
-        if self.dive is not None:
-            self.dive += 1
-            if self.dive > 20:
-                self.over = "won"
+        self.zone_max = max(self.zone_max, w.zone_of(h.col))
+        # the camera
+        lead = self.cols // 3 if h.facing > 0 else 2 * self.cols // 3
+        target = max(0.0, min(float(WORLD_W - self.cols), h.x - lead))
+        self.cam += (target - self.cam) * 0.2
+        if h.hp <= 0 and self.dying is None:
+            self.dying = 10
 
-    def take(self):
-        n = len(self.got) + 1
-        if n <= 8:
-            self.got.append(n)
-            self.taken.append(str(n))
-            self.show = (SHOW_TICKS, str(n))
-        else:
-            self.dist += 50
+    def _hurt(self, n, knock_dir, cause):
+        h = self.hero
+        if h.immune:
+            return
+        h.hp -= n
+        self.hurts.append((self.tick, cause))
+        h.immune = 15
+        if knock_dir:
+            h.knock, h.knock_d = 4, knock_dir
 
-    def autopilot(self):
-        """The sim's pilot: jump when the next item lands in the jump's high
-        ticks. Not perfect -- a run still ends -- but it collects."""
-        if self.air >= 0:
-            return None
-        ahead = [x for x, _ in self.items if x > HERO_X]
-        if not ahead:
-            return None
-        ticks = (min(ahead) - HERO_X) / self.speed
-        return "j" if 1.5 <= ticks <= 3.5 else None
+    def _ending(self):
+        self.ending += 1
+        if self.ending >= 34:
+            self.over = "won"
 
-    # -- the picture -------------------------------------------------------
+    @property
+    def zone(self):
+        return self.world.zone_of(self.hero.col)
+
+    # -- the picture -----------------------------------------------------
     def frame(self, tl, best):
-        w = self.w
-        rows = [[" "] * w for _ in range(14)]
+        """20 rows of (char, (colour, bold)): status, 15 of forest, 4 of
+        footer. Everything outside the moon's reach is dark."""
+        w, h, cols = self.world, self.hero, self.cols
+        rows = [[(" ", PLAIN)] * cols for _ in range(20)]
+        cam = int(round(self.cam))
 
-        def put(r, c, s):
-            for i, ch in enumerate(s):
-                if 0 <= c + i < w:
-                    rows[r][c + i] = ch
-        put(0, 2, "%s lua" % MARK)
-        put(0, w - 16, "* %d/8" % len(self.got))
-        put(1, 2, moon_line())
-        for i, ln in enumerate(moon_art(self.p)):
-            put(1 + i, w - 8, ln)
-        # the ending's stars, under everything else
-        if self.dive is not None:
-            r = self.rng
-            for _ in range(self.dive * 2):
-                put(r.randint(2, GROUND - 2), r.randint(0, w - 10), "*")
-        # the bird
-        bx = int(round(self.bird_x))
-        wings = "~v~" if (self.tick // 4) % 2 == 0 else "-v-"
-        if self.dive is not None:
-            bx = HERO_X - 1
-            wings = "\\v/"
-            put(max(2, GROUND - 1 - self.h - 1 - min(self.dive, 4)), bx, wings)
-        else:
-            put(2, bx, wings)
-        # the ground and what stands on it, lit only so far ahead
-        for c in range(w):
-            rows[GROUND][c] = "_" if c <= HERO_X + self.lit else " "
-        for x, kind in self.items:
-            c = int(round(x))
-            if c > HERO_X + self.lit or c < 0:
+        def put(r, c, s, attr=PLAIN):
+            if 0 <= r < 20:
+                for i, ch in enumerate(s):
+                    if 0 <= c + i < cols:
+                        rows[r][c + i] = (ch, attr)
+
+        def wput(r, wx, ch, attr=PLAIN):
+            if abs(wx - h.x) <= self.lit:
+                put(r, wx - cam, ch, attr)
+
+        # status
+        hp = max(0, h.hp)
+        bar = "[" + G("hp_on") * hp + G("hp_off") * (HP_MAX - hp) + "]"
+        put(0, 1, "%s lua" % MARK, (WHITE, True))
+        put(0, 12, "HP " + bar, (GREEN if hp > 3 else RED, True))
+        put(0, 27, "* %d/8" % self.stars, (YELLOW, True))
+        put(0, 35, "zone %d/8" % self.zone, PLAIN)
+        put(0, 46, moon_line(self.day)[: cols - 47], (CYAN, False))
+        # the forest, column by column
+        for sx in range(cols):
+            wx = cam + sx
+            if wx < 0 or wx >= WORLD_W or abs(wx - h.x) > self.lit:
                 continue
-            if kind == ROCK:
-                put(GROUND - 1, c, ROCK)
-            elif kind == TRUNK:
-                put(GROUND - 1, c, TRUNK)
-                put(GROUND - 2, c, TRUNK)
+            if w.canopy[wx]:
+                put(w.canopy[wx], sx, G("canopy"), (GREEN, False))
+            kind = w.floor[wx]
+            if kind == WATER:
+                put(FLOOR + 1, sx, G("water"), (BLUE, True))
+                put(SOIL + 1, sx, G("water"), (BLUE, False))
+            elif kind == STONE:
+                put(FLOOR + 1, sx, G("log"), (YELLOW, False))
+                put(SOIL + 1, sx, G("water"), (BLUE, False))
             else:
-                put(GROUND - 3, c, SPARK)
-        # the hero
-        hero_r = GROUND - 1 - self.h
-        if self.dive is not None:
-            hero_r = max(1, hero_r - self.dive // 2)
-        put(hero_r, HERO_X, "@")
-        put(GROUND + 1, 2, "distancia %d" % int(self.dist))
-        put(GROUND + 1, w - 14, "best %d" % max(best, int(self.dist)))
+                put(FLOOR + 1, sx, G("ground"), PLAIN)
+                put(SOIL + 1, sx, G("soil"), (DIM, True))
+            lh = w.log_at(wx)
+            for r in range(STAND - lh + 1, STAND + 1):
+                put(r + 1, sx, G("log"), (YELLOW, False))
+            if wx in w.briars:
+                put(STAND + 1, sx, "x", (RED, False))
+        # the palm
+        for r in range(3, STAND + 1):
+            for c in (w.palm_x, w.palm_x + 1):
+                wput(r + 1, c, "|", (GREEN, self.stars >= 8))
+        for r, span in ((1, 2), (2, 3), (3, 3)):
+            for c in range(w.palm_x - span + 1, w.palm_x + span + 1):
+                wput(r + 1, c, G("canopy"), (GREEN, True))
+        # stars, fauna, arrows
+        blink = (self.tick // 5) % 2 == 0
+        for s in w.stars:
+            if not s["taken"]:
+                wput(s["y"] + 1, s["x"], "*", (YELLOW, blink))
+        for o in w.oncas:
+            if o["alive"]:
+                wput(STAND + 1, int(round(o["x"])), "M", (RED, True))
+        for b in w.bats:
+            if b["alive"]:
+                wput(int(round(b["y"])) + 1, int(round(b["x"])), "v", (MAGENTA, False))
+        for a in self.arrows:
+            wput(a[1] + 1, int(round(a[0])), ">" if a[2] > 0 else "<", (WHITE, True))
+        # the hero, the vulture
+        hr, hc = h.row, h.col - cam
+        if self.ending is not None:
+            e = self.ending
+            vr = max(1, 1 + (hr - 1) * min(e, 14) // 14) if e <= 14 else max(1, hr - (e - 14) // 2)
+            put(vr, hc - 1, "~V~" if (e // 3) % 2 else "-V-", (WHITE, True))
+            if e > 14:
+                hr = max(1, hr - (e - 14) // 2)
+                r = self.rng
+                for _ in range(e):
+                    put(r.randint(2, 12), r.randint(0, cols - 1), "*", (YELLOW, r.random() < 0.5))
+        if self.dying is not None:
+            put(hr + 1, hc, "x", (RED, True))
+        elif not (h.immune and self.tick % 2):
+            put(hr + 1, hc, "@", (WHITE, True))
+        # the footer
         if self.show:
             import textwrap
-            pt, en = tl.get(self.show[1], ("", ""))
-            for i, ln in enumerate((textwrap.wrap(fold(pt), w - 4)[:2] + [""] * 2)[:2]):
-                put(GROUND + 2 + i, 2, ln)
-            for i, ln in enumerate((textwrap.wrap(fold(en), w - 4)[:2] + [""] * 2)[:2]):
-                put(GROUND + 4 + i, 4, ln)
-        return ["".join(r).rstrip() for r in rows]
+            if self.show[1] == "palma":
+                pt, en = ("A Grande Palmeira espera por oito estrelas.", "The Great Palm waits for eight stars.")
+            else:
+                pt, en = tl.get(self.show[1], ("", ""))
+            for i, ln in enumerate(textwrap.wrap(fold(pt), cols - 4)[:2]):
+                put(16 + i, 2, ln, (YELLOW, False))
+            for i, ln in enumerate(textwrap.wrap(fold(en), cols - 6)[:2]):
+                put(18 + i, 4, ln, PLAIN)
+        return rows
 
 
-# ------------------------------------------------------------- the runs --
-def sim(seed, tape, day=None, st=None):
-    """Headless: a fixed seed and a key tape ('j' jump, '.' nothing, per
-    tick, repeating; 'auto' = the autopilot). Prints the numbers."""
-    st = st if st is not None else load_state()
-    g = Game(80, seed=seed, day=day, got=st["got"])
-    for i in range(4000):
-        key = g.autopilot() if tape == "auto" else ("j" if tape[i % len(tape)] == "j" else None)
-        g.step(key)
+# ------------------------------------------------------------ the pilot --
+class Pilot:
+    """The sim's player: walks toward the lowest star it lacks (then the
+    palm), jumps at water, logs, briars and stars, shoots what stands or
+    flies ahead, and jumps when it has been stuck."""
+
+    def __init__(self, g):
+        self.g = g
+        self.last_x = None
+        self.stuck = 0
+
+    def keys(self):
+        g, h, w = self.g, self.g.hero, self.g.world
+        want = [s for s in w.stars if not s["taken"]]
+        goal = min(want, key=lambda s: s["n"])["x"] if want else w.palm_x
+        d = 1 if goal >= h.x else -1
+        out = ["d" if d > 0 else "a"]
+        ahead = [int(round(h.x)) + d * i for i in range(1, 4)]
+        jump = False
+        for i, x in enumerate(ahead):
+            if 0 <= x < WORLD_W:
+                if w.floor[x] == WATER and w.floor[h.col] != WATER and i == 1:
+                    jump = True
+                if w.log_at(x) and not w.log_at(h.col) and i <= 1:
+                    jump = True
+                if x in w.briars and i <= 1:
+                    jump = True
+        for s in want:
+            dx = abs(s["x"] - h.x)
+            above = h.y - s["y"]
+            if (s["x"] - h.x) * d >= 0 and 3 <= dx <= 6 and 0 < above <= JUMP_ROWS + 1:
+                jump = True
+            if dx < 1.0 and 0 < above <= JUMP_ROWS + 1:
+                jump = True                      # right under it: straight up
+                out = []                         # and no sidestep this tick
+            elif dx < 3 and 0 < above <= JUMP_ROWS + 1:
+                out = ["d" if s["x"] > h.x else "a"]     # walk under it first
+        if self.last_x is not None and abs(h.x - self.last_x) < 0.05 and h.ground:
+            self.stuck += 1
+            if self.stuck >= 3:
+                jump = True
+                self.stuck = 0
+        else:
+            self.stuck = 0
+        self.last_x = h.x
+        if jump and h.ground:
+            out.append("w")
+        for o in w.oncas:
+            if o["alive"] and (o["x"] - h.x) * d > 0 and abs(o["x"] - h.x) < 12:
+                out.append("s")
+                if abs(o["x"] - h.x) < 3 and h.ground:
+                    out.append("w")
+        for b in w.bats:
+            if b["alive"] and abs(b["x"] - h.x) < 9 and abs(b["y"] - h.y) < 2.5:
+                if (b["x"] - h.x) * d < 0:
+                    out = ["a" if d > 0 else "d"] + [k for k in out if k not in ("a", "d")]
+                out.append("s")
+        return out
+
+
+def sim(seed, tape, day=None):
+    """Headless: a fixed seed and a key tape (per tick, repeating: a d w s
+    . ) or `auto`, the Pilot. Returns the finished Game."""
+    g = Game(80, seed=seed, day=day)
+    pilot = Pilot(g) if tape == "auto" else None
+    for i in range(6000):
+        if pilot:
+            for k in pilot.keys():
+                g.key(k)
+        else:
+            k = tape[i % len(tape)]
+            if k in "adws":
+                g.key(k)
+        g.step()
         if g.over:
             break
     g.over = g.over or "end"
     return g
 
 
-def finish(g, st, tl):
-    """After a run, at the shell: what was taken, the numbers, the ending."""
-    st["got"] = g.got
-    st["best"] = max(st["best"], int(g.dist))
-    path = None
+def sim_line(g):
+    return "zone %d stars %d over %s hp %d ticks %d" % (g.zone_max, g.stars, g.over, max(0, g.hero.hp), g.tick)
+
+
+# ----------------------------------------------------------- the screen --
+def play(st, tl):
+    import curses
+
+    def _play(stdscr):
+        try:
+            curses.curs_set(0)
+        except curses.error:
+            pass
+        stdscr.nodelay(True)
+        stdscr.keypad(True)
+        attrs = {}
+        try:
+            curses.start_color()
+            curses.use_default_colors()
+            for i in range(1, 8):
+                curses.init_pair(i, i, -1)
+            colour = True
+        except curses.error:
+            colour = False
+        for c in range(8):
+            for b in (False, True):
+                a = curses.color_pair(c) if colour and c else 0
+                attrs[(c, b)] = a | (curses.A_BOLD if b else 0)
+        lines, cols = stdscr.getmaxyx()
+        g = Game(cols, day=None)
+        keys = {curses.KEY_LEFT: "a", curses.KEY_RIGHT: "d", curses.KEY_UP: "w",
+                ord("a"): "a", ord("d"): "d", ord("w"): "w", ord(" "): "s",
+                ord("A"): "a", ord("D"): "d", ord("W"): "w"}
+        paused = False
+        import time
+        while not g.over:
+            t0 = time.monotonic()
+            while True:
+                c = stdscr.getch()
+                if c == -1:
+                    break
+                if c == 27:
+                    # a terminal that ignores keypad mode sends ESC [ A..D:
+                    # read the two bytes that follow and map them ourselves
+                    c1, c2 = stdscr.getch(), stdscr.getch()
+                    c = {ord("A"): curses.KEY_UP, ord("B"): curses.KEY_DOWN, ord("C"): curses.KEY_RIGHT,
+                         ord("D"): curses.KEY_LEFT}.get(c2, -1) if c1 in (ord("["), ord("O")) else -1
+                    if c == -1:
+                        continue
+                if c in (ord("q"), ord("Q")):
+                    g.over = "quit"
+                elif c in (ord("p"), ord("P")):
+                    paused = not paused
+                elif c == curses.KEY_RESIZE:
+                    lines, cols = stdscr.getmaxyx()
+                    g.cols = max(60, min(cols, 120))
+                elif c in keys and not paused:
+                    g.key(keys[c])
+            if g.over:
+                break
+            stdscr.erase()
+            if lines < 20 or cols < 60:
+                stdscr.addstr(0, 0, "spark lua: 60x20 at least (this is %dx%d) -- q leaves" % (cols, lines))
+            else:
+                if not paused:
+                    g.step()
+                rows = g.frame(tl, st["best"])
+                for r, row in enumerate(rows):
+                    c0, run, cur = 0, [], None
+                    for c, (ch, attr) in enumerate(row):
+                        if attr != cur and run:
+                            _draw(stdscr, r, c0, "".join(run), attrs[cur], lines, cols)
+                            run, c0 = [], c
+                        cur = attr
+                        run.append(ch)
+                    if run:
+                        _draw(stdscr, r, c0, "".join(run), attrs[cur], lines, cols)
+                if paused:
+                    _draw(stdscr, 15, 2, "paused -- p goes on, q leaves", attrs[(WHITE, True)], lines, cols)
+            stdscr.noutrefresh()
+            curses.doupdate()
+            rest = 1.0 / FPS - (time.monotonic() - t0)
+            if rest > 0:
+                curses.napms(int(rest * 1000))
+        if g.over in ("dead", "won"):
+            curses.napms(500)
+        return g
+
+    g = curses.wrapper(_play)
+    if g.over == "quit":
+        _remember(g, st)
+        say("%s lua -- zone %d, * %d/8" % (MARK, g.zone_max, g.stars))
+        return 0
+    finish(g, st, tl)
+    return 0
+
+
+def _draw(stdscr, r, c, s, attr, lines, cols):
+    """addstr that never raises: clipped, and the bottom-right cell via insstr."""
+    if r >= lines or c >= cols or not s:
+        return
+    s = s[: cols - c]
+    try:
+        if r == lines - 1 and c + len(s) >= cols:
+            stdscr.insstr(r, c, s, attr)
+        else:
+            stdscr.addstr(r, c, s, attr)
+    except Exception:
+        pass
+
+
+# ------------------------------------------------------------ the shell --
+def _remember(g, st):
+    b = st["best"]
+    if (g.zone_max, g.stars) > (b.get("zone", 0), b.get("stars", 0)):
+        st["best"] = {"zone": g.zone_max, "stars": g.stars}
     if g.over == "won":
         st["won"] = True
-        path = write_palette()      # before a word is printed: a closed pipe must not lose the prize
     save_state(st)
+
+
+def finish(g, st, tl):
+    """After a run, at the shell: the outcome, what was taken, the ending."""
+    path = None
+    if g.over == "won":
+        path = write_palette()       # before a word is printed: a closed pipe must not lose the prize
+    _remember(g, st)
     say()
-    say("%s lua -- %s" % (MARK, moon_line()))
+    say("%s lua -- %s" % (MARK, moon_line(g.day)))
+    if g.over == "dead":
+        say("  GAME OVER -- zone %d, * %d/8" % (g.zone_max, g.stars))
+        pt, en = tl.get("queda", ("", ""))
+        say("  %s" % fold(pt))
+        say("  %s" % fold(en))
     for tag in g.taken:
         pt, en = tl.get(tag, ("", ""))
         say("  * %s" % fold(pt))
         say("    %s" % fold(en))
-    if g.over == "hit":
-        pt, en = tl.get("queda", ("", ""))
-        say("  %s" % fold(pt))
-        say("  %s" % fold(en))
-    say("  distancia %d, best %d, * %d/8" % (int(g.dist), st["best"], len(g.got)))
+    say("  zone %d, * %d/8, best zone %d with %d" % (g.zone_max, g.stars, st["best"]["zone"], st["best"]["stars"]))
     if g.over == "won":
         pt, en = tl.get("fim", ("", ""))
         say()
@@ -368,73 +909,12 @@ def finish(g, st, tl):
     say()
 
 
-def play(st, tl):
-    import termios
-    import tty
-    cols, lines = shutil_size()
-    if cols < 60 or lines < 16:
-        say("%s lua: a terminal of 60x16 at least (this one is %dx%d)" % (MARK, cols, lines))
-        return 2
-    g = Game(cols, got=st["got"])
-    fd = sys.stdin.fileno()
-    old = termios.tcgetattr(fd)
-    out = sys.stdout
-    paused = False
-    try:
-        tty.setcbreak(fd)
-        out.write("\033[?1049h\033[?25l\033[H\033[2J")
-        out.flush()
-        frame_t = 1.0 / FPS
-        while not g.over:
-            t0 = time.monotonic()
-            key = None
-            if select.select([fd], [], [], frame_t)[0]:
-                data = os.read(fd, 16)
-                if data in (b"q", b"\x1b", b"\x03"):
-                    g.over = "quit"
-                    break
-                if data == b"p":
-                    paused = not paused
-                elif data in (b" ", b"\n", b"\r", b"\x1b[A", b"k", b"w"):
-                    key = "j"
-            if paused:
-                continue
-            g.step(key)
-            rows = g.frame(tl, st["best"])
-            out.write("\033[H" + "\r\n".join(r + "\033[K" for r in rows))
-            if paused:
-                out.write("\r\n  paused -- p goes on, q leaves")
-            out.flush()
-            rest = frame_t - (time.monotonic() - t0)
-            if rest > 0:
-                time.sleep(rest)
-        if g.over in ("hit", "won"):
-            time.sleep(0.6)
-    finally:
-        out.write("\033[?25h\033[?1049l")
-        out.flush()
-        termios.tcsetattr(fd, termios.TCSADRAIN, old)
-    if g.over == "quit":
-        st["best"] = max(st["best"], int(g.dist))
-        st["got"] = g.got
-        save_state(st)
-        say("%s lua -- distancia %d, * %d/8" % (MARK, int(g.dist), len(g.got)))
-        return 0
-    finish(g, st, tl)
-    return 0
+USAGE = """%s lua -- the forest, a bow, eight stars, a moon
 
-
-def shutil_size():
-    import shutil
-    s = shutil.get_terminal_size((80, 24))
-    return s.columns, s.lines
-
-
-USAGE = """%s lua -- the dark, a runner, a moon
-
-  spark lua                 run: Space (or Enter, Up) jumps, p pauses, q leaves
+  spark lua                 a d / arrows move, w / Up jumps, Space shoots,
+                            p pauses, q leaves
   spark lua --moon [DATE]   tonight's moon, or a date's (YYYY-MM-DD)
-  spark lua --reset         forget what was collected
+  spark lua --reset         forget the best run
 """ % MARK
 
 
@@ -461,8 +941,8 @@ def cmd_lua(args):
         seed = int(args[1]) if len(args) > 1 else 1
         tape = args[2] if len(args) > 2 else "auto"
         day = date.fromisoformat(args[3]) if len(args) > 3 else None
-        g = sim(seed, tape, day, st)
-        say("distance %d sparks %d over %s got %s" % (int(g.dist), len(g.taken), g.over, ",".join(str(n) for n in g.got)))
+        g = sim(seed, tape, day)
+        say(sim_line(g))
         finish(g, st, tl)
         return 0
     if not sys.stdin.isatty() or not sys.stdout.isatty():
