@@ -339,6 +339,15 @@ def row_theme(ctx):
                     "spark theme %s" % name)
     if not IS_MAC and not os.path.isfile(os.path.join(CONFIG_DIR, "console-colors")):
         return fail("%s -- theme.env current, but no console-colors for the VT" % name, "spark theme %s" % name)
+    if ctx.cfg.shell:
+        # micro shows the palette only while its own settings say colorscheme spark
+        try:
+            with open(os.path.join(ctx.home, ".config", "micro", "settings.json"), encoding="utf-8") as f:
+                scheme = json.load(f).get("colorscheme", "spark")
+        except (OSError, ValueError, AttributeError):
+            scheme = "spark"
+        if scheme != "spark":
+            return warn("%s -- theme.env current, but micro uses colorscheme %s" % (name, scheme), "spark theme %s" % name)
     return ok("%s -- theme.env current" % name)
 
 

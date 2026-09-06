@@ -296,6 +296,31 @@ def write_runtime(name):
         f.write(esc + "\n")
 
 
+MICRO_SETTINGS = os.path.join(HOME, ".config", "micro", "settings.json")
+
+
+def micro_colorscheme(path=MICRO_SETTINGS):
+    """micro's settings.json is micro's own (seeded once, rewritten by micro
+    on every `set`), but its colorscheme key is the theme's: a palette
+    lands in colorschemes/spark.micro and shows only while that key says
+    spark. Sets it back when micro changed it; returns the name it had,
+    None when it already said spark or the file is absent or not JSON."""
+    import json
+    try:
+        with open(path, encoding="utf-8") as f:
+            d = json.load(f)
+    except (OSError, ValueError):
+        return None
+    if not isinstance(d, dict) or d.get("colorscheme", "spark") == "spark":
+        return None
+    was = str(d.get("colorscheme"))
+    d["colorscheme"] = "spark"
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(d, f, indent=4)
+        f.write("\n")
+    return was
+
+
 def set_theme(name):
     """`spark theme NAME`: choose it in site.env, render the files that carry
     it (install.sh; micro and tmux with the shell layer on), write theme.env
@@ -318,10 +343,16 @@ def set_theme(name):
         say("spark theme: install.sh failed -- sh %s says why" % os.path.join(REPO, "install.sh"))
         return 1
     write_runtime(name)
+    if config.load().shell:
+        was = micro_colorscheme()
+        if was:
+            say("ok     micro        colorscheme spark (was %s); reopen micro" % was)
     rc, _ = run(["tmux", "list-sessions"])
     if rc == 0:
         run(["tmux", "source-file", os.path.join(HOME, ".tmux.conf")])
         say("ok     tmux         reloaded")
+    else:
+        say("       tmux         not running: the next tmux takes the palette")
     if IS_MAC:
         profile(config.load(), False)
     from . import check

@@ -321,7 +321,7 @@ rendered once as regular files and left to the app:
 | `~/.config/btop/btop.conf` | btop rewrites it on every exit |
 | `~/.config/micro/bindings.json` | micro rewrites it (through the link) when a plugin adds keys -- spark's own plugin never binds from inside for that reason; `Alt-s` is a tracked line here |
 | `~/.config/micro/plug/spark/` | linked file by file; micro loads it from there, `set spark false` switches it off |
-| `~/.config/micro/settings.json` | micro rewrites it on every option change; seeded once (`"colorscheme": "spark"`), then it is micro's -- never re-rendered, never backed up |
+| `~/.config/micro/settings.json` | micro rewrites it on every option change; seeded once (`"colorscheme": "spark"`), then it is micro's -- never re-rendered, never backed up. One key stays the theme's: `spark theme NAME` sets `colorscheme` back to `spark` when micro changed it (the `theme` row warns meanwhile), since the palette shows in micro only through that scheme |
 | `~/.gitconfig`, `~/.tmux.conf`, `~/.config/starship.toml`, `~/.config/micro/colorschemes/spark.micro` | carry your name / palette / choices |
 | `~/.config/spark/launchd/*.plist` | launchd needs absolute paths |
 

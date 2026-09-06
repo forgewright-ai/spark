@@ -96,6 +96,10 @@ The server keeps no prompt cache in RAM.
   is missing -- before, a console face such as `VGA` carried into a Mac's
   `site.env` made Terminal.app fall back to SF Mono 11 in silence. The
   default stays the Nerd Font at 13; one face and size for every profile.
+- `spark theme NAME` sets micro's `colorscheme` back to `spark` when
+  micro had changed it (a `set colorscheme gruvbox` inside micro made the
+  palette invisible there), and the `theme` check row warns while it
+  differs; it also says when tmux is not running to take the palette.
 - Something small runs in the dark. Those who look will find it.
 
 ## v1.6

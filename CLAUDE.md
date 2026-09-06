@@ -188,7 +188,9 @@ may change freely.
    micro's bindings and the shell templates (`.gitconfig`, `.tmux.conf`,
    btop, starship, micro's colorscheme and `settings.json`) are installed
    only with `SITE_SHELL=on`; micro's `settings.json` is seeded once and
-   never re-rendered (micro rewrites it). `spark shell off` hands the
+   never re-rendered (micro rewrites it) -- except its `colorscheme` key,
+   which `spark theme NAME` sets back to `spark` when micro changed it
+   (`theme.micro_colorscheme`; the `theme` row warns meanwhile). `spark shell off` hands the
    rendered look back the way it hands the rc files back
    (`site.restore_rendered`): each of `.tmux.conf`,
    `.config/starship.toml`, btop's conf and the two micro files is

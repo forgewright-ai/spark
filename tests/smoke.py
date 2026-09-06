@@ -1449,6 +1449,17 @@ def main():
         t.ok(sh.stdout == "#101010", "lib/env.sh theme_load reads your palette too", sh.stdout + sh.stderr)
         rc, out, _ = spark("mine")
         t.ok(rc == 2 and "is a palette -- spark theme mine" in out, "a bare palette name of yours is a slip, not a question", out)
+        # micro's colorscheme key is the theme's: set back to spark, the rest of the file kept
+        from spark import theme as _theme
+        msj = home + "/.config/micro/settings.json"
+        os.makedirs(os.path.dirname(msj), exist_ok=True)
+        with open(msj, "w") as f:
+            f.write('{"colorscheme": "gruvbox", "softwrap": true}\n')
+        was = _theme.micro_colorscheme(msj)
+        with open(msj) as f:
+            after = json.load(f)
+        t.ok(was == "gruvbox" and after == {"colorscheme": "spark", "softwrap": True} and _theme.micro_colorscheme(msj) is None,
+             "theme: micro's colorscheme is set back to spark, the other settings kept, and left alone once it says so", str(after))
 
         # the egg (lib/spark/lua.py): the forest, headless through --sim, then a pty
         rc, out, _ = spark("lua", "--sim", "1", "auto")
