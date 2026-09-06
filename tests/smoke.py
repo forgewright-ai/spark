@@ -1351,7 +1351,7 @@ def main():
         t.ok(open(home + "/.config/btop/btop.conf").read() == "# pre-spark btop\n",
              "spark shell off restores btop.conf from its .bak", out)
         t.ok(os.path.exists(home + "/.config/spark/theme.env"),
-             "spark shell off leaves theme.env alone (the theme is core)", out)
+             "spark shell off leaves theme.env alone (unchoosing the layer is not unchoosing the palette)", out)
         os.remove(home + "/.config/spark/theme.env")
         os.remove(home + "/.config/btop/btop.conf")
         rc, out, _ = spark("shell", "sideways", extra=off)
@@ -1407,6 +1407,11 @@ def main():
              "spark setup -h signs (contract 8)", out)
         rc, out, _ = spark(extra=off)
         t.ok(rc == 0 and "'s AI on" in out, "bare spark with no site.env, not a tty: the status (the offer is tty-only)", out)
+        for stale in ("theme.env", "console-colors"):   # earlier cases left theirs
+            try:
+                os.remove(home + "/.config/spark/" + stale)
+            except OSError:
+                pass
         rc, out, err = spark("setup", "--yes", "--no-serve", "--model", "none", extra=off)
         site_env = open(home + "/.config/spark/site.env").read()
         t.ok(rc == 0 and err == "", "spark setup --yes --no-serve --model none exits 0", out + err)
@@ -1415,6 +1420,9 @@ def main():
              "setup wrote SITE_NAME, SITE_USER, SITE_AI_MODEL=none, SITE_SHELL=off", site_env)
         t.ok("SITE_THEME=gruvbox-dark\n" in site_env and "theme [" not in out,
              "setup never asks the palette: gruvbox-dark is written unasked", site_env + out)
+        t.ok(not os.path.exists(home + "/.config/spark/theme.env")
+             and not os.path.exists(home + "/.config/spark/console-colors"),
+             "setup with the shell layer off applies no palette: the machine looks untouched", out)
         rc, out, _ = spark("setup", "--yes", "--no-serve", "--model", "none", "--theme", "nosuch", extra=off)
         t.ok(rc == 2 and "no palette named nosuch" in out and "none" in out,
              "setup --theme nosuch exits 2 naming the palettes", out)

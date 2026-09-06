@@ -8,6 +8,18 @@
   about tmux and starship colours is one a user who never turns the shell
   layer on has no way to answer. `--theme` and `SITE_THEME` still
   pre-answer it.
+- A first run leaves a stranger's machine looking exactly as it did. The
+  palette's runtime files were written by `spark setup` whatever
+  `SITE_SHELL` said, and the rc hook -- which is core -- cats
+  `console-colors` on a `TERM=linux` console, so a fresh install repainted
+  the VT at the next login. `SITE_THEME` is still recorded; the files, and
+  the macOS Terminal profile, now land with `spark shell on` or an
+  explicit `spark theme NAME`.
+- `spark font list` on Linux names the Nerd Font. The console takes `.psf`
+  faces from `/usr/share/consolefonts`; the JetBrainsMono Nerd Font that
+  `spark shell on` unzips into `~/.local/share/fonts` is a `.ttf` for a
+  terminal emulator and can never appear in that list. It is named under
+  the list now, with where to set it.
 - The setup table says it is not the whole list. Only rows proven on the
   line and under an open license are offered, which today is the five
   qwen3 rows, so the first run read as though spark served nothing else --

@@ -158,6 +158,9 @@ CONSOLEFONTS_DIR = "/usr/share/consolefonts"
 _FONT_FILE = re.compile(r"^[A-Za-z0-9]+-([A-Za-z]+?)(\d+(?:x\d+)?)\.psfu?(?:\.gz)?$")
 
 
+NERDFONT_DIR = os.path.join(HOME, ".local", "share", "fonts", "JetBrainsMonoNerdFont")
+
+
 def console_fonts():
     """{face: set of sizes} parsed from /usr/share/consolefonts file names
     (<codeset>-<Face><Size>.psf.gz -- the sizes there are HxW). {} when the
@@ -204,12 +207,18 @@ def font_list():
     fonts = console_fonts()
     if not fonts:
         say("%s font list -- nothing in %s (console-setup not installed?)" % (MARK, CONSOLEFONTS_DIR))
-        return 0
-    say("%s font list -- the console faces in %s, sizes as spark font takes them (WxH)" % (MARK, CONSOLEFONTS_DIR))
-    for face in sorted(fonts):
-        sizes = sorted({size_as_taken(x) for x in fonts[face]}, key=lambda s: tuple(int(p) for p in s.split("x")[::-1]))
-        say("  %-16s %s" % (face, " ".join(sizes)))
-    say("  spark font FACE SIZE sets one, e.g. spark font Terminus 16x32")
+    else:
+        say("%s font list -- the console faces in %s, sizes as spark font takes them (WxH)" % (MARK, CONSOLEFONTS_DIR))
+        for face in sorted(fonts):
+            sizes = sorted({size_as_taken(x) for x in fonts[face]}, key=lambda s: tuple(int(p) for p in s.split("x")[::-1]))
+            say("  %-16s %s" % (face, " ".join(sizes)))
+        say("  spark font FACE SIZE sets one, e.g. spark font Terminus 16x32")
+    # the Nerd Font `spark shell on` installs is not one of these: the console
+    # takes .psf faces, that one is a .ttf for a terminal emulator. Naming it
+    # here is the only place the two meet.
+    if os.path.isdir(NERDFONT_DIR):
+        say("  JetBrainsMono Nerd Font is installed in ~%s" % NERDFONT_DIR[len(HOME):])
+        say("  for your terminal emulator -- set it there; spark font is the console")
     return 0
 
 
@@ -1151,6 +1160,16 @@ def cmd_shell(args):
         set_keys(SITE_SHELL="on")
         rc = apply(SHELL_ROWS, stream=True)
         if rc == 0:
+            # the palette lands here, not at setup: turning the layer on is
+            # where a user asks for spark's look. bootstrap's theme row wrote
+            # theme.env; console-colors and the macOS profile are ours.
+            cfg = config.load()
+            if cfg.theme != "none" and not os.environ.get("SPARK_NO_APPLY"):
+                from . import theme
+                theme.write_runtime(cfg.theme)
+                say("ok     theme        %s -> ~/.config/spark/theme.env (+ console-colors)" % cfg.theme)
+                if IS_MAC:
+                    theme.profile(cfg, False)
             say("open a new shell (exec $SHELL)")
         return rc
     set_keys(SITE_SHELL="off")

@@ -139,7 +139,7 @@ grep -q '^SITE_SHELL=off$' "$HOME/.config/spark/site.env" && ok "shell off wrote
     && ok "shell off removed every rendered look file with no .bak (no husk)" \
     || bad "a spark-rendered look file survived shell off"
 [ "$(cat "$HOME/.config/btop/btop.conf")" = "# pre-spark btop" ] && ok "shell off restored btop.conf from its .bak" || bad "btop.conf not restored"
-[ -f "$HOME/.config/spark/theme.env" ] && ok "shell off left theme.env (the theme is core)" || bad "theme.env removed"
+[ -f "$HOME/.config/spark/theme.env" ] && ok "shell off left theme.env (the palette stays chosen)" || bad "theme.env removed"
 printf '%s\n' "$out" | grep -q '^ok     restore' && ok "shell off names what it restored or removed" || bad "no restore rows: $out"
 rm -f "$HOME/.config/spark/theme.env" "$HOME/.config/btop/btop.conf" "$HOME/.config/btop/btop.conf.bak"
 

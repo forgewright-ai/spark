@@ -91,11 +91,10 @@ in the SITE_AI_BUDGET percent (default 60) of RAM plus GPU memory and
 stays usable on this engine build (the speed cap under Models). That table
 is the proven few; one line under it counts the rest, and `spark model
 list` shows every row. It never asks about the palette, the hostname, the
-shell layer or headless: those have verbs of their own. The palette is
-`gruvbox-dark` unless `--theme`,
-`SITE_THEME` in the environment or a `site.env` that already holds the key
-says otherwise -- spark ships wearing its look, and `spark theme NAME` or
-`spark theme none` changes it at any time. Then, in order:
+shell layer or headless: those have verbs of their own. `SITE_THEME` is
+recorded as `gruvbox-dark` unless `--theme`, the environment or an existing
+`site.env` says otherwise, but nothing is painted with it until you run
+`spark shell on` or `spark theme NAME`. Then, in order:
 
 1. writes `~/.config/spark/site.env` (created from `site.env.example`,
    0600, with `SITE_SHELL=off`: the AI only, your shell stays yours);
@@ -107,9 +106,10 @@ says otherwise -- spark ships wearing its look, and `spark theme NAME` or
    curl's progress bar, the api-token, the widgets, the one rc line, the
    units (`spark-serve` / `spark.serve` and the FORGE's, plus a 5-minute
    check timer);
-4. writes the palette's runtime files (`theme.env`, `console-colors`)
-   unless it is `none` -- the theme is core, shell layer or not; on macOS
-   the Terminal.app profile is imported too;
+4. writes nothing about colours. `SITE_THEME` is set, but the palette's
+   runtime files (`theme.env`, `console-colors`) and, on macOS, the
+   Terminal.app profile land only with `spark shell on` or an explicit
+   `spark theme NAME`: a first run leaves the machine looking as it did;
 5. brings the server up (the unit, or `spark serve`) and waits for it;
 6. asks `? how big is this dir` for you, shows the answer as the widget
    shows it, and prints the tok/s that question measured;
@@ -366,11 +366,16 @@ With the layer off, `spark bar` and the set forms of
 folds the shell block into one line, and the check rows that stand on it
 (`pinned terminfo quiet bar git backup swap editor encryption pending
 battery disk`) read `na`; the `shell` row says what `on` adds. `spark
-theme` and `spark font` work either way -- the palette and the console
-font are the machine's face, shell layer or not (the Nerd Font download
-alone stays with the layer; `spark font list` shows the console faces
-this box has) -- and `spark quiet start` works either way: it is spark's
-own noise, not the shell's.
+theme` and `spark font` work either way -- and `spark quiet start` too: it
+is spark's own noise, not the shell's. Two fonts are in play on Linux and
+they are not the same one. `spark font` sets the **console** face, a
+`.psf` from `/usr/share/consolefonts`, and `spark font list` shows those.
+The **Nerd Font** comes with the shell layer, a `.ttf` unzipped into
+`~/.local/share/fonts` for your terminal emulator to use; no console
+command can select it, so set it in the emulator's own settings.
+`spark font list` names it at the end so the two are not confused. On
+macOS there is one font, the Terminal.app profile's, and `spark font`
+sets it.
 
 Most linked files are symlinks into the repo, so an edit anywhere is a
 `git status` line. Some apps rewrite their own config on exit; those are

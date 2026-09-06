@@ -67,7 +67,6 @@ ok     download     Qwen_Qwen3-8B-Q4_K_M.gguf (4.7 GB) -- curl's progress bar fo
 ok     model        qwen3-8b: Qwen_Qwen3-8B-Q4_K_M.gguf
 ...                 (token, dirs, configs, tools, hooks, units)
 ok     rc           ~/.bashrc sources the hook
-ok     theme        gruvbox-dark -> ~/.config/spark/theme.env (+ console-colors)
 ok     server       loading the model ... ready
 
 ? how big is this dir

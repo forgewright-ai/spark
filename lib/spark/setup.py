@@ -353,9 +353,12 @@ def _run(opts):
         say("                    (without libgomp1, llama-server will not start)")
     if rc != 0:
         return rc
-    if theme_name != "none" and not os.environ.get("SPARK_NO_APPLY"):
-        # the palette's runtime files (theme is core: this happens with the
-        # shell layer off too); macOS also gets the Terminal.app profile
+    if theme_name != "none" and cfg.shell and not os.environ.get("SPARK_NO_APPLY"):
+        # only with the shell layer on. SITE_THEME is written either way, but
+        # a first run must leave a stranger's machine looking exactly as it
+        # did: console-colors repaints the VT through the core rc hook, and
+        # the macOS profile repaints Terminal. `spark shell on` and `spark
+        # theme NAME` are where a user asks for the palette.
         from . import theme
         theme.write_runtime(theme_name)
         say("ok     theme        %s -> ~/.config/spark/theme.env (+ console-colors)" % theme_name)
