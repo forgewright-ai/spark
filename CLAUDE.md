@@ -365,8 +365,9 @@ may change freely.
     do not raise these again:` and the notes, newest first, 1200 chars at
     most; a note whose first quoted span is no longer in the text has
     retired (dropped there and then), and every note leaves after
-    `SPARK_HISTORY` days. `spark ledger [NAME]`, `spark ledger clear
-    [NAME]`. The micro plugin depends on nothing else.
+    `SPARK_HISTORY` days. `--ledger [clear] --name NAME` lists or drops them
+    (the pane's `ledger` and `ledger clear` at the `spark>` prompt); no
+    shell verb. The micro plugin depends on nothing else.
 
 ## The grammar
 

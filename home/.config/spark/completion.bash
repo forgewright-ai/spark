@@ -6,7 +6,7 @@
 # the static words still complete, silently. Binds no key of its own --
 # readline's TAB does the work.
 # Not completed on purpose (plumbing, gone, or aliases of ver):
-#   line talk version --version
+#   line talk ledger version --version
 
 _spark_repo() {
     # ~/.local/bin/spark is a symlink to <repo>/bin/spark; print <repo>
@@ -47,7 +47,7 @@ _spark_complete() {
     if [ "$COMP_CWORD" -eq 1 ]; then
         words="chat do serve stop check update shell headless client setup
                ver last status brain history stats bench tune model ember
-               forge soul remember forget memory ledger quiet theme font bar off
+               forge soul remember forget memory quiet theme font bar off
                on user explain edit help"
         COMPREPLY=($(compgen -W "$words" -- "$cur"))
         return 0

@@ -33,6 +33,8 @@ printf '%s\n' "$*" >> "$STUB_LOG"
 cat > "$STUB_LOG.stdin"
 case " $* " in
     *" --decline "*) exit 0 ;;
+    *" --ledger clear "*) printf 'dropped 2 notes for note.md\n'; exit 0 ;;
+    *" --ledger "*) printf 'note.md: 2 notes, newest first\nSTUB-LEDGER\n'; exit 0 ;;
     *" ? "*)      printf '1. "hello" is plain -- say more\n2. "nothing here" drifts\n\n    print("fixed")\n\nASKED-%s\nSTUB-ASK\n' "$(printf '%s' "$*" | sed 's/.* ? //; s/ --thread.*//; s/ /-/g')"; exit 0 ;;
     *" --at "*)   printf 'STUB-DONE'; exit 0 ;;
     *" keep it "*) cat "$STUB_LOG.stdin"; exit 0 ;;
@@ -487,6 +489,33 @@ def main():
         ok(m.expect("dark"), "the word lua at the prompt points to the shell", debug_log())
         time.sleep(0.4)
         ok(not os.path.exists(log), "and runs nothing")
+        m.send("\x11")
+        m.read(1.0)
+        m.close()
+
+        # R. ledger at the prompt opens the file's declined notes in a pane;
+        # ledger clear drops them and says so on the infobar
+        if os.path.exists(log):
+            os.unlink(log)
+        with open(note, "w") as f:
+            f.write("hello world\n")
+        m = Micro(argv, env, work)
+        ok(m.expect("hello world"), "micro draws the file for the ledger")
+        m.mark()
+        m.send("\x1bs")
+        m.expect("spark>")
+        m.send("ledger\r")
+        ok(m.expect("STUB-LEDGER"), "ledger at the prompt: the notes in a pane", debug_log())
+        got = logged()
+        ok("edit --type" in got and "--name note.md" in got and got.rstrip().endswith("--ledger"),
+           "the pane asked spark edit --ledger with the file's name, never its path", got)
+        m.send("q")                      # the pane goes
+        time.sleep(0.5)
+        m.mark()
+        m.send("\x1bs")
+        m.expect("spark>")
+        m.send("ledger clear\r")
+        ok(m.expect("dropped"), "ledger clear: spark's line on the infobar", debug_log())
         m.send("\x11")
         m.read(1.0)
         m.close()

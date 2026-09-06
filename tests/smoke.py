@@ -704,11 +704,13 @@ def main():
         t.ok(rc == 0 and len(lfiles) == 1 and oct(os.stat(lfiles[0]).st_mode & 0o777) == "0o600"
              and b"drags" not in open(lfiles[0], "rb").read(),
              "the ledger is one sealed 0600 file under the account", str(lfiles))
+        rc, out, _ = spark("edit", "--ledger")
+        t.ok(rc == 0 and out.splitlines()[0] == "2 notes, newest first" and "t.md" in out and "the ending drags" in out
+             and out.index("drags") < out.index("reads flat"), "edit --ledger lists the notes, newest first, by file", out)
+        rc, out, _ = spark("edit", "--ledger", "--name", "other.md")
+        t.ok(rc == 0 and out.startswith("other.md: no declined note"), "edit --ledger --name: another file has none", out)
         rc, out, _ = spark("ledger")
-        t.ok(rc == 0 and out.splitlines()[0].startswith("spark ledger: 2 notes") and "t.md" in out and "the ending drags" in out
-             and out.index("drags") < out.index("reads flat"), "spark ledger lists the notes, newest first, by file", out)
-        rc, out, _ = spark("ledger", "other.md")
-        t.ok(rc == 0 and "no declined note" in out, "spark ledger NAME: another file has none", out)
+        t.ok(rc == 2 and out.startswith("spark ledger -- gone: in micro"), "spark ledger is gone: one line naming the prompt, exit 2", out)
         rc, out, _ = spark("edit", "--name", "t.md", "?", stdin="Some prose.\n")
         umsg = STATE["bodies"][-1]["messages"][-1]["content"]
         t.ok(rc == 0 and "\nDeclined before -- do not raise these again:\n- 3. the ending drags\n- 2. \"Some prose.\" reads flat -- cut it\nFile t.md:\n" in umsg,
@@ -720,21 +722,22 @@ def main():
         umsg = STATE["bodies"][-1]["messages"][-1]["content"]
         t.ok(rc == 0 and "reads flat" not in umsg and "- 3. the ending drags" in umsg,
              "edit ?: a note whose quote left the text retires; one without a quote rides on", repr(umsg[:200]))
-        rc, out, _ = spark("ledger", "t.md")
-        t.ok(rc == 0 and "1 note" in out and "reads flat" not in out, "the retired note left the file", out)
+        rc, out, _ = spark("edit", "--ledger", "--name", "t.md")
+        t.ok(rc == 0 and out.startswith("t.md: 1 note") and "reads flat" not in out, "the retired note left the file", out)
         for i in range(35):
             spark("edit", "--decline", "--name", "cap.md", stdin="note %02d\n" % i)
-        rc, out, _ = spark("ledger", "cap.md")
-        t.ok(rc == 0 and out.splitlines()[0].startswith("spark ledger cap.md: 30 notes") and "note 04" not in out and "note 34" in out,
+        rc, out, _ = spark("edit", "--ledger", "--name", "cap.md")
+        t.ok(rc == 0 and out.splitlines()[0].startswith("cap.md: 30 notes") and "note 04" not in out and "note 34" in out,
              "a file keeps its newest 30 notes", out.splitlines()[0])
-        rc, out, _ = spark("ledger", "clear", "cap.md")
-        rc2, out2, _ = spark("ledger")
-        t.ok(rc == 0 and "dropped 30 notes" in out and rc2 == 0 and "1 note" in out2, "spark ledger clear NAME drops one file's", out + out2)
-        rc, out, _ = spark("ledger", "clear")
-        rc2, out2, _ = spark("ledger")
-        t.ok(rc == 0 and "dropped 1 note" in out and "no declined note" in out2, "spark ledger clear drops them all", out + out2)
+        rc, out, _ = spark("edit", "--ledger", "clear", "--name", "cap.md")
+        rc2, out2, _ = spark("edit", "--ledger")
+        t.ok(rc == 0 and "dropped 30 notes for cap.md" in out and rc2 == 0 and out2.startswith("1 note"),
+             "edit --ledger clear --name drops one file's", out + out2)
+        rc, out, _ = spark("edit", "--ledger", "clear")
+        t.ok(rc == 0 and out.startswith("dropped ") and spark("edit", "--ledger")[1].startswith("no declined note"),
+             "edit --ledger clear drops them all", out)
         rc, out, _ = spark("ledger", "-h")
-        t.ok(rc == 0 and out.splitlines()[0] == "spark ledger -- the notes you declined in the editor, per file name", "spark ledger -h signs", out)
+        t.ok(rc == 2 and out.startswith("spark ledger -- gone"), "spark ledger -h says where it went", out)
         rc, out, _ = spark("edit", "--type", "python", "--about", "a poem", "tighten", stdin="x = 1\n")
         body = STATE["bodies"][-1]
         t.ok(body["messages"][-1]["content"].startswith("tighten\n\nThe author says: a poem\nText (python):\n"), "edit: --about rides above the label", repr(body["messages"][-1]["content"][:80]))

@@ -27,6 +27,9 @@ or Esc then s, quickly. What you type there decides what happens:
                          then a handful of quoted notes. Every quote is
                          checked against your text; one it does not hold
                          is followed by [not in the text]
+    ledger               the notes declined for this file (d in a pane),
+                         newest first, in a pane of their own
+    ledger clear         drop them: the next ? may raise them again
     ?? words             go on: one more question in the newest pane's
                          thread; the answer lands under the first
 
@@ -41,7 +44,7 @@ In a spark pane (read-only), single keys act:
     d                    decline the note under the cursor: it leaves the
                          pane and spark's ledger keeps it under the file's
                          name, so the next ? about this file is told not to
-                         raise it again (spark ledger lists them)
+                         raise it again (ledger at this prompt lists them)
 
 The same thing from command mode (Ctrl-e): `spark shorter`, `spark ? why`,
 `spark ?? and then`.

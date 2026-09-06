@@ -168,7 +168,7 @@ edit`), the file's name and its text -- 6 kB around the cursor for a
 completion, 12 kB for a rewrite, 16 kB for a question -- never its path,
 and no thread is kept unless the editor asks for one (`--thread`), which
 is then sealed like a chat thread; a note you decline is kept, sealed, by
-the file's name (`spark ledger`). No telemetry, no analytics, no
+the file's name (`ledger` at micro's `spark>` prompt). No telemetry, no analytics, no
 crash reports, no account. The one-liner fetches two things: `get` from
 raw.githubusercontent.com and the clone from github.com; bootstrap fetches
 the engine (one pinned llama.cpp release, sha256) from github.com and the

@@ -21,16 +21,6 @@ PER_NAME = 30         # notes per file name; the oldest goes
 TOTAL_MAX = 200       # notes in all
 SEND_MAX = 1200       # characters a ? carries, newest first
 
-LEDGER_USAGE = """%s ledger -- the notes you declined in the editor, per file name
-
-  spark ledger                  every declined note, newest first, its file
-  spark ledger NAME             one file's (the name, never a path)
-  spark ledger clear [NAME]     drop them all, or one file's
-
-  micro's pane: d on a note declines it (spark edit --decline --name NAME,
-  the note on stdin). A note retires by itself once the words it quoted
-  have left the file, or after SPARK_HISTORY days.
-""" % MARK
 
 
 class Refused(Exception):
@@ -186,27 +176,21 @@ def _age(ts):
     return "today" if days < 1 else ("%dd" % days)
 
 
-def cmd_ledger(args):
-    if args and args[0] in ("-h", "--help", "help"):
-        say(LEDGER_USAGE.rstrip())
-        return 0
-    if args[:1] == ["clear"]:
-        if len(args) > 2:
-            say(LEDGER_USAGE.rstrip())
-            return 2
-        n = clear(args[1] if len(args) == 2 else None)
-        say("%s ledger: dropped %d note%s" % (MARK, n, "" if n == 1 else "s"))
-        return 0
-    if len(args) > 1:
-        say(LEDGER_USAGE.rstrip())
-        return 2
-    name = args[0] if args else None
+def listing(name=None):
+    """The declined notes as lines for the editor's pane: one file's, or
+    every file's; newest first."""
     es = _fresh(entries(name), config.load())
+    head = (name + ": ") if name else ""
     if not es:
-        say("%s ledger%s%s" % (MARK, " " + name + ": " if name else ": ", "no declined note (micro's pane: d on a note)"))
-        return 0
-    say("%s ledger%s%d note%s, newest first" % (MARK, " " + name + ": " if name else ": ", len(es), "" if len(es) == 1 else "s"))
+        return [head + "no declined note (the pane: d on a note)"]
+    out = [head + "%d note%s, newest first" % (len(es), "" if len(es) == 1 else "s")]
     width = max(len(e["name"]) for e in es)
     for e in reversed(es):
-        say("  %-5s %-*s %s" % (_age(e["ts"]), width, e["name"], e["note"][:60] + ("..." if len(e["note"]) > 60 else "")))
-    return 0
+        out.append("  %-5s %-*s %s" % (_age(e["ts"]), width, e["name"], e["note"][:60] + ("..." if len(e["note"]) > 60 else "")))
+    return out
+
+
+def cmd_ledger(args):
+    # moved into the editor in v1.7: one line naming where it lives, no forwarding
+    say("%s ledger -- gone: in micro, at the spark> prompt: ledger, ledger clear" % MARK)
+    return 2

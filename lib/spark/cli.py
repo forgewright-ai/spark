@@ -49,6 +49,8 @@ EDIT_USAGE = """spark edit -- the editor's protocol (contract 10): the text on s
                               [A-Za-z0-9_-]); the same ID again continues it
   --decline --name NAME       keep the note on stdin as declined for NAME: a
                               later ? about NAME is told not to raise it
+  --ledger [clear] --name NAME  the notes declined for NAME (every file's
+                              without a name), newest first; clear drops them
 
   raw streamed text: no mark, no wrap, a code fence around the answer is
   removed; exit 1 when nothing came in or no brain answers. In micro,
@@ -274,7 +276,8 @@ def cmd_explain(words):
 # ------------------------------------------------------------------- edit
 def _edit_args(args):
     """(options, words) -- ValueError names a flag that lacks its value."""
-    opts = {"type": "", "name": "", "about": "", "at": None, "part": False, "sel": None, "thread": "", "decline": False}
+    opts = {"type": "", "name": "", "about": "", "at": None, "part": False, "sel": None, "thread": "", "decline": False,
+            "ledger": None}
     words, rest = [], list(args)
     while rest:
         a = rest.pop(0)
@@ -282,6 +285,10 @@ def _edit_args(args):
             opts["part"] = True
         elif a == "--decline":
             opts["decline"] = True
+        elif a == "--ledger":
+            opts["ledger"] = "clear" if rest[:1] == ["clear"] else "list"
+            if opts["ledger"] == "clear":
+                rest.pop(0)
         elif a == "--sel":
             if len(rest) < 2:
                 raise ValueError(a)
@@ -367,6 +374,16 @@ def cmd_edit(args):
         except ValueError:
             say("%s edit -- --at N is a byte offset" % MARK)
             return 2
+    if opts["ledger"]:
+        # the pane's ledger: what was declined for this file, or drop it; no text needed
+        name = opts["name"] or None
+        if opts["ledger"] == "clear":
+            n = ledger.clear(name)
+            say("dropped %d note%s%s" % (n, "" if n == 1 else "s", (" for " + name) if name else ""))
+        else:
+            for line in ledger.listing(name):
+                say(line)
+        return 0
     if at is None and not words and not opts["decline"]:
         say(EDIT_USAGE.rstrip())
         return 2

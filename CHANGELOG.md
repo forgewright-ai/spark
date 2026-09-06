@@ -100,6 +100,10 @@ The server keeps no prompt cache in RAM.
   micro had changed it (a `set colorscheme gruvbox` inside micro made the
   palette invisible there), and the `theme` check row warns while it
   differs; it also says when tmux is not running to take the palette.
+- The ledger is the editor's: `ledger` and `ledger clear` at micro's
+  `spark>` prompt list or drop the notes declined for the file, through
+  `spark edit --ledger [clear] --name NAME`; the shell verb `spark ledger`
+  is gone (one line says where it went).
 - Something small runs in the dark. Those who look will find it.
 
 ## v1.6

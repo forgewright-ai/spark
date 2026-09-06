@@ -1,4 +1,4 @@
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 
 -- spark.lua -- spark in micro (the first smart tool). One key, Alt-s, opens
 -- the `spark> ` prompt; Enter alone completes at the cursor, words rewrite
@@ -209,8 +209,8 @@ local function on_out(chunk, args)
     local state = args[1]
     if chunk == nil or chunk == "" then return end
     state.got = true
-    if state.kind == "rewrite" or state.kind == "decline" then
-        state.acc = state.acc .. chunk      -- spliced only once it is whole
+    if state.kind == "rewrite" or state.kind == "decline" or state.kind == "notice" then
+        state.acc = state.acc .. chunk      -- spliced, or shown, only once it is whole
         return
     end
     state.buf:Insert(state.loc, chunk)
@@ -234,6 +234,12 @@ local function on_exit(_, args)
     pending = false
     current = nil
     local ib = micro.InfoBar()
+    if state.kind == "notice" then
+        -- one line on the infobar: what spark said, or why it refused
+        local why = trim(state.err ~= "" and state.err or state.acc)
+        notice("spark: " .. (why ~= "" and why or "done"))
+        return
+    end
     if state.kind == "decline" then
         -- silence and exit 0 is success; a refusal comes on stdout, a die on stderr
         local why = trim(state.err ~= "" and state.err or state.acc)
@@ -409,6 +415,22 @@ local function ask(bp, words, follow)
     extra[#extra + 1] = "--thread"
     extra[#extra + 1] = entry.thread
     spawn(bp, argv(bp, extra), text, state)
+end
+
+-- The ledger: what was declined for this file, in a pane; `clear` drops
+-- it. Both are spark edit --ledger [clear] --name FILE, nothing on stdin.
+local function ledger_pane(bp, clear)
+    local path = bp.Buf.Path
+    if path == nil or path == "" then
+        micro.InfoBar():Message("spark: an unnamed buffer keeps no ledger -- save it first")
+        return
+    end
+    if clear then
+        spawn(bp, argv(bp, {"--ledger", "clear"}), "", {kind = "notice", bp = bp, acc = "", err = ""})
+        return
+    end
+    local entry = open_pane(bp, "", nil)
+    spawn(bp, argv(bp, {"--ledger"}), "", {kind = "ask", bp = bp, buf = entry.buf, pbp = entry.pbp, loc = buffer.Loc(0, 0), acc = "", err = ""})
 end
 
 -- ----------------------------------------------------------- the pane --
@@ -645,6 +667,8 @@ local function run(bp, line)
         local words = words_of(line:sub(2))
         table.insert(words, 1, "?")
         ask(bp, words, false)
+    elseif line == "ledger" or line == "ledger clear" then
+        ledger_pane(bp, line == "ledger clear")
     elseif line == "lua" then
         -- the one word that is not an instruction: the shell has it
         micro.InfoBar():Message("spark lua -- this one runs in the dark; ask your shell")
