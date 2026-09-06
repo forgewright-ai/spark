@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.8
+
+- The page loads no font from Google: the local stack (the Nerd Font
+  where spark installed it, else the system's monospace) draws it, and a
+  browser no longer waits on fonts.googleapis.com to render it.
+
 ## v1.7
 
 The editor grows up; the shell learns your palettes; a client stays a client.
