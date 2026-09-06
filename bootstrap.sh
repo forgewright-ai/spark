@@ -836,7 +836,8 @@ elif [ "$SITE_THEME" = none ]; then
     skip theme "SITE_THEME=none: your terminal keeps its colours"
 else
     theme_load "$REPO"
-    want=$(for k in $THEME_KEYS; do eval "printf '%s=%s\n' $k \"\$$k\""; done)
+    want=$(for k in $THEME_KEYS; do eval "printf '%s=%s\n' $k \"\$$k\""; done
+           [ -z "${THEME_LOGO:-}" ] || printf 'THEME_LOGO=%s\n' "$THEME_LOGO")
     # console-colors (the Linux VT palette) has one writer: spark theme /
     # spark setup (lib/spark/theme.py write_runtime); this row only notes it
     cc=""; [ -f "$SPARK_CONFIG_DIR/console-colors" ] && cc=" + console-colors"

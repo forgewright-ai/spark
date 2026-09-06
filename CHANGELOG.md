@@ -84,6 +84,12 @@ The server keeps no prompt cache in RAM.
   completed by TAB and kept by the `theme` check row, exactly like the six
   in the repository; yours wins on a name clash. `config.theme_path` and
   `lib/env.sh theme_load` are the twins.
+- A palette may name `THEME_LOGO`: six colour names, one per banner row,
+  and `spark ver` (the login greeting) draws the logo in them. The six
+  built-in palettes leave the logo its own.
+- `spark theme NAME` on macOS switches the open Terminal.app windows to
+  the new profile as well as new ones; before, the cursor and the colours
+  of the window you typed in stayed the old theme's.
 - Something small runs in the dark. Those who look will find it.
 
 ## v1.6

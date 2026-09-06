@@ -142,7 +142,7 @@ def profile(cfg, dry):
     live_keys = rc == 0 and "keyMapBoundKeys" in out.split('"%s" =' % name, 1)[-1][:4000]
     stale_dup = rc == 0 and ('"%s 1"' % name in out)
     if have == want and imported and is_default and live_keys and not stale_dup:
-        say("ok     profile      Terminal.app profile %s is the default" % name)
+        say("ok     profile      Terminal.app profile %s is the default%s" % (name, _switch_windows(name)))
         return 0
     if dry:
         say("would  profile      write %s, import it, make it Terminal.app's default" % path)
@@ -157,8 +157,17 @@ def profile(cfg, dry):
     if not _install_profile(name, profile_dict(name, pal, cfg.font_face, cfg.font_size), path):
         say("skip   profile      wrote %s but could not write Terminal.app's preferences" % path)
         return 1
-    say("ok     profile      %s written, imported and set as default (new windows use it)" % name)
+    say("ok     profile      %s written, imported and set as default%s" % (name, _switch_windows(name)))
     return 0
+
+
+def _switch_windows(name):
+    """Every open Terminal.app window and tab takes the profile now (a
+    profile set as default reaches only new windows). Returns the note for
+    the row: switched, or what to do by hand."""
+    script = 'tell application "Terminal" to set current settings of every tab of every window to settings set "%s"' % name
+    rc, _ = run(["osascript", "-e", script], timeout=8)
+    return "; open windows switched" if rc == 0 else " (new windows use it; open ones: Terminal > Shell > Show Inspector)"
 
 
 def _terminal_prefs(path):
@@ -254,7 +263,8 @@ def write_runtime(name):
                 f.write("\033]R\n")
         return
     pal = config.theme_palette(name, REPO)
-    order = ["THEME_BG", "THEME_FG", "THEME_ACCENT", "THEME_MUTED", "THEME_BTOP"] + ["THEME_ANSI_%d" % i for i in range(16)]
+    order = (["THEME_BG", "THEME_FG", "THEME_ACCENT", "THEME_MUTED", "THEME_BTOP"] + ["THEME_ANSI_%d" % i for i in range(16)]
+             + ["THEME_LOGO"])          # optional: present only when the palette names it
     with open(theme_env, "w", encoding="utf-8") as f:       # bootstrap's order, so it agrees
         f.write("".join("%s=%s\n" % (k, pal[k]) for k in order if k in pal))
     esc = "".join("\033]P%x%s" % (i, pal["THEME_ANSI_%d" % i].lstrip("#").lower()) for i in range(16))
@@ -292,7 +302,7 @@ def set_theme(name):
         profile(config.load(), False)
     from . import check
     check.refresh()
-    say("open a new shell for the prompt colours (exec $SHELL)")
+    say("open a new shell for the prompt colours (exec $SHELL); a running micro: reopen it")
     return 0
 
 

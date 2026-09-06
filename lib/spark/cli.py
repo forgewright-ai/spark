@@ -691,6 +691,36 @@ def _llama_version():
         return "?"
 
 
+LOGO_COLOURS = {"black": 0, "red": 1, "green": 2, "yellow": 3, "blue": 4, "magenta": 5, "cyan": 6, "white": 7}
+
+
+def recolour(names, logo):
+    """The banner's rows in the colours THEME_LOGO names -- one name per
+    row, `bright-` allowed, the first row bold -- a row without a name
+    keeps its own. The banner file holds the text \\033, not the byte."""
+    lines = logo.split("\n")
+    for i, name in enumerate(names[: len(lines)]):
+        n = LOGO_COLOURS.get(name.replace("bright-", ""))
+        if n is None:
+            continue
+        code = (90 if name.startswith("bright-") else 30) + n
+        sgr = "\\033[%s%dm" % ("1;" if i == 0 else "", code)
+        lines[i] = re.sub(r"^\\033\[[0-9;]*m", lambda m: sgr, lines[i], count=1)
+    return "\n".join(lines)
+
+
+def logo_names():
+    """THEME_LOGO from theme.env (the palette in force), or None."""
+    try:
+        with open(os.path.join(CONFIG_DIR, "theme.env"), encoding="utf-8") as f:
+            for line in f:
+                if line.startswith("THEME_LOGO="):
+                    return line[len("THEME_LOGO="):].strip().strip('"').split()
+    except OSError:
+        pass
+    return None
+
+
 def cmd_ver(args):
     """logo, version, credits"""
     if _help(args, VER_USAGE):
@@ -704,6 +734,9 @@ def cmd_ver(args):
             logo = ""
     say()
     if logo:
+        names = logo_names()
+        if names:
+            logo = recolour(names, logo)
         logo = logo.replace("\\033", "\033") if sys.stdout.isatty() else re.sub(r"\\033\[[0-9;]*m", "", logo)
         say(logo.rstrip("\n"))
         say()

@@ -221,7 +221,7 @@ def main():
         env = {k: v for k, v in os.environ.items() if not k.startswith(("SPARK_", "XDG_", "SITE_", "GIT_"))}
         env.update({"HOME": home, "XDG_CONFIG_HOME": home + "/.config", "XDG_STATE_HOME": home + "/.local/state",
                     "XDG_DATA_HOME": home + "/.local/share", "SPARK_BASE_URL": url, "SPARK_API_KEY": TOKEN,
-                    "SPARK_TIMEOUT": "5", "SPARK_NO_REFRESH": "1", "SHELL": "/bin/bash", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "TERM": "xterm-256color"})
+                    "SPARK_TIMEOUT": "5", "SPARK_NO_REFRESH": "1", "SPARK_LUA_MUTE": "1", "SHELL": "/bin/bash", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "TERM": "xterm-256color"})
         os.makedirs(home + "/.config/spark")
 
         def spark(*args, stdin="", extra=None, exe=SPARK, cwd=None):
@@ -1462,8 +1462,22 @@ def main():
         rc, out, err = spark("theme", "canarinho", extra={"SPARK_NO_APPLY": "1"})
         with open(home + "/.config/spark/theme.env") as f:
             theme_env = f.read()
-        t.ok(rc == 0 and "THEME_ACCENT=#ffdf00" in theme_env and theme_env.count("THEME_") == 21,
-             "spark theme canarinho: the prize applies like any palette", out + err)
+        t.ok(rc == 0 and "THEME_ACCENT=#ffdf00" in theme_env and theme_env.count("THEME_") == 22
+             and "THEME_LOGO=bright-green" in theme_env,
+             "spark theme canarinho: the prize applies like any palette, its logo colours with it", out + err)
+        from spark import cli as _cli
+        with open(os.path.join(REPO, "home", ".config", "spark", "banner")) as f:
+            banner = f.read()
+        painted = _cli.recolour("bright-green bright-green bright-yellow bright-yellow bright-blue bright-blue".split(), banner)
+        rows = painted.split("\n")
+        t.ok(rows[0].startswith("\\033[1;92m") and rows[1].startswith("\\033[92m") and rows[2].startswith("\\033[93m")
+             and rows[4].startswith("\\033[94m") and painted.count("\\033[0m") == banner.count("\\033[0m"),
+             "spark ver: the banner takes THEME_LOGO's colours, row by row, the first bold", rows[0][:20])
+        sh = subprocess.run(["sh", "-c", '. "$1/lib/env.sh"; SITE_THEME=canarinho; theme_load "$1" && printf %s "$THEME_LOGO"', "x", REPO],
+                            capture_output=True, text=True, env=env, timeout=30)
+        t.ok(sh.stdout.startswith("bright-green bright-green"), "lib/env.sh theme_load carries THEME_LOGO too", sh.stdout + sh.stderr)
+        import wave as _wave
+        import io as _io
         # a death: running and hopping, never firing
         rc, out, _ = spark("lua", "--sim", "1", "dwww")
         t.ok(rc == 0 and "over dead" in out.splitlines()[0] and "GAME OVER" in out and "....." in out and "Sloth" in out,
@@ -1496,6 +1510,10 @@ def main():
             _g.step()
         t.ok(not _g.world.bats[0]["alive"] and _g.chased == 1 and _g.sweep_cool > 0,
              "lua: v calls the vulture; a bat in the canopy ahead is chased away, then he rests")
+        with _wave.open(_io.BytesIO(_lua.synth(_lua.SOUNDS["won"])), "rb") as wv:
+            t.ok(wv.getnchannels() == 1 and wv.getsampwidth() == 1 and wv.getframerate() == 22050
+                 and abs(wv.getnframes() - sum(ms for _, ms in _lua.SOUNDS["won"]) * 22.05) < 10,
+                 "lua: the success fanfare is an 8-bit mono WAV of the notes' length")
         art = _lua.letters("GAME OVER")
         t.ok(len(art) == 5 and len(set(len(r) for r in art)) == 1 and len(art[0]) < 60, "lua: GAME OVER is five even rows under 60 columns", str(art))
         import fcntl
@@ -1533,7 +1551,7 @@ def main():
         _, status = os.waitpid(pid, 0)
         t.ok(os.WEXITSTATUS(status) == 0 and b"\x1b[?1049h" not in data and b"\x1b[?25l" in data and b"\x1b[?25h" in data,
              "lua on a pty: no alternate screen, the cursor hidden and shown again", repr(data[-300:]))
-        t.ok(b"HP" in data and b"@" in data and b"zone 1/8 the river" in data and b"\x1b[9A" in data and b"v calls the vulture" in data,
+        t.ok(b"HP" in data and b"@" in data and b"zone 1/8 the river" in data and b"\x1b[9A" in data and b"v the vulture" in data,
              "lua on a pty: the status, the hero, the zone and the hint in a nine-line band redrawn in place", repr(data[:600]))
         t.ok(sent == 2 and len(data) > mark_len + 400, "lua on a pty: the arrow keys run the hero (the forest scrolls)", str(len(data) - mark_len))
         t.ok(b"\x1b[38;5" not in data and b"spark lua -- left in zone" in data, "lua on a pty: eight colours only, and q leaves with one line", repr(data[-200:]))

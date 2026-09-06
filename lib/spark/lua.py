@@ -26,20 +26,25 @@
 # (no network) and sits in the status line. The forest is seeded by the
 # day. stdlib only.
 
+import io
 import json
 import math
 import os
 import random
 import select
+import shutil
+import subprocess
 import sys
 import textwrap
 import time
 import unicodedata
+import wave
 from datetime import date
 
-from . import ASCII, CONFIG_DIR, MARK, REPO, STATE_DIR, say
+from . import ASCII, CONFIG_DIR, IS_MAC, MARK, REPO, STATE_DIR, say
 
 STATE_FILE = os.path.join(STATE_DIR, "lua")
+SOUND_DIR = os.path.join(STATE_DIR, "cache", "lua")
 TALE_FILES = (os.path.join(CONFIG_DIR, "tale"), os.path.join(REPO, "home", ".config", "spark", "tale"))
 PALETTE_NAME = "canarinho"
 PALETTE = (
@@ -49,6 +54,7 @@ PALETTE = (
     "THEME_ANSI_4=#2e6fd6", "THEME_ANSI_5=#a86fcf", "THEME_ANSI_6=#3aa6a6", "THEME_ANSI_7=#d8dccf",
     "THEME_ANSI_8=#3d5a80", "THEME_ANSI_9=#f07070", "THEME_ANSI_10=#33cc66", "THEME_ANSI_11=#ffe94d",
     "THEME_ANSI_12=#5b93ff", "THEME_ANSI_13=#c79bff", "THEME_ANSI_14=#5fd0d0", "THEME_ANSI_15=#ffffff",
+    "THEME_LOGO=bright-green bright-green bright-yellow bright-yellow bright-blue bright-blue",
 )
 CARD = (
     "Lua -- PUC-Rio, Tecgraf, 1993. In Portuguese: moon.",
@@ -184,7 +190,12 @@ def write_palette():
     d = os.path.join(CONFIG_DIR, "themes")
     os.makedirs(d, exist_ok=True)
     path = os.path.join(d, PALETTE_NAME + ".env")
-    if not os.path.exists(path):
+    try:
+        with open(path, encoding="utf-8") as f:
+            have = f.read()
+    except OSError:
+        have = ""
+    if "THEME_LOGO=" not in have:           # absent, or written before the logo line existed
         with open(path, "w", encoding="utf-8") as f:
             f.write("\n".join(PALETTE) + "\n")
     return path
@@ -410,6 +421,7 @@ class Game:
         self.zone_max = 1
         self.hurts = []                      # (tick, cause): the sim's post-mortem
         self.vulture = float(self.hero.x + 12)
+        self.events = []                     # sound names raised this tick: star hit jump vulture dead won
         self.sweep = None                    # the vulture's sweep: (ticks left, direction, x)
         self.sweep_cool = 0                  # ticks until he answers again
         self.chased = 0                      # bats chased away this run
@@ -433,6 +445,7 @@ class Game:
             self.want_shot = True
         elif k == "v" and self.sweep is None and self.sweep_cool == 0:
             self.sweep, self.sweep_cool = (22, h.facing, h.x - 3 * h.facing), 70   # from just behind the hero, ahead
+            self.events.append("vulture")
 
     # -- one tick --------------------------------------------------------
     def step(self):
@@ -440,6 +453,8 @@ class Game:
         if self.over:
             return
         if self.ending is not None:
+            if self.ending == 0:
+                self.events.append("won")
             self.ending += 1
             if self.ending >= 40:
                 self.over = "won"
@@ -454,6 +469,7 @@ class Game:
         if self.want_jump and h.ground:
             h.vy = JUMP_V
             h.ground = False
+            self.events.append("jump")
         self.want_jump = False
         if self.want_shot and self.cool == 0 and len(self.arrows) < 3:
             self.arrows.append([h.x + h.facing, h.row, h.facing, 26])
@@ -576,6 +592,7 @@ class Game:
                 self.stars += 1
                 self.taken.append(str(s["n"]))
                 self.sparkle, self.fresh = 12, (40, str(s["n"]))
+                self.events.append("star")
         # the palm
         if h.col >= w.palm_x - 2 and self.stars >= 8:
             self.ending = 0
@@ -598,6 +615,7 @@ class Game:
         self.cam += (target - self.cam) * 0.25
         if h.hp <= 0 and self.dying is None:
             self.dying = 8
+            self.events.append("dead")
 
     def _hurt(self, n, knock_dir, cause):
         h = self.hero
@@ -606,6 +624,7 @@ class Game:
         h.hp -= n
         h.immune = 15
         self.hurts.append((self.tick, cause))
+        self.events.append("hit")
         if knock_dir:
             h.knock, h.knock_d = 4, knock_dir
 
@@ -618,6 +637,32 @@ class Game:
         return self.hero.col >= self.world.palm_x - 2
 
     # -- the picture -----------------------------------------------------
+    def _weather(self, put, rows):
+        """The zone's decoration: streaks in the wind, drops in the rain, a
+        flicker in the thunder, a bolt and a flash in the lightning, a few
+        stars over the strength. Returns True on a flash tick."""
+        z, t, cols = self.zone, self.tick, self.cols
+        if z == 4:                                   # the wind: streaks blowing left
+            for k in range(cols // 9):
+                put((AIR2 if k % 2 else AIR1) + 1, (k * 9 - t * 2) % cols, "-" if k % 3 else "~", (CYAN, "d"))
+        elif z == 5:                                 # the rain: drops falling
+            for k in range(cols // 5):
+                c = (k * 5 + (k * 7919) % 5) % cols
+                put((AIR2 if (t + k) % 2 else AIR1) + 1, c, "'" if (t + k) % 2 else ".", (BLUE, ""))
+        elif z == 6:                                 # the thunder: the canopy flickers
+            return t % 90 < 2
+        elif z == 7:                                 # the lightning: a bolt every few seconds
+            if t % 70 < 3:
+                bx = (self.seed * 31 + (t // 70) * 47) % max(1, cols - 4) + 2
+                for row, ch in ((AIR2, "\\"), (AIR1, "/"), (LANE, "\\")):
+                    put(row + 1, bx + (0 if row != AIR1 else 1), ch, (YELLOW, "b"))
+                return t % 70 == 0
+        elif z == 8:                                 # the strength: the first stars out
+            for k in range(cols // 10):
+                if (t // 6 + k) % 3 == 0:
+                    put(AIR2 + 1, (k * 10 + 3) % cols, ".", (YELLOW, "d"))
+        return False
+
     def frame(self, tl):
         """Nine rows of (char, attr): the status, the six world rows, the
         memory in English (two rows)."""
@@ -648,13 +693,15 @@ class Game:
         ml = moon_line(self.day)
         if cols >= 38 + len(zn) + 12 + len(ml) + 2:
             put(0, cols - len(ml) - 1, ml, (CYAN, ""))
+        # the weather of the zone, under everything else
+        flash = self._weather(put, rows)
         # the forest, column by column
         for sx in range(cols):
             wx = cam + sx
             if wx < 0 or wx >= WORLD_W:
                 continue
             if w.canopy[wx]:
-                put(CANOPY + 1, sx, G("canopy"), (GREEN, ""))
+                put(CANOPY + 1, sx, G("canopy"), (WHITE, "b") if flash else (GREEN, ""))
             kind = w.floor[wx]
             if kind == WATER:
                 put(GROUND + 1, sx, G("water"), (BLUE, "b"))
@@ -728,7 +775,7 @@ class Game:
             centre(AIR2, "-- %s --" % fold(ZONE_NAMES[self.callout[1] - 1][0]), (WHITE, "b"))
         if self.first_key is None and self.ending is None:
             centre(AIR2, "the forest of O Urubu-Rei e a Lua", (WHITE, "b"))
-            centre(AIR1, "d runs   w jumps   Space fires   v calls the vulture   q leaves", (CYAN, ""))
+            centre(AIR1, "d runs   w jumps   Space fires   v the vulture   m mute   q leaves", (CYAN, ""))
         # the memory, in English; the newest piece bold for a moment
         taken = set(self.taken)
         fresh = tl.get(self.fresh[1], ("", ""))[0] if self.fresh else None
@@ -809,6 +856,7 @@ def sim(seed, tape, day=None):
             if k in "adswfv":
                 g.key(k)
         g.step()
+        g.events.clear()
         if g.over:
             break
     g.over = g.over or "end"
@@ -862,6 +910,84 @@ def ending_rows(g, tl, kind):
             if ch != " " and left + j < cols:
                 rows[1 + i][left + j] = (ch, attr)
     return rows
+
+
+# ------------------------------------------------------------ the sound --
+RATE = 22050
+SOUNDS = {                       # (Hz, ms) per note, 0 Hz a rest: square waves, 8-bit
+    "star": ((880, 60), (1319, 90)),
+    "hit": ((196, 60), (147, 110)),
+    "jump": ((523, 35), (784, 45)),
+    "vulture": ((659, 45), (880, 45), (1175, 90)),
+    "dead": ((523, 140), (440, 140), (349, 140), (262, 420)),
+    "won": ((523, 110), (659, 110), (784, 110), (1047, 160), (0, 40), (1047, 110), (1319, 380)),
+}
+
+
+def synth(notes):
+    """A WAV of square waves, 8-bit mono, each note decaying: the 8-bit
+    sound of the thing. stdlib only."""
+    frames = bytearray()
+    for hz, ms in notes:
+        n = int(RATE * ms / 1000)
+        period = RATE / hz if hz else 0
+        for i in range(n):
+            if not hz:
+                frames.append(128)
+                continue
+            on = (i % period) < period / 2
+            amp = 36 * (1.0 - 0.6 * i / n)
+            frames.append(128 + int(amp if on else -amp))
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wv:
+        wv.setnchannels(1)
+        wv.setsampwidth(1)
+        wv.setframerate(RATE)
+        wv.writeframes(bytes(frames))
+    return buf.getvalue()
+
+
+class Sound:
+    """The sounds, played through the OS's own player -- afplay on macOS,
+    aplay or paplay on Linux -- from WAVs synthesized once into the state
+    cache; without a player, the two endings ring the terminal bell. m
+    mutes; SPARK_LUA_MUTE=1 starts muted."""
+
+    def __init__(self, out):
+        self.out = out
+        self.mute = os.environ.get("SPARK_LUA_MUTE") == "1"
+        self.player = None
+        for cmd in (("afplay",) if IS_MAC else ("aplay", "-q"), ("paplay",)):
+            if shutil.which(cmd[0]):
+                self.player = list(cmd)
+                break
+        self.paths = {}
+        self.procs = []
+
+    def _path(self, name):
+        if name not in self.paths:
+            os.makedirs(SOUND_DIR, mode=0o700, exist_ok=True)
+            path = os.path.join(SOUND_DIR, name + ".wav")
+            if not os.path.exists(path):
+                with open(path, "wb") as f:
+                    f.write(synth(SOUNDS[name]))
+            self.paths[name] = path
+        return self.paths[name]
+
+    def play(self, name):
+        if self.mute or name not in SOUNDS:
+            return
+        self.procs = [p for p in self.procs if p.poll() is None]
+        if self.player is None or len(self.procs) > 3:
+            if name in ("dead", "won"):
+                self.out.write("\a")
+                self.out.flush()
+            return
+        try:
+            self.procs.append(subprocess.Popen(self.player + [self._path(name)], stdin=subprocess.DEVNULL,
+                                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL))
+        except OSError:
+            self.player = None
 
 
 # ------------------------------------------------------------- the band --
@@ -930,14 +1056,13 @@ def read_keys(fd):
             keys.append(arrows[data[i + 2:i + 3]])
             i += 3
             continue
-        keys.append({b"a": "a", b"d": "d", b"s": "s", b"w": "w", b" ": "f", b"f": "f", b"v": "v", b"p": "p",
-                     b"q": "q", b"\x03": "q"}.get(b.lower()))
+        keys.append({b"a": "a", b"d": "d", b"s": "s", b"w": "w", b" ": "f", b"f": "f", b"v": "v", b"m": "m",
+                     b"p": "p", b"q": "q", b"\x03": "q"}.get(b.lower()))
         i += 1
     return [k for k in keys if k]
 
 
 def play(st, tl):
-    import shutil
     import termios
     import tty
     size = shutil.get_terminal_size((80, 24))
@@ -948,6 +1073,7 @@ def play(st, tl):
     fd = sys.stdin.fileno()
     old = termios.tcgetattr(fd)
     band = Band(sys.stdout)
+    sound = Sound(sys.stdout)
     paused = False
     try:
         tty.setcbreak(fd)
@@ -961,12 +1087,17 @@ def play(st, tl):
                         g.over = "quit"
                     elif k == "p":
                         paused = not paused
+                    elif k == "m":
+                        sound.mute = not sound.mute
                     elif not paused:
                         g.key(k)
             if g.over:
                 break
             if not paused:
                 g.step()
+                for name in g.events:
+                    sound.play(name)
+                g.events.clear()
             cols = shutil.get_terminal_size((80, 24)).columns
             if cols != g.cols:
                 g.cols = max(60, min(cols, 200))
@@ -1043,7 +1174,8 @@ USAGE = """%s lua -- the forest, a bow, eight stars, a moon
 
   spark lua                 d / Right runs, a / Left runs back, s / Down stops,
                             w / Up jumps, Space fires an arrow, v calls the
-                            king vulture down on the bats, p pauses, q leaves
+                            king vulture down on the bats, m mutes, p pauses,
+                            q leaves (SPARK_LUA_MUTE=1 starts muted)
   spark lua --moon [DATE]   tonight's moon, or a date's (YYYY-MM-DD)
   spark lua --reset         forget the best run
 """ % MARK
@@ -1068,6 +1200,8 @@ def cmd_lua(args):
         say("%s lua: the night starts over" % MARK)
         return 0
     st = load_state()
+    if os.path.exists(os.path.join(CONFIG_DIR, "themes", PALETTE_NAME + ".env")):
+        write_palette()                      # a prize written before the logo line existed gets it
     if args and args[0] == "--sim":
         seed = int(args[1]) if len(args) > 1 else 1
         tape = args[2] if len(args) > 2 else "auto"

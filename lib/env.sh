@@ -92,4 +92,6 @@ theme_load() {
         if [ -z "$v" ]; then printf 'spark: theme %s lacks %s\n' "$SITE_THEME" "$k" >&2; return 1; fi
         export "${k?}"
     done
+    # THEME_LOGO is optional: the banner's row colours (spark ver), else its own
+    [ -z "${THEME_LOGO:-}" ] || export THEME_LOGO
 }

@@ -222,6 +222,10 @@ may change freely.
    `THEME_KEYS` and `config.theme_palette`: the two validators agree);
    `~/.config/spark/themes/<name>.env` is yours, the same keys, and wins
    on a name clash (`config.theme_path`, `lib/env.sh theme_load`).
+   `THEME_LOGO` is optional in either: six colour names, one per banner
+   row (`bright-` allowed), and `spark ver` draws the logo in them
+   (`cli.recolour`); unset, the logo keeps its own. It rides in
+   `theme.env` with the rest when present (both twins).
    Precedence: environment > file > default.
 4. `spark line --cwd D --shell S` reads the prompt buffer on stdin and prints
    line 1 = `cmd<TAB>command` | `danger<TAB>command` | `answer` | `error`,
@@ -535,7 +539,9 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   `theme.builtin` map matches `themes/*.env` value for value -- a gap in
   either goes loud. A palette of the user's own is one file,
   `~/.config/spark/themes/<name>.env`, the same 21 keys, and lives nowhere
-  else: not on the page, not in `CREDITS.md`, not in that map.
+  else: not on the page, not in `CREDITS.md`, not in that map. On macOS
+  `spark theme NAME` also switches every open Terminal.app window to the
+  profile (`theme._switch_windows`, osascript), not only new ones.
 
 ## Verifying a claim
 
