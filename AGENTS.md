@@ -67,8 +67,8 @@ home paths naming a user, with no skip path for those.
 - Change the banner (`home/.config/spark/banner`): it is spark's own
   artwork.
 - Add a model row without its size and sha256 from Hugging Face's file
-  metadata, and, for the curated list, the line proof (`spark line`
-  answers valid JSON for it).
+  metadata and its license, or mark one `_TESTED="line"` without the
+  line proof (`spark line` answers valid JSON for it).
 - Call `git` on `spark line`'s path: the widgets depend on nothing but
   the line contract, and it must never block.
 - Write non-ASCII into a doc: the pre-commit hook refuses it, because

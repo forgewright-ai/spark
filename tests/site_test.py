@@ -83,8 +83,9 @@ def main():
         items = sum(1 for l in lines if re.match(r"^([-*]|\d+\.) ", l))
         check(page.count("<li>") >= items, "%s: %d list items -> %d <li>" % (slug, items, page.count("<li>")))
     check("<pre>SPARK CHEATSHEET" in pages["cheatsheet"], "cheatsheet: the text, verbatim")
-    curated = sum(1 for l in read(os.path.join(ROOT, "models.env")).split("\n") if re.match(r'^MODEL_[A-Z0-9_]+="', l))
-    check(pages["models"].count("<tr>") >= curated + 1, "models: every curated row is on the page")
+    rows = sum(1 for l in read(os.path.join(ROOT, "models.env")).split("\n")
+               if re.match(r'^MODEL_[A-Z0-9_]+="', l) and not re.match(r'^MODEL_[A-Z0-9_]+_(LICENSE|NOTE|TESTED)=', l))
+    check(pages["models"].count("<tr>") == rows + 1, "models: every row of models.env is on the page (%d)" % rows)
     check("banner.svg" in pages[""] and 'id="ol"' in pages[""], "index: the banner and the one-liner")
     return finish()
 

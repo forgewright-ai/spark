@@ -20,7 +20,7 @@ Try it at the prompt:
 Nothing runs until you press Enter again. A command that deletes comes back
 marked `!` -- one mark, every OS, every terminal.
 
-The page: https://spark.forgewright.ai -- the docs, the model lists.
+The page: https://spark.forgewright.ai -- the docs, the model list.
 
 ## Quickstart
 
@@ -127,10 +127,11 @@ What comes next: `ROADMAP.md`.
 - **Yours.** spark ships with a default soul; `spark soul edit` writes your
   own. `spark remember` adds a fact it keeps. Both live under
   `~/.config/spark/`, 0600, read by the model and never written by it.
-  `spark ember NAME` adds a second brain -- a bigger, conversational
-  model; spark stays small at the prompt. `spark ember list` shows the
-  ones with a purpose. Every model is verified on download and by `spark
-  model verify`; add your own with `spark model add URL`.
+  `spark ember NAME` adds a second, bigger model for conversations;
+  spark stays small at the prompt. `spark model list` is the one table:
+  26 models, each with its license, the tested ones marked. Every model
+  is verified on download and by `spark model verify`; add your own with
+  `spark model add URL`.
 - **`spark check`.** Every promise this machine makes, one row each; exit 0
   when all are kept. `./bootstrap.sh --dry-run` says what a rebuild would
   change and never asks for sudo.
@@ -192,7 +193,7 @@ Every version below, and its license, is in `CREDITS.md`.
 | llama.cpp | `bootstrap.sh` (both OSes) | version + sha256 |
 | starship, JetBrainsMono Nerd Font | `bootstrap.sh` (Linux) | version + sha256 |
 | the same | `Brewfile` (macOS) | Homebrew -- no pinning worth trusting |
-| models | `models.env` (curated), `embers.env`, `community.env` | file size + sha256; `spark model list` / `spark ember list` |
+| models | `models.env` | file size + sha256; `spark model list` |
 
 ## License
 

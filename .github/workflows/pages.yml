@@ -13,8 +13,6 @@ on:
       - '*.md'
       - 'CHEATSHEET.txt'
       - 'models.env'
-      - 'embers.env'
-      - 'community.env'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
 permissions:

@@ -38,13 +38,11 @@ either one forward and converges the machine.
 
 ## Three ways to contribute without writing code
 
-1. **A model row.** One row per pull request, in the right list:
-   - Curated (`models.env`): an open license, size and sha256 from
-     Hugging Face's file metadata, and the line proof (`spark line`
-     answers it with valid JSON).
-   - Ember (`embers.env`): the same, plus a one-line purpose.
-   - Community (`community.env`): any license, named, plus an optional
-     note.
+1. **A model row.** One row per pull request, in `models.env`: the
+   five fields (size and sha256 from Hugging Face's file metadata), its
+   `_LICENSE`, an optional `_NOTE`; `_TESTED="line"` only with the line
+   proof (`spark line` answers it with valid JSON). A proof for a row
+   that is already there is a pull request too.
 2. **A CREDITS correction.** A wrong version, a missing license, a name
    that changed -- `CREDITS.md` is a pull request away from being right.
 3. **A doc fix.** A stale count, a broken cross-reference, a sentence
@@ -76,5 +74,5 @@ one for a bug; anything else is a blank issue.
 
 ## Roadmap
 
-`ROADMAP.md` lists what comes next, the token wave first; an idea that
-is not there is an issue away.
+`ROADMAP.md` lists what comes next, the editor first; an idea that is
+not there is an issue away.

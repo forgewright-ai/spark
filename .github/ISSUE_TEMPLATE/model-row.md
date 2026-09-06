@@ -1,23 +1,22 @@
 ---
 name: Model row
-about: Propose a row for models.env, embers.env, or community.env
+about: Propose a row for models.env
 title: "model: NAME"
 labels: model
 ---
 
-List (pick one): curated / ember / community
+File URL on huggingface.co (a `.../resolve/main/<file>.gguf`, Q4_K_M):
 
-File URL on huggingface.co:
+Size (bytes) and sha256 -- `x-linked-size` and `x-linked-etag` on the
+redirect `curl -sI '<url>?download=true'` answers with:
 
-Size (bytes) and sha256, from the file's metadata on huggingface.co:
+License name and URL (required; Apache-2.0 and MIT are the ones `auto`
+may pick):
 
-License name and URL:
+Note (optional, one line -- what this model is for, or a warning):
 
-Purpose (ember only, one line -- what this model is for):
-
-Note (community only, optional):
-
-Line proof (curated only -- the output of piping a question through
-`spark line` with this model loaded, showing valid JSON on line 1):
+Line proof (optional; the row is marked tested only with it -- the
+output of piping a question through `spark line` with this model
+loaded, showing valid JSON on line 1):
 
 One row per issue / pull request, please.

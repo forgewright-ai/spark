@@ -79,8 +79,7 @@ bootstrap.sh    POSIX sh, both OSes. --dry-run --list-packages --list-tools --li
 install.sh      POSIX sh, both OSes. Links home/ + <os>/home/ into $HOME; renders templates/
 lib/env.sh      the KEY=value reader for the two scripts (config.py is the python twin)
 Brewfile        macOS packages (the Linux list is in bootstrap.sh)
-site.env.example, models.env, embers.env,        KEY=value data
-  community.env, themes/*.env
+site.env.example, models.env, themes/*.env       KEY=value data
 bin/spark, bin/explain -> spark                  the one command
 lib/spark/      __init__ config wire engine serve session persona cli check
                 verify (sha256, cached: spark model verify, check's models row) bar theme site
@@ -125,7 +124,7 @@ assets/         banner.svg -- the banner as rectangles, for the README and the p
                 banner-svg.py makes it from home/.config/spark/banner; icon-svg.py
                 makes the favicon, the app icons and the social card the same way
 www/            the page, spark.forgewright.ai: build.py (stdlib) renders the docs
-                (INSTALL, CHEATSHEET, the three lists, CHANGELOG, ROADMAP,
+                (INSTALL, CHEATSHEET, the model list, CHANGELOG, ROADMAP,
                 CONTRIBUTING, CREDITS) into www/dist/ with template.html; index.html
                 is the front: the banner, the one-liner, two demos, no prose
 CREDITS.md      every third-party project spark downloads or installs,
@@ -207,12 +206,13 @@ may change freely.
    SPARK_FORGE SPARK_FORGE_HOST SPARK_FORGE_PORT SPARK_FORGE_TOKEN_FILE`
    (`SPARK_PERSONA_EXTRA` is still read, as the soul's fallback, in this
    version only; the `soul` row warns while it is set);
-   `models.env` (curated), `embers.env`, `community.env` and
-   `~/.config/spark/models.env` (yours) -- `MODEL_<NAME>="<file> <url>
-   <bytes> <sha256> <ram_gb>"`, plus `EMBER_<NAME>_PURPOSE` (required in
-   embers.env) and `MODEL_<NAME>_LICENSE`/`MODEL_<NAME>_NOTE` (LICENSE
-   required in community.env and yours; NOTE optional). A name in two
-   files is refused, naming both;
+   `models.env` and `~/.config/spark/models.env` (yours) --
+   `MODEL_<NAME>="<file> <url> <bytes> <sha256> <ram_gb>"`, plus
+   `MODEL_<NAME>_LICENSE="<name> <url>"` (required, every row),
+   `MODEL_<NAME>_TESTED="line"` (present only on a row proven on the
+   line: with an open license -- `config.OPEN_LICENSES`, Apache-2.0 or
+   MIT -- it is a row `auto` may pick) and `MODEL_<NAME>_NOTE` (one line,
+   optional). A name in both files is refused, naming both;
    `themes/<name>.env` -- `THEME_BG THEME_FG THEME_ACCENT THEME_MUTED
    THEME_BTOP THEME_ANSI_0..15` (the same 21 keys in `lib/env.sh`
    `THEME_KEYS` and `config.theme_palette`: the two validators agree).
@@ -446,20 +446,21 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   forge) read `na`;
   `--selftest`'s fourth pass asserts that with the peer row ok. The peer
   row is where a client's health lives.
-- **A model.** Three lists, by what it is:
-  - Curated (`models.env`, the only source `auto` reads): an open
-    license, proven on the line -- size and sha256 from the file's LFS
-    metadata, then watch it answer `spark line` with valid JSON.
-  - An ember (`embers.env`, `spark ember list`): an open license, plus
-    `EMBER_<NAME>_PURPOSE` (one line) and `MODEL_<NAME>_LICENSE`.
-  - Community (`community.env`, untested, at your own risk): any license,
-    named in `MODEL_<NAME>_LICENSE`; `MODEL_<NAME>_NOTE` is optional.
-  A name already in another list (including
-  `~/.config/spark/models.env`, yours) is refused, naming both files
+- **A model.** One list, `models.env`: a row (`MODEL_<NAME>`, the
+  five fields), its `_LICENSE` (always), a `_NOTE` when one line helps,
+  and `_TESTED="line"` only once the row has answered `spark line` with
+  valid JSON -- `auto` reads only tested rows under an open license
+  (`config.auto_rows`, `bootstrap.sh model_rows`); a row under another
+  license is by name and asks before the download (`site._license_ok`,
+  `config.is_open`). Size and sha256 come from the file's Hugging Face
+  metadata: `x-linked-size` and `x-linked-etag` on the redirect
+  `.../resolve/main/<file>?download=true` answers with (the CDN it
+  points at knows neither). A name already in the other file
+  (`~/.config/spark/models.env`, yours) is refused, naming both
   (`config.model_tables`, `bootstrap.sh model_rows_all`). `spark model add
-  URL` writes your row for you: huggingface.co is auto-verified from its
-  LFS headers, any other host needs `--sha256`; `--license "NAME URL"` is
-  always required there. `spark model verify` (and the `models` check
+  URL` writes your row for you: huggingface.co is auto-verified from
+  that redirect, any other host needs `--sha256`; `--license "NAME URL"`
+  is always required there. `spark model verify` (and the `models` check
   row, cached) re-hashes every downloaded file (`lib/spark/verify.py`).
 - **A palette.** Two files, nothing else hand-listed: `themes/<name>.env`
   with the full 21-key `THEME_*` set (contract 3; the header comment names

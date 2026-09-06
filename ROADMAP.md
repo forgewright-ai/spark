@@ -1,100 +1,82 @@
 # Roadmap
 
-What comes after v1.5, in the order it is likely to happen. Nothing here
+What comes after v1.6, in the order it is likely to happen. Nothing here
 is a promise; a row in `CHANGELOG.md` is. A better idea is an issue away.
 
 ## The editor, next
 
-v1.5 put spark in micro through one verb, `spark edit`. What the first
-weeks of use decide: anchor verification -- every span a `?` answer
-quotes checked against the buffer, the unverifiable ones marked, and a
-key that jumps to the quote (a misquote is the small model's commonest
-fabrication); a per-file ledger in memory so a suggestion the author
-declined retires instead of returning; a whole-file context around a
-selection for `?`; threads in the pane (`??`); a key that applies a code
-block from the pane; Escape and `q` closing the pane; the audition -- a
-handful of fixtures (a poem, a chapter, a README, a commit message,
-Portuguese prose, Go, Python, shell) with mechanical lints (quotes
-present, no fences, five notes at most, unchanged when impossible) run
-against a live brain, so a change to a brief is judged blind, not by
-feel. Then the other editors: vim, helix, VS Code -- each one client of
-`spark edit`, nothing new in spark.
+- Anchor verification: every span a `?` answer quotes is checked against
+  the buffer; the unverifiable ones marked; a key jumps to the quote.
+- A per-file ledger in memory: a declined suggestion retires.
+- Whole-file context around a selection for `?`; threads in the pane
+  (`??`); a key that applies a code block; Escape and `q` close the pane.
+- The audition: fixtures (a poem, a chapter, a README, a commit message,
+  Portuguese prose, Go, Python, shell) with mechanical lints, run against
+  a live brain, so a brief is judged blind.
+- Then vim, helix, VS Code: each one client of `spark edit`.
+
+## Line proofs for the new rows
+
+v1.6 lists 26 models, 5 tested. Each untested row wants its line proof
+(`spark line` answers valid JSON) before `auto` may pick it; a proof is a
+pull request setting `MODEL_<NAME>_TESTED=line`.
 
 ## spark token: status for the keys that remain
 
-v1.4 made user tokens personal (`spark user`: mint, login, rotate --
-shown once, never stored server-side), which absorbed the rotation half
-of the old `spark token` idea. What remains is status: bare `spark
-token` naming which keys this machine holds (the api-token, the admin
-token, the login) and whether the brain accepts each -- status only,
-never a value -- with the right remedy per stale key. The landing rule
-applies: the help line, the verb, a check row, the docs.
+Bare `spark token` names which keys this machine holds (api-token, admin
+token, login) and whether the brain accepts each -- status only, never a
+value, with the remedy per stale key.
 
 ## OS-user accounts on one box
 
-v1.4's users are FORGE accounts: one OS login, many named people, each
-with a sealed store. The second layer is real OS users on the box, each
-running their own spark against one shared engine: a package of the
-port story (two servers cannot bind one :8080), a shared model cache
-with per-user config, and a system unit serving all of them. Deferred
-on purpose until the account layer has been lived with.
+Real OS users, each running their own spark against one shared engine:
+the port story, a shared model cache with per-user config, a system unit
+serving all of them. After the account layer has been lived with.
 
 ## Chaos: rehearse the failures
 
-Every failure spark met on the way to v1.0 was met by accident -- a model
-that did not fit, a server on the CPU because a group landed after the
-unit, two processes racing for one port, a download cut half way, a unit
-that never warmed, a client with no route to the brain, a thinking model
-answering with no JSON. The next wave turns that list into a rehearsal:
-`spark chaos` (or `spark check --chaos`) breaks the machine one known
-way at a time and proves that the right check row goes red and that the
-remedy it names heals it. Hermetic first (the stub servers in `tests/`
-learn to be slow, to hang, to answer 503 forever, to cut a stream), then
-once, live, on a real box. Not part of a stranger's `spark check`.
+`spark chaos` (or `spark check --chaos`) breaks the machine one known way
+at a time and proves the right row goes red and its remedy heals it.
+Hermetic first (the stub servers learn to be slow, to hang, to 503, to
+cut a stream), then once on a real box. Not part of a stranger's check.
 
-The faults, each with the row that must catch it: the server killed
-mid-reply (`serve`; the unit brings it back, the line answers again
-within 30 s); a truncated model file (`models`; `spark model verify`
-names it); a full disk (the download refuses cleanly, no `.part` left);
-the GPU taken away (`gpu`; the line still answers on the CPU); the LAN
-cut on a client (`peer`; `??` and chat fail fast with the hint, never a
-20 s hang); two `spark serve` or two `spark update` at once (the lock
-wins, the other says so); a clone three tags behind (`git`; `spark
-update` moves it, `spark check` green after); a hostile line answer --
-not JSON, empty, 40 kB (the widget runs nothing, keeps the prompt).
+- the server killed mid-reply -- `serve`; the unit brings it back
+- a truncated model file -- `models`; `spark model verify` names it
+- a full disk -- the download refuses cleanly, no `.part` left
+- the GPU taken away -- `gpu`; the line still answers on the CPU
+- the LAN cut on a client -- `peer`; `??` and chat fail fast
+- two `spark serve` or two `spark update` at once -- the lock wins
+- a clone three tags behind -- `git`; `spark update` moves it
+- a hostile line answer (not JSON, empty, 40 kB) -- the widget runs
+  nothing, keeps the prompt
 
 ## Line-bench: a quality number per model and OS
 
-A fixed set of about forty questions per OS with a checker each (the
-kind, a head word, a pattern the command must match or must not), run
-through the real `spark line` path: `spark bench --lines`, one pass rate
-and one median latency per model, kept beside the speed baseline. The
-curated table then chooses on quality and speed, not size alone.
+About forty questions per OS with a checker each, through the real
+`spark line` path: `spark bench --lines`, one pass rate and one median
+latency per model, kept beside the speed baseline. The table then
+chooses on quality and speed, not size alone.
 
 ## Per-OS exemplars in the line
 
-The misses so far are macOS knowledge: `free` where `vm_stat` was meant,
-a `top` field that does not exist. A short block of per-OS examples in
-the line's prefix is the cheapest gain and the first rung of teaching a
-small model with its own machine's answers.
+The misses so far are macOS knowledge (`free` for `vm_stat`). A short
+block of per-OS examples in the line's prefix is the cheapest gain.
 
 ## More distros, more machines
 
-Debian-family only today (`apt`). Fedora and Arch need a package table
-and a CI job each; Linux arm64 already has an engine pin. A `.deb` and a
-Homebrew tap wait until the clone-and-tag path has been lived with.
+Debian-family only today. Fedora and Arch need a package table and a CI
+job each; Linux arm64 already has an engine pin. A `.deb` and a Homebrew
+tap wait until the clone-and-tag path has been lived with.
 
 ## The FORGE from anywhere
 
-The page and the API stop at the LAN today, on purpose: LAN http is the
-trust model. An overlay network -- Tailscale, or any WireGuard mesh --
-extends that boundary to your own devices wherever they are, without
-opening a port to the world. Its https endpoints are also the real PWA
-path: a secure context at last, so a service worker and a true offline
-shell become possible without spark minting certificates.
+The page and the API stop at the LAN on purpose. An overlay network
+(Tailscale, any WireGuard mesh) extends that boundary to your own devices
+without opening a port; its https endpoints are the real PWA path (a
+service worker, a true offline shell).
 
-## The bigger ember
+## The bigger second model
 
-A machine with 32 GB earns a mixture-of-experts model (the 30B-A3B row:
-near-4B speed, near-flagship answers) as its ember. The table already
-says when it fits; the proof and the tuning are the work.
+A machine with 32 GB earns a mixture-of-experts model (the 30B-A3B rows:
+near-4B speed, near-flagship answers) as its second model. The table
+already says when it fits; the proof and the tuning are the work.

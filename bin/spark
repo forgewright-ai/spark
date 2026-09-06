@@ -53,7 +53,7 @@ at the prompt: the surprise -- your question becomes a command in your line
 the FORGE: the agent spark keeps on this machine, one identity
   spark soul [edit|reset]     who it is: ~/.config/spark/soul, yours
   spark remember <words>      a fact it keeps; spark forget N; spark memory
-  spark ember [NAME|auto|none]  a second brain for conversations (opt-in)
+  spark ember [NAME|auto|none]  a second model for conversations (opt-in)
   spark forge [on|off]        the FORGE on the LAN: the API and the page
   spark forge --print-url     the page's login URL, and the admin token
   spark forge --print-client  what a peer machine needs: URL + a user there
@@ -63,7 +63,7 @@ the FORGE: the agent spark keeps on this machine, one identity
 
 the server
   spark model [NAME|auto|none]  choose the served model: download, restart
-  spark model list            the table: size, RAM, downloaded, serving, tok/s
+  spark model list            the table: size, RAM, license, tested, tok/s
   spark model budget [N]      percent of RAM+GPU memory auto may use (10-95)
   spark model add URL         your own row (--sha256 HEX, --license "NAME URL")
   spark model verify | rm NAME  re-hash every download; delete an unused file
@@ -199,7 +199,7 @@ def misplaced(word):
     themes = sorted(f[:-4] for f in os.listdir(os.path.join(REPO, "themes")) if f.endswith(".env"))
     if word in themes or word == "none":
         say("spark: %s is a palette -- spark theme %s" % (word, word))
-    elif word in {r[0] for r in config.models_table()} or word == "auto":
+    elif word in {r[0] for r in config.model_tables()} or word == "auto":
         say("spark: %s is a model -- spark model %s" % (word, word))
     else:
         near = near_verb(word, cli)

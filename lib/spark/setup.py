@@ -104,10 +104,10 @@ def _decide(cfg, key, flag, cfg_value, label, yes):
 
 
 def _table(cfg):
-    """The header and the curated rows only (setup never offers a
-    community or ember row -- naming one with --model is still allowed,
-    it just is not in this table), the default row (the spark pick)
-    marked *; the name of that row, or none."""
+    """The header and the rows auto may pick (tested on the line, open
+    license -- setup never offers the others; naming one with --model is
+    still allowed, it just is not in this table), the default row (the
+    spark pick) marked *; the name of that row, or none."""
     budget = mem_total_gb() * cfg.ai_budget / 100.0
     say("%.0f GB for models (RAM + GPU), budget %.0f GB (%d%%), %s" % (mem_total_gb(), budget, cfg.ai_budget, engine.backend(cfg)))
     note = engine.cap_note(cfg)
@@ -115,7 +115,7 @@ def _table(cfg):
         say(note)
     default = "none"
     for r in site.model_rows(cfg):
-        if r["source"] != "curated":
+        if not (r["tested"] and r["open"]):
             continue
         say(site.model_line(r))
         if r["role"] == "spark":
@@ -124,11 +124,12 @@ def _table(cfg):
 
 
 def _announce_license(rows, name):
-    """A community or user row named here (never offered in the table, but
-    a --model or a typed name may still pick one) prints its license line
-    and its note, when there is one -- no question: naming it is the yes."""
+    """A row under a license auto would not take, named here (never
+    offered in the table, but a --model or a typed name may still pick
+    one), prints its license line and its note, when there is one -- no
+    question: naming it is the yes."""
     match = [r for r in rows if r[0] == name]
-    if match and match[0][6] in ("community", "user"):
+    if match and not config.is_open(match[0][8]):
         say("%s license: %s" % (name, match[0][8] or "none on file"))
         if match[0][9]:
             say("  " + match[0][9])
@@ -137,7 +138,7 @@ def _announce_license(rows, name):
 def _model(cfg, opts, default, yes):
     rows = config.model_tables()
     valid = ["auto", "none"] + [r[0] for r in rows]
-    choices = "one of: auto none " + " ".join(r[0] for r in rows if r[6] == "curated")
+    choices = "one of: auto none " + " ".join(r[0] for r in config.auto_rows(rows))
     if opts["model"] is not None or "SITE_AI_MODEL" in os.environ or "SITE_AI_MODEL" in cfg.site_file:
         name = opts["model"] if opts["model"] is not None else cfg.model_choice
         if name not in valid:

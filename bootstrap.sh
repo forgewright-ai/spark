@@ -155,31 +155,38 @@ mem_gb() {
     fi
 }
 
+# open_license KEY FILE: true when MODEL_<KEY>_LICENSE in FILE starts with
+# a license auto may take -- Apache-2.0 or MIT (lib/spark
+# config.OPEN_LICENSES is the twin).
+open_license() {
+    grep -E "^MODEL_${1}_LICENSE=\"?(Apache-2\.0|MIT)( |\"|$)" "$2" >/dev/null 2>&1
+}
 # model_rows: name file url bytes sha256 ram_gb, one per line, file order --
-# the curated list only (models.env: open licenses, proven on the line).
-# The only source auto reads (lib/spark config.models_table is the twin).
+# the rows auto may pick: models.env rows with MODEL_<NAME>_TESTED=line
+# (proven on the line) under an open license. The only source auto reads
+# (lib/spark config.models_table / auto_rows is the twin).
 model_rows() {
     [ -f "$REPO/models.env" ] || return 0
-    grep -E '^MODEL_[A-Z0-9_]+=' "$REPO/models.env" | grep -vE '_(LICENSE|NOTE)=' | while IFS='=' read -r k v; do
+    grep -E '^MODEL_[A-Z0-9_]+=' "$REPO/models.env" | grep -vE '_(LICENSE|NOTE|TESTED)=' | while IFS='=' read -r k v; do
         v=${v#\"}; v=${v%\"}
+        grep -qE "^${k}_TESTED=\"?line\"?$" "$REPO/models.env" || continue
+        open_license "${k#MODEL_}" "$REPO/models.env" || continue
         name=$(printf '%s' "${k#MODEL_}" | tr 'A-Z_' 'a-z-')
         printf '%s %s\n' "$name" "$v"
     done
 }
-# model_rows_all: the four catalogs, curated first, each row's name file
-# url bytes sha256 ram_gb followed by a source mark: - curated, e embers
-# (a purpose, a conversation model), ? community (untested, any license),
-# u yours (~/.config/spark/models.env). Absent files are skipped; a
-# LICENSE/NOTE side-key is not a row (lib/spark config.model_tables is the
-# twin, and where a name in two files is refused).
+# model_rows_all: the list then yours, each row's name file url bytes
+# sha256 ram_gb followed by a source mark: - models.env, u yours
+# (~/.config/spark/models.env). An absent file is skipped; a
+# LICENSE/NOTE/TESTED side-key is not a row (lib/spark config.model_tables
+# is the twin, and where a name in both files is refused).
 model_rows_all() {
-    for pair in "$REPO/models.env -" "$REPO/embers.env e" "$REPO/community.env ?" \
-                "$SPARK_CONFIG_DIR/models.env u"; do
+    for pair in "$REPO/models.env -" "$SPARK_CONFIG_DIR/models.env u"; do
         # shellcheck disable=SC2086
         set -- $pair
         f=$1; mark=$2
         [ -f "$f" ] || continue
-        grep -E '^MODEL_[A-Z0-9_]+=' "$f" | grep -vE '_(LICENSE|NOTE)=' | while IFS='=' read -r k v; do
+        grep -E '^MODEL_[A-Z0-9_]+=' "$f" | grep -vE '_(LICENSE|NOTE|TESTED)=' | while IFS='=' read -r k v; do
             v=${v#\"}; v=${v%\"}
             # shellcheck disable=SC2086
             set -- $v
@@ -192,19 +199,20 @@ model_rows_all() {
 
 # model_pick spark|ember [nocap]: that role's row (lib/spark
 # engine.chosen_rows is the python twin; the two must agree). spark:
-# SITE_AI_MODEL none|NAME|auto -- auto is the smallest curated row when an
-# ember resolves beside it, else the largest usable curated row that fits
-# the SITE_AI_BUDGET percent (default 60) alone (the default: the ember
-# is none); a NAME is looked up in all four catalogs, never second-guessed.
+# SITE_AI_MODEL none|NAME|auto -- auto is the smallest auto row (tested
+# on the line, open license: model_rows) when an ember resolves beside
+# it, else the largest usable auto row that fits the SITE_AI_BUDGET
+# percent (default 60) alone (the default: the ember is none); a NAME is
+# looked up in the list and yours, never second-guessed.
 # ember: SITE_EMBER_MODEL
 # none|NAME|auto -- none (default) is one model doing both; auto is the
-# largest usable curated row fitting the budget beside the spark pick, a
-# NAME again any catalog; the spark row again would be one model doing
+# largest usable auto row fitting the budget beside the spark pick, a
+# NAME again any row; the spark row again would be one model doing
 # both, so it prints nothing. No spark model (SITE_AI_MODEL=none, or a
 # name that is not there) means nothing is served here: no ember either.
 # Usable = the file is at or under the speed cap (speed_cap); nothing
-# usable fits -> the smallest curated row that fits, so auto never picks
-# nothing while something fits (auto never leaves the curated table).
+# usable fits -> the smallest auto row that fits, so auto never picks
+# nothing while something fits (an untested row is by name only).
 # `nocap` lifts the cap (list_models says what it held back).
 model_sorted() { model_rows | sort -n -k6 ; }
 model_sorted_all() { model_rows_all | sort -n -k6 ; }
@@ -268,7 +276,7 @@ list_models() {
         if [ "$ram" -le "$budget" ]; then v=fits; else v="needs $ram GB"; fi
         mark=' '; [ "$name" = "$spick" ] && mark='*'; [ "$name" = "$epick" ] && mark='+'
         [ "$src" = - ] && src=' '
-        printf '%s%s %-14s %6s GB  %s  %s\n' "$mark" "$src" "$name" "$ram" "$v" "$file"
+        printf '%s%s %-20s %6s GB  %s  %s\n' "$mark" "$src" "$name" "$ram" "$v" "$file"
     done
     printf 'spark: %s\n' "${spick:-none}"
     printf 'ember: %s\n' "${epick:-none}"
@@ -277,7 +285,7 @@ list_models() {
     else
         echo "no model chosen (none, or nothing fits)"
     fi
-    echo "? = community (untested), e = embers (a purpose), u = yours"
+    echo "u = yours; auto picks among the rows tested on the line (Apache-2.0, MIT)"
 }
 
 case $MODE in
@@ -363,7 +371,7 @@ fi
 pick=$(model_pick spark | awk '{ print $1 " (" $6 " GB)" }')
 case $SITE_AI_MODEL in
     none) ok model "none: no download; bring your own .gguf or set SITE_AI_MODEL" ;;
-    *) [ -n "$pick" ] && ok model "$SITE_AI_MODEL -> $pick" || row todo model "SITE_AI_MODEL=$SITE_AI_MODEL: nothing fits $(mem_gb) GB / not in models.env" ;;
+    *) [ -n "$pick" ] && ok model "$SITE_AI_MODEL -> $pick" || row todo model "SITE_AI_MODEL=$SITE_AI_MODEL: nothing fits $(mem_gb) GB / not in models.env or yours" ;;
 esac
 epick=$(model_pick ember | awk '{ print $1 " (" $6 " GB)" }')
 if [ -z "$pick" ] && [ "$SITE_EMBER_MODEL" != none ]; then ok ember "no spark model here: nothing is served, no ember"

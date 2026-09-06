@@ -30,13 +30,12 @@ _spark_theme_names() {
 
 _spark_model_names() {
     # MODEL_QWEN3_1_7B= -> qwen3-1-7b, the same mapping bootstrap.sh makes
-    # (tr 'A-Z_' 'a-z-'); the _LICENSE and _NOTE keys are not models
+    # (tr 'A-Z_' 'a-z-'); the _LICENSE, _NOTE and _TESTED keys are not models
     local repo
     repo=$(_spark_repo) || return 0
     sed -n 's/^MODEL_\([A-Z0-9_]*\)=.*/\1/p' \
-        "$repo/models.env" "$repo/embers.env" "$repo/community.env" \
-        "$HOME/.config/spark/models.env" 2>/dev/null \
-        | sed -e '/_LICENSE$/d' -e '/_NOTE$/d' | tr 'A-Z_' 'a-z-'
+        "$repo/models.env" "$HOME/.config/spark/models.env" 2>/dev/null \
+        | sed -e '/_LICENSE$/d' -e '/_NOTE$/d' -e '/_TESTED$/d' | tr 'A-Z_' 'a-z-'
 }
 
 _spark_complete() {

@@ -150,35 +150,33 @@ soul's fallback in this version; `spark soul edit` absorbs it and the
 
 ## Models
 
-### Three lists, and yours
+### The list
 
-Every model lives in one of three files at the repo root, plus a fourth
-that is never in the repo:
+One file at the repo root, `models.env`, plus yours, never in the repo:
 
-| list | file | rule | shown by |
-|---|---|---|---|
-| curated | `models.env` | open license, proven on the line -- the only one `auto` reads | `spark model list`, unmarked |
-| embers | `embers.env` | open license, plus a one-line purpose | `spark ember list`, marked `e` |
-| community | `community.env` | any license, named; untested, at your own risk | `spark model list`, marked `?` |
-| yours | `~/.config/spark/models.env` | your own rows, written by hand, 0600, never in the repo | either table, marked `u` |
+| file | what |
+|---|---|
+| `models.env` | every model spark can serve: 26 rows, each with its license; `line` marks a row proven on the line |
+| `~/.config/spark/models.env` | your own rows (`spark model add URL --license`), 0600; shown marked `u` |
 
-`spark model list` shows the curated, community and your own rows (no
-purpose to show), then a line pointing at `spark ember list` when there
-is one. `spark ember list` shows all four, with each ember row's purpose
-printed on the line below it, indented. A name in two lists is refused,
-naming both files. Picking a community or your-own row by name (`spark
-model NAME` / `spark ember NAME`) prints its license line and, at a
-terminal, asks `download it? [y/N]` first (`SPARK_YES=1` in the
-environment, or stdin not a terminal, counts as yes without asking);
-`spark setup` never offers one, though naming one with `--model` is still
-allowed. A row in any list is a pull request.
+Every row states its license. `auto` picks only among the rows tested on
+the line under Apache-2.0 or MIT; every other row is yours by name (`spark
+model NAME`, `spark ember NAME`), and a row under another license -- the
+Llama and Gemma rows -- prints its license line and, at a terminal, asks
+`download it? yes/NO:` first (`SPARK_YES=1`, or stdin not a terminal,
+counts as yes). `spark setup` offers the tested rows only, though naming
+any row with `--model` is allowed. A name in both files is refused,
+naming both. A row is a pull request; the line proof (`spark line`
+answers valid JSON) is what turns `tested` on.
 
-`spark model` lists the curated table: each model's file size, the RAM it
-needs against this machine's SITE_AI_BUDGET percent (default 60) of RAM
-plus GPU memory, whether it is downloaded, which one serves, and its
-speed here -- `~N tok/s` is an estimate for this backend (metal, vulkan
-or cpu) until `spark bench` or a real turn measures the model, when the
-`~` goes.
+`spark model list` (and `spark ember list`, the same table) shows every
+row: file size, the RAM it needs against this machine's SITE_AI_BUDGET
+percent (default 60) of RAM plus GPU memory, the license's first word,
+`line` when tested, downloaded or serving, and its speed here -- `~N
+tok/s` is an estimate for this backend (metal, vulkan or cpu) until
+`spark bench` or a real turn measures the model, when the `~` goes; `too
+big` when it does not fit. A row's note follows it, indented. The tested
+rows today:
 
 | name | file | RAM |
 |---|---|---|
@@ -188,46 +186,46 @@ or cpu) until `spark bench` or a real turn measures the model, when the
 | `qwen3-14b` | 8.4 GB | 11 GB |
 | `qwen3-30b-a3b` | 17.4 GB | 21 GB |
 
-How `auto` picks: every curated row whose RAM fits the SITE_AI_BUDGET
-percent (default 60) of RAM plus GPU memory, then the largest of those
+The untested rows: Qwen3-4B-Thinking, Qwen3-Coder-30B-A3B, Qwen2.5 7B /
+14B / Coder-7B, Mistral 7B v0.3 and Nemo 12B, Phi-4 mini and 14B,
+DeepSeek-R1 distills 7B / 14B, SmolLM2 1.7B, gpt-oss-20b, Granite 3.3 8B
+(all Apache-2.0 or MIT); Llama 3.2 1B / 3B, Llama 3.1 8B and Gemma 3 1B /
+4B / 12B / 27B under their own terms. The page lists them all:
+https://spark.forgewright.ai/models/
+
+How `auto` picks: every tested open-license row whose RAM fits the
+SITE_AI_BUDGET percent of RAM plus GPU memory, then the largest of those
 whose file is under this build's speed cap -- 3 GB on `cpu`, 6 GB on
-`vulkan`, 20 GB on `metal`: the size classes the
-estimate keeps at about 8 tok/s or better (a `-a3b` MoE counts as its 3B
-active class, as in the speed column). A row can fit the budget but run
-too slowly on a weaker backend, so `auto` stops earlier there than on a
-faster one; when the cap held a bigger row back the table's header says
-so (`auto stops at 6 GB files on vulkan ...`), and `spark model NAME`
-takes that row anyway, from any of the four lists: a name is never
-second-guessed. Nothing under the cap fits: the smallest row that fits,
-never nothing while something fits. `bootstrap.sh --list-models` and
-`spark model` make the same choice (they are twins, and the tests pin
-both); `bootstrap.sh --list-models` shows all four lists too, curated
-first, with the same marks.
+`vulkan`, 20 GB on `metal`: the size classes the estimate keeps at about
+8 tok/s or better (a `-a3b` MoE counts as its 3B active class, as in the
+speed column). A row can fit the budget but run too slowly on a weaker
+backend, so `auto` stops earlier there than on a faster one; when the
+cap held a bigger row back the table's header says so (`auto stops at 6
+GB files on vulkan ...`), and `spark model NAME` takes that row anyway: a
+name is never second-guessed. Nothing under the cap fits: the smallest
+row that fits, never nothing while something fits. `bootstrap.sh
+--list-models` and `spark model` make the same choice (they are twins,
+and the tests pin both).
 
 `spark model qwen3-8b` chooses it (`SITE_AI_MODEL`), downloads and
-verifies it if needed (size and sha256 from the list it is in, from
+verifies it if needed (size and sha256 from its row, from
 huggingface.co), and restarts the server; `spark model auto` goes back to
-the rule above (curated only); `spark model rm NAME` deletes a file that
-is not in use. A `.gguf` you drop into `~/.local/share/spark/models`
-yourself is served with `SPARK_MODEL=<file>` in `spark.env`. `spark model
-budget` prints the percent, the GB it buys and the table; `spark model
-budget N` (10-95) sets `SITE_AI_BUDGET`, re-applies the pick and prints
-the table again.
+the rule above; `spark model rm NAME` deletes a file that is not in use.
+A `.gguf` you drop into `~/.local/share/spark/models` yourself is served
+with `SPARK_MODEL=<file>` in `spark.env`. `spark model budget` prints the
+percent, the GB it buys and the table; `spark model budget N` (10-95)
+sets `SITE_AI_BUDGET`, re-applies the pick and prints the table again.
 
-One model answers everything by default. A second brain is a larger model
-devoted to conversation while spark stays small and fast at the prompt
-line, chosen by name from any list.
-
-One model by default. `spark ember NAME` is the opt-in second model: the
-prompt line stays with the small spark model (context 4096, reasoning off,
-so a thinking model answers plainly and fast) and every conversation --
-`spark <words>`, `chat`, `do`, the page, any `/v1` client that names no
-model -- goes to the ember, the identity riding only with it. `spark serve`
-then runs llama-server as a router: one process, one port, one api-token;
-the request's `model` field picks the child. `spark ember auto` makes spark
-the smallest row and the ember the largest that fits beside it in the
-budget, under the same speed cap; `spark ember none` (the default) runs
-one model in both roles.
+One model answers everything by default. `spark ember NAME` is the
+opt-in second model: the prompt line stays with the small spark model
+(context 4096, reasoning off, so a thinking model answers plainly and
+fast) and every conversation -- `spark <words>`, `chat`, `do`, the page,
+any `/v1` client that names no model -- goes to the ember, the identity
+riding only with it. `spark serve` then runs llama-server as a router:
+one process, one port, one api-token; the request's `model` field picks
+the child. `spark ember auto` makes spark the smallest tested row and the
+ember the largest that fits beside it in the budget, under the same
+speed cap; `spark ember none` (the default) runs one model in both roles.
 
 Speed: `spark bench` measures with llama-bench (pp512 / tg128; the ember
 when one serves, `--spark` / `--ember` force a role) and keeps the result
@@ -239,14 +237,14 @@ up what real turns measured. The server is paused while llama-bench runs.
 
 ### Adding your own model
 
-`spark model add URL` writes a fifth, yours-only row and picks it. A
+`spark model add URL` writes a row of your own and picks it. A
 huggingface.co `.../resolve/<rev>/<file>` URL is auto-verified from its
-LFS headers (size and sha256); any other URL needs `--sha256 HEX`. The
+redirect headers (size and sha256); any other URL needs `--sha256 HEX`. The
 name is the file stem, lowercased, dots and underscores turned to dashes,
 a trailing quantization token (`-q4-k-m`, `-f16`, ...) stripped; a name
-already in any of the four lists is refused, naming the file it is in.
+already in either file is refused, naming the file it is in.
 `--license "NAME URL"` is required -- your own row states its license
-like every non-curated row. The row lands in `~/.config/spark/models.env`
+like every row. The row lands in `~/.config/spark/models.env`
 (0600, created if absent), then `spark model add` downloads it and
 restarts the server, same as `spark model NAME`.
 
@@ -603,7 +601,7 @@ NOPASSWD:ALL' | sudo tee /etc/sudoers.d/you`, fine for a test bench).
    spark forge start`.
 5. `spark forge` -- is the FORGE up, at which address, is its upstream ok;
    `~/.local/state/spark/forge.log` has one line per request, never a body.
-6. The `ember` row: the pair over budget (`spark ember list` shows one
+6. The `ember` row: the pair over budget (`spark model list` shows one
    that fits), the file not downloaded (`./bootstrap.sh`), or not warm
    (`spark serve` warms it).
 7. A GPU that new servers cannot see (the `gpu` row warns, generation is
@@ -627,9 +625,8 @@ spark chat | do | explain -> spark <verb> -+-> the FORGE :8081 ---> another
                                                one model (spark), or
                                                two (spark + ember):
                                                the pinned engine and a
-                                               GGUF from models.env,
-                                               embers.env, community.env
-                                               or your own models.env
+                                               GGUF from models.env or
+                                               your own models.env
 
 get -> spark setup -> bootstrap.sh (apply) -> install.sh (links, renders)
                       the engine tarball, the model, the token, the units,

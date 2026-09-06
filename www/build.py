@@ -2,7 +2,7 @@
 # www/build.py -- spark's page, spark.forgewright.ai, rendered from the
 # repository's own files into www/dist/: the index is the banner, the
 # one-liner and two demos; every other page IS a doc (INSTALL.md,
-# CHEATSHEET.txt, the three model lists, CHANGELOG.md, ROADMAP.md,
+# CHEATSHEET.txt, the model list, CHANGELOG.md, ROADMAP.md,
 # CONTRIBUTING.md, CREDITS.md) rendered as it is. Nothing is written here
 # twice: a doc change is a site change. Stdlib only; the markdown subset is
 # the one the docs use (tests/site_test.py holds the invariants).
@@ -22,7 +22,7 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(HERE)
 sys.path.insert(0, os.path.join(ROOT, "lib"))
-from spark import config  # noqa: E402  (the model lists, parsed by spark itself)
+from spark import config  # noqa: E402  (the model list, parsed by spark itself)
 
 # slug -> (title, source file, kind)
 PAGES = [
@@ -39,7 +39,7 @@ DOC_LINKS = {
     "README.md": "", "INSTALL.md": "install/", "CHEATSHEET.txt": "cheatsheet/",
     "CHANGELOG.md": "changelog/", "ROADMAP.md": "roadmap/",
     "CONTRIBUTING.md": "contributing/", "CREDITS.md": "credits/",
-    "models.env": "models/", "embers.env": "models/", "community.env": "models/",
+    "models.env": "models/",
 }
 DOC_RE = re.compile(r"\b(%s)\b" % "|".join(re.escape(k) for k in DOC_LINKS))
 URL_RE = re.compile(r"https?://[^\s<>\"]+")
@@ -180,30 +180,25 @@ def read(name):
 
 
 def models_page(base):
-    """The three lists as spark's own parser reads them (config.model_tables),
-    the user's list left out: this is the repository's page."""
+    """The one list as spark's own parser reads it (config.model_tables),
+    the user's file left out: this is the repository's page. One table:
+    model, file, RAM, license, tested, note; the tested rows under an open
+    license are the ones `auto` picks."""
     rows = [r for r in config.model_tables(ROOT) if r[6] != "user"]
-    def table(source, title, last_col, last):
-        rs = [r for r in rows if r[6] == source]
-        h = ["<p class=\"cmd\"><span class=\"p\">~ &gt; </span>spark model list<span class=\"k\"> -- %s</span></p>" % title,
-             "<table><thead><tr><th>model</th><th class=\"r\">file</th><th class=\"r\">RAM</th><th>license</th><th>%s</th></tr></thead><tbody>" % last_col]
-        for r in rs:
-            name, fname, url, nbytes, sha, ram, src, purpose, lic, note = r
-            lic = html.escape(lic.split()[0].replace("-", " ") if "Gemma" in lic else lic.split()[0]) if lic else '<a href="%scredits/">open</a>' % base
-            h.append("<tr><td><a href=\"%s\">%s</a></td><td class=\"r\">%.1f GB</td><td class=\"r\">%d GB</td><td>%s</td><td class=\"q\">%s</td></tr>"
-                     % (html.escape(url, quote=True), html.escape(name), int(nbytes) / 2**30, int(ram),
-                        lic, html.escape(last(r))))
-        h.append("</tbody></table>")
-        return "\n".join(h)
-    body = [
-        table("curated", "curated: open licenses, each proven on the line", "proven", lambda r: "on the line"),
-        "<p class=\"hint\">The only list <code>auto</code> reads. <code>spark model NAME</code> picks one; <code>spark model budget N</code> sets the RAM share.</p>",
-        table("ember", "embers: a second brain, with a purpose", "purpose", lambda r: r[7] or ""),
-        "<p class=\"hint\"><code>spark ember NAME</code> serves one beside the spark model.</p>",
-        table("community", "community: any license, untested, at your own risk", "note", lambda r: r[9] or ""),
-        "<p class=\"hint\">A row in any list is a pull request: CONTRIBUTING.md. Your own rows: <code>spark model add URL --license</code>.</p>",
-    ]
-    return "<section class=\"doc\">%s</section>" % "\n".join(inline_hints(b, base) for b in body)
+    h = ["<p class=\"cmd\"><span class=\"p\">~ &gt; </span>spark model list<span class=\"k\"> -- %d models, one list</span></p>" % len(rows),
+         "<table><thead><tr><th>model</th><th class=\"r\">file</th><th class=\"r\">RAM</th><th>license</th><th>tested</th><th>note</th></tr></thead><tbody>"]
+    for r in rows:
+        name, fname, url, nbytes, sha, ram, src, tested, lic, note = r
+        lic_name, lic_url = (lic.split() + [""])[:2]
+        lic_html = '<a href="%s">%s</a>' % (html.escape(lic_url, quote=True), html.escape(lic_name.replace("-", " "))) if lic_url else html.escape(lic_name)
+        h.append("<tr><td><a href=\"%s\">%s</a></td><td class=\"r\">%.1f GB</td><td class=\"r\">%d GB</td><td>%s</td><td>%s</td><td class=\"q\">%s</td></tr>"
+                 % (html.escape(url, quote=True), html.escape(name), int(nbytes) / 2**30, int(ram),
+                    lic_html, "line" if tested else "", html.escape(note or "")))
+    h.append("</tbody></table>")
+    h.append("<p class=\"hint\"><code>spark model NAME</code> serves one; <code>spark ember NAME</code> adds a second, for conversations. "
+             "<code>auto</code> picks among the rows tested on the line under Apache-2.0 or MIT; any other license is shown and asked about before the download. "
+             "Every file is sha256-verified. Your own rows: <code>spark model add URL --license</code>. A row is a pull request: CONTRIBUTING.md.</p>")
+    return "<section class=\"doc\">%s</section>" % "\n".join(inline_hints(b, base) for b in h)
 
 
 def inline_hints(s, base):

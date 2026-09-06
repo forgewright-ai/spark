@@ -1413,8 +1413,14 @@ def make_fixture(root, good, stub_url=""):
         fixture_sha = hashlib.sha256(b"x" * 4096).hexdigest()
         zero_sha = "0" * 64
         f.write('MODEL_FIXTURE="fixture.gguf https://models.invalid/fixture.gguf 4096 %s 1"\n'
+                'MODEL_FIXTURE_LICENSE="Apache-2.0 https://models.invalid"\n'
+                'MODEL_FIXTURE_TESTED="line"\n'
                 'MODEL_FIXTURE_EMBER="fixture-ember.gguf https://models.invalid/fixture-ember.gguf 4096 %s 2"\n'
+                'MODEL_FIXTURE_EMBER_LICENSE="Apache-2.0 https://models.invalid"\n'
+                'MODEL_FIXTURE_EMBER_TESTED="line"\n'
                 'MODEL_QWEN3_30B_A3B="qwen3-30b-a3b.gguf https://models.invalid/qwen3-30b-a3b.gguf 4096 %s 21"\n'
+                'MODEL_QWEN3_30B_A3B_LICENSE="Apache-2.0 https://models.invalid"\n'
+                'MODEL_QWEN3_30B_A3B_TESTED="line"\n'
                 % (fixture_sha, fixture_sha, zero_sha))
     # a palette for the theme row: SITE_THEME=fixture below; the good
     # machine's theme.env matches it, the bad one's is stale

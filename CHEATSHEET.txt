@@ -13,7 +13,7 @@ THE AI
   spark soul [edit|reset]         who it is: default soul, replace with edit
   spark remember WORDS            a fact it keeps    spark forget N  drops it
   spark memory [on|off|clear]     the facts it recalls on every answer
-  spark ember [NAME|auto|none]    a second brain for conversations (opt-in)
+  spark ember [NAME|auto|none]    a second model for conversations (opt-in)
   spark history [clear]           the threads kept here; clear removes them
   spark                           status: brain, widget, server, soul, last
 
@@ -27,7 +27,7 @@ AT THE PROMPT
                                   (theme and model names included, offline)
 
 THE SERVER
-  spark model [NAME|list]         the table; choose one (download + restart)
+  spark model [NAME|list]         the table (license, tested); choose one
   spark model budget [N]          percent of RAM+GPU auto may use (10-95)
   spark model add URL             add your own (--sha256, --license required)
   spark model verify              sha256 every downloaded file now, exit 1 bad

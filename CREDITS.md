@@ -81,19 +81,23 @@ their own repositories, unpinned.
 ## Models
 
 Downloaded by `bootstrap.sh`, never vendored. Each row's size and sha256
-come from Hugging Face's file metadata.
+come from Hugging Face's file metadata; every row in `models.env` names
+its license. GGUF quantizations by bartowski and unsloth.
 
-The curated list (`models.env`) holds open licenses only: Qwen3 1.7B,
-4B, 8B, 14B and 30B-A3B, by Alibaba's Qwen team, Apache-2.0. GGUF
-quantizations by unsloth (1.7B) and bartowski (the rest).
-
-The embers list (`embers.env`): Qwen2.5-Coder-7B-Instruct and
-Qwen3-4B-Thinking-2507, Apache-2.0, quantized by bartowski.
-
-The community list (`community.env`) may name any license, and names it
-per row: gemma-3-12b-it, by Google, is under the Gemma Terms of Use
-(https://ai.google.dev/gemma/terms), not an open-source license; spark
-asks before downloading a community row.
+- Qwen3 (1.7B, 4B, 4B-Thinking, 8B, 14B, 30B-A3B, Coder-30B-A3B) and
+  Qwen2.5 (7B, 14B, Coder-7B), by Alibaba's Qwen team -- Apache-2.0
+- Mistral 7B Instruct v0.3 and Mistral Nemo 12B, by Mistral AI --
+  Apache-2.0
+- Phi-4 and Phi-4 mini, by Microsoft -- MIT
+- DeepSeek-R1-Distill-Qwen 7B and 14B, by DeepSeek -- MIT
+- SmolLM2 1.7B, by Hugging Face -- Apache-2.0
+- gpt-oss-20b, by OpenAI -- Apache-2.0
+- Granite 3.3 8B, by IBM -- Apache-2.0
+- Llama 3.2 1B / 3B and Llama 3.1 8B, by Meta -- the Llama Community
+  License (not an open-source license; spark asks before downloading)
+- Gemma 3 1B / 4B / 12B / 27B, by Google -- the Gemma Terms of Use
+  (https://ai.google.dev/gemma/terms; not an open-source license; spark
+  asks before downloading)
 
 ## Built with Claude
 

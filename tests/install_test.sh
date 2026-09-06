@@ -250,13 +250,13 @@ sh "$REPO/bootstrap.sh" --list-packages | grep -qx tmux && ok "SITE_SHELL=on: --
 #    same way). SPARK_MEM_TOTAL_GB pins the budget; a uname stub pins the
 #    Linux rule on either OS (on macOS the build is metal whatever the key
 #    says) and SPARK_SYSFS_DRM the GPU probe. 18 GB -> 10 GB budget: auto
-#    (curated only) takes the largest row that fits AND stays under the
+#    (tested, open-license rows only) takes the largest row that fits AND stays under the
 #    build's speed cap -- 3 GB files on cpu (qwen3-4b), 6 GB on vulkan
 #    (qwen3-8b); qwen3-14b needs 11 GB, over this budget either way. With
 #    the ember auto: the smallest row + the largest usable beside it.
 #    SITE_AI_BUILD=auto (the default) = vulkan when a DRM device reports
 #    VRAM, else cpu. A name is never second-guessed, and is looked up in
-#    all four lists (curated, embers, community, yours), not curated only.
+#    the whole list and yours, tested or not, any license.
 #    6 GB -> 3 GB budget: the smallest row alone, no ember, nothing held
 #    back.
 mkdir -p "$T/os" "$T/drm/card0/device" "$T/nodrm"
@@ -276,7 +276,7 @@ out=$(lm SPARK_MEM_TOTAL_GB=18 SITE_AI_BUILD=vulkan) || bad "--list-models faile
 printf '%s\n' "$out" | grep -qx 'ember: qwen3-8b' && ok "18 GB vulkan: ember is the largest under the 6 GB cap beside it" || bad "18 GB vulkan ember line"
 printf 'SITE_AI_MODEL=auto\nSITE_EMBER_MODEL=none\n' > "$HOME/.config/spark/site.env"
 out=$(lm SPARK_MEM_TOTAL_GB=18 SITE_AI_BUILD=cpu) || bad "--list-models failed"
-printf '%s\n' "$out" | grep -qx 'spark: qwen3-4b' && ok "18 GB cpu: auto stops at the 3 GB cap (qwen3-4b, not a bigger curated row)" || bad "18 GB cpu spark line: $(printf '%s\n' "$out" | grep '^spark')"
+printf '%s\n' "$out" | grep -qx 'spark: qwen3-4b' && ok "18 GB cpu: auto stops at the 3 GB cap (qwen3-4b, not a bigger tested row)" || bad "18 GB cpu spark line: $(printf '%s\n' "$out" | grep '^spark')"
 printf '%s\n' "$out" | head -1 | grep -q ', cpu$' && ok "the header names the cpu build" || bad "header: $(printf '%s\n' "$out" | head -1)"
 # 19 GB -> 11 GB budget: qwen3-14b (11 GB) fits the budget but its 8.4 GB
 # file is over the 6 GB vulkan cap, so auto still stops at qwen3-8b and
@@ -299,12 +299,12 @@ printf '%s\n' "$out" | grep -qx 'spark: qwen3-4b' && ok "auto without a GPU pick
 out=$(lm SPARK_MEM_TOTAL_GB=18 SITE_AI_BUILD=cpu SITE_AI_MODEL=qwen3-14b) || bad "--list-models failed"
 printf '%s\n' "$out" | grep -qx 'spark: qwen3-14b' && ok "a named model is never second-guessed" || bad "named model line"
 printf '%s\n' "$out" | grep -q '^auto stops' && bad "a name printed the cap note" || ok "a name: no cap note"
-# a name is looked up in all four lists, not curated only: an ember row
-# and a community row, picked by name for the spark role
+# a name is looked up in the whole list, tested or not: an untested row
+# and a non-open-license row, picked by name for the spark role
 out=$(lm SPARK_MEM_TOTAL_GB=18 SITE_AI_BUILD=cpu SITE_AI_MODEL=qwen2-5-coder-7b) || bad "--list-models failed"
-printf '%s\n' "$out" | grep -qx 'spark: qwen2-5-coder-7b' && ok "a named ember row is picked for spark too" || bad "named ember row: $(printf '%s\n' "$out" | grep '^spark')"
+printf '%s\n' "$out" | grep -qx 'spark: qwen2-5-coder-7b' && ok "a named untested row is picked for spark too" || bad "named untested row: $(printf '%s\n' "$out" | grep '^spark')"
 out=$(lm SPARK_MEM_TOTAL_GB=18 SITE_AI_BUILD=cpu SITE_AI_MODEL=gemma3-12b) || bad "--list-models failed"
-printf '%s\n' "$out" | grep -qx 'spark: gemma3-12b' && ok "a named community row is picked for spark too" || bad "named community row: $(printf '%s\n' "$out" | grep '^spark')"
+printf '%s\n' "$out" | grep -qx 'spark: gemma3-12b' && ok "a named non-open row is picked for spark too" || bad "named non-open row: $(printf '%s\n' "$out" | grep '^spark')"
 out=$(lm SPARK_MEM_TOTAL_GB=6 SITE_AI_BUILD=cpu) || bad "--list-models failed"
 printf '%s\n' "$out" | grep -qx 'spark: qwen3-1-7b' && ok "6 GB: the smallest row alone" || bad "6 GB spark line"
 printf '%s\n' "$out" | grep -qx 'ember: none' && ok "6 GB: no ember" || bad "6 GB ember line"

@@ -11,9 +11,9 @@ import re
 import shutil
 import subprocess
 import sys
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
 from . import (CONFIG_DIR, HOME, IS_MAC, MARK, REPO, SITE_ENV, config, confirm, glyph,
                mem_total_gb, paged, say, wait_ready)
@@ -428,15 +428,15 @@ def _login_hint(url):
 # ------------------------------------------------------------------ model
 MODEL_USAGE = """%s model -- which model this machine serves
 
-  spark model                   the table: size, RAM, downloaded, serving, tok/s
-                                the spark pick marked *, the ember +, the
-                                source ? community, u yours (auto is curated
-                                only); spark ember list adds the ember rows
-  spark model NAME              choose it: any list, by name; site.env,
-                                download, server restart (a community or
-                                your own row asks first, naming its license)
-  spark model auto | none       auto: the largest curated row that fits
-                                (smallest beside an ember); none: no model here
+  spark model                   the table: size, RAM, license, tested,
+                                downloaded, serving, tok/s; the spark pick
+                                marked *, the ember +, your own rows u
+  spark model NAME              choose it: site.env, download, server restart
+                                (a row not under Apache-2.0 or MIT prints
+                                its license and asks first)
+  spark model auto | none       auto: the largest tested open-license row
+                                that fits (smallest beside an ember);
+                                none: no model here
   spark model budget [N]        percent of RAM+GPU auto may use (10-95)
   spark model rm NAME           delete a downloaded file that is not in use
   spark model add URL           add your own: --sha256 HEX (non-HF URLs need
@@ -474,16 +474,18 @@ def _restart_server(cfg):
         say("ok     server       not running -- the next spark serve uses it")
 
 
-SOURCE_MARKS = {"curated": " ", "community": "?", "ember": "e", "user": "u"}
+SOURCE_MARKS = {"repo": " ", "user": "u"}
 
 
 def model_rows(cfg, serving=None):
     """The model table as data: [{name, gb, ram_gb, fits, downloaded,
-    chosen, role, serving, speed, speed_kind, source, mark, purpose,
-    license, note}] in model_tables() order (curated first). `role` is
-    "spark", "ember" or "" from engine.chosen_rows. `source` is "curated",
-    "ember", "community" or "user"; `mark` is the second column's glyph
-    (SOURCE_MARKS). `serving` is the model name a brain answers with; None
+    chosen, role, serving, speed, speed_kind, source, mark, tested,
+    license, open, note}] in model_tables() order (the list, then yours).
+    `role` is "spark", "ember" or "" from engine.chosen_rows. `source` is
+    "repo" or "user"; `mark` is the second column's glyph (SOURCE_MARKS:
+    blank, `u` yours); `tested` says the row was proven on the line and
+    `open` that its license is one auto may take (config.is_open).
+    `serving` is the model name a brain answers with; None
     asks the brain (the FORGE passes its own). `speed` is tok/s and
     `speed_kind` "measured" or "estimate" (engine.speed_of)."""
     from . import engine, wire
@@ -503,47 +505,47 @@ def model_rows(cfg, serving=None):
             pass
     out = []
     for row in config.model_tables():
-        name, fname, _url, nbytes, _sha, ram, source, purpose, license_, note = row
+        name, fname, _url, nbytes, _sha, ram, source, tested, license_, note = row
         speed, kind = engine.speed_of(cfg, row)
         out.append({"name": name, "gb": round(nbytes / 2**30, 1), "ram_gb": ram, "fits": ram <= budget,
                     "downloaded": os.path.isfile(os.path.join(cfg.models_dir, fname)),
                     "chosen": fname == chosen, "role": role_of.get(fname, ""),
                     "serving": bool(serving) and fname.replace(".gguf", "") == serving,
                     "speed": speed, "speed_kind": kind, "source": source,
-                    "mark": SOURCE_MARKS.get(source, " "), "purpose": purpose,
-                    "license": license_, "note": note})
+                    "mark": SOURCE_MARKS.get(source, " "), "tested": tested,
+                    "license": license_, "open": config.is_open(license_), "note": note})
     return out
 
 
 def model_line(r, marks=None, width=13):
     """One table row: the pick mark (spark *, ember +), the source mark
-    (blank curated, `?` community, `e` embers, `u` yours), the name, the
-    file size, the RAM verdict, downloaded, serving, and the speed --
+    (blank the list, `u` yours), the name, the file size, the RAM verdict,
+    the license's first word (`open` marks one auto may take), `line` when
+    the row was proven on the line, downloaded / serving, and the speed --
     `~N tok/s` an estimate, `N tok/s` measured; nothing for a row that
     does not fit. `width` pads the name column (the caller widens it past
-    13 for a longer ember name). Every row stays within 80 columns."""
+    13 for a longer name). Every row stays within 80 columns."""
     marks = marks or {"spark": "*", "ember": "+"}
     state = "serving" if r["serving"] else ("downloaded" if r["downloaded"] else "")
-    speed = ("%s%d tok/s" % ("~" if r["speed_kind"] == "estimate" else "", r["speed"])) if r["fits"] else ""
+    speed = ("%s%d tok/s" % ("~" if r["speed_kind"] == "estimate" else "", r["speed"])) if r["fits"] else "too big"
+    lic = ((r["license"] or "").split() or [""])[0][:10]
     # padded columns, right-aligned numbers: the eye reads a table, not a
-    # sentence; 60 + width columns, so a 16-char ember name still fits 80
-    return ("  %s%s %-*s %5.1f GB file %3.0f GB RAM %-7s %-10s %9s"
+    # sentence; 57 + width columns, so a 23-char name still fits 80
+    return ("  %s%s %-*s %5.1f GB %2.0f GB %-10s %-4s %-10s %9s"
             % (marks.get(r["role"], " "), r["mark"], width, r["name"], r["gb"], r["ram_gb"],
-               "fits" if r["fits"] else "too big", state, speed)).rstrip()
+               lic, "line" if r["tested"] else "", state, speed)).rstrip()
 
 
-def print_model_table(cfg, embers=False):
-    """The table `spark model list` (embers=False: curated, community and
-    yours -- no purpose, no ember source) and `spark ember list`
-    (embers=True: the same rows plus the embers.env rows, each followed
-    by its purpose line, indented) share: every row with its RAM verdict,
-    the spark pick marked * and the ember pick + (the marks bootstrap.sh
-    --list-models draws), a second mark naming the source, and a last
-    column with the generation speed: `~N tok/s` an estimate for this
-    backend, `N tok/s` measured here (spark bench, or a real turn);
-    nothing for a row that does not fit. Every row stays within 80
-    columns. `spark model list` ends with a line pointing at `spark ember
-    list` when there is a purpose to show."""
+def print_model_table(cfg):
+    """The one table `spark model list` and `spark ember list` share:
+    every row of models.env and yours with its RAM verdict, the spark pick
+    marked * and the ember pick + (the marks bootstrap.sh --list-models
+    draws), a second mark `u` for your own rows, the license's first word,
+    `line` on a row proven on the line (auto reads only those, under an
+    open license), and a last column with the generation speed: `~N
+    tok/s` an estimate for this backend, `N tok/s` measured here (spark
+    bench, or a real turn); nothing for a row that does not fit. A row's
+    note follows it, indented. Every row stays within 80 columns."""
     from . import engine
     budget = mem_total_gb() * cfg.ai_budget / 100.0
     say("%s model%sSITE_AI_MODEL=%s SITE_EMBER_MODEL=%s%s%.0f GB for models (RAM + GPU), budget %.0f GB (%d%%), %s" % (
@@ -551,34 +553,31 @@ def print_model_table(cfg, embers=False):
     note = engine.cap_note(cfg)
     if note:
         say("  " + note)
-    all_rows = model_rows(cfg)
-    rows = all_rows if embers else [r for r in all_rows if r["source"] != "ember"]
+    rows = model_rows(cfg)
     width = max([13] + [len(r["name"]) for r in rows])
+    say("     %-*s %8s %5s %-10s %-4s %-10s %9s" % (width, "model", "file", "RAM", "license", "line", "", "fits"))
     for r in rows:
         say(model_line(r, width=width))
-        if embers and r["source"] == "ember" and r["purpose"]:
-            say("      " + r["purpose"])
+        if r["note"]:
+            say("      " + r["note"])
     known = {row[1] for row in config.model_tables()}
     others = [f for f in os.listdir(cfg.models_dir) if f.endswith(".gguf") and f not in known] if os.path.isdir(cfg.models_dir) else []
     for f in others:
         say("    %-13s %5.1f GB file   (not in models.env; SPARK_MODEL=%s serves it)" % (
             "-", os.path.getsize(os.path.join(cfg.models_dir, f)) / 2**30, f))
-    say("  * = spark (the prompt line), + = ember (conversations)")
-    say("  ? = community (untested), e = embers (a purpose), u = yours")
-    if not embers:
-        n = sum(1 for r in all_rows if r["source"] == "ember")
-        if n:
-            say("  spark ember list -- %d model%s with a purpose" % (n, "" if n == 1 else "s"))
+    say("  * = spark (the prompt line), + = ember (conversations), u = yours")
+    say("  auto picks among the rows tested on the line (line) under %s" % " or ".join(config.OPEN_LICENSES))
     return 0
 
 
 def _license_ok(row, verb):
-    """A community/user row (never curated or ember) prints its license
-    line -- and its note, when there is one -- and gets a yes before the
-    download: SPARK_YES=1 in the environment, or stdin not a tty (a
-    script, a pipe), counts as yes without asking."""
-    name, source, license_, note = row[0], row[6], row[8], row[9]
-    if source not in ("community", "user"):
+    """A row under a license auto would not take (config.is_open: not
+    Apache-2.0 or MIT) prints its license line -- and its note, when
+    there is one -- and gets a yes before the download: SPARK_YES=1 in
+    the environment, or stdin not a tty (a script, a pipe), counts as yes
+    without asking. An open-license row downloads without a question."""
+    name, license_, note = row[0], row[8], row[9]
+    if config.is_open(license_):
         return True
     say("%s license: %s" % (name, license_ or "none on file"))
     if note:
@@ -593,7 +592,6 @@ def _license_ok(row, verb):
 
 # ------------------------------------------------------------------ add
 QUANT_RE = re.compile(r"-(q4-k-m|q5-k-m|q8-0|f16|bf16|iq[0-9][a-z0-9-]*)$")
-CATALOG_FILE = {"curated": "models.env", "ember": "embers.env", "community": "community.env"}
 USER_MODELS_FILE = os.path.join(CONFIG_DIR, "models.env")
 
 
@@ -602,7 +600,7 @@ def _short(path):
 
 
 def _source_file(source):
-    return USER_MODELS_FILE if source == "user" else os.path.join(REPO, CATALOG_FILE[source])
+    return USER_MODELS_FILE if source == "user" else os.path.join(REPO, "models.env")
 
 
 def _model_name(fname):
@@ -613,26 +611,40 @@ def _model_name(fname):
     return QUANT_RE.sub("", stem)
 
 
-def _head(url, extra_headers=None):
-    """(headers, error) -- a HEAD request through urllib, redirects
-    followed, headers of the final response; error is a one-line reason,
-    or None."""
+class _NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def _head(url, extra_headers=None, follow=True):
+    """(headers, error) -- a HEAD request through urllib; redirects
+    followed and the final response's headers returned, or, with
+    follow=False, the FIRST response's headers even when it is a 3xx
+    (huggingface.co puts the file's size and sha256 on its redirect, and
+    the CDN it points at knows neither). error is a one-line reason, or
+    None."""
     req = Request(url, method="HEAD", headers=dict(extra_headers or {}, **{"User-Agent": "spark"}))
+    opener = urlopen if follow else build_opener(_NoRedirect()).open
     try:
-        with urlopen(req, timeout=20) as resp:
+        with opener(req, timeout=20) as resp:
             return resp.headers, None
+    except HTTPError as e:
+        if not follow and 300 <= e.code < 400:
+            return e.headers, None
+        return None, "could not reach %s -- %s" % (url, e)
     except (URLError, OSError) as e:
         return None, "could not reach %s -- %s" % (url, e)
 
 
 def _probe_model_url(url, sha):
     """(bytes, sha256, error) for `spark model add URL`: huggingface.co is
-    auto-verified from its LFS headers (x-linked-size, x-linked-etag);
-    any other host needs --sha256 and its size from a plain HEAD."""
+    auto-verified from its LFS headers (x-linked-size, x-linked-etag, on
+    the redirect it answers with); any other host needs --sha256 and its
+    size from a plain HEAD."""
     host = urlsplit(url).hostname or ""
     if host == "huggingface.co":
         hurl = url + ("&download=true" if "?" in url else "?download=true")
-        headers, err = _head(hurl)
+        headers, err = _head(hurl, follow=False)
         if err:
             return None, None, err
         size = headers.get("x-linked-size")
@@ -792,8 +804,8 @@ EMBER_USAGE = """%s ember -- the conversational model
   spark ember NAME              choose it: site.env, download, server restart
   spark ember auto              the largest that fits beside the spark model
   spark ember none              no second model -- spark answers everything
-  spark ember list              the table plus embers.env's rows, purpose
-                                shown, the spark pick marked *, the ember +
+  spark ember list              the model table, the spark pick marked *,
+                                the ember + (the same table as spark model)
 """ % MARK
 
 
@@ -804,7 +816,7 @@ def cmd_ember(args):
         say(EMBER_USAGE.rstrip())
         return 0
     if args and args[0] == "list":
-        return paged(lambda: print_model_table(cfg, embers=True))
+        return paged(lambda: print_model_table(cfg))
     if not args or args[0] == "status":
         pair = engine.chosen_rows(cfg)
         files = engine.roles(cfg)

@@ -55,19 +55,19 @@ def _usable(row, cap_gb):
     return cap_gb is None or "-a3b" in row[0].lower() or row[3] <= cap_gb * 2**30
 
 
-def _pick(curated, all_rows, choice, budget, beside=0.0, cap_gb=None):
+def _pick(auto, all_rows, choice, budget, beside=0.0, cap_gb=None):
     """One row (sorted by ram_gb) for a choice: none -> None; a name ->
-    that row from any of the three lists plus yours (or None when there is
-    no such row), never second-guessed; auto -> the largest curated row
-    whose ram_gb fits the budget beside `beside` GB and whose file is
-    under the speed cap -- nothing under the cap fits, the smallest
-    curated row that fits (never nothing while something fits). `auto`
-    never leaves the curated table: the ember and community lists are
-    by-name only."""
+    that row from the list or yours (or None when there is no such row),
+    never second-guessed; auto -> the largest row of `auto` (the tested,
+    open-license rows: config.auto_rows) whose ram_gb fits the budget
+    beside `beside` GB and whose file is under the speed cap -- nothing
+    under the cap fits, the smallest such row that fits (never nothing
+    while something fits). An untested row, or one under another
+    license, is by-name only."""
     if choice == "none":
         return None
     if choice == "auto":
-        fits = [r for r in curated if beside + r[5] <= budget]
+        fits = [r for r in auto if beside + r[5] <= budget]
         usable = [r for r in fits if _usable(r, cap_gb)]
         return usable[-1] if usable else (fits[0] if fits else None)
     for r in all_rows:
@@ -82,36 +82,37 @@ def _choose(cfg, cap_gb):
         rows = sorted(config.model_tables(), key=lambda r: r[5])
     except SystemExit:
         rows = []
-    curated = [r for r in rows if r[6] == "curated"]
+    auto = config.auto_rows(rows)
     budget = mem_total_gb() * cfg.ai_budget / 100.0
     sc, ec = cfg.model_choice, cfg.ember_model
     spark = ember = None
     if sc == "auto":
-        if ec != "none" and curated:
-            ember = _pick(curated, rows, ec, budget, curated[0][5], cap_gb)
+        if ec != "none" and auto:
+            ember = _pick(auto, rows, ec, budget, auto[0][5], cap_gb)
             if ember:
-                spark = curated[0]
+                spark = auto[0]
         if not spark:
-            spark = _pick(curated, rows, "auto", budget, 0.0, cap_gb)
+            spark = _pick(auto, rows, "auto", budget, 0.0, cap_gb)
             ember = None
     else:
-        spark = _pick(curated, rows, sc, budget)
-        ember = _pick(curated, rows, ec, budget, spark[5], cap_gb) if spark else None
+        spark = _pick(auto, rows, sc, budget)
+        ember = _pick(auto, rows, ec, budget, spark[5], cap_gb) if spark else None
     if ember and spark and ember[1] == spark[1]:
         ember = None
     return {"spark": spark, "ember": ember}
 
 
 def chosen_rows(cfg):
-    """{"spark": row|None, "ember": row|None} from models.env, the same
-    choice bootstrap.sh model_pick makes (the rule, in one place):
+    """{"spark": row|None, "ember": row|None} from models.env (and yours),
+    the same choice bootstrap.sh model_pick makes (the rule, in one place):
     ember none (the default) -> no ember; ember NAME -> that row; ember
     auto -> the largest usable row that fits the SITE_AI_BUDGET percent
     (default 60) of RAM+GPU beside the spark row. spark none -> no spark;
     spark NAME -> that row; spark auto -> the smallest row when an ember
     then fits beside it, else the largest
     usable row that fits alone (the default, with the ember none), with no
-    ember. Usable = the file is under this backend's speed cap
+    ember. auto reads only the tested, open-license rows (config.auto_rows).
+    Usable = the file is under this backend's speed cap
     (speed_cap_gb); nothing usable fits -> the smallest row that fits. A
     name is never second-guessed. The same file in both roles is one model
     doing both: no ember. No spark row (none, or a name that is not there)

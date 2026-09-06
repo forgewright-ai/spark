@@ -362,57 +362,67 @@ def theme_palette(name, repo=REPO):
     return pal
 
 
+OPEN_LICENSES = ("Apache-2.0", "MIT")     # the first word of a MODEL_*_LICENSE that auto may take (bootstrap.sh open_license is the twin)
+
+
+def is_open(license_):
+    """True when the license's first word is one of OPEN_LICENSES: the
+    rows `auto` may pick and that download without a question."""
+    return bool(license_) and license_.split()[0] in OPEN_LICENSES
+
+
 def _parse_model_file(path, source):
-    """[(name, file, url, bytes, sha256, ram_gb, source, purpose, license,
-    note)] from one KEY=value catalog file. Every MODEL_<NAME> row is
+    """[(name, file, url, bytes, sha256, ram_gb, source, tested, license,
+    note)] from one KEY=value model file. Every MODEL_<NAME> row is
     exactly 5 fields (file url bytes sha256 ram_gb); anything else dies,
     naming the file (config is data, wrong data is refused). The
-    LICENSE/NOTE side-keys (MODEL_<NAME>_LICENSE, MODEL_<NAME>_NOTE) and
-    the PURPOSE side-key (EMBER_<NAME>_PURPOSE) are not rows themselves.
-    An ember row (source "ember") needs a PURPOSE; a community or user row
-    needs a LICENSE; a curated row needs neither. Missing file -> []."""
+    side-keys are not rows: MODEL_<NAME>_LICENSE ("<name> <url>",
+    required for every row), MODEL_<NAME>_TESTED ("line": the row was
+    proven on the line, so auto may pick it; absent otherwise) and
+    MODEL_<NAME>_NOTE (one line, optional). `source` is "repo"
+    (models.env) or "user" (~/.config/spark/models.env). Missing file
+    -> []."""
     kv = parse_env(path)
     base = os.path.basename(path)
     rows = []
     for k, v in kv.items():
-        if not k.startswith("MODEL_") or k.endswith(("_LICENSE", "_NOTE")):
+        if not k.startswith("MODEL_") or k.endswith(("_LICENSE", "_NOTE", "_TESTED")):
             continue
         parts = v.split()
         if len(parts) != 5:
             die("%s: %s needs 5 fields: file url bytes sha256 ram_gb" % (base, k), 2)
         stem = k[6:]
         name = stem.lower().replace("_", "-")
-        purpose = kv.get("EMBER_" + stem + "_PURPOSE", "")
         license_ = kv.get(k + "_LICENSE", "")
         note = kv.get(k + "_NOTE", "")
-        if source == "ember" and not purpose:
-            die("%s: %s has no EMBER_%s_PURPOSE" % (base, k, stem), 2)
-        if source in ("community", "user") and not license_:
+        tested = kv.get(k + "_TESTED", "") == "line"
+        if not license_:
             die("%s: %s has no %s_LICENSE" % (base, k, k), 2)
         rows.append((name, parts[0], parts[1], int(parts[2]), parts[3], float(parts[4]),
-                     source, purpose, license_, note))
+                     source, tested, license_, note))
     return rows
 
 
+def auto_rows(rows):
+    """The rows `auto` may pick: tested on the line, open license (the
+    only filter; bootstrap.sh model_rows is the twin)."""
+    return [r for r in rows if r[7] and is_open(r[8])]
+
+
 def models_table(repo=REPO):
-    """[(name, file, url, bytes, sha256, ram_gb)] from models.env (the
-    curated list: open licenses only, each row proven on the line), in
-    file order. The only source SITE_AI_MODEL=auto / SITE_EMBER_MODEL=auto
-    read."""
-    return [row[:6] for row in _parse_model_file(os.path.join(repo, "models.env"), "curated")]
+    """[(name, file, url, bytes, sha256, ram_gb)] -- the rows auto reads
+    (tested, open license), in file order, from models.env only."""
+    return [row[:6] for row in auto_rows(_parse_model_file(os.path.join(repo, "models.env"), "repo"))]
 
 
 def model_tables(repo=REPO):
-    """All four catalogs, curated first: [(name, file, url, bytes, sha256,
-    ram_gb, source, purpose, license, note)] from models.env (curated),
-    embers.env (ember), community.env (community) and
-    ~/.config/spark/models.env (user, when present -- yours, never in the
-    repo). A name that appears in two files is refused, naming both."""
+    """The one list plus yours: [(name, file, url, bytes, sha256, ram_gb,
+    source, tested, license, note)] from models.env ("repo") then
+    ~/.config/spark/models.env ("user", when present -- yours, never in
+    the repo). A name that appears in both is refused, naming both."""
     seen = {}
     out = []
-    for path, source in ((os.path.join(repo, "models.env"), "curated"),
-                          (os.path.join(repo, "embers.env"), "ember"),
-                          (os.path.join(repo, "community.env"), "community"),
+    for path, source in ((os.path.join(repo, "models.env"), "repo"),
                           (os.path.join(CONFIG_DIR, "models.env"), "user")):
         for row in _parse_model_file(path, source):
             name = row[0]

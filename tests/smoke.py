@@ -872,26 +872,25 @@ def main():
         rc, out, _ = spark("model", "list", extra=marks)
         t.ok(rc == 0 and re.search(r"^  \*\s+qwen3-1-7b ", out, re.M) and re.search(r"^  \+\s+qwen3-4b ", out, re.M),
              "spark model list marks the spark pick * and the ember pick +", out)
-        t.ok(re.search(r"^   \? gemma3-12b ", out, re.M), "spark model list marks a community row ?", out)
-        t.ok("spark ember list -- 2 models with a purpose" in out, "spark model list ends pointing at spark ember list", out)
-        t.ok("e = embers (a purpose), u = yours" in out, "the legend names the source marks", out)
+        t.ok(re.search(r"^     gemma3-12b .* Gemma-Term", out, re.M), "spark model list shows a row's license, first word", out)
+        t.ok(re.search(r"^  \*\s+qwen3-1-7b .* Apache-2.0 line ", out, re.M), "a tested row says line", out)
+        t.ok(re.search(r"^     qwen2-5-coder-7b .* Apache-2.0      ", out, re.M) and "      code: reads and writes programs" in out,
+             "an untested row has no line mark; its note follows, indented", out)
+        t.ok("u = yours" in out and "auto picks among the rows tested on the line" in out, "the legend names the mark and the auto rule", out)
+        t.ok("community" not in out and "embers" not in out and "curated" not in out, "one list: no list words", out)
         rc, out2, _ = spark("ember", "list", extra=marks)
-        t.ok(rc == 0 and re.search(r"^  \*\s+qwen3-1-7b ", out2, re.M) and re.search(r"^  \+\s+qwen3-4b ", out2, re.M),
-             "spark ember list prints the same table", out2)
-        t.ok(re.search(r"^   e qwen2-5-coder-7b ", out2, re.M) and "      code: reads and writes programs" in out2,
-             "spark ember list shows an embers.env row and its purpose line", out2)
-        t.ok("spark ember list --" not in out2, "spark ember list has no closing pointer to itself", out2)
+        t.ok(rc == 0 and out2 == out, "spark ember list prints the same table", out2)
         client = {"SPARK_NO_APPLY": "1", "SPARK_MEM_TOTAL_GB": "64", "SITE_AI_MODEL": "none", "SITE_EMBER_MODEL": "auto"}
         rc, out3, _ = spark("ember", "list", extra=client)
-        row_lines3 = [ln for ln in out3.splitlines() if " GB file " in ln]
+        row_lines3 = [ln for ln in out3.splitlines() if re.match(r"^  [ *+][ u] \S+ +\d+\.\d GB ", ln)]
         t.ok(rc == 0 and row_lines3 and not any(re.match(r"^  [*+]", ln) for ln in row_lines3),
              "SITE_AI_MODEL=none: nothing served, so ember auto picks nothing", out3)
         # the speed column: an estimate (~) on every fitting row until measured
         speed_env = {"SPARK_NO_APPLY": "1", "SPARK_MEM_TOTAL_GB": "16"}
         rc, out4, _ = spark("model", "list", extra=speed_env)
-        rows = [ln for ln in out4.splitlines() if re.search(r" GB file ", ln)]
-        fitting = [ln for ln in rows if " fits " in ln]
-        too_big = [ln for ln in rows if " too big" in ln]
+        rows = [ln for ln in out4.splitlines() if re.match(r"^  [ *+][ u] \S+ +\d+\.\d GB ", ln)]
+        fitting = [ln for ln in rows if not ln.endswith(" too big")]
+        too_big = [ln for ln in rows if ln.endswith(" too big")]
         t.ok(rc == 0 and fitting and all(re.search(r" ~\d+ tok/s$", ln) for ln in fitting),
              "spark model list: every fitting row ends in an estimated ~N tok/s", out4)
         t.ok(too_big and all("tok/s" not in ln for ln in too_big), "a too-big row has no speed", out4)
@@ -899,12 +898,12 @@ def main():
         t.ok(re.search(r"budget \d+ GB \(\d+%\), (metal|vulkan|cpu)$", out4.splitlines()[0]), "the header names the backend", out4)
         # the speed cap and the auto build, the python twin under the pins
         # tests/install_test.sh section 8 puts on bootstrap.sh: 18 GB -> a
-        # 10.8 GB curated-only budget (qwen3-14b needs 11, over either
+        # 10.8 GB budget over the tested rows (qwen3-14b needs 11, over either
         # way); auto stops at the 3 GB cap on cpu (qwen3-4b), the 6 GB cap
         # on vulkan (qwen3-8b, at 19 GB / 11.4 GB budget, where qwen3-14b
         # would otherwise fit); SITE_AI_BUILD=auto is vulkan when a DRM
         # device reports VRAM, else cpu; a name is never second-guessed,
-        # and is looked up in all four lists. The Linux rule is forced
+        # and is looked up in the whole list and yours. The Linux rule is forced
         # (engine.IS_MAC) so the pins mean the same on either OS; this OS
         # as it is comes last (metal on macOS whatever the key says).
         os.makedirs(home + "/drm/card0/device")
@@ -934,10 +933,10 @@ def main():
         t.ok(linux_pick(SITE_AI_BUILD="cpu", SITE_AI_MODEL="qwen3-14b") == "qwen3-14b none cpu -",
              "twin: a named model is never second-guessed, no note", linux_pick(SITE_AI_BUILD="cpu", SITE_AI_MODEL="qwen3-14b"))
         t.ok(linux_pick(SITE_AI_BUILD="cpu", SITE_AI_MODEL="qwen2-5-coder-7b") == "qwen2-5-coder-7b none cpu -",
-             "twin: a named ember row is picked for spark too, from any list",
+             "twin: a named untested row is picked for spark too",
              linux_pick(SITE_AI_BUILD="cpu", SITE_AI_MODEL="qwen2-5-coder-7b"))
         t.ok(linux_pick(SITE_AI_BUILD="cpu", SITE_AI_MODEL="gemma3-12b") == "gemma3-12b none cpu -",
-             "twin: a named community row is picked for spark too, from any list",
+             "twin: a named non-open row is picked for spark too",
              linux_pick(SITE_AI_BUILD="cpu", SITE_AI_MODEL="gemma3-12b"))
         t.ok(linux_pick(SITE_AI_BUILD="cpu", SPARK_MEM_TOTAL_GB="6") == "qwen3-1-7b none cpu -",
              "twin: 6 GB -> the smallest row, nothing held back", linux_pick(SITE_AI_BUILD="cpu", SPARK_MEM_TOTAL_GB="6"))
@@ -985,20 +984,22 @@ def main():
         rc, outb3, _ = spark("model", "budget", "30", extra={"SPARK_NO_APPLY": "1"})
         t.ok(rc == 0 and "SITE_AI_BUDGET=30" in outb3, "spark model budget 30 writes the key", outb3)
         t.ok("(30%)" in outb3, "the table header shows the new percent", outb3)
-        t.ok("restarting" not in outb3 and "download" not in outb3,
+        t.ok("restarting" not in outb3 and "ok     download" not in outb3,
              "SPARK_NO_APPLY: the key and the table only -- no restart or download narration", outb3)
         t.ok("SITE_AI_BUDGET=30" in open(home + "/.config/spark/site.env").read(), "site.env carries the choice")
 
-        # the community list: a name from it is never offered by auto, but
-        # spark model NAME still finds it (it accepts any source), prints
-        # its license line first, and -- stdin not a tty in this harness,
-        # which counts as yes -- writes the key
+        # a row under a license auto would not take: never offered by auto,
+        # but spark model NAME still finds it, prints its license line
+        # first, and -- stdin not a tty in this harness, which counts as
+        # yes -- writes the key; an open-license row asks nothing
         rc, out7, err7 = spark("model", "gemma3-12b", extra={"SPARK_NO_APPLY": "1"})
         t.ok(rc == 0 and "gemma3-12b license: Gemma-Terms-of-Use" in out7,
-             "spark model NAME on a community row prints the license line", out7 + err7)
+             "spark model NAME on a non-open row prints the license line", out7 + err7)
         t.ok("not an open-source license" in out7, "... and its note", out7)
         t.ok("SITE_AI_MODEL=gemma3-12b" in open(home + "/.config/spark/site.env").read(),
              "stdin not a tty counts as yes: the key is written", out7)
+        rc, out7b, _ = spark("model", "qwen2-5-coder-7b", extra={"SPARK_NO_APPLY": "1"})
+        t.ok(rc == 0 and "license:" not in out7b, "an untested Apache-2.0 row downloads without a question", out7b)
 
         # a name in two lists is refused, naming both files (config is
         # data; wrong data is refused) -- config.model_tables is the rule,
