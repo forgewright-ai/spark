@@ -2,63 +2,55 @@
 
 ## v1.9
 
-- `spark setup` asks three things, not four: the palette is no longer a
-  question. spark ships wearing `gruvbox-dark`, and `spark theme NAME` or
-  `spark theme none` changes it whenever you like -- a first-run question
-  about tmux and starship colours is one a user who never turns the shell
-  layer on has no way to answer. `--theme` and `SITE_THEME` still
+A stranger's first run: three questions, and a machine that looks untouched
+until it is asked to change.
+
+- `spark setup` asks three things, not four. The palette is no longer a
+  question: spark ships wearing `gruvbox-dark`, and `spark theme NAME` or
+  `spark theme none` changes it whenever you like. Asking a first-timer to
+  pick colours for tmux and starship -- the shell layer, which setup leaves
+  off -- spent a question on nothing. `--theme` and `SITE_THEME`
   pre-answer it.
-- A first run leaves a stranger's machine looking exactly as it did. The
-  palette's runtime files were written by `spark setup` whatever
-  `SITE_SHELL` said, and the rc hook -- which is core -- cats
-  `console-colors` on a `TERM=linux` console, so a fresh install repainted
-  the VT at the next login. `SITE_THEME` is still recorded; the files, and
-  the macOS Terminal profile, now land with `spark shell on` or an
-  explicit `spark theme NAME`.
-- `spark theme` stopped asking for a shell restart it never needed.
-  Nothing in a running shell holds the palette: starship re-reads its
-  config on every prompt, the widget draws no colour of its own, and the
-  rc hook reads `console-colors` alone. With that file now sent to the
-  console directly, a theme is live everywhere it can be -- the next
-  prompt, tmux, the VT -- and only a running micro must be reopened.
-- A palette change reaches the console it is typed on. `spark theme NAME`
-  and `spark theme none` wrote `console-colors` and left it for the rc hook
-  to cat at the next login, so turning a theme off looked stuck until a
-  logout and a `clear`. One helper (`theme.apply_console`) now sends that
-  file to a running `TERM=linux` VT, and `spark theme`, `spark shell on`
-  and `spark shell off` all go through it. An emulator is never repainted.
-- The `theme` check row reads `na`, not `fail`, when `SITE_THEME` names a
-  palette that nothing has painted yet and the shell layer is off -- the
-  state every fresh install is now in.
-- `spark shell off` hands the terminal back. It restored the rc files and
-  the rendered configs but said nothing about opening a new shell, and it
-  left the palette on: a VT holds its own colours, so no `exec $SHELL`
-  could undo them and only a fresh login looked clean. It now writes the
-  reset into `console-colors` for the next login, sends it to a running
-  Linux console at once, and prints the `open a new shell (exec $SHELL)`
-  line that `spark shell on` always printed. `SITE_THEME` stays in
-  `site.env`, so `spark shell on` paints it again.
+- A first run now leaves the machine looking exactly as it did. setup wrote
+  the palette's runtime files whatever `SITE_SHELL` said, and the rc hook
+  is core: it cats `console-colors` on a `TERM=linux` console, so a fresh
+  install with the shell layer off repainted the VT at the next login.
+  `SITE_THEME` is still recorded; the files, and the macOS Terminal
+  profile, land with `spark shell on` or an explicit `spark theme NAME`.
+- A palette reaches the console it is typed on. `spark theme` wrote
+  `console-colors` and left it for the next login, so a theme arrived late
+  and turning one off looked stuck until a logout and a `clear`. One helper
+  sends that file to a running Linux VT, and `spark theme`, `spark shell
+  on` and `spark shell off` all use it. An emulator is never repainted.
+- `spark theme` no longer asks for a shell restart it never needed:
+  starship re-reads its config on every prompt, the widget draws no colour
+  of its own, and the hook reads `console-colors` alone. Only a running
+  micro must be reopened.
+- `spark shell off` hands the terminal back: the palette goes with the
+  layer that brought it, a running console is reset at once, and it prints
+  the `open a new shell (exec $SHELL)` line that `spark shell on` always
+  printed. `SITE_THEME` stays, so `spark shell on` paints it again. The
+  `theme` check row reads `na`, not `fail`, for a palette nothing has
+  painted yet.
 - `spark font list` on Linux names the Nerd Font. The console takes `.psf`
   faces from `/usr/share/consolefonts`; the JetBrainsMono Nerd Font that
   `spark shell on` unzips into `~/.local/share/fonts` is a `.ttf` for a
-  terminal emulator and can never appear in that list. It is named under
-  the list now, with where to set it.
+  terminal emulator and can never appear in that list, so it is named
+  under it with where to set it.
 - The setup table says it is not the whole list. Only rows proven on the
-  line and under an open license are offered, which today is the five
-  qwen3 rows, so the first run read as though spark served nothing else --
-  one line under the table now counts the other 21 and points at `spark
-  model list`. Naming any of them with `--model` always worked.
+  line and under an open license are offered -- today the five qwen3 rows
+  -- so the first run read as though spark served nothing else. One line
+  counts the other 21 and points at `spark model list`.
 - INSTALL.md opens with two numbered walkthroughs instead of prose: a
   machine from zero (the Debian image, the empty root password that earns
   you `sudo`, the packages) and spark on a machine you have (one check for
   `sudo`, `git`, `curl` and `python3`, then the one-liner). The runbook
-  follows; `get`'s own internals moved out of the first-run path.
-- The page really does rebuild on a release now. `release.yml` creates the
+  follows.
+- The page really does rebuild on a release. `release.yml` creates the
   Release with the job's own `GITHUB_TOKEN`, and GitHub raises no event for
-  what that token does, so the `release: published` trigger v1.8 shipped
-  never fired: v1.8 was published and the page went on naming v1.7.
-  `pages.yml` waits for the release WORKFLOW to finish instead, and
-  publishes only when it succeeded.
+  what that token does, so v1.8's `release: published` trigger never fired
+  and the page went on naming v1.7. `pages.yml` waits for the release
+  workflow to finish instead, and publishes only when it succeeded.
 
 ## v1.8
 
