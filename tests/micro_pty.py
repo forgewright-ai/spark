@@ -36,6 +36,7 @@ case " $* " in
     *" --at "*)   printf 'STUB-DONE'; exit 0 ;;
     *" keep it "*) cat "$STUB_LOG.stdin"; exit 0 ;;
     *" fail "*)   printf 'spark: no brain today -- spark serve\n' >&2; exit 1 ;;
+    *" slow "*)   sleep 2; printf 'STUB-SLOW'; exit 0 ;;
 esac
 printf 'STUB-EDIT'
 '''
@@ -265,6 +266,53 @@ def main():
         m.send("fail\r")
         ok(m.expect("no brain today"), "spark's die hint is shown", debug_log())
         m.send("\x11")
+        m.read(1.0)
+        m.close()
+
+        # G. the file is edited while spark thinks: nothing is spliced over
+        # the stale range; the answer opens in a pane; micro lives on
+        with open(note, "w") as f:
+            f.write("hello world\nsecond line\n")
+        m = Micro(argv, env, work)
+        ok(m.expect("second line"), "micro draws two lines")
+        m.mark()
+        m.send("\x1bs")
+        m.expect("spark>")
+        m.send("slow\r")
+        time.sleep(0.5)
+        m.send("\x01")              # Ctrl-a, Backspace: the buffer is emptied meanwhile
+        m.send("\x08")
+        ok(m.expect("thought", 6), "a whole-file answer over a changed buffer is refused (the infobar says so)", debug_log())
+        ok(m.expect("STUB-SLOW", 2), "the answer is shown in a pane instead")
+        ok(os.waitpid(m.pid, os.WNOHANG) == (0, 0), "micro is still running")
+        m.send("\x11")              # the pane
+        time.sleep(0.4)
+        m.send("\x11")              # the buffer, modified: micro asks
+        time.sleep(0.4)
+        m.send("n\r")
+        m.read(1.0)
+        m.close()
+        with open(note) as f:
+            ok(f.read() == "hello world\nsecond line\n", "the file on disk is untouched")
+
+        # H. the same over a selection that moved
+        m = Micro(argv, env, work)
+        ok(m.expect("second line"), "micro draws two lines again")
+        m.mark()
+        m.send("\x01")              # select all
+        m.send("\x1bs")
+        m.expect("spark>")
+        m.send("slow\r")
+        time.sleep(0.5)
+        m.send("\x1b[H")            # Home, then a word typed at the top
+        m.send("x")
+        ok(m.expect("thought", 6), "a selection answer over a changed buffer is refused (the infobar says so)", debug_log())
+        ok(os.waitpid(m.pid, os.WNOHANG) == (0, 0), "micro is still running")
+        m.send("\x11")
+        time.sleep(0.4)
+        m.send("\x11")
+        time.sleep(0.4)
+        m.send("n\r")
         m.read(1.0)
         m.close()
 

@@ -874,8 +874,7 @@ def main():
              "spark model list marks the spark pick * and the ember pick +", out)
         t.ok(re.search(r"^     gemma3-12b .* Gemma-Term", out, re.M), "spark model list shows a row's license, first word", out)
         t.ok(re.search(r"^  \*\s+qwen3-1-7b .* Apache-2.0 line ", out, re.M), "a tested row says line", out)
-        t.ok(re.search(r"^     qwen2-5-coder-7b .* Apache-2.0      ", out, re.M) and "      code: reads and writes programs" in out,
-             "an untested row has no line mark; its note follows, indented", out)
+        t.ok(re.search(r"^     qwen2-5-coder-7b .* Apache-2.0      ", out, re.M), "an untested row has no line mark", out)
         t.ok("u = yours" in out and "auto picks among the rows tested on the line" in out, "the legend names the mark and the auto rule", out)
         t.ok("community" not in out and "embers" not in out and "curated" not in out, "one list: no list words", out)
         rc, out2, _ = spark("ember", "list", extra=marks)
@@ -995,7 +994,6 @@ def main():
         rc, out7, err7 = spark("model", "gemma3-12b", extra={"SPARK_NO_APPLY": "1"})
         t.ok(rc == 0 and "gemma3-12b license: Gemma-Terms-of-Use" in out7,
              "spark model NAME on a non-open row prints the license line", out7 + err7)
-        t.ok("not an open-source license" in out7, "... and its note", out7)
         t.ok("SITE_AI_MODEL=gemma3-12b" in open(home + "/.config/spark/site.env").read(),
              "stdin not a tty counts as yes: the key is written", out7)
         rc, out7b, _ = spark("model", "qwen2-5-coder-7b", extra={"SPARK_NO_APPLY": "1"})

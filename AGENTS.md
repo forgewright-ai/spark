@@ -35,6 +35,7 @@ shellcheck -S warning bootstrap.sh install.sh lib/env.sh
 /usr/bin/python3 tests/serve_smoke.py
 /usr/bin/python3 tests/forge_smoke.py
 /usr/bin/python3 tests/bench_smoke.py
+/usr/bin/python3 tests/docs_test.py
 /usr/bin/python3 tests/widget_pty.py zsh home/.config/spark/widget.zsh
 /usr/bin/python3 tests/widget_pty.py pager
 /usr/bin/python3 tests/widget_pty.py completion zsh home/.config/spark/completion.zsh

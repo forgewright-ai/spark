@@ -15,6 +15,20 @@ The server keeps no prompt cache in RAM.
 - The `serve` check row reads the running server's arguments: `no host
   cache`, or the budget you set, or a warning when an older start still
   caches (restart the unit).
+- The micro plugin (1.0.1) survives its own mistakes: every job callback
+  runs protected, so a Lua error becomes an infobar line instead of a dead
+  editor with a stack trace. A rewrite checks that the text it was given
+  is still where it was; when the buffer was edited meanwhile the answer
+  opens in a read-only pane instead of being spliced over a stale range.
+  Two pty cases prove both.
+- The docs keep themselves true: `tests/docs_test.py` (pre-commit, CI)
+  checks every palette's and every model's upstream is in `CREDITS.md`,
+  the check-row and model counts the docs state are the tree's, every
+  page has its source file, and no retired list word survives.
+- `CREDITS.md` names all six palettes with their own license (Tokyo Night
+  is Apache-2.0) and every model family's upstream.
+- The page's models table drops the note column; `models.env` ships no
+  notes (the key stays, optional, for your own rows).
 
 ## v1.6
 

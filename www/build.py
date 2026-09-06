@@ -182,18 +182,18 @@ def read(name):
 def models_page(base):
     """The one list as spark's own parser reads it (config.model_tables),
     the user's file left out: this is the repository's page. One table:
-    model, file, RAM, license, tested, note; the tested rows under an open
+    model, file, RAM, license, tested; the tested rows under an open
     license are the ones `auto` picks."""
     rows = [r for r in config.model_tables(ROOT) if r[6] != "user"]
     h = ["<p class=\"cmd\"><span class=\"p\">~ &gt; </span>spark model list<span class=\"k\"> -- %d models, one list</span></p>" % len(rows),
-         "<table><thead><tr><th>model</th><th class=\"r\">file</th><th class=\"r\">RAM</th><th>license</th><th>tested</th><th>note</th></tr></thead><tbody>"]
+         "<table><thead><tr><th>model</th><th class=\"r\">file</th><th class=\"r\">RAM</th><th>license</th><th>tested</th></tr></thead><tbody>"]
     for r in rows:
         name, fname, url, nbytes, sha, ram, src, tested, lic, note = r
         lic_name, lic_url = (lic.split() + [""])[:2]
         lic_html = '<a href="%s">%s</a>' % (html.escape(lic_url, quote=True), html.escape(lic_name.replace("-", " "))) if lic_url else html.escape(lic_name)
-        h.append("<tr><td><a href=\"%s\">%s</a></td><td class=\"r\">%.1f GB</td><td class=\"r\">%d GB</td><td>%s</td><td>%s</td><td class=\"q\">%s</td></tr>"
+        h.append("<tr><td><a href=\"%s\">%s</a></td><td class=\"r\">%.1f GB</td><td class=\"r\">%d GB</td><td>%s</td><td>%s</td></tr>"
                  % (html.escape(url, quote=True), html.escape(name), int(nbytes) / 2**30, int(ram),
-                    lic_html, "line" if tested else "", html.escape(note or "")))
+                    lic_html, "yes" if tested else ""))
     h.append("</tbody></table>")
     h.append("<p class=\"hint\"><code>spark model NAME</code> serves one; <code>spark ember NAME</code> adds a second, for conversations. "
              "<code>auto</code> picks among the rows tested on the line under Apache-2.0 or MIT; any other license is shown and asked about before the download. "

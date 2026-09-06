@@ -110,6 +110,7 @@ templates/      rendered, not linked: .gitconfig .tmux.conf .config/btop/btop.co
                 .config/micro/colorschemes/spark.micro .config/micro/settings.json (seeded once)
                 .config/starship.toml.{minimal,full} .config/spark/launchd/spark.{serve,forge,check}.plist
 tests/          install_test.sh get_test.sh update_test.sh smoke.py serve_smoke.py
+                docs_test.py (the docs say what the tree holds: credits, counts, pages)
                 micro_pty.py (micro in a pty against a stub spark; skips without micro)
                 forge_smoke.py bench_smoke.py widget_pty.py check_selftest.py
                 vault_test.py (RFC 8439 vectors, round-trips, refusals)
@@ -354,12 +355,17 @@ One grammar for every verb; a verb that breaks a rule is a bug.
 ## Adding things
 
 - **A doc.** The page (`www/`, spark.forgewright.ai) is the docs rendered:
-  a change in INSTALL.md, CHEATSHEET.txt, a model list, CHANGELOG.md,
+  a change in INSTALL.md, CHEATSHEET.txt, models.env, CHANGELOG.md,
   ROADMAP.md, CONTRIBUTING.md or CREDITS.md ships on the next push to main,
   nothing to do. The look lives in `www/template.html`; the front in
   `www/index.html` (demos and one-line hints, never a paragraph); the
   markdown subset in `www/build.py` (tests/site_test.py holds its
-  invariants -- a new construct in a doc needs both).
+  invariants -- a new construct in a doc needs both). The docs are kept
+  true by `tests/docs_test.py` (pre-commit, CI): every palette and every
+  model upstream is in CREDITS.md, the check-row and model counts the
+  docs state are the tree's, every page has its source, no retired word
+  survives. A new fact a doc states that the tree can derive goes there
+  as one more check -- the test is the consistency, not a reviewer.
 - **A package.** Linux: the right `PKG_*` group in `bootstrap.sh` with a
   comment saying why (`PKG_CORE`/`PKG_ENGINE`/`PKG_AI` are the AI, always
   installed; the rest is the shell layer, `SITE_SHELL=on`). macOS:
@@ -479,6 +485,7 @@ spark check                     # must exit 0
 spark check --selftest          # every fixture-testable row flips
 spark forge                     # the FORGE: up, at one LAN address, upstream ok
 python3 tests/forge_smoke.py    # the API and the page, against a stub model
+python3 tests/docs_test.py      # the docs say what the tree holds (credits, counts)
 python3 tests/widget_pty.py pager        # $PAGER at a tty; plain when absent
 python3 tests/widget_pty.py completion zsh home/.config/spark/completion.zsh
                                 # TAB completes verbs and names (bash likewise)

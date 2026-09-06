@@ -42,12 +42,14 @@ installs the same family on macOS with no version pin.
 
 ## Palettes
 
-Colour values only, no code copied; MIT, each:
+Colour values only, no code copied; the license is the upstream's:
 
-- Catppuccin -- https://github.com/catppuccin/catppuccin
-- Gruvbox -- https://github.com/morhetz/gruvbox
-- Selenized -- https://github.com/jan-warchol/selenized
-- Solarized -- https://ethanschoonover.com/solarized
+- Catppuccin -- https://github.com/catppuccin/catppuccin -- MIT
+- Gruvbox -- https://github.com/morhetz/gruvbox -- MIT
+- Nord -- https://www.nordtheme.com -- MIT
+- Selenized -- https://github.com/jan-warchol/selenized -- MIT
+- Solarized -- https://ethanschoonover.com/solarized -- MIT
+- Tokyo Night -- https://github.com/folke/tokyonight.nvim -- Apache-2.0
 
 ## Shell tools (apt / Homebrew, `spark shell on`)
 
@@ -85,19 +87,21 @@ come from Hugging Face's file metadata; every row in `models.env` names
 its license. GGUF quantizations by bartowski and unsloth.
 
 - Qwen3 (1.7B, 4B, 4B-Thinking, 8B, 14B, 30B-A3B, Coder-30B-A3B) and
-  Qwen2.5 (7B, 14B, Coder-7B), by Alibaba's Qwen team -- Apache-2.0
-- Mistral 7B Instruct v0.3 and Mistral Nemo 12B, by Mistral AI --
-  Apache-2.0
-- Phi-4 and Phi-4 mini, by Microsoft -- MIT
-- DeepSeek-R1-Distill-Qwen 7B and 14B, by DeepSeek -- MIT
-- SmolLM2 1.7B, by Hugging Face -- Apache-2.0
-- gpt-oss-20b, by OpenAI -- Apache-2.0
-- Granite 3.3 8B, by IBM -- Apache-2.0
-- Llama 3.2 1B / 3B and Llama 3.1 8B, by Meta -- the Llama Community
-  License (not an open-source license; spark asks before downloading)
-- Gemma 3 1B / 4B / 12B / 27B, by Google -- the Gemma Terms of Use
-  (https://ai.google.dev/gemma/terms; not an open-source license; spark
-  asks before downloading)
+  Qwen2.5 (7B, 14B, Coder-7B) -- https://huggingface.co/Qwen -- Apache-2.0
+- Mistral 7B Instruct v0.3 and Mistral Nemo 12B --
+  https://huggingface.co/mistralai -- Apache-2.0
+- Phi-4 and Phi-4 mini -- https://huggingface.co/microsoft -- MIT
+- DeepSeek-R1-Distill-Qwen 7B and 14B -- https://huggingface.co/deepseek-ai
+  -- MIT
+- SmolLM2 1.7B -- https://huggingface.co/HuggingFaceTB -- Apache-2.0
+- gpt-oss-20b -- https://huggingface.co/openai -- Apache-2.0
+- Granite 3.3 8B -- https://huggingface.co/ibm-granite -- Apache-2.0
+- Llama 3.2 1B / 3B and Llama 3.1 8B -- https://huggingface.co/meta-llama
+  -- the Llama Community License: not an open-source license, spark asks
+  before downloading
+- Gemma 3 1B / 4B / 12B / 27B -- https://ai.google.dev/gemma/terms -- the
+  Gemma Terms of Use: not an open-source license, spark asks before
+  downloading
 
 ## Built with Claude
 

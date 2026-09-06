@@ -16,7 +16,10 @@ or Esc then s, quickly. What you type there decides what happens:
                          selected: it is a proposal, never applied silently.
                          Select the whole unit you mean -- the paragraph,
                          the function -- not a word of it: a fragment comes
-                         back as exactly that fragment
+                         back as exactly that fragment. Keep editing while
+                         it thinks if you like: an answer whose text moved
+                         or changed meanwhile opens in a pane instead of
+                         being spliced over the wrong place
     ? words              ask about the selection (or the whole file) in a
                          pane on the right; Ctrl-q closes it
     ?                    review the selection or the file: a few sentences,

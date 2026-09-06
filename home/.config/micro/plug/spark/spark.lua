@@ -1,4 +1,4 @@
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 
 -- spark.lua -- spark in micro (the first smart tool). One key, Alt-s, opens
 -- the `spark> ` prompt; Enter alone completes at the cursor, words rewrite
@@ -109,6 +109,28 @@ local function select_region(bp, a, b)
     c:SetSelectionEnd(b)
 end
 
+-- Is loc still inside buf? The buffer may have shrunk while spark thought.
+local function inside(buf, loc)
+    if loc.Y < 0 or loc.Y >= buf:LinesNum() then return false end
+    return loc.X >= 0 and loc.X <= runes(buf:Line(loc.Y))
+end
+
+-- What the buffer holds now between a and b, or nil when the range is gone.
+local function text_at(buf, a, b)
+    if not inside(buf, a) or not inside(buf, b) then return nil end
+    return util.String(buf:Substr(a, b))
+end
+
+-- An answer that cannot be spliced is still an answer: a read-only pane.
+local function show_pane(bp, text)
+    local pane = buffer.NewBuffer(text, "spark")
+    pane.Type.Scratch = true
+    pane.Type.Readonly = true
+    pane:SetOptionNative("softwrap", true)
+    pane:SetOptionNative("wordwrap", true)
+    bp:VSplitBuf(pane)
+end
+
 local function argv(bp, extra)
     local args = {"edit", "--type", bp.Buf:FileType()}
     local path = bp.Buf.Path
@@ -172,6 +194,13 @@ local function on_exit(_, args)
             notice("spark: unchanged")
             return
         end
+        -- the text it rewrote must still be there: an edit meanwhile moved
+        -- or shrank it, and a splice over a stale range corrupts the file
+        if text_at(state.buf, state.sel_a, state.sel_b) ~= state.sel_text then
+            show_pane(state.bp, state.acc)
+            notice("spark: the text changed while it thought -- the answer is in the pane, Ctrl-q closes")
+            return
+        end
         state.buf:Remove(state.sel_a, state.sel_b)
         state.buf:Insert(state.sel_a, state.acc)
         if state.whole then
@@ -203,10 +232,22 @@ function onAnyEvent()
     end
 end
 
+-- A Lua error inside a job callback ends micro with a stack trace (2.0.14):
+-- each callback runs protected, and an error becomes an infobar line.
+local function guarded(fn)
+    return function(out, args)
+        local fine, err = pcall(fn, out, args)
+        if not fine then
+            pending = false
+            micro.InfoBar():Error("spark: " .. tostring(err))
+        end
+    end
+end
+
 local function spawn(bp, args, stdin, state)
     state.err, state.got = "", false
     pending = true
-    local job = shell.JobSpawn(bin(), args, on_out, on_err, on_exit, state)
+    local job = shell.JobSpawn(bin(), args, guarded(on_out), guarded(on_err), guarded(on_exit), state)
     if job == nil then
         pending = false
         micro.InfoBar():Error("spark: could not start " .. bin())
