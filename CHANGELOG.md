@@ -2,25 +2,23 @@
 
 ## v1.8
 
-- A rendered file no longer moves with the network. `SITE_NAME` and the
-  guessed `SITE_GIT_EMAIL` took macOS's `hostname`, which is whatever the
-  network last told configd while `scutil --get HostName` is unset -- so
-  `~/.gitconfig` and `~/.tmux.conf` drifted on their own, the `configs`
-  row failed, and applying `install.sh` rewrote the author line of every
-  later commit. Both now take `scutil --get LocalHostName` on macOS
-  (`short_host` in `lib/env.sh`, `_short_host` in `config.py`); Linux is
-  unchanged.
+A rendered file stops moving with the network; the page stands on its own.
+
+- `SITE_NAME` and a guessed `SITE_GIT_EMAIL` take `scutil --get
+  LocalHostName` on macOS instead of `hostname`: with `HostName` unset the
+  kernel name follows whatever the network last said, so `~/.gitconfig` and
+  `~/.tmux.conf` drifted from their templates on their own, the `configs`
+  row failed, and `install.sh` would have rewritten the author line of
+  every later commit. Linux is unchanged.
 - `./bootstrap.sh` names a guessed git identity in its `identity` row
-  whether the key is absent or still the example's placeholder -- before,
-  only the placeholder was reported and an absent key was invented in
-  silence.
-- A client's `ember` row reads `na` like its other AI rows: a client keeps
-  no second model of its own, and `spark ember NAME` there is refused.
-  What the peer offers is `spark ember list`.
+  whether the key is absent or still the example's placeholder: a guess
+  signs every commit, so it is said out loud.
+- A client's `ember` row reads `na` beside its other AI rows -- a client
+  keeps no second model of its own, and `spark ember NAME` there is
+  refused. `spark ember list` shows what the peer offers.
 - The page rebuilds when a release is published, and its sign line links
   that release: the page and the GitHub release never disagree.
-- The page loads no font from Google: the local stack (the Nerd Font
-  where spark installed it, else the system's monospace) draws it, and a
+- The page loads no font from Google -- the local stack draws it, and a
   browser no longer waits on fonts.googleapis.com to render it.
 
 ## v1.7
