@@ -13,13 +13,6 @@ is a promise; a row in `CHANGELOG.md` is. A better idea is an issue away.
 - The audition: fixtures (a poem, a chapter, a README, a commit message,
   Portuguese prose, Go, Python, shell) with mechanical lints, run against
   a live brain, so a brief is judged blind.
-- Then vim, helix, VS Code: each one client of `spark edit`.
-
-## Line proofs for the new rows
-
-v1.6 lists 26 models, 5 tested. Each untested row wants its line proof
-(`spark line` answers valid JSON) before `auto` may pick it; a proof is a
-pull request setting `MODEL_<NAME>_TESTED=line`.
 
 ## spark token: status for the keys that remain
 
