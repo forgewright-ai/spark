@@ -324,8 +324,14 @@ may change freely.
     usage. No thread is kept; the turn record is numbers (`kind`,
     `chars`, `ms`). A `?` is two requests: the reading (`edit-read`, a
     JSON `{language, kind}` from the first 800 chars, restated as `You
-    read this as: ...`; any failure is silence) and the answer. The
-    micro plugin depends on nothing else.
+    read this as: ...`; any failure is silence) and the answer. A `?`
+    answer streams line by line through `text.Anchors`: every quoted
+    span (double quotes, curly quotes, backticks; 3..200 chars) is
+    checked against the text on stdin -- verbatim, then whitespace
+    folded, then trailing punctuation stripped -- and one that does not
+    anchor is followed by ` [not in the text]` where it stands; the turn
+    records `quotes` and `unanchored`. The micro plugin depends on
+    nothing else.
 
 ## The grammar
 

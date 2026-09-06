@@ -134,6 +134,11 @@ def edit_pieces(system, user):
         return ("```markdown\n", "Fixed ", "text.\n", "```\n")
     if "You are completing text" in system:
         return (" and so on.",)
+    if STATE.get("ask_quotes"):
+        # a review with quotes: one true, one misquote, one across the
+        # text's line break, one curly with the comma tucked inside
+        return ('1. "Some prose." reads flat\n2. "Sum prose" is mis', 'spelled\n3. "prose. And more" runs on\n',
+                '4. “more here,” drifts\nno newline')
     return ("1. line 2: ", "typo\n")
 
 
@@ -627,6 +632,17 @@ def main():
         umsg = STATE["bodies"][-1]["messages"][-1]["content"]
         t.ok(rc == 0 and out == "1. line 2: typo\n" and "You read this as" not in umsg and "Answer in" not in umsg, "edit: a failed reading is silent, the answer still streams", repr(umsg[:120]))
         t.ok(umsg.startswith("Review this.\n\n"), "edit: ? alone is a review", repr(umsg[:40]))
+        # anchors: every quoted span of a ? answer is checked against the text
+        STATE["ask_quotes"] = True
+        rc, out, _ = spark("edit", "?", stdin="Some prose.\nAnd more here.\n")
+        STATE["ask_quotes"] = False
+        t.ok(rc == 0 and out == '1. "Some prose." reads flat\n2. "Sum prose" [not in the text] is misspelled\n'
+             '3. "prose. And more" runs on\n4. “more here,” drifts\nno newline',
+             "edit ?: a misquote is marked where it stands; verbatim, folded and curly quotes anchor; the last line flushes", repr(out))
+        turns = sorted(glob.glob(home + "/.local/state/spark/turns/*.jsonl"))
+        lt = json.loads(open(turns[-1]).read().splitlines()[-1]) if turns else {}
+        t.ok(lt.get("kind") == "ask" and lt.get("quotes") == 4 and lt.get("unanchored") == 1,
+             "edit ?: the turn counts the quotes and the unanchored ones", json.dumps(lt)[:200])
         rc, out, _ = spark("edit", "--type", "python", "--about", "a poem", "tighten", stdin="x = 1\n")
         body = STATE["bodies"][-1]
         t.ok(body["messages"][-1]["content"].startswith("tighten\n\nThe author says: a poem\nText (python):\n"), "edit: --about rides above the label", repr(body["messages"][-1]["content"][:80]))

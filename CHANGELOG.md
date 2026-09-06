@@ -32,6 +32,13 @@ The server keeps no prompt cache in RAM.
 - The page renders a CHANGELOG section above the newest tag as
   `vX.Y (unreleased)`; `tests/docs_test.py` refuses a heading more than
   one release ahead of the tag. The sign line and the changelog agree.
+- Every quote in a `?` answer is checked against the text. The answer
+  streams line by line; a quoted span the text does not hold -- verbatim,
+  with whitespace folded, or with the punctuation tucked inside the quote
+  stripped -- is followed by `[not in the text]` where it stands, so a
+  misquote (an earlier tool of ours turned "plum" into "plume") never
+  reads as the author's words. The brief asks for double quotes, never
+  across a line; the turn record counts `quotes` and `unanchored`.
 - A client stays a client. `spark model` on a client showed its own RAM
   and a budget for a machine that serves nothing, and `spark model NAME`
   there quietly made it a server (the same steps as `spark client off`).

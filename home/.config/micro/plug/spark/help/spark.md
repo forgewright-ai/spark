@@ -23,7 +23,9 @@ or Esc then s, quickly. What you type there decides what happens:
     ? words              ask about the selection (or the whole file) in a
                          pane on the right; Ctrl-q closes it
     ?                    review the selection or the file: a few sentences,
-                         then a handful of quoted notes
+                         then a handful of quoted notes. Every quote is
+                         checked against your text; one it does not hold
+                         is followed by [not in the text]
 
 The same thing from command mode (Ctrl-e): `spark shorter`, `spark ? why`.
 

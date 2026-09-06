@@ -361,18 +361,27 @@ def cmd_edit(args):
     # a rewrite keeps the text's own final-newline shape: the editor splices
     # the reply over the selection, and a model that drops or adds the last
     # newline would join or split lines
-    fence = textmod.Fence(sys.stdout, newline=data.endswith("\n") if kind == "rewrite" else None)
+    # an answer's quotes are checked against the text, line by line, and
+    # the ones the text does not hold are marked where they stand
+    anchors = textmod.Anchors(sys.stdout, data) if kind == "ask" else None
+    fence = textmod.Fence(anchors or sys.stdout, newline=data.endswith("\n") if kind == "rewrite" else None)
+
+    def done():
+        fence.close()
+        if anchors:
+            anchors.close()
     try:
         s = session.Session(cfg, "edit-" + kind, _shell_default(), "", role=role)
         _out, ms = s.ask_stream(text, context, fence.feed, max_tokens=max_tokens, timeout=EDIT_TIMEOUT)
     except wire.BrainError as e:
-        fence.close()
+        done()
         die(e.hint)
     except KeyboardInterrupt:
-        fence.close()
+        done()
         raise
-    fence.close()
-    s.record(kind=kind, chars=len(data), ms=ms)
+    done()
+    counts = {"quotes": anchors.quoted, "unanchored": anchors.missed} if anchors else {}
+    s.record(kind=kind, chars=len(data), ms=ms, **counts)
     return 0
 
 

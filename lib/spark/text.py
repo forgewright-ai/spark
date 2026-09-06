@@ -196,3 +196,80 @@ class Fence:
             elif self.last and self.last != "\n":
                 rest = "\n"
         self._write(rest)
+
+
+# ------------------------------------------------------------- anchors
+# A `?` answer points at the text by quoting it; a quote the text does
+# not contain is a fabrication (an earlier tool of ours misquoted "plum"
+# as "plume"). Every quoted span on every line is checked against the
+# text the question was about, and the ones that do not anchor are
+# marked where they stand, so the reader (and the editor's jump key)
+# knows which quotes to trust.
+QUOTE = re.compile(r'"([^"\n]{3,200})"|“([^”\n]{3,200})”|`([^`\n]{3,200})`')
+ANCHOR_MARK = " [not in the text]"
+
+
+def quotes(line):
+    """[(span, end)] -- every quoted span on one line (double quotes,
+    curly double quotes or backticks; 3..200 chars) and the index just
+    past its closing mark."""
+    return [(m.group(m.lastindex), m.end()) for m in QUOTE.finditer(line)]
+
+
+def _fold(s):
+    return " ".join(s.split())
+
+
+def anchor(span, data, folded=None):
+    """Is `span` in `data`: verbatim; else with whitespace folded on both
+    sides (a quote across a line break); else with the punctuation the
+    model tucked inside the closing quote stripped. `folded` is
+    _fold(data) when the caller has it already."""
+    if span in data:
+        return True
+    folded = _fold(data) if folded is None else folded
+    f = _fold(span)
+    if f and f in folded:
+        return True
+    f = f.rstrip(".,;:!?")
+    return bool(f) and f in folded
+
+
+class Anchors:
+    """A line-buffered stream: each line is held until its newline, every
+    quoted span on it checked against `data`, ANCHOR_MARK appended after
+    each one that does not anchor, and the line written on. close()
+    writes the last unterminated line. `quoted` and `missed` count."""
+
+    def __init__(self, stream, data):
+        self.stream, self.data = stream, data
+        self.folded = _fold(data)
+        self.buf = ""
+        self.quoted = self.missed = 0
+
+    def _mark(self, line):
+        out, last = [], 0
+        for span, end in quotes(line):
+            self.quoted += 1
+            if not anchor(span, self.data, self.folded):
+                self.missed += 1
+                out.append(line[last:end] + ANCHOR_MARK)
+                last = end
+        out.append(line[last:])
+        return "".join(out)
+
+    def write(self, s):
+        self.buf += s
+        while "\n" in self.buf:
+            line, self.buf = self.buf.split("\n", 1)
+            self.stream.write(self._mark(line) + "\n")
+        self.stream.flush()
+
+    def flush(self):
+        self.stream.flush()
+
+    def close(self):
+        if self.buf:
+            self.stream.write(self._mark(self.buf))
+            self.buf = ""
+        self.stream.flush()
