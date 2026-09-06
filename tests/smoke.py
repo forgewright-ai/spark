@@ -643,6 +643,49 @@ def main():
         lt = json.loads(open(turns[-1]).read().splitlines()[-1]) if turns else {}
         t.ok(lt.get("kind") == "ask" and lt.get("quotes") == 4 and lt.get("unanchored") == 1,
              "edit ?: the turn counts the quotes and the unanchored ones", json.dumps(lt)[:200])
+        # --sel: the whole file on stdin, the question about one part of it
+        big = "".join("line %03d of the file\n" % i for i in range(1, 41))
+        a, b = big.index("line 020"), big.index("line 022")
+        rc, out, _ = spark("edit", "--name", "big.md", "?", "why", "--sel", str(a), str(b), stdin=big)
+        umsg = STATE["bodies"][-1]["messages"][-1]["content"]
+        t.ok(rc == 0 and "File big.md -- the question is about the part between the marks:\n" in umsg
+             and "\n[selection starts]\nline 020 of the file\nline 021 of the file\n\n[selection ends]\n" in umsg
+             and "line 001" in umsg and "line 040" in umsg,
+             "edit ? --sel: the selection between the marks, the file around it", repr(umsg[:300]))
+        reading = STATE["bodies"][-2]["messages"][-1]["content"]
+        t.ok(reading.startswith(big[max(0, a - 200):][:20]), "edit ? --sel: the reading starts 200 chars before the selection", repr(reading[:40]))
+        huge = "x" * 30000 + "\n" + "y" * 20000 + "\n" + "z" * 30000 + "\n"
+        rc, out, _ = spark("edit", "?", "--sel", "30001", "50001", stdin=huge)
+        umsg = STATE["bodies"][-1]["messages"][-1]["content"]
+        t.ok(rc == 0 and len(umsg) < 17000 and "[... 8000 chars cut ...]" in umsg
+             and umsg.count("[... ") == 3 and "[selection starts]" in umsg and "[selection ends]" in umsg,
+             "edit ? --sel: a 20 kB selection is clipped inside the marks, the window stays under 16 kB", str(len(umsg)))
+        rc, out, _ = spark("edit", "?", "--sel", "5", "2", stdin="short\n")
+        t.ok(rc == 2 and "--sel A B are byte offsets" in out, "edit ? --sel out of order is refused", out)
+        # --thread: the same id continues the exchange; the text again only when it changed
+        n1 = len(STATE["bodies"])
+        rc, out, _ = spark("edit", "--name", "t.md", "?", "first", "--thread", "edit-t1", stdin="Some prose.\n")
+        rc2, out2, _ = spark("edit", "--name", "t.md", "?", "again", "--thread", "edit-t1", stdin="Some prose.\n")
+        msgs2 = STATE["bodies"][-1]["messages"]
+        t.ok(rc == 0 and rc2 == 0 and len(STATE["bodies"]) == n1 + 3, "edit ? --thread: the reading runs on the first turn only", str(len(STATE["bodies"]) - n1))
+        t.ok(len(msgs2) == 4 and msgs2[1]["role"] == "user" and msgs2[1]["content"].startswith("first\n\n")
+             and msgs2[2] == {"role": "assistant", "content": "1. line 2: typo\n"} and msgs2[3]["content"] == "again",
+             "edit ? --thread again: the first pair rides, the words alone (the text is unchanged)", json.dumps(msgs2)[:300])
+        rc3, out3, _ = spark("edit", "--name", "t.md", "?", "third", "--thread", "edit-t1", stdin="Other prose.\n")
+        msgs3 = STATE["bodies"][-1]["messages"]
+        t.ok(rc3 == 0 and len(msgs3) == 6 and msgs3[-1]["content"] == "third\n\nFile t.md, as it is now:\nOther prose.\n",
+             "edit ? --thread with a changed text sends the text again, labelled as it is now", repr(msgs3[-1]["content"]))
+        tfiles = [f for _d, _s, fs in os.walk(home + "/.local/state/spark/users") for f in fs if f == "edit-t1.sealed"]
+        t.ok(len(tfiles) == 1, "edit ? --thread: one sealed thread under the account, named by the client", str(tfiles))
+        rc4, out4, _ = spark("history")
+        t.ok(rc4 == 0 and "edit-t1" in out4, "spark history lists the editor's thread", out4)
+        rc5, _, _ = spark("edit", "?", "off", "--thread", "edit-t2", stdin="A.\n", extra={"SPARK_HISTORY": "off"})
+        rc6, _, _ = spark("edit", "?", "off", "--thread", "edit-t2", stdin="A.\n", extra={"SPARK_HISTORY": "off"})
+        t.ok(rc5 == 0 and rc6 == 0 and len(STATE["bodies"][-1]["messages"]) == 2
+             and not [f for _d, _s, fs in os.walk(home + "/.local/state/spark/users") for f in fs if f == "edit-t2.sealed"],
+             "edit ? --thread with history off: accepted, nothing kept, every turn alone", str(len(STATE["bodies"][-1]["messages"])))
+        rc7, out7, _ = spark("edit", "?", "x", "--thread", "bad id!", stdin="A.\n")
+        t.ok(rc7 == 2 and "--thread ID is" in out7, "edit ? --thread with a bad id is refused", out7)
         rc, out, _ = spark("edit", "--type", "python", "--about", "a poem", "tighten", stdin="x = 1\n")
         body = STATE["bodies"][-1]
         t.ok(body["messages"][-1]["content"].startswith("tighten\n\nThe author says: a poem\nText (python):\n"), "edit: --about rides above the label", repr(body["messages"][-1]["content"][:80]))

@@ -16,6 +16,8 @@ STDIN_TAIL = 6000          # what `explain` sends at most: the last 6 kB
 EDIT_BEFORE, EDIT_AFTER = 4000, 2000   # a completion: around the cursor
 EDIT_MAX = 12000                        # a rewrite: the whole text, or nothing
 EDIT_READ = 800                         # the reading before a question
+EDIT_SEL_MAX = 12000                    # a selection inside a ?: whole up to this, else head + tail
+EDIT_WINDOW = 16000                     # a ? with --sel: the selection and the file around it
 EDIT_TIMEOUT = 180                      # a big selection takes a while to read
 
 # Grammar rule 4: every verb answers -h first, signed per contract 8.
@@ -41,6 +43,10 @@ EDIT_USAGE = """spark edit -- the editor's protocol (contract 10): the text on s
                               should not guess ("a novel chapter")
   --part                      the text is a selection from a larger file:
                               a rewrite replaces exactly that part
+  --sel A B                   ?: stdin is the whole file; the question is
+                              about bytes A..B, the file around it context
+  --thread ID                 ?: keep the exchange under ID (yours to name,
+                              [A-Za-z0-9_-]); the same ID again continues it
 
   raw streamed text: no mark, no wrap, a code fence around the answer is
   removed; exit 1 when nothing came in or no brain answers. In micro,
@@ -266,13 +272,17 @@ def cmd_explain(words):
 # ------------------------------------------------------------------- edit
 def _edit_args(args):
     """(options, words) -- ValueError names a flag that lacks its value."""
-    opts = {"type": "", "name": "", "about": "", "at": None, "part": False}
+    opts = {"type": "", "name": "", "about": "", "at": None, "part": False, "sel": None, "thread": ""}
     words, rest = [], list(args)
     while rest:
         a = rest.pop(0)
         if a == "--part":
             opts["part"] = True
-        elif a in ("--type", "--name", "--about", "--at"):
+        elif a == "--sel":
+            if len(rest) < 2:
+                raise ValueError(a)
+            opts["sel"] = (rest.pop(0), rest.pop(0))
+        elif a in ("--type", "--name", "--about", "--at", "--thread"):
             if not rest:
                 raise ValueError(a)
             opts[a[2:]] = rest.pop(0)
@@ -281,11 +291,37 @@ def _edit_args(args):
     return opts, words
 
 
+def _sha(data):
+    import hashlib
+    return hashlib.sha256(data.encode("utf-8", "replace")).hexdigest()[:16]
+
+
 def _edit_label(name, ftype, part=False):
     what = "File %s" % name if name else "Text"
     if part:
         what = "Selected part of %s" % name if name else "Selected text"
     return what + (" (%s):" % ftype if ftype else ":")
+
+
+def _edit_window(data, a, b):
+    """The context of a ? about a selection: the selection whole (head +
+    cut mark + tail past EDIT_SEL_MAX) between two mark lines the brief
+    knows, and as much of the file around it as EDIT_WINDOW leaves,
+    split evenly, a side's unused room going to the other; a cut mark
+    where the file goes on."""
+    sel = data[a:b]
+    if len(sel) > EDIT_SEL_MAX:
+        sel = sel[:4000] + "\n[... %d chars cut ...]\n" % (len(sel) - EDIT_SEL_MAX) + sel[-(EDIT_SEL_MAX - 4000):]
+    room = max(0, EDIT_WINDOW - len(sel))
+    half = room // 2
+    before_all, after_all = data[:a], data[b:]
+    before = before_all[-(half + max(0, half - len(after_all))):] if room else ""
+    after = after_all[:room - len(before)] if room else ""
+    if len(before) < len(before_all):
+        before = "[... %d chars cut ...]\n" % (len(before_all) - len(before)) + before
+    if len(after) < len(after_all):
+        after = after + "\n[... %d chars cut ...]" % (len(after_all) - len(after))
+    return "%s\n[selection starts]\n%s\n[selection ends]\n%s" % (before, sel, after)
 
 
 def _edit_reading(cfg, data):
@@ -333,6 +369,19 @@ def cmd_edit(args):
     data = "" if sys.stdin.isatty() else sys.stdin.read()
     if not data:
         die("edit reads stdin -- spark edit --type FT words < FILE")
+    sel = None
+    if opts["sel"] is not None:
+        try:
+            sel = (int(opts["sel"][0]), int(opts["sel"][1]))
+        except ValueError:
+            sel = (-1, -1)
+        if not 0 <= sel[0] <= sel[1] <= len(data):
+            say("%s edit -- --sel A B are byte offsets, 0 <= A <= B <= %d" % (MARK, len(data)))
+            return 2
+    tid = opts["thread"].strip()
+    if tid and not forge.valid_id(tid):
+        say("%s edit -- --thread ID is [A-Za-z0-9_-]" % MARK)
+        return 2
     ftype = opts["type"].strip() if opts["type"].strip() != "unknown" else ""
     label = _edit_label(os.path.basename(opts["name"].strip()), ftype, opts["part"])
     about = opts["about"].strip()
@@ -348,8 +397,22 @@ def cmd_edit(args):
     elif words[0] == "?":
         kind, role, max_tokens = "ask", "ember", 600
         text = " ".join(words[1:]).strip() or persona.REVIEW
-        reading, tail = _edit_reading(cfg, data)
-        context = head + reading + label + "\n" + forge.clip(data) + tail
+        # a thread: the same id again continues it -- the words alone when
+        # the text is the one the first turn carried, else the text again
+        tid = forge.open_thread(cfg, tid) if tid else None
+        history = forge.history(tid) if tid else []
+        sha = _sha(data)
+        if history:
+            first = next((m for m in forge.load(tid) if m.get("role") == "user"), {})
+            context = "" if first.get("text_sha") == sha else head + label.replace(":", ", as it is now:") + "\n" + forge.clip(data)
+        elif sel:
+            start = max(0, sel[0] - 200)
+            reading, tail = _edit_reading(cfg, data[start:start + EDIT_READ])
+            context = (head + reading + label[:-1] + " -- the question is about the part between the marks:\n"
+                       + _edit_window(data, sel[0], sel[1]) + tail)
+        else:
+            reading, tail = _edit_reading(cfg, data)
+            context = head + reading + label + "\n" + forge.clip(data) + tail
     else:
         kind, role = "rewrite", "ember"
         if len(data) > EDIT_MAX:
@@ -371,8 +434,9 @@ def cmd_edit(args):
         if anchors:
             anchors.close()
     try:
-        s = session.Session(cfg, "edit-" + kind, _shell_default(), "", role=role)
-        _out, ms = s.ask_stream(text, context, fence.feed, max_tokens=max_tokens, timeout=EDIT_TIMEOUT)
+        s = session.Session(cfg, "edit-" + kind, _shell_default(), "", role=role,
+                            history=history if kind == "ask" else None)
+        out, ms = s.ask_stream(text, context, fence.feed, max_tokens=max_tokens, timeout=EDIT_TIMEOUT)
     except wire.BrainError as e:
         done()
         die(e.hint)
@@ -381,6 +445,10 @@ def cmd_edit(args):
         raise
     done()
     counts = {"quotes": anchors.quoted, "unanchored": anchors.missed} if anchors else {}
+    if kind == "ask" and tid:
+        forge.append(cfg, tid, "user", persona.user_message(text, "", context), text_sha=sha)
+        forge.append(cfg, tid, "assistant", out or "")
+        counts["thread"] = tid
     s.record(kind=kind, chars=len(data), ms=ms, **counts)
     return 0
 

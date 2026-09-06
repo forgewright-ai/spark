@@ -120,6 +120,27 @@ class Store:
             log_exc("new thread")
         return None
 
+    def open_thread(self, cfg, tid):
+        """A thread under the caller's own id (the editor names its panes'
+        threads: no id can come back through a raw text stream): created,
+        header only, when absent. None when history is off or the id is
+        not one (forge.valid_id)."""
+        if cfg.history <= 0 or not valid_id(tid):
+            return None
+        try:
+            p = self._path(tid)
+            self._dir()
+            if not os.path.isfile(p):
+                fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                with os.fdopen(fd, "w") as f:
+                    f.write(vault.header("thread", tid) + "\n")
+            return tid
+        except FileExistsError:
+            return tid
+        except OSError:
+            log_exc("open thread")
+            return None
+
     def _files(self):
         """[(mtime_ns, id)] of every thread file, unsorted."""
         out = []
@@ -238,6 +259,9 @@ class _NullStore:
     def new_thread(self, cfg):
         return None
 
+    def open_thread(self, cfg, tid):
+        return None
+
     def last_thread(self):
         return None
 
@@ -335,6 +359,14 @@ def new_thread(cfg):
     if cfg.history <= 0:
         return None
     return local_store(provision=True).new_thread(cfg)
+
+
+def open_thread(cfg, tid):
+    """The thread `tid` on this machine's own store, created when absent
+    (the editor's `--thread`). None when history is off."""
+    if cfg.history <= 0:
+        return None
+    return local_store(provision=True).open_thread(cfg, tid)
 
 
 def last_thread():

@@ -168,7 +168,10 @@ MODE_EDIT_ASK = (
     "and where it is weakest, every note names a change. When little needs saying, say "
     "little; 'nothing I would change' is an answer. Do not rewrite unless asked; when asked for wording, offer one "
     "version, theirs to discard. Never claim to remember earlier drafts or turns. Answer "
-    "in the text's own language.")
+    "in the text's own language. When the text carries the lines [selection starts] and "
+    "[selection ends], the question is about what lies between them and the rest is "
+    "context: never quote or comment on the mark lines themselves. In a continued "
+    "exchange, the text is the one shown earlier unless a newer one is given.")
 # The reading that precedes a question: the model says what the text is
 # (language, kind) from its first 800 chars, and that reading is restated
 # in the request. A small model drifts -- an English draft answered in

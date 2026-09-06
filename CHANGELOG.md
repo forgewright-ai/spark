@@ -39,6 +39,16 @@ The server keeps no prompt cache in RAM.
   misquote (an earlier tool of ours turned "plum" into "plume") never
   reads as the author's words. The brief asks for double quotes, never
   across a line; the turn record counts `quotes` and `unanchored`.
+- A `?` about a selection sees the file around it: `spark edit ? --sel A
+  B` takes the whole file on stdin and sends one 16 kB window -- the
+  selection between two mark lines the brief knows, the file before and
+  after it -- so a question about a paragraph is answered in the light
+  of the chapter.
+- A `?` can go on: `spark edit ? words --thread ID` keeps the exchange
+  under an id of the client's choosing, sealed in your account's store
+  like a chat thread and pruned with it; the same id again continues it,
+  sending the words alone while the text is unchanged and the text again
+  when it is not. Without the flag nothing is kept, as before.
 - A client stays a client. `spark model` on a client showed its own RAM
   and a budget for a machine that serves nothing, and `spark model NAME`
   there quietly made it a server (the same steps as `spark client off`).

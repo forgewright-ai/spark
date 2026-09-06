@@ -330,8 +330,21 @@ may change freely.
     checked against the text on stdin -- verbatim, then whitespace
     folded, then trailing punctuation stripped -- and one that does not
     anchor is followed by ` [not in the text]` where it stands; the turn
-    records `quotes` and `unanchored`. The micro plugin depends on
-    nothing else.
+    records `quotes` and `unanchored`. `--sel A B` (a `?`; stdin is the
+    whole file) sends one window of at most 16 kB (`cli._edit_window`):
+    the selection whole (head + cut + tail past 12 kB) between the lines
+    `[selection starts]` / `[selection ends]` the brief knows, the file
+    around it split evenly, cut marks where it goes on; the reading
+    runs on the 800 chars from 200 before the selection. `--thread ID`
+    (a `?`; the CLIENT names the id, `forge.valid_id`) keeps the
+    exchange in the account's sealed store like a chat thread
+    (`forge.open_thread`; `SPARK_HISTORY` prunes it; `spark history`
+    lists it): the same id again rides the earlier pairs and sends the
+    words alone when the text on stdin is the one the first turn carried
+    (`text_sha` on that message), else `File NAME, as it is now:` and the
+    text; the reading runs on the first turn only; anchors always check
+    the text on stdin now. Without `--thread`, or with history off, no
+    thread is kept. The micro plugin depends on nothing else.
 
 ## The grammar
 
