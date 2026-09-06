@@ -1238,7 +1238,9 @@ def main():
                 rc, out, _ = spark("font", "Menlo-Regular", "99", extra=dict(off, SPARK_NO_APPLY="1"))
                 t.ok(rc == 2 and "6 to 72" in out, "macOS: a size outside 6..72 points is refused", out)
                 rc, out, _ = spark("font", "list", extra=off)
-                t.ok("Menlo-Regular" in out and "JetBrainsMonoNFM-Regular" in out, "macOS: spark font list names installed faces", out)
+                nerd = _site.mac_font_installed("JetBrainsMonoNFM-Regular")
+                t.ok("Menlo-Regular" in out and (not nerd or "JetBrainsMonoNFM-Regular" in out),
+                     "macOS: spark font list names the faces every Mac ships, and the Nerd Font when installed", out)
             else:
                 print("  skip macOS font guard: Spotlight indexing is off here")
         rc, out, _ = spark("bootconfig", extra=off)

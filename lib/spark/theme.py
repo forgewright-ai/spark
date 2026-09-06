@@ -121,7 +121,7 @@ def show(cfg):
 def profile(cfg, dry):
     pal = palette(cfg)
     if not pal:
-        say("skip   profile      SITE_THEME=none")
+        say("skip   profile      SITE_THEME=none: no spark profile to carry the font -- spark theme NAME makes one")
         return 0
     if not IS_MAC:
         say("skip   profile      not macOS: apply %s in your terminal emulator's settings" % os.path.join(CONFIG_DIR, "theme.env"))
