@@ -506,7 +506,7 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   nothing runs here: bootstrap skips the `engine` and `services` rows
   (`$client`), `install.sh` links no unit and renders no plist, and the
   rows in `check.CLIENT_ROWS` (engine, services, watchdog, ai, serve,
-  forge) read `na`;
+  forge, ember) read `na`;
   `--selftest`'s fourth pass asserts that with the peer row ok. The peer
   row is where a client's health lives. A client stays a client until
   `spark client off`: `spark model` / `ember list` / `model budget` there
@@ -572,7 +572,7 @@ sh tests/update_test.sh         # spark update: pull, move to a tag, dirty refus
 NONFUNCTIONAL (`grep -c '^@row' lib/spark/check.py`). With `SITE_SHELL=off`
 the 12 rows in `check.SHELL_ROWS` and the `shell` row answer `na`;
 `--selftest` runs a third pass to prove it, and a fourth for the client
-shape (the 6 rows in `check.CLIENT_ROWS`).
+shape (the 7 rows in `check.CLIENT_ROWS`).
 
 ## Releasing
 

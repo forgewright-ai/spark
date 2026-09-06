@@ -12,6 +12,19 @@ SPARK_CONFIG_DIR=${XDG_CONFIG_HOME:-$HOME/.config}/spark
 SPARK_STATE_DIR=${XDG_STATE_HOME:-$HOME/.local/state}/spark
 SPARK_DATA_DIR=${XDG_DATA_HOME:-$HOME/.local/share}/spark
 
+# This machine's own short name, the one safe to bake into a rendered file.
+# On macOS `hostname` is whatever the network last told configd while
+# `scutil --get HostName` is unset, so it moves from network to network;
+# LocalHostName is the name the owner set and does not move. ComputerName is
+# not it: that one carries spaces and punctuation. lib/spark/config.py
+# _short_host() is the twin.
+short_host() {
+    _host=
+    [ "$(uname -s)" != Darwin ] || _host=$(scutil --get LocalHostName 2>/dev/null || true)
+    [ -n "$_host" ] || _host=$(hostname -s 2>/dev/null || hostname)
+    printf '%s' "$_host"
+}
+
 # A valid line: blank, a comment, or KEY=value with no shell syntax in the
 # value. Anything else refuses the whole file -- config is data, never code.
 load_env() {
@@ -38,7 +51,7 @@ load_env() {
 site_load() {
     load_env "$SPARK_CONFIG_DIR/site.env" || return 1
     load_env "$SPARK_CONFIG_DIR/spark.env" || return 1    # SPARK_SERVICE, SPARK_PORT, dirs
-    : "${SITE_NAME:=$(hostname -s 2>/dev/null || hostname)}"
+    : "${SITE_NAME:=$(short_host)}"
     : "${SITE_USER:=$(id -un)}"
     : "${SITE_SET_HOSTNAME:=no}"
     : "${SITE_WORKSPACE:=$HOME/projects}"
@@ -60,8 +73,15 @@ site_load() {
     # placeholders from site.env.example count as unset
     [ "${SITE_GIT_NAME:-}" != "Your Name" ] || SITE_GIT_NAME=
     [ "${SITE_GIT_EMAIL:-}" != "you@example.com" ] || SITE_GIT_EMAIL=
+    # unchosen is unchosen, whether the key is absent or still the example's
+    # placeholder: spark guesses so git works, and bootstrap's identity row
+    # names what it guessed -- the author line of every commit is at stake
+    SPARK_GIT_GUESSED=
+    [ -n "${SITE_GIT_NAME:-}" ] || SPARK_GIT_GUESSED=SITE_GIT_NAME
+    [ -n "${SITE_GIT_EMAIL:-}" ] || SPARK_GIT_GUESSED="${SPARK_GIT_GUESSED:+$SPARK_GIT_GUESSED }SITE_GIT_EMAIL"
     : "${SITE_GIT_NAME:=$SITE_USER}"
-    : "${SITE_GIT_EMAIL:=$(id -un)@$(hostname -s 2>/dev/null || hostname)}"
+    : "${SITE_GIT_EMAIL:=$(id -un)@$(short_host)}"
+    export SPARK_GIT_GUESSED
     export SITE_NAME SITE_USER SITE_SET_HOSTNAME SITE_WORKSPACE SITE_THEME \
            SITE_PROMPT SITE_PROMPT_STYLE SITE_AI_MODEL SITE_EMBER_MODEL SITE_AI_BUDGET SITE_AI_BUILD \
            SITE_GIT_NAME SITE_GIT_EMAIL SITE_FONT_FACE SITE_FONT_SIZE SITE_QUIET_LOGIN SITE_QUIET_BOOT SITE_QUIET_AUDIO SITE_HEADLESS SITE_SHELL SITE_PEER_AI_URL

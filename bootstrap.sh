@@ -373,8 +373,8 @@ fi
 ok name "$SITE_NAME  (user $SITE_USER)"
 # the shell layer: the git identity goes into ~/.gitconfig, the theme into tmux and starship
 if [ "$shell" = 1 ]; then
-    left=$(grep -E '^SITE_GIT_(NAME|EMAIL)=(Your Name|you@example.com)$' "$SPARK_CONFIG_DIR/site.env" 2>/dev/null | cut -d= -f1 | paste -sd' ' -)
-    [ -z "$left" ] || row todo identity "placeholders in site.env: $left"
+    [ -z "$SPARK_GIT_GUESSED" ] || row todo identity \
+        "guessed, and it signs every commit -- set in site.env: $SPARK_GIT_GUESSED"
     ok theme "$SITE_THEME | prompt $SITE_PROMPT/$SITE_PROMPT_STYLE"
 else
     skip identity "$SHELL_OFF"

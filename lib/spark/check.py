@@ -1321,9 +1321,10 @@ SHELL_ROWS = ("pinned", "terminfo", "quiet", "bar", "git", "backup", "swap", "ed
               "encryption", "pending", "battery", "disk")
 SHELL_OFF = "SITE_SHELL=off (spark shell on)"
 # a client's rows: nothing runs here (SITE_AI_MODEL=none + SITE_PEER_AI_URL),
-# so the engine, the units, their snapshot, the local AI and its two servers
-# are na before they look; the peer row says whether the peer answers
-CLIENT_ROWS = ("engine", "services", "watchdog", "ai", "serve", "forge")
+# so the engine, the units, their snapshot, the local AI, its two servers and
+# a second model of its own are na before they look; the peer row is where a
+# client's health lives, and `spark ember list` shows what the peer offers
+CLIENT_ROWS = ("engine", "services", "watchdog", "ai", "serve", "forge", "ember")
 
 
 def client_of(cfg):

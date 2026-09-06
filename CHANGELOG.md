@@ -2,6 +2,21 @@
 
 ## v1.8
 
+- A rendered file no longer moves with the network. `SITE_NAME` and the
+  guessed `SITE_GIT_EMAIL` took macOS's `hostname`, which is whatever the
+  network last told configd while `scutil --get HostName` is unset -- so
+  `~/.gitconfig` and `~/.tmux.conf` drifted on their own, the `configs`
+  row failed, and applying `install.sh` rewrote the author line of every
+  later commit. Both now take `scutil --get LocalHostName` on macOS
+  (`short_host` in `lib/env.sh`, `_short_host` in `config.py`); Linux is
+  unchanged.
+- `./bootstrap.sh` names a guessed git identity in its `identity` row
+  whether the key is absent or still the example's placeholder -- before,
+  only the placeholder was reported and an absent key was invented in
+  silence.
+- A client's `ember` row reads `na` like its other AI rows: a client keeps
+  no second model of its own, and `spark ember NAME` there is refused.
+  What the peer offers is `spark ember list`.
 - The page rebuilds when a release is published, and its sign line links
   that release: the page and the GitHub release never disagree.
 - The page loads no font from Google: the local stack (the Nerd Font

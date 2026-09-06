@@ -111,11 +111,13 @@ silently, by design.
 Everything else in `site.env` is optional and has a verb of its own;
 editing the file by hand and running `./bootstrap.sh` does the same thing.
 The two you may want are `SITE_GIT_NAME` and `SITE_GIT_EMAIL` (the shell
-layer's git identity).
+layer's git identity). Leave them out and spark guesses your login at this
+machine's name so git works out of the box, and `./bootstrap.sh` says so in
+its `identity` row: a guess signs every commit you make, so choose them.
 
 | key | values | default |
 |---|---|---|
-| `SITE_NAME` | this machine's display name | short hostname |
+| `SITE_NAME` | this machine's display name | short hostname (macOS: `scutil --get LocalHostName`, which the network cannot move) |
 | `SITE_USER` | your display name | your login |
 | `SITE_AI_MODEL` | `auto`, `none`, or a name from `spark model` -- later, `spark model NAME`; `none` beside a peer URL is a client (`spark client URL`) | `auto` |
 | `SITE_EMBER_MODEL` | `none`, `auto`, or a name: a second model for conversations; `none` = one model does both -- later, `spark ember NAME` | `none` |

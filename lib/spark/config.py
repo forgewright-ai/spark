@@ -5,6 +5,7 @@
 import os
 import re
 import socket
+import subprocess
 
 from . import (CONFIG_DIR, ENGINE_DIR, FORGE_TOKEN_FILE, HOME, IS_MAC, MODELS_DIR, REPO, SITE_ENV,
                SPARK_ENV, TOKEN_FILE, die)
@@ -52,8 +53,25 @@ def parse_env(path):
     return out
 
 
+_HOST = []
+
+
 def _short_host():
-    return socket.gethostname().split(".")[0] or "spark"
+    """This machine's own short name, the one safe to bake into a rendered
+    file. On macOS `hostname` is whatever the network last told configd while
+    `scutil --get HostName` is unset, so it moves from network to network;
+    LocalHostName is the name the owner set and does not move. lib/env.sh
+    short_host() is the twin."""
+    if not _HOST:
+        name = ""
+        if IS_MAC:
+            try:
+                name = subprocess.run(["scutil", "--get", "LocalHostName"], capture_output=True,
+                                      text=True, timeout=5).stdout.strip()
+            except (OSError, subprocess.SubprocessError):
+                name = ""
+        _HOST.append(name or socket.gethostname().split(".")[0] or "spark")
+    return _HOST[0]
 
 
 class Config:

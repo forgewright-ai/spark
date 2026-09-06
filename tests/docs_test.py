@@ -72,6 +72,22 @@ def main():
     for doc in ("CLAUDE.md", "INSTALL.md"):
         for m in re.finditer(r"spark check`?\s+(?:has )?(\d+) rows", read(doc)):
             check(int(m.group(1)) == n_rows, "%s: '%s' is check.py's count (%d)" % (doc, m.group(0), n_rows))
+    # the gated row lists: CLAUDE.md states their counts, and names the
+    # client's rows one by one
+    src = read(os.path.join("lib", "spark", "check.py"))
+    claude = read("CLAUDE.md")
+    named = {}
+    for const in ("SHELL_ROWS", "CLIENT_ROWS"):
+        m = re.search(r"^%s = \(([^)]*)\)" % const, src, re.M)
+        named[const] = re.findall(r'"([a-z]+)"', m.group(1)) if m else []
+        check(bool(named[const]), "check.py defines %s" % const)
+        for c in re.finditer(r"the (\d+) rows in `check\.%s`" % const, claude):
+            check(int(c.group(1)) == len(named[const]),
+                  "CLAUDE.md: '%s' is check.py's count (%d)" % (c.group(0), len(named[const])))
+    m = re.search(r"`check\.CLIENT_ROWS` \(([^)]*)\)", claude)
+    listed = re.split(r",\s+", " ".join(m.group(1).split())) if m else []
+    check(listed == named["CLIENT_ROWS"],
+          "CLAUDE.md names check.CLIENT_ROWS in order (%s)" % ", ".join(named["CLIENT_ROWS"]))
     n_models = len(rows)
     for doc in ("README.md", "INSTALL.md"):
         for m in re.finditer(r"(\d+) (models|rows), each with its license", read(doc)):
