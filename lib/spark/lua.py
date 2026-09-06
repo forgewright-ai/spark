@@ -56,13 +56,8 @@ PALETTE = (
     "THEME_ANSI_12=#5b93ff", "THEME_ANSI_13=#c79bff", "THEME_ANSI_14=#5fd0d0", "THEME_ANSI_15=#ffffff",
     "THEME_LOGO=bright-green bright-green bright-yellow bright-yellow bright-blue bright-blue",
 )
-CARD = (
-    "Lua -- PUC-Rio, Tecgraf, 1993. In Portuguese: moon.",
-    "The plugin that puts spark in your editor is written in it.",
-    "Cobra Computadores drew its engineers from the same city; those",
-    "machines were rented by the hour. This one is yours.",
-    "You have been typing the word all along.",
-)
+# the one line that keeps the joke: the rest is in CREDITS.md
+CARD = "lua: the moon, in Portuguese. It was in the word all along."
 
 # glyphs: (terminal, console) -- every one drawable on the Linux console
 _G = {"canopy": ("♣", "Y"), "log": ("■", "="), "hp_on": ("█", "#"), "hp_off": ("░", "."),
@@ -116,7 +111,7 @@ def moon_art(p):
 def moon_line(day=None):
     p = phase(day)
     en, _ = PHASES[phase_index(p)]
-    return "Rando: %s (%d%%)" % (en, int(round(illumination(p) * 100)))
+    return "Moon: %s" % en
 
 
 # ------------------------------------------------------------- the tale --
@@ -164,15 +159,20 @@ ZONE_NAMES = (("the river", "o rio"), ("the forest", "a mata"), ("the hunt", "a 
               ("the rain", "a chuva"), ("the thunder", "o trovão"), ("the lightning", "o raio"), ("the strength", "a força"))
 
 # ------------------------------------------------------------ the state --
+NIGHTS = 6                 # the forest runs faster and pays more each night, up to this
+
+
 def load_state():
-    st = {"best": {"zone": 0, "stars": 0}, "won": False}
+    st = {"best": {"zone": 0, "stars": 0}, "won": False, "nights": 0, "scores": []}
     try:
         with open(STATE_FILE, encoding="utf-8") as f:
             got = json.load(f)
         if isinstance(got.get("best"), dict):
             st["best"].update(got["best"])
         st["won"] = bool(got.get("won"))
-    except (OSError, ValueError, AttributeError):
+        st["nights"] = int(got.get("nights", 0))
+        st["scores"] = [r for r in got.get("scores", []) if isinstance(r, dict)][:5]
+    except (OSError, ValueError, AttributeError, TypeError):
         pass
     return st
 
@@ -233,6 +233,7 @@ class World:
         r = self.rng = random.Random(seed)
         self.floor = [LAND] * WORLD_W
         self.canopy = [False] * WORLD_W
+        self.under = [False] * WORLD_W       # a sparser line of trees under the canopy
         self.logs = set()                    # columns with a log (one high)
         self.briars = set()
         self.stars = []                      # {"x", "n", "taken"}
@@ -254,6 +255,8 @@ class World:
         for x in range(x0, x1):
             if r.random() < (0.45 if dense else 0.25):
                 self.canopy[x] = True
+            if r.random() < (0.14 if dense else 0.07):
+                self.under[x] = True
         gap = (8, 14) if z <= 2 else (6, 12) if z <= 5 else (5, 9)     # the forest thickens
         x = x0 + 8                           # a flat start
         while True:
@@ -401,7 +404,11 @@ class Hero:
 
 
 class Game:
-    def __init__(self, cols, seed=None, day=None):
+    def __init__(self, cols, seed=None, day=None, night=1):
+        self.night = max(1, min(NIGHTS, int(night)))
+        self.pace = 1.0 + 0.12 * (self.night - 1)     # the forest runs faster each night
+        self.points = 0                               # before the night's multiplier
+        self.far = 0.0                                # the furthest column reached
         self.cols = max(60, min(int(cols), 200))
         self.day = day
         self.seed = seed if seed is not None else (day or date.today()).toordinal()
@@ -462,6 +469,7 @@ class Game:
         if self.ending is not None:
             if self.ending == 0:
                 self.events.append("won")
+                self.points += self.hero.hp * 50 + max(0, 2400 - self.tick) // 2     # the hero left standing, and the haste
             self.ending += 1
             if self.ending >= 40:
                 self.over = "won"
@@ -489,7 +497,7 @@ class Game:
             vx = h.knock_d * 1.2
             h.knock -= 1
         else:
-            vx = h.run * (WADE if in_water else RUN)
+            vx = h.run * (WADE if in_water else RUN) * self.pace
         nx = h.x + vx
         if not w.solid(int(round(nx)), h.row, self.stars):
             h.x = max(1.0, min(WORLD_W - 2.0, nx))
@@ -527,11 +535,11 @@ class Game:
                     o["tell"] -= 1
                     o["d"] = 1 if d > 0 else -1
                 else:
-                    o["x"] += o["charge"] if d > 0 else -o["charge"]
+                    o["x"] += (o["charge"] if d > 0 else -o["charge"]) * self.pace
                     o["d"] = 1 if d > 0 else -1
             else:
                 o["seen"] = False
-                o["x"] += o["d"] * 0.4
+                o["x"] += o["d"] * 0.4 * self.pace
             if o["x"] <= o["x0"]:
                 o["x"], o["d"] = float(o["x0"]), 1
             elif o["x"] >= o["x1"]:
@@ -548,6 +556,7 @@ class Game:
                 if b["alive"] and b["y"] <= 1.5 and min(x, x1) - 1.5 <= b["x"] <= max(x, x1) + 1.5:
                     b["alive"], b["flee"] = False, 10
                     self.chased += 1
+                    self.points += 10
             self.sweep = (n - 1, d, x1) if n > 1 else None
             if self.sweep is None:
                 self.vulture = x1
@@ -593,9 +602,11 @@ class Game:
             for o in w.oncas:
                 if o["alive"] and ay == LANE and lo <= o["x"] <= hi:
                     o["alive"], hit = False, True
+                    self.points += 30
             for b in w.bats:
                 if b["alive"] and lo <= b["x"] <= hi and abs(b["y"] - ay) < 0.8:
                     b["alive"], hit = False, True
+                    self.points += 20
             if not hit:
                 keep.append(a)
         self.arrows = keep
@@ -610,12 +621,16 @@ class Game:
             if not s["taken"] and abs(s["x"] - h.x) < 1.3 and abs(AIR1 - h.y) < 0.9:
                 s["taken"] = True
                 self.stars += 1
+                self.points += 100
                 self.taken.append(str(s["n"]))
                 self.sparkle, self.fresh = 12, (40, str(s["n"]))
                 self.events.append("star")
         # the palm
         if h.col >= w.palm_x - 2 and self.stars >= 8:
             self.ending = 0
+        if h.x > self.far:
+            self.points += int(h.x // 5) - int(self.far // 5)     # a point every five columns of new ground
+            self.far = h.x
         z = w.zone_of(h.col)
         self.zone_max = max(self.zone_max, z)
         if z != self.zone_seen:
@@ -651,6 +666,10 @@ class Game:
     @property
     def zone(self):
         return self.world.zone_of(self.hero.col)
+
+    @property
+    def score(self):
+        return self.points * self.night
 
     @property
     def at_palm(self):
@@ -710,9 +729,11 @@ class Game:
         put(0, 27, "* %d/8" % self.stars, (YELLOW, "b"))
         put(0, 35, "V", (WHITE, "b") if self.sweep_cool == 0 else (DEFAULT, "d"))
         put(0, 38, "zone %d/8 %s" % (self.zone, zn), PLAIN)
-        ml = moon_line(self.day)
-        if cols >= 38 + len(zn) + 12 + len(ml) + 2:
-            put(0, cols - len(ml) - 1, ml, (CYAN, ""))
+        right = "night %d   score %d   %s" % (self.night, self.score, moon_line(self.day))
+        if cols >= 38 + len(zn) + 12 + len(right) + 2:
+            put(0, cols - len(right) - 1, right, (CYAN, ""))
+        elif cols >= 38 + len(zn) + 12 + 24:
+            put(0, cols - 23, "night %d  score %5d" % (self.night, self.score), (CYAN, ""))
         # the weather of the zone, under everything else
         flash = self._weather(put, rows)
         # the forest, column by column
@@ -722,6 +743,8 @@ class Game:
                 continue
             if w.canopy[wx]:
                 put(CANOPY + 1, sx, G("canopy"), (WHITE, "b") if flash else (GREEN, ""))
+            if w.under[wx]:
+                put(AIR2 + 1, sx, G("canopy"), (WHITE, "b") if flash else (GREEN, "d"))
             kind = w.floor[wx]
             if kind == WATER:
                 put(GROUND + 1, sx, G("water"), (BLUE, "b"))
@@ -867,10 +890,10 @@ class Pilot:
         return out
 
 
-def sim(seed, tape, day=None):
+def sim(seed, tape, day=None, night=1):
     """Headless: a fixed seed and a key tape (per tick, repeating: a d s w
     f v .) or `auto`, the Pilot. Returns the finished Game."""
-    g = Game(80, seed=seed, day=day)
+    g = Game(80, seed=seed, day=day, night=night)
     pilot = Pilot(g) if tape == "auto" else None
     for i in range(6000):
         if pilot:
@@ -889,7 +912,8 @@ def sim(seed, tape, day=None):
 
 
 def sim_line(g):
-    return "zone %d stars %d over %s hp %d ticks %d" % (g.zone_max, g.stars, g.over, max(0, g.hero.hp), g.tick)
+    return "zone %d stars %d over %s hp %d ticks %d score %d night %d" % (
+        g.zone_max, g.stars, g.over, max(0, g.hero.hp), g.tick, g.score, g.night)
 
 
 # ----------------------------------------------------------- the letters --
@@ -1095,7 +1119,7 @@ def play(st, tl):
     if size.columns < 60 or size.lines < Band.N + 2:
         say("%s lua: a terminal of 60x%d at least (this one is %dx%d)" % (MARK, Band.N + 2, size.columns, size.lines))
         return 2
-    g = Game(size.columns, day=None)
+    g = Game(size.columns, day=None, night=st.get("night_pick") or min(NIGHTS, st["nights"] + 1))
     fd = sys.stdin.fileno()
     old = termios.tcgetattr(fd)
     band = Band(sys.stdout)
@@ -1156,43 +1180,69 @@ def play(st, tl):
 
 # ------------------------------------------------------------ the shell --
 def _remember(g, st):
+    """The best run, the nights won, the top five scores -- kept."""
     b = st["best"]
     if (g.zone_max, g.stars) > (b.get("zone", 0), b.get("stars", 0)):
         st["best"] = {"zone": g.zone_max, "stars": g.stars}
     if g.over == "won":
         st["won"] = True
+        st["nights"] = max(st.get("nights", 0), g.night)
+    if g.over in ("won", "dead") and g.score > 0:
+        rows = st.get("scores", []) + [{"score": g.score, "night": g.night, "stars": g.stars,
+                                        "date": date.today().isoformat(), "won": g.over == "won"}]
+        st["scores"] = sorted(rows, key=lambda r: -r.get("score", 0))[:5]
+    st.pop("night_pick", None)
     save_state(st)
 
 
+def boxed(paragraphs, width=66):
+    """An ASCII box around paragraphs (a blank line between them, each
+    wrapped to width): + - | draw on every terminal and console."""
+    inner = []
+    for para in paragraphs:
+        if inner and not (para.startswith(" ") and inner[-1].startswith(" ")) and not para.startswith("    "):
+            inner.append("")
+        elif inner and para.startswith("    ") and not inner[-1].startswith(" ") and not inner[-1].endswith(":"):
+            inner.append("")
+        inner.extend(textwrap.wrap(para, width) if not para.startswith(" ") else [para])
+    w = max(len(ln) for ln in inner) + 4
+    out = ["+" + "-" * w + "+", "|" + " " * w + "|"]
+    out += ["|  %-*s  |" % (w - 4, ln) for ln in inner]
+    out += ["|" + " " * w + "|", "+" + "-" * w + "+"]
+    return out
+
+
 def finish(g, st, tl):
-    """After a run, at the shell: one line and the memory; a win adds the
-    ending, the palette and the card."""
+    """After a run, at the shell: one box -- the outcome, the memory as it
+    stands, the tale's line; a win adds the ending, the palette and the
+    one line that keeps the joke."""
     path = None
     if g.over == "won":
         path = write_palette()       # before a word is printed: a closed pipe must not lose the prize
     _remember(g, st)
     taken = set(g.taken)
     zone = fold(ZONE_NAMES[g.zone_max - 1][0])
-    say()
+    board = ["Top runs:"] + ["    %d. %5d   night %d   * %d/8   %s%s" % (
+        i + 1, r["score"], r["night"], r["stars"], r["date"], "   crossed" if r.get("won") else "")
+        for i, r in enumerate(st.get("scores", []))]
     if g.over == "won":
-        say("%s lua -- SUCCESS: eight stars, the forest crossed" % MARK)
+        again = ("Night %d awaits: faster, and every point counts %d times." % (g.night + 1, g.night + 1)
+                 if g.night < NIGHTS else "The last night. The forest has nothing left to hide.")
+        paras = ["SUCCESS -- eight stars, the forest crossed.  Score %d (night %d)." % (g.score, g.night),
+                 memory(tl, taken, 0),
+                 fold(tl.get("fim", ("", ""))[0]),
+                 CARD,
+                 "A palette of your own, in the colours of the flag:",
+                 "    spark theme %s" % PALETTE_NAME,
+                 again] + board
     else:
-        say("%s lua -- GAME OVER in zone %d, %s; * %d/8; best zone %d with %d" % (
-            MARK, g.zone_max, zone, g.stars, st["best"]["zone"], st["best"]["stars"]))
-    for ln in textwrap.wrap(memory(tl, taken, 0), 76):
+        paras = ["GAME OVER in zone %d, %s.  * %d/8   Score %d (night %d)." % (
+                     g.zone_max, zone, g.stars, g.score, g.night),
+                 memory(tl, taken, 0),
+                 fold(tl.get("queda", ("", ""))[0])] + board
+    say()
+    for ln in boxed(paras):
         say("  " + ln)
-    if g.over == "dead":
-        say()
-        say("  %s" % fold(tl.get("queda", ("", ""))[0]))
-    if g.over == "won":
-        say()
-        say("  %s" % fold(tl.get("fim", ("", ""))[0]))
-        say()
-        say("  a palette of your own: %s" % path.replace(os.path.expanduser("~"), "~"))
-        say("  spark theme %s" % PALETTE_NAME)
-        say()
-        for ln in CARD:
-            say("  " + ln)
     say()
 
 
@@ -1202,8 +1252,11 @@ USAGE = """%s lua -- the forest, a bow, eight stars, a moon
                             w / Up jumps, Space fires an arrow, v calls the
                             king vulture down on the bats, m mutes, p pauses,
                             q leaves (SPARK_LUA_MUTE=1 starts muted)
+  spark lua --night N       play night N (1-6): faster, more points; the next
+                            night opens with each win
+  spark lua --scores        the top five runs
   spark lua --moon [DATE]   tonight's moon, or a date's (YYYY-MM-DD)
-  spark lua --reset         forget the best run
+  spark lua --reset         forget the best run and the scores
 """ % MARK
 
 
@@ -1228,11 +1281,22 @@ def cmd_lua(args):
         say("%s lua: the night starts over" % MARK)
         return 0
     st = load_state()
+    if args and args[0] == "--scores":
+        say("%s lua -- top runs (nights won: %d)" % (MARK, st["nights"]))
+        for i, r in enumerate(st["scores"]):
+            say("  %d. %5d   night %d   * %d/8   %s%s" % (i + 1, r["score"], r["night"], r["stars"], r["date"],
+                                                          "   crossed" if r.get("won") else ""))
+        if not st["scores"]:
+            say("  none yet")
+        return 0
+    if args and args[0] == "--night":
+        st["night_pick"] = max(1, min(NIGHTS, int(args[1]) if len(args) > 1 and args[1].isdigit() else 1))
+        args = args[2:]
     if args and args[0] == "--sim":
         seed = int(args[1]) if len(args) > 1 else 1
         tape = args[2] if len(args) > 2 else "auto"
         day = date.fromisoformat(args[3]) if len(args) > 3 else None
-        g = sim(seed, tape, day)
+        g = sim(seed, tape, day, st.get("night_pick") or 1)
         say(sim_line(g))
         finish(g, st, tl)
         return 0
