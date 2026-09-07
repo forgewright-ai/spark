@@ -1,5 +1,39 @@
 # Changelog
 
+## v1.13
+
+A second Linux family: Arch. One spark, one oracle, the package names as
+data.
+
+- `distro()` beside `is_wsl()` in both twins (`lib/spark/__init__.py`,
+  `bootstrap.sh`) reads `ID` then `ID_LIKE` from os-release and answers
+  `debian`, `arch` or nothing; `SPARK_OS_RELEASE` pins it in tests, the
+  way `SPARK_PROC_VERSION` pins WSL 2. `os_pretty` reads the same file.
+- The package names live in `distro/<id>.env`, one file per family, the
+  same eight keys (contract 3): the manager, its install line, the name
+  the docs use, the five groups. `lib/spark/packages.py` is the one place
+  python asks a package manager; bootstrap's `pkg_installed`,
+  `pkg_available` and `pkg_install` are the one place sh does.
+  `spark uninstall` reads the same file instead of bootstrap's source.
+- The `apt` and `brew` rows are one row, `packages`, in bootstrap and in
+  `spark check`.
+- Arch: `get` accepts pacman and names its install line; packages come
+  through `pacman -S --needed`, never `-Sy` alone (a name the database
+  cannot find is a todo naming `sudo pacman -Syu`); the `pending` row
+  counts `checkupdates`; `gcc-libs` is in `base`, so the AI layer asks
+  for sudo only with a GPU.
+- What Arch lacks refuses in one signed line: `spark font` (no
+  console-setup: `/etc/vconsole.conf` is yours) and `spark quiet boot` (no
+  `update-grub`); the `font` and `quiet` rows say so, never fail
+  (`check.ARCH_ROWS`, a sixth selftest pass). `spark quiet login` works
+  there.
+- Two rows are generic now: the console palette's boot unit orders after
+  `systemd-vconsole-setup.service` as well as `console-setup.service`,
+  and the quiet login never creates a motd that was absent.
+- CI runs the stranger's one-liner in an `archlinux` container too, with
+  the shell layer on top; an Arch block in INSTALL sections 1 and 7;
+  the Arch package names in CREDITS.md.
+
 ## v1.12
 
 A way out: `spark uninstall` takes spark off a machine and keeps what is yours.

@@ -98,7 +98,8 @@ LINUX
   systemctl --user status spark-serve spark-forge spark-check.timer
   journalctl --user -u spark-serve -n 50     (spark-forge likewise)
   ~/.local/state/spark/forge.log             the FORGE's own log (both OSes)
-  fd/bat are fdfind/batcat on Debian; the shell layer's rc aliases them
+  fd/bat are fdfind/batcat on Debian, fd/bat on Arch; the rc aliases them
+  arch: sudo pacman -S --needed PKG; never -Sy alone (sudo pacman -Syu first)
 
 MACOS
   launchctl print gui/$UID/spark.serve         is the agent loaded? (.forge too)

@@ -43,6 +43,17 @@ minutes, one 4.7 GB model, one sudo.
 
 4. Continue at section 2.
 
+**Linux, Arch.** Get the ISO from https://archlinux.org/download/, write
+it to a USB stick and boot it. `archinstall` asks the questions; the ones
+that matter: the *Minimal* profile (a desktop is optional), a user
+account marked superuser (that is the `sudo`), *GRUB* as the bootloader
+if you want `spark quiet boot` one day (systemd-boot has no
+`/etc/default/grub`, and the row skips), `git curl python` under
+additional packages, and a network configuration. Reboot, log in, `sudo
+pacman -Syu` once, then section 2. Arch Linux, and what says
+`ID_LIKE=arch` (Manjaro, EndeavourOS), get the same rows as Debian;
+CI proves them in a container only.
+
 **macOS.** Any Mac Apple still updates. `xcode-select --install` brings
 `git`, `curl` and Apple's own `python3` (3.9 is enough). No Homebrew for
 the AI; it is wanted only by `spark shell on`. Continue at section 2.
@@ -55,8 +66,8 @@ the boot -- and that the GPU is not reached through WSL today.
 
 ## 2. spark on a machine you have
 
-spark needs four things: `sudo` once for `apt`, `git`, `curl`, and
-`python3` 3.9 or newer. Check all four:
+spark needs four things: `sudo` once for the package manager, `git`,
+`curl`, and `python3` 3.9 or newer. Check all four:
 
 ```sh
 for c in sudo git curl python3; do
@@ -68,10 +79,14 @@ python3 -c 'import sys; sys.exit(sys.version_info < (3, 9))' \
 
 Silence means you are ready. Otherwise:
 
-- Linux: `sudo apt-get install -y git curl python3`. No `sudo` at all?
-  `su -c 'apt-get install -y sudo && usermod -aG sudo YOURNAME'`, then log
-  out and back in. Debian 13 or Ubuntu 24.04 or newer (older ones lack
-  `eza` for the shell layer); x86_64 or arm64.
+- Linux, Debian family: `sudo apt-get install -y git curl python3`. No
+  `sudo` at all? `su -c 'apt-get install -y sudo && usermod -aG sudo
+  YOURNAME'`, then log out and back in. Debian 13 / Ubuntu 24.04 or newer
+  (older ones lack `eza` for the shell layer); x86_64 or arm64.
+- Linux, Arch: `sudo pacman -S --needed git curl python`. Arch Linux, or
+  what says `ID_LIKE=arch`; x86_64 or arm64. Never `pacman -Sy` alone (a
+  partial upgrade breaks a rolling distro): `sudo pacman -Syu` first when
+  a package cannot be found.
 - macOS: `xcode-select --install`.
 - Either: bash 4+ or zsh as your login shell, since the prompt widget
   lives in one of them (macOS ships zsh; its bash is 3.2).
@@ -119,9 +134,10 @@ recorded as `gruvbox-dark` unless `--theme`, the environment or an existing
 
 1. writes `~/.config/spark/site.env` (created from `site.env.example`,
    0600, with `SITE_SHELL=off`: the AI only, your shell stays yours);
-2. on Linux, `sudo -v` once when `apt` has something to install
-   (`libgomp1`; with a GPU, the Mesa Vulkan packages too: one sudo, both
-   at once); nothing on macOS;
+2. on Linux, `sudo -v` once when the `packages` row has something to
+   install (`libgomp1` on Debian; with a GPU, the Mesa Vulkan packages
+   too: one sudo, both at once; on Arch `gcc-libs` is already in `base`,
+   so a bare Arch asks for sudo only with a GPU); nothing on macOS;
 3. runs `bootstrap.sh` on the terminal: the engine (one pinned llama.cpp
    tarball for this OS and architecture, sha256-verified), the model with
    curl's progress bar, the api-token, the widgets, the one rc line, the
@@ -143,9 +159,9 @@ pre-answer, as do `SITE_NAME`, `SITE_USER`, `SITE_AI_MODEL` and
 asked again.
 
 `get` itself checks the ground before it touches anything -- the command
-line tools on macOS (before `git` can pop the dialog), `apt-get` on Linux,
-`git`, `python3` >= 3.9 -- and refuses with the install line when one is
-missing. It never runs sudo, and its whole body is one function called on
+line tools on macOS (before `git` can pop the dialog), `apt-get` or
+`pacman` on Linux, `git`, `python3` >= 3.9 -- and refuses with the
+install line when one is missing. It never runs sudo, and its whole body is one function called on
 its last line, so a download cut short runs nothing. `SPARK_HOME` moves
 the clone, `SPARK_URL` points it elsewhere, `SPARK_REF` checks out a ref
 right after a fresh clone (developers: `SPARK_REF=main`; with none, it
@@ -202,7 +218,7 @@ spark:
 | `SITE_PEER_AI_URL` | another machine's FORGE URL (`spark forge --print-client` there), or its raw `spark serve` URL | unset |
 | `SITE_HEADLESS` | `yes`: the FORGE up from boot with nobody logged in, never asleep -- later, `spark headless on|off` (refused on WSL 2: it stops with its last window) | `no` |
 | `SITE_THEME` | `none`, or a palette from `themes/` or your own in `~/.config/spark/themes/` (`spark theme` lists both) -- later, `spark theme NAME`; painted only by `spark shell on` or `spark theme NAME` | `none` |
-| `SITE_FONT_FACE` / `SITE_FONT_SIZE` | Linux console: a face and size `spark font list` shows (e.g. `Terminus` `16x32`); macOS profile: an installed font's PostScript name and points (`spark font list` shows the monospace ones; a face this Mac lacks is refused, and the `font` row warns) -- later, `spark font FACE SIZE`; core, shell layer or not. WSL 2 has no console: refused there, the font is Windows Terminal's | unset (Linux), the Nerd Font (macOS) / `16x32` (Linux), `13` (macOS) |
+| `SITE_FONT_FACE` / `SITE_FONT_SIZE` | Linux console: a face and size `spark font list` shows (e.g. `Terminus` `16x32`); macOS profile: an installed font's PostScript name and points (`spark font list` shows the monospace ones; a face this Mac lacks is refused, and the `font` row warns) -- later, `spark font FACE SIZE`; core, shell layer or not. WSL 2 has no console: refused there, the font is Windows Terminal's. Arch has no console-setup: refused there too, `/etc/vconsole.conf` is yours | unset (Linux), the Nerd Font (macOS) / `16x32` (Linux), `13` (macOS) |
 | `SITE_QUIET_START` | both OSes: `yes` silences spark's own start -- no login banner, one-line `spark serve` and `spark forge`, one-line bare `spark` (`spark status` stays full) -- later, `spark quiet start on`. The login path greps `site.env` directly (no python there), so the usual environment-over-file precedence does not apply to the banner | `no` |
 | `SITE_QUIET_AUDIO` | both OSes: `yes` and spark plays no sound (the `audio` check row names the player it would use: afplay, aplay, paplay) -- later, `spark quiet audio on|off` | `no` |
 
@@ -214,7 +230,7 @@ spark shell (`SITE_SHELL=on`):
 | `SITE_GIT_NAME` / `SITE_GIT_EMAIL` | the git identity `~/.gitconfig` is rendered with. Leave them out and spark guesses your login at this machine's name, and `./bootstrap.sh` says so in its `identity` row: a guess signs every commit you make, so choose them | guessed |
 | `SITE_PROMPT` / `SITE_PROMPT_STYLE` | `starship`/`plain`; `minimal`/`full` | `starship`, `minimal` |
 | `SITE_WORKSPACE` | the folder the `backup` row watches and the `dir` row makes | `~/projects` |
-| `SITE_QUIET_LOGIN` / `SITE_QUIET_BOOT` | Linux: `yes` bares the login (motd, kernel line and `/etc/issue` emptied, originals kept as `*.orig`) / makes the boot silent -- BIOS splash to login prompt (GRUB menu hidden, quiet kernel line, systemd silent; one drop-in at `/etc/default/grub.d/zz-spark-quiet.cfg`) -- later, `spark quiet login|boot on`. WSL 2 has no GRUB: `boot` is refused there, `login` works | `no` |
+| `SITE_QUIET_LOGIN` / `SITE_QUIET_BOOT` | Linux: `yes` bares the login (motd, kernel line and `/etc/issue` emptied, originals kept as `*.orig`) / makes the boot silent -- BIOS splash to login prompt (GRUB menu hidden, quiet kernel line, systemd silent; one drop-in at `/etc/default/grub.d/zz-spark-quiet.cfg`) -- later, `spark quiet login|boot on`. WSL 2 has no GRUB and Arch has no `update-grub`: `boot` is refused on both, `login` works | `no` |
 
 Runtime knobs live in `~/.config/spark/spark.env` (`spark.env.example`
 lists them all); the ones with a verb of their own:
@@ -574,7 +590,8 @@ file) -- TTY, tmux, starship and micro, the same look. The rc files
 become spark's -- `~/.bashrc` and `~/.bash_profile` on Linux, `~/.zshrc`
 and `~/.zprofile` on macOS turn into symlinks into the repo, yours moved
 to `<file>.bak`, never overwritten. It runs bootstrap (sudo once for
-`apt` on Linux; Homebrew on macOS), then says `open a new shell`.
+the `packages` row on Linux; Homebrew on macOS), then says `open a new
+shell`.
 
 `spark shell off` hands everything back the same way, look included:
 each rc file and each rendered config -- `.tmux.conf`,
@@ -588,8 +605,8 @@ palette goes with the layer that brought it: `theme.env` is removed and
 sent at once and redrawn with -- a console holds its own colours, so no
 `exec $SHELL` could undo them. `SITE_THEME` stays in `site.env`, so `spark shell on`
 paints it again. The `configs` and `rc` rows re-run so the one hook line
-lands in a restored rc file, and the packages stay installed (`apt` or
-`brew` removes them). It ends with `open a new shell (exec $SHELL)`: this
+lands in a restored rc file, and the packages stay installed (apt,
+pacman or brew removes them). It ends with `open a new shell (exec $SHELL)`: this
 one still has spark's prompt loaded. `spark shell` prints the state.
 
 With the layer off, `spark bar` and the set forms of
@@ -600,7 +617,9 @@ disk`) read `na`; the `shell` row says what `on` adds. `spark
 theme` and `spark font` work either way -- and `spark quiet start` too: it
 is spark's own noise, not the shell's. Two fonts are in play on Linux and
 they are not the same one. `spark font` sets the **console** face, a
-`.psf` from `/usr/share/consolefonts`, and `spark font list` shows those.
+`.psf` from `/usr/share/consolefonts` (Debian's console-setup; on Arch
+the console font is `/etc/vconsole.conf`'s and `spark font` says so), and
+`spark font list` shows those.
 The **Nerd Font** comes with the shell layer, a `.ttf` unzipped into
 `~/.local/share/fonts` for your terminal emulator to use; no console
 command can select it, so set it in the emulator's own settings.
@@ -693,8 +712,9 @@ Linux:
 - The engine is the pinned tarball for x86_64 or arm64, the Vulkan build
   when a GPU reports its memory in `/sys/class/drm` (`SITE_AI_BUILD=auto`,
   the default; `vulkan` and `cpu` choose outright, `cpu` works anywhere).
-  The Vulkan build brings `libvulkan1 mesa-vulkan-drivers` through apt --
-  the same sudo as `libgomp1`, no second prompt. The `gpu` row names the
+  The Vulkan build brings `libvulkan1 mesa-vulkan-drivers` through apt
+  (`vulkan-icd-loader vulkan-radeon vulkan-intel` through pacman) -- the
+  same sudo as `libgomp1`, no second prompt. The `gpu` row names the
   build this machine gets; when the extracted engine is the other build
   (a box that had `cpu` before a GPU was seen) the `engine` row says so
   and `./bootstrap.sh` replaces it. An architecture without a pin gets
@@ -742,8 +762,36 @@ Linux:
   spark-check.timer`; `journalctl --user -u spark-serve -n 50`. Without a
   user systemd session (a container) the `services` row reads `na`; run
   `spark serve` and `spark forge` by hand.
-- `fd` and `bat` are `fdfind` and `batcat` on Debian; the shell layer's rc
-  file aliases them.
+- `fd` and `bat` are `fdfind` and `batcat` on Debian (`fd` and `bat` on
+  Arch); the shell layer's rc file aliases them where it must.
+
+Arch:
+
+- It is Linux to spark: the same one-liner, the same rows. The engine is
+  the pinned tarball named `ubuntu-*` -- a glibc build, and Arch's glibc
+  is newer; the `engine` row names the asset. CI proves the one-liner and
+  the shell layer in an Arch container; the console palette, the units and
+  the GPU there are the maintainer's, by hand.
+- Packages come through `pacman -S --needed`, never `-Sy` alone: a rolling
+  distro forbids the partial upgrade, so when a name cannot be found the
+  `packages` row says `sudo pacman -Syu` first. The `pending` row counts
+  `checkupdates` (`pacman-contrib`, with the shell layer). `gcc-libs`
+  (OpenMP) is in `base`: the AI layer installs nothing without a GPU.
+- No console-setup: `spark font` refuses to set and the `font` row says
+  so; the console font is `/etc/vconsole.conf`'s (`FONT=ter-132n` with
+  `terminus-font`; `sudo systemctl restart systemd-vconsole-setup` applies
+  it). The Nerd Font half of the row is real.
+- `spark quiet login on` works: an absent motd stays absent, `/etc/issue`
+  is emptied to the cursor escape, the original kept. `spark quiet boot`
+  refuses: there is no `update-grub` and Arch's `grub-mkconfig` reads no
+  drop-in. By hand, in `/etc/default/grub`: `GRUB_TIMEOUT=0`,
+  `GRUB_TIMEOUT_STYLE=hidden`, `GRUB_CMDLINE_LINUX_DEFAULT="loglevel=3
+  quiet systemd.show_status=false udev.log_level=3
+  vt.global_cursor_default=0 fbcon=nodefer"`, then `sudo grub-mkconfig -o
+  /boot/grub/grub.cfg`.
+- The palette's boot unit works (`kbd` ships `setvtrgb`); the `render`
+  group, the user units, linger and the hostname are the same as on
+  Debian. The fzf key bindings are read from `/usr/share/fzf`.
 
 Windows (Ubuntu 24.04 on WSL 2):
 
@@ -776,13 +824,15 @@ Windows (Ubuntu 24.04 on WSL 2):
 `bootstrap.sh` uses sudo per layer, and `--dry-run` never calls it -- it
 lists exactly which of these it would do:
 
-- the AI (always): Linux `apt` for `libgomp1` (and the Vulkan libraries
-  when the build is vulkan: a GPU in sysfs, or `SITE_AI_BUILD=vulkan`),
+- the AI (always): Linux apt or pacman for the `packages` row --
+  `libgomp1` on Debian (Arch has it in `base`), and the Vulkan libraries
+  when the build is vulkan: a GPU in sysfs, or `SITE_AI_BUILD=vulkan` --
   and the hostname when `SITE_SET_HOSTNAME=yes`; macOS the hostname only.
-- the shell (`SITE_SHELL=on`): Linux `apt` for tmux and the tools, the
-  console font, the console palette (`setvtrgb` and its boot unit, once a
-  theme is painted), the quiet login (motd) and the quiet boot (the GRUB
-  drop-in), each only when its key says so; macOS nothing.
+- the shell (`SITE_SHELL=on`): Linux apt or pacman for tmux and the tools,
+  the console font, the console palette (`setvtrgb` and its boot unit,
+  once a theme is painted), the quiet login (motd) and the quiet boot (the
+  GRUB drop-in), each only when its key says so -- on Arch the console
+  font and GRUB rows are skips; macOS nothing.
 - headless (`SITE_HEADLESS=yes`): Linux `loginctl enable-linger` and the
   `render` group (also on any vulkan build), the sleep targets masked, the
   lid ignored (a logind drop-in); macOS the LaunchDaemons in `system/` and

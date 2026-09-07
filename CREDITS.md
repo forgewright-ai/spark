@@ -2,8 +2,8 @@
 
 spark vendors none of the projects below. `bootstrap.sh` downloads each
 one, pinned by version and sha256, from its own upstream to your machine
-at install time; apt and Homebrew install the rest from their own
-repositories. spark's own code is MIT (`LICENSE`). The banner in
+at install time; apt, pacman and Homebrew install the rest from their
+own repositories. spark's own code is MIT (`LICENSE`). The banner in
 `home/.config/spark/banner` is spark's own artwork.
 
 ## The engine
@@ -51,25 +51,35 @@ Colour values only, no code copied; the license is the upstream's:
 - Solarized -- https://ethanschoonover.com/solarized -- MIT
 - Tokyo Night -- https://github.com/folke/tokyonight.nvim -- Apache-2.0
 
-## The AI's packages (apt, Linux; macOS needs none)
+## The AI's packages (apt or pacman, Linux; macOS needs none)
 
-None of these is shipped by spark; apt installs them from Debian's or
-Ubuntu's own repositories, unpinned. The names are the distro's own, as
-`distro/debian.env` lists them (tests/docs_test.py checks every name
-there is credited here).
+None of these is shipped by spark; apt or pacman installs them from the
+distro's own repositories, unpinned. The names are the distro's own, as
+`distro/debian.env` and `distro/arch.env` list them (tests/docs_test.py
+checks every name there is credited here); where the two families name
+one project differently, both names are here.
 
 - git -- GPL-2.0-only
 - curl -- the curl license
-- ca-certificates -- MPL-2.0 (Mozilla's bundle, as Debian ships it)
+- ca-certificates -- MPL-2.0 (Mozilla's bundle, as the distro ships it)
 - python3 -- PSF-2.0
+- python -- PSF-2.0 (python3, on Arch)
 - libgomp1 -- GPL-3.0-or-later, with the GCC runtime exception
+- gcc-libs -- GPL-3.0-or-later, with the GCC runtime exception (libgomp,
+  on Arch; in `base` there)
 - libvulkan1 -- Apache-2.0 (the vulkan build only)
+- vulkan-icd-loader -- Apache-2.0 (libvulkan1, on Arch; the vulkan build
+  only)
 - mesa-vulkan-drivers -- MIT and others (the vulkan build only)
+- vulkan-radeon -- MIT and others (Mesa's AMD driver, on Arch; the vulkan
+  build only)
+- vulkan-intel -- MIT and others (Mesa's Intel driver, on Arch; the
+  vulkan build only)
 
-## Shell tools (apt / Homebrew, `spark shell on`)
+## Shell tools (apt or pacman / Homebrew, `spark shell on`)
 
-The shell layer's, installed from apt's or Homebrew's own repositories,
-unpinned. No editor is among them: an app's plugin is its own repository
+The shell layer's, installed from apt's, pacman's or Homebrew's own
+repositories, unpinned. No editor is among them: an app's plugin is its own repository
 (micro: github.com/forgewright-ai/spark-micro, with its own credits).
 
 - bash -- GPL-3.0-or-later
@@ -77,12 +87,15 @@ unpinned. No editor is among them: an app's plugin is its own repository
 - unzip -- Info-ZIP (the Nerd Font's archive)
 - fontconfig -- MIT-style
 - ncurses-bin -- MIT-style (ncurses)
+- ncurses -- MIT-style (ncurses-bin, on Arch)
+- pacman-contrib -- GPL-2.0-or-later (`checkupdates`, on Arch)
 - bat -- MIT/Apache-2.0
 - eza -- MIT
 - fzf -- MIT
 - zoxide -- MIT
 - ripgrep -- MIT/Unlicense
 - fd-find -- MIT/Apache-2.0 (fd)
+- fd -- MIT/Apache-2.0 (fd-find, on Arch)
 - jq -- MIT
 - btop -- Apache-2.0
 

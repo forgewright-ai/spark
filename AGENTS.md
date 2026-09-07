@@ -1,12 +1,13 @@
 # spark -- for agents and contributors
 
-spark is a local AI at your shell prompt, bare bones, for Linux, macOS
-and Windows through WSL 2; nothing leaves the machine except pinned
+spark is a local AI at your shell prompt, bare bones, for Linux (the
+Debian and Arch families), macOS and Windows through WSL 2; nothing leaves the machine except pinned
 downloads and your own talk to a model you run. Three domains share the
 one command: spark (the AI), spark shell (`spark shell on`, the look and
 the tools) and the smart apps (clients of spark, each in its own repo).
 CI has no WSL runner: the WSL 2 branch is pinned by fixture, and a real
-run there is the maintainer's, by hand.
+run there is the maintainer's, by hand. Arch is proven in a container:
+the console, the units and the GPU there are the maintainer's too.
 
 ## The landing rule
 

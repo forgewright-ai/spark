@@ -25,14 +25,16 @@ The page: https://spark.forgewright.ai -- the docs, the model list.
 
 ## Quickstart
 
-Debian 13 / Ubuntu 24.04 or newer (Ubuntu on WSL 2 too), or macOS with the
-command line tools. Step 0 on a bare Linux, once:
+Debian 13 / Ubuntu 24.04 or newer (Ubuntu on WSL 2 too), Arch Linux, or
+macOS with the command line tools. Step 0 on a bare Linux, once:
 
 ```sh
-sudo apt-get update && sudo apt-get install -y git curl python3
+sudo apt-get update && sudo apt-get install -y git curl python3   # Debian, Ubuntu
+sudo pacman -S --needed git curl python                            # Arch
 ```
 
-Then one line, either OS. No sudo, except once for `apt` on Linux:
+Then one line, either OS. No sudo, except once for the package manager on
+Linux (none at all on a bare Arch without a GPU):
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/forgewright-ai/spark/main/get | sh

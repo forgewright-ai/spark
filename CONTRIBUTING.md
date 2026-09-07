@@ -7,7 +7,7 @@ and macOS; this file is the short path to a change that lands.
 
 No special hardware is needed: the tests are hermetic (a stub
 llama-server, throwaway `HOME` and `XDG_*` dirs), and CI runs the same
-gate on Ubuntu, Debian 13, and macOS.
+gate on Ubuntu, Debian 13, Arch, and macOS.
 
 ```sh
 git clone https://github.com/forgewright-ai/spark.git
@@ -17,8 +17,9 @@ git config core.hooksPath .githooks
 
 Then the gate: the list in `AGENTS.md`, run in that order, is what the
 pre-commit hook runs -- one copy, there. shellcheck is a contributor's
-tool, not a user's package: `apt-get install shellcheck` or `brew install
-shellcheck` (the hook skips it with a notice when absent). Changing
+tool, not a user's package: `apt-get install shellcheck`, `pacman -S
+shellcheck` or `brew install shellcheck` (the hook skips it with a notice
+when absent). Changing
 one of the editor's briefs (`persona.MODE_EDIT_*`)? Run
 `tests/audition.py` against a live brain and put its before and after
 totals in the pull request -- the briefs are judged by lints, not taste.
