@@ -1778,6 +1778,8 @@ def selftest():
             env.update(make_fixture(root, True, stub_url))
             with open(os.path.join(root, "version"), "w") as f:
                 f.write("Linux version 6.6.87.2-microsoft-standard-WSL2 (root@fixture) #1 SMP\n")
+            env["SITE_QUIET_BOOT"] = "yes"                          # the boot half is what WSL lacks
+            env["SPARK_SYSFS_DRM"] = os.path.join(root, "nodrm")    # no DRM card: WSL shows /dev/dxg
             p = subprocess.run([sys.executable, os.path.join(REPO, "bin", "spark"), "check", "--porcelain", "--fresh"],
                                env=env, capture_output=True, text=True, timeout=180)
             for line in p.stdout.splitlines():
