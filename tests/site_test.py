@@ -87,7 +87,8 @@ def main():
                if re.match(r'^MODEL_[A-Z0-9_]+="', l) and not re.match(r'^MODEL_[A-Z0-9_]+_(LICENSE|NOTE|TESTED)=', l))
     check(pages["models"].count("<tr>") == rows + 1, "models: every row of models.env is on the page (%d)" % rows)
     check("banner.svg" in pages[""] and 'id="ol"' in pages[""], "index: the banner and the one-liner")
-    check("spark shell on" in pages[""] and "spark-micro" in pages[""], "index: names the two optional layers, spark shell and spark-micro")
+    check("spark chat" in pages[""] and "spark-micro" in pages[""], "index: spark chat, the prompt line and one spark app (spark-micro)")
+    check("spark shell" not in pages[""], "index: the front is spark and spark apps; the shell layer is INSTALL.md's")
     # a CHANGELOG section above the newest tag is marked unreleased on the page
     sys.path.insert(0, os.path.join(ROOT, "www"))
     import build

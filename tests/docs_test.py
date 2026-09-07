@@ -6,7 +6,9 @@
 # model row's license upstream is in CREDITS.md; the check-row count the
 # docs state is the count in check.py; the model count they state is the
 # count in models.env; every page www/build.py renders has its source
-# file; no doc names the lists that are gone. Hermetic, stdlib, fast.
+# file; no doc names the lists that are gone; the docs a stranger reads
+# speak two nouns (spark, spark apps) and no doc names what is private.
+# Hermetic, stdlib, fast.
 import os
 import re
 import sys
@@ -16,6 +18,10 @@ sys.path.insert(0, os.path.join(ROOT, "lib"))
 from spark import config  # noqa: E402
 
 fails = []
+# the docs a stranger reads (the voice checks below), and every doc
+CUSTOMER_DOCS = ("README.md", "www/index.html")
+ALL_DOCS = ("README.md", "INSTALL.md", "CLAUDE.md", "CHEATSHEET.txt", "CREDITS.md", "CONTRIBUTING.md",
+            "AGENTS.md", "ROADMAP.md", "CHANGELOG.md", "site.env.example", "www/index.html")
 
 
 def check(cond, what):
@@ -112,12 +118,6 @@ def main():
     listed = re.split(r",\s+", " ".join(m.group(1).split())) if m else []
     check(listed == named["CLIENT_ROWS"],
           "CLAUDE.md names check.CLIENT_ROWS in order (%s)" % ", ".join(named["CLIENT_ROWS"]))
-    # the README's setup transcript counts the rows setup does NOT offer
-    offered = len(config.auto_rows(config.model_tables(ROOT)))
-    rest = len(config.model_tables(ROOT)) - offered
-    for m in re.finditer(r"(\d+) more: spark model list", read("README.md")):
-        check(int(m.group(1)) == rest,
-              "README.md: '%s' is models.env minus what setup offers (%d)" % (m.group(0), rest))
     n_models = len(rows)
     for doc in ("README.md", "INSTALL.md"):
         for m in re.finditer(r"(\d+) (models|rows), each with its license", read(doc)):
@@ -143,6 +143,27 @@ def main():
         tmaj, tmin = (int(x) for x in tag.split("."))
         check((major, minor) in ((tmaj, tmin), (tmaj, tmin + 1), (tmaj + 1, 0)),
               "CHANGELOG.md: the top section v%d.%d is the newest tag v%s or the next release" % (major, minor, tag))
+    # the customer-facing docs speak two nouns, spark and spark apps: the
+    # names the code keeps (the FORGE, an ember, the brain, the seed, the
+    # strangers) stay in the maintainer's docs; and no public doc calls
+    # the shell layer frozen or deprecated
+    taxonomy = r"\b(the|a) forge\b|\b(the|an) ember\b|\bthe brain\b|\bsmart (app|apps|os)\b|\bthe seed\b|\bstranger"
+    for doc in CUSTOMER_DOCS:
+        m = re.search(taxonomy, read(doc), re.I)
+        check(m is None, "%s: two nouns, spark and spark apps%s" % (doc, " (found '%s')" % m.group(0) if m else ""))
+    for doc in ALL_DOCS:
+        m = re.search(r"\b(frozen|deprecated)\b", read(doc), re.I)
+        check(m is None, "%s: no '%s'" % (doc, m.group(0) if m else "frozen/deprecated"))
+    # what is private is named nowhere in the tree's docs
+    for doc in ALL_DOCS:
+        check(not re.search(r"\bfactor(y|ies)\b", read(doc), re.I), "%s: no factory" % doc)
+    # every spark app the README names is in INSTALL, the cheatsheet, the
+    # credits and the page front
+    apps = sorted(set(re.findall(r"github\.com/forgewright-ai/(spark-[a-z0-9]+)", read("README.md"))))
+    check(bool(apps), "README.md names at least one spark app repo")
+    for app in apps:
+        for doc in ("INSTALL.md", "CHEATSHEET.txt", "CREDITS.md", "www/index.html"):
+            check(app in read(doc), "%s names %s (the README does)" % (doc, app))
     # the lists that are gone stay gone
     for doc in ("README.md", "INSTALL.md", "CLAUDE.md", "CHEATSHEET.txt", "CREDITS.md", "CONTRIBUTING.md",
                 "AGENTS.md", "ROADMAP.md", "site.env.example"):

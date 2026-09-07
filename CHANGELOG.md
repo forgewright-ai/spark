@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.14
+
+The docs rewritten around three lines: choose your OS, one line, spark
+is live; spark apps, a tool that becomes smart as a client of `spark
+edit`; another contract when apps ask for it. The shell layer keeps
+working, off by default, and the docs stop presenting it as a third of
+spark.
+
+- README: install in three steps, the verbs in one table, spark apps,
+  what leaves the machine. The page front is spark and spark apps.
+  `tests/docs_test.py` checks the voice: two nouns in what a stranger
+  reads, every spark app the README names in INSTALL, the cheatsheet,
+  the credits and the page.
+
 ## v1.13
 
 A second Linux family: Arch. One spark, one oracle, the package names as
