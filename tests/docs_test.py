@@ -19,7 +19,7 @@ from spark import config  # noqa: E402
 
 fails = []
 # the docs a stranger reads (the voice checks below), and every doc
-CUSTOMER_DOCS = ("README.md", "www/index.html")
+CUSTOMER_DOCS = ("README.md", "INSTALL.md", "www/index.html")
 ALL_DOCS = ("README.md", "INSTALL.md", "CLAUDE.md", "CHEATSHEET.txt", "CREDITS.md", "CONTRIBUTING.md",
             "AGENTS.md", "ROADMAP.md", "CHANGELOG.md", "site.env.example", "www/index.html")
 

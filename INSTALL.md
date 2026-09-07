@@ -1,40 +1,20 @@
 # Installing spark
 
-spark is AI on the edge, at no cost: `spark chat` is the front door, the
-prompt line is the surprise. Three things share the one command, and you
-take the ones you came for:
-
-| | what | how |
-|---|---|---|
-| spark | the engine, a model, chat, the `?` prompt line, the FORGE on the LAN. Your shell, colours and editor stay yours | the one-liner (section 2) |
-| spark shell | spark's own shell for an AI box: tmux, starship, fzf, eza, bat, btop, zoxide, the Nerd Font, one palette on every surface | `spark shell on` (section 5) |
-| smart apps | spark inside a tool you use; micro first | the app's own install (section 6) |
-
-Start at **section 1** if the machine does not exist yet, at **section 2**
-if you have one and want spark on it. The rest is the runbook: what the
-first run does, every key, the models, the FORGE from other machines,
-headless, updating, the shell layer, the smart apps, each OS's own notes,
-and what to do when something stops working. The README is the short form.
+Start at section 1 without a machine, at section 2 with one. The rest
+is the runbook, in the order you will need it.
 
 ## 1. A machine from zero
 
-A bare box to a working spark. Most of the time is downloads: about ten
-minutes, one 4.7 GB model, one sudo.
+About ten minutes, most of it one 4.7 GB download; sudo once.
 
-**Linux.**
+Debian:
 
 1. Get Debian 13 (trixie), the small installer image, from
-   https://www.debian.org/CD/netinst/ -- `amd64` for a PC, `arm64` for an
-   ARM board. Write it to a USB stick and boot it.
-
-2. Run the installer. Two answers matter:
-
-   - **Leave the root password empty.** Debian puts your user in the
-     `sudo` group only when you do. Set one and you have no `sudo`, and
-     spark's single `apt` step cannot run.
-   - At *Software selection*, keep **SSH server** and **standard system
-     utilities**. A desktop is optional -- spark never needs one.
-
+   https://www.debian.org/CD/netinst/ (`amd64` for a PC, `arm64` for an
+   ARM board). Write it to a USB stick and boot it.
+2. In the installer, leave the root password empty: that puts your user
+   in the `sudo` group. At *Software selection* keep SSH server and
+   standard system utilities; a desktop is optional.
 3. Log in and install what spark needs:
 
    ```sh
@@ -43,245 +23,175 @@ minutes, one 4.7 GB model, one sudo.
 
 4. Continue at section 2.
 
-**Linux, Arch.** Get the ISO from https://archlinux.org/download/, write
-it to a USB stick and boot it. `archinstall` asks the questions; the ones
-that matter: the *Minimal* profile (a desktop is optional), a user
-account marked superuser (that is the `sudo`), *systemd-boot* as the
-bootloader (UEFI-native, one entry file per kernel, no generated
-config; GRUB works too), `git curl python openssh` under additional
-packages, and a network configuration ("copy the ISO's" keeps the Wi-Fi
-you joined with `iwctl`). Take one HTTPS mirror
-(`https://geo.mirror.pkgbuild.com/$repo/os/$arch` as a custom server): a
-router that inspects HTTP turns a mirror into `invalid or corrupted
-database (PGP signature)`. Reboot, log in, `sudo pacman -Syu` once, then
-section 2. Arch Linux, and what says
-`ID_LIKE=arch` (Manjaro, EndeavourOS), get the same rows as Debian;
-CI proves them in a container only.
+Arch:
 
-**macOS.** Any Mac Apple still updates. `xcode-select --install` brings
-`git`, `curl` and Apple's own `python3` (3.9 is enough). No Homebrew for
-the AI; it is wanted only by `spark shell on`. Continue at section 2.
+1. Get the ISO from https://archlinux.org/download/, write it to a USB
+   stick and boot it.
+2. Run `archinstall`. The answers that matter: the *Minimal* profile; a
+   user account marked superuser (that is the `sudo`); *systemd-boot* as
+   the bootloader (GRUB works too); `git curl python openssh` under
+   additional packages; "copy the ISO's" network configuration to keep
+   the Wi-Fi you joined with `iwctl`; one HTTPS mirror as a custom server
+   (`https://geo.mirror.pkgbuild.com/$repo/os/$arch`), because a router
+   that inspects HTTP turns a mirror into `invalid or corrupted database
+   (PGP signature)`.
+3. Reboot, log in, `sudo pacman -Syu` once, then section 2.
 
-**Windows.** spark runs in WSL 2, where Ubuntu is Linux to it. In
-PowerShell: `wsl --install -d Ubuntu-24.04`, reboot when asked, open
-Ubuntu, then step 3 above and section 2. Windows Terminal draws it; the
-per-OS notes (section 7) say what is Windows's to set there -- the font,
-the boot -- and that the GPU is not reached through WSL today.
+macOS: any Mac Apple still updates. `xcode-select --install` brings
+`git`, `curl` and Apple's `python3` (3.9 is enough). Continue at
+section 2.
 
-## 2. spark on a machine you have
+Windows: spark runs in WSL 2, where Ubuntu is Linux to it. In
+PowerShell, `wsl --install -d Ubuntu-24.04`, reboot when asked, open
+Ubuntu, then Debian's step 3 and section 2.
 
-spark needs four things: `sudo` once for the package manager, `git`,
-`curl`, and `python3` 3.9 or newer. Check all four:
+## 2. Install spark
 
-```sh
-for c in sudo git curl python3; do
-    command -v "$c" >/dev/null || echo "missing: $c"
-done
-python3 -c 'import sys; sys.exit(sys.version_info < (3, 9))' \
-    || echo "python3 is older than 3.9"
-```
+1. Check the four things spark needs: `sudo` once for the package
+   manager, `git`, `curl`, `python3` 3.9 or newer.
 
-Silence means you are ready. Otherwise:
+   ```sh
+   for c in sudo git curl python3; do
+       command -v "$c" >/dev/null || echo "missing: $c"
+   done
+   python3 -c 'import sys; sys.exit(sys.version_info < (3, 9))' \
+       || echo "python3 is older than 3.9"
+   ```
 
-- Linux, Debian family: `sudo apt-get install -y git curl python3`. No
-  `sudo` at all? `su -c 'apt-get install -y sudo && usermod -aG sudo
-  YOURNAME'`, then log out and back in. Debian 13 / Ubuntu 24.04 or newer
-  (older ones lack `eza` for the shell layer); x86_64 or arm64.
-- Linux, Arch: `sudo pacman -S --needed git curl python`. Arch Linux, or
-  what says `ID_LIKE=arch`; x86_64 or arm64. Never `pacman -Sy` alone (a
-  partial upgrade breaks a rolling distro): `sudo pacman -Syu` first when
-  a package cannot be found.
-- macOS: `xcode-select --install`.
-- Either: bash 4+ or zsh as your login shell, since the prompt widget
-  lives in one of them (macOS ships zsh; its bash is 3.2).
+   Silence means you are ready. Otherwise:
 
-Then one line installs spark:
+   - Debian 13 / Ubuntu 24.04 or newer: `sudo apt-get install -y git
+     curl python3`. No `sudo` at all: `su -c 'apt-get install -y sudo &&
+     usermod -aG sudo YOURNAME'`, then log out and in.
+   - Arch Linux, or what says `ID_LIKE=arch`: `sudo pacman -S --needed
+     git curl python`. Never `pacman -Sy` alone: `sudo pacman -Syu` first
+     when a package cannot be found.
+   - macOS: `xcode-select --install`.
+   - Your login shell must be bash 4+ or zsh: the prompt widget lives in
+     one of them (macOS ships zsh; its bash is 3.2).
 
-```sh
-curl -fsSL https://raw.githubusercontent.com/forgewright-ai/spark/main/get | sh
-```
+2. One line:
 
-It clones spark to `~/.spark`, lands on the newest release, and runs
-`spark setup`. To read it before running it:
-`curl -fsSLO https://raw.githubusercontent.com/forgewright-ai/spark/main/get; sh get`.
-With `wget` instead of `curl`: `wget -qO- URL | sh`, the same URL. By
-hand, the same two steps:
+   ```sh
+   curl -fsSL https://raw.githubusercontent.com/forgewright-ai/spark/main/get | sh
+   ```
 
-```sh
-git clone https://github.com/forgewright-ai/spark.git ~/.spark
-~/.spark/bin/spark setup
-```
+   It clones spark to `~/.spark`, lands on the newest release and runs
+   `spark setup`. To read it first:
+   `curl -fsSLO https://raw.githubusercontent.com/forgewright-ai/spark/main/get; sh get`.
+   With `wget`: `wget -qO- URL | sh`. By hand, the same two steps:
 
-When it finishes:
+   ```sh
+   git clone https://github.com/forgewright-ai/spark.git ~/.spark
+   ~/.spark/bin/spark setup
+   ```
 
-```sh
-exec $SHELL      # the prompt widget goes live
-spark check      # every row green
-```
+3. When it finishes:
 
-That is spark. `spark shell on` (section 5) and the smart apps (section 6)
-are separate choices, each its own step.
+   ```sh
+   exec $SHELL      # the prompt widget goes live
+   spark check      # every row green
+   ```
 
-## What the first run does
+What setup does. It asks three things and never more: this machine's
+name (the short hostname by default), yours (your login), and the model
+(the row this machine earns is marked `*`; section 4 says how). Then:
 
-`spark setup` asks three things and never more: this machine's name (the
-short hostname by default), yours (your login), and the model, from the
-table with the row this machine earns marked `*` -- the largest that fits
-in the SITE_AI_BUDGET percent (default 60) of RAM plus GPU memory and
-stays usable on this engine build (the speed cap under Models). That table
-is the proven few; one line under it counts the rest, and `spark model
-list` shows every row. It never asks about the palette, the hostname, the
-shell layer or headless: those have verbs of their own. `SITE_THEME` is
-recorded as `gruvbox-dark` unless `--theme`, the environment or an existing
-`site.env` says otherwise, but nothing is painted with it until you run
-`spark shell on` or `spark theme NAME`. Then, in order:
+1. writes `~/.config/spark/site.env` (0600);
+2. on Linux, `sudo -v` once when a package is missing (`libgomp1` on
+   Debian, plus the Mesa Vulkan packages with a GPU; Arch has the library
+   in `base`, so a bare Arch asks only with a GPU); nothing on macOS;
+3. runs `bootstrap.sh`: the engine (one pinned llama.cpp tarball for this
+   OS, sha256-verified), the model with curl's progress bar, the token,
+   the prompt widget, one rc line, the units (the server, the page, a
+   5-minute check timer);
+4. brings the server up and waits for it;
+5. asks `? how big is this dir` for you and prints the tok/s it measured;
+6. prints the three things to try.
 
-1. writes `~/.config/spark/site.env` (created from `site.env.example`,
-   0600, with `SITE_SHELL=off`: the AI only, your shell stays yours);
-2. on Linux, `sudo -v` once when the `packages` row has something to
-   install (`libgomp1` on Debian; with a GPU, the Mesa Vulkan packages
-   too: one sudo, both at once; on Arch `gcc-libs` is already in `base`,
-   so a bare Arch asks for sudo only with a GPU); nothing on macOS;
-3. runs `bootstrap.sh` on the terminal: the engine (one pinned llama.cpp
-   tarball for this OS and architecture, sha256-verified), the model with
-   curl's progress bar, the api-token, the widgets, the one rc line, the
-   units (`spark-serve` / `spark.serve` and the FORGE's, plus a 5-minute
-   check timer);
-4. writes nothing about colours: a first run leaves the machine looking
-   as it did;
-5. brings the server up (the unit, or `spark serve`) and waits for it;
-6. asks `? how big is this dir` for you, shows the answer as the widget
-   shows it, and prints the tok/s that question measured;
-7. prints the three things to try. `spark shell on` is mentioned, never
-   offered.
+It paints nothing: the machine looks as it did. It is re-runnable.
+Flags: `--yes` takes every default (implied when stdin is not a
+terminal); `--model NAME|auto|none`, `--name`, `--user`, `--theme`,
+`--no-serve` pre-answer, as do `SITE_NAME`, `SITE_USER`, `SITE_AI_MODEL`
+and `SITE_THEME` in the environment. `get` itself checks the ground
+first (the command line tools on macOS, `apt-get` or `pacman`, `git`,
+`python3` >= 3.9) and refuses with the install line when one is
+missing; it never runs sudo. `SPARK_HOME` moves the clone, `SPARK_URL`
+points it elsewhere, `SPARK_REF=main` follows development; `sh get
+--clone-only` stops after the clone.
 
-It is re-runnable: every bootstrap row is idempotent. Flags: `--yes` takes
-every default without asking (implied when stdin is not a terminal);
-`--model NAME|auto|none`, `--name`, `--user`, `--theme` and `--no-serve`
-pre-answer, as do `SITE_NAME`, `SITE_USER`, `SITE_AI_MODEL` and
-`SITE_THEME` in the environment; a key `site.env` already holds is not
-asked again.
-
-`get` itself checks the ground before it touches anything -- the command
-line tools on macOS (before `git` can pop the dialog), `apt-get` or
-`pacman` on Linux, `git`, `python3` >= 3.9 -- and refuses with the
-install line when one is missing. It never runs sudo, and its whole body is one function called on
-its last line, so a download cut short runs nothing. `SPARK_HOME` moves
-the clone, `SPARK_URL` points it elsewhere, `SPARK_REF` checks out a ref
-right after a fresh clone (developers: `SPARK_REF=main`; with none, it
-lands on the newest release tag). A `~/.spark` that is spark already gets
-fetched and moved forward; any other non-empty directory is refused.
-`sh get --clone-only` stops after the clone.
-
-## The rc line
-
-bootstrap's `rc` row appends exactly one line to the end of your login
-shell's rc file -- `~/.bashrc` for bash, `~/.zshrc` for zsh -- and only
-when the file does not already contain `config/spark/hook.`:
+The rc line. bootstrap appends exactly one line to your login shell's rc
+file (`~/.bashrc` for bash, `~/.zshrc` for zsh), only when it is not
+there yet:
 
 ```sh
 [ -r ~/.config/spark/hook.bash ] && . ~/.config/spark/hook.bash   # spark: the AI at the prompt
 [[ -r ~/.config/spark/hook.zsh ]] && source ~/.config/spark/hook.zsh   # spark: the AI at the prompt
 ```
 
-The hook puts `~/.local/bin` first on PATH, sources the widget and keeps
-a blank row above a plain prompt (the hint lives there). It goes last,
-after fzf, because the widget wraps Enter. If the row says `todo rc`, the
-login shell cannot host the widget (another shell, or macOS's bash 3.2):
-`chsh -s /bin/zsh`, then `spark setup` again -- or paste the line into
-the rc file of a bash 4+ or zsh you do use. Open a new shell (`exec
-$SHELL`) and the prompt is live.
+The hook puts `~/.local/bin` first on PATH, sources the widget, keeps a
+blank row above the prompt for the hint, and sources TAB completion (the
+verbs, then each verb's words, offline). It goes last, after fzf,
+because the widget wraps Enter. If the `rc` row says `todo`, the login
+shell cannot host the widget (another shell, or macOS's bash 3.2):
+`chsh -s /bin/zsh`, then `spark setup` again. A bare zsh needs your own
+`autoload -Uz compinit && compinit` in `~/.zshrc` for completion.
 
-The hook also sources TAB completion
-(`~/.config/spark/completion.bash` / `.zsh`, linked by `install.sh`):
-the first word completes the verbs, the second each verb's words --
-theme and model names included, resolved offline from the repository
-the `spark` symlink points into. It binds no key of its own. One zsh
-note: registration needs `compinit`; with the shell layer off nothing
-runs it for you, so a bare zsh without your own
-`autoload -Uz compinit && compinit` in `~/.zshrc` gets no completion --
-silently, by design.
+## 3. Use it
 
-## The keys
+1. At the prompt: `? words` or `words?`, Enter, and the command lands in
+   your line with a hint above it; Enter again runs it. A command that
+   deletes comes back marked `!`. `?? words` follows up on the last
+   answer; `Esc s` asks about the line you are on; `cmd 2>&1 | explain`
+   says what went wrong. `spark off` gives Enter back; `spark on`
+   restores it. TAB completes the verbs and their names, offline.
+2. `spark chat` is a conversation at a `chat> ` prompt. `/help` lists
+   its verbs: `/new` a fresh thread, `/resume [N]` an older one, `/clear`
+   the screen, `/last` the last turn with its tok/s, `/model` which one
+   answers, `/q` (or Ctrl-D) ends. Ctrl-C cancels a reply and keeps the
+   chat. `spark chat --thread N [words]` continues an older thread from
+   the `spark history` list (1 = newest).
+3. `spark <words>` streams one answer; `spark @FILE words` sends a text
+   file's first 4 kB and last 12 kB with the question. Quote words the
+   shell would glob (a trailing `?`, parentheses).
+4. `spark do <words>` proposes one command at a time: Enter runs it, `e`
+   edits it first, `s` skips, `q` quits; a step that can destroy data
+   runs only when you type `yes`. Each step's output (last 4 kB) goes
+   back to the model until it says done, or after 8 steps.
+5. `spark soul edit` writes the paragraph that tells the model who it is
+   (`~/.config/spark/soul`, at most 4000 characters; `spark soul` shows
+   which is in use, `spark soul reset` goes back to the default). The
+   default:
 
-Everything in `site.env` beyond the three setup asks is optional and has a
-verb of its own; editing the file by hand and running `./bootstrap.sh`
-does the same thing. Two tables: spark's keys, then the shell layer's.
+   ```
+   You are spark, the AI on this machine. You run here, on hardware the user
+   owns; nothing you are told leaves it. You are here to answer, to explain,
+   to write, and to hand the user a command when one is what they need.
+   Speak plainly, in the user's language. Say when you do not know. Never
+   invent a flag, a path, or a command.
+   ```
 
-spark:
+6. `spark remember <words>` adds a fact it keeps (`spark forget N` drops
+   one, `spark memory` lists them, `spark memory off` stops sending
+   them; 40 facts of 200 characters). Soul and facts ride on every
+   conversation, so a fact costs tokens every time: keep the ones that
+   change answers. The model never writes them. `spark history clear`
+   empties the turns and threads and never touches a fact.
 
-| key | values | default |
-|---|---|---|
-| `SITE_NAME` | this machine's display name | short hostname (macOS: `scutil --get LocalHostName`, which the network cannot move) |
-| `SITE_USER` | your display name | your login |
-| `SITE_SET_HOSTNAME` | `yes`: the OS hostname follows `SITE_NAME` (sudo). Identity, not look: core, shell layer or not | `no` |
-| `SITE_AI_MODEL` | `auto`, `none`, or a name from `spark model` -- later, `spark model NAME`; `none` beside a peer URL is a client (`spark client URL`) | `auto` |
-| `SITE_EMBER_MODEL` | `none`, `auto`, or a name: a second model for conversations; `none` = one model does both -- later, `spark ember NAME` | `none` |
-| `SITE_AI_BUDGET` | 10..95: percent of RAM+GPU memory `auto` may use -- later, `spark model budget N` | `60` |
-| `SITE_AI_BUILD` | `auto`, `cpu` or `vulkan`: the Linux engine build; `auto` = `vulkan` when a GPU reports its memory in `/sys/class/drm`, else `cpu` (macOS ignores it, its tarball has Metal; WSL 2 lands on `cpu`) | `auto` |
-| `SITE_PEER_AI_URL` | another machine's FORGE URL (`spark forge --print-client` there), or its raw `spark serve` URL | unset |
-| `SITE_HEADLESS` | `yes`: the FORGE up from boot with nobody logged in, never asleep -- later, `spark headless on|off` (refused on WSL 2: it stops with its last window) | `no` |
-| `SITE_THEME` | `none`, or a palette from `themes/` or your own in `~/.config/spark/themes/` (`spark theme` lists both) -- later, `spark theme NAME`; painted only by `spark shell on` or `spark theme NAME` | `none` |
-| `SITE_FONT_FACE` / `SITE_FONT_SIZE` | Linux console: a face and size `spark font list` shows (e.g. `Terminus` `16x32`); macOS profile: an installed font's PostScript name and points (`spark font list` shows the monospace ones; a face this Mac lacks is refused, and the `font` row warns) -- later, `spark font FACE SIZE`; core, shell layer or not. WSL 2 has no console: refused there, the font is Windows Terminal's. Arch has no console-setup: refused there too, `/etc/vconsole.conf` is yours | unset (Linux), the Nerd Font (macOS) / `16x32` (Linux), `13` (macOS) |
-| `SITE_QUIET_START` | both OSes: `yes` silences spark's own start -- no login banner, one-line `spark serve` and `spark forge`, one-line bare `spark` (`spark status` stays full) -- later, `spark quiet start on`. The login path greps `site.env` directly (no python there), so the usual environment-over-file precedence does not apply to the banner | `no` |
-| `SITE_QUIET_AUDIO` | both OSes: `yes` and spark plays no sound (the `audio` check row names the player it would use: afplay, aplay, paplay) -- later, `spark quiet audio on|off` | `no` |
+## 4. Models
 
-spark shell (`SITE_SHELL=on`):
-
-| key | values | default |
-|---|---|---|
-| `SITE_SHELL` | `off`: the AI only; `on`: tmux, starship, fzf, zoxide, eza, bat, btop, the Nerd Font, and the rc files become spark's -- later, `spark shell on|off`. No editor either way | `off` |
-| `SITE_GIT_NAME` / `SITE_GIT_EMAIL` | the git identity `~/.gitconfig` is rendered with. Leave them out and spark guesses your login at this machine's name, and `./bootstrap.sh` says so in its `identity` row: a guess signs every commit you make, so choose them | guessed |
-| `SITE_PROMPT` / `SITE_PROMPT_STYLE` | `starship`/`plain`; `minimal`/`full` | `starship`, `minimal` |
-| `SITE_WORKSPACE` | the folder the `backup` row watches and the `dir` row makes | `~/projects` |
-| `SITE_QUIET_LOGIN` / `SITE_QUIET_BOOT` | Linux: `yes` bares the login (motd, kernel line and `/etc/issue` emptied, originals kept as `*.orig`) / makes the boot silent -- BIOS splash to login prompt (GRUB menu hidden, quiet kernel line, systemd silent; one drop-in at `/etc/default/grub.d/zz-spark-quiet.cfg`) -- later, `spark quiet login|boot on`. WSL 2 has no GRUB and Arch has no `update-grub`: `boot` is refused on both, `login` works | `no` |
-
-Runtime knobs live in `~/.config/spark/spark.env` (`spark.env.example`
-lists them all); the ones with a verb of their own:
-
-| key | values | default |
-|---|---|---|
-| `SPARK_MEMORY` | `on`/`off`: recall the remembered facts on every answer -- later, `spark memory on|off` | `on` |
-| `SPARK_FORGE` | `auto`/`on`/`off`: serve the FORGE; `auto` = wherever the model server is enabled -- later, `spark forge on|off` | `auto` |
-| `SPARK_FORGE_HOST` / `SPARK_FORGE_PORT` | the address and port the FORGE binds (never `0.0.0.0`) | the LAN address / `8081` |
-| `SPARK_FORGE_TOKEN_FILE` | its admin token file (0600); never the api-token | `~/.local/state/spark/forge-token` |
-| `SPARK_HISTORY` | days of turns and threads kept under `~/.local/state/spark/`; `off` keeps none, so `??` behaves like `?` | `30` |
-| `SPARK_NGL` `SPARK_FLASH_ATTN` `SPARK_KV` `SPARK_THREADS` | the engine's tuning; `spark tune apply` writes them | auto |
-| `SPARK_API_KEY_FILE` | a token file you already have | `~/.local/state/spark/api-token` |
-
-`SPARK_PERSONA_EXTRA`, the old one-line persona, is still read as the
-soul's fallback in this version; `spark soul edit` absorbs it and the
-`soul` row warns while it is set.
-
-## Models
-
-### The list
-
-One file at the repo root, `models.env`, plus yours, never in the repo:
+Two files:
 
 | file | what |
 |---|---|
-| `models.env` | every model spark can serve: 26 rows, each with its license; `line` marks a row proven on the line |
-| `~/.config/spark/models.env` | your own rows (`spark model add URL --license`), 0600; shown marked `u` |
+| `models.env` | every model spark can serve: 26 models, each with its license; `line` marks a row proven on the prompt line |
+| `~/.config/spark/models.env` | your own rows (`spark model add URL --license`), 0600; marked `u` |
 
-Every row states its license. `auto` picks only among the rows tested on
-the line under Apache-2.0 or MIT; every other row is yours by name (`spark
-model NAME`, `spark ember NAME`), and a row under another license -- the
-Llama and Gemma rows -- prints its license line and, at a terminal, asks
-`download it? yes/NO:` first (`SPARK_YES=1`, or stdin not a terminal,
-counts as yes). `spark setup` offers the tested rows only, though naming
-any row with `--model` is allowed. A name in both files is refused,
-naming both. A row is a pull request; the line proof (`spark line`
-answers valid JSON) is what turns `tested` on.
-
-`spark model list` (and `spark ember list`, the same table) shows every
-row: file size, the RAM it needs against this machine's SITE_AI_BUDGET
-percent (default 60) of RAM plus GPU memory, the license's first word,
-`line` when tested, downloaded or serving, and its speed here -- `~N
-tok/s` is an estimate for this backend (metal, vulkan or cpu) until
-`spark bench` or a real turn measures the model, when the `~` goes; `too
-big` when it does not fit. A row's note follows it, indented. The tested
-rows today:
+`spark model list` shows every row: file size, the RAM it needs against
+this machine's budget (`SITE_AI_BUDGET`, default 60 percent of RAM plus
+GPU memory), the license, `line` when tested, downloaded or serving,
+and its speed here (`~N tok/s` is an estimate until `spark bench` or a
+real turn measures it; `too big` when it does not fit). The tested rows:
 
 | name | file | RAM |
 |---|---|---|
@@ -291,169 +201,81 @@ rows today:
 | `qwen3-14b` | 8.4 GB | 11 GB |
 | `qwen3-30b-a3b` | 17.4 GB | 21 GB |
 
-The untested rows: Qwen3-4B-Thinking, Qwen3-Coder-30B-A3B, Qwen2.5 7B /
-14B / Coder-7B, Mistral 7B v0.3 and Nemo 12B, Phi-4 mini and 14B,
-DeepSeek-R1 distills 7B / 14B, SmolLM2 1.7B, gpt-oss-20b, Granite 3.3 8B
-(all Apache-2.0 or MIT); Llama 3.2 1B / 3B, Llama 3.1 8B and Gemma 3 1B /
-4B / 12B / 27B under their own terms. The page lists them all:
+The untested rows (Qwen3 4B-Thinking and Coder-30B-A3B, Qwen2.5 7B /
+14B / Coder-7B, Mistral 7B and Nemo 12B, Phi-4 mini and 14B,
+DeepSeek-R1 distills 7B / 14B, SmolLM2 1.7B, gpt-oss-20b, Granite 3.3
+8B, all Apache-2.0 or MIT; Llama 3.2 1B / 3B, Llama 3.1 8B and Gemma 3
+1B / 4B / 12B / 27B under their own terms) are yours by name. A row
+under a license that is not Apache-2.0 or MIT prints its license and
+asks `download it? yes/NO:` first. The page lists them all:
 https://spark.forgewright.ai/models/
 
 How `auto` picks: every tested open-license row whose RAM fits the
-SITE_AI_BUDGET percent of RAM plus GPU memory, then the largest of those
-whose file is under this build's speed cap -- 3 GB on `cpu`, 6 GB on
-`vulkan`, 20 GB on `metal`: the size classes the estimate keeps at about
-8 tok/s or better (a `-a3b` MoE counts as its 3B active class, as in the
-speed column). A row can fit the budget but run too slowly on a weaker
-backend, so `auto` stops earlier there than on a faster one; when the
-cap held a bigger row back the table's header says so (`auto stops at 6
-GB files on vulkan ...`), and `spark model NAME` takes that row anyway: a
-name is never second-guessed. Nothing under the cap fits: the smallest
-row that fits, never nothing while something fits. `bootstrap.sh
---list-models` and `spark model` make the same choice (they are twins,
-and the tests pin both).
+budget, then the largest of those whose file is under this build's
+speed cap (3 GB on `cpu`, 6 GB on `vulkan`, 20 GB on `metal`: the sizes
+that keep about 8 tok/s). When the cap held a bigger row back the
+table's header says so, and `spark model NAME` takes that row anyway.
+Nothing under the cap fits: the smallest row that fits.
 
-`spark model qwen3-8b` chooses it (`SITE_AI_MODEL`), downloads and
-verifies it if needed (size and sha256 from its row, from
-huggingface.co), and restarts the server; `spark model auto` goes back to
-the rule above; `spark model rm NAME` deletes a file that is not in use.
-A `.gguf` you drop into `~/.local/share/spark/models` yourself is served
-with `SPARK_MODEL=<file>` in `spark.env`. `spark model budget` prints the
-percent, the GB it buys and the table; `spark model budget N` (10-95)
-sets `SITE_AI_BUDGET`, re-applies the pick and prints the table again.
+1. `spark model NAME` chooses a model: downloads and verifies it (size
+   and sha256 from its row) and restarts the server. `spark model auto`
+   goes back to the rule above; `spark model rm NAME` deletes a file not
+   in use.
+2. `spark model budget N` (10-95) sets the percent and prints the table.
+3. A `.gguf` of your own in `~/.local/share/spark/models` is served with
+   `SPARK_MODEL=<file>` in `spark.env`.
+4. `spark ember NAME` adds a second, bigger model for conversations: the
+   prompt line stays with the small one (context 4096, reasoning off, so
+   a thinking model answers fast) and every conversation (`spark
+   <words>`, `chat`, `do`, the page, any `/v1` client naming no model)
+   goes to the second. One server, one port, one token; the request's
+   `model` field picks. `spark ember auto` pairs the smallest tested row
+   with the largest that fits beside it; `spark ember none` (the
+   default) runs one model in both roles.
+5. `spark model add URL` adds your own row: a huggingface.co
+   `.../resolve/<rev>/<file>` URL is verified from its redirect headers,
+   any other URL needs `--sha256 HEX`; `--license "NAME URL"` is
+   required. The row lands in `~/.config/spark/models.env`, then it is
+   downloaded and served like any row.
+6. `spark model verify` re-hashes every downloaded file, prints `ok` or
+   `bad -- spark model rm NAME; spark model NAME` per file, and exits 1
+   on a mismatch; nothing is deleted for you. `spark check`'s `models`
+   row is the daily, cached version of the same check.
 
-One model answers everything by default. `spark ember NAME` is the
-opt-in second model: the prompt line stays with the small spark model
-(context 4096, reasoning off, so a thinking model answers plainly and
-fast) and every conversation -- `spark <words>`, `chat`, `do`, the page,
-any `/v1` client that names no model -- goes to the ember, the identity
-riding only with it. `spark serve` then runs llama-server as a router:
-one process, one port, one api-token; the request's `model` field picks
-the child. `spark ember auto` makes spark the smallest tested row and the
-ember the largest that fits beside it in the budget, under the same
-speed cap; `spark ember none` (the default) runs one model in both roles.
+Speed: `spark bench` measures with llama-bench (pp512 / tg128) and keeps
+the result as the file's baseline; the `throughput` check row warns when
+real turns fall below 70 percent of it. `spark bench --tune` tries GPU
+layers, flash attention, KV cache types and thread counts; `spark tune
+apply` writes the winner to `spark.env` and restarts. `spark stats
+[--week]` sums up what real turns measured. The server keeps no prompt
+cache in RAM (`--cache-ram 0`: llama-server would otherwise keep up to
+8 GiB of replaced prompts in host memory); `SPARK_EXTRA_ARGS=--cache-ram
+N` in `spark.env` sets a budget in MiB.
 
-The server keeps no prompt cache in RAM (`--cache-ram 0`). llama-server
-would otherwise keep every replaced prompt's KV state in host memory, up
-to 8 GiB by default, more than a small box has; its slots already hold
-the recent prompts on the GPU, so a prompt only costs its prefill again
-when it comes back after four others. `SPARK_EXTRA_ARGS=--cache-ram N`
-in `spark.env` sets a budget in MiB; the `serve` check row says which.
+## 5. Other machines and your phone
 
-Speed: `spark bench` measures with llama-bench (pp512 / tg128; the ember
-when one serves, `--spark` / `--ember` force a role) and keeps the result
-as the file's baseline; `spark check`'s `throughput` row warns when real
-turns fall below 70 % of it. `spark bench --tune` tries GPU vs CPU layers,
-flash attention, KV cache types and thread counts; `spark tune apply`
-writes the winner to `spark.env` and restarts. `spark stats [--week]` sums
-up what real turns measured. The server is paused while llama-bench runs.
+spark serves the same AI, with its soul, memory and threads, on one LAN
+address (`http://<host>:8081`). The admin token stays on this machine;
+everyone else is a named user with a token of their own.
 
-### Adding your own model
+Another machine of yours:
 
-`spark model add URL` writes a row of your own and picks it. A
-huggingface.co `.../resolve/<rev>/<file>` URL is auto-verified from its
-redirect headers (size and sha256); any other URL needs `--sha256 HEX`. The
-name is the file stem, lowercased, dots and underscores turned to dashes,
-a trailing quantization token (`-q4-k-m`, `-f16`, ...) stripped; a name
-already in either file is refused, naming the file it is in.
-`--license "NAME URL"` is required -- your own row states its license
-like every row. The row lands in `~/.config/spark/models.env`
-(0600, created if absent), then `spark model add` downloads it and
-restarts the server, same as `spark model NAME`.
+1. Here: `spark user add NAME` mints an account; its token is shown once
+   and never stored.
+2. There, with spark installed: `spark client URL` (the URL from `spark
+   forge --print-client` here), then `spark user login NAME` with that
+   token.
+3. `spark brain` there says which server answers.
 
-### Verifying
+A client runs nothing of its own: no engine, no model, no units. `spark
+check` there reads `na` on those rows and the `peer` row says whether
+this machine answers. `spark model` there prints this machine's table;
+choosing a model there is refused. `spark client off` gives it a model
+of its own again.
 
-Every download is sha256-verified once, by `fetch` in `bootstrap.sh`.
-`spark model verify` re-hashes every downloaded file right now (1 MiB
-chunks), prints `ok` or `bad -- spark model rm NAME; spark model NAME`
-per file, and exits 1 on a mismatch; nothing is ever deleted for you.
-`spark check`'s `models` row is the cached, daily version of the same
-check: a file's hash is re-verified when its size or modification time
-changes, or once a day, whichever comes first.
-
-## The identity
-
-`~/.config/spark/soul` is the paragraph that tells the model who it is.
-spark ships with a default soul; `spark soul edit` replaces it with your
-own, in `$EDITOR` (`spark soul` shows which is in use, `spark soul reset`
-goes back to the default; at most 4000 characters, 0600). The default:
-
-```
-You are spark, the AI on this machine. You run here, on hardware the user
-owns; nothing you are told leaves it. You are here to answer, to explain,
-to write, and to hand the user a command when one is what they need.
-Speak plainly, in the user's language. Say when you do not know. Never
-invent a flag, a path, or a command.
-```
-
-`~/.config/spark/memory` is one fact per line: `spark remember <words>`
-adds one, `spark forget N` (or `spark forget <words>`) drops one, `spark
-memory` lists them, `spark memory off` stops sending them; 40 facts of
-200 characters, 2000 in all. Both go into the system message on every
-conversational request, so a fact costs tokens every time -- keep the
-ones that change answers. The model never
-writes them: a small model's judgement about what is worth keeping is
-poor, and a silent write to a file you own breaks "the user chooses". They
-are config, not state: `spark history clear` empties the turns and threads
-and never touches a fact.
-
-`? words` and `spark <words>` start a thread; `?? words` continues the
-newest one -- a rule, not a guess -- and `spark chat <words>` is one more
-turn on it. `spark chat --thread N [words]` continues an older thread
-instead: N counts down the `spark history` (or `/resume`) list, 1 the
-newest, and a literal thread id works too. `spark chat` alone is a
-conversation at a `chat> ` prompt: `/help` lists its verbs (`/new` a
-fresh thread, `/resume` an older one -- bare lists the newest five,
-`/resume N` switches to one -- `/clear` wipes the screen while the
-thread goes on, `/last` the last turn with its tok/s, `/model` which one
-is answering); `/q` (or `quit`, `exit`, Ctrl-D) ends it, silently, and
-Ctrl-C cancels a reply in progress without ending the chat. At a terminal it keeps a readline history,
-sealed in your account's store (`users/<name>/chat-history`; off with
-every other conversation trace when `SPARK_HISTORY=off`); two
-`spark chat` sessions open at once share that history and the newest
-thread the same way two shells share one file -- last writer wins. `spark @FILE words`
-sends a text file's first 4 kB and last 12 kB along with the question (a
-directory or a binary is refused). Quote words the shell would glob (a
-trailing `?`, parentheses) -- zsh eats them first. `spark do <words>`
-proposes one command at a time: Enter runs it, `e` edits it first, `s`
-skips, `q` quits, and a step that can destroy data runs only when you type
-`yes`; each step's output (last 4 kB) goes back to the model until it says
-done, or after 8 steps. A done summary whose numbers no command produced
-is marked unchecked -- claims need provenance the way actions need
-confirmation.
-
-## The FORGE from other machines and programs
-
-The FORGE is the agent this machine serves: the model plus its soul,
-memory and threads behind one HTTP API on `http://<host>:8081`, started
-beside the model server (`SPARK_FORGE=auto`). The api-token is the
-model server's and never leaves the machine; the forge-token is the
-admin's and stays here too. Everyone else is a named user: `spark user
-add NAME` mints an account whose token is shown once and never stored
--- it is the only key to that user's sealed threads and memory, and
-there is no reset. `spark forge --print-client` says the flow: mint the
-user here, `spark client URL` and `spark user login NAME` on the other
-machine. A peer only talks to the ember; a machine with a model of its
-own prefers the peer while it answers and falls back to its own server
-silently; `spark brain` says which answers. The raw-model path still
-exists: `spark serve --print-client` prints the `:8080` URL and the
-api-token's `scp`.
-
-`spark client URL` on the other machine is the short form: it writes the
-peer URL and `SITE_AI_MODEL=none`, applies the prompt hook and the
-widgets, and names the login step. A client runs nothing --
-no engine, no model, no units -- and `spark check` there says so: the
-engine, services, watchdog, ai, serve and forge rows read `na`, the
-peer row says whether the FORGE answers. `spark client` shows that state.
-On a client `spark model` prints the peer's table (its RAM, its budget,
-its picks -- asked of the FORGE; the rows alone when the peer is a bare
-server or down), never this machine's; choosing a model, an ember or a
-budget there is refused, since it would quietly make a server of the
-client. `spark client off` is that step made on purpose: `spark model
-auto` again, a model of its own, the peer still first while it answers.
-
-Any program talks to the same FORGE with the OpenAI shape; a request that
-names no `model` gets the ember with the identity injected (`model: spark`
-reaches the bare line model, no identity):
+Any program, with the OpenAI shape (a request naming no `model` gets the
+conversation model with the identity; `model: spark` the bare prompt
+model):
 
 ```sh
 curl -sN http://<host>:8081/v1/chat/completions \
@@ -462,420 +284,321 @@ curl -sN http://<host>:8081/v1/chat/completions \
   -d '{"messages":[{"role":"user","content":"what is this machine for?"}],"stream":true}'
 ```
 
-The page: a plain client page in the browser. `spark forge --print-url`
-prints `http://<host>:8081/login` and, on a terminal, the admin token;
-type a token once and the browser keeps a cookie (90 days; a server
-restart asks again -- a user's key lives in memory only). Any
-machine's browser works -- a phone is just one client among many. The
-forge-token logs in as admin -- the whole machine: every verb, `do`, the
-config, serve, bench, the log, and the box account's own threads; a
-personal token logs in as that user: their own sealed chat, threads and
-memory, the palette, a read-only monitor. Give each of the household
-their own `spark user add NAME`; the admin token stays here, and nobody
--- the admin included -- holds a key to another user's messages.
-`spark forge token --new` rotates the admin; `spark user token --new`
-(or the page's account card) rotates a user; exactly that principal's
-clients and browsers log in again. `spark forge` alone is the status
-(URL, health, model, unit, tokens, users, log tail); `spark forge
-on|off` writes `SPARK_FORGE` and enables or disables the unit.
+The page, in any browser on the LAN:
 
-Each user's threads, memory and chat history are sealed --
-ChaCha20-Poly1305, written from RFC 8439, under a per-user data key
-wrapped by that user's token. The box stores a sha256 verifier and the
-wrap, never the token: no token, no key, no plaintext, and there is no
-reset -- a lost token is lost history. Coming from v1.3, `spark user
-claim` seals the old plaintext threads, memory and chat history into
-your store and removes them (`spark setup` and the first `spark user
-add` offer it at a terminal); the `users` check row nags until every
-plaintext file and the old shared ember-token are gone. There is no TLS
-on the LAN: the standard library cannot mint a certificate without a new
-dependency, a self-signed one trains people to click through warnings,
-and the trust model is your LAN. The API is contract 9 in `CLAUDE.md`.
+1. `spark forge --print-url` prints `http://<host>:8081/login` and, on a
+   terminal, the admin token.
+2. Type a token once; the browser keeps a cookie (90 days; a server
+   restart asks again). The admin token opens the whole machine (every
+   verb, `do`, the config, the log, this account's threads); a user's
+   token opens that user's own chat, threads, memory and a read-only
+   monitor. Give each of the household their own `spark user add NAME`.
+3. On a phone, add it to the home screen (iOS: share > add to home
+   screen, and it becomes an app; Android keeps a shortcut that opens in
+   a browser tab). The page needs this machine reachable when it opens:
+   there is no offline copy.
 
-On a phone, open the page once and add it to the home screen (iOS:
-share -> add to home screen; Android: menu -> add to home screen). On
-iOS the page becomes an app: its own icon, full screen. Android grants
-that standalone install only to a secure context, so over LAN http the
-shortcut keeps its icon but opens in an ordinary browser tab. Either way
-the page needs the FORGE reachable when it opens: browsers grant a
-service worker only to https or localhost, and the page lives on LAN
-http, so there is no offline copy -- it is small and loads from the
-FORGE in one round trip.
+`spark forge` alone is the status (URL, health, model, unit, users);
+`spark forge on|off` enables or disables it. `spark forge token --new`
+rotates the admin token; `spark user token --new` rotates a user's;
+that principal logs in again.
 
-## Headless
+Sealed stores: each user's threads, memory and chat history are
+encrypted (ChaCha20-Poly1305, written from RFC 8439) under a key wrapped
+by that user's token. The machine keeps a sha256 verifier and the wrap,
+never the token: nobody, the admin included, holds a key to another
+user's messages, and a lost token is lost history. There is no TLS on
+the LAN: the trust model is your LAN.
 
-Install spark on the machine that stays on, then `spark headless on`
-(`SITE_HEADLESS=yes`). Linux: linger (the units run from boot without a
-login), the `render` group (the GPU without a logind seat), the sleep,
-suspend and hibernate targets masked, the lid ignored through
-`/etc/systemd/logind.conf.d/spark.conf`; bootstrap rows `linger`,
-`render`, `sleep`, `lid`, each with sudo; `off` reverses all but linger
-and the group. macOS: `spark.serve`, `spark.forge` and `spark.check` move
-from `gui/$UID` to `/Library/LaunchDaemons` as LaunchDaemons running as
-you (no auto-login; FileVault's login screen is untouched), and `pmset -a
-sleep 0 disksleep 0 womp 1 autorestart 1` (only the keys this hardware
-lists); rows `daemons`, `sleep`. Restart and stop then need root: `spark
-stop` and `spark model` print the `sudo launchctl` line. `off` puts the
-login agents back and leaves `pmset` as it is. Then `spark forge
---print-client`, and point every laptop's `site.env` and every phone's
-browser at it: one FORGE, one identity, the same answers everywhere. The
-`headless` row names any piece that is missing. A WSL 2 distro stops with
-its last window, so it is never a brain: `spark headless on` refuses there.
+Headless. On the machine that stays on, `spark headless on`:
 
-## Updating
+- Linux: the units run from boot without a login (linger), the GPU is
+  reachable without a seat (the `render` group), sleep, suspend and
+  hibernate are masked, the lid is ignored. `off` reverses all but
+  linger and the group.
+- macOS: the three agents move to `/Library/LaunchDaemons` (no
+  auto-login; FileVault's login screen is untouched) and `pmset` keeps
+  the machine awake. Restart and stop then need `sudo launchctl` (the
+  verbs print the line). `off` puts the login agents back.
+- WSL 2 stops with its last window: `spark headless on` refuses there.
+
+Then point every laptop (`spark client URL`) and every phone at it: one
+address, one identity, the same answers everywhere. The `headless` check
+row names any piece that is missing.
+
+## 6. spark apps
+
+A tool becomes smart as a client of one command, `spark edit`: the text
+on stdin, raw text out; `--at N` completes at a byte offset, `<words>`
+rewrites (12 kB at most), `? [words]` asks or reviews; an empty text with
+words is written from nothing; hints `--type`, `--name`, `--about`; never
+a path, and no thread unless the app asks (`--thread ID`, sealed like a
+chat thread). `spark edit -h` says the rest. It works from a pipe too:
+
+```sh
+spark edit fix grammar < draft.md
+```
+
+spark ships no app. Each app's plugin lives in its own repository and
+installs the app's way. micro is first:
+
+1. Clone the plugin:
+
+   ```sh
+   git clone https://github.com/forgewright-ai/spark-micro ~/.config/micro/plug/spark
+   ```
+
+2. Add one line to `~/.config/micro/bindings.json`:
+   `"Alt-s": "lua:spark.prompt"`.
+3. `Alt-s` (Option-s on a Mac) opens `spark> `: Enter alone completes at
+   the cursor; words rewrite the selection or the file; `? words` asks in
+   a pane; `?` alone reviews; `??` goes on. In the pane, Enter jumps to a
+   quote, `a` applies a code block, `d` declines a note for good, `q`
+   closes. `help spark` inside micro says everything; `setlocal
+   spark.about "a novel chapter"` tells spark what a buffer is; `git -C
+   ~/.config/micro/plug/spark pull` updates it.
+
+Coming from spark v1.9, where the plugin came with spark: `spark update`
+hands the old links back (the `micro` row says so), then clone as above.
+Another editor joins the same way: one client of `spark edit`, in a
+repository of its own.
+
+## 7. Per-OS notes
+
+macOS:
+
+- macOS asks once whether `python3` may find devices on the local
+  network: that is spark binding your LAN address. Allow it; deny it and
+  the page answers only this machine.
+- The engine is the pinned llama.cpp tarball for arm64 or x64 (Metal
+  inside), under `~/.local/share/spark/engine/`; bootstrap clears its
+  quarantine flag. If Gatekeeper still objects: `xattr -dr
+  com.apple.quarantine ~/.local/share/spark/engine`.
+- Nothing from Homebrew. `spark font FACE SIZE` sets Terminal.app's
+  font (`spark font list` shows the monospace faces installed).
+- Units: `launchctl print gui/$UID/spark.serve` (`.forge`, `.check`
+  likewise); `launchctl kickstart -k gui/$UID/spark.serve` restarts one.
+  There is no root-free GPU counter, so `stats` and the `gpu` row say so.
+- `Alt-s` is Option-s; `Esc` then `s`, quickly, is the same keys.
+
+Linux:
+
+- The engine is the pinned tarball for x86_64 or arm64: the Vulkan build
+  when a GPU reports its memory in `/sys/class/drm` (`SITE_AI_BUILD=auto`;
+  `vulkan` and `cpu` choose outright). The Vulkan build brings the Mesa
+  Vulkan packages with the same sudo. The `gpu` row names the build this
+  machine gets; when the extracted engine is the other build, the
+  `engine` row says so and `./bootstrap.sh` replaces it. An architecture
+  without a pin: point `SPARK_ENGINE_DIR` at a build of your own.
+- Integrated GPUs: the BIOS decides how much RAM the iGPU owns ("UMA
+  frame buffer size"). If the `gpu` row says the model is larger than
+  VRAM, raise it there (8 GB for a 4B-8B model), then `spark bench`
+  again.
+- The `render` group grants the GPU without a logind seat: bootstrap
+  adds you on a vulkan build; log out of every session and in again for
+  the units to see it.
+- `spark font Terminus 16x32` gives the text console a readable font
+  (`spark font list` shows the faces and sizes this box has, width by
+  height). The console cannot draw the check and arrow glyphs; spark
+  notices (`TERM=linux`) and prints ASCII; `SPARK_ASCII=1` forces it.
+- `spark theme NAME` reaches the text console: the palette is sent to
+  the console you type on and set at boot for every VT (the
+  `spark-console` unit, `setvtrgb`). GUI terminals stay yours: apply
+  `theme.env` in their settings by hand. Nothing is painted until you
+  ask.
+- Units: `systemctl --user status spark-serve spark-forge
+  spark-check.timer`; `journalctl --user -u spark-serve -n 50`. Without a
+  user systemd session (a container) the `services` row reads `na`; run
+  `spark serve` and `spark forge` by hand.
+
+Arch:
+
+- Linux to spark: the same one-liner, the same rows. The engine is the
+  pinned `ubuntu-*` tarball (a glibc build; Arch's glibc is newer). CI
+  proves the one-liner in an Arch container; the console, the units and
+  the GPU there are proven by hand.
+- Packages come through `pacman -S --needed`, never `-Sy` alone; when a
+  name cannot be found the `packages` row says `sudo pacman -Syu` first.
+  `gcc-libs` is in `base`: without a GPU nothing is installed.
+- No console-setup: `spark font` refuses to set and the `font` row says
+  so; the console font is `/etc/vconsole.conf`'s (`FONT=ter-132n` with
+  `terminus-font`; `sudo systemctl restart systemd-vconsole-setup`).
+- `spark quiet login on` works; `spark quiet boot` refuses (no
+  `update-grub`). By hand with systemd-boot: `timeout 0` in
+  `/boot/loader/loader.conf` and `quiet loglevel=3
+  systemd.show_status=false udev.log_level=3 vt.global_cursor_default=0
+  fbcon=nodefer` on the entry's `options` line under
+  `/boot/loader/entries/`. With GRUB: the same words in
+  `GRUB_CMDLINE_LINUX_DEFAULT`, `GRUB_TIMEOUT=0`,
+  `GRUB_TIMEOUT_STYLE=hidden`, then `sudo grub-mkconfig -o
+  /boot/grub/grub.cfg`.
+
+Windows (Ubuntu 24.04 on WSL 2):
+
+- Linux to spark: the same one-liner, the same rows; `spark check` and
+  the status line say `WSL 2`. Not proven by CI (no WSL runner): the
+  one-liner end to end there is on you, for now.
+- The engine is the CPU build: WSL 2 exposes the GPU as `/dev/dxg`, not
+  as a DRM card, so `auto` lands on `cpu` and picks under the 3 GB cap
+  (qwen3-4b on most machines). `SITE_AI_BUILD=vulkan` through Mesa is
+  yours to try, untested.
+- No console: the font is Windows Terminal's (`spark font` refuses; the
+  `font` row reads `na`). No GRUB: `spark quiet boot` refuses; `spark
+  quiet login` works.
+- Units: if the `services` row reads `na`, put `[boot] systemd=true` in
+  `/etc/wsl.conf`, `wsl --shutdown` from PowerShell, reopen,
+  `./bootstrap.sh`.
+- Not a server for the LAN: the distro stops with its last window, so
+  `spark headless on` refuses. Reaching the page from the LAN needs
+  `networkingMode=mirrored` in `.wslconfig` (Windows 11), untested here.
+
+## 8. Keep it
+
+Update:
 
 ```sh
 spark update
 ```
 
-Fetches tags, then either pulls `--ff-only` (a developer clone, on a
-branch) or moves to the newest release tag (the common case: what `get`
-lands on by default); either way it converges -- bootstrap.sh runs, `spark
-check` re-reads -- and `--dry-run` says what it would do without changing
-anything. By hand, the same two steps:
+A clone `get` made moves to the newest release tag; a developer clone on
+a branch pulls `--ff-only`. Either way it converges (bootstrap.sh runs,
+`spark check` re-reads); `--dry-run` says what it would do. By hand:
+`git -C ~/.spark pull --ff-only && ~/.spark/bootstrap.sh`.
 
-```sh
-git -C ~/.spark pull --ff-only && ~/.spark/bootstrap.sh
-```
-
-`./bootstrap.sh --dry-run` must then end with `Nothing to do`, and `spark
-check` exit 0.
-
-## Uninstalling
+Uninstall:
 
 ```sh
 spark uninstall
 ```
 
-It prints the plan first -- one row per thing, in bootstrap's shape --
-then asks for the word `yes`. Everything spark made goes: the units and
-timers (the FORGE and the server stopped), the shell layer's look (rc
-files and rendered configs back from their `.bak`, micro's colorscheme
-key dropped), the spark line in your rc file, the console palette (VGA
-again, the boot unit removed), the Nerd Font and the terminfo entry it
-compiled, `~/.local/bin/spark`, `explain` and the pinned starship, the
-engine and every model (the gigabytes are named), `site.env`, `spark.env`
-and the rest of `~/.config/spark`, the state under `~/.local/state/spark`,
-and the clone at `~/.spark` (or `SPARK_HOME`) when it is the one `get`
-made and clean; a developer checkout is named and left. Headless and the
-quiet login and boot are undone first through their own bootstrap rows
-(sudo: sleep targets, the lid, motd, GRUB).
+1. It prints the plan, one row per thing, then asks for the word `yes`.
+2. Everything spark made goes: the units, the rc line, the console
+   palette and font (VGA again), the shell layer's files back from their
+   `.bak` (section 9), `~/.local/bin/spark`, the engine and every model,
+   `~/.config/spark`, `~/.local/state/spark`, and the clone at `~/.spark`
+   when it is the one `get` made and clean. Headless and the quiet login
+   and boot are undone first (sudo).
+3. What stays, on purpose: your soul, your memory, the sealed users'
+   stores with their keys, your `models.env`, your themes and
+   `privacy-terms`; `--purge` takes those too. The shell layer's packages
+   are a question (`--packages` / `--keep-packages` answer up front).
+   `--dry-run` shows the plan; `--yes` skips the question for a script.
+4. Named at the end with the line that puts it back: a hostname it set,
+   macOS's `pmset` values, a console font set before v1.12. A root step
+   whose sudo refuses becomes a `todo` row, never a failure.
 
-What stays, on purpose: your soul, your memory, the sealed users' stores
-with the account keys that open them, your `models.env`, your themes and
-`privacy-terms` -- `spark uninstall --purge` takes those too. The shell
-layer's packages are a question at the terminal (`remove the shell
-layer's packages too? yes/NO`); nobody answering means kept, and
-`--packages` / `--keep-packages` answer up front. `--dry-run` prints the
-plan and stops; `--yes` (or `SPARK_YES=1`) skips the question for a
-script; a non-terminal without it prints the plan and exits 2.
+The keys. Everything in `~/.config/spark/site.env` beyond the three
+setup asks is optional and has a verb; editing the file and running
+`./bootstrap.sh` does the same.
 
-Some things spark changed it could not record first: a hostname it set
-(`SITE_SET_HOSTNAME=yes`), macOS's `pmset` values under headless, and a
-console font set before v1.12 (since v1.12 the original is kept as
-`/etc/default/console-setup.spark-orig` and put back). Each is named at
-the end with the line that puts it back. A root step whose sudo refuses
-becomes a `todo` row with its command, never a failure. Reinstalling
-afterwards is the one-liner again; a kept sealed store opens with the
-same token.
+| key | values | default |
+|---|---|---|
+| `SITE_NAME` | this machine's display name | short hostname |
+| `SITE_USER` | your display name | your login |
+| `SITE_SET_HOSTNAME` | `yes`: the OS hostname follows `SITE_NAME` (sudo) | `no` |
+| `SITE_AI_MODEL` | `auto`, `none`, or a name -- `spark model NAME`; `none` beside a peer URL is a client | `auto` |
+| `SITE_EMBER_MODEL` | `none`, `auto`, or a name: the second model for conversations -- `spark ember NAME` | `none` |
+| `SITE_AI_BUDGET` | 10..95: percent of RAM+GPU memory `auto` may use -- `spark model budget N` | `60` |
+| `SITE_AI_BUILD` | `auto`, `cpu` or `vulkan`: the Linux engine build (macOS ignores it; WSL 2 lands on `cpu`) | `auto` |
+| `SITE_PEER_AI_URL` | another machine's URL (`spark forge --print-client` there) -- `spark client URL` | unset |
+| `SITE_HEADLESS` | `yes`: up from boot, never asleep -- `spark headless on\|off` | `no` |
+| `SITE_THEME` | `none`, or a palette from `themes/` or `~/.config/spark/themes/` -- `spark theme NAME`; painted only when you ask | `none` |
+| `SITE_FONT_FACE` / `SITE_FONT_SIZE` | Linux console: a face and size from `spark font list` (`Terminus` `16x32`); macOS: Terminal.app's font and points -- `spark font FACE SIZE`. Refused on WSL 2 and Arch (no console-setup) | unset / `16x32` (Linux), the Nerd Font / `13` (macOS) |
+| `SITE_QUIET_START` | `yes`: no banner, one-line `serve`, `forge` and bare `spark` -- `spark quiet start on` | `no` |
+| `SITE_QUIET_AUDIO` | `yes`: no sound from spark -- `spark quiet audio on` | `no` |
 
-## 5. spark shell
+Runtime knobs live in `~/.config/spark/spark.env` (`spark.env.example`
+lists them all); the ones with a verb:
 
-`spark shell on` (`SITE_SHELL=on`) puts spark's own shell on top of the AI:
-tmux, starship, fzf, zoxide, eza, bat, btop, the Nerd Font, and on Linux
-the quiet login and boot when their keys say so (the console font is
-core: `spark font` sets it with the layer off too). No editor comes with
-it: an editor is an app, and an app is yours (section 6). With a theme
-chosen, one palette lands on every surface in the same move: tmux and
-starship are rendered from it, the text console wears it through
-`console-colors`, and a micro you have gets a `spark` colorscheme (plus a
-seeded `settings.json` choosing it, and `MICRO_TRUECOLOR=1` from the rc
-file) -- TTY, tmux, starship and micro, the same look. The rc files
-become spark's -- `~/.bashrc` and `~/.bash_profile` on Linux, `~/.zshrc`
-and `~/.zprofile` on macOS turn into symlinks into the repo, yours moved
-to `<file>.bak`, never overwritten. It runs bootstrap (sudo once for
-the `packages` row on Linux; Homebrew on macOS), then says `open a new
-shell`.
+| key | values | default |
+|---|---|---|
+| `SPARK_MEMORY` | `on`/`off`: send the remembered facts -- `spark memory on\|off` | `on` |
+| `SPARK_FORGE` | `auto`/`on`/`off`: serve the page and the API -- `spark forge on\|off` | `auto` |
+| `SPARK_FORGE_HOST` / `SPARK_FORGE_PORT` | the address and port (never `0.0.0.0`) | the LAN address / `8081` |
+| `SPARK_HISTORY` | days of turns and threads kept; `off` keeps none | `30` |
+| `SPARK_NGL` `SPARK_FLASH_ATTN` `SPARK_KV` `SPARK_THREADS` | the engine's tuning -- `spark tune apply` | auto |
+| `SPARK_API_KEY_FILE` | a token file you already have | `~/.local/state/spark/api-token` |
 
-`spark shell off` hands everything back the same way, look included:
-each rc file and each rendered config -- `.tmux.conf`,
-`.config/starship.toml`, btop's conf, micro's colorscheme -- is restored
-from its `.bak`, or removed when there was none (that was the pre-spark
-state; never an empty husk). micro's `settings.json` stays, since after
-the seed it is micro's own; only the `colorscheme` key the seed put there
-is dropped. `~/.gitconfig` (your identity, not the look) stays. The
-palette goes with the layer that brought it: `theme.env` is removed and
-`console-colors` becomes the VGA sixteen, which a running Linux console is
-sent at once and redrawn with -- a console holds its own colours, so no
-`exec $SHELL` could undo them. `SITE_THEME` stays in `site.env`, so `spark shell on`
-paints it again. The `configs` and `rc` rows re-run so the one hook line
-lands in a restored rc file, and the packages stay installed (apt,
-pacman or brew removes them). It ends with `open a new shell (exec $SHELL)`: this
-one still has spark's prompt loaded. `spark shell` prints the state.
+What needs root. `bootstrap.sh --dry-run` lists exactly which of these
+it would do and never calls sudo:
 
-With the layer off, `spark bar` and the set forms of
-`spark quiet login|boot` refuse (`the shell layer is off`), `spark help`
-folds the shell block into one line, and the check rows that stand on it
-(`pinned terminfo quiet bar git backup swap encryption pending battery
-disk`) read `na`; the `shell` row says what `on` adds. `spark
-theme` and `spark font` work either way -- and `spark quiet start` too: it
-is spark's own noise, not the shell's. Two fonts are in play on Linux and
-they are not the same one. `spark font` sets the **console** face, a
-`.psf` from `/usr/share/consolefonts` (Debian's console-setup; on Arch
-the console font is `/etc/vconsole.conf`'s and `spark font` says so), and
-`spark font list` shows those.
-The **Nerd Font** comes with the shell layer, a `.ttf` unzipped into
-`~/.local/share/fonts` for your terminal emulator to use; no console
-command can select it, so set it in the emulator's own settings.
-`spark font list` names it at the end so the two are not confused. On
-macOS there is one font, the Terminal.app profile's, and `spark font`
-sets it.
+- always: the package manager for the `packages` row (`libgomp1` on
+  Debian, the Vulkan libraries with a GPU) and the hostname when
+  `SITE_SET_HOSTNAME=yes`; macOS the hostname only;
+- `spark shell on`: the shell tools, the console font and palette, the
+  quiet login and boot, each only when its key says so;
+- `spark headless on`: linger, the `render` group, the sleep targets,
+  the lid; macOS the LaunchDaemons and `pmset`.
 
-Most linked files are symlinks into the repo, so an edit anywhere is a
-`git status` line. Some apps rewrite their own config on exit; those are
-rendered once as regular files and left to the app:
+`spark uninstall` uses sudo for the mirror image. Passwordless sudo is
+yours to decide (`echo 'you ALL=(ALL) NOPASSWD:ALL' | sudo tee
+/etc/sudoers.d/you`, fine for a test bench).
+
+When something stops working:
+
+1. `spark check` names the row and the remedy (long output pages
+   through `$PAGER`, plain when piped).
+2. `./bootstrap.sh --dry-run`: what a rebuild would change.
+3. `spark`: which server answers, which shells have the widget.
+4. A stale server after a DHCP move shows as `moved` on the `serve` row:
+   `spark stop; spark serve`. The `forge` row likewise: `spark forge
+   stop; spark forge start`.
+5. `spark forge`: is the page up, at which address; one line per request
+   in `~/.local/state/spark/forge.log`, never a body.
+6. The `ember` row: the pair over budget, the file not downloaded
+   (`./bootstrap.sh`), or not warm (`spark serve` warms it).
+7. A GPU new servers cannot see (the `gpu` row warns): on Linux the
+   serving user must be in the `render` group; log out of every session
+   and in again.
+8. `SPARK_DEBUG=1 spark ...` and `~/.local/state/spark/debug.log`.
+
+## 9. spark shell
+
+`spark shell on` (`SITE_SHELL=on`) puts spark's own shell on a machine
+that is only an AI box: tmux, starship, fzf, zoxide, eza, bat, btop and
+the Nerd Font, with one palette on every surface once a theme is chosen
+(the text console, tmux, starship, and a micro you have). The rc files
+become spark's (`~/.bashrc` and `~/.bash_profile` on Linux, `~/.zshrc`
+and `~/.zprofile` on macOS; yours move to `<file>.bak`). It runs
+bootstrap (sudo once for the packages on Linux; Homebrew on macOS, the
+`Brewfile`), then says `open a new shell`. No editor comes with it.
+
+`spark shell off` hands everything back: each rc file and each rendered
+config (`.tmux.conf`, `.config/starship.toml`, btop's conf, micro's
+colorscheme) is restored from its `.bak` or removed when there was none;
+the console palette goes back to VGA; `~/.gitconfig` stays; the packages
+stay installed. With the layer off, `spark bar` and the set forms of
+`spark quiet login|boot` refuse, `spark help` folds the shell block into
+one line, and the check rows that stand on it read `na`. `spark theme`,
+`spark font` and `spark quiet start|audio` work either way.
+
+Its keys:
+
+| key | values | default |
+|---|---|---|
+| `SITE_SHELL` | `off` / `on` -- `spark shell on\|off` | `off` |
+| `SITE_GIT_NAME` / `SITE_GIT_EMAIL` | the git identity `~/.gitconfig` is rendered with; unset, spark guesses and the `identity` row says so | guessed |
+| `SITE_PROMPT` / `SITE_PROMPT_STYLE` | `starship`/`plain`; `minimal`/`full` | `starship`, `minimal` |
+| `SITE_WORKSPACE` | the folder the `backup` row watches | `~/projects` |
+| `SITE_QUIET_LOGIN` / `SITE_QUIET_BOOT` | Linux: `yes` bares the login (motd, `/etc/issue`; originals kept) / makes the boot silent (one GRUB drop-in) -- `spark quiet login\|boot on`. `boot` is refused on WSL 2 and Arch | `no` |
+
+Two fonts on Linux: `spark font` sets the console face (core); the Nerd
+Font comes with the layer as a `.ttf` in `~/.local/share/fonts` for your
+terminal emulator, set in its own settings. On macOS the layer adds a
+Terminal.app profile with the palette, the font and the keys an editor
+needs (Option as Meta, so `Alt-s` is Option-s).
+
+Most linked files are symlinks into the repo. Some apps rewrite their
+own config on exit; those are rendered once as regular files:
 
 | file | why it is not a symlink |
 |---|---|
 | `~/.config/btop/btop.conf` | btop rewrites it on every exit |
-| `~/.config/micro/settings.json` | micro rewrites it on every option change; seeded once (`"colorscheme": "spark"`) when micro is on PATH, then it is micro's -- never re-rendered, never backed up, never removed. One key stays the theme's: `spark theme NAME` sets `colorscheme` back to `spark` when micro changed it (the `theme` row warns meanwhile), and `spark shell off` drops that key |
+| `~/.config/micro/settings.json` | micro rewrites it; seeded once with `"colorscheme": "spark"` when micro is on PATH, then it is micro's. `spark theme NAME` sets that one key back; `spark shell off` drops it |
 | `~/.gitconfig`, `~/.tmux.conf`, `~/.config/starship.toml`, `~/.config/micro/colorschemes/spark.micro` | carry your name / palette / choices |
 | `~/.config/spark/launchd/*.plist` | launchd needs absolute paths |
 
 `install.sh` never overwrites a regular file: it moves it to `<file>.bak`.
-
-## 6. Smart apps
-
-A tool becomes smart by being a client of one spark verb, the way the
-prompt widget is a client of `spark line`. For editors that verb is
-`spark edit`: the text on stdin, raw text out; `--at N` completes at a
-byte offset, `<words>` rewrites (12 kB at most), `? [words]` asks or
-reviews; an empty text with words is written from nothing (a new file);
-hints `--type`, `--name`, `--about`; never a path, and no thread
-unless the client asks for one (`--thread ID`, sealed like a chat thread).
-`spark edit -h` says the rest, and it works from a pipe:
-`spark edit fix grammar < draft.md`.
-
-spark ships no app. Each app's plugin lives in its own repository and
-installs the app's own way; spark's installers never touch it, and
-`spark shell on` installs no editor. micro is first:
-
-```sh
-git clone https://github.com/forgewright-ai/spark-micro ~/.config/micro/plug/spark
-```
-
-and one line in `~/.config/micro/bindings.json`
-(`"Alt-s": "lua:spark.prompt"`). Then `Alt-s` -- Option-s on a Mac --
-opens `spark> `: Enter alone completes at the cursor, words rewrite the
-selection (or the whole file), `? words` asks in a pane on the right, `?`
-alone reviews, `??` goes on; in the pane Enter jumps to a quote, `a`
-applies a code block, `d` declines a note for good, `q` closes. `help
-spark` inside micro says everything; `setlocal spark.about "a novel
-chapter"` tells spark what a buffer is when it should not guess; `set
-spark false` switches the plugin off; `git -C ~/.config/micro/plug/spark
-pull` updates it. Coming from spark v1.9, where the plugin came with the
-shell layer: `spark update` hands spark's old links back (the `micro`
-bootstrap row says so), then clone as above.
-
-Another editor joins the same way: one client of `spark edit`, in a repo
-of its own; nothing new in spark. The other surfaces an app can use are
-the shell (`? words`, `spark do`, `explain`, `$EDITOR`) and the FORGE's
-API (the OpenAI shape above).
-
-## 7. Per-OS notes
-
-- macOS asks once, in a dialog, whether `python3` may find and connect
-  to devices on the local network: that is the FORGE (`spark forge`)
-  binding your LAN address so other machines and your phone can reach
-  it. Allow it; deny it and the FORGE answers only this machine.
-
-macOS:
-
-- No Homebrew for the AI. The engine is the pinned llama.cpp tarball for
-  arm64 or x64 (Metal inside; `SITE_AI_BUILD` is ignored), extracted into
-  `~/.local/share/spark/engine/`. Bootstrap clears any quarantine flag on
-  it, so Gatekeeper never objects; if it still does, `xattr -dr
-  com.apple.quarantine ~/.local/share/spark/engine`.
-- The shell layer is Homebrew's (`Brewfile`, no pinning worth trusting)
-  plus a Terminal.app profile: `spark theme profile` writes and imports
-  one with the palette, the font (`spark font FACE SIZE` sets them) and
-  the keys an editor needs -- Terminal.app sends nothing for Shift+Up/Down
-  or Ctrl+arrows by default, so the profile binds them (select by line in
-  micro works in a new window). The profile makes Option the Meta key, so
-  `Alt-s` is Option-s (Cmd-s is Terminal's own Export sheet); `Esc` then
-  `s`, quickly, is the same keys.
-- Apple's `tmux-256color` terminfo predates modified arrow keys, so an
-  editor types junk on Shift+Right; bootstrap compiles a complete entry
-  from Homebrew's ncurses into `~/.terminfo` (the `terminfo` row).
-- Units: `launchctl print gui/$UID/spark.serve` (`.forge`, `.check`
-  likewise); `launchctl kickstart -k gui/$UID/spark.serve` restarts one.
-  There is no root-free GPU counter, so `stats` and the `gpu` row say so.
-
-Linux:
-
-- The engine is the pinned tarball for x86_64 or arm64, the Vulkan build
-  when a GPU reports its memory in `/sys/class/drm` (`SITE_AI_BUILD=auto`,
-  the default; `vulkan` and `cpu` choose outright, `cpu` works anywhere).
-  The Vulkan build brings `libvulkan1 mesa-vulkan-drivers` through apt
-  (`vulkan-icd-loader vulkan-radeon vulkan-intel` through pacman) -- the
-  same sudo as `libgomp1`, no second prompt. The `gpu` row names the
-  build this machine gets; when the extracted engine is the other build
-  (a box that had `cpu` before a GPU was seen) the `engine` row says so
-  and `./bootstrap.sh` replaces it. An architecture without a pin gets
-  `skip engine no pin for llama.cpp ...` -- point `SPARK_ENGINE_DIR` at a
-  build of your own; bootstrap and the `engine` row honour it over the
-  tarball.
-- Integrated GPUs: the BIOS decides how much RAM the iGPU owns as VRAM
-  ("UMA frame buffer size"). If the `gpu` row says the model is larger
-  than VRAM, the weights spill into GTT across the bus and generation
-  slows; raise it in the BIOS (e.g. 8 GB for a 4B-8B model), then `spark
-  bench` again: the two rows in `~/.local/state/spark/bench.jsonl` are
-  your before and after.
-- The `render` group grants the GPU without a logind seat (an ssh login
-  has none): bootstrap adds you to it on a vulkan build and under `spark
-  headless on`; log out of every session and in again for the units to
-  see it.
-- The theme reaches the text console: `spark theme NAME` writes
-  `~/.config/spark/console-colors`, the precomputed VT palette escapes,
-  sends them to the console it is typed on and redraws the screen (a
-  framebuffer paints a new palette only into what is drawn after it, so
-  without the redraw half the screen kept the old colours); the rc hook
-  sends them again at login, `TERM=linux` only -- an xterm-family terminal
-  never sees them. The login screen is drawn before any shell runs, so
-  bootstrap's `vt-palette` row installs a one-shot `spark-console.service`
-  (root, `setvtrgb`, the same sudo as the font) that sets the kernel's
-  default palette at every boot from `console-colors.rgb`, for every VT.
-  GUI terminal emulators stay yours: apply the colours in `theme.env` in
-  their settings by hand. The `theme` check row watches that `theme.env`
-  and `console-colors` match the chosen palette and that the kernel's
-  boot palette (`/sys/module/vt/parameters`) is the file's.
-- The console font is core, not the shell layer: `spark font Terminus
-  16x32` gives the text console a readable font on a 1080p screen (`VGA`
-  for the installer's look). `spark font list` reads
-  `/usr/share/consolefonts` -- the real faces and sizes this box has --
-  and a face or size not there is refused before anything is written. The
-  list spells sizes the way the command takes them, width by height
-  (console-setup's `FONTSIZE`); the font files spell them the other way
-  round, `Terminus32x16` being `16x32`. The quiet rows stay
-  with the shell layer: `spark quiet login on` empties the motd and
-  `spark quiet boot on` makes the boot silent (the GRUB drop-in). The
-  console font cannot draw the check and arrow glyphs; spark notices
-  (`TERM=linux`, also inside a tmux whose client is the console) and
-  prints ASCII. `SPARK_ASCII=1` forces that.
-- Units: `systemctl --user status spark-serve spark-forge
-  spark-check.timer`; `journalctl --user -u spark-serve -n 50`. Without a
-  user systemd session (a container) the `services` row reads `na`; run
-  `spark serve` and `spark forge` by hand.
-- `fd` and `bat` are `fdfind` and `batcat` on Debian (`fd` and `bat` on
-  Arch); the shell layer's rc file aliases them where it must.
-
-Arch:
-
-- It is Linux to spark: the same one-liner, the same rows. The engine is
-  the pinned tarball named `ubuntu-*` -- a glibc build, and Arch's glibc
-  is newer; the `engine` row names the asset. CI proves the one-liner and
-  the shell layer in an Arch container; the console palette, the units and
-  the GPU there are the maintainer's, by hand.
-- Packages come through `pacman -S --needed`, never `-Sy` alone: a rolling
-  distro forbids the partial upgrade, so when a name cannot be found the
-  `packages` row says `sudo pacman -Syu` first. The `pending` row counts
-  `checkupdates` (`pacman-contrib`, with the shell layer). `gcc-libs`
-  (OpenMP) is in `base`: the AI layer installs nothing without a GPU.
-- No console-setup: `spark font` refuses to set and the `font` row says
-  so; the console font is `/etc/vconsole.conf`'s (`FONT=ter-132n` with
-  `terminus-font`; `sudo systemctl restart systemd-vconsole-setup` applies
-  it). The Nerd Font half of the row is real.
-- `spark quiet login on` works: an absent motd stays absent, `/etc/issue`
-  is emptied to the cursor escape, the original kept. `spark quiet boot`
-  refuses: there is no `update-grub`, and Arch's `grub-mkconfig` reads no
-  drop-in. By hand, with systemd-boot: `timeout 0` in
-  `/boot/loader/loader.conf`, and `quiet loglevel=3
-  systemd.show_status=false udev.log_level=3 vt.global_cursor_default=0
-  fbcon=nodefer` appended to the `options` line of the entry under
-  `/boot/loader/entries/`. With GRUB: the same words in
-  `GRUB_CMDLINE_LINUX_DEFAULT`, `GRUB_TIMEOUT=0`,
-  `GRUB_TIMEOUT_STYLE=hidden` in `/etc/default/grub`, then `sudo
-  grub-mkconfig -o /boot/grub/grub.cfg`.
-- The palette's boot unit works (`kbd` ships `setvtrgb`); the `render`
-  group, the user units, linger and the hostname are the same as on
-  Debian. The fzf key bindings are read from `/usr/share/fzf`.
-
-Windows (Ubuntu 24.04 on WSL 2):
-
-- It is Linux to spark: the same one-liner, the same rows. `spark check`'s
-  header, the status line and the machine line the model reads say
-  `WSL 2`. Not proven by CI, which has no WSL runner: the WSL 2 branch is
-  pinned by fixture; the one-liner end to end there is on you, for now.
-- The engine is the CPU build. WSL 2 exposes the GPU as `/dev/dxg`, not as
-  a DRM card with a memory counter, so `SITE_AI_BUILD=auto` lands on
-  `cpu` and the `gpu` row says the GPU is not reached through WSL today;
-  `auto` then picks under the 3 GB cap (qwen3-4b on most machines).
-  `SITE_AI_BUILD=vulkan` through Mesa is yours to try, untested.
-- No console: the font is Windows Terminal's (Settings > Profiles >
-  Appearance), the Nerd Font too (install it on Windows). `spark font`
-  says so and refuses to set; the `font` row reads `na`.
-- No GRUB: Windows boots it. `spark quiet boot` refuses; `spark quiet
-  login` works (the motd is real on the login shell wsl.exe opens).
-- Units: Ubuntu's WSL image runs systemd (`[boot] systemd=true` in
-  `/etc/wsl.conf`); if the `services` row reads `na`, add that line,
-  `wsl --shutdown` from PowerShell, reopen, `./bootstrap.sh`.
-- Not a brain: the distro stops with its last window, so `spark headless
-  on` refuses. The FORGE answers this PC at the VM's address; reaching it
-  from the LAN needs `networkingMode=mirrored` in `.wslconfig` (Windows
-  11), untested here.
-- The palette reaches tmux, starship and micro; Windows Terminal's own
-  colour scheme is yours to set from `theme.env`.
-
-## What bootstrap does as root
-
-`bootstrap.sh` uses sudo per layer, and `--dry-run` never calls it -- it
-lists exactly which of these it would do:
-
-- the AI (always): Linux apt or pacman for the `packages` row --
-  `libgomp1` on Debian (Arch has it in `base`), and the Vulkan libraries
-  when the build is vulkan: a GPU in sysfs, or `SITE_AI_BUILD=vulkan` --
-  and the hostname when `SITE_SET_HOSTNAME=yes`; macOS the hostname only.
-- the shell (`SITE_SHELL=on`): Linux apt or pacman for tmux and the tools,
-  the console font, the console palette (`setvtrgb` and its boot unit,
-  once a theme is painted), the quiet login (motd) and the quiet boot (the
-  GRUB drop-in), each only when its key says so -- on Arch the console
-  font and GRUB rows are skips; macOS nothing.
-- headless (`SITE_HEADLESS=yes`): Linux `loginctl enable-linger` and the
-  `render` group (also on any vulkan build), the sleep targets masked, the
-  lid ignored (a logind drop-in); macOS the LaunchDaemons in `system/` and
-  `pmset`.
-
-`spark uninstall` uses sudo for the mirror image, each step a row: the
-sleep targets, the lid drop-in, motd and GRUB back (bootstrap's own rows),
-`setvtrgb vga` and the `spark-console` unit removed, linger off and the
-`render` group left, the console font's original back, the motd and issue
-originals removed, and the packages when you say so.
-
-One thing stays manual on purpose, being a trust decision rather than
-configuration: passwordless sudo for your user (`echo 'you ALL=(ALL)
-NOPASSWD:ALL' | sudo tee /etc/sudoers.d/you`, fine for a test bench).
-
-## When something stops working
-
-1. `spark check` -- it names the row and the remedy. The report -- like
-   every long output: the help, the model table -- pages through `$PAGER`
-   (`less` when unset) at a terminal, and stays plain when piped.
-2. `./bootstrap.sh --dry-run` -- what a rebuild would change.
-3. `spark` -- which brain answers, which shells have the widget.
-4. A stale server after a DHCP move shows as `moved` on the `serve` row
-   and on the status line: `spark stop; spark serve` (or restart the
-   unit). The `forge` row says the same for the FORGE: `spark forge stop;
-   spark forge start`.
-5. `spark forge` -- is the FORGE up, at which address, is its upstream ok;
-   `~/.local/state/spark/forge.log` has one line per request, never a body.
-6. The `ember` row: the pair over budget (`spark model list` shows one
-   that fits), the file not downloaded (`./bootstrap.sh`), or not warm
-   (`spark serve` warms it).
-7. A GPU that new servers cannot see (the `gpu` row warns, generation is
-   slow): on Linux the serving user must be in the `render` group;
-   `./bootstrap.sh` adds it on a vulkan build; log out of every session
-   and in again so the user units pick it up.
-8. `SPARK_DEBUG=1 spark ...` and `~/.local/state/spark/debug.log`.
 
 ## Appendix: how it fits together
 
@@ -884,25 +607,23 @@ your shell                    this machine                        the LAN
 ----------                    ------------                        -------
 ? words ---- widget -------> spark line ---+
 micro Alt-s - spark-micro -> spark edit ---+
-spark chat | do | explain -> spark <verb> -+-> the FORGE :8081 ---> another
-(readline, wrapped)                        |   identity: soul,         machine's
-                                           |   memory, threads; /v1     spark, a
-                                           |   and /api; the page       browser,
-                                           +-> llama-server :8080 <---- program
-                                               one model (spark), or
-                                               two (spark + ember):
+spark chat | do | explain -> spark <verb> -+-> spark's server :8081 --> another
+                                           |   soul, memory, threads;    machine's
+                                           |   /v1 and /api; the page    spark, a
+                                           |                             browser,
+                                           +-> llama-server :8080 <---- a program
+                                               one model, or two:
                                                the pinned engine and a
-                                               GGUF from models.env or
-                                               your own models.env
+                                               GGUF from models.env
 
 get -> spark setup -> bootstrap.sh (apply) -> install.sh (links, renders)
-                      the engine tarball, the model, the token, the units,
-                      one rc line; SITE_SHELL=on adds spark's shell; an
-                      app's plugin is its own (spark-micro)
+                      the engine, the model, the token, the units, one rc
+                      line; spark shell on adds spark's shell; a spark app
+                      is its own repository (spark-micro)
 
 spark check   38 rows: every promise the machine makes, fixture-tested
-spark update  the newest tag (a stranger), or main (a developer); converge
+spark update  the newest tag, or main on a developer clone; converge
 
-what leaves the machine: pinned downloads in, your questions to the brain
-you chose, nothing else -- no telemetry, no account, one LAN address.
+what leaves the machine: pinned downloads in, your questions to the
+server you chose, nothing else -- no telemetry, no account, one LAN address.
 ```
