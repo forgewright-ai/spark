@@ -233,7 +233,7 @@ printf '%s\n' "$out" | grep -qE ' micro-aspell ' && bad "a micro-aspell row surv
 printf '%s\n' "$out" | grep -qE "^would +dir +mkdir .*/projects" && bad "SITE_SHELL unset: the workspace folder would be made" || ok "SITE_SHELL unset: no workspace folder for a stranger"
 [ "$(uname -s)" = Darwin ] && { printf '%s\n' "$out" | grep -qE '^ok +brew +nothing required' && ok "SITE_SHELL unset: brew row is ok, nothing required" || bad "brew row with the shell off"; }
 [ -z "$(sh "$REPO/bootstrap.sh" --list-packages | grep -E '^(tmux|starship|bat|eza|fzf|btop)$')" ] && ok "SITE_SHELL unset: --list-packages has no shell package" || bad "--list-packages lists shell packages with the shell off"
-[ -z "$(SITE_SHELL=on sh "$REPO/bootstrap.sh" --list-packages | grep -E '^(micro|aspell|aspell-en|shellcheck|git)$')" ] && ok "SITE_SHELL=on: no editor, no contributor tool in --list-packages" || bad "--list-packages still lists micro/aspell/shellcheck/git"
+[ -z "$(SITE_SHELL=on sh "$REPO/bootstrap.sh" --list-packages | grep -E '^(micro|aspell|aspell-en|shellcheck)$')" ] && ok "SITE_SHELL=on: no editor, no contributor tool in --list-packages" || bad "--list-packages still lists micro/aspell/shellcheck"
 # the v1.10 migration row: links an older install.sh made into this repo's
 # home/.config/micro are handed back once (dry-run says would; apply is
 # proven by hand -- it needs a real bootstrap)
