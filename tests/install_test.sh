@@ -361,6 +361,17 @@ if [ "$(uname -s)" != Darwin ]; then
     printf '%s\n' "$out" | grep -qE '^skip +quiet-boot +WSL 2' && ok "WSL 2: the quiet-boot row skips (no GRUB)" || bad "WSL 2 quiet-boot row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
     printf '%s\n' "$out" | grep -qE '^todo +headless +WSL 2' && ok "WSL 2: SITE_HEADLESS=yes is a todo, never a mask" || bad "WSL 2 headless: $(printf '%s\n' "$out" | grep -E ' headless | sleep ' | head -2)"
     printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "WSL 2 dry-run called sudo" || ok "WSL 2 dry-run: no sudo"
+    # the console palette is root's: with a painted palette the vt-palette
+    # row wants the boot unit (would, never sudo in a dry run); without one
+    # it has nothing to do
+    printf 'SITE_SHELL=off\nSITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
+    printf '40,204,152,215,69,177,104,168,146,251,184,250,131,211,142,235\n40,36,151,153,133,135,157,153,131,73,187,189,165,134,192,219\n40,29,26,33,136,166,116,132,116,54,38,47,152,155,164,178\n' > "$HOME/.config/spark/console-colors.rgb"
+    out=$(PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (palette) failed"
+    printf '%s\n' "$out" | grep -qE '^(would|todo) +vt-palette ' && ok "a painted palette: the vt-palette row would install the boot unit (or names kbd)" || bad "vt-palette row: $(printf '%s\n' "$out" | grep -E ' vt-palette ' | head -1)"
+    printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "vt-palette dry-run called sudo" || ok "vt-palette dry-run: no sudo"
+    rm -f "$HOME/.config/spark/console-colors.rgb"
+    out=$(PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run failed"
+    printf '%s\n' "$out" | grep -qE '^skip +vt-palette +no palette painted yet' && ok "no palette: the vt-palette row skips" || bad "vt-palette skip: $(printf '%s\n' "$out" | grep -E ' vt-palette ' | head -1)"
 fi
 
 [ "$fail" -eq 0 ] && echo "install_test: all ok" || { echo "install_test: FAILED"; exit 1; }

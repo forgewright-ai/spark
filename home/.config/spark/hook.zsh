@@ -11,7 +11,9 @@ export PATH
 [[ -r ~/.config/spark/widget.zsh ]] && source ~/.config/spark/widget.zsh
 if [[ -z ${STARSHIP_SHELL:-} && $PROMPT != $'\n'* ]]; then PROMPT=$'\n'$PROMPT; fi
 # the Linux VT palette (`spark theme` writes it) -- strictly TERM=linux, so
-# an xterm-family terminal's scrollback is never garbled by the escapes
+# an xterm-family terminal's scrollback is never garbled by the escapes.
+# The spark-console unit set the same palette at boot; this covers a VT
+# opened before it, and a box without the unit yet
 [ "$TERM" = linux ] && [ -r ~/.config/spark/console-colors ] && cat ~/.config/spark/console-colors
 # quiet boot turns the VT cursor off globally; a human session turns it back on
 [ "$TERM" = linux ] && printf '\033[?25h'

@@ -11,7 +11,7 @@ import subprocess
 import sys
 import time
 
-from . import CONFIG_DIR, HOME, IS_MAC, MARK, REPO, config, glyph, run, say
+from . import CONFIG_DIR, HOME, IS_MAC, MARK, REPO, config, glyph, is_wsl, run, say
 
 
 
@@ -116,7 +116,7 @@ def show(cfg):
     say("  ansi          " + " ".join(pal["THEME_ANSI_%d" % i] for i in range(8)))
     say("  bright        " + " ".join(pal["THEME_ANSI_%d" % i] for i in range(8, 16)))
     say("  written to    %s (by bootstrap.sh or spark theme NAME)" % os.path.join(CONFIG_DIR, "theme.env"))
-    say("  console       %s (TERM=linux only: the rc hook applies it)" % os.path.join(CONFIG_DIR, "console-colors"))
+    say("  console       %s (TERM=linux: now and at login; .rgb: setvtrgb at boot)" % os.path.join(CONFIG_DIR, "console-colors"))
     return 0
 
 
@@ -271,11 +271,14 @@ def write_runtime(name):
       theme.env       KEY=value, what tmux/starship/btop were rendered from
                       and what the FORGE page reads (removed for `none`)
       console-colors  the Linux VT palette, precomputed: \\033]P<n><rrggbb>
-                      per ansi colour 0-15. hook.bash/.zsh cat it only when
-                      TERM=linux, so an xterm's scrollback is never touched.
-                      For `none` an existing file becomes the one reset
-                      escape \\033]R: the console lets the palette go at the
-                      next login."""
+                      per ansi colour 0-15 -- what a user can print on their
+                      own VT: apply_console now (then a redraw), the rc hook
+                      at login. For `none` the sixteen VGA values, never
+                      \\033]R: the kernel's defaults may be a theme by then.
+      console-colors.rgb  the same palette in setvtrgb's form (three lines:
+                      red, green, blue of ansi 0-15), for root at boot: the
+                      spark-console unit sets the kernel's defaults, so every
+                      VT and the login screen wear it before any shell runs."""
     theme_env = os.path.join(CONFIG_DIR, "theme.env")
     console = os.path.join(CONFIG_DIR, "console-colors")
     os.makedirs(CONFIG_DIR, exist_ok=True)
@@ -286,34 +289,57 @@ def write_runtime(name):
             pass
         if os.path.exists(console):
             with open(console, "w", encoding="utf-8") as f:
-                f.write("\033]R\n")
+                f.write(vt_escapes(VGA))
+            with open(console + ".rgb", "w", encoding="utf-8") as f:
+                f.write(vt_lines(VGA))
         return
     pal = config.theme_palette(name, REPO)
     order = (["THEME_BG", "THEME_FG", "THEME_ACCENT", "THEME_MUTED", "THEME_BTOP"] + ["THEME_ANSI_%d" % i for i in range(16)]
              + ["THEME_LOGO"])          # optional: present only when the palette names it
     with open(theme_env, "w", encoding="utf-8") as f:       # bootstrap's order, so it agrees
         f.write("".join("%s=%s\n" % (k, pal[k]) for k in order if k in pal))
-    esc = "".join("\033]P%x%s" % (i, pal["THEME_ANSI_%d" % i].lstrip("#").lower()) for i in range(16))
+    hexes = [pal["THEME_ANSI_%d" % i] for i in range(16)]
     with open(console, "w", encoding="utf-8") as f:
-        f.write(esc + "\n")
+        f.write(vt_escapes(hexes))
+    with open(console + ".rgb", "w", encoding="utf-8") as f:
+        f.write(vt_lines(hexes))
+
+
+# the kernel's own sixteen: what `none` puts back
+VGA = ["#000000", "#aa0000", "#00aa00", "#aa5500", "#0000aa", "#aa00aa", "#00aaaa", "#aaaaaa",
+       "#555555", "#ff5555", "#55ff55", "#ffff55", "#5555ff", "#ff55ff", "#55ffff", "#ffffff"]
+
+
+def vt_escapes(hexes):
+    """The Linux VT's palette escapes, \\033]P<n><rrggbb> for ansi 0-15."""
+    return "".join("\033]P%x%s" % (i, h.lstrip("#").lower()) for i, h in enumerate(hexes)) + "\n"
+
+
+def vt_lines(hexes):
+    """setvtrgb's decimal form: three lines (red, green, blue), sixteen
+    comma-separated values each, ansi 0-15 in order."""
+    rgb = [[int(h.lstrip("#")[i:i + 2], 16) for h in hexes] for i in (0, 2, 4)]
+    return "".join(",".join(str(v) for v in ch) + "\n" for ch in rgb)
 
 
 def apply_console():
-    """Send ~/.config/spark/console-colors to a RUNNING Linux VT, and say so.
-    The rc hook cats that file at the next login; without this a palette --
-    or the reset `none` leaves there -- waited for one, which is why turning
-    a theme off looked stuck until logout. Only TERM=linux, only a tty: an
-    emulator's scrollback must never be repainted under the user."""
+    """Send ~/.config/spark/console-colors to a RUNNING Linux VT and redraw
+    it. A framebuffer console paints a new palette only into cells drawn
+    after it (measured on the box: old lines kept their colours, new ones
+    took gruvbox), so a palette landing mid-screen looked like a glitch;
+    the screen is cleared after the escapes and the caller prints its
+    closing lines next. Only TERM=linux at a tty: an emulator's scrollback
+    must never be repainted under the user."""
     if os.environ.get("SPARK_NO_APPLY") or not sys.stdout.isatty():
         return False
-    if os.environ.get("TERM") != "linux":
+    if os.environ.get("TERM") != "linux" or IS_MAC or is_wsl():
         return False
     try:
         with open(os.path.join(CONFIG_DIR, "console-colors"), encoding="utf-8") as f:
             data = f.read()
     except OSError:
         return False
-    sys.stdout.write(data)
+    sys.stdout.write(data + "\033[2J\033[H")
     sys.stdout.flush()
     return True
 
@@ -365,6 +391,8 @@ def set_theme(name):
         say("spark theme: install.sh failed -- sh %s says why" % os.path.join(REPO, "install.sh"))
         return 1
     write_runtime(name)
+    if not IS_MAC and not is_wsl():
+        site.apply(["vt-palette"], stream=True)        # the boot unit (sudo), idempotent
     if apply_console():
         say("ok     console      this console took the palette now" if name != "none"
             else "ok     console      this console has its own colours back")

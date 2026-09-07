@@ -356,8 +356,8 @@ def _run(opts):
     if theme_name != "none" and cfg.shell and not os.environ.get("SPARK_NO_APPLY"):
         # only with the shell layer on. SITE_THEME is written either way, but
         # a first run must leave a stranger's machine looking exactly as it
-        # did: console-colors repaints the VT through the core rc hook, and
-        # the macOS profile repaints Terminal. `spark shell on` and `spark
+        # did: console-colors repaints the VT (spark theme, the rc hook, the
+        # spark-console unit at boot), and the macOS profile repaints Terminal. `spark shell on` and `spark
         # theme NAME` are where a user asks for the palette.
         from . import theme
         theme.write_runtime(theme_name)

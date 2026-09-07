@@ -1,30 +1,38 @@
 SPARK CHEATSHEET                                          lp CHEATSHEET.txt
 
 SPARK
+  spark                           status: brain, widget, server, soul, last
+  spark off | spark on            silence / restore the widget, every pane
+  spark soul [edit|reset]         who it is: default soul, replace with edit
+  spark remember WORDS            a fact it keeps    spark forget N  drops it
+  spark memory [on|off|clear]     the facts it recalls on every answer
+  spark ver                       about, version, credits (the login greeting)
   spark chat [words]              one more turn, or a chat (/help for verbs)
   spark chat --thread N [words]   go on with an older thread (spark history)
   /resume [N]   /clear   /new     in the chat: an older thread, wipe, fresh
   spark <words>                   a streamed answer     spark last  the last
   spark do <words>                a task, one confirmed command at a time
-  ?? words                        follow up on the last answer (same thread)
-  ?? how do I change the theme    spark knows itself: it names its own verbs
   spark @FILE words               ask about a file (first 4 kB, last 12 kB)
+  spark edit [?] words < FILE     rewrite / complete (--at N) / ask (?) stdin
   spark history [clear]           the threads kept here; clear removes them
-  spark                           status: brain, widget, server, soul, last
-
-AT THE PROMPT
+  try:
   ? words   or   words?   Enter   the command lands in your line, hint above
   Enter again                     runs it (! = read it first; it deletes)
+  ?? words                        follow up on the last answer (same thread)
+  ?? how do I change the theme    spark knows itself: it names its own verbs
   Esc s                           ask about the line you are on, no ?
   cmd 2>&1 | explain              what went wrong, and the fix
-  spark off | spark on            silence / restore every pane at once
   spark <TAB>                     completes the verbs; second word too
                                   (theme and model names included, offline)
 
-THE FORGE (one identity per machine, served on the LAN)
-  spark soul [edit|reset]         who it is: default soul, replace with edit
-  spark remember WORDS            a fact it keeps    spark forget N  drops it
-  spark memory [on|off|clear]     the facts it recalls on every answer
+THE FORGE: SERVER/CLIENT (one identity per machine, served on the LAN)
+  spark model [NAME|list]         the table (license, tested); choose one
+  spark model budget [N]          percent of RAM+GPU auto may use (10-95)
+  spark model add URL             add your own (--sha256, --license required)
+  spark model verify              sha256 every downloaded file now, exit 1 bad
+  spark serve | spark stop        one LAN address, token required; stop
+  spark stop --force [--noreload] also the unit's server; and keep it down
+  spark ember [NAME|auto|none]    a second model for conversations (opt-in)
   spark forge [on|off]            the FORGE: the agent's API + page, on the LAN
   spark forge --print-client      what a peer needs: URL + a user minted here
   spark forge --print-url         the login URL; the admin token on a tty
@@ -34,6 +42,8 @@ THE FORGE (one identity per machine, served on the LAN)
   spark user add NAME             mint an account; the token shows once
   spark user login [NAME] | logout  act as NAME here; forget the login
   spark user token --new          rotate your token; old logins die
+  spark headless [on|off]         the FORGE up from boot, never asleep (brain)
+  spark client [URL|off]          answer from another machine's FORGE; none here
 
 THE PAGE (spark forge --print-url)  keys work when no input has focus
   1..5                            the tabs      r  refresh      ?  help
@@ -43,41 +53,20 @@ THE PAGE (spark forge --print-url)  keys work when no input has focus
   Esc                             stop the answer; else blur; else close
   share -> add to home screen     an app on iOS; a browser shortcut on Android
 
-THE SERVER
-  spark model [NAME|list]         the table (license, tested); choose one
-  spark model budget [N]          percent of RAM+GPU auto may use (10-95)
-  spark model add URL             add your own (--sha256, --license required)
-  spark model verify              sha256 every downloaded file now, exit 1 bad
-  spark ember [NAME|auto|none]    a second model for conversations (opt-in)
-  spark serve | spark stop        one LAN address, token required; stop
-  spark stop --force [--noreload] also the unit's server; and keep it down
-
 THE MACHINE
   spark setup                     first run: name, user, model, light it up
   spark check                     drift report; exit 0 = every promise kept
   spark check --watch 5           redraw every 5 s     --selftest  prove rows
   long output (help, check, lists) pages via $PAGER (less); piped stays plain
-  spark shell [on|off]            spark's own shell: tmux, starship, fzf ...
-                                  on links the rc files (yours -> .bak)
-  spark headless [on|off]         the FORGE up from boot, never asleep (brain)
-  spark client [URL|off]          answer from another machine's FORGE; none here
-  spark quiet                     the four states: start, login, boot, audio
-  spark quiet start on|off        no banner, one-line serve/forge + bare spark
-  spark quiet login|boot on|off   Linux: motd + kernel line; GRUB's menu
-  spark quiet audio on|off        no sound from spark (both OSes)
-  spark font FACE SIZE | list     console font (Linux) / Terminal.app's font
-  spark ver                       logo, version, credits (the login greeting)
   spark update [--dry-run]        the newest tag; main pulls on a dev clone
-  spark brain                     what answers now: a FORGE or a llama-server
-  spark stats [--week]            tok/s, latency, cache hits, GPU, baseline
-  spark bench [--tune]            llama-bench; --tune finds the best settings
-  spark tune show | apply         the winner; apply writes spark.env, restarts
   ./bootstrap.sh --dry-run        what a rebuild would change (never sudo)
   ./bootstrap.sh                  apply; converged = Nothing to do
   ~/.config/spark/site.env  name, user, model, ember, budget, shell, peer, theme
   ~/.config/spark/spark.env       ports, URLs, engine, history, memory, forge
 
-SPARK SHELL (spark shell on)
+THE INTERFACE (spark shell on)
+  spark shell [on|off]            spark's own shell: tmux, starship, fzf ...
+                                  on links the rc files (yours -> .bak)
   spark bar [on|off]              tmux's status line: bare shows, on|off sets
   spark theme NAME | list | show  one palette: console, tmux, micro; none=off
   ~/.config/spark/themes/NAME.env your own palette: the same 21 THEME_* keys
@@ -85,14 +74,24 @@ SPARK SHELL (spark shell on)
                      h j k l panes  d detach  r reload  [ scroll/copy (vi)
   z DIR (zoxide)   C-r history (fzf)   C-t files (fzf)   rg PATTERN
   fd NAME  eza -la  bat FILE  btop
+  spark quiet                     the four states: start, login, boot, audio
+  spark quiet start on|off        no banner, one-line serve/forge + bare spark
+  spark quiet login|boot on|off   Linux: motd + kernel line; GRUB's menu
+  spark quiet audio on|off        no sound from spark (both OSes)
+  spark font FACE SIZE | list     console font (Linux) / Terminal.app's font
 
 SMART APPS (a tool that is a client of spark edit; spark installs none)
-  spark edit [?] words < FILE     rewrite / complete (--at N) / ask (?) stdin
   micro: github.com/forgewright-ai/spark-micro   clone it, bind Alt-s, done
   micro: Alt-s (Mac: Option-s)  Enter=complete  words=rewrite  ?=ask/review
   micro pane: q closes  Enter=go to quote  a=apply code  d=decline  ??=go on
          ledger [clear] at spark>   the notes declined for this file
          setlocal spark.about "a poem"   tell it, when it should not guess
+
+LESS OFTEN USED
+  spark brain                     what answers now: a FORGE or a llama-server
+  spark stats [--week]            tok/s, latency, cache hits, GPU, baseline
+  spark bench [--tune]            llama-bench; --tune finds the best settings
+  spark tune show | apply         the winner; apply writes spark.env, restarts
 
 LINUX
   systemctl --user status spark-serve spark-forge spark-check.timer

@@ -1165,7 +1165,7 @@ SHELL_USAGE = """%s shell -- spark's own shell: tmux, starship, fzf, eza, bat, b
 # SITE_SHELL); the row names are bootstrap.sh's, not check.py's. The
 # console-font and hostname rows are core, so they are not filtered for here.
 SHELL_APPLY_ROWS = ["identity", "dir", "apt", "brew", "starship", "pinned",
-                    "configs", "rc", "theme", "terminfo", "quiet-login", "quiet-boot"]
+                    "configs", "rc", "theme", "vt-palette", "terminfo", "quiet-login", "quiet-boot"]
 SHELL_TOOLS = "tmux, starship, fzf, zoxide, eza, bat, btop"
 
 
@@ -1223,9 +1223,8 @@ def cmd_shell(args):
         say("ok     restore      ~/.config/micro/settings.json -- colorscheme key dropped, the rest is micro's")
     # the palette came with the layer, so it goes with it. SITE_THEME stays
     # in site.env (spark shell on paints it again); theme.env goes and
-    # console-colors becomes the VT reset the hook cats at the next login --
-    # and the running console gets that reset now, since no shell restart
-    # can undo a palette the terminal itself is holding.
+    # console-colors becomes the VGA sixteen, sent to the running console now
+    # (then a redraw) and set as the kernel's defaults by the unit at boot.
     if any(os.path.exists(os.path.join(CONFIG_DIR, f)) for f in ("theme.env", "console-colors")):
         from . import theme
         theme.write_runtime("none")     # config, so SPARK_NO_APPLY does it too

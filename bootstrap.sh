@@ -892,6 +892,33 @@ else
         ok console "$SITE_FONT_FACE $size"
     fi
 fi
+# the console palette at boot: a user's escapes reach their own VT (the rc
+# hook, spark theme), but the login screen is drawn before any shell runs
+# and other VTs keep the kernel's defaults. This one-shot unit (root,
+# setvtrgb: the same sudo as the font) sets the defaults at every boot from
+# the .rgb twin of console-colors. No palette painted yet: nothing to do.
+vt_unit=/etc/systemd/system/spark-console.service
+vt_file="$SPARK_CONFIG_DIR/console-colors.rgb"
+if [ "$OS" = Darwin ]; then
+    skip vt-palette "macOS: the palette is the Terminal.app profile's"
+elif is_wsl; then
+    skip vt-palette "WSL 2: no console"
+elif [ ! -f "$vt_file" ]; then
+    skip vt-palette "no palette painted yet (spark theme NAME)"
+elif ! command -v setvtrgb >/dev/null 2>&1; then
+    row todo vt-palette "setvtrgb is missing: sudo apt-get install kbd"
+else
+    vt_want=$(printf '[Unit]\nDescription=spark: the console palette (setvtrgb)\nAfter=console-setup.service\nConditionPathExists=%s\n\n[Service]\nType=oneshot\nExecStart=/usr/bin/setvtrgb %s\n\n[Install]\nWantedBy=multi-user.target\n' "$vt_file" "$vt_file")
+    if [ "$(cat "$vt_unit" 2>/dev/null)" = "$vt_want" ] && systemctl is-enabled spark-console.service >/dev/null 2>&1; then
+        ok vt-palette "spark-console.service: setvtrgb $vt_file at boot"
+    elif need vt-palette "write $vt_unit; enable it; setvtrgb now (sudo)"; then
+        printf '%s\n' "$vt_want" | as_root tee "$vt_unit" >/dev/null
+        as_root systemctl daemon-reload
+        as_root systemctl enable spark-console.service >/dev/null 2>&1 || true
+        as_root setvtrgb "$vt_file" 2>/dev/null || true      # the defaults now, for the other VTs
+        ok vt-palette "spark-console.service: setvtrgb $vt_file at boot"
+    fi
+fi
 if [ "$shell" = 0 ]; then
     :   # quiet-login and quiet-boot skipped above
 elif [ "$OS" = Darwin ]; then

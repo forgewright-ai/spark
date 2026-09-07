@@ -53,7 +53,8 @@ EDIT_USAGE = """spark edit -- the editor's protocol (contract 10): the text on s
                               without a name), newest first; clear drops them
 
   raw streamed text: no mark, no wrap, a code fence around the answer is
-  removed; exit 1 when nothing came in or no brain answers. In micro: the
+  removed; an empty text with words is written from nothing (a new file);
+  exit 1 when ? or --at find no text, or no brain answers. In micro: the
   spark-micro plugin, github.com/forgewright-ai/spark-micro (Alt-s). From
   a pipe: spark edit fix grammar < draft.md
 """
@@ -390,7 +391,15 @@ def cmd_edit(args):
         return 2
     data = "" if sys.stdin.isatty() else sys.stdin.read()
     if not data:
-        die("edit reads stdin -- spark edit --type FT words < FILE")
+        # an empty buffer (a new file in the editor): words write it from
+        # nothing; ? and --at have nothing to read or continue, and say so
+        # in one line an infobar can show
+        if opts["decline"]:
+            die("edit --decline reads the note on stdin")
+        if at is not None:
+            die("nothing to continue yet -- say what to write: spark> words")
+        if words[0] == "?":
+            die("nothing to ask about yet -- write something first")
     if opts["decline"]:
         # the pane's d key: the note on stdin retires for this file name
         try:
@@ -450,9 +459,9 @@ def cmd_edit(args):
         kind, role = "rewrite", "ember"
         if len(data) > EDIT_MAX:
             die("the text is %d chars; a rewrite takes at most %d -- select less" % (len(data), EDIT_MAX))
-        max_tokens = min(6000, len(data) // 2 + 200)
+        max_tokens = min(6000, len(data) // 2 + 200) if data else 1500
         text = " ".join(words).strip()
-        context = head + label + "\n" + data
+        context = head + label + "\n" + (data or "(no text yet: write it, as the instruction asks)")
     from . import text as textmod
     # a rewrite keeps the text's own final-newline shape: the editor splices
     # the reply over the selection, and a model that drops or adds the last
@@ -460,7 +469,7 @@ def cmd_edit(args):
     # an answer's quotes are checked against the text, line by line, and
     # the ones the text does not hold are marked where they stand
     anchors = textmod.Anchors(sys.stdout, data) if kind == "ask" else None
-    fence = textmod.Fence(anchors or sys.stdout, newline=data.endswith("\n") if kind == "rewrite" else None)
+    fence = textmod.Fence(anchors or sys.stdout, newline=(data.endswith("\n") if data else True) if kind == "rewrite" else None)
 
     def done():
         fence.close()

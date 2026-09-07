@@ -546,9 +546,9 @@ state; never an empty husk). micro's `settings.json` stays, since after
 the seed it is micro's own; only the `colorscheme` key the seed put there
 is dropped. `~/.gitconfig` (your identity, not the look) stays. The
 palette goes with the layer that brought it: `theme.env` is removed and
-`console-colors` becomes the VT reset, which a running Linux console is
-sent at once -- a terminal holds its own colours, so no `exec $SHELL`
-could undo them. `SITE_THEME` stays in `site.env`, so `spark shell on`
+`console-colors` becomes the VGA sixteen, which a running Linux console is
+sent at once and redrawn with -- a console holds its own colours, so no
+`exec $SHELL` could undo them. `SITE_THEME` stays in `site.env`, so `spark shell on`
 paints it again. The `configs` and `rc` rows re-run so the one hook line
 lands in a restored rc file, and the packages stay installed (`apt` or
 `brew` removes them). It ends with `open a new shell (exec $SHELL)`: this
@@ -589,7 +589,8 @@ A tool becomes smart by being a client of one spark verb, the way the
 prompt widget is a client of `spark line`. For editors that verb is
 `spark edit`: the text on stdin, raw text out; `--at N` completes at a
 byte offset, `<words>` rewrites (12 kB at most), `? [words]` asks or
-reviews; hints `--type`, `--name`, `--about`; never a path, and no thread
+reviews; an empty text with words is written from nothing (a new file);
+hints `--type`, `--name`, `--about`; never a path, and no thread
 unless the client asks for one (`--thread ID`, sealed like a chat thread).
 `spark edit -h` says the rest, and it works from a pipe:
 `spark edit fix grammar < draft.md`.
@@ -674,11 +675,18 @@ Linux:
   see it.
 - The theme reaches the text console: `spark theme NAME` writes
   `~/.config/spark/console-colors`, the precomputed VT palette escapes,
-  and the rc hook applies it only when `TERM=linux` -- an xterm-family
-  terminal never sees the escapes. GUI terminal emulators stay yours:
-  apply the colours in `theme.env` in their settings by hand. The `theme`
-  check row watches that `theme.env` and `console-colors` still match the
-  chosen palette.
+  sends them to the console it is typed on and redraws the screen (a
+  framebuffer paints a new palette only into what is drawn after it, so
+  without the redraw half the screen kept the old colours); the rc hook
+  sends them again at login, `TERM=linux` only -- an xterm-family terminal
+  never sees them. The login screen is drawn before any shell runs, so
+  bootstrap's `vt-palette` row installs a one-shot `spark-console.service`
+  (root, `setvtrgb`, the same sudo as the font) that sets the kernel's
+  default palette at every boot from `console-colors.rgb`, for every VT.
+  GUI terminal emulators stay yours: apply the colours in `theme.env` in
+  their settings by hand. The `theme` check row watches that `theme.env`
+  and `console-colors` match the chosen palette and that the kernel's
+  boot palette (`/sys/module/vt/parameters`) is the file's.
 - The console font is core, not the shell layer: `spark font Terminus
   16x32` gives the text console a readable font on a 1080p screen (`VGA`
   for the installer's look). `spark font list` reads
@@ -734,7 +742,8 @@ lists exactly which of these it would do:
   when the build is vulkan: a GPU in sysfs, or `SITE_AI_BUILD=vulkan`),
   and the hostname when `SITE_SET_HOSTNAME=yes`; macOS the hostname only.
 - the shell (`SITE_SHELL=on`): Linux `apt` for tmux and the tools, the
-  console font, the quiet login (motd) and the quiet boot (the GRUB
+  console font, the console palette (`setvtrgb` and its boot unit, once a
+  theme is painted), the quiet login (motd) and the quiet boot (the GRUB
   drop-in), each only when its key says so; macOS nothing.
 - headless (`SITE_HEADLESS=yes`): Linux `loginctl enable-linger` and the
   `render` group (also on any vulkan build), the sleep targets masked, the

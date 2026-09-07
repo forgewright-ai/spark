@@ -613,6 +613,16 @@ def main():
         t.ok("Output:" not in umsg, "edit: the editor's block carries its own label", repr(umsg[:80]))
         rc, out, _ = spark("edit", "keep", "it", stdin="one\n  two\n\nthree")
         t.ok(rc == 0 and out == "one\n  two\n\nthree", "edit: an unchanged rewrite comes back byte for byte", repr(out))
+        # an empty buffer (a new file in micro): words write from nothing,
+        # the reply ends with a newline; ? and --at say what is missing
+        rc, out, err = spark("edit", "write", "a", "haiku", stdin="")
+        umsg = STATE["bodies"][-1]["messages"][-1]["content"]
+        t.ok(rc == 0 and out.strip() and out.endswith("\n") and "no text yet: write it" in umsg,
+             "edit: an empty text with words is written from nothing, ending with a newline", repr(out) + err)
+        rc, out, err = spark("edit", "?", stdin="")
+        t.ok(rc == 1 and "nothing to ask about yet" in err, "edit: ? on an empty text says so, exit 1", err)
+        rc, out, err = spark("edit", "--at", "0", stdin="")
+        t.ok(rc == 1 and "nothing to continue yet" in err, "edit: --at on an empty text says so, exit 1", err)
         rc, out, _ = spark("edit", "--type", "text", "--at", "4", stdin="Once upon a time")
         t.ok(rc == 0 and out == " and so on.", "edit: --at N completes", repr(out))
         t.ok(STATE.get("model") == "spark", "edit: a completion names the spark role", str(STATE.get("model")))
@@ -750,7 +760,7 @@ def main():
         umsg = STATE["bodies"][-1]["messages"][-1]["content"]
         t.ok(rc == 0 and umsg.startswith("add a docstring\n\nSelected part of s.py (python):\ndef f():") and "Output:" not in umsg, "edit: --part labels a selection", repr(umsg[:80]))
         rc, out, err = spark("edit", "tighten")
-        t.ok(rc == 1 and "stdin" in err, "edit: refuses without stdin", err)
+        t.ok(rc == 0 and out.endswith("\n"), "edit: words with no text write from nothing (was a refusal before v1.11)", repr(out) + err)
         rc, out, err = spark("edit", stdin="text")
         t.ok(rc == 2 and "spark edit --" in out, "edit: no words and no --at is the usage, exit 2", out[:60] + err)
         rc, out, err = spark("edit", "--at", stdin="text")
@@ -1201,7 +1211,7 @@ def main():
         t.ok(rc == 0 and "spark font" in out and "spark bar" not in out and "spark shell on" in out,
              "spark help with the layer off: font stays (core), bar folds into spark shell on", out)
         rc, out, _ = spark("help", extra=dict(off, SITE_SHELL="on"))
-        t.ok(rc == 0 and "spark bar" in out and "spark shell (spark shell on)" in out,
+        t.ok(rc == 0 and "spark bar" in out and "the interface" in out,
              "spark help with SITE_SHELL=on lists the shell block", out)
 
         # the pager: piped output never touches $PAGER -- a pager that would
@@ -1302,9 +1312,10 @@ def main():
             spark("quiet", "login", "off", extra=dict(off, SITE_SHELL="on"))
         rc, out, _ = spark("theme", "-h", extra=off)
         t.ok(rc == 0 and out.startswith("spark theme -- "), "spark theme stays usable with the layer off", out)
-        # the palette's two runtime files, one writer: spark theme NAME
-        # writes theme.env and console-colors (the VT escapes); none removes
-        # theme.env and turns console-colors into the one reset escape
+        # the palette's runtime files, one writer: spark theme NAME writes
+        # theme.env, console-colors (the VT escapes) and console-colors.rgb
+        # (setvtrgb's three lines, for the boot unit); none removes theme.env
+        # and turns both into the VGA sixteen
         rc, out, _ = spark("theme", "gruvbox-dark", extra=off)
         theme_env = open(home + "/.config/spark/theme.env").read()
         cc = open(home + "/.config/spark/console-colors").read()
@@ -1312,10 +1323,17 @@ def main():
              "spark theme NAME writes theme.env from the palette", theme_env)
         t.ok(cc.startswith("\033]P0282828") and "\033]P9fb4934" in cc and "\033]Pfebdbb2" in cc,
              "console-colors holds the sixteen VT escapes, ansi 0-15 in hex", repr(cc))
+        rgb = open(home + "/.config/spark/console-colors.rgb").read()
+        from spark import theme as _theme_mod, config as _config_mod
+        _pal = _config_mod.theme_palette("gruvbox-dark", REPO)
+        t.ok(rgb == _theme_mod.vt_lines([_pal["THEME_ANSI_%d" % i] for i in range(16)]) and rgb.startswith("40,204,152,215,")
+             and len(rgb.splitlines()) == 3 and all(len(l.split(",")) == 16 for l in rgb.splitlines()),
+             "console-colors.rgb holds setvtrgb's three lines: red, green, blue of ansi 0-15", repr(rgb))
         rc, out, _ = spark("theme", "none", extra=off)
         t.ok(rc == 0 and not os.path.exists(home + "/.config/spark/theme.env")
-             and open(home + "/.config/spark/console-colors").read() == "\033]R\n",
-             "spark theme none removes theme.env and leaves the VT reset", out)
+             and open(home + "/.config/spark/console-colors").read().startswith("\033]P0000000\033]P1aa0000")
+             and open(home + "/.config/spark/console-colors.rgb").read().splitlines()[0] == "0,170,0,170,0,170,0,170,85,255,85,255,85,255,85,255",
+             "spark theme none removes theme.env and leaves the VGA sixteen in both console files", out)
         rc, out, _ = spark("theme", "nosuch", extra=off)
         t.ok(rc == 2 and out.startswith("spark theme -- "), "spark theme nosuch: usage, exit 2", out)
         rc, out, _ = spark("shell", "on", extra=off)

@@ -319,6 +319,20 @@ THEME_KEYS = (["THEME_BG", "THEME_FG", "THEME_ACCENT", "THEME_MUTED", "THEME_BTO
               + ["THEME_ANSI_%d" % i for i in range(16)])
 
 
+def _vt_palette(sysfs):
+    """The kernel's current default VT palette as setvtrgb's three lines,
+    from /sys/module/vt/parameters/default_{red,grn,blu}; None when
+    unreadable (no VT here)."""
+    lines = []
+    for ch in ("red", "grn", "blu"):
+        try:
+            with open(os.path.join(sysfs, "default_" + ch), encoding="utf-8") as f:
+                lines.append(f.read().strip())
+        except OSError:
+            return None
+    return lines
+
+
 @row("SOFTWARE")
 def row_theme(ctx):
     """The chosen palette actually applied: ~/.config/spark/theme.env (what
@@ -349,6 +363,18 @@ def row_theme(ctx):
                     "spark theme %s" % name)
     if not IS_MAC and not os.path.isfile(os.path.join(CONFIG_DIR, "console-colors")):
         return fail("%s -- theme.env current, but no console-colors for the VT" % name, "spark theme %s" % name)
+    if not IS_MAC and not is_wsl():
+        # the kernel's default palette (sysfs, world-readable) is what the
+        # spark-console unit set at boot -- the login screen and every VT
+        live = _vt_palette(os.environ.get("SPARK_SYSFS_VT", "/sys/module/vt/parameters"))
+        try:
+            with open(os.path.join(CONFIG_DIR, "console-colors.rgb"), encoding="utf-8") as f:
+                mine = [line.strip() for line in f.read().splitlines()[:3]]
+        except OSError:
+            mine = None
+        if live and mine and live != mine:
+            return warn("%s -- theme.env current, but the console's boot palette is another" % name,
+                        "./bootstrap.sh   (the vt-palette row: setvtrgb at boot, sudo)")
     if ctx.cfg.shell and shutil.which("micro"):
         # a micro the user has shows the palette only while its own
         # settings say colorscheme spark
@@ -1539,6 +1565,13 @@ def make_fixture(root, good, stub_url=""):
             f.write("\n".join(["THEME_BG=#000000"] + fixture_theme[1:]) + "\n")
     with open(os.path.join(cfgd, "console-colors"), "w") as f:
         f.write("".join("\033]P%x101010" % i for i in range(16)) + "\n")
+    with open(os.path.join(cfgd, "console-colors.rgb"), "w") as f:
+        f.write(("16," * 15 + "16\n") * 3)
+    # the live kernel palette the theme row compares with (sysfs, pinned)
+    os.makedirs(os.path.join(root, "vt"))
+    for ch in ("red", "grn", "blu"):
+        with open(os.path.join(root, "vt", "default_" + ch), "w") as f:
+            f.write("16," * 15 + "16\n")
     # soul and memory: the user's files, private (good) or world-readable and
     # the old key still set (bad); one thread, 0600 or not
     with open(os.path.join(cfgd, "soul"), "w") as f:
@@ -1679,7 +1712,7 @@ def make_fixture(root, good, stub_url=""):
             "PATH": os.path.join(home, ".local", "bin") + ":" + bin_ + ":" + os.environ.get("PATH", ""),
             "SPARK_REPO": repo, "SPARK_ENGINE_DIR": engine if good else os.path.join(root, "nope"),
             "SPARK_API_KEY": "stub-token", "SPARK_SERVICE": "none", "TMUX": "", "SPARK_SYSFS_DRM": os.path.join(root, "drm"),
-            "SPARK_PROC_VERSION": os.path.join(root, "version"),
+            "SPARK_PROC_VERSION": os.path.join(root, "version"), "SPARK_SYSFS_VT": os.path.join(root, "vt"),
             "SPARK_MEM_TOTAL_GB": "16" if good else "8", "SHELL": "/bin/zsh" if IS_MAC else "/bin/bash",
             "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8"}
 

@@ -149,11 +149,19 @@ ROADMAP.md      what comes after the current release, in order
 ```
 
 Runtime paths: config `~/.config/spark/{site.env,spark.env,theme.env,
-console-colors,soul,memory}` (`console-colors` is the precomputed Linux VT
-palette -- `\033]P<n><rrggbb>` per ansi colour, `\033]R` after `none` --
-written by `spark theme`/`spark setup` only, applied by the rc hooks only
-when `TERM=linux`; `soul` and `memory` are prose, 0600, yours: never
-linked from `home/`);
+console-colors,console-colors.rgb,soul,memory}` (`console-colors` is the
+precomputed Linux VT palette -- `\033]P<n><rrggbb>` per ansi colour, the
+sixteen VGA values after `none`, never `\033]R`: the kernel's defaults may
+be a theme -- written by `spark theme`/`spark setup` only, sent to a
+running VT by `theme.apply_console` followed by a redraw (a framebuffer
+paints a palette only into cells drawn after it) and by the rc hooks at
+login, `TERM=linux` only. `console-colors.rgb` is the same palette in
+`setvtrgb`'s three-line form for root at boot: bootstrap's `vt-palette`
+row installs the one-shot `spark-console.service`, which sets the kernel's
+defaults so the login screen and every VT wear it before any shell runs;
+the `theme` row compares that file with `/sys/module/vt/parameters` --
+`SPARK_SYSFS_VT` pins it in the fixture; `soul` and `memory` are prose,
+0600, yours: never linked from `home/`);
 state `~/.local/state/spark/` (0700: `api-token` 0600, `serve-url`,
 `serve.pid`, `serve.log`, `serve.lock`, `forge-token` 0600, `ember-token`
 0600, `forge-url`, `forge.pid`, `forge.log`, `forge.lock`,
@@ -352,8 +360,9 @@ may change freely.
     hints that ride in the user message (the name is a basename, never a
     path; no `[cwd]` line, ever). Output is raw streamed text: no mark, no wrap, a code
     fence around the answer removed, a rewrite ending the way the input
-    ended. Exit 0; 1 when nothing came in or no brain answers; 2 for the
-    usage. No thread is kept; the turn record is numbers (`kind`,
+    ended; an empty text with words is written from nothing (a new file
+    in the editor), the reply ending with a newline. Exit 0; 1 when `?` or
+    `--at` find no text, or no brain answers; 2 for the usage. No thread is kept; the turn record is numbers (`kind`,
     `chars`, `ms`). A `?` is two requests: the reading (`edit-read`, a
     JSON `{language, kind}` from the first 800 chars, restated as `You
     read this as: ...`; any failure is silence) and the answer. A `?`

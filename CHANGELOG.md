@@ -1,5 +1,28 @@
 # Changelog
 
+## v1.11
+
+The help in the maintainer's own order; an empty buffer is a page to
+write on; the console palette paints the whole screen, and the login one.
+
+- `spark help` reads top to bottom as spark (status, off|on, soul, memory,
+  ver, chat, ask, do, edit, then a `try:` list of the prompt gestures),
+  the FORGE: server/client, the machine (setup, check, update), the
+  interface (shell, bar, theme, quiet, font) and "less often used"; the
+  tail is the version alone (README carries what leaves the machine).
+  46 lines with the shell off, 48 on. CHEATSHEET follows the same order.
+- `spark edit` on an empty text: words write it from nothing (a new file
+  in micro no longer answers "edit reads stdin"), the reply ending with a
+  newline; `?` and Enter alone say what is missing in one infobar line.
+- The console palette paints the whole screen: a framebuffer console
+  colours only what is drawn after a palette change, so `spark theme`
+  and `spark shell on|off` redraw after sending it. The login screen is
+  drawn before any shell, so bootstrap's new `vt-palette` row installs a
+  one-shot `spark-console.service` (root, `setvtrgb`, the same sudo as
+  the font) that sets the kernel's defaults at boot from
+  `console-colors.rgb`, for every VT; `none` writes the VGA sixteen
+  instead of a reset, and the `theme` row watches the boot palette.
+
 ## v1.10
 
 Three domains share the one command: spark, spark shell, and the smart
