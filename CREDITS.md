@@ -87,6 +87,7 @@ repositories, unpinned. No editor is among them: an app's plugin is its own repo
 - unzip -- Info-ZIP (the Nerd Font's archive)
 - fontconfig -- MIT-style
 - ncurses-bin -- MIT-style (ncurses)
+- diffutils -- GPL-3.0-or-later (`cmp`, for install.sh's rendered files, on Arch)
 - ncurses -- MIT-style (ncurses-bin, on Arch)
 - pacman-contrib -- GPL-2.0-or-later (`checkupdates`, on Arch)
 - bat -- MIT/Apache-2.0

@@ -1458,6 +1458,9 @@ def make_fixture(root, good, stub_url=""):
     _stub(os.path.join(repo, "bin", "spark"), "#!/bin/sh\necho stub\n")
     os.symlink("spark", os.path.join(repo, "bin", "explain"))
     open(os.path.join(repo, "Brewfile"), "w").close()
+    # the package tables are data the packages row reads (packages.table):
+    # the real files, so the row asks the stubbed manager for the real names
+    shutil.copytree(os.path.join(REPO, "distro"), os.path.join(repo, "distro"))
     # the rc files spark links with the shell layer on (<os>/home/), stubs
     from . import site
     osdir = os.path.join(repo, "macos" if IS_MAC else "linux", "home")
