@@ -423,10 +423,18 @@ def step_data(ctx):
     ctx.remove("data", DATA_DIR, "%s -- the engine and the models, %.1f GB" % (_tilde(DATA_DIR), ctx.freed / 2**30))
 
 
+def _essential(pkg):
+    """dpkg's Essential flag: apt refuses to remove such a package (ncurses-bin
+    is one), so it never appears in the list."""
+    rc, out = run(["dpkg-query", "-W", "-f=${Essential}", pkg], timeout=10)
+    return rc == 0 and out.strip() == "yes"
+
+
 def _packages():
     """The packages bootstrap installed, from its own lists (Linux) or the
-    Brewfile (macOS): what a removal names. bash and the AI's four
-    prerequisites (git curl ca-certificates python3) are never removed."""
+    Brewfile (macOS): what a removal names. bash, anything dpkg marks
+    Essential, and the AI's four prerequisites (git curl ca-certificates
+    python3) are never removed."""
     if IS_MAC:
         try:
             with open(os.path.join(REPO, "Brewfile"), encoding="utf-8") as f:
@@ -442,7 +450,7 @@ def _packages():
     for group in ("PKG_ENGINE", "PKG_AI", "PKG_SHELL", "PKG_CLI"):
         m = re.search(r'^%s="([^"]*)"' % group, src, re.M)
         if m:
-            pkgs += [p for p in m.group(1).split() if p != "bash"]
+            pkgs += [p for p in m.group(1).split() if p != "bash" and not _essential(p)]
     return pkgs
 
 
