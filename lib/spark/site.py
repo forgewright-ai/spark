@@ -1210,6 +1210,7 @@ def cmd_shell(args):
             if cfg.theme != "none" and not os.environ.get("SPARK_NO_APPLY"):
                 from . import theme
                 theme.write_runtime(cfg.theme)
+                apply(["vt-palette"], stream=True)     # the boot unit: the files exist only now
                 theme.apply_console()
                 say("ok     theme        %s -> ~/.config/spark/theme.env (+ console-colors)" % cfg.theme)
                 if IS_MAC:
@@ -1240,7 +1241,7 @@ def cmd_shell(args):
                 say("ok     tmux         reloaded (your .tmux.conf)")
             else:
                 say("ok     tmux         running sessions keep the look until tmux restarts")
-    rc = apply(["configs", "rc"])
+    rc = apply(["configs", "rc", "vt-palette"])       # the boot palette back to VGA too
     say("packages stay installed -- apt or brew removes them if you want")
     if rc == 0:
         # the same line `on` prints: this shell still has spark's prompt
