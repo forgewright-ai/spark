@@ -909,14 +909,26 @@ elif ! command -v setvtrgb >/dev/null 2>&1; then
     row todo vt-palette "setvtrgb is missing: sudo apt-get install kbd"
 else
     vt_want=$(printf '[Unit]\nDescription=spark: the console palette (setvtrgb)\nAfter=console-setup.service\nConditionPathExists=%s\n\n[Service]\nType=oneshot\nExecStart=/usr/bin/setvtrgb %s\n\n[Install]\nWantedBy=multi-user.target\n' "$vt_file" "$vt_file")
-    if [ "$(cat "$vt_unit" 2>/dev/null)" = "$vt_want" ] && systemctl is-enabled spark-console.service >/dev/null 2>&1; then
-        ok vt-palette "spark-console.service: setvtrgb $vt_file at boot"
+    # the kernel's live defaults (sysfs, the red line) must be the file's:
+    # spark theme and spark shell off rewrite the file under a unit that
+    # already exists, and the defaults follow only when someone sets them
+    vt_live=$(cat "${SPARK_SYSFS_VT:-/sys/module/vt/parameters}/default_red" 2>/dev/null || true)
+    vt_mine=$(sed -n 1p "$vt_file")
+    vt_unit_ok=0
+    [ "$(cat "$vt_unit" 2>/dev/null)" = "$vt_want" ] && systemctl is-enabled spark-console.service >/dev/null 2>&1 && vt_unit_ok=1
+    if [ "$vt_unit_ok" = 1 ] && [ "$vt_live" = "$vt_mine" ]; then
+        ok vt-palette "spark-console.service: setvtrgb $vt_file at boot; the defaults are the file's"
+    elif [ "$vt_unit_ok" = 1 ]; then
+        if need vt-palette "setvtrgb $vt_file: the defaults changed under the unit (sudo)"; then
+            as_root setvtrgb "$vt_file" 2>/dev/null || true
+            ok vt-palette "spark-console.service: setvtrgb $vt_file at boot; the defaults set now"
+        fi
     elif need vt-palette "write $vt_unit; enable it; setvtrgb now (sudo)"; then
         printf '%s\n' "$vt_want" | as_root tee "$vt_unit" >/dev/null
         as_root systemctl daemon-reload
         as_root systemctl enable spark-console.service >/dev/null 2>&1 || true
         as_root setvtrgb "$vt_file" 2>/dev/null || true      # the defaults now, for the other VTs
-        ok vt-palette "spark-console.service: setvtrgb $vt_file at boot"
+        ok vt-palette "spark-console.service: setvtrgb $vt_file at boot; the defaults set now"
     fi
 fi
 if [ "$shell" = 0 ]; then

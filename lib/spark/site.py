@@ -1246,7 +1246,7 @@ def cmd_shell(args):
     if rc == 0:
         # the same line `on` prints: this shell still has spark's prompt
         # loaded, and only a new one reads the rc file that was put back
-        say("open a new shell (exec $SHELL)")
+        say("open a new shell (exec $SHELL) -- this one still runs spark's prompt")
     return rc
 
 
