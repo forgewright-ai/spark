@@ -1520,9 +1520,10 @@ def main():
             rc, out, _ = spark("font", extra=wsl)
             t.ok(rc == 0 and out.strip() == "spark font -- no console on WSL 2: the font lives in Windows Terminal's settings",
                  "WSL 2: spark font shows the one line (contract 8), exit 0", out)
+            before = open(home + "/.config/spark/site.env").read()
             rc, out, _ = spark("font", "Terminus", "16x32", extra=wsl)
-            t.ok(rc == 2 and "no console on WSL 2" in out and "SITE_FONT_FACE" not in open(home + "/.config/spark/site.env").read(),
-                 "WSL 2: spark font FACE SIZE refuses with the same line, exit 2, nothing written", out)
+            t.ok(rc == 2 and "no console on WSL 2" in out and open(home + "/.config/spark/site.env").read() == before,
+                 "WSL 2: spark font FACE SIZE refuses with the same line, exit 2, site.env untouched", "%d %s" % (rc, out))
             rc, out, _ = spark("quiet", "boot", "on", extra=dict(wsl, SITE_SHELL="on"))
             t.ok(rc == 2 and out.strip() == "spark quiet boot -- no GRUB on WSL 2: Windows boots it",
                  "WSL 2: spark quiet boot on refuses: no GRUB", out)
