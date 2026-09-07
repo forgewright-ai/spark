@@ -1,8 +1,12 @@
 # spark -- for agents and contributors
 
-spark is a local AI at your shell prompt, bare bones, for Linux and
-macOS; nothing leaves the machine except pinned downloads and your own
-talk to a model you run.
+spark is a local AI at your shell prompt, bare bones, for Linux, macOS
+and Windows through WSL 2; nothing leaves the machine except pinned
+downloads and your own talk to a model you run. Three domains share the
+one command: spark (the AI), spark shell (`spark shell on`, the look and
+the tools) and the smart apps (clients of spark, each in its own repo).
+CI has no WSL runner: the WSL 2 branch is pinned by fixture, and a real
+run there is the maintainer's, by hand.
 
 ## The landing rule
 
@@ -88,6 +92,10 @@ home paths naming a user, with no skip path for those.
   use a throwaway `HOME` and the matching `XDG_*` dirs.
 - Change the banner (`home/.config/spark/banner`): it is spark's own
   artwork.
+- Put an app inside this repository: no plugin, no app package, no app
+  check row. An app is a client of one spark verb (`spark edit`, `spark
+  line`, the FORGE's API), in a repository of its own -- spark-micro is
+  the shape.
 - Add a model row without its size and sha256 from Hugging Face's file
   metadata and its license, or mark one `_TESTED="line"` without the
   line proof (`spark line` answers valid JSON for it).

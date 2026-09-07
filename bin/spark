@@ -29,89 +29,61 @@ from spark import MARK, page, say  # noqa: E402
 
 USAGE_HEAD = """%s -- your own AI, on your own machine, at no cost
 
-the AI
-  spark chat [words]          a conversation (/help lists its verbs, Ctrl-D
-                              ends): /resume picks up an older thread,
-                              /clear wipes the screen while the thread goes on
-  spark chat --thread N       one more turn on an older thread, straight from
-                              the command line (N from the /resume listing)
+spark
+  spark chat [words]          a conversation; /help lists its verbs, Ctrl-D ends
   spark [@FILE] <words>       ask about anything, or a file; a streamed answer
   spark do <words>            a task, one command at a time; you confirm each
-  spark edit [?] [words]      the text on stdin: words rewrite it, ? asks
-                              about it, --at N completes; micro's Alt-s (-h)
+  spark edit [?] [words]      the text on stdin: words rewrite it, ? asks,
+                              --at N completes; an editor's client (-h)
   ?? words                    follow up on the last answer (same thread)
   spark                       status: brain, widget, server, soul, memory, last
   spark off | on              silence / restore the prompt, every pane at once
 
-at the prompt: the surprise -- your question becomes a command in your line
-  ? words   or   words?   Enter   the command lands in your line, hint above
+at the prompt: your question becomes a command in your line
+  ? words   or   words?       Enter: the command lands in your line, hint above
   Esc s                       ask about the line you are on, no ? needed
   cmd 2>&1 | explain          what went wrong, and the fix
-  spark <TAB>                 completes the verbs, then each verb's words --
-                              theme and model names included, offline
+  spark <TAB>                 the verbs, then each verb's words -- offline
 
 the FORGE: the agent spark keeps on this machine, one identity
   spark soul [edit|reset]     who it is: ~/.config/spark/soul, yours
   spark remember <words>      a fact it keeps; spark forget N; spark memory
-  spark ember [NAME|auto|none]  a second model for conversations (opt-in)
   spark forge [on|off]        the FORGE on the LAN: the API and the page
-  spark forge --print-url     the page's login URL, and the admin token
-  spark forge --print-client  what a peer machine needs: URL + a user there
-  spark forge token --new     rotate the admin token; users rotate their own
-  spark user [add NAME]       the named users, each with their own sealed
-                              threads (list, login, logout, remove, token --new)
+  spark forge --print-url     the login URL and token; --print-client for a peer
+  spark user [add NAME]       the named users, each with sealed threads (-h)
 
 the server
-  spark model [NAME|auto|none]  choose the served model: download, restart
-  spark model list            the table: size, RAM, license, tested, tok/s
-  spark model budget [N]      percent of RAM+GPU memory auto may use (10-95)
-  spark model add URL         your own row (--sha256 HEX, --license "NAME URL")
-  spark model verify | rm NAME  re-hash every download; delete an unused file
-  spark serve                 start it, one LAN address, token required
-                              (-h: --foreground, --host, --print-client)
-  spark stop [--force]        stop it; --force also the unit's server
+  spark model [NAME|auto|none]  the served model: download, restart (-h: more)
+  spark model list            the table; -h: budget N, add URL, verify, rm NAME
+  spark serve | stop          one LAN address, token required; stop [--force]
+  spark ember [NAME|auto|none]  a second model for conversations (opt-in)
 """ % MARK
 
 USAGE_MACHINE = """the machine
-  spark setup                 the guided first run: name, user, model; -h:
-                              --yes --model --name --user --theme --no-serve
-  spark check                 drift report; exit 0 = every promise kept
-                              (--watch N, --porcelain, --selftest; -h: more)
+  spark setup                 the guided first run: name, user, model (-h)
+  spark check                 drift report; exit 0 = every promise kept (-h)
   spark update [--dry-run]    the newest tag, or main on a developer clone
-  spark shell [on|off]        the shell layer: off = the prompt widget only
-  spark headless [on|off]     the FORGE up from boot, never asleep (a brain)
   spark client [URL|off]      answer from another machine's FORGE; none here
+  spark headless [on|off]     the FORGE up from boot, never asleep (a brain)
   spark quiet [SUB on|off]    start (banner), login (motd), boot (GRUB), audio
   spark font [FACE SIZE|list]  the console font (Linux) / Terminal.app's
   spark ver                   logo, version, credits
-
-less often (long output pages via $PAGER at a terminal; piped stays plain)
-  spark last                  the last exchange, with its tok/s
-  spark history [clear]       the threads kept here; clear removes them all
-  spark stats [--week]        tok/s, latency, cache hits from real turns
-  spark bench [--tune]        llama-bench; --tune hunts the best settings
-  spark tune [show|apply]     the winner; apply writes spark.env, restarts
-  spark brain                 what answers right now: a FORGE or a llama-server
+  less often                  last, history [clear], stats [--week], brain,
+                              bench [--tune], tune [show|apply] -- each has -h
 """
 
-USAGE_SHELL = """the shell (spark shell on)
+USAGE_SHELL = """spark shell (spark shell on)
+  spark shell [on|off]        the shell layer: tmux, starship, fzf ... + bar
   spark bar [on|off]          tmux's status line: shown or hidden; set it
-  spark theme [NAME|show]     the palettes, and yours in ~/.config/spark/themes;
-                              choose one; show = its colours
+  spark theme [NAME|show]     the palettes, and yours; show = its colours
 """
 # with the layer off, the block above folds into this one line
-USAGE_SHELL_OFF = """  spark shell on              tmux, starship, micro ... + bar
+USAGE_SHELL_OFF = """  spark shell on              tmux, starship, fzf, eza, bat, btop + bar, theme
 """
 
-USAGE_TAIL = """what leaves this machine: the line you typed, the shell and OS name, and --
-only where a command is proposed (the prompt line, do, explain) -- the
-directory path; with a conversation your soul, your remembered facts and the
-thread's earlier turns (the prompt line sends machine facts only); for
-explain the piped text (last 6 kB); for @FILE its first 4 kB and last 12 kB;
-for spark do each step's output (last 4 kB); from the editor (spark edit)
-the file's name and its text -- 6 kB around the cursor, 12 kB for a rewrite,
-16 kB for a question -- never its path. Nothing else, and only to the FORGE
-or llama-server you configured.                           version %s
+USAGE_TAIL = """what leaves this machine: the line you typed, the shell and OS name, and what
+each verb needs of your text (README, "What leaves this machine", says how
+much). Nothing else, and only to the brain you configured.    version %s
 """
 
 

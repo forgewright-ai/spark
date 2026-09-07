@@ -4,7 +4,7 @@
     <code id="ol">curl -fsSL https://raw.githubusercontent.com/forgewright-ai/spark/main/get | sh</code>
     <button type="button" id="copy">copy</button>
   </div>
-  <p class="hint">Debian 13 or macOS (for more details check <a href="install/">INSTALL.md</a>).</p>
+  <p class="hint">Debian 13, Ubuntu 24.04, macOS, or Windows with WSL 2 (<a href="install/">INSTALL.md</a> says how).</p>
 </section>
 
 <section>
@@ -22,6 +22,19 @@ chat&gt; <span class="caret"></span></pre></div>
   <p class="cmd"><span class="p">~ &gt; </span>files bigger than 1G modified this week?</p>
   <div class="demo"><pre><span class="mark">*</span> Finds files &gt;1G modified in last 7 days               <span class="c">&lt;- the hint, above the prompt</span>
 ~ &gt; find . -type f -size +1G -mtime -7                  <span class="c">&lt;- the command, in your line</span></pre></div>
+</section>
+
+<section>
+  <p class="cmd"><span class="p">~ &gt; </span>spark shell on</p>
+  <p class="hint">Optional: spark's own shell for an AI box -- tmux, starship, fzf, eza, bat, btop, one palette on every surface.</p>
+</section>
+
+<section>
+  <p class="cmd"><span class="p">~ &gt; </span>micro draft.md<span class="k">   Alt-s</span></p>
+  <div class="demo"><pre>spark&gt; <span class="c">? is the ending earned</span>
+<span class="mark">*</span> Not yet: "she turned back" comes with nothing before it that
+  would make her. One scene of doubt, earlier, would earn it.</pre></div>
+  <p class="hint">spark inside micro: <a href="https://github.com/forgewright-ai/spark-micro">github.com/forgewright-ai/spark-micro</a> -- a clone and one binding line. Any editor joins the same way, as a client of <code>spark edit</code>.</p>
 </section>
 
 <section>

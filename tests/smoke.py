@@ -1201,7 +1201,7 @@ def main():
         t.ok(rc == 0 and "spark font" in out and "spark bar" not in out and "spark shell on" in out,
              "spark help with the layer off: font stays (core), bar folds into spark shell on", out)
         rc, out, _ = spark("help", extra=dict(off, SITE_SHELL="on"))
-        t.ok(rc == 0 and "spark bar" in out and "the shell (spark shell on)" in out,
+        t.ok(rc == 0 and "spark bar" in out and "spark shell (spark shell on)" in out,
              "spark help with SITE_SHELL=on lists the shell block", out)
 
         # the pager: piped output never touches $PAGER -- a pager that would

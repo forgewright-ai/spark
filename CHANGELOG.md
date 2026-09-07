@@ -1,5 +1,46 @@
 # Changelog
 
+## v1.10
+
+Three domains share the one command: spark, spark shell, and the smart
+apps in their own repositories; Windows through WSL 2, honestly.
+
+- spark ships no app. The micro plugin moved to its own home,
+  github.com/forgewright-ai/spark-micro, and installs micro's own way: a
+  clone into `~/.config/micro/plug/spark` and one `Alt-s` line. An editor
+  becomes smart by being a client of `spark edit`; spark keeps the verb
+  and its judge (the audition), never the plugin, the packages or the row.
+  `spark update` hands back the links an older install made (the `micro`
+  bootstrap row), then clone as the plugin's README says.
+- `spark shell on` installs no editor: tmux, starship, fzf, zoxide, eza,
+  bat, btop and the Nerd Font, and nothing else. A micro you have still
+  wears the palette (its colorscheme and the seeded `settings.json`,
+  rendered only when micro is on PATH); `spark shell off` keeps
+  `settings.json` -- it is micro's after the seed -- and drops only the
+  colorscheme key it seeded. The rc files set `EDITOR=micro` only when
+  micro is there; the core hooks export nothing of micro's.
+- Windows users have a way in: Ubuntu on WSL 2 is Linux to spark, minus
+  what the VT console and GRUB own. `spark font` and `spark quiet boot`
+  say so in one line and refuse to set; `spark headless on` refuses (the
+  distro stops with its last window); the gpu, services and encryption
+  rows say WSL 2; the status and the check header name it. Pinned by
+  fixture (a fifth selftest pass, Linux only) -- CI has no WSL runner.
+- `spark help` is sectioned by domain -- spark, at the prompt, the FORGE,
+  the server, the machine, spark shell -- and half as long: 51 lines with
+  the shell on, no line wider than 80. The forms still live on each verb's
+  `-h`. README opens with the three ways in; INSTALL is sectioned the same
+  way, with a Windows walk and per-OS notes for three tribes; CHEATSHEET
+  and CREDITS follow the layers.
+- The hostname row leaves the shell gate: `SITE_SET_HOSTNAME` is identity,
+  not look. git and shellcheck leave the user's packages (core has git;
+  shellcheck is a contributor's tool). The v1.3 stubs `bootconfig` and
+  `talk` are gone; the page's two boot buttons run `spark quiet boot
+  on|off`. One verb table drives dispatch and the near-miss hint. tmux's
+  status line asks `spark bar` every 15 s, not 5.
+- The docs' counts are tests: the category split, the roadmap's version
+  and the page sources join the derived facts `tests/docs_test.py` reads.
+  38 check rows.
+
 ## v1.9
 
 A stranger's first run: three questions, and a machine that looks untouched

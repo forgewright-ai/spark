@@ -23,17 +23,7 @@ starship -- https://github.com/starship/starship -- ISC
 Version 1.26.0 (`STARSHIP_VERSION` in `bootstrap.sh`), pinned by sha256
 on Linux; Homebrew installs the same tool on macOS with no version pin.
 
-micro's aspell plugin, installed by `micro -plugin install aspell` from
-micro's own plugin channel -- not pinned by spark; the shell layer only
-(`spark shell on`).
-
-## The editor's language
-
-Lua -- https://www.lua.org -- MIT
-(c) Lua.org, PUC-Rio
-
-micro's spark plugin (`home/.config/micro/plug/spark/spark.lua`) is written
-in it; micro embeds the interpreter (gopher-lua), spark ships no copy.
+## The tale
 
 The text in `home/.config/spark/tale` is the maintainer's own, CC BY-NC-ND 4.0.
 
@@ -61,17 +51,27 @@ Colour values only, no code copied; the license is the upstream's:
 - Solarized -- https://ethanschoonover.com/solarized -- MIT
 - Tokyo Night -- https://github.com/folke/tokyonight.nvim -- Apache-2.0
 
+## The AI's packages (apt, Linux; macOS needs none)
+
+None of these is shipped by spark; apt installs them from Debian's or
+Ubuntu's own repositories, unpinned.
+
+- git -- GPL-2.0-only
+- curl -- the curl license
+- python3 -- PSF-2.0
+- libgomp1 -- GPL-3.0-or-later, with the GCC runtime exception
+- libvulkan1 -- Apache-2.0 (the vulkan build only)
+- mesa-vulkan-drivers -- MIT and others (the vulkan build only)
+
 ## Shell tools (apt / Homebrew, `spark shell on`)
 
-None of these is shipped by spark; apt and Homebrew install them from
-their own repositories, unpinned.
+The shell layer's, installed from apt's or Homebrew's own repositories,
+unpinned. No editor is among them: an app's plugin is its own repository
+(micro: github.com/forgewright-ai/spark-micro, with its own credits).
 
 - bash -- GPL-3.0-or-later
 - tmux -- ISC
-- git -- GPL-2.0-only
-- curl -- the curl license
-- unzip -- Info-ZIP
-- python3 -- PSF-2.0
+- unzip -- Info-ZIP (the Nerd Font's archive)
 - fontconfig -- MIT-style
 - ncurses -- MIT-style
 - bat -- MIT/Apache-2.0
@@ -82,13 +82,6 @@ their own repositories, unpinned.
 - fd -- MIT/Apache-2.0
 - jq -- MIT
 - btop -- Apache-2.0
-- micro -- MIT
-- aspell -- LGPL-2.1-or-later
-- aspell-en -- SCOWL
-- shellcheck -- GPL-3.0-only (development only)
-- libgomp1 -- GPL-3.0-or-later, with the GCC runtime exception
-- libvulkan1 -- Apache-2.0
-- mesa-vulkan-drivers -- MIT and others
 
 ## Models
 

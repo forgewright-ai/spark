@@ -72,6 +72,16 @@ def main():
     for doc in ("CLAUDE.md", "INSTALL.md"):
         for m in re.finditer(r"spark check`?\s+(?:has )?(\d+) rows", read(doc)):
             check(int(m.group(1)) == n_rows, "%s: '%s' is check.py's count (%d)" % (doc, m.group(0), n_rows))
+    # the split by category CLAUDE.md states ("12 SOFTWARE, 17 CAPABILITY, 9 NONFUNCTIONAL")
+    src_rows = read(os.path.join("lib", "spark", "check.py"))
+    for cat in ("SOFTWARE", "CAPABILITY", "NONFUNCTIONAL"):
+        n_cat = len(re.findall(r'^@row\("%s"' % cat, src_rows, re.M))
+        m = re.search(r"(\d+)\s+%s" % cat, read("CLAUDE.md"))
+        check(m is not None and int(m.group(1)) == n_cat, "CLAUDE.md: %d %s rows (check.py says %d)" % (int(m.group(1)) if m else -1, cat, n_cat))
+    # the roadmap starts where the changelog's top section is
+    top = re.search(r"^## v(\d+\.\d+)", read("CHANGELOG.md"), re.M).group(1)
+    m = re.search(r"What comes after v(\d+\.\d+)", read("ROADMAP.md"))
+    check(m is not None and m.group(1) == top, "ROADMAP.md: 'What comes after v%s' names CHANGELOG.md's top section" % top)
     # the gated row lists: CLAUDE.md states their counts, and names the
     # client's rows one by one
     src = read(os.path.join("lib", "spark", "check.py"))
@@ -100,7 +110,9 @@ def main():
             check(int(m.group(1)) == n_models, "%s: '%s' is models.env's count (%d)" % (doc, m.group(0), n_models))
     # the page renders docs that exist, and nothing else is named as a page
     build = read(os.path.join("www", "build.py"))
-    for src in re.findall(r'\("[a-z]+", "[a-z]+", "([A-Za-z.]+)", "(?:md|text)"\)', build):
+    pages = re.findall(r'\("([a-z-]+)", "([a-z -]+)", "([A-Za-z0-9./_-]+)", "(?:md|text)"\)', build)
+    check(len(pages) >= 6, "www/build.py: PAGES parsed (%d doc pages)" % len(pages))
+    for _slug, _title, src in pages:
         check(os.path.exists(os.path.join(ROOT, src)), "www/build.py renders %s, which exists" % src)
     # the CHANGELOG's top section is the newest tag or the one right after it
     # (written before its tag, CLAUDE.md Releasing) -- never further ahead,
@@ -120,7 +132,8 @@ def main():
     # the lists that are gone stay gone
     for doc in ("README.md", "INSTALL.md", "CLAUDE.md", "CHEATSHEET.txt", "CREDITS.md", "CONTRIBUTING.md",
                 "AGENTS.md", "ROADMAP.md", "site.env.example"):
-        check(not re.search(r"embers\.env|community\.env|\bcurated\b", read(doc)), "%s: no retired list word" % doc)
+        check(not re.search(r"embers\.env|community\.env|\bcurated\b|PKG_QA|PKG_EDITOR|micro-aspell|\bbootconfig\b", read(doc)),
+              "%s: no retired list word" % doc)
     if fails:
         print("docs_test: %d failed" % len(fails))
         return 1

@@ -13,26 +13,12 @@ gate on Ubuntu, Debian 13, and macOS.
 git clone https://github.com/forgewright-ai/spark.git
 cd spark
 git config core.hooksPath .githooks
-# shellcheck is a contributor's tool, not a user's package: apt-get install
-# shellcheck, or brew install shellcheck (the hook skips it with a notice)
-/usr/bin/python3 -m py_compile lib/spark/*.py bin/spark
-sh -n bootstrap.sh install.sh lib/env.sh
-shellcheck -S warning bootstrap.sh install.sh lib/env.sh
-/usr/bin/python3 tests/smoke.py
-/usr/bin/python3 tests/serve_smoke.py
-/usr/bin/python3 tests/forge_smoke.py
-/usr/bin/python3 tests/bench_smoke.py
-/usr/bin/python3 tests/docs_test.py
-/usr/bin/python3 tests/widget_pty.py zsh home/.config/spark/widget.zsh
-/usr/bin/python3 tests/widget_pty.py pager
-/usr/bin/python3 tests/widget_pty.py completion zsh home/.config/spark/completion.zsh
-/usr/bin/python3 bin/spark check --selftest
-sh tests/install_test.sh
-sh tests/get_test.sh
-sh tests/update_test.sh
 ```
 
-The full list, and why each step matters, is in `AGENTS.md`. Changing
+Then the gate: the list in `AGENTS.md`, run in that order, is what the
+pre-commit hook runs -- one copy, there. shellcheck is a contributor's
+tool, not a user's package: `apt-get install shellcheck` or `brew install
+shellcheck` (the hook skips it with a notice when absent). Changing
 one of the editor's briefs (`persona.MODE_EDIT_*`)? Run
 `tests/audition.py` against a live brain and put its before and after
 totals in the pull request -- the briefs are judged by lints, not taste.
@@ -65,6 +51,12 @@ request.
 Commit messages: a lowercase title line, and a body that says why, not
 just what. No trailers are required from you.
 
+An editor or another app becomes smart by being a client of one spark
+verb (`spark edit`, `spark line`, the FORGE's API), in a repository of
+its own -- spark-micro is the shape. spark itself ships no app, no app
+package and no app check row; a pull request adding one is turned into a
+pointer to the app's own repository.
+
 ## Privacy gate
 
 The pre-commit hook checks staged changes for e-mail addresses, private
@@ -81,5 +73,5 @@ one for a bug; anything else is a blank issue.
 
 ## Roadmap
 
-`ROADMAP.md` lists what comes next, the editor first; an idea that is
-not there is an issue away.
+`ROADMAP.md` lists what comes next; an idea that is not there is an
+issue away.

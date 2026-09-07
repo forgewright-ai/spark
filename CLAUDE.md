@@ -5,7 +5,7 @@ the full reference.
 
 spark is a local AI at the shell prompt that never leaves your LAN, plus the
 minimal workstation setup that keeps it reproducible and observable on a fresh
-Debian-family Linux or macOS. spark is the seed; the FORGE is the agent it
+Debian-family Linux, macOS, or Ubuntu on WSL 2. spark is the seed; the FORGE is the agent it
 builds and keeps on the box -- the model plus one soul, one memory and
 threads, served on the LAN by `spark forge` -- one identity per box, the same
 one for the prompt, the page and any program. This file is the reference for
@@ -16,10 +16,19 @@ they came to be.
 
 - **Simple.** One command (`spark`), one bootstrap, one install script, one
   config format (`KEY=value`), python3 stdlib >= 3.9 or POSIX sh, nothing else.
-- **Two arcs.** Foundation: OS -> local AI (spark) -> smart shell and
-  chat. Productivity: tools -> local AI (spark) -> smart tools. The same
-  spark sits in the middle of both; a tool becomes smart by being a client
-  of one spark verb (micro is the first: `spark edit`, contract 10).
+- **Three domains, one command.** spark: the engine, the model, chat, the
+  `?` prompt line, the FORGE, users -- OS + spark = a smart OS, always
+  installed, one rc line and nothing else touched. spark shell
+  (`SITE_SHELL`, `spark shell on|off`): the look and the workstation tools
+  for a machine that is an AI box -- tmux, starship, fzf, eza, bat, btop,
+  zoxide, the Nerd Font, palettes, the bar, quiet login and boot. Smart
+  apps: a tool becomes smart by being a client of one spark surface --
+  text on stdin (`spark edit`, contract 10; `spark line`, contract 4),
+  the shell (`? words`, `spark do`, `explain`, `$EDITOR`), or the FORGE's
+  API (contract 9) -- and its plugin lives in its own repository, named
+  `spark-<app>` (micro first: forgewright-ai/spark-micro), installed the
+  app's way. spark ships no app, no app package, no app check row, and
+  no per-app verb: a domain is a switch (`spark shell`); an app is not.
 - **The seed and the FORGE.** spark is the seed; the FORGE is the agent it
   builds and keeps. One identity per box (`soul`, `memory`); every client --
   the prompt here, a laptop's `spark`, a script, a phone -- talks to the same
@@ -47,6 +56,11 @@ they came to be.
   anything else): they are read on that console as well.
 - **Symmetric.** Every feature exists on both OSes, using each OS's native
   mechanism (apt/brew, systemd/launchd, bash/zsh). Nothing OS-only ships.
+  Windows is reached through WSL 2: Ubuntu there is Linux to spark, minus
+  what the VT console and GRUB own (`is_wsl()` beside `os_pretty`; the
+  verbs that own those refuse in one signed line, their rows say so, never
+  fail). CI has no WSL runner: `check.WSL_ROWS` and a fifth selftest pass
+  pin the branch by fixture; a real run there is the maintainer's, by hand.
 - **The user chooses.** Theme, prompt, model, workstation name, user -- all
   `site.env` keys with defaults. Nothing aesthetic or sized-to-hardware is
   baked in.
@@ -98,21 +112,18 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 this machine's login: spark user)
 lib/spark/forge/  index.html spark.css spark.js manifest.webmanifest favicon.svg
                   -- the page, ASCII, no inline script
-home/           shared $HOME mirror (linked): micro bindings and the spark plugin
-                (.config/micro/plug/spark/: spark.lua, repo.json, help/spark.md -- the
-                editor's client of spark edit), the two widgets, the two rc hooks
+home/           shared $HOME mirror (linked): the two widgets, the two rc hooks
                 (.config/spark/hook.bash hook.zsh: PATH, the widget, the blank row, completion,
-                the VT palette -- TERM=linux only -- and MICRO_TRUECOLOR),
-                the two completion files (.config/spark/completion.bash completion.zsh:
+                the VT palette -- TERM=linux only), the two completion files (.config/spark/completion.bash completion.zsh:
                 TAB completes the verbs and their names, offline), the banner, spark.env.example
 linux/home/     .bashrc .bash_profile, the systemd user units (spark-serve spark-forge spark-check)
 macos/home/     .zshrc .zprofile
 templates/      rendered, not linked: .gitconfig .tmux.conf .config/btop/btop.conf
-                .config/micro/colorschemes/spark.micro .config/micro/settings.json (seeded once)
+                .config/micro/colorschemes/spark.micro .config/micro/settings.json (seeded once;
+                both only with the layer on AND micro on PATH -- the look for a micro you have)
                 .config/starship.toml.{minimal,full} .config/spark/launchd/spark.{serve,forge,check}.plist
 tests/          install_test.sh get_test.sh update_test.sh smoke.py serve_smoke.py
                 docs_test.py (the docs say what the tree holds: credits, counts, pages)
-                micro_pty.py (micro in a pty against a stub spark; skips without micro)
                 audition.py + audition/ (the editor's briefs against a live brain, lints as the
                 judge; not in the gate) vault_test.py site_test.py check_selftest.py
                 forge_smoke.py bench_smoke.py widget_pty.py check_selftest.py
@@ -185,19 +196,24 @@ may change freely.
    up  <path>` and the same final line. Link = symlink into the repo; render
    = a regular file written from `templates/`. An existing regular file, or
    a symlink that points outside the repo, is moved to `<path>.bak`, never
-   overwritten (a stale symlink into the repo is replaced). The rc files,
-   micro's bindings and the shell templates (`.gitconfig`, `.tmux.conf`,
-   btop, starship, micro's colorscheme and `settings.json`) are installed
-   only with `SITE_SHELL=on`; micro's `settings.json` is seeded once and
-   never re-rendered (micro rewrites it) -- except its `colorscheme` key,
-   which `spark theme NAME` sets back to `spark` when micro changed it
-   (`theme.micro_colorscheme`; the `theme` row warns meanwhile). `spark shell off` hands the
-   rendered look back the way it hands the rc files back
-   (`site.restore_rendered`): each of `.tmux.conf`,
-   `.config/starship.toml`, btop's conf and the two micro files is
-   restored from its `.bak` or removed -- never an empty husk;
+   overwritten (a stale symlink into the repo is replaced). The rc files
+   and the shell templates (`.gitconfig`, `.tmux.conf`, btop, starship)
+   are installed only with `SITE_SHELL=on`; micro's colorscheme and its
+   `settings.json` seed only with the layer on AND micro on PATH
+   (`look_micro`: the look for a micro the user has -- spark installs no
+   editor). `settings.json` is seeded once and never re-rendered (micro
+   rewrites it) -- except its `colorscheme` key, which `spark theme NAME`
+   sets back to `spark` when micro changed it (`theme.micro_colorscheme`;
+   the `theme` row warns meanwhile). `spark shell off` hands the rendered
+   look back the way it hands the rc files back (`site.restore_rendered`):
+   each of `.tmux.conf`, `.config/starship.toml`, btop's conf and micro's
+   colorscheme is restored from its `.bak` or removed -- never an empty
+   husk; `settings.json` stays (it is micro's) and only its seeded
+   `colorscheme` key is dropped (`site.micro_settings_reset`);
    `.gitconfig` (identity, not look) and the core palette files under
-   `~/.config/spark/` stay.
+   `~/.config/spark/` stay. A `micro` bootstrap row hands back, once, the
+   plugin links and `bindings.json` a pre-v1.10 install made under
+   `~/.config/micro` (the plugin lives at forgewright-ai/spark-micro now).
 3. Config files are `KEY=value` lines; any other non-blank, non-comment line
    is refused by every reader (`^[A-Z_0-9]+=[^;`$()|&<>]*$`). Keys:
    `site.env` -- `SITE_NAME SITE_USER SITE_SET_HOSTNAME SITE_GIT_NAME
@@ -255,7 +271,11 @@ may change freely.
    and the set forms `spark quiet login|boot on|off` refuse with the
    same line (showing still answers, saying the layer is off); `spark
    help` then folds the shell block into one `spark shell on` line.
-   `spark theme` and `spark font` are core: they answer either way.
+   `spark theme` and `spark font` are core: they answer either way. On
+   WSL 2 the same shape: `spark font -- no console on WSL 2: the font
+   lives in Windows Terminal's settings` (show 0, set 2), `spark quiet
+   boot -- no GRUB on WSL 2: Windows boots it`, `spark headless -- WSL 2
+   stops with its last window: not a brain (a Linux box is)` (exit 2).
 9. The FORGE's HTTP API (`lib/spark/forgeserve.py`, on
    `SPARK_FORGE_HOST:SPARK_FORGE_PORT`, one LAN address, never `0.0.0.0`).
    `GET /api/health` answers without a token: `{status, forge: true, name,
@@ -414,10 +434,11 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   as one more check -- the test is the consistency, not a reviewer.
 - **A package.** Linux: the right `PKG_*` group in `bootstrap.sh` with a
   comment saying why (`PKG_CORE`/`PKG_ENGINE`/`PKG_AI` are the AI, always
-  installed; the rest is the shell layer, `SITE_SHELL=on`). macOS:
+  installed; `PKG_SHELL`/`PKG_CLI` the shell layer, `SITE_SHELL=on`). macOS:
   `Brewfile`, same comment -- the whole Brewfile is the shell layer; the AI
-  needs nothing from Homebrew. The `packages` row reads both; nothing else
-  to update.
+  needs nothing from Homebrew. No editor, no app and no contributor tool
+  in either (shellcheck is the contributor's own). The `packages` row
+  reads both; nothing else to update.
 - **A config file.** First ask whether the app *rewrites* its own config.
   If it only reads: put it in `home/` (shared) or `<os>/home/`; `install.sh`
   links it. If it rewrites: it cannot be linked -- seed it once from
@@ -466,41 +487,34 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   refuses through `site.shell_off()`, its help line sits in `USAGE_SHELL`
   (bin/spark), and its check row's name goes into `check.SHELL_ROWS` so
   it reads `na` when the layer is off; `--selftest`'s third pass asserts
-  that. `spark shell on|off` (`site.cmd_shell`, `site.SHELL_ROWS`) is the
-  only switch; `spark shell off` hands back what the layer rendered
+  that. `spark shell on|off` (`site.cmd_shell`, `site.SHELL_APPLY_ROWS` --
+  bootstrap row names, not check's) is the only switch; `spark shell off` hands back what the layer rendered
   (`restore_rc`, `restore_rendered`: `.bak` or gone, never a husk).
   `spark theme` and `spark font` stay outside the gate (the FORGE page
   reads `theme.env`, the VT console palette and font are the machine's
   face with the layer off too); their `theme` and `font` check rows are
   core for the same reason -- only the Nerd Font piece of `font` waits
-  for the layer.
-- **An editor thing.** A tool becomes smart by being a client of one
-  spark verb, the way the widget is a client of `spark line`: micro's
-  plugin (`home/.config/micro/plug/spark/`) only spawns `spark edit` with
-  the text on stdin and streams the answer back; it never speaks HTTP,
-  never sees a token, never sends a path. The briefs live in
-  `persona.MODES` (`edit-complete`, `edit-rewrite`, `edit-ask`,
-  `edit-read`): no table routes by filetype or genre -- the model reads
-  what the text is, and for a `?` its own reading is restated to it
-  (small models drift otherwise; the reading keeps the judgment the
-  model's). The plugin ships under the shell layer (install.sh links it
-  with the other `.config/micro/*` files), binds no key itself (a rebind
-  from inside makes micro rewrite `bindings.json` and detach the link:
-  `Alt-s` is a tracked line there), and its row is `editor`
-  (`check.SHELL_ROWS`). A `?` sends the WHOLE buffer, a selection as
-  `--sel A B`, and names its own `--thread` id; every pane has its own
-  name (`spark:N` -- micro shares one text between buffers opened under
-  one path) and a registry entry (origin pane, selection, thread). The
-  pane's keys are callbacks, never bindings: `preRune` (`q` closes, `a`
-  applies the code block under the cursor, `d` declines the note under
-  it via `spark edit --decline`), `preEscape` (closes),
-  `preInsertNewline` (Enter: `FindNext` on the origin for the line's
-  first quote, whitespace loosened, then selects and activates it),
-  `preQuit` (forgets a pane; a closed file leaves its panes without an
-  origin). `?? words` goes on in the newest pane's thread. Version
-  1.3.0. `tests/micro_pty.py` drives a real micro against a stub spark
-  (cases I..P are the pane). Another editor joins the same way: one
-  client of `spark edit`, nothing new in spark.
+  for the layer. The layer installs no editor: the hostname row is core
+  too (identity), and micro's colorscheme is rendered only for a micro
+  the user already has.
+- **A smart app.** Nothing in this repository. A tool becomes smart by
+  being a client of one spark surface -- text on stdin (`spark edit`,
+  contract 10; `spark line`, contract 4), the shell (`? words`, `spark
+  do`, `explain`, `$EDITOR`), or the FORGE's API (contract 9) -- and its
+  plugin lives in its own repository, `spark-<app>`, installed the app's
+  way with its own keys, tests and channel. spark keeps the verb and its
+  judge: the editor briefs live in `persona.MODES` (`edit-complete`,
+  `edit-rewrite`, `edit-ask`, `edit-read`): no table routes by filetype
+  or genre -- the model reads what the text is, and for a `?` its own
+  reading is restated to it (small models drift otherwise); the audition
+  (`tests/audition.py`) scores those briefs against a live brain. micro
+  is the first client, forgewright-ai/spark-micro: it spawns `spark edit`
+  with the text on stdin and streams the answer back, never speaks HTTP,
+  never sees a token, never sends a path; its pty test, its `Alt-s` line
+  and its README are its own. The known clients are listed in README
+  and INSTALL ("Smart apps"); a new one is one more line there. A pull
+  request that adds an app, an app package or an app check row here is
+  turned into a pointer to the app's repository.
 - **The client shape.** `SITE_AI_MODEL=none` beside `SITE_PEER_AI_URL`
   (`config.client`; `spark client URL|off`, `site.cmd_client`) means
   nothing runs here: bootstrap skips the `engine` and `services` rows
