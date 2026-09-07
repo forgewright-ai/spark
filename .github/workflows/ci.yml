@@ -163,7 +163,8 @@ jobs:
           sudo -u stranger -H sh -c 'grep -q "config/spark/hook\." ~/.bashrc'
       - name: the shell layer on top (a real pacman installs the shell packages)
         run: |
-          sudo -u stranger -H sh -c 'echo SITE_SHELL=on >> ~/.config/spark/site.env && ~/.spark/bootstrap.sh'
+          # setup wrote SITE_SHELL=off and a reader keeps a key's first line: replace it, never append
+          sudo -u stranger -H sh -c 'sed -i "s/^SITE_SHELL=.*/SITE_SHELL=on/" ~/.config/spark/site.env && ~/.spark/bootstrap.sh'
           sudo -u stranger -H sh -c '~/.spark/bootstrap.sh --dry-run' | tee /tmp/dry.txt
           grep -q '^Nothing to do$' /tmp/dry.txt
           grep -qE '^ok +packages ' /tmp/dry.txt

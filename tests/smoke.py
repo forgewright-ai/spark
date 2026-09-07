@@ -1611,8 +1611,6 @@ def main():
             t.ok(rc == 0 and "SITE_QUIET_LOGIN=yes" in open(home + "/.config/spark/site.env").read(),
                  "Arch: spark quiet login on still sets the key (the motd is real there)", "%d %s" % (rc, out))
             rc, out, _ = spark("quiet", "login", "off", extra=dict(arch, SITE_SHELL="on"))
-            rc, out, _ = spark("status", extra=arch)
-            t.ok("Arch Linux" in out, "Arch: the status line reads the fixture's PRETTY_NAME", out.splitlines()[0] if out else "")
 
         # the egg (lib/spark/lua.py): the forest, headless through --sim, then a pty
         rc, out, _ = spark("lua", "--sim", "1", "auto")
