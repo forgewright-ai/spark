@@ -21,7 +21,7 @@ import sys
 import tempfile
 import time
 
-from . import is_wsl  # noqa: E402  (the OS fact, beside os_pretty)
+from . import distro, is_wsl  # noqa: E402  (the OS facts, beside os_pretty)
 from . import (BIN_DIR, CACHE_DIR, CHECK_JSON, HOME, IS_MAC, MARK, OS, REPO,
                STATE_DIR, config, glyph, log_exc, packages, page, run, say, state_dir, version)
 
@@ -264,20 +264,22 @@ def row_font(ctx):
     Linux) is judged with the shell layer off too; the Nerd Font is still
     the layer's, so it is only demanded when the layer is on. WSL 2 has no
     console: the font is Windows Terminal's, the row says so and stops."""
-    if not IS_MAC and is_wsl():
-        from . import site
-        return na(site.WSL_NO_FONT)
-    console = _console_font_row(ctx)
+    from . import site
+    why = site.no_console_font()
+    if why and is_wsl():
+        return na(why)
+    console = na(why) if why and ctx.cfg.font_face else _console_font_row(ctx)
     if IS_MAC:
         # a face this Mac does not have makes Terminal.app fall back to its
         # own font in silence (a console face such as VGA carried over)
-        from . import site
         if site.mac_font_installed(ctx.cfg.font_face) is False:
             return warn("SITE_FONT_FACE=%s is not installed here: Terminal.app falls back to its own font" % ctx.cfg.font_face,
                         "spark font list; spark font FACE %s" % ctx.cfg.font_size)
     if not ctx.cfg.shell:
         if console:
             return console
+        if why:
+            return na(why)
         if IS_MAC:
             return na("Terminal.app profile: %s %s (spark font FACE SIZE sets it)" % (ctx.cfg.font_face, ctx.cfg.font_size))
         return na("console not managed (spark font FACE SIZE; spark font list)")
@@ -292,9 +294,11 @@ def row_font(ctx):
     if not where:
         return fail("JetBrainsMono Nerd Font not installed", "./bootstrap.sh; then pick it in your terminal's settings")
     if console:
-        if console.status != OK:
+        if console.status not in (OK, NA):
             return console
         return ok("Nerd Font in %s; %s" % (ctx.short(where), console.value))
+    if why:
+        return ok("Nerd Font in %s; %s" % (ctx.short(where), why))
     return ok("JetBrainsMono Nerd Font in %s" % ctx.short(where))
 
 
@@ -878,8 +882,9 @@ def row_quiet(ctx):
             bad.append("login")
     else:
         parts.append("login loud")
-    if ctx.cfg.quiet_boot and is_wsl():
-        parts.append("boot n/a (no GRUB on WSL 2)")
+    from . import site
+    if ctx.cfg.quiet_boot and site.no_grub():
+        parts.append("boot n/a (%s)" % site.no_grub())
     elif ctx.cfg.quiet_boot:
         # the promise is spark's GRUB drop-in (menu hidden + silent kernel
         # line), proven against the generated grub.cfg when it is readable
@@ -1326,6 +1331,11 @@ SHELL_OFF = "SITE_SHELL=off (spark shell on)"
 # the rows WSL 2 answers differently (na or a WSL 2 note, never a fault):
 # the selftest's fifth pass, on Linux, proves each says so
 WSL_ROWS = ("font", "quiet", "gpu")
+# the rows Arch answers differently (na or an Arch note on the half it
+# lacks -- console-setup, update-grub -- never a fault): the selftest's
+# sixth pass, on Linux, proves each says so and that the packages row
+# answers through pacman
+ARCH_ROWS = ("font", "quiet")
 # a client's rows: nothing runs here (SITE_AI_MODEL=none + SITE_PEER_AI_URL),
 # so the engine, the units, their snapshot, the local AI, its two servers and
 # a second model of its own are na before they look; the peer row is where a
@@ -1688,6 +1698,9 @@ def make_fixture(root, good, stub_url=""):
     _stub(os.path.join(bin_, "brew"), "#!/bin/sh\n" + ("exit 0\n" if good else "exit 1\n"))
     _stub(os.path.join(bin_, "dpkg-query"),
           "#!/bin/sh\n" + ("shift 3; for p; do echo \"$p install ok installed\"; done\n" if good else "exit 1\n"))
+    _stub(os.path.join(bin_, "pacman"),
+          "#!/bin/sh\n" + ("case $1 in -Qq) shift; printf '%s\\n' \"$@\" ;; -Sp) exit 0 ;; *) exit 1 ;; esac\n" if good else "exit 1\n"))
+    _stub(os.path.join(bin_, "checkupdates"), "#!/bin/sh\n" + ("exit 2\n" if good else "exit 1\n"))
     _stub(os.path.join(bin_, "systemctl"),
           "#!/bin/sh\n[ \"$2\" = show-environment ] && exit 0\ncase $3 in spark-check.timer) "
           + ("[ \"$2\" = is-enabled ] && echo enabled || echo active" if good else "echo disabled")
@@ -1815,6 +1828,25 @@ def selftest():
                 parts = line.split("\t")
                 if len(parts) == 5:
                     results["wsl"][parts[2]] = (parts[1], parts[3])
+        # the sixth pass, Linux only: the good fixture as Arch (ID=arch in
+        # os-release, a pacman stub) -- font and quiet say so on the half
+        # Arch lacks, never fail, and the packages row answers through pacman
+        results["arch"] = {}
+        if not IS_MAC:
+            root = os.path.join(tmp, "arch")
+            os.makedirs(root)
+            env = dict(base)
+            env.update(make_fixture(root, True, stub_url))
+            with open(os.path.join(root, "os-release"), "w") as f:
+                f.write('ID=arch\nPRETTY_NAME="Arch Linux"\n')
+            env["SITE_QUIET_BOOT"] = "yes"                          # the boot half Arch leaves alone
+            env["SITE_FONT_FACE"] = "Terminus"                      # a console font Arch's console-setup-less VT ignores
+            p = subprocess.run([sys.executable, os.path.join(REPO, "bin", "spark"), "check", "--porcelain", "--fresh"],
+                               env=env, capture_output=True, text=True, timeout=180)
+            for line in p.stdout.splitlines():
+                parts = line.split("\t")
+                if len(parts) == 5:
+                    results["arch"][parts[2]] = (parts[1], parts[3])
     srv.shutdown()
     bad = 0
     say("%s check --selftest" % MARK)
@@ -1850,6 +1882,16 @@ def selftest():
         say("  %s wsl: %d rows say WSL 2%s" % (GLYPH[OK] if not off else GLYPH[FAIL], len(WSL_ROWS) - len(off),
                                               "" if not off else "   not so: " + " ".join(off)))
         bad += bool(off)
+    if IS_MAC:
+        say("  %s arch: skipped on macOS (a Linux gate proves it)" % GLYPH[NA])
+    else:
+        off = [n for n in ARCH_ROWS
+               if results["arch"].get(n, ("missing", ""))[0] not in (NA, OK) or "Arch" not in results["arch"].get(n, ("", ""))[1]]
+        pk = results["arch"].get("packages", ("missing", ""))[0]
+        say("  %s arch: %d rows say Arch, packages %s via pacman%s" % (GLYPH[OK] if not off and pk == OK else GLYPH[FAIL],
+                                                                  len(ARCH_ROWS) - len(off), pk,
+                                                                  "" if not off else "   not so: " + " ".join(off)))
+        bad += bool(off) or pk != OK
     say("  %d row%s failed to flip" % (bad, "" if bad == 1 else "s") if bad else "  every fixture-testable row flips")
     return 1 if bad else 0
 

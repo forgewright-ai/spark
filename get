@@ -12,7 +12,7 @@
 # then pull --ff-only on a branch, or move to the newest tag when detached
 # -- so this line is also the updater (`spark update` is the same, from
 # inside a checkout). Any other non-empty directory is refused. It never
-# runs sudo: apt is spark setup's, asked once. The whole body is one
+# runs sudo: the package manager is spark setup's, asked once. The whole body is one
 # function called on the last line, so a download cut short runs nothing.
 set -eu
 
@@ -42,13 +42,16 @@ main() {
                 || refuse "the command line tools are missing -- xcode-select --install, then run this again"
             ;;
         Linux)
-            command -v apt-get >/dev/null 2>&1 || refuse "no apt-get -- Debian-family only in this version"
+            # the family by its package manager: the fix line below names it
+            if command -v apt-get >/dev/null 2>&1; then fix="sudo apt-get install -y git python3 curl"
+            elif command -v pacman >/dev/null 2>&1; then fix="sudo pacman -S --needed git python curl"
+            else refuse "no apt-get or pacman -- a Debian-family or Arch Linux in this version"; fi
             case $(uname -m) in
                 x86_64|aarch64) ;;
                 *) notice "no prebuilt engine for $(uname -m): bootstrap skips it (SPARK_ENGINE_DIR names a build of your own)" ;;
             esac
             ;;
-        *) refuse "$os: Linux (Debian-family) or macOS only" ;;
+        *) refuse "$os: Linux (Debian or Arch family) or macOS only" ;;
     esac
     missing=''
     command -v git >/dev/null 2>&1 || missing="$missing git"
@@ -57,7 +60,7 @@ main() {
         missing="$missing python3>=3.9"
     fi
     if [ -n "$missing" ]; then
-        case $os in Darwin) fix="xcode-select --install" ;; *) fix="sudo apt-get install -y git python3 curl" ;; esac
+        [ "$os" != Darwin ] || fix="xcode-select --install"
         refuse "missing:$missing -- $fix, then run this again"
     fi
     # Homebrew is the shell layer's (spark shell on), not the AI's: on PATH

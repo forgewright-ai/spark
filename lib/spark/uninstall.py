@@ -23,7 +23,7 @@ import subprocess
 import sys
 
 from . import (BIN_DIR, CONFIG_DIR, DATA_DIR, FORGE_PID, FORGE_URL_FILE, HOME, IS_MAC, MARK, REPO, STATE_DIR,
-               config, is_wsl, run, say)
+               config, distro, is_wsl, run, say)
 from . import packages as pkg
 
 USAGE = """%s uninstall -- remove spark from this machine: shows first, then asks for the word yes
@@ -336,7 +336,7 @@ def step_console(ctx):
         ctx.root("console", ["sh", "-c", "cp %s %s && rm -f %s && (setupcon --force 2>/dev/null || true)" % (CONSOLE_ORIG, CONSOLE_SETUP, CONSOLE_ORIG)],
                  "the console font is back as it was (%s)" % CONSOLE_ORIG,
                  "sudo cp %s %s; sudo setupcon --force" % (CONSOLE_ORIG, CONSOLE_SETUP))
-    elif ctx.cfg.font_face:
+    elif ctx.cfg.font_face and distro() == "debian":
         ctx.row("todo", "console", "the font stays %s %s (no original kept before v1.12): sudo dpkg-reconfigure console-setup"
                 % (ctx.cfg.font_face, ctx.cfg.font_size))
     origs = [p for p in ("/etc/motd.orig", "/etc/issue.orig") if os.path.exists(p)]

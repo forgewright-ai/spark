@@ -1594,6 +1594,25 @@ def main():
                  "WSL 2: spark headless on refuses: not a brain", out)
             rc, out, _ = spark("status", extra=wsl)
             t.ok("(WSL 2)" in out, "WSL 2: the status line names it", out.splitlines()[0] if out else "")
+            # Arch (ID=arch in os-release): the console font and GRUB are not
+            # spark's there; the verbs say so in one signed line (contract 8)
+            arch = dict(SPARK_OS_RELEASE=home + "/os-release-arch", SPARK_PROC_VERSION=home + "/version-plain", SPARK_NO_APPLY="1")
+            rc, out, _ = spark("font", extra=arch)
+            t.ok(rc == 0 and out.strip() == "spark font -- no console-setup on Arch: the console font is /etc/vconsole.conf's (FONT=), left alone in this version",
+                 "Arch: spark font shows the one line (contract 8), exit 0", out)
+            before = open(home + "/.config/spark/site.env").read()
+            rc, out, _ = spark("font", "Terminus", "16x32", extra=arch)
+            t.ok(rc == 2 and "no console-setup on Arch" in out and open(home + "/.config/spark/site.env").read() == before,
+                 "Arch: spark font FACE SIZE refuses with the same line, exit 2, site.env untouched", "%d %s" % (rc, out))
+            rc, out, _ = spark("quiet", "boot", "on", extra=dict(arch, SITE_SHELL="on"))
+            t.ok(rc == 2 and out.strip() == "spark quiet boot -- no update-grub on Arch: GRUB is left alone in this version",
+                 "Arch: spark quiet boot on refuses: no update-grub", out)
+            rc, out, _ = spark("quiet", "login", "on", extra=dict(arch, SITE_SHELL="on"))
+            t.ok(rc == 0 and "SITE_QUIET_LOGIN=yes" in open(home + "/.config/spark/site.env").read(),
+                 "Arch: spark quiet login on still sets the key (the motd is real there)", "%d %s" % (rc, out))
+            rc, out, _ = spark("quiet", "login", "off", extra=dict(arch, SITE_SHELL="on"))
+            rc, out, _ = spark("status", extra=arch)
+            t.ok("Arch Linux" in out, "Arch: the status line reads the fixture's PRETTY_NAME", out.splitlines()[0] if out else "")
 
         # the egg (lib/spark/lua.py): the forest, headless through --sim, then a pty
         rc, out, _ = spark("lua", "--sim", "1", "auto")

@@ -377,4 +377,34 @@ if [ "$(uname -s)" != Darwin ]; then
     printf '%s\n' "$out" | grep -qE '^skip +vt-palette +no palette painted yet' && ok "no palette: the vt-palette row skips" || bad "vt-palette skip: $(printf '%s\n' "$out" | grep -E ' vt-palette ' | head -1)"
 fi
 
+# 10. Arch (the second family): ID=arch in os-release, pinned by
+#     SPARK_OS_RELEASE, and a pacman on PATH that answers -- the packages
+#     row asks it, the console and quiet-boot rows are honest skips, never
+#     sudo. The names come from distro/arch.env (both OSes, the uname stub);
+#     the dry-run is Linux's (the rows are).
+printf 'ID=arch\nPRETTY_NAME="Arch Linux"\n' > "$T/os-release-arch"
+printf 'ID=manjaro\nID_LIKE=arch\nPRETTY_NAME="Manjaro Linux"\n' > "$T/os-release-manjaro"
+lp() { env PATH="$T/os:$PATH" SPARK_SYSFS_DRM="$T/nodrm" SPARK_OS_RELEASE="$1" sh "$REPO/bootstrap.sh" --list-packages 2>&1; }
+printf 'SITE_SHELL=on\nSITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
+out=$(lp "$T/os-release-arch")
+printf '%s\n' "$out" | grep -qx gcc-libs && printf '%s\n' "$out" | grep -qx fd && ! printf '%s\n' "$out" | grep -qxE 'fd-find|libgomp1' \
+    && ok "Arch: --list-packages speaks pacman's names (gcc-libs, fd)" || bad "Arch --list-packages: $(printf '%s' "$out" | tr '\n' ' ')"
+[ "$(lp "$T/os-release-manjaro")" = "$out" ] && ok "Manjaro (ID_LIKE=arch): the same list" || bad "Manjaro list differs"
+lp "$T/os-release-debian" | grep -qx libgomp1 && ok "Ubuntu (ID_LIKE=debian): libgomp1 still" || bad "Ubuntu list lost libgomp1"
+if [ "$(uname -s)" != Darwin ]; then
+    mkdir -p "$T/arch"
+    printf '#!/bin/sh\ncase $1 in -Qq) shift; printf "%%s\\n" "$@" ;; -Sp) exit 0 ;; *) exit 1 ;; esac\n' > "$T/arch/pacman"; chmod +x "$T/arch/pacman"
+    printf 'SITE_SHELL=on\nSITE_FONT_FACE=Terminus\nSITE_FONT_SIZE=16x32\nSITE_QUIET_BOOT=yes\nSITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
+    out=$(SPARK_OS_RELEASE="$T/os-release-arch" PATH="$T/arch:$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Arch) failed: $out"
+    printf '%s\n' "$out" | grep -qE '^ok +packages ' && ok "Arch: the packages row answers through pacman (everything installed)" || bad "Arch packages row: $(printf '%s\n' "$out" | grep -E ' packages ' | head -1)"
+    printf '%s\n' "$out" | grep -qE '^skip +console +Arch' && ok "Arch: the console row skips (no console-setup)" || bad "Arch console row: $(printf '%s\n' "$out" | grep -E ' console ' | head -1)"
+    printf '%s\n' "$out" | grep -qE '^skip +quiet-boot +Arch' && ok "Arch: the quiet-boot row skips (no update-grub)" || bad "Arch quiet-boot row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
+    printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "Arch dry-run called sudo" || ok "Arch dry-run: no sudo"
+    # a pacman that knows nothing installed: the row would install, as root
+    printf '#!/bin/sh\ncase $1 in -Sp) exit 0 ;; *) exit 1 ;; esac\n' > "$T/arch/pacman"; chmod +x "$T/arch/pacman"
+    out=$(SPARK_OS_RELEASE="$T/os-release-arch" PATH="$T/arch:$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Arch, bare) failed: $out"
+    printf '%s\n' "$out" | grep -qE '^would +packages +install:.*\(sudo\)$' && ok "Arch, nothing installed: the packages row would install (sudo)" || bad "Arch bare packages row: $(printf '%s\n' "$out" | grep -E ' packages ' | head -1)"
+    printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "Arch bare dry-run called sudo" || ok "Arch bare dry-run: no sudo"
+fi
+
 [ "$fail" -eq 0 ] && echo "install_test: all ok" || { echo "install_test: FAILED"; exit 1; }

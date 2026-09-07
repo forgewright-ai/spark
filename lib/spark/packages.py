@@ -41,6 +41,13 @@ def installed(pkgs):
         if rc == -1:
             return None
         return {l.split()[0] for l in out.splitlines() if l.endswith("install ok installed")}
+    if pm == "pacman":
+        # stdout is the answer: -Qq prints the installed ones and exits 1
+        # when any name is missing
+        rc, out = run(["pacman", "-Qq"] + list(pkgs), timeout=30)
+        if rc == -1:
+            return None
+        return set(out.split())
     return None
 
 
@@ -53,12 +60,23 @@ def pending():
     if pm == "apt":
         rc, out = run(["apt", "list", "--upgradable"], timeout=60)
         return -1 if rc != 0 else len([l for l in out.splitlines() if "/" in l])
+    if pm == "pacman":
+        # checkupdates (pacman-contrib) counts against a private copy of the
+        # database: safe on a rolling distro (2 = nothing pending); without
+        # it, -Qu counts against the last refresh
+        rc, out = run(["checkupdates"], timeout=120)
+        if rc == 2:
+            return 0
+        if rc == 0:
+            return len(out.splitlines())
+        rc, out = run(["pacman", "-Qu"], timeout=60)
+        return -1 if rc == -1 else len(out.splitlines())
     return -1
 
 
 def upgrade_line():
     """The one line a human runs to take the pending updates."""
-    return {"brew": "brew upgrade", "apt": "sudo apt upgrade"}.get(manager(), "")
+    return {"brew": "brew upgrade", "apt": "sudo apt upgrade", "pacman": "sudo pacman -Syu"}.get(manager(), "")
 
 
 def install_line(pkgs):
@@ -74,7 +92,7 @@ def remove_argv(pkgs):
     apt-get remove leaves them)."""
     if IS_MAC:
         return ["brew", "uninstall"] + list(pkgs)
-    return {"apt": ["apt-get", "remove", "-y"]}.get(manager(), []) + list(pkgs)
+    return {"apt": ["apt-get", "remove", "-y"], "pacman": ["pacman", "-R", "--noconfirm"]}.get(manager(), []) + list(pkgs)
 
 
 def remove_line(pkgs):
@@ -83,11 +101,19 @@ def remove_line(pkgs):
 
 
 def essential(pkg):
-    """A package the manager refuses to remove (apt: dpkg's Essential flag;
-    ncurses-bin is one): it never appears in a removal list."""
-    if manager() == "apt":
+    """A package the manager refuses to remove (apt: dpkg's Essential flag,
+    ncurses-bin is one; pacman: one another package requires): it never
+    appears in a removal list."""
+    pm = manager()
+    if pm == "apt":
         rc, out = run(["dpkg-query", "-W", "-f=${Essential}", pkg], timeout=10)
         return rc == 0 and out.strip() == "yes"
+    if pm == "pacman":
+        # pacman refuses -R on a package another one requires (gcc-libs,
+        # ncurses, bash): Required By says so
+        rc, out = run(["pacman", "-Qi", pkg], timeout=10)
+        m = re.search(r"^Required By\s*:\s*(.*)$", out, re.M)
+        return rc == 0 and bool(m) and m.group(1).strip() != "None"
     return False
 
 

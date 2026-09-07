@@ -5,6 +5,9 @@
 # debian: the README's first-named platform, as a stranger meets it -- a
 # Debian 13 container, a user made for the run, the one-liner in pipe form
 # from the tree under test, the AI layer only; converges the same way.
+# arch: the second family, the same stranger in an Arch container --
+# packages through pacman, then the shell layer on top so a real pacman
+# proves the install path (Arch's base already holds the AI's library).
 # macos: syntax, the selftest and the zsh pty test under Apple's python 3.9;
 # then (not on a pull request) the real core bootstrap, and the shell layer
 # on top of it (the Brewfile, the font cask).
@@ -119,6 +122,55 @@ jobs:
           awk -F'\t' '$3=="services" { print; found=1; if ($2!="na") bad=1 } END { exit bad || !found }' /tmp/porcelain.txt
           # the core rc hook: one marked line at the end of the stranger's .bashrc
           sudo -u stranger -H sh -c 'grep -q "config/spark/hook\." ~/.bashrc'
+  arch:
+    # the second family: the same stranger, the same one-liner, in an Arch
+    # container -- packages through pacman, the console and GRUB rows honest
+    # skips. Arch's base already holds gcc-libs (llama.cpp's OpenMP), so a
+    # stranger without a GPU installs nothing: the shell layer on top is
+    # what makes a real pacman prove the packages row's install path.
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    timeout-minutes: 20
+    steps:
+      # git first, as in the debian job; -Syu is the image's own rule (a
+      # rolling distro: never -Sy alone)
+      - run: pacman -Syu --noconfirm --needed git ca-certificates >/dev/null
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: a stranger with sudo
+        run: |
+          pacman -S --noconfirm --needed sudo curl python >/dev/null
+          useradd -m -s /bin/bash stranger
+          echo 'stranger ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/stranger && chmod 440 /etc/sudoers.d/stranger
+          git config --system safe.directory '*'
+          git -C "$GITHUB_WORKSPACE" symbolic-ref -q HEAD >/dev/null || git -C "$GITHUB_WORKSPACE" checkout -q -B ci
+      - name: the one-liner, pipe form, from the tree under test
+        run: |
+          ref=$(git -C "$GITHUB_WORKSPACE" symbolic-ref -q --short HEAD || echo ci)
+          sudo -u stranger -H env SITE_AI_MODEL=none SITE_GIT_NAME=ci SITE_GIT_EMAIL=you@example.com SPARK_URL="file://$GITHUB_WORKSPACE" SPARK_REF="$ref" \
+            sh -c 'cat "$1" | sh' _ "$GITHUB_WORKSPACE/get"
+      - name: converged, checked, hooked
+        run: |
+          sudo -u stranger -H sh -c '~/.spark/bootstrap.sh --dry-run' | tee /tmp/dry.txt
+          grep -q '^Nothing to do$' /tmp/dry.txt
+          grep -qE '^skip +systemd ' /tmp/dry.txt
+          grep -qE '^ok +packages ' /tmp/dry.txt
+          sudo -u stranger -H sh -c '~/.local/bin/spark check --fresh' || true
+          sudo -u stranger -H sh -c '~/.local/bin/spark check --porcelain --fresh' > /tmp/porcelain.txt
+          awk -F'\t' '$1=="SOFTWARE" && $2=="fail" && $3!="services" { bad=1; print } END { exit bad }' /tmp/porcelain.txt
+          awk -F'\t' '$3=="services" { print; found=1; if ($2!="na") bad=1 } END { exit bad || !found }' /tmp/porcelain.txt
+          sudo -u stranger -H sh -c 'grep -q "config/spark/hook\." ~/.bashrc'
+      - name: the shell layer on top (a real pacman installs the shell packages)
+        run: |
+          sudo -u stranger -H sh -c 'echo SITE_SHELL=on >> ~/.config/spark/site.env && ~/.spark/bootstrap.sh'
+          sudo -u stranger -H sh -c '~/.spark/bootstrap.sh --dry-run' | tee /tmp/dry.txt
+          grep -q '^Nothing to do$' /tmp/dry.txt
+          grep -qE '^ok +packages ' /tmp/dry.txt
+          grep -qE '^skip +console +Arch' /tmp/dry.txt || grep -qE '^skip +console +SITE_FONT_FACE' /tmp/dry.txt
+          pacman -Q tmux fd bat eza
+          sudo -u stranger -H sh -c '~/.local/bin/spark check --porcelain --fresh' > /tmp/porcelain.txt
+          awk -F'\t' '$1=="SOFTWARE" && $2=="fail" && $3!="services" { bad=1; print } END { exit bad }' /tmp/porcelain.txt
   macos:
     runs-on: macos-latest
     timeout-minutes: 40

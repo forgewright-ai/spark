@@ -16,13 +16,40 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
-from . import (CONFIG_DIR, HOME, IS_MAC, MARK, REPO, SITE_ENV, config, confirm, glyph,
+from . import (CONFIG_DIR, HOME, IS_MAC, MARK, REPO, SITE_ENV, config, confirm, distro, glyph,
                is_wsl, mem_total_gb, paged, say, wait_ready)
 
 # WSL 2: Linux, minus what the VT console and GRUB own (contract 8 lines)
 WSL_NO_FONT = "no console on WSL 2: the font lives in Windows Terminal's settings"
 WSL_NO_BOOT = "no GRUB on WSL 2: Windows boots it"
 WSL_NO_BRAIN = "WSL 2 stops with its last window: not a brain (a Linux box is)"
+# Arch: Linux, minus console-setup and update-grub (contract 8 lines)
+ARCH_NO_FONT = "no console-setup on Arch: the console font is /etc/vconsole.conf's (FONT=), left alone in this version"
+ARCH_NO_BOOT = "no update-grub on Arch: GRUB is left alone in this version"
+
+
+def no_console_font():
+    """The one line that says why this Linux's console font is not spark's
+    to set ('' when it is): WSL 2 has no console, Arch no console-setup."""
+    if IS_MAC:
+        return ""
+    if is_wsl():
+        return WSL_NO_FONT
+    if distro() == "arch":
+        return ARCH_NO_FONT
+    return ""
+
+
+def no_grub():
+    """The one line that says why quiet boot is not spark's to set here
+    ('' when it is): WSL 2 has no GRUB, Arch no update-grub."""
+    if IS_MAC:
+        return ""
+    if is_wsl():
+        return WSL_NO_BOOT
+    if distro() == "arch":
+        return ARCH_NO_BOOT
+    return ""
 
 
 def set_keys(_file=None, _quiet=False, **kv):
@@ -242,10 +269,11 @@ def cmd_font(args):
         say(FONT_USAGE.rstrip())
         return 0
     cfg = config.load()
-    if not IS_MAC and is_wsl():
+    why = no_console_font()
+    if why:
         # show forms answer; set forms refuse: nothing is written for a
-        # console that does not exist
-        say("%s font -- %s" % (MARK, WSL_NO_FONT))
+        # console spark does not manage here
+        say("%s font -- %s" % (MARK, why))
         return 0 if not args or args[0] in ("status", "list") else 2
     if not args or args[0] == "status":
         if IS_MAC:
@@ -331,20 +359,20 @@ def cmd_quiet(args):
             say("%s quiet -- start %s, audio %s (login, boot: the shell layer is off)" % (MARK, start, audio))
         else:
             say("%s quiet -- start %s, login %s, boot %s, audio %s" % (
-                MARK, start, _quiet_state(cfg, "login"), "n/a (%s)" % WSL_NO_BOOT if is_wsl() else _quiet_state(cfg, "boot"), audio))
+                MARK, start, _quiet_state(cfg, "login"), "n/a (%s)" % no_grub() if no_grub() else _quiet_state(cfg, "boot"), audio))
         return 0
     sub = args[0]
     if sub not in QUIET_KEYS or len(args) > 2 or (len(args) == 2 and args[1] not in ("on", "off")):
         say(QUIET_USAGE.rstrip())
         return 2
     linux_only = sub in ("login", "boot")                  # start and audio are both OSes, core
-    no_boot = sub == "boot" and not IS_MAC and is_wsl()    # login (motd) is real on WSL; GRUB is not
+    no_boot = no_grub() if sub == "boot" else ""             # login (motd) is real on WSL and Arch; GRUB is not spark's there
     if len(args) == 1:                                     # show one state
         if linux_only and IS_MAC:
             say("%s quiet %s -- %s" % (MARK, sub, MAC_NO_QUIET))
             return 0
         if no_boot:
-            say("%s quiet %s -- %s" % (MARK, sub, WSL_NO_BOOT))
+            say("%s quiet %s -- %s" % (MARK, sub, no_boot))
             return 0
         if linux_only and not cfg.shell:
             say("%s quiet %s -- the shell layer is off (spark shell on)" % (MARK, sub))
@@ -355,7 +383,7 @@ def cmd_quiet(args):
         say("%s quiet %s -- %s" % (MARK, sub, MAC_NO_QUIET))
         return 2
     if no_boot:
-        say("%s quiet %s -- %s" % (MARK, sub, WSL_NO_BOOT))
+        say("%s quiet %s -- %s" % (MARK, sub, no_boot))
         return 2
     if linux_only and shell_off("quiet"):
         return 2

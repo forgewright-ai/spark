@@ -78,6 +78,9 @@ def main():
         for g in packages.GROUPS:
             for name in t.get(g, "").split():
                 check(re.search(r"(?m)^- %s -- " % re.escape(name), credits) is not None, "CREDITS.md names %s (distro/%s %s)" % (name, f, g))
+        # the family's name in the docs is the file's PM_TARGET, verbatim
+        for doc in ("README.md", "INSTALL.md"):
+            check(t.get("PM_TARGET", "") in read(doc), "%s names %s (distro/%s PM_TARGET)" % (doc, t.get("PM_TARGET", "?"), f))
     # counts the docs state
     n_rows = sum(1 for line in read(os.path.join("lib", "spark", "check.py")).split("\n") if line.startswith("@row"))
     for doc in ("CLAUDE.md", "INSTALL.md"):
@@ -98,7 +101,7 @@ def main():
     src = read(os.path.join("lib", "spark", "check.py"))
     claude = read("CLAUDE.md")
     named = {}
-    for const in ("SHELL_ROWS", "WSL_ROWS", "CLIENT_ROWS"):
+    for const in ("SHELL_ROWS", "WSL_ROWS", "ARCH_ROWS", "CLIENT_ROWS"):
         m = re.search(r"^%s = \(([^)]*)\)" % const, src, re.M)
         named[const] = re.findall(r'"([a-z]+)"', m.group(1)) if m else []
         check(bool(named[const]), "check.py defines %s" % const)

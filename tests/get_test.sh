@@ -105,7 +105,7 @@ out=$(SPARK_HOME="$T/piped" sh -s -- --clone-only < "$REPO/get" 2>&1) && ok "pip
 
 # 7. no git on PATH: a PATH of only the other tools get needs
 mkdir "$T/nogit"
-for t in sh uname ls python3 apt-get xcode-select; do
+for t in sh uname ls python3 apt-get pacman xcode-select; do
     p=$(command -v "$t" 2>/dev/null || true); [ -z "$p" ] || ln -s "$p" "$T/nogit/$t"
 done
 if out=$(PATH="$T/nogit" SPARK_HOME="$T/nogit-home" /bin/sh "$REPO/get" --clone-only 2>&1); then bad "no git: not refused"; else ok "no git: refused"; fi

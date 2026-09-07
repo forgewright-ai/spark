@@ -435,18 +435,21 @@ fi
 pkg_installed() {
     case $PM in
         apt) dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q 'install ok installed' ;;
+        pacman) pacman -Qq "$1" >/dev/null 2>&1 ;;
         *) return 1 ;;
     esac
 }
 pkg_available() {
     case $PM in
         apt) apt-cache policy "$1" 2>/dev/null | grep -q 'Candidate: [^(]' ;;
+        pacman) pacman -Sp "$1" >/dev/null 2>&1 ;;
         *) return 1 ;;
     esac
 }
 pkg_install() {   # pkg_install NAME... -- as root, the manager's own way
     case $PM in
         apt) as_root apt-get update -qq && as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "$@" ;;
+        pacman) as_root pacman -S --needed --noconfirm "$@" ;;      # never -Sy alone: a rolling distro forbids the partial upgrade
         *) return 1 ;;
     esac
 }
@@ -475,9 +478,15 @@ else
         ok packages "$(list_packages | wc -l | tr -d ' ') packages installed"
     elif need packages "install:$missing (sudo)"; then
         # shellcheck disable=SC2086
-        pkg_install $missing > "$TMP/pkg.log" 2>&1 \
-            || { tail -20 "$TMP/pkg.log"; echo "bootstrap: $PM install failed" >&2; exit 1; }
-        ok packages "installed:$missing"
+        if pkg_install $missing > "$TMP/pkg.log" 2>&1; then
+            ok packages "installed:$missing"
+        elif [ "$PM" = pacman ]; then
+            # the sync database is stale, most often: the fix is the full
+            # upgrade, the user's to run (spark never -Sy's alone)
+            row todo packages "pacman could not install:$missing -- sudo pacman -Syu (a rolling distro: spark never refreshes the database without upgrading), then run again"
+        else
+            tail -20 "$TMP/pkg.log"; echo "bootstrap: $PM install failed" >&2; exit 1
+        fi
     fi
 fi
 
@@ -918,6 +927,8 @@ if [ "$OS" = Darwin ]; then
     skip console "macOS: the font is in the Terminal.app profile (spark theme profile)"
 elif is_wsl; then
     skip console "WSL 2: no console -- the font is Windows Terminal's"
+elif [ "$DISTRO" = arch ]; then
+    skip console "Arch: no console-setup -- the font is /etc/vconsole.conf's, left alone in this version"
 elif [ -z "$SITE_FONT_FACE" ]; then
     skip console "SITE_FONT_FACE unset: the console keeps its font"
 else
@@ -946,9 +957,9 @@ elif is_wsl; then
 elif [ ! -f "$vt_file" ]; then
     skip vt-palette "no palette painted yet (spark theme NAME)"
 elif ! command -v setvtrgb >/dev/null 2>&1; then
-    row todo vt-palette "setvtrgb is missing: sudo apt-get install kbd"
+    row todo vt-palette "setvtrgb is missing: $PM_INSTALL kbd"
 else
-    vt_want=$(printf '[Unit]\nDescription=spark: the console palette (setvtrgb)\nAfter=console-setup.service\nConditionPathExists=%s\n\n[Service]\nType=oneshot\nExecStart=/usr/bin/setvtrgb %s\n\n[Install]\nWantedBy=multi-user.target\n' "$vt_file" "$vt_file")
+    vt_want=$(printf '[Unit]\nDescription=spark: the console palette (setvtrgb)\nAfter=console-setup.service systemd-vconsole-setup.service\nConditionPathExists=%s\n\n[Service]\nType=oneshot\nExecStart=/usr/bin/setvtrgb %s\n\n[Install]\nWantedBy=multi-user.target\n' "$vt_file" "$vt_file")
     # the kernel's live defaults (sysfs, the red line) must be the file's:
     # spark theme and spark shell off rewrite the file under a unit that
     # already exists, and the defaults follow only when someone sets them
@@ -998,7 +1009,7 @@ else
         ok quiet-login "motd empty, no kernel line, bare login prompt (cursor kept)"
     elif need quiet-login "empty /etc/motd and /etc/issue (cursor escape only), disable update-motd.d/10-uname (sudo)"; then
         [ -s /etc/motd ] && as_root cp -n /etc/motd /etc/motd.orig 2>/dev/null
-        as_root truncate -s 0 /etc/motd
+        [ -f /etc/motd ] && as_root truncate -s 0 /etc/motd      # Arch ships none: an absent motd is quiet already
         [ -x /etc/update-motd.d/10-uname ] && as_root chmod -x /etc/update-motd.d/10-uname
         [ -s /etc/issue ] && ! grep -q '25h' /etc/issue && as_root cp -n /etc/issue /etc/issue.orig 2>/dev/null
         printf '\033[?25h' | as_root tee /etc/issue >/dev/null
@@ -1048,6 +1059,8 @@ GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT quiet splash loglevel=3 
         else skip quiet-boot "loud (SITE_QUIET_BOOT=no)"; fi
     elif is_wsl; then
         skip quiet-boot "WSL 2: no GRUB (Windows boots it)"
+    elif [ "$DISTRO" = arch ]; then
+        skip quiet-boot "Arch: no update-grub -- GRUB left alone in this version"
     elif [ ! -f /etc/default/grub ]; then
         skip quiet-boot "no /etc/default/grub here"
     elif ! have_update_grub; then
