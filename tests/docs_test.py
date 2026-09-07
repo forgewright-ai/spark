@@ -6,7 +6,7 @@
 # model row's license upstream is in CREDITS.md; the check-row count the
 # docs state is the count in check.py; the model count they state is the
 # count in models.env; every page www/build.py renders has its source
-# file; no doc names the lists that are gone; the docs a stranger reads
+# file; no doc names the lists that are gone; the docs a new user reads
 # speak two nouns (spark, spark apps) and no doc names what is private.
 # Hermetic, stdlib, fast.
 import os
@@ -18,7 +18,7 @@ sys.path.insert(0, os.path.join(ROOT, "lib"))
 from spark import config  # noqa: E402
 
 fails = []
-# the docs a stranger reads (the voice checks below), and every doc
+# the docs a new user reads (the voice checks below), and every doc
 CUSTOMER_DOCS = ("README.md", "INSTALL.md", "CHEATSHEET.txt", "www/index.html")
 ALL_DOCS = ("README.md", "INSTALL.md", "CLAUDE.md", "CHEATSHEET.txt", "CREDITS.md", "CONTRIBUTING.md",
             "AGENTS.md", "ROADMAP.md", "CHANGELOG.md", "site.env.example", "www/index.html")
@@ -144,16 +144,16 @@ def main():
         check((major, minor) in ((tmaj, tmin), (tmaj, tmin + 1), (tmaj + 1, 0)),
               "CHANGELOG.md: the top section v%d.%d is the newest tag v%s or the next release" % (major, minor, tag))
     # the customer-facing docs speak two nouns, spark and spark apps: the
-    # names the code keeps (the FORGE, an ember, the brain, the seed, the
-    # strangers) stay in the maintainer's docs; and no public doc calls
-    # the shell layer frozen or deprecated
-    taxonomy = r"\b(the|a) forge\b|\b(the|an) ember\b|\bthe brain\b|\bsmart (app|apps|os)\b|\bthe seed\b|\bstranger"
+    # names the code keeps (the FORGE, an ember, the brain, the seed) stay
+    # in the maintainer's docs; no doc calls the shell layer frozen or
+    # deprecated, and nobody is called a stranger
+    taxonomy = r"\b(the|a) forge\b|\b(the|an) ember\b|\bthe brain\b|\bsmart (app|apps|os)\b|\bthe seed\b"
     for doc in CUSTOMER_DOCS:
         m = re.search(taxonomy, read(doc), re.I)
         check(m is None, "%s: two nouns, spark and spark apps%s" % (doc, " (found '%s')" % m.group(0) if m else ""))
     for doc in ALL_DOCS:
-        m = re.search(r"\b(frozen|deprecated)\b", read(doc), re.I)
-        check(m is None, "%s: no '%s'" % (doc, m.group(0) if m else "frozen/deprecated"))
+        m = re.search(r"\b(frozen|deprecated|strangers?)\b", read(doc), re.I)
+        check(m is None, "%s: no '%s'" % (doc, m.group(0) if m else "frozen/deprecated/stranger"))
     # what is private is named nowhere in the tree's docs
     for doc in ALL_DOCS:
         check(not re.search(r"\bfactor(y|ies)\b", read(doc), re.I), "%s: no factory" % doc)

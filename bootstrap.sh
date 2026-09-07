@@ -602,7 +602,7 @@ fi
 # ================================================================ 6. dirs
 section dirs
 # the workspace is the shell layer's (the backup row watches it, a template
-# names it): a stranger's machine gets no folder it did not ask for
+# names it): a new user's machine gets no folder it did not ask for
 if [ "$shell" = 1 ]; then dirs="$SITE_WORKSPACE $MODELS_DIR"; else dirs="$MODELS_DIR"; skip dir "$SHELL_OFF, $SITE_WORKSPACE"; fi
 for d in $dirs "$HOME/.local/bin" "$SPARK_STATE_DIR"; do
     if [ -d "$d" ]; then ok dir "$d"

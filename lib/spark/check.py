@@ -1125,7 +1125,7 @@ def row_privacy(ctx):
     if problems:
         fix = "chmod 700 %s; chmod 600 %s %s%s" % (ctx.short(STATE_DIR), ctx.short(tok), ctx.short(SITE_ENV), loose)
         return warn("; ".join(problems), fix)
-    # a word list is the maintainer's tool, not a promise to a stranger: none
+    # a word list is the maintainer's tool, not a promise to a new user: none
     # is fine, and the row says where one would go
     words = ("no banned words (%d watched)" % len(terms)) if terms else \
         ("no word list (optional: %s)" % ctx.short(privacy_terms_file(ctx.cfg)))

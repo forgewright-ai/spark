@@ -113,7 +113,7 @@ home paths naming a user, with no skip path for those.
 - Name a private repository or tool in any doc: what is not public is
   not documented (`tests/docs_test.py` refuses the word for the tooling
   that makes distros and apps).
-- Bring the taxonomy into what a stranger reads: README, INSTALL,
+- Bring the taxonomy into what a new user reads: README, INSTALL,
   CHEATSHEET and the page front speak two nouns, spark and spark apps,
   step by step (docs_test holds the word list); `CLAUDE.md` keeps the
   contracts' names.

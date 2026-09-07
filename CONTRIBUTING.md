@@ -40,7 +40,7 @@ either one forward and converges the machine.
 2. **A CREDITS correction.** A wrong version, a missing license, a name
    that changed -- `CREDITS.md` is a pull request away from being right.
 3. **A doc fix.** A stale count, a broken cross-reference, a sentence
-   that no longer matches the code. What a stranger reads (README,
+   that no longer matches the code. What a new user reads (README,
    INSTALL, CHEATSHEET, the page front) stays minimal and step by step,
    with two nouns, spark and spark apps; `tests/docs_test.py` says which
    words are out.

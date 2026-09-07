@@ -53,7 +53,7 @@ RELEASES = "https://github.com/forgewright-ai/spark/releases"
 
 def version():
     """The newest tag: the version the one-liner installs (get lands a
-    stranger there), so the sign line and the install agree."""
+    new user there), so the sign line and the install agree."""
     try:
         out = subprocess.run(["git", "describe", "--tags", "--abbrev=0", "--match", "v*"],
                              cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()

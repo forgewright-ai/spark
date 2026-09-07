@@ -8,7 +8,7 @@ is a promise; a row in `CHANGELOG.md` is. A better idea is an issue away.
 `spark chaos` (or `spark check --chaos`) breaks the machine one known way
 at a time and proves the right row goes red and its remedy heals it.
 Hermetic first (the stub servers learn to be slow, to hang, to 503, to
-cut a stream), then once on a real box. Not part of a stranger's check.
+cut a stream), then once on a real box. Not part of a new user's check.
 
 - the server killed mid-reply -- `serve`; the unit brings it back
 - a truncated model file -- `models`; `spark model verify` names it

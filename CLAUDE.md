@@ -31,7 +31,7 @@ describes how things are, not how they came to be.
   layer (`SITE_SHELL`, `spark shell on|off`, default off): spark's own
   shell for a machine that is only an AI box -- tmux, starship, fzf,
   eza, bat, btop, zoxide, the Nerd Font, palettes, the bar, quiet login
-  and boot. It stays green behind its gate; the docs a stranger reads
+  and boot. It stays green behind its gate; the docs a new user reads
   give it one paragraph, never a third of the story, and no word that
   writes it off (docs_test). A domain is a switch (`spark shell`); an
   app is not.
@@ -142,7 +142,7 @@ templates/      rendered, not linked: .gitconfig .tmux.conf .config/btop/btop.co
                 .config/starship.toml.{minimal,full} .config/spark/launchd/spark.{serve,forge,check}.plist
 tests/          install_test.sh get_test.sh update_test.sh uninstall_test.sh smoke.py serve_smoke.py
                 docs_test.py (the docs say what the tree holds: credits, counts, pages,
-                the voice of what a stranger reads)
+                the voice of what a new user reads)
                 audition.py + audition/ (the editor's briefs against a live brain, lints as the
                 judge; not in the gate) vault_test.py site_test.py check_selftest.py
                 forge_smoke.py bench_smoke.py widget_pty.py check_selftest.py
@@ -151,7 +151,7 @@ tests/          install_test.sh get_test.sh update_test.sh uninstall_test.sh smo
                 same privacy patterns over the message -- history is public too),
                 pre-push (install test, selftest)
 .github/        ci.yml: the same on ubuntu (plus a real bootstrap) and macOS (python 3.9);
-                the stranger's one-liner in a debian:13 and an archlinux container
+                the new user's one-liner in a debian:13 and an archlinux container
                 release.yml: the GitHub Release from the CHANGELOG section, on a v* tag
                 pages.yml: www/ rendered and published to GitHub Pages on a doc change
                 and on a published release (the sign line links the release)
@@ -478,7 +478,7 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   docs state are the tree's, every page has its source, no retired word
   survives. A new fact a doc states that the tree can derive goes there
   as one more check -- the test is the consistency, not a reviewer. What
-  a stranger reads (README, INSTALL, CHEATSHEET, the page front) is
+  a new user reads (README, INSTALL, CHEATSHEET, the page front) is
   minimal and step by step and speaks two nouns, spark and spark apps:
   no FORGE, ember or brain as a noun there, no "smart app", nothing
   private named anywhere in the tree's docs (docs_test holds the word

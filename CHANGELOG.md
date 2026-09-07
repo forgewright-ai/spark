@@ -10,12 +10,15 @@ spark.
 
 - README: install in three steps, the verbs in one table, spark apps,
   what leaves the machine. The page front is spark and spark apps.
-  `tests/docs_test.py` checks the voice: two nouns in what a stranger
+  `tests/docs_test.py` checks the voice: two nouns in what a new user
   reads, every spark app the README names in INSTALL, the cheatsheet,
   the credits and the page.
 - CLAUDE.md, AGENTS.md and CONTRIBUTING.md are framed by the same
   three lines; the shell layer is one principle, behind its gate.
-- INSTALL.md in the stranger's order, numbered and step by step (the
+- A new user is a new user: the word that held them at arm's length is
+  gone from every doc, code comment and CI account name, and
+  `tests/docs_test.py` refuses it.
+- INSTALL.md in the new user's order, numbered and step by step (the
   machine, the one line, the verbs, the models, other machines, spark
   apps, the per-OS notes, keeping it, spark shell last). CHEATSHEET.txt
   in the same words, the shell block folded to its verbs.
@@ -50,7 +53,7 @@ data.
 - Two rows are generic now: the console palette's boot unit orders after
   `systemd-vconsole-setup.service` as well as `console-setup.service`,
   and the quiet login never creates a motd that was absent.
-- CI runs the stranger's one-liner in an `archlinux` container too, with
+- CI runs the new user's one-liner in an `archlinux` container too, with
   the shell layer on top; an Arch block in INSTALL sections 1 and 7;
   the Arch package names in CREDITS.md.
 
@@ -147,7 +150,7 @@ apps in their own repositories; Windows through WSL 2, honestly.
 
 ## v1.9
 
-A stranger's first run: three questions, and a machine that looks untouched
+A new user's first run: three questions, and a machine that looks untouched
 until it is asked to change.
 
 - `spark setup` asks three things, not four. The palette is no longer a
