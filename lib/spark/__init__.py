@@ -233,17 +233,36 @@ def run(cmd, timeout=5, env=None, stdin=None):
 
 
 # ------------------------------------------------------------ machine facts
+PROC_VERSION = os.environ.get("SPARK_PROC_VERSION", "/proc/version")
+WSL = "WSL 2"
+
+
+def is_wsl():
+    """Linux under Windows: the kernel line names microsoft (WSL 2's is
+    ...-microsoft-standard-WSL2). Ubuntu there is Linux to spark, minus what
+    the VT console and GRUB own. Never on macOS unless SPARK_PROC_VERSION
+    points at a file (tests, the way SPARK_SYSFS_DRM does)."""
+    if IS_MAC and "SPARK_PROC_VERSION" not in os.environ:
+        return False
+    try:
+        with open(PROC_VERSION, encoding="utf-8") as f:
+            return "microsoft" in f.read().lower()
+    except OSError:
+        return False
+
+
 def os_pretty():
     if IS_MAC:
         return "macOS " + platform.mac_ver()[0]
+    name = "Linux " + platform.release()
     try:
         with open("/etc/os-release", encoding="utf-8") as f:
             for line in f:
                 if line.startswith("PRETTY_NAME="):
-                    return line.split("=", 1)[1].strip().strip('"')
+                    name = line.split("=", 1)[1].strip().strip('"')
     except OSError:
         pass
-    return "Linux " + platform.release()
+    return name + (" on " + WSL if is_wsl() else "")
 
 
 def package_manager():

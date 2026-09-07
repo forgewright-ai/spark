@@ -571,8 +571,9 @@ sh tests/update_test.sh         # spark update: pull, move to a tag, dirty refus
 `spark check` has 38 rows today: 12 SOFTWARE, 17 CAPABILITY, 9
 NONFUNCTIONAL (`grep -c '^@row' lib/spark/check.py`). With `SITE_SHELL=off`
 the 11 rows in `check.SHELL_ROWS` and the `shell` row answer `na`;
-`--selftest` runs a third pass to prove it, and a fourth for the client
-shape (the 7 rows in `check.CLIENT_ROWS`).
+`--selftest` runs a third pass to prove it, a fourth for the client
+shape (the 7 rows in `check.CLIENT_ROWS`), and on Linux a fifth under a
+WSL 2 kernel line (the 3 rows in `check.WSL_ROWS` say so, never fail).
 
 ## Releasing
 

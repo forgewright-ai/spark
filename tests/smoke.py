@@ -1498,6 +1498,40 @@ def main():
         t.ok(dropped and after == {"softwrap": True} and not _site.micro_settings_reset(msj),
              "shell off: micro's colorscheme key is dropped, the other settings kept, the file never removed", str(after))
 
+        # WSL 2: the OS fact from the kernel line, pinned by SPARK_PROC_VERSION
+        # (both OSes, in-process twin); the verbs that own the console and GRUB
+        # refuse there, the status names it (Linux, through the CLI)
+        with open(home + "/version-wsl", "w") as f:
+            f.write("Linux version 6.6.87.2-microsoft-standard-WSL2 (root@w) #1 SMP PREEMPT_DYNAMIC\n")
+        with open(home + "/version-plain", "w") as f:
+            f.write("Linux version 6.12.0-amd64 (debian-kernel) #1 SMP PREEMPT_DYNAMIC Debian\n")
+        wsl_twin = ("import sys; sys.path.insert(0, %r); import spark; spark.IS_MAC = False; "
+                    "print(spark.is_wsl(), spark.os_pretty().endswith(' on WSL 2'))" % os.path.join(REPO, "lib"))
+
+        def wsl_fact(path):
+            p = subprocess.run([sys.executable, "-c", wsl_twin], capture_output=True, text=True,
+                               env=dict(env, SPARK_PROC_VERSION=path), timeout=30)
+            return p.stdout.strip() or p.stderr.strip()
+        t.ok(wsl_fact(home + "/version-wsl") == "True True", "is_wsl: a kernel line naming microsoft, and os_pretty says on WSL 2", wsl_fact(home + "/version-wsl"))
+        t.ok(wsl_fact(home + "/version-plain") == "False False", "is_wsl: a plain kernel line is not WSL", wsl_fact(home + "/version-plain"))
+        t.ok(wsl_fact(home + "/version-none") == "False False", "is_wsl: no file at all is not WSL", wsl_fact(home + "/version-none"))
+        if sys.platform != "darwin":
+            wsl = dict(SPARK_PROC_VERSION=home + "/version-wsl", SPARK_NO_APPLY="1")
+            rc, out, _ = spark("font", extra=wsl)
+            t.ok(rc == 0 and out.strip() == "spark font -- no console on WSL 2: the font lives in Windows Terminal's settings",
+                 "WSL 2: spark font shows the one line (contract 8), exit 0", out)
+            rc, out, _ = spark("font", "Terminus", "16x32", extra=wsl)
+            t.ok(rc == 2 and "no console on WSL 2" in out and "SITE_FONT_FACE" not in open(home + "/.config/spark/site.env").read(),
+                 "WSL 2: spark font FACE SIZE refuses with the same line, exit 2, nothing written", out)
+            rc, out, _ = spark("quiet", "boot", "on", extra=dict(wsl, SITE_SHELL="on"))
+            t.ok(rc == 2 and out.strip() == "spark quiet boot -- no GRUB on WSL 2: Windows boots it",
+                 "WSL 2: spark quiet boot on refuses: no GRUB", out)
+            rc, out, _ = spark("headless", "on", extra=wsl)
+            t.ok(rc == 2 and "WSL 2 stops with its last window" in out and "SITE_HEADLESS=yes" not in open(home + "/.config/spark/site.env").read(),
+                 "WSL 2: spark headless on refuses: not a brain", out)
+            rc, out, _ = spark("status", extra=wsl)
+            t.ok("(WSL 2)" in out, "WSL 2: the status line names it", out.splitlines()[0] if out else "")
+
         # the egg (lib/spark/lua.py): the forest, headless through --sim, then a pty
         rc, out, _ = spark("lua", "--sim", "1", "auto")
         first = out.splitlines()[0] if out else ""

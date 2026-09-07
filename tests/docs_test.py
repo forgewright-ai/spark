@@ -77,7 +77,7 @@ def main():
     src = read(os.path.join("lib", "spark", "check.py"))
     claude = read("CLAUDE.md")
     named = {}
-    for const in ("SHELL_ROWS", "CLIENT_ROWS"):
+    for const in ("SHELL_ROWS", "WSL_ROWS", "CLIENT_ROWS"):
         m = re.search(r"^%s = \(([^)]*)\)" % const, src, re.M)
         named[const] = re.findall(r'"([a-z]+)"', m.group(1)) if m else []
         check(bool(named[const]), "check.py defines %s" % const)

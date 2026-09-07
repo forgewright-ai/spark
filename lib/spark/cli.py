@@ -600,7 +600,8 @@ def cmd_status(args, _bare=False):
         except wire.BrainError as e:
             say("%s -- %s (spark status for the rest)" % (MARK, e.hint))
         return 0
-    say("%s -- %s's AI on %s" % (MARK, cfg.user, cfg.name))
+    from . import is_wsl
+    say("%s -- %s's AI on %s%s" % (MARK, cfg.user, cfg.name, " (WSL 2)" if is_wsl() else ""))
     t0 = time.time()
     try:
         url, model, is_forge = wire.resolve_brain(cfg, fresh=True)

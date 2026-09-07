@@ -66,6 +66,9 @@ drm_vram_file() {
     done
     return 0
 }
+# Linux under Windows (WSL 2): the kernel line names microsoft. Linux to
+# spark, minus the VT console and GRUB (python twin: spark.is_wsl)
+is_wsl() { grep -qi microsoft "${SPARK_PROC_VERSION:-/proc/version}" 2>/dev/null; }
 # ai_build: the engine build this machine gets -- metal on macOS (the key
 # is ignored there); on Linux SITE_AI_BUILD cpu|vulkan as chosen, auto
 # (the default) = vulkan when a DRM device reports VRAM, else cpu. It
@@ -802,6 +805,9 @@ else
     for t in $targets; do [ "$(systemctl is-enabled "$t" 2>/dev/null || true)" = masked ] && nmasked=$((nmasked + 1)); done
     dropin=/etc/systemd/logind.conf.d/spark.conf
     lid=$(printf '[Login]\nHandleLidSwitch=ignore\nHandleLidSwitchExternalPower=ignore\n')
+    # WSL 2 stops with its last window: a hand-set SITE_HEADLESS=yes there is a
+    # todo, never a systemctl mask (spark headless on refuses it first)
+    if [ "$headless" = 1 ] && is_wsl; then row todo headless "WSL 2 stops with its last window: not a brain (a Linux box is)"; headless=0; fi
     if [ "$headless" = 1 ]; then
         if [ "$nmasked" = 4 ]; then ok sleep "sleep, suspend, hibernate masked"
         elif need sleep "systemctl mask $targets (sudo)"; then
@@ -872,6 +878,8 @@ fi
 # shell layer -- spark font sets SITE_FONT_FACE with the layer off too
 if [ "$OS" = Darwin ]; then
     skip console "macOS: the font is in the Terminal.app profile (spark theme profile)"
+elif is_wsl; then
+    skip console "WSL 2: no console -- the font is Windows Terminal's"
 elif [ -z "$SITE_FONT_FACE" ]; then
     skip console "SITE_FONT_FACE unset: the console keeps its font"
 else
@@ -959,6 +967,8 @@ GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT quiet splash loglevel=3 
                 fi
             fi
         else skip quiet-boot "loud (SITE_QUIET_BOOT=no)"; fi
+    elif is_wsl; then
+        skip quiet-boot "WSL 2: no GRUB (Windows boots it)"
     elif [ ! -f /etc/default/grub ]; then
         skip quiet-boot "no /etc/default/grub here"
     elif ! have_update_grub; then

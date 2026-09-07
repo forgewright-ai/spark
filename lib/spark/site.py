@@ -17,7 +17,12 @@ from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
 from . import (CONFIG_DIR, HOME, IS_MAC, MARK, REPO, SITE_ENV, config, confirm, glyph,
-               mem_total_gb, paged, say, wait_ready)
+               is_wsl, mem_total_gb, paged, say, wait_ready)
+
+# WSL 2: Linux, minus what the VT console and GRUB own (contract 8 lines)
+WSL_NO_FONT = "no console on WSL 2: the font lives in Windows Terminal's settings"
+WSL_NO_BOOT = "no GRUB on WSL 2: Windows boots it"
+WSL_NO_BRAIN = "WSL 2 stops with its last window: not a brain (a Linux box is)"
 
 
 def set_keys(_file=None, _quiet=False, **kv):
@@ -237,6 +242,11 @@ def cmd_font(args):
         say(FONT_USAGE.rstrip())
         return 0
     cfg = config.load()
+    if not IS_MAC and is_wsl():
+        # show forms answer; set forms refuse: nothing is written for a
+        # console that does not exist
+        say("%s font -- %s" % (MARK, WSL_NO_FONT))
+        return 0 if not args or args[0] in ("status", "list") else 2
     if not args or args[0] == "status":
         if IS_MAC:
             say("%s font -- Terminal.app profile: %s %s   (spark theme profile applies it)" % (MARK, cfg.font_face, cfg.font_size))
@@ -321,16 +331,20 @@ def cmd_quiet(args):
             say("%s quiet -- start %s, audio %s (login, boot: the shell layer is off)" % (MARK, start, audio))
         else:
             say("%s quiet -- start %s, login %s, boot %s, audio %s" % (
-                MARK, start, _quiet_state(cfg, "login"), _quiet_state(cfg, "boot"), audio))
+                MARK, start, _quiet_state(cfg, "login"), "n/a (%s)" % WSL_NO_BOOT if is_wsl() else _quiet_state(cfg, "boot"), audio))
         return 0
     sub = args[0]
     if sub not in QUIET_KEYS or len(args) > 2 or (len(args) == 2 and args[1] not in ("on", "off")):
         say(QUIET_USAGE.rstrip())
         return 2
     linux_only = sub in ("login", "boot")                  # start and audio are both OSes, core
+    no_boot = sub == "boot" and not IS_MAC and is_wsl()    # login (motd) is real on WSL; GRUB is not
     if len(args) == 1:                                     # show one state
         if linux_only and IS_MAC:
             say("%s quiet %s -- %s" % (MARK, sub, MAC_NO_QUIET))
+            return 0
+        if no_boot:
+            say("%s quiet %s -- %s" % (MARK, sub, WSL_NO_BOOT))
             return 0
         if linux_only and not cfg.shell:
             say("%s quiet %s -- the shell layer is off (spark shell on)" % (MARK, sub))
@@ -339,6 +353,9 @@ def cmd_quiet(args):
         return 0
     if linux_only and IS_MAC:                              # nothing to set there
         say("%s quiet %s -- %s" % (MARK, sub, MAC_NO_QUIET))
+        return 2
+    if no_boot:
+        say("%s quiet %s -- %s" % (MARK, sub, WSL_NO_BOOT))
         return 2
     if linux_only and shell_off("quiet"):
         return 2
@@ -433,6 +450,9 @@ def cmd_headless(args):
         return 0
     if args[0] not in ("on", "off"):
         say(HEADLESS_USAGE.rstrip())
+        return 2
+    if args[0] == "on" and not IS_MAC and is_wsl():
+        say("%s headless -- %s" % (MARK, WSL_NO_BRAIN))
         return 2
     set_keys(SITE_HEADLESS="yes" if args[0] == "on" else "no")
     if args[0] == "off":

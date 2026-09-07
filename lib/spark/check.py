@@ -21,6 +21,7 @@ import sys
 import tempfile
 import time
 
+from . import is_wsl  # noqa: E402  (the OS fact, beside os_pretty)
 from . import (BIN_DIR, CACHE_DIR, CHECK_JSON, HOME, IS_MAC, MARK, OS, REPO,
                STATE_DIR, config, glyph, log_exc, page, run, say, state_dir, version)
 
@@ -262,7 +263,11 @@ def _console_font_row(ctx):
 def row_font(ctx):
     """Core now, like the verb: the console font choice (SITE_FONT_FACE,
     Linux) is judged with the shell layer off too; the Nerd Font is still
-    the layer's, so it is only demanded when the layer is on."""
+    the layer's, so it is only demanded when the layer is on. WSL 2 has no
+    console: the font is Windows Terminal's, the row says so and stops."""
+    if not IS_MAC and is_wsl():
+        from . import site
+        return na(site.WSL_NO_FONT)
     console = _console_font_row(ctx)
     if IS_MAC:
         # a face this Mac does not have makes Terminal.app fall back to its
@@ -468,6 +473,8 @@ def row_services(ctx):
         return Row(worst, SEP.join(parts), remedy)
     en, ac = _systemd_user(ctx, "spark-check.timer")
     if not en:
+        if is_wsl():
+            return na("no user systemd session (WSL 2)", "[boot] systemd=true in /etc/wsl.conf; wsl --shutdown from Windows; ./bootstrap.sh")
         return na("no user systemd session (headless or container)")
     parts, worst, remedies = ["check timer %s, %s" % (en, ac)], OK, []
     if en != "enabled" or ac != "active":
@@ -846,7 +853,9 @@ def row_quiet(ctx):
             bad.append("login")
     else:
         parts.append("login loud")
-    if ctx.cfg.quiet_boot:
+    if ctx.cfg.quiet_boot and is_wsl():
+        parts.append("boot n/a (no GRUB on WSL 2)")
+    elif ctx.cfg.quiet_boot:
         # the promise is spark's GRUB drop-in (menu hidden + silent kernel
         # line), proven against the generated grub.cfg when it is readable
         # without root (newer Debians keep it 0600 -- then the drop-in's
@@ -910,7 +919,11 @@ def row_gpu(ctx):
     g = engine.gpu_info()
     build = engine.backend(ctx.cfg)
     if not g:
-        return na("%s build; no root-free GPU counter on macOS" % build if IS_MAC else "%s build: no GPU counters in sysfs" % build)
+        if IS_MAC:
+            return na("%s build; no root-free GPU counter on macOS" % build)
+        if is_wsl():
+            return na("%s build; the GPU is not reached through WSL 2 today" % build)
+        return na("%s build: no GPU counters in sysfs" % build)
     node = "/dev/dri/renderD128"
     if not IS_MAC and os.path.exists(node) and not os.access(node, os.R_OK | os.W_OK):
         if engine.render_wrap(["x"])[0] == "sg":
@@ -1230,6 +1243,8 @@ def row_encryption(ctx):
         if rc == 0 and "On" in out:
             return ok("FileVault on")
         return warn("FileVault off -- the disk reads in plain text if the machine walks", "System Settings > Privacy & Security > FileVault")
+    if is_wsl():
+        return na("WSL 2: the disk is a Windows file -- BitLocker is Windows's to turn on")
     rc, out = ctx.sh(["lsblk", "-rno", "TYPE"], 5)
     if rc == 0 and "crypt" in out.split():
         return ok("LUKS volume present")
@@ -1290,6 +1305,9 @@ def row_cost(ctx):
 SHELL_ROWS = ("pinned", "terminfo", "quiet", "bar", "git", "backup", "swap",
               "encryption", "pending", "battery", "disk")
 SHELL_OFF = "SITE_SHELL=off (spark shell on)"
+# the rows WSL 2 answers differently (na or a WSL 2 note, never a fault):
+# the selftest's fifth pass, on Linux, proves each says so
+WSL_ROWS = ("font", "quiet", "gpu")
 # a client's rows: nothing runs here (SITE_AI_MODEL=none + SITE_PEER_AI_URL),
 # so the engine, the units, their snapshot, the local AI, its two servers and
 # a second model of its own are na before they look; the peer row is where a
@@ -1347,7 +1365,8 @@ def render(ctx, rows, color):
 
     def paint(code, s):
         return "\033[%sm%s\033[0m" % (code, s) if color else s
-    out = ["%s check %s%son %s%s%s" % (paint("1", MARK), version.version(), SEP, ctx.cfg.name, SEP, time.strftime("%Y-%m-%d %H:%M"))]
+    where = ctx.cfg.name + (SEP + "WSL 2" if is_wsl() else "")
+    out = ["%s check %s%son %s%s%s" % (paint("1", MARK), version.version(), SEP, where, SEP, time.strftime("%Y-%m-%d %H:%M"))]
     for cat in CATEGORIES:
         rs = [r for r in rows if r.category == cat]
         if not rs:
@@ -1651,12 +1670,16 @@ def make_fixture(root, good, stub_url=""):
     _stub(os.path.join(bin_, "launchctl"),
           "#!/bin/sh\ncase $1 in print-disabled) exit 0 ;; print) " + ("case $2 in gui/*/spark.check) exit 0 ;; esac; " if good else "")
           + "exit 113 ;; esac\n")
+    # a plain kernel line: a selftest on a real WSL box must not read the host's
+    with open(os.path.join(root, "version"), "w") as f:
+        f.write("Linux version 6.12.0-fixture (fixture) #1 SMP\n")
     return {"HOME": home, "XDG_CONFIG_HOME": os.path.join(home, ".config"),
             "XDG_STATE_HOME": os.path.join(home, ".local", "state"),
             "XDG_DATA_HOME": os.path.join(home, ".local", "share"),
             "PATH": os.path.join(home, ".local", "bin") + ":" + bin_ + ":" + os.environ.get("PATH", ""),
             "SPARK_REPO": repo, "SPARK_ENGINE_DIR": engine if good else os.path.join(root, "nope"),
             "SPARK_API_KEY": "stub-token", "SPARK_SERVICE": "none", "TMUX": "", "SPARK_SYSFS_DRM": os.path.join(root, "drm"),
+            "SPARK_PROC_VERSION": os.path.join(root, "version"),
             "SPARK_MEM_TOTAL_GB": "16" if good else "8", "SHELL": "/bin/zsh" if IS_MAC else "/bin/bash",
             "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8"}
 
@@ -1692,7 +1715,8 @@ def selftest():
     """Run the check against a good and a bad fixture; every fixture-testable
     row must be ok in the good one and not ok in the bad one. A third pass,
     the good fixture with SITE_SHELL=off, must make every shell row na; a
-    fourth, the good fixture as a client of the stub, every client row."""
+    fourth, the good fixture as a client of the stub, every client row; a
+    fifth, on Linux, the good fixture under WSL 2: every WSL row says so."""
     base = {k: v for k, v in os.environ.items()
             if not k.startswith(("GIT_", "SPARK_", "XDG_", "SITE_"))}
     results = {}
@@ -1744,6 +1768,22 @@ def selftest():
             parts = line.split("\t")
             if len(parts) == 5:
                 results["client"][parts[2]] = (parts[1], parts[3])
+        # the fifth pass, Linux only: the good fixture under WSL 2 (a kernel
+        # line naming microsoft) -- font, quiet and gpu say so, never fail
+        results["wsl"] = {}
+        if not IS_MAC:
+            root = os.path.join(tmp, "wsl")
+            os.makedirs(root)
+            env = dict(base)
+            env.update(make_fixture(root, True, stub_url))
+            with open(os.path.join(root, "version"), "w") as f:
+                f.write("Linux version 6.6.87.2-microsoft-standard-WSL2 (root@fixture) #1 SMP\n")
+            p = subprocess.run([sys.executable, os.path.join(REPO, "bin", "spark"), "check", "--porcelain", "--fresh"],
+                               env=env, capture_output=True, text=True, timeout=180)
+            for line in p.stdout.splitlines():
+                parts = line.split("\t")
+                if len(parts) == 5:
+                    results["wsl"][parts[2]] = (parts[1], parts[3])
     srv.shutdown()
     bad = 0
     say("%s check --selftest" % MARK)
@@ -1771,6 +1811,14 @@ def selftest():
                                               len(CLIENT_ROWS) - len(not_na), peer,
                                               "" if not not_na else "   not na: " + " ".join(not_na)))
     bad += bool(not_na) or peer != OK
+    if IS_MAC:
+        say("  %s wsl: skipped on macOS (a Linux gate proves it)" % GLYPH[NA])
+    else:
+        off = [n for n in WSL_ROWS
+               if results["wsl"].get(n, ("missing", ""))[0] not in (NA, OK) or "WSL 2" not in results["wsl"].get(n, ("", ""))[1]]
+        say("  %s wsl: %d rows say WSL 2%s" % (GLYPH[OK] if not off else GLYPH[FAIL], len(WSL_ROWS) - len(off),
+                                              "" if not off else "   not so: " + " ".join(off)))
+        bad += bool(off)
     say("  %d row%s failed to flip" % (bad, "" if bad == 1 else "s") if bad else "  every fixture-testable row flips")
     return 1 if bad else 0
 
