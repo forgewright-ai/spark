@@ -83,6 +83,12 @@ plus one line in `~/.config/micro/bindings.json`: `"Alt-s": "lua:spark.prompt"`.
 Then `Alt-s` (Option-s on a Mac): Enter completes at the cursor, words
 rewrite, `?` asks in a pane. neovim is next. Each app lives in its own
 `spark-<app>` repository and installs the app's way; spark ships no app.
+
+vim, helix and nano need no plugin: their own filter pipes the selection
+through `spark edit fix the spelling` and takes the answer back (INSTALL
+section 6 has the three lines). A filter cannot complete at the cursor;
+a plugin can.
+
 When apps need more than text, another contract is defined -- e-mail,
 for example -- and apps connect to it the same way.
 

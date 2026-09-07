@@ -358,6 +358,19 @@ installs the app's way. micro is first:
    spark.about "a novel chapter"` tells spark what a buffer is; `git -C
    ~/.config/micro/plug/spark pull` updates it.
 
+No plugin needed: an editor with a filter is a client already. The
+selection goes through `spark edit`, the whole file when nothing is
+selected:
+
+| editor | rewrite the selection | ask about it |
+|---|---|---|
+| vim (neovim too) | `:'<,'>!spark edit fix the spelling` | `:'<,'>w !spark edit \? is this clear` (`\?`: vim hands the line to your shell, and zsh reads a bare `?` as a pattern) |
+| helix | `\|spark edit fix the spelling` | `\|spark edit ? is this clear`; the answer replaces the selection, `u` takes it back |
+| nano | mark, `^T`, `\|spark edit fix the spelling` | `^T`, `\|spark edit ? is this clear`; the answer replaces the mark, `M-U` takes it back |
+
+A filter cannot complete at the cursor: that needs a plugin, and micro's
+is above.
+
 Coming from spark v1.9, where the plugin came with spark: `spark update`
 hands the old links back (the `micro` row says so), then clone as above.
 Another editor joins the same way: one client of `spark edit`, in a

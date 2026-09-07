@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.15
+
+- vim, helix and nano are spark apps with no plugin: their own filter
+  (`:'<,'>!`, `|`, `^T |`) pipes the selection through `spark edit` and
+  takes the answer back. Doc rows in the README, INSTALL section 6, the
+  cheatsheet and `spark edit -h`; a filter cannot complete at the cursor,
+  a plugin can.
+
 ## v1.14
 
 The docs rewritten around three lines: choose your OS, one line, spark
