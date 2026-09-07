@@ -3,32 +3,38 @@
 AGENTS.md is the short form for agents and contributors; this file is
 the full reference.
 
-spark is a local AI at the shell prompt that never leaves your LAN, plus the
-minimal workstation setup that keeps it reproducible and observable on a fresh
-Debian-family or Arch Linux, macOS, or Ubuntu on WSL 2. spark is the seed; the FORGE is the agent it
-builds and keeps on the box -- the model plus one soul, one memory and
-threads, served on the LAN by `spark forge` -- one identity per box, the same
-one for the prompt, the page and any program. This file is the reference for
-anyone (human or agent) changing it. It describes how things are, not how
-they came to be.
+spark is a local AI at the shell prompt that never leaves your LAN, on a
+fresh Debian-family or Arch Linux, macOS, or Ubuntu on WSL 2. Three lines
+are its spine: choose your OS, one line, spark is live; spark apps -- a
+tool becomes smart as a client of `spark edit` (contract 10), each in its
+own `spark-<app>` repository; and, as apps ask for it, another contract
+is defined and apps connect to it the same way. Inside, the FORGE is the
+agent spark builds and keeps on the box -- the model plus one soul, one
+memory and threads, served on the LAN by `spark forge` -- one identity
+per box, the same one for the prompt, the page and any program. This
+file is the reference for anyone (human or agent) changing it. It
+describes how things are, not how they came to be.
 
 ## Principles
 
 - **Simple.** One command (`spark`), one bootstrap, one install script, one
   config format (`KEY=value`), python3 stdlib >= 3.9 or POSIX sh, nothing else.
-- **Three domains, one command.** spark: the engine, the model, chat, the
-  `?` prompt line, the FORGE, users -- OS + spark = a smart OS, always
-  installed, one rc line and nothing else touched. spark shell
-  (`SITE_SHELL`, `spark shell on|off`): the look and the workstation tools
-  for a machine that is an AI box -- tmux, starship, fzf, eza, bat, btop,
-  zoxide, the Nerd Font, palettes, the bar, quiet login and boot. Smart
-  apps: a tool becomes smart by being a client of one spark surface --
-  text on stdin (`spark edit`, contract 10; `spark line`, contract 4),
-  the shell (`? words`, `spark do`, `explain`, `$EDITOR`), or the FORGE's
-  API (contract 9) -- and its plugin lives in its own repository, named
-  `spark-<app>` (micro first: forgewright-ai/spark-micro), installed the
-  app's way. spark ships no app, no app package, no app check row, and
-  no per-app verb: a domain is a switch (`spark shell`); an app is not.
+- **The spine, one command.** spark: the engine, the model, chat, the
+  `?` prompt line, the FORGE, users -- always installed, one rc line and
+  nothing else touched. spark apps: a tool becomes smart by being a
+  client of one spark surface -- text on stdin (`spark edit`, contract
+  10; `spark line`, contract 4), the shell (`? words`, `spark do`,
+  `explain`, `$EDITOR`), or the FORGE's API (contract 9) -- and its
+  plugin lives in its own repository, named `spark-<app>` (micro first:
+  forgewright-ai/spark-micro), installed the app's way. spark ships no
+  app, no app package, no app check row, and no per-app verb. The shell
+  layer (`SITE_SHELL`, `spark shell on|off`, default off): spark's own
+  shell for a machine that is only an AI box -- tmux, starship, fzf,
+  eza, bat, btop, zoxide, the Nerd Font, palettes, the bar, quiet login
+  and boot. It stays green behind its gate; the docs a stranger reads
+  give it one paragraph, never a third of the story, and no word that
+  writes it off (docs_test). A domain is a switch (`spark shell`); an
+  app is not.
 - **The seed and the FORGE.** spark is the seed; the FORGE is the agent it
   builds and keeps. One identity per box (`soul`, `memory`); every client --
   the prompt here, a laptop's `spark`, a script, a phone -- talks to the same
@@ -135,7 +141,8 @@ templates/      rendered, not linked: .gitconfig .tmux.conf .config/btop/btop.co
                 both only with the layer on AND micro on PATH -- the look for a micro you have)
                 .config/starship.toml.{minimal,full} .config/spark/launchd/spark.{serve,forge,check}.plist
 tests/          install_test.sh get_test.sh update_test.sh uninstall_test.sh smoke.py serve_smoke.py
-                docs_test.py (the docs say what the tree holds: credits, counts, pages)
+                docs_test.py (the docs say what the tree holds: credits, counts, pages,
+                the voice of what a stranger reads)
                 audition.py + audition/ (the editor's briefs against a live brain, lints as the
                 judge; not in the gate) vault_test.py site_test.py check_selftest.py
                 forge_smoke.py bench_smoke.py widget_pty.py check_selftest.py
@@ -155,7 +162,7 @@ assets/         banner.svg -- the banner as rectangles, for the README and the p
 www/            the page, spark.forgewright.ai: build.py (stdlib) renders the docs
                 (INSTALL, CHEATSHEET, the model list, CHANGELOG, ROADMAP,
                 CONTRIBUTING, CREDITS) into www/dist/ with template.html; index.html
-                is the front: the banner, the one-liner, two demos, no prose
+                is the front: the banner, the one-liner, the demos, spark-micro, no prose
 CREDITS.md      every third-party project spark downloads or installs,
                 with its license; spark's own code is LICENSE
 ROADMAP.md      what comes after the current release, in order
@@ -470,7 +477,12 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   model upstream is in CREDITS.md, the check-row and model counts the
   docs state are the tree's, every page has its source, no retired word
   survives. A new fact a doc states that the tree can derive goes there
-  as one more check -- the test is the consistency, not a reviewer.
+  as one more check -- the test is the consistency, not a reviewer. What
+  a stranger reads (README, INSTALL, CHEATSHEET, the page front) is
+  minimal and step by step and speaks two nouns, spark and spark apps:
+  no FORGE, ember or brain as a noun there, no "smart app", nothing
+  private named anywhere in the tree's docs (docs_test holds the word
+  list; this file and AGENTS.md keep the contracts' names).
 - **A package.** Linux: the right `PKG_*` group in every `distro/<id>.env`
   with a comment saying why (`PKG_CORE`/`PKG_ENGINE`/`PKG_AI` are the AI,
   always installed; `PKG_SHELL`/`PKG_CLI` the shell layer, `SITE_SHELL=on`),
@@ -487,8 +499,8 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   If it only reads: put it in `home/` (shared) or `<os>/home/`; `install.sh`
   links it. If it rewrites: it cannot be linked -- seed it once from
   `templates/` as a rendered regular file, and note it in INSTALL.md's trap
-  table (under "The shell layer"). Test by changing a setting in the app and running `ls -l` on the
-  path: still a symlink, or now a regular file?
+  table (section 9, "spark shell"). Test by changing a setting in the app
+  and running `ls -l` on the path: still a symlink, or now a regular file?
 - **A choice.** A `SITE_*` key with a default in `site.env.example`, applied
   by `bootstrap.sh` or rendered by `install.sh`, **and** a `spark <verb>`
   that sets and applies it (`spark theme`, `spark font`, `spark quiet`;
@@ -541,7 +553,7 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   for the layer. The layer installs no editor: the hostname row is core
   too (identity), and micro's colorscheme is rendered only for a micro
   the user already has.
-- **A smart app.** Nothing in this repository. A tool becomes smart by
+- **A spark app.** Nothing in this repository. A tool becomes smart by
   being a client of one spark surface -- text on stdin (`spark edit`,
   contract 10; `spark line`, contract 4), the shell (`? words`, `spark
   do`, `explain`, `$EDITOR`), or the FORGE's API (contract 9) -- and its
@@ -556,7 +568,9 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   with the text on stdin and streams the answer back, never speaks HTTP,
   never sees a token, never sends a path; its pty test, its `Alt-s` line
   and its README are its own. The known clients are listed in README
-  and INSTALL ("Smart apps"); a new one is one more line there. A pull
+  ("spark apps"), INSTALL section 6, CHEATSHEET and the page front --
+  docs_test looks every `spark-<app>` the README names up in the other
+  three; a new one is one line in each. A pull
   request that adds an app, an app package or an app check row here is
   turned into a pointer to the app's repository.
 - **The client shape.** `SITE_AI_MODEL=none` beside `SITE_PEER_AI_URL`

@@ -1,10 +1,15 @@
 # spark -- for agents and contributors
 
 spark is a local AI at your shell prompt, bare bones, for Linux (the
-Debian and Arch families), macOS and Windows through WSL 2; nothing leaves the machine except pinned
-downloads and your own talk to a model you run. Three domains share the
-one command: spark (the AI), spark shell (`spark shell on`, the look and
-the tools) and the smart apps (clients of spark, each in its own repo).
+Debian and Arch families), macOS and Windows through WSL 2; nothing
+leaves the machine except pinned downloads and your own talk to a model
+you run. Its spine is three lines: choose your OS, one line, spark is
+live; spark apps -- a tool becomes smart as a client of `spark edit`,
+each in its own `spark-<app>` repo (micro first); as apps ask for it,
+another contract is defined and apps connect the same way. The shell
+layer (`spark shell on`, default off: the look and the tools for a
+machine that is only an AI box) stays green behind its gate and gets one
+paragraph in the docs, no more.
 CI has no WSL runner: the WSL 2 branch is pinned by fixture, and a real
 run there is the maintainer's, by hand. Arch is proven in a container:
 the console, the units and the GPU there are the maintainer's too.
@@ -105,6 +110,13 @@ home paths naming a user, with no skip path for those.
   the line contract, and it must never block.
 - Write non-ASCII into a doc: the pre-commit hook refuses it, because
   these docs are read on the Linux console too.
+- Name a private repository or tool in any doc: what is not public is
+  not documented (`tests/docs_test.py` refuses the word for the tooling
+  that makes distros and apps).
+- Bring the taxonomy into what a stranger reads: README, INSTALL,
+  CHEATSHEET and the page front speak two nouns, spark and spark apps,
+  step by step (docs_test holds the word list); `CLAUDE.md` keeps the
+  contracts' names.
 
 ## Voice
 

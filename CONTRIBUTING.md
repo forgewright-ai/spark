@@ -40,7 +40,10 @@ either one forward and converges the machine.
 2. **A CREDITS correction.** A wrong version, a missing license, a name
    that changed -- `CREDITS.md` is a pull request away from being right.
 3. **A doc fix.** A stale count, a broken cross-reference, a sentence
-   that no longer matches the code.
+   that no longer matches the code. What a stranger reads (README,
+   INSTALL, CHEATSHEET, the page front) stays minimal and step by step,
+   with two nouns, spark and spark apps; `tests/docs_test.py` says which
+   words are out.
 
 ## Code changes
 
@@ -52,11 +55,11 @@ request.
 Commit messages: a lowercase title line, and a body that says why, not
 just what. No trailers are required from you.
 
-An editor or another app becomes smart by being a client of one spark
-verb (`spark edit`, `spark line`, the FORGE's API), in a repository of
-its own -- spark-micro is the shape. spark itself ships no app, no app
-package and no app check row; a pull request adding one is turned into a
-pointer to the app's own repository.
+A spark app: an editor or another tool becomes smart by being a client
+of one spark verb (`spark edit`, `spark line`, the FORGE's API), in a
+repository of its own -- spark-micro is the shape. spark itself ships no
+app, no app package and no app check row; a pull request adding one is
+turned into a pointer to the app's own repository.
 
 ## Privacy gate
 

@@ -13,6 +13,8 @@ spark.
   `tests/docs_test.py` checks the voice: two nouns in what a stranger
   reads, every spark app the README names in INSTALL, the cheatsheet,
   the credits and the page.
+- CLAUDE.md, AGENTS.md and CONTRIBUTING.md are framed by the same
+  three lines; the shell layer is one principle, behind its gate.
 - INSTALL.md in the stranger's order, numbered and step by step (the
   machine, the one line, the verbs, the models, other machines, spark
   apps, the per-OS notes, keeping it, spark shell last). CHEATSHEET.txt
