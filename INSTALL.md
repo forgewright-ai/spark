@@ -46,11 +46,15 @@ minutes, one 4.7 GB model, one sudo.
 **Linux, Arch.** Get the ISO from https://archlinux.org/download/, write
 it to a USB stick and boot it. `archinstall` asks the questions; the ones
 that matter: the *Minimal* profile (a desktop is optional), a user
-account marked superuser (that is the `sudo`), *GRUB* as the bootloader
-if you want `spark quiet boot` one day (systemd-boot has no
-`/etc/default/grub`, and the row skips), `git curl python` under
-additional packages, and a network configuration. Reboot, log in, `sudo
-pacman -Syu` once, then section 2. Arch Linux, and what says
+account marked superuser (that is the `sudo`), *systemd-boot* as the
+bootloader (UEFI-native, one entry file per kernel, no generated
+config; GRUB works too), `git curl python openssh` under additional
+packages, and a network configuration ("copy the ISO's" keeps the Wi-Fi
+you joined with `iwctl`). Take one HTTPS mirror
+(`https://geo.mirror.pkgbuild.com/$repo/os/$arch` as a custom server): a
+router that inspects HTTP turns a mirror into `invalid or corrupted
+database (PGP signature)`. Reboot, log in, `sudo pacman -Syu` once, then
+section 2. Arch Linux, and what says
 `ID_LIKE=arch` (Manjaro, EndeavourOS), get the same rows as Debian;
 CI proves them in a container only.
 
@@ -783,12 +787,15 @@ Arch:
   it). The Nerd Font half of the row is real.
 - `spark quiet login on` works: an absent motd stays absent, `/etc/issue`
   is emptied to the cursor escape, the original kept. `spark quiet boot`
-  refuses: there is no `update-grub` and Arch's `grub-mkconfig` reads no
-  drop-in. By hand, in `/etc/default/grub`: `GRUB_TIMEOUT=0`,
-  `GRUB_TIMEOUT_STYLE=hidden`, `GRUB_CMDLINE_LINUX_DEFAULT="loglevel=3
-  quiet systemd.show_status=false udev.log_level=3
-  vt.global_cursor_default=0 fbcon=nodefer"`, then `sudo grub-mkconfig -o
-  /boot/grub/grub.cfg`.
+  refuses: there is no `update-grub`, and Arch's `grub-mkconfig` reads no
+  drop-in. By hand, with systemd-boot: `timeout 0` in
+  `/boot/loader/loader.conf`, and `quiet loglevel=3
+  systemd.show_status=false udev.log_level=3 vt.global_cursor_default=0
+  fbcon=nodefer` appended to the `options` line of the entry under
+  `/boot/loader/entries/`. With GRUB: the same words in
+  `GRUB_CMDLINE_LINUX_DEFAULT`, `GRUB_TIMEOUT=0`,
+  `GRUB_TIMEOUT_STYLE=hidden` in `/etc/default/grub`, then `sudo
+  grub-mkconfig -o /boot/grub/grub.cfg`.
 - The palette's boot unit works (`kbd` ships `setvtrgb`); the `render`
   group, the user units, linger and the hostname are the same as on
   Debian. The fzf key bindings are read from `/usr/share/fzf`.
