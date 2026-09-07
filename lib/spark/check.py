@@ -1606,7 +1606,7 @@ def make_fixture(root, good, stub_url=""):
         _stub(os.path.join(engine, "llama-server"), "#!/bin/sh\nexit 0\n")
         with open(os.path.join(engine, "flavour"), "w") as f:     # the engine row names the tarball's flavour
             f.write("fixture-x64\n")
-        _stub(os.path.join(bin_, "starship"), "#!/bin/sh\nexit 0\n")
+        _stub(os.path.join(home, ".local", "bin", "starship"), "#!/bin/sh\nexit 0\n")   # where bootstrap pins it
         for sh in ("bash", "zsh"):
             open(os.path.join(home, ".config", "spark", "widget." + sh), "w").close()
             # the completion row: the two files plus a hook that sources its
