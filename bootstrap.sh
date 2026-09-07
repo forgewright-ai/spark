@@ -958,6 +958,8 @@ elif [ ! -f "$vt_file" ]; then
     skip vt-palette "no palette painted yet (spark theme NAME)"
 elif ! command -v setvtrgb >/dev/null 2>&1; then
     row todo vt-palette "setvtrgb is missing: $PM_INSTALL kbd"
+elif [ ! -d /run/systemd/system ]; then
+    skip vt-palette "no booted systemd here (a container): the unit waits for a machine that boots"
 else
     vt_want=$(printf '[Unit]\nDescription=spark: the console palette (setvtrgb)\nAfter=console-setup.service systemd-vconsole-setup.service\nConditionPathExists=%s\n\n[Service]\nType=oneshot\nExecStart=/usr/bin/setvtrgb %s\n\n[Install]\nWantedBy=multi-user.target\n' "$vt_file" "$vt_file")
     # the kernel's live defaults (sysfs, the red line) must be the file's:

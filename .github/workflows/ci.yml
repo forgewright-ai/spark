@@ -163,11 +163,12 @@ jobs:
           sudo -u stranger -H sh -c 'grep -q "config/spark/hook\." ~/.bashrc'
       - name: the shell layer on top (a real pacman installs the shell packages)
         run: |
-          # setup wrote SITE_SHELL=off and a reader keeps a key's first line: replace it, never append
-          # the identity rides in the environment, as the one-liner step gave it
-          sudo -u stranger -H env SITE_GIT_NAME=ci SITE_GIT_EMAIL=you@example.com \
-            sh -c 'sed -i "s/^SITE_SHELL=.*/SITE_SHELL=on/" ~/.config/spark/site.env && ~/.spark/bootstrap.sh'
-          sudo -u stranger -H env SITE_GIT_NAME=ci SITE_GIT_EMAIL=you@example.com sh -c '~/.spark/bootstrap.sh --dry-run' | tee /tmp/dry.txt
+          # the identity in site.env (a reader keeps a key's first line: no duplicates),
+          # then the verb a user runs -- it flips the key, applies the layer's rows
+          # through pacman, writes the palette files
+          sudo -u stranger -H sh -c 'sed -i "/^SITE_GIT_/d" ~/.config/spark/site.env && printf "SITE_GIT_NAME=ci\nSITE_GIT_EMAIL=you@example.com\n" >> ~/.config/spark/site.env'
+          sudo -u stranger -H sh -c '~/.local/bin/spark shell on'
+          sudo -u stranger -H sh -c '~/.spark/bootstrap.sh --dry-run' | tee /tmp/dry.txt
           grep -q '^Nothing to do$' /tmp/dry.txt
           grep -qE '^ok +packages ' /tmp/dry.txt
           grep -qE '^skip +console +Arch' /tmp/dry.txt || grep -qE '^skip +console +SITE_FONT_FACE' /tmp/dry.txt
