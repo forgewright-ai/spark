@@ -106,7 +106,9 @@ nothing else: your shell, your colours and your editor stay yours.
   verified; `spark model add URL` adds your own.
 - **`spark check`.** Every promise this machine makes, one row each; exit 0
   when all are kept. `./bootstrap.sh --dry-run` says what a rebuild would
-  change and never asks for sudo.
+  change and never asks for sudo. `spark uninstall` takes it all off again
+  -- shows the plan, asks for the word `yes` -- and keeps your prose and
+  sealed threads unless you say `--purge`.
 
 ### spark shell
 

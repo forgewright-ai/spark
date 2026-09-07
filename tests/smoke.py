@@ -1516,6 +1516,22 @@ def main():
         t.ok(dropped and after == {"softwrap": True} and not _site.micro_settings_reset(msj),
              "shell off: micro's colorscheme key is dropped, the other settings kept, the file never removed", str(after))
 
+        # spark uninstall: signed, shows and never mutates without the word;
+        # SPARK_NO_APPLY = the plan only (the real run is tests/uninstall_test.sh)
+        rc, out, _ = spark("uninstall", "-h")
+        t.ok(rc == 0 and out.splitlines()[0] == "spark uninstall -- remove spark from this machine: shows first, then asks for the word yes",
+             "spark uninstall -h signs (contract 8)", out)
+        snap = sorted(os.listdir(home + "/.config/spark"))
+        rc, out, _ = spark("uninstall", extra={"SPARK_NO_APPLY": "1"})
+        t.ok(rc == 0 and "the plan" in out and not any(l.startswith("ok ") for l in out.splitlines())
+             and sorted(os.listdir(home + "/.config/spark")) == snap,
+             "spark uninstall under SPARK_NO_APPLY prints the plan and changes nothing", out[:300])
+        rc, out, _ = spark("uninstall", "--nope")
+        t.ok(rc == 2 and out.startswith("spark uninstall -- "), "spark uninstall --nope: usage, exit 2", out)
+        rc, out, _ = spark("uninstall")
+        t.ok(rc == 2 and "not a terminal: spark uninstall --yes runs it" in out,
+             "spark uninstall at a non-terminal without --yes: the plan, then refused, exit 2", out[-200:])
+
         # WSL 2: the OS fact from the kernel line, pinned by SPARK_PROC_VERSION
         # (both OSes, in-process twin); the verbs that own the console and GRUB
         # refuse there, the status names it (Linux, through the CLI)

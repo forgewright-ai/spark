@@ -222,6 +222,42 @@ def _terminal_prefs(path):
                 pass
 
 
+def spark_profiles():
+    """The spark-* profile names Terminal.app's preferences hold."""
+    prefs = _terminal_prefs(os.path.join(CONFIG_DIR, "terminal"))
+    ws = prefs.get("Window Settings")
+    return sorted(k for k in ws if k.startswith("spark-")) if isinstance(ws, dict) else []
+
+
+def remove_profiles():
+    """spark uninstall: every spark-* profile leaves Terminal.app's
+    preferences; a default or startup setting that named one falls back
+    to Basic. Returns the names removed. Open windows keep their look."""
+    path = os.path.join(CONFIG_DIR, "terminal")
+    prefs = _terminal_prefs(path)
+    ws = prefs.get("Window Settings")
+    if not isinstance(ws, dict):
+        return []
+    gone = sorted(k for k in ws if k.startswith("spark-"))
+    if not gone:
+        return []
+    for k in gone:
+        del ws[k]
+    for key in ("Default Window Settings", "Startup Window Settings"):
+        if str(prefs.get(key, "")).startswith("spark-"):
+            prefs[key] = "Basic"
+    tmp = path + ".prefs"
+    os.makedirs(os.path.dirname(tmp), exist_ok=True)
+    with open(tmp, "wb") as f:
+        plistlib.dump(prefs, f, fmt=plistlib.FMT_BINARY)
+    rc, _ = run(["defaults", "import", "com.apple.Terminal", tmp], timeout=10)
+    try:
+        os.remove(tmp)
+    except OSError:
+        pass
+    return gone if rc == 0 else []
+
+
 def _install_profile(name, d, path):
     """Put the profile into Terminal.app's preferences under its name --
     replacing an older one of that name -- and make it the default. Through

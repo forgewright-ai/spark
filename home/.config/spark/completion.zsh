@@ -47,7 +47,7 @@ _spark() {
         comp=(chat do serve stop check update shell headless client setup
               ver last status brain history stats bench tune model ember
               forge soul remember forget memory quiet theme font bar off
-              on user explain edit help)
+              on user explain edit help uninstall)
     elif (( CURRENT == 3 )); then
         case ${words[2]} in
             quiet)   comp=(start login boot audio on off status) ;;
@@ -56,6 +56,7 @@ _spark() {
             ember)   comp=(list auto none status ${(f)"$(_spark_model_names)"}) ;;
             shell | bar | headless | forge | memory) comp=(on off status) ;;
             check)   comp=(--watch --porcelain --selftest --fresh --fetch) ;;
+            uninstall) comp=(--dry-run --yes --purge --packages --keep-packages) ;;
             serve)   comp=(--foreground --host --print-client) ;;
             chat)    comp=(--thread) ;;
             soul)    comp=(show edit reset) ;;

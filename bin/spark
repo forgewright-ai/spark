@@ -63,6 +63,7 @@ USAGE_MACHINE = """the machine
  spark setup                  the guided first run: name, user, model (-h)
  spark check                  drift report; exit 0 = every promise kept (-h)
  spark update [--dry-run]     the newest tag, or main on a developer clone
+ spark uninstall [--purge]    remove spark from this machine: shows, asks yes
 """
 
 USAGE_SHELL = """the interface
@@ -142,7 +143,8 @@ VERBS = {"setup": ("setup", "main", False), "check": ("check", "main", False),
          "model": ("site", "main", True), "headless": ("site", "main", True), "ember": ("site", "main", True),
          "client": ("site", "main", True),
          "serve": ("serve", "main", True), "stop": ("serve", "main", True),
-         "forge": ("forgeserve", "main", False), "user": ("users", "main", False)}
+         "forge": ("forgeserve", "main", False), "user": ("users", "main", False),
+         "uninstall": ("uninstall", "main", False)}
 
 
 def near_verb(word, cli):

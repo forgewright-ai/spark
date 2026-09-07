@@ -45,7 +45,7 @@ $hit"
 fi
 
 # --- 2. syntax ------------------------------------------------------------
-for f in bootstrap.sh install.sh get .githooks/pre-commit .githooks/pre-push tests/install_test.sh; do
+for f in bootstrap.sh install.sh get .githooks/pre-commit .githooks/pre-push tests/install_test.sh tests/uninstall_test.sh; do
     [ -f "$f" ] || continue
     sh -n "$f" || bad "sh -n $f"
 done

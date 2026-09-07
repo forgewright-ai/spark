@@ -1,5 +1,32 @@
 # Changelog
 
+## v1.12
+
+A way out: `spark uninstall` takes spark off a machine and keeps what is yours.
+
+- `spark uninstall` prints the plan, one row per thing, then asks for the
+  word `yes`. Everything spark made goes -- units and timers, the shell
+  layer's look (rc files and renders back from `.bak`), the spark line in
+  your rc file, the console palette (VGA again, the boot unit removed),
+  the Nerd Font and the terminfo entry, `~/.local/bin/{spark,explain,
+  starship}`, the engine and every model, `~/.config/spark`,
+  `~/.local/state/spark`, and the clone `get` made. Your soul, memory,
+  sealed users and account keys, `models.env`, themes and `privacy-terms`
+  stay unless `--purge`; the shell layer's packages are a question
+  (`--packages` / `--keep-packages` answer it up front); `--dry-run` shows;
+  `--yes` is a script's form. Headless and the quiet login and boot are
+  undone first through their own bootstrap rows; a root step whose sudo
+  refuses is a `todo` row with its command. What spark could not record
+  before changing it -- a hostname, pmset, a console font set before this
+  release -- is named with the line that puts it back; the console font's
+  original is kept from now on (`console-setup.spark-orig`).
+- Terminal.app: `theme.remove_profiles` takes the spark profiles out of
+  the preferences (a default or startup setting that named one falls back
+  to Basic).
+- `tests/uninstall_test.sh` proves it against a real clone in a throwaway
+  HOME: the plan changes nothing, a non-terminal refuses, `--yes` keeps
+  exactly yours, `--purge` keeps nothing, a developer checkout is left.
+
 ## v1.11
 
 The help in the maintainer's own order; an empty buffer is a page to

@@ -43,6 +43,7 @@ jobs:
           sh tests/install_test.sh
           sh tests/get_test.sh
           sh tests/update_test.sh
+          sh tests/uninstall_test.sh
           python3 tests/smoke.py
           python3 tests/serve_smoke.py
           python3 tests/forge_smoke.py
@@ -135,6 +136,7 @@ jobs:
           sh tests/install_test.sh
           sh tests/get_test.sh
           sh tests/update_test.sh
+          sh tests/uninstall_test.sh
           /usr/bin/python3 tests/smoke.py
           /usr/bin/python3 tests/serve_smoke.py
           /usr/bin/python3 tests/forge_smoke.py

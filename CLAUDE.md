@@ -104,6 +104,8 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 forgeserve (the FORGE server: spark forge, the API, the page) do (spark do)
                 version (the version, from git, cached: spark ver, check's header, forgeserve)
                 update (spark update: the newest tag, or main; converges)
+                uninstall (spark uninstall: the plan, the word yes, then everything
+                spark made goes; yours stays unless --purge; the clone last)
                 chacha (ChaCha20-Poly1305 written from RFC 8439, pinned to its
                 vectors in tests/vault_test.py: the sealed stores' cipher)
                 vault (the sealed-file format and the key custody: a per-user
@@ -122,7 +124,7 @@ templates/      rendered, not linked: .gitconfig .tmux.conf .config/btop/btop.co
                 .config/micro/colorschemes/spark.micro .config/micro/settings.json (seeded once;
                 both only with the layer on AND micro on PATH -- the look for a micro you have)
                 .config/starship.toml.{minimal,full} .config/spark/launchd/spark.{serve,forge,check}.plist
-tests/          install_test.sh get_test.sh update_test.sh smoke.py serve_smoke.py
+tests/          install_test.sh get_test.sh update_test.sh uninstall_test.sh smoke.py serve_smoke.py
                 docs_test.py (the docs say what the tree holds: credits, counts, pages)
                 audition.py + audition/ (the editor's briefs against a live brain, lints as the
                 judge; not in the gate) vault_test.py site_test.py check_selftest.py
@@ -175,7 +177,13 @@ token verifier and the wrapped data key -- plus that user's sealed
 `threads/`, `memory`, `chat-history`, `ledger`), `account` 0600 (this machine's
 login: name and token), `account-key` 0600 (the unwrapped data key, so
 the hot paths never pay the KDF)); data `~/.local/share/spark/{engine,models}`;
-tools linked into `~/.local/bin`.
+tools linked into `~/.local/bin`. `spark uninstall` (`lib/spark/uninstall.py`)
+removes all of it but the sealed stores, the account keys and your prose
+(`--purge` takes those); it runs bootstrap ONCE first -- headless and quiet
+undone through their rows with the shell layer still on -- and never
+`site.apply` or `check.refresh` after (each would put things back); root
+steps become `todo` rows when sudo refuses; the clone goes last, only when
+it is `${SPARK_HOME:-~/.spark}` and clean.
 
 ## Contracts
 
@@ -279,7 +287,9 @@ may change freely.
    and the set forms `spark quiet login|boot on|off` refuse with the
    same line (showing still answers, saying the layer is off); `spark
    help` then folds the shell block into one `spark shell on` line.
-   `spark theme` and `spark font` are core: they answer either way. On
+   `spark theme` and `spark font` are core: they answer either way.
+   `spark uninstall -- not a terminal: spark uninstall --yes runs it` is
+   the refusal of a non-terminal without `--yes` (the plan printed, 2). On
    WSL 2 the same shape: `spark font -- no console on WSL 2: the font
    lives in Windows Terminal's settings` (show 0, set 2), `spark quiet
    boot -- no GRUB on WSL 2: Windows boots it`, `spark headless -- WSL 2
@@ -418,8 +428,8 @@ One grammar for every verb; a verb that breaks a rule is a bug.
    config read -- signed per contract 8.
 5. One confirm shape: `<question>? yes/NO: ` -- only `y` or `yes`
    proceeds; Enter or EOF is no (`confirm()` in `lib/spark/__init__.py`,
-   beside `say()`). The one deliberate second shape: `spark do`'s danger
-   step requires the typed word `yes`.
+   beside `say()`). The one deliberate second shape, two users: `spark
+   do`'s danger step and `spark uninstall` require the typed word `yes`.
 6. One progress vocabulary: curl's bar for downloads, and one
    dot-spinner -- `wait_ready(label, probe, timeout, interval)` in
    `lib/spark/__init__.py` -- for every wait on a server coming up.

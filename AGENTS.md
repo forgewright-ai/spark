@@ -49,6 +49,7 @@ shellcheck -S warning bootstrap.sh install.sh lib/env.sh
 sh tests/install_test.sh
 sh tests/get_test.sh
 sh tests/update_test.sh
+sh tests/uninstall_test.sh
 ```
 
 (`tests/check_selftest.py` is the hook's entry to `spark check --selftest`.)

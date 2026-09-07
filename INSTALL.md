@@ -521,6 +521,44 @@ git -C ~/.spark pull --ff-only && ~/.spark/bootstrap.sh
 `./bootstrap.sh --dry-run` must then end with `Nothing to do`, and `spark
 check` exit 0.
 
+## Uninstalling
+
+```sh
+spark uninstall
+```
+
+It prints the plan first -- one row per thing, in bootstrap's shape --
+then asks for the word `yes`. Everything spark made goes: the units and
+timers (the FORGE and the server stopped), the shell layer's look (rc
+files and rendered configs back from their `.bak`, micro's colorscheme
+key dropped), the spark line in your rc file, the console palette (VGA
+again, the boot unit removed), the Nerd Font and the terminfo entry it
+compiled, `~/.local/bin/spark`, `explain` and the pinned starship, the
+engine and every model (the gigabytes are named), `site.env`, `spark.env`
+and the rest of `~/.config/spark`, the state under `~/.local/state/spark`,
+and the clone at `~/.spark` (or `SPARK_HOME`) when it is the one `get`
+made and clean; a developer checkout is named and left. Headless and the
+quiet login and boot are undone first through their own bootstrap rows
+(sudo: sleep targets, the lid, motd, GRUB).
+
+What stays, on purpose: your soul, your memory, the sealed users' stores
+with the account keys that open them, your `models.env`, your themes and
+`privacy-terms` -- `spark uninstall --purge` takes those too. The shell
+layer's packages are a question at the terminal (`remove the shell
+layer's packages too? yes/NO`); nobody answering means kept, and
+`--packages` / `--keep-packages` answer up front. `--dry-run` prints the
+plan and stops; `--yes` (or `SPARK_YES=1`) skips the question for a
+script; a non-terminal without it prints the plan and exits 2.
+
+Some things spark changed it could not record first: a hostname it set
+(`SITE_SET_HOSTNAME=yes`), macOS's `pmset` values under headless, and a
+console font set before v1.12 (since v1.12 the original is kept as
+`/etc/default/console-setup.spark-orig` and put back). Each is named at
+the end with the line that puts it back. A root step whose sudo refuses
+becomes a `todo` row with its command, never a failure. Reinstalling
+afterwards is the one-liner again; a kept sealed store opens with the
+same token.
+
 ## 5. spark shell
 
 `spark shell on` (`SITE_SHELL=on`) puts spark's own shell on top of the AI:
@@ -749,6 +787,12 @@ lists exactly which of these it would do:
   `render` group (also on any vulkan build), the sleep targets masked, the
   lid ignored (a logind drop-in); macOS the LaunchDaemons in `system/` and
   `pmset`.
+
+`spark uninstall` uses sudo for the mirror image, each step a row: the
+sleep targets, the lid drop-in, motd and GRUB back (bootstrap's own rows),
+`setvtrgb vga` and the `spark-console` unit removed, linger off and the
+`render` group left, the console font's original back, the motd and issue
+originals removed, and the packages when you say so.
 
 One thing stays manual on purpose, being a trust decision rather than
 configuration: passwordless sudo for your user (`echo 'you ALL=(ALL)

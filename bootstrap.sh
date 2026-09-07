@@ -887,6 +887,8 @@ else
     cur=$(sed -n 's/^FONTFACE="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p; s/^FONTSIZE="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' /etc/default/console-setup 2>/dev/null | paste -sd' ' -)
     if [ "$cur" = "$SITE_FONT_FACE $size" ]; then ok console "$SITE_FONT_FACE $size"
     elif need console "set $SITE_FONT_FACE $size in /etc/default/console-setup (sudo)"; then
+        # the original, once: spark uninstall puts it back
+        as_root cp -n /etc/default/console-setup /etc/default/console-setup.spark-orig 2>/dev/null || true
         as_root sed -i "s/^FONTFACE=.*/FONTFACE=\"$SITE_FONT_FACE\"/; s/^FONTSIZE=.*/FONTSIZE=\"$size\"/" /etc/default/console-setup
         as_root setupcon --force 2>/dev/null || true
         ok console "$SITE_FONT_FACE $size"

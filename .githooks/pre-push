@@ -17,6 +17,9 @@ fi
 if [ -f tests/update_test.sh ]; then
     sh tests/update_test.sh >/dev/null || { echo "pre-push: tests/update_test.sh failed"; fail=1; }
 fi
+if [ -f tests/uninstall_test.sh ]; then
+    sh tests/uninstall_test.sh >/dev/null || { echo "pre-push: tests/uninstall_test.sh failed"; fail=1; }
+fi
 if [ -f bin/spark ] && [ -f lib/spark/check.py ]; then
     python3 bin/spark check --selftest || { echo "pre-push: spark check --selftest failed"; fail=1; }
 fi

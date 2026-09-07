@@ -59,6 +59,7 @@ THE MACHINE
   spark check --watch 5           redraw every 5 s     --selftest  prove rows
   long output (help, check, lists) pages via $PAGER (less); piped stays plain
   spark update [--dry-run]        the newest tag; main pulls on a dev clone
+  spark uninstall [--purge]       remove spark: shows, asks yes; keeps yours
   ./bootstrap.sh --dry-run        what a rebuild would change (never sudo)
   ./bootstrap.sh                  apply; converged = Nothing to do
   ~/.config/spark/site.env  name, user, model, ember, budget, shell, peer, theme

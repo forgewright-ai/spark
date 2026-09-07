@@ -48,7 +48,7 @@ _spark_complete() {
         words="chat do serve stop check update shell headless client setup
                ver last status brain history stats bench tune model ember
                forge soul remember forget memory quiet theme font bar off
-               on user explain edit help"
+               on user explain edit help uninstall"
         COMPREPLY=($(compgen -W "$words" -- "$cur"))
         return 0
     fi
@@ -60,6 +60,7 @@ _spark_complete() {
         ember)   words="list auto none status $(_spark_model_names)" ;;
         shell | bar | headless | forge | memory) words="on off status" ;;
         check)   words="--watch --porcelain --selftest --fresh --fetch" ;;
+        uninstall) words="--dry-run --yes --purge --packages --keep-packages" ;;
         serve)   words="--foreground --host --print-client" ;;
         chat)    words="--thread" ;;
         soul)    words="show edit reset" ;;
