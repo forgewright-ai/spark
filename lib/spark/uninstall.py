@@ -68,7 +68,7 @@ class Ctx(object):
         if status == "todo":
             self.todo.append((what, detail))
 
-    def root(self, what, cmd, done, manual=None):
+    def root(self, what, cmd, done, manual=None, timeout=120):
         """Run cmd as root (sudo): a `would` row when dry, `ok` when it ran,
         `todo` with the manual line when sudo refused or is absent."""
         manual = manual or "sudo " + " ".join(cmd)
@@ -78,7 +78,7 @@ class Ctx(object):
         if shutil.which("sudo"):
             argv = ["sudo"] + ([] if sys.stdin.isatty() else ["-n"]) + cmd
             try:
-                rc = subprocess.run(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120).returncode
+                rc = subprocess.run(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=timeout).returncode
             except (OSError, subprocess.TimeoutExpired):
                 rc = 1
             if rc == 0:
@@ -462,7 +462,7 @@ def step_packages(ctx):
             run(["brew", "uninstall", p], timeout=300)
         ctx.row("ok", "packages", "brew uninstall %s (a formula another package needs stays)" % " ".join(pkgs))
     else:
-        ctx.root("packages", ["apt-get", "remove", "-y"] + pkgs, "apt-get remove " + " ".join(pkgs))
+        ctx.root("packages", ["apt-get", "remove", "-y"] + pkgs, "apt-get remove " + " ".join(pkgs), timeout=1800)
 
 
 def step_state_config(ctx):
