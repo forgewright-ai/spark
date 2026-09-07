@@ -7,7 +7,7 @@ labels: bug
 
 `spark ver` output:
 
-OS (Debian 13, Ubuntu 24.04, macOS, and the version):
+OS (Debian 13, Ubuntu 24.04, Arch, macOS, and the version):
 
 `spark check --porcelain` output:
 

@@ -5,7 +5,7 @@ the full reference.
 
 spark is a local AI at the shell prompt that never leaves your LAN, plus the
 minimal workstation setup that keeps it reproducible and observable on a fresh
-Debian-family Linux, macOS, or Ubuntu on WSL 2. spark is the seed; the FORGE is the agent it
+Debian-family or Arch Linux, macOS, or Ubuntu on WSL 2. spark is the seed; the FORGE is the agent it
 builds and keeps on the box -- the model plus one soul, one memory and
 threads, served on the LAN by `spark forge` -- one identity per box, the same
 one for the prompt, the page and any program. This file is the reference for
@@ -55,8 +55,14 @@ they came to be.
   report/bar glyphs fall back to `+ x - | v ^ ->`. The docs are ASCII too (the hook refuses
   anything else): they are read on that console as well.
 - **Symmetric.** Every feature exists on both OSes, using each OS's native
-  mechanism (apt/brew, systemd/launchd, bash/zsh). Nothing OS-only ships.
-  Windows is reached through WSL 2: Ubuntu there is Linux to spark, minus
+  mechanism (apt or pacman/brew, systemd/launchd, bash/zsh). Nothing
+  OS-only ships. A Linux package family is one oracle beside `is_wsl()`
+  (`distro()`, `ID` then `ID_LIKE` from os-release, `SPARK_OS_RELEASE`
+  pins it), one data file `distro/<id>.env` (the names), and the verbs
+  that ask a package manager switched once on `PM` (bootstrap's
+  `pkg_*`, `lib/spark/packages.py`); what a family lacks refuses in one
+  signed line, its rows say so (`check.ARCH_ROWS`, a sixth selftest
+  pass), never fail. Windows is reached through WSL 2: Ubuntu there is Linux to spark, minus
   what the VT console and GRUB own (`is_wsl()` beside `os_pretty`; the
   verbs that own those refuse in one signed line, their rows say so, never
   fail). CI has no WSL runner: `check.WSL_ROWS` and a fifth selftest pass
@@ -137,7 +143,8 @@ tests/          install_test.sh get_test.sh update_test.sh uninstall_test.sh smo
 .githooks/      pre-commit (privacy gate, syntax, tests, 80-col), commit-msg (the
                 same privacy patterns over the message -- history is public too),
                 pre-push (install test, selftest)
-.github/        ci.yml: the same on ubuntu (plus a real bootstrap) and macOS (python 3.9)
+.github/        ci.yml: the same on ubuntu (plus a real bootstrap) and macOS (python 3.9);
+                the stranger's one-liner in a debian:13 and an archlinux container
                 release.yml: the GitHub Release from the CHANGELOG section, on a v* tag
                 pages.yml: www/ rendered and published to GitHub Pages on a doc change
                 and on a published release (the sign line links the release)
@@ -302,7 +309,11 @@ may change freely.
    WSL 2 the same shape: `spark font -- no console on WSL 2: the font
    lives in Windows Terminal's settings` (show 0, set 2), `spark quiet
    boot -- no GRUB on WSL 2: Windows boots it`, `spark headless -- WSL 2
-   stops with its last window: not a brain (a Linux box is)` (exit 2).
+   stops with its last window: not a brain (a Linux box is)` (exit 2). On
+   Arch likewise: `spark font -- no console-setup on Arch: the console
+   font is /etc/vconsole.conf's (FONT=), left alone in this version`
+   (show 0, set 2) and `spark quiet boot -- no update-grub on Arch: GRUB
+   is left alone in this version` (exit 2).
 9. The FORGE's HTTP API (`lib/spark/forgeserve.py`, on
    `SPARK_FORGE_HOST:SPARK_FORGE_PORT`, one LAN address, never `0.0.0.0`).
    `GET /api/health` answers without a token: `{status, forge: true, name,
@@ -620,7 +631,9 @@ NONFUNCTIONAL (`grep -c '^@row' lib/spark/check.py`). With `SITE_SHELL=off`
 the 11 rows in `check.SHELL_ROWS` and the `shell` row answer `na`;
 `--selftest` runs a third pass to prove it, a fourth for the client
 shape (the 7 rows in `check.CLIENT_ROWS`), and on Linux a fifth under a
-WSL 2 kernel line (the 3 rows in `check.WSL_ROWS` say so, never fail).
+WSL 2 kernel line (the 3 rows in `check.WSL_ROWS` say so, never fail)
+and a sixth under `ID=arch` (the 2 rows in `check.ARCH_ROWS` say so; the
+packages row answers through a pacman stub).
 
 ## Releasing
 
