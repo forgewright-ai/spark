@@ -453,31 +453,31 @@ pkg_install() {   # pkg_install NAME... -- as root, the manager's own way
 section packages
 if [ "$OS" = Darwin ]; then
     if [ "$shell" = 0 ]; then
-        ok brew "nothing required (SITE_SHELL=off)"
+        ok packages "nothing required (SITE_SHELL=off)"
     elif ! command -v brew >/dev/null 2>&1; then
-        row todo brew "Homebrew is not installed: https://brew.sh (then run again)"
+        row todo packages "Homebrew is not installed: https://brew.sh (then run again)"
     elif brew bundle check --file "$REPO/Brewfile" --no-upgrade >/dev/null 2>&1; then
-        ok brew "Brewfile satisfied ($(list_packages | wc -l | tr -d ' ') entries)"
-    elif need brew "brew bundle --file Brewfile"; then
+        ok packages "Brewfile satisfied ($(list_packages | wc -l | tr -d ' ') entries)"
+    elif need packages "brew bundle --file Brewfile"; then
         brew bundle --file "$REPO/Brewfile" --no-upgrade
-        ok brew "Brewfile satisfied"
+        ok packages "Brewfile satisfied"
     fi
 elif [ -z "$PM" ]; then
-    row todo apt "no package list for this Linux ($(sed -n 's/^PRETTY_NAME=//p' "${SPARK_OS_RELEASE:-/etc/os-release}" 2>/dev/null | tr -d '"')): distro/*.env know debian and arch -- install git curl python3 and libgomp by hand"
+    row todo packages "no package list for this Linux ($(sed -n 's/^PRETTY_NAME=//p' "${SPARK_OS_RELEASE:-/etc/os-release}" 2>/dev/null | tr -d '"')): distro/*.env know debian and arch -- install git curl python3 and libgomp by hand"
 else
     missing=''; absent=''
     for p in $(list_packages); do
         if pkg_installed "$p"; then continue; fi
         if pkg_available "$p"; then missing="$missing $p"; else absent="$absent $p"; fi
     done
-    [ -z "$absent" ] || skip apt "not in this $PM:$absent (spark targets $PM_TARGET)"
+    [ -z "$absent" ] || skip packages "not in this $PM:$absent (spark targets $PM_TARGET)"
     if [ -z "$missing" ]; then
-        ok apt "$(list_packages | wc -l | tr -d ' ') packages installed"
-    elif need apt "install:$missing (sudo)"; then
+        ok packages "$(list_packages | wc -l | tr -d ' ') packages installed"
+    elif need packages "install:$missing (sudo)"; then
         # shellcheck disable=SC2086
         pkg_install $missing > "$TMP/pkg.log" 2>&1 \
             || { tail -20 "$TMP/pkg.log"; echo "bootstrap: $PM install failed" >&2; exit 1; }
-        ok apt "installed:$missing"
+        ok packages "installed:$missing"
     fi
 fi
 

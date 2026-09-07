@@ -231,7 +231,7 @@ printf '%s\n' "$out" | grep -qE '^skip +console +(macOS:|SITE_FONT_FACE unset)' 
 printf '%s\n' "$out" | grep -qE '^skip +hostname +SITE_SET_HOSTNAME=no' && ok "SITE_SHELL unset: the hostname row is core (identity), its skip names its key" || bad "hostname row: $(printf '%s\n' "$out" | grep -E ' hostname ' | head -1)"
 printf '%s\n' "$out" | grep -qE ' micro-aspell ' && bad "a micro-aspell row survives (spark ships no app)" || ok "no micro-aspell row: spark installs no editor"
 printf '%s\n' "$out" | grep -qE "^would +dir +mkdir .*/projects" && bad "SITE_SHELL unset: the workspace folder would be made" || ok "SITE_SHELL unset: no workspace folder for a stranger"
-[ "$(uname -s)" = Darwin ] && { printf '%s\n' "$out" | grep -qE '^ok +brew +nothing required' && ok "SITE_SHELL unset: brew row is ok, nothing required" || bad "brew row with the shell off"; }
+[ "$(uname -s)" = Darwin ] && { printf '%s\n' "$out" | grep -qE '^ok +packages +nothing required' && ok "SITE_SHELL unset: packages row is ok, nothing required" || bad "packages row with the shell off"; }
 [ -z "$(sh "$REPO/bootstrap.sh" --list-packages | grep -E '^(tmux|starship|bat|eza|fzf|btop)$')" ] && ok "SITE_SHELL unset: --list-packages has no shell package" || bad "--list-packages lists shell packages with the shell off"
 [ -z "$(SITE_SHELL=on sh "$REPO/bootstrap.sh" --list-packages | grep -E '^(micro|aspell|aspell-en|shellcheck)$')" ] && ok "SITE_SHELL=on: no editor, no contributor tool in --list-packages" || bad "--list-packages still lists micro/aspell/shellcheck"
 # the v1.10 migration row: links an older install.sh made into this repo's
@@ -255,7 +255,7 @@ printf 'SITE_SHELL=on\nSITE_HEADLESS=no\nSITE_AI_MODEL=none\n' > "$HOME/.config/
 out=$(PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (shell on) failed: $(printf '%s\n' "$out" | tail -3)"
 case $(uname -s) in
     Darwin) printf '%s\n' "$out" | grep -qE '^skip +pinned +Homebrew' && ok "SITE_SHELL=on: pinned names Homebrew" || bad "SITE_SHELL=on: pinned row"
-            printf '%s\n' "$out" | grep -qE '^(ok|would|todo) +brew ' && ok "SITE_SHELL=on: the brew row reads the Brewfile" || bad "SITE_SHELL=on: brew row" ;;
+            printf '%s\n' "$out" | grep -qE '^(ok|would|todo) +packages ' && ok "SITE_SHELL=on: the packages row reads the Brewfile" || bad "SITE_SHELL=on: packages row" ;;
     *)      for r in starship font; do
                 printf '%s\n' "$out" | grep -qE "^(ok|would) +$r " && ok "SITE_SHELL=on: $r announced" || bad "SITE_SHELL=on: no $r row"
             done ;;

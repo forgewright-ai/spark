@@ -1164,7 +1164,7 @@ SHELL_USAGE = """%s shell -- spark's own shell: tmux, starship, fzf, eza, bat, b
 # the bootstrap rows the switch flips (bootstrap.sh gates them on
 # SITE_SHELL); the row names are bootstrap.sh's, not check.py's. The
 # console-font and hostname rows are core, so they are not filtered for here.
-SHELL_APPLY_ROWS = ["identity", "dir", "apt", "brew", "starship", "pinned",
+SHELL_APPLY_ROWS = ["identity", "dir", "packages", "starship", "pinned",
                     "configs", "rc", "theme", "vt-palette", "terminfo", "quiet-login", "quiet-boot"]
 SHELL_TOOLS = "tmux, starship, fzf, zoxide, eza, bat, btop"
 

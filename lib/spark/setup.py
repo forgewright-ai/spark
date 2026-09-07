@@ -1,6 +1,6 @@
 # spark.setup -- `spark setup`: the guided first run. Greet, ask three
 # things (this machine's name, yours, the model), write
-# site.env, sudo once when apt has something to install, run bootstrap on
+# site.env, sudo once when the package manager has something to install, run bootstrap on
 # the terminal, wait for the brain, ask the first question live, print the
 # measured speed and the three things to try. Every step reuses code that
 # exists: cmd_ver, print_model_table's rows, set_keys, apply, cmd_serve,
@@ -39,7 +39,7 @@ DEFAULT_THEME = "gruvbox-dark"
 # the bootstrap rows that are the AI layer, by their names in bootstrap.sh
 # (the filter apply() uses when its output is captured; at a terminal the
 # whole bootstrap shows, progress bars included)
-CORE_ROWS = ["site", r"spark\.env", "name", "hostname", "model", "ember", "apt", "brew", "engine", "token", "dir",
+CORE_ROWS = ["site", r"spark\.env", "name", "hostname", "model", "ember", "packages", "engine", "token", "dir",
              "configs", "rc", "spark", "explain", "PATH", "hooks", "linger", "render", "systemd", "launchd",
              r"spark[-.]serve", r"spark[-.]forge", r"spark[-.]check"]
 QUESTION = "how big is this dir"
@@ -197,14 +197,14 @@ def _write(name, user, model, theme):
     say("ok     site         " + " ".join("%s=%s" % kv for kv in keys.items()))
 
 
-def _apt_packages():
-    """The packages bootstrap's apt row would install (Linux), from a
+def _packages_pending():
+    """The packages bootstrap's packages row would install (Linux), from a
     dry-run: '' when none. The dry-run never calls sudo."""
     if IS_MAC or os.environ.get("SPARK_NO_APPLY"):
         return ""
     p = subprocess.run(["sh", os.path.join(REPO, "bootstrap.sh"), "--dry-run"], capture_output=True, text=True)
     for line in p.stdout.splitlines():
-        m = re.match(r"^would\s+apt\s+install:(.*?)\s*\(sudo\)\s*$", line)
+        m = re.match(r"^would\s+packages\s+install:(.*?)\s*\(sudo\)\s*$", line)
         if m:
             return m.group(1).strip()
     return ""
@@ -343,12 +343,12 @@ def _run(opts):
     _write(name, user, model, theme_name)
     _account(user)
     cfg = config.load()
-    waiting = _sudo(_apt_packages(), yes)
+    waiting = _sudo(_packages_pending(), yes)
     pend = [] if os.environ.get("SPARK_NO_APPLY") else site._downloads_pending(cfg)
     site._announce_downloads(pend)
     rc = site.apply(CORE_ROWS, stream=True)
     if waiting:
-        say("todo   apt          still to install: %s -- %s, then spark setup again"
+        say("todo   packages     still to install: %s -- %s, then spark setup again"
             % (waiting, packages.install_line(waiting.split())))
         say("                    (without %s, llama-server will not start)" % (packages.groups()["PKG_ENGINE"] or ["the engine's library"])[0])
     if rc != 0:
