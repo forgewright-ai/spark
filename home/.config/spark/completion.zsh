@@ -7,7 +7,7 @@
 # over the four model lists; when any of that fails, the static words
 # still complete, silently. Binds no key of its own.
 # Not completed on purpose (plumbing, gone, or aliases of ver):
-#   line talk version --version
+#   line version --version
 
 _spark_repo() {
     # ~/.local/bin/spark is a symlink to <repo>/bin/spark; print <repo>

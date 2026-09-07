@@ -218,19 +218,20 @@ def row_engine(ctx):
     return ok(" ".join(x for x in (name, flavour, "(%s)" % where if where else "") if x))
 
 
-@row("SOFTWARE")
+@row("SOFTWARE", fixture=not IS_MAC, reason="Homebrew's starship is on the real PATH; the packages row proves the Brewfile")
 def row_pinned(ctx):
-    """The shell layer's pinned pieces: starship and micro's aspell plugin
-    (llama-server is the engine row's). Linux fetches them by version and
-    sha256; on macOS Homebrew provides starship, so bootstrap skips the pin."""
-    missing = []
-    if not which("starship"):
-        missing.append("starship")
-    if not os.path.isdir(os.path.join(ctx.home, ".config", "micro", "plug", "aspell")):
-        missing.append("micro-aspell")
-    if missing:
-        return fail("missing: %s" % " ".join(missing), "brew bundle --file Brewfile; ./bootstrap.sh" if IS_MAC else "./bootstrap.sh")
-    return ok("starship (Homebrew), micro-aspell" if IS_MAC else "starship, micro-aspell")
+    """The shell layer's pinned piece: starship (llama-server is the engine
+    row's). Linux fetches it by version and sha256 into ~/.local/bin --
+    that file, or a distro's in the system dirs; on macOS Homebrew provides
+    it, so bootstrap skips the pin and the row reads what Homebrew has."""
+    if IS_MAC:
+        return ok("starship (Homebrew)") if which("starship") else fail("missing: starship", "brew bundle --file Brewfile; ./bootstrap.sh")
+    pinned = os.path.join(ctx.home, ".local", "bin", "starship")
+    if os.access(pinned, os.X_OK):
+        return ok("starship")
+    if shutil.which("starship", path="/usr/bin:/usr/local/bin:/bin"):
+        return ok("starship (the distro's)")
+    return fail("missing: starship", "./bootstrap.sh")
 
 
 def _font_dirs(home):
@@ -343,8 +344,9 @@ def row_theme(ctx):
                     "spark theme %s" % name)
     if not IS_MAC and not os.path.isfile(os.path.join(CONFIG_DIR, "console-colors")):
         return fail("%s -- theme.env current, but no console-colors for the VT" % name, "spark theme %s" % name)
-    if ctx.cfg.shell:
-        # micro shows the palette only while its own settings say colorscheme spark
+    if ctx.cfg.shell and shutil.which("micro"):
+        # a micro the user has shows the palette only while its own
+        # settings say colorscheme spark
         try:
             with open(os.path.join(ctx.home, ".config", "micro", "settings.json"), encoding="utf-8") as f:
                 scheme = json.load(f).get("colorscheme", "spark")
@@ -636,42 +638,6 @@ def row_completion(ctx):
     if missing:
         return warn("missing: %s" % ", ".join(missing), "sh install.sh")
     return ok("bash and zsh: the verbs, their words, theme and model names")
-
-
-@row("CAPABILITY")
-def row_editor(ctx):
-    """spark in micro: micro on PATH, the plugin linked into
-    ~/.config/micro/plug/spark (install.sh, the shell layer), the Alt-s
-    line in bindings.json, and micro's own switch not set to off. The
-    plugin is one client of `spark edit` (contract 10)."""
-    from . import site
-    micro_bin = shutil.which("micro")
-    if not micro_bin:
-        return warn("no micro", "./bootstrap.sh   (spark shell on installs it)")
-    rc, out = ctx.sh(["micro", "-version"], 5)
-    ver = ""
-    for line in out.splitlines():
-        if line.lower().startswith("version:"):
-            ver = line.split(":", 1)[1].strip()
-    what = "micro %s" % ver if ver else "micro"
-    d = os.path.join(ctx.home, ".config", "micro")
-    if not site._spark_link(os.path.join(d, "plug", "spark", "spark.lua")):
-        return warn("%s, no spark plugin" % what, "sh install.sh")
-    try:
-        with open(os.path.join(d, "bindings.json"), encoding="utf-8", errors="replace") as f:
-            bound = "lua:spark." in f.read()
-    except OSError:
-        bound = False
-    if not bound:
-        return warn("%s, plugin linked, no key bound" % what, "sh install.sh")
-    try:
-        with open(os.path.join(d, "settings.json"), encoding="utf-8", errors="replace") as f:
-            switched_off = json.load(f).get("spark") is False
-    except (OSError, ValueError):
-        switched_off = False
-    if switched_off:
-        return warn("%s, plugin switched off" % what, "in micro: set spark true")
-    return ok("%s, spark plugin, Alt-s" % what)
 
 
 @row("CAPABILITY")
@@ -1321,7 +1287,7 @@ def row_cost(ctx):
 # The shell layer's rows: with SITE_SHELL=off they are na before they look,
 # the same answer bootstrap.sh gives (the `shell` row itself says what on
 # adds). `font` is core now, like `theme`: its row runs either way.
-SHELL_ROWS = ("pinned", "terminfo", "quiet", "bar", "git", "backup", "swap", "editor",
+SHELL_ROWS = ("pinned", "terminfo", "quiet", "bar", "git", "backup", "swap",
               "encryption", "pending", "battery", "disk")
 SHELL_OFF = "SITE_SHELL=off (spark shell on)"
 # a client's rows: nothing runs here (SITE_AI_MODEL=none + SITE_PEER_AI_URL),
@@ -1484,11 +1450,6 @@ def make_fixture(root, good, stub_url=""):
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
     env.update({"HOME": home, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"})
     g = ["git", "-C", repo]
-    # the editor plugin's source, tracked like the real one (the editor row
-    # links to it from the good fixture's home)
-    os.makedirs(os.path.join(repo, "home", ".config", "micro", "plug", "spark"))
-    with open(os.path.join(repo, "home", ".config", "micro", "plug", "spark", "spark.lua"), "w") as f:
-        f.write('VERSION = "0"\n')
     subprocess.run(g + ["init", "-q", "-b", "main"], env=env, check=True)
     subprocess.run(g + ["add", "-A"], env=env, check=True)
     subprocess.run(g + ["commit", "-q", "-m", "fixture"], env=env, check=True)
@@ -1623,15 +1584,6 @@ def make_fixture(root, good, stub_url=""):
         fd = os.path.join(home, "Library", "Fonts") if IS_MAC else os.path.join(home, ".local", "share", "fonts")
         os.makedirs(fd)
         open(os.path.join(fd, "JetBrainsMonoNerdFont-Regular.ttf"), "w").close()
-        os.makedirs(os.path.join(home, ".config", "micro", "plug", "aspell"))
-        # the editor row: a stub micro, the plugin linked from the stub
-        # repository, the Alt-s line (the bad fixture has none of it)
-        _stub(os.path.join(bin_, "micro"), "#!/bin/sh\nprintf 'Version: 2.0.15\\n'\n")
-        plug_src = os.path.join(repo, "home", ".config", "micro", "plug", "spark")
-        os.makedirs(os.path.join(home, ".config", "micro", "plug", "spark"))
-        os.symlink(os.path.join(plug_src, "spark.lua"), os.path.join(home, ".config", "micro", "plug", "spark", "spark.lua"))
-        with open(os.path.join(home, ".config", "micro", "bindings.json"), "w") as f:
-            f.write('{"Alt-s": "lua:spark.prompt"}\n')
         _stub(os.path.join(engine, "llama-server"), "#!/bin/sh\nexit 0\n")
         with open(os.path.join(engine, "flavour"), "w") as f:     # the engine row names the tarball's flavour
             f.write("fixture-x64\n")

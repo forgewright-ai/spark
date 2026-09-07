@@ -38,8 +38,6 @@ PKG_AI="libvulkan1 mesa-vulkan-drivers"                      # the vulkan build 
 # the shell layer -- SITE_SHELL=on (spark shell on)
 PKG_SHELL="bash tmux unzip fontconfig ncurses-bin"           # tmux, the font's unzip + fc-cache, a tmux-256color terminfo
 PKG_CLI="bat eza fzf zoxide ripgrep fd-find jq btop"        # the shell's daily tools
-PKG_EDITOR="micro aspell aspell-en"                          # micro + its spell checker
-PKG_QA="shellcheck"                                          # the pre-commit hook wants it
 
 # ------------------------------------------------------------ pinned bits
 # Everything not packaged is pinned by version and sha256. An empty sha
@@ -116,8 +114,9 @@ engine_home() {
 site_load
 MODELS_DIR=${SPARK_MODELS_DIR:-$SPARK_DATA_DIR/models}
 AI_BUILD=$(ai_build)
-# the two layers: the AI is always on; the shell (tmux, starship, micro, the
-# daily tools, the font, the rc files, the console) only with SITE_SHELL=on
+# the two layers: the AI is always on; the shell (tmux, starship, the daily
+# tools, the font, the rc files, the console) only with SITE_SHELL=on. An
+# editor is neither: spark ships no app (spark-micro is micro's own plugin)
 shell=0; [ "$SITE_SHELL" = on ] && shell=1
 SHELL_OFF="SITE_SHELL=off (spark shell on)"
 # a client: no model of its own and a peer answering (SITE_AI_MODEL=none +
@@ -134,7 +133,7 @@ list_packages() {
     else
         set -- $PKG_CORE $PKG_ENGINE
         [ "$AI_BUILD" = vulkan ] && set -- "$@" $PKG_AI
-        [ "$shell" = 1 ] && set -- "$@" $PKG_SHELL $PKG_CLI $PKG_EDITOR $PKG_QA
+        [ "$shell" = 1 ] && set -- "$@" $PKG_SHELL $PKG_CLI
         printf '%s\n' "$@"
     fi
 }
@@ -395,9 +394,7 @@ esac; fi
 
 # ============================================================ 2. identity
 section identity
-if [ "$shell" = 0 ]; then
-    skip hostname "$SHELL_OFF"
-elif [ "$SITE_SET_HOSTNAME" = yes ]; then
+if [ "$SITE_SET_HOSTNAME" = yes ]; then
     if [ "$(hostname -s 2>/dev/null || hostname)" = "$SITE_NAME" ]; then
         ok hostname "$SITE_NAME"
     elif need hostname "set to $SITE_NAME (sudo)"; then
@@ -518,17 +515,6 @@ elif need engine "install llama.cpp $LLAMA_VERSION $flavour$([ -z "$have" ] || e
     if [ "$OS" = Darwin ]; then xattr -dr com.apple.quarantine "$ENGINE_DIR" 2>/dev/null || true; fi
     ok engine "llama.cpp $LLAMA_VERSION $flavour"
 fi
-# micro's spell checker plugin (both OSes; the shell layer)
-if [ "$shell" = 0 ]; then
-    skip micro-aspell "$SHELL_OFF"
-elif [ -d "$HOME/.config/micro/plug/aspell" ]; then
-    ok micro-aspell "installed"
-elif ! command -v micro >/dev/null 2>&1; then
-    skip micro-aspell "micro not installed yet"
-elif need micro-aspell "micro -plugin install aspell"; then
-    micro -plugin install aspell >/dev/null 2>&1 || true
-    [ -d "$HOME/.config/micro/plug/aspell" ] && ok micro-aspell "installed" || skip micro-aspell "plugin install failed (network?)"
-fi
 # the models, one per role (both OSes): each pick's six fields become $1..$6
 for role in spark ember; do
     if [ "$role" = spark ]; then rname=model; choice=$SITE_AI_MODEL; else rname=ember; choice=$SITE_EMBER_MODEL; fi
@@ -581,6 +567,22 @@ printf '%s\n' "$out" | grep -v '^ok ' | grep -vE '^(Nothing to do|[0-9]+ to do)$
 n=$(printf '%s\n' "$out" | grep -c '^would' || true)
 todo=$((todo + n))
 ok configs "$(printf '%s\n' "$out" | tail -1)"
+# micro's plugin left this repository in v1.10 (github.com/forgewright-ai/
+# spark-micro): the links an older install.sh made under ~/.config/micro
+# now dangle into this tree. Hand them back once (bindings.json from its
+# .bak, or gone); a machine without them has nothing to do here.
+mplug="$HOME/.config/micro/plug/spark"
+old_plug=0
+if [ -L "$mplug/spark.lua" ]; then case $(readlink "$mplug/spark.lua") in "$REPO"/*) old_plug=1 ;; esac; fi
+if [ "$old_plug" = 1 ] && need micro "the plugin moved to github.com/forgewright-ai/spark-micro: remove spark's links"; then
+    for f in "$mplug/spark.lua" "$mplug/repo.json" "$mplug/help/spark.md"; do
+        [ ! -L "$f" ] || rm -f "$f"
+    done
+    rmdir "$mplug/help" "$mplug" 2>/dev/null || true
+    mb="$HOME/.config/micro/bindings.json"
+    if [ -L "$mb" ]; then rm -f "$mb"; [ ! -f "$mb.bak" ] || mv "$mb.bak" "$mb"; fi
+    ok micro "spark's links removed -- git clone https://github.com/forgewright-ai/spark-micro $mplug"
+fi
 # the core rc hook: one marked line at the end of the login shell's rc file
 # (after fzf: the widget wraps Enter, so it loads last). The marker is
 # `config/spark/hook.`, so the line lands once. An rc file that is spark's

@@ -136,39 +136,12 @@ def main(argv):
     if sub in ("-h", "--help", "help"):
         page(usage().rstrip())
         return 0
-    if sub == "setup":
-        from spark import setup
-        return setup.main(rest)
-    if sub == "check":
-        from spark import check
-        return check.main(rest)
-    if sub == "update":
-        from spark import update
-        return update.cmd_update(rest)
-    if sub == "bar":
-        from spark import bar
-        return bar.main(rest)
-    if sub == "theme":
-        from spark import theme
-        return theme.main(rest)
-    if sub in ("bench", "tune"):
-        from spark import bench
-        return bench.main(sub, rest)
-    if sub == "stats":
-        from spark import stats
-        return stats.main(rest)
-    if sub in ("shell", "font", "quiet", "bootconfig", "model", "headless", "ember", "client"):
-        from spark import site
-        return site.main(sub, rest)
-    if sub in ("serve", "stop"):
-        from spark import serve
-        return serve.main(sub, rest)
-    if sub == "forge":
-        from spark import forgeserve
-        return forgeserve.main(rest)
-    if sub == "user":
-        from spark import users
-        return users.main(rest)
+    spec = VERBS.get(sub)
+    if spec:
+        import importlib
+        mod = importlib.import_module("spark." + spec[0])
+        fn = getattr(mod, spec[1])
+        return fn(sub, rest) if spec[2] else fn(rest)
     from spark import cli
     if len(argv) == 1 and " " not in sub and not sub.endswith("?") and not sub.startswith("@") and sub not in cli.COMMANDS:
         # one word that is not a command: a slip, not a question -- questions
@@ -184,14 +157,24 @@ def main(argv):
     return cli.main(argv)
 
 
-VERBS = ("help", "setup", "check", "update", "bar", "theme", "bench", "tune", "stats",
-         "shell", "font", "quiet", "model", "headless", "ember", "client", "serve",
-         "stop", "forge", "user")
+# The verbs this file dispatches: verb -> (module under lib/spark, entry,
+# whether the entry takes the verb too). The module is imported only when
+# its verb runs -- `spark line` must stay cheap. Everything else is
+# cli.COMMANDS, or a question.
+VERBS = {"setup": ("setup", "main", False), "check": ("check", "main", False),
+         "update": ("update", "cmd_update", False), "bar": ("bar", "main", False),
+         "theme": ("theme", "main", False), "bench": ("bench", "main", True), "tune": ("bench", "main", True),
+         "stats": ("stats", "main", False),
+         "shell": ("site", "main", True), "font": ("site", "main", True), "quiet": ("site", "main", True),
+         "model": ("site", "main", True), "headless": ("site", "main", True), "ember": ("site", "main", True),
+         "client": ("site", "main", True),
+         "serve": ("serve", "main", True), "stop": ("serve", "main", True),
+         "forge": ("forgeserve", "main", False), "user": ("users", "main", False)}
 
 
 def near_verb(word, cli):
     import difflib
-    hits = difflib.get_close_matches(word, VERBS + tuple(cli.COMMANDS), n=1, cutoff=0.8)
+    hits = difflib.get_close_matches(word, ("help",) + tuple(VERBS) + tuple(cli.COMMANDS), n=1, cutoff=0.8)
     return hits[0] if hits else None
 
 

@@ -12,6 +12,9 @@ gate on Ubuntu, Debian 13, and macOS.
 ```sh
 git clone https://github.com/forgewright-ai/spark.git
 cd spark
+git config core.hooksPath .githooks
+# shellcheck is a contributor's tool, not a user's package: apt-get install
+# shellcheck, or brew install shellcheck (the hook skips it with a notice)
 /usr/bin/python3 -m py_compile lib/spark/*.py bin/spark
 sh -n bootstrap.sh install.sh lib/env.sh
 shellcheck -S warning bootstrap.sh install.sh lib/env.sh

@@ -6,6 +6,7 @@
 
 import os
 import plistlib
+import shutil
 import subprocess
 import sys
 import time
@@ -344,7 +345,7 @@ def micro_colorscheme(path=MICRO_SETTINGS):
 
 def set_theme(name):
     """`spark theme NAME`: choose it in site.env, render the files that carry
-    it (install.sh; micro and tmux with the shell layer on), write theme.env
+    it (install.sh; tmux, and micro's scheme, with the shell layer on), write theme.env
     and console-colors, reload tmux; macOS also gets the Terminal profile.
     SPARK_NO_APPLY=1 (tests) writes the key and the two runtime files only:
     nothing outside $HOME/.config/spark, no tmux, no Terminal.app."""
@@ -367,7 +368,8 @@ def set_theme(name):
     if apply_console():
         say("ok     console      this console took the palette now" if name != "none"
             else "ok     console      this console has its own colours back")
-    if config.load().shell:
+    micro_here = config.load().shell and shutil.which("micro")
+    if micro_here:
         was = micro_colorscheme()
         if was:
             say("ok     micro        colorscheme spark (was %s); reopen micro" % was)
@@ -385,7 +387,7 @@ def set_theme(name):
     # config on every prompt, the widget draws no colour of its own, and the
     # hook reads console-colors alone -- so no shell restart is owed. Only a
     # running editor is, and a terminal emulator keeps its own colours.
-    say("the next prompt has it, and tmux; a running micro: reopen it")
+    say("the next prompt has it, and tmux" + ("; a running micro: reopen it" if micro_here else ""))
     return 0
 
 

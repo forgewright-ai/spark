@@ -1078,9 +1078,12 @@ def restore_rc():
 # The shell layer's rendered look: what install.sh renders only with
 # SITE_SHELL=on and what `spark shell off` therefore hands back. The
 # user-owned runtime palette (~/.config/spark/theme.env, console-colors)
-# is core -- `spark theme` owns it, outside the gate -- and stays.
+# is core -- `spark theme` owns it, outside the gate -- and stays. micro's
+# settings.json is not here: seeded once, it is micro's (the user's
+# options live in it); `off` only drops the colorscheme key it seeded.
 RENDERED_FILES = (".tmux.conf", ".config/starship.toml", ".config/btop/btop.conf",
-                  ".config/micro/colorschemes/spark.micro", ".config/micro/settings.json")
+                  ".config/micro/colorschemes/spark.micro")
+MICRO_SETTINGS = os.path.join(HOME, ".config", "micro", "settings.json")
 
 
 def restore_rendered():
@@ -1106,24 +1109,44 @@ def restore_rendered():
     return done
 
 
+def micro_settings_reset(path=MICRO_SETTINGS):
+    """The inverse of theme.micro_colorscheme: the colorscheme key the seed
+    put in micro's settings.json goes (the scheme file is gone with the
+    layer), every other option stays -- the file is micro's. Returns True
+    when the key was dropped; the file is never removed."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            d = json.load(f)
+    except (OSError, ValueError):
+        return False
+    if not isinstance(d, dict) or d.get("colorscheme") != "spark":
+        return False
+    del d["colorscheme"]
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(d, f, indent=4)
+        f.write("\n")
+    return True
+
+
 # ------------------------------------------------------------------ shell
-SHELL_USAGE = """%s shell -- spark's own shell: tmux, starship, micro, fzf, eza, bat, btop
+SHELL_USAGE = """%s shell -- spark's own shell: tmux, starship, fzf, eza, bat, btop
 
   spark shell                   the state: off (the prompt widget only) or on
   spark shell on                SITE_SHELL=on: the tools, the Nerd Font, the
                                 console; the rc files become spark's (yours
-                                move to .bak); with a theme set, tmux, micro
-                                and the console wear the same palette
+                                move to .bak); with a theme set, tmux and
+                                the console wear the same palette (a micro
+                                you have too)
   spark shell off               SITE_SHELL=off: the rc files and the rendered
-                                look (tmux, starship, btop, micro) come back
-                                from .bak, or go; the packages stay installed
+                                look (tmux, starship, btop, micro's scheme)
+                                come back from .bak, or go; packages stay
 """ % MARK
 # the bootstrap rows the switch flips (bootstrap.sh gates them on
-# SITE_SHELL). The console-font row is core now (spark font owns it), so
-# `font` and `console` are no longer filtered for here.
-SHELL_ROWS = ["identity", "hostname", "dir", "apt", "brew", "starship", "micro-aspell", "pinned",
-              "configs", "rc", "theme", "terminfo", "quiet-login", "quiet-boot"]
-SHELL_TOOLS = "tmux, starship, micro, fzf, zoxide, eza, bat, btop"
+# SITE_SHELL); the row names are bootstrap.sh's, not check.py's. The
+# console-font and hostname rows are core, so they are not filtered for here.
+SHELL_APPLY_ROWS = ["identity", "dir", "apt", "brew", "starship", "pinned",
+                    "configs", "rc", "theme", "terminfo", "quiet-login", "quiet-boot"]
+SHELL_TOOLS = "tmux, starship, fzf, zoxide, eza, bat, btop"
 
 
 def rc_state(path):
@@ -1158,7 +1181,7 @@ def cmd_shell(args):
         return 2
     if args[0] == "on":
         set_keys(SITE_SHELL="on")
-        rc = apply(SHELL_ROWS, stream=True)
+        rc = apply(SHELL_APPLY_ROWS, stream=True)
         if rc == 0:
             # the palette lands here, not at setup: turning the layer on is
             # where a user asks for spark's look. bootstrap's theme row wrote
@@ -1176,6 +1199,8 @@ def cmd_shell(args):
     set_keys(SITE_SHELL="off")
     for path, what in restore_rc() + restore_rendered():
         say("ok     restore      ~%s -- %s" % (path[len(HOME):], what))
+    if micro_settings_reset():
+        say("ok     restore      ~/.config/micro/settings.json -- colorscheme key dropped, the rest is micro's")
     # the palette came with the layer, so it goes with it. SITE_THEME stays
     # in site.env (spark shell on paints it again); theme.env goes and
     # console-colors becomes the VT reset the hook cats at the next login --
@@ -1216,8 +1241,4 @@ def main(sub, args):
         return cmd_headless(args)
     if sub == "client":
         return cmd_client(args)
-    if sub == "bootconfig":
-        # removed in v1.3: one line naming the new verb, no forwarding
-        say("%s bootconfig -- gone: spark quiet (login|boot)" % MARK)
-        return 2
     return cmd_font(args) if sub == "font" else cmd_quiet(args)

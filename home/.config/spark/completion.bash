@@ -6,7 +6,7 @@
 # the static words still complete, silently. Binds no key of its own --
 # readline's TAB does the work.
 # Not completed on purpose (plumbing, gone, or aliases of ver):
-#   line talk ledger version --version
+#   line ledger version --version
 
 _spark_repo() {
     # ~/.local/bin/spark is a symlink to <repo>/bin/spark; print <repo>

@@ -13,8 +13,10 @@
 #
 # Two layers (site.env SITE_SHELL): the AI is always installed -- the
 # widgets, the banner, spark.env.example, the service units. The shell
-# layer -- the rc files, micro, .gitconfig, .tmux.conf, btop, starship --
-# only with SITE_SHELL=on (spark shell on).
+# layer -- the rc files, .gitconfig, .tmux.conf, btop, starship, and
+# micro's colorscheme when micro is here -- only with SITE_SHELL=on
+# (spark shell on). No editor and no plugin: an app is a client of spark,
+# installed its own way (github.com/forgewright-ai/spark-micro).
 #
 #   install.sh --dry-run    print what would change, touch nothing
 #
@@ -38,6 +40,9 @@ theme_load "$REPO"
 # a client (SITE_AI_MODEL=none + SITE_PEER_AI_URL, spark client URL) runs no
 # units: the systemd units and the launchd plists stay out
 client=0; [ "$SITE_AI_MODEL" = none ] && [ -n "$SITE_PEER_AI_URL" ] && client=1
+# micro's colorscheme and its seeded settings.json are the shell's look for
+# a micro the user has: rendered only with the layer on AND micro on PATH
+look_micro() { [ "$SITE_SHELL" = on ] && command -v micro >/dev/null 2>&1; }
 
 changes=0
 row() { printf '%-14s %s\n' "$1" "$2"; }
@@ -107,7 +112,7 @@ for tree in "$REPO/home" "$REPO/$OSDIR/home"; do
     for src in $(find "$tree" -type f | sort); do
         rel=${src#"$tree"/}
         case $rel in
-            .bashrc|.bash_profile|.zshrc|.zprofile|.config/micro/*)
+            .bashrc|.bash_profile|.zshrc|.zprofile)
                 [ "$SITE_SHELL" = on ] || continue ;;
             .config/systemd/user/*)
                 [ "$client" = 0 ] || continue ;;
@@ -127,9 +132,11 @@ for src in $(find "$REPO/templates" -type f | sort); do
         .config/micro/settings.json)
             # seeded once, then micro's own: micro rewrites it on every
             # option change, so a file that exists is never re-rendered
-            [ "$SITE_SHELL" = on ] || continue
+            look_micro || continue
             seed=1 ;;
-        .gitconfig|.tmux.conf|.config/btop/*|.config/micro/*)
+        .config/micro/*)
+            look_micro || continue ;;
+        .gitconfig|.tmux.conf|.config/btop/*)
             [ "$SITE_SHELL" = on ] || continue ;;
         .config/starship.toml.*)
             [ "$SITE_SHELL" = on ] || continue

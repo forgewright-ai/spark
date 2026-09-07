@@ -5,7 +5,9 @@
 # --- PATH first: everything below may depend on ~/.local/bin ---------------
 case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) PATH="$HOME/.local/bin:$PATH" ;; esac
 export PATH
-export EDITOR=micro VISUAL=micro
+# micro is yours (spark-micro puts spark in it); the truecolor flag lets it
+# draw spark's palette when the layer rendered its colorscheme
+if command -v micro >/dev/null 2>&1; then export EDITOR=micro VISUAL=micro MICRO_TRUECOLOR=1; fi
 
 # --- history ---------------------------------------------------------------
 HISTSIZE=20000 HISTFILESIZE=50000 HISTCONTROL=ignoreboth:erasedups

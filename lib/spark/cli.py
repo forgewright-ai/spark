@@ -53,8 +53,9 @@ EDIT_USAGE = """spark edit -- the editor's protocol (contract 10): the text on s
                               without a name), newest first; clear drops them
 
   raw streamed text: no mark, no wrap, a code fence around the answer is
-  removed; exit 1 when nothing came in or no brain answers. In micro,
-  Alt-s (spark shell on). From a pipe: spark edit fix grammar < draft.md
+  removed; exit 1 when nothing came in or no brain answers. In micro: the
+  spark-micro plugin, github.com/forgewright-ai/spark-micro (Alt-s). From
+  a pipe: spark edit fix grammar < draft.md
 """
 LAST_USAGE = """spark last -- the last exchange, with its tok/s
 
@@ -796,12 +797,6 @@ def cmd_lua(args):
     return lua.cmd_lua(args)
 
 
-def cmd_talk(args):
-    # removed in v1.3: one line naming the new verb, no forwarding
-    say("%s talk -- gone: spark chat" % MARK)
-    return 2
-
-
 def cmd_do(args):
     from . import do
     return do.cmd_do(args)
@@ -812,7 +807,7 @@ COMMANDS = {
     "line": cmd_line, "last": cmd_last, "status": cmd_status, "brain": cmd_brain,
     "explain": cmd_explain, "edit": cmd_edit, "off": cmd_off, "on": cmd_on, "history": cmd_history,
     "soul": cmd_soul, "remember": cmd_remember, "forget": cmd_forget, "memory": cmd_memory, "ledger": ledger.cmd_ledger,
-    "chat": cmd_chat, "talk": cmd_talk, "do": cmd_do,
+    "chat": cmd_chat, "do": cmd_do,
     "ver": cmd_ver, "version": cmd_ver, "--version": cmd_ver,
     "lua": cmd_lua,
 }

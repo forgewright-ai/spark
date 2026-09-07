@@ -452,9 +452,9 @@ def main():
         t.ok(len(os.listdir(threads)) == 2, "the REPL left one thread continued and one new")
         rc, out, _ = spark("chat", "-h")
         t.ok(rc == 0 and out.splitlines()[0] == "spark chat -- a conversation", "spark chat -h signs (contract 8)", out)
-        rc, out, _ = spark("talk", "count")
-        t.ok(rc == 2 and out.strip() == "spark talk -- gone: spark chat",
-             "spark talk is gone: one line naming spark chat, exit 2, no model call", out)
+        rc, out, _ = spark("talk")
+        t.ok(rc == 2 and out.startswith("spark: no command named talk"),
+             "spark talk is no command any more (v1.3's stub is gone): a slip, exit 2, no model call", out)
         # the quit grammar: all silent, rc 0, nothing sent to the model
         hits0 = STATE["hits"]
         rc, out, err = spark("chat", stdin=":q\n")
@@ -1195,7 +1195,7 @@ def main():
         rc, out, _ = spark("shell", extra=off)
         t.ok(rc == 0 and "SITE_SHELL=off" in out, "spark shell: the state, off by default", out)
         rc, out, _ = spark("shell", "-h")
-        t.ok(rc == 0 and out.splitlines()[0] == "spark shell -- spark's own shell: tmux, starship, micro, fzf, eza, bat, btop",
+        t.ok(rc == 0 and out.splitlines()[0] == "spark shell -- spark's own shell: tmux, starship, fzf, eza, bat, btop",
              "spark shell -h signs (contract 8)", out)
         rc, out, _ = spark("help", extra=off)
         t.ok(rc == 0 and "spark font" in out and "spark bar" not in out and "spark shell on" in out,
@@ -1265,8 +1265,8 @@ def main():
         t.ok(rc == 0 and "audio is on" in out and rc2 == 0 and out2.strip().endswith("audio -- off"),
              "spark quiet audio off, and the one state shows", out + out2)
         rc, out, _ = spark("bootconfig", extra=off)
-        t.ok(rc == 2 and out.strip() == "spark bootconfig -- gone: spark quiet (login|boot)",
-             "spark bootconfig is gone: one line naming spark quiet, exit 2", out)
+        t.ok(rc == 2 and out.startswith("spark: no command named bootconfig"),
+             "spark bootconfig is no command any more (v1.3's stub is gone): a slip, exit 2", out)
 
         # spark quiet: core start round-trip; login/boot per OS (grammar law)
         rc, out, _ = spark("quiet", "-h", extra=off)
@@ -1490,6 +1490,13 @@ def main():
             after = json.load(f)
         t.ok(was == "gruvbox" and after == {"colorscheme": "spark", "softwrap": True} and _theme.micro_colorscheme(msj) is None,
              "theme: micro's colorscheme is set back to spark, the other settings kept, and left alone once it says so", str(after))
+        # and the inverse, on spark shell off: the key goes, the file stays micro's
+        from spark import site as _site
+        dropped = _site.micro_settings_reset(msj)
+        with open(msj) as f:
+            after = json.load(f)
+        t.ok(dropped and after == {"softwrap": True} and not _site.micro_settings_reset(msj),
+             "shell off: micro's colorscheme key is dropped, the other settings kept, the file never removed", str(after))
 
         # the egg (lib/spark/lua.py): the forest, headless through --sim, then a pty
         rc, out, _ = spark("lua", "--sim", "1", "auto")
@@ -1650,10 +1657,10 @@ def main():
     # excluded from completion on purpose are named in a comment there,
     # which counts: the guard is about forgetting, not about policy.
     comp = open(os.path.join(REPO, "home", ".config", "spark", "completion.bash")).read()
-    verbs_src = re.search(r"^VERBS = \((.*?)\)$", open(SPARK).read(), re.S | re.M).group(1)
+    verbs_src = re.search(r"^VERBS = \{(.*?)\}$", open(SPARK).read(), re.S | re.M).group(1)
     commands_src = re.search(r"^COMMANDS = \{(.*?)\}$", open(os.path.join(REPO, "lib", "spark", "cli.py")).read(),
                              re.S | re.M).group(1)
-    wanted = set(re.findall(r'"([^"]+)"', verbs_src)) | set(re.findall(r'"([^"]+)":', commands_src))
+    wanted = set(re.findall(r'"([^"]+)":', verbs_src)) | set(re.findall(r'"([^"]+)":', commands_src)) | {"help"}
     missing = sorted(w for w in wanted
                      if not re.search(r"(?<![A-Za-z-])%s(?![A-Za-z-])" % re.escape(w), comp))
     t.ok(not missing, "completion.bash names every dispatch verb and cli command",

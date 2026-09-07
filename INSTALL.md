@@ -369,8 +369,8 @@ loaded. `spark shell` prints the state.
 With the layer off, `spark bar` and the set forms of
 `spark quiet login|boot` refuse (`the shell layer is off`), `spark help`
 folds the shell block into one line, and the check rows that stand on it
-(`pinned terminfo quiet bar git backup swap editor encryption pending
-battery disk`) read `na`; the `shell` row says what `on` adds. `spark
+(`pinned terminfo quiet bar git backup swap encryption pending battery
+disk`) read `na`; the `shell` row says what `on` adds. `spark
 theme` and `spark font` work either way -- and `spark quiet start` too: it
 is spark's own noise, not the shell's. Two fonts are in play on Linux and
 they are not the same one. `spark font` sets the **console** face, a
@@ -715,7 +715,7 @@ get -> spark setup -> bootstrap.sh (apply) -> install.sh (links, renders)
                       the engine tarball, the model, the token, the units,
                       one rc line; SITE_SHELL=on adds the workstation
 
-spark check   39 rows: every promise the machine makes, fixture-tested
+spark check   38 rows: every promise the machine makes, fixture-tested
 spark update  the newest tag (a stranger), or main (a developer); converge
 
 what leaves the machine: pinned downloads in, your questions to the brain

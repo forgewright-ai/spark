@@ -1,8 +1,0 @@
-{
-    "Alt-/": "lua:comment.comment",
-    "Alt-q": "QuitAll",
-    "Alt-s": "lua:spark.prompt",
-    "Ctrl-/": "lua:comment.comment",
-    "Ctrl-e": "CommandMode",
-    "CtrlUnderscore": "lua:comment.comment"
-}

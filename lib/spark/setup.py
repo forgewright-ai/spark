@@ -39,7 +39,7 @@ DEFAULT_THEME = "gruvbox-dark"
 # the bootstrap rows that are the AI layer, by their names in bootstrap.sh
 # (the filter apply() uses when its output is captured; at a terminal the
 # whole bootstrap shows, progress bars included)
-CORE_ROWS = ["site", r"spark\.env", "name", "model", "ember", "apt", "brew", "engine", "token", "dir",
+CORE_ROWS = ["site", r"spark\.env", "name", "hostname", "model", "ember", "apt", "brew", "engine", "token", "dir",
              "configs", "rc", "spark", "explain", "PATH", "hooks", "linger", "render", "systemd", "launchd",
              r"spark[-.]serve", r"spark[-.]forge", r"spark[-.]check"]
 QUESTION = "how big is this dir"
@@ -322,7 +322,7 @@ def _closing():
     say("  spark chat                      a conversation")
     say("  ? how big is this dir           a command in your line, a hint above it")
     say("  cmd 2>&1 | explain              what went wrong, and the fix")
-    say("spark shell on adds spark's own shell: tmux, starship, micro, fzf ...")
+    say("spark shell on adds spark's own shell: tmux, starship, fzf, eza, bat, btop")
     say("spark ember NAME adds a second brain: a bigger model, just for conversation")
 
 

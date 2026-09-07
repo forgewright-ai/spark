@@ -18,7 +18,7 @@ SITE_KEYS = ("SITE_NAME", "SITE_USER", "SITE_SET_HOSTNAME", "SITE_GIT_NAME", "SI
              "SITE_WORKSPACE", "SITE_PEER_AI_URL", "SITE_PEER_SSH", "SITE_THEME", "SITE_PROMPT",
              "SITE_PROMPT_STYLE", "SITE_AI_MODEL", "SITE_EMBER_MODEL", "SITE_AI_BUDGET", "SITE_AI_BUILD",
              "SITE_FONT_FACE", "SITE_FONT_SIZE", "SITE_QUIET_LOGIN", "SITE_QUIET_BOOT", "SITE_QUIET_START",
-             "SITE_HEADLESS", "SITE_SHELL")
+             "SITE_QUIET_AUDIO", "SITE_HEADLESS", "SITE_SHELL")
 SPARK_KEYS = ("SPARK_PORT", "SPARK_BASE_URL", "SPARK_PREFER_URL", "SPARK_SERVE_HOST", "SPARK_ENGINE_DIR",
               "SPARK_MODELS_DIR", "SPARK_MODEL", "SPARK_NGL", "SPARK_CTX", "SPARK_FLASH_ATTN", "SPARK_KV",
               "SPARK_THREADS", "SPARK_EXTRA_ARGS", "SPARK_MEM_NEEDED_GB", "SPARK_API_KEY_FILE",
@@ -206,9 +206,9 @@ class Config:
 
     @property
     def shell(self):
-        """on: the shell layer is spark's -- tmux, starship, micro, the
-        daily tools, the Nerd Font and the rc files. off (default): the
-        AI only; the shell stays yours."""
+        """on: the shell layer is spark's -- tmux, starship, the daily
+        tools, the Nerd Font and the rc files. off (default): the AI only;
+        the shell stays yours. No editor either way: spark ships no app."""
         return self.get("SITE_SHELL", "off") == "on"
 
     @property

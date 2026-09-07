@@ -568,9 +568,9 @@ sh tests/get_test.sh            # the one-liner: clone, pull, refusals, the hand
 sh tests/update_test.sh         # spark update: pull, move to a tag, dirty refused, --dry-run
 ```
 
-`spark check` has 39 rows today: 12 SOFTWARE, 18 CAPABILITY, 9
+`spark check` has 38 rows today: 12 SOFTWARE, 17 CAPABILITY, 9
 NONFUNCTIONAL (`grep -c '^@row' lib/spark/check.py`). With `SITE_SHELL=off`
-the 12 rows in `check.SHELL_ROWS` and the `shell` row answer `na`;
+the 11 rows in `check.SHELL_ROWS` and the `shell` row answer `na`;
 `--selftest` runs a third pass to prove it, and a fourth for the client
 shape (the 7 rows in `check.CLIENT_ROWS`).
 

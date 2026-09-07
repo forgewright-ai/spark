@@ -15,5 +15,4 @@ if [[ -z ${STARSHIP_SHELL:-} && $PROMPT != $'\n'* ]]; then PROMPT=$'\n'$PROMPT; 
 [ "$TERM" = linux ] && [ -r ~/.config/spark/console-colors ] && cat ~/.config/spark/console-colors
 # quiet boot turns the VT cursor off globally; a human session turns it back on
 [ "$TERM" = linux ] && printf '\033[?25h'
-export MICRO_TRUECOLOR=1   # micro draws the palette's real colours
 [[ -r "$HOME/.config/spark/completion.zsh" ]] && source "$HOME/.config/spark/completion.zsh"

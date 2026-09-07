@@ -63,11 +63,17 @@ out=$(run --dry-run)
 printf '%s\n' "$out" | grep -q '^would render .*\.gitconfig$' && ok "SITE_SHELL=on: would render .gitconfig" || bad "would render"
 case $(uname -s) in Darwin) rc=.zshrc ;; *) rc=.bashrc ;; esac
 printf '%s\n' "$out" | grep -q "^would link .*/$rc\$" && ok "SITE_SHELL=on: would link $rc" || bad "would link $rc"
-run >/dev/null
+PATH=/usr/bin:/bin:/usr/sbin:/sbin run >/dev/null     # a PATH without micro (Homebrew may have one)
 [ -L "$HOME/$rc" ] && ok "$rc is a symlink" || bad "$rc not linked"
-[ -L "$HOME/.config/micro/bindings.json" ] && ok "micro bindings linked" || bad "micro bindings"
-[ -L "$HOME/.config/micro/plug/spark/spark.lua" ] && [ -L "$HOME/.config/micro/plug/spark/help/spark.md" ] \
-    && ok "micro spark plugin linked" || bad "micro spark plugin"
+# no editor and no plugin: nothing under .config/micro without a micro on
+# PATH (spark ships no app; spark-micro is micro's own); with one, the
+# shell layer renders its colorscheme and seeds its settings.json
+[ ! -e "$HOME/.config/micro" ] && ok "shell on, no micro: nothing rendered under .config/micro" || bad "shell on rendered micro's look without micro: $(ls -R "$HOME/.config/micro")"
+mkdir -p "$T/bin"; printf '#!/bin/sh\nexit 0\n' > "$T/bin/micro"; chmod +x "$T/bin/micro"
+export PATH="$T/bin:$PATH"
+run >/dev/null
+[ ! -e "$HOME/.config/micro/plug" ] && [ ! -e "$HOME/.config/micro/bindings.json" ] \
+    && ok "shell on with micro: no plugin, no bindings (spark-micro is micro's own)" || bad "spark linked a plugin or bindings"
 [ -f "$HOME/.gitconfig" ] && [ ! -L "$HOME/.gitconfig" ] && ok ".gitconfig is a regular file" || bad ".gitconfig"
 grep -q "name = $(id -un)" "$HOME/.gitconfig" && ok "git name defaulted to the login" || bad "git name default"
 [ -f "$HOME/.config/starship.toml" ] && grep -q 'bold blue' "$HOME/.config/starship.toml" && ok "starship minimal with neutral colours" || bad "starship render"
@@ -135,9 +141,12 @@ printf 'THEME_BG=#282828\n' > "$HOME/.config/spark/theme.env"
 out=$(SPARK_NO_APPLY=1 SPARK_NO_REFRESH=1 python3 "$REPO/bin/spark" shell off 2>&1) || bad "spark shell off failed: $out"
 grep -q '^SITE_SHELL=off$' "$HOME/.config/spark/site.env" && ok "shell off wrote SITE_SHELL=off" || bad "SITE_SHELL not off"
 [ ! -e "$HOME/.tmux.conf" ] && [ ! -e "$HOME/.config/starship.toml" ] \
-    && [ ! -e "$HOME/.config/micro/colorschemes/spark.micro" ] && [ ! -e "$HOME/.config/micro/settings.json" ] \
+    && [ ! -e "$HOME/.config/micro/colorschemes/spark.micro" ] \
     && ok "shell off removed every rendered look file with no .bak (no husk)" \
     || bad "a spark-rendered look file survived shell off"
+# micro's settings.json is micro's after the seed: kept, only the seeded colorscheme key dropped
+[ -f "$HOME/.config/micro/settings.json" ] && ! grep -q colorscheme "$HOME/.config/micro/settings.json" && grep -q tabsize "$HOME/.config/micro/settings.json" \
+    && ok "shell off kept micro's settings.json, minus the colorscheme key" || bad "settings.json after shell off: $(cat "$HOME/.config/micro/settings.json" 2>&1)"
 [ "$(cat "$HOME/.config/btop/btop.conf")" = "# pre-spark btop" ] && ok "shell off restored btop.conf from its .bak" || bad "btop.conf not restored"
 [ ! -f "$HOME/.config/spark/theme.env" ] && ok "shell off gave the palette back (theme.env removed)" || bad "theme.env survived shell off"
 printf '%s\n' "$out" | grep -q '^ok     restore' && ok "shell off names what it restored or removed" || bad "no restore rows: $out"
@@ -214,14 +223,28 @@ out=$(SHELL=/usr/local/bin/fish PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dr
 printf '%s\n' "$out" | grep -qE '^todo +rc +shell fish' && ok "rc: an unknown login shell is a todo naming it" || bad "rc: fish: $(printf '%s\n' "$out" | grep -E ' rc ')"
 # the shell layer off (SITE_SHELL unset): every shell row is a skip naming
 # the key (the console-font row is core now and skips for its own reason)
-case $(uname -s) in Darwin) srows="dir hostname theme pinned micro-aspell terminfo quiet-login quiet-boot" ;; *) srows="dir hostname theme starship font micro-aspell terminfo quiet-login quiet-boot" ;; esac
+case $(uname -s) in Darwin) srows="dir theme pinned terminfo quiet-login quiet-boot" ;; *) srows="dir theme starship font terminfo quiet-login quiet-boot" ;; esac
 for r in $srows; do
     printf '%s\n' "$out" | grep -qE "^skip +$r +SITE_SHELL=off" && ok "SITE_SHELL unset: skip $r" || bad "SITE_SHELL unset: no skip row for $r: $(printf '%s\n' "$out" | grep -E " $r " | head -1)"
 done
 printf '%s\n' "$out" | grep -qE '^skip +console +(macOS:|SITE_FONT_FACE unset)' && ok "SITE_SHELL unset: the console row is core, its skip names its own reason" || bad "console row: $(printf '%s\n' "$out" | grep -E ' console ' | head -1)"
+printf '%s\n' "$out" | grep -qE '^skip +hostname +SITE_SET_HOSTNAME=no' && ok "SITE_SHELL unset: the hostname row is core (identity), its skip names its key" || bad "hostname row: $(printf '%s\n' "$out" | grep -E ' hostname ' | head -1)"
+printf '%s\n' "$out" | grep -qE ' micro-aspell ' && bad "a micro-aspell row survives (spark ships no app)" || ok "no micro-aspell row: spark installs no editor"
 printf '%s\n' "$out" | grep -qE "^would +dir +mkdir .*/projects" && bad "SITE_SHELL unset: the workspace folder would be made" || ok "SITE_SHELL unset: no workspace folder for a stranger"
 [ "$(uname -s)" = Darwin ] && { printf '%s\n' "$out" | grep -qE '^ok +brew +nothing required' && ok "SITE_SHELL unset: brew row is ok, nothing required" || bad "brew row with the shell off"; }
-[ -z "$(sh "$REPO/bootstrap.sh" --list-packages | grep -E '^(tmux|starship|micro|bat|eza|fzf|btop|shellcheck)$')" ] && ok "SITE_SHELL unset: --list-packages has no shell package" || bad "--list-packages lists shell packages with the shell off"
+[ -z "$(sh "$REPO/bootstrap.sh" --list-packages | grep -E '^(tmux|starship|bat|eza|fzf|btop)$')" ] && ok "SITE_SHELL unset: --list-packages has no shell package" || bad "--list-packages lists shell packages with the shell off"
+[ -z "$(SITE_SHELL=on sh "$REPO/bootstrap.sh" --list-packages | grep -E '^(micro|aspell|aspell-en|shellcheck|git)$')" ] && ok "SITE_SHELL=on: no editor, no contributor tool in --list-packages" || bad "--list-packages still lists micro/aspell/shellcheck/git"
+# the v1.10 migration row: links an older install.sh made into this repo's
+# home/.config/micro are handed back once (dry-run says would; apply is
+# proven by hand -- it needs a real bootstrap)
+mkdir -p "$HOME/.config/micro/plug/spark/help"
+ln -s "$REPO/home/.config/micro/plug/spark/spark.lua" "$HOME/.config/micro/plug/spark/spark.lua"
+ln -s "$REPO/home/.config/micro/bindings.json" "$HOME/.config/micro/bindings.json"
+out=$(PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (old plugin links) failed"
+printf '%s\n' "$out" | grep -qE '^would +micro +the plugin moved to github.com/forgewright-ai/spark-micro' && ok "old plugin links: the micro row would hand them back" || bad "no micro row for old plugin links: $(printf '%s\n' "$out" | grep -E ' micro ' | head -1)"
+rm -rf "$HOME/.config/micro/plug" "$HOME/.config/micro/bindings.json"
+out=$(PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run failed"
+printf '%s\n' "$out" | grep -qE ' micro ' && bad "a micro row with nothing to hand back" || ok "no old plugin links: no micro row"
 printf 'SITE_HEADLESS=no\nSITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
 out=$(PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run failed"
 printf '%s\n' "$out" | grep -qE '^(skip|would) +sleep ' && ok "SITE_HEADLESS=no: sleep row is skip (or would undo)" || bad "no sleep row for SITE_HEADLESS=no"
