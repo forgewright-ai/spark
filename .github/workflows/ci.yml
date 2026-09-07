@@ -164,14 +164,18 @@ jobs:
       - name: the shell layer on top (a real pacman installs the shell packages)
         run: |
           # setup wrote SITE_SHELL=off and a reader keeps a key's first line: replace it, never append
-          sudo -u stranger -H sh -c 'sed -i "s/^SITE_SHELL=.*/SITE_SHELL=on/" ~/.config/spark/site.env && ~/.spark/bootstrap.sh'
-          sudo -u stranger -H sh -c '~/.spark/bootstrap.sh --dry-run' | tee /tmp/dry.txt
+          # the identity rides in the environment, as the one-liner step gave it
+          sudo -u stranger -H env SITE_GIT_NAME=ci SITE_GIT_EMAIL=you@example.com \
+            sh -c 'sed -i "s/^SITE_SHELL=.*/SITE_SHELL=on/" ~/.config/spark/site.env && ~/.spark/bootstrap.sh'
+          sudo -u stranger -H env SITE_GIT_NAME=ci SITE_GIT_EMAIL=you@example.com sh -c '~/.spark/bootstrap.sh --dry-run' | tee /tmp/dry.txt
           grep -q '^Nothing to do$' /tmp/dry.txt
           grep -qE '^ok +packages ' /tmp/dry.txt
           grep -qE '^skip +console +Arch' /tmp/dry.txt || grep -qE '^skip +console +SITE_FONT_FACE' /tmp/dry.txt
           pacman -Q tmux fd bat eza
-          sudo -u stranger -H sh -c '~/.local/bin/spark check --porcelain --fresh' > /tmp/porcelain.txt
-          awk -F'\t' '$1=="SOFTWARE" && $2=="fail" && $3!="services" { bad=1; print } END { exit bad }' /tmp/porcelain.txt
+          # spark check exits 1 when a row fails: keep going, and name the row
+          sudo -u stranger -H sh -c '~/.local/bin/spark check --porcelain --fresh' > /tmp/porcelain.txt || true
+          awk -F'\t' '$2=="fail" { print }' /tmp/porcelain.txt
+          awk -F'\t' '$1=="SOFTWARE" && $2=="fail" && $3!="services" { bad=1 } END { exit bad }' /tmp/porcelain.txt
   macos:
     runs-on: macos-latest
     timeout-minutes: 40

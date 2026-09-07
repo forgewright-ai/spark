@@ -21,7 +21,8 @@ SPARK_DATA_DIR=${XDG_DATA_HOME:-$HOME/.local/share}/spark
 short_host() {
     _host=
     [ "$(uname -s)" != Darwin ] || _host=$(scutil --get LocalHostName 2>/dev/null || true)
-    [ -n "$_host" ] || _host=$(hostname -s 2>/dev/null || hostname)
+    # hostname is not in every base (Arch's lacks inetutils): uname -n is POSIX
+    [ -n "$_host" ] || _host=$(hostname -s 2>/dev/null || uname -n | cut -d. -f1)
     printf '%s' "$_host"
 }
 
