@@ -4,6 +4,7 @@
 # every fenced block is a <pre>, every table keeps its rows, HTML in a doc
 # is text (`<file>` is a file), no placeholder is left, the output is ASCII
 # (the docs are), and every page the nav names exists.
+import html as html_mod
 import os
 import re
 import subprocess
@@ -69,11 +70,11 @@ def main():
             if m:
                 # the heading's plain words survive rendering (code spans and bold aside)
                 words = re.sub(r"[`*]", "", m.group(2)).split()
-                tag = "<h%d>" % len(m.group(1))
+                lvl = len(m.group(1))
                 hit = any(all(w in re.sub(r"<[^>]+>", "", h) for w in words)
-                          for h in re.findall(r"%s(.*?)</h\d>" % tag, page))
+                          for h in re.findall(r"<h%d[^>]*>(.*?)</h\d>" % lvl, page))
                 check(hit, "%s: heading kept: %s" % (slug, m.group(2)[:50]))
-        fences = src.count("\n```") // 2 + (1 if src.startswith("```") else 0)
+        fences = sum(1 for l in src.split("\n") if l.lstrip().startswith("```")) // 2
         check(page.count("<pre>") == fences, "%s: %d fenced blocks -> %d <pre>" % (slug, fences, page.count("<pre>")))
         table_rows = sum(1 for l in lines if l.startswith("|") and not re.fullmatch(r"[|:\- ]+", l))
         check(page.count("<tr>") == table_rows, "%s: %d table rows -> %d <tr>" % (slug, table_rows, page.count("<tr>")))
@@ -89,6 +90,29 @@ def main():
     check("banner.svg" in pages[""] and 'id="ol"' in pages[""], "index: the banner and the one-liner")
     check("spark chat" in pages[""] and "spark-micro" in pages[""], "index: spark chat, the prompt line and one spark app (spark-micro)")
     check("spark shell" not in pages[""], "index: the front is spark and spark apps; the shell layer is INSTALL.md's")
+    # the front's stages: an OS panel each, and every marked command is a
+    # line the docs have (the front never teaches what a doc does not)
+    for os_id in ("debian", "arch", "macos", "windows"):
+        check('data-os="%s"' % os_id in pages[""], "index: an OS panel for %s" % os_id)
+    docs_text = read(os.path.join(ROOT, "INSTALL.md")) + read(os.path.join(ROOT, "README.md"))
+    blocks = re.findall(r"<pre data-doc>(.*?)</pre>", pages[""], re.S)
+    blocks += re.findall(r'<code id="ol2?">(.*?)</code>', pages[""])
+    check(len(blocks) >= 8, "index: the doc-verbatim blocks (%d)" % len(blocks))
+    for b in blocks:
+        for line in html_mod.unescape(re.sub(r"<[^>]+>", "", b)).split("\n"):
+            if line.strip():
+                check(line.strip() in docs_text, "index: a doc's line: %s" % line.strip()[:60])
+    # the template: both palettes, the toggle, the pre-paint snippet
+    tpl = read(os.path.join(ROOT, "www", "template.html"))
+    check(':root[data-theme="light"]' in tpl and 'id="theme"' in tpl and tpl.count("spark-theme") >= 2,
+          "template: a light palette, the toggle and the pre-paint snippet")
+    # install/: unique h2 ids, and the table of contents points at them
+    ids = re.findall(r'<h2 id="([^"]+)"', pages["install"])
+    check(bool(ids) and len(ids) == len(set(ids)), "install: every h2 has a unique id")
+    m = re.search(r'<aside class="toc">.*?</aside>', pages["install"], re.S)
+    check(bool(m), "install: a table of contents")
+    for target in re.findall(r'href="#([^"]+)"', m.group(0) if m else ""):
+        check(target in ids, "install: toc target #%s exists" % target)
     # a CHANGELOG section above the newest tag is marked unreleased on the page
     sys.path.insert(0, os.path.join(ROOT, "www"))
     import build

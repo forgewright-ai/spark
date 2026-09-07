@@ -156,13 +156,15 @@ tests/          install_test.sh get_test.sh update_test.sh uninstall_test.sh smo
                 pages.yml: www/ rendered and published to GitHub Pages on a doc change
                 and on a published release (the sign line links the release)
 LICENSE         MIT, verbatim, ASCII (the hook checks it with the docs)
-assets/         banner.svg -- the banner as rectangles, for the README and the page;
-                banner-svg.py makes it from home/.config/spark/banner; icon-svg.py
+assets/         banner.svg -- the banner as rectangles, for the README and the page
+                (banner-light.svg is the page's light-theme variant);
+                banner-svg.py makes both from home/.config/spark/banner; icon-svg.py
                 makes the favicon, the app icons and the social card the same way
 www/            the page, spark.forgewright.ai: build.py (stdlib) renders the docs
                 (INSTALL, CHEATSHEET, the model list, CHANGELOG, ROADMAP,
                 CONTRIBUTING, CREDITS) into www/dist/ with template.html; index.html
-                is the front: the banner, the one-liner, the demos, spark-micro, no prose
+                is the front: onboarding in three stages (the OS picker, the
+                one line, spark apps), every command on it a doc's own line
 CREDITS.md      every third-party project spark downloads or installs,
                 with its license; spark's own code is LICENSE
 ROADMAP.md      what comes after the current release, in order
@@ -469,8 +471,10 @@ One grammar for every verb; a verb that breaks a rule is a bug.
 - **A doc.** The page (`www/`, spark.forgewright.ai) is the docs rendered:
   a change in INSTALL.md, CHEATSHEET.txt, models.env, CHANGELOG.md,
   ROADMAP.md, CONTRIBUTING.md or CREDITS.md ships on the next push to main,
-  nothing to do. The look lives in `www/template.html`; the front in
-  `www/index.html` (demos and one-line hints, never a paragraph); the
+  nothing to do. The look lives in `www/template.html` (dark and light, in
+  lockstep with `lib/spark/forge/spark.css` -- docs_test checks); the front in
+  `www/index.html` (onboarding in three stages; every command on it is a
+  line of INSTALL.md or the README, and site_test checks); the
   markdown subset in `www/build.py` (tests/site_test.py holds its
   invariants -- a new construct in a doc needs both). The docs are kept
   true by `tests/docs_test.py` (pre-commit, CI): every palette and every

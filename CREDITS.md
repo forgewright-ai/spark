@@ -138,3 +138,7 @@ maintainer's.
 ## Corrections
 
 A correction or a missing name is a pull request away.
+
+- **Simple Icons** -- the Debian, Arch, Apple and GitHub glyphs inline
+  on the page's front (the Windows panes are drawn by hand). CC0 1.0.
+  https://simpleicons.org

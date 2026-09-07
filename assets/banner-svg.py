@@ -2,11 +2,15 @@
 # banner-svg.py -- spark's banner (home/.config/spark/banner, six lines of
 # block and box-drawing characters with one colour per line) as an SVG of
 # rectangles: no font, so it draws the same on GitHub, in a browser tab and
-# as a link preview. Usage: banner-svg.py BANNER_FILE > banner.svg
+# as a link preview. Usage: banner-svg.py BANNER_FILE [light] > banner.svg
+# (light emits the deepened palette for the page's light theme)
 import re
 import sys
 
 COLOURS = ["#ffe066", "#ffe066", "#e0b400", "#e0b400", "#d24a2a", "#d24a2a"]   # bright yellow -> yellow -> red
+# the same letters for a light ground (the page's light theme): the embers
+# deepened to hold on cream, the same gradient story
+LIGHT = ["#d4a400", "#d4a400", "#a87e00", "#a87e00", "#c2401f", "#c2401f"]
 CELL_W, CELL_H = 10, 18       # one character cell
 LINE = 3                      # the thin stroke of a box-drawing piece
 # each character -> rectangles as (x, y, w, h) fractions of a cell
@@ -25,6 +29,8 @@ PIECES = {
     " ": [],
 }
 
+if len(sys.argv) > 2 and sys.argv[2] == "light":
+    COLOURS = LIGHT
 lines = [re.sub(r"\\033\[[0-9;]*m", "", l.rstrip("\n")) for l in open(sys.argv[1], encoding="utf-8")]
 lines = [l for l in lines if l.strip()][:6]
 width = max(len(l) for l in lines) * CELL_W

@@ -7,6 +7,11 @@
   takes the answer back. Doc rows in the README, INSTALL section 6, the
   cheatsheet and `spark edit -h`; a filter cannot complete at the cursor,
   a plugin can.
+- The page front redesigned for onboarding: three stages (choose your
+  OS with a picker, spark is live, spark apps), a light theme with a
+  toggle, and a table of contents on the long pages. Every command on
+  the front is a line of INSTALL.md or the README, and the page's
+  palette stays in lockstep with the LAN page's -- both are tests now.
 
 ## v1.14
 

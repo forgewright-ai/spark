@@ -4,7 +4,7 @@
    (a user theme is a choice, the default is the brand). --muted is
    decoration (the na glyph, true ornament) only; readable dim text uses
    --muted-text; hairlines use --line.
-   lockstep: the ember values below mirror landing/site/template.html
+   lockstep: the ember values below mirror www/template.html
    :root -- change them there and here together. */
 
 :root {

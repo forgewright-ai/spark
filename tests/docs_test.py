@@ -169,6 +169,25 @@ def main():
                 "AGENTS.md", "ROADMAP.md", "site.env.example"):
         check(not re.search(r"embers\.env|community\.env|\bcurated\b|PKG_QA|PKG_EDITOR|micro-aspell|\bbootconfig\b", read(doc)),
               "%s: no retired list word" % doc)
+    # the page and the FORGE page share the ember palette: www/template.html's
+    # tokens mirror lib/spark/forge/spark.css, dark and light alike
+    def css_tokens(text, anchor):
+        i = text.index(anchor)
+        block = text[i:text.index("}", i)]
+        return {k: v.strip() for k, v in re.findall(r"--([a-z0-9-]+)\s*:\s*([^;]+);", block)}
+    tpl, forge_css = read("www/template.html"), read("lib/spark/forge/spark.css")
+    t_dark = css_tokens(tpl, ":root {")
+    t_light = css_tokens(tpl, ':root[data-theme="light"]')
+    c_dark = css_tokens(forge_css, ":root {")
+    c_light = css_tokens(forge_css[forge_css.index("@media (prefers-color-scheme: light)"):], ":root")
+    for a, b in (("ground", "bg"), ("ink", "fg"), ("rule", "line"), ("panel", "tint"),
+                 ("y2", "accent"), ("accent", "accent"), ("muted", "muted")):
+        check(t_dark.get(a) == c_dark.get(b), "template dark --%s is spark.css --%s (%s vs %s)"
+              % (a, b, t_dark.get(a), c_dark.get(b)))
+    for a, b in (("ground", "bg"), ("ink", "fg"), ("rule", "line"), ("panel", "tint"),
+                 ("accent", "accent"), ("muted", "muted-text")):
+        check(t_light.get(a) == c_light.get(b), "template light --%s is spark.css light --%s (%s vs %s)"
+              % (a, b, t_light.get(a), c_light.get(b)))
     if fails:
         print("docs_test: %d failed" % len(fails))
         return 1
