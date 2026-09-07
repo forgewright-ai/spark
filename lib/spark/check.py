@@ -23,7 +23,7 @@ import time
 
 from . import is_wsl  # noqa: E402  (the OS fact, beside os_pretty)
 from . import (BIN_DIR, CACHE_DIR, CHECK_JSON, HOME, IS_MAC, MARK, OS, REPO,
-               STATE_DIR, config, glyph, log_exc, page, run, say, state_dir, version)
+               STATE_DIR, config, glyph, log_exc, packages, page, run, say, state_dir, version)
 
 OK, WARN, FAIL, NA = "ok", "warn", "fail", "na"
 GLYPH = {OK: glyph("ok"), WARN: "!", FAIL: glyph("fail"), NA: glyph("na")}
@@ -137,10 +137,9 @@ def row_packages(ctx):
         if rc != 0:
             return fail("Brewfile has unmet entries", "brew bundle --file %s" % ctx.short(brewfile))
         return ok("Brewfile satisfied (%d entries)" % len(pkgs))
-    rc, out = ctx.sh(["dpkg-query", "-W", "-f", "${Package} ${Status}\n"] + pkgs, 30)
-    if rc == -1:
-        return fail("dpkg-query not found", "./bootstrap.sh")
-    have = {l.split()[0] for l in out.splitlines() if l.endswith("install ok installed")}
+    have = packages.installed(pkgs)
+    if have is None:
+        return fail("no package manager spark knows here (%s)" % (packages.manager() or "distro/*.env know debian and arch"), "./bootstrap.sh")
     missing = [p for p in pkgs if p not in have]
     if missing:
         return fail("%d/%d missing: %s" % (len(missing), len(pkgs), " ".join(missing[:6])), "./bootstrap.sh")
@@ -855,7 +854,7 @@ def row_audio(ctx):
         return na("quiet audio on: spark plays no sound%s" % ((" (%s is here)" % player) if player else ""))
     if player:
         return ok("%s -- sounds play (spark quiet audio on silences them)" % player)
-    return warn("no player on PATH: the terminal bell at most", "apt install alsa-utils (aplay), or spark quiet audio on")
+    return warn("no player on PATH: the terminal bell at most", "%s (aplay), or spark quiet audio on" % packages.install_line(["alsa-utils"]))
 
 
 @row("SOFTWARE", fixture=False, reason="reads /etc")
@@ -1292,18 +1291,11 @@ def row_headless(ctx):
 
 @row("NONFUNCTIONAL", fixture=False, reason="asks the package manager, cached an hour")
 def row_pending(ctx):
-    def count():
-        if IS_MAC:
-            rc, out = run(["brew", "outdated", "--quiet"], timeout=120)
-        else:
-            rc, out = run(["apt", "list", "--upgradable"], timeout=60)
-            out = "\n".join(l for l in out.splitlines() if "/" in l)
-        return -1 if rc != 0 else len(out.split())
-    n = ctx.cached("pending", 3600, count)
+    n = ctx.cached("pending", 3600, packages.pending)
     if n < 0:
         return na("could not ask the package manager")
     if n > 30:
-        return warn("%d updates pending" % n, "brew upgrade" if IS_MAC else "sudo apt upgrade")
+        return warn("%d updates pending" % n, packages.upgrade_line())
     return ok("%d updates pending" % n)
 
 
@@ -1706,6 +1698,9 @@ def make_fixture(root, good, stub_url=""):
     # a plain kernel line: a selftest on a real WSL box must not read the host's
     with open(os.path.join(root, "version"), "w") as f:
         f.write("Linux version 6.12.0-fixture (fixture) #1 SMP\n")
+    # a Debian os-release: a selftest on another family must not read the host's
+    with open(os.path.join(root, "os-release"), "w") as f:
+        f.write('ID=debian\nPRETTY_NAME="Debian fixture"\n')
     return {"HOME": home, "XDG_CONFIG_HOME": os.path.join(home, ".config"),
             "XDG_STATE_HOME": os.path.join(home, ".local", "state"),
             "XDG_DATA_HOME": os.path.join(home, ".local", "share"),
@@ -1713,6 +1708,7 @@ def make_fixture(root, good, stub_url=""):
             "SPARK_REPO": repo, "SPARK_ENGINE_DIR": engine if good else os.path.join(root, "nope"),
             "SPARK_API_KEY": "stub-token", "SPARK_SERVICE": "none", "TMUX": "", "SPARK_SYSFS_DRM": os.path.join(root, "drm"),
             "SPARK_PROC_VERSION": os.path.join(root, "version"), "SPARK_SYSFS_VT": os.path.join(root, "vt"),
+            "SPARK_OS_RELEASE": os.path.join(root, "os-release"),
             "SPARK_MEM_TOTAL_GB": "16" if good else "8", "SHELL": "/bin/zsh" if IS_MAC else "/bin/bash",
             "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8"}
 

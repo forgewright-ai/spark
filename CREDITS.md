@@ -54,10 +54,13 @@ Colour values only, no code copied; the license is the upstream's:
 ## The AI's packages (apt, Linux; macOS needs none)
 
 None of these is shipped by spark; apt installs them from Debian's or
-Ubuntu's own repositories, unpinned.
+Ubuntu's own repositories, unpinned. The names are the distro's own, as
+`distro/debian.env` lists them (tests/docs_test.py checks every name
+there is credited here).
 
 - git -- GPL-2.0-only
 - curl -- the curl license
+- ca-certificates -- MPL-2.0 (Mozilla's bundle, as Debian ships it)
 - python3 -- PSF-2.0
 - libgomp1 -- GPL-3.0-or-later, with the GCC runtime exception
 - libvulkan1 -- Apache-2.0 (the vulkan build only)
@@ -73,13 +76,13 @@ unpinned. No editor is among them: an app's plugin is its own repository
 - tmux -- ISC
 - unzip -- Info-ZIP (the Nerd Font's archive)
 - fontconfig -- MIT-style
-- ncurses -- MIT-style
+- ncurses-bin -- MIT-style (ncurses)
 - bat -- MIT/Apache-2.0
 - eza -- MIT
 - fzf -- MIT
 - zoxide -- MIT
 - ripgrep -- MIT/Unlicense
-- fd -- MIT/Apache-2.0
+- fd-find -- MIT/Apache-2.0 (fd)
 - jq -- MIT
 - btop -- Apache-2.0
 

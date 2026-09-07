@@ -92,11 +92,15 @@ get             POSIX sh, both OSes: the one-liner. Clone (or pull) ~/.spark, ex
 bootstrap.sh    POSIX sh, both OSes. --dry-run --list-packages --list-tools --list-models
 install.sh      POSIX sh, both OSes. Links home/ + <os>/home/ into $HOME; renders templates/
 lib/env.sh      the KEY=value reader for the two scripts (config.py is the python twin)
-Brewfile        macOS packages (the Linux list is in bootstrap.sh)
+Brewfile        macOS packages (the Linux lists are distro/<id>.env)
+distro/         one KEY=value file per Linux package family (debian.env): the
+                manager, its install line, the doc's name, the five package groups
 site.env.example, models.env, themes/*.env       KEY=value data
 bin/spark, bin/explain -> spark                  the one command
 lib/spark/      __init__ config wire engine serve session persona cli check
                 verify (sha256, cached: spark model verify, check's models row) bar theme site
+                packages (the family's names from distro/<id>.env, the manager's
+                questions -- installed, pending, install/remove lines -- switched once)
                 setup (spark setup: the guided first run)
                 stats (turns -> numbers) bench (llama-bench, --tune, tune apply)
                 soul memory (the identity files) ledger (the editor's declined notes, per file name)
@@ -252,6 +256,11 @@ may change freely.
    line: with an open license -- `config.OPEN_LICENSES`, Apache-2.0 or
    MIT -- it is a row `auto` may pick) and `MODEL_<NAME>_NOTE` (one line,
    optional). A name in both files is refused, naming both;
+   `distro/<id>.env` (one per Linux package family the oracle `distro()`
+   knows -- `lib/spark/__init__.py` beside `is_wsl()`, the sh twin in
+   `bootstrap.sh`, `SPARK_OS_RELEASE` pins it) -- `PM PM_INSTALL
+   PM_TARGET PKG_CORE PKG_ENGINE PKG_AI PKG_SHELL PKG_CLI`, the same eight
+   keys in every file (`packages.KEYS`; tests/docs_test.py asserts it);
    `themes/<name>.env` -- `THEME_BG THEME_FG THEME_ACCENT THEME_MUTED
    THEME_BTOP THEME_ANSI_0..15` (the same 21 keys in `lib/env.sh`
    `THEME_KEYS` and `config.theme_palette`: the two validators agree);
@@ -451,13 +460,18 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   docs state are the tree's, every page has its source, no retired word
   survives. A new fact a doc states that the tree can derive goes there
   as one more check -- the test is the consistency, not a reviewer.
-- **A package.** Linux: the right `PKG_*` group in `bootstrap.sh` with a
-  comment saying why (`PKG_CORE`/`PKG_ENGINE`/`PKG_AI` are the AI, always
-  installed; `PKG_SHELL`/`PKG_CLI` the shell layer, `SITE_SHELL=on`). macOS:
-  `Brewfile`, same comment -- the whole Brewfile is the shell layer; the AI
-  needs nothing from Homebrew. No editor, no app and no contributor tool
-  in either (shellcheck is the contributor's own). The `packages` row
-  reads both; nothing else to update.
+- **A package.** Linux: the right `PKG_*` group in every `distro/<id>.env`
+  with a comment saying why (`PKG_CORE`/`PKG_ENGINE`/`PKG_AI` are the AI,
+  always installed; `PKG_SHELL`/`PKG_CLI` the shell layer, `SITE_SHELL=on`),
+  under the name that family's manager knows, and its credit in
+  `CREDITS.md` (docs_test looks every name up). macOS: `Brewfile`, same
+  comment -- the whole Brewfile is the shell layer; the AI needs nothing
+  from Homebrew. No editor, no app and no contributor tool in either
+  (shellcheck is the contributor's own). The `packages` row and `spark
+  uninstall` read the same files through `lib/spark/packages.py`;
+  bootstrap's `pkg_installed`/`pkg_available`/`pkg_install` are the sh
+  twin, the one place that switches on the manager. Nothing else to
+  update.
 - **A config file.** First ask whether the app *rewrites* its own config.
   If it only reads: put it in `home/` (shared) or `<os>/home/`; `install.sh`
   links it. If it rewrites: it cannot be linked -- seed it once from

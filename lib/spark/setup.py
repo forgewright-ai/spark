@@ -15,7 +15,7 @@ import sys
 import time
 
 from . import HOME, IS_MAC, MARK, REPO, SITE_ENV, config, mem_total_gb, say, wait_ready
-from . import engine, session, site, wire
+from . import engine, packages, session, site, wire
 
 SIGN = "%s setup -- pick the model this machine earns and light it up" % MARK
 USAGE = SIGN + """
@@ -216,9 +216,9 @@ def _sudo(pkgs, yes):
     if not pkgs:
         return ""
     if not yes:
-        say("apt needs sudo once, for: %s" % pkgs)
+        say("%s needs sudo once, for: %s" % (packages.manager() or "the package manager", pkgs))
         if subprocess.run(["sudo", "-v"]).returncode != 0:
-            raise Abort("no sudo -- sudo apt-get install -y %s, then spark setup again" % pkgs)
+            raise Abort("no sudo -- %s, then spark setup again" % packages.install_line(pkgs.split()))
         return ""
     if subprocess.run(["sudo", "-n", "true"], capture_output=True).returncode != 0:
         return pkgs
@@ -348,9 +348,9 @@ def _run(opts):
     site._announce_downloads(pend)
     rc = site.apply(CORE_ROWS, stream=True)
     if waiting:
-        say("todo   apt          still to install: %s -- sudo apt-get install -y %s, then spark setup again"
-            % (waiting, waiting))
-        say("                    (without libgomp1, llama-server will not start)")
+        say("todo   apt          still to install: %s -- %s, then spark setup again"
+            % (waiting, packages.install_line(waiting.split())))
+        say("                    (without %s, llama-server will not start)" % (packages.groups()["PKG_ENGINE"] or ["the engine's library"])[0])
     if rc != 0:
         return rc
     if theme_name != "none" and cfg.shell and not os.environ.get("SPARK_NO_APPLY"):

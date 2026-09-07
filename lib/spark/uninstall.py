@@ -18,13 +18,13 @@
 
 import glob
 import os
-import re
 import shutil
 import subprocess
 import sys
 
 from . import (BIN_DIR, CONFIG_DIR, DATA_DIR, FORGE_PID, FORGE_URL_FILE, HOME, IS_MAC, MARK, REPO, STATE_DIR,
                config, is_wsl, run, say)
+from . import packages as pkg
 
 USAGE = """%s uninstall -- remove spark from this machine: shows first, then asks for the word yes
 
@@ -423,42 +423,15 @@ def step_data(ctx):
     ctx.remove("data", DATA_DIR, "%s -- the engine and the models, %.1f GB" % (_tilde(DATA_DIR), ctx.freed / 2**30))
 
 
-def _essential(pkg):
-    """dpkg's Essential flag: apt refuses to remove such a package (ncurses-bin
-    is one), so it never appears in the list."""
-    rc, out = run(["dpkg-query", "-W", "-f=${Essential}", pkg], timeout=10)
-    return rc == 0 and out.strip() == "yes"
-
-
-def _packages():
-    """The packages bootstrap installed, from its own lists (Linux) or the
-    Brewfile (macOS): what a removal names. bash, anything dpkg marks
-    Essential, and the AI's four prerequisites (git curl ca-certificates
-    python3) are never removed."""
-    if IS_MAC:
-        try:
-            with open(os.path.join(REPO, "Brewfile"), encoding="utf-8") as f:
-                return re.findall(r'^(?:brew|cask) "([^"]+)"', f.read(), re.M)
-        except OSError:
-            return []
-    try:
-        with open(os.path.join(REPO, "bootstrap.sh"), encoding="utf-8") as f:
-            src = f.read()
-    except OSError:
-        return []
-    pkgs = []
-    for group in ("PKG_ENGINE", "PKG_AI", "PKG_SHELL", "PKG_CLI"):
-        m = re.search(r'^%s="([^"]*)"' % group, src, re.M)
-        if m:
-            pkgs += [p for p in m.group(1).split() if p != "bash" and not _essential(p)]
-    return pkgs
-
-
 def step_packages(ctx):
-    pkgs = _packages()
+    """The packages bootstrap installed, from the distro file (Linux) or the
+    Brewfile (macOS): what a removal names. bash, anything the manager
+    calls essential, and the AI's four prerequisites (git curl
+    ca-certificates python3) are never removed (packages.removable)."""
+    pkgs = pkg.removable()
     if not pkgs:
         return
-    line = ("brew uninstall " + " ".join(pkgs)) if IS_MAC else ("sudo apt-get remove -y " + " ".join(pkgs))
+    line = pkg.remove_line(pkgs)
     if ctx.packages is not True:
         ctx.row("skip", "packages", "kept -- %s removes them" % line)
         return
@@ -470,7 +443,7 @@ def step_packages(ctx):
             run(["brew", "uninstall", p], timeout=300)
         ctx.row("ok", "packages", "brew uninstall %s (a formula another package needs stays)" % " ".join(pkgs))
     else:
-        ctx.root("packages", ["apt-get", "remove", "-y"] + pkgs, "apt-get remove " + " ".join(pkgs), timeout=1800)
+        ctx.root("packages", pkg.remove_argv(pkgs), " ".join(pkg.remove_argv(pkgs)), timeout=1800)
 
 
 def step_state_config(ctx):
@@ -590,7 +563,7 @@ def main(argv):
         if answer != "yes":
             say("%s uninstall -- kept" % MARK)
             return 0
-    if packages is None and tty and _packages():
+    if packages is None and tty and pkg.removable():
         from . import confirm
         packages = confirm("remove the shell layer's packages too")
     say()

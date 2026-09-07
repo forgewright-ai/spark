@@ -29,15 +29,12 @@ case ${1:-} in
 esac
 
 # ---------------------------------------------------------------- packages
-# Linux, by group, each with its reason. macOS reads Brewfile instead (the
-# shell layer only: the AI needs nothing from Homebrew).
-# core -- the AI: SITE_SHELL=off installs only these (+ PKG_AI for vulkan)
-PKG_CORE="git curl ca-certificates python3"
-PKG_ENGINE="libgomp1"                                        # llama.cpp's Ubuntu build needs OpenMP; Debian's base lacks it
-PKG_AI="libvulkan1 mesa-vulkan-drivers"                      # the vulkan build only (ai_build: a GPU in sysfs, or SITE_AI_BUILD=vulkan)
-# the shell layer -- SITE_SHELL=on (spark shell on)
-PKG_SHELL="bash tmux unzip fontconfig ncurses-bin"           # tmux, the font's unzip + fc-cache, a tmux-256color terminfo
-PKG_CLI="bat eza fzf zoxide ripgrep fd-find jq btop"        # the shell's daily tools
+# Linux: the names live in distro/<id>.env (PKG_CORE PKG_ENGINE PKG_AI
+# PKG_SHELL PKG_CLI, plus PM PM_INSTALL PM_TARGET), one file per package
+# family, loaded after site_load once distro() has said which. macOS reads
+# Brewfile instead (the shell layer only: the AI needs nothing from
+# Homebrew). The verbs that ask a package manager are pkg_installed,
+# pkg_available and pkg_install below -- the one place that switches on PM.
 
 # ------------------------------------------------------------ pinned bits
 # Everything not packaged is pinned by version and sha256. An empty sha
@@ -69,6 +66,17 @@ drm_vram_file() {
 # Linux under Windows (WSL 2): the kernel line names microsoft. Linux to
 # spark, minus the VT console and GRUB (python twin: spark.is_wsl)
 is_wsl() { grep -qi microsoft "${SPARK_PROC_VERSION:-/proc/version}" 2>/dev/null; }
+# distro: the package family this Linux belongs to -- debian | arch | ''
+# (lib/spark distro() is the python twin): ID first, then ID_LIKE's words
+# in order, the first one a distro/<id>.env knows. Unknown is empty, never
+# a guess. SPARK_OS_RELEASE pins it (tests), like SPARK_PROC_VERSION.
+distro() {
+    [ "$OS" = Linux ] || [ -n "${SPARK_OS_RELEASE:-}" ] || return 0
+    _f=${SPARK_OS_RELEASE:-/etc/os-release}
+    for w in $(sed -n 's/^ID=//p; s/^ID_LIKE=//p' "$_f" 2>/dev/null | tr -d '"'); do
+        case $w in debian|arch) echo "$w"; return ;; esac
+    done
+}
 # ai_build: the engine build this machine gets -- metal on macOS (the key
 # is ignored there); on Linux SITE_AI_BUILD cpu|vulkan as chosen, auto
 # (the default) = vulkan when a DRM device reports VRAM, else cpu. It
@@ -115,6 +123,13 @@ engine_home() {
 }
 
 site_load
+# the package family and its names: brew on macOS; on Linux the distro's
+# file (load_env sets only what the environment lacks, so a test may pin
+# a group); an unknown Linux keeps PM empty and the packages row says so
+DISTRO=$(distro)
+PM=; [ "$OS" = Darwin ] && PM=brew
+[ -z "$DISTRO" ] || load_env "$REPO/distro/$DISTRO.env" || exit 1
+: "${PM_INSTALL:=}" "${PM_TARGET:=}" "${PKG_CORE:=}" "${PKG_ENGINE:=}" "${PKG_AI:=}" "${PKG_SHELL:=}" "${PKG_CLI:=}"
 MODELS_DIR=${SPARK_MODELS_DIR:-$SPARK_DATA_DIR/models}
 AI_BUILD=$(ai_build)
 # the two layers: the AI is always on; the shell (tmux, starship, the daily
@@ -134,6 +149,7 @@ list_packages() {
         [ "$shell" = 1 ] || return 0
         sed -nE 's/^(brew|cask) "([^"]+)".*/\2/p' "$REPO/Brewfile"
     else
+        [ -n "$DISTRO" ] || return 0        # an unknown family: no list (the packages row says so)
         set -- $PKG_CORE $PKG_ENGINE
         [ "$AI_BUILD" = vulkan ] && set -- "$@" $PKG_AI
         [ "$shell" = 1 ] && set -- "$@" $PKG_SHELL $PKG_CLI
@@ -413,6 +429,27 @@ else
 fi
 
 # ============================================================ 3. packages
+# the three questions a package manager is asked, switched once on PM
+# (lib/spark packages.py is the python twin: the packages check row and
+# spark uninstall ask the same way). A new family is one arm in each.
+pkg_installed() {
+    case $PM in
+        apt) dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q 'install ok installed' ;;
+        *) return 1 ;;
+    esac
+}
+pkg_available() {
+    case $PM in
+        apt) apt-cache policy "$1" 2>/dev/null | grep -q 'Candidate: [^(]' ;;
+        *) return 1 ;;
+    esac
+}
+pkg_install() {   # pkg_install NAME... -- as root, the manager's own way
+    case $PM in
+        apt) as_root apt-get update -qq && as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "$@" ;;
+        *) return 1 ;;
+    esac
+}
 section packages
 if [ "$OS" = Darwin ]; then
     if [ "$shell" = 0 ]; then
@@ -425,20 +462,21 @@ if [ "$OS" = Darwin ]; then
         brew bundle --file "$REPO/Brewfile" --no-upgrade
         ok brew "Brewfile satisfied"
     fi
+elif [ -z "$PM" ]; then
+    row todo apt "no package list for this Linux ($(sed -n 's/^PRETTY_NAME=//p' "${SPARK_OS_RELEASE:-/etc/os-release}" 2>/dev/null | tr -d '"')): distro/*.env know debian and arch -- install git curl python3 and libgomp by hand"
 else
     missing=''; absent=''
     for p in $(list_packages); do
-        if dpkg-query -W -f='${Status}' "$p" 2>/dev/null | grep -q 'install ok installed'; then continue; fi
-        if apt-cache policy "$p" 2>/dev/null | grep -q 'Candidate: [^(]'; then missing="$missing $p"; else absent="$absent $p"; fi
+        if pkg_installed "$p"; then continue; fi
+        if pkg_available "$p"; then missing="$missing $p"; else absent="$absent $p"; fi
     done
-    [ -z "$absent" ] || skip apt "not in this apt:$absent (spark targets Debian 13 / Ubuntu 24.04+)"
+    [ -z "$absent" ] || skip apt "not in this $PM:$absent (spark targets $PM_TARGET)"
     if [ -z "$missing" ]; then
         ok apt "$(list_packages | wc -l | tr -d ' ') packages installed"
     elif need apt "install:$missing (sudo)"; then
-        as_root apt-get update -qq
         # shellcheck disable=SC2086
-        as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq $missing > "$TMP/apt.log" 2>&1 \
-            || { tail -20 "$TMP/apt.log"; echo "bootstrap: apt-get install failed" >&2; exit 1; }
+        pkg_install $missing > "$TMP/pkg.log" 2>&1 \
+            || { tail -20 "$TMP/pkg.log"; echo "bootstrap: $PM install failed" >&2; exit 1; }
         ok apt "installed:$missing"
     fi
 fi

@@ -67,6 +67,17 @@ def main():
             continue
         seen.add(up)
         check(up in credits, "CREDITS.md names %s (%s)" % (up, r[0]))
+    # the package families: every distro/<id>.env has the same eight keys
+    # (contract 3), and every package it names is credited
+    from spark import packages
+    for f in sorted(os.listdir(os.path.join(ROOT, "distro"))):
+        if not f.endswith(".env"):
+            continue
+        t = config.parse_env(os.path.join(ROOT, "distro", f))
+        check(tuple(sorted(t)) == tuple(sorted(packages.KEYS)), "distro/%s: exactly the keys %s" % (f, " ".join(packages.KEYS)))
+        for g in packages.GROUPS:
+            for name in t.get(g, "").split():
+                check(re.search(r"(?m)^- %s -- " % re.escape(name), credits) is not None, "CREDITS.md names %s (distro/%s %s)" % (name, f, g))
     # counts the docs state
     n_rows = sum(1 for line in read(os.path.join("lib", "spark", "check.py")).split("\n") if line.startswith("@row"))
     for doc in ("CLAUDE.md", "INSTALL.md"):

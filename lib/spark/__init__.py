@@ -251,17 +251,41 @@ def is_wsl():
         return False
 
 
+OS_RELEASE = os.environ.get("SPARK_OS_RELEASE", "/etc/os-release")
+DISTROS = ("debian", "arch")      # the package families distro/<id>.env know
+
+
+def _os_release():
+    """{KEY: value} from os-release (quotes stripped); {} when unreadable."""
+    out = {}
+    try:
+        with open(OS_RELEASE, encoding="utf-8") as f:
+            for line in f:
+                if "=" in line and not line.startswith("#"):
+                    key, val = line.split("=", 1)
+                    out[key.strip()] = val.strip().strip('"')
+    except OSError:
+        pass
+    return out
+
+
+def distro():
+    """The package family this Linux belongs to: "debian", "arch" or "" --
+    ID first, then each ID_LIKE word in order, the first one a distro/
+    file knows wins (ubuntu -> debian, manjaro -> arch). Unknown is "",
+    never a guess. Never on macOS unless SPARK_OS_RELEASE points at a
+    file (tests, the way SPARK_PROC_VERSION does). bootstrap.sh distro()
+    is the sh twin."""
+    if IS_MAC and "SPARK_OS_RELEASE" not in os.environ:
+        return ""
+    d = _os_release()
+    return next((w for w in [d.get("ID", "")] + d.get("ID_LIKE", "").split() if w in DISTROS), "")
+
+
 def os_pretty():
     if IS_MAC:
         return "macOS " + platform.mac_ver()[0]
-    name = "Linux " + platform.release()
-    try:
-        with open("/etc/os-release", encoding="utf-8") as f:
-            for line in f:
-                if line.startswith("PRETTY_NAME="):
-                    name = line.split("=", 1)[1].strip().strip('"')
-    except OSError:
-        pass
+    name = _os_release().get("PRETTY_NAME") or "Linux " + platform.release()
     return name + (" on " + WSL if is_wsl() else "")
 
 

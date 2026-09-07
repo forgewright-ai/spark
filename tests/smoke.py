@@ -1549,6 +1549,34 @@ def main():
         t.ok(wsl_fact(home + "/version-wsl") == "True True", "is_wsl: a kernel line naming microsoft, and os_pretty says on WSL 2", wsl_fact(home + "/version-wsl"))
         t.ok(wsl_fact(home + "/version-plain") == "False False", "is_wsl: a plain kernel line is not WSL", wsl_fact(home + "/version-plain"))
         t.ok(wsl_fact(home + "/version-none") == "False False", "is_wsl: no file at all is not WSL", wsl_fact(home + "/version-none"))
+        # the package family from os-release, pinned by SPARK_OS_RELEASE (both
+        # OSes, in-process twin): ID first, then ID_LIKE's words; unknown is ''
+        for name, body in (("arch", 'ID=arch\nPRETTY_NAME="Arch Linux"\n'),
+                           ("ubuntu", 'ID=ubuntu\nID_LIKE=debian\nPRETTY_NAME="Ubuntu 24.04 LTS"\n'),
+                           ("manjaro", 'ID=manjaro\nID_LIKE=arch\n'),
+                           ("fedora", 'ID=fedora\nPRETTY_NAME="Fedora Linux 42"\n')):
+            with open(home + "/os-release-" + name, "w") as f:
+                f.write(body)
+        distro_twin = ("import sys; sys.path.insert(0, %r); import spark; spark.IS_MAC = False; "
+                       "print(repr(spark.distro()), spark.os_pretty())" % os.path.join(REPO, "lib"))
+
+        def distro_fact(path):
+            p = subprocess.run([sys.executable, "-c", distro_twin], capture_output=True, text=True,
+                               env=dict(env, SPARK_OS_RELEASE=path, SPARK_PROC_VERSION=home + "/version-plain"), timeout=30)
+            return p.stdout.strip() or p.stderr.strip()
+        t.ok(distro_fact(home + "/os-release-arch") == "'arch' Arch Linux", "distro: ID=arch is arch, and os_pretty reads the file's PRETTY_NAME", distro_fact(home + "/os-release-arch"))
+        t.ok(distro_fact(home + "/os-release-ubuntu") == "'debian' Ubuntu 24.04 LTS", "distro: ID=ubuntu ID_LIKE=debian is debian", distro_fact(home + "/os-release-ubuntu"))
+        t.ok(distro_fact(home + "/os-release-manjaro").startswith("'arch' "), "distro: ID=manjaro ID_LIKE=arch is arch", distro_fact(home + "/os-release-manjaro"))
+        t.ok(distro_fact(home + "/os-release-fedora") == "'' Fedora Linux 42", "distro: an unknown family is '', never a guess", distro_fact(home + "/os-release-fedora"))
+        t.ok(distro_fact(home + "/os-release-none").startswith("'' Linux "), "distro: no file at all is '', and os_pretty falls back to the kernel", distro_fact(home + "/os-release-none"))
+        # the sh twin answers the same (bootstrap.sh distro())
+        sh_twin = "OS=Linux; . %s; distro" % os.path.join(REPO, "lib", "env.sh")
+        for name, want in (("arch", "arch"), ("ubuntu", "debian"), ("manjaro", "arch"), ("fedora", "")):
+            p = subprocess.run(["sh", "-c", "OS=Linux; SPARK_OS_RELEASE=%s; export SPARK_OS_RELEASE; "
+                                "eval \"$(sed -n '/^distro() {/,/^}/p' %s)\"; distro"
+                                % (home + "/os-release-" + name, os.path.join(REPO, "bootstrap.sh"))],
+                               capture_output=True, text=True, timeout=30)
+            t.ok(p.stdout.strip() == want, "bootstrap.sh distro(): %s -> %r (the sh twin agrees)" % (name, want), p.stdout + p.stderr)
         if sys.platform != "darwin":
             wsl = dict(SPARK_PROC_VERSION=home + "/version-wsl", SPARK_NO_APPLY="1")
             rc, out, _ = spark("font", extra=wsl)

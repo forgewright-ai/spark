@@ -108,6 +108,6 @@ build_home three
 out=$(SPARK_REPO="$REPO" python3 "$REPO/bin/spark" uninstall --dry-run 2>&1) || bad "dev-clone dry-run failed: $out"
 printf '%s\n' "$out" | grep -qE '^skip +clone +.* is yours' && ok "a developer checkout: the clone row skips" || bad "dev clone row: $(printf '%s\n' "$out" | grep -E ' clone ')"
 [ -z "$(git -C "$REPO" status --porcelain -- bin lib tests 2>/dev/null | grep -v '^??')" ] || true
-[ -d "$REPO/.git" ] && ok "the repository is untouched" || bad "the repository is gone"
+[ -e "$REPO/.git" ] && ok "the repository is untouched" || bad "the repository is gone"
 
 [ "$fail" -eq 0 ] && echo "uninstall_test: all ok" || { echo "uninstall_test: FAILED"; exit 1; }

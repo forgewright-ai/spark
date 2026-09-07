@@ -1242,7 +1242,8 @@ def cmd_shell(args):
             else:
                 say("ok     tmux         running sessions keep the look until tmux restarts")
     rc = apply(["configs", "rc", "vt-palette"])       # the boot palette back to VGA too
-    say("packages stay installed -- apt or brew removes them if you want")
+    from . import packages
+    say("packages stay installed -- %s removes them if you want" % (packages.manager() or "the package manager"))
     if rc == 0:
         # the same line `on` prints: this shell still has spark's prompt
         # loaded, and only a new one reads the rc file that was put back
