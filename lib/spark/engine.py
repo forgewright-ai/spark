@@ -539,7 +539,9 @@ def spawn(cfg, host):
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
         os.close(lock)
-        raise EngineError("another `spark serve` is starting right now")
+        # a gate refusal, not a world that failed: code 2, signed by the
+        # caller (the grammar's exit codes; `spark update`'s lock the same)
+        raise EngineError("another `spark serve` is starting right now", 2)
     _rotate_log()
     log = os.open(SERVE_LOG, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
     try:

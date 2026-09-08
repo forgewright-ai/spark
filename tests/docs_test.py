@@ -98,6 +98,16 @@ def main():
         n_cat = len(re.findall(r'^@row\("%s"' % cat, src_rows, re.M))
         m = re.search(r"(\d+)\s+%s" % cat, read("CLAUDE.md"))
         check(m is not None and int(m.group(1)) == n_cat, "CLAUDE.md: %d %s rows (check.py says %d)" % (int(m.group(1)) if m else -1, cat, n_cat))
+    # the chaos scenarios: a count a doc spells out is chaos.py's own
+    n_sc = sum(1 for line in read(os.path.join("lib", "spark", "chaos.py")).split("\n")
+               if line.startswith("@scenario"))
+    spelled = "zero one two three four five six seven eight nine ten eleven twelve".split()
+    if n_sc < len(spelled):
+        rx = re.compile(r"\b(%s) (?:failures|scenarios)\b" % "|".join(spelled), re.I)
+        for doc in ("ROADMAP.md", "CHANGELOG.md", "README.md", "INSTALL.md", "CLAUDE.md", "AGENTS.md"):
+            for m in rx.finditer(read(doc)):
+                check(m.group(1).lower() == spelled[n_sc],
+                      "%s: '%s' is chaos.py's count (%s)" % (doc, m.group(0), spelled[n_sc]))
     # the roadmap starts where the changelog's top section is
     top = re.search(r"^## v(\d+\.\d+)", read("CHANGELOG.md"), re.M).group(1)
     m = re.search(r"What comes after v(\d+\.\d+)", read("ROADMAP.md"))

@@ -654,6 +654,51 @@ def row_prompt(ctx):
 
 
 @row("CAPABILITY")
+def row_failure(ctx):
+    """The failure moment: a nonzero exit offers explain at the prompt.
+    Core -- the widgets carry it with the shell layer off too. A live
+    shell says so through the marker's fourth field (contract 6)."""
+    from . import OFF_FLAG, WIDGETS_DIR
+    d = os.path.join(ctx.home, ".config", "spark")
+    stale = []
+    for sh in ("bash", "zsh"):
+        p = os.path.join(d, "widget." + sh)
+        try:
+            with open(p, encoding="utf-8", errors="replace") as f:
+                if "_spark_failed" not in f.read():
+                    stale.append("widget." + sh)
+        except OSError:
+            stale.append("widget." + sh)
+    if stale:
+        return warn("no exit-code hook in: %s" % ", ".join(stale), "sh install.sh")
+    if os.path.exists(OFF_FLAG):
+        return na("switched off on purpose (spark on)")
+    armed, old = [], 0
+    try:
+        names = os.listdir(WIDGETS_DIR)
+    except OSError:
+        names = []
+    for name in names:
+        try:
+            with open(os.path.join(WIDGETS_DIR, name), encoding="utf-8") as f:
+                parts = f.read().split()
+            os.kill(int(parts[1]), 0)
+        except (OSError, ValueError, IndexError):
+            continue
+        if len(parts) > 3 and parts[3] == "hook":
+            armed.append("%s %s" % (parts[0], parts[1]))
+        else:
+            old += 1
+    if old:
+        return warn("%d shell(s) predate the exit-code hook" % old, "exec $SHELL there")
+    if not armed:
+        if ctx.cfg.headless:
+            return na("headless: no interactive shell open (armed when one is)")
+        return warn("no shell has sourced the widget", "open a new shell")
+    return ok("armed in %s -- a nonzero exit offers explain (Esc s)" % ", ".join(armed[:3]))
+
+
+@row("CAPABILITY")
 def row_completion(ctx):
     """TAB completion: the two files install.sh links, each hook sourcing
     its own. Static verbs always; theme and model names offline, from the
@@ -1462,10 +1507,14 @@ def _stub(path, body):
     os.chmod(path, 0o755)
 
 
-def make_fixture(root, good, stub_url=""):
+def make_fixture(root, good, stub_url="", real_spark=False):
     """A throwaway HOME plus a stub repository and stub commands, shaped so
     every fixture-testable row is ok (good=True) or not (good=False).
-    stub_url is a fake llama-server the good fixture's rows may reach."""
+    stub_url is a fake llama-server the good fixture's rows may reach.
+    real_spark makes the fixture repository's bin/spark a symlink to this
+    one instead of a stub, at every commit: `spark chaos` runs remedies
+    that re-exec spark out of the fixture tree (spark update), and a stub
+    there would answer them."""
     home = os.path.join(root, "home")
     repo = os.path.join(root, "repo")
     bin_ = os.path.join(root, "bin")
@@ -1484,7 +1533,10 @@ def make_fixture(root, good, stub_url=""):
     _stub(os.path.join(repo, "install.sh"),
           "#!/bin/sh\n" + ("printf 'ok             %s/.tmux.conf\\nNothing to do\\n' \"$HOME\"\n" if good
                             else "printf 'would link     %s/.tmux.conf\\n1 to do\\n' \"$HOME\"\n"))
-    _stub(os.path.join(repo, "bin", "spark"), "#!/bin/sh\necho stub\n")
+    if real_spark:
+        os.symlink(os.path.join(REPO, "bin", "spark"), os.path.join(repo, "bin", "spark"))
+    else:
+        _stub(os.path.join(repo, "bin", "spark"), "#!/bin/sh\necho stub\n")
     os.symlink("spark", os.path.join(repo, "bin", "explain"))
     open(os.path.join(repo, "Brewfile"), "w").close()
     # the package tables are data the packages row reads (packages.table):
@@ -1570,8 +1622,10 @@ def make_fixture(root, good, stub_url=""):
         else:
             f.write("SITE_EMBER_MODEL=qwen3-30b-a3b\n")     # 21 GB: over the bad fixture's budget
     os.chmod(os.path.join(home, ".config", "spark", "site.env"), 0o600 if good else 0o644)
+    # the good marker carries contract 6's fourth field (the exit-code
+    # hook is armed); the bad one is a pre-hook shell -- the failure row
     with open(os.path.join(state, "widgets", str(os.getpid())), "w") as f:
-        f.write("bash %d %d\n" % (os.getpid(), int(time.time())))
+        f.write("bash %d %d%s\n" % (os.getpid(), int(time.time()), " hook" if good else ""))
     with open(os.path.join(state, "bar"), "w") as f:
         json.dump({"t": time.time() if good else time.time() - 3600, "net": None, "line": "x"}, f)
     with open(os.path.join(state, "check.json"), "w") as f:
@@ -1684,7 +1738,11 @@ def make_fixture(root, good, stub_url=""):
             f.write("fixture-x64\n")
         _stub(os.path.join(home, ".local", "bin", "starship"), "#!/bin/sh\nexit 0\n")   # where bootstrap pins it
         for sh in ("bash", "zsh"):
-            open(os.path.join(home, ".config", "spark", "widget." + sh), "w").close()
+            # the failure row wants the exit-code hook's sentinel in each
+            # widget (the bad fixture has no widgets at all, so both the
+            # prompt and the failure row flip to warn there)
+            with open(os.path.join(home, ".config", "spark", "widget." + sh), "w") as f:
+                f.write("# fixture widget\n_spark_failed() { :; }\n")
             # the completion row: the two files plus a hook that sources its
             # own (the bad fixture has neither, so the row flips to warn)
             open(os.path.join(home, ".config", "spark", "completion." + sh), "w").close()
@@ -1909,6 +1967,11 @@ def selftest():
     say("  %s shell-off: %d rows na%s" % (GLYPH[OK] if not not_na else GLYPH[FAIL], len(gated) - len(not_na),
                                          "" if not not_na else "   not na: " + " ".join(not_na)))
     bad += bool(not_na)
+    # the failure moment is core: the same pass must leave it ok, not na --
+    # the machine-checked form of "the feature survives the layer being off"
+    foff = results["off"].get("failure", ("missing", ""))[0]
+    say("  %s core: failure %s with the shell layer off" % (GLYPH[OK] if foff == OK else GLYPH[FAIL], foff))
+    bad += foff != OK
     not_na = [n for n in CLIENT_ROWS if results["client"].get(n, ("missing", ""))[0] != NA]
     peer = results["client"].get("peer", ("missing", ""))[0]
     say("  %s client: %d rows na, peer %s%s" % (GLYPH[OK] if not not_na and peer == OK else GLYPH[FAIL],
@@ -1960,6 +2023,9 @@ USAGE = """%s check -- is this machine still what its repository says it is?
   spark check --fresh      ignore cached answers (brew, git fetch results)
   spark check --fetch      ask origin before judging the git row
   spark check --selftest   prove every fixture-testable row can flip
+  spark check --chaos      break a throwaway machine one known way at a
+                           time; the right row must say so and its remedy
+                           must heal it
 """ % MARK
 
 
@@ -1980,6 +2046,9 @@ def main(argv):
             fetch = True
         elif a == "--selftest":
             return selftest()
+        elif a == "--chaos":
+            from . import chaos
+            return chaos.run()
         elif a.startswith("--"):
             say(USAGE.rstrip())
             return 2

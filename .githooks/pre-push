@@ -1,5 +1,5 @@
 #!/bin/sh
-# spark pre-push gate: the slower proofs (~20 s). NOTICE-skip when a
+# spark pre-push gate: the slower proofs (~30 s). NOTICE-skip when a
 # prerequisite is missing; never silently pass.
 set -eu
 cd "$(git rev-parse --show-toplevel)"
@@ -22,5 +22,8 @@ if [ -f tests/uninstall_test.sh ]; then
 fi
 if [ -f bin/spark ] && [ -f lib/spark/check.py ]; then
     python3 bin/spark check --selftest || { echo "pre-push: spark check --selftest failed"; fail=1; }
+fi
+if [ -f lib/spark/chaos.py ]; then
+    python3 bin/spark check --chaos || { echo "pre-push: spark check --chaos failed"; fail=1; }
 fi
 [ "$fail" -eq 0 ] || { echo "pre-push: refused"; exit 1; }

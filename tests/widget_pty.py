@@ -3,9 +3,14 @@
 # widget. Proves the contract the widget makes: a question's command lands
 # in the line and does NOT run; a plain line runs at once; a glob is not a
 # question; the off flag hands Enter back; Esc s asks; the liveness marker
-# comes and goes with the shell. Then, in a 40-column tmux pane (skipped
-# without tmux): a question that wraps still gets its hint in the row above
-# an intact prompt.
+# comes and goes with the shell; a nonzero exit prints the failure line
+# and Esc s on an empty line composes `cmd 2>&1 | explain` (quoting
+# intact), then offers the fix as a fact -- and the suppression table
+# (_spark_offer_kind) answers the same in both shells; a hostile answer
+# -- prose, nothing, a dead spark line, 40 kB -- runs nothing and leaves
+# a working prompt. Then, in a
+# 40-column tmux pane (skipped without tmux): a question that wraps still
+# gets its hint in the row above an intact prompt.
 #
 #   widget_pty.py bash home/.config/spark/widget.bash
 #   widget_pty.py zsh  home/.config/spark/widget.zsh
@@ -39,8 +44,25 @@ printf '%s\n' "$line" >> "$STUB_LOG"
 case $line in
   *delete*) printf 'danger\techo EXECUTED-MARK\nDeletes things -- careful\n' ;;
   *answer-me*) printf 'answer\nForty-two\n' ;;
+  # the hostile three: contract 4 broken three ways. The widget must run
+  # nothing and leave a prompt the shell can still be used at.
+  *hostile-prose*) printf 'the model rambled instead of answering, at length\n' ;;
+  *hostile-empty*) : ;;
+  # the padding comes BEFORE the mark on purpose: with the mark first,
+  # running the command would print MARK+40 kB and the "nothing ran"
+  # assertion below could never fail, whatever the widget did
+  *hostile-huge*) printf 'cmd\techo '; awk 'BEGIN{while(i++<40000)printf "z"}'; printf ' EXECUTED-MARK\n'; awk 'BEGIN{while(i++<40000)printf "y"}'; printf '\n' ;;
+  *hostile-dead*) exit 1 ;;
   *) printf 'cmd\techo EXECUTED-MARK\nA hint about it\n' ;;
 esac
+'''
+
+EXPLAIN_STUB = r'''#!/bin/sh
+# a stand-in for `explain`: logs its stdin and the one-shot variables the
+# widget rides along, then answers with a marker
+cat >> "$EXPLAIN_LOG"
+printf 'cmd=%s rc=%s\n' "${SPARK_EXPLAIN_CMD-}" "${SPARK_EXPLAIN_RC-}" >> "$EXPLAIN_LOG"
+printf 'EXPLAINED\n'
 '''
 
 
@@ -67,6 +89,18 @@ class Shell:
                 if not data:
                     return
                 self.buf += data
+
+    def settle(self, quiet=0.4, timeout=20):
+        """Read until nothing new has arrived for `quiet` seconds. A fixed
+        sleep is not enough after a 40 kB answer: the shell is still
+        redrawing, and the next command typed into that queues behind the
+        redraw, so an expect() on it times out on text that then lands."""
+        end = time.time() + timeout
+        while time.time() < end:
+            n = len(self.buf)
+            self.read(quiet)
+            if len(self.buf) == n:
+                return
 
     def expect(self, text, timeout=8):
         """text appears in output written AFTER the last mark()"""
@@ -250,8 +284,14 @@ def main(shell, widget):
         with open(stub, "w") as f:
             f.write(STUB)
         os.chmod(stub, 0o755)
+        estub = os.path.join(home, "bin", "explain")
+        with open(estub, "w") as f:
+            f.write(EXPLAIN_STUB)
+        os.chmod(estub, 0o755)
         log = os.path.join(tmp, "asked.log")
+        elog = os.path.join(tmp, "explained.log")
         env = {"HOME": home, "XDG_STATE_HOME": state, "SPARK_BIN": stub, "STUB_LOG": log,
+               "EXPLAIN_LOG": elog,
                "PATH": os.path.join(home, "bin") + ":" + os.environ.get("PATH", ""),
                "TERM": "xterm-256color", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "ZDOTDIR": home}
         prompt = "SPARKPROMPT> "
@@ -274,6 +314,9 @@ def main(shell, widget):
         markers = os.listdir(os.path.join(state, "spark", "widgets"))
         ok(len(markers) == 1 and open(os.path.join(state, "spark", "widgets", markers[0])).read().startswith(shell + " "),
            "liveness marker written: %s" % markers)
+        fields = open(os.path.join(state, "spark", "widgets", markers[0])).read().split()
+        ok(len(fields) >= 4 and fields[3] == "hook",
+           "the marker's fourth field says the exit-code hook is armed: %s" % fields)
 
         # 1. a question: the command lands in the line, the hint shows, nothing runs
         since = sh.mark()
@@ -317,6 +360,28 @@ def main(shell, widget):
         sh.expect(prompt, 3)
         ok("EXECUTED" not in since2(), "an answer leaves no command behind", since2())
 
+        # 3b. the hostile answers: contract 4 broken four ways. Whatever
+        # comes back, nothing runs and the prompt is still a prompt --
+        # the widget's own promise, under an answer that is not spark's
+        for what, why in (("hostile-prose", "prose where the two lines belong"),
+                          ("hostile-empty", "nothing at all"),
+                          ("hostile-dead", "a spark line that died"),
+                          ("hostile-huge", "40 kB on both lines")):
+            since = sh.mark()
+            sh.send("%s?\r" % what)
+            time.sleep(0.6)
+            sh.settle()                # 40 kB takes a while to draw
+            seen = since()
+            ok("EXECUTED-MARK\r\n" not in seen and "EXECUTED-MARK\n" not in seen,
+               "%s: nothing ran" % why, seen[-300:])
+            sh.send("\x15")            # C-u: clear whatever landed
+            sh.settle()
+            since2 = sh.mark()
+            sh.send("echo STILL-HERE-%s\r" % what)
+            ok(sh.expect("STILL-HERE-%s\r\n" % what) or sh.expect("STILL-HERE-%s\n" % what),
+               "%s: the prompt still works after it" % why, since2()[-300:])
+            sh.expect(prompt)
+
         # 4. a plain line runs at once, unasked
         n = asked()
         since = sh.mark()
@@ -359,6 +424,87 @@ def main(shell, widget):
         sh.send("\x1bs")
         ok(sh.expect("type something first"), "Esc s on an empty line explains itself")
         ok(asked() == n, "and does not ask")
+
+        # 10. the failure moment: a nonzero exit prints one line, no model call
+        n = asked()
+        since = sh.mark()
+        sh.send("sh -c 'exit 3'\r")
+        ok(sh.expect("failed (3) -- press Esc s to ask why"), "a nonzero exit prints the failure line", since())
+        ok(asked() == n, "the failure line costs no spark call")
+        sh.expect(prompt)
+
+        # 10b. an empty Enter neither reprints it nor loses the offer
+        since = sh.mark()
+        sh.send("\r")
+        sh.expect(prompt, 3)
+        ok("failed (3)" not in since(), "an empty Enter does not reprint the failure line", since())
+
+        # 10c. Esc s on the empty line composes the pipe, quoting intact,
+        # and runs nothing until Enter
+        since = sh.mark()
+        sh.send("\x1bs")
+        ok(sh.expect("{ sh -c 'exit 3'; } 2>&1 | explain"), "Esc s after a failure composes the explain, braced", since())
+        ok(asked() == n, "and asks spark line nothing")
+        time.sleep(0.3)
+        ok("EXPLAINED" not in since(), "nothing runs before Enter", since())
+
+        # 10d. Enter runs it: explain gets the output, the command, the code
+        since = sh.mark()
+        sh.send("\r")
+        ok(sh.expect("EXPLAINED"), "Enter runs the composed explain", since())
+        sh.expect(prompt)
+        explained = open(elog).read() if os.path.exists(elog) else ""
+        ok("cmd=sh -c 'exit 3' rc=3" in explained, "explain saw the command and its exit code", explained)
+
+        # 10e. a danger head word is seen but never offered a re-run
+        since = sh.mark()
+        sh.send("rm /nonexistent-spark-test-path\r")
+        ok(sh.expect("not re-run; ? words asks about it"), "a danger head word says why instead of offering", since())
+        sh.expect(prompt)
+        since = sh.mark()
+        sh.send("\x1bs")
+        ok(sh.expect("type something first"), "and Esc s stays the nag", since())
+        time.sleep(0.2)
+
+        # 10f. the first success after the explain is the fix: Esc s offers
+        # to keep what happened, as a line the user reads and edits
+        since = sh.mark()
+        sh.send("mkdir fixed-dir\r")
+        sh.expect(prompt)
+        since = sh.mark()
+        sh.send("\x1bs")
+        ok(sh.expect("spark remember"), "Esc s after the fix offers to keep it", since())
+        ok(sh.expect("failed until: mkdir fixed-dir"), "the fact records what the user did", since())
+        sh.send("\x15")
+        time.sleep(0.2)
+
+        # 10g. the off flag silences the failure line too
+        open(os.path.join(state, "spark", "off"), "w").close()
+        since = sh.mark()
+        sh.send("sh -c 'exit 7'\r")
+        sh.expect(prompt, 3)
+        ok("failed (7)" not in since(), "the off flag silences the failure line", since())
+        os.remove(os.path.join(state, "spark", "off"))
+
+        # 10h. the suppression table, through the widget's own predicate --
+        # the same answers in both shells (no process runs: the stub spark
+        # reads stdin, so naming it here is safe)
+        for cmd, rc, want in (("grep -q zzz a.txt", 1, "none"),
+                              ("grep -q zzz a.txt", 2, "ask"),
+                              ("diff a b", 1, "none"),
+                              ("sh -c x", 130, "none"),
+                              ("spark check", 1, "none"),
+                              ("make x 2>&1 | explain", 1, "none"),
+                              ("make", 2, "ask"),
+                              ("rm -rf build", 1, "danger"),
+                              ("sudo rm -rf /x", 1, "danger"),
+                              ("VAR=1 env kill -9 123", 1, "danger"),
+                              ("mkfs.ext4 /dev/sda", 1, "danger")):
+            since = sh.mark()
+            sh.send("_spark_offer_kind '%s' %d\r" % (cmd, rc))
+            got = sh.expect("%s\r\n" % want) or sh.expect("%s\n" % want)
+            ok(got, "offer_kind(%r, %d) is %s" % (cmd, rc, want), since())
+        sh.expect(prompt)
 
         # 8. exit removes the marker
         sh.send("exit\r")

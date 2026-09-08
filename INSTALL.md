@@ -143,22 +143,33 @@ shell cannot host the widget (another shell, or macOS's bash 3.2):
    your line with a hint above it; Enter again runs it. A command that
    deletes comes back marked `!`. `?? words` follows up on the last
    answer; `Esc s` asks about the line you are on; `cmd 2>&1 | explain`
-   says what went wrong. `spark off` gives Enter back; `spark on`
-   restores it. TAB completes the verbs and their names, offline.
-2. `spark chat` is a conversation at a `chat> ` prompt. `/help` lists
+   says what went wrong. `spark off` gives Enter back and quiets the
+   failure line; `spark on` restores both. TAB completes the verbs and
+   their names, offline.
+2. When a command fails, one line appears above the next prompt:
+   `* failed (1) -- press Esc s to ask why`. `Esc s` on the empty line
+   puts the command back, already piped to `explain`, and nothing runs
+   until you press Enter. A command that deletes or destroys (`rm`,
+   `dd`, `mkfs`...) is never offered a re-run -- the line says so, and
+   `? words` still answers about it. After the fix works, `Esc s` offers
+   to keep what happened as a `spark remember` fact -- edit the line,
+   then Enter. Only a command typed on one line is offered; Ctrl-C and
+   a no-match from `grep` or `diff` stay quiet. The offer lives in the
+   one pane it happened in and is gone with it.
+3. `spark chat` is a conversation at a `chat> ` prompt. `/help` lists
    its verbs: `/new` a fresh thread, `/resume [N]` an older one, `/clear`
    the screen, `/last` the last turn with its tok/s, `/model` which one
    answers, `/q` (or Ctrl-D) ends. Ctrl-C cancels a reply and keeps the
    chat. `spark chat --thread N [words]` continues an older thread from
    the `spark history` list (1 = newest).
-3. `spark <words>` streams one answer; `spark @FILE words` sends a text
+4. `spark <words>` streams one answer; `spark @FILE words` sends a text
    file's first 4 kB and last 12 kB with the question. Quote words the
    shell would glob (a trailing `?`, parentheses).
-4. `spark do <words>` proposes one command at a time: Enter runs it, `e`
+5. `spark do <words>` proposes one command at a time: Enter runs it, `e`
    edits it first, `s` skips, `q` quits; a step that can destroy data
    runs only when you type `yes`. Each step's output (last 4 kB) goes
    back to the model until it says done, or after 8 steps.
-5. `spark ask` reads a plan, a draft or a decision on stdin and answers
+6. `spark ask` reads a plan, a draft or a decision on stdin and answers
    with questions about it -- at most three, one per line, and nothing
    else. Every line of the output is a question: a line that is not one,
    a question quoting words the text does not contain, and a question
@@ -176,7 +187,7 @@ shell cannot host the widget (another shell, or macOS's bash 3.2):
    `spark ask --answered --name plan.md` with the question on stdin;
    `spark ask --ledger --name plan.md` lists what you have answered,
    `--ledger clear` drops it. `spark ask -h` says the rest.
-6. `spark soul edit` writes the paragraph that tells the model who it is
+7. `spark soul edit` writes the paragraph that tells the model who it is
    (`~/.config/spark/soul`, at most 4000 characters; `spark soul` shows
    which is in use, `spark soul reset` goes back to the default). The
    default:
@@ -189,7 +200,7 @@ shell cannot host the widget (another shell, or macOS's bash 3.2):
    invent a flag, a path, or a command.
    ```
 
-7. `spark remember <words>` adds a fact it keeps (`spark forget N` drops
+8. `spark remember <words>` adds a fact it keeps (`spark forget N` drops
    one, `spark memory` lists them, `spark memory off` stops sending
    them; 40 facts of 200 characters). Soul and facts ride on every
    conversation, so a fact costs tokens every time: keep the ones that
@@ -700,7 +711,7 @@ get -> spark setup -> bootstrap.sh (apply) -> install.sh (links, renders)
                       line; spark shell on adds spark's shell; a spark app
                       is its own repository (spark-<app>)
 
-spark check   39 rows: every promise the machine makes, fixture-tested
+spark check   40 rows: every promise the machine makes, fixture-tested
 spark update  the newest tag, or main on a developer clone; converge
 
 what leaves the machine: pinned downloads in, your questions to the

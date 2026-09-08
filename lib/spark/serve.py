@@ -31,6 +31,14 @@ def _die(msg, code=1):
     return code
 
 
+def _refuse(msg):
+    """A gate refusal, signed (contract 8): stdout, exit 2. The world did
+    not fail -- something says this invocation does not happen here, and
+    `spark update`'s lock answers in the same shape."""
+    say("%s serve -- %s" % (MARK, msg))
+    return 2
+
+
 def _warm(cfg, url):
     """Load every served role now (the router loads on first use) and say
     which answered: `warm   spark, ember`."""
@@ -143,6 +151,8 @@ def cmd_serve(args):
     try:
         pid = engine.spawn(cfg, host)
     except engine.EngineError as e:
+        if e.code == 2:                 # the lock: another serve is starting
+            return _refuse(str(e))
         return _die(str(e), e.code)
 
     class Exited(Exception):

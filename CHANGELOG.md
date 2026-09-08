@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.15
+## v1.16
 
 - `spark ask` (contract 12): a plan, a draft or a decision on stdin, and
   at most three questions about it back -- one per line, nothing else.
@@ -30,11 +30,51 @@
 - A `ledger` check row: sealed, 0600, what is in it and how much room is
   left before the oldest records go. The `users` row watches the ledger
   file too, so a plaintext one cannot sit unseen in a sealed store.
-  `spark check` has 39 rows.
+  `spark check` has 40 rows.
 - Contracts 11 (`spark read`) and 13 (`spark drill`) are written down and
   not built: their text is in ROADMAP.md and in `lib/spark/read.py` and
   `lib/spark/drill.py`, nothing dispatches to them, and their cases in
   `tests/smoke.py` are marked skipped with the reason.
+- `spark check --chaos` rehearses the failures: it breaks a throwaway
+  machine one known way at a time and proves the right row says so and
+  the remedy that row prints heals it. `--selftest` proves a row can
+  flip; `--chaos` proves the sentence under it is true. Nine scenarios,
+  each on ports of its own, so a machine that is serving is left alone.
+- A reply cut off mid-stream is an error, not half an answer. A severed
+  connection is not an end of stream: the read simply stops, so a killed
+  server handed back a truncated answer looking whole, and exited 0. The
+  turn still lands -- the question and the words that did arrive go on
+  the thread, the way they do when you press Ctrl-C.
+- A download that dies leaves nothing behind. `bootstrap.sh` removed its
+  partial file only on a sha256 mismatch; a curl that failed left a
+  `.part` on the disk that was already full. `--fetch U D S` runs the
+  download primitive alone, so that failure can be rehearsed.
+- Two `spark update` at once: the second refuses rather than race the
+  first through a checkout. Both locks refuse alike now -- `spark serve`
+  said it on stderr and exited 1; a lock another process holds is a gate
+  refusal, so it is signed and exits 2.
+
+## v1.15
+
+- The failure moment: a command that exits nonzero prints one line above
+  the next prompt -- `* failed (1) -- press Esc s to ask why` -- and
+  `Esc s` on the empty line puts it back, already piped to `explain`;
+  nothing runs until Enter. The command and its exit code ride along, so
+  the answer can correct the command itself, and a command that failed
+  in silence still gets an answer. A destructive head word (`rm`, `dd`,
+  `mkfs`...) is seen but never offered a re-run; Ctrl-C, a no-match from
+  `grep` or `diff`, spark's own refusals and a multi-line command stay
+  quiet. After the fix works, `Esc s` offers to keep what happened as a
+  `spark remember` fact you edit before Enter. All of it is per pane, in
+  shell variables, with no model call and no fork at the prompt; `spark
+  off` silences the line with everything else, and the new `failure`
+  check row (39 rows now) watches the hook through the liveness
+  marker's fourth field (contract 6).
+- The hint above the prompt stopped cutting answers at 80 characters
+  mid-word: an answer now carries up to 300 characters, cut at a word,
+  and the widget trims it to the terminal's own width -- so a wide
+  terminal shows the whole sentence. The ellipsis comes from the glyph
+  table (`...` on the Linux console, which cannot draw the Unicode one).
 - Five spark apps: spark-neovim and spark-vim join spark-micro with the
   whole prompt (one clone, one mapping: complete at the cursor, rewrite,
   ask in a pane, the ledger); spark-helix and spark-nano put `spark

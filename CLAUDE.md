@@ -113,6 +113,10 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 verify (sha256, cached: spark model verify, check's models row) bar theme site
                 packages (the family's names from distro/<id>.env, the manager's
                 questions -- installed, pending, install/remove lines -- switched once)
+                chaos (spark check --chaos: the rehearsed failures --
+                break a throwaway machine, prove the row says so and its
+                own remedy heals it; a llama-server with a mood, as a
+                real process, so it can be killed mid-reply)
                 setup (spark setup: the guided first run)
                 stats (turns -> numbers) bench (llama-bench, --tune, tune apply)
                 soul memory (the identity files)
@@ -155,7 +159,7 @@ tests/          install_test.sh get_test.sh update_test.sh uninstall_test.sh smo
                 vault_test.py (RFC 8439 vectors, round-trips, refusals)
 .githooks/      pre-commit (privacy gate, syntax, tests, 80-col), commit-msg (the
                 same privacy patterns over the message -- history is public too),
-                pre-push (install test, selftest)
+                pre-push (install test, selftest, chaos)
 .github/        ci.yml: the same on ubuntu (plus a real bootstrap) and macOS (python 3.9);
                 the new user's one-liner in a debian:13 and an archlinux container
                 release.yml: the GitHub Release from the CHANGELOG section, on a v* tag
@@ -221,7 +225,10 @@ may change freely.
    line. `--list-models` prints the model table with a RAM verdict per row
    and marks the chosen one; its header names the engine build this
    machine gets (`ai_build`: metal, vulkan or cpu) and, on a line of its
-   own, what the speed cap held back, when it did. `--dry-run` prints rows `ok|would|skip|todo
+   own, what the speed cap held back, when it did. `--fetch URL DEST SHA` runs the download primitive
+   alone -- download, verify sha256, or die having removed its own
+   partial file (`spark check --chaos` rehearses that; nothing else
+   calls it). `--dry-run` prints rows `ok|would|skip|todo
    <what>  <why>` (`todo` = needs the user, e.g. a placeholder in site.env)
    and ends with `Nothing to do` or `N to do`; it never calls sudo. The
    `rc` row appends one marked line (marker `config/spark/hook.`) to the
@@ -295,7 +302,9 @@ may change freely.
    Precedence: environment > file > default.
 4. `spark line --cwd D --shell S` reads the prompt buffer on stdin and prints
    line 1 = `cmd<TAB>command` | `danger<TAB>command` | `answer` | `error`,
-   line 2 = hint / answer / reason (<= 80 columns). Exit 0 for the first
+   line 2 = hint / answer / reason -- one line, cut at a word to a
+   character budget (a hint or reason <= 80, an answer <= `cli.ANSWER_MAX`;
+   the widget trims to the terminal's own width). Exit 0 for the first
    three, 1 for error. A buffer starting with `??` continues the newest
    thread; any other starts a new one (no heuristics). The shell widgets
    depend on nothing else.
@@ -304,7 +313,10 @@ may change freely.
    `/api/health` there says `forge: true`) and exits 0, or exits 1. This
    is the check's only AI probe.
 6. A live widget writes `~/.local/state/spark/widgets/<pid>` containing
-   `<shell> <pid> <epoch>` and removes it on shell exit.
+   `<shell> <pid> <epoch> [hook]` and removes it on shell exit. The
+   fourth field, the literal word `hook`, says that shell's exit-code
+   hook is armed (the failure moment); readers ignore fields they do
+   not know, so old markers and old readers both survive.
 7. `spark check` exits 0 iff no row is `fail`; CAPABILITY rows never
    `fail`. `--porcelain` prints `category<TAB>status<TAB>name<TAB>value<TAB>
    remedy`. Every run writes `~/.local/state/spark/check.json` for the bar.
@@ -567,6 +579,23 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   is ok in the good fixture and not ok in the bad one; `--selftest` refuses
   otherwise. CAPABILITY rows use `warn`/`na`, never `fail`, so `spark
   check`'s exit code keeps meaning "something reproducible is broken".
+- **A chaos scenario.** A function `chaos_<name>(m)` in
+  `lib/spark/chaos.py` decorated `@scenario(row=..., expect=..., ...)`. It
+  breaks the throwaway machine `m` one way and returns `""` or why the
+  break did not take; the runner then asks the row, runs the heal and
+  asks again. The heal is the row's OWN remedy string wherever the
+  remedy is a command (`heal="remedy"`; a parenthetical aside after two
+  spaces is for the reader, not the shell) -- that is the point of the
+  suite, and it is how a remedy naming a renamed verb gets caught. Where
+  nothing here can run it, `heal=None` and `unhealed` must say why, so
+  an unrehearsed half is visible instead of silent; `healed=NA` where
+  the remedy's promise is to forget a thing, not bring it back. A
+  scenario with no row (`row=None`) must say what it proves instead.
+  `mood` picks the brain: `ok`, `slow`, `hang`, `loading`, `cut`,
+  `garbage`, `blackhole`. A scenario is NOT a check row: chaos is a
+  prover, like `--selftest`, not a promise the machine makes -- neither
+  has a row, and obligation 3 is met by the row the scenario judges.
+  Before trusting a new one, take the fix away and watch it go red.
 - **A prose data file.** The soul is the pattern: user-owned text under
   `~/.config/spark/`, never linked from `home/`, written 0600 by a
   `spark` verb (and by the page through the same code), capped
@@ -695,6 +724,7 @@ One grammar for every verb; a verb that breaks a rule is a bug.
 ./bootstrap.sh --dry-run        # must end with: Nothing to do
 spark check                     # must exit 0
 spark check --selftest          # every fixture-testable row flips
+spark check --chaos             # every rehearsed failure: break, red, remedy, green
 spark forge                     # the FORGE: up, at one LAN address, upstream ok
 python3 tests/forge_smoke.py    # the API and the page, against a stub model
 python3 tests/docs_test.py      # the docs say what the tree holds (credits, counts)
@@ -707,7 +737,7 @@ sh tests/get_test.sh            # the one-liner: clone, pull, refusals, the hand
 sh tests/update_test.sh         # spark update: pull, move to a tag, dirty refused, --dry-run
 ```
 
-`spark check` has 39 rows today: 12 SOFTWARE, 18 CAPABILITY, 9
+`spark check` has 40 rows today: 12 SOFTWARE, 19 CAPABILITY, 9
 NONFUNCTIONAL (`grep -c '^@row' lib/spark/check.py`). With `SITE_SHELL=off`
 the 11 rows in `check.SHELL_ROWS` and the `shell` row answer `na`;
 `--selftest` runs a third pass to prove it, a fourth for the client

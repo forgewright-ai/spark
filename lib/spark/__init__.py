@@ -80,7 +80,7 @@ ASCII = _ascii_terminal()
 # their Unicode faces with the console fallback.
 _GLYPHS = {"hammer": ("*", "*"), "warn": ("!", "!"), "ok": ("✓", "+"), "fail": ("✗", "x"),
            "na": ("–", "-"), "sep": (" · ", " | "), "down": ("↓", "v"), "up": ("↑", "^"),
-           "arrow": ("→", "->")}
+           "arrow": ("→", "->"), "cut": ("…", "...")}
 
 
 def glyph(name):

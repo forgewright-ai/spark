@@ -10,7 +10,9 @@ import time
 from . import CONFIG_DIR, MARK, OFF_FLAG, REPO, STATE_DIR, WIDGETS_DIR, config, die, glyph, paged, say, state_dir
 from . import engine, forge, ledger, persona, session, version, wire
 
-HINT_COLS = 80
+HINT_COLS = 80             # a hint labels a command: terse
+ANSWER_MAX = 300           # an answer IS the content: the widget fits it
+                           # to the terminal's own width
 STDIN_TAIL = 6000          # what `explain` sends at most: the last 6 kB
 # spark edit (contract 10): what the editor sends at most
 EDIT_BEFORE, EDIT_AFTER = 4000, 2000   # a completion: around the cursor
@@ -76,8 +78,9 @@ BRAIN_USAGE = """spark brain -- what answers right now: a FORGE or a llama-serve
 """
 OFF_USAGE = """spark off -- silence the prompt widget, every pane at once
 
-  spark off                   Enter is the shell's again; Esc s and
-                              spark <words> still work; spark on restores
+  spark off                   Enter is the shell's again and a failure says
+                              nothing; Esc s and spark <words> still work;
+                              spark on restores
 """
 ON_USAGE = """spark on -- the prompt widget answers again
 
@@ -103,8 +106,16 @@ def _help(args, usage):
 
 
 def _one_line(s, width=HINT_COLS):
+    """One line, cut at a word when it must be cut -- and the ellipsis
+    from the glyph table, so a console shows ... and not a blank box."""
     s = " ".join((s or "").split())
-    return s if len(s) <= width else s[:width - 1] + "…"
+    if len(s) <= width:
+        return s
+    e = glyph("cut")
+    s = s[:width - len(e)]
+    if " " in s[-20:]:
+        s = s[:s.rfind(" ")]
+    return s + e
 
 
 def _shell_default():
@@ -203,7 +214,9 @@ def cmd_line(args):
         s.record(kind=kind, line=text, command=command, hint=hint, ms=ms, thread=thread)
     else:
         kind = "answer"
-        shown = _one_line(reply.get("hint") or reply.get("command") or "")
+        # an answer is the content, not a label: its budget is characters,
+        # and the widget trims to the terminal's own width (contract 4)
+        shown = _one_line(reply.get("hint") or reply.get("command") or "", ANSWER_MAX)
         say("answer")
         say(shown)
         s.record(kind=kind, line=text, answer=shown, ms=ms, thread=thread)
@@ -270,8 +283,16 @@ def cmd_explain(words):
     if _help(words, EXPLAIN_USAGE):
         return 0
     ctx = _stdin_context()
-    if not ctx:
+    # the widget's Esc s rides the failed command and its exit code along
+    # (one-shot variables, cleared at the next prompt): with them, the
+    # answer can name the command and correct it -- and a command that
+    # failed in silence still gets an answer instead of a refusal
+    cmd = os.environ.get("SPARK_EXPLAIN_CMD", "").strip()
+    rc = os.environ.get("SPARK_EXPLAIN_RC", "").strip()
+    if not ctx and not cmd:
         die("explain reads stdin -- cmd 2>&1 | explain")
+    if cmd:
+        ctx = "Command: %s\nExit: %s\nOutput:\n%s" % (cmd, rc or "unknown", ctx or "(none)\n")
     return _stream("explain", " ".join(words).strip(), context=ctx, line="[explain] " + " ".join(words))
 
 
@@ -625,7 +646,7 @@ def cmd_off(args):
         return 0
     state_dir()
     open(OFF_FLAG, "a").close()
-    say("%s off -- Enter is the shell's again (Esc s and spark <words> still work) -- spark on restores" % MARK)
+    say("%s off -- Enter is the shell's again, and a failure says nothing (Esc s and spark <words> still work) -- spark on restores" % MARK)
     from . import check
     check.refresh()
     return 0
@@ -638,7 +659,7 @@ def cmd_on(args):
         os.remove(OFF_FLAG)
     except OSError:
         pass
-    say("%s on -- ? words and words? go to the model again" % MARK)
+    say("%s on -- ? words, words? and the failure line are back" % MARK)
     from . import check
     check.refresh()
     return 0
