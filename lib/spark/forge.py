@@ -518,14 +518,17 @@ def reply(cfg, thread, text, files=(), cwd="", shell="", mode="chat", on_delta=N
     after `context` (piped output). Both messages land on the thread and
     the turn is recorded. `brain` goes to the Session (the FORGE's own
     upstream). Returns (thread, answer, ms). Raises RefError before any
-    request, wire.BrainError from the request. A KeyboardInterrupt during
-    the request (Ctrl-C at the prompt), or a BrokenPipeError /
+    request, wire.BrainError from the request. Any end mid-stream -- a
+    KeyboardInterrupt (Ctrl-C at the prompt), a BrokenPipeError /
     ConnectionResetError from on_delta (a page or desktop client pressing
-    stop mid-stream), appends the user line and, when any text arrived,
-    the partial reply (partial=True), then re-raises; the thread id rides
-    on the exception (`e.thread`) so the caller can keep going with it.
-    Nothing is printed here -- that is the caller's job."""
+    stop), or a BrainError of kind `cut` (the server died with the answer
+    half sent) -- appends the user line and, when any text arrived, the
+    partial reply (partial=True), then re-raises; the thread id rides on
+    the exception (`e.thread`) so the caller can keep going with it. Every
+    other BrainError failed before a byte came back and leaves the thread
+    as it was. Nothing is printed here -- that is the caller's job."""
     from . import session          # session imports forge: resolved late on purpose
+    from . import wire
     context = "\n\n".join(c for c in (context, file_context(files, cwd)) if c)
     if not text and files:
         text = SUMMARISE
@@ -542,14 +545,28 @@ def reply(cfg, thread, text, files=(), cwd="", shell="", mode="chat", on_delta=N
         collected.append(d)
         tap(d)
 
-    try:
-        answer, ms = s.ask_stream(text, context, on_delta_tap)
-    except (KeyboardInterrupt, BrokenPipeError, ConnectionResetError) as e:
+    def land(e):
+        """The user line, and whatever words arrived, on the thread; the
+        id rides on the exception so the caller keeps the thread."""
         st.append(cfg, thread, "user", line, mode=mode, cwd=cwd)
         partial = "".join(collected)
         if partial:
             st.append(cfg, thread, "assistant", partial, kind="answer", partial=True)
         e.thread = thread
+
+    try:
+        answer, ms = s.ask_stream(text, context, on_delta_tap)
+    except (KeyboardInterrupt, BrokenPipeError, ConnectionResetError) as e:
+        land(e)
+        raise
+    except wire.BrainError as e:
+        # a server that dies mid-reply is that same stop, arriving as an
+        # error: the words already on the screen belong on the thread, and
+        # a turn the user watched must not vanish with the connection.
+        # Every other kind failed before a byte came back.
+        if e.kind != "cut":
+            raise
+        land(e)
         raise
     s.record(kind="answer", ms=ms, thread=thread)
     st.append(cfg, thread, "user", line, mode=mode, cwd=cwd)

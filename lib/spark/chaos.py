@@ -347,8 +347,8 @@ def chaos_truncated_model(m):
 
 @scenario(row="serve", expect=WARN, want="nothing answers", healed=NA, mood="cut")
 def chaos_server_killed_mid_reply(m):
-    """The server dies mid-reply: the answer fails cleanly, not in a
-    traceback, and the serve row says nothing answers."""
+    """The server dies mid-reply: the answer fails cleanly, the turn is
+    still on the thread, and the serve row says nothing answers."""
     t0 = time.time()
     rc, out = m.spark("what is 2+2?", timeout=60)
     took = time.time() - t0
@@ -358,6 +358,13 @@ def chaos_server_killed_mid_reply(m):
         return "a cut reply ended in a traceback: %s" % out.strip()[-300:]
     m.note("the cut reply failed in %.1fs, one line: %s"
            % (took, _fit(" ".join(out.split()), 60)))
+    # the words were on the screen: a connection dying must not take the
+    # question with it (forge.reply lands the partial, as a stop does)
+    _rc, hist = m.spark("history")
+    if "2+2" not in hist:
+        return ("the cut turn left nothing on the thread: spark history says %r"
+                % " ".join(hist.split())[-200:])
+    m.note("the question is still on the thread the cut interrupted")
     m.brain.kill()                  # and now the server is gone for good
     return ""
 

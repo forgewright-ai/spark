@@ -13,7 +13,11 @@
 - A reply cut off mid-stream is now an error, not half an answer. A
   severed connection is not an end of stream: the read simply stops, so
   a killed server handed back a truncated answer looking whole, and
-  exited 0. The caller now says the answer above is incomplete.
+  exited 0. The caller now says the answer above is incomplete, and the
+  turn still lands: the question and the words that did arrive go on
+  the thread, the way they do when you press Ctrl-C or a client presses
+  stop. Without that, a server dying took the question with it and left
+  an empty thread behind.
 - A download that dies leaves nothing behind. `bootstrap.sh` removed
   its partial file only on a sha256 mismatch; a curl that failed -- a
   full disk, a cut LAN, a Ctrl-C -- left a `.part` on the disk that was
