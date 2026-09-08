@@ -1,14 +1,25 @@
-# spark.ledger -- the notes you declined in the editor, kept per file
-# name, sealed in the account's store (users/<name>/ledger), written only
-# by you (the pane's `d` key runs `spark edit --decline --name NAME` with
-# the note on stdin). The next `?` about a file of that name carries them
-# -- "Declined before -- do not raise these again" -- so a note you have
-# already weighed does not come back. A declined note retires: it leaves
-# the request (and the file) once the span it quoted has left the text,
-# and after SPARK_HISTORY days like a thread.
+# spark.ledger -- what you have already weighed, kept per name, sealed in
+# the account's store (users/<name>/ledger), written only by you. One
+# file, one record shape ({kind, name, ts, note}); the rule that decides
+# when a record stops counting belongs to the contract that wrote it, and
+# nowhere else. A rule that generalised would fit none of them:
 #
-#   spark ledger [NAME]        the notes, newest first (one file's, or all)
-#   spark ledger clear [NAME]  drop them (one file's, or all)
+#   kind   what one record is        what invalidates it       what it does
+#   edit   a note you declined in    its first quoted span     keeps the note
+#          the editor (contract 10)  left the text             out of the next ?
+#   ask    a question you answered   nothing but age and       keeps the question
+#          (contract 12)             `ledger clear`: a plan    from being asked
+#                                    moves, an answer stays    again
+#   read   a question asked of a     nothing: a source does    a record to read
+#          source (contract 11)      not change                (no suppression)
+#   drill  an item and when it is    never: a schedule that    brings the item
+#          next due (contract 13)    expires is not one        back when due
+#
+# So `edit` retires a note by content and `drill` must not age at all;
+# every kind shares the caps and the sealed file, nothing else.
+#
+#   spark edit --ledger [clear] --name NAME   the editor's, in its pane
+#   spark ask  --ledger [clear] --name NAME   the questions answered
 
 import json
 import os
@@ -17,9 +28,26 @@ import time
 from . import MARK, config, log_exc, say, vault
 
 NOTE_MAX = 300        # characters kept of one note
-PER_NAME = 30         # notes per file name; the oldest goes
+PER_NAME = 30         # notes per name and kind; the oldest goes
 TOTAL_MAX = 200       # notes in all
-SEND_MAX = 1200       # characters a ? carries, newest first
+SEND_MAX = 1200       # characters a request carries, newest first
+
+KIND_EDIT, KIND_ASK, KIND_READ, KIND_DRILL = "edit", "ask", "read", "drill"
+# The table above, as the code reads it. `age`: SPARK_HISTORY days apply.
+# `retire`: what drops a record before its time -- "quote" is contract
+# 10's (the note's first quoted span left the text), "never" is every
+# other contract's, each for its own stated reason.
+RULES = {
+    KIND_EDIT: {"age": True, "retire": "quote"},
+    KIND_ASK: {"age": True, "retire": "never"},
+    KIND_READ: {"age": True, "retire": "never"},
+    KIND_DRILL: {"age": False, "retire": "never"},
+}
+
+
+def _kind(e):
+    """A record's kind; one written before v1.15 is the editor's."""
+    return e.get("kind") or KIND_EDIT
 
 
 
@@ -75,13 +103,17 @@ def _save(entries, st=None):
 
 
 def _fresh(entries, cfg):
-    """Without the notes older than SPARK_HISTORY days."""
+    """Without the notes older than SPARK_HISTORY days -- of the kinds
+    whose rule says age applies. A drill schedule does not expire."""
     days = cfg.history if cfg is not None else 30
     if days <= 0:
         return entries
     cutoff = time.time() - days * 86400
     out = []
     for e in entries:
+        if not RULES.get(_kind(e), RULES[KIND_EDIT])["age"]:
+            out.append(e)
+            continue
         try:
             ts = time.mktime(time.strptime(e.get("ts", ""), "%Y-%m-%d %H:%M:%S"))
         except (ValueError, OverflowError):
@@ -91,19 +123,39 @@ def _fresh(entries, cfg):
     return out
 
 
-def decline(name, note, cfg=None):
-    """Keep one declined note under a file name; returns it as kept."""
+def path():
+    """Where the ledger is on this machine, or "" with no login. Unlike
+    _store() this needs no key: the check row must be able to look at the
+    file it cannot open."""
+    from . import users
+    name = users.account()[0]
+    return os.path.join(users.user_dir(name), "ledger") if name else ""
+
+
+def counts():
+    """{kind: how many records} -- what the check row reports. Empty when
+    this machine holds no key to its own store."""
+    out = {}
+    for e in _load():
+        out[_kind(e)] = out.get(_kind(e), 0) + 1
+    return out
+
+
+def keep(kind, name, note, cfg=None, missing=""):
+    """Keep one record of `kind` under a name; returns it as kept. The
+    caps are the file's, shared by every kind; what the record means, and
+    when it stops meaning it, is the contract's (RULES above)."""
     name = os.path.basename((name or "").strip())
     text = " ".join((note or "").split())
     if not name:
-        raise Refused("a declined note needs --name NAME (the file's name)")
+        raise Refused(missing or "a declined note needs --name NAME (the file's name)")
     if not text:
-        raise Refused("nothing to decline -- the note comes on stdin")
+        raise Refused("nothing to keep -- the note comes on stdin")
     text = text[:NOTE_MAX]
     entries = _fresh(_load(), cfg)
-    entries = [e for e in entries if not (e["name"] == name and e["note"] == text)]
-    entries.append({"name": name, "ts": time.strftime("%Y-%m-%d %H:%M:%S"), "note": text})
-    mine = [e for e in entries if e["name"] == name]
+    entries = [e for e in entries if not (_kind(e) == kind and e["name"] == name and e["note"] == text)]
+    entries.append({"kind": kind, "name": name, "ts": time.strftime("%Y-%m-%d %H:%M:%S"), "note": text})
+    mine = [e for e in entries if _kind(e) == kind and e["name"] == name]
     if len(mine) > PER_NAME:
         drop = mine[:len(mine) - PER_NAME]
         entries = [e for e in entries if e not in drop]
@@ -113,40 +165,38 @@ def decline(name, note, cfg=None):
     return text
 
 
-def entries(name=None):
-    """The kept notes, oldest first; one file's when a name is given."""
+def decline(name, note, cfg=None):
+    """Contract 10's: one note declined in the editor, under a file name."""
+    return keep(KIND_EDIT, name, note, cfg)
+
+
+def entries(name=None, kind=KIND_EDIT):
+    """The kept records of one kind, oldest first; one name's when given."""
     name = os.path.basename(name) if name else None
-    return [e for e in _load() if not name or e["name"] == name]
+    return [e for e in _load() if _kind(e) == kind and (not name or e["name"] == name)]
 
 
-def block(cfg, name, data):
-    """The paragraph a ? about `name` carries, or "": the file's declined
-    notes, newest first, at most SEND_MAX chars. A note whose first
-    quoted span is no longer in `data` has retired: it is dropped from
-    the file here and not sent."""
+def _mine(cfg, kind, name, data=None):
+    """(the kind's records for `name`, newest last; every record kept) --
+    with this kind's own invalidation applied. `retire: "quote"` needs
+    `data`, the text as it is now: a note whose first quoted span has
+    left it is dropped from the file here and not sent."""
     from . import text as textmod
-    name = os.path.basename((name or "").strip())
-    if not name:
-        return ""
-    all_e = _load()
-    if not all_e:
-        return ""
-    fresh = _fresh(all_e, cfg)
-    keep, mine = [], []
-    for e in fresh:
-        if e["name"] == name:
-            qs = textmod.quotes(e["note"])
-            if qs and not textmod.anchor(qs[0][0], data):
-                continue                     # retired: the passage changed
+    retire = RULES.get(kind, RULES[KIND_EDIT])["retire"]
+    alive, mine = [], []
+    for e in _fresh(_load(), cfg):
+        if _kind(e) == kind and e["name"] == name:
+            if retire == "quote" and data is not None:
+                qs = textmod.quotes(e["note"])
+                if qs and not textmod.anchor(qs[0][0], data):
+                    continue                 # retired: the passage changed
             mine.append(e)
-        keep.append(e)
-    if len(keep) != len(all_e):
-        try:
-            _save(keep)
-        except OSError:
-            pass
-    if not mine:
-        return ""
+        alive.append(e)
+    return mine, alive
+
+
+def _paragraph(head, mine):
+    """`head` and the notes, newest first, at most SEND_MAX chars."""
     lines, total = [], 0
     for e in reversed(mine):
         line = "- " + e["note"]
@@ -154,17 +204,48 @@ def block(cfg, name, data):
             break
         lines.append(line)
         total += len(line)
-    return "Declined before -- do not raise these again:\n" + "\n".join(lines) + "\n"
+    return head + "\n".join(lines) + "\n" if lines else ""
 
 
-def clear(name=None):
-    """Drop every note, or one file's; the count dropped."""
+def block(cfg, name, data):
+    """Contract 10: the paragraph a ? about `name` carries, or "".
+    Retirement by quote is this kind's rule and no other's."""
+    name = os.path.basename((name or "").strip())
+    if not name:
+        return ""
+    all_e = _load()
+    if not all_e:
+        return ""
+    mine, alive = _mine(cfg, KIND_EDIT, name, data)
+    if len(alive) != len(all_e):
+        try:
+            _save(alive)
+        except OSError:
+            pass
+    return _paragraph("Declined before -- do not raise these again:\n", mine)
+
+
+def answered(cfg, name):
+    """Contract 12: (the paragraph a question round carries, the folded
+    questions already answered). Nothing invalidates these but age and
+    `ledger clear`: the plan may move, an answer stays an answer."""
+    from . import text as textmod
+    name = os.path.basename((name or "").strip())
+    if not name:
+        return "", set()
+    mine, _alive = _mine(cfg, KIND_ASK, name)
+    folded = set(textmod.fold(e["note"]) for e in mine)
+    return _paragraph("Answered before -- do not ask these again:\n", mine), folded
+
+
+def clear(name=None, kind=KIND_EDIT):
+    """Drop this kind's notes, or one name's; the count dropped."""
     name = os.path.basename(name) if name else None
     all_e = _load()
-    keep = [e for e in all_e if name and e["name"] != name]
-    if len(keep) != len(all_e):
-        _save(keep)
-    return len(all_e) - len(keep)
+    alive = [e for e in all_e if _kind(e) != kind or (name and e["name"] != name)]
+    if len(alive) != len(all_e):
+        _save(alive)
+    return len(all_e) - len(alive)
 
 
 def _age(ts):
@@ -176,14 +257,14 @@ def _age(ts):
     return "today" if days < 1 else ("%dd" % days)
 
 
-def listing(name=None):
-    """The declined notes as lines for the editor's pane: one file's, or
-    every file's; newest first."""
-    es = _fresh(entries(name), config.load())
+def listing(name=None, kind=KIND_EDIT, empty="no declined note (the pane: d on a note)", noun="note"):
+    """One kind's records as lines for a pane: one name's, or every
+    name's; newest first. Each kind names its own records."""
+    es = _fresh(entries(name, kind), config.load())
     head = (name + ": ") if name else ""
     if not es:
-        return [head + "no declined note (the pane: d on a note)"]
-    out = [head + "%d note%s, newest first" % (len(es), "" if len(es) == 1 else "s")]
+        return [head + empty]
+    out = [head + "%d %s%s, newest first" % (len(es), noun, "" if len(es) == 1 else "s")]
     width = max(len(e["name"]) for e in es)
     for e in reversed(es):
         out.append("  %-5s %-*s %s" % (_age(e["ts"]), width, e["name"], e["note"][:60] + ("..." if len(e["note"]) > 60 else "")))

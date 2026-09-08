@@ -40,6 +40,8 @@ spark
  spark do <words>             a task, one command at a time; you confirm each
  spark edit [?] [words]       the text on stdin: words rewrite it, ? asks,
                               --at N completes; an editor's client (-h)
+ spark ask < FILE             the questions that text does not answer: at
+                              most three, every line one question (-h)
  try:
  ? words or words? ENTER      the command lands in your line, hint above
  ?? words ENTER               follow up on the last answer (same thread)
@@ -137,6 +139,7 @@ def main(argv):
 # its verb runs -- `spark line` must stay cheap. Everything else is
 # cli.COMMANDS, or a question.
 VERBS = {"setup": ("setup", "main", False), "check": ("check", "main", False),
+         "ask": ("ask", "cmd_ask", False),
          "update": ("update", "cmd_update", False), "bar": ("bar", "main", False),
          "theme": ("theme", "main", False), "bench": ("bench", "main", True), "tune": ("bench", "main", True),
          "stats": ("stats", "main", False),

@@ -114,6 +114,8 @@ class Stub(BaseHTTPRequestHandler):
             return self._send(200, {"choices": [{"message": {"content": json.dumps({"language": "Portuguese", "kind": "fiction"})}}], "timings": TIMINGS})
         if body.get("stream") and "inside an editor" in system:
             return self._sse(edit_pieces(system, user))
+        if body.get("stream") and "you reply with questions" in system:
+            return self._sse(ask_pieces())
         if body.get("stream"):
             # `count` streams how many messages arrived, as the JSON shape does;
             # `wraptest` streams a long plain answer to prove the 80-col wrap
@@ -143,6 +145,29 @@ def edit_pieces(system, user):
         return ('1. "Some prose." reads flat\n2. "Sum prose" is mis', 'spelled\n3. "prose. And more" runs on\n',
                 '4. “more here,” drifts\n5. "Sum prose" -> "Some verse" reads better\nno newline')
     return ("1. line 2: ", "typo\n")
+
+
+ASK_TEXT = ("We will move the store to Postgres in March.\n"
+            "The migration runs nightly and takes four hours.\n")
+
+
+def ask_pieces():
+    """spark ask's reply (contract 12), one line at a time: a preamble, a
+    grounded question, one whose quote is invented, a question that could
+    be asked of any plan, a repeat, two more grounded ones and a fourth
+    past the cap. Three survive; five are dropped, each by a different
+    rule. STATE['ask_none'] plays the model with nothing to ask."""
+    if STATE.get("ask_none"):
+        return ("Here are my questions:\n", "The plan looks solid to me.\n",
+                'Why does "the rollback plan" exist?\n')
+    return ("Here are my questions:\n",
+            'What happens if "the migration runs nightly" overr', "uns its window?\n",
+            'Why does "the rollback plan" exist?\n',
+            "What is your timeline?\n",
+            'What happens if "the migration runs nightly" overruns its window?\n',
+            'Who owns "Postgres" after March?\n',
+            'What else could "takes four hours" hide?\n',
+            'Is "nightly" the only window?')
 
 
 def is_do(messages):
@@ -209,6 +234,11 @@ class T:
         print("  %s %s%s" % ("ok  " if cond else "FAIL", what, ("   " + extra) if extra and not cond else ""))
         if not cond:
             self.fail += 1
+
+    def skip(self, what, why):
+        """A case written before the thing it tests: it is here so the
+        contract has somewhere to land, and it never passes silently."""
+        print("  skip %s   (%s)" % (what, why))
 
 
 def main():
@@ -797,6 +827,88 @@ def main():
         last_turn = json.loads(open(turns[-1]).read().splitlines()[-1]) if turns else {}
         t.ok(last_turn.get("mode") == "edit-rewrite" and last_turn.get("kind") == "rewrite" and not any(k in last_turn for k in ("line", "answer", "context", "command")),
              "edit: the turn is numbers and enums only", json.dumps(last_turn)[:200])
+
+        # spark ask: the questioner's protocol (contract 12)
+        rc, out, _ = spark("ask", "-h")
+        t.ok(rc == 0 and out.startswith("spark ask -- "), "ask -h is signed", out[:40])
+        rc, out, err = spark("ask", stdin=ASK_TEXT)
+        t.ok(rc == 0 and out == ('What happens if "the migration runs nightly" overruns its window?\n'
+                                 'Who owns "Postgres" after March?\n'
+                                 'What else could "takes four hours" hide?\n'),
+             "ask: three questions survive; a preamble, an invented quote, a stock question, "
+             "a repeat and a fourth past the cap do not", repr(out) + err)
+        t.ok(STATE.get("model") == "ember", "ask: the request names the ember role", str(STATE.get("model")))
+        umsg = STATE["bodies"][-1]["messages"][-1]["content"]
+        t.ok(umsg.startswith("What does this not answer?\n\nYou read this as: Portuguese, fiction.\nText:\n")
+             and "[cwd" not in umsg and "Output:" not in umsg,
+             "ask: the reading is restated, the text carries its own label, no cwd", repr(umsg[:110]))
+        turns = sorted(glob.glob(home + "/.local/state/spark/turns/*.jsonl"))
+        lt = json.loads(open(turns[-1]).read().splitlines()[-1]) if turns else {}
+        t.ok(lt.get("mode") == "ask-questions" and lt.get("kind") == "questions" and lt.get("asked") == 3
+             and lt.get("dropped") == 5 and not any(k in lt for k in ("line", "answer", "context")),
+             "ask: the turn counts what was asked and what was dropped, and keeps no words", json.dumps(lt)[:200])
+        rc, out, _ = spark("ask", "--name", "plan.md", "what", "am", "I", "missing", stdin=ASK_TEXT)
+        umsg = STATE["bodies"][-1]["messages"][-1]["content"]
+        t.ok(rc == 0 and umsg.startswith("what am I missing\n\n") and "Plan plan.md:\n" in umsg,
+             "ask: the words say what is being decided; --name labels the text", repr(umsg[:80]))
+        # nothing survives: one line, exit 1, and nothing on stdout
+        STATE["ask_none"] = True
+        rc, out, err = spark("ask", stdin=ASK_TEXT)
+        STATE["ask_none"] = False
+        t.ok(rc == 1 and out == "" and "nothing to ask" in err,
+             "ask: when every line drops, one line on stderr and exit 1, stdout untouched", repr(out) + err)
+        # the ledger (kind ask): an answered question is not asked again
+        rc, out, _ = spark("ask", "--answered", stdin="who owns it?")
+        t.ok(rc == 2 and "needs --name" in out, "ask --answered without a name is refused", out)
+        rc, out, err = spark("ask", "--answered", "--name", "a/b/plan.md",
+                             stdin='Who owns "Postgres" after March?\n')
+        t.ok(rc == 0 and out == "" and err == "", "ask --answered --name keeps the question, silently", out + err)
+        rc, out, _ = spark("ask", "--ledger", "--name", "plan.md")
+        t.ok(rc == 0 and out.splitlines()[0].startswith("plan.md: 1 question")
+             and "Postgres" in out, "ask --ledger lists the questions answered", out)
+        rc, out, _ = spark("edit", "--ledger", "--name", "plan.md")
+        t.ok(rc == 0 and out.startswith("plan.md: no declined note"),
+             "the ledger's kinds do not see each other: the editor's is empty", out)
+        rc, out, err = spark("ask", "--name", "plan.md", stdin=ASK_TEXT)
+        t.ok(rc == 0 and "Postgres" not in out and out.count("?") == 3,
+             "ask: a question already answered is not asked again -- the one behind it takes the place",
+             repr(out) + err)
+        umsg = STATE["bodies"][-1]["messages"][-1]["content"]
+        t.ok("Answered before -- do not ask these again:\n- Who owns \"Postgres\" after March?\n" in umsg,
+             "ask: the answered questions ride above the text", repr(umsg[:220]))
+        rc, out, _ = spark("ask", "--ledger", "clear", "--name", "plan.md")
+        t.ok(rc == 0 and "dropped 1 question for plan.md" in out, "ask --ledger clear --name drops one text's", out)
+        # the shape of the law, unit by unit
+        from spark import ask as askmod
+        t.ok(askmod.generic("What is your timeline?", ASK_TEXT)
+             and not askmod.generic("What is your timeline for the nightly migration?", ASK_TEXT)
+             and not askmod.generic('Who owns "Postgres" after March?', ASK_TEXT),
+             "ask: a stock question is generic; the same phrase about this text's own words is not")
+        rc, out, err = spark("ask", stdin="")
+        t.ok(rc == 2 and out.startswith("spark ask -- ") and "spark <words>" in out,
+             "ask: no text is the usage and where a question goes, exit 2", out[:80] + err)
+        rc, out, err = spark("ask", stdin="x" * 13000)
+        t.ok(rc == 1 and "at most 12000" in err and out == "", "ask: a 13 kB text is refused, nothing sent", err)
+        rc, out, err = spark("ask", "--thread", "bad id!", stdin=ASK_TEXT)
+        t.ok(rc == 2 and "--thread ID is" in out, "ask --thread with a bad id is refused", out)
+        n0 = len(STATE["bodies"])
+        rc, out, _ = spark("ask", "--name", "t2.md", "--thread", "ask-t1", stdin=ASK_TEXT)
+        rc2, out2, _ = spark("ask", "--name", "t2.md", "--thread", "ask-t1", "and", "now", stdin=ASK_TEXT)
+        msgs = STATE["bodies"][-1]["messages"]
+        t.ok(rc == 0 and rc2 == 0 and len(STATE["bodies"]) == n0 + 3 and len(msgs) == 4
+             and msgs[-1]["content"] == "and now",
+             "ask --thread: the reading runs once, the first pair rides, the same text sends the words alone",
+             json.dumps(msgs)[:200])
+
+        # contracts 11 and 13: the text is written, the code is not
+        t.skip("read: every claim quotes the source; an unanswered question is one line",
+               "contract 11 not built -- lib/spark/read.py, ROADMAP.md")
+        t.skip("read: past 16 kB, --part N, and the answer names the part it read",
+               "contract 11 not built -- lib/spark/read.py, ROADMAP.md")
+        t.skip("drill: a question whose answer is not in the source is dropped before it is asked",
+               "contract 13 not built -- lib/spark/drill.py, ROADMAP.md")
+        t.skip("drill: a missed item comes back on a widening interval until it is right twice",
+               "contract 13 not built -- lib/spark/drill.py, ROADMAP.md")
 
         # the Terminal.app profile carries the keys micro needs
         from spark import theme as thememod

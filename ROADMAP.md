@@ -84,8 +84,36 @@ never a path.
   read in its first line: an answer from part 2 that does not say so
   cannot be told from an answer about the whole
 
+- ledger kind `read`: the questions asked of this source, so a second
+  reader sees what has been asked. Nothing invalidates them -- a source
+  does not change, and that is what makes it a source -- and none of
+  them suppresses a question, unlike a note declined in a draft
+
 The gate `spark ask` landed -- `text.Gate`, `text.Ground` -- is the
-machinery. This is the second verb through it.
+machinery. This is the second verb through it, and `lib/spark/read.py`
+holds this text beside the code that will fill it.
+
+## Contract 13: spark drill
+
+Practice against a source: the source on stdin, one question at a time
+out, your answer in. `lib/spark/drill.py` holds this text.
+
+- both the question and the correct answer come from the source. The
+  model composes neither: it proposes a span of the source as the answer
+  and a question that span answers, and a question whose answer does not
+  anchor in the source is dropped before it is ever asked -- a drill
+  built on an invented answer teaches the invention
+- material too thin for questions is said in one line, never padded from
+  the model's own knowledge: the learner cannot tell padding from the
+  source
+- self-graded against the sourced answer to begin with -- you see the
+  span and say whether you had it. A second model grading a first
+  model's question is two opinions and no source
+- ledger kind `drill` schedules rather than suppresses, the inversion of
+  every other kind: a missed item comes back at 1, 3, 7, 21 and 60 days
+  until it has been answered right twice in a row. Its records carry
+  state the other kinds do not, and alone among them they never age out
+  -- a schedule that expires is not a schedule
 
 ## Contract 14: spark watch
 

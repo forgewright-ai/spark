@@ -2,6 +2,39 @@
 
 ## v1.16
 
+- `spark ask` (contract 12): a plan, a draft or a decision on stdin, and
+  at most three questions about it back -- one per line, nothing else.
+  The shape is the law, not a request in a brief: a line that does not
+  end in a question mark never reaches you, and neither does one whose
+  every quoted span is missing from the text, one that could be asked of
+  any plan, a repeat, or a question you have already answered
+  (`spark ask --answered --name NAME`, `--ledger [clear]`). Three is a
+  cap, never a target: when nothing survives, stdout stays empty and one
+  line on stderr says so, exit 1. At most 12 kB in; `--thread ID` keeps
+  a round going, and a follow-up obeys the same law -- the moment a
+  reply may assert, that is `spark chat`.
+- The grounding law is one place now, `lib/spark/text.py`: `anchor()`
+  checks a span, `Ground.verdict()` a whole note or question, and `Gate`
+  is the stream that marks what it keeps and drops what it refuses.
+  `Anchors` (contract 10's marker) is that gate with nothing refused, so
+  `spark edit ?` behaves exactly as before -- its own tests are the
+  proof. `session.reading()` and `forge.text_sha()` / `same_text()` come
+  out of the editor's path for the same reason: the next contract needs
+  them, not a copy of them.
+- The ledger holds more than the editor's declined notes: one sealed
+  file, one record shape, and a kind per contract -- and the rule that
+  retires a record belongs to the contract that wrote it
+  (`ledger.RULES`), because a rule that generalised would fit none of
+  them. A note declined in a draft retires when its quote leaves the
+  text; a question you answered stays answered.
+- A `ledger` check row: sealed, 0600, what is in it and how much room is
+  left before the oldest records go. The `users` row watches the ledger
+  file too, so a plaintext one cannot sit unseen in a sealed store.
+  `spark check` has 40 rows.
+- Contracts 11 (`spark read`) and 13 (`spark drill`) are written down and
+  not built: their text is in ROADMAP.md and in `lib/spark/read.py` and
+  `lib/spark/drill.py`, nothing dispatches to them, and their cases in
+  `tests/smoke.py` are marked skipped with the reason.
 - `spark check --chaos` rehearses the failures: it breaks a throwaway
   machine one known way at a time and proves the right row says so and
   the remedy that row prints heals it. `--selftest` proves a row can

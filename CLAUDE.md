@@ -119,7 +119,13 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 real process, so it can be killed mid-reply)
                 setup (spark setup: the guided first run)
                 stats (turns -> numbers) bench (llama-bench, --tune, tune apply)
-                soul memory (the identity files) ledger (the editor's declined notes, per file name)
+                soul memory (the identity files)
+                text (the streams: wrap, fence, and the grounding law -- anchor,
+                Ground, Gate, shared by every contract that shows a text to a model)
+                ledger (what you have already weighed: one sealed file, a kind per
+                contract, and the rule that retires a record is the contract's own)
+                ask (spark ask: contract 12) read drill (contracts 11 and 13: the
+                contract text and its constants, no code, nothing dispatched yet)
                 forge (identity, threads, reply, the chat REPL, @FILE)
                 forgeserve (the FORGE server: spark forge, the API, the page) do (spark do)
                 version (the version, from git, cached: spark ver, check's header, forgeserve)
@@ -449,6 +455,46 @@ may change freely.
     `SPARK_HISTORY` days. `--ledger [clear] --name NAME` lists or drops them
     (the pane's `ledger` and `ledger clear` at the `spark>` prompt); no
     shell verb. The micro plugin depends on nothing else.
+11. `spark read` -- reserved, not built. The contract's text is in
+    `ROADMAP.md` and in `lib/spark/read.py`; nothing dispatches to it, and
+    `spark read` is an unknown word until one line lands in `bin/spark`'s
+    `VERBS`.
+12. `spark ask` is the questioner's protocol: the text on stdin -- a plan,
+    a draft, a decision -- and questions about it out, raw, one per line;
+    never a path, never a `[cwd]` line. Mode from the argument shape, no
+    mode flags: bare asks what the text does not answer, `<words>` says
+    what the author is deciding. `--name NAME` (a basename) and `--about
+    TEXT` are hints that ride in the user message; a reading pass runs
+    first (`session.reading`, contract 10's); `--thread ID` (the CLIENT
+    names the id, `forge.valid_id`) keeps the exchange in the account's
+    sealed store, the same id again riding the earlier pairs and sending
+    the words alone when the text is the one the first turn carried
+    (`forge.same_text`) -- and a follow-up obeys the same law, so the
+    moment a reply may assert, this is `spark chat`.
+    The law is enforced after the model, never by the brief alone: every
+    line of the output ends in a question mark or it never reaches stdout
+    (`text.Gate`, line by line). Five filters, in this order -- a line
+    that is not a question; one whose every quoted span is missing from
+    the text (`text.UNGROUNDED`); anything past the cap of three (a cap,
+    never a target); a repeat, or a question the ledger holds as
+    answered; a question that could be asked of any plan (`ask._GENERIC`,
+    a named list, forgiven when the question shares a word of its own
+    with the text). When nothing survives, stdout stays empty and the
+    refusal is one line on stderr, exit 1: a client tells "no question"
+    from "a question" by the exit code, never by reading prose. At most
+    12 kB in, else one line and exit 1; exit 2 for the usage, and stdin
+    with no text prints it plus where a question for spark itself goes
+    (`spark <words>`). `--answered --name NAME` keeps the question on
+    stdin in the ledger (kind `ask`, `ledger.RULES`: nothing invalidates
+    it but age and `clear` -- a plan moves, an answer stays an answer);
+    `--ledger [clear] --name NAME` lists or drops them. A round where
+    nothing survived is not written to the thread: a refusal is not a
+    turn to follow up on. The turn record is numbers (`kind`, `chars`,
+    `ms`, `asked`, `dropped`, `quotes`, `unanchored`).
+13. `spark drill` -- reserved, not built. The contract's text is in
+    `ROADMAP.md` and in `lib/spark/drill.py`; nothing dispatches to it.
+    Its ledger rule inverts every other one -- a missed item comes back
+    rather than being suppressed -- which is why `ledger.RULES` exists.
 
 ## The grammar
 
@@ -586,6 +632,18 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   for the layer. The layer installs no editor: the hostname row is core
   too (identity), and micro's colorscheme is rendered only for a micro
   the user already has.
+- **A grounded contract.** One law, four contracts (10, 11, 12, 13): what
+  a model says about a text is checked against that text before the reader
+  sees it. The judge is `lib/spark/text.py` -- `anchor()` at the span
+  level, `Ground.verdict()` at the unit level, `Gate` the stream that
+  marks what it keeps and drops what it refuses, so a contract can refuse
+  instead of invent. A new one states, in `CLAUDE.md` and in its module's
+  own head: what grounds its output; what happens when grounding fails
+  (one line, and what exit code says so); its caps; its ledger kind and
+  the rule that retires a record there (`ledger.RULES` -- each contract's
+  own, because a rule that generalised would fit none of them); and what
+  leaves the machine. Text on stdin, raw text out, never a path: that is
+  what lets an editor with no plugin at all be a client.
 - **A spark app.** Nothing in this repository. A tool becomes smart by
   being a client of one spark surface -- text on stdin (`spark edit`,
   contract 10; `spark line`, contract 4), the shell (`? words`, `spark
@@ -679,7 +737,7 @@ sh tests/get_test.sh            # the one-liner: clone, pull, refusals, the hand
 sh tests/update_test.sh         # spark update: pull, move to a tag, dirty refused, --dry-run
 ```
 
-`spark check` has 39 rows today: 12 SOFTWARE, 18 CAPABILITY, 9
+`spark check` has 40 rows today: 12 SOFTWARE, 19 CAPABILITY, 9
 NONFUNCTIONAL (`grep -c '^@row' lib/spark/check.py`). With `SITE_SHELL=off`
 the 11 rows in `check.SHELL_ROWS` and the `shell` row answer `na`;
 `--selftest` runs a third pass to prove it, a fourth for the client

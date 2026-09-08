@@ -61,6 +61,7 @@ and your editor stay yours. `INSTALL.md` has every step and every key.
 | `spark chat` | a conversation; `/help` lists its verbs |
 | `spark <words>` | one answer, streamed; `spark @FILE words` reads a file |
 | `spark do <words>` | a task, one confirmed command at a time |
+| `spark ask < plan.md` | the questions that text does not answer: at most three, every line a question |
 | `spark soul edit` | who it is; `spark remember <words>` adds a fact it keeps |
 | `spark model list` | 26 models, each with its license; `spark model NAME` serves one |
 | `spark ember NAME` | a second, bigger model for conversations |

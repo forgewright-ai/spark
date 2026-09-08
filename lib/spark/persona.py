@@ -192,8 +192,28 @@ READ_SCHEMA = {
     "required": ["language", "kind"],
 }
 REVIEW = "Review this."
+# The questioner (spark ask, contract 12). The law is enforced after the
+# model, not by it -- a line that is not a question never reaches the
+# reader -- but a brief that asks for the right shape wastes fewer
+# tokens getting there. It is told what is thrown away, so a small model
+# spends its three lines on questions instead of a preamble.
+MODE_ASK_QUESTIONS = (
+    "The author shows you something they are working on -- a plan, a draft, a decision -- "
+    "and you reply with questions about it and nothing else. Every line you write is one "
+    "question ending in a question mark: no preamble, no summary, no heading, no numbering, "
+    "no markdown marks, no closing line. A line that is not a question is thrown away "
+    "before the author sees it, so do not write one. At most three questions, fewer when "
+    "fewer are worth asking, none at all when the text answers everything you would ask -- "
+    "saying nothing is an answer here. Ask what this text and no other would provoke: a "
+    "question that could be asked of any plan is thrown away too. Point at the text by "
+    "quoting it between double quotes, character for character, at most twelve words and "
+    "never across a line; every quote is checked against the text, and a question whose "
+    "quotes are not in it is thrown away. Never state a fact, never answer your own "
+    "question, never say what you would do or what the author should do: you are the one "
+    "who asks. Ask in the text's own language.")
 MODES.update({"edit-complete": MODE_EDIT_COMPLETE, "edit-rewrite": MODE_EDIT_REWRITE,
-              "edit-ask": MODE_EDIT_ASK, "edit-read": MODE_EDIT_READ})
+              "edit-ask": MODE_EDIT_ASK, "edit-read": MODE_EDIT_READ,
+              "ask-questions": MODE_ASK_QUESTIONS})
 
 
 def _tools_line():
@@ -233,9 +253,10 @@ def mode_prefix(cfg, mode, shell):
     brief for everything else."""
     if mode in ("chat", "talk"):
         return machine_line(cfg) + "\n" + KNOW_CHAT
-    if mode.startswith("edit-"):
-        # inside an editor the shell brief (tools, flags, spark's verbs)
-        # is noise for prose and code alike, and it costs prompt
+    if mode.startswith(("edit-", "ask-")):
+        # over a text -- in an editor, or a plan on stdin -- the shell
+        # brief (tools, flags, spark's verbs) is noise for prose and code
+        # alike, and it costs prompt
         return machine_line(cfg)
     return prefix(cfg, shell)
 
@@ -274,9 +295,10 @@ def user_message(text, cwd, context=""):
     @FILEs named (forge.file_context labels those itself). Nothing else."""
     head = "[cwd %s]\n" % cwd if cwd else ""
     if context:
-        # an @FILE block, the editor's blocks and the widget's failure
-        # block (Command:/Exit:/Output:) carry their own label
-        labelled = context.startswith(("File ", "Text", "Selected ", "The author says", "You read this as", "Declined before",
+        # an @FILE block, the editor's and the questioner's blocks, and the
+        # widget's failure block (Command:/Exit:/Output:) carry their own label
+        labelled = context.startswith(("File ", "Text", "Selected ", "Plan ", "The author says",
+                                       "You read this as", "Declined before", "Answered before",
                                        "Command: "))
         label = "" if labelled else "Output:\n"
         return head + (text + "\n\n" if text else "") + label + context
