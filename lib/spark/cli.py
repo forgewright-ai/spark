@@ -54,9 +54,9 @@ EDIT_USAGE = """spark edit -- the editor's protocol (contract 10): the text on s
 
   raw streamed text: no mark, no wrap, a code fence around the answer is
   removed; an empty text with words is written from nothing (a new file);
-  exit 1 when ? or --at find no text, or no brain answers. In micro: the
-  spark-micro plugin, github.com/forgewright-ai/spark-micro (Alt-s). In
-  vim, helix or nano: their filter (:'<,'>!  |  ^T |) with the same words.
+  exit 1 when ? or --at find no text, or no brain answers. In an editor:
+  its plugin, github.com/forgewright-ai/spark-<app> (micro, neovim, vim,
+  helix, nano), or its filter (:'<,'>!  |  ^T |) with the same words.
   From a pipe: spark edit fix grammar < draft.md
 """
 LAST_USAGE = """spark last -- the last exchange, with its tok/s

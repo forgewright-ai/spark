@@ -340,7 +340,7 @@ spark edit fix grammar < draft.md
 ```
 
 spark ships no app. Each app's plugin lives in its own repository and
-installs the app's way; five editors have one today. micro is first:
+installs the app's way. micro is first:
 
 1. Clone the plugin:
 
@@ -680,7 +680,7 @@ spark chat | do | explain -> spark <verb> -+-> spark's server :8081 --> another
 get -> spark setup -> bootstrap.sh (apply) -> install.sh (links, renders)
                       the engine, the model, the token, the units, one rc
                       line; spark shell on adds spark's shell; a spark app
-                      is its own repository (spark-<app>: five today)
+                      is its own repository (spark-<app>)
 
 spark check   38 rows: every promise the machine makes, fixture-tested
 spark update  the newest tag, or main on a developer clone; converge

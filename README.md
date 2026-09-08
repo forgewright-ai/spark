@@ -73,24 +73,21 @@ and your editor stay yours. `INSTALL.md` has every step and every key.
 ## spark apps
 
 A tool becomes smart as a client of one command, `spark edit`: text in
-on stdin, text out, never a path. Five editors have a plugin today, each
-in its own `spark-<app>` repository, installed the app's way; spark
-ships no app. micro is first:
+on stdin, text out, never a path. Each app's plugin is its own
+`spark-<app>` repository, installed the app's way; spark ships no app.
 
-```sh
-git clone https://github.com/forgewright-ai/spark-micro ~/.config/micro/plug/spark
-```
+| | |
+|---|---|
+| [spark-micro](https://github.com/forgewright-ai/spark-micro) | micro: `Alt-s` opens `spark> ` |
+| [spark-neovim](https://github.com/forgewright-ai/spark-neovim) | neovim: your key opens `spark> ` |
+| [spark-vim](https://github.com/forgewright-ai/spark-vim) | vim: your key opens `spark> ` |
+| [spark-helix](https://github.com/forgewright-ai/spark-helix) | helix: `A-s` pre-fills helix's prompt |
+| [spark-nano](https://github.com/forgewright-ai/spark-nano) | nano: `M-S` pre-fills nano's prompt |
 
-plus one line in `~/.config/micro/bindings.json`: `"Alt-s": "lua:spark.prompt"`.
-Then `Alt-s` (Option-s on a Mac): Enter completes at the cursor, words
-rewrite, `?` asks in a pane. neovim and vim carry the same prompt under
-one key of your own -- https://github.com/forgewright-ai/spark-neovim
-and https://github.com/forgewright-ai/spark-vim. helix and nano cannot
-hook the cursor, so their plugins put `spark edit ` on the editor's own
-prompt instead -- https://github.com/forgewright-ai/spark-helix and
-https://github.com/forgewright-ai/spark-nano: add words, press Enter,
-and the text is rewritten or asked about. INSTALL section 6 has each
-app's lines; an editor with a filter is a client with no plugin at all.
+At `spark> `: Enter completes at the cursor, words rewrite, `? words`
+asks in a pane. helix and nano have no cursor hook: their key pre-fills
+`spark edit ` instead -- add words, press Enter. INSTALL section 6 has
+each app's lines; an editor with a filter needs no plugin at all.
 
 When apps need more than text, another contract is defined -- e-mail,
 for example -- and apps connect to it the same way.
