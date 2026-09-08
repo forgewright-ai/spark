@@ -108,6 +108,27 @@ def main():
             for m in rx.finditer(read(doc)):
                 check(m.group(1).lower() == spelled[n_sc],
                       "%s: '%s' is chaos.py's count (%s)" % (doc, m.group(0), spelled[n_sc]))
+    # a contract written down and not built says so in three places: its
+    # module, the roadmap and CLAUDE.md. Check the claims, not the prose --
+    # and check that nothing quietly started dispatching to it
+    verbs = read(os.path.join("bin", "spark"))
+    roadmap, claude = read("ROADMAP.md"), read("CLAUDE.md")
+    reserved = 0
+    for f in sorted(os.listdir(os.path.join("lib", "spark"))):
+        head = read(os.path.join("lib", "spark", f))[:600] if f.endswith(".py") else ""
+        if "NOT BUILT" not in head:
+            continue
+        reserved += 1
+        name = f[:-3]
+        m = re.search(r"contract (\d+)", head)
+        n = m.group(1) if m else "?"
+        check('"%s":' % name not in verbs,
+              "bin/spark does not dispatch %s (contract %s is not built)" % (name, n))
+        check(re.search(r"(?m)^## Contract %s: spark %s$" % (n, name), roadmap) is not None,
+              "ROADMAP.md has '## Contract %s: spark %s'" % (n, name))
+        check(re.search(r"(?m)^%s\. `spark %s` -- reserved, not built" % (n, name), claude) is not None,
+              "CLAUDE.md reserves contract %s for spark %s" % (n, name))
+    check(reserved > 0, "the reserved contracts are found by their modules (%d)" % reserved)
     # the roadmap starts where the changelog's top section is
     top = re.search(r"^## v(\d+\.\d+)", read("CHANGELOG.md"), re.M).group(1)
     m = re.search(r"What comes after v(\d+\.\d+)", read("ROADMAP.md"))

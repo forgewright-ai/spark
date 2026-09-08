@@ -114,31 +114,6 @@ The forecast is the same trick pointed forward -- "the disk fills in
 about three days at this rate" -- and it stays honest, because it is
 made of numbers spark already keeps and words that never leave.
 
-## 6. spark drill: practice against a source
-
-Not the line and not a smart tool -- a use for a model on the box that a
-hosted one cannot schedule for you. The source on stdin, one question at
-a time out, your answer in.
-
-- both the question AND the correct answer come from the source: the
-  model proposes a span of the source as the answer and a question that
-  span answers, and a question whose answer does not anchor is dropped
-  before it is ever asked. A drill built on an invented answer teaches
-  the invention
-- material too thin for questions is said in one line, never padded from
-  the model's own knowledge -- the learner cannot tell padding from the
-  source
-- self-graded against the sourced answer: you see the span and say
-  whether you had it. A second model grading a first model's question is
-  two opinions and no source
-- its ledger kind schedules rather than suppresses -- a missed item comes
-  back at 1, 3, 7, 21 and 60 days -- which is the inversion of every
-  other kind, and the reason it waits here: records that carry state and
-  never age out are a cost the roadmap has not agreed to pay
-
-Contract 13, if it is ever built. `lib/spark/drill.py` on the
-`claude/spark-three-new-contracts-qds99n` branch holds the full text.
-
 ## Where to start
 
 | idea | cost | surface |
@@ -149,7 +124,6 @@ Contract 13, if it is ever built. `lib/spark/drill.py` on the
 | The command and the proof | medium -- the line plus `do` | the line |
 | Failure memory | medium -- a ledger of its own | the failure |
 | The doctor | medium -- reads what exists | the machine |
-| `spark drill` | medium -- contract 13, a ledger that schedules | new |
 | `??` across machines | high -- thread routing at the prompt | new |
 
 Two to build first, if it were two:

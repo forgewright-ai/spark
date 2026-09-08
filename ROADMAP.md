@@ -83,7 +83,6 @@ never a path.
 - 16 kB a part, `--part N` beyond that, and the answer names the part it
   read in its first line: an answer from part 2 that does not say so
   cannot be told from an answer about the whole
-
 - ledger kind `read`: the questions asked of this source, so a second
   reader sees what has been asked. Nothing invalidates them -- a source
   does not change, and that is what makes it a source -- and none of
