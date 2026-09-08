@@ -325,14 +325,22 @@ def main():
             d = json.loads(raw)
             ok(st == 200 and "now" in d and "baseline" in d and "tune" in d, "/api/bench", raw[:100])
             # the request line lands after the response left (it carries the
-            # time taken), and the server is threaded: give it a moment
+            # time taken), and the server is threaded: give it a moment.
+            # The window has to be wider than the poll can fill -- every
+            # poll writes a log line of its own, so waiting on a tail of 3
+            # pushes the line being waited for out of its own window the
+            # moment the server is slow enough to need a second look.
             for _ in range(20):
-                st, _, raw = req(url, "GET", "/api/log?n=3", headers=bearer)
+                st, _, raw = req(url, "GET", "/api/log?n=30", headers=bearer)
                 d = json.loads(raw)
-                if d.get("lines") and " GET /api/bench 200 " in d["lines"][-1]:
+                if any(" GET /api/bench 200 " in ln for ln in d.get("lines") or []):
                     break
                 time.sleep(0.1)
-            ok(st == 200 and len(d["lines"]) == 3 and " GET /api/bench 200 " in d["lines"][-1], "/api/log tails forge.log", d)
+            ok(st == 200 and any(" GET /api/bench 200 " in ln for ln in d["lines"]),
+               "/api/log tails forge.log", d)
+            st, _, raw = req(url, "GET", "/api/log?n=3", headers=bearer)
+            ok(st == 200 and len(json.loads(raw)["lines"]) == 3,
+               "/api/log?n= is the tail length", raw[:120])
             lg = open(state + "/forge.log").read()
             ok(oct(os.stat(state + "/forge.log").st_mode & 0o777) == "0o600" and token not in lg and smoke.TOKEN not in lg, "forge.log 0600, no token in it")
             ok("login failed" in lg and "wrong bearer" in lg, "forge.log has the login events", lg[-300:])

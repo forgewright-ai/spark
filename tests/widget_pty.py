@@ -90,6 +90,18 @@ class Shell:
                     return
                 self.buf += data
 
+    def settle(self, quiet=0.4, timeout=20):
+        """Read until nothing new has arrived for `quiet` seconds. A fixed
+        sleep is not enough after a 40 kB answer: the shell is still
+        redrawing, and the next command typed into that queues behind the
+        redraw, so an expect() on it times out on text that then lands."""
+        end = time.time() + timeout
+        while time.time() < end:
+            n = len(self.buf)
+            self.read(quiet)
+            if len(self.buf) == n:
+                return
+
     def expect(self, text, timeout=8):
         """text appears in output written AFTER the last mark()"""
         end = time.time() + timeout
@@ -358,12 +370,12 @@ def main(shell, widget):
             since = sh.mark()
             sh.send("%s?\r" % what)
             time.sleep(0.6)
-            sh.read(0.6)
+            sh.settle()                # 40 kB takes a while to draw
             seen = since()
             ok("EXECUTED-MARK\r\n" not in seen and "EXECUTED-MARK\n" not in seen,
                "%s: nothing ran" % why, seen[-300:])
             sh.send("\x15")            # C-u: clear whatever landed
-            time.sleep(0.2)
+            sh.settle()
             since2 = sh.mark()
             sh.send("echo STILL-HERE-%s\r" % what)
             ok(sh.expect("STILL-HERE-%s\r\n" % what) or sh.expect("STILL-HERE-%s\n" % what),
