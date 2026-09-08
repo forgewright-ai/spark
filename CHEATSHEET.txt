@@ -2,9 +2,9 @@ SPARK CHEATSHEET                                          lp CHEATSHEET.txt
 
 SPARK
   spark                           status: server, widget, soul, last answer
-  spark off | spark on            silence / restore the widget, every pane
+  spark off | on                  silence / restore the widget, every pane
   spark soul [edit|reset]         who it is: the default, or your own
-  spark memory add WORDS          a fact it keeps  memory forget N  drops it
+  spark memory add <words>        a fact it keeps  memory forget N  drops it
   spark memory [on|off|clear]     the facts it recalls on every answer
   spark ver                       about, version, credits
   spark chat [words]              a conversation (/help for its verbs)
@@ -28,12 +28,12 @@ SPARK
   spark <TAB>                     completes the verbs; second word too
 
 ON THE LAN (server / client)
-  spark model [NAME|list]         the table (license, tested); choose one
+  spark model [NAME|auto|none]    choose one; model list = the table
   spark model budget [N]          percent of RAM+GPU auto may use (10-95)
   spark model add URL             add your own (--sha256, --license required)
   spark model verify              sha256 every downloaded file now, exit 1 bad
   spark serve [on|off]            one LAN address, token required
-  spark ember [NAME|auto|none]    a second, bigger model for conversations
+  spark ember [NAME|auto|none]    a second model for chat; ember list = same
   spark forge [on|off]            the page and the API on the LAN; status bare
   spark forge --print-url         the page's login URL; the admin token on a tty
   spark forge --print-client      what another machine needs: URL + a user

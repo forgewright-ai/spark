@@ -230,7 +230,17 @@ may change freely.
    partial file (`spark check --chaos` rehearses that; nothing else
    calls it). `--dry-run` prints rows `ok|would|skip|todo
    <what>  <why>` (`todo` = needs the user, e.g. a placeholder in site.env)
-   and ends with `Nothing to do` or `N to do`; it never calls sudo. The
+   and ends with `Nothing to do` or `N to do`; it never calls sudo. An
+   APPLY run prints only what it changed and what needs the user: `ok`
+   and `skip` are silent there (and so are the section headers) unless
+   `--verbose`, because a converged machine has nothing to report and
+   said it in 54 lines. `--dry-run` stays the full report -- `spark
+   check`'s configs row and tests/install_test.sh read those rows. An
+   apply run that will need root asks for sudo ONCE, before it touches
+   anything (`sudo_upfront`), and only at a terminal: over ssh or a
+   pipe there is nobody to answer, and a run needing no root at all
+   (`spark update` on a converged machine) must not be made to ask.
+   No sudo on the machine at all is one line and exit 1, up front. The
    `rc` row appends one marked line (marker `config/spark/hook.`) to the
    end of the login shell's rc file -- `~/.bashrc` or `~/.zshrc`, by
    `$SHELL` else the passwd entry -- creating it if absent and never
@@ -242,7 +252,8 @@ may change freely.
    file from its `.bak`, or removes it when there was no file before --
    never an empty husk.
 2. `install.sh --dry-run` prints rows `ok|would link|would render|would back
-   up  <path>` and the same final line. Link = symlink into the repo; render
+   up  <path>` and the same final line. Apply is quiet the same way: an
+   `ok` row (already in place) prints only with `--verbose`. Link = symlink into the repo; render
    = a regular file written from `templates/`. An existing regular file, or
    a symlink that points outside the repo, is moved to `<path>.bak`, never
    overwritten (a stale symlink into the repo is replaced). The rc files

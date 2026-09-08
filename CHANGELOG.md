@@ -1,5 +1,27 @@
 # Changelog
 
+## v1.17
+
+- An install says what it changed, not what it checked. A converged
+  machine printed 54 rows of `ok` and `skip` from `./bootstrap.sh` and 18
+  more from `install.sh`; both now print what they changed, what needs
+  you, and the summary -- so `Nothing to do` is usually the whole of it.
+  `--verbose` brings every row back, and `--dry-run` is untouched,
+  because that one is the report `spark check` and the tests read.
+- The sudo password is asked for once, at the start, before anything is
+  touched. It used to be asked at whichever row first needed root, half
+  way through a run that had already changed things. If sudo is not on
+  the machine at all, that is one line and exit 1 up front rather than a
+  failure later. Only at a terminal: over ssh or a pipe there is nobody
+  to answer, and a run that needs no root -- `spark update` on a
+  converged machine -- is never made to ask.
+- `spark theme list` is in `spark help` now, and `spark ember list` in
+  both help and the cheatsheet: the grammar names four verbs that take
+  `list` and the docs described two of them. The cheatsheet also names
+  `auto` and `none` for `spark model` (it showed them for `ember` and
+  hid them for `model`, whose default is `auto`), spells the mute the way
+  help does (`spark off | on`), and writes `<words>` where it had `WORDS`.
+
 ## v1.16
 
 - `spark ask` (contract 12): a plan, a draft or a decision on stdin, and

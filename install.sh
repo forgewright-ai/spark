@@ -19,6 +19,7 @@
 # installed its own way (github.com/forgewright-ai/spark-micro).
 #
 #   install.sh --dry-run    print what would change, touch nothing
+#   install.sh --verbose    every row, not only what changed
 #
 # Output rows (contract 2): ok | would link | would render | would back up
 # in dry-run; ok | link | render | back up when applied.
@@ -29,8 +30,9 @@ REPO=$(cd "$(dirname "$0")" && pwd)
 DRY=0
 case ${1:-} in
     --dry-run) DRY=1 ;;
+    --verbose|-v) VERBOSE=1 ;;
     '') ;;
-    *) echo "usage: install.sh [--dry-run]" >&2; exit 2 ;;
+    *) echo "usage: install.sh [--dry-run] [--verbose]" >&2; exit 2 ;;
 esac
 OS=$(uname -s)
 case $OS in Darwin) OSDIR=macos ;; *) OSDIR=linux ;; esac
@@ -45,7 +47,15 @@ client=0; [ "$SITE_AI_MODEL" = none ] && [ -n "$SITE_PEER_AI_URL" ] && client=1
 look_micro() { [ "$SITE_SHELL" = on ] && command -v micro >/dev/null 2>&1; }
 
 changes=0
-row() { printf '%-14s %s\n' "$1" "$2"; }
+: "${VERBOSE:=0}"
+# An apply run says what it CHANGED. `ok` means a file was already in
+# place, which is the whole output on a converged machine and none of it
+# is news; --dry-run (the report `spark check` reads) and --verbose keep
+# every row.
+row() {
+    if [ "$1" = ok ] && [ "$DRY" -eq 0 ] && [ "$VERBOSE" -eq 0 ]; then return 0; fi
+    printf '%-14s %s\n' "$1" "$2"
+}
 
 # --- helpers --------------------------------------------------------------
 backup() {

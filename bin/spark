@@ -54,7 +54,7 @@ the FORGE: server/client
  spark model [NAME|auto|none] the served model: download, restart (-h: more)
  spark model list             the table; -h: budget N, add URL, verify, rm NAME
  spark serve [on|off]         one LAN address, token required (-h: --force)
- spark ember [NAME|auto|none] a second model for conversations (opt-in)
+ spark ember [NAME|auto|none] a second model for conversations; ember list
  spark forge --print-url      the login URL and token; --print-client for a peer
  spark user [add NAME]        the named users, each with sealed threads (-h)
  spark forge [on|off]         the FORGE on the LAN: the API and the page
@@ -72,7 +72,7 @@ USAGE_MACHINE = """the machine
 USAGE_SHELL = """the interface
  spark shell [on|off]         the shell layer: tmux, starship, fzf ... + bar
  spark bar [on|off]           tmux's status line: shown or hidden; set it
- spark theme [NAME|show]      the palettes, and yours; show = its colours
+ spark theme [NAME|list|show] the palettes, and yours; show = its colours
  spark quiet [SUB on|off]     start (banner), login (motd), boot (GRUB), audio
  spark font [FACE SIZE|list]  the console font (Linux) / Terminal.app's
 """

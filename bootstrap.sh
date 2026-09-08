@@ -1,10 +1,12 @@
 #!/bin/sh
 # spark bootstrap.sh -- a fresh Debian-family Linux or macOS to a spark
-# workstation, idempotently. Run it again after any change to site.env; a
-# converged machine ends with "Nothing to do".
+# workstation, idempotently. Run it again after any change to site.env. An
+# apply run prints what it CHANGED and what needs you, and nothing else:
+# a converged machine says only "Nothing to do".
 #
 #   ./bootstrap.sh                 apply (sudo only for apt, and the shell/headless rows)
 #   ./bootstrap.sh --dry-run       print what would change; never sudo
+#   ./bootstrap.sh --verbose       every row, not only what changed
 #   ./bootstrap.sh --list-packages one package per line, as this site wants them
 #   ./bootstrap.sh --list-tools    repo-path<TAB>name of every tool linked on PATH
 #   ./bootstrap.sh --list-models   the model table with a RAM verdict per row
@@ -20,9 +22,11 @@ REPO=$(cd "$(dirname "$0")" && pwd)
 OS=$(uname -s)
 ARCH=$(uname -m)
 MODE=apply
-usage() { sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+VERBOSE=0
+usage() { sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 case ${1:-} in
     --dry-run) MODE=dry ;;
+    --verbose|-v) VERBOSE=1 ;;
     --list-tools) printf 'bin/spark\tspark\nbin/explain\texplain\n'; exit 0 ;;
     --list-packages|--list-models) MODE=${1#--list-} ;;
     # the download primitive on its own, so a failed download can be
@@ -330,18 +334,51 @@ esac
 
 # ------------------------------------------------------------------ rows
 todo=0
+acting=0        # the row about to print is a change, not a state already true
 row() { printf '%-6s %-12s %s\n' "$1" "$2" "${3:-}"; }
-ok() { row ok "$1" "${2:-}"; }
-skip() { row skip "$1" "${2:-}"; }
+# An apply run says what it CHANGED. A machine already converged has
+# nothing to say, so it says nothing; --verbose (and --dry-run, which is
+# the report `spark check` and install_test.sh read) print every row.
+loud() { [ "$MODE" = dry ] || [ "$VERBOSE" = 1 ]; }
+ok() {
+    if loud || [ "$acting" = 1 ]; then row ok "$1" "${2:-}"; fi
+    acting=0
+}
+skip() { if loud; then row skip "$1" "${2:-}"; fi; acting=0; }
 need() {   # need WHAT WHY -- something must change; in apply mode the caller does it
     todo=$((todo + 1))
     if [ "$MODE" = dry ]; then row would "$1" "${2:-}"; return 1; fi
+    acting=1
     return 0
 }
 as_root() {
     if [ "$(id -u)" -eq 0 ]; then "$@"; else sudo "$@"; fi
 }
-section() { printf '\n== %s\n' "$1"; }
+sudo_upfront() {
+    # Ask once, here, before anything is touched. A run that stops at the
+    # first root step has already changed things and springs a password
+    # prompt on someone who thought the install was under way.
+    #
+    # Only where a prompt can be answered: at a terminal. Piped or over
+    # ssh there is nobody to type, and demanding sudo there would break
+    # every run that needed no root at all -- `spark update` on a
+    # converged machine is exactly that.
+    [ "$MODE" = apply ] || return 0
+    [ "$(id -u)" -ne 0 ] || return 0
+    if ! command -v sudo >/dev/null 2>&1; then
+        echo "bootstrap: no sudo here, and packages, the console and the units need root." >&2
+        echo "bootstrap: run it as root, or install sudo first. Nothing was changed." >&2
+        exit 1
+    fi
+    sudo -n true 2>/dev/null && return 0        # passwordless, or already cached
+    [ -t 0 ] || return 0                        # nobody to ask: let the root step speak
+    printf 'spark needs sudo once, now: packages, the console, the units.\n'
+    if ! sudo -v; then
+        echo "bootstrap: sudo refused. Nothing was changed." >&2
+        exit 1
+    fi
+}
+section() { if loud; then printf '\n== %s\n' "$1"; fi; }
 sha_ok() {   # sha_ok FILE SHA
     if [ "$OS" = Darwin ]; then shasum -a 256 "$1" | awk '{print $1}' | grep -qx "$2"
     else sha256sum "$1" | awk '{print $1}' | grep -qx "$2"; fi
@@ -383,7 +420,8 @@ if [ "$MODE" = fetch ]; then
     fetch "$FETCH_ARGS_URL" "$FETCH_ARGS_DEST" "$FETCH_ARGS_SHA"
     exit 0
 fi
-printf 'spark bootstrap | %s %s | %s\n' "$OS" "$ARCH" "$MODE"
+sudo_upfront
+if loud; then printf 'spark bootstrap | %s %s | %s\n' "$OS" "$ARCH" "$MODE"; fi
 
 # =============================================================== 1. site
 section site
