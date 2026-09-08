@@ -1029,6 +1029,35 @@ def row_memory(ctx):
     return ok("%d fact%s%s" % (len(facts), "" if len(facts) == 1 else "s", ", sealed" if sealed else ""))
 
 
+@row("CAPABILITY")
+def row_ledger(ctx):
+    """The ledger: what you have already weighed, sealed in the account's
+    store -- one file, one record shape, and a rule per contract
+    (ledger.RULES). The promise is that it is yours alone and that it
+    does not grow without bound: sealed, 0600, and inside the caps."""
+    from . import ledger, vault
+    path = ledger.path()
+    if not path or not os.path.exists(path):
+        return ok("nothing weighed yet (%s)" % ", ".join(sorted(ledger.RULES)))
+    st = os.stat(path)
+    problems = []
+    if st.st_mode & 0o077:
+        problems.append("not 0600")
+    if not vault.is_sealed(path):
+        problems.append("plaintext, not sealed")
+    if problems:
+        return warn("%s: %s" % (ctx.short(path), "; ".join(problems)), "chmod 600 %s" % ctx.short(path))
+    counts = ledger.counts()
+    total = sum(counts.values())
+    if total > ledger.TOTAL_MAX:
+        return warn("%d records, %d are kept" % (total, ledger.TOTAL_MAX),
+                    "spark edit --ledger clear; spark ask --ledger clear")
+    if not total:
+        return ok("sealed, empty (%s)" % ", ".join(sorted(ledger.RULES)))
+    return ok("sealed, %s (%d of %d)" % (", ".join("%d %s" % (n, k) for k, n in sorted(counts.items())),
+                                         total, ledger.TOTAL_MAX))
+
+
 @row("CAPABILITY", fixture=False, reason="reads the live battery")
 def row_battery(ctx):
     from . import bar
@@ -1163,7 +1192,7 @@ def row_users(ctx):
             data = [os.path.join(d, "threads", f) for f in os.listdir(os.path.join(d, "threads"))]
         except OSError:
             pass
-        data += [os.path.join(d, f) for f in ("memory", "chat-history")]
+        data += [os.path.join(d, f) for f in ("memory", "chat-history", "ledger")]
         for p in data:
             if os.path.isfile(p):
                 if not vault.is_sealed(p):
@@ -1615,6 +1644,9 @@ def make_fixture(root, good, stub_url=""):
                             "thread", "2000-01-01-000001",
                             json.dumps({"ts": "2000-01-01 00:00:01", "role": "user", "text": "sealed?"}).encode())
         vault.write_sealed(os.path.join(udir, "memory"), fdk, "memory", "fixture", b"a sealed fact\n")
+        vault.write_sealed(os.path.join(udir, "ledger"), fdk, "ledger", "fixture",
+                           json.dumps({"kind": "edit", "name": "a.md", "ts": "2000-01-01 00:00:00",
+                                       "note": "a declined note"}).encode() + b"\n")
         vault.write_private(os.path.join(state, "account"), b"name=fixture\ntoken=fixture-token\n")
         import base64 as _b64
         vault.write_private(os.path.join(state, "account-key"), _b64.b64encode(fdk) + b"\n")
@@ -1624,6 +1656,12 @@ def make_fixture(root, good, stub_url=""):
         os.chmod(os.path.join(udir, "token.hash"), 0o644)
         with open(os.path.join(udir, "threads", "2000-01-01-000001.jsonl"), "w") as f:
             f.write(json.dumps({"ts": "2000-01-01 00:00:01", "role": "user", "text": "leaked?"}) + "\n")
+        # the ledger in the clear: the row that watches it must go red
+        with open(os.path.join(udir, "ledger"), "w") as f:
+            f.write(json.dumps({"kind": "ask", "name": "plan.md", "ts": "2000-01-01 00:00:00",
+                                "note": "who decides?"}) + "\n")
+        os.chmod(os.path.join(udir, "ledger"), 0o644)
+        vault.write_private(os.path.join(state, "account"), b"name=fixture\ntoken=fixture-token\n")
     if not good:
         with open(os.path.join(cfgd, "spark.env"), "w") as f:
             f.write("SPARK_PERSONA_EXTRA=old\n")

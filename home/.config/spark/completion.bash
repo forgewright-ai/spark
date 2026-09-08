@@ -48,7 +48,7 @@ _spark_complete() {
         words="chat do serve stop check update shell headless client setup
                ver last status brain history stats bench tune model ember
                forge soul remember forget memory quiet theme font bar off
-               on user explain edit help uninstall"
+               on user explain edit ask help uninstall"
         COMPREPLY=($(compgen -W "$words" -- "$cur"))
         return 0
     fi

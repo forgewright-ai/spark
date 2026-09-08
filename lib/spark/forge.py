@@ -391,6 +391,22 @@ def history(tid):
     return local_store().history(tid)
 
 
+def text_sha(data):
+    """The short hash a thread's first user message carries in `text_sha`:
+    which text this exchange is about."""
+    import hashlib
+    return hashlib.sha256(data.encode("utf-8", "replace")).hexdigest()[:16]
+
+
+def same_text(tid, sha):
+    """True when the thread's first user message carried a text of this
+    sha. The rule every grounded contract's --thread follows: the same
+    text again rides as the words alone, a changed one is sent again,
+    labelled as it is now."""
+    first = next((m for m in load(tid) if m.get("role") == "user"), {})
+    return first.get("text_sha") == sha
+
+
 def pick(cfg, more):
     """(thread id, history) for a turn: the newest thread continued when
     `more` asks for it, else a new one. (None, []) when history is off."""

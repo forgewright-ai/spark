@@ -158,7 +158,25 @@ shell cannot host the widget (another shell, or macOS's bash 3.2):
    edits it first, `s` skips, `q` quits; a step that can destroy data
    runs only when you type `yes`. Each step's output (last 4 kB) goes
    back to the model until it says done, or after 8 steps.
-5. `spark soul edit` writes the paragraph that tells the model who it is
+5. `spark ask` reads a plan, a draft or a decision on stdin and answers
+   with questions about it -- at most three, one per line, and nothing
+   else. Every line of the output is a question: a line that is not one,
+   a question quoting words the text does not contain, and a question
+   that could be asked of any plan are dropped before you see them, so
+   the reply cannot state a fact the text does not hold. When nothing
+   survives, you get one line saying so and nothing more -- a reader
+   with nothing to ask says nothing.
+
+   ```sh
+   spark ask < plan.md
+   spark ask what am I deciding here < plan.md
+   ```
+
+   Answer one of them and it stops coming back:
+   `spark ask --answered --name plan.md` with the question on stdin;
+   `spark ask --ledger --name plan.md` lists what you have answered,
+   `--ledger clear` drops it. `spark ask -h` says the rest.
+6. `spark soul edit` writes the paragraph that tells the model who it is
    (`~/.config/spark/soul`, at most 4000 characters; `spark soul` shows
    which is in use, `spark soul reset` goes back to the default). The
    default:
@@ -171,7 +189,7 @@ shell cannot host the widget (another shell, or macOS's bash 3.2):
    invent a flag, a path, or a command.
    ```
 
-6. `spark remember <words>` adds a fact it keeps (`spark forget N` drops
+7. `spark remember <words>` adds a fact it keeps (`spark forget N` drops
    one, `spark memory` lists them, `spark memory off` stops sending
    them; 40 facts of 200 characters). Soul and facts ride on every
    conversation, so a fact costs tokens every time: keep the ones that
@@ -682,7 +700,7 @@ get -> spark setup -> bootstrap.sh (apply) -> install.sh (links, renders)
                       line; spark shell on adds spark's shell; a spark app
                       is its own repository (spark-<app>)
 
-spark check   38 rows: every promise the machine makes, fixture-tested
+spark check   39 rows: every promise the machine makes, fixture-tested
 spark update  the newest tag, or main on a developer clone; converge
 
 what leaves the machine: pinned downloads in, your questions to the

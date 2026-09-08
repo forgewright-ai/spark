@@ -15,7 +15,6 @@ STDIN_TAIL = 6000          # what `explain` sends at most: the last 6 kB
 # spark edit (contract 10): what the editor sends at most
 EDIT_BEFORE, EDIT_AFTER = 4000, 2000   # a completion: around the cursor
 EDIT_MAX = 12000                        # a rewrite: the whole text, or nothing
-EDIT_READ = 800                         # the reading before a question
 EDIT_SEL_MAX = 12000                    # a selection inside a ?: whole up to this, else head + tail
 EDIT_WINDOW = 16000                     # a ? with --sel: the selection and the file around it
 EDIT_TIMEOUT = 180                      # a big selection takes a while to read
@@ -305,11 +304,6 @@ def _edit_args(args):
     return opts, words
 
 
-def _sha(data):
-    import hashlib
-    return hashlib.sha256(data.encode("utf-8", "replace")).hexdigest()[:16]
-
-
 def _edit_label(name, ftype, part=False):
     what = "File %s" % name if name else "Text"
     if part:
@@ -336,26 +330,6 @@ def _edit_window(data, a, b):
     if len(after) < len(after_all):
         after = after + "\n[... %d chars cut ...]" % (len(after_all) - len(after))
     return "%s\n[selection starts]\n%s\n[selection ends]\n%s" % (before, sel, after)
-
-
-def _edit_reading(cfg, data):
-    """(`You read this as: LANGUAGE, KIND.\n`, `\n\nAnswer in LANGUAGE.`) --
-    the model's own reading of the text's first 800 chars
-    (persona.MODE_EDIT_READ), restated to it above the text, and the
-    language it named repeated as the last line of the request: a small
-    model answers a Portuguese draft in English otherwise, whatever the
-    brief says. Any failure is two empty strings: the question goes on."""
-    try:
-        s = session.Session(cfg, "edit-read", _shell_default(), "", role="spark")
-        reply, _ms = s.ask_json(data[:EDIT_READ], persona.READ_SCHEMA, max_tokens=30, timeout=EDIT_TIMEOUT)
-        lang, kind = [" ".join(str(reply.get(k, "")).split()) for k in ("language", "kind")]
-    except Exception:
-        return "", ""
-    parts = [p for p in (lang, kind) if p]
-    if not parts:
-        return "", ""
-    tail = "\n\nAnswer in %s." % lang if lang and lang.lower() not in ("code", "source code", "none", "n/a") else ""
-    return "You read this as: %s.\n" % ", ".join(parts), tail
 
 
 def cmd_edit(args):
@@ -443,19 +417,17 @@ def cmd_edit(args):
         # the text is the one the first turn carried, else the text again
         tid = forge.open_thread(cfg, tid) if tid else None
         history = forge.history(tid) if tid else []
-        sha = _sha(data)
+        sha = forge.text_sha(data)
         if history:
-            first = next((m for m in forge.load(tid) if m.get("role") == "user"), {})
-            context = "" if first.get("text_sha") == sha else head + label.replace(":", ", as it is now:") + "\n" + forge.clip(data)
+            context = "" if forge.same_text(tid, sha) else head + label.replace(":", ", as it is now:") + "\n" + forge.clip(data)
         elif sel:
-            start = max(0, sel[0] - 200)
-            reading, tail = _edit_reading(cfg, data[start:start + EDIT_READ])
-            context = (head + reading + ledger.block(cfg, opts["name"], data) + label[:-1]
+            read, tail = session.reading(cfg, data, _shell_default(), start=max(0, sel[0] - 200))
+            context = (head + read + ledger.block(cfg, opts["name"], data) + label[:-1]
                        + " -- the question is about the part between the marks:\n"
                        + _edit_window(data, sel[0], sel[1]) + tail)
         else:
-            reading, tail = _edit_reading(cfg, data)
-            context = head + reading + ledger.block(cfg, opts["name"], data) + label + "\n" + forge.clip(data) + tail
+            read, tail = session.reading(cfg, data, _shell_default())
+            context = head + read + ledger.block(cfg, opts["name"], data) + label + "\n" + forge.clip(data) + tail
     else:
         kind, role = "rewrite", "ember"
         if len(data) > EDIT_MAX:

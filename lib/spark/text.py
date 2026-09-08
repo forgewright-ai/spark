@@ -225,56 +225,123 @@ def quotes(line):
 _MARKS = str.maketrans({"\u201c": '"', "\u201d": '"', "\u2018": "'", "\u2019": "'", "'": '"'})
 
 
-def _fold(s):
+def fold(s):
     """Whitespace runs to one space, every quote mark to ", lower case:
     the shapes a faithful quote may still differ in (a line break, a
-    capital at the start of a sentence, "hum" written 'hum')."""
+    capital at the start of a sentence, "hum" written 'hum'). Public: the
+    grounded contracts fold their own units this way too."""
     return " ".join(s.split()).translate(_MARKS).lower()
 
 
 def anchor(span, data, folded=None):
     """Is `span` in `data`: verbatim; else folded on both sides
     (whitespace, quote marks, case); else with the punctuation the model
-    tucked inside the closing quote stripped. `folded` is _fold(data)
+    tucked inside the closing quote stripped. `folded` is fold(data)
     when the caller has it already."""
     if span in data:
         return True
-    folded = _fold(data) if folded is None else folded
-    f = _fold(span)
+    folded = fold(data) if folded is None else folded
+    f = fold(span)
     if f and f in folded:
         return True
     f = f.rstrip(".,;:!?")
     return bool(f) and f in folded
 
 
-class Anchors:
-    """A line-buffered stream: each line is held until its newline, every
-    quoted span on it checked against `data`, ANCHOR_MARK appended after
-    each one that does not anchor, and the line written on. close()
-    writes the last unterminated line. `quoted` and `missed` count."""
+# ------------------------------------------------------------ grounding
+# The law contracts 10 to 13 share: what a model says about a text is
+# checked against that text before the reader sees it. anchor() above is
+# the span level -- is this quote in the source. Ground is the unit level
+# -- is this whole note, question or claim worth printing; Gate is the
+# stream that drops the ones that are not, so a contract can refuse
+# instead of invent. The judge is one, so "grounded" means the same thing
+# in every contract that uses the word.
+GROUNDED, UNGROUNDED, UNQUOTED = "grounded", "ungrounded", "unquoted"
 
-    def __init__(self, stream, data):
-        self.stream, self.data = stream, data
-        self.folded = _fold(data)
-        self.buf = ""
-        self.quoted = self.missed = 0
 
-    def _mark(self, line):
+class Ground:
+    """One source text, a verdict per unit (a line, a note, a question):
+
+      GROUNDED    it quotes the source and at least one quote anchors
+      UNGROUNDED  it quotes and not one quote anchors -- fluent invention,
+                  the failure these contracts exist to make impossible
+      UNQUOTED    it quotes nothing, which only a contract can judge (a
+                  claim about a source must quote it; a question need not)
+
+    A unit with one good quote and one bad is GROUNDED, the bad one in
+    `misses`: it does point at the text, and mark() says which half to
+    distrust."""
+
+    def __init__(self, data):
+        self.data = data
+        self.folded = fold(data)
+
+    def verdict(self, unit):
+        """(GROUNDED | UNGROUNDED | UNQUOTED, [spans the source lacks])"""
+        spans = [q[0] for q in quotes(unit)]
+        if not spans:
+            return UNQUOTED, []
+        misses = [q for q in spans if not anchor(q, self.data, self.folded)]
+        return (UNGROUNDED if len(misses) == len(spans) else GROUNDED), misses
+
+    def mark(self, unit):
+        """`unit` with ANCHOR_MARK after every span the source does not
+        hold -- the marking rule, one unit at a time."""
         out, last = [], 0
-        for span, _start, end in quotes(line):
-            self.quoted += 1
+        for span, _start, end in quotes(unit):
             if not anchor(span, self.data, self.folded):
-                self.missed += 1
-                out.append(line[last:end] + ANCHOR_MARK)
+                out.append(unit[last:end] + ANCHOR_MARK)
                 last = end
-        out.append(line[last:])
+        out.append(unit[last:])
         return "".join(out)
+
+
+class Gate:
+    """A line-buffered filter between a model's stream and the reader: one
+    line is one unit, `keep(line, verdict, misses)` decides, and a line it
+    refuses never reaches the stream. What is kept is written marked, so
+    the quotes a reader does see are the ones that stood up. write(s) a
+    chunk at a time; close() flushes the last unterminated line (without a
+    newline, the way the model left it).
+
+    `quoted` and `missed` count spans, `kept` and `dropped` count units,
+    and `spoke` says the model wrote something at all: `spoke` with
+    `kept` 0 is the moment a contract says so in one line and stops --
+    and, because nothing was written, that line stands alone.
+
+    keep=None keeps every line and drops nothing: that is `Anchors`,
+    contract 10's marker, whose only job is to say which quotes to
+    trust."""
+
+    def __init__(self, stream, data, keep=None):
+        self.stream, self.data = stream, data
+        self.ground = Ground(data)
+        self.keep = keep
+        self.buf = ""
+        self.quoted = self.missed = self.kept = self.dropped = 0
+        self.spoke = False
+
+    def _unit(self, line, newline):
+        if line.strip():
+            self.spoke = True
+        if self.keep is not None:
+            if not line.strip():
+                return                      # a blank line is not a unit
+            verdict, misses = self.ground.verdict(line)
+            if not self.keep(line, verdict, misses):
+                self.dropped += 1
+                return
+            self.kept += 1
+        qs = quotes(line)
+        self.quoted += len(qs)
+        self.missed += sum(1 for q, _s, _e in qs if not anchor(q, self.data, self.ground.folded))
+        self.stream.write(self.ground.mark(line) + ("\n" if newline else ""))
 
     def write(self, s):
         self.buf += s
         while "\n" in self.buf:
             line, self.buf = self.buf.split("\n", 1)
-            self.stream.write(self._mark(line) + "\n")
+            self._unit(line, True)
         self.stream.flush()
 
     def flush(self):
@@ -282,6 +349,15 @@ class Anchors:
 
     def close(self):
         if self.buf:
-            self.stream.write(self._mark(self.buf))
-            self.buf = ""
+            line, self.buf = self.buf, ""
+            self._unit(line, False)
         self.stream.flush()
+
+
+class Anchors(Gate):
+    """Contract 10's stream: every line written on, every quoted span the
+    text does not hold followed by ANCHOR_MARK where it stands. `quoted`
+    and `missed` count."""
+
+    def __init__(self, stream, data):
+        Gate.__init__(self, stream, data, keep=None)
