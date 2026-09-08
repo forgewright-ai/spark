@@ -92,8 +92,8 @@ THE INTERFACE
 
 LESS OFTEN USED
   spark stats [--week]            tok/s, latency, cache hits, GPU, baseline
-  spark bench [--tune]            llama-bench; --tune finds the best settings
-  spark tune show | apply         the winner; apply writes spark.env, restarts
+  spark bench [tune]              llama-bench; tune finds the best settings
+  spark bench tune show | apply   the winner; apply writes spark.env, restarts
 
 LINUX
   systemctl --user status spark-serve spark-forge spark-check.timer

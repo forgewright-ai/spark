@@ -269,9 +269,3 @@ def listing(name=None, kind=KIND_EDIT, empty="no declined note (the pane: d on a
     for e in reversed(es):
         out.append("  %-5s %-*s %s" % (_age(e["ts"]), width, e["name"], e["note"][:60] + ("..." if len(e["note"]) > 60 else "")))
     return out
-
-
-def cmd_ledger(args):
-    # moved into the editor in v1.7: one line naming where it lives, no forwarding
-    say("%s ledger -- gone: in micro, at the spark> prompt: ledger, ledger clear" % MARK)
-    return 2

@@ -767,7 +767,8 @@ def main():
         rc, out, _ = spark("edit", "--ledger", "--name", "other.md")
         t.ok(rc == 0 and out.startswith("other.md: no declined note"), "edit --ledger --name: another file has none", out)
         rc, out, _ = spark("ledger")
-        t.ok(rc == 2 and out.startswith("spark ledger -- gone: in micro"), "spark ledger is gone: one line naming the prompt, exit 2", out)
+        t.ok(rc == 2 and "no command named ledger" in out,
+             "spark ledger is not a verb: the unknown-word line, exit 2", out)
         rc, out, _ = spark("edit", "--name", "t.md", "?", stdin="Some prose.\n")
         umsg = STATE["bodies"][-1]["messages"][-1]["content"]
         t.ok(rc == 0 and "\nDeclined before -- do not raise these again:\n- 3. the ending drags\n- 2. \"Some prose.\" reads flat -- cut it\nFile t.md:\n" in umsg,
@@ -793,8 +794,6 @@ def main():
         rc, out, _ = spark("edit", "--ledger", "clear")
         t.ok(rc == 0 and out.startswith("dropped ") and spark("edit", "--ledger")[1].startswith("no declined note"),
              "edit --ledger clear drops them all", out)
-        rc, out, _ = spark("ledger", "-h")
-        t.ok(rc == 2 and out.startswith("spark ledger -- gone"), "spark ledger -h says where it went", out)
         rc, out, _ = spark("edit", "--type", "python", "--about", "a poem", "tighten", stdin="x = 1\n")
         body = STATE["bodies"][-1]
         t.ok(body["messages"][-1]["content"].startswith("tighten\n\nThe author says: a poem\nText (python):\n"), "edit: --about rides above the label", repr(body["messages"][-1]["content"][:80]))

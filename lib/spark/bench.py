@@ -5,7 +5,7 @@
 #   spark bench              pp512 / tg128 -> the measured file's baseline
 #                            (the ember when one is served, else the spark model;
 #                            --spark / --ember pick a role by hand)
-#   spark bench --tune       a small matrix; the winner is kept for `spark tune apply`
+#   spark bench tune         a small matrix; the winner is kept for `spark bench tune apply`
 #   spark tune show|apply    see or take the winner (spark.env, then a restart)
 #
 # The server is paused while llama-bench runs: two processes fighting for
@@ -157,9 +157,9 @@ USAGE = """%s bench -- how fast is this machine, with llama-bench
   spark bench --spark      measure the spark role (the prompt line's model)
   spark bench --ember      measure the ember; an error when none is served
   spark bench --quick      smaller sizes, fewer repetitions
-  spark bench --tune       try GPU/CPU, flash attention, KV types, thread counts
-  spark tune show          the last --tune result against what runs now
-  spark tune apply         write the winner to spark.env and restart the server
+  spark bench tune         try GPU/CPU, flash attention, KV types, thread counts
+  spark bench tune show    the last tune's result against what runs now
+  spark bench tune apply   write the winner to spark.env and restart the server
 """ % MARK
 
 
@@ -296,7 +296,7 @@ def cmd_tune(args):
         return 0
     t = load_tune()
     if not t:
-        say("%s tune -- nothing measured yet -- spark bench --tune" % MARK)
+        say("%s bench tune -- nothing measured yet -- spark bench tune" % MARK)
         return 1
     cfg = config.load()
     cur = settings_of(cfg)
@@ -319,4 +319,13 @@ def cmd_tune(args):
 
 
 def main(sub, args):
-    return cmd_bench(args) if sub == "bench" else cmd_tune(args)
+    """`tune` is a sub-noun of bench, not a verb of its own: one thing the
+    tool does, reached one way (the grammar, rule 3). `spark bench tune`
+    measures, the way `spark bench` does; `show` and `apply` read the
+    result of the last one."""
+    if args and args[0] == "tune":
+        rest = args[1:]
+        if rest and rest[0] in ("show", "apply", "-h", "--help", "help"):
+            return cmd_tune(rest)
+        return cmd_bench(["--tune"] + rest)
+    return cmd_bench(args)

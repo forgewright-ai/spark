@@ -5,8 +5,8 @@
 # glob, models by sed over the four model lists; when any of that fails,
 # the static words still complete, silently. Binds no key of its own --
 # readline's TAB does the work.
-# Not completed on purpose (plumbing, gone, or aliases of ver):
-#   line ledger version --version
+# Not completed on purpose (plumbing, or aliases of ver):
+#   line version --version
 
 _spark_repo() {
     # ~/.local/bin/spark is a symlink to <repo>/bin/spark; print <repo>
@@ -46,7 +46,7 @@ _spark_complete() {
     COMPREPLY=()
     if [ "$COMP_CWORD" -eq 1 ]; then
         words="chat do serve check update shell headless client setup
-               ver last status brain history stats bench tune model ember
+               ver last status brain history stats bench model ember
                forge soul memory quiet theme font bar off
                on user explain edit ask help uninstall"
         COMPREPLY=($(compgen -W "$words" -- "$cur"))

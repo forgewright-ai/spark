@@ -710,20 +710,20 @@ def print_model_table(cfg):
         # speeds); else the rows alone, no verdict
         peer = peer_models(cfg)
         if peer:
-            say("%s model%sa client of %s -- the peer's table: %.0f GB for models, budget %.0f GB (%d%%), %s" % (
-                MARK, glyph("sep"), cfg.peer_ai_url, peer.get("total_gb", 0), peer.get("budget_gb", 0),
+            say("%s model -- a client of %s: the peer's table: %.0f GB for models, budget %.0f GB (%d%%), %s" % (
+                MARK, cfg.peer_ai_url, peer.get("total_gb", 0), peer.get("budget_gb", 0),
                 peer.get("budget_pct", 0), peer.get("backend", "?")))
             if peer.get("cap_note"):
                 say("  " + peer["cap_note"])
             rows = peer["models"]
         else:
-            say("%s model%sa client of %s -- nothing is served here; what fits is the peer's business (spark model there)" % (
-                MARK, glyph("sep"), cfg.peer_ai_url))
+            say("%s model -- a client of %s: nothing is served here; what fits is the peer's business (spark model there)" % (
+                MARK, cfg.peer_ai_url))
             rows = model_rows(cfg)
     else:
         budget = mem_total_gb() * cfg.ai_budget / 100.0
-        say("%s model%sSITE_AI_MODEL=%s SITE_EMBER_MODEL=%s%s%.0f GB for models (RAM + GPU), budget %.0f GB (%d%%), %s" % (
-            MARK, glyph("sep"), cfg.model_choice, cfg.ember_model, glyph("sep"), mem_total_gb(), budget, cfg.ai_budget, engine.backend(cfg)))
+        say("%s model -- SITE_AI_MODEL=%s SITE_EMBER_MODEL=%s%s%.0f GB for models (RAM + GPU), budget %.0f GB (%d%%), %s" % (
+            MARK, cfg.model_choice, cfg.ember_model, glyph("sep"), mem_total_gb(), budget, cfg.ai_budget, engine.backend(cfg)))
         note = engine.cap_note(cfg)
         if note:
             say("  " + note)
@@ -916,7 +916,7 @@ def cmd_model(args):
             if cfg.client:
                 return print_model_table(cfg)
             gb = mem_total_gb() * cfg.ai_budget / 100.0
-            say("%s model budget%s%d%% of %.0f GB = %.0f GB" % (MARK, glyph("sep"), cfg.ai_budget, mem_total_gb(), gb))
+            say("%s model budget -- %d%% of %.0f GB = %.0f GB" % (MARK, cfg.ai_budget, mem_total_gb(), gb))
             return print_model_table(cfg)
         if len(args) != 2 or not args[1].isdigit() or not 10 <= int(args[1]) <= 95:
             say(MODEL_USAGE.rstrip())
@@ -1004,7 +1004,7 @@ def cmd_ember(args):
         files = engine.roles(cfg)
         url = wire.serve_url()
         status = engine.models_status(cfg, url) if url and wire.health(url) == "ok" else {}
-        say("%s ember%sSITE_EMBER_MODEL=%s" % (MARK, glyph("sep"), cfg.ember_model))
+        say("%s ember -- SITE_EMBER_MODEL=%s" % (MARK, cfg.ember_model))
         for role in engine.ROLES:
             f, r = files[role], pair.get(role)
             if not f and not r:

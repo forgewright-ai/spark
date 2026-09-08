@@ -86,7 +86,7 @@ USAGE_SHELL_OFF = """the interface
 
 USAGE_TAIL = """less often used
  spark                        last, history [clear], stats [--week], brain,
-                              bench [--tune], tune [show|apply] -- each has -h
+                              bench [tune [show|apply]] -- each has -h
 
 version %s
 """
@@ -141,7 +141,7 @@ def main(argv):
 VERBS = {"setup": ("setup", "main", False), "check": ("check", "main", False),
          "ask": ("ask", "cmd_ask", False),
          "update": ("update", "cmd_update", False), "bar": ("bar", "main", False),
-         "theme": ("theme", "main", False), "bench": ("bench", "main", True), "tune": ("bench", "main", True),
+         "theme": ("theme", "main", False), "bench": ("bench", "main", True),
          "stats": ("stats", "main", False),
          "shell": ("site", "main", True), "font": ("site", "main", True), "quiet": ("site", "main", True),
          "model": ("site", "main", True), "headless": ("site", "main", True), "ember": ("site", "main", True),

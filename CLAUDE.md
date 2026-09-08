@@ -118,7 +118,7 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 own remedy heals it; a llama-server with a mood, as a
                 real process, so it can be killed mid-reply)
                 setup (spark setup: the guided first run)
-                stats (turns -> numbers) bench (llama-bench, --tune, tune apply)
+                stats (turns -> numbers) bench (llama-bench, bench tune [show|apply])
                 soul memory (the identity files)
                 text (the streams: wrap, fence, and the grounding law -- anchor,
                 Ground, Gate, shared by every contract that shows a text to a model)

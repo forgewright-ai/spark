@@ -32,6 +32,15 @@
   already there. The widget composes the new line too -- the fact `Esc
   s` offers to keep after a fix lands in your buffer as `spark memory
   add '...'`.
+- Three smaller harmonies. `tune` was a flag and a verb at once
+  (`spark bench --tune`, `spark tune show`); it is a sub-noun of the
+  thing it belongs to now -- `spark bench tune [show|apply]`. The
+  `spark ledger` tombstone from v1.7 is gone: it existed to tell people
+  where the ledger went, and there is nobody to tell yet. And the signed
+  first line uses one separator, `spark <verb> -- <one line>` as
+  contract 8 says; the glyph separator is for fields inside a line, not
+  for the signature, so `spark theme` and `spark model` no longer sign
+  differently from `spark shell` and `spark forge`.
 - A mode is named for what spark does. `ask` meant spark answering your
   question, which read backwards next to `spark ask`, where spark is the
   one asking: the mode is `answer` now, and contract 10's `edit-ask` is

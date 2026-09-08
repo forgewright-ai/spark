@@ -98,7 +98,7 @@ def read_back(path):
 
 def table(cfg):
     notes = {"none": "the terminal's own colours", "gruvbox-dark": "preferred: it matches the logo"}
-    say("%s theme%sSITE_THEME=%s" % (MARK, glyph("sep"), cfg.theme))
+    say("%s theme -- SITE_THEME=%s" % (MARK, cfg.theme))
     for p in ["none"] + palettes():
         note = notes.get(p, "yours: ~/.config/spark/themes/%s.env" % p if yours(p) else "")
         say("  %-18s %-34s %s" % (p, note, "current" if p == cfg.theme else ""))
@@ -107,7 +107,7 @@ def table(cfg):
 
 def show(cfg):
     pal = palette(cfg)
-    say("%s theme show%s%s" % (MARK, glyph("sep"), cfg.theme))
+    say("%s theme show -- %s" % (MARK, cfg.theme))
     if not pal:
         say("  SITE_THEME=none: the terminal keeps its own colours -- tmux and starship use named ones")
         return 0

@@ -45,7 +45,7 @@ _spark() {
     local -a comp
     if (( CURRENT == 2 )); then
         comp=(chat do serve check update shell headless client setup
-              ver last status brain history stats bench tune model ember
+              ver last status brain history stats bench model ember
               forge soul memory quiet theme font bar off
               on user explain edit ask help uninstall)
     elif (( CURRENT == 3 )); then

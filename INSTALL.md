@@ -273,8 +273,8 @@ Nothing under the cap fits: the smallest row that fits.
 
 Speed: `spark bench` measures with llama-bench (pp512 / tg128) and keeps
 the result as the file's baseline; the `throughput` check row warns when
-real turns fall below 70 percent of it. `spark bench --tune` tries GPU
-layers, flash attention, KV cache types and thread counts; `spark tune
+real turns fall below 70 percent of it. `spark bench tune` tries GPU
+layers, flash attention, KV cache types and thread counts; `spark bench tune
 apply` writes the winner to `spark.env` and restarts. `spark stats
 [--week]` sums up what real turns measured. The server keeps no prompt
 cache in RAM (`--cache-ram 0`: llama-server would otherwise keep up to
@@ -606,7 +606,7 @@ lists them all); the ones with a verb:
 | `SPARK_FORGE` | `auto`/`on`/`off`: serve the page and the API -- `spark forge on\|off` | `auto` |
 | `SPARK_FORGE_HOST` / `SPARK_FORGE_PORT` | the address and port (never `0.0.0.0`) | the LAN address / `8081` |
 | `SPARK_HISTORY` | days of turns and threads kept; `off` keeps none | `30` |
-| `SPARK_NGL` `SPARK_FLASH_ATTN` `SPARK_KV` `SPARK_THREADS` | the engine's tuning -- `spark tune apply` | auto |
+| `SPARK_NGL` `SPARK_FLASH_ATTN` `SPARK_KV` `SPARK_THREADS` | the engine's tuning -- `spark bench tune apply` | auto |
 | `SPARK_API_KEY_FILE` | a token file you already have | `~/.local/state/spark/api-token` |
 
 What needs root. `bootstrap.sh --dry-run` lists exactly which of these

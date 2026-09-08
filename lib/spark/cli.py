@@ -800,7 +800,7 @@ def cmd_do(args):
 COMMANDS = {
     "line": cmd_line, "last": cmd_last, "status": cmd_status, "brain": cmd_brain,
     "explain": cmd_explain, "edit": cmd_edit, "off": cmd_off, "on": cmd_on, "history": cmd_history,
-    "soul": cmd_soul, "memory": cmd_memory, "ledger": ledger.cmd_ledger,
+    "soul": cmd_soul, "memory": cmd_memory,
     "chat": cmd_chat, "do": cmd_do,
     "ver": cmd_ver, "version": cmd_ver, "--version": cmd_ver,
     "lua": cmd_lua,
