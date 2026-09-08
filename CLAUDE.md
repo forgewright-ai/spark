@@ -506,12 +506,20 @@ One grammar for every verb; a verb that breaks a rule is a bug.
    status-right runs `spark bar` and must always get the line, never a
    state change.
 2. `on|off` is the only switch vocabulary at the CLI (shell, bar,
-   headless, forge, quiet, memory). Stored values are storage, not
+   headless, serve, forge, quiet, memory) -- including the two servers,
+   which hold the same kind of state and so answer the same way; there
+   is no `start`/`stop` pair beside it, and `--force`/`--noreload` are
+   flags of `off`. Stored values are storage, not
    interface: `SITE_HEADLESS` and the `SITE_QUIET_*` keys stay `yes|no`
    in `site.env`; the verb translates. Choices keep their value grammars
-   (`theme NAME|none`, `model NAME|auto|none`, `client URL|off`).
+   (`theme NAME|none`, `model NAME|auto|none`, `client URL|off`). The
+   one carve-out is bare `spark off` / `spark on`, which silences and
+   restores the whole prompt: it is the global mute, and reads better
+   without a noun in front of it.
 3. `status` is an alias of bare for every stateful verb; `list` is the
-   table word (theme, model, ember, font).
+   table word (theme, model, ember, font). A noun keeps its own verbs as
+   sub-words rather than taking top-level ones: `spark soul edit|reset`,
+   `spark memory add|forget|clear`.
 4. Every verb answers `-h|--help|help` first -- before any gate or
    config read -- signed per contract 8.
 5. One confirm shape: `<question>? yes/NO: ` -- only `y` or `yes`
