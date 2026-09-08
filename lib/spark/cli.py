@@ -1,6 +1,6 @@
 # spark.cli -- the client subcommands: line (what the widgets call), ask,
 # explain, last, brain, status, off, on, history, and the thin dispatch to
-# soul / remember / forget / memory / chat / do (imported only when called).
+# soul / memory / chat / do (imported only when called).
 
 import os
 import re
@@ -777,16 +777,6 @@ def cmd_soul(args):
     return soul.cmd_soul(args)
 
 
-def cmd_remember(args):
-    from . import memory
-    return memory.cmd_remember(args)
-
-
-def cmd_forget(args):
-    from . import memory
-    return memory.cmd_forget(args)
-
-
 def cmd_memory(args):
     from . import memory
     return memory.cmd_memory(args)
@@ -810,7 +800,7 @@ def cmd_do(args):
 COMMANDS = {
     "line": cmd_line, "last": cmd_last, "status": cmd_status, "brain": cmd_brain,
     "explain": cmd_explain, "edit": cmd_edit, "off": cmd_off, "on": cmd_on, "history": cmd_history,
-    "soul": cmd_soul, "remember": cmd_remember, "forget": cmd_forget, "memory": cmd_memory, "ledger": ledger.cmd_ledger,
+    "soul": cmd_soul, "memory": cmd_memory, "ledger": ledger.cmd_ledger,
     "chat": cmd_chat, "do": cmd_do,
     "ver": cmd_ver, "version": cmd_ver, "--version": cmd_ver,
     "lua": cmd_lua,

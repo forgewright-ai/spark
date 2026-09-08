@@ -152,7 +152,7 @@ shell cannot host the widget (another shell, or macOS's bash 3.2):
    until you press Enter. A command that deletes or destroys (`rm`,
    `dd`, `mkfs`...) is never offered a re-run -- the line says so, and
    `? words` still answers about it. After the fix works, `Esc s` offers
-   to keep what happened as a `spark remember` fact -- edit the line,
+   to keep what happened as a `spark memory add` fact -- edit the line,
    then Enter. Only a command typed on one line is offered; Ctrl-C and
    a no-match from `grep` or `diff` stay quiet. The offer lives in the
    one pane it happened in and is gone with it.
@@ -200,7 +200,7 @@ shell cannot host the widget (another shell, or macOS's bash 3.2):
    invent a flag, a path, or a command.
    ```
 
-8. `spark remember <words>` adds a fact it keeps (`spark forget N` drops
+8. `spark memory add <words>` adds a fact it keeps (`spark memory forget N` drops
    one, `spark memory` lists them, `spark memory off` stops sending
    them; 40 facts of 200 characters). Soul and facts ride on every
    conversation, so a fact costs tokens every time: keep the ones that

@@ -473,7 +473,7 @@ def main(shell, widget):
         sh.expect(prompt)
         since = sh.mark()
         sh.send("\x1bs")
-        ok(sh.expect("spark remember"), "Esc s after the fix offers to keep it", since())
+        ok(sh.expect("spark memory add"), "Esc s after the fix offers to keep it", since())
         ok(sh.expect("failed until: mkdir fixed-dir"), "the fact records what the user did", since())
         sh.send("\x15")
         time.sleep(0.2)

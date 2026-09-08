@@ -4,7 +4,7 @@
 # pruning of turns. The pre-v1.4 plaintext ~/.config/spark/memory is
 # read as the fallback until the first write seals and removes it.
 #
-#   spark remember <words>     keep a fact
+#   spark memory add <words>   keep a fact
 #   spark forget N | <words>   drop one, by number or by substring
 #   spark memory               list them; on | off | clear
 
@@ -21,9 +21,9 @@ MEMORY_USAGE = """%s memory -- what it keeps
   spark memory                  the facts, numbered
   spark memory on | off         recall them on every answer, or not
   spark memory clear            forget them all
-  spark remember <words>        keep a fact (at most %d chars, %d facts)
-  spark forget N                drop fact N as listed above
-  spark forget <words>          drop the one fact containing the words
+  spark memory add <words>      keep a fact (at most %d chars, %d facts)
+  spark memory forget N         drop fact N as listed above
+  spark memory forget <words>   drop the one fact containing the words
 
   The file is ~/.config/spark/memory, one fact per line, # for comments.
   Quote a fact that carries ( ) * ? or | -- the shell eats them first.
@@ -242,6 +242,10 @@ def cmd_memory(args):
         site.set_keys(_file=SPARK_ENV, SPARK_MEMORY=args[0])
         _refresh()
         return 0
+    if args[0] == "add":
+        return cmd_remember(args[1:])
+    if args[0] == "forget":
+        return cmd_forget(args[1:])
     if args[0] == "clear":
         removed = False
         st = _store()

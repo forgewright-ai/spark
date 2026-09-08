@@ -7,7 +7,7 @@
 #   Esc s      asks about whatever line you are on, question mark or not.
 #              On an empty line after a failure it puts the failed command
 #              back, piped to explain; after the fix works, it offers to
-#              keep what happened (spark remember). You press Enter.
+#              keep what happened (spark memory add). You press Enter.
 #   * failed   a nonzero exit prints that one line above the next prompt.
 #              No model call, no fork, nothing written: the command you
 #              typed on one line and its exit code live in this pane's
@@ -180,7 +180,7 @@ _spark_failed() {
         if [[ $cmd == *"| explain"* || $cmd == *"|explain"* ]]; then
             _spark_explained=${_spark_fail:-$_spark_explained}   # the offer was taken
             _spark_fix=''
-        elif [[ $cmd == "spark remember"* ]]; then
+        elif [[ $cmd == "spark memory add"* ]]; then
             _spark_explained='' _spark_fix=''                    # the fact was kept
         elif [[ -n $_spark_explained && -z $_spark_fix ]]; then
             case " $_SPARK_LOOKING " in
@@ -235,7 +235,7 @@ bindkey '^J' spark-accept-line
 # On an empty line it serves the failure moment first: a pending failure
 # becomes `cmd 2>&1 | explain` in your line (the command and its exit
 # code ride along for that one run); a fix that just worked becomes a
-# `spark remember` line. Either way you press Enter.
+# `spark memory add` line. Either way you press Enter.
 spark-ask() {
     local fact
     if [[ -n $BUFFER ]]; then _spark_ask "$BUFFER"; return; fi
@@ -250,7 +250,7 @@ spark-ask() {
         _spark_say "$_spark_h Enter runs it: the failure, explained"
     elif [[ -n $_spark_fix ]]; then
         fact="$_spark_explained failed until: $_spark_fix"
-        BUFFER="spark remember ${(qq)fact}"
+        BUFFER="spark memory add ${(qq)fact}"
         CURSOR=$#BUFFER
         _spark_say "$_spark_h the fix, as a fact -- edit it, then Enter"
     else

@@ -24,6 +24,14 @@
   start|stop` are gone rather than kept as aliases: there is nobody to
   keep them for yet. The check rows that named the old verb name the
   new one, which `spark check --chaos` proves by running each remedy.
+- Memory lives under its own noun, like the soul. `spark remember
+  <words>` and `spark forget N` were top-level verbs while the other
+  half of the same identity was `spark soul edit|reset`: two shapes for
+  two halves of one thing. It is `spark memory add <words>` and `spark
+  memory forget N` now, beside the `on|off` and `clear` that were
+  already there. The widget composes the new line too -- the fact `Esc
+  s` offers to keep after a fix lands in your buffer as `spark memory
+  add '...'`.
 - A mode is named for what spark does. `ask` meant spark answering your
   question, which read backwards next to `spark ask`, where spark is the
   one asking: the mode is `answer` now, and contract 10's `edit-ask` is

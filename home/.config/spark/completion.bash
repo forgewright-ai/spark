@@ -47,7 +47,7 @@ _spark_complete() {
     if [ "$COMP_CWORD" -eq 1 ]; then
         words="chat do serve check update shell headless client setup
                ver last status brain history stats bench tune model ember
-               forge soul remember forget memory quiet theme font bar off
+               forge soul memory quiet theme font bar off
                on user explain edit ask help uninstall"
         COMPREPLY=($(compgen -W "$words" -- "$cur"))
         return 0
@@ -58,7 +58,8 @@ _spark_complete() {
         theme)   words="list show none status $(_spark_theme_names)" ;;
         model)   words="list verify budget rm add auto none status $(_spark_model_names)" ;;
         ember)   words="list auto none status $(_spark_model_names)" ;;
-        shell | bar | headless | forge | memory) words="on off status" ;;
+        shell | bar | headless | forge) words="on off status" ;;
+        memory)  words="add forget clear on off status" ;;
         check)   words="--watch --porcelain --selftest --fresh --fetch" ;;
         uninstall) words="--dry-run --yes --purge --packages --keep-packages" ;;
         serve)   words="on off status --foreground --host --print-client" ;;

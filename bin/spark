@@ -33,7 +33,7 @@ spark
  spark                        status: brain, widget, server, soul, memory, last
  spark off | on               silence / restore the widget, every pane at once
  spark soul [edit|reset]      who it is: ~/.config/spark/soul
- spark remember <words>       a fact it keeps; spark forget N; spark memory
+ spark memory add <words>     a fact it keeps; memory forget N; memory
  spark ver                    about, version, credits
  spark chat [words]           a conversation; /help lists its verbs, Ctrl-D ends
  spark [@FILE] <words>        ask about anything, or a file; a streamed answer
