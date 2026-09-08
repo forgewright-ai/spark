@@ -1,18 +1,17 @@
 # Roadmap
 
-What comes after v1.15, in the order it is likely to happen. Nothing here
+What comes after v1.16, in the order it is likely to happen. Nothing here
 is a promise; a row in `CHANGELOG.md` is. A better idea is an issue away.
 
 ## Chaos on a real box
 
-The hermetic half shipped: `spark check --chaos` rehearses nine failures
-against a throwaway machine. What a fixture cannot reach is left, and it
-is the maintainer's, by hand, as the WSL pass is:
+What a fixture cannot reach is the maintainer's, by hand, as the WSL
+pass is:
 
-- the server killed mid-reply -- the unit must bring it back (the stub
-  service manager here says `absent`, so only the `serve` row is proven)
-- a genuinely full disk -- the rehearsal fakes curl's write error; a
-  real ENOSPC on a real filesystem is the one that counts
+- the server killed mid-reply -- the unit must bring it back (the
+  fixture proves only the `serve` row)
+- a genuinely full disk -- a real ENOSPC on a real filesystem, not
+  curl's write error faked
 - the GPU taken away for real -- a card removed, not an empty sysfs
 - two machines, one FORGE: a peer that dies mid-answer for a client
 

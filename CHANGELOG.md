@@ -1,35 +1,27 @@
 # Changelog
 
-## v1.15
+## v1.16
 
 - `spark check --chaos` rehearses the failures: it breaks a throwaway
   machine one known way at a time and proves the right row says so and
   the remedy that row prints heals it. `--selftest` proves a row can
-  flip; `--chaos` proves the sentence under it is true. Nine scenarios
-  today -- a clone three tags behind, a truncated model file, a server
-  killed mid-reply, the GPU taken away, the LAN cut on a client, a
-  download that cannot be written, two `spark update` at once, two
-  `spark serve` at once, and a brain answering rubbish.
-- A reply cut off mid-stream is now an error, not half an answer. A
-  severed connection is not an end of stream: the read simply stops, so
-  a killed server handed back a truncated answer looking whole, and
-  exited 0. The caller now says the answer above is incomplete, and the
-  turn still lands: the question and the words that did arrive go on
-  the thread, the way they do when you press Ctrl-C or a client presses
-  stop. Without that, a server dying took the question with it and left
-  an empty thread behind.
-- A download that dies leaves nothing behind. `bootstrap.sh` removed
-  its partial file only on a sha256 mismatch; a curl that failed -- a
-  full disk, a cut LAN, a Ctrl-C -- left a `.part` on the disk that was
-  already full, and the next run orphaned another. `--fetch U D S` runs
-  the download primitive alone, so that failure can be rehearsed.
-- `spark update` takes a lock. Two at once could both fetch, both move
-  the tree, and one exec into a tree the other was moving; the second
-  now refuses in one line.
-- Both locks refuse in the same shape. `spark serve` said a lock it
-  could not take on stderr and exited 1, the code for a world that
-  failed; another process holding a lock is a gate refusal, so it is
-  signed on stdout and exits 2 now, the way `spark update` answers it.
+  flip; `--chaos` proves the sentence under it is true. Nine scenarios,
+  each on ports of its own, so a machine that is serving is left alone.
+- A reply cut off mid-stream is an error, not half an answer. A severed
+  connection is not an end of stream: the read simply stops, so a killed
+  server handed back a truncated answer looking whole, and exited 0. The
+  turn still lands -- the question and the words that did arrive go on
+  the thread, the way they do when you press Ctrl-C.
+- A download that dies leaves nothing behind. `bootstrap.sh` removed its
+  partial file only on a sha256 mismatch; a curl that failed left a
+  `.part` on the disk that was already full. `--fetch U D S` runs the
+  download primitive alone, so that failure can be rehearsed.
+- Two `spark update` at once: the second refuses rather than race the
+  first through a checkout. Both locks refuse alike now -- `spark serve`
+  said it on stderr and exited 1; a lock another process holds is a gate
+  refusal, so it is signed and exits 2.
+
+## v1.15
 
 - The failure moment: a command that exits nonzero prints one line above
   the next prompt -- `* failed (1) -- press Esc s to ask why` -- and
