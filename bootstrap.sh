@@ -8,6 +8,8 @@
 #   ./bootstrap.sh --list-packages one package per line, as this site wants them
 #   ./bootstrap.sh --list-tools    repo-path<TAB>name of every tool linked on PATH
 #   ./bootstrap.sh --list-models   the model table with a RAM verdict per row
+#   ./bootstrap.sh --fetch U D S   download U to D, verify sha256 S, or die
+#                                  cleanly (the download primitive, alone)
 #
 # Rows (contract 1):  ok | would | skip | todo   <what>   <why>
 #   ok     already true, or just applied        would   dry-run: would apply
@@ -18,11 +20,14 @@ REPO=$(cd "$(dirname "$0")" && pwd)
 OS=$(uname -s)
 ARCH=$(uname -m)
 MODE=apply
-usage() { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+usage() { sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 case ${1:-} in
     --dry-run) MODE=dry ;;
     --list-tools) printf 'bin/spark\tspark\nbin/explain\texplain\n'; exit 0 ;;
     --list-packages|--list-models) MODE=${1#--list-} ;;
+    # the download primitive on its own, so a failed download can be
+    # rehearsed (spark check --chaos) without a machine to bootstrap
+    --fetch) [ $# -eq 4 ] || usage 2; MODE=fetch; FETCH_ARGS_URL=$2; FETCH_ARGS_DEST=$3; FETCH_ARGS_SHA=$4 ;;
     -h|--help) usage ;;
     '') ;;
     *) usage 2 ;;
@@ -344,14 +349,23 @@ sha_ok() {   # sha_ok FILE SHA
 fetch() {   # fetch URL DEST SHA  -- download, verify, or die
     # at a terminal: name the file and let curl draw its progress bar
     # (a model is gigabytes -- minutes, not seconds); captured output
-    # (spark model/ember filtering, CI) stays quiet as before
+    # (spark model/ember filtering, CI) stays quiet as before.
+    # PARTIAL is what the EXIT trap removes: a download that dies -- a
+    # full disk, a cut LAN, a Ctrl-C, a bad sha -- leaves nothing behind,
+    # least of all on the disk that was already full.
+    PARTIAL=$2
     if [ -t 2 ]; then
         printf '       downloading %s\n' "${1##*/}"
-        curl -fL --retry 3 --progress-bar -o "$2" "$1"
+        curl -fL --retry 3 --progress-bar -o "$2" "$1" || fetch_died "$1"
     else
-        curl -fsSL --retry 3 -o "$2" "$1"
+        curl -fsSL --retry 3 -o "$2" "$1" || fetch_died "$1"
     fi
-    sha_ok "$2" "$3" || { rm -f "$2"; echo "bootstrap: sha256 mismatch for $1" >&2; exit 1; }
+    sha_ok "$2" "$3" || { echo "bootstrap: sha256 mismatch for $1" >&2; exit 1; }
+    PARTIAL=
+}
+fetch_died() {
+    echo "bootstrap: could not download $1 (nothing left behind)" >&2
+    exit 1
 }
 login_shell() {   # the login shell, as a path: $SHELL, else the passwd entry
     s=${SHELL:-}
@@ -363,7 +377,12 @@ login_shell() {   # the login shell, as a path: $SHELL, else the passwd entry
 }
 
 TMP=$(mktemp -d)
-trap 'rm -rf "$TMP"' EXIT
+PARTIAL=
+trap 'rm -rf "$TMP"; [ -z "$PARTIAL" ] || rm -f "$PARTIAL"' EXIT
+if [ "$MODE" = fetch ]; then
+    fetch "$FETCH_ARGS_URL" "$FETCH_ARGS_DEST" "$FETCH_ARGS_SHA"
+    exit 0
+fi
 printf 'spark bootstrap | %s %s | %s\n' "$OS" "$ARCH" "$MODE"
 
 # =============================================================== 1. site

@@ -42,8 +42,8 @@ class Scenario:
 SCENARIOS = []
 
 
-def scenario(row, expect, want="", heal="remedy", healed=OK, unhealed="",
-             mood="ok", real=False):
+def scenario(row=None, expect=None, want="", heal="remedy", healed=OK,
+             unhealed="", mood="ok", real=False):
     """Register one rehearsed failure. `row` is the check row that must
     notice it, `expect` the status it must reach (WARN for a CAPABILITY
     row, which never fails; NA where the truth is "the world stopped
@@ -55,6 +55,7 @@ def scenario(row, expect, want="", heal="remedy", healed=OK, unhealed="",
     the remedy's promise is to forget a thing, not to bring it back).
     `mood` is the brain this machine gets."""
     assert heal or unhealed, "a scenario with no heal must say why"
+    assert row or unhealed, "a scenario with no row must say what it proves"
     def deco(fn):
         SCENARIOS.append(Scenario(fn.__name__[6:].replace("_", "-"), row, expect,
                                   want, heal, healed, unhealed, mood, real, fn))
@@ -88,6 +89,9 @@ class Machine:
         self.models = os.path.join(self.home, ".local", "share", "spark", "models")
         self.brain = None
         self.notes = []
+
+    def short(self, path):
+        return "~" + path[len(self.home):] if path.startswith(self.home + "/") else path
 
     def note(self, s):
         """One line the report prints under the scenario: what the break
@@ -389,6 +393,79 @@ def chaos_lan_cut_on_a_client(m):
     return ""
 
 
+@scenario(heal=None, unhealed="a download that dies must leave nothing "
+                              "behind, least of all on a full disk")
+def chaos_full_disk_download(m):
+    """A download that cannot be written: bootstrap refuses cleanly, and
+    no .part file is left on the disk that was already full."""
+    # a curl that writes a little and then fails the way a full disk
+    # fails it (23: a write error), so the real fetch() is under test
+    with open(os.path.join(m.bin, "curl"), "w", encoding="utf-8") as f:
+        f.write("#!/bin/sh\n# a curl on a full disk: some bytes, then no more\n"
+                "for a in \"$@\"; do [ \"$prev\" = -o ] && out=$a; prev=$a; done\n"
+                "[ -z \"${out:-}\" ] || printf 'half a model' > \"$out\"\n"
+                "echo 'curl: (23) Failure writing output to destination' >&2\n"
+                "exit 23\n")
+    os.chmod(os.path.join(m.bin, "curl"), 0o755)
+    dest = os.path.join(m.models, "chaos.gguf.part")
+    rc, out = m.sh("sh %s --fetch https://models.invalid/chaos.gguf %s %s"
+                   % (os.path.join(REPO, "bootstrap.sh"), dest, "0" * 64))
+    if rc == 0:
+        return "the download exited 0 though curl failed"
+    left = sorted(f for f in os.listdir(m.models) if f.endswith(".part"))
+    if left:
+        return "a partial file survived a failed download: %s" % ", ".join(left)
+    m.note("bootstrap exits %d: %s" % (rc, _fit(" ".join(out.split()), 60)))
+    m.note("no .part left in %s" % m.short(m.models))
+    return ""
+
+
+@scenario(heal=None, unhealed="two updates at once must not both move the "
+                              "tree: the lock decides which one does")
+def chaos_two_updates_at_once(m):
+    """Two `spark update` at once: the second refuses in one signed line
+    rather than racing the first through a checkout."""
+    import fcntl
+    from .update import UPDATE_LOCK
+    path = os.path.join(m.state, os.path.basename(UPDATE_LOCK))
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        rc, out = m.spark("update")
+    finally:
+        os.close(fd)
+    if rc != 2:
+        return "the second update exited %d, not 2 (a refusal): %r" % (rc, out.strip()[-200:])
+    if "another spark update" not in out:
+        return "the refusal does not say why: %r" % out.strip()[-200:]
+    m.note("the second update refuses: %s" % _fit(" ".join(out.split()), 60))
+    return ""
+
+
+@scenario(heal=None, unhealed="two servers at once must not race for the "
+                              "port: the lock decides which one starts")
+def chaos_two_serves_at_once(m):
+    """Two `spark serve` at once: the second refuses instead of racing
+    the first for the port."""
+    import fcntl
+    from . import LOCK_FILE
+    m.brain.kill()              # nothing is serving: the start is real
+    path = os.path.join(m.state, os.path.basename(LOCK_FILE))
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        rc, out = m.spark("serve")
+    finally:
+        os.close(fd)
+    if rc == 0:
+        return "the second serve exited 0: %r" % out.strip()[-200:]
+    if "another" not in out:
+        return "the refusal does not say why: %r" % out.strip()[-300:]
+    m.note("the second serve refuses (exit %d): %s"
+           % (rc, _fit(" ".join(out.split()), 60)))
+    return ""
+
+
 # ---------------------------------------------------------------- runner
 def _command_of(remedy):
     """The runnable half of a remedy. Rows end a remedy with an aside --
@@ -412,6 +489,10 @@ def _judge(m, sc):
     why = sc.fn(m)
     if why:
         return False, ["the break did not take: " + why]
+    if sc.row is None:
+        # no row watches this one: what the break itself proved is the
+        # whole rehearsal, and it says so rather than implying a row
+        return True, m.notes + ["no row watches this: " + sc.unhealed]
     status, value, remedy = m.row(sc.row)
     if status != sc.expect:
         return False, ["%s is %s, not %s: %s" % (sc.row, status, sc.expect, value)]

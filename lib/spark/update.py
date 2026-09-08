@@ -4,10 +4,13 @@
 # The converge runs in a fresh exec of the NEW tree: this process was
 # imported from the old one, and mixing the two ends in ImportError.
 
+import fcntl
 import os
 import sys
 
-from . import MARK, REPO, run, say
+from . import MARK, REPO, STATE_DIR, run, say, state_dir
+
+UPDATE_LOCK = os.path.join(STATE_DIR, "update.lock")
 
 USAGE = """%s update -- move this checkout to the newest tag or main, then converge
 
@@ -19,6 +22,21 @@ USAGE = """%s update -- move this checkout to the newest tag or main, then conve
 
 def _git(args, timeout=15):
     return run(["git", "-C", REPO] + list(args), timeout=timeout)
+
+
+def _lock():
+    """Take the update lock, or None when another update holds it. The
+    lock covers the half that cannot be run twice -- the fetch and the
+    move -- and is dropped before the converge exec: two bootstraps at
+    once are idempotent, two checkouts of the same tree are not."""
+    state_dir()
+    fd = os.open(UPDATE_LOCK, os.O_WRONLY | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        os.close(fd)
+        return None
+    return fd
 
 
 def cmd_update(args):
@@ -37,6 +55,11 @@ def cmd_update(args):
         say("spark update: no option %s -- spark update -h" % a)
         return 2
     moved = False
+
+    lock = None if dry else _lock()
+    if not dry and lock is None:
+        say("%s update -- another spark update is running (%s)" % (MARK, UPDATE_LOCK))
+        return 2
 
     rc, out = _git(["status", "--porcelain"])
     if rc != 0:
@@ -102,6 +125,9 @@ def cmd_update(args):
 
     if dry:
         return 0
+    # the move is done: the converge is idempotent, and holding a lock
+    # across an exec only leaks it into bootstrap's own children
+    os.close(lock)
     if moved:
         os.execv(sys.executable, [sys.executable, os.path.join(REPO, "bin", "spark"),
                                   "update", "--converge"])
