@@ -2,11 +2,13 @@
 
 ## v1.15
 
-- vim, helix and nano are spark apps with no plugin: their own filter
-  (`:'<,'>!`, `|`, `^T |`) pipes the selection through `spark edit` and
-  takes the answer back. Doc rows in the README, INSTALL section 6, the
-  cheatsheet and `spark edit -h`; a filter cannot complete at the cursor,
-  a plugin can.
+- Five spark apps: spark-neovim and spark-vim join spark-micro with the
+  whole prompt (one clone, one mapping: complete at the cursor, rewrite,
+  ask in a pane, the ledger); spark-helix and spark-nano put `spark
+  edit ` on the editor's own prompt instead -- helix and nano have no
+  cursor hook, so words rewrite or ask, and nothing completes. Each in
+  its own repository, proven by its own pty test; any editor's filter
+  is still a client with no plugin at all (INSTALL section 6).
 - The page front redesigned for onboarding: three stages (choose your
   OS with a picker, spark is live, spark apps), a light theme with a
   toggle, and a table of contents on the long pages. Every command on

@@ -79,8 +79,9 @@ one project differently, both names are here.
 ## Shell tools (apt or pacman / Homebrew, `spark shell on`)
 
 The shell layer's, installed from apt's, pacman's or Homebrew's own
-repositories, unpinned. No editor is among them: an app's plugin is its own repository
-(micro: github.com/forgewright-ai/spark-micro, with its own credits).
+repositories, unpinned. No editor is among them: an app's plugin is its
+own repository with its own credits (github.com/forgewright-ai/<name> --
+spark-micro, spark-neovim, spark-vim, spark-helix, spark-nano).
 
 - bash -- GPL-3.0-or-later
 - tmux -- ISC

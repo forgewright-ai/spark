@@ -571,7 +571,12 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   is the first client, forgewright-ai/spark-micro: it spawns `spark edit`
   with the text on stdin and streams the answer back, never speaks HTTP,
   never sees a token, never sends a path; its pty test, its `Alt-s` line
-  and its README are its own. The known clients are listed in README
+  and its README are its own. Five clients today, two shapes: a full
+  plugin (micro, neovim, vim) carries the whole prompt and completes at
+  the cursor; a prompt plugin (helix, nano -- editors with no cursor
+  hook) pre-fills the editor's own prompt with `spark edit `, proven the
+  same way, by a pty test whose config is the shipped snippet itself.
+  The known clients are listed in README
   ("spark apps"), INSTALL section 6, CHEATSHEET and the page front --
   docs_test looks every `spark-<app>` the README names up in the other
   three; a new one is one line in each. A pull

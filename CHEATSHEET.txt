@@ -69,10 +69,11 @@ SPARK APPS (a tool that is a client of spark edit; spark installs none)
   micro pane: q closes  Enter=go to quote  a=apply code  d=decline  ??=go on
          ledger [clear] at spark>   the notes declined for this file
          setlocal spark.about "a poem"   tell it, when it should not guess
-  vim:   :'<,'>!spark edit fix the spelling   :'<,'>w !spark edit \? is it clear
-  helix: |spark edit fix the spelling         |spark edit ? is it clear
-  nano:  ^T |spark edit fix the spelling      (the marked text, else the file)
-         a filter rewrites and asks; to complete at the cursor, a plugin
+  neovim: github.com/forgewright-ai/spark-neovim  the same prompt, one map
+  vim:    github.com/forgewright-ai/spark-vim     the same prompt, one map
+  helix:  github.com/forgewright-ai/spark-helix   A-s: the prompt pre-filled
+  nano:   github.com/forgewright-ai/spark-nano    M-S: the prompt pre-filled
+  any editor's filter is a client too (INSTALL 6); to complete, a plugin
 
 THE INTERFACE
   spark shell [on|off]            spark's own shell for an AI box: tmux,

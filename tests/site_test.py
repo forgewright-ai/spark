@@ -88,7 +88,11 @@ def main():
                if re.match(r'^MODEL_[A-Z0-9_]+="', l) and not re.match(r'^MODEL_[A-Z0-9_]+_(LICENSE|NOTE|TESTED)=', l))
     check(pages["models"].count("<tr>") == rows + 1, "models: every row of models.env is on the page (%d)" % rows)
     check("banner.svg" in pages[""] and 'id="ol"' in pages[""], "index: the banner and the one-liner")
-    check("spark chat" in pages[""] and "spark-micro" in pages[""], "index: spark chat, the prompt line and one spark app (spark-micro)")
+    check("spark chat" in pages[""], "index: spark chat and the prompt line")
+    apps = sorted(set(re.findall(r"github\.com/forgewright-ai/(spark-[a-z0-9]+)",
+                                 read(os.path.join(ROOT, "README.md")))))
+    for app in apps:
+        check(app in pages[""], "index: the front names %s (the README does)" % app)
     check("spark shell" not in pages[""], "index: the front is spark and spark apps; the shell layer is INSTALL.md's")
     # the front's stages: an OS panel each, and every marked command is a
     # line the docs have (the front never teaches what a doc does not)

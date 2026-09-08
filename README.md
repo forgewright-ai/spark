@@ -73,7 +73,9 @@ and your editor stay yours. `INSTALL.md` has every step and every key.
 ## spark apps
 
 A tool becomes smart as a client of one command, `spark edit`: text in
-on stdin, text out, never a path. micro is first:
+on stdin, text out, never a path. Five editors have a plugin today, each
+in its own `spark-<app>` repository, installed the app's way; spark
+ships no app. micro is first:
 
 ```sh
 git clone https://github.com/forgewright-ai/spark-micro ~/.config/micro/plug/spark
@@ -81,13 +83,14 @@ git clone https://github.com/forgewright-ai/spark-micro ~/.config/micro/plug/spa
 
 plus one line in `~/.config/micro/bindings.json`: `"Alt-s": "lua:spark.prompt"`.
 Then `Alt-s` (Option-s on a Mac): Enter completes at the cursor, words
-rewrite, `?` asks in a pane. neovim is next. Each app lives in its own
-`spark-<app>` repository and installs the app's way; spark ships no app.
-
-vim, helix and nano need no plugin: their own filter pipes the selection
-through `spark edit fix the spelling` and takes the answer back (INSTALL
-section 6 has the three lines). A filter cannot complete at the cursor;
-a plugin can.
+rewrite, `?` asks in a pane. neovim and vim carry the same prompt under
+one key of your own -- https://github.com/forgewright-ai/spark-neovim
+and https://github.com/forgewright-ai/spark-vim. helix and nano cannot
+hook the cursor, so their plugins put `spark edit ` on the editor's own
+prompt instead -- https://github.com/forgewright-ai/spark-helix and
+https://github.com/forgewright-ai/spark-nano: add words, press Enter,
+and the text is rewritten or asked about. INSTALL section 6 has each
+app's lines; an editor with a filter is a client with no plugin at all.
 
 When apps need more than text, another contract is defined -- e-mail,
 for example -- and apps connect to it the same way.

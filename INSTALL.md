@@ -340,7 +340,7 @@ spark edit fix grammar < draft.md
 ```
 
 spark ships no app. Each app's plugin lives in its own repository and
-installs the app's way. micro is first:
+installs the app's way; five editors have one today. micro is first:
 
 1. Clone the plugin:
 
@@ -358,18 +358,66 @@ installs the app's way. micro is first:
    spark.about "a novel chapter"` tells spark what a buffer is; `git -C
    ~/.config/micro/plug/spark pull` updates it.
 
-No plugin needed: an editor with a filter is a client already. The
-selection goes through `spark edit`, the whole file when nothing is
-selected:
+neovim and vim carry micro's whole prompt -- `spark> `, the pane and its
+keys, the ledger, the splice safety -- one clone and one mapping each
+(each README says the rest, `:help spark` inside the editor too):
+
+- neovim (0.9 or newer):
+
+  ```sh
+  git clone https://github.com/forgewright-ai/spark-neovim ~/.config/nvim/pack/spark/start/spark
+  ```
+
+  and one line in `init.lua`:
+  `vim.keymap.set({ "n", "x" }, "<M-s>", function() require("spark").prompt() end)`.
+
+- vim (8.2 or newer, the usual huge build):
+
+  ```sh
+  git clone https://github.com/forgewright-ai/spark-vim ~/.vim/pack/spark/start/spark
+  ```
+
+  and three lines in `~/.vimrc` (the first teaches terminal vim the key):
+  `execute "set <M-s>=\es"`, `nnoremap <M-s> :call spark#prompt(0)<CR>`,
+  `xnoremap <M-s> :<C-u>call spark#prompt(1)<CR>`.
+
+helix and nano have no cursor hook: their plugins put `spark edit ` on
+the editor's own prompt -- add words, press Enter; no completion there.
+One clone each, and the snippet's comment block is the help:
+
+- helix (25.01 or newer):
+
+  ```sh
+  git clone https://github.com/forgewright-ai/spark-helix ~/.config/helix/spark
+  ```
+
+  then paste `spark.toml`'s two key blocks into `config.toml`
+  (`:config-open`, paste, `:config-reload`). `A-s r` rewrites the file,
+  `A-s s` the selection, `A-s a` asks (`u` removes the answer), `A-s f`
+  fixes spelling in one keystroke.
+
+- nano (GNU nano 5.4 or newer):
+
+  ```sh
+  git clone https://github.com/forgewright-ai/spark-nano ~/.config/nano/spark
+  cat ~/.config/nano/spark/spark.nanorc >> ~/.nanorc
+  ```
+
+  `M-S words` rewrites the file or the marked region (`M-U` undoes),
+  `M-F` fixes spelling in one keystroke.
+
+No plugin at all still works: an editor with a filter is a client
+already. The selection goes through `spark edit`, the whole file when
+nothing is selected:
 
 | editor | rewrite the selection | ask about it |
 |---|---|---|
-| vim (neovim too) | `:'<,'>!spark edit fix the spelling` | `:'<,'>w !spark edit \? is this clear` (`\?`: vim hands the line to your shell, and zsh reads a bare `?` as a pattern) |
+| vim | `:'<,'>!spark edit fix the spelling` | `:'<,'>w !spark edit \? is this clear` (`\?`: vim hands the line to your shell, and zsh reads a bare `?` as a pattern) |
 | helix | `\|spark edit fix the spelling` | `\|spark edit ? is this clear`; the answer replaces the selection, `u` takes it back |
 | nano | mark, `^T`, `\|spark edit fix the spelling` | `^T`, `\|spark edit ? is this clear`; the answer replaces the mark, `M-U` takes it back |
 
-A filter cannot complete at the cursor: that needs a plugin, and micro's
-is above.
+A filter cannot complete at the cursor: that needs a plugin -- micro's,
+neovim's and vim's complete; helix's and nano's pre-fill the prompt.
 
 Coming from spark v1.9, where the plugin came with spark: `spark update`
 hands the old links back (the `micro` row says so), then clone as above.
@@ -619,7 +667,7 @@ own config on exit; those are rendered once as regular files:
 your shell                    this machine                        the LAN
 ----------                    ------------                        -------
 ? words ---- widget -------> spark line ---+
-micro Alt-s - spark-micro -> spark edit ---+
+an app's key - spark-<app> -> spark edit --+
 spark chat | do | explain -> spark <verb> -+-> spark's server :8081 --> another
                                            |   soul, memory, threads;    machine's
                                            |   /v1 and /api; the page    spark, a
@@ -632,7 +680,7 @@ spark chat | do | explain -> spark <verb> -+-> spark's server :8081 --> another
 get -> spark setup -> bootstrap.sh (apply) -> install.sh (links, renders)
                       the engine, the model, the token, the units, one rc
                       line; spark shell on adds spark's shell; a spark app
-                      is its own repository (spark-micro)
+                      is its own repository (spark-<app>: five today)
 
 spark check   38 rows: every promise the machine makes, fixture-tested
 spark update  the newest tag, or main on a developer clone; converge
