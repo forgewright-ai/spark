@@ -21,7 +21,8 @@ Brain = collections.namedtuple("Brain", "url model forge")
 
 
 class BrainError(Exception):
-    """kind: down | loading | auth | bad | timeout ; hint: one line for a human"""
+    """kind: down | loading | auth | bad | timeout | cut ; hint: one line
+    for a human"""
 
     def __init__(self, kind, hint):
         super().__init__(hint)
@@ -389,7 +390,7 @@ def chat_stream(cfg, url, messages, on_delta, max_tokens=600, temperature=0.3, f
             "stream": True, "cache_prompt": True}
     if model is not None:
         body["model"] = model
-    out, timings = [], {}
+    out, timings, done = [], {}, False
     with _post(cfg, url, body, timeout or cfg.timeout, stream=True, forge=forge) as r:
         for raw in r:
             line = raw.decode("utf-8", errors="replace").strip()
@@ -397,6 +398,7 @@ def chat_stream(cfg, url, messages, on_delta, max_tokens=600, temperature=0.3, f
                 continue
             payload = line[5:].strip()
             if payload == "[DONE]":
+                done = True
                 break
             try:
                 chunk = json.loads(payload)
@@ -411,4 +413,11 @@ def chat_stream(cfg, url, messages, on_delta, max_tokens=600, temperature=0.3, f
             if delta:
                 out.append(delta)
                 on_delta(delta)
+    if not done:
+        # a severed connection is not an end of stream: readline() answers
+        # b"" and the loop simply stops, so half an answer would come back
+        # looking whole. Every server spark talks to (llama-server, and a
+        # FORGE proxying its bytes) closes with [DONE]; its absence means
+        # the reply was cut off, and the caller must say so.
+        raise BrainError("cut", "%s stopped mid-reply -- the answer above is incomplete" % url)
     return "".join(out), timings

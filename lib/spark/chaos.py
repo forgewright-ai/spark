@@ -18,6 +18,7 @@
 # says so and is skipped unless --real.
 
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -28,30 +29,35 @@ from .check import FAIL, GLYPH, NA, OK, WARN
 
 
 class Scenario:
-    __slots__ = ("name", "row", "expect", "want", "heal", "unhealed", "real", "fn", "doc")
+    __slots__ = ("name", "row", "expect", "want", "heal", "healed", "unhealed",
+                 "mood", "real", "fn", "doc")
 
-    def __init__(self, name, row, expect, want, heal, unhealed, real, fn):
+    def __init__(self, name, row, expect, want, heal, healed, unhealed, mood, real, fn):
         self.name, self.row, self.expect = name, row, expect
-        self.want, self.heal, self.unhealed = want, heal, unhealed
-        self.real, self.fn = real, fn
+        self.want, self.heal, self.healed, self.unhealed = want, heal, healed, unhealed
+        self.mood, self.real, self.fn = mood, real, fn
         self.doc = " ".join((fn.__doc__ or "").split())
 
 
 SCENARIOS = []
 
 
-def scenario(row, expect, want="", heal="remedy", unhealed="", real=False):
+def scenario(row, expect, want="", heal="remedy", healed=OK, unhealed="",
+             mood="ok", real=False):
     """Register one rehearsed failure. `row` is the check row that must
     notice it, `expect` the status it must reach (WARN for a CAPABILITY
     row, which never fails; NA where the truth is "the world stopped
     offering this"), `want` a substring its value must carry. `heal` is
     the literal string "remedy" (run what the row itself printed), a
     command, or None -- and None must say in `unhealed` why nothing here
-    can run the remedy, so an unrehearsed half is visible, not silent."""
+    can run the remedy, so an unrehearsed half is visible, not silent.
+    `healed` is the status the row must reach after it (OK, or NA where
+    the remedy's promise is to forget a thing, not to bring it back).
+    `mood` is the brain this machine gets."""
     assert heal or unhealed, "a scenario with no heal must say why"
     def deco(fn):
-        SCENARIOS.append(Scenario(fn.__name__[6:].replace("_", "-"), row,
-                                  expect, want, heal, unhealed, real, fn))
+        SCENARIOS.append(Scenario(fn.__name__[6:].replace("_", "-"), row, expect,
+                                  want, heal, healed, unhealed, mood, real, fn))
         return fn
     return deco
 
@@ -80,6 +86,7 @@ class Machine:
         self.cfg = os.path.join(self.home, ".config", "spark")
         self.state = os.path.join(self.home, ".local", "state", "spark")
         self.models = os.path.join(self.home, ".local", "share", "spark", "models")
+        self.brain = None
         self.notes = []
 
     def note(self, s):
@@ -90,17 +97,17 @@ class Machine:
     def spark(self, *args, **kw):
         """Run the real spark against this machine. (rc, output)."""
         argv = [sys.executable, os.path.join(REPO, "bin", "spark")] + list(args)
-        return self._run(argv, kw.get("timeout", 120))
+        return self._run(argv, kw.get("timeout", 120), stdin=kw.get("stdin"))
 
     def sh(self, cmd, timeout=120):
         """Run a shell command against this machine -- a remedy, verbatim
         as the row printed it. (rc, output)."""
         return self._run(["sh", "-c", cmd], timeout, cwd=self.repo)
 
-    def _run(self, argv, timeout, cwd=None):
+    def _run(self, argv, timeout, cwd=None, stdin=None):
         try:
-            p = subprocess.run(argv, env=self.env, cwd=cwd, capture_output=True,
-                               text=True, timeout=timeout)
+            p = subprocess.run(argv, env=self.env, cwd=cwd, input=stdin or "",
+                               capture_output=True, text=True, timeout=timeout)
         except subprocess.TimeoutExpired:
             return 124, "timed out after %ss" % timeout
         return p.returncode, p.stdout + p.stderr
@@ -128,6 +135,168 @@ class Machine:
             if rc != 0:
                 return "git %s: %s" % (args[0], out.strip()[-200:])
         return ""
+
+
+
+# --------------------------------------------------------------- the brain
+# A llama-server with a mood. The stub check's fixture carries answers
+# GET only; a rehearsed failure needs a brain that can be slow, hang,
+# cut a reply in half, answer rubbish -- and be killed mid-reply, which
+# an in-process thread cannot be. So: a real process, on loopback.
+BRAIN = r'''#!/usr/bin/env python3
+import json, os, sys, time
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+MOOD = os.environ.get("MOOD", "ok")
+# the fixture holds two: the api-token a llama-server wants and the
+# forge-token a FORGE wants. This brain answers to both -- which one
+# the client picks is the client's business, not the rehearsal's.
+TOKENS = [t for t in os.environ.get("BRAIN_TOKENS", "").split(",") if t]
+PORT = int(os.environ["BRAIN_PORT"])
+LINE = {"kind": "cmd", "command": "echo rehearsed", "hint": "a rehearsed answer", "danger": False}
+MODELS = {"data": [{"id": "fixture.gguf", "aliases": ["spark"], "status": {"value": "loaded"}},
+                   {"id": "fixture-ember.gguf", "aliases": ["ember"], "status": {"value": "loaded"}}]}
+seen = [0]
+
+
+class H(BaseHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
+    def log_message(self, *a):
+        pass
+
+    def _send(self, code, body, ctype="application/json"):
+        self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _authed(self):
+        if not TOKENS:
+            return True
+        return self.headers.get("Authorization") in ["Bearer " + t for t in TOKENS]
+
+    def do_GET(self):
+        if MOOD == "blackhole":                 # the LAN, cut: nothing comes back
+            time.sleep(600)
+            return
+        if self.path == "/health":
+            if MOOD == "loading":
+                return self._send(503, b'{"status":"loading model"}')
+            return self._send(200, b'{"status":"ok"}')
+        if self.path == "/api/health":
+            return self._send(200, json.dumps(
+                {"status": "ok", "forge": True, "name": "chaos", "version": "0",
+                 "model": "fixture.gguf", "upstream": "ok",
+                 "models": {"spark": "loaded"}, "roles": {"spark": "fixture"}}).encode())
+        if self.path.startswith("/v1/models") or self.path.startswith("/api/models"):
+            if not self._authed():
+                return self._send(401, b"{}")
+            return self._send(200, json.dumps(MODELS).encode())
+        self._send(404, b"{}")
+
+    def do_POST(self):
+        n = int(self.headers.get("Content-Length") or 0)
+        try:
+            body = json.loads(self.rfile.read(n) or b"{}")
+        except ValueError:
+            body = {}
+        if not self._authed():
+            return self._send(401, b"{}")
+        if MOOD in ("hang", "blackhole"):       # accepts, and never answers
+            time.sleep(600)
+            return
+        if MOOD == "slow":
+            time.sleep(float(os.environ.get("BRAIN_SLOW", "3")))
+        stream = bool(body.get("stream"))
+        if MOOD == "cut":                       # half a reply, then the wire dies
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream" if stream else "application/json")
+            self.send_header("Content-Length", "40000")
+            self.end_headers()
+            half = (b'data: {"choices":[{"delta":{"content":"half an "}}]}\n\n'
+                    if stream else b'{"choices":[{"message":{"content":"{\"kind\"')
+            self.wfile.write(half)
+            self.wfile.flush()
+            self.close_connection = True
+            return
+        seen[0] += 1
+        if MOOD == "garbage":                   # not JSON, then empty, then 40 kB
+            content = ["a model that answers in prose, not JSON", "", "x" * 40000][(seen[0] - 1) % 3]
+        else:
+            content = json.dumps(LINE)
+        if stream:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.end_headers()
+            for piece in (content[i:i + 400] for i in range(0, max(len(content), 1), 400)):
+                self.wfile.write(b"data: " + json.dumps(
+                    {"choices": [{"delta": {"content": piece}}]}).encode() + b"\n\n")
+            self.wfile.write(b"data: [DONE]\n\n")
+            self.wfile.flush()
+            self.close_connection = True
+            return
+        self._send(200, json.dumps({"choices": [{"message": {"content": content}}],
+                                    "timings": {"predicted_per_second": 12.0}}).encode())
+
+
+HTTPServer(("127.0.0.1", PORT), H).serve_forever()
+'''
+
+
+def _free_port():
+    import socket
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    s.close()
+    return port
+
+
+class Brain:
+    """The moody llama-server, as a real process: startable, killable."""
+
+    # the three the fixture holds: the api-token (a llama-server), the
+    # forge-token (a FORGE, admin) and the box account's own login --
+    # which of them a client sends is the client's business, not the
+    # rehearsal's, so this brain answers to all three
+    TOKENS = "stub-token,stub-forge-token,fixture-token"
+
+    def __init__(self, root, mood="ok", tokens=TOKENS):
+        path = os.path.join(root, "brain.py")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(BRAIN)
+        self.port = _free_port()
+        self.url = "http://127.0.0.1:%d" % self.port
+        self.mood = mood
+        env = dict(os.environ, MOOD=mood, BRAIN_PORT=str(self.port), BRAIN_TOKENS=tokens)
+        self.p = subprocess.Popen([sys.executable, path], env=env,
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        # ready = the port accepts, not /health answers: a blackhole
+        # brain never answers anything, and is still up
+        import socket
+        deadline = time.time() + 10
+        while time.time() < deadline:
+            try:
+                socket.create_connection(("127.0.0.1", self.port), timeout=1).close()
+                return
+            except OSError:
+                time.sleep(0.05)
+        raise RuntimeError("the chaos brain never came up on %s" % self.url)
+
+    def kill(self):
+        """SIGKILL: the server dies where it stands, mid-reply."""
+        self.p.kill()
+        self.p.wait(timeout=10)
+
+    def stop(self):
+        if self.p.poll() is None:
+            self.p.terminate()
+            try:
+                self.p.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.p.kill()
 
 
 # ------------------------------------------------------------- scenarios
@@ -165,7 +334,70 @@ def chaos_truncated_model(m):
     return ""
 
 
+@scenario(row="serve", expect=WARN, want="nothing answers", healed=NA, mood="cut")
+def chaos_server_killed_mid_reply(m):
+    """The server dies mid-reply: the answer fails cleanly, not in a
+    traceback, and the serve row says nothing answers."""
+    t0 = time.time()
+    rc, out = m.spark("what is 2+2?", timeout=60)
+    took = time.time() - t0
+    if rc == 0:
+        return "a cut reply exited 0: %r" % out.strip()[-200:]
+    if "Traceback" in out:
+        return "a cut reply ended in a traceback: %s" % out.strip()[-300:]
+    m.note("the cut reply failed in %.1fs, one line: %s"
+           % (took, _fit(" ".join(out.split()), 60)))
+    m.brain.kill()                  # and now the server is gone for good
+    return ""
+
+
+@scenario(row="gpu", expect=NA, heal=None,
+          unhealed="the GPU comes back when the hardware does: the row's "
+                   "promise is to say so and let the CPU answer")
+def chaos_gpu_taken_away(m):
+    """The GPU taken away: the gpu row says so, never fails, and the line
+    still answers on the CPU."""
+    gone = os.path.join(m.root, "no-drm")
+    os.makedirs(gone, exist_ok=True)
+    m.env["SPARK_SYSFS_DRM"] = gone
+    rc, out = m.spark("line", "--cwd", m.root, "--shell", "bash", stdin="how big is this dir?\n")
+    if rc != 0 or not out.startswith(("cmd\t", "answer")):
+        return "the line did not answer without a GPU: rc %d, %r" % (rc, out[:200])
+    m.note("the line still answers: %s" % _fit(out.splitlines()[0], 60))
+    return ""
+
+
+@scenario(row="peer", expect=WARN, want="down", heal=None, mood="blackhole",
+          unhealed="the LAN comes back when the cable does: the row's "
+                   "promise is to say the peer is unreachable")
+def chaos_lan_cut_on_a_client(m):
+    """The LAN cut on a client: the peer row says down, and a question
+    fails fast instead of hanging on a wire nobody answers."""
+    m.env["SITE_AI_MODEL"] = "none"         # a client: nothing runs here
+    m.env["SITE_PEER_AI_URL"] = m.brain.url
+    budget = 30
+    t0 = time.time()
+    rc, out = m.spark("line", "--cwd", m.root, "--shell", "bash",
+                      stdin="how big is this dir?\n", timeout=budget + 30)
+    took = time.time() - t0
+    if rc == 0:
+        return "the line answered from a peer that never replied: %r" % out[:200]
+    if took > budget:
+        return "the line took %.0fs to give up: a cut LAN must fail fast" % took
+    m.note("the line gives up in %.1fs (budget %ds): %s"
+           % (took, budget, _fit(" ".join(out.split()), 55)))
+    return ""
+
+
 # ---------------------------------------------------------------- runner
+def _command_of(remedy):
+    """The runnable half of a remedy. Rows end a remedy with an aside --
+    `spark stop   (clears it)`, `spark update   (--fetch to ask origin)` --
+    set off by two or more spaces. The aside is for the reader; the
+    command is what runs, and the report prints exactly what ran."""
+    return re.split(r"\s\s+\(", remedy, 1)[0].strip()
+
+
 def _fit(s, budget):
     """One line, cut at a word -- the report's own width, as every other
     value spark prints."""
@@ -194,7 +426,7 @@ def _judge(m, sc):
     if sc.heal == "remedy":
         if not remedy:
             return False, lines + ["the row prints no remedy to run"]
-        cmd, how = remedy, "its own remedy"
+        cmd, how = _command_of(remedy), "its own remedy"
     else:
         cmd, how = sc.heal, "the scenario's heal (the row's remedy is prose)"
     rc, out = m.sh(cmd)
@@ -202,20 +434,19 @@ def _judge(m, sc):
     if rc != 0:
         return False, lines + ["the heal exited %d: %s" % (rc, out.strip()[-300:])]
     status, value, _r = m.row(sc.row)
-    if status != OK:
-        return False, lines + ["healed, but %s is %s: %s" % (sc.row, status, value)]
-    lines.append("%s ok: %s" % (sc.row, value))
+    if status != sc.healed:
+        return False, lines + ["healed, but %s is %s, not %s: %s"
+                               % (sc.row, status, sc.healed, value)]
+    lines.append("%s %s: %s" % (sc.row, status, value))
     return True, lines
 
 
 def run(real=False, only=()):
     """Every scenario, each on its own throwaway machine. Exit 0 iff every
     one of them rehearsed."""
-    from .check import _stub_server
     say("%s check --chaos" % MARK)
-    srv, stub_url = _stub_server()
     bad = skipped = 0
-    try:
+    if True:
         for sc in SCENARIOS:
             if only and sc.name not in only:
                 continue
@@ -227,20 +458,24 @@ def run(real=False, only=()):
             with tempfile.TemporaryDirectory(prefix="spark-chaos-") as tmp:
                 root = os.path.join(tmp, sc.name)
                 os.makedirs(root)
+                brain = None
                 try:
-                    m = Machine(root, stub_url)
+                    brain = Brain(root, sc.mood)
+                    m = Machine(root, brain.url)
+                    m.brain = brain
                     passed, lines = _judge(m, sc)
                 except Exception as e:      # a crashed scenario is a failed one
                     from . import log_exc
                     log_exc("chaos " + sc.name)
                     passed, lines = False, ["crashed: %s" % e]
+                finally:
+                    if brain is not None:
+                        brain.stop()
             bad += not passed
             say("  %s %-16s %s" % (GLYPH[OK] if passed else GLYPH[FAIL], sc.name,
                                     _fit(sc.doc, 58 - len(" (%.1fs)" % 0)) + " (%.1fs)" % (time.time() - t0)))
             for line in lines:
                 say("      %s %s" % (glyph("arrow"), line))
-    finally:
-        srv.shutdown()
     tail = " (%d need a real box)" % skipped if skipped else ""
     if bad:
         say("  %d scenario%s did not rehearse%s" % (bad, "" if bad == 1 else "s", tail))
