@@ -1254,7 +1254,10 @@ def main():
         t.ok(rc == 0 and out.splitlines()[0] == "spark font -- the terminal's font",
              "spark font -h signs (contract 8)", out)
         rc, out, _ = spark("font", "list", extra=off)
-        t.ok(rc == 0 and out.startswith("spark font list -- "), "spark font list answers on either OS", out)
+        # a show answers on every family: where there is no console-setup
+        # to list (Arch, WSL 2) the answer is the signed refusal, still 0
+        t.ok(rc == 0 and out.startswith(("spark font list -- ", "spark font -- no console")),
+             "spark font list answers on either OS", out)
         from spark import site as _site2
         t.ok([_site2.size_as_taken(x) for x in ("32x16", "16", "12x6")] == ["16x32", "8x16", "6x12"],
              "font list: a file's HxW (or bare height) is spelled as the command takes it, WxH")

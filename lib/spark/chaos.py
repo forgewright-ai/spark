@@ -79,6 +79,14 @@ class Machine:
         # about to be deleted
         self.env["SPARK_NO_APPLY"] = "1"
         self.env["SPARK_NO_REFRESH"] = "1"
+        # nor may it reach the real machine's servers. A throwaway HOME is
+        # not enough: the ports are not in it, so on a box that is actually
+        # serving, 8080 answered the fixture's health probe (a `spark
+        # serve` scenario then found itself "already serving") and `spark
+        # stop` looked straight at the real llama-server's pid. Two ports
+        # of its own, bound by nothing, so every probe here answers no.
+        self.env["SPARK_PORT"] = str(_free_port())
+        self.env["SPARK_FORGE_PORT"] = str(_free_port())
         # make_fixture keeps its own git identity to itself; a scenario
         # that commits (the git row's) needs one of its own
         self.env.update({"GIT_AUTHOR_NAME": "chaos", "GIT_AUTHOR_EMAIL": "chaos@fixture",
