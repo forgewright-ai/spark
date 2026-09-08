@@ -3,22 +3,22 @@
 What comes after v1.15, in the order it is likely to happen. Nothing here
 is a promise; a row in `CHANGELOG.md` is. A better idea is an issue away.
 
-## Chaos: rehearse the failures
+## Chaos on a real box
 
-`spark chaos` (or `spark check --chaos`) breaks the machine one known way
-at a time and proves the right row goes red and its remedy heals it.
-Hermetic first (the stub servers learn to be slow, to hang, to 503, to
-cut a stream), then once on a real box. Not part of a new user's check.
+The hermetic half shipped: `spark check --chaos` rehearses nine failures
+against a throwaway machine. What a fixture cannot reach is left, and it
+is the maintainer's, by hand, as the WSL pass is:
 
-- the server killed mid-reply -- `serve`; the unit brings it back
-- a truncated model file -- `models`; `spark model verify` names it
-- a full disk -- the download refuses cleanly, no `.part` left
-- the GPU taken away -- `gpu`; the line still answers on the CPU
-- the LAN cut on a client -- `peer`; `??` and chat fail fast
-- two `spark serve` or two `spark update` at once -- the lock wins
-- a clone three tags behind -- `git`; `spark update` moves it
-- a hostile line answer (not JSON, empty, 40 kB) -- the widget runs
-  nothing, keeps the prompt
+- the server killed mid-reply -- the unit must bring it back (the stub
+  service manager here says `absent`, so only the `serve` row is proven)
+- a genuinely full disk -- the rehearsal fakes curl's write error; a
+  real ENOSPC on a real filesystem is the one that counts
+- the GPU taken away for real -- a card removed, not an empty sysfs
+- two machines, one FORGE: a peer that dies mid-answer for a client
+
+Then the two shapes the suite still cannot express: a scenario whose
+remedy needs the network (a re-download after `spark model rm`), and
+one that must survive a reboot.
 
 ## Line-bench: a quality number per model and OS
 

@@ -13,9 +13,10 @@
 # The machine is check's good fixture: a throwaway HOME, a stub
 # repository, stub commands and a stub llama-server on loopback. Nothing
 # here touches the real machine, reaches the network beyond loopback, or
-# runs longer than its own timeout. A scenario that needs the real box
-# (a service manager that restarts things, a real GPU, a real full disk)
-# says so and is skipped unless --real.
+# runs longer than its own timeout -- so the suite is a gate, not an
+# errand. The rehearsals that need a real box (a unit restarting a
+# killed server, a genuinely full disk) are the maintainer's, by hand,
+# as the WSL pass is; ROADMAP.md says so.
 
 import os
 import re
@@ -31,12 +32,12 @@ from .cli import ANSWER_MAX
 
 class Scenario:
     __slots__ = ("name", "row", "expect", "want", "heal", "healed", "unhealed",
-                 "mood", "real", "fn", "doc")
+                 "mood", "fn", "doc")
 
-    def __init__(self, name, row, expect, want, heal, healed, unhealed, mood, real, fn):
+    def __init__(self, name, row, expect, want, heal, healed, unhealed, mood, fn):
         self.name, self.row, self.expect = name, row, expect
         self.want, self.heal, self.healed, self.unhealed = want, heal, healed, unhealed
-        self.mood, self.real, self.fn = mood, real, fn
+        self.mood, self.fn = mood, fn
         self.doc = " ".join((fn.__doc__ or "").split())
 
 
@@ -44,7 +45,7 @@ SCENARIOS = []
 
 
 def scenario(row=None, expect=None, want="", heal="remedy", healed=OK,
-             unhealed="", mood="ok", real=False):
+             unhealed="", mood="ok"):
     """Register one rehearsed failure. `row` is the check row that must
     notice it, `expect` the status it must reach (WARN for a CAPABILITY
     row, which never fails; NA where the truth is "the world stopped
@@ -59,7 +60,7 @@ def scenario(row=None, expect=None, want="", heal="remedy", healed=OK,
     assert row or unhealed, "a scenario with no row must say what it proves"
     def deco(fn):
         SCENARIOS.append(Scenario(fn.__name__[6:].replace("_", "-"), row, expect,
-                                  want, heal, healed, unhealed, mood, real, fn))
+                                  want, heal, healed, unhealed, mood, fn))
         return fn
     return deco
 
@@ -558,18 +559,14 @@ def _judge(m, sc):
     return True, lines
 
 
-def run(real=False, only=()):
+def run(only=()):
     """Every scenario, each on its own throwaway machine. Exit 0 iff every
     one of them rehearsed."""
     say("%s check --chaos" % MARK)
-    bad = skipped = 0
+    bad = 0
     if True:
         for sc in SCENARIOS:
             if only and sc.name not in only:
-                continue
-            if sc.real and not real:
-                say("  %s %-16s needs a real box (--chaos --real)" % (GLYPH[NA], sc.name))
-                skipped += 1
                 continue
             t0 = time.time()
             with tempfile.TemporaryDirectory(prefix="spark-chaos-") as tmp:
@@ -593,9 +590,8 @@ def run(real=False, only=()):
                                     _fit(sc.doc, 58 - len(" (%.1fs)" % 0)) + " (%.1fs)" % (time.time() - t0)))
             for line in lines:
                 say("      %s %s" % (glyph("arrow"), line))
-    tail = " (%d need a real box)" % skipped if skipped else ""
     if bad:
-        say("  %d scenario%s did not rehearse%s" % (bad, "" if bad == 1 else "s", tail))
+        say("  %d scenario%s did not rehearse" % (bad, "" if bad == 1 else "s"))
     else:
-        say("  every scenario rehearsed%s" % tail)
+        say("  every scenario rehearsed (%d)" % len(SCENARIOS))
     return 1 if bad else 0

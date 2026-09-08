@@ -2,6 +2,27 @@
 
 ## v1.15
 
+- `spark check --chaos` rehearses the failures: it breaks a throwaway
+  machine one known way at a time and proves the right row says so and
+  the remedy that row prints heals it. `--selftest` proves a row can
+  flip; `--chaos` proves the sentence under it is true. Nine scenarios
+  today -- a clone three tags behind, a truncated model file, a server
+  killed mid-reply, the GPU taken away, the LAN cut on a client, a
+  download that cannot be written, two `spark update` at once, two
+  `spark serve` at once, and a brain answering rubbish.
+- A reply cut off mid-stream is now an error, not half an answer. A
+  severed connection is not an end of stream: the read simply stops, so
+  a killed server handed back a truncated answer looking whole, and
+  exited 0. The caller now says the answer above is incomplete.
+- A download that dies leaves nothing behind. `bootstrap.sh` removed
+  its partial file only on a sha256 mismatch; a curl that failed -- a
+  full disk, a cut LAN, a Ctrl-C -- left a `.part` on the disk that was
+  already full, and the next run orphaned another. `--fetch U D S` runs
+  the download primitive alone, so that failure can be rehearsed.
+- `spark update` takes a lock. Two at once could both fetch, both move
+  the tree, and one exec into a tree the other was moving; the second
+  now refuses in one line.
+
 - The failure moment: a command that exits nonzero prints one line above
   the next prompt -- `* failed (1) -- press Esc s to ask why` -- and
   `Esc s` on the empty line puts it back, already piped to `explain`;

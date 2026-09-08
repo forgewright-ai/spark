@@ -1987,13 +1987,12 @@ USAGE = """%s check -- is this machine still what its repository says it is?
   spark check --selftest   prove every fixture-testable row can flip
   spark check --chaos      break a throwaway machine one known way at a
                            time; the right row must say so and its remedy
-                           must heal it (--real adds what needs a real box)
+                           must heal it
 """ % MARK
 
 
 def main(argv):
     watch, porcelain_out, fresh, fetch, names = 0, False, False, False, []
-    real = "--real" in argv
     it = iter(argv)
     for a in it:
         if a in ("-h", "--help", "help"):
@@ -2011,9 +2010,7 @@ def main(argv):
             return selftest()
         elif a == "--chaos":
             from . import chaos
-            return chaos.run(real=real)
-        elif a == "--real":
-            real = True
+            return chaos.run()
         elif a.startswith("--"):
             say(USAGE.rstrip())
             return 2
