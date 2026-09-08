@@ -1478,10 +1478,14 @@ def _stub(path, body):
     os.chmod(path, 0o755)
 
 
-def make_fixture(root, good, stub_url=""):
+def make_fixture(root, good, stub_url="", real_spark=False):
     """A throwaway HOME plus a stub repository and stub commands, shaped so
     every fixture-testable row is ok (good=True) or not (good=False).
-    stub_url is a fake llama-server the good fixture's rows may reach."""
+    stub_url is a fake llama-server the good fixture's rows may reach.
+    real_spark makes the fixture repository's bin/spark a symlink to this
+    one instead of a stub, at every commit: `spark chaos` runs remedies
+    that re-exec spark out of the fixture tree (spark update), and a stub
+    there would answer them."""
     home = os.path.join(root, "home")
     repo = os.path.join(root, "repo")
     bin_ = os.path.join(root, "bin")
@@ -1500,7 +1504,10 @@ def make_fixture(root, good, stub_url=""):
     _stub(os.path.join(repo, "install.sh"),
           "#!/bin/sh\n" + ("printf 'ok             %s/.tmux.conf\\nNothing to do\\n' \"$HOME\"\n" if good
                             else "printf 'would link     %s/.tmux.conf\\n1 to do\\n' \"$HOME\"\n"))
-    _stub(os.path.join(repo, "bin", "spark"), "#!/bin/sh\necho stub\n")
+    if real_spark:
+        os.symlink(os.path.join(REPO, "bin", "spark"), os.path.join(repo, "bin", "spark"))
+    else:
+        _stub(os.path.join(repo, "bin", "spark"), "#!/bin/sh\necho stub\n")
     os.symlink("spark", os.path.join(repo, "bin", "explain"))
     open(os.path.join(repo, "Brewfile"), "w").close()
     # the package tables are data the packages row reads (packages.table):
@@ -1978,11 +1985,15 @@ USAGE = """%s check -- is this machine still what its repository says it is?
   spark check --fresh      ignore cached answers (brew, git fetch results)
   spark check --fetch      ask origin before judging the git row
   spark check --selftest   prove every fixture-testable row can flip
+  spark check --chaos      break a throwaway machine one known way at a
+                           time; the right row must say so and its remedy
+                           must heal it (--real adds what needs a real box)
 """ % MARK
 
 
 def main(argv):
     watch, porcelain_out, fresh, fetch, names = 0, False, False, False, []
+    real = "--real" in argv
     it = iter(argv)
     for a in it:
         if a in ("-h", "--help", "help"):
@@ -1998,6 +2009,11 @@ def main(argv):
             fetch = True
         elif a == "--selftest":
             return selftest()
+        elif a == "--chaos":
+            from . import chaos
+            return chaos.run(real=real)
+        elif a == "--real":
+            real = True
         elif a.startswith("--"):
             say(USAGE.rstrip())
             return 2
