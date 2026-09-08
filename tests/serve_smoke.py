@@ -136,7 +136,7 @@ def main():
         print("serve_smoke: port %d, HOME %s" % (port, home))
 
         # serve: token, serve-url, pidfile, argv
-        rc, out, err = spark("serve")
+        rc, out, err = spark("serve", "on")
         ok(rc == 0 and "ready (pid" in out, "spark serve starts and waits for /health", out + err)
         ok(get(url + "/health") == 200, "the stub answers /health")
         tok = state + "/api-token"
@@ -156,23 +156,23 @@ def main():
         rc, out, _ = spark("brain", "--porcelain")
         ok(rc == 0 and out.strip() == url + "\tstub\tmodel", "brain resolves via serve-url", out)
         # again: already serving
-        rc, out, _ = spark("serve")
+        rc, out, _ = spark("serve", "on")
         ok(rc == 0 and "already serving" in out, "second serve: already serving", out)
         # stop
-        rc, out, err = spark("stop")
+        rc, out, err = spark("serve", "off")
         ok(rc == 0 and "stopped pid" in out, "spark stop", out + err)
         time.sleep(0.5)
         ok(get(url + "/health") == 0, "server gone")
         ok(not os.path.exists(state + "/serve-url") and not os.path.exists(state + "/serve.pid"), "serve-url and pidfile removed")
-        rc, out, _ = spark("stop")
+        rc, out, _ = spark("serve", "off")
         ok(rc == 0 and "not running" in out, "stop again: not running, exit 0", out)
 
         # SITE_QUIET_START=yes: the whole start collapses to one line
-        rc, out, err = spark("serve", extra={"SITE_QUIET_START": "yes"})
+        rc, out, err = spark("serve", "on", extra={"SITE_QUIET_START": "yes"})
         lines = [l for l in out.splitlines() if l.strip()]
         ok(rc == 0 and len(lines) == 1 and re.match(r"^spark serve -- ready \(pid \d+\) at %s$" % re.escape(url), lines[0]),
            "quiet start: spark serve answers with exactly one line", out + err)
-        rc, out, err = spark("stop")
+        rc, out, err = spark("serve", "off")
         ok(rc == 0 and "stopped pid" in out, "stop the quiet server", out + err)
         time.sleep(0.5)
 
@@ -180,27 +180,27 @@ def main():
         foreign = subprocess.Popen([sys.executable, os.path.join(eng, "llama-server"), "--host", "127.0.0.1", "--port", str(port), "-m", "foreign"],
                                    env=dict(env, HOME=tmp), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         time.sleep(1.0)
-        rc, out, err = spark("serve")
+        rc, out, err = spark("serve", "on")
         ok(rc == 0 and "already serving" in out, "a healthy foreign server on the port: used, not fought", out + err)
         os.remove(state + "/serve-url")
-        rc, out, err = spark("stop")
+        rc, out, err = spark("serve", "off")
         ok(rc == 1 and "not started by spark" in err, "stop leaves a foreign server alone", err)
         ok(foreign.poll() is None, "foreign server still alive")
-        rc, out, err = spark("stop", "--force")
+        rc, out, err = spark("serve", "off", "--force")
         ok(rc == 0 and "killed" in out, "stop --force kills it", out + err)
         foreign.wait(timeout=5)
         ok(foreign.returncode is not None, "foreign server gone")
 
         # flags and refusals
-        rc, out, err = spark("stop", "--noreload")
+        rc, out, err = spark("serve", "off", "--noreload")
         ok(rc == 1 and "nothing to disable" in err, "--noreload without a unit is refused", err)
-        rc, out, err = spark("serve", extra={"SPARK_BASE_URL": "http://192.0.2.9:8080"})
+        rc, out, err = spark("serve", "on", extra={"SPARK_BASE_URL": "http://192.0.2.9:8080"})
         ok(rc == 78 and "client of" in err, "SPARK_BASE_URL set: serve refuses with 78", err)
         rc, out, err = spark("serve", "--host", "0.0.0.0")
         ok(rc == 78 and "0.0.0.0" in err, "0.0.0.0 refused", err)
-        rc, out, err = spark("serve", extra={"SPARK_MODELS_DIR": tmp + "/nope"})
+        rc, out, err = spark("serve", "on", extra={"SPARK_MODELS_DIR": tmp + "/nope"})
         ok(rc == 78 and "bootstrap" in err, "no model: exit 78 naming bootstrap", err)
-        rc, out, err = spark("serve", extra={"SPARK_ENGINE_DIR": tmp + "/nope"})
+        rc, out, err = spark("serve", "on", extra={"SPARK_ENGINE_DIR": tmp + "/nope"})
         ok(rc == 78 and "bootstrap" in err, "no engine: exit 78 naming bootstrap", err)
         rc, out, _ = spark("serve", "--print-client")
         ok(rc == 0 and "SPARK_BASE_URL=" in out and "scp" in out, "--print-client", out)
@@ -213,7 +213,7 @@ def main():
         # SITE_AI_BUILD=vulkan: the speed cap then admits the 8b as the ember on a
         # Linux runner too (cpu would cap at 3 GB files; macOS ignores the key)
         renv = {"SITE_AI_MODEL": "auto", "SITE_EMBER_MODEL": "auto", "SPARK_MEM_TOTAL_GB": "18", "SITE_AI_BUILD": "vulkan"}
-        rc, out, err = spark("serve", extra=renv)
+        rc, out, err = spark("serve", "on", extra=renv)
         ok(rc == 0 and "ready (pid" in out, "serve with an ember: router starts", out + err)
         ok("warm   spark, ember" in out, "both roles warmed", out)
         argv = json.load(open(home + "/spawned.json"))
@@ -231,12 +231,12 @@ def main():
         ok("cache-ram = 0" in spark_sec and "cache-ram = 0" in ember_sec, "both presets: no prompt cache in RAM", ini)
         rc, out, _ = spark("brain", "--porcelain", "--fresh", extra=renv)
         ok(rc == 0 and out.strip() == url + "\tQwen3-1.7B-Q4_K_M\tmodel", "brain names the spark role's file stem", out)
-        rc, out, err = spark("stop", extra=renv)
+        rc, out, err = spark("serve", "off", extra=renv)
         ok(rc == 0 and "stopped pid" in out, "stop the router", out + err)
 
         # SITE_EMBER_MODEL=none: the single form, aliased spark + stem
         nenv = {"SITE_AI_MODEL": "auto", "SITE_EMBER_MODEL": "none", "SPARK_MEM_TOTAL_GB": "18"}
-        rc, out, err = spark("serve", extra=nenv)
+        rc, out, err = spark("serve", "on", extra=nenv)
         ok(rc == 0 and "warm   spark\n" in out, "ember none: serves, warms spark alone", out + err)
         argv = json.load(open(home + "/spawned.json"))
         ok("-m" in argv and argv[argv.index("-m") + 1] == os.path.join(models, big) and "--models-dir" not in argv,
@@ -245,8 +245,8 @@ def main():
         ok(not os.path.lexists(router + "/ember.gguf"), "stale ember link removed")
         rc, out, _ = spark("brain", "--porcelain", "--fresh", extra=nenv)
         ok(rc == 0 and out.strip() == url + "\tQwen_Qwen3-8B-Q4_K_M\tmodel", "brain still names the file stem", out)
-        spark("stop", extra=nenv)
-        rc, out, err = spark("serve", extra={"SITE_EMBER_MODEL": "nosuch"})
+        spark("serve", "off", extra=nenv)
+        rc, out, err = spark("serve", "on", extra={"SITE_EMBER_MODEL": "nosuch"})
         ok(rc == 78 and "nosuch" in err, "SITE_EMBER_MODEL=nosuch: exit 78 naming the row", err)
 
         # --foreground (the unit's path) warms after /health through a
@@ -281,9 +281,9 @@ def main():
             os.remove(os.path.join(models, f))
 
         # a server that dies while loading
-        rc, out, err = spark("serve", extra={"STUB_LOAD_S": "2", "SPARK_EXTRA_ARGS": "--crash"}, timeout=60)
+        rc, out, err = spark("serve", "on", extra={"STUB_LOAD_S": "2", "SPARK_EXTRA_ARGS": "--crash"}, timeout=60)
         ok(rc == 0 and "ready" in out, "loading (503) is waited out", out + err)
-        spark("stop")
+        spark("serve", "off")
 
         # foreground: the process IS the server; SIGTERM ends it
         p = subprocess.Popen([sys.executable, SPARK, "serve", "--foreground"], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)

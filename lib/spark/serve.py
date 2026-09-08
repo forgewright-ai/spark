@@ -1,5 +1,6 @@
-# spark.serve -- `spark serve` and `spark stop`: the local llama-server,
-# by hand or as the unit's foreground process.
+# spark.serve -- `spark serve [on|off]`: the local llama-server, by hand
+# or as the unit's foreground process. on|off is the only switch
+# vocabulary (the grammar); bare shows.
 
 import os
 import subprocess
@@ -9,15 +10,16 @@ import time
 from . import IS_MAC, MARK, REPO, config, glyph, lan_ip, own_hostnames, say, wait_ready
 from . import engine, wire
 
-USAGE = """%s serve -- start the local model server for this LAN
+USAGE = """%s serve -- the local model server for this LAN
 
-  spark serve                 start it in the background, wait until it answers
+  spark serve                 status: the url, whether it answers, the model
+  spark serve on              start it in the background, wait until it answers
+  spark serve off             stop a server spark serve started
+  spark serve off --force     also the unit's, or one spark did not start
+  spark serve off --force --noreload   and disable the unit so it stays down
   spark serve --foreground    become the server (what the unit runs)
   spark serve --host ADDR     bind ADDR instead of this machine's LAN address
   spark serve --print-client  the two lines another machine needs to use it
-  spark stop                  stop a server spark serve started
-  spark stop --force          also the unit's, or one spark did not start
-  spark stop --force --noreload   and disable the unit so it stays down
 """ % MARK
 
 
@@ -131,7 +133,7 @@ def cmd_serve(args):
     others = engine.server_pids(cfg.port)
     mine = engine.pidfile_pid()
     if others and mine not in others:
-        return _die("port %d is held by llama-server pid %s that spark did not start -- `spark stop --force` first"
+        return _die("port %d is held by llama-server pid %s that spark did not start -- `spark serve off --force` first"
                     % (cfg.port, ",".join(str(p) for p in others)))
 
     served = [f for f in (files["spark"], files["ember"]) if f]
@@ -202,7 +204,7 @@ def cmd_stop(args):
             return _die("the server is a LaunchDaemon (spark headless on) -- sudo launchctl bootout %s stops it; spark headless off puts it back under your login" % engine.service_target(cfg))
         if not force:
             mgr = "launchd" if IS_MAC else "systemd"
-            return _die("%s would bring the server straight back -- spark stop --force stops it; --noreload keeps it down" % mgr)
+            return _die("%s would bring the server straight back -- spark serve off --force stops it; --noreload keeps it down" % mgr)
         undo = engine.service_stop(noreload)
         left = engine.wait_gone(engine.server_pids(cfg.port), 20)
         if left:
@@ -221,13 +223,13 @@ def cmd_stop(args):
             engine.terminate(left, force=True)
             left = engine.wait_gone(left, 5)
         if left:
-            return _die("pid %d survived SIGTERM -- `spark stop --force` sends SIGKILL" % mine)
+            return _die("pid %d survived SIGTERM -- `spark serve off --force` sends SIGKILL" % mine)
         engine.forget()
         say("%s stop -- stopped pid %d" % (MARK, mine))
         return 0
     if pids:
         if not force:
-            return _die("llama-server on port %d (pid %s) was not started by spark -- left alone; `spark stop --force` kills it"
+            return _die("llama-server on port %d (pid %s) was not started by spark -- left alone; `spark serve off --force` kills it"
                         % (cfg.port, ",".join(str(p) for p in pids)))
         engine.terminate(pids)
         left = engine.wait_gone(pids, 10)
@@ -241,12 +243,44 @@ def cmd_stop(args):
     return 0
 
 
+def cmd_show():
+    """`spark serve` alone shows, like every other bare verb: where it
+    would serve, whether anything answers there, and with what."""
+    cfg = config.load()
+    if cfg.base_url:
+        say("%s serve -- a client of %s (SPARK_BASE_URL): nothing serves here" % (MARK, cfg.base_url))
+        return 0
+    url = wire.serve_url() or "http://%s:%d" % (cfg.serve_host or lan_ip() or "<lan-ip>", cfg.port)
+    st = wire.health(url)
+    if st == "loading":
+        say("%s serve -- loading its model at %s" % (MARK, url))
+        return 0
+    if st != "ok":
+        say("%s serve -- not running (spark serve on)" % MARK)
+        return 0
+    what = ""
+    try:
+        files = engine.roles(cfg)
+        what = ", ".join(os.path.basename(files[r]) for r in engine.ROLES if files.get(r))
+    except Exception:                      # a report never fails on its own detail
+        pass
+    say("%s serve -- serving at %s%s" % (MARK, url, " (%s)" % what if what else ""))
+    return 0
+
+
 def main(sub, args):
+    """`spark serve` alone shows; `on` and `off` are the only switch words
+    (the grammar), and every other argument is the unit's own entry point."""
     if args and args[0] in ("-h", "--help", "help"):
         say(USAGE.rstrip())
         return 0
-    rc = cmd_serve(args) if sub == "serve" else cmd_stop(args)
-    if sub == "stop":
+    if not args or args[0] == "status":
+        return cmd_show()
+    if args[0] == "on":
+        return cmd_serve(args[1:])
+    if args[0] == "off":
+        rc = cmd_stop(args[1:])
         from . import check
         check.refresh()
-    return rc
+        return rc
+    return cmd_serve(args)

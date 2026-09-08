@@ -13,6 +13,17 @@
   line on stderr says so, exit 1. At most 12 kB in; `--thread ID` keeps
   a round going, and a follow-up obeys the same law -- the moment a
   reply may assert, that is `spark chat`.
+- One switch vocabulary for both servers. `spark serve` used to start a
+  server when a bare verb is supposed to show, and stopping it was a
+  top-level `spark stop`, while the FORGE had `on|off` for the setting
+  and `start|stop` for the same thing by hand -- four words for two
+  states, and two grammars for one kind of thing. Now both are
+  `spark <verb> on|off`, bare shows (`spark serve` reports the url,
+  whether anything answers, and the model), and `--force` and
+  `--noreload` are flags of `off`. `spark stop` and `spark forge
+  start|stop` are gone rather than kept as aliases: there is nobody to
+  keep them for yet. The check rows that named the old verb name the
+  new one, which `spark check --chaos` proves by running each remedy.
 - A mode is named for what spark does. `ask` meant spark answering your
   question, which read backwards next to `spark ask`, where spark is the
   one asking: the mode is `answer` now, and contract 10's `edit-ask` is

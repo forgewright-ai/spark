@@ -631,8 +631,8 @@ When something stops working:
 2. `./bootstrap.sh --dry-run`: what a rebuild would change.
 3. `spark`: which server answers, which shells have the widget.
 4. A stale server after a DHCP move shows as `moved` on the `serve` row:
-   `spark stop; spark serve`. The `forge` row likewise: `spark forge
-   stop; spark forge start`.
+   `spark serve off; spark serve on`. The `forge` row likewise:
+   `spark forge off; spark forge on`.
 5. `spark forge`: is the page up, at which address; one line per request
    in `~/.local/state/spark/forge.log`, never a body.
 6. The `ember` row: the pair over budget, the file not downloaded

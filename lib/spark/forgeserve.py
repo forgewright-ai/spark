@@ -80,8 +80,8 @@ ADMIN_POST = frozenset(("/api/run", "/api/do/propose", "/api/do/run", "/api/chec
 USAGE = """%s forge -- the served agent
 
   spark forge                  status: url, health, model, unit, token, log tail
-  spark forge on | off         SPARK_FORGE in spark.env; the unit; start/stop
-  spark forge start | stop     by hand (a managed unit needs stop --force)
+  spark forge on | off         SPARK_FORGE in spark.env; the unit; runs it
+  spark forge off --force      also a managed unit's, or one spark did not start
   spark forge --foreground     what the unit runs; exit 78 = misconfigured
                                (--host ADDR, --port N override the config)
   spark forge --print-url      the page's login URL; the admin token on
@@ -1486,13 +1486,13 @@ def cmd_token(args):
     return 0
 
 
-def cmd_onoff(sub):
+def cmd_onoff(sub, args=()):
     from . import site
     site.set_keys(_file=SPARK_ENV, SPARK_FORGE=sub)
     rc = site.apply(["spark-forge", "spark.forge"])
     if rc:
         return rc
-    return cmd_start([]) if sub == "on" else cmd_stop(["--force"])
+    return cmd_start([]) if sub == "on" else cmd_stop(args or ["--force"])
 
 
 def main(argv):
@@ -1503,10 +1503,6 @@ def main(argv):
         return 0
     if sub == "status":
         return cmd_status(rest)
-    if sub == "start":
-        return cmd_start(rest)
-    if sub == "stop":
-        return cmd_stop(rest)
     if sub == "--foreground":
         return cmd_foreground(rest)
     if sub == "--print-url":
@@ -1516,6 +1512,6 @@ def main(argv):
     if sub == "token":
         return cmd_token(rest)
     if sub in ("on", "off"):
-        return cmd_onoff(sub)
+        return cmd_onoff(sub, rest)
     say(USAGE.rstrip())
     return 2

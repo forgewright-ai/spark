@@ -514,7 +514,7 @@ def row_services(ctx):
             from . import engine
             if engine.server_pids(ctx.cfg.port):
                 parts.append("serve unit inactive; a hand-started server answers")
-                remedies.append("spark stop; systemctl --user start spark-serve   (to hand it back to the unit)")
+                remedies.append("spark serve off; systemctl --user start spark-serve   (to hand it back to the unit)")
             else:
                 parts.append("serve %s" % sac)
                 remedies.append("systemctl --user restart spark-serve; journalctl --user -u spark-serve")
@@ -758,7 +758,7 @@ def row_serve(ctx):
         ip = lan_ip()
         if ip and host not in (ip, "127.0.0.1", "localhost"):
             return warn("moved: serving on %s but the LAN address is now %s (DHCP)" % (host, ip),
-                        "spark stop; spark serve" if st == "absent" else "restart the unit")
+                        "spark serve off; spark serve on" if st == "absent" else "restart the unit")
         try:
             served = wire.models(ctx.cfg, url)
         except wire.BrainError:
@@ -775,10 +775,10 @@ def row_serve(ctx):
         if cache and "--cache-ram" in ctx.cfg.extra_args:
             return ok(where + ", host cache %s MiB from SPARK_EXTRA_ARGS)" % cache)
         return warn(where + ") but the prompt cache in RAM is on: an older start",
-                    "spark stop; spark serve" if st == "absent" else "restart the unit")
+                    "spark serve off; spark serve on" if st == "absent" else "restart the unit")
     if h == "loading":
         return warn("loading the model at %s" % url.split("//")[-1])
-    return warn("serve-url says %s but nothing answers" % url.split("//")[-1], "spark stop   (clears it)")
+    return warn("serve-url says %s but nothing answers" % url.split("//")[-1], "spark serve off   (clears it)")
 
 
 @row("CAPABILITY")
@@ -1336,7 +1336,7 @@ def row_swap(ctx):
         return na("no swap")
     pct = 100 * (total - free) // total
     if pct > 50:
-        return warn("%d%% of %d MB in use" % (pct, total // 1024), "the model may not fit; spark stop")
+        return warn("%d%% of %d MB in use" % (pct, total // 1024), "the model may not fit; spark serve off")
     return ok("%d%% of %d MB in use" % (pct, total // 1024))
 
 

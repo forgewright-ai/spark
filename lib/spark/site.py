@@ -543,7 +543,7 @@ def cmd_client(args):
             say("then log in as yourself: " + _login_hint(url))
         from . import engine
         if engine.server_pids(cfg.port):
-            say("the server that ran here keeps running: spark stop ends it")
+            say("the server that ran here keeps running: spark serve off ends it")
     return rc
 
 

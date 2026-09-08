@@ -44,7 +44,7 @@ _spark_model_names() {
 _spark() {
     local -a comp
     if (( CURRENT == 2 )); then
-        comp=(chat do serve stop check update shell headless client setup
+        comp=(chat do serve check update shell headless client setup
               ver last status brain history stats bench tune model ember
               forge soul remember forget memory quiet theme font bar off
               on user explain edit ask help uninstall)
@@ -57,7 +57,7 @@ _spark() {
             shell | bar | headless | forge | memory) comp=(on off status) ;;
             check)   comp=(--watch --porcelain --selftest --fresh --fetch) ;;
             uninstall) comp=(--dry-run --yes --purge --packages --keep-packages) ;;
-            serve)   comp=(--foreground --host --print-client) ;;
+            serve)   comp=(on off status --foreground --host --print-client) ;;
             chat)    comp=(--thread) ;;
             soul)    comp=(show edit reset) ;;
             history) comp=(clear) ;;

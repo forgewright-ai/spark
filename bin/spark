@@ -6,7 +6,7 @@
 #   spark do <words>           a task, one confirmed command at a time
 #   ? how big is this dir?     at the prompt: the answer lands in your line
 #   cmd 2>&1 | explain         what went wrong (explain is a symlink to spark)
-#   spark serve | stop         the local model server
+#   spark serve [on|off]       the local model server
 #   spark check                is this machine still what its repo says?
 #   spark bar                  the tmux status line
 #
@@ -53,7 +53,7 @@ spark
 the FORGE: server/client
  spark model [NAME|auto|none] the served model: download, restart (-h: more)
  spark model list             the table; -h: budget N, add URL, verify, rm NAME
- spark serve | stop           one LAN address, token required; stop [--force]
+ spark serve [on|off]         one LAN address, token required (-h: --force)
  spark ember [NAME|auto|none] a second model for conversations (opt-in)
  spark forge --print-url      the login URL and token; --print-client for a peer
  spark user [add NAME]        the named users, each with sealed threads (-h)
@@ -146,7 +146,7 @@ VERBS = {"setup": ("setup", "main", False), "check": ("check", "main", False),
          "shell": ("site", "main", True), "font": ("site", "main", True), "quiet": ("site", "main", True),
          "model": ("site", "main", True), "headless": ("site", "main", True), "ember": ("site", "main", True),
          "client": ("site", "main", True),
-         "serve": ("serve", "main", True), "stop": ("serve", "main", True),
+         "serve": ("serve", "main", True),
          "forge": ("forgeserve", "main", False), "user": ("users", "main", False),
          "uninstall": ("uninstall", "main", False)}
 

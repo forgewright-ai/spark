@@ -159,7 +159,7 @@ def main():
         ok(all(len(l) <= 80 for l in out.splitlines()), "usage fits 80 columns")
         rc, out, _ = spark("forge")
         ok(rc == 0 and "not running" in out, "status before start: not running", out)
-        rc, out, _ = spark("forge", "stop")
+        rc, out, _ = spark("forge", "off")
         ok(rc == 0 and "not running" in out, "stop before start: not running, exit 0", out)
 
         # the server, in the foreground
@@ -729,7 +729,7 @@ def main():
             ok(rc == 0 and url in out and "health   ok" in out and "stub-7b-q4" in out
                and "admin" in out and "users    3" in out,
                "spark forge (status): url, ok, model, admin token, the user count", out)
-            rc, out, _ = spark("forge", "start")
+            rc, out, _ = spark("forge", "on")
             ok(rc == 0 and "already running" in out, "start while running: already running", out)
 
             # a client through the forge
@@ -812,11 +812,11 @@ def main():
                 p.kill()
                 ok(False, "foreground forge ignored SIGTERM")
         ok(not os.path.exists(state + "/forge-url") and not os.path.exists(state + "/forge.pid"), "forge-url and forge.pid removed")
-        rc, out, _ = spark("forge", "stop")
+        rc, out, _ = spark("forge", "off")
         ok(rc == 0 and "not running" in out, "stop afterwards: not running", out)
 
         # start / stop in the background
-        rc, out, err = spark("forge", "start")
+        rc, out, err = spark("forge", "on")
         ok(rc == 0 and "ready (pid" in out and url in out, "spark forge start: background, waits for health", out + err)
         try:
             st, _, _ = req(url, "GET", "/api/health")
@@ -833,8 +833,8 @@ def main():
             rc, out, _ = spark("forge", "on")
             ok(rc == 0 and "SPARK_FORGE=on" in out and "ready (pid" in out, "spark forge on: writes spark.env, starts", out)
         finally:
-            spark("forge", "stop", "--force")
-        rc, out, _ = spark("forge", "stop")
+            spark("forge", "off", "--force")
+        rc, out, _ = spark("forge", "off")
         ok(rc == 0 and "not running" in out, "stopped for good", out)
         os.remove(state + "/serve-url")
         rc, out, err = spark("forge", "--foreground")

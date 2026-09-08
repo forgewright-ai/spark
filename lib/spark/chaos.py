@@ -467,7 +467,7 @@ def chaos_two_updates_at_once(m):
 @scenario(heal=None, unhealed="two servers at once must not race for the "
                               "port: the lock decides which one starts")
 def chaos_two_serves_at_once(m):
-    """Two `spark serve` at once: the second refuses instead of racing
+    """Two `spark serve on` at once: the second refuses instead of racing
     the first for the port."""
     import fcntl
     from . import LOCK_FILE
@@ -476,7 +476,7 @@ def chaos_two_serves_at_once(m):
     fd = os.open(path, os.O_WRONLY | os.O_CREAT, 0o600)
     try:
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        rc, out = m.spark("serve")
+        rc, out = m.spark("serve", "on")
     finally:
         os.close(fd)
     # 2, the same as the update lock: a gate refusal, not a world that
@@ -523,7 +523,7 @@ def chaos_hostile_line_answer(m):
 # ---------------------------------------------------------------- runner
 def _command_of(remedy):
     """The runnable half of a remedy. Rows end a remedy with an aside --
-    `spark stop   (clears it)`, `spark update   (--fetch to ask origin)` --
+    `spark serve off   (clears it)`, `spark update   (--fetch to ask origin)` --
     set off by two or more spaces. The aside is for the reader; the
     command is what runs, and the report prints exactly what ran."""
     return re.split(r"\s\s+\(", remedy, 1)[0].strip()

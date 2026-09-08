@@ -32,7 +32,7 @@ ON THE LAN (server / client)
   spark model budget [N]          percent of RAM+GPU auto may use (10-95)
   spark model add URL             add your own (--sha256, --license required)
   spark model verify              sha256 every downloaded file now, exit 1 bad
-  spark serve | spark stop        one LAN address, token required; stop
+  spark serve [on|off]            one LAN address, token required
   spark ember [NAME|auto|none]    a second, bigger model for conversations
   spark forge [on|off]            the page and the API on the LAN; status bare
   spark forge --print-url         the page's login URL; the admin token on a tty
