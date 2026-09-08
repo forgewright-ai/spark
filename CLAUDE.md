@@ -388,8 +388,9 @@ may change freely.
    unchecked}` -- `driver` the ember role's model stem, `unchecked` the
    done hint's numbers no user message of the thread backs (`[]`
    otherwise).
-   Streams are SSE: `/api/chat` (mode `chat|talk|ask`; `talk` is the old
-   name for `chat` and records write `chat`) emits `queued` (when the model is busy),
+   Streams are SSE: `/api/chat` (mode `chat|answer`; `talk` and `ask` are
+   the old names for `chat` and `answer`, accepted for one version, and
+   records write the new ones) emits `queued` (when the model is busy),
    `delta {t}`, `done {thread, ms, model}`, `error {kind, hint}`; a
    client that hangs up mid-stream (the stop button) still lands the
    turn -- the user line and any partial answer (`partial: true`) go on
@@ -651,7 +652,7 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   plugin lives in its own repository, `spark-<app>`, installed the app's
   way with its own keys, tests and channel. spark keeps the verb and its
   judge: the editor briefs live in `persona.MODES` (`edit-complete`,
-  `edit-rewrite`, `edit-ask`, `edit-read`): no table routes by filetype
+  `edit-rewrite`, `edit-answer`, `edit-read`): no table routes by filetype
   or genre -- the model reads what the text is, and for a `?` its own
   reading is restated to it (small models drift otherwise); the audition
   (`tests/audition.py`) scores those briefs against a live brain. micro

@@ -114,7 +114,7 @@ def _report(argv):
         say("  no turns yet -- ask something at the prompt")
     else:
         say("  turns       %d   (%s)" % (s["turns"], ", ".join("%s %d" % (m, sum(1 for t in rows if t.get("mode") == m))
-                                                              for m in ("line", "ask", "explain", "chat", "talk", "do") if any(t.get("mode") == m for t in rows))))
+                                                              for m in ("line", "answer", "explain", "chat", "do", "ask", "talk") if any(t.get("mode") == m for t in rows))))
         say("  generate    %.1f tok/s mean, %.1f p50, %.1f p05" % (s["tg_mean"], s["tg_p50"], s["tg_p05"]))
         say("  prompt      %.0f tok/s mean, %.0f%% of prompt tokens from the cache" % (s["pp_mean"], s["cache"]))
         say("  latency     %.1f s p50, %.1f s p95" % (s["ms_p50"] / 1000.0, s["ms_p95"] / 1000.0))

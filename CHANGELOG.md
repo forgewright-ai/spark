@@ -13,6 +13,13 @@
   line on stderr says so, exit 1. At most 12 kB in; `--thread ID` keeps
   a round going, and a follow-up obeys the same law -- the moment a
   reply may assert, that is `spark chat`.
+- A mode is named for what spark does. `ask` meant spark answering your
+  question, which read backwards next to `spark ask`, where spark is the
+  one asking: the mode is `answer` now, and contract 10's `edit-ask` is
+  `edit-answer`. `ask` is left free rather than reused for contract 12 --
+  a string that changed meaning would make the turn records already on
+  disk lie about themselves. The old names are read for one version, the
+  way `talk` is read for `chat`, and `/api/chat` takes either.
 - The grounding law is one place now, `lib/spark/text.py`: `anchor()`
   checks a span, `Ground.verdict()` a whole note or question, and `Gate`
   is the stream that marks what it keeps and drops what it refuses.

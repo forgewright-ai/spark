@@ -717,7 +717,7 @@ class Handler(BaseHTTPRequestHandler):
                 prefix = prefix if isinstance(prefix, str) else ""
                 msgs[0] = {"role": "system", "content": forge.identity(cfg, mem) + ("\n\n" + prefix if prefix else "")}
             else:
-                msgs.insert(0, {"role": "system", "content": forge.system(cfg, "ask", "sh", mem)})
+                msgs.insert(0, {"role": "system", "content": forge.system(cfg, "answer", "sh", mem)})
         body["messages"] = msgs
         stream = bool(body.get("stream"))
         try:
@@ -1037,10 +1037,12 @@ class Handler(BaseHTTPRequestHandler):
         if text is None:
             return None
         mode = body.get("mode") or "chat"
-        if mode == "talk":      # the old name, accepted for one version
+        if mode == "talk":      # the old names, accepted for one version
             mode = "chat"       # records write mode "chat" from now on
-        if mode not in ("chat", "ask"):
-            return self._error(400, "bad", "mode is chat or ask")
+        if mode == "ask":       # spark answering is "answer" now: `spark
+            mode = "answer"     # ask` is where spark does the asking
+        if mode not in ("chat", "answer"):
+            return self._error(400, "bad", "mode is chat or answer")
         thread, ok = self._thread_of(body)
         if not ok:
             return None

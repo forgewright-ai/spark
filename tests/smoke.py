@@ -706,7 +706,7 @@ def main():
              "edit ?: a misquote is marked where it stands; verbatim, folded and curly quotes anchor; a proposal after -> is not checked; the last line flushes", repr(out))
         turns = sorted(glob.glob(home + "/.local/state/spark/turns/*.jsonl"))
         lt = json.loads(open(turns[-1]).read().splitlines()[-1]) if turns else {}
-        t.ok(lt.get("kind") == "ask" and lt.get("quotes") == 5 and lt.get("unanchored") == 2,
+        t.ok(lt.get("kind") == "answer" and lt.get("quotes") == 5 and lt.get("unanchored") == 2,
              "edit ?: the turn counts the quotes and the unanchored ones", json.dumps(lt)[:200])
         # --sel: the whole file on stdin, the question about one part of it
         big = "".join("line %03d of the file\n" % i for i in range(1, 41))

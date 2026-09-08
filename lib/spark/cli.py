@@ -275,7 +275,7 @@ def cmd_ask(words):
     ctx = _stdin_context()
     if not q and not ctx and not paths:
         return cmd_status([])
-    mode = "explain" if ctx and not q else "ask"
+    mode = "explain" if ctx and not q else "answer"
     return _stream(mode, q, paths, ctx, line=None if q or paths else "[explain]")
 
 
@@ -432,7 +432,7 @@ def cmd_edit(args):
         if after:
             context += "\n\nAfter the cursor:\n" + after
     elif words[0] == "?":
-        kind, role, max_tokens = "ask", "ember", 600
+        kind, role, max_tokens = "answer", "ember", 600
         text = " ".join(words[1:]).strip() or persona.REVIEW
         # a thread: the same id again continues it -- the words alone when
         # the text is the one the first turn carried, else the text again
@@ -462,7 +462,7 @@ def cmd_edit(args):
     # newline would join or split lines
     # an answer's quotes are checked against the text, line by line, and
     # the ones the text does not hold are marked where they stand
-    anchors = textmod.Anchors(sys.stdout, data) if kind == "ask" else None
+    anchors = textmod.Anchors(sys.stdout, data) if kind == "answer" else None
     fence = textmod.Fence(anchors or sys.stdout, newline=(data.endswith("\n") if data else True) if kind == "rewrite" else None)
 
     def done():
@@ -471,7 +471,7 @@ def cmd_edit(args):
             anchors.close()
     try:
         s = session.Session(cfg, "edit-" + kind, _shell_default(), "", role=role,
-                            history=history if kind == "ask" else None)
+                            history=history if kind == "answer" else None)
         out, ms = s.ask_stream(text, context, fence.feed, max_tokens=max_tokens, timeout=EDIT_TIMEOUT)
     except wire.BrainError as e:
         done()
@@ -481,7 +481,7 @@ def cmd_edit(args):
         raise
     done()
     counts = {"quotes": anchors.quoted, "unanchored": anchors.missed} if anchors else {}
-    if kind == "ask" and tid:
+    if kind == "answer" and tid:
         forge.append(cfg, tid, "user", persona.user_message(text, "", context), text_sha=sha)
         forge.append(cfg, tid, "assistant", out or "")
         counts["thread"] = tid

@@ -62,7 +62,7 @@ MODE_LINE = (
     "is not something a command answers, reply kind=answer with the answer in `hint` (one line, a "
     "sentence or two, at most 250 characters) and an empty `command`."
 )
-MODE_ASK = (
+MODE_ANSWER = (
     "Answer the user's question about their shell, tools, files or system. Be terse: a few lines, "
     "no preamble, no summary. Plain text for a terminal -- no markdown marks (no **, no #, no "
     "backticks, no tables); a command goes on its own line, indented four spaces. If output was "
@@ -117,9 +117,14 @@ MODE_DO = (
     "permissions. Never propose a command that needs interactive input, and never repeat a step whose "
     "output already answers the goal."
 )
-# "talk" is the old name for "chat": old thread and turn records carry it,
-# so it stays an accepted alias for one version.
-MODES = {"line": MODE_LINE, "ask": MODE_ASK, "explain": MODE_EXPLAIN, "chat": MODE_CHAT, "talk": MODE_CHAT, "do": MODE_DO}
+# A mode is named for what spark DOES. "answer" was called "ask" until
+# v1.16, which read backwards beside `spark ask` (contract 12), where
+# spark is the one asking. "talk" is the old name for "chat"; both old
+# names stay accepted for one version, because thread and turn records
+# on disk carry them. Note "ask" is NOT reused as contract 12's mode:
+# a string that changes meaning would make old turn records lie.
+MODES = {"line": MODE_LINE, "answer": MODE_ANSWER, "explain": MODE_EXPLAIN, "chat": MODE_CHAT,
+         "ask": MODE_ANSWER, "talk": MODE_CHAT, "do": MODE_DO}
 
 # The editor (spark edit, contract 10): three briefs, one per kind. No
 # table routes by filetype or genre -- each brief tells the model to read
@@ -155,7 +160,7 @@ MODE_EDIT_REWRITE = (
     "paragraph, a function -- and you reply with exactly what replaces that fragment: not a "
     "line before it, not a line after it, nothing the fragment did not cover. If the "
     "instruction cannot be done to this text, return the text exactly as it was.")
-MODE_EDIT_ASK = (
+MODE_EDIT_ANSWER = (
     "The user asks about the text shown below, inside an editor, their own file as written. " + _READ +
     "You are a good reader in the room, not a report generator: plain text for a narrow "
     "editor pane, no markdown marks (no **, no #, no tables, no headings), a line of code "
@@ -212,7 +217,7 @@ MODE_ASK_QUESTIONS = (
     "question, never say what you would do or what the author should do: you are the one "
     "who asks. Ask in the text's own language.")
 MODES.update({"edit-complete": MODE_EDIT_COMPLETE, "edit-rewrite": MODE_EDIT_REWRITE,
-              "edit-ask": MODE_EDIT_ASK, "edit-read": MODE_EDIT_READ,
+              "edit-answer": MODE_EDIT_ANSWER, "edit-read": MODE_EDIT_READ,
               "ask-questions": MODE_ASK_QUESTIONS})
 
 
