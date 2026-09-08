@@ -398,7 +398,7 @@ def main(shell, widget):
         # and runs nothing until Enter
         since = sh.mark()
         sh.send("\x1bs")
-        ok(sh.expect("sh -c 'exit 3' 2>&1 | explain"), "Esc s after a failure composes the explain", since())
+        ok(sh.expect("{ sh -c 'exit 3'; } 2>&1 | explain"), "Esc s after a failure composes the explain, braced", since())
         ok(asked() == n, "and asks spark line nothing")
         time.sleep(0.3)
         ok("EXPLAINED" not in since(), "nothing runs before Enter", since())

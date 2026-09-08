@@ -240,8 +240,12 @@ spark-ask() {
     local fact
     if [[ -n $BUFFER ]]; then _spark_ask "$BUFFER"; return; fi
     if [[ -n $_spark_fail ]]; then
-        export SPARK_EXPLAIN_CMD=$_spark_fail SPARK_EXPLAIN_RC=$_spark_fail_rc
-        BUFFER="$_spark_fail 2>&1 | explain"
+        # braces catch a compound's every branch; a trailing ; would
+        # double up inside them, so it is trimmed
+        fact=$_spark_fail
+        while [[ $fact == *[\;\ ] ]]; do fact=${fact%?}; done
+        export SPARK_EXPLAIN_CMD=$fact SPARK_EXPLAIN_RC=$_spark_fail_rc
+        BUFFER="{ $fact; } 2>&1 | explain"
         CURSOR=$#BUFFER
         _spark_say "$_spark_h Enter runs it: the failure, explained"
     elif [[ -n $_spark_fix ]]; then
