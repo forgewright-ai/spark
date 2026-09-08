@@ -35,38 +35,6 @@ do it just as well? If yes, it is not a prompt feature.
 
 ## 1. The line, before it runs
 
-### Blast radius
-
-`danger=true` earns a `!` today. Have the line answer with a read-only
-twin as well; spark runs the twin and puts the number in the hint row.
-
-```
-~ > ? clean out the build dir
-! rm -rf ./build            <- 1,204 files, 3.1 GB, 2 tracked by git
-```
-
-A confirmation everywhere else is a yes/no. This one is a yes/no with
-the facts, and it costs one more field in contract 4 (`probe`, a command
-that only reads) plus the rule that a probe which is not read-only is
-dropped. The highest safety per line of code in this file.
-
-### Localize a pasted command
-
-A command from a page on the internet is written for someone else's
-machine. Before Enter, rewrite it for this one: the OS, the package
-manager from `distro/<id>.env`, the tools `persona.PREFERRED` says are
-here.
-
-```
-~ > free -h                            (on macOS)
-* vm_stat: the same numbers here       <- the hint
-~ > vm_stat
-```
-
-The roadmap already names per-OS knowledge as the line's weakest spot.
-This turns the weakness into the feature, and the exemplars it needs are
-the ones the roadmap wanted anyway.
-
 ### Paste inspection (local-only)
 
 Bracketed paste is visible to readline. A multi-line paste into a prompt
@@ -90,15 +58,8 @@ stops being a hopeful step and becomes a verified one. Pairs with
 
 ## 2. The failure moment, further
 
-v1.15 catches the instant and offers prose. Three escalations, in
-increasing cost:
-
-### The fix as a patch
-
-`Esc s` explains. A second `Esc s` should put the *corrected command* in
-the buffer -- one keystroke from failure to a line you can read and
-press Enter on. The state it needs (the command, the exit code) is
-already in the pane.
+v1.15 catches the instant and offers prose. Two of its escalations are on
+the roadmap; this is the third, and the most expensive.
 
 ### Failure memory (local-only)
 
@@ -113,28 +74,7 @@ first line of stderr -- and the prompt can say what worked last time:
 `lib/spark/ledger.py` is the precedent to copy, down to the retirement
 rule: a note whose anchor is gone is dropped where it stands.
 
-### `command not found` is a package name
-
-spark knows every family's names already (`distro/<id>.env`,
-`lib/spark/packages.py`). That failure should offer the install line,
-not an explanation of what a PATH is.
-
 ## 3. History as a corpus (local-only)
-
-### Intent search
-
-`Ctrl-R` matches text. A model on the box matches intent:
-
-```
-(Ctrl-R) that thing where I fixed the docker network
-> docker network rm $(docker network ls -q --filter dangling=true)
-```
-
-Your shell history is the highest-value and most private corpus you own.
-Nobody uploads it -- which is exactly why a local AI wins here and a
-hosted one structurally cannot. fzf is already in the shell layer; this
-is `Ctrl-R` with a brain behind it. If one idea in this file explains
-why spark exists, it is this one.
 
 ### The command you keep retyping
 
@@ -147,25 +87,7 @@ flow v1.15 already built for keeping a fix as a fact.
 Ten `find . -name` in a machine with `fd` on it earns one line in the
 hint row, once, and then never again. `persona.PREFERRED` is the list.
 
-## 4. Streams: the gap beside contract 10
-
-`spark edit` takes a body of text. There is no verb for a live one:
-
-```
-tail -f app.log | spark watch "tell me when a 500 appears"
-journalctl -f  | spark watch "anything about the disk"
-```
-
-Silent until something matters, then one line. This is a new contract
-(11) and a real surface -- and local-only in the strongest sense: nobody
-streams a production log to a vendor by the megabyte. The same shape
-covers a long build, a test watcher, a slow migration.
-
-The hard parts are honest ones: what a window is, how it says nothing
-for an hour without looking dead, and how it stays cheap enough to leave
-running.
-
-## 5. One FORGE, many prompts
+## 4. One FORGE, many prompts
 
 Threads are sealed and per-user, and every client talks to one FORGE
 (contract 9) -- but the prompt does not use that yet.
@@ -177,7 +99,7 @@ Threads are sealed and per-user, and every client talks to one FORGE
   prompts on one machine, one soul, and the admin genuinely cannot read
   the other's history. No hosted assistant can make that promise.
 
-## 6. The machine's own doctor
+## 5. The machine's own doctor
 
 `spark check` answers 39 yes/no questions and `stats.py` keeps the
 numbers. Let a model read `check.json` and `bench.jsonl` and answer the
@@ -192,26 +114,62 @@ The forecast is the same trick pointed forward -- "the disk fills in
 about three days at this rate" -- and it stays honest, because it is
 made of numbers spark already keeps and words that never leave.
 
+## 6. spark drill: practice against a source
+
+Not the line and not a smart tool -- a use for a model on the box that a
+hosted one cannot schedule for you. The source on stdin, one question at
+a time out, your answer in.
+
+- both the question AND the correct answer come from the source: the
+  model proposes a span of the source as the answer and a question that
+  span answers, and a question whose answer does not anchor is dropped
+  before it is ever asked. A drill built on an invented answer teaches
+  the invention
+- material too thin for questions is said in one line, never padded from
+  the model's own knowledge -- the learner cannot tell padding from the
+  source
+- self-graded against the sourced answer: you see the span and say
+  whether you had it. A second model grading a first model's question is
+  two opinions and no source
+- its ledger kind schedules rather than suppresses -- a missed item comes
+  back at 1, 3, 7, 21 and 60 days -- which is the inversion of every
+  other kind, and the reason it waits here: records that carry state and
+  never age out are a cost the roadmap has not agreed to pay
+
+Contract 13, if it is ever built. `lib/spark/drill.py` on the
+`claude/spark-three-new-contracts-qds99n` branch holds the full text.
+
 ## Where to start
 
 | idea | cost | surface |
 |---|---|---|
-| Blast radius | low -- one field in contract 4 | the line |
-| The fix as a patch | low -- the state is in the pane | the failure |
-| Localize a pasted command | low -- the brief plus `distro/` | the line |
-| `command not found` | low -- `packages.py` knows the name | the failure |
-| Intent search | medium -- a verb, no new contract | history |
+| The command you keep retyping | low -- counts, and v1.15's offer flow | history |
+| The tool you have and do not use | low -- `persona.PREFERRED` is the list | history |
 | Paste inspection | medium -- widget work | the line |
 | The command and the proof | medium -- the line plus `do` | the line |
 | Failure memory | medium -- a ledger of its own | the failure |
 | The doctor | medium -- reads what exists | the machine |
-| `spark watch` | high -- contract 11 | new |
+| `spark drill` | medium -- contract 13, a ledger that schedules | new |
 | `??` across machines | high -- thread routing at the prompt | new |
 
 Two to build first, if it were two:
 
-- **Blast radius**, because it makes `danger` mean a number instead of a
-  mark, and because it is nearly free.
-- **Intent search**, because it is the clearest thing a local model does
-  that a hosted one cannot, and it is the demo that needs no
-  explanation.
+- **The command and the proof**, because it turns a hopeful line into a
+  verified one, and `spark do` already runs the confirmed half.
+- **Failure memory**, because the ledger it needs exists, and the third
+  time you hit a failure is not the same event as the first.
+
+## Not prompt features
+
+These two came off the roadmap rather than out of the field. Neither
+passes the test at the top of this file -- they are maintainer tools,
+not things an AI at the prompt does -- so they sit apart here rather
+than pretending otherwise.
+
+- **Line-bench.** About forty questions per OS with a checker each,
+  through the real `spark line` path: `spark bench --lines`, one pass
+  rate and one median latency per model, kept beside the speed baseline.
+  The table would then choose on quality and speed, not size alone.
+- **`spark token`.** Bare `spark token` names which keys this machine
+  holds (api-token, admin token, login) and whether the brain accepts
+  each -- status only, never a value, with the remedy per stale key.
