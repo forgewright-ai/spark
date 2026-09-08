@@ -59,8 +59,8 @@ MODE_LINE = (
     "reply kind=cmd with ONE command line in `command` (no comments, no explanation inside it, no `sudo` "
     "unless unavoidable) and a `hint` of at most 70 characters saying what it does. Set danger=true when "
     "the command deletes, overwrites, kills, reboots, or changes permissions or history. If the question "
-    "is not something a command answers, reply kind=answer with the answer in `hint` (one line, at most "
-    "70 characters) and an empty `command`."
+    "is not something a command answers, reply kind=answer with the answer in `hint` (one line, a "
+    "sentence or two, at most 250 characters) and an empty `command`."
 )
 MODE_ASK = (
     "Answer the user's question about their shell, tools, files or system. Be terse: a few lines, "
@@ -69,10 +69,12 @@ MODE_ASK = (
     "pasted, read it before answering."
 )
 MODE_EXPLAIN = (
-    "The user pasted the output of a command that did not do what they wanted. Say in two or three "
-    "short lines what happened and what to do next, with the exact command to run on its own line, "
-    "indented four spaces, when there is one. Plain text for a terminal -- no markdown marks. "
-    "No preamble."
+    "The user pasted the output of a command that did not do what they wanted. A Command: line, when "
+    "present, is the exact command that ran and Exit: its status -- read them first: a typo in the "
+    "command is corrected, a permission is named, a service's log is where its own message points. Say "
+    "in two or three short lines what happened and what to do next, with the exact command to run on "
+    "its own line, indented four spaces, when there is one. Plain text for a terminal -- no markdown "
+    "marks. No preamble."
 )
 MODE_CHAT = (
     "This is a conversation, not the shell prompt. Talk with the user the way they talk to you: answer in "
@@ -272,8 +274,10 @@ def user_message(text, cwd, context=""):
     @FILEs named (forge.file_context labels those itself). Nothing else."""
     head = "[cwd %s]\n" % cwd if cwd else ""
     if context:
-        # an @FILE block and the editor's blocks carry their own label
-        labelled = context.startswith(("File ", "Text", "Selected ", "The author says", "You read this as", "Declined before"))
+        # an @FILE block, the editor's blocks and the widget's failure
+        # block (Command:/Exit:/Output:) carry their own label
+        labelled = context.startswith(("File ", "Text", "Selected ", "The author says", "You read this as", "Declined before",
+                                       "Command: "))
         label = "" if labelled else "Output:\n"
         return head + (text + "\n\n" if text else "") + label + context
     return head + text

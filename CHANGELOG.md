@@ -2,6 +2,25 @@
 
 ## v1.15
 
+- The failure moment: a command that exits nonzero prints one line above
+  the next prompt -- `* failed (1) -- press Esc s to ask why` -- and
+  `Esc s` on the empty line puts it back, already piped to `explain`;
+  nothing runs until Enter. The command and its exit code ride along, so
+  the answer can correct the command itself, and a command that failed
+  in silence still gets an answer. A destructive head word (`rm`, `dd`,
+  `mkfs`...) is seen but never offered a re-run; Ctrl-C, a no-match from
+  `grep` or `diff`, spark's own refusals and a multi-line command stay
+  quiet. After the fix works, `Esc s` offers to keep what happened as a
+  `spark remember` fact you edit before Enter. All of it is per pane, in
+  shell variables, with no model call and no fork at the prompt; `spark
+  off` silences the line with everything else, and the new `failure`
+  check row (39 rows now) watches the hook through the liveness
+  marker's fourth field (contract 6).
+- The hint above the prompt stopped cutting answers at 80 characters
+  mid-word: an answer now carries up to 300 characters, cut at a word,
+  and the widget trims it to the terminal's own width -- so a wide
+  terminal shows the whole sentence. The ellipsis comes from the glyph
+  table (`...` on the Linux console, which cannot draw the Unicode one).
 - Five spark apps: spark-neovim and spark-vim join spark-micro with the
   whole prompt (one clone, one mapping: complete at the cursor, rewrite,
   ask in a pane, the ledger); spark-helix and spark-nano put `spark

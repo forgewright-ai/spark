@@ -289,7 +289,9 @@ may change freely.
    Precedence: environment > file > default.
 4. `spark line --cwd D --shell S` reads the prompt buffer on stdin and prints
    line 1 = `cmd<TAB>command` | `danger<TAB>command` | `answer` | `error`,
-   line 2 = hint / answer / reason (<= 80 columns). Exit 0 for the first
+   line 2 = hint / answer / reason -- one line, cut at a word to a
+   character budget (a hint or reason <= 80, an answer <= `cli.ANSWER_MAX`;
+   the widget trims to the terminal's own width). Exit 0 for the first
    three, 1 for error. A buffer starting with `??` continues the newest
    thread; any other starts a new one (no heuristics). The shell widgets
    depend on nothing else.
@@ -298,7 +300,10 @@ may change freely.
    `/api/health` there says `forge: true`) and exits 0, or exits 1. This
    is the check's only AI probe.
 6. A live widget writes `~/.local/state/spark/widgets/<pid>` containing
-   `<shell> <pid> <epoch>` and removes it on shell exit.
+   `<shell> <pid> <epoch> [hook]` and removes it on shell exit. The
+   fourth field, the literal word `hook`, says that shell's exit-code
+   hook is armed (the failure moment); readers ignore fields they do
+   not know, so old markers and old readers both survive.
 7. `spark check` exits 0 iff no row is `fail`; CAPABILITY rows never
    `fail`. `--porcelain` prints `category<TAB>status<TAB>name<TAB>value<TAB>
    remedy`. Every run writes `~/.local/state/spark/check.json` for the bar.
@@ -649,7 +654,7 @@ sh tests/get_test.sh            # the one-liner: clone, pull, refusals, the hand
 sh tests/update_test.sh         # spark update: pull, move to a tag, dirty refused, --dry-run
 ```
 
-`spark check` has 38 rows today: 12 SOFTWARE, 17 CAPABILITY, 9
+`spark check` has 39 rows today: 12 SOFTWARE, 18 CAPABILITY, 9
 NONFUNCTIONAL (`grep -c '^@row' lib/spark/check.py`). With `SITE_SHELL=off`
 the 11 rows in `check.SHELL_ROWS` and the `shell` row answer `na`;
 `--selftest` runs a third pass to prove it, a fourth for the client

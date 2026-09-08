@@ -21,6 +21,8 @@ SPARK
   ?? words                        follow up on the last answer (same thread)
   ?? how do I change the model    spark knows itself: it names its own verbs
   Esc s                           ask about the line you are on, no ?
+  Esc s on an empty line          the command that just failed, piped
+                                  to explain; then the fix, as a fact
   cmd 2>&1 | explain              what went wrong, and the fix
   spark <TAB>                     completes the verbs; second word too
 

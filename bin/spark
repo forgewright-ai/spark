@@ -44,6 +44,7 @@ spark
  ? words or words? ENTER      the command lands in your line, hint above
  ?? words ENTER               follow up on the last answer (same thread)
  Esc s                        ask about the line you are on, no ? needed
+ Esc s on an empty line       the command that just failed, piped to explain
  cmd 2>&1 | explain           what went wrong, and the fix
  spark <TAB>                  the verbs, then each verb's words -- offline
 

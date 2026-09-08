@@ -108,6 +108,10 @@ home paths naming a user, with no skip path for those.
   line proof (`spark line` answers valid JSON for it).
 - Call `git` on `spark line`'s path: the widgets depend on nothing but
   the line contract, and it must never block.
+- Fork, call a model or touch a file in the widgets' prompt hook (the
+  failure line): it runs before every prompt, and it is a `$?` test, a
+  few variable writes and at most one `printf`. Its state is per pane
+  and in memory -- never exported, never on disk.
 - Write non-ASCII into a doc: the pre-commit hook refuses it, because
   these docs are read on the Linux console too.
 - Name a private repository or tool in any doc: what is not public is

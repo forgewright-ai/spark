@@ -105,6 +105,7 @@ class Stub(BaseHTTPRequestHandler):
             return self._send(200, b"<html>not json</html>", "text/html")
         messages = body["messages"]
         user = messages[-1]["content"]
+        STATE["last_user"] = user                     # the newest user message, for the failure checks
         STATE.setdefault("bodies", []).append(body)   # every request, for the editor's checks
         system = messages[0]["content"]
         if "Say what this text is" in system:        # the editor's reading (spark edit ?)
@@ -266,6 +267,22 @@ def main():
         t.ok(rc == 1 and "stdin" in err, "explain: refuses without stdin", err)
         rc, out, _ = spark(stdin="some output\n", exe=os.path.join(REPO, "bin", "explain"))
         t.ok(rc == 0 and "means X" in out, "explain symlink dispatches on its name", out)
+
+        # the failure moment: the widget rides the command and its exit
+        # code along (one-shot variables); explain names them to the brain,
+        # and a command that failed in silence still gets an answer
+        env_fail = {"SPARK_EXPLAIN_CMD": "find . -nmae x", "SPARK_EXPLAIN_RC": "1"}
+        rc, out, err = spark("explain", stdin="find: -nmae: unknown primary\n", extra=env_fail)
+        t.ok(rc == 0 and "means X" in out, "explain: answers with the command riding along", out + err)
+        sent = STATE.get("last_user") or ""
+        t.ok("Command: find . -nmae x" in sent and "Exit: 1" in sent and "Output:" in sent,
+             "explain: the command, the exit code and the output are labelled", sent)
+        rc, out, err = spark("explain", stdin="", extra=env_fail)
+        t.ok(rc == 0 and "means X" in out, "explain: an empty output still answers when the command is known", out + err)
+        t.ok("(none)" in (STATE.get("last_user") or ""), "explain: the empty output is said to be empty", STATE.get("last_user"))
+        rc, out, err = spark("explain", stdin="x" * 40000, extra=env_fail)
+        t.ok(rc == 0 and "chars cut" in (STATE.get("last_user") or ""),
+             "explain: 40 kB of hostile output is cut to the tail with a visible mark", err)
 
         # last, brain, status, history
         rc, out, _ = spark("last")
@@ -1213,6 +1230,11 @@ def main():
         rc, out, _ = spark("help", extra=dict(off, SITE_SHELL="on"))
         t.ok(rc == 0 and "spark bar" in out and "the interface" in out,
              "spark help with SITE_SHELL=on lists the shell block", out)
+        rc, out, _ = spark("help", extra=off)
+        t.ok("Esc s" in out and "empty line" in out,
+             "the failure moment is in help with the shell layer off", out)
+        wide = [l for l in out.splitlines() if len(l) > 80]
+        t.ok(not wide, "every help line fits 80 columns", "\n".join(wide))
 
         # the pager: piped output never touches $PAGER -- a pager that would
         # fail (/bin/false) proves page() never ran it off a tty
@@ -1802,6 +1824,28 @@ def main():
          "js only: %s; themes only: %s; differing: %s" % (
              sorted(set(js_map) - set(env_map)), sorted(set(env_map) - set(js_map)),
              sorted(k for k in set(js_map) & set(env_map) if js_map[k] != env_map[k])))
+
+    # widget drift guard: the failure moment's word lists live in two
+    # files, one per shell, with no compiler between them. A word added to
+    # one and not the other goes loud here, as does a marker or hook that
+    # leaves one shell behind.
+    wz = open(os.path.join(REPO, "home", ".config", "spark", "widget.zsh")).read()
+    wb = open(os.path.join(REPO, "home", ".config", "spark", "widget.bash")).read()
+
+    def wordlist(text, name):
+        m = re.search(r"^%s='([^']*)'" % name, text, re.M)
+        return sorted(m.group(1).split()) if m else []
+    for name in ("_SPARK_DANGER", "_SPARK_QUIET_ONE", "_SPARK_QUIET_RC", "_SPARK_LOOKING"):
+        a, b = wordlist(wz, name), wordlist(wb, name)
+        t.ok(bool(a) and a == b, "%s is the same list in both widgets" % name,
+             "zsh: %s; bash: %s" % (a, b))
+    t.ok(wordlist(wz, "_SPARK_DANGER") == sorted(
+        "rm dd mkfs shred chown chmod kill killall pkill shutdown reboot halt "
+        "poweroff crontab truncate diskutil fdisk parted".split()),
+        "the danger list is the agreed one", wordlist(wz, "_SPARK_DANGER"))
+    for name, text in (("widget.zsh", wz), ("widget.bash", wb)):
+        t.ok("_spark_failed" in text and "_spark_offer_kind" in text and " hook" in text,
+             "%s carries the exit-code hook, the predicate and the marker field" % name)
 
     srv.shutdown()
     print("smoke: %s" % ("all ok" if not t.fail else "%d FAILED" % t.fail))

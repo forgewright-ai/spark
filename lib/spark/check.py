@@ -654,6 +654,51 @@ def row_prompt(ctx):
 
 
 @row("CAPABILITY")
+def row_failure(ctx):
+    """The failure moment: a nonzero exit offers explain at the prompt.
+    Core -- the widgets carry it with the shell layer off too. A live
+    shell says so through the marker's fourth field (contract 6)."""
+    from . import OFF_FLAG, WIDGETS_DIR
+    d = os.path.join(ctx.home, ".config", "spark")
+    stale = []
+    for sh in ("bash", "zsh"):
+        p = os.path.join(d, "widget." + sh)
+        try:
+            with open(p, encoding="utf-8", errors="replace") as f:
+                if "_spark_failed" not in f.read():
+                    stale.append("widget." + sh)
+        except OSError:
+            stale.append("widget." + sh)
+    if stale:
+        return warn("no exit-code hook in: %s" % ", ".join(stale), "sh install.sh")
+    if os.path.exists(OFF_FLAG):
+        return na("switched off on purpose (spark on)")
+    armed, old = [], 0
+    try:
+        names = os.listdir(WIDGETS_DIR)
+    except OSError:
+        names = []
+    for name in names:
+        try:
+            with open(os.path.join(WIDGETS_DIR, name), encoding="utf-8") as f:
+                parts = f.read().split()
+            os.kill(int(parts[1]), 0)
+        except (OSError, ValueError, IndexError):
+            continue
+        if len(parts) > 3 and parts[3] == "hook":
+            armed.append("%s %s" % (parts[0], parts[1]))
+        else:
+            old += 1
+    if old:
+        return warn("%d shell(s) predate the exit-code hook" % old, "exec $SHELL there")
+    if not armed:
+        if ctx.cfg.headless:
+            return na("headless: no interactive shell open (armed when one is)")
+        return warn("no shell has sourced the widget", "open a new shell")
+    return ok("armed in %s -- a nonzero exit offers explain (Esc s)" % ", ".join(armed[:3]))
+
+
+@row("CAPABILITY")
 def row_completion(ctx):
     """TAB completion: the two files install.sh links, each hook sourcing
     its own. Static verbs always; theme and model names offline, from the
@@ -1541,8 +1586,10 @@ def make_fixture(root, good, stub_url=""):
         else:
             f.write("SITE_EMBER_MODEL=qwen3-30b-a3b\n")     # 21 GB: over the bad fixture's budget
     os.chmod(os.path.join(home, ".config", "spark", "site.env"), 0o600 if good else 0o644)
+    # the good marker carries contract 6's fourth field (the exit-code
+    # hook is armed); the bad one is a pre-hook shell -- the failure row
     with open(os.path.join(state, "widgets", str(os.getpid())), "w") as f:
-        f.write("bash %d %d\n" % (os.getpid(), int(time.time())))
+        f.write("bash %d %d%s\n" % (os.getpid(), int(time.time()), " hook" if good else ""))
     with open(os.path.join(state, "bar"), "w") as f:
         json.dump({"t": time.time() if good else time.time() - 3600, "net": None, "line": "x"}, f)
     with open(os.path.join(state, "check.json"), "w") as f:
@@ -1646,7 +1693,11 @@ def make_fixture(root, good, stub_url=""):
             f.write("fixture-x64\n")
         _stub(os.path.join(home, ".local", "bin", "starship"), "#!/bin/sh\nexit 0\n")   # where bootstrap pins it
         for sh in ("bash", "zsh"):
-            open(os.path.join(home, ".config", "spark", "widget." + sh), "w").close()
+            # the failure row wants the exit-code hook's sentinel in each
+            # widget (the bad fixture has no widgets at all, so both the
+            # prompt and the failure row flip to warn there)
+            with open(os.path.join(home, ".config", "spark", "widget." + sh), "w") as f:
+                f.write("# fixture widget\n_spark_failed() { :; }\n")
             # the completion row: the two files plus a hook that sources its
             # own (the bad fixture has neither, so the row flips to warn)
             open(os.path.join(home, ".config", "spark", "completion." + sh), "w").close()
@@ -1871,6 +1922,11 @@ def selftest():
     say("  %s shell-off: %d rows na%s" % (GLYPH[OK] if not not_na else GLYPH[FAIL], len(gated) - len(not_na),
                                          "" if not not_na else "   not na: " + " ".join(not_na)))
     bad += bool(not_na)
+    # the failure moment is core: the same pass must leave it ok, not na --
+    # the machine-checked form of "the feature survives the layer being off"
+    foff = results["off"].get("failure", ("missing", ""))[0]
+    say("  %s core: failure %s with the shell layer off" % (GLYPH[OK] if foff == OK else GLYPH[FAIL], foff))
+    bad += foff != OK
     not_na = [n for n in CLIENT_ROWS if results["client"].get(n, ("missing", ""))[0] != NA]
     peer = results["client"].get("peer", ("missing", ""))[0]
     say("  %s client: %d rows na, peer %s%s" % (GLYPH[OK] if not not_na and peer == OK else GLYPH[FAIL],
