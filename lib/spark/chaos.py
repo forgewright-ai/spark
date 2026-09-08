@@ -471,8 +471,10 @@ def chaos_two_serves_at_once(m):
         rc, out = m.spark("serve")
     finally:
         os.close(fd)
-    if rc == 0:
-        return "the second serve exited 0: %r" % out.strip()[-200:]
+    # 2, the same as the update lock: a gate refusal, not a world that
+    # failed. Both locks answer the same situation, so both sign it alike
+    if rc != 2:
+        return "the second serve exited %d, not 2 (a refusal): %r" % (rc, out.strip()[-200:])
     if "another" not in out:
         return "the refusal does not say why: %r" % out.strip()[-300:]
     m.note("the second serve refuses (exit %d): %s"
@@ -570,35 +572,36 @@ def run(only=()):
     """Every scenario, each on its own throwaway machine. Exit 0 iff every
     one of them rehearsed."""
     say("%s check --chaos" % MARK)
-    bad = 0
-    if True:
-        for sc in SCENARIOS:
-            if only and sc.name not in only:
-                continue
-            t0 = time.time()
-            with tempfile.TemporaryDirectory(prefix="spark-chaos-") as tmp:
-                root = os.path.join(tmp, sc.name)
-                os.makedirs(root)
-                brain = None
-                try:
-                    brain = Brain(root, sc.mood)
-                    m = Machine(root, brain.url)
-                    m.brain = brain
-                    passed, lines = _judge(m, sc)
-                except Exception as e:      # a crashed scenario is a failed one
-                    from . import log_exc
-                    log_exc("chaos " + sc.name)
-                    passed, lines = False, ["crashed: %s" % e]
-                finally:
-                    if brain is not None:
-                        brain.stop()
-            bad += not passed
-            say("  %s %-16s %s" % (GLYPH[OK] if passed else GLYPH[FAIL], sc.name,
-                                    _fit(sc.doc, 58 - len(" (%.1fs)" % 0)) + " (%.1fs)" % (time.time() - t0)))
-            for line in lines:
-                say("      %s %s" % (glyph("arrow"), line))
+    bad = ran = 0
+    for sc in SCENARIOS:
+        if only and sc.name not in only:
+            continue
+        ran += 1
+        t0 = time.time()
+        with tempfile.TemporaryDirectory(prefix="spark-chaos-") as tmp:
+            root = os.path.join(tmp, sc.name)
+            os.makedirs(root)
+            brain = None
+            try:
+                brain = Brain(root, sc.mood)
+                m = Machine(root, brain.url)
+                m.brain = brain
+                passed, lines = _judge(m, sc)
+            except Exception as e:      # a crashed scenario is a failed one
+                from . import log_exc
+                log_exc("chaos " + sc.name)
+                passed, lines = False, ["crashed: %s" % e]
+            finally:
+                if brain is not None:
+                    brain.stop()
+        bad += not passed
+        say("  %s %-16s %s" % (GLYPH[OK] if passed else GLYPH[FAIL], sc.name,
+                                _fit(sc.doc, 58 - len(" (%.1fs)" % 0)) + " (%.1fs)" % (time.time() - t0)))
+        for line in lines:
+            say("      %s %s" % (glyph("arrow"), line))
     if bad:
         say("  %d scenario%s did not rehearse" % (bad, "" if bad == 1 else "s"))
     else:
-        say("  every scenario rehearsed (%d)" % len(SCENARIOS))
+        # `ran`, not len(SCENARIOS): a filtered run must not claim the suite
+        say("  every scenario rehearsed (%d)" % ran)
     return 1 if bad else 0

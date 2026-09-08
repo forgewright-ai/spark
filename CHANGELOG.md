@@ -26,6 +26,10 @@
 - `spark update` takes a lock. Two at once could both fetch, both move
   the tree, and one exec into a tree the other was moving; the second
   now refuses in one line.
+- Both locks refuse in the same shape. `spark serve` said a lock it
+  could not take on stderr and exited 1, the code for a world that
+  failed; another process holding a lock is a gate refusal, so it is
+  signed on stdout and exits 2 now, the way `spark update` answers it.
 
 - The failure moment: a command that exits nonzero prints one line above
   the next prompt -- `* failed (1) -- press Esc s to ask why` -- and

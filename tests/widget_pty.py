@@ -48,7 +48,10 @@ case $line in
   # nothing and leave a prompt the shell can still be used at.
   *hostile-prose*) printf 'the model rambled instead of answering, at length\n' ;;
   *hostile-empty*) : ;;
-  *hostile-huge*) printf 'cmd\techo EXECUTED-MARK'; awk 'BEGIN{while(i++<40000)printf "z"}'; printf '\n'; awk 'BEGIN{while(i++<40000)printf "y"}'; printf '\n' ;;
+  # the padding comes BEFORE the mark on purpose: with the mark first,
+  # running the command would print MARK+40 kB and the "nothing ran"
+  # assertion below could never fail, whatever the widget did
+  *hostile-huge*) printf 'cmd\techo '; awk 'BEGIN{while(i++<40000)printf "z"}'; printf ' EXECUTED-MARK\n'; awk 'BEGIN{while(i++<40000)printf "y"}'; printf '\n' ;;
   *hostile-dead*) exit 1 ;;
   *) printf 'cmd\techo EXECUTED-MARK\nA hint about it\n' ;;
 esac
