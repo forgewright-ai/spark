@@ -26,6 +26,7 @@ import time
 
 from . import MARK, REPO, glyph, say
 from .check import FAIL, GLYPH, NA, OK, WARN
+from .cli import ANSWER_MAX
 
 
 class Scenario:
@@ -226,8 +227,13 @@ class H(BaseHTTPRequestHandler):
             self.close_connection = True
             return
         seen[0] += 1
-        if MOOD == "garbage":                   # not JSON, then empty, then 40 kB
-            content = ["a model that answers in prose, not JSON", "", "x" * 40000][(seen[0] - 1) % 3]
+        if MOOD == "garbage":
+            # three ways a model betrays contract 4: prose where JSON was
+            # asked for, nothing at all, and a well-formed answer 40 kB
+            # long whose command carries newlines of its own
+            content = ["a model that answers in prose, not JSON", "",
+                       json.dumps({"kind": "cmd", "hint": "y" * 40000, "danger": False,
+                                   "command": "echo one\necho two\n" + "z" * 40000})][(seen[0] - 1) % 3]
         else:
             content = json.dumps(LINE)
         if stream:
@@ -463,6 +469,36 @@ def chaos_two_serves_at_once(m):
         return "the refusal does not say why: %r" % out.strip()[-300:]
     m.note("the second serve refuses (exit %d): %s"
            % (rc, _fit(" ".join(out.split()), 60)))
+    return ""
+
+
+@scenario(heal=None, mood="garbage",
+          unhealed="a hostile answer is the model's, not the machine's: "
+                   "the line keeps contract 4 and the widget runs nothing")
+def chaos_hostile_line_answer(m):
+    """A brain that answers prose, then nothing, then 40 kB with newlines
+    in it: `spark line` still prints contract 4's two lines, every time."""
+    kinds = []
+    for nth in ("prose", "empty", "40 kB"):
+        rc, out = m.spark("line", "--cwd", m.root, "--shell", "bash",
+                          stdin="how big is this dir?\n")
+        if "Traceback" in out:
+            return "the %s answer ended in a traceback: %s" % (nth, out.strip()[-300:])
+        if rc not in (0, 1):
+            return "the %s answer exited %d (contract 4: 0 or 1)" % (nth, rc)
+        lines = out.split("\n")
+        if lines and lines[-1] == "":
+            lines.pop()
+        if len(lines) != 2:
+            return "the %s answer printed %d lines, not 2: %r" % (nth, len(lines), out[:300])
+        head = lines[0].split("\t")[0]
+        if head not in ("cmd", "danger", "answer", "error"):
+            return "the %s answer began %r, which contract 4 does not name" % (nth, head)
+        if len(lines[0]) > 1200 or len(lines[1]) > ANSWER_MAX:
+            return ("the %s answer came through at %d + %d characters: the "
+                    "widget would wrap the prompt away" % (nth, len(lines[0]), len(lines[1])))
+        kinds.append("%s -> %s" % (nth, head))
+    m.note("contract 4 held: " + ", ".join(kinds))
     return ""
 
 
