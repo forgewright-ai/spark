@@ -6,7 +6,9 @@
 # comes and goes with the shell; a nonzero exit prints the failure line
 # and Esc s on an empty line composes `cmd 2>&1 | explain` (quoting
 # intact), then offers the fix as a fact -- and the suppression table
-# (_spark_offer_kind) answers the same in both shells. Then, in a
+# (_spark_offer_kind) answers the same in both shells; a hostile answer
+# -- prose, nothing, a dead spark line, 40 kB -- runs nothing and leaves
+# a working prompt. Then, in a
 # 40-column tmux pane (skipped without tmux): a question that wraps still
 # gets its hint in the row above an intact prompt.
 #
@@ -42,6 +44,12 @@ printf '%s\n' "$line" >> "$STUB_LOG"
 case $line in
   *delete*) printf 'danger\techo EXECUTED-MARK\nDeletes things -- careful\n' ;;
   *answer-me*) printf 'answer\nForty-two\n' ;;
+  # the hostile three: contract 4 broken three ways. The widget must run
+  # nothing and leave a prompt the shell can still be used at.
+  *hostile-prose*) printf 'the model rambled instead of answering, at length\n' ;;
+  *hostile-empty*) : ;;
+  *hostile-huge*) printf 'cmd\techo EXECUTED-MARK'; awk 'BEGIN{while(i++<40000)printf "z"}'; printf '\n'; awk 'BEGIN{while(i++<40000)printf "y"}'; printf '\n' ;;
+  *hostile-dead*) exit 1 ;;
   *) printf 'cmd\techo EXECUTED-MARK\nA hint about it\n' ;;
 esac
 '''
@@ -336,6 +344,28 @@ def main(shell, widget):
         sh.send("\r")
         sh.expect(prompt, 3)
         ok("EXECUTED" not in since2(), "an answer leaves no command behind", since2())
+
+        # 3b. the hostile answers: contract 4 broken four ways. Whatever
+        # comes back, nothing runs and the prompt is still a prompt --
+        # the widget's own promise, under an answer that is not spark's
+        for what, why in (("hostile-prose", "prose where the two lines belong"),
+                          ("hostile-empty", "nothing at all"),
+                          ("hostile-dead", "a spark line that died"),
+                          ("hostile-huge", "40 kB on both lines")):
+            since = sh.mark()
+            sh.send("%s?\r" % what)
+            time.sleep(0.6)
+            sh.read(0.6)
+            seen = since()
+            ok("EXECUTED-MARK\r\n" not in seen and "EXECUTED-MARK\n" not in seen,
+               "%s: nothing ran" % why, seen[-300:])
+            sh.send("\x15")            # C-u: clear whatever landed
+            time.sleep(0.2)
+            since2 = sh.mark()
+            sh.send("echo STILL-HERE-%s\r" % what)
+            ok(sh.expect("STILL-HERE-%s\r\n" % what) or sh.expect("STILL-HERE-%s\n" % what),
+               "%s: the prompt still works after it" % why, since2()[-300:])
+            sh.expect(prompt)
 
         # 4. a plain line runs at once, unasked
         n = asked()

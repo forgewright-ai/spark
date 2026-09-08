@@ -52,6 +52,7 @@ shellcheck -S warning bootstrap.sh install.sh lib/env.sh
 /usr/bin/python3 tests/widget_pty.py pager
 /usr/bin/python3 tests/widget_pty.py completion zsh home/.config/spark/completion.zsh
 /usr/bin/python3 bin/spark check --selftest
+/usr/bin/python3 bin/spark check --chaos
 sh tests/install_test.sh
 sh tests/get_test.sh
 sh tests/update_test.sh
@@ -59,6 +60,12 @@ sh tests/uninstall_test.sh
 ```
 
 (`tests/check_selftest.py` is the hook's entry to `spark check --selftest`.)
+
+`--selftest` proves every fixture-testable row CAN flip; `--chaos`
+proves the sentence a row prints under a real failure is true, and
+that the remedy it names heals it. The scenarios live in
+`lib/spark/chaos.py`; the rehearsals that need a real box are in
+ROADMAP.md, not here.
 
 ## The audition: the editor's briefs, judged blind
 
