@@ -2,6 +2,13 @@
 
 ## v1.18
 
+- A command pasted from a page is rewritten for this machine. The prompt
+  line's prefix now names this OS's side of the pairs a paste crosses
+  most -- `free`/`vm_stat`, the package managers, `systemctl`/`launchctl`,
+  `xdg-open`/`open`, `ls --color`/`ls -G` -- and tells the model to
+  rewrite the other side and say so in the hint. This OS's half only, so
+  the prefix stays byte-stable per machine and the prompt cache keeps
+  hitting.
 - The failure moment goes further, twice. After the explain, a second
   `Esc s` proposes the corrected command in your line -- the command and
   its exit code ride to `spark line`, which answers with a fix through the

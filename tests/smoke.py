@@ -296,6 +296,17 @@ def main():
         t.ok(rc == 0 and lines[0].startswith("cmd\t") and "ripgrep" in lines[0]
              and STATE["hits"] == n0,
              "line: a known missing tool (rg) gets its install line with no model call", out)
+
+        # localize: the prefix names THIS OS's side of the pairs, not the other
+        import platform as _plat
+        from spark import persona as _persona, config as _config
+        pfx = _persona.prefix(_config.load(), "bash")
+        if _plat.system() == "Darwin":
+            t.ok("free is vm_stat" in pfx and "rewrite it for macOS" in pfx and "vm_stat is free" not in pfx,
+                 "line: the prefix localizes to macOS, not the other way", pfx[-300:])
+        else:
+            t.ok("vm_stat is free" in pfx and "rewrite it for this machine" in pfx and "free is vm_stat" not in pfx,
+                 "line: the prefix localizes to this Linux, not macOS", pfx[-300:])
         rc, out, _ = spark("line", stdin="what is the capital of France?")
         t.ok(rc == 0 and out.splitlines() == ["answer", "Paris"], "line: answer", out)
         rc, out, _ = spark("line", stdin="?   ")

@@ -325,8 +325,22 @@ def prefix(cfg, shell):
     ]
     if pm:
         lines.append("Package manager: %s." % pm)
+    mac = platform.system() == "Darwin"
     lines.append("System tools: " + ("launchctl, pbcopy, pbpaste, open, mdfind, diskutil."
-                                     if platform.system() == "Darwin" else "systemctl --user, journalctl, ip."))
+                                     if mac else "systemctl --user, journalctl, ip."))
+    # a command pasted from a page is written for someone else's machine.
+    # These are this OS's side of the pairs a paste crosses most; the model
+    # is told to rewrite the other side and say so. This OS's half only, so
+    # the prefix stays byte-stable per machine (the prompt cache needs it).
+    if mac:
+        lines.append("On this machine free is vm_stat, apt/dnf is brew, systemctl is "
+                     "launchctl, xdg-open is open, ls --color is ls -G, sed -i is sed -i ''. "
+                     "A command written for Linux: rewrite it for macOS and say so in the hint.")
+    else:
+        lines.append("On this machine vm_stat is free, brew is %s, launchctl is systemctl, "
+                     "open is xdg-open, ls -G is ls --color, sed -i '' is sed -i. "
+                     "A command written for macOS: rewrite it for this machine and say so in "
+                     "the hint." % (pm or "the package manager"))
     t = _tools_line()
     if t:
         lines.append(t)
