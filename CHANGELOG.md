@@ -2,6 +2,15 @@
 
 ## v1.17
 
+- `spark uninstall` no longer deletes the script it just told you to run.
+  The undo pass is the one root step that runs `bootstrap.sh` rather than
+  a command of its own -- bootstrap is what knows how to unmask sleep,
+  drop the lid file and put the motd and GRUB back -- so when it cannot
+  get sudo, its remedy is "run ./bootstrap.sh". The clone was then
+  removed a few steps later, leaving an instruction nobody could follow
+  and a machine still half spark's. The clone stays while that is
+  outstanding, and says so.
+
 - The core documents are the core. `spark help`, `CHEATSHEET.txt`,
   `README.md` and `INSTALL.md` no longer carry the shell layer or the
   apps: `spark shell` and `spark bar` moved to `SHELL.md`, and the apps

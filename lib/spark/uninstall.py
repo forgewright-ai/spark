@@ -160,8 +160,17 @@ def step_bootstrap_undo(ctx):
     site.set_keys(_quiet=True, **keys)
     os.environ["SPARK_HEADLESS_UNDO"] = "1"
     rc = site.apply(["quiet-login", "quiet-boot", "sleep", "lid", "daemons", r"spark\.(serve|forge|check)"], stream=True)
-    ctx.row("ok" if rc == 0 else "todo", "undo",
-            "headless and quiet off through bootstrap" if rc == 0 else "bootstrap.sh failed: run ./bootstrap.sh and read its rows")
+    if rc == 0:
+        ctx.row("ok", "undo", "headless and quiet off through bootstrap")
+        return
+    # The undo is the one root step that runs bootstrap rather than a
+    # command of its own -- it is bootstrap that knows how to unmask sleep,
+    # drop the lid file, put the motd and GRUB back. So the remedy has to
+    # be "run ./bootstrap.sh", and the clone has to still be there to run:
+    # step_clone reads this.
+    ctx.undo_pending = True
+    ctx.row("todo", "undo", "bootstrap.sh could not finish (sudo): sleep, lid, motd and GRUB "
+                            "are still spark's -- ./bootstrap.sh in the clone undoes them")
 
 
 def step_services(ctx):
@@ -500,6 +509,11 @@ def step_clone(ctx):
         return
     if st == "dirty":
         ctx.row("skip", "clone", "%s has uncommitted changes: commit or discard them, then rm -rf it" % _tilde(REPO))
+        return
+    if getattr(ctx, "undo_pending", False):
+        # never delete the script the report just told them to run
+        ctx.row("todo", "clone", "%s stays: ./bootstrap.sh there finishes the undo above, "
+                                 "then rm -rf it" % _tilde(REPO))
         return
     if ctx.dry:
         ctx.row("would", "clone", "%s removed" % _tilde(REPO))

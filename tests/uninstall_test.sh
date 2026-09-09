@@ -110,4 +110,21 @@ printf '%s\n' "$out" | grep -qE '^skip +clone +.* is yours' && ok "a developer c
 [ -z "$(git -C "$REPO" status --porcelain -- bin lib tests 2>/dev/null | grep -v '^??')" ] || true
 [ -e "$REPO/.git" ] && ok "the repository is untouched" || bad "the repository is gone"
 
+# 6. the undo needs root and cannot get it: the clone must survive, because
+# the row that failed tells you to run ./bootstrap.sh from inside it
+build_home four
+printf 'SITE_SHELL=on\nSITE_THEME=gruvbox-dark\nSITE_AI_MODEL=none\nSITE_HEADLESS=yes\n' > "$HOME/.config/spark/site.env"
+# a bootstrap that cannot finish -- the box hit this for want of a tty to
+# type a sudo password into. Committed, so the clone stays clean and is not
+# skipped for being dirty, which would prove nothing.
+printf '#!/bin/sh\necho "bootstrap: sudo refused" >&2\nexit 1\n' > "$HOME/.spark/bootstrap.sh"
+git -C "$HOME/.spark" commit -qam "a bootstrap that fails" >/dev/null 2>&1
+out=$(spark uninstall --yes 2>&1) || bad "uninstall with headless on failed: $out"
+printf '%s\n' "$out" | grep -qE '^todo +undo ' && ok "headless on, no sudo: the undo lands as a todo" \
+    || bad "undo row: $(printf '%s\n' "$out" | grep -E ' undo ')"
+[ -e "$HOME/.spark/bootstrap.sh" ] && ok "the clone stays while the undo is unfinished" \
+    || bad "the clone was removed although the report says to run ./bootstrap.sh in it"
+printf '%s\n' "$out" | grep -qE '^todo +clone +.*stays' && ok "the clone row says why it stayed" \
+    || bad "clone row: $(printf '%s\n' "$out" | grep -E ' clone ')"
+
 [ "$fail" -eq 0 ] && echo "uninstall_test: all ok" || { echo "uninstall_test: FAILED"; exit 1; }
