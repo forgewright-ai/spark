@@ -301,7 +301,7 @@ def cmd_tune(args):
     cfg = config.load()
     cur = settings_of(cfg)
     if sub == "show":
-        say("%s tune -- %s, %s" % (MARK, t["model"], t["ts"]))
+        say("%s bench tune -- %s, %s" % (MARK, t["model"], t["ts"]))
         say("  now:    %s" % key_of(cur))
         say("  winner: %s  (tg %.1f, pp %.1f tok/s)" % (key_of(t["winner"]), t["winner_tg"], t["winner_pp"]))
         for row in t["table"][:6]:

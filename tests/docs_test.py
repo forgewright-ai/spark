@@ -129,6 +129,23 @@ def main():
         check(re.search(r"(?m)^%s\. `spark %s` -- reserved, not built" % (n, name), claude) is not None,
               "CLAUDE.md reserves contract %s for spark %s" % (n, name))
     check(reserved > 0, "the reserved contracts are found by their modules (%d)" % reserved)
+    # contract 8: a signed line is `spark <verb> -- <one line>`, and the
+    # verb it names has to be one that exists. Renaming a verb leaves these
+    # behind -- `spark stop -- stopped` outlived `spark stop` by a whole
+    # release -- and nothing else looks at them.
+    known = set(re.findall(r'"([a-z-]+)": \("', read(os.path.join("bin", "spark"))))
+    from spark import cli as _cli
+    known |= set(_cli.COMMANDS)
+    stale = []
+    libdir = os.path.join(ROOT, "lib", "spark")
+    for f in sorted(os.listdir(libdir)):
+        if not f.endswith(".py"):
+            continue
+        for m in re.finditer(r'"%s ([a-z]+(?: [a-z]+)?) --[ "]', read(os.path.join("lib", "spark", f))):
+            if m.group(1).split()[0] not in known:
+                stale.append("%s: '%s'" % (f, m.group(1)))
+    check(not stale, "every signed line names a verb that exists%s"
+          % ("" if not stale else " (found %s)" % ", ".join(stale[:3])))
     # the roadmap starts where the changelog's top section is
     top = re.search(r"^## v(\d+\.\d+)", read("CHANGELOG.md"), re.M).group(1)
     m = re.search(r"What comes after v(\d+\.\d+)", read("ROADMAP.md"))

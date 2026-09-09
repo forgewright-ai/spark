@@ -210,7 +210,7 @@ def cmd_stop(args):
         if left:
             engine.terminate(left, force=True)
         engine.forget()
-        say("%s stop -- %s; to bring it back: %s" % (MARK, "disabled" if noreload else "stopped", undo))
+        say("%s serve -- %s; to bring it back: %s" % (MARK, "disabled" if noreload else "stopped", undo))
         return 0
     if noreload:
         return _die("nothing to disable -- no unit here (%s)" % ("disabled already" if st == "disabled" else "on demand"))
@@ -225,7 +225,7 @@ def cmd_stop(args):
         if left:
             return _die("pid %d survived SIGTERM -- `spark serve off --force` sends SIGKILL" % mine)
         engine.forget()
-        say("%s stop -- stopped pid %d" % (MARK, mine))
+        say("%s serve -- stopped pid %d" % (MARK, mine))
         return 0
     if pids:
         if not force:
@@ -236,10 +236,10 @@ def cmd_stop(args):
         if left:
             engine.terminate(left, force=True)
         engine.forget()
-        say("%s stop -- killed pid %s" % (MARK, ",".join(str(p) for p in pids)))
+        say("%s serve -- killed pid %s" % (MARK, ",".join(str(p) for p in pids)))
         return 0
     engine.forget()
-    say("%s stop -- not running" % MARK)
+    say("%s serve -- not running" % MARK)
     return 0
 
 

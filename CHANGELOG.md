@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.18
+
+- Signed lines name verbs that exist. `spark serve off` still answered
+  `spark stop -- stopped`, and the tune report signed itself `spark tune`;
+  both verbs were removed in v1.17 and nothing looked at the strings that
+  named them. `tests/docs_test.py` now reads the verb table out of
+  `bin/spark` and refuses any `%s <verb> --` line whose verb is not in it.
+
 ## v1.17
 
 - `spark uninstall` no longer deletes the script it just told you to run.
