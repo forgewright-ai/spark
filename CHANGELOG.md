@@ -2,6 +2,15 @@
 
 ## v1.18
 
+- `spark ask` survives a model that wraps its questions. The brief said to
+  point at the text "by quoting it between double quotes", and small
+  models read that as wrapping the whole question -- every line then ended
+  in a quote mark and the law (`it ends in ? or it is not output`) dropped
+  all of them: on the box, two different models produced zero questions.
+  The brief now says the quotes go inside the question, never around it,
+  and a line that still arrives as one wrapped question is unwrapped
+  before the gate reads it -- its inner quotes are then exactly the spans
+  the grounding law judges.
 - Signed lines name verbs that exist. `spark serve off` still answered
   `spark stop -- stopped`, and the tune report signed itself `spark tune`;
   both verbs were removed in v1.17 and nothing looked at the strings that

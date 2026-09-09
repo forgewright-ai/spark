@@ -154,9 +154,10 @@ ASK_TEXT = ("We will move the store to Postgres in March.\n"
 def ask_pieces():
     """spark ask's reply (contract 12), one line at a time: a preamble, a
     grounded question, one whose quote is invented, a question that could
-    be asked of any plan, a repeat, two more grounded ones and a fourth
-    past the cap. Three survive; five are dropped, each by a different
-    rule. STATE['ask_none'] plays the model with nothing to ask."""
+    be asked of any plan, a repeat, two more grounded ones (one arriving
+    wrapped whole in quotes -- unwrapped before the law reads it) and a
+    fourth past the cap. Three survive; five are dropped, each by a
+    different rule. STATE['ask_none'] plays the model with nothing to ask."""
     if STATE.get("ask_none"):
         return ("Here are my questions:\n", "The plan looks solid to me.\n",
                 'Why does "the rollback plan" exist?\n')
@@ -165,7 +166,7 @@ def ask_pieces():
             'Why does "the rollback plan" exist?\n',
             "What is your timeline?\n",
             'What happens if "the migration runs nightly" overruns its window?\n',
-            'Who owns "Postgres" after March?\n',
+            '"Who owns "Postgres" after March?"\n',   # wrapped whole: unwrapped, then kept
             'What else could "takes four hours" hide?\n',
             'Is "nightly" the only window?')
 

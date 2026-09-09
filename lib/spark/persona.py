@@ -210,10 +210,12 @@ MODE_ASK_QUESTIONS = (
     "before the author sees it, so do not write one. At most three questions, fewer when "
     "fewer are worth asking, none at all when the text answers everything you would ask -- "
     "saying nothing is an answer here. Ask what this text and no other would provoke: a "
-    "question that could be asked of any plan is thrown away too. Point at the text by "
-    "quoting it between double quotes, character for character, at most twelve words and "
-    "never across a line; every quote is checked against the text, and a question whose "
-    "quotes are not in it is thrown away. Never state a fact, never answer your own "
+    "question that could be asked of any plan is thrown away too. To point at the text, "
+    "weave a short piece of it -- character for character, at most twelve words, never "
+    "across a line -- into your question between double quotes. The quotes are for the "
+    "text's words inside your question, never around the question itself: the last "
+    "character of every line is the question mark. Every quote is checked against the "
+    "text, and a question whose quotes are not in it is thrown away. Never state a fact, never answer your own "
     "question, never say what you would do or what the author should do: you are the one "
     "who asks. Ask in the text's own language.")
 MODES.update({"edit-complete": MODE_EDIT_COMPLETE, "edit-rewrite": MODE_EDIT_REWRITE,

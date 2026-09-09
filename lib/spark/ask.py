@@ -127,6 +127,40 @@ def _label(name, about):
     return head, ("Plan %s:" % name if name else "Text:")
 
 
+class _Unwrap:
+    """A model told to weave a quote into its question sometimes wraps the
+    whole question in quotes instead -- every line then ends in a quote
+    mark and the law would drop all of them. A line that IS one wrapped
+    question (it opens with a quote and closes with a question mark inside
+    one) is unwrapped before the gate reads it; its inner quotes are then
+    exactly the spans the grounding law should judge. Anything else passes
+    untouched."""
+
+    def __init__(self, stream):
+        self.stream, self.buf = stream, ""
+
+    @staticmethod
+    def _line(line):
+        t = line.rstrip()
+        if t.startswith('"') and t.endswith('?"'):
+            return t[1:-1]
+        return line
+
+    def write(self, s):
+        self.buf += s
+        while "\n" in self.buf:
+            line, self.buf = self.buf.split("\n", 1)
+            self.stream.write(self._line(line) + "\n")
+
+    def flush(self):
+        self.stream.flush()
+
+    def close(self):
+        if self.buf:
+            self.stream.write(self._line(self.buf))
+            self.buf = ""
+
+
 def cmd_ask(args):
     """Contract 12: the text on stdin, questions out, one per line. The
     interrogative shape is the law -- a line that is not a question never
@@ -208,10 +242,12 @@ def cmd_ask(args):
         return True
 
     gate = textmod.Gate(sys.stdout, data, keep)
-    fence = textmod.Fence(gate, newline=None)
+    unwrap = _Unwrap(gate)
+    fence = textmod.Fence(unwrap, newline=None)
 
     def done():
         fence.close()
+        unwrap.close()
         gate.close()
     try:
         s = session.Session(cfg, "ask-questions", shell, "", role="ember", history=history)
