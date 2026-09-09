@@ -48,6 +48,8 @@ spark
  Esc s                        ask about the line you are on, no ? needed
  Esc s on an empty line       the failed command piped to explain; again
                               proposes the fix; a 127 offers the install line
+ Esc r                        describe a past command; it lands in your line
+                              (Esc r again cycles); Ctrl-R stays the shell's
  cmd 2>&1 | explain           what went wrong, and the fix
  spark <TAB>                  the verbs, then each verb's words -- offline
 

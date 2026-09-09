@@ -306,9 +306,25 @@ MODE_ASK_QUESTIONS = (
     "text, and a question whose quotes are not in it is thrown away. Never state a fact, never answer your own "
     "question, never say what you would do or what the author should do: you are the one "
     "who asks. Ask in the text's own language.")
+RECALL_SCHEMA = {
+    "type": "object",
+    "properties": {"candidates": {"type": "array", "items": {"type": "string"}}},
+    "required": ["candidates"],
+}
+# intent search (spark recall). The shell hands its history on stdin; the
+# model matches intent, not text. Every candidate is checked against the
+# history afterwards, so it can only ever return a line that actually ran
+# -- the brief asks it to copy lines verbatim, never to compose.
+MODE_RECALL = (
+    "The user describes a command they ran before, in their own words, and you find it "
+    "in their shell history below. Reply with the matching command lines from the history, "
+    "copied CHARACTER FOR CHARACTER -- never edited, never composed, never explained. At "
+    "most five, best match first, fewer when fewer fit, none when nothing in the history "
+    "matches. A line you return that is not in the history verbatim is thrown away, so copy, "
+    "do not reconstruct. `candidates` is the list; nothing else.")
 MODES.update({"edit-complete": MODE_EDIT_COMPLETE, "edit-rewrite": MODE_EDIT_REWRITE,
               "edit-answer": MODE_EDIT_ANSWER, "edit-read": MODE_EDIT_READ,
-              "ask-questions": MODE_ASK_QUESTIONS})
+              "ask-questions": MODE_ASK_QUESTIONS, "recall": MODE_RECALL})
 
 
 def _tools_line():

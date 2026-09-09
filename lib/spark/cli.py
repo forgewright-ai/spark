@@ -572,6 +572,64 @@ def speed(t):
     return secs
 
 
+RECALL_USAGE = """spark recall -- find a command you ran, by describing it (intent search)
+
+  <history> | spark recall <words>   the shell pipes its history on stdin,
+                                     you say what the command did; the lines
+                                     that match, most likely first, at most 5
+                                     -- every one is a line from the history,
+                                     never invented. Esc r drives this.
+"""
+
+
+def cmd_recall(args):
+    """Intent search over the shell's own history (given on stdin). The
+    model matches meaning; every candidate is then checked against the
+    history with text.anchor, so a line that was not in it is dropped and
+    the answer is always a command that ran. One per line; none -> one line
+    on stderr, exit 1. Nothing is written; the turn record is numbers."""
+    if _help(args, RECALL_USAGE):
+        return 0
+    from . import text as textmod
+    intent = " ".join(args).strip()
+    history = sys.stdin.read()
+    if not intent:
+        print("recall: say what the command did -- spark recall <words>", file=sys.stderr)
+        return 1
+    if not history.strip():
+        print("recall: no history on stdin", file=sys.stderr)
+        return 1
+    cfg = config.load()
+    prompt = "What I am looking for: %s\n\nMy shell history:\n%s" % (intent, history)
+    try:
+        s = session.Session(cfg, "recall", _shell_default(), "", role="spark")
+        reply, ms = s.ask_json(prompt, persona.RECALL_SCHEMA, max_tokens=300)
+    except wire.BrainError as e:
+        print("recall: " + e.hint, file=sys.stderr)
+        return 1
+    raw = reply.get("candidates") or []
+    folded = textmod.fold(history)
+    seen, out = set(), []
+    for c in raw:
+        line = str(c).rstrip("\n")
+        key = line.strip()
+        if not key or key in seen:
+            continue
+        if not textmod.anchor(key, history, folded):
+            continue                        # grounding: only a line that ran
+        seen.add(key)
+        out.append(line)
+        if len(out) >= 5:
+            break
+    s.record(kind="recall", chars=len(history), ms=ms, candidates=len(out))
+    if not out:
+        print("recall: nothing in the history matches", file=sys.stderr)
+        return 1
+    for line in out:
+        print(line)
+    return 0
+
+
 def cmd_last(args):
     if _help(args, LAST_USAGE):
         return 0
@@ -853,7 +911,7 @@ COMMANDS = {
     "line": cmd_line, "last": cmd_last, "status": cmd_status, "brain": cmd_brain,
     "explain": cmd_explain, "edit": cmd_edit, "off": cmd_off, "on": cmd_on, "history": cmd_history,
     "soul": cmd_soul, "memory": cmd_memory,
-    "chat": cmd_chat, "do": cmd_do,
+    "chat": cmd_chat, "do": cmd_do, "recall": cmd_recall,
     "ver": cmd_ver, "version": cmd_ver, "--version": cmd_ver,
     "lua": cmd_lua,
 }

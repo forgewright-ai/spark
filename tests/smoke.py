@@ -178,6 +178,11 @@ def is_do(messages):
 
 def answer_json(messages):
     last = messages[-1].get("content", "")
+    if "copied CHARACTER FOR CHARACTER" in messages[0].get("content", ""):
+        # spark recall: one line that is really in the history, one invented.
+        # cli.cmd_recall grounds against stdin, so only the real one survives.
+        return {"candidates": ["docker network rm $(docker network ls -q)",
+                               "docker network prune --force --invented"]}
     if "sameagain" in " ".join(m.get("content", "") for m in messages):
         if "already tried and failed" in last and "sameagain-fix" in " ".join(m.get("content", "") for m in messages):
             return {"kind": "cmd", "command": "echo FIXED", "hint": "a different way", "danger": False}
@@ -307,6 +312,21 @@ def main():
         else:
             t.ok("vm_stat is free" in pfx and "rewrite it for this machine" in pfx and "free is vm_stat" not in pfx,
                  "line: the prefix localizes to this Linux, not macOS", pfx[-300:])
+
+        # spark recall: intent search grounded against the history on stdin.
+        # the stub returns one real line and one invented; only the real
+        # one is in the history, so only it prints.
+        hist = "ls -la\ndocker network rm $(docker network ls -q)\ngit status\ncd /tmp\n"
+        rc, out, err = spark("recall", "the", "docker", "network", "thing", stdin=hist)
+        t.ok(rc == 0 and out.strip() == "docker network rm $(docker network ls -q)"
+             and "invented" not in out,
+             "recall: the line that ran prints; the invented one is dropped", out + "|" + err)
+        rc, out, err = spark("recall", stdin=hist)
+        t.ok(rc == 1 and "what the command did" in err,
+             "recall: no intent is one line on stderr, exit 1", out + "|" + err)
+        rc, out, err = spark("recall", "anything", stdin="")
+        t.ok(rc == 1 and "no history" in err,
+             "recall: empty history is exit 1", out + "|" + err)
         rc, out, _ = spark("line", stdin="what is the capital of France?")
         t.ok(rc == 0 and out.splitlines() == ["answer", "Paris"], "line: answer", out)
         rc, out, _ = spark("line", stdin="?   ")

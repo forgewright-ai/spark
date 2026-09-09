@@ -292,5 +292,42 @@ _spark_ask_line() {
     fi
 }
 bind -x '"\es": _spark_ask_line'
+
+# --- Esc r: intent search over the shell's own history ---------------------
+# First press: the buffer is what you are looking for; the shell's history
+# goes to `spark recall` on stdin, and candidate 1 lands in the line. Press
+# again, buffer unchanged, to cycle. Ctrl-R is left to the shell.
+_spark_recall_cands=() _spark_recall_i=0 _spark_recall_for=''
+_spark_recall() {
+    [[ -e $SPARK_DIR/off ]] && return
+    if [[ -n $READLINE_LINE && $READLINE_LINE == "$_spark_recall_for" && ${#_spark_recall_cands[@]} -gt 0 ]]; then
+        # a repeat with the landed candidate still in the line: cycle
+        _spark_recall_i=$(( (_spark_recall_i + 1) % ${#_spark_recall_cands[@]} ))
+        READLINE_LINE=${_spark_recall_cands[_spark_recall_i]}
+        READLINE_POINT=${#READLINE_LINE}
+        _spark_say "$_spark_h $(( _spark_recall_i + 1 ))/${#_spark_recall_cands[@]} -- Esc r: next"
+        _spark_recall_for=$READLINE_LINE
+        return
+    fi
+    local intent=$READLINE_LINE
+    if [[ -z $intent ]]; then
+        _spark_say "$_spark_h type what the command did, then Esc r"
+        return
+    fi
+    _spark_say "$_spark_h $_spark_d"
+    local out
+    out=$(fc -ln -400 2>/dev/null | "$SPARK_BIN" recall "$intent" 2>/dev/null)
+    if [[ -z $out ]]; then
+        _spark_say "$_spark_h nothing in your history matches that"
+        return
+    fi
+    mapfile -t _spark_recall_cands <<< "$out"
+    _spark_recall_i=0
+    READLINE_LINE=${_spark_recall_cands[0]}
+    READLINE_POINT=${#READLINE_LINE}
+    _spark_recall_for=$READLINE_LINE
+    _spark_say "$_spark_h 1/${#_spark_recall_cands[@]} -- Esc r: next"
+}
+bind -x '"\er": _spark_recall'
 # Esc and s are two keystrokes: give them a full second to be one chord
 bind 'set keyseq-timeout 1000'

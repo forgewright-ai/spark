@@ -45,7 +45,7 @@ _spark_complete() {
     cur=${COMP_WORDS[COMP_CWORD]}
     COMPREPLY=()
     if [ "$COMP_CWORD" -eq 1 ]; then
-        words="chat do serve check update shell headless client setup
+        words="chat do recall serve check update shell headless client setup
                ver last status brain history stats bench model ember
                forge soul memory quiet theme font bar off
                on user explain edit ask help uninstall"

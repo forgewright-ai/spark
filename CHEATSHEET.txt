@@ -26,6 +26,8 @@ SPARK
   Esc s on an empty line          the failed command, piped to explain;
                                   again for the fix; the fix, as a fact
   command not found -> Esc s      the line that installs it
+  Esc r                           describe a past command; it lands in
+                                  your line (Esc r cycles); Ctrl-R stays
   cmd 2>&1 | explain              what went wrong, and the fix
   spark <TAB>                     completes the verbs; second word too
 

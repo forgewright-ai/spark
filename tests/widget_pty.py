@@ -38,7 +38,14 @@ import termios
 import time
 
 STUB = r'''#!/bin/sh
-# a stand-in for `spark line`: canned replies, and a log of every question
+# a stand-in for `spark line` (and `spark recall`): canned replies.
+if [ "$1" = recall ]; then
+    # history arrives on stdin; grounding is cli's job, not the stub's --
+    # here we just hand back two lines for the widget to land and cycle
+    cat > /dev/null
+    printf 'git commit --amend --no-edit\ndocker network prune -f\n'
+    exit 0
+fi
 line=$(cat)
 printf '%s\n' "$line" >> "$STUB_LOG"
 case $line in
@@ -535,6 +542,19 @@ def main(shell, widget):
             sh.send("_spark_offer_kind '%s' %d\r" % (cmd, rc))
             got = sh.expect("%s\r\n" % want) or sh.expect("%s\n" % want)
             ok(got, "offer_kind(%r, %d) is %s" % (cmd, rc, want), since())
+        sh.expect(prompt)
+
+        # 7d. Esc r: intent search -- type what a command did, the first
+        # candidate lands in the line; Esc r again cycles to the next
+        since = sh.mark()
+        sh.send("the amend thing")
+        time.sleep(0.2)
+        sh.send("\x1br")
+        ok(sh.expect("git commit --amend --no-edit"), "Esc r lands the first history candidate", since())
+        since = sh.mark()
+        sh.send("\x1br")
+        ok(sh.expect("docker network prune -f"), "Esc r again cycles to the next candidate", since())
+        sh.send("\x15")
         sh.expect(prompt)
 
         # 8. exit removes the marker

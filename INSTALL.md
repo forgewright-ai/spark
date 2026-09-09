@@ -161,20 +161,26 @@ shell cannot host the widget (another shell, or macOS's bash 3.2):
    then Enter. Only a command typed on one line is offered; Ctrl-C and
    a no-match from `grep` or `diff` stay quiet. The offer lives in the
    one pane it happened in and is gone with it.
-3. `spark chat` is a conversation at a `chat> ` prompt. `/help` lists
+3. `Esc r` is intent search: type what a command did in your own words,
+   press `Esc r`, and the line that ran lands in your prompt -- `Esc r`
+   again cycles through the matches. Your shell hands its own history to
+   spark; nothing reads a history file, and every candidate is one that
+   is actually in it. `Ctrl-R` is left to the shell (and to fzf). On
+   bash, `Esc r` (`M-r`) replaces the default `revert-line`.
+4. `spark chat` is a conversation at a `chat> ` prompt. `/help` lists
    its verbs: `/new` a fresh thread, `/resume [N]` an older one, `/clear`
    the screen, `/last` the last turn with its tok/s, `/model` which one
    answers, `/q` (or Ctrl-D) ends. Ctrl-C cancels a reply and keeps the
    chat. `spark chat --thread N [words]` continues an older thread from
    the `spark history` list (1 = newest).
-4. `spark <words>` streams one answer; `spark @FILE words` sends a text
+5. `spark <words>` streams one answer; `spark @FILE words` sends a text
    file's first 4 kB and last 12 kB with the question. Quote words the
    shell would glob (a trailing `?`, parentheses).
-5. `spark do <words>` proposes one command at a time: Enter runs it, `e`
+6. `spark do <words>` proposes one command at a time: Enter runs it, `e`
    edits it first, `s` skips, `q` quits; a step that can destroy data
    runs only when you type `yes`. Each step's output (last 4 kB) goes
    back to the model until it says done, or after 8 steps.
-6. `spark ask` reads a plan, a draft or a decision on stdin and answers
+7. `spark ask` reads a plan, a draft or a decision on stdin and answers
    with questions about it -- at most three, one per line, and nothing
    else. Every line of the output is a question: a line that is not one,
    a question quoting words the text does not contain, and a question
@@ -192,7 +198,7 @@ shell cannot host the widget (another shell, or macOS's bash 3.2):
    `spark ask --answered --name plan.md` with the question on stdin;
    `spark ask --ledger --name plan.md` lists what you have answered,
    `--ledger clear` drops it. `spark ask -h` says the rest.
-7. `spark soul edit` writes the paragraph that tells the model who it is
+8. `spark soul edit` writes the paragraph that tells the model who it is
    (`~/.config/spark/soul`, at most 4000 characters; `spark soul` shows
    which is in use, `spark soul reset` goes back to the default). The
    default:
@@ -205,7 +211,7 @@ shell cannot host the widget (another shell, or macOS's bash 3.2):
    invent a flag, a path, or a command.
    ```
 
-8. `spark memory add <words>` adds a fact it keeps (`spark memory forget N` drops
+9. `spark memory add <words>` adds a fact it keeps (`spark memory forget N` drops
    one, `spark memory` lists them, `spark memory off` stops sending
    them; 40 facts of 200 characters). Soul and facts ride on every
    conversation, so a fact costs tokens every time: keep the ones that

@@ -2,6 +2,15 @@
 
 ## v1.18
 
+- Intent search: describe a command you ran, and the line that ran comes
+  back. `Esc r` sends your shell's own history (`fc -ln -400`, bash and
+  zsh) to `spark recall <words>` on stdin; the model matches meaning, and
+  every candidate is checked against the history (`text.anchor`) so what
+  lands in your prompt is always a line you actually ran, never invented.
+  `Esc r` again cycles the matches. `Ctrl-R` is left to the shell and to
+  fzf -- an instant key stays instant, and a dead brain costs nothing.
+  No new contract: the grounding law is borrowed. Nothing is written; the
+  turn record is numbers.
 - A command pasted from a page is rewritten for this machine. The prompt
   line's prefix now names this OS's side of the pairs a paste crosses
   most -- `free`/`vm_stat`, the package managers, `systemctl`/`launchctl`,

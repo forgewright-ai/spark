@@ -58,6 +58,7 @@ and your editor stay yours. `INSTALL.md` has every step and every key.
 | | |
 |---|---|
 | `? words` at the prompt | the command lands in your line; `??` follows up; `Esc s` asks about the line you are on |
+| `Esc r` | describe a command you ran before; the line that ran lands in your prompt (`Esc r` cycles). `Ctrl-R` stays the shell's |
 | a command fails | `Esc s` puts it back piped to `explain`; a second `Esc s` proposes the fix; `command not found` offers the install line |
 | `cmd 2>&1 \| explain` | what went wrong, and the fix |
 | `spark chat` | a conversation; `/help` lists its verbs |

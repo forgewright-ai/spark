@@ -278,5 +278,45 @@ spark-ask() {
 }
 zle -N spark-ask
 bindkey '\es' spark-ask
+
+# --- Esc r: intent search over the shell's own history ---------------------
+typeset -g _spark_recall_for=''
+typeset -ga _spark_recall_cands
+typeset -g _spark_recall_i=0
+spark-recall() {
+    [[ -e $SPARK_DIR/off ]] && return
+    if [[ -n $BUFFER && $BUFFER == $_spark_recall_for && ${#_spark_recall_cands[@]} -gt 0 ]]; then
+        _spark_recall_i=$(( _spark_recall_i % ${#_spark_recall_cands[@]} + 1 ))
+        BUFFER=${_spark_recall_cands[_spark_recall_i]}
+        CURSOR=$#BUFFER
+        _spark_say "$_spark_h $_spark_recall_i/${#_spark_recall_cands[@]} -- Esc r: next"
+        _spark_recall_for=$BUFFER
+        zle -R
+        return
+    fi
+    local intent=$BUFFER
+    if [[ -z $intent ]]; then
+        _spark_say "$_spark_h type what the command did, then Esc r"
+        zle -R
+        return
+    fi
+    _spark_say "$_spark_h $_spark_d"
+    local out
+    out=$(fc -ln -400 2>/dev/null | "$SPARK_BIN" recall "$intent" 2>/dev/null)
+    if [[ -z $out ]]; then
+        _spark_say "$_spark_h nothing in your history matches that"
+        zle -R
+        return
+    fi
+    _spark_recall_cands=("${(@f)out}")
+    _spark_recall_i=1
+    BUFFER=${_spark_recall_cands[1]}
+    CURSOR=$#BUFFER
+    _spark_recall_for=$BUFFER
+    _spark_say "$_spark_h 1/${#_spark_recall_cands[@]} -- Esc r: next"
+    zle -R
+}
+zle -N spark-recall
+bindkey '\er' spark-recall
 # Esc and s are two keystrokes: give them a full second to be one chord
 KEYTIMEOUT=100

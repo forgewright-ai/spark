@@ -121,7 +121,8 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 stats (turns -> numbers) bench (llama-bench, bench tune [show|apply])
                 soul memory (the identity files)
                 text (the streams: wrap, fence, and the grounding law -- anchor,
-                Ground, Gate, shared by every contract that shows a text to a model)
+                Ground, Gate, shared by every contract that shows a text to a
+                model, and borrowed by spark recall to keep to lines that ran)
                 ledger (what you have already weighed: one sealed file, a kind per
                 contract, and the rule that retires a record is the contract's own)
                 ask (spark ask: contract 12) read drill (contracts 11 and 13: the
