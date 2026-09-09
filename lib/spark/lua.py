@@ -1006,6 +1006,25 @@ def ending_rows(g, tl, kind):
         for j, ch in enumerate(ln):
             if ch != " " and left + j < cols:
                 rows[2 + i][left + j] = (ch, attr)
+    # the memory is the band's bottom-left corner while you play, and a
+    # caption under the banner when the run ends: centred, and one blank
+    # row below the art. frame() drew it at rows 7-8 from column 2; it
+    # moves to 8-9, which is why the band grows a tenth row here and only
+    # here -- during play its height is untouched.
+    caption = []
+    for r in (7, 8):
+        text = "".join(c for c, _ in rows[r]).rstrip()
+        caption.append(rows[r][2:len(text)] if text.strip() else None)
+    rows.append([(" ", PLAIN)] * cols)
+    for r in (7, 8, 9):
+        rows[r] = [(" ", PLAIN)] * cols
+    for i, cells in enumerate(caption):
+        if not cells:
+            continue
+        at = max(0, (cols - len(cells)) // 2)
+        for j, cell in enumerate(cells):
+            if at + j < cols:
+                rows[8 + i][at + j] = cell
     return rows
 
 
