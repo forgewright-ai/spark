@@ -69,17 +69,8 @@ USAGE_MACHINE = """the machine
  spark uninstall [--purge]    remove spark from this machine: shows, asks yes
 """
 
-USAGE_SHELL = """the interface
- spark shell [on|off]         the shell layer: tmux, starship, fzf ... + bar
- spark bar [on|off]           tmux's status line: shown or hidden; set it
+USAGE_INTERFACE = """the interface
  spark theme [NAME|list|show] the palettes, and yours; show = its colours
- spark quiet [SUB on|off]     start (banner), login (motd), boot (GRUB), audio
- spark font [FACE SIZE|list]  the console font (Linux) / Terminal.app's
-"""
-# with the layer off, the shell block folds into one line; quiet and font
-# are core (start/audio, the console face) and stay
-USAGE_SHELL_OFF = """the interface
- spark shell on               tmux, starship, fzf, eza, bat, btop + bar, theme
  spark quiet [SUB on|off]     start (banner), login (motd), boot (GRUB), audio
  spark font [FACE SIZE|list]  the console font (Linux) / Terminal.app's
 """
@@ -88,23 +79,23 @@ USAGE_TAIL = """less often used
  spark                        last, history [clear], stats [--week], brain,
                               bench [tune [show|apply]] -- each has -h
 
+beside the core
+ APPS.md                      editors and tools that speak to spark
+ SHELL.md                     spark's own shell for a machine that is
+                              only an AI box (spark shell, spark bar)
+
 version %s
 """
 
 
 def usage():
-    """The help, with the shell block only when the layer is on. Reading
-    the config must never break help: no site.env means off. The version is
-    formatted here, not at import: nothing on the `spark line` path may call
-    git, and version() (lib/spark/version.py) does, on a cache miss."""
-    try:
-        from spark import config
-        shell = config.load().shell
-    except Exception:
-        shell = False
+    """The help. It reads the same whatever the shell layer is doing: the
+    two verbs behind that gate live in SHELL.md now, and theme, quiet and
+    font are core. The version is formatted here, not at import: nothing on
+    the `spark line` path may call git, and version() does, on a cache miss."""
     from spark import version
     tail = USAGE_TAIL % version.version()
-    return USAGE_HEAD + "\n" + USAGE_MACHINE + "\n" + (USAGE_SHELL_OFF if not shell else USAGE_SHELL) + "\n" + tail
+    return USAGE_HEAD + "\n" + USAGE_MACHINE + "\n" + USAGE_INTERFACE + "\n" + tail
 
 
 def main(argv):

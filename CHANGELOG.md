@@ -2,6 +2,24 @@
 
 ## v1.17
 
+- The core documents are the core. `spark help`, `CHEATSHEET.txt`,
+  `README.md` and `INSTALL.md` no longer carry the shell layer or the
+  apps: `spark shell` and `spark bar` moved to `SHELL.md`, and the apps
+  to `APPS.md`, each with one pointer line left behind. INSTALL loses two
+  sections and renumbers; the app table the README carried is APPS.md's
+  now, and `tests/docs_test.py` reads the app names from there.
+- The landing rule binds core documentation, and core documentation moves
+  with a release. `APPS.md` and `SHELL.md` sit outside it: kept true as
+  things change, no release waiting on them, nothing in them owed to
+  help, the cheatsheet or a changelog entry. Both say so in their first
+  lines and docs_test checks that they do, so neither drifts back under
+  the rule unnoticed.
+- `spark help` reads the same whatever the shell layer is doing. It had
+  two versions of its interface block and picked one by reading
+  `site.env`; with the gated verbs gone there is one block, and help no
+  longer reads config at all. `spark theme` and `spark font` stay in it:
+  they are core, and a machine has a face with the layer off.
+
 - An install says what it changed, not what it checked. A converged
   machine printed 54 rows of `ok` and `skip` from `./bootstrap.sh` and 18
   more from `install.sh`; both now print what they changed, what needs

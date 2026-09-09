@@ -67,22 +67,7 @@ THE MACHINE
   ~/.config/spark/spark.env       ports, engine, history, memory
   long output (help, check, lists) pages via $PAGER (less); piped stays plain
 
-SPARK APPS (a tool that is a client of spark edit; spark installs none)
-  micro: github.com/forgewright-ai/spark-micro   clone it, bind Alt-s, done
-  micro: Alt-s (Mac: Option-s)  Enter=complete  words=rewrite  ?=ask/review
-  micro pane: q closes  Enter=go to quote  a=apply code  d=decline  ??=go on
-         ledger [clear] at spark>   the notes declined for this file
-         setlocal spark.about "a poem"   tell it, when it should not guess
-  neovim: github.com/forgewright-ai/spark-neovim  the same prompt, one map
-  vim:    github.com/forgewright-ai/spark-vim     the same prompt, one map
-  helix:  github.com/forgewright-ai/spark-helix   A-s: the prompt pre-filled
-  nano:   github.com/forgewright-ai/spark-nano    M-S: the prompt pre-filled
-  any editor's filter is a client too (INSTALL 6); to complete, a plugin
-
 THE INTERFACE
-  spark shell [on|off]            spark's own shell for an AI box: tmux,
-                                  starship, fzf, eza, bat, btop, the bar
-  spark bar [on|off]              tmux's status line (with the shell on)
   spark theme NAME | list | show  one palette: console, tmux, micro; none=off
   ~/.config/spark/themes/NAME.env your own palette: the same 21 THEME_* keys
   spark quiet start on|off        no banner, one-line serve/forge + bare spark
@@ -111,3 +96,8 @@ WINDOWS (Ubuntu 24.04 on WSL 2 -- Linux to spark)
   wsl --install -d Ubuntu-24.04    then INSTALL.md section 1, the Linux way
   the CPU build; no console (the font is Windows Terminal's); no GRUB
   units: [boot] systemd=true in /etc/wsl.conf, then wsl --shutdown
+
+BESIDE THE CORE (kept in the repository, not tied to a release)
+  APPS.md                         editors and tools that speak to spark
+  SHELL.md                        spark's own shell for a machine that is
+                                  only an AI box: spark shell, spark bar

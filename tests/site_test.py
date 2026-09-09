@@ -93,12 +93,15 @@ def main():
                                  read(os.path.join(ROOT, "README.md")))))
     for app in apps:
         check(app in pages[""], "index: the front names %s (the README does)" % app)
-    check("spark shell" not in pages[""], "index: the front is spark and spark apps; the shell layer is INSTALL.md's")
+    check("spark shell" not in pages[""], "index: the front is spark and spark apps; the shell layer is SHELL.md's")
     # the front's stages: an OS panel each, and every marked command is a
     # line the docs have (the front never teaches what a doc does not)
     for os_id in ("debian", "arch", "macos", "windows"):
         check('data-os="%s"' % os_id in pages[""], "index: an OS panel for %s" % os_id)
-    docs_text = read(os.path.join(ROOT, "INSTALL.md")) + read(os.path.join(ROOT, "README.md"))
+    # APPS.md joins the sources: the app lines the front shows moved there
+    # when the core docs stopped naming the apps
+    docs_text = (read(os.path.join(ROOT, "INSTALL.md")) + read(os.path.join(ROOT, "README.md"))
+                 + read(os.path.join(ROOT, "APPS.md")))
     blocks = re.findall(r"<pre data-doc>(.*?)</pre>", pages[""], re.S)
     blocks += re.findall(r'<code id="ol2?">(.*?)</code>', pages[""])
     check(len(blocks) >= 8, "index: the doc-verbatim blocks (%d)" % len(blocks))

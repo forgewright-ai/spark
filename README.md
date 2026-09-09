@@ -72,34 +72,10 @@ and your editor stay yours. `INSTALL.md` has every step and every key.
 | `spark off` | Enter is a plain Enter again; `spark on` brings it back |
 | `spark uninstall` | takes it all off; keeps your prose and your threads |
 
-## spark apps
+## Beside the core
 
-A tool becomes smart as a client of one command, `spark edit`: text in
-on stdin, text out, never a path. Each app's plugin is its own
-`spark-<app>` repository, installed the app's way; spark ships no app.
-
-| | |
-|---|---|
-| [spark-micro](https://github.com/forgewright-ai/spark-micro) | micro: `Alt-s` opens `spark> ` |
-| [spark-neovim](https://github.com/forgewright-ai/spark-neovim) | neovim: your key opens `spark> ` |
-| [spark-vim](https://github.com/forgewright-ai/spark-vim) | vim: your key opens `spark> ` |
-| [spark-helix](https://github.com/forgewright-ai/spark-helix) | helix: `A-s` pre-fills helix's prompt |
-| [spark-nano](https://github.com/forgewright-ai/spark-nano) | nano: `M-S` pre-fills nano's prompt |
-
-At `spark> `: Enter completes at the cursor, words rewrite, `? words`
-asks in a pane. helix and nano have no cursor hook: their key pre-fills
-`spark edit ` instead -- add words, press Enter. INSTALL section 6 has
-each app's lines; an editor with a filter needs no plugin at all.
-
-When apps need more than text, another contract is defined -- e-mail,
-for example -- and apps connect to it the same way.
-
-## Also
-
-`spark shell on` gives a machine that is only an AI box spark's own
-shell: tmux, starship, fzf, eza, bat, btop, zoxide, the Nerd Font, one
-palette on every surface. Off by default; `spark shell off` hands
-everything back. `INSTALL.md` section 9.
+- Editors and tools that speak to spark: `APPS.md`
+- spark's own shell for a machine that is only an AI box: `SHELL.md`
 
 The page: https://spark.forgewright.ai -- the docs and the model list.
 

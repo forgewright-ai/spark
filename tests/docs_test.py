@@ -188,13 +188,19 @@ def main():
     # what is private is named nowhere in the tree's docs
     for doc in ALL_DOCS:
         check(not re.search(r"\bfactor(y|ies)\b", read(doc), re.I), "%s: no factory" % doc)
-    # every spark app the README names is in INSTALL, the cheatsheet, the
-    # credits and the page front
-    apps = sorted(set(re.findall(r"github\.com/forgewright-ai/(spark-[a-z0-9]+)", read("README.md"))))
-    check(bool(apps), "README.md names at least one spark app repo")
+    # APPS.md is where the apps live now: the customer docs a new user reads
+    # are the core, and the apps and the shell layer are beside it, in their
+    # own files, outside the landing rule. Every app APPS.md names still has
+    # to be credited and on the page front -- those two are not optional.
+    apps = sorted(set(re.findall(r"github\.com/forgewright-ai/(spark-[a-z0-9]+)", read("APPS.md"))))
+    check(bool(apps), "APPS.md names at least one spark app repo")
     for app in apps:
-        for doc in ("INSTALL.md", "CHEATSHEET.txt", "CREDITS.md", "www/index.html"):
-            check(app in read(doc), "%s names %s (the README does)" % (doc, app))
+        for doc in ("CREDITS.md", "www/index.html"):
+            check(app in read(doc), "%s names %s (APPS.md does)" % (doc, app))
+    # and the two documents beside the core exist and say they are not
+    # tied to a release, so nobody files them back under the landing rule
+    for doc in ("APPS.md", "SHELL.md"):
+        check("not tied to a spark release" in read(doc), "%s says it is not release-gated" % doc)
     # the lists that are gone stay gone
     for doc in ("README.md", "INSTALL.md", "CLAUDE.md", "CHEATSHEET.txt", "CREDITS.md", "CONTRIBUTING.md",
                 "AGENTS.md", "ROADMAP.md", "site.env.example"):

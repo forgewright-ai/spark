@@ -1336,8 +1336,11 @@ def main():
         t.ok(rc == 0 and out.splitlines()[0] == "spark shell -- spark's own shell: tmux, starship, fzf, eza, bat, btop",
              "spark shell -h signs (contract 8)", out)
         rc, out, _ = spark("help", extra=off)
-        t.ok(rc == 0 and "spark font" in out and "spark bar" not in out and "spark shell on" in out,
-             "spark help with the layer off: font stays (core), bar folds into spark shell on", out)
+        gated = [l for l in out.splitlines() if l.startswith((" spark shell", " spark bar"))]
+        t.ok(rc == 0 and "spark font" in out and "spark theme" in out and not gated and "SHELL.md" in out,
+             "spark help: core only (theme, font); no line for the gated verbs, SHELL.md instead", gated or out)
+        rc, out2, _ = spark("help")
+        t.ok(rc == 0 and out2 == out, "spark help reads the same whatever the layer does", out2[:200])
         rc, out, _ = spark("help", extra=dict(off, SITE_SHELL="on"))
         t.ok(rc == 0 and "spark bar" in out and "the interface" in out,
              "spark help with SITE_SHELL=on lists the shell block", out)

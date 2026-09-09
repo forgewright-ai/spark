@@ -178,6 +178,10 @@ www/            the page, spark.forgewright.ai: build.py (stdlib) renders the do
 CREDITS.md      every third-party project spark downloads or installs,
                 with its license; spark's own code is LICENSE
 ROADMAP.md      what comes after the current release, in order
+APPS.md         the editors and tools that speak to spark, and how each one
+                connects; outside the landing rule, kept true continuously
+SHELL.md        spark shell and spark bar: the layer behind SITE_SHELL,
+                off by default; outside the landing rule, like APPS.md
 ```
 
 Runtime paths: config `~/.config/spark/{site.env,spark.env,theme.env,
@@ -581,7 +585,7 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   If it only reads: put it in `home/` (shared) or `<os>/home/`; `install.sh`
   links it. If it rewrites: it cannot be linked -- seed it once from
   `templates/` as a rendered regular file, and note it in INSTALL.md's trap
-  table (section 9, "spark shell"). Test by changing a setting in the app
+  table (SHELL.md). Test by changing a setting in the app
   and running `ls -l` on the path: still a symlink, or now a regular file?
 - **A choice.** A `SITE_*` key with a default in `site.env.example`, applied
   by `bootstrap.sh` or rendered by `install.sh`, **and** a `spark <verb>`
@@ -593,6 +597,14 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   the machine makes, contract 3 above if it is a key, and README / INSTALL /
   CHEATSHEET / CHANGELOG. A key without a command, or a command without a
   row and a doc line, is half a feature.
+  The rule binds the CORE documentation, and core documentation moves with
+  a release: README, INSTALL.md, CHEATSHEET.txt, `spark help`, this file
+  and CHANGELOG.md are updated as a version ships, together. `APPS.md` and
+  `SHELL.md` are outside it -- they are kept true continuously, no release
+  waits on them, and nothing in them has to appear in help, the cheatsheet
+  or a changelog entry. Both say so in their own first lines, and
+  `tests/docs_test.py` checks that they do, so neither drifts back under
+  the rule by accident.
 - **A check row.** A function `row_<name>(ctx)` in `lib/spark/check.py`
   decorated `@row(CATEGORY, fixture=True)` or `@row(CATEGORY, fixture=False,
   reason="...")`. If it is fixture-testable, extend `make_fixture` so the row
@@ -683,10 +695,10 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   the cursor; a prompt plugin (helix, nano -- editors with no cursor
   hook) pre-fills the editor's own prompt with `spark edit `, proven the
   same way, by a pty test whose config is the shipped snippet itself.
-  The known clients are listed in README
-  ("spark apps"), INSTALL section 6, CHEATSHEET and the page front --
-  docs_test looks every `spark-<app>` the README names up in the other
-  three; a new one is one line in each. A pull
+  The known clients are listed in APPS.md, and every one of them is in
+  CREDITS.md and on the page front -- docs_test reads the app names out
+  of APPS.md and looks them up in those two; a new one is one line in
+  each. The core docs no longer name them at all. A pull
   request that adds an app, an app package or an app check row here is
   turned into a pointer to the app's repository.
 - **The client shape.** `SITE_AI_MODEL=none` beside `SITE_PEER_AI_URL`

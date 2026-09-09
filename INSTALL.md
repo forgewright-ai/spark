@@ -355,105 +355,7 @@ Then point every laptop (`spark client URL`) and every phone at it: one
 address, one identity, the same answers everywhere. The `headless` check
 row names any piece that is missing.
 
-## 6. spark apps
-
-A tool becomes smart as a client of one command, `spark edit`: the text
-on stdin, raw text out; `--at N` completes at a byte offset, `<words>`
-rewrites (12 kB at most), `? [words]` asks or reviews; an empty text with
-words is written from nothing; hints `--type`, `--name`, `--about`; never
-a path, and no thread unless the app asks (`--thread ID`, sealed like a
-chat thread). `spark edit -h` says the rest. It works from a pipe too:
-
-```sh
-spark edit fix grammar < draft.md
-```
-
-spark ships no app. Each app's plugin lives in its own repository and
-installs the app's way. micro is first:
-
-1. Clone the plugin:
-
-   ```sh
-   git clone https://github.com/forgewright-ai/spark-micro ~/.config/micro/plug/spark
-   ```
-
-2. Add one line to `~/.config/micro/bindings.json`:
-   `"Alt-s": "lua:spark.prompt"`.
-3. `Alt-s` (Option-s on a Mac) opens `spark> `: Enter alone completes at
-   the cursor; words rewrite the selection or the file; `? words` asks in
-   a pane; `?` alone reviews; `??` goes on. In the pane, Enter jumps to a
-   quote, `a` applies a code block, `d` declines a note for good, `q`
-   closes. `help spark` inside micro says everything; `setlocal
-   spark.about "a novel chapter"` tells spark what a buffer is; `git -C
-   ~/.config/micro/plug/spark pull` updates it.
-
-neovim and vim carry micro's whole prompt -- `spark> `, the pane and its
-keys, the ledger, the splice safety -- one clone and one mapping each
-(each README says the rest, `:help spark` inside the editor too):
-
-- neovim (0.9 or newer):
-
-  ```sh
-  git clone https://github.com/forgewright-ai/spark-neovim ~/.config/nvim/pack/spark/start/spark
-  ```
-
-  and one line in `init.lua`:
-  `vim.keymap.set({ "n", "x" }, "<M-s>", function() require("spark").prompt() end)`.
-
-- vim (8.2 or newer, the usual huge build):
-
-  ```sh
-  git clone https://github.com/forgewright-ai/spark-vim ~/.vim/pack/spark/start/spark
-  ```
-
-  and three lines in `~/.vimrc` (the first teaches terminal vim the key):
-  `execute "set <M-s>=\es"`, `nnoremap <M-s> :call spark#prompt(0)<CR>`,
-  `xnoremap <M-s> :<C-u>call spark#prompt(1)<CR>`.
-
-helix and nano have no cursor hook: their plugins put `spark edit ` on
-the editor's own prompt -- add words, press Enter; no completion there.
-One clone each, and the snippet's comment block is the help:
-
-- helix (25.01 or newer):
-
-  ```sh
-  git clone https://github.com/forgewright-ai/spark-helix ~/.config/helix/spark
-  ```
-
-  then paste `spark.toml`'s two key blocks into `config.toml`
-  (`:config-open`, paste, `:config-reload`). `A-s r` rewrites the file,
-  `A-s s` the selection, `A-s a` asks (`u` removes the answer), `A-s f`
-  fixes spelling in one keystroke.
-
-- nano (GNU nano 5.4 or newer):
-
-  ```sh
-  git clone https://github.com/forgewright-ai/spark-nano ~/.config/nano/spark
-  cat ~/.config/nano/spark/spark.nanorc >> ~/.nanorc
-  ```
-
-  `M-S words` rewrites the file or the marked region (`M-U` undoes),
-  `M-F` fixes spelling in one keystroke.
-
-No plugin at all still works: an editor with a filter is a client
-already. The selection goes through `spark edit`, the whole file when
-nothing is selected:
-
-| editor | rewrite the selection | ask about it |
-|---|---|---|
-| vim | `:'<,'>!spark edit fix the spelling` | `:'<,'>w !spark edit \? is this clear` (`\?`: vim hands the line to your shell, and zsh reads a bare `?` as a pattern) |
-| helix | `\|spark edit fix the spelling` | `\|spark edit ? is this clear`; the answer replaces the selection, `u` takes it back |
-| nano | mark, `^T`, `\|spark edit fix the spelling` | `^T`, `\|spark edit ? is this clear`; the answer replaces the mark, `M-U` takes it back |
-
-A filter cannot complete at the cursor: that needs a plugin -- micro's,
-neovim's and vim's complete; helix's and nano's pre-fill the prompt.
-
-Coming from spark v1.9, where the plugin came with spark: `spark update`
-hands the old links back (the `micro` row says so), then clone as above.
-Another editor joins the same way: one client of `spark edit`, in a
-repository of its own.
-
-## 7. Per-OS notes
+## 6. Per-OS notes
 
 macOS:
 
@@ -542,7 +444,7 @@ Windows (Ubuntu 24.04 on WSL 2):
   `spark headless on` refuses. Reaching the page from the LAN needs
   `networkingMode=mirrored` in `.wslconfig` (Windows 11), untested here.
 
-## 8. Keep it
+## 7. Keep it
 
 Update:
 
@@ -564,7 +466,7 @@ spark uninstall
 1. It prints the plan, one row per thing, then asks for the word `yes`.
 2. Everything spark made goes: the units, the rc line, the console
    palette and font (VGA again), the shell layer's files back from their
-   `.bak` (section 9), `~/.local/bin/spark`, the engine and every model,
+   `.bak` (SHELL.md), `~/.local/bin/spark`, the engine and every model,
    `~/.config/spark`, `~/.local/state/spark`, and the clone at `~/.spark`
    when it is the one `get` made and clean. Headless and the quiet login
    and boot are undone first (sudo).
@@ -641,54 +543,6 @@ When something stops working:
    serving user must be in the `render` group; log out of every session
    and in again.
 8. `SPARK_DEBUG=1 spark ...` and `~/.local/state/spark/debug.log`.
-
-## 9. spark shell
-
-`spark shell on` (`SITE_SHELL=on`) puts spark's own shell on a machine
-that is only an AI box: tmux, starship, fzf, zoxide, eza, bat, btop and
-the Nerd Font, with one palette on every surface once a theme is chosen
-(the text console, tmux, starship, and a micro you have). The rc files
-become spark's (`~/.bashrc` and `~/.bash_profile` on Linux, `~/.zshrc`
-and `~/.zprofile` on macOS; yours move to `<file>.bak`). It runs
-bootstrap (sudo once for the packages on Linux; Homebrew on macOS, the
-`Brewfile`), then says `open a new shell`. No editor comes with it.
-
-`spark shell off` hands everything back: each rc file and each rendered
-config (`.tmux.conf`, `.config/starship.toml`, btop's conf, micro's
-colorscheme) is restored from its `.bak` or removed when there was none;
-the console palette goes back to VGA; `~/.gitconfig` stays; the packages
-stay installed. With the layer off, `spark bar` and the set forms of
-`spark quiet login|boot` refuse, `spark help` folds the shell block into
-one line, and the check rows that stand on it read `na`. `spark theme`,
-`spark font` and `spark quiet start|audio` work either way.
-
-Its keys:
-
-| key | values | default |
-|---|---|---|
-| `SITE_SHELL` | `off` / `on` -- `spark shell on\|off` | `off` |
-| `SITE_GIT_NAME` / `SITE_GIT_EMAIL` | the git identity `~/.gitconfig` is rendered with; unset, spark guesses and the `identity` row says so | guessed |
-| `SITE_PROMPT` / `SITE_PROMPT_STYLE` | `starship`/`plain`; `minimal`/`full` | `starship`, `minimal` |
-| `SITE_WORKSPACE` | the folder the `backup` row watches | `~/projects` |
-| `SITE_QUIET_LOGIN` / `SITE_QUIET_BOOT` | Linux: `yes` bares the login (motd, `/etc/issue`; originals kept) / makes the boot silent (one GRUB drop-in) -- `spark quiet login\|boot on`. `boot` is refused on WSL 2 and Arch | `no` |
-
-Two fonts on Linux: `spark font` sets the console face (core); the Nerd
-Font comes with the layer as a `.ttf` in `~/.local/share/fonts` for your
-terminal emulator, set in its own settings. On macOS the layer adds a
-Terminal.app profile with the palette, the font and the keys an editor
-needs (Option as Meta, so `Alt-s` is Option-s).
-
-Most linked files are symlinks into the repo. Some apps rewrite their
-own config on exit; those are rendered once as regular files:
-
-| file | why it is not a symlink |
-|---|---|
-| `~/.config/btop/btop.conf` | btop rewrites it on every exit |
-| `~/.config/micro/settings.json` | micro rewrites it; seeded once with `"colorscheme": "spark"` when micro is on PATH, then it is micro's. `spark theme NAME` sets that one key back; `spark shell off` drops it |
-| `~/.gitconfig`, `~/.tmux.conf`, `~/.config/starship.toml`, `~/.config/micro/colorschemes/spark.micro` | carry your name / palette / choices |
-| `~/.config/spark/launchd/*.plist` | launchd needs absolute paths |
-
-`install.sh` never overwrites a regular file: it moves it to `<file>.bak`.
 
 ## Appendix: how it fits together
 
