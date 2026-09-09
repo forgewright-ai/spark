@@ -274,6 +274,19 @@ def main():
         t.ok(rc == 0 and out.startswith("danger\t"), "line: model-flagged danger", out)
         rc, out, _ = spark("line", stdin="rm-plain?")
         t.ok(rc == 0 and out.startswith("danger\trm -rf build"), "line: regex catches an unflagged rm -rf", out)
+        # blast radius: with a real build/ under --cwd, line 2 opens with the facts
+        btree = os.path.join(home, "blast")
+        os.makedirs(os.path.join(btree, "build", "sub"))
+        for i in range(4):
+            open(os.path.join(btree, "build", "f%d.o" % i), "w").write("x" * 1000)
+        open(os.path.join(btree, "build", "sub", "g.o"), "w").write("y" * 500)
+        rc, out, _ = spark("line", "--cwd", btree, stdin="rm-plain?")
+        lines = out.splitlines()
+        t.ok(rc == 0 and lines[0] == "danger\trm -rf build" and lines[1].startswith("<- 5 files,")
+             and "5 files" in lines[1], "line: a recursive rm shows the blast radius (files, bytes)", out)
+        rc, out, _ = spark("line", "--cwd", btree, stdin="delete the tmp files?")
+        t.ok(rc == 0 and out.startswith("danger\t") and "<- " not in out,
+             "line: a danger that is not a recursive rm shows no facts", out)
         rc, out, _ = spark("line", stdin="what is the capital of France?")
         t.ok(rc == 0 and out.splitlines() == ["answer", "Paris"], "line: answer", out)
         rc, out, _ = spark("line", stdin="?   ")

@@ -319,6 +319,10 @@ may change freely.
    line 1 = `cmd<TAB>command` | `danger<TAB>command` | `answer` | `error`,
    line 2 = hint / answer / reason -- one line, cut at a word to a
    character budget (a hint or reason <= 80, an answer <= `cli.ANSWER_MAX`;
+   a `danger` line's hint may open with `<- <facts> -- ` where the facts
+   are `persona.blast`'s count for a recursive `rm` -- files, bytes and
+   git-tracked, from the command, run nothing; the facts lead so the cut
+   eats the model's words first;
    the widget trims to the terminal's own width). Exit 0 for the first
    three, 1 for error. A buffer starting with `??` continues the newest
    thread; any other starts a new one (no heuristics). The shell widgets

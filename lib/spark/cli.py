@@ -208,6 +208,12 @@ def cmd_line(args):
                 hint = _one_line("already tried above -- %s" % hint)
         flagged = bool(reply.get("danger")) or persona.is_dangerous(command)
         kind = "danger" if flagged else "cmd"
+        if flagged:
+            facts = persona.blast(command, cwd)
+            if facts:
+                # the facts first, so contract 4's 80-char cut eats the
+                # model's words before it eats the numbers
+                hint = _one_line("<- " + facts + " -- " + hint)
         say(kind + "\t" + command)
         say(hint)
         shown = "`%s` -- %s" % (command, hint)

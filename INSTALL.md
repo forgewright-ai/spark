@@ -141,7 +141,8 @@ shell cannot host the widget (another shell, or macOS's bash 3.2):
 
 1. At the prompt: `? words` or `words?`, Enter, and the command lands in
    your line with a hint above it; Enter again runs it. A command that
-   deletes comes back marked `!`. `?? words` follows up on the last
+   deletes comes back marked `!` -- a recursive `rm` also says how many
+   files and bytes it clears. `?? words` follows up on the last
    answer; `Esc s` asks about the line you are on; `cmd 2>&1 | explain`
    says what went wrong. `spark off` gives Enter back and quiets the
    failure line; `spark on` restores both. TAB completes the verbs and

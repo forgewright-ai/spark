@@ -43,6 +43,94 @@ def is_dangerous(command):
     return any(p.search(command) for p in DANGER)
 
 
+import shlex as _shlex
+
+
+_RM_R = re.compile(r"\brm\s+(?:-\S+\s+)*-\S*[rR]")   # rm with a recursive flag
+
+
+def _human_bytes(n):
+    for unit in ("B", "KB", "MB", "GB", "TB"):
+        if n < 1024 or unit == "TB":
+            return ("%d %s" % (n, unit)) if unit == "B" else ("%.1f %s" % (n, unit))
+        n /= 1024.0
+
+
+def blast(command, cwd=""):
+    """The facts beside a `!` for a recursive `rm`: how many files, how many
+    bytes, and how many git-tracked, under the paths it would remove. From
+    the command spark already has -- nothing the model proposed is run.
+
+    Only `rm -r...`, because that is the danger a count answers; a glob or
+    an option is skipped, a path is resolved against `cwd`, and the walk is
+    capped in entries and time so a huge tree cannot hang the prompt (the
+    count then ends `+`). Returns the one-line string, or `` when there is
+    nothing honest to say."""
+    if not _RM_R.search(command):
+        return ""
+    try:
+        words = _shlex.split(command)
+    except ValueError:
+        return ""
+    base = os.path.abspath(cwd) if cwd else os.getcwd()
+    paths = []
+    for w in words[1:] if words else []:
+        if w == "rm" or w.startswith("-"):
+            continue
+        if any(c in w for c in "*?[]"):     # a glob: spark did not expand it
+            return ""
+        paths.append(w if os.path.isabs(w) else os.path.join(base, w))
+    paths = [p for p in paths if os.path.lexists(p)]
+    if not paths:
+        return ""
+    CAP_ENTRIES, CAP_SECONDS = 200000, 0.2
+    import time as _time
+    files = total = 0
+    capped = False
+    deadline = _time.time() + CAP_SECONDS
+    for p in paths:
+        if os.path.isfile(p) or os.path.islink(p):
+            files += 1
+            try:
+                total += os.lstat(p).st_size
+            except OSError:
+                pass
+            continue
+        for root, dirs, names in os.walk(p):
+            for n in names:
+                files += 1
+                try:
+                    total += os.lstat(os.path.join(root, n)).st_size
+                except OSError:
+                    pass
+            if files >= CAP_ENTRIES or _time.time() > deadline:
+                capped = True
+                break
+        if capped:
+            break
+    tracked = _tracked(paths, base)
+    n = "%s%s file%s" % ("{:,}".format(files), "+" if capped else "", "" if files == 1 else "s")
+    parts = [n, _human_bytes(total) + ("+" if capped else "")]
+    if tracked:
+        parts.append("%s tracked by git" % "{:,}".format(tracked))
+    return ", ".join(parts)
+
+
+def _tracked(paths, base):
+    """How many of the paths git tracks, or 0 when cwd is not a repo (quiet
+    on any failure -- the count is a courtesy, never a promise)."""
+    import subprocess
+    try:
+        rel = [os.path.relpath(p, base) for p in paths]
+        out = subprocess.run(["git", "-C", base, "ls-files", "-z", "--"] + rel,
+                             capture_output=True, timeout=2)
+        if out.returncode != 0:
+            return 0
+        return len([x for x in out.stdout.split(b"\0") if x])
+    except (OSError, subprocess.SubprocessError):
+        return 0
+
+
 LINE_SCHEMA = {
     "type": "object",
     "properties": {

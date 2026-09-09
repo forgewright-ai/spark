@@ -18,7 +18,8 @@ SPARK
   spark history [clear]           the threads kept here; clear removes them
   try:
   ? words   or   words?   Enter   the command lands in your line, hint above
-  Enter again                     runs it (! = read it first; it deletes)
+  Enter again                     runs it (! = read it first; a recursive
+                                  rm says how many files and bytes it clears)
   ?? words                        follow up on the last answer (same thread)
   ?? how do I change the model    spark knows itself: it names its own verbs
   Esc s                           ask about the line you are on, no ?

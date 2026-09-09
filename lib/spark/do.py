@@ -172,9 +172,12 @@ def _edit(command):
     return " ".join(new.split()) or command
 
 
-def _confirm(reply):
+def _confirm(reply, cwd=""):
     """What the user wants for this step: run | edit | skip | quit."""
     if reply["danger"]:
+        facts = persona.blast(reply.get("command", ""), cwd)
+        if facts:
+            say("  %s %s" % (glyph("arrow"), facts))
         answer = input("  this can destroy data -- type yes to run it: ").strip()
         return "run" if answer == "yes" else "skip"
     answer = input("  Enter runs it, e edits, s skips, q quits: ").strip().lower()
@@ -227,11 +230,11 @@ def cmd_do(args):
                 text = "%s is not installed on this machine" % missing
                 continue
             say("%s %d  %s   %s" % (glyph("warn") if reply["danger"] else glyph("hammer"), n, command, hint))
-            choice = _confirm(reply)
+            choice = _confirm(reply, cwd)
             if choice == "edit":
                 command = _edit(command)
                 reply["danger"] = bool(reply["danger"]) or persona.is_dangerous(command)
-                if reply["danger"] and _confirm(reply) != "run":
+                if reply["danger"] and _confirm(reply, cwd) != "run":
                     choice = "skip"
             if choice == "quit":
                 break

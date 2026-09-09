@@ -12,7 +12,9 @@ One line installs it. Then ask at the prompt:
 ```
 
 Nothing runs until you press Enter again. A command that deletes comes
-back marked `!`.
+back marked `!`, and a recursive `rm` says how many files and bytes it
+would clear -- and how many git tracks -- worked out from the command
+itself, never by running anything.
 
 ## Install
 

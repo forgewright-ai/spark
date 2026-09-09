@@ -2,6 +2,15 @@
 
 ## v1.18
 
+- Blast radius: a recursive `rm` at the prompt earns its numbers beside
+  the `!`. `? clean the build dir` that comes back `rm -rf build` now
+  reads `<- 1,204 files, 3.1 GB, 2 tracked by git -- ...`: the count of
+  files, bytes and git-tracked files under the paths, worked out from the
+  command spark already has -- nothing the model proposed is run. Only a
+  recursive `rm` (a glob or a plain delete says nothing), the walk is
+  capped so a huge tree cannot hang the prompt (the count ends `+` then),
+  and `spark do` shows the same line above its `yes`. The facts lead the
+  hint so contract 4's cut eats the model's words, not the numbers.
 - `spark ask` survives a model that wraps its questions. The brief said to
   point at the text "by quoting it between double quotes", and small
   models read that as wrapping the whole question -- every line then ended
