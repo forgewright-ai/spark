@@ -57,7 +57,6 @@ PALETTE = (
     "THEME_LOGO=bright-green bright-green bright-yellow bright-yellow bright-blue bright-blue",
 )
 # the one line that keeps the joke: the rest is in CREDITS.md
-CARD = "lua: the moon, in Portuguese. It was in the word all along."
 
 # glyphs: (terminal, console) -- every one drawable on the Linux console
 _G = {"canopy": ("♣", "Y"), "log": ("■", "="), "hp_on": ("█", "#"), "hp_off": ("░", "."),
@@ -228,8 +227,9 @@ class World:
     logs, briars, stars, oncas, bats; the zone posts; the palm at the end.
     Beatable by construction (check() proves the invariants)."""
 
-    def __init__(self, seed):
+    def __init__(self, seed, night=1):
         self.seed = seed
+        self.night = max(1, int(night))
         r = self.rng = random.Random(seed)
         self.floor = [LAND] * WORLD_W
         self.canopy = [False] * WORLD_W
@@ -245,6 +245,7 @@ class World:
         self.palm_x = WORLD_W - 22
         for z in range(1, ZONES + 1):
             self._zone(z, START_W + (z - 1) * ZONE_W)
+        self._night_pass()
 
     def _zone(self, z, x0):
         r = self.rng
@@ -313,6 +314,40 @@ class World:
         else:                                # an onca's stretch: flat, it patrols it
             self.oncas.append({"x": float(x + 7), "x0": x, "x1": x + w - 1, "d": 1, "alive": True,
                                "charge": 1.25 if z >= 7 else 1.1 if z >= 6 else 1.0, "tell": 0, "seen": False})
+
+    def _night_pass(self):
+        """What the later nights add. The terrain is deliberately untouched:
+        the same seed draws the same forest every night, so a player learns
+        its shape and it is the threat in it that grows, not the ground.
+
+        Its own RNG, seeded from the seed AND the night, so adding this pass
+        cannot shift the layout the zones already drew. Counts rise strictly
+        with the night -- night 6 is never lighter than night 3, which is
+        what a difficulty curve has to promise.
+        """
+        if self.night < 2:
+            return
+        n = self.night - 1
+        r = random.Random("%s-%d" % (self.seed, self.night))
+        for _ in range(3 * n):                     # more in the air
+            z = r.randint(2, ZONES)
+            x0 = START_W + (z - 1) * ZONE_W
+            self._bat(r.randint(x0 + 10, x0 + ZONE_W - 25))
+        for _ in range(n // 2):                    # and more on the ground
+            # an onca needs a flat run to pace: check() refuses one on
+            # rough ground, so look for a clear span and skip the zone
+            # rather than place an unfair one
+            z = r.randint(3, ZONES)
+            x0 = START_W + (z - 1) * ZONE_W
+            spots = [x for x in range(x0 + 12, x0 + ZONE_W - 30)
+                     if not any(self.floor[c] != LAND or c in self.logs or c in self.briars
+                                for c in range(x, x + 14))
+                     and not any(abs(x + 7 - o["x"]) < 18 for o in self.oncas)]
+            if not spots:
+                continue                       # no flat run left here: leave the zone alone
+            x = spots[r.randrange(len(spots))]
+            self.oncas.append({"x": float(x + 7), "x0": x, "x1": x + 13, "d": 1, "alive": True,
+                               "tell": 0, "charge": 1.25 if z >= 7 else 1.0})
 
     def _bat(self, ax):
         self.bats.append({"ax": ax, "x": float(ax), "y": float(CANOPY), "t": self.rng.randint(0, 60),
@@ -416,7 +451,7 @@ class Game:
         self.cols = max(60, min(int(cols), 200))
         self.day = day
         self.seed = seed if seed is not None else (day or date.today()).toordinal()
-        self.world = World(self.seed)
+        self.world = World(self.seed, self.night)
         # the potions the night allows: none the first night (it is easy enough),
         # one on nights 2 to 4 (the fourth zone), two from the fifth (zones 3 and 6)
         allowed = () if self.night == 1 else (4,) if self.night <= 4 else (3, 6)
@@ -964,10 +999,13 @@ def ending_rows(g, tl, kind):
     left = max(0, (cols - len(art[0])) // 2)
     for i in range(6):
         rows[1 + i] = [(" ", PLAIN)] * cols
+    # the art starts on the second blanked row, not the first: one blank
+    # line between the status bar and the banner, so the banner reads as a
+    # thing of its own and not as the bar's next line
     for i, (ln, attr) in enumerate(zip(art, colours)):
         for j, ch in enumerate(ln):
             if ch != " " and left + j < cols:
-                rows[1 + i][left + j] = (ch, attr)
+                rows[2 + i][left + j] = (ch, attr)
     return rows
 
 
@@ -1205,20 +1243,27 @@ def _remember(g, st):
     save_state(st)
 
 
-def boxed(paragraphs, width=66):
-    """An ASCII box around paragraphs (a blank line between them, each
-    wrapped to width): + - | draw on every terminal and console."""
-    inner = []
-    for para in paragraphs:
-        if inner and not (para.startswith(" ") and inner[-1].startswith(" ")) and not para.startswith("    "):
-            inner.append("")
-        elif inner and para.startswith("    ") and not inner[-1].startswith(" ") and not inner[-1].endswith(":"):
-            inner.append("")
-        inner.extend(textwrap.wrap(para, width) if not para.startswith(" ") else [para])
-    w = max(len(ln) for ln in inner) + 4
-    out = ["+" + "-" * w + "+", "|" + " " * w + "|"]
-    out += ["|  %-*s  |" % (w - 4, ln) for ln in inner]
-    out += ["|" + " " * w + "|", "+" + "-" * w + "+"]
+def _centre(s, width):
+    return " " * max(0, (width - len(s)) // 2) + s
+
+
+def splash(lines, rows, width):
+    """The ending under its banner: one fact per line, centred, a blank
+    between them, and the board centred as a block so its columns stay in
+    line with each other. No box -- the banner is the frame.
+
+    `width` is the band's own (g.cols), never a constant: the banner is
+    centred on that, and a splash centred on anything else sits visibly
+    off to one side of it on a wide terminal."""
+    out = []
+    for ln in lines:
+        out.append(_centre(ln, width))
+        out.append("")
+    if rows:
+        out.append(_centre("Top runs", width))
+        out.append("")
+        pad = " " * max(0, (width - max(len(r) for r in rows)) // 2)
+        out.extend(pad + r for r in rows)
     return out
 
 
@@ -1227,32 +1272,29 @@ def finish(g, st, tl):
     stands, the tale's line; a win adds the ending, the palette and the
     one line that keeps the joke."""
     path = None
-    if g.over == "won":
+    # The palette is the prize for the WHOLE forest, not for one crossing:
+    # it comes when the last night is won. Winning night 1 used to hand it
+    # over, which left nothing to play for.
+    last_night = g.over == "won" and g.night >= NIGHTS
+    if last_night:
         path = write_palette()       # before a word is printed: a closed pipe must not lose the prize
     _remember(g, st)
     taken = set(g.taken)
     zone = fold(ZONE_NAMES[g.zone_max - 1][0])
-    board = ["Top runs:"] + ["    %d. %5d   night %d   * %d/8   %s%s" % (
+    rows = ["%d. %5d   night %d   * %d/8   %s%s" % (
         i + 1, r["score"], r["night"], r["stars"], r["date"], "   crossed" if r.get("won") else "")
         for i, r in enumerate(st.get("scores", []))]
+    score = "Score %d (night %d)" % (g.score, g.night)
     if g.over == "won":
-        again = ("Night %d awaits: faster, and every point counts %d times." % (g.night + 1, g.night + 1)
-                 if g.night < NIGHTS else "The last night. The forest has nothing left to hide.")
-        paras = ["SUCCESS -- eight stars, the forest crossed.  Score %d (night %d)." % (g.score, g.night),
-                 memory(tl, taken, 0),
-                 fold(tl.get("fim", ("", ""))[0]),
-                 CARD,
-                 "A palette of your own, in the colours of the flag:",
-                 "    spark theme %s" % PALETTE_NAME,
-                 again] + board
+        lines = ["Eight stars, the forest crossed.", score,
+                 "A palette of your own:  spark theme %s" % PALETTE_NAME if last_night
+                 else "Night %d awaits: faster, thicker, and every point counts %d times."
+                      % (g.night + 1, g.night + 1)]
     else:
-        paras = ["GAME OVER in zone %d, %s.  * %d/8   Score %d (night %d)." % (
-                     g.zone_max, zone, g.stars, g.score, g.night),
-                 memory(tl, taken, 0),
-                 fold(tl.get("queda", ("", ""))[0])] + board
+        lines = ["Zone %d, %s.  * %d/8" % (g.zone_max, zone, g.stars), score]
     say()
-    for ln in boxed(paras):
-        say("  " + ln)
+    for ln in splash(lines, rows, g.cols):
+        say(ln)
     say()
 
 

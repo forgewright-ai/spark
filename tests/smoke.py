@@ -1762,6 +1762,7 @@ def main():
         t.ok(rc == 0 and out3.splitlines()[0] == first, "lua --sim: the moon changes the light, not the numbers", out3)
         # the pilot takes star 1 on every seed, and wins some seed
         wins, star1 = [], []
+        from spark import lua as _lua
         for seed in range(1, 21):
             rc, out, _ = spark("lua", "--sim", str(seed), "auto")
             line = out.splitlines()[0] if out else ""
@@ -1774,12 +1775,30 @@ def main():
         t.ok(bool(wins), "lua: the pilot wins at least one seed in 1..20", "no win")
         if wins:
             seed, out = wins[0]
-            t.ok("SUCCESS" in out and "He remembered the river, the forest," in out and "Ele lembrou" not in out,
-                 "lua: a win prints the whole memory, in English only (seed %d)" % seed, out)
-            t.ok("spark theme canarinho" in out and "the moon, in Portuguese" in out and "....." not in out
-                 and "Cobra" not in out and out.count("+--") == 2,
-                 "lua: one boxed ending after a win -- the invitation, the one quiet line, no credits, no gap", out)
-        t.ok(os.path.exists(mine_dir + "/canarinho.env"), "lua: the win writes canarinho.env into your palettes")
+            t.ok("Eight stars, the forest crossed." in out and "Ele lembrou" not in out,
+                 "lua: a win says so in English, under the banner (seed %d)" % seed, out)
+            t.ok("Top runs" in out and out.count("+--") == 0
+                 and "Cobra" not in out and "the moon, in Portuguese" not in out,
+                 "lua: the win splash is the score and the board -- no box, no credits", out)
+            # the palette is the whole forest's prize: a first-night win
+            # says what is still to come, and hands over nothing
+            t.ok("spark theme canarinho" not in out and "Night 2 awaits" in out,
+                 "lua: winning night 1 offers the next night, not the palette", out)
+        t.ok(not os.path.exists(mine_dir + "/canarinho.env"),
+             "lua: no palette until the last night is won")
+        # the last night: the same pilot, the forest at its thickest
+        last = ""
+        for seed in range(1, 21):
+            rc, out, _ = spark("lua", "--night", str(_lua.NIGHTS), "--sim", str(seed), "auto")
+            if out.splitlines()[0:1] and " over won " in out.splitlines()[0]:
+                last = out
+                break
+        t.ok(bool(last), "lua: the pilot can still cross on the last night", last[:200])
+        if last:
+            t.ok("spark theme canarinho" in last and "awaits" not in last,
+                 "lua: winning the last night is what hands over the palette", last)
+        t.ok(os.path.exists(mine_dir + "/canarinho.env"),
+             "lua: the last night writes canarinho.env into your palettes")
         rc, out, err = spark("theme", "canarinho", extra={"SPARK_NO_APPLY": "1"})
         with open(home + "/.config/spark/theme.env") as f:
             theme_env = f.read()
@@ -1801,9 +1820,9 @@ def main():
         import io as _io
         # a death: running and hopping, never firing
         rc, out, _ = spark("lua", "--sim", "1", "dwww")
-        t.ok(rc == 0 and "over dead" in out.splitlines()[0] and "GAME OVER in zone" in out and "....." in out
-             and "Sloth" in out and out.count("+--") == 2,
-             "lua: a run that never fires dies: one boxed GAME OVER, the gaps in the line, the tale's line", out)
+        t.ok(rc == 0 and "over dead" in out.splitlines()[0] and re.search(r"Zone \d+, ", out)
+             and "Score " in out and out.count("+--") == 0 and "Sloth" not in out,
+             "lua: a run that never fires dies: the same splash as a win, no box", out)
         rc, out, _ = spark("lua", "--sim", "2", "auto", extra={"SPARK_ASCII": "1", "XDG_STATE_HOME": home + "/.local/state-c"})
         t.ok(rc == 0 and all(ord(c) < 128 for c in out), "lua on the console: every character ASCII, the text folded", out)
         rc, out, _ = spark("lua")
@@ -1818,7 +1837,8 @@ def main():
         t3 = re.search(r"ticks (\d+) score (\d+) night 3", n3.splitlines()[0])
         t.ok(t1 and t3 and int(t3.group(1)) < int(t1.group(1)) and int(t3.group(2)) > int(t1.group(2)),
              "lua --night 3: the same forest runs faster and pays more than night 1", n1.splitlines()[0] + " | " + n3.splitlines()[0])
-        t.ok("Top runs:" in n3 and "Night " in n3 and n3.count("+--") == 2, "lua: the ending box carries the next night and the top runs", n3)
+        t.ok("Top runs" in n3 and "(night 3)" in n3 and n3.count("+--") == 0,
+             "lua: the splash carries the night and the top runs, in no box", n3)
         rc, out, _ = spark("lua", "--scores", extra={"XDG_STATE_HOME": home + "/.local/state-n"})
         t.ok(rc == 0 and out.count("night ") == 2 and "nights won: 3" in out, "lua --scores: the runs so far, and the nights won", out)
         rc, out, _ = spark("help")
