@@ -133,6 +133,27 @@ def _last_proposed(history):
     return None
 
 
+def _failed_cmd():
+    """The failing command and its exit code the widget exports for a
+    failure turn (SPARK_EXPLAIN_CMD / _RC), or ('', None). The same two
+    variables `explain` reads: a failure turn rides them into the line."""
+    cmd = os.environ.get("SPARK_EXPLAIN_CMD", "").strip()
+    rc = os.environ.get("SPARK_EXPLAIN_RC", "").strip()
+    return cmd, (int(rc) if rc.isdigit() else None)
+
+
+def _install_line(binary):
+    """The `cmd\tinstall-line` for a known missing tool, computed here with
+    no model call, or ('', ''). Only tools spark itself installs; anything
+    else the model names."""
+    from . import packages
+    pkg = packages.package_for(binary)
+    if not pkg:
+        return "", ""
+    return packages.install_line([pkg]), "%s installs %s (%s)" % (
+        "brew" if packages.IS_MAC else packages.manager(), binary, pkg)
+
+
 def cmd_line(args):
     """Contract 4. stdin = the prompt buffer. stdout line 1 = cmd<TAB>command
     | danger<TAB>command | answer | error; line 2 = hint / answer / reason."""
@@ -159,11 +180,36 @@ def cmd_line(args):
         say("error")
         say("nothing to ask")
         return 1
+    # command not found (127): the failed head word names a tool. If spark
+    # installs it, the install line is known here with no model call; else
+    # the model is told what is missing and asked to name its package.
+    fcmd, frc = _failed_cmd()
+    install_ctx = ""
+    if frc == 127 and fcmd:
+        head = fcmd.split()[0] if fcmd.split() else ""
+        while head in ("sudo", "env", "nohup"):
+            rest = fcmd.split()[1:]
+            head = rest[0] if rest else ""
+            fcmd = " ".join(rest)
+        line, why = _install_line(head)
+        if line:
+            say("cmd\t" + line)
+            say(_one_line(why))
+            return 0
+        install_ctx = ("Command not found: %s. Reply with the single command "
+                       "that installs it on this machine, and a hint naming the "
+                       "package." % head)
+    elif frc is not None and fcmd and text.strip().lower() in ("fix it", "? fix it", "fix"):
+        # a second Esc s after an explain: correct the command that failed
+        install_ctx = ("The command `%s` failed with exit %d. Reply with a "
+                       "corrected command that does what it was trying to do."
+                       % (fcmd, frc))
     cfg = config.load()
     thread, history = forge.pick(cfg, more)
+    ask_text = (install_ctx + "\n\n" + text) if install_ctx else text
     try:
         s = session.Session(cfg, "line", shell, cwd, history)
-        reply, ms = s.ask_json(text)
+        reply, ms = s.ask_json(ask_text)
     except wire.BrainError as e:
         say("error")
         say(_one_line(e.hint))

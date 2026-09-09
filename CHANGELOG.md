@@ -2,6 +2,14 @@
 
 ## v1.18
 
+- The failure moment goes further, twice. After the explain, a second
+  `Esc s` proposes the corrected command in your line -- the command and
+  its exit code ride to `spark line`, which answers with a fix through the
+  cmd path, and nothing runs until Enter. And a `command not found` (exit
+  127) offers the line that installs it: a tool spark itself installs is
+  named here with no model call (`packages.package_for` -- fd is fd-find
+  on Debian, fd on Arch and macOS), the rest through the model. Both ride
+  the same hook the widgets already keep, in both shells; no new check row.
 - Blast radius: a recursive `rm` at the prompt earns its numbers beside
   the `!`. `? clean the build dir` that comes back `rm -rf build` now
   reads `<- 1,204 files, 3.1 GB, 2 tracked by git -- ...`: the count of

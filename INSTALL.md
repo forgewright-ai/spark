@@ -150,9 +150,13 @@ shell cannot host the widget (another shell, or macOS's bash 3.2):
 2. When a command fails, one line appears above the next prompt:
    `* failed (1) -- press Esc s to ask why`. `Esc s` on the empty line
    puts the command back, already piped to `explain`, and nothing runs
-   until you press Enter. A command that deletes or destroys (`rm`,
-   `dd`, `mkfs`...) is never offered a re-run -- the line says so, and
-   `? words` still answers about it. After the fix works, `Esc s` offers
+   until you press Enter. A second `Esc s` after that proposes the
+   corrected command in your line. When a command is not found (exit
+   127), `Esc s` offers the line that installs it -- a tool spark itself
+   installs is named with no model call, the rest through the model. A
+   command that deletes or destroys (`rm`, `dd`, `mkfs`...) is never
+   offered a re-run -- the line says so, and `? words` still answers
+   about it. After the fix works, `Esc s` offers
    to keep what happened as a `spark memory add` fact -- edit the line,
    then Enter. Only a command typed on one line is offered; Ctrl-C and
    a no-match from `grep` or `diff` stay quiet. The offer lives in the

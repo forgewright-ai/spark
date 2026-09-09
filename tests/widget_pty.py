@@ -53,7 +53,10 @@ case $line in
   # assertion below could never fail, whatever the widget did
   *hostile-huge*) printf 'cmd\techo '; awk 'BEGIN{while(i++<40000)printf "z"}'; printf ' EXECUTED-MARK\n'; awk 'BEGIN{while(i++<40000)printf "y"}'; printf '\n' ;;
   *hostile-dead*) exit 1 ;;
-  *) printf 'cmd\techo EXECUTED-MARK\nA hint about it\n' ;;
+  *fix\ it*) printf 'cmd\techo FIXED-COMMAND\nthe corrected command\n' ;;
+  *) if [ "${SPARK_EXPLAIN_RC:-}" = 127 ]; then
+         printf 'cmd\tbrew install the-tool\ninstalls the missing tool\n'
+     else printf 'cmd\techo EXECUTED-MARK\nA hint about it\n'; fi ;;
 esac
 '''
 
@@ -475,6 +478,34 @@ def main(shell, widget):
         sh.send("\x1bs")
         ok(sh.expect("spark memory add"), "Esc s after the fix offers to keep it", since())
         ok(sh.expect("failed until: mkdir fixed-dir"), "the fact records what the user did", since())
+        sh.send("\x15")
+        time.sleep(0.2)
+
+        # 10f2. command not found (127): the note says so, and Esc s lands
+        # an install line in the buffer
+        since = sh.mark()
+        sh.send("this-command-does-not-exist-xyz\r")
+        ok(sh.expect("not found; Esc s offers the install line"), "127 prints the install note", since())
+        sh.expect(prompt)
+        since = sh.mark()
+        sh.send("\x1bs")
+        ok(sh.expect("brew install the-tool") or sh.expect("install"), "Esc s after 127 offers an install line", since())
+        sh.send("\x15")
+        time.sleep(0.2)
+
+        # 10f3. a second Esc s right after an explain proposes the fix
+        since = sh.mark()
+        sh.send("sh -c 'exit 4'\r")
+        sh.expect("failed (4)")
+        sh.expect(prompt)
+        sh.send("\x1bs")                 # first Esc s: composes the explain
+        sh.expect("2>&1 | explain")
+        sh.send("\r")                    # run it: the explain window opens
+        sh.expect("EXPLAINED")
+        sh.expect(prompt)
+        since = sh.mark()
+        sh.send("\x1bs")                 # second Esc s: propose the fix
+        ok(sh.expect("FIXED-COMMAND"), "a second Esc s after the explain proposes the corrected command", since())
         sh.send("\x15")
         time.sleep(0.2)
 

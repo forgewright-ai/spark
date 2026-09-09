@@ -100,7 +100,7 @@ _spark_ask() {   # _spark_ask LINE  -- ask, then edit READLINE_LINE
 # next Enter means no prompt was drawn between them (a PS2 continuation):
 # the lines accumulate and the newline refuses the offer.
 _spark_cmd='' _spark_fail='' _spark_fail_rc=0
-_spark_explained='' _spark_fix=''
+_spark_explained='' _spark_explained_rc='' _spark_fix='' _spark_offer_fix=''
 # One list per judgment, the same lists in widget.zsh (tests/smoke.py
 # compares them). DANGER: head words never offered a re-run. QUIET_ONE:
 # exit 1 means "no match" or "differs" for these, not a failure.
@@ -173,12 +173,15 @@ _spark_failed() {
     local rc=$? cmd=$_spark_cmd
     _spark_cmd=''
     unset SPARK_EXPLAIN_CMD SPARK_EXPLAIN_RC
+    _spark_offer_fix=''
     # no capture: an empty Enter, Ctrl-C at the prompt, or a key spark
     # does not own. Nothing prints twice; a standing offer survives.
     [[ -n $cmd ]] || return $rc
     if (( rc == 0 )); then
         if [[ $cmd == *"| explain"* || $cmd == *"|explain"* ]]; then
             _spark_explained=${_spark_fail:-$_spark_explained}   # the offer was taken
+            _spark_explained_rc=${_spark_fail_rc:-$_spark_explained_rc}
+            _spark_offer_fix=1                                    # a second Esc s now proposes the fix
             _spark_fix=''
         elif [[ $cmd == "spark memory add"* ]]; then
             _spark_explained='' _spark_fix=''                    # the fact was kept
@@ -204,8 +207,12 @@ _spark_failed() {
         _spark_fail=''
         _spark_note "$_spark_h failed ($rc) -- $_spark_head: not re-run; ? words asks about it"
     else
-        _spark_fail=$cmd _spark_fail_rc=$rc _spark_explained='' _spark_fix=''
-        _spark_note "$_spark_h failed ($rc) -- press Esc s to ask why"
+        _spark_fail=$cmd _spark_fail_rc=$rc _spark_explained='' _spark_explained_rc='' _spark_fix=''
+        if (( rc == 127 )); then
+            _spark_note "$_spark_h failed (127) -- $_spark_head not found; Esc s offers the install line"
+        else
+            _spark_note "$_spark_h failed ($rc) -- press Esc s to ask why"
+        fi
     fi
     return $rc
 }
@@ -255,7 +262,13 @@ bind '"\C-j": "\C-x\C-s\C-x\C-a"'
 _spark_ask_line() {
     local fact
     if [[ -n $READLINE_LINE ]]; then _spark_ask "$READLINE_LINE"; return; fi
-    if [[ -n $_spark_fail ]]; then
+    if [[ -n $_spark_fail && $_spark_fail_rc == 127 ]]; then
+        # command not found: Esc s asks for the install line (known tools
+        # answer offline in `spark line`, the rest through the model)
+        export SPARK_EXPLAIN_CMD=$_spark_fail SPARK_EXPLAIN_RC=127
+        _spark_fail=''
+        _spark_ask "install it"
+    elif [[ -n $_spark_fail ]]; then
         # braces catch a compound's every branch; a trailing ; would
         # double up inside them, so it is trimmed
         fact=$_spark_fail
@@ -264,6 +277,11 @@ _spark_ask_line() {
         READLINE_LINE="{ $fact; } 2>&1 | explain"
         READLINE_POINT=${#READLINE_LINE}
         _spark_say "$_spark_h Enter runs it: the failure, explained"
+    elif [[ -n $_spark_offer_fix ]]; then
+        # the second Esc s, right after the explain: the corrected command
+        export SPARK_EXPLAIN_CMD=$_spark_explained SPARK_EXPLAIN_RC=${_spark_explained_rc:-1}
+        _spark_offer_fix=''
+        _spark_ask "? fix it"
     elif [[ -n $_spark_fix ]]; then
         fact="$_spark_explained failed until: $_spark_fix"
         READLINE_LINE="spark memory add '${fact//\'/\'\\\'\'}'"

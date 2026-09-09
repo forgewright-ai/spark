@@ -287,6 +287,15 @@ def main():
         rc, out, _ = spark("line", "--cwd", btree, stdin="delete the tmp files?")
         t.ok(rc == 0 and out.startswith("danger\t") and "<- " not in out,
              "line: a danger that is not a recursive rm shows no facts", out)
+        # command not found (127): a tool spark installs is named offline,
+        # with no model call -- the stub brain is never asked
+        n0 = STATE["hits"]
+        rc, out, _ = spark("line", stdin="install it",
+                           extra={"SPARK_EXPLAIN_CMD": "rg foo", "SPARK_EXPLAIN_RC": "127"})
+        lines = out.splitlines()
+        t.ok(rc == 0 and lines[0].startswith("cmd\t") and "ripgrep" in lines[0]
+             and STATE["hits"] == n0,
+             "line: a known missing tool (rg) gets its install line with no model call", out)
         rc, out, _ = spark("line", stdin="what is the capital of France?")
         t.ok(rc == 0 and out.splitlines() == ["answer", "Paris"], "line: answer", out)
         rc, out, _ = spark("line", stdin="?   ")
@@ -1997,6 +2006,8 @@ def main():
     for name, text in (("widget.zsh", wz), ("widget.bash", wb)):
         t.ok("_spark_failed" in text and "_spark_offer_kind" in text and " hook" in text,
              "%s carries the exit-code hook, the predicate and the marker field" % name)
+        t.ok("_spark_offer_fix" in text and "SPARK_EXPLAIN_RC=127" in text and "install it" in text,
+             "%s carries the two escalations (127 install, the second-Esc-s fix)" % name)
 
     srv.shutdown()
     print("smoke: %s" % ("all ok" if not t.fail else "%d FAILED" % t.fail))

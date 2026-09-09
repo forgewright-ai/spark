@@ -87,6 +87,38 @@ def install_line(pkgs):
     return ("%s %s" % (t.get("PM_INSTALL", "install"), " ".join(pkgs))).strip()
 
 
+# the binary a shell tries to run, to the package that provides it, for
+# the handful spark itself installs where the two names differ or where a
+# family renames it (Debian ships fd as fd-find, bat as batcat). Anything
+# not here is left to the model to name -- this map only spares a model
+# call for tools spark already knows.
+_TOOL_PKG = {
+    "fd": {"apt": "fd-find", "pacman": "fd", "brew": "fd"},
+    "fdfind": {"apt": "fd-find", "pacman": "fd", "brew": "fd"},
+    "rg": {"apt": "ripgrep", "pacman": "ripgrep", "brew": "ripgrep"},
+    "bat": {"apt": "bat", "pacman": "bat", "brew": "bat"},
+    "batcat": {"apt": "bat", "pacman": "bat", "brew": "bat"},
+    "eza": {"apt": "eza", "pacman": "eza", "brew": "eza"},
+    "fzf": {"apt": "fzf", "pacman": "fzf", "brew": "fzf"},
+    "zoxide": {"apt": "zoxide", "pacman": "zoxide", "brew": "zoxide"},
+    "btop": {"apt": "btop", "pacman": "btop", "brew": "btop"},
+    "jq": {"apt": "jq", "pacman": "jq", "brew": "jq"},
+    "tmux": {"apt": "tmux", "pacman": "tmux", "brew": "tmux"},
+    "starship": {"apt": "starship", "pacman": "starship", "brew": "starship"},
+}
+
+
+def package_for(binary):
+    """The package that provides `binary` on this machine, when spark knows
+    it (`_TOOL_PKG`), else '' -- the caller then asks the model. The family
+    is this machine's: fd is fd-find on Debian, fd on Arch and macOS."""
+    row = _TOOL_PKG.get(binary)
+    if not row:
+        return ""
+    pm = "brew" if IS_MAC else manager()
+    return row.get(pm, binary)
+
+
 def remove_argv(pkgs):
     """The manager's own removal, as root on Linux (dependencies stay, as
     apt-get remove leaves them)."""
