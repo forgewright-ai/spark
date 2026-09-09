@@ -81,15 +81,18 @@ def last_turn():
 READ_MAX = 800          # what the reading pass looks at: the first chars
 
 
-def reading(cfg, data, shell="", start=0):
-    """(`You read this as: LANGUAGE, KIND.\n`, `\n\nAnswer in LANGUAGE.`) --
+def reading(cfg, data, shell="", start=0, act="Answer"):
+    """(`You read this as: LANGUAGE, KIND.\n`, `\n\n<act> in LANGUAGE.`) --
     the model's own reading of READ_MAX chars of `data` from `start`
     (persona.MODE_EDIT_READ), restated to it above the text, and the
     language it named repeated as the last line of the request: a small
     model answers a Portuguese draft in English otherwise, whatever the
-    brief says. Every grounded contract that shows a text to the model
-    opens with this. Any failure is two empty strings: the request goes
-    on without it."""
+    brief says. `act` is the verb of that last line -- "Answer" for a
+    contract that replies, "Ask" for `spark ask`, which replies with
+    questions: "Answer in ..." pushed small models to answer the text
+    instead of questioning it. Every grounded contract that shows a text
+    to the model opens with this. Any failure is two empty strings: the
+    request goes on without it."""
     try:
         s = Session(cfg, "edit-read", shell or "sh", "", role="spark")
         reply, _ms = s.ask_json(data[start:start + READ_MAX], persona.READ_SCHEMA, max_tokens=30, timeout=180)
@@ -99,7 +102,7 @@ def reading(cfg, data, shell="", start=0):
     parts = [p for p in (lang, kind) if p]
     if not parts:
         return "", ""
-    tail = "\n\nAnswer in %s." % lang if lang and lang.lower() not in ("code", "source code", "none", "n/a") else ""
+    tail = "\n\n%s in %s." % (act, lang) if lang and lang.lower() not in ("code", "source code", "none", "n/a") else ""
     return "You read this as: %s.\n" % ", ".join(parts), tail
 
 

@@ -220,7 +220,7 @@ def cmd_ask(args):
         # a continued round: the same text rides as the words alone
         context = "" if forge.same_text(tid, sha) else head + label.replace(":", ", as it is now:") + "\n" + forge.clip(data)
     else:
-        read, tail = session.reading(cfg, data, shell)
+        read, tail = session.reading(cfg, data, shell, act="Ask")
         context = head + read + answered_block + label + "\n" + forge.clip(data) + tail
 
     kept = []
