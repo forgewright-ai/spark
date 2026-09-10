@@ -102,7 +102,7 @@ conf=$(cd "$HOME/.config/spark" && find . | sort | tr '\n' ' ')
 [ "$conf" = ". ./memory ./models.env ./privacy-terms ./soul ./themes ./themes/mine.env " ] && ok "config keeps only soul, memory, models.env, themes, privacy-terms" || bad "config left: $conf"
 printf '%s\n' "$out" | grep -qE '^spark: |^fail ' && bad "a step failed outright: $(printf '%s\n' "$out" | grep -E '^spark: |^fail ' | head -2)" || ok "no step failed outright (a refusing sudo is a todo row)"
 printf '%s\n' "$out" | grep -q 'kept (yours): ' && printf '%s\n' "$out" | grep -q 'is gone from this machine' && ok "the summary names what stayed and says spark is gone" || bad "summary: $(printf '%s\n' "$out" | tail -6)"
-case $(uname -s) in Darwin) ;; *) [ ! -e "$HOME/.local/bin/starship" ] && ok "the pinned starship is gone (Linux)" || bad "starship survived" ;; esac
+[ -e "$HOME/.local/bin/starship" ] && ok "starship stays (spark-shell's)" || bad "starship removed"
 
 # 4. --purge on a fresh HOME: nothing of spark's remains
 build_home two
