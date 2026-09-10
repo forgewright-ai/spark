@@ -128,7 +128,7 @@ out=$(SPARK_HOME="$T/handoff" SPARK_REF=main SPARK_NO_APPLY=1 SITE_AI_MODEL=none
 note "$out"
 site="$HOME/.config/spark/site.env"
 [ -f "$site" ] && grep -q '^SITE_AI_MODEL=none$' "$site" && ok "setup wrote SITE_AI_MODEL=none" || bad "site.env: $(cat "$site" 2>/dev/null | grep SITE_AI_MODEL)"
-grep -q '^SITE_SHELL=off$' "$site" 2>/dev/null && ok "setup wrote SITE_SHELL=off" || bad "site.env lacks SITE_SHELL=off"
+grep -q 'SITE_SHELL' "$site" 2>/dev/null && bad "setup wrote a shell key (the layer is spark-shell's)" || ok "setup writes no shell key"
 printf '%s\n' "$out" | grep -q 'GB for models' && ok "setup printed the table header" || bad "no table header"
 printf '%s\n' "$out" | grep -q 'open a new shell' && ok "setup printed the closing block" || bad "no closing block"
 printf '%s\n' "$out" | grep -q 'no model chosen' && ok "setup said no model was chosen" || bad "no 'no model chosen' line"
