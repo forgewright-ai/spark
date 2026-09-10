@@ -64,17 +64,15 @@ site_load
 facts=$(SPARK_OS=$OS SPARK_ARCH=$ARCH python3 "$REPO/lib/spark/facts.py") || {
     echo "bootstrap: lib/spark/facts.py failed -- python3 >= 3.9 is required" >&2; exit 1; }
 eval "$facts"
-ENGINE_DIR="$SPARK_DATA_DIR/engine/llama.cpp-$LLAMA_VERSION"
+ENGINE_DIR="$SPARK_DATA_DIR/engine/$ENGINE_PIN_NAME"
 # thin adapters over the facts: the names the rows below already speak
 is_wsl() { [ "$IS_WSL" = 1 ]; }
-mem_gb() { echo "$MEM_GB"; }
 # model_pick spark|ember: that role's row (name file url bytes sha256
 # ram_gb), or nothing -- engine.chosen_rows decided it
 model_pick() {
     if [ "${1:-spark}" = ember ]; then _row=$EMBER_PICK; else _row=$SPARK_PICK; fi
     [ -z "$_row" ] || printf '%s\n' "$_row"
 }
-cap_note() { [ -z "$CAP_NOTE" ] || printf '%s\n' "$CAP_NOTE"; }
 # every model row (the list, then yours), trailing mark: - the list, u yours
 model_rows_all() { [ -z "$MODEL_ROWS" ] || printf '%s\n' "$MODEL_ROWS"; }
 # the package family and its names: brew on macOS; on Linux the distro's
@@ -122,12 +120,12 @@ list_models() {
         echo "u = yours"
         return
     fi
-    total=$(mem_gb); budget=$(( total * ${SITE_AI_BUDGET:-60} / 100 ))
+    total=$MEM_GB; budget=$(( total * ${SITE_AI_BUDGET:-60} / 100 ))
     spick=$(model_pick spark | awk '{ print $1 }')
     epick=$(model_pick ember | awk '{ print $1 }')
     printf 'this machine: %s GB for models (RAM + GPU), budget %s GB (%s%%), %s\n' "$total" "$budget" "${SITE_AI_BUDGET:-60}" "$AI_BUILD"
     printf 'SITE_AI_MODEL=%s, SITE_EMBER_MODEL=%s\n' "$SITE_AI_MODEL" "$SITE_EMBER_MODEL"
-    cap_note
+    [ -z "$CAP_NOTE" ] || printf '%s\n' "$CAP_NOTE"
     model_rows_all | while read -r name file _url _bytes _sha ram src; do
         if [ "$ram" -le "$budget" ]; then v=fits; else v="needs $ram GB"; fi
         mark=' '; [ "$name" = "$spick" ] && mark='*'; [ "$name" = "$epick" ] && mark='+'
@@ -275,7 +273,7 @@ fi
 pick=$(model_pick spark | awk '{ print $1 " (" $6 " GB)" }')
 case $SITE_AI_MODEL in
     none) ok model "none: no download; bring your own .gguf or set SITE_AI_MODEL" ;;
-    *) [ -n "$pick" ] && ok model "$SITE_AI_MODEL -> $pick" || row todo model "SITE_AI_MODEL=$SITE_AI_MODEL: nothing fits $(mem_gb) GB / not in models.env or yours" ;;
+    *) [ -n "$pick" ] && ok model "$SITE_AI_MODEL -> $pick" || row todo model "SITE_AI_MODEL=$SITE_AI_MODEL: nothing fits $MEM_GB GB / not in models.env or yours" ;;
 esac
 epick=$(model_pick ember | awk '{ print $1 " (" $6 " GB)" }')
 if [ -z "$pick" ] && [ "$SITE_EMBER_MODEL" != none ]; then ok ember "no spark model here: nothing is served, no ember"
@@ -408,15 +406,14 @@ fi
 # always). A build of your own in SPARK_ENGINE_DIR wins; the tarball is
 # never fetched over it. The extracted dir carries a one-line `flavour`
 # file so `spark check`'s engine row can name it.
-flavour=$ENGINE_FLAVOUR sha=$ENGINE_SHA
 have=$(cat "$ENGINE_DIR/flavour" 2>/dev/null || true)
-if [ -z "$have" ] && [ -x "$ENGINE_DIR/llama-server" ] && [ -n "$flavour" ]; then
+if [ -z "$have" ] && [ -x "$ENGINE_DIR/llama-server" ] && [ -n "$ENGINE_FLAVOUR" ]; then
     # a dir from before the flavour file existed: name it now by what is in
     # it -- the Linux vulkan build ships libggml-vulkan.so (dry-run too: a
     # one-line note beside a binary that is already there is not a change)
-    have=$flavour
+    have=$ENGINE_FLAVOUR
     if [ "$OS" = Linux ]; then
-        if ls "$ENGINE_DIR"/libggml-vulkan.so* >/dev/null 2>&1; then have="ubuntu-vulkan-${flavour##*-}"; else have="ubuntu-${flavour##*-}"; fi
+        if ls "$ENGINE_DIR"/libggml-vulkan.so* >/dev/null 2>&1; then have="ubuntu-vulkan-${ENGINE_FLAVOUR##*-}"; else have="ubuntu-${ENGINE_FLAVOUR##*-}"; fi
     fi
     echo "$have" > "$ENGINE_DIR/flavour"
 fi
@@ -424,9 +421,9 @@ if [ "$client" = 1 ]; then
     skip engine "$CLIENT_OF"
 elif [ -n "${SPARK_ENGINE_DIR:-}" ] && [ -x "$SPARK_ENGINE_DIR/llama-server" ]; then
     ok engine "your build in $SPARK_ENGINE_DIR (SPARK_ENGINE_DIR)"
-elif [ -x "$ENGINE_DIR/llama-server" ] && { [ -z "$sha" ] || [ "$have" = "$flavour" ]; }; then
+elif [ -x "$ENGINE_DIR/llama-server" ] && { [ -z "$ENGINE_SHA" ] || [ "$have" = "$ENGINE_FLAVOUR" ]; }; then
     ok engine "llama.cpp $LLAMA_VERSION $have"
-elif [ -z "$sha" ]; then
+elif [ -z "$ENGINE_SHA" ]; then
     # no pin for this OS/arch/build: a llama-server this machine already
     # has (facts: ENGINE_HOME probed PATH and the system dirs) is used
     # rather than refused; where a pin exists it is still installed and
@@ -436,16 +433,16 @@ elif [ -z "$sha" ]; then
     else
         skip engine "no pin for llama.cpp $LLAMA_VERSION $OS/$ARCH ($AI_BUILD) -- set SPARK_ENGINE_DIR to a build of your own"
     fi
-elif need engine "install llama.cpp $LLAMA_VERSION $flavour$([ -z "$have" ] || echo " (replaces $have: the build here is $AI_BUILD now)")"; then
-    fetch "https://github.com/ggml-org/llama.cpp/releases/download/$LLAMA_VERSION/llama-$LLAMA_VERSION-bin-$flavour.tar.gz" "$TMP/llama.tgz" "$sha"
+elif need engine "install llama.cpp $LLAMA_VERSION $ENGINE_FLAVOUR$([ -z "$have" ] || echo " (replaces $have: the build here is $AI_BUILD now)")"; then
+    fetch "https://github.com/ggml-org/llama.cpp/releases/download/$LLAMA_VERSION/llama-$LLAMA_VERSION-bin-$ENGINE_FLAVOUR.tar.gz" "$TMP/llama.tgz" "$ENGINE_SHA"
     rm -rf "$ENGINE_DIR"
     mkdir -p "$ENGINE_DIR"
     tar -xzf "$TMP/llama.tgz" -C "$ENGINE_DIR" --strip-components=1
-    echo "$flavour" > "$ENGINE_DIR/flavour"
+    echo "$ENGINE_FLAVOUR" > "$ENGINE_DIR/flavour"
     # macOS Gatekeeper: a curl download carries no quarantine flag, but if
     # one is there the unsigned binaries would be refused; clear it, no sudo
     if [ "$OS" = Darwin ]; then xattr -dr com.apple.quarantine "$ENGINE_DIR" 2>/dev/null || true; fi
-    ok engine "llama.cpp $LLAMA_VERSION $flavour"
+    ok engine "llama.cpp $LLAMA_VERSION $ENGINE_FLAVOUR"
 fi
 # the models, one per role (both OSes): each pick's six fields become $1..$6
 for role in spark ember; do

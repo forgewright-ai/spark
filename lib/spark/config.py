@@ -4,6 +4,7 @@
 
 import os
 import re
+import shutil
 import socket
 import subprocess
 
@@ -167,7 +168,7 @@ class Config:
     def ai_build(self):
         """auto | cpu | vulkan: the Linux engine build as chosen (macOS
         ignores it: Metal). engine.backend() resolves auto by the GPU probe,
-        as bootstrap.sh ai_build does."""
+        as engine.backend answers."""
         return self.get("SITE_AI_BUILD", "auto")
 
     @property
@@ -408,7 +409,7 @@ def theme_palette(name, repo=REPO):
     return pal
 
 
-OPEN_LICENSES = ("Apache-2.0", "MIT")     # the first word of a MODEL_*_LICENSE that auto may take (bootstrap.sh open_license is the twin)
+OPEN_LICENSES = ("Apache-2.0", "MIT")     # the first word of a MODEL_*_LICENSE that auto may take (the one home)
 
 
 def is_open(license_):
@@ -479,6 +480,24 @@ def model_tables(repo=REPO):
     return out
 
 
+_PINS = []
+
+
+def engine_pins():
+    """engine.env (the llama.cpp pin: version + one sha per flavour),
+    parsed once per process -- repo data, stable while spark runs."""
+    if not _PINS:
+        _PINS.append(parse_env(os.path.join(REPO, "engine.env")))
+    return _PINS[0]
+
+
+def pinned_engine_name():
+    """The pinned engine directory's basename, llama.cpp-<version> --
+    the one place the name is spelled ('' without a pin)."""
+    pin = engine_pins().get("LLAMA_VERSION", "")
+    return "llama.cpp-" + pin if pin else ""
+
+
 def default_engine_dir():
     """Where llama-server lives when SPARK_ENGINE_DIR is unset (the one
     home: bootstrap.sh asks it through lib/spark/facts.py): the newest
@@ -496,14 +515,12 @@ def default_engine_dir():
         if os.access(os.path.join(ENGINE_DIR, n, "llama-server"), os.X_OK):
             return os.path.join(ENGINE_DIR, n)
     if IS_MAC:
-        for p in ("/opt/homebrew/bin", "/usr/local/bin"):
-            if os.access(os.path.join(p, "llama-server"), os.X_OK):
-                return p
+        yours = ["/opt/homebrew/bin", "/usr/local/bin"]
     else:
-        import shutil
         found = shutil.which("llama-server")
-        for p in ([os.path.dirname(found)] if found else []) + ["/usr/local/bin", "/usr/bin"]:
-            if os.access(os.path.join(p, "llama-server"), os.X_OK):
-                return p
-    pin = parse_env(os.path.join(REPO, "engine.env")).get("LLAMA_VERSION", "")
-    return os.path.join(ENGINE_DIR, "llama.cpp-" + pin) if pin else ENGINE_DIR
+        yours = ([os.path.dirname(found)] if found else []) + ["/usr/local/bin", "/usr/bin"]
+    for p in yours:
+        if os.access(os.path.join(p, "llama-server"), os.X_OK):
+            return p
+    name = pinned_engine_name()
+    return os.path.join(ENGINE_DIR, name) if name else ENGINE_DIR

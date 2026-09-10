@@ -113,7 +113,6 @@ def main(argv):
         mod = importlib.import_module("spark." + spec[0])
         fn = getattr(mod, spec[1])
         return fn(sub, rest) if spec[2] else fn(rest)
-    from spark import cli
     if len(argv) == 1 and " " not in sub and not sub.endswith("?") and not sub.startswith("@"):
         # one word that is not a command: a slip, not a question -- questions
         # are several words (quoted or not), end with ?, or name a file (@FILE)
@@ -125,6 +124,7 @@ def main(argv):
         if near:
             say("spark: no command named %s -- try: spark %s   (a question ends with ?)" % (sub, near))
             return 2
+    from spark import cli
     return cli.main(argv)
 
 
@@ -162,7 +162,7 @@ def near_verb(word):
 
 
 def misplaced(word):
-    from spark import REPO, cli, config
+    from spark import REPO, config
     if word in config.theme_names(REPO) or word == "none":
         say("spark: %s is a palette -- spark theme %s" % (word, word))
     elif word in {r[0] for r in config.model_tables()} or word == "auto":

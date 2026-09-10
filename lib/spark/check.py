@@ -116,17 +116,13 @@ class Ctx:
         return "~" + path[len(self.home):] if path.startswith(self.home + "/") else path
 
 
-# The rows by value area (the four areas the code is laid out in; a row
-# keeps its category -- SOFTWARE / CAPABILITY / NONFUNCTIONAL -- this map
-# is the other axis):
-#   AI infrastructure  engine pinned ai models serve ember throughput gpu
-#   core               packages configs tools git hooks services prompt
-#                      failure completion forge soul memory ledger peer
-#                      quiet audio privacy users backup swap encryption
-#                      headless battery disk pending watchdog cost
-#   shell layer        font theme terminfo shell bar (na while off)
-#   apps               none, by design: an app lives in its own repo and
-#                      spark ships no app check row
+# The four value areas cut across the categories: the AI infrastructure
+# rows (engine, models, serving, speed), the core rows (the contracts,
+# the FORGE, identity, the machine's promises), and the shell layer's
+# rows (SHELL_ROWS below -- na while the layer is off). Apps have no row
+# by design: an app lives in its own repo, and spark ships no app check
+# row. A row's home area is where its code lives (engine/model/shell/
+# the rest), not a second registry here.
 # ------------------------------------------------------------ SOFTWARE rows
 @row("SOFTWARE")
 def row_packages(ctx):

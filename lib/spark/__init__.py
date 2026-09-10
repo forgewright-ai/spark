@@ -277,8 +277,8 @@ def distro():
     ID first, then each ID_LIKE word in order, the first one a distro/
     file knows wins (ubuntu -> debian, manjaro -> arch). Unknown is "",
     never a guess. Never on macOS unless SPARK_OS_RELEASE points at a
-    file (tests, the way SPARK_PROC_VERSION does). bootstrap.sh distro()
-    is the sh twin."""
+    file (tests, the way SPARK_PROC_VERSION does). bootstrap.sh eval's this
+    through lib/spark/facts.py."""
     if IS_MAC and "SPARK_OS_RELEASE" not in os.environ:
         return ""
     d = _os_release()

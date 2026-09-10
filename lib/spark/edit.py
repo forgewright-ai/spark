@@ -110,7 +110,7 @@ def cmd_edit(args):
     wrap -- the text goes back into a buffer). Three kinds by the words:
     --at N completes at that byte offset, words rewrite, `?` asks. No
     thread is kept and no path is sent: the turn record is numbers only."""
-    if args[:1] and args[0] in ("-h", "--help", "help"):
+    if args and args[0] in ("-h", "--help", "help"):
         say(EDIT_USAGE.rstrip())
         return 0
     try:

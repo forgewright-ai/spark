@@ -46,12 +46,32 @@ def bench_bin(cfg):
 
 
 def pinned_version():
-    """LLAMA_VERSION out of engine.env -- one file read, no network: the
-    login greeting (spark ver) must stay fast."""
-    return config.parse_env(os.path.join(REPO, "engine.env")).get("LLAMA_VERSION", "?")
+    """LLAMA_VERSION out of engine.env -- one cached file read, no
+    network: the login greeting (spark ver) must stay fast."""
+    return config.engine_pins().get("LLAMA_VERSION", "?")
 
 
-SPEED_CAP_GB = {"cpu": 3, "vulkan": 6, "metal": 20}     # the largest file auto takes, per backend (bootstrap.sh speed_cap is the twin)
+# The release asset per OS/arch/build (the engine step's tarball name
+# and its sha key in engine.env); check.py's ENGINE_FLAVOURS lists the
+# same six names for the row's display.
+FLAVOURS = {
+    ("Darwin", "arm64", "metal"): ("macos-arm64", "LLAMA_SHA_MACOS_ARM64"),
+    ("Darwin", "x86_64", "metal"): ("macos-x64", "LLAMA_SHA_MACOS_X64"),
+    ("Linux", "x86_64", "vulkan"): ("ubuntu-vulkan-x64", "LLAMA_SHA_LINUX_VULKAN_X64"),
+    ("Linux", "x86_64", "cpu"): ("ubuntu-x64", "LLAMA_SHA_LINUX_X64"),
+    ("Linux", "aarch64", "vulkan"): ("ubuntu-vulkan-arm64", "LLAMA_SHA_LINUX_VULKAN_ARM64"),
+    ("Linux", "aarch64", "cpu"): ("ubuntu-arm64", "LLAMA_SHA_LINUX_ARM64"),
+}
+
+
+def flavour(sysname, machine, build):
+    """(asset name, sha) for this OS/arch/build, ('', '') when there is
+    no pin -- the engine step then leverages a build the machine has."""
+    name, key = FLAVOURS.get((sysname, machine, build), ("", ""))
+    return name, (config.engine_pins().get(key, "") if key else "")
+
+
+SPEED_CAP_GB = {"cpu": 3, "vulkan": 6, "metal": 20}     # the largest file auto takes, per backend (the one home)
 
 
 def speed_cap_gb(cfg):
@@ -116,7 +136,7 @@ def _choose(cfg, cap_gb):
 
 def chosen_rows(cfg):
     """{"spark": row|None, "ember": row|None} from models.env (and yours),
-    the same choice bootstrap.sh model_pick makes (the rule, in one place):
+    the rule in its one place (bootstrap.sh eval's the picks through lib/spark/facts.py):
     ember none (the default) -> no ember; ember NAME -> that row; ember
     auto -> the largest usable row that fits the SITE_AI_BUDGET percent
     (default 60) of RAM+GPU beside the spark row. spark none -> no spark;
@@ -134,7 +154,7 @@ def chosen_rows(cfg):
 
 def cap_note(cfg):
     """One line for the table's header when the speed cap held a bigger
-    auto pick back (bootstrap.sh cap_note is the twin), else ""."""
+    auto pick back (facts.py hands it to bootstrap), else ""."""
     if _choose(cfg, None) == chosen_rows(cfg):
         return ""
     return "auto stops at %d GB files on %s (bigger fits, slower than 8 tok/s)" % (speed_cap_gb(cfg), backend(cfg))
@@ -690,8 +710,8 @@ SPEED_TABLE = {                           # generation tok/s per class, per back
 
 
 def backend(cfg):
-    """The engine build this machine gets, the twin of bootstrap.sh
-    ai_build: metal on macOS (SITE_AI_BUILD is ignored there); on Linux
+    """The engine build this machine gets, the one home (bootstrap.sh
+    eval's it through lib/spark/facts.py): metal on macOS (SITE_AI_BUILD is ignored there); on Linux
     cpu or vulkan as SITE_AI_BUILD says, and auto (the default) = vulkan
     when a DRM device reports VRAM in sysfs (gpu_info), else cpu."""
     if IS_MAC:

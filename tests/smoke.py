@@ -1769,7 +1769,7 @@ def main():
                                capture_output=True, text=True, timeout=30,
                                env=dict(os.environ, SPARK_OS_RELEASE=home + "/os-release-" + name,
                                         HOME=home, SPARK_MEM_TOTAL_GB="16"))
-            got = re.search(r"^DISTRO='([^']*)'$", p.stdout, re.M)
+            got = re.search(r"^DISTRO='?([^'\n]*?)'?$", p.stdout, re.M)
             t.ok(got is not None and got.group(1) == want,
                  "facts.py DISTRO: %s -> %r (what bootstrap eval's)" % (name, want), p.stdout + p.stderr)
         if sys.platform != "darwin":
