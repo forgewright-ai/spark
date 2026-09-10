@@ -16,6 +16,7 @@ import time
 
 from . import HOME, IS_MAC, MARK, REPO, SITE_ENV, config, mem_total_gb, say, wait_ready
 from . import engine, packages, session, site, wire
+from . import model as modeltab      # `model` is a local name here: the chosen row
 
 SIGN = "%s setup -- pick the model this machine earns and light it up" % MARK
 USAGE = SIGN + """
@@ -120,11 +121,11 @@ def _table(cfg):
         say(note)
     default = "none"
     rest = 0
-    for r in site.model_rows(cfg):
+    for r in modeltab.model_rows(cfg):
         if not (r["tested"] and r["open"]):
             rest += 1
             continue
-        say(site.model_line(r))
+        say(modeltab.model_line(r))
         if r["role"] == "spark":
             default = r["name"]
     if rest:
@@ -240,7 +241,7 @@ def _rc_line():
 
 def _serve(cfg):
     """The brain up: the unit bootstrap enabled, waited for (as
-    site._restart_server does), else `spark serve`."""
+    modeltab._restart_server does), else `spark serve`."""
     from . import serve
     if engine.service_state(cfg) != "loaded":
         return serve.cmd_serve([])
@@ -344,8 +345,8 @@ def _run(opts):
     _account(user)
     cfg = config.load()
     waiting = _sudo(_packages_pending(), yes)
-    pend = [] if os.environ.get("SPARK_NO_APPLY") else site._downloads_pending(cfg)
-    site._announce_downloads(pend)
+    pend = [] if os.environ.get("SPARK_NO_APPLY") else modeltab._downloads_pending(cfg)
+    modeltab._announce_downloads(pend)
     rc = site.apply(CORE_ROWS, stream=True)
     if waiting:
         say("todo   packages     still to install: %s -- %s, then spark setup again"

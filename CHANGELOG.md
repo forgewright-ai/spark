@@ -1,5 +1,25 @@
 # Changelog
 
+## v1.19
+
+- The code now speaks the four value areas. `spark edit` (contract 10)
+  has its own module beside `spark ask`'s; `spark model` / `spark ember`
+  moved out of site.py into model.py; the shell layer's switch and
+  hand-back live in shell.py; site.py keeps the site.env custody, the
+  rc hook and the machine-shape verbs. One dispatch table in bin/spark
+  lists every verb. No verb, flag or message changed.
+- One home for every decision. bootstrap.sh no longer computes its own
+  answers in sh twins: lib/spark/facts.py prints the machine's facts
+  (distro, build, WSL, memory, the engine's home and flavour, the model
+  picks) from the same code the verbs use, and bootstrap eval's them.
+  The llama.cpp pin moved to engine.env (version + one sha per
+  flavour), read by both sides.
+- Bring your own engine, on Linux too. On an architecture spark has no
+  pin for, a `llama-server` already on this machine (`$PATH`,
+  `/usr/local/bin`, `/usr/bin`) is found and served with -- the engine
+  check row reads `(your build)`. macOS keeps its Homebrew probe; a
+  pinned build still wins where one exists.
+
 ## v1.18
 
 - Intent search: describe a command you ran, and the line that ran comes

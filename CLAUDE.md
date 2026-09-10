@@ -107,10 +107,17 @@ lib/env.sh      the KEY=value reader for the two scripts (config.py is the pytho
 Brewfile        macOS packages (the Linux lists are distro/<id>.env)
 distro/         one KEY=value file per Linux package family (debian.env): the
                 manager, its install line, the doc's name, the five package groups
-site.env.example, models.env, themes/*.env       KEY=value data
+site.env.example, models.env, engine.env, themes/*.env       KEY=value data
+                (engine.env is the llama.cpp pin: version + one sha per flavour)
 bin/spark, bin/explain -> spark                  the one command
 lib/spark/      __init__ config wire engine serve session persona cli check
-                verify (sha256, cached: spark model verify, check's models row) bar theme site
+                verify (sha256, cached: spark model verify, check's models row) bar theme
+                site (site.env custodian: set_keys/apply, rc custody, font quiet
+                headless client) model (spark model / spark ember: the table,
+                add, verify, budget) shell (the gated layer: spark shell on|off,
+                the hand-back) edit (spark edit: contract 10)
+                facts (the machine's decisions as KEY=value for bootstrap's eval:
+                distro, build, WSL, memory, engine home + flavour, model picks)
                 packages (the family's names from distro/<id>.env, the manager's
                 questions -- installed, pending, install/remove lines -- switched once)
                 chaos (spark check --chaos: the rehearsed failures --
@@ -229,7 +236,8 @@ may change freely.
    site branching. `--list-tools` prints `repo-relative-path<TAB>name` per
    line. `--list-models` prints the model table with a RAM verdict per row
    and marks the chosen one; its header names the engine build this
-   machine gets (`ai_build`: metal, vulkan or cpu) and, on a line of its
+   machine gets (`engine.backend`: metal, vulkan or cpu -- bootstrap
+   eval's every such decision from `lib/spark/facts.py`) and, on a line of its
    own, what the speed cap held back, when it did. `--fetch URL DEST SHA` runs the download primitive
    alone -- download, verify sha256, or die having removed its own
    partial file (`spark check --chaos` rehearses that; nothing else
@@ -270,11 +278,11 @@ may change freely.
    rewrites it) -- except its `colorscheme` key, which `spark theme NAME`
    sets back to `spark` when micro changed it (`theme.micro_colorscheme`;
    the `theme` row warns meanwhile). `spark shell off` hands the rendered
-   look back the way it hands the rc files back (`site.restore_rendered`):
+   look back the way it hands the rc files back (`shell.restore_rendered`):
    each of `.tmux.conf`, `.config/starship.toml`, btop's conf and micro's
    colorscheme is restored from its `.bak` or removed -- never an empty
    husk; `settings.json` stays (it is micro's) and only its seeded
-   `colorscheme` key is dropped (`site.micro_settings_reset`);
+   `colorscheme` key is dropped (`shell.micro_settings_reset`);
    `.gitconfig` (identity, not look) and the core palette files under
    `~/.config/spark/` stay. A `micro` bootstrap row hands back, once, the
    plugin links and `bindings.json` a pre-v1.10 install made under
@@ -302,8 +310,8 @@ may change freely.
    MIT -- it is a row `auto` may pick) and `MODEL_<NAME>_NOTE` (one line,
    optional). A name in both files is refused, naming both;
    `distro/<id>.env` (one per Linux package family the oracle `distro()`
-   knows -- `lib/spark/__init__.py` beside `is_wsl()`, the sh twin in
-   `bootstrap.sh`, `SPARK_OS_RELEASE` pins it) -- `PM PM_INSTALL
+   knows -- `lib/spark/__init__.py` beside `is_wsl()`; bootstrap.sh
+   eval's it from `lib/spark/facts.py`; `SPARK_OS_RELEASE` pins it) -- `PM PM_INSTALL
    PM_TARGET PKG_CORE PKG_ENGINE PKG_AI PKG_SHELL PKG_CLI`, the same eight
    keys in every file (`packages.KEYS`; tests/docs_test.py asserts it);
    `themes/<name>.env` -- `THEME_BG THEME_FG THEME_ACCENT THEME_MUTED
@@ -390,7 +398,7 @@ may change freely.
    version}`, which is how the page decides which console to draw and
    whom to greet. `GET /api/models` (user-or-admin) answers this box's
    model table `{name, total_gb, budget_gb, budget_pct, backend,
-   cap_note, models: site.model_rows}` -- what `spark model` on a client
+   cap_note, models: model.model_rows}` -- what `spark model` on a client
    prints instead of its own numbers. The chat, thread and memory routes are scoped to the
    requester's own sealed store -- a user's to their
    `users/<name>/`, the admin's to the box account's; nobody holds a
@@ -453,7 +461,7 @@ may change freely.
     right after `->`, a Unicode arrow or `=>` is the model's proposal: not checked,
     not counted); the turn
     records `quotes` and `unanchored`. `--sel A B` (a `?`; stdin is the
-    whole file) sends one window of at most 16 kB (`cli._edit_window`):
+    whole file) sends one window of at most 16 kB (`edit._edit_window`):
     the selection whole (head + cut + tail past 12 kB) between the lines
     `[selection starts]` / `[selection ends]` the brief knows, the file
     around it split evenly, cut marks where it goes on; the reading
@@ -656,10 +664,10 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   dotfile, a console setting, a tmux piece -- lands behind `SITE_SHELL`:
   its bootstrap row starts `[ "$shell" = 1 ] || skip <row> "$SHELL_OFF"`,
   `install.sh` links or renders it only with `SITE_SHELL=on`, its verb
-  refuses through `site.shell_off()`, its help line sits in `USAGE_SHELL`
+  refuses through `shell.shell_off()`, its help line sits in `USAGE_SHELL`
   (bin/spark), and its check row's name goes into `check.SHELL_ROWS` so
   it reads `na` when the layer is off; `--selftest`'s third pass asserts
-  that. `spark shell on|off` (`site.cmd_shell`, `site.SHELL_APPLY_ROWS` --
+  that. `spark shell on|off` (`shell.cmd_shell`, `shell.SHELL_APPLY_ROWS` --
   bootstrap row names, not check's) is the only switch; `spark shell off` hands back what the layer rendered
   (`restore_rc`, `restore_rendered`: `.bak` or gone, never a husk).
   `spark theme` and `spark font` stay outside the gate (the FORGE page
@@ -715,12 +723,12 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   `--selftest`'s fourth pass asserts that with the peer row ok. The peer
   row is where a client's health lives. A client stays a client until
   `spark client off`: `spark model` / `ember list` / `model budget` there
-  print the PEER's table (`site.peer_models`, `GET /api/models` with the
+  print the PEER's table (`model.peer_models`, `GET /api/models` with the
   login token; the rows alone, no verdict, when the peer is down, a bare
   server or an older FORGE; `bootstrap.sh --list-models` likewise) and
   never this machine's RAM as a budget; `spark model NAME|auto|none`,
   `model budget N`, `model rm`, `spark ember NAME` are refused with one
-  line (`site._client_no`) -- each would have made a server of the
+  line (`model._client_no`) -- each would have made a server of the
   client in silence. `spark client off` is the one deliberate promotion
   (it ends the shape, then runs `spark model auto`).
 - **A model.** One list, `models.env`: a row (`MODEL_<NAME>`, the
@@ -728,7 +736,7 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   and `_TESTED="line"` only once the row has answered `spark line` with
   valid JSON -- `auto` reads only tested rows under an open license
   (`config.auto_rows`, `bootstrap.sh model_rows`); a row under another
-  license is by name and asks before the download (`site._license_ok`,
+  license is by name and asks before the download (`model._license_ok`,
   `config.is_open`). Size and sha256 come from the file's Hugging Face
   metadata: `x-linked-size` and `x-linked-etag` on the redirect
   `.../resolve/main/<file>?download=true` answers with (the CDN it

@@ -828,16 +828,16 @@ class Handler(BaseHTTPRequestHandler):
         its budget, the picks, the speeds -- what `spark model` on a
         client prints instead of its own numbers. No key, no token, no
         path: names, sizes and verdicts."""
-        from . import site
+        from . import model as modeltab
         cfg = self.server.cfg
         _url, model, st = self.server.upstream.resolve()
         total = mem_total_gb()
         self._json(200, {"name": cfg.name, "total_gb": total, "budget_gb": total * cfg.ai_budget / 100.0,
                          "budget_pct": cfg.ai_budget, "backend": engine.backend(cfg), "cap_note": engine.cap_note(cfg),
-                         "models": site.model_rows(cfg, model if st == "ok" else "")})
+                         "models": modeltab.model_rows(cfg, model if st == "ok" else "")})
 
     def api_config(self):
-        from . import site, theme
+        from . import model as modeltab, theme
         cfg = self.server.cfg
         _url, model, st = self.server.upstream.resolve()
 
@@ -845,7 +845,7 @@ class Handler(BaseHTTPRequestHandler):
             return {k: v for k, v in d.items() if "KEY" not in k and "TOKEN" not in k}
         self._json(200, {"site": clean(cfg.site_file), "spark": clean(cfg.spark_file),
                          "effective": clean({k: cfg.get(k, "") for k in config.KEYS}),
-                         "themes": theme.palettes(), "models": site.model_rows(cfg, model if st == "ok" else ""),
+                         "themes": theme.palettes(), "models": modeltab.model_rows(cfg, model if st == "ok" else ""),
                          "off": os.path.exists(OFF_FLAG), "service": engine.service_state(cfg),
                          "forge": {"url": self.server.url, "service": engine.forge_service_state(cfg), "mode": cfg.forge}})
 

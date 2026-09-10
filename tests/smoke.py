@@ -1702,11 +1702,11 @@ def main():
         t.ok(was == "gruvbox" and after == {"colorscheme": "spark", "softwrap": True} and _theme.micro_colorscheme(msj) is None,
              "theme: micro's colorscheme is set back to spark, the other settings kept, and left alone once it says so", str(after))
         # and the inverse, on spark shell off: the key goes, the file stays micro's
-        from spark import site as _site
-        dropped = _site.micro_settings_reset(msj)
+        from spark import shell as _shell
+        dropped = _shell.micro_settings_reset(msj)
         with open(msj) as f:
             after = json.load(f)
-        t.ok(dropped and after == {"softwrap": True} and not _site.micro_settings_reset(msj),
+        t.ok(dropped and after == {"softwrap": True} and not _shell.micro_settings_reset(msj),
              "shell off: micro's colorscheme key is dropped, the other settings kept, the file never removed", str(after))
 
         # spark uninstall: signed, shows and never mutates without the word;
@@ -1762,14 +1762,16 @@ def main():
         t.ok(distro_fact(home + "/os-release-manjaro").startswith("'arch' "), "distro: ID=manjaro ID_LIKE=arch is arch", distro_fact(home + "/os-release-manjaro"))
         t.ok(distro_fact(home + "/os-release-fedora") == "'' Fedora Linux 42", "distro: an unknown family is '', never a guess", distro_fact(home + "/os-release-fedora"))
         t.ok(distro_fact(home + "/os-release-none").startswith("'' Linux "), "distro: no file at all is '', and os_pretty falls back to the kernel", distro_fact(home + "/os-release-none"))
-        # the sh twin answers the same (bootstrap.sh distro())
-        sh_twin = "OS=Linux; . %s; distro" % os.path.join(REPO, "lib", "env.sh")
+        # bootstrap asks the same code through lib/spark/facts.py (the one
+        # home, no sh twin): its DISTRO line honours the same fixture
         for name, want in (("arch", "arch"), ("ubuntu", "debian"), ("manjaro", "arch"), ("fedora", "")):
-            p = subprocess.run(["sh", "-c", "OS=Linux; SPARK_OS_RELEASE=%s; export SPARK_OS_RELEASE; "
-                                "eval \"$(sed -n '/^distro() {/,/^}/p' %s)\"; distro"
-                                % (home + "/os-release-" + name, os.path.join(REPO, "bootstrap.sh"))],
-                               capture_output=True, text=True, timeout=30)
-            t.ok(p.stdout.strip() == want, "bootstrap.sh distro(): %s -> %r (the sh twin agrees)" % (name, want), p.stdout + p.stderr)
+            p = subprocess.run([sys.executable, os.path.join(REPO, "lib", "spark", "facts.py")],
+                               capture_output=True, text=True, timeout=30,
+                               env=dict(os.environ, SPARK_OS_RELEASE=home + "/os-release-" + name,
+                                        HOME=home, SPARK_MEM_TOTAL_GB="16"))
+            got = re.search(r"^DISTRO='([^']*)'$", p.stdout, re.M)
+            t.ok(got is not None and got.group(1) == want,
+                 "facts.py DISTRO: %s -> %r (what bootstrap eval's)" % (name, want), p.stdout + p.stderr)
         if sys.platform != "darwin":
             wsl = dict(SPARK_PROC_VERSION=home + "/version-wsl", SPARK_NO_APPLY="1")
             rc, out, _ = spark("font", extra=wsl)
@@ -1978,16 +1980,14 @@ def main():
         t.ok(b"....." in data and b"Ele lembrou" not in data, "lua on a pty: the memory panel is on screen from the start, English only", repr(data[:900]))
 
     # completion drift guard: every verb the CLI dispatches (bin/spark's
-    # VERBS tuple + cli.COMMANDS' keys) appears in completion.bash -- a new
-    # verb without a completion word goes loud here. The zsh file shares
-    # the same tables; the pty completion test proves both live. Verbs
-    # excluded from completion on purpose are named in a comment there,
-    # which counts: the guard is about forgetting, not about policy.
+    # one VERBS table) appears in completion.bash -- a new verb without a
+    # completion word goes loud here. The zsh file shares the same
+    # tables; the pty completion test proves both live. Verbs excluded
+    # from completion on purpose are named in a comment there, which
+    # counts: the guard is about forgetting, not about policy.
     comp = open(os.path.join(REPO, "home", ".config", "spark", "completion.bash")).read()
     verbs_src = re.search(r"^VERBS = \{(.*?)\}$", open(SPARK).read(), re.S | re.M).group(1)
-    commands_src = re.search(r"^COMMANDS = \{(.*?)\}$", open(os.path.join(REPO, "lib", "spark", "cli.py")).read(),
-                             re.S | re.M).group(1)
-    wanted = set(re.findall(r'"([^"]+)":', verbs_src)) | set(re.findall(r'"([^"]+)":', commands_src)) | {"help"}
+    wanted = set(re.findall(r'"([^"]+)":', verbs_src)) | {"help"}
     missing = sorted(w for w in wanted
                      if not re.search(r"(?<![A-Za-z-])%s(?![A-Za-z-])" % re.escape(w), comp))
     t.ok(not missing, "completion.bash names every dispatch verb and cli command",

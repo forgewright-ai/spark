@@ -392,7 +392,11 @@ Linux:
   Vulkan packages with the same sudo. The `gpu` row names the build this
   machine gets; when the extracted engine is the other build, the
   `engine` row says so and `./bootstrap.sh` replaces it. An architecture
-  without a pin: point `SPARK_ENGINE_DIR` at a build of your own.
+  without a pin: a `llama-server` already on this machine (on `$PATH`,
+  or in `/usr/local/bin` or `/usr/bin`) is found and used -- the
+  `engine` row reads `(your build)` -- or point `SPARK_ENGINE_DIR` at a
+  build of your own. Where a pin exists, the pinned engine is still
+  installed and used: your build never silently replaces the pin.
 - Integrated GPUs: the BIOS decides how much RAM the iGPU owns ("UMA
   frame buffer size"). If the `gpu` row says the model is larger than
   VRAM, raise it there (8 GB for a 4B-8B model), then `spark bench`

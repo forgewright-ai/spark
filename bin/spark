@@ -114,40 +114,50 @@ def main(argv):
         fn = getattr(mod, spec[1])
         return fn(sub, rest) if spec[2] else fn(rest)
     from spark import cli
-    if len(argv) == 1 and " " not in sub and not sub.endswith("?") and not sub.startswith("@") and sub not in cli.COMMANDS:
+    if len(argv) == 1 and " " not in sub and not sub.endswith("?") and not sub.startswith("@"):
         # one word that is not a command: a slip, not a question -- questions
         # are several words (quoted or not), end with ?, or name a file (@FILE)
         return misplaced(sub)
-    if len(argv) > 1 and sub not in cli.COMMANDS and "?" not in sub and not sub.startswith("@"):
+    if len(argv) > 1 and "?" not in sub and not sub.startswith("@"):
         # a near-miss of a verb with arguments is a typo, not a question:
         # `spark quite start on` must not become a conversation
-        near = near_verb(sub, cli)
+        near = near_verb(sub)
         if near:
             say("spark: no command named %s -- try: spark %s   (a question ends with ?)" % (sub, near))
             return 2
     return cli.main(argv)
 
 
-# The verbs this file dispatches: verb -> (module under lib/spark, entry,
-# whether the entry takes the verb too). The module is imported only when
-# its verb runs -- `spark line` must stay cheap. Everything else is
-# cli.COMMANDS, or a question.
+# The one dispatch table: verb -> (module under lib/spark, entry, whether
+# the entry takes the verb too). The module is imported only when its
+# verb runs -- `spark line` must stay cheap. Anything else is a question
+# (cli.main).
 VERBS = {"setup": ("setup", "main", False), "check": ("check", "main", False),
-         "ask": ("ask", "cmd_ask", False),
+         "ask": ("ask", "cmd_ask", False), "edit": ("edit", "cmd_edit", False),
          "update": ("update", "cmd_update", False), "bar": ("bar", "main", False),
          "theme": ("theme", "main", False), "bench": ("bench", "main", True),
          "stats": ("stats", "main", False),
-         "shell": ("site", "main", True), "font": ("site", "main", True), "quiet": ("site", "main", True),
-         "model": ("site", "main", True), "headless": ("site", "main", True), "ember": ("site", "main", True),
-         "client": ("site", "main", True),
+         "shell": ("shell", "cmd_shell", False),
+         "font": ("site", "cmd_font", False), "quiet": ("site", "cmd_quiet", False),
+         "headless": ("site", "cmd_headless", False), "client": ("site", "cmd_client", False),
+         "model": ("model", "cmd_model", False), "ember": ("model", "cmd_ember", False),
          "serve": ("serve", "main", True),
          "forge": ("forgeserve", "main", False), "user": ("users", "main", False),
-         "uninstall": ("uninstall", "main", False)}
+         "uninstall": ("uninstall", "main", False),
+         "line": ("cli", "cmd_line", False), "last": ("cli", "cmd_last", False),
+         "status": ("cli", "cmd_status", False), "brain": ("cli", "cmd_brain", False),
+         "explain": ("cli", "cmd_explain", False), "off": ("cli", "cmd_off", False),
+         "on": ("cli", "cmd_on", False), "history": ("cli", "cmd_history", False),
+         "soul": ("cli", "cmd_soul", False), "memory": ("cli", "cmd_memory", False),
+         "chat": ("cli", "cmd_chat", False), "do": ("cli", "cmd_do", False),
+         "recall": ("cli", "cmd_recall", False), "lua": ("cli", "cmd_lua", False),
+         "ver": ("cli", "cmd_ver", False), "version": ("cli", "cmd_ver", False),
+         "--version": ("cli", "cmd_ver", False)}
 
 
-def near_verb(word, cli):
+def near_verb(word):
     import difflib
-    hits = difflib.get_close_matches(word, ("help",) + tuple(VERBS) + tuple(cli.COMMANDS), n=1, cutoff=0.8)
+    hits = difflib.get_close_matches(word, ("help",) + tuple(VERBS), n=1, cutoff=0.8)
     return hits[0] if hits else None
 
 
@@ -158,7 +168,7 @@ def misplaced(word):
     elif word in {r[0] for r in config.model_tables()} or word == "auto":
         say("spark: %s is a model -- spark model %s" % (word, word))
     else:
-        near = near_verb(word, cli)
+        near = near_verb(word)
         hint = "try: spark %s" % near if near else "spark help lists them"
         say("spark: no command named %s -- %s; a question is several words, or ends with ?" % (word, hint))
     return 2

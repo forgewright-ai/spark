@@ -480,10 +480,14 @@ def model_tables(repo=REPO):
 
 
 def default_engine_dir():
-    """Where llama-server lives when SPARK_ENGINE_DIR is unset (bootstrap.sh
-    engine_home is the sh twin): the newest engine/<name> directory holding
-    one, then Homebrew's bin on macOS, else the pinned directory bootstrap
-    fills -- so the error names where it would be."""
+    """Where llama-server lives when SPARK_ENGINE_DIR is unset (the one
+    home: bootstrap.sh asks it through lib/spark/facts.py): the newest
+    engine/<name> directory holding one -- the pin is the promise, a
+    system build never shadows spark's own -- then a llama-server this
+    machine already has (Homebrew's bin on macOS; on Linux $PATH plus
+    /usr/local/bin and /usr/bin, the dirs a unit sees without a login
+    PATH), else the pinned directory bootstrap fills, so the error names
+    where it would be."""
     try:
         names = sorted(d for d in os.listdir(ENGINE_DIR) if os.path.isdir(os.path.join(ENGINE_DIR, d)))
     except OSError:
@@ -495,4 +499,11 @@ def default_engine_dir():
         for p in ("/opt/homebrew/bin", "/usr/local/bin"):
             if os.access(os.path.join(p, "llama-server"), os.X_OK):
                 return p
-    return os.path.join(ENGINE_DIR, names[-1]) if names else ENGINE_DIR
+    else:
+        import shutil
+        found = shutil.which("llama-server")
+        for p in ([os.path.dirname(found)] if found else []) + ["/usr/local/bin", "/usr/bin"]:
+            if os.access(os.path.join(p, "llama-server"), os.X_OK):
+                return p
+    pin = parse_env(os.path.join(REPO, "engine.env")).get("LLAMA_VERSION", "")
+    return os.path.join(ENGINE_DIR, "llama.cpp-" + pin) if pin else ENGINE_DIR

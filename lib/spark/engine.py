@@ -9,7 +9,7 @@ import signal
 import subprocess
 import time
 
-from . import (IS_MAC, LOCK_FILE, PID_FILE, SERVE_LOG, SERVE_URL_FILE, STATE_DIR, config, run,
+from . import (IS_MAC, LOCK_FILE, PID_FILE, REPO, SERVE_LOG, SERVE_URL_FILE, STATE_DIR, config, run,
                state_dir)
 
 EX_CONFIG = 78          # sysexits: a missing engine, model or token -- not a crash
@@ -37,6 +37,18 @@ def engine_dir(cfg):
 def engine_bin(cfg):
     p = os.path.join(engine_dir(cfg), "llama-server")
     return p if os.access(p, os.X_OK) else ""
+
+
+def bench_bin(cfg):
+    """llama-bench sits beside llama-server in the engine dir, or ''."""
+    p = os.path.join(engine_dir(cfg), "llama-bench")
+    return p if os.access(p, os.X_OK) else ""
+
+
+def pinned_version():
+    """LLAMA_VERSION out of engine.env -- one file read, no network: the
+    login greeting (spark ver) must stay fast."""
+    return config.parse_env(os.path.join(REPO, "engine.env")).get("LLAMA_VERSION", "?")
 
 
 SPEED_CAP_GB = {"cpu": 3, "vulkan": 6, "metal": 20}     # the largest file auto takes, per backend (bootstrap.sh speed_cap is the twin)

@@ -116,6 +116,17 @@ class Ctx:
         return "~" + path[len(self.home):] if path.startswith(self.home + "/") else path
 
 
+# The rows by value area (the four areas the code is laid out in; a row
+# keeps its category -- SOFTWARE / CAPABILITY / NONFUNCTIONAL -- this map
+# is the other axis):
+#   AI infrastructure  engine pinned ai models serve ember throughput gpu
+#   core               packages configs tools git hooks services prompt
+#                      failure completion forge soul memory ledger peer
+#                      quiet audio privacy users backup swap encryption
+#                      headless battery disk pending watchdog cost
+#   shell layer        font theme terminfo shell bar (na while off)
+#   apps               none, by design: an app lives in its own repo and
+#                      spark ships no app check row
 # ------------------------------------------------------------ SOFTWARE rows
 @row("SOFTWARE")
 def row_packages(ctx):
@@ -205,12 +216,14 @@ def row_engine(ctx):
     from . import ENGINE_DIR
     if ctx.cfg.engine_dir:
         name, where = ctx.short(d), "SPARK_ENGINE_DIR"
-    elif d in ("/opt/homebrew/bin", "/usr/local/bin"):
+    elif IS_MAC and d in ("/opt/homebrew/bin", "/usr/local/bin"):
         name, where = d, "Homebrew"
     elif os.path.dirname(d) == ENGINE_DIR:
         name, where = os.path.basename(d), ctx.short(ENGINE_DIR)
     else:
-        name, where = ctx.short(d), ""
+        # a llama-server this machine already had (facts probed PATH and
+        # the system dirs): spark has no pin here, so it serves with yours
+        name, where = ctx.short(d), "your build"
     build = engine.backend(ctx.cfg)
     if not ctx.cfg.engine_dir and flavour.startswith("ubuntu-") and ("vulkan" in flavour) != (build == "vulkan"):
         return warn("%s is the %s build, but the build here is %s now" % (name, "vulkan" if "vulkan" in flavour else "cpu", build),
@@ -726,9 +739,9 @@ def row_shell(ctx):
     """The shell layer: off (the default) is the prompt widget only; on
     means the rc files are spark's own symlinks and starship and tmux are
     on PATH (spark shell on installs them, both OSes)."""
-    from . import site
+    from . import shell, site
     if not ctx.cfg.shell:
-        return na("off -- spark shell on: " + site.SHELL_TOOLS)
+        return na("off -- spark shell on: " + shell.SHELL_TOOLS)
     problems = []
     for name in site.RC_FILES:
         if not site._spark_link(os.path.join(ctx.home, name)):

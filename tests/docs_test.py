@@ -134,8 +134,6 @@ def main():
     # behind -- `spark stop -- stopped` outlived `spark stop` by a whole
     # release -- and nothing else looks at them.
     known = set(re.findall(r'"([a-z-]+)": \("', read(os.path.join("bin", "spark"))))
-    from spark import cli as _cli
-    known |= set(_cli.COMMANDS)
     stale = []
     libdir = os.path.join(ROOT, "lib", "spark")
     for f in sorted(os.listdir(libdir)):

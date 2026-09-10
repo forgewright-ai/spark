@@ -239,8 +239,8 @@ def main(argv):
     if sub in ("-h", "--help", "help"):
         say(USAGE.rstrip())
         return 0
-    from . import site
-    if site.shell_off("bar"):      # the status line is the shell layer's (tmux)
+    from . import shell
+    if shell.shell_off("bar"):     # the status line is the shell layer's (tmux)
         return 2
     if sub == "line":
         say(line(config.load()))

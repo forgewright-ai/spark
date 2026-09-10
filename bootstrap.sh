@@ -53,94 +53,37 @@ STARSHIP_SHA_X86_64=321f0dd7af8340a5f2e6a8fec6538a04f617486f9ec70d878f91c09cd8de
 STARSHIP_SHA_AARCH64=dc30189378d2f2e287384e8a692d3f95ad1df64cf0e8c36aa9201516028aed6b
 NERDFONT_VERSION=3.5.1
 NERDFONT_SHA=fab782a66f7d3019da64f6572db9fc5d3a4bcb19f9fa13e2d8a62e3693d6396e
-# llama.cpp: one release, one tarball per OS/arch (the macOS ones carry
-# Metal; on Linux ai_build picks the Vulkan build when a GPU is there)
-LLAMA_VERSION=b10689
-LLAMA_SHA_MACOS_ARM64=00540770ac0ef4748996f0332d3b93e73c3252d4f1d16ba613ea62cf93e7cccd
-LLAMA_SHA_MACOS_X64=75f463c3ac353f54c3a8daa1b7b117ebbebc7e573bf8e49fb60a464a1665f262
-LLAMA_SHA_LINUX_X64=5524e59a98b037c054760fde61fb871c5473f782336b69efeb485e845041fda7
-LLAMA_SHA_LINUX_VULKAN_X64=ffa749a6c0f969fc13ec1de3d8e931374f8735965247b585c0aa141b80124c23
-LLAMA_SHA_LINUX_ARM64=b70d5f153e089fbdf6ef79531a5fd462831f09b29745f11a5a86607af11c29d2
-LLAMA_SHA_LINUX_VULKAN_ARM64=c34ac1facc627f39807d727c0700280b8bae3304fd27bbbd66c645cfa50f5af8
-ENGINE_DIR="$SPARK_DATA_DIR/engine/llama.cpp-$LLAMA_VERSION"
-# drm_vram_file: the first DRM device that reports VRAM in sysfs (Linux;
-# nothing when none). SPARK_SYSFS_DRM overrides the root (tests), as it
-# does for lib/spark engine.gpu_info(), the python twin of this probe.
-drm_vram_file() {
-    for f in "${SPARK_SYSFS_DRM:-/sys/class/drm}"/card*/device/mem_info_vram_total; do
-        [ -r "$f" ] && { echo "$f"; return; }
-    done
-    return 0
-}
-# Linux under Windows (WSL 2): the kernel line names microsoft. Linux to
-# spark, minus the VT console and GRUB (python twin: spark.is_wsl)
-is_wsl() { grep -qi microsoft "${SPARK_PROC_VERSION:-/proc/version}" 2>/dev/null; }
-# distro: the package family this Linux belongs to -- debian | arch | ''
-# (lib/spark distro() is the python twin): ID first, then ID_LIKE's words
-# in order, the first one a distro/<id>.env knows. Unknown is empty, never
-# a guess. SPARK_OS_RELEASE pins it (tests), like SPARK_PROC_VERSION.
-distro() {
-    [ "$OS" = Linux ] || [ -n "${SPARK_OS_RELEASE:-}" ] || return 0
-    _f=${SPARK_OS_RELEASE:-/etc/os-release}
-    for w in $(sed -n 's/^ID=//p; s/^ID_LIKE=//p' "$_f" 2>/dev/null | tr -d '"'); do
-        case $w in debian|arch) echo "$w"; return ;; esac
-    done
-}
-# ai_build: the engine build this machine gets -- metal on macOS (the key
-# is ignored there); on Linux SITE_AI_BUILD cpu|vulkan as chosen, auto
-# (the default) = vulkan when a DRM device reports VRAM, else cpu. It
-# drives PKG_AI, the engine flavour and the model pick's speed cap; lib/
-# spark engine.backend() is the python twin and must answer the same.
-ai_build() {
-    [ "$OS" = Darwin ] && { echo metal; return; }
-    case $SITE_AI_BUILD in
-        cpu|vulkan) echo "$SITE_AI_BUILD" ;;
-        *) [ -n "$(drm_vram_file)" ] && echo vulkan || echo cpu ;;
-    esac
-}
-# engine_flavour: the release asset for this OS/arch/build, and its pin
-# (empty when there is none) -- macos-arm64 | macos-x64 | ubuntu-x64 |
-# ubuntu-vulkan-x64 | ubuntu-arm64 | ubuntu-vulkan-arm64
-engine_flavour() {
-    case $OS/$ARCH/$AI_BUILD in
-        Darwin/arm64/*)         flavour=macos-arm64;         sha=$LLAMA_SHA_MACOS_ARM64 ;;
-        Darwin/x86_64/*)        flavour=macos-x64;           sha=$LLAMA_SHA_MACOS_X64 ;;
-        Linux/x86_64/vulkan)    flavour=ubuntu-vulkan-x64;   sha=$LLAMA_SHA_LINUX_VULKAN_X64 ;;
-        Linux/x86_64/*)         flavour=ubuntu-x64;          sha=$LLAMA_SHA_LINUX_X64 ;;
-        Linux/aarch64/vulkan)   flavour=ubuntu-vulkan-arm64; sha=$LLAMA_SHA_LINUX_VULKAN_ARM64 ;;
-        Linux/aarch64/*)        flavour=ubuntu-arm64;        sha=$LLAMA_SHA_LINUX_ARM64 ;;
-        *)                      flavour=;                    sha= ;;
-    esac
-}
-# engine_home: where llama-server is looked for (lib/spark config.py
-# default_engine_dir is the python twin): SPARK_ENGINE_DIR, else the
-# newest ~/.local/share/spark/engine/<name> holding one, else Homebrew's
-# bin on macOS, else the pinned directory bootstrap fills
-engine_home() {
-    [ -z "${SPARK_ENGINE_DIR:-}" ] || { echo "$SPARK_ENGINE_DIR"; return; }
-    found=
-    for d in "$SPARK_DATA_DIR"/engine/*/; do
-        [ -x "$d/llama-server" ] && found=${d%/}
-    done
-    if [ -n "$found" ]; then echo "$found"; return; fi
-    if [ "$OS" = Darwin ]; then
-        for d in /opt/homebrew/bin /usr/local/bin; do
-            [ -x "$d/llama-server" ] && { echo "$d"; return; }
-        done
-    fi
-    echo "$ENGINE_DIR"
-}
-
 site_load
+# Every decision is python's: lib/spark/facts.py answers from the same
+# code the verbs use (distro, the build, WSL, memory, the engine home
+# and flavour off engine.env, the model picks), printed as KEY=value
+# and eval'd here -- one home, no sh twin. This file orchestrates: rows,
+# package installs, downloads, file placement. python3 >= 3.9 is a
+# prerequisite of the public path (get refuses without it; spark setup
+# is python itself), so asking python is not a new requirement.
+facts=$(SPARK_OS=$OS SPARK_ARCH=$ARCH python3 "$REPO/lib/spark/facts.py") || {
+    echo "bootstrap: lib/spark/facts.py failed -- python3 >= 3.9 is required" >&2; exit 1; }
+eval "$facts"
+ENGINE_DIR="$SPARK_DATA_DIR/engine/llama.cpp-$LLAMA_VERSION"
+# thin adapters over the facts: the names the rows below already speak
+is_wsl() { [ "$IS_WSL" = 1 ]; }
+mem_gb() { echo "$MEM_GB"; }
+# model_pick spark|ember: that role's row (name file url bytes sha256
+# ram_gb), or nothing -- engine.chosen_rows decided it
+model_pick() {
+    if [ "${1:-spark}" = ember ]; then _row=$EMBER_PICK; else _row=$SPARK_PICK; fi
+    [ -z "$_row" ] || printf '%s\n' "$_row"
+}
+cap_note() { [ -z "$CAP_NOTE" ] || printf '%s\n' "$CAP_NOTE"; }
+# every model row (the list, then yours), trailing mark: - the list, u yours
+model_rows_all() { [ -z "$MODEL_ROWS" ] || printf '%s\n' "$MODEL_ROWS"; }
 # the package family and its names: brew on macOS; on Linux the distro's
 # file (load_env sets only what the environment lacks, so a test may pin
 # a group); an unknown Linux keeps PM empty and the packages row says so
-DISTRO=$(distro)
 PM=; [ "$OS" = Darwin ] && PM=brew
 [ -z "$DISTRO" ] || load_env "$REPO/distro/$DISTRO.env" || exit 1
 : "${PM_INSTALL:=}" "${PM_TARGET:=}" "${PKG_CORE:=}" "${PKG_ENGINE:=}" "${PKG_AI:=}" "${PKG_SHELL:=}" "${PKG_CLI:=}"
 MODELS_DIR=${SPARK_MODELS_DIR:-$SPARK_DATA_DIR/models}
-AI_BUILD=$(ai_build)
 # the two layers: the AI is always on; the shell (tmux, starship, the daily
 # tools, the font, the rc files, the console) only with SITE_SHELL=on. An
 # editor is neither: spark ships no app (spark-micro is micro's own plugin)
@@ -164,132 +107,6 @@ list_packages() {
         [ "$shell" = 1 ] && set -- "$@" $PKG_SHELL $PKG_CLI
         printf '%s\n' "$@"
     fi
-}
-
-# memory a model can live in: RAM, plus the GPU's own memory on Linux (an
-# iGPU's VRAM is RAM the BIOS carved out of MemTotal; a discrete card's VRAM
-# holds the weights too). The same rule as lib/spark mem_total_gb().
-mem_gb() {
-    # SPARK_MEM_TOTAL_GB overrides it (tests; whole GB), like SPARK_MEM_NEEDED_GB
-    if [ -n "${SPARK_MEM_TOTAL_GB:-}" ]; then echo "$SPARK_MEM_TOTAL_GB"; return; fi
-    if [ "$OS" = Darwin ]; then
-        echo $(( $(sysctl -n hw.memsize) / 1073741824 ))
-    else
-        ram=$(awk '/^MemTotal:/ { printf "%d", $2 / 1048576 }' /proc/meminfo)
-        vram=0; f=$(drm_vram_file)
-        [ -z "$f" ] || vram=$(( $(cat "$f") / 1073741824 ))
-        echo $(( ram + vram ))
-    fi
-}
-
-# open_license KEY FILE: true when MODEL_<KEY>_LICENSE in FILE starts with
-# a license auto may take -- Apache-2.0 or MIT (lib/spark
-# config.OPEN_LICENSES is the twin).
-open_license() {
-    grep -E "^MODEL_${1}_LICENSE=\"?(Apache-2\.0|MIT)( |\"|$)" "$2" >/dev/null 2>&1
-}
-# model_rows: name file url bytes sha256 ram_gb, one per line, file order --
-# the rows auto may pick: models.env rows with MODEL_<NAME>_TESTED=line
-# (proven on the line) under an open license. The only source auto reads
-# (lib/spark config.models_table / auto_rows is the twin).
-model_rows() {
-    [ -f "$REPO/models.env" ] || return 0
-    grep -E '^MODEL_[A-Z0-9_]+=' "$REPO/models.env" | grep -vE '_(LICENSE|NOTE|TESTED)=' | while IFS='=' read -r k v; do
-        v=${v#\"}; v=${v%\"}
-        grep -qE "^${k}_TESTED=\"?line\"?$" "$REPO/models.env" || continue
-        open_license "${k#MODEL_}" "$REPO/models.env" || continue
-        name=$(printf '%s' "${k#MODEL_}" | tr 'A-Z_' 'a-z-')
-        printf '%s %s\n' "$name" "$v"
-    done
-}
-# model_rows_all: the list then yours, each row's name file url bytes
-# sha256 ram_gb followed by a source mark: - models.env, u yours
-# (~/.config/spark/models.env). An absent file is skipped; a
-# LICENSE/NOTE/TESTED side-key is not a row (lib/spark config.model_tables
-# is the twin, and where a name in both files is refused).
-model_rows_all() {
-    for pair in "$REPO/models.env -" "$SPARK_CONFIG_DIR/models.env u"; do
-        # shellcheck disable=SC2086
-        set -- $pair
-        f=$1; mark=$2
-        [ -f "$f" ] || continue
-        grep -E '^MODEL_[A-Z0-9_]+=' "$f" | grep -vE '_(LICENSE|NOTE|TESTED)=' | while IFS='=' read -r k v; do
-            v=${v#\"}; v=${v%\"}
-            # shellcheck disable=SC2086
-            set -- $v
-            [ $# -eq 5 ] || continue
-            name=$(printf '%s' "${k#MODEL_}" | tr 'A-Z_' 'a-z-')
-            printf '%s %s %s\n' "$name" "$v" "$mark"
-        done
-    done
-}
-
-# model_pick spark|ember [nocap]: that role's row (lib/spark
-# engine.chosen_rows is the python twin; the two must agree). spark:
-# SITE_AI_MODEL none|NAME|auto -- auto is the smallest auto row (tested
-# on the line, open license: model_rows) when an ember resolves beside
-# it, else the largest usable auto row that fits the SITE_AI_BUDGET
-# percent (default 60) alone (the default: the ember is none); a NAME is
-# looked up in the list and yours, never second-guessed.
-# ember: SITE_EMBER_MODEL
-# none|NAME|auto -- none (default) is one model doing both; auto is the
-# largest usable auto row fitting the budget beside the spark pick, a
-# NAME again any row; the spark row again would be one model doing
-# both, so it prints nothing. No spark model (SITE_AI_MODEL=none, or a
-# name that is not there) means nothing is served here: no ember either.
-# Usable = the file is at or under the speed cap (speed_cap); nothing
-# usable fits -> the smallest auto row that fits, so auto never picks
-# nothing while something fits (an untested row is by name only).
-# `nocap` lifts the cap (list_models says what it held back).
-model_sorted() { model_rows | sort -n -k6 ; }
-model_sorted_all() { model_rows_all | sort -n -k6 ; }
-# speed_cap: the largest file (bytes) auto takes on this build -- cpu 3 GB,
-# vulkan 6 GB, metal 20 GB: the size classes the speed column keeps at
-# about 8 tok/s or better (engine.SPEED_CAP_GB is the python twin). A
-# `-a3b` MoE counts as its 3B active class, as in the speed column.
-speed_cap() {
-    case $AI_BUILD in vulkan) echo 6442450944 ;; metal) echo 21474836480 ;; *) echo 3221225472 ;; esac
-}
-model_fit() {   # model_fit BESIDE_GB CAP_BYTES -> the largest row with BESIDE+ram_gb <= budget and the file under CAP (0 = no cap), else the smallest that fits
-    budget=$(( $(mem_gb) * ${SITE_AI_BUDGET:-60} / 100 ))
-    model_sorted | awk -v b="$budget" -v s="$1" -v c="$2" \
-        '$6 + s <= b { if (!first) first = $0; if (c == 0 || $4 <= c || $1 ~ /-a3b/) row = $0 } END { if (row) print row; else if (first) print first }'
-}
-model_pick() {
-    if [ "${2:-}" = nocap ]; then cap=0; else cap=$(speed_cap); fi
-    if [ "${1:-spark}" = ember ]; then
-        spark_row=$(model_pick spark "${2:-}")
-        [ -n "$spark_row" ] || return 0
-        spark_ram=$(printf '%s' "$spark_row" | awk '{ print $6 }')
-        case $SITE_EMBER_MODEL in
-            none) return 0 ;;
-            auto) erow=$(model_fit "$spark_ram" "$cap") ;;
-            *) erow=$(model_sorted_all | awk -v n="$SITE_EMBER_MODEL" '$1 == n') ;;
-        esac
-        [ -n "$erow" ] && [ "${erow%% *}" != "${spark_row%% *}" ] && printf '%s\n' "$erow"
-        return 0
-    fi
-    case $SITE_AI_MODEL in
-        none) return 0 ;;
-        auto)
-            small=$(model_sorted | head -n 1)
-            if [ "$SITE_EMBER_MODEL" != none ] && [ -n "$small" ]; then
-                case $SITE_EMBER_MODEL in
-                    auto) e=$(model_fit "$(printf '%s' "$small" | awk '{ print $6 }')" "$cap") ;;
-                    *) e=$(model_sorted_all | awk -v n="$SITE_EMBER_MODEL" '$1 == n') ;;
-                esac
-                if [ -n "$e" ]; then printf '%s\n' "$small"; return 0; fi
-            fi
-            model_fit 0 "$cap"
-            ;;
-        *) model_sorted_all | awk -v n="$SITE_AI_MODEL" '$1 == n' ;;
-    esac
-}
-# cap_note: one line when the speed cap held a bigger auto pick back
-# (lib/spark engine.cap_note is the python twin), else nothing
-cap_note() {
-    [ "$(model_pick spark)$(model_pick ember)" != "$(model_pick spark nocap)$(model_pick ember nocap)" ] || return 0
-    printf 'auto stops at %s GB files on %s (bigger fits, slower than 8 tok/s)\n' "$(( $(speed_cap) / 1073741824 ))" "$AI_BUILD"
 }
 
 list_models() {
@@ -591,7 +408,7 @@ fi
 # always). A build of your own in SPARK_ENGINE_DIR wins; the tarball is
 # never fetched over it. The extracted dir carries a one-line `flavour`
 # file so `spark check`'s engine row can name it.
-engine_flavour
+flavour=$ENGINE_FLAVOUR sha=$ENGINE_SHA
 have=$(cat "$ENGINE_DIR/flavour" 2>/dev/null || true)
 if [ -z "$have" ] && [ -x "$ENGINE_DIR/llama-server" ] && [ -n "$flavour" ]; then
     # a dir from before the flavour file existed: name it now by what is in
@@ -610,7 +427,15 @@ elif [ -n "${SPARK_ENGINE_DIR:-}" ] && [ -x "$SPARK_ENGINE_DIR/llama-server" ]; 
 elif [ -x "$ENGINE_DIR/llama-server" ] && { [ -z "$sha" ] || [ "$have" = "$flavour" ]; }; then
     ok engine "llama.cpp $LLAMA_VERSION $have"
 elif [ -z "$sha" ]; then
-    skip engine "no pin for llama.cpp $LLAMA_VERSION $OS/$ARCH ($AI_BUILD) -- set SPARK_ENGINE_DIR to a build of your own"
+    # no pin for this OS/arch/build: a llama-server this machine already
+    # has (facts: ENGINE_HOME probed PATH and the system dirs) is used
+    # rather than refused; where a pin exists it is still installed and
+    # still wins, so an existing build is never a silent unpin
+    if [ -x "$ENGINE_HOME/llama-server" ]; then
+        ok engine "your llama-server ($ENGINE_HOME)"
+    else
+        skip engine "no pin for llama.cpp $LLAMA_VERSION $OS/$ARCH ($AI_BUILD) -- set SPARK_ENGINE_DIR to a build of your own"
+    fi
 elif need engine "install llama.cpp $LLAMA_VERSION $flavour$([ -z "$have" ] || echo " (replaces $have: the build here is $AI_BUILD now)")"; then
     fetch "https://github.com/ggml-org/llama.cpp/releases/download/$LLAMA_VERSION/llama-$LLAMA_VERSION-bin-$flavour.tar.gz" "$TMP/llama.tgz" "$sha"
     rm -rf "$ENGINE_DIR"
@@ -750,7 +575,7 @@ fi
 # ============================================================ 10. services
 section services
 have_model=0; ls "$MODELS_DIR"/*.gguf >/dev/null 2>&1 && have_model=1
-engine_bin=$(engine_home)
+engine_bin=$ENGINE_HOME
 serve_ready=0
 [ -x "$engine_bin/llama-server" ] && [ "$have_model" = 1 ] && [ -s "$tok" ] && [ "${SPARK_SERVICE:-auto}" = auto ] && serve_ready=1
 serve_why="engine $([ -x "$engine_bin/llama-server" ] && echo yes || echo no), model $([ "$have_model" = 1 ] && echo yes || echo no), token $([ -s "$tok" ] && echo yes || echo no), SPARK_SERVICE=${SPARK_SERVICE:-auto}"

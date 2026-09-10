@@ -24,11 +24,6 @@ TUNE_FILE = os.path.join(STATE_DIR, "tune.json")
 SIZES = {"full": (512, 128, 3), "quick": (256, 64, 2)}
 
 
-def bench_bin(cfg):
-    p = os.path.join(engine.engine_dir(cfg), "llama-bench")
-    return p if os.access(p, os.X_OK) else ""
-
-
 def settings_of(cfg):
     return {"ngl": cfg.ngl, "fa": cfg.flash_attn, "kv": cfg.kv, "t": cfg.threads or ""}
 
@@ -47,7 +42,7 @@ def _args(s):
 def run_one(cfg, model, s, size):
     """(pp_tps, tg_tps) for one setting, or an EngineError."""
     p, n, r = SIZES[size]
-    cmd = [bench_bin(cfg), "-m", model, "-p", str(p), "-n", str(n), "-r", str(r), "-o", "json"] + _args(s)
+    cmd = [engine.bench_bin(cfg), "-m", model, "-p", str(p), "-n", str(n), "-r", str(r), "-o", "json"] + _args(s)
     try:
         out = subprocess.run(cmd, capture_output=True, text=True, timeout=1800, env=engine.server_env(cfg))
     except (OSError, subprocess.TimeoutExpired) as e:
@@ -187,7 +182,7 @@ def cmd_bench(args):
     cfg = config.load()
     tune, porcelain = "--tune" in args, "--porcelain" in args
     size = "quick" if ("--quick" in args or tune) else "full"
-    if not bench_bin(cfg):
+    if not engine.bench_bin(cfg):
         say("spark bench: no llama-bench in %s -- ./bootstrap.sh installs the engine" % engine.engine_dir(cfg))
         return engine.EX_CONFIG
     files = engine.roles(cfg)
@@ -309,10 +304,10 @@ def cmd_tune(args):
         say("  the knobs are SPARK_NGL SPARK_FLASH_ATTN SPARK_KV SPARK_THREADS in ~/.config/spark/spark.env")
         return 0
     if sub == "apply":
-        from . import site
+        from . import model, site
         w = t["winner"]
         site.set_keys(_file=SPARK_ENV, SPARK_NGL=w["ngl"], SPARK_FLASH_ATTN=w["fa"], SPARK_KV=w["kv"], SPARK_THREADS=w.get("t", ""))
-        site._restart_server(cfg)     # narrates: restarting ... ready
+        model._restart_server(cfg)     # narrates: restarting ... ready
         return 0
     say(USAGE.rstrip())
     return 2

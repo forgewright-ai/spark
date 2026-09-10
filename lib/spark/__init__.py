@@ -13,7 +13,10 @@ import time
 import traceback
 
 MARK = "spark"          # the sign every tool carries: plain, so every terminal can draw it
-IS_MAC = sys.platform == "darwin"
+# SPARK_OS (Darwin|Linux) pins the OS the way SPARK_OS_RELEASE pins the
+# distro: bootstrap.sh hands its own uname view to lib/spark/facts.py
+# with it, so a test's uname stub steers the whole pipeline
+IS_MAC = (os.environ.get("SPARK_OS") or sys.platform) in ("Darwin", "darwin")
 OS = "macos" if IS_MAC else "linux"
 
 HOME = os.path.expanduser("~")

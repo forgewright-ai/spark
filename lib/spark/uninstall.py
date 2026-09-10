@@ -236,22 +236,22 @@ def step_services(ctx):
 def step_look(ctx):
     """The shell layer's look back, whatever SITE_SHELL says: rc files, the
     rendered configs, micro's colorscheme key, .gitconfig, the old plugin links."""
-    from . import site
+    from . import shell, site
     if ctx.dry:
         for name in site.RC_FILES:
             path = os.path.join(HOME, name)
             if _spark_link(path):
                 ctx.row("would", "rc", "%s: spark's link goes, %s" % (_tilde(path), "back from .bak" if os.path.lexists(path + ".bak") else "removed"))
-        for rel in site.RENDERED_FILES:
+        for rel in shell.RENDERED_FILES:
             path = os.path.join(HOME, rel)
             if os.path.isfile(path) and not os.path.islink(path):
                 ctx.row("would", "look", "%s: %s" % (_tilde(path), "back from .bak" if os.path.lexists(path + ".bak") else "removed"))
     else:
         for path, what in site.restore_rc():
             ctx.row("ok", "rc", "%s -- %s" % (_tilde(path), what))
-        for path, what in site.restore_rendered():
+        for path, what in shell.restore_rendered():
             ctx.row("ok", "look", "%s -- %s" % (_tilde(path), what))
-        if site.micro_settings_reset():
+        if shell.micro_settings_reset():
             ctx.row("ok", "look", "~/.config/micro/settings.json -- colorscheme key dropped, the rest is micro's")
     gitconfig = os.path.join(HOME, ".gitconfig")
     try:
