@@ -713,20 +713,19 @@ section terminal
 if [ "$SITE_THEME" = none ]; then
     skip theme "SITE_THEME=none: your terminal keeps its colours"
 else
-    theme_load "$REPO"
-    want=$(for k in $THEME_KEYS; do eval "printf '%s=%s\n' $k \"\$$k\""; done
-           [ -z "${THEME_LOGO:-}" ] || printf 'THEME_LOGO=%s\n' "$THEME_LOGO")
-    # console-colors (the Linux VT palette) has one writer: spark theme /
-    # spark setup (lib/spark/theme.py write_runtime); this row only notes it
-    cc=""; [ -f "$SPARK_CONFIG_DIR/console-colors" ] && cc=" + console-colors"
-    if [ -f "$SPARK_CONFIG_DIR/theme.env" ] && [ "$(cat "$SPARK_CONFIG_DIR/theme.env")" = "$want" ]; then
-        ok theme "$SITE_THEME -> $SPARK_CONFIG_DIR/theme.env$cc"
-    elif need theme "write $SPARK_CONFIG_DIR/theme.env ($SITE_THEME)"; then
-        mkdir -p "$SPARK_CONFIG_DIR"; printf '%s\n' "$want" > "$SPARK_CONFIG_DIR/theme.env"; ok theme "$SITE_THEME$cc"
+    # the palette must exist (yours first, then the repository's), but
+    # writing theme.env, the console files and the mac profile is
+    # `spark theme NAME`'s alone: a bootstrap run paints nothing
+    tf="$SPARK_CONFIG_DIR/themes/$SITE_THEME.env"
+    [ -f "$tf" ] || tf="$REPO/themes/$SITE_THEME.env"
+    if [ ! -f "$tf" ]; then
+        printf 'spark: SITE_THEME=%s: no such palette (themes/*.env, ~/.config/spark/themes/*.env)\n' "$SITE_THEME" >&2
+        exit 1
     fi
-    if [ "$OS" = Darwin ] && [ -x "$HOME/.local/bin/spark" ]; then
-        if [ "$MODE" = dry ]; then "$HOME/.local/bin/spark" theme profile --dry-run | sed 's/^/       /' || true
-        else "$HOME/.local/bin/spark" theme profile | sed 's/^/       /' || true; fi
+    if [ -f "$SPARK_CONFIG_DIR/theme.env" ]; then
+        ok theme "$SITE_THEME (painted: theme.env; spark theme NAME repaints)"
+    else
+        skip theme "$SITE_THEME chosen, not painted (spark theme $SITE_THEME)"
     fi
 fi
 # the text console's font (console-setup), when chosen: core -- spark
