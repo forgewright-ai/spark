@@ -1412,9 +1412,11 @@ def main():
         rc, out, _ = spark("check", "memory", extra={"PAGER": "/bin/false"})
         t.ok(rc == 0 and out.startswith("spark check ") and "memory" in out,
              "spark check piped with PAGER=/bin/false: the report prints", out)
-        rc, out, _ = spark("bar", extra=off)
+        rc, out, _ = spark("bar", "line", extra=off)
+        t.ok(rc == 0 and out.strip(), "spark bar line answers with the layer off (the line is core)", out)
+        rc, out, _ = spark("bar", "on", extra=off)
         t.ok(rc == 2 and out.strip() == "spark bar -- the shell layer is off (spark shell on)",
-             "spark bar refuses while the layer is off, signing", out)
+             "spark bar on refuses while the layer is off (the tmux wiring), signing", out)
         # spark font left the shell gate: it shows, lists and sets either way
         rc, out, _ = spark("font", extra=off)
         t.ok(rc == 0 and out.startswith("spark font -- "), "spark font shows with the layer off (core)", out)
@@ -1495,14 +1497,11 @@ def main():
                  "spark quiet login on on macOS: nothing to set, exit 2", out)
         else:
             rc, out, _ = spark("quiet", "login", extra=off)
-            t.ok(rc == 0 and "the shell layer is off" in out, "spark quiet login shows with the layer off", out)
+            t.ok(rc == 0 and "loud" in out, "spark quiet login shows its state (core, no gate)", out)
             rc, out, _ = spark("quiet", "login", "on", extra=off)
-            t.ok(rc == 2 and out.strip() == "spark quiet -- the shell layer is off (spark shell on)",
-                 "spark quiet login on refuses while the layer is off, signing", out)
-            rc, out, _ = spark("quiet", "login", "on", extra=dict(off, SITE_SHELL="on"))
             t.ok(rc == 0 and "SITE_QUIET_LOGIN=yes" in open(home + "/.config/spark/site.env").read(),
-                 "spark quiet login on writes the key with the layer on", out)
-            spark("quiet", "login", "off", extra=dict(off, SITE_SHELL="on"))
+                 "spark quiet login on writes the key (core, no gate)", out)
+            spark("quiet", "login", "off", extra=off)
         rc, out, _ = spark("theme", "-h", extra=off)
         t.ok(rc == 0 and out.startswith("spark theme -- "), "spark theme stays usable with the layer off", out)
         # the palette's runtime files, one writer: spark theme NAME writes

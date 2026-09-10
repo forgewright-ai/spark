@@ -354,11 +354,10 @@ may change freely.
    setup --` is the offer bare `spark` prints, after the banner, on a
    clone with no `site.env` at a terminal; and a refusal signs the same
    way: with `SITE_SHELL=off`, `spark bar` prints
-   `spark bar -- the shell layer is off (spark shell on)` and exits 2,
-   and the set forms `spark quiet login|boot on|off` refuse with the
-   same line (showing still answers, saying the layer is off); `spark
-   help` then folds the shell block into one `spark shell on` line.
-   `spark theme` and `spark font` are core: they answer either way.
+   `spark bar -- the shell layer is off (spark shell on)` and exits 2;
+   `spark help` then folds the shell block into one `spark shell on`
+   line. `spark theme`, `spark font` and `spark quiet` are core: they
+   answer either way.
    `spark uninstall -- not a terminal: spark uninstall --yes runs it` is
    the refusal of a non-terminal without `--yes` (the plan printed, 2). On
    WSL 2 the same shape: `spark font -- no console on WSL 2: the font
@@ -784,7 +783,7 @@ sh tests/update_test.sh         # spark update: pull, move to a tag, dirty refus
 
 `spark check` has 40 rows today: 12 SOFTWARE, 19 CAPABILITY, 9
 NONFUNCTIONAL (`grep -c '^@row' lib/spark/check.py`). With `SITE_SHELL=off`
-the 11 rows in `check.SHELL_ROWS` and the `shell` row answer `na`;
+the 10 rows in `check.SHELL_ROWS` and the `shell` row answer `na`;
 `--selftest` runs a third pass to prove it, a fourth for the client
 shape (the 7 rows in `check.CLIENT_ROWS`), and on Linux a fifth under a
 WSL 2 kernel line (the 3 rows in `check.WSL_ROWS` say so, never fail)

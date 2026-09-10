@@ -223,7 +223,7 @@ out=$(SHELL=/usr/local/bin/fish PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dr
 printf '%s\n' "$out" | grep -qE '^todo +rc +shell fish' && ok "rc: an unknown login shell is a todo naming it" || bad "rc: fish: $(printf '%s\n' "$out" | grep -E ' rc ')"
 # the shell layer off (SITE_SHELL unset): every shell row is a skip naming
 # the key (the console-font row is core now and skips for its own reason)
-case $(uname -s) in Darwin) srows="dir theme pinned terminfo quiet-login quiet-boot" ;; *) srows="dir theme starship font terminfo quiet-login quiet-boot" ;; esac
+case $(uname -s) in Darwin) srows="dir theme pinned terminfo" ;; *) srows="dir theme starship font terminfo" ;; esac
 for r in $srows; do
     printf '%s\n' "$out" | grep -qE "^skip +$r +SITE_SHELL=off" && ok "SITE_SHELL unset: skip $r" || bad "SITE_SHELL unset: no skip row for $r: $(printf '%s\n' "$out" | grep -E " $r " | head -1)"
 done

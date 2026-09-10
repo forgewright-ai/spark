@@ -321,8 +321,6 @@ def cmd_quiet(args):
         start, audio = _quiet_state(cfg, "start"), _quiet_state(cfg, "audio")
         if IS_MAC:
             say("%s quiet -- start %s, audio %s (login, boot: macOS has no motd, no GRUB)" % (MARK, start, audio))
-        elif not cfg.shell:
-            say("%s quiet -- start %s, audio %s (login, boot: the shell layer is off)" % (MARK, start, audio))
         else:
             say("%s quiet -- start %s, login %s, boot %s, audio %s" % (
                 MARK, start, _quiet_state(cfg, "login"), "n/a (%s)" % no_grub() if no_grub() else _quiet_state(cfg, "boot"), audio))
@@ -340,9 +338,6 @@ def cmd_quiet(args):
         if no_boot:
             say("%s quiet %s -- %s" % (MARK, sub, no_boot))
             return 0
-        if linux_only and not cfg.shell:
-            say("%s quiet %s -- the shell layer is off (spark shell on)" % (MARK, sub))
-            return 0
         say("%s quiet %s -- %s" % (MARK, sub, _quiet_state(cfg, sub)))
         return 0
     if linux_only and IS_MAC:                              # nothing to set there
@@ -350,9 +345,6 @@ def cmd_quiet(args):
         return 2
     if no_boot:
         say("%s quiet %s -- %s" % (MARK, sub, no_boot))
-        return 2
-    from . import shell
-    if linux_only and shell.shell_off("quiet"):
         return 2
     set_keys(**{QUIET_KEYS[sub]: "yes" if args[1] == "on" else "no"})
     if sub == "audio":

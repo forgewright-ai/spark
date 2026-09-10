@@ -239,10 +239,8 @@ def main(argv):
     if sub in ("-h", "--help", "help"):
         say(USAGE.rstrip())
         return 0
-    from . import shell
-    if shell.shell_off("bar"):     # the status line is the shell layer's (tmux)
-        return 2
     if sub == "line":
+        # the line is core: the machine's one-line status, whoever asks
         say(line(config.load()))
         return 0
     if sub not in ("", "status", "on", "off", "toggle"):
@@ -253,6 +251,9 @@ def main(argv):
         # "#(spark bar)" must draw the bar, never show or set anything else
         say(line(config.load()))
         return 0
+    from . import shell
+    if shell.shell_off("bar"):     # the status wiring is the shell layer's (tmux)
+        return 2
     rc, _ = _tmux("list-sessions")
     if rc != 0:
         say("spark bar: no tmux running -- the status line is tmux's (tmux starts one)")

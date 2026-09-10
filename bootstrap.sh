@@ -762,10 +762,10 @@ fi
 # ============================================================ 11. terminal
 section terminal
 if [ "$shell" = 0 ]; then
-    # the palette render, the terminfo and the login/boot noise are the
-    # shell layer -- one skip row per block. The console-font row is core
-    # (spark font works with the layer off) and runs below either way.
-    for r in theme terminfo quiet-login quiet-boot; do skip "$r" "$SHELL_OFF"; done
+    # the palette render and the terminfo are the shell layer -- one skip
+    # row per block. The console-font row and the quiet login/boot rows
+    # are core (appliance behaviour, spark quiet) and run below either way.
+    for r in theme terminfo; do skip "$r" "$SHELL_OFF"; done
 elif [ "$SITE_THEME" = none ]; then
     skip theme "SITE_THEME=none: your terminal keeps its colours"
 else
@@ -863,9 +863,7 @@ else
         ok vt-palette "spark-console.service: setvtrgb $vt_file at boot; the defaults set now"
     fi
 fi
-if [ "$shell" = 0 ]; then
-    :   # quiet-login and quiet-boot skipped above
-elif [ "$OS" = Darwin ]; then
+if [ "$OS" = Darwin ]; then
     skip quiet-login "macOS: no motd"
     skip quiet-boot "macOS: no GRUB"
 else

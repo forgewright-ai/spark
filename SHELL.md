@@ -34,7 +34,6 @@ Its keys:
 | `SITE_GIT_NAME` / `SITE_GIT_EMAIL` | the git identity `~/.gitconfig` is rendered with; unset, spark guesses and the `identity` row says so | guessed |
 | `SITE_PROMPT` / `SITE_PROMPT_STYLE` | `starship`/`plain`; `minimal`/`full` | `starship`, `minimal` |
 | `SITE_WORKSPACE` | the folder the `backup` row watches | `~/projects` |
-| `SITE_QUIET_LOGIN` / `SITE_QUIET_BOOT` | Linux: `yes` bares the login (motd, `/etc/issue`; originals kept) / makes the boot silent (one GRUB drop-in) -- `spark quiet login\|boot on`. `boot` is refused on WSL 2 and Arch | `no` |
 
 Two fonts on Linux: `spark font` sets the console face (core); the Nerd
 Font comes with the layer as a `.ttf` in `~/.local/share/fonts` for your

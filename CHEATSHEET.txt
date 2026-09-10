@@ -75,7 +75,7 @@ THE INTERFACE
   spark theme NAME | list | show  one palette: console, tmux, micro; none=off
   ~/.config/spark/themes/NAME.env your own palette: the same 21 THEME_* keys
   spark quiet start on|off        no banner, one-line serve/forge + bare spark
-  spark quiet login|boot on|off   Linux: motd + kernel line; GRUB (shell on)
+  spark quiet login|boot on|off   Linux: motd + kernel line; GRUB
   spark quiet audio on|off        no sound from spark (both OSes)
   spark font FACE SIZE | list     console font (Linux) / Terminal.app's font
 

@@ -511,6 +511,8 @@ setup asks is optional and has a verb; editing the file and running
 | `SITE_HEADLESS` | `yes`: up from boot, never asleep -- `spark headless on\|off` | `no` |
 | `SITE_THEME` | `none`, or a palette from `themes/` or `~/.config/spark/themes/` -- `spark theme NAME`; painted only when you ask | `none` |
 | `SITE_FONT_FACE` / `SITE_FONT_SIZE` | Linux console: a face and size from `spark font list` (`Terminus` `16x32`); macOS: Terminal.app's font and points -- `spark font FACE SIZE`. Refused on WSL 2 and Arch (no console-setup) | unset / `16x32` (Linux), the Nerd Font / `13` (macOS) |
+| `SITE_QUIET_LOGIN` | Linux: `yes` bares the login (motd, `/etc/issue`; originals kept) -- `spark quiet login on` | `no` |
+| `SITE_QUIET_BOOT` | Linux: `yes` makes the boot silent (one GRUB drop-in) -- `spark quiet boot on`; refused on WSL 2 and Arch | `no` |
 | `SITE_QUIET_START` | `yes`: no banner, one-line `serve`, `forge` and bare `spark` -- `spark quiet start on` | `no` |
 | `SITE_QUIET_AUDIO` | `yes`: no sound from spark -- `spark quiet audio on` | `no` |
 

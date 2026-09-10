@@ -1408,7 +1408,7 @@ def row_cost(ctx):
 # The shell layer's rows: with SITE_SHELL=off they are na before they look,
 # the same answer bootstrap.sh gives (the `shell` row itself says what on
 # adds). `font` is core now, like `theme`: its row runs either way.
-SHELL_ROWS = ("pinned", "terminfo", "quiet", "bar", "git", "backup", "swap",
+SHELL_ROWS = ("pinned", "terminfo", "bar", "git", "backup", "swap",
               "encryption", "pending", "battery", "disk")
 SHELL_OFF = "SITE_SHELL=off (spark shell on)"
 # the rows WSL 2 answers differently (na or a WSL 2 note, never a fault):
