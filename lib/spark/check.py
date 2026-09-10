@@ -233,7 +233,7 @@ def _console_font_row(ctx):
     return ok("console %s" % want)
 
 
-@row("SOFTWARE", fixture=not IS_MAC, reason="the mac good state is the profile note (na); Linux proves the console half")
+@row("SOFTWARE", fixture=False, reason="reads the real /etc/default/console-setup (Linux) / the installed faces (macOS)")
 def row_font(ctx):
     """The console font choice (SITE_FONT_FACE, Linux) and the macOS
     Terminal face -- the machine's own; an emulator font (a Nerd Font)
