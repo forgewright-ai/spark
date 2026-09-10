@@ -1493,7 +1493,7 @@ def main():
                  "spark quiet login on on macOS: nothing to set, exit 2", out)
         else:
             rc, out, _ = spark("quiet", "login", extra=off)
-            t.ok(rc == 0 and "loud" in out, "spark quiet login shows its state (core, no gate)", out)
+            t.ok(rc == 0 and out.startswith("spark quiet login -- "), "spark quiet login shows its state (core, no gate)", out)
             rc, out, _ = spark("quiet", "login", "on", extra=off)
             t.ok(rc == 0 and "SITE_QUIET_LOGIN=yes" in open(home + "/.config/spark/site.env").read(),
                  "spark quiet login on writes the key (core, no gate)", out)
