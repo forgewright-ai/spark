@@ -7,12 +7,11 @@
 import json
 import os
 import shutil
-import sys
 import time
 
 from . import BAR_CACHE, CHECK_JSON, IS_MAC, SERVE_URL_FILE, config, glyph, lan_ip, run, say, state_dir
 
-INTERVAL = 5          # what .tmux.conf's status-interval is
+INTERVAL = 5          # the cache age the forge page's tick reads (seconds)
 SEP = glyph("sep")
 
 
@@ -217,21 +216,11 @@ def line(cfg):
     return s
 
 
-USAGE = """spark bar -- tmux's status line
+USAGE = """spark bar -- the machine's one-line status
 
-  spark bar            shown or hidden, and the line it draws
-  spark bar on | off   show / hide it
-  spark bar line       print the line itself -- what .tmux.conf's status-right runs
+  spark bar            print it: load, mem, disk, net, ai, check, clock
+  spark bar line       the same line (what a status bar runs every 15 s)
 """
-
-
-def _tmux(*args):
-    return run(["tmux"] + list(args))
-
-
-def _status_on():
-    rc, out = _tmux("show", "-gv", "status")
-    return rc == 0 and out.strip() != "off"
 
 
 def main(argv):
@@ -239,32 +228,13 @@ def main(argv):
     if sub in ("-h", "--help", "help"):
         say(USAGE.rstrip())
         return 0
-    if sub == "line":
-        # the line is core: the machine's one-line status, whoever asks
+    if sub in ("", "line", "status"):
+        # bare = show (grammar rule 1): the line is the whole show
         say(line(config.load()))
         return 0
-    if sub not in ("", "status", "on", "off", "toggle"):
-        say(USAGE.rstrip())
+    if sub in ("on", "off", "toggle"):
+        # the tmux wiring moved with the shell layer (one release of pointer)
+        say("spark bar %s -- the tmux status line lives at github.com/forgewright-ai/spark-shell (spark-shell bar)" % sub)
         return 2
-    if sub == "" and not sys.stdout.isatty():
-        # tmux runs status-right without a tty; a config that says
-        # "#(spark bar)" must draw the bar, never show or set anything else
-        say(line(config.load()))
-        return 0
-    from . import shell
-    if shell.shell_off("bar"):     # the status wiring is the shell layer's (tmux)
-        return 2
-    rc, _ = _tmux("list-sessions")
-    if rc != 0:
-        say("spark bar: no tmux running -- the status line is tmux's (tmux starts one)")
-        return 1
-    if sub in ("", "status"):
-        # bare = show (grammar rule 1): the state and the line it would draw
-        say("spark bar -- %s" % ("shown (spark bar off hides it)" if _status_on()
-                                 else "hidden (spark bar on brings it back)"))
-        say("  " + line(config.load()).rstrip())
-        return 0
-    want = {"on": True, "off": False}.get(sub, not _status_on())    # toggle: accepted, undocumented
-    _tmux("set", "-g", "status", "on" if want else "off")
-    say("spark bar -- %s" % ("shown (spark bar off hides it)" if want else "hidden (spark bar on brings it back)"))
-    return 0
+    say(USAGE.rstrip())
+    return 2

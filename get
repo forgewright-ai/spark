@@ -63,7 +63,6 @@ main() {
         [ "$os" != Darwin ] || fix="xcode-select --install"
         refuse "missing:$missing -- $fix, then run this again"
     fi
-    # Homebrew is the shell layer's (spark shell on), not the AI's: on PATH
     # for bootstrap's brew row when it is there, a NOTICE when it is not
     if [ "$os" = Darwin ]; then
         for d in /opt/homebrew/bin /usr/local/bin; do

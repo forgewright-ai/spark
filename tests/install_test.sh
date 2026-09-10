@@ -17,12 +17,12 @@ run() { sh "$REPO/install.sh" "$@" 2>&1; }
 
 echo "install_test: $T"
 
-# 1. dry-run on an empty HOME (SITE_SHELL unset: the AI layer only): only
+# 1. dry-run on an empty HOME: only
 #    `would` rows, nothing created
 out=$(run --dry-run)
 if printf '%s\n' "$out" | grep -qE '^(ok|link|render|back up) '; then bad "dry-run printed a non-would row"; else ok "dry-run prints only would rows"; fi
 printf '%s\n' "$out" | grep -q '^would link .*\.config/spark/spark.env.example$' && ok "would link a home/ file" || bad "would link"
-printf '%s\n' "$out" | grep -q '^would .*\.gitconfig$' && bad "SITE_SHELL unset: .gitconfig announced" || ok "SITE_SHELL unset: no .gitconfig row"
+printf '%s\n' "$out" | grep -q '^would .*\.gitconfig$' && bad ".gitconfig announced" || ok "no .gitconfig row (the look is spark-shell's)"
 [ ! -e "$HOME/.config/spark/spark.env.example" ] && ok "dry-run created nothing" || bad "dry-run wrote a file"
 printf '%s\n' "$out" | tail -1 | grep -qE '^[0-9]+ to do$' && ok "dry-run summary line" || bad "summary line"
 
@@ -34,9 +34,9 @@ for f in .config/spark/spark.env.example .config/spark/widget.bash .config/spark
     [ -L "$HOME/$f" ] && ok "AI layer: $f is a symlink" || bad "AI layer: $f not linked"
 done
 for f in .bashrc .bash_profile .zshrc .zprofile .config/micro .gitconfig .tmux.conf .config/btop .config/starship.toml; do
-    [ ! -e "$HOME/$f" ] && [ ! -L "$HOME/$f" ] || bad "SITE_SHELL unset: $f was installed"
+    [ ! -e "$HOME/$f" ] && [ ! -L "$HOME/$f" ] || bad "$f was installed"
 done
-ok "SITE_SHELL unset: no rc file, no .gitconfig, .tmux.conf, btop or starship"
+ok "no rc file, no .gitconfig, .tmux.conf, btop or starship"
 case $(uname -s) in
     Darwin) [ -f "$HOME/.config/spark/launchd/spark.serve.plist" ] && ok "plists rendered on macOS" || bad "plist"
             [ -f "$HOME/.config/spark/launchd/spark.forge.plist" ] && ok "spark.forge.plist rendered too" || bad "forge plist"
@@ -55,42 +55,6 @@ printf 'SITE_AI_MODEL=none\nSITE_PEER_AI_URL=http://192.0.2.10:8081\n' > "$C/.co
 out=$(HOME=$C XDG_CONFIG_HOME=$C/.config sh "$REPO/install.sh" --dry-run 2>&1)
 printf '%s\n' "$out" | grep -q '^would link .*\.config/spark/widget\.zsh$' && ok "client: would link the widget" || bad "client: widget"
 if printf '%s\n' "$out" | grep -qE 'spark[-.](serve|forge|check)'; then bad "client: a unit or plist announced: $(printf '%s\n' "$out" | grep -E 'spark[-.](serve|forge|check)' | head -1)"; else ok "client: no unit, no plist"; fi
-
-# 2b. SITE_SHELL=on adds the shell layer on top: the rc files linked, the
-#     templates rendered; then Nothing to do again
-printf 'SITE_SHELL=on\n' > "$HOME/.config/spark/site.env"
-out=$(run --dry-run)
-printf '%s\n' "$out" | grep -q '^would render .*\.gitconfig$' && ok "SITE_SHELL=on: would render .gitconfig" || bad "would render"
-case $(uname -s) in Darwin) rc=.zshrc ;; *) rc=.bashrc ;; esac
-printf '%s\n' "$out" | grep -q "^would link .*/$rc\$" && ok "SITE_SHELL=on: would link $rc" || bad "would link $rc"
-PATH=/usr/bin:/bin:/usr/sbin:/sbin run >/dev/null     # a PATH without micro (Homebrew may have one)
-[ -L "$HOME/$rc" ] && ok "$rc is a symlink" || bad "$rc not linked"
-# no editor and no plugin: nothing under .config/micro without a micro on
-# PATH (spark ships no app; spark-micro is micro's own); with one, the
-# shell layer renders its colorscheme and seeds its settings.json
-[ ! -e "$HOME/.config/micro" ] && ok "shell on, no micro: nothing rendered under .config/micro" || bad "shell on rendered micro's look without micro: $(ls -R "$HOME/.config/micro")"
-mkdir -p "$T/bin"; printf '#!/bin/sh\nexit 0\n' > "$T/bin/micro"; chmod +x "$T/bin/micro"
-export PATH="$T/bin:$PATH"
-run >/dev/null
-[ ! -e "$HOME/.config/micro/plug" ] && [ ! -e "$HOME/.config/micro/bindings.json" ] \
-    && ok "shell on with micro: no plugin, no bindings (spark-micro is micro's own)" || bad "spark linked a plugin or bindings"
-[ -f "$HOME/.gitconfig" ] && [ ! -L "$HOME/.gitconfig" ] && ok ".gitconfig is a regular file" || bad ".gitconfig"
-grep -q "name = $(id -un)" "$HOME/.gitconfig" && ok "git name defaulted to the login" || bad "git name default"
-[ -f "$HOME/.config/starship.toml" ] && grep -q 'bold blue' "$HOME/.config/starship.toml" && ok "starship minimal with neutral colours" || bad "starship render"
-grep -q 'bg=default,fg=default' "$HOME/.tmux.conf" && ok "tmux neutral colours" || bad "tmux neutral"
-grep -q '@' "$HOME/.tmux.conf" && bad "unrendered placeholder in .tmux.conf" || ok "no placeholders left"
-[ -f "$HOME/.config/btop/btop.conf" ] && ok "btop.conf rendered" || bad "btop.conf"
-[ -f "$HOME/.config/micro/colorschemes/spark.micro" ] && [ ! -L "$HOME/.config/micro/colorschemes/spark.micro" ] \
-    && ok "micro colorscheme rendered" || bad "micro colorscheme"
-grep -q '"colorscheme": "spark"' "$HOME/.config/micro/settings.json" && ok "micro settings.json seeded" || bad "micro settings.json"
-out=$(run)
-[ "$(printf '%s\n' "$out" | tail -1)" = "Nothing to do" ] && ok "shell layer, second run: Nothing to do" || bad "not idempotent: $(printf '%s\n' "$out" | grep -v '^ok' | head -3)"
-# settings.json is seeded once, then micro's own: an edited file (micro
-# rewrites it on every option change) is never re-rendered, never backed up
-printf '{\n    "colorscheme": "spark",\n    "tabsize": 2\n}\n' > "$HOME/.config/micro/settings.json"
-run >/dev/null
-grep -q tabsize "$HOME/.config/micro/settings.json" && [ ! -e "$HOME/.config/micro/settings.json.bak" ] \
-    && ok "micro settings.json seeded once, then micro's own" || bad "settings.json was re-rendered or backed up"
 
 # 3. a regular file in the way is backed up, never overwritten; so is a
 #    symlink that points outside the repo (the link itself moves to .bak);
@@ -119,78 +83,13 @@ run >/dev/null
     && [ "$(readlink "$HOME/.config/spark/spark.env.example")" = "$REPO/home/.config/spark/spark.env.example" ] \
     && ok "a stale symlink into the repo is replaced, no .bak" || bad "stale repo symlink"
 
-# 4. a file spark rendered is re-rendered in place (its header says whose it
-#    is); a file someone else wrote in that spot is backed up first; and a
-#    stale symlink is replaced
-echo edited >> "$HOME/.gitconfig"
-run >/dev/null
-[ ! -f "$HOME/.gitconfig.bak" ] && ! grep -q edited "$HOME/.gitconfig" && ok "edited render re-rendered, no .bak" || bad "render re-render"
-printf '[user]\n\tname = theirs\n' > "$HOME/.gitconfig"
-run >/dev/null
-[ -f "$HOME/.gitconfig.bak" ] && grep -q theirs "$HOME/.gitconfig.bak" && ok "a foreign file in a render's place is backed up" || bad "foreign file back-up"
-rm "$HOME/.tmux.conf"; ln -s /nonexistent "$HOME/.tmux.conf"
-run >/dev/null
-[ -f "$HOME/.tmux.conf" ] && [ ! -L "$HOME/.tmux.conf" ] && ok "stale symlink replaced by a render" || bad "stale link"
-
-# 4b. spark shell off hands the whole look back, not only the rc files: a
-#     rendered config with a .bak is restored, one without is removed --
-#     never an empty husk -- and the palette goes with the layer that
-#     brought it (theme.env removed, console-colors left as the VT reset)
-printf '# pre-spark btop\n' > "$HOME/.config/btop/btop.conf.bak"
-printf 'THEME_BG=#282828\n' > "$HOME/.config/spark/theme.env"
-out=$(SPARK_NO_APPLY=1 SPARK_NO_REFRESH=1 python3 "$REPO/bin/spark" shell off 2>&1) || bad "spark shell off failed: $out"
-grep -q '^SITE_SHELL=off$' "$HOME/.config/spark/site.env" && ok "shell off wrote SITE_SHELL=off" || bad "SITE_SHELL not off"
-[ ! -e "$HOME/.tmux.conf" ] && [ ! -e "$HOME/.config/starship.toml" ] \
-    && [ ! -e "$HOME/.config/micro/colorschemes/spark.micro" ] \
-    && ok "shell off removed every rendered look file with no .bak (no husk)" \
-    || bad "a spark-rendered look file survived shell off"
-# micro's settings.json is micro's after the seed: kept, only the seeded colorscheme key dropped
-[ -f "$HOME/.config/micro/settings.json" ] && ! grep -q colorscheme "$HOME/.config/micro/settings.json" && grep -q tabsize "$HOME/.config/micro/settings.json" \
-    && ok "shell off kept micro's settings.json, minus the colorscheme key" || bad "settings.json after shell off: $(cat "$HOME/.config/micro/settings.json" 2>&1)"
-[ "$(cat "$HOME/.config/btop/btop.conf")" = "# pre-spark btop" ] && ok "shell off restored btop.conf from its .bak" || bad "btop.conf not restored"
-[ ! -f "$HOME/.config/spark/theme.env" ] && ok "shell off gave the palette back (theme.env removed)" || bad "theme.env survived shell off"
-printf '%s\n' "$out" | grep -q '^ok     restore' && ok "shell off names what it restored or removed" || bad "no restore rows: $out"
-rm -f "$HOME/.config/spark/theme.env" "$HOME/.config/btop/btop.conf" "$HOME/.config/btop/btop.conf.bak"
-
-# 5. every palette and both prompt styles render without a leftover
-#    placeholder (the shell layer on: that is where the palette lands).
-#    The list is a glob over themes/*.env, `none` first: a new palette is
-#    exercised here without being hand-listed anywhere.
-themes=none
-for f in "$REPO"/themes/*.env; do t=${f##*/}; themes="$themes ${t%.env}"; done
-for theme in $themes; do
-    for style in minimal full; do
-        printf 'SITE_SHELL=on\nSITE_THEME=%s\nSITE_PROMPT_STYLE=%s\n' "$theme" "$style" > "$HOME/.config/spark/site.env"
-        if out=$(run); then
-            grep -q '@[A-Z_0-9]*@' "$HOME/.config/starship.toml" "$HOME/.tmux.conf" "$HOME/.config/micro/colorschemes/spark.micro" \
-                && bad "$theme/$style placeholder" || ok "$theme / $style"
-        else
-            bad "$theme/$style: $out"
-        fi
-    done
-done
-# one named palette's colour reaching tmux, pinned by name so the glob
-# order cannot move it
-printf 'SITE_SHELL=on\nSITE_THEME=solarized-light\nSITE_PROMPT_STYLE=minimal\n' > "$HOME/.config/spark/site.env"
-run >/dev/null
-grep -q '#fdf6e3' "$HOME/.tmux.conf" && ok "a chosen palette (solarized-light) reached tmux" || bad "palette not rendered"
-# the acceptance shape: one palette, every surface -- with a theme chosen,
-# tmux and micro carry the same background (the console gets the same one
-# via ~/.config/spark/console-colors, written by spark theme / spark setup)
-printf 'SITE_SHELL=on\nSITE_THEME=gruvbox-dark\nSITE_PROMPT_STYLE=minimal\n' > "$HOME/.config/spark/site.env"
-run >/dev/null
-grep -q '#282828' "$HOME/.tmux.conf" && grep -q '"#ebdbb2,#282828"' "$HOME/.config/micro/colorschemes/spark.micro" \
-    && ok "one palette, both surfaces: gruvbox-dark's colours in tmux and micro" || bad "tmux and micro disagree on the palette"
-
-# 6. plain prompt renders no starship.toml; a bad theme name is refused
-rm -f "$HOME/.config/starship.toml"
-printf 'SITE_SHELL=on\nSITE_PROMPT=plain\n' > "$HOME/.config/spark/site.env"
-run >/dev/null
-[ ! -e "$HOME/.config/starship.toml" ] && ok "plain prompt: no starship.toml" || bad "starship rendered for plain"
+# 4. a bad theme name (bootstrap's theme row) and shell syntax in
+#    site.env (site_load, both scripts) are refused
 printf 'SITE_THEME=nope\n' > "$HOME/.config/spark/site.env"
-if run >/dev/null 2>&1; then bad "unknown theme accepted"; else ok "unknown theme refused"; fi
+if sh "$REPO/bootstrap.sh" --dry-run >/dev/null 2>&1; then bad "unknown theme accepted"; else ok "unknown theme refused"; fi
 printf 'SITE_THEME=none; rm -rf /\n' > "$HOME/.config/spark/site.env"
 if run >/dev/null 2>&1; then bad "shell syntax in site.env accepted"; else ok "shell syntax in site.env refused"; fi
+printf 'SITE_THEME=none\n' > "$HOME/.config/spark/site.env"
 
 # 7. bootstrap --dry-run with SITE_HEADLESS=yes announces the headless rows
 #    (contract 1: would/skip, a count line, never sudo -- a sudo on PATH that
@@ -208,7 +107,7 @@ printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "dry-run called sudo" || ok 
 printf '%s\n' "$out" | tail -1 | grep -qE '^([0-9]+ to do|Nothing to do)$' && ok "headless dry-run ends with a count line" || bad "no count line"
 # the rc row (the core hook): a throwaway rc file without the line is a
 # `would`; with the line appended it is ok; an unknown login shell is a todo
-case $(uname -s) in Darwin) SHELL=/bin/zsh ;; *) SHELL=/bin/bash ;; esac
+case $(uname -s) in Darwin) SHELL=/bin/zsh; rc=.zshrc ;; *) SHELL=/bin/bash; rc=.bashrc ;; esac
 export SHELL
 rm -f "$HOME/$rc"; : > "$HOME/$rc"
 out=$(PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (rc) failed"
@@ -221,19 +120,13 @@ out=$(PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootst
 printf '%s\n' "$out" | grep -qE "^ok +rc +~/$rc sources the hook\$" && ok "rc: with the line: ok rc sources the hook" || bad "rc: no ok row: $(printf '%s\n' "$out" | grep -E ' rc ')"
 out=$(SHELL=/usr/local/bin/fish PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (fish) failed"
 printf '%s\n' "$out" | grep -qE '^todo +rc +shell fish' && ok "rc: an unknown login shell is a todo naming it" || bad "rc: fish: $(printf '%s\n' "$out" | grep -E ' rc ')"
-# the shell layer off (SITE_SHELL unset): every shell row is a skip naming
-# the key (the console-font row is core now and skips for its own reason)
-case $(uname -s) in Darwin) srows="dir theme pinned terminfo" ;; *) srows="dir theme starship font terminfo" ;; esac
-for r in $srows; do
-    printf '%s\n' "$out" | grep -qE "^skip +$r +SITE_SHELL=off" && ok "SITE_SHELL unset: skip $r" || bad "SITE_SHELL unset: no skip row for $r: $(printf '%s\n' "$out" | grep -E " $r " | head -1)"
-done
-printf '%s\n' "$out" | grep -qE '^skip +console +(macOS:|SITE_FONT_FACE unset)' && ok "SITE_SHELL unset: the console row is core, its skip names its own reason" || bad "console row: $(printf '%s\n' "$out" | grep -E ' console ' | head -1)"
-printf '%s\n' "$out" | grep -qE '^skip +hostname +SITE_SET_HOSTNAME=no' && ok "SITE_SHELL unset: the hostname row is core (identity), its skip names its key" || bad "hostname row: $(printf '%s\n' "$out" | grep -E ' hostname ' | head -1)"
+printf '%s\n' "$out" | grep -qE '^skip +console +(macOS:|SITE_FONT_FACE unset)' && ok "the console row is core, its skip names its own reason" || bad "console row: $(printf '%s\n' "$out" | grep -E ' console ' | head -1)"
+printf '%s\n' "$out" | grep -qE '^skip +hostname +SITE_SET_HOSTNAME=no' && ok "the hostname row is core (identity), its skip names its key" || bad "hostname row: $(printf '%s\n' "$out" | grep -E ' hostname ' | head -1)"
 printf '%s\n' "$out" | grep -qE ' micro-aspell ' && bad "a micro-aspell row survives (spark ships no app)" || ok "no micro-aspell row: spark installs no editor"
-printf '%s\n' "$out" | grep -qE "^would +dir +mkdir .*/projects" && bad "SITE_SHELL unset: the workspace folder would be made" || ok "SITE_SHELL unset: no workspace folder for a new user"
-[ "$(uname -s)" = Darwin ] && { printf '%s\n' "$out" | grep -qE '^ok +packages +nothing required' && ok "SITE_SHELL unset: packages row is ok, nothing required" || bad "packages row with the shell off"; }
-[ -z "$(sh "$REPO/bootstrap.sh" --list-packages | grep -E '^(tmux|starship|bat|eza|fzf|btop)$')" ] && ok "SITE_SHELL unset: --list-packages has no shell package" || bad "--list-packages lists shell packages with the shell off"
-[ -z "$(SITE_SHELL=on sh "$REPO/bootstrap.sh" --list-packages | grep -E '^(micro|aspell|aspell-en|shellcheck)$')" ] && ok "SITE_SHELL=on: no editor, no contributor tool in --list-packages" || bad "--list-packages still lists micro/aspell/shellcheck"
+printf '%s\n' "$out" | grep -qE "^would +dir +mkdir .*/projects" && bad "the workspace folder would be made" || ok "no workspace folder for a new user"
+[ "$(uname -s)" = Darwin ] && { printf '%s\n' "$out" | grep -qE '^ok +packages +nothing required' && ok "macOS: packages row is ok, nothing required" || bad "macOS packages row"; }
+[ -z "$(sh "$REPO/bootstrap.sh" --list-packages | grep -E '^(tmux|starship|bat|eza|fzf|btop)$')" ] && ok "--list-packages has no shell tool (spark-shell installs those)" || bad "--list-packages lists a shell tool"
+[ -z "$(sh "$REPO/bootstrap.sh" --list-packages | grep -E '^(micro|aspell|aspell-en|shellcheck)$')" ] && ok "no editor, no contributor tool in --list-packages" || bad "--list-packages still lists micro/aspell/shellcheck"
 # the v1.10 migration row: links an older install.sh made into this repo's
 # home/.config/micro are handed back once (dry-run says would; apply is
 # proven by hand -- it needs a real bootstrap)
@@ -250,23 +143,15 @@ out=$(PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootst
 printf '%s\n' "$out" | grep -qE '^(skip|would) +sleep ' && ok "SITE_HEADLESS=no: sleep row is skip (or would undo)" || bad "no sleep row for SITE_HEADLESS=no"
 [ "$(uname -s)" = Darwin ] || { printf '%s\n' "$out" | grep -qE '^skip +linger ' && ok "SITE_HEADLESS=no: linger is skipped" || bad "linger row with SITE_HEADLESS=no"; }
 printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "dry-run called sudo" || ok "dry-run never called sudo (workstation)"
-# the shell layer on: the shell rows are announced (would or ok), still no sudo
-printf 'SITE_SHELL=on\nSITE_HEADLESS=no\nSITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
-out=$(PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (shell on) failed: $(printf '%s\n' "$out" | tail -3)"
-case $(uname -s) in
-    Darwin) printf '%s\n' "$out" | grep -qE '^skip +pinned +Homebrew' && ok "SITE_SHELL=on: pinned names Homebrew" || bad "SITE_SHELL=on: pinned row"
-            printf '%s\n' "$out" | grep -qE '^(ok|would|todo) +packages ' && ok "SITE_SHELL=on: the packages row reads the Brewfile" || bad "SITE_SHELL=on: packages row" ;;
-    *)      for r in starship font; do
-                printf '%s\n' "$out" | grep -qE "^(ok|would) +$r " && ok "SITE_SHELL=on: $r announced" || bad "SITE_SHELL=on: no $r row"
-            done ;;
-esac
-printf '%s\n' "$out" | grep -qE '^skip +[a-z-]+ +SITE_SHELL=off' && bad "SITE_SHELL=on still skips a shell row" || ok "SITE_SHELL=on: no shell row skipped"
+# the shell-moved migration: an rc file symlinked into this repository (an
+# older shell layer's) is announced for hand-back; the rc row names it
+case $(uname -s) in Darwin) rc=.zshrc ;; *) rc=.bashrc ;; esac
 ln -sfn "$REPO/$([ "$rc" = .zshrc ] && echo macos || echo linux)/home/$rc" "$HOME/$rc"
 out=$(PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (rc linked) failed"
-printf '%s\n' "$out" | grep -qE "^ok +rc +~/$rc is spark's own" && ok "rc: spark's own rc file: ok rc is spark's own" || bad "rc: linked: $(printf '%s\n' "$out" | grep -E ' rc ')"
-printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "dry-run called sudo (shell on)" || ok "dry-run never called sudo (shell on)"
-printf '%s\n' "$out" | tail -1 | grep -qE '^([0-9]+ to do|Nothing to do)$' && ok "shell-on dry-run ends with a count line" || bad "no count line (shell on)"
-sh "$REPO/bootstrap.sh" --list-packages | grep -qx tmux && ok "SITE_SHELL=on: --list-packages has tmux" || bad "--list-packages lacks tmux with the shell on"
+printf '%s\n' "$out" | grep -qE '^would +shell-moved +the shell layer moved to github.com/forgewright-ai/spark-shell' && ok "shell-moved: the migration row announces the hand-back" || bad "shell-moved row: $(printf '%s\n' "$out" | grep -E ' shell-moved ' | head -1)"
+printf '%s\n' "$out" | grep -qE "^ok +rc +~/$rc is a symlink into this repo" && ok "rc: a repo symlink is named (shell-moved hands it back)" || bad "rc: linked: $(printf '%s\n' "$out" | grep -E ' rc ')"
+printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "dry-run called sudo (rc linked)" || ok "dry-run never called sudo (rc linked)"
+rm -f "$HOME/$rc"
 
 # 8. bootstrap --list-models names both roles' picks (the choosing rule;
 #    lib/spark engine.chosen_rows is the twin, tests/smoke.py pins it the
@@ -358,7 +243,7 @@ esac
 #    hand-set SITE_HEADLESS=yes a todo -- never a systemctl mask, no sudo
 if [ "$(uname -s)" != Darwin ]; then
     printf 'Linux version 6.6.87.2-microsoft-standard-WSL2 (root@w) #1 SMP\n' > "$T/version-wsl"
-    printf 'SITE_SHELL=on\nSITE_FONT_FACE=Terminus\nSITE_FONT_SIZE=16x32\nSITE_QUIET_BOOT=yes\nSITE_HEADLESS=yes\nSITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
+    printf 'SITE_FONT_FACE=Terminus\nSITE_FONT_SIZE=16x32\nSITE_QUIET_BOOT=yes\nSITE_HEADLESS=yes\nSITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
     out=$(SPARK_PROC_VERSION="$T/version-wsl" PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (WSL 2) failed: $out"
     printf '%s\n' "$out" | grep -qE '^skip +console +WSL 2' && ok "WSL 2: the console row skips (the font is Windows Terminal's)" || bad "WSL 2 console row: $(printf '%s\n' "$out" | grep -E ' console ' | head -1)"
     printf '%s\n' "$out" | grep -qE '^skip +quiet-boot +WSL 2' && ok "WSL 2: the quiet-boot row skips (no GRUB)" || bad "WSL 2 quiet-boot row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
@@ -367,7 +252,7 @@ if [ "$(uname -s)" != Darwin ]; then
     # the console palette is root's: with a painted palette the vt-palette
     # row wants the boot unit (would, never sudo in a dry run); without one
     # it has nothing to do
-    printf 'SITE_SHELL=off\nSITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
+    printf 'SITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
     printf '40,204,152,215,69,177,104,168,146,251,184,250,131,211,142,235\n40,36,151,153,133,135,157,153,131,73,187,189,165,134,192,219\n40,29,26,33,136,166,116,132,116,54,38,47,152,155,164,178\n' > "$HOME/.config/spark/console-colors.rgb"
     out=$(PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (palette) failed"
     printf '%s\n' "$out" | grep -qE '^(would|todo) +vt-palette ' && ok "a painted palette: the vt-palette row would install the boot unit (or names kbd)" || bad "vt-palette row: $(printf '%s\n' "$out" | grep -E ' vt-palette ' | head -1)"
@@ -385,16 +270,16 @@ fi
 printf 'ID=arch\nPRETTY_NAME="Arch Linux"\n' > "$T/os-release-arch"
 printf 'ID=manjaro\nID_LIKE=arch\nPRETTY_NAME="Manjaro Linux"\n' > "$T/os-release-manjaro"
 lp() { env PATH="$T/os:$PATH" SPARK_SYSFS_DRM="$T/nodrm" SPARK_OS_RELEASE="$1" sh "$REPO/bootstrap.sh" --list-packages 2>&1; }
-printf 'SITE_SHELL=on\nSITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
+printf 'SITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
 out=$(lp "$T/os-release-arch")
-printf '%s\n' "$out" | grep -qx gcc-libs && printf '%s\n' "$out" | grep -qx fd && ! printf '%s\n' "$out" | grep -qxE 'fd-find|libgomp1' \
-    && ok "Arch: --list-packages speaks pacman's names (gcc-libs, fd)" || bad "Arch --list-packages: $(printf '%s' "$out" | tr '\n' ' ')"
+printf '%s\n' "$out" | grep -qx gcc-libs && printf '%s\n' "$out" | grep -qx kbd && ! printf '%s\n' "$out" | grep -qxE 'fd-find|libgomp1|tmux' \
+    && ok "Arch: --list-packages speaks pacman's names (gcc-libs, kbd)" || bad "Arch --list-packages: $(printf '%s' "$out" | tr '\n' ' ')"
 [ "$(lp "$T/os-release-manjaro")" = "$out" ] && ok "Manjaro (ID_LIKE=arch): the same list" || bad "Manjaro list differs"
 lp "$T/os-release-debian" | grep -qx libgomp1 && ok "Ubuntu (ID_LIKE=debian): libgomp1 still" || bad "Ubuntu list lost libgomp1"
 if [ "$(uname -s)" != Darwin ]; then
     mkdir -p "$T/arch"
     printf '#!/bin/sh\ncase $1 in -Qq) shift; printf "%%s\\n" "$@" ;; -Sp) exit 0 ;; *) exit 1 ;; esac\n' > "$T/arch/pacman"; chmod +x "$T/arch/pacman"
-    printf 'SITE_SHELL=on\nSITE_FONT_FACE=Terminus\nSITE_FONT_SIZE=16x32\nSITE_QUIET_BOOT=yes\nSITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
+    printf 'SITE_FONT_FACE=Terminus\nSITE_FONT_SIZE=16x32\nSITE_QUIET_BOOT=yes\nSITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
     out=$(SPARK_OS_RELEASE="$T/os-release-arch" PATH="$T/arch:$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Arch) failed: $out"
     printf '%s\n' "$out" | grep -qE '^ok +packages ' && ok "Arch: the packages row answers through pacman (everything installed)" || bad "Arch packages row: $(printf '%s\n' "$out" | grep -E ' packages ' | head -1)"
     printf '%s\n' "$out" | grep -qE '^skip +console +Arch' && ok "Arch: the console row skips (no console-setup)" || bad "Arch console row: $(printf '%s\n' "$out" | grep -E ' console ' | head -1)"

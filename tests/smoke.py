@@ -1382,25 +1382,21 @@ def main():
         os.remove(user_models_file)
         del STATE["head_body"]
 
-        # the shell layer: spark shell (state, on, off), the guards, the help that follows it
+        # the shell layer left the repository: the stub points, the help holds
         off = {"SPARK_NO_APPLY": "1"}
         rc, out, _ = spark("shell", extra=off)
-        t.ok(rc == 0 and "SITE_SHELL=off" in out, "spark shell: the state, off by default", out)
-        rc, out, _ = spark("shell", "-h")
-        t.ok(rc == 0 and out.splitlines()[0] == "spark shell -- spark's own shell: tmux, starship, fzf, eza, bat, btop",
-             "spark shell -h signs (contract 8)", out)
+        t.ok(rc == 2 and out.strip() == "spark shell -- moved: the shell layer lives at github.com/forgewright-ai/spark-shell",
+             "spark shell: one signed pointer line, exit 2 (one release)", out)
+        rc, out2, _ = spark("shell", "on", extra=off)
+        t.ok(rc == 2 and out2 == out, "spark shell on: the same pointer", out2)
         rc, out, _ = spark("help", extra=off)
-        gated = [l for l in out.splitlines() if l.startswith((" spark shell", " spark bar"))]
+        gated = [l for l in out.splitlines() if l.startswith(" spark shell")]
         t.ok(rc == 0 and "spark font" in out and "spark theme" in out and not gated and "SHELL.md" in out,
-             "spark help: core only (theme, font); no line for the gated verbs, SHELL.md instead", gated or out)
-        rc, out2, _ = spark("help")
-        t.ok(rc == 0 and out2 == out, "spark help reads the same whatever the layer does", out2[:200])
-        rc, out, _ = spark("help", extra=dict(off, SITE_SHELL="on"))
-        t.ok(rc == 0 and "spark bar" in out and "the interface" in out,
-             "spark help with SITE_SHELL=on lists the shell block", out)
-        rc, out, _ = spark("help", extra=off)
+             "spark help: core only (theme, font); no spark shell line, SHELL.md points instead", gated or out)
+        rc, out2, _ = spark("help", extra=dict(off, SITE_SHELL="on"))
+        t.ok(rc == 0 and out2 == out, "spark help reads the same whatever a stale key says", out2[:200])
         t.ok("Esc s" in out and "empty line" in out,
-             "the failure moment is in help with the shell layer off", out)
+             "the failure moment is in help", out)
         wide = [l for l in out.splitlines() if len(l) > 80]
         t.ok(not wide, "every help line fits 80 columns", "\n".join(wide))
 
@@ -1413,11 +1409,11 @@ def main():
         t.ok(rc == 0 and out.startswith("spark check ") and "memory" in out,
              "spark check piped with PAGER=/bin/false: the report prints", out)
         rc, out, _ = spark("bar", "line", extra=off)
-        t.ok(rc == 0 and out.strip(), "spark bar line answers with the layer off (the line is core)", out)
+        t.ok(rc == 0 and out.strip(), "spark bar line answers (the line is core)", out)
         rc, out, _ = spark("bar", "on", extra=off)
-        t.ok(rc == 2 and out.strip() == "spark bar -- the shell layer is off (spark shell on)",
-             "spark bar on refuses while the layer is off (the tmux wiring), signing", out)
-        # spark font left the shell gate: it shows, lists and sets either way
+        t.ok(rc == 2 and out.strip() == "spark bar on -- the tmux status line lives at github.com/forgewright-ai/spark-shell (spark-shell bar)",
+             "spark bar on: the pointer (the tmux wiring moved), exit 2", out)
+        # spark font: it shows, lists and sets, core
         rc, out, _ = spark("font", extra=off)
         t.ok(rc == 0 and out.startswith("spark font -- "), "spark font shows with the layer off (core)", out)
         rc, out, _ = spark("font", "-h", extra=off)
@@ -1528,45 +1524,18 @@ def main():
              "spark theme none removes theme.env and leaves the VGA sixteen in both console files", out)
         rc, out, _ = spark("theme", "nosuch", extra=off)
         t.ok(rc == 2 and out.startswith("spark theme -- "), "spark theme nosuch: usage, exit 2", out)
-        rc, out, _ = spark("shell", "on", extra=off)
-        site_env = open(home + "/.config/spark/site.env").read()
-        t.ok(rc == 0 and "SITE_SHELL=on\n" in site_env and "open a new shell" in out,
-             "spark shell on writes SITE_SHELL=on and says to open a new shell", out)
-        rc, out, _ = spark("shell", extra=off)
-        t.ok(rc == 0 and "SITE_SHELL=on" in out and "rc files:" in out, "spark shell: the state, on", out)
-        # off hands the rc files AND the rendered look back: spark's links
-        # go, a .bak comes back, a render with no .bak is removed -- never
-        # an empty husk; the core palette files (theme.env) stay
+        # the shell-moved migration: an rc symlink into this repo is handed
+        # back by bootstrap's row (the sh side is proven in install_test;
+        # here: the stub never mutates, whatever the argument)
         rcname = ".zshrc" if sys.platform == "darwin" else ".bashrc"
         os.symlink(os.path.join(REPO, "macos" if sys.platform == "darwin" else "linux", "home", rcname), home + "/" + rcname)
         with open(home + "/" + rcname + ".bak", "w") as f:
             f.write("# mine\n")
-        with open(home + "/.tmux.conf", "w") as f:               # a spark render, no .bak
-            f.write("# rendered by spark\n")
-        os.makedirs(home + "/.config/btop", exist_ok=True)
-        with open(home + "/.config/btop/btop.conf", "w") as f:   # a render shadowing a .bak
-            f.write("# rendered by spark\n")
-        with open(home + "/.config/btop/btop.conf.bak", "w") as f:
-            f.write("# pre-spark btop\n")
-        with open(home + "/.config/spark/theme.env", "w") as f:  # core: spark theme owns it
-            f.write("THEME_BG=#282828\n")
         rc, out, _ = spark("shell", "off", extra=off)
-        site_env = open(home + "/.config/spark/site.env").read()
-        t.ok(rc == 0 and "SITE_SHELL=off\n" in site_env and "packages stay installed" in out,
-             "spark shell off writes SITE_SHELL=off and says the packages stay", out)
-        t.ok("restore" in out and not os.path.islink(home + "/" + rcname) and open(home + "/" + rcname).read() == "# mine\n",
-             "spark shell off moves the .bak rc file back over spark's link", out)
-        t.ok(not os.path.exists(home + "/.tmux.conf") and "tmux.conf" in out,
-             "spark shell off removes a rendered .tmux.conf with no .bak (no husk)", out)
-        t.ok(open(home + "/.config/btop/btop.conf").read() == "# pre-spark btop\n",
-             "spark shell off restores btop.conf from its .bak", out)
-        t.ok(not os.path.exists(home + "/.config/spark/theme.env") and "console palette is back" in out,
-             "spark shell off gives the console palette back (the palette came with the layer)", out)
-        t.ok("open a new shell" in out,
-             "spark shell off says to open a new shell, as spark shell on does", out)
-        os.remove(home + "/.config/btop/btop.conf")
-        rc, out, _ = spark("shell", "sideways", extra=off)
-        t.ok(rc == 2 and out.startswith("spark shell -- "), "spark shell sideways is refused with the usage", out)
+        t.ok(rc == 2 and os.path.islink(home + "/" + rcname),
+             "spark shell off: the stub points and mutates nothing (bootstrap's shell-moved row hands back)", out)
+        os.remove(home + "/" + rcname)
+        os.rename(home + "/" + rcname + ".bak", home + "/" + rcname)
 
         # the client shape: spark client (state, URL, off); the check's client rows
         rc, out, _ = spark("client", extra=off)
@@ -1627,13 +1596,13 @@ def main():
         site_env = open(home + "/.config/spark/site.env").read()
         t.ok(rc == 0 and err == "", "spark setup --yes --no-serve --model none exits 0", out + err)
         t.ok(re.search(r"^SITE_NAME=\S", site_env, re.M) and re.search(r"^SITE_USER=\S", site_env, re.M)
-             and "SITE_AI_MODEL=none\n" in site_env and "SITE_SHELL=off\n" in site_env,
-             "setup wrote SITE_NAME, SITE_USER, SITE_AI_MODEL=none, SITE_SHELL=off", site_env)
+             and "SITE_AI_MODEL=none\n" in site_env,
+             "setup wrote SITE_NAME, SITE_USER, SITE_AI_MODEL=none", site_env)
         t.ok("SITE_THEME=gruvbox-dark\n" in site_env and "theme [" not in out,
              "setup never asks the palette: gruvbox-dark is written unasked", site_env + out)
         t.ok(not os.path.exists(home + "/.config/spark/theme.env")
              and not os.path.exists(home + "/.config/spark/console-colors"),
-             "setup with the shell layer off applies no palette: the machine looks untouched", out)
+             "setup applies no palette: the machine looks untouched (spark theme paints)", out)
         rc, out, _ = spark("setup", "--yes", "--no-serve", "--model", "none", "--theme", "nosuch", extra=off)
         t.ok(rc == 2 and "no palette named nosuch" in out and "none" in out,
              "setup --theme nosuch exits 2 naming the palettes", out)
@@ -1689,25 +1658,6 @@ def main():
         t.ok(sh.stdout == "#101010", "lib/env.sh theme_load reads your palette too", sh.stdout + sh.stderr)
         rc, out, _ = spark("mine")
         t.ok(rc == 2 and "is a palette -- spark theme mine" in out, "a bare palette name of yours is a slip, not a question", out)
-        # micro's colorscheme key is the theme's: set back to spark, the rest of the file kept
-        from spark import theme as _theme
-        msj = home + "/.config/micro/settings.json"
-        os.makedirs(os.path.dirname(msj), exist_ok=True)
-        with open(msj, "w") as f:
-            f.write('{"colorscheme": "gruvbox", "softwrap": true}\n')
-        was = _theme.micro_colorscheme(msj)
-        with open(msj) as f:
-            after = json.load(f)
-        t.ok(was == "gruvbox" and after == {"colorscheme": "spark", "softwrap": True} and _theme.micro_colorscheme(msj) is None,
-             "theme: micro's colorscheme is set back to spark, the other settings kept, and left alone once it says so", str(after))
-        # and the inverse, on spark shell off: the key goes, the file stays micro's
-        from spark import shell as _shell
-        dropped = _shell.micro_settings_reset(msj)
-        with open(msj) as f:
-            after = json.load(f)
-        t.ok(dropped and after == {"softwrap": True} and not _shell.micro_settings_reset(msj),
-             "shell off: micro's colorscheme key is dropped, the other settings kept, the file never removed", str(after))
-
         # spark uninstall: signed, shows and never mutates without the word;
         # SPARK_NO_APPLY = the plan only (the real run is tests/uninstall_test.sh)
         rc, out, _ = spark("uninstall", "-h")

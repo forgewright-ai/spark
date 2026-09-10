@@ -1,7 +1,7 @@
 #!/bin/sh
 # spark tests/uninstall_test.sh -- `spark uninstall` against a throwaway
-# HOME holding a real clone at the default place (~/.spark), the shell
-# layer's links and renders with .bak originals, state, config, data. Proves:
+# HOME holding a real clone at the default place (~/.spark), an old shell
+# layer's rc links with .bak originals, state, config, data. Proves:
 # --dry-run changes nothing; a non-terminal without --yes refuses; --yes takes
 # everything spark made and keeps what is yours; --purge keeps nothing; a
 # developer checkout is never removed. sudo is a stub that shouts and
@@ -35,10 +35,19 @@ build_home() {
     # uncommitted verb must be testable), committed there so it is clean
     git clone -q "$REPO" "$HOME/.spark"
     (cd "$REPO" && git ls-files -z --cached --others --exclude-standard | tar --null -cf - -T -) | (cd "$HOME/.spark" && tar xf -)
+    # files deleted in the working tree (staged or not) leave the clone too
+    git -C "$REPO" diff --name-only --diff-filter=D HEAD | while IFS= read -r f; do rm -f "$HOME/.spark/$f"; done
     git -C "$HOME/.spark" add -A >/dev/null 2>&1; git -C "$HOME/.spark" commit -q -m "the working tree" >/dev/null 2>&1 || true
-    printf 'SITE_SHELL=on\nSITE_THEME=gruvbox-dark\nSITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
-    # originals the layer will back up, and a marker line in the other shell's rc
-    printf '# mine\n' > "$HOME/$rc"; printf '# my tmux\n' > "$HOME/.tmux.conf"; printf '[user]\n\tname = me\n' > "$HOME/.gitconfig"
+    printf 'SITE_THEME=gruvbox-dark\nSITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
+    # what an old shell layer left: spark's rc symlink (dangling after the
+    # cut) over a .bak original, a marked .gitconfig render, the user's own
+    # tmux.conf, micro's settings -- and a marker line in the other rc
+    printf '# mine\n' > "$HOME/$rc.bak"
+    case $(uname -s) in Darwin) osd=macos ;; *) osd=linux ;; esac
+    ln -s "$HOME/.spark/$osd/home/$rc" "$HOME/$rc"
+    printf '# my tmux\n' > "$HOME/.tmux.conf"
+    printf '[user]\n\tname = me\n' > "$HOME/.gitconfig.bak"
+    printf '# rendered by spark install.sh from templates/.gitconfig\n[user]\n\tname = render\n' > "$HOME/.gitconfig"
     printf 'export MINE=1\n\n[ -r ~/.config/spark/hook.bash ] && . ~/.config/spark/hook.bash   # spark: the AI at the prompt\n' > "$HOME/$other"
     printf '{"colorscheme": "spark", "tabsize": 2}\n' > "$HOME/.config/micro/settings.json"
     sh "$HOME/.spark/install.sh" >/dev/null
@@ -60,7 +69,7 @@ spark() { python3 "$HOME/.spark/bin/spark" "$@"; }
 
 # 1. the plan changes nothing; only would/skip/todo rows; sudo is never called
 build_home one
-[ -L "$HOME/$rc" ] && [ -f "$HOME/$rc.bak" ] && ok "the layer is on: $rc is spark's link, the original in .bak" || bad "setup: $rc not linked"
+[ -L "$HOME/$rc" ] && [ -f "$HOME/$rc.bak" ] && ok "an old layer's $rc link is in place, the original in .bak" || bad "setup: $rc not linked"
 before=$(snapshot)
 out=$(spark uninstall --dry-run 2>&1) || bad "--dry-run failed: $out"
 [ "$(snapshot)" = "$before" ] && ok "--dry-run changed nothing" || bad "--dry-run changed the HOME: $(printf '%s\n' "$before" > "$T/b"; snapshot | diff "$T/b" - | tr '\n' ' ')"
@@ -77,16 +86,15 @@ rc2=0; out=$(spark uninstall </dev/null 2>&1) || rc2=$?
 # 3. --yes --keep-packages: all spark made goes, yours stays, root steps are todo
 out=$(spark uninstall --yes --keep-packages 2>&1) || bad "uninstall --yes failed: $out"
 [ "$(cat "$HOME/$rc")" = "# mine" ] && [ ! -e "$HOME/$rc.bak" ] && ok "$rc back from its .bak" || bad "$rc: $(ls -la "$HOME/$rc"* 2>&1)"
-[ "$(cat "$HOME/.tmux.conf")" = "# my tmux" ] && ok ".tmux.conf back from its .bak" || bad ".tmux.conf: $(cat "$HOME/.tmux.conf" 2>&1)"
+[ "$(cat "$HOME/.tmux.conf")" = "# my tmux" ] && ok ".tmux.conf left alone (the look is spark-shell's)" || bad ".tmux.conf: $(cat "$HOME/.tmux.conf" 2>&1)"
 grep -q 'name = me' "$HOME/.gitconfig" && ok ".gitconfig back from its .bak (spark's render gone)" || bad ".gitconfig: $(cat "$HOME/.gitconfig" 2>&1)"
 grep -q 'config/spark/hook' "$HOME/$other" && bad "the marker line survived in $other" || ok "the spark line is gone from $other"
 grep -q 'MINE=1' "$HOME/$other" && ok "$other kept its own lines" || bad "$other lost its content"
-[ ! -e "$HOME/.config/starship.toml" ] && [ ! -e "$HOME/.config/micro/colorschemes/spark.micro" ] && ok "the rendered look is gone" || bad "a render survived"
-grep -q tabsize "$HOME/.config/micro/settings.json" && ! grep -q colorscheme "$HOME/.config/micro/settings.json" && ok "micro's settings.json kept, minus the colorscheme key" || bad "settings.json: $(cat "$HOME/.config/micro/settings.json")"
+grep -q tabsize "$HOME/.config/micro/settings.json" && grep -q colorscheme "$HOME/.config/micro/settings.json" && ok "micro's settings.json untouched (spark-shell's business)" || bad "settings.json: $(cat "$HOME/.config/micro/settings.json")"
 [ ! -e "$HOME/.local/bin/spark" ] && [ ! -e "$HOME/.local/bin/explain" ] && ok "~/.local/bin/spark and explain are gone" || bad "bin links survived"
 [ ! -e "$HOME/.local/share/spark" ] && ok "the data dir (engine, models, .part) is gone" || bad "data dir survived: $(ls -R "$HOME/.local/share/spark")"
-[ ! -e "$HOME/.terminfo/74/tmux-256color" ] && ok "the terminfo entry is gone" || bad "terminfo survived"
-case $(uname -s) in Darwin) ;; *) [ ! -e "$HOME/.local/share/fonts/JetBrainsMonoNerdFont" ] && ok "the Nerd Font dir is gone (Linux)" || bad "the font dir survived" ;; esac
+[ -e "$HOME/.terminfo/74/tmux-256color" ] && ok "the terminfo entry stays (spark-shell's)" || bad "terminfo removed"
+[ -e "$HOME/.local/share/fonts/JetBrainsMonoNerdFont" ] && ok "the Nerd Font dir stays (spark-shell's)" || bad "the font dir removed"
 [ ! -e "$HOME/.spark" ] && ok "the default clone is gone" || bad "~/.spark survived"
 state=$(cd "$HOME/.local/state/spark" && find . | sort | tr '\n' ' ')
 [ "$state" = ". ./account ./users ./users/ana ./users/ana/token.hash " ] && ok "state keeps only the sealed users and the account" || bad "state left: $state"

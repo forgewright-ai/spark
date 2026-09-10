@@ -116,34 +116,22 @@ class Ctx:
         return "~" + path[len(self.home):] if path.startswith(self.home + "/") else path
 
 
-# The four value areas cut across the categories: the AI infrastructure
-# rows (engine, models, serving, speed), the core rows (the contracts,
-# the FORGE, identity, the machine's promises), and the shell layer's
-# rows (SHELL_ROWS below -- na while the layer is off). Apps have no row
-# by design: an app lives in its own repo, and spark ships no app check
-# row. A row's home area is where its code lives (engine/model/shell/
-# the rest), not a second registry here.
+# Two value areas cut across the categories: the AI infrastructure rows
+# (engine, models, serving, speed) and the core rows (the contracts, the
+# FORGE, identity, the machine's promises). The shell layer and the apps
+# have no row by design: each lives in its own repository, with its own
+# doctor where it needs one.
 # ------------------------------------------------------------ SOFTWARE rows
-@row("SOFTWARE")
+@row("SOFTWARE", fixture=not IS_MAC, reason="the mac core installs no package; the Linux gates prove the row")
 def row_packages(ctx):
+    if IS_MAC:
+        return ok("nothing required")
     rc, out = ctx.sh(["sh", os.path.join(ctx.repo, "bootstrap.sh"), "--list-packages"], 30)
     if rc != 0:
         return fail("bootstrap.sh --list-packages failed", "sh %s --list-packages" % ctx.short(os.path.join(ctx.repo, "bootstrap.sh")))
     pkgs = out.split()
     if not pkgs:
-        return ok("nothing required (SITE_SHELL=off)")
-    if IS_MAC:
-        brewfile = os.path.join(ctx.repo, "Brewfile")
-
-        def check():
-            rc, _ = run(["brew", "bundle", "check", "--file", brewfile, "--no-upgrade"], timeout=120)
-            return rc
-        rc = ctx.cached("brew-bundle", 300, check)
-        if rc == -1:
-            return fail("brew not found", "install Homebrew, then ./bootstrap.sh")
-        if rc != 0:
-            return fail("Brewfile has unmet entries", "brew bundle --file %s" % ctx.short(brewfile))
-        return ok("Brewfile satisfied (%d entries)" % len(pkgs))
+        return ok("nothing required")
     have = packages.installed(pkgs)
     if have is None:
         return fail("no package manager spark knows here (%s)" % (packages.manager() or "distro/*.env know debian and arch"), "./bootstrap.sh")
@@ -227,28 +215,6 @@ def row_engine(ctx):
     return ok(" ".join(x for x in (name, flavour, "(%s)" % where if where else "") if x))
 
 
-@row("SOFTWARE", fixture=not IS_MAC, reason="Homebrew's starship is on the real PATH; the packages row proves the Brewfile")
-def row_pinned(ctx):
-    """The shell layer's pinned piece: starship (llama-server is the engine
-    row's). Linux fetches it by version and sha256 into ~/.local/bin --
-    that file, or a distro's in the system dirs; on macOS Homebrew provides
-    it, so bootstrap skips the pin and the row reads what Homebrew has."""
-    if IS_MAC:
-        return ok("starship (Homebrew)") if which("starship") else fail("missing: starship", "brew bundle --file Brewfile; ./bootstrap.sh")
-    pinned = os.path.join(ctx.home, ".local", "bin", "starship")
-    if os.access(pinned, os.X_OK):
-        return ok("starship")
-    if shutil.which("starship", path="/usr/bin:/usr/local/bin:/bin"):
-        return ok("starship (the distro's)")
-    return fail("missing: starship", "./bootstrap.sh")
-
-
-def _font_dirs(home):
-    if IS_MAC:
-        return [os.path.join(home, "Library", "Fonts"), "/Library/Fonts"]
-    return [os.path.join(home, ".local", "share", "fonts"), "/usr/share/fonts", "/usr/local/share/fonts"]
-
-
 def _console_font_row(ctx):
     """The Linux console-setup half of the font row: ok/fail against
     SITE_FONT_FACE, or None when nothing is chosen there."""
@@ -267,12 +233,12 @@ def _console_font_row(ctx):
     return ok("console %s" % want)
 
 
-@row("SOFTWARE")
+@row("SOFTWARE", fixture=not IS_MAC, reason="the mac good state is the profile note (na); Linux proves the console half")
 def row_font(ctx):
-    """Core now, like the verb: the console font choice (SITE_FONT_FACE,
-    Linux) is judged with the shell layer off too; the Nerd Font is still
-    the layer's, so it is only demanded when the layer is on. WSL 2 has no
-    console: the font is Windows Terminal's, the row says so and stops."""
+    """The console font choice (SITE_FONT_FACE, Linux) and the macOS
+    Terminal face -- the machine's own; an emulator font (a Nerd Font)
+    is spark-shell's business. WSL 2 has no console: the font is Windows
+    Terminal's, the row says so and stops."""
     from . import site
     why = site.no_console_font()
     if why and is_wsl():
@@ -284,31 +250,13 @@ def row_font(ctx):
         if site.mac_font_installed(ctx.cfg.font_face) is False:
             return warn("SITE_FONT_FACE=%s is not installed here: Terminal.app falls back to its own font" % ctx.cfg.font_face,
                         "spark font list; spark font FACE %s" % ctx.cfg.font_size)
-    if not ctx.cfg.shell:
-        if console:
-            return console
-        if why:
-            return na(why)
-        if IS_MAC:
-            return na("Terminal.app profile: %s %s (spark font FACE SIZE sets it)" % (ctx.cfg.font_face, ctx.cfg.font_size))
-        return na("console not managed (spark font FACE SIZE; spark font list)")
-    where = ""
-    for d in _font_dirs(ctx.home):
-        for root, _dirs, files in os.walk(d):
-            if any("JetBrainsMono" in f and "Nerd" in f for f in files):
-                where = root
-                break
-        if where:
-            break
-    if not where:
-        return fail("JetBrainsMono Nerd Font not installed", "./bootstrap.sh; then pick it in your terminal's settings")
     if console:
-        if console.status not in (OK, NA):
-            return console
-        return ok("Nerd Font in %s; %s" % (ctx.short(where), console.value))
+        return console
     if why:
-        return ok("Nerd Font in %s; %s" % (ctx.short(where), why))
-    return ok("JetBrainsMono Nerd Font in %s" % ctx.short(where))
+        return na(why)
+    if IS_MAC:
+        return na("Terminal.app profile: %s %s (spark font FACE SIZE sets it)" % (ctx.cfg.font_face, ctx.cfg.font_size))
+    return na("console not managed (spark font FACE SIZE; spark font list)")
 
 
 def _env_lines(path):
@@ -366,9 +314,7 @@ def row_theme(ctx):
         return fail("SITE_THEME=%s: no %s.env in themes/ or ~/.config/spark/themes/" % (name, name), "spark theme list")
     have = _env_lines(os.path.join(CONFIG_DIR, "theme.env"))
     if have is None:
-        if not ctx.cfg.shell:
-            return na("%s chosen, not painted (spark shell on, or spark theme %s)" % (name, name))
-        return fail("%s chosen but theme.env was never written" % name, "spark theme %s" % name)
+        return na("%s chosen, not painted (spark theme %s)" % (name, name))
     stale = [k for k in THEME_KEYS if have.get(k) != want.get(k)]
     if stale:
         return fail("%s -- theme.env is stale: %s differ%s" % (name, " ".join(stale[:3]), "s" if len(stale) == 1 else ""),
@@ -387,16 +333,6 @@ def row_theme(ctx):
         if live and mine and live != mine:
             return warn("%s -- theme.env current, but the console's boot palette is another" % name,
                         "./bootstrap.sh   (the vt-palette row: setvtrgb at boot, sudo)")
-    if ctx.cfg.shell and shutil.which("micro"):
-        # a micro the user has shows the palette only while its own
-        # settings say colorscheme spark
-        try:
-            with open(os.path.join(ctx.home, ".config", "micro", "settings.json"), encoding="utf-8") as f:
-                scheme = json.load(f).get("colorscheme", "spark")
-        except (OSError, ValueError, AttributeError):
-            scheme = "spark"
-        if scheme != "spark":
-            return warn("%s -- theme.env current, but micro uses colorscheme %s" % (name, scheme), "spark theme %s" % name)
     return ok("%s -- theme.env current" % name)
 
 
@@ -448,19 +384,6 @@ def row_hooks(ctx):
     if rc == 0 and (got == ".githooks" or os.path.abspath(os.path.join(ctx.repo, got)) == want):
         return ok("commits gated by .githooks")
     return fail("core.hooksPath is not .githooks", "./bootstrap.sh   (or: git -C %s config core.hooksPath .githooks)" % ctx.short(ctx.repo))
-
-
-@row("SOFTWARE")
-def row_terminfo(ctx):
-    rc, out = ctx.sh(["infocmp", "-1x", "tmux-256color"], 10)
-    if rc == -1:
-        return warn("infocmp not found", "./bootstrap.sh")
-    if rc != 0:
-        return (fail if IS_MAC else warn)("no tmux-256color entry", "./bootstrap.sh")
-    if "kUP=" not in out:
-        return (fail if IS_MAC else warn)("tmux-256color lacks modified arrow keys (Shift+arrow types junk in micro)",
-                                          "./bootstrap.sh   (compiles a complete entry into ~/.terminfo)")
-    return ok("tmux-256color knows modified arrow keys")
 
 
 def _systemd_user(ctx, unit):
@@ -665,7 +588,7 @@ def row_prompt(ctx):
 @row("CAPABILITY")
 def row_failure(ctx):
     """The failure moment: a nonzero exit offers explain at the prompt.
-    Core -- the widgets carry it with the shell layer off too. A live
+    Core -- the widgets carry it everywhere. A live
     shell says so through the marker's fourth field (contract 6)."""
     from . import OFF_FLAG, WIDGETS_DIR
     d = os.path.join(ctx.home, ".config", "spark")
@@ -728,26 +651,6 @@ def row_completion(ctx):
     if missing:
         return warn("missing: %s" % ", ".join(missing), "sh install.sh")
     return ok("bash and zsh: the verbs, their words, theme and model names")
-
-
-@row("CAPABILITY")
-def row_shell(ctx):
-    """The shell layer: off (the default) is the prompt widget only; on
-    means the rc files are spark's own symlinks and starship and tmux are
-    on PATH (spark shell on installs them, both OSes)."""
-    from . import shell, site
-    if not ctx.cfg.shell:
-        return na("off -- spark shell on: " + shell.SHELL_TOOLS)
-    problems = []
-    for name in site.RC_FILES:
-        if not site._spark_link(os.path.join(ctx.home, name)):
-            problems.append("~/%s is not spark's link" % name)
-    for tool in ("starship", "tmux"):
-        if not which(tool):
-            problems.append("no " + tool)
-    if problems:
-        return warn("on but: " + ", ".join(problems), "spark shell on")
-    return ok("on: rc files are spark's; starship, tmux present")
 
 
 @row("CAPABILITY")
@@ -881,25 +784,6 @@ def row_peer(ctx):
     if not parts:
         return na("no peer configured (SITE_PEER_AI_URL / SITE_PEER_SSH)")
     return Row(worst, SEP.join(parts), "off the LAN, or the peer is down" if worst == WARN else "")
-
-
-@row("CAPABILITY")
-def row_bar(ctx):
-    from . import BAR_CACHE, bar
-    rc, _ = ctx.sh(["tmux", "list-sessions"], 5)
-    if rc != 0:
-        return na("tmux not running")
-    rc, out = ctx.sh(["tmux", "show", "-gv", "status"], 5)
-    if rc == 0 and out.strip() == "off":
-        return na("hidden on purpose (spark bar on)")
-    try:
-        with open(BAR_CACHE, encoding="utf-8") as f:
-            age = time.time() - json.load(f)["t"]
-    except (OSError, ValueError, KeyError):
-        return warn("the status line has never been drawn", "tmux source-file ~/.tmux.conf")
-    if age > 6 * bar.INTERVAL:
-        return warn("stale: last tick %ds ago" % age, "tmux source-file ~/.tmux.conf; spark bar line")
-    return ok("ticking (last tick %ds ago)" % age)
 
 
 @row("CAPABILITY", fixture=False, reason="looks for a player on this machine's PATH")
@@ -1278,51 +1162,6 @@ def row_users(ctx):
     return ok("%d user%s, sealed, keys wrapped; %s" % (len(names), "" if len(names) == 1 else "s", who))
 
 
-def _repos(ws):
-    out = []
-    try:
-        for a in sorted(os.listdir(ws)):
-            p = os.path.join(ws, a)
-            if os.path.isdir(os.path.join(p, ".git")):
-                out.append(p)
-            elif os.path.isdir(p):
-                for b in sorted(os.listdir(p)):
-                    q = os.path.join(p, b)
-                    if os.path.isdir(os.path.join(q, ".git")):
-                        out.append(q)
-    except OSError:
-        pass
-    return out
-
-
-@row("NONFUNCTIONAL")
-def row_backup(ctx):
-    repos = _repos(ctx.cfg.workspace)
-    if not repos:
-        return na("no repositories under %s" % ctx.short(ctx.cfg.workspace))
-    unpushed, noremote, dirty = [], [], []
-    for r in repos:
-        name = os.path.basename(r)
-        rc, out = ctx.sh(["git", "-C", r, "status", "--porcelain"], 20)
-        if rc == 0 and out.strip():
-            dirty.append(name)
-        rc, out = ctx.sh(["git", "-C", r, "rev-list", "--count", "@{upstream}..HEAD"], 20)
-        if rc != 0:
-            noremote.append(name)
-        elif int(out.strip() or 0):
-            unpushed.append(name)
-    parts = []
-    if unpushed:
-        parts.append("unpushed: %s" % " ".join(unpushed[:4]))
-    if noremote:
-        parts.append("no remote: %s" % " ".join(noremote[:4]))
-    if dirty:
-        parts.append("dirty: %s" % " ".join(dirty[:4]))
-    if unpushed or noremote:
-        return warn("%d repos%s%s" % (len(repos), SEP, "; ".join(parts)), "git push, or add a remote -- a disk is not a backup")
-    return ok("%d repos, all pushed%s" % (len(repos), " (%s)" % parts[0] if parts else ""))
-
-
 @row("NONFUNCTIONAL", fixture=False, reason="reads live swap use")
 def row_swap(ctx):
     if IS_MAC:
@@ -1405,12 +1244,6 @@ def row_cost(ctx):
 
 
 # ------------------------------------------------------------------- runner
-# The shell layer's rows: with SITE_SHELL=off they are na before they look,
-# the same answer bootstrap.sh gives (the `shell` row itself says what on
-# adds). `font` is core now, like `theme`: its row runs either way.
-SHELL_ROWS = ("pinned", "terminfo", "bar", "git", "backup", "swap",
-              "encryption", "pending", "battery", "disk")
-SHELL_OFF = "SITE_SHELL=off (spark shell on)"
 # the rows WSL 2 answers differently (na or a WSL 2 note, never a fault):
 # the selftest's fifth pass, on Linux, proves each says so
 WSL_ROWS = ("font", "quiet", "gpu")
@@ -1437,9 +1270,7 @@ def run_rows(ctx, names=None):
         if names and spec.name not in names:
             continue
         try:
-            if spec.name in SHELL_ROWS and not ctx.cfg.shell:
-                r = na(SHELL_OFF)
-            elif spec.name in CLIENT_ROWS and ctx.cfg.client:
+            if spec.name in CLIENT_ROWS and ctx.cfg.client:
                 r = na(client_of(ctx.cfg))
             else:
                 r = spec.fn(ctx)
@@ -1507,7 +1338,6 @@ esac
 """
 
 
-RC_FIXTURE_LINE = "[ -r ~/.config/spark/hook.bash ] && . ~/.config/spark/hook.bash   # spark: the AI at the prompt"
 
 
 def _stub(path, body):
@@ -1551,13 +1381,7 @@ def make_fixture(root, good, stub_url="", real_spark=False):
     # the package tables are data the packages row reads (packages.table):
     # the real files, so the row asks the stubbed manager for the real names
     shutil.copytree(os.path.join(REPO, "distro"), os.path.join(repo, "distro"))
-    # the rc files spark links with the shell layer on (<os>/home/), stubs
     from . import site
-    osdir = os.path.join(repo, "macos" if IS_MAC else "linux", "home")
-    os.makedirs(osdir)
-    for name in site.RC_FILES:
-        with open(os.path.join(osdir, name), "w") as f:
-            f.write("# fixture rc\n" + RC_FIXTURE_LINE + "\n")
     with open(os.path.join(repo, "models.env"), "w") as f:
         # the row_models check row hashes the stub .gguf files for real, so
         # both fixtures carry the REAL sha256 of the "x" * 4096 content the
@@ -1614,15 +1438,8 @@ def make_fixture(root, good, stub_url="", real_spark=False):
     state = os.path.join(home, ".local", "state", "spark")
     os.makedirs(os.path.join(state, "widgets"), mode=0o700)
     os.makedirs(os.path.join(state, "cache"))
-    ws = os.path.join(root, "work")
-    os.makedirs(os.path.join(ws, "proj"))
-    subprocess.run(["git", "-C", os.path.join(ws, "proj"), "init", "-q", "-b", "main"], env=env, check=True)
-    open(os.path.join(ws, "proj", "f"), "w").close()
-    subprocess.run(["git", "-C", os.path.join(ws, "proj"), "add", "-A"], env=env, check=True)
-    subprocess.run(["git", "-C", os.path.join(ws, "proj"), "commit", "-q", "-m", "x"], env=env, check=True)
     with open(os.path.join(home, ".config", "spark", "site.env"), "w") as f:
-        f.write("SITE_WORKSPACE=%s\nSITE_PEER_AI_URL=%s\n" % (ws, stub_url if good else "http://127.0.0.1:9"))
-        f.write("SITE_SHELL=on\n")     # both fixtures carry the shell layer: its rows must flip too
+        f.write("SITE_PEER_AI_URL=%s\n" % (stub_url if good else "http://127.0.0.1:9"))
         f.write("SITE_THEME=fixture\n")     # the theme row: applied (good) or stale (bad)
         if IS_MAC:                      # a face every Mac ships: the font row judges the Nerd Font, not Spotlight
             f.write("SITE_FONT_FACE=Menlo-Regular\nSITE_FONT_SIZE=13\n")
@@ -1769,10 +1586,6 @@ def make_fixture(root, good, stub_url="", real_spark=False):
         os.close(fd_)
         with open(os.path.join(state, "forge-url"), "w") as f:
             f.write(stub_url + "\n")
-        origin = os.path.join(root, "work-origin.git")
-        subprocess.run(["git", "init", "-q", "--bare", "-b", "main", origin], env=env, check=True)
-        subprocess.run(["git", "-C", os.path.join(ws, "proj"), "remote", "add", "origin", origin], env=env, check=True)
-        subprocess.run(["git", "-C", os.path.join(ws, "proj"), "push", "-q", "-u", "origin", "main"], env=env, check=True)
     else:
         os.chmod(state, 0o755)
         with open(os.path.join(state, "api-token"), "w") as f:
@@ -1792,14 +1605,12 @@ def make_fixture(root, good, stub_url="", real_spark=False):
         with open(os.path.join(home, ".local", "share", "spark", "models", "fixture.gguf"), "w") as f:
             f.write("y" * 4096)
 
-    # the rc files: the good fixture's are spark's own links into the repo
-    # (SITE_SHELL=on: the prompt row reads `link`, the shell row is ok);
-    # the bad one's rc file is a plain empty file, no hook line, no link
-    if good:
-        for name in site.RC_FILES:
-            os.symlink(os.path.join(osdir, name), os.path.join(home, name))
-    else:
-        open(os.path.join(home, ".zshrc" if IS_MAC else ".bashrc"), "w").close()
+    # the rc file: the good fixture's carries the one marked hook line
+    # (the prompt row reads `hook`); the bad one's is plain and empty
+    rcname = ".zshrc" if IS_MAC else ".bashrc"
+    with open(os.path.join(home, rcname), "w") as f:
+        if good:
+            f.write(site.RC_LINE["zsh" if IS_MAC else "bash"] + "\n")
 
     # stub commands: what the OS would answer
     _stub(os.path.join(bin_, "infocmp"), "#!/bin/sh\n" + ("echo 'kUP=\\E[1;2A,'\n" if good else "exit 1\n"))
@@ -1863,10 +1674,10 @@ def _stub_server():
 
 def selftest():
     """Run the check against a good and a bad fixture; every fixture-testable
-    row must be ok in the good one and not ok in the bad one. A third pass,
-    the good fixture with SITE_SHELL=off, must make every shell row na; a
-    fourth, the good fixture as a client of the stub, every client row; a
-    fifth, on Linux, the good fixture under WSL 2: every WSL row says so."""
+    row must be ok in the good one and not ok in the bad one. A third
+    pass, the good fixture as a client of the stub, must make every
+    client row na; a fourth, on Linux, the good fixture under WSL 2:
+    every WSL row says so; a fifth under ID=arch likewise."""
     base = {k: v for k, v in os.environ.items()
             if not k.startswith(("GIT_", "SPARK_", "XDG_", "SITE_"))}
     results = {}
@@ -1889,21 +1700,7 @@ def selftest():
                 srv.shutdown()
                 return 1
             results[tag] = got
-        # the third pass: the good fixture with the shell layer off -- every
-        # shell row, and the shell row itself, must answer na
-        root = os.path.join(tmp, "off")
-        os.makedirs(root)
-        env = dict(base)
-        env.update(make_fixture(root, True, stub_url))
-        env["SITE_SHELL"] = "off"
-        p = subprocess.run([sys.executable, os.path.join(REPO, "bin", "spark"), "check", "--porcelain", "--fresh"],
-                           env=env, capture_output=True, text=True, timeout=180)
-        results["off"] = {}
-        for line in p.stdout.splitlines():
-            parts = line.split("\t")
-            if len(parts) == 5:
-                results["off"][parts[2]] = (parts[1], parts[3])
-        # the fourth pass: the good fixture as a client of the stub -- the
+        # the third pass: the good fixture as a client of the stub -- the
         # engine, the units, the snapshot, the local AI and its servers answer na
         root = os.path.join(tmp, "client")
         os.makedirs(root)
@@ -1971,16 +1768,6 @@ def selftest():
     for spec in SPECS:
         if not spec.fixture:
             say("    %s %-11s %s" % (GLYPH[NA], spec.name, spec.reason))
-    gated = SHELL_ROWS + ("shell",)
-    not_na = [n for n in gated if results["off"].get(n, ("missing", ""))[0] != NA]
-    say("  %s shell-off: %d rows na%s" % (GLYPH[OK] if not not_na else GLYPH[FAIL], len(gated) - len(not_na),
-                                         "" if not not_na else "   not na: " + " ".join(not_na)))
-    bad += bool(not_na)
-    # the failure moment is core: the same pass must leave it ok, not na --
-    # the machine-checked form of "the feature survives the layer being off"
-    foff = results["off"].get("failure", ("missing", ""))[0]
-    say("  %s core: failure %s with the shell layer off" % (GLYPH[OK] if foff == OK else GLYPH[FAIL], foff))
-    bad += foff != OK
     not_na = [n for n in CLIENT_ROWS if results["client"].get(n, ("missing", ""))[0] != NA]
     peer = results["client"].get("peer", ("missing", ""))[0]
     say("  %s client: %d rows na, peer %s%s" % (GLYPH[OK] if not not_na and peer == OK else GLYPH[FAIL],

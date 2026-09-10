@@ -4,12 +4,12 @@
 # rc line, the engine and the models, the state, the links, the clone.
 # What is yours stays -- the soul, the memory, the sealed users' stores
 # (and the account keys that open them), your models.env, your themes,
-# privacy-terms -- unless --purge. The shell layer's packages are a
+# privacy-terms -- unless --purge. The packages spark installed are a
 # question. The plan prints first (bootstrap's row shape), then the typed
 # word `yes` (spark do's danger shape); --dry-run shows only.
 #
 # Order matters (the traps): the one bootstrap pass -- headless and quiet
-# undone through their own rows, with the shell layer still ON so bootstrap
+# undone through their own rows first, so bootstrap
 # does not skip them -- runs BEFORE anything is removed; nothing calls
 # bootstrap or check.refresh after that (each would put things back).
 # Root steps try sudo and become a `todo` row naming the command when it
@@ -33,7 +33,7 @@ USAGE = """%s uninstall -- remove spark from this machine: shows first, then ask
   spark uninstall --yes        no question (SPARK_YES=1 too); a script's form
   --purge                      your soul, memory, sealed users, models.env,
                                themes and privacy-terms go too (kept otherwise)
-  --packages | --keep-packages the shell layer's packages: answer up front
+  --packages | --keep-packages the installed packages: answer up front
                                (asked at a terminal; kept when nobody answers)
 
   What stays, always: what spark could not record before it changed it --
@@ -50,7 +50,6 @@ CONSOLE_UNIT = "/etc/systemd/system/spark-console.service"
 CONSOLE_SETUP = "/etc/default/console-setup"
 CONSOLE_ORIG = CONSOLE_SETUP + ".spark-orig"
 RC_CANDIDATES = (".bashrc", ".zshrc", ".bash_profile", ".zprofile")
-TERMINFO_ENTRIES = ("t/tmux-256color", "74/tmux-256color")
 
 
 class Ctx(object):
@@ -139,9 +138,8 @@ def _rmdir_empty(path):
 
 # ---------------------------------------------------------------- the steps
 def step_bootstrap_undo(ctx):
-    """The one bootstrap pass: headless and quiet undone through their own
-    rows, keys flipped, the shell layer still on so bootstrap does not skip
-    the quiet rows. Before anything is removed."""
+    """The one bootstrap pass: headless and quiet undone through their
+    own rows, keys flipped first. Before anything is removed."""
     from . import site
     keys = {}
     if ctx.cfg.headless:
@@ -234,25 +232,20 @@ def step_services(ctx):
 
 
 def step_look(ctx):
-    """The shell layer's look back, whatever SITE_SHELL says: rc files, the
-    rendered configs, micro's colorscheme key, .gitconfig, the old plugin links."""
-    from . import shell, site
+    """What older sparks left in the way: rc symlinks a pre-cut shell
+    layer made (the shell-moved bootstrap row's twin, kept one release),
+    and the old plugin links. The rendered look is spark-shell's now."""
+    from . import site
     if ctx.dry:
         for name in site.RC_FILES:
             path = os.path.join(HOME, name)
             if _spark_link(path):
                 ctx.row("would", "rc", "%s: spark's link goes, %s" % (_tilde(path), "back from .bak" if os.path.lexists(path + ".bak") else "removed"))
-        for rel in shell.RENDERED_FILES:
-            path = os.path.join(HOME, rel)
-            if os.path.isfile(path) and not os.path.islink(path):
-                ctx.row("would", "look", "%s: %s" % (_tilde(path), "back from .bak" if os.path.lexists(path + ".bak") else "removed"))
     else:
         for path, what in site.restore_rc():
             ctx.row("ok", "rc", "%s -- %s" % (_tilde(path), what))
-        for path, what in shell.restore_rendered():
-            ctx.row("ok", "look", "%s -- %s" % (_tilde(path), what))
-        if shell.micro_settings_reset():
-            ctx.row("ok", "look", "~/.config/micro/settings.json -- colorscheme key dropped, the rest is micro's")
+    # a pre-cut render of ours (".gitconfig, rendered by spark") goes back
+    # to its .bak too -- kept one release, like the rc half above
     gitconfig = os.path.join(HOME, ".gitconfig")
     try:
         with open(gitconfig, encoding="utf-8", errors="replace") as f:
@@ -388,30 +381,11 @@ def step_terminal(ctx):
                 % (len(gone), "" if len(gone) == 1 else "s"))
 
 
-def step_fonts_terminfo(ctx):
-    if not IS_MAC:
-        from . import site
-        if ctx.remove("font", site.NERDFONT_DIR) and not ctx.dry:
-            run(["fc-cache", "-f"], timeout=60)
-    ti = os.path.join(HOME, ".terminfo")
-    for rel in TERMINFO_ENTRIES:
-        p = os.path.join(ti, rel)
-        if os.path.exists(p):
-            ctx.remove("terminfo", p)
-            if not ctx.dry:
-                _rmdir_empty(os.path.dirname(p))
-    if not ctx.dry:
-        _rmdir_empty(ti)
-
-
 def step_bin(ctx):
     for name in ("spark", "explain"):
         p = os.path.join(BIN_DIR, name)
         if _spark_link(p) or os.path.islink(p) and not os.path.exists(p):
             ctx.remove("tools", p)
-    starship = os.path.join(BIN_DIR, "starship")
-    if not IS_MAC and os.path.isfile(starship) and not os.path.islink(starship):
-        ctx.remove("tools", starship, "%s (the pinned starship)" % _tilde(starship))
 
 
 def _du(path):
@@ -523,7 +497,7 @@ def step_clone(ctx):
 
 
 STEPS = (step_bootstrap_undo, step_services, step_look, step_rc_lines, step_console, step_headless_leftovers,
-         step_terminal, step_fonts_terminfo, step_bin, step_data, step_packages, step_state_config, step_clone)
+         step_terminal, step_bin, step_data, step_packages, step_state_config, step_clone)
 
 
 def walk(ctx):
@@ -579,7 +553,7 @@ def main(argv):
             return 0
     if packages is None and tty and pkg.removable():
         from . import confirm
-        packages = confirm("remove the shell layer's packages too")
+        packages = confirm("remove the packages spark installed too")
     say()
     done = walk(Ctx(False, purge, packages))
     summary(done)

@@ -167,10 +167,8 @@ def _model(cfg, opts, default, yes):
 
 def _theme(cfg, opts):
     """Not a question. spark has a look and ships wearing it; `spark theme
-    NAME|none` changes it, like every other choice. Asking cost a first-run
-    question that a user who never turns the shell layer on has no way to
-    answer -- the palette dresses tmux, starship and btop, which are that
-    layer. The flag, else the environment or site.env, else DEFAULT_THEME."""
+    NAME|none` changes it, like every other choice. The flag, else the
+    environment or site.env, else DEFAULT_THEME."""
     from . import theme
     valid = ["none"] + theme.palettes()
     choices = "one of: none " + " ".join(theme.palettes())
@@ -183,16 +181,13 @@ def _theme(cfg, opts):
 
 
 def _write(name, user, model, theme):
-    """site.env: the documented example first when there is none, then the
-    keys decided here. SITE_SHELL=off is written so the file says which
-    layer this is; an `on` already there is kept."""
+    """site.env: the documented example first when there is none, then
+    the keys decided here."""
     if not os.path.exists(SITE_ENV):
         os.makedirs(os.path.dirname(SITE_ENV), exist_ok=True)
         shutil.copy(os.path.join(REPO, "site.env.example"), SITE_ENV)
         os.chmod(SITE_ENV, 0o600)
     keys = {"SITE_NAME": name, "SITE_USER": user, "SITE_AI_MODEL": model, "SITE_THEME": theme}
-    if config.parse_env(SITE_ENV).get("SITE_SHELL") != "on":
-        keys["SITE_SHELL"] = "off"
     site.set_keys(_quiet=True, **keys)
     # one row, not one per key: bootstrap's own `site` row names the file
     say("ok     site         " + " ".join("%s=%s" % kv for kv in keys.items()))
@@ -323,7 +318,6 @@ def _closing():
     say("  spark chat                      a conversation")
     say("  ? how big is this dir           a command in your line, a hint above it")
     say("  cmd 2>&1 | explain              what went wrong, and the fix")
-    say("spark shell on adds spark's own shell: tmux, starship, fzf, eza, bat, btop")
     say("spark ember NAME adds a second brain: a bigger model, just for conversation")
 
 
@@ -354,15 +348,6 @@ def _run(opts):
         say("                    (without %s, llama-server will not start)" % (packages.groups()["PKG_ENGINE"] or ["the engine's library"])[0])
     if rc != 0:
         return rc
-    if theme_name != "none" and cfg.shell and not os.environ.get("SPARK_NO_APPLY"):
-        # only with the shell layer on. SITE_THEME is written either way, but
-        # a first run must leave a new user's machine looking exactly as it
-        # did: console-colors repaints the VT (spark theme, the rc hook, the
-        # spark-console unit at boot), and the macOS profile repaints Terminal. `spark shell on` and `spark
-        # theme NAME` are where a user asks for the palette.
-        from . import theme
-        theme.write_runtime(theme_name)
-        say("ok     theme        %s -> ~/.config/spark/theme.env (+ console-colors)" % theme_name)
         if IS_MAC:
             theme.profile(config.load(), False)
     _rc_line()

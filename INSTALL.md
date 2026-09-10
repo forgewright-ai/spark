@@ -579,10 +579,10 @@ spark chat | do | explain -> spark <verb> -+-> spark's server :8081 --> another
 
 get -> spark setup -> bootstrap.sh (apply) -> install.sh (links, renders)
                       the engine, the model, the token, the units, one rc
-                      line; spark shell on adds spark's shell; a spark app
+                      line; spark-shell adds spark's own shell; a spark app
                       is its own repository (spark-<app>)
 
-spark check   40 rows: every promise the machine makes, fixture-tested
+spark check   35 rows: every promise the machine makes, fixture-tested
 spark update  the newest tag, or main on a developer clone; converge
 
 what leaves the machine: pinned downloads in, your questions to the

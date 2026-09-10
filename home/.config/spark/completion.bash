@@ -40,12 +40,13 @@ _spark_model_names() {
 }
 
 # lua: excluded on purpose -- not a verb anyone is told about
+# shell, bar on|off: moved to spark-shell -- the stubs answer for one release
 _spark_complete() {
     local cur words
     cur=${COMP_WORDS[COMP_CWORD]}
     COMPREPLY=()
     if [ "$COMP_CWORD" -eq 1 ]; then
-        words="chat do recall serve check update shell headless client setup
+        words="chat do recall serve check update headless client setup
                ver last status brain history stats bench model ember
                forge soul memory quiet theme font bar off
                on user explain edit ask help uninstall"
@@ -58,7 +59,8 @@ _spark_complete() {
         theme)   words="list show none status $(_spark_theme_names)" ;;
         model)   words="list verify budget rm add auto none status $(_spark_model_names)" ;;
         ember)   words="list auto none status $(_spark_model_names)" ;;
-        shell | bar | headless | forge) words="on off status" ;;
+        headless | forge) words="on off status" ;;
+        bar)     words="line" ;;
         memory)  words="add forget clear on off status" ;;
         check)   words="--watch --porcelain --selftest --fresh --fetch" ;;
         uninstall) words="--dry-run --yes --purge --packages --keep-packages" ;;

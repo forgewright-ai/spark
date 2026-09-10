@@ -1,6 +1,6 @@
 # spark completion.zsh -- TAB completes spark's verbs and their names.
 # Self-contained and sourced by hook.zsh. Registered only when compinit is
-# live -- with the shell layer off nothing here runs compinit, and this
+# live -- with the layer off nothing here runs compinit, and this
 # file degrades silently (functions defined, nothing bound). Offline
 # always, no python: the dynamic names come from the repository
 # `command -v spark` links into (readlink), themes by glob, models by sed
@@ -41,10 +41,11 @@ _spark_model_names() {
 }
 
 # lua: excluded on purpose -- not a verb anyone is told about
+# shell, bar on|off: moved to spark-shell -- the stubs answer for one release
 _spark() {
     local -a comp
     if (( CURRENT == 2 )); then
-        comp=(chat do recall serve check update shell headless client setup
+        comp=(chat do recall serve check update headless client setup
               ver last status brain history stats bench model ember
               forge soul memory quiet theme font bar off
               on user explain edit ask help uninstall)
@@ -54,7 +55,8 @@ _spark() {
             theme)   comp=(list show none status ${(f)"$(_spark_theme_names)"}) ;;
             model)   comp=(list verify budget rm add auto none status ${(f)"$(_spark_model_names)"}) ;;
             ember)   comp=(list auto none status ${(f)"$(_spark_model_names)"}) ;;
-            shell | bar | headless | forge | memory) comp=(on off status) ;;
+            headless | forge | memory) comp=(on off status) ;;
+            bar)     comp=(line) ;;
             check)   comp=(--watch --porcelain --selftest --fresh --fetch) ;;
             uninstall) comp=(--dry-run --yes --purge --packages --keep-packages) ;;
             serve)   comp=(on off status --foreground --host --print-client) ;;

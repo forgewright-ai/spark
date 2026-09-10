@@ -12,14 +12,14 @@ from . import (CONFIG_DIR, ENGINE_DIR, FORGE_TOKEN_FILE, HOME, IS_MAC, MODELS_DI
                SPARK_ENV, TOKEN_FILE, die)
 
 LINE = re.compile(r"^[A-Z_0-9]+=[^;`$()|&<>]*$")
-PLACEHOLDERS = {"SITE_GIT_NAME": "Your Name", "SITE_GIT_EMAIL": "you@example.com"}
+PLACEHOLDERS = {}
 
 # Contract 3: every key a config file may carry, in the documented order.
-SITE_KEYS = ("SITE_NAME", "SITE_USER", "SITE_SET_HOSTNAME", "SITE_GIT_NAME", "SITE_GIT_EMAIL",
-             "SITE_WORKSPACE", "SITE_PEER_AI_URL", "SITE_PEER_SSH", "SITE_THEME", "SITE_PROMPT",
-             "SITE_PROMPT_STYLE", "SITE_AI_MODEL", "SITE_EMBER_MODEL", "SITE_AI_BUDGET", "SITE_AI_BUILD",
+SITE_KEYS = ("SITE_NAME", "SITE_USER", "SITE_SET_HOSTNAME",
+             "SITE_PEER_AI_URL", "SITE_PEER_SSH", "SITE_THEME",
+             "SITE_AI_MODEL", "SITE_EMBER_MODEL", "SITE_AI_BUDGET", "SITE_AI_BUILD",
              "SITE_FONT_FACE", "SITE_FONT_SIZE", "SITE_QUIET_LOGIN", "SITE_QUIET_BOOT", "SITE_QUIET_START",
-             "SITE_QUIET_AUDIO", "SITE_HEADLESS", "SITE_SHELL")
+             "SITE_QUIET_AUDIO", "SITE_HEADLESS")
 SPARK_KEYS = ("SPARK_PORT", "SPARK_BASE_URL", "SPARK_PREFER_URL", "SPARK_SERVE_HOST", "SPARK_ENGINE_DIR",
               "SPARK_MODELS_DIR", "SPARK_MODEL", "SPARK_NGL", "SPARK_CTX", "SPARK_FLASH_ATTN", "SPARK_KV",
               "SPARK_THREADS", "SPARK_EXTRA_ARGS", "SPARK_MEM_NEEDED_GB", "SPARK_API_KEY_FILE",
@@ -117,28 +117,8 @@ class Config:
         return self.get("SITE_USER", os.environ.get("USER") or "user")
 
     @property
-    def git_name(self):
-        return self.get("SITE_GIT_NAME", self.user)
-
-    @property
-    def git_email(self):
-        return self.get("SITE_GIT_EMAIL", "%s@%s" % (os.environ.get("USER") or "user", _short_host()))
-
-    @property
-    def workspace(self):
-        return self.get("SITE_WORKSPACE", os.path.join(HOME, "projects"))
-
-    @property
     def theme(self):
         return self.get("SITE_THEME", "none")
-
-    @property
-    def prompt(self):
-        return self.get("SITE_PROMPT", "starship")
-
-    @property
-    def prompt_style(self):
-        return self.get("SITE_PROMPT_STYLE", "minimal")
 
     @property
     def model_choice(self):
@@ -204,13 +184,6 @@ class Config:
     def headless(self):
         """yes: a box that is the brain -- the FORGE up from boot, never asleep."""
         return self.get("SITE_HEADLESS", "no") == "yes"
-
-    @property
-    def shell(self):
-        """on: the shell layer is spark's -- tmux, starship, the daily
-        tools, the Nerd Font and the rc files. off (default): the AI only;
-        the shell stays yours. No editor either way: spark ships no app."""
-        return self.get("SITE_SHELL", "off") == "on"
 
     @property
     def peer_ai_url(self):

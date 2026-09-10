@@ -2,6 +2,24 @@
 
 ## v1.19
 
+- The shell layer lives in its own repository:
+  github.com/forgewright-ai/spark-shell. The tools, the starship and
+  Nerd Font pins, the rc files, the terminfo entry and the rendered
+  look (tmux, starship, btop, micro's colorscheme) install from there
+  (`spark-shell on`), read `~/.config/spark/theme.env` -- the palette
+  `spark theme NAME` writes -- and re-render on `spark-shell apply`.
+  spark keeps no shell code, no shell package, no gate: 35 check rows
+  now, and a first install touches nothing but the AI.
+- What was appliance behaviour stayed, ungated: `spark quiet
+  login|boot` (the silent login and boot) and the bar line -- bare
+  `spark bar` or `spark bar line` prints the machine's one-line status
+  for any status bar to run.
+- Moving off the old built-in layer is automatic: bootstrap's
+  `shell-moved` row hands the rc files back from their `.bak` on the
+  first `spark update`, rendered files keep working where they are and
+  spark-shell adopts them; `spark shell` and `spark bar on|off` answer
+  with a pointer for this one release.
+
 - The code now speaks the four value areas. `spark edit` (contract 10)
   has its own module beside `spark ask`'s; `spark model` / `spark ember`
   moved out of site.py into model.py; the shell layer's switch and

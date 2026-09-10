@@ -1,16 +1,14 @@
 # spark CI -- the second net. The first is .githooks on the workstation.
 # linux: every hermetic test, then a REAL bootstrap on the runner (a fresh
-# Ubuntu with sudo, the shell layer on), which must converge to "Nothing to
-# do" and pass `spark check`.
+# Ubuntu with sudo), which must converge to "Nothing to do" and pass
+# `spark check`.
 # debian: the README's first-named platform, as a new user meets it -- a
 # Debian 13 container, a user made for the run, the one-liner in pipe form
 # from the tree under test, the AI layer only; converges the same way.
 # arch: the second family, the same new user in an Arch container --
-# packages through pacman, then the shell layer on top so a real pacman
-# proves the install path (Arch's base already holds the AI's library).
-# macos: syntax, the selftest and the zsh pty test under Apple's python 3.9;
-# then (not on a pull request) the real core bootstrap, and the shell layer
-# on top of it (the Brewfile, the font cask).
+# packages through pacman (Arch's base already holds the AI's library).
+# macos: syntax, the selftest and the zsh pty test under Apple's python
+# 3.9; then (not on a pull request) the real core bootstrap.
 # No job downloads a model: SITE_AI_MODEL=none everywhere; the engine
 # tarball is the one real download.
 name: ci
@@ -64,8 +62,6 @@ jobs:
           SITE_AI_MODEL: none
         run: |
           mkdir -p ~/.config/spark
-          # the shell layer on: its rows (starship, font, tmux) are proved here too
-          printf 'SITE_AI_MODEL=none\nSITE_SHELL=on\nSITE_GIT_NAME=ci\nSITE_GIT_EMAIL=you@example.com\n' > ~/.config/spark/site.env
           ./bootstrap.sh
           ./bootstrap.sh --dry-run | tee /tmp/dry.txt
           grep -q '^Nothing to do$' /tmp/dry.txt
@@ -125,10 +121,9 @@ jobs:
           sudo -u newuser -H sh -c 'grep -q "config/spark/hook\." ~/.bashrc'
   arch:
     # the second family: the same new user, the same one-liner, in an Arch
-    # container -- packages through pacman, the console and GRUB rows honest
-    # skips. Arch's base already holds gcc-libs (llama.cpp's OpenMP), so a
-    # new user without a GPU installs nothing: the shell layer on top is
-    # what makes a real pacman prove the packages row's install path.
+    # container -- packages through pacman (kbd proves the install path;
+    # Arch's base already holds gcc-libs, llama.cpp's OpenMP), the console
+    # and GRUB rows honest skips.
     runs-on: ubuntu-latest
     container: archlinux:latest
     timeout-minutes: 20
@@ -162,22 +157,6 @@ jobs:
           awk -F'\t' '$1=="SOFTWARE" && $2=="fail" && $3!="services" { bad=1; print } END { exit bad }' /tmp/porcelain.txt
           awk -F'\t' '$3=="services" { print; found=1; if ($2!="na") bad=1 } END { exit bad || !found }' /tmp/porcelain.txt
           sudo -u newuser -H sh -c 'grep -q "config/spark/hook\." ~/.bashrc'
-      - name: the shell layer on top (a real pacman installs the shell packages)
-        run: |
-          # the identity in site.env (a reader keeps a key's first line: no duplicates),
-          # then the verb a user runs -- it flips the key, applies the layer's rows
-          # through pacman, writes the palette files
-          sudo -u newuser -H sh -c 'sed -i "/^SITE_GIT_/d" ~/.config/spark/site.env && printf "SITE_GIT_NAME=ci\nSITE_GIT_EMAIL=you@example.com\n" >> ~/.config/spark/site.env'
-          sudo -u newuser -H sh -c '~/.local/bin/spark shell on'
-          sudo -u newuser -H sh -c '~/.spark/bootstrap.sh --dry-run' | tee /tmp/dry.txt
-          grep -q '^Nothing to do$' /tmp/dry.txt
-          grep -qE '^ok +packages ' /tmp/dry.txt
-          grep -qE '^skip +console +Arch' /tmp/dry.txt || grep -qE '^skip +console +SITE_FONT_FACE' /tmp/dry.txt
-          pacman -Q tmux fd bat eza
-          # spark check exits 1 when a row fails: keep going, and name the row
-          sudo -u newuser -H sh -c '~/.local/bin/spark check --porcelain --fresh' > /tmp/porcelain.txt || true
-          awk -F'\t' '$2=="fail" { print }' /tmp/porcelain.txt
-          awk -F'\t' '$1=="SOFTWARE" && $2=="fail" && $3!="services" { bad=1 } END { exit bad }' /tmp/porcelain.txt
   macos:
     runs-on: macos-latest
     timeout-minutes: 40
@@ -225,19 +204,4 @@ jobs:
           grep -q 'config/spark/hook\.' ~/.zshrc
           ~/.local/bin/spark check --fresh || true
           # a runner may have no gui launchd domain: the launchd rows skip and services may fail; nothing else may
-          ~/.local/bin/spark check --porcelain --fresh | awk -F'\t' '$1=="SOFTWARE" && $2=="fail" && $3!="services" { bad=1; print } END { exit bad }'
-      - name: the shell layer on top
-        # spark shell on, as bootstrap does it: the Brewfile (the font cask
-        # included), the rc files become spark's, the terminfo; a second
-        # dry-run must converge on top of the first
-        if: github.event_name != 'pull_request'
-        env:
-          HOMEBREW_NO_AUTO_UPDATE: '1'
-          SHELL: /bin/zsh
-        run: |
-          echo 'SITE_SHELL=on' >> ~/.config/spark/site.env
-          time ./bootstrap.sh
-          ./bootstrap.sh --dry-run | tee /tmp/dry.txt
-          [ "$(tail -1 /tmp/dry.txt)" = 'Nothing to do' ]
-          brew bundle check --file Brewfile --no-upgrade
           ~/.local/bin/spark check --porcelain --fresh | awk -F'\t' '$1=="SOFTWARE" && $2=="fail" && $3!="services" { bad=1; print } END { exit bad }'

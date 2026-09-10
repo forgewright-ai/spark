@@ -153,7 +153,7 @@ def main():
     src = read(os.path.join("lib", "spark", "check.py"))
     claude = read("CLAUDE.md")
     named = {}
-    for const in ("SHELL_ROWS", "WSL_ROWS", "ARCH_ROWS", "CLIENT_ROWS"):
+    for const in ("WSL_ROWS", "ARCH_ROWS", "CLIENT_ROWS"):
         m = re.search(r"^%s = \(([^)]*)\)" % const, src, re.M)
         named[const] = re.findall(r'"([a-z]+)"', m.group(1)) if m else []
         check(bool(named[const]), "check.py defines %s" % const)
@@ -219,7 +219,7 @@ def main():
     # the lists that are gone stay gone
     for doc in ("README.md", "INSTALL.md", "CLAUDE.md", "CHEATSHEET.txt", "CREDITS.md", "CONTRIBUTING.md",
                 "AGENTS.md", "ROADMAP.md", "site.env.example"):
-        check(not re.search(r"embers\.env|community\.env|\bcurated\b|PKG_QA|PKG_EDITOR|micro-aspell|\bbootconfig\b", read(doc)),
+        check(not re.search(r"embers\.env|community\.env|\bcurated\b|PKG_QA|PKG_EDITOR|micro-aspell|\bbootconfig\b|SITE_SHELL|PKG_SHELL|PKG_CLI", read(doc)),
               "%s: no retired list word" % doc)
     # the page and the FORGE page share the ember palette: www/template.html's
     # tokens mirror lib/spark/forge/spark.css, dark and light alike

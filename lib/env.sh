@@ -55,10 +55,7 @@ site_load() {
     : "${SITE_NAME:=$(short_host)}"
     : "${SITE_USER:=$(id -un)}"
     : "${SITE_SET_HOSTNAME:=no}"
-    : "${SITE_WORKSPACE:=$HOME/projects}"
     : "${SITE_THEME:=none}"
-    : "${SITE_PROMPT:=starship}"
-    : "${SITE_PROMPT_STYLE:=minimal}"
     : "${SITE_AI_MODEL:=auto}"
     : "${SITE_EMBER_MODEL:=none}"
     : "${SITE_AI_BUDGET:=60}"
@@ -70,24 +67,11 @@ site_load() {
     : "${SITE_QUIET_AUDIO:=no}"
     : "${SITE_QUIET_START:=no}"
     : "${SITE_HEADLESS:=no}"
-    : "${SITE_SHELL:=off}"
     : "${SITE_PEER_AI_URL:=}"
     : "${SITE_PEER_SSH:=}"
-    # placeholders from site.env.example count as unset
-    [ "${SITE_GIT_NAME:-}" != "Your Name" ] || SITE_GIT_NAME=
-    [ "${SITE_GIT_EMAIL:-}" != "you@example.com" ] || SITE_GIT_EMAIL=
-    # unchosen is unchosen, whether the key is absent or still the example's
-    # placeholder: spark guesses so git works, and bootstrap's identity row
-    # names what it guessed -- the author line of every commit is at stake
-    SPARK_GIT_GUESSED=
-    [ -n "${SITE_GIT_NAME:-}" ] || SPARK_GIT_GUESSED=SITE_GIT_NAME
-    [ -n "${SITE_GIT_EMAIL:-}" ] || SPARK_GIT_GUESSED="${SPARK_GIT_GUESSED:+$SPARK_GIT_GUESSED }SITE_GIT_EMAIL"
-    : "${SITE_GIT_NAME:=$SITE_USER}"
-    : "${SITE_GIT_EMAIL:=$(id -un)@$(short_host)}"
-    export SPARK_GIT_GUESSED
-    export SITE_NAME SITE_USER SITE_SET_HOSTNAME SITE_WORKSPACE SITE_THEME \
-           SITE_PROMPT SITE_PROMPT_STYLE SITE_AI_MODEL SITE_EMBER_MODEL SITE_AI_BUDGET SITE_AI_BUILD \
-           SITE_GIT_NAME SITE_GIT_EMAIL SITE_FONT_FACE SITE_FONT_SIZE SITE_QUIET_LOGIN SITE_QUIET_BOOT SITE_QUIET_START SITE_QUIET_AUDIO SITE_HEADLESS SITE_SHELL SITE_PEER_AI_URL SITE_PEER_SSH
+    export SITE_NAME SITE_USER SITE_SET_HOSTNAME SITE_THEME \
+           SITE_AI_MODEL SITE_EMBER_MODEL SITE_AI_BUDGET SITE_AI_BUILD \
+           SITE_FONT_FACE SITE_FONT_SIZE SITE_QUIET_LOGIN SITE_QUIET_BOOT SITE_QUIET_START SITE_QUIET_AUDIO SITE_HEADLESS SITE_PEER_AI_URL SITE_PEER_SSH
 }
 
 THEME_KEYS="THEME_BG THEME_FG THEME_ACCENT THEME_MUTED THEME_BTOP THEME_ANSI_0 THEME_ANSI_1 THEME_ANSI_2 THEME_ANSI_3 THEME_ANSI_4 THEME_ANSI_5 THEME_ANSI_6 THEME_ANSI_7 THEME_ANSI_8 THEME_ANSI_9 THEME_ANSI_10 THEME_ANSI_11 THEME_ANSI_12 THEME_ANSI_13 THEME_ANSI_14 THEME_ANSI_15"

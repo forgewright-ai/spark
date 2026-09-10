@@ -383,75 +383,34 @@ def apply_console():
 MICRO_SETTINGS = os.path.join(HOME, ".config", "micro", "settings.json")
 
 
-def micro_colorscheme(path=MICRO_SETTINGS):
-    """micro's settings.json is micro's own (seeded once, rewritten by micro
-    on every `set`), but its colorscheme key is the theme's: a palette
-    lands in colorschemes/spark.micro and shows only while that key says
-    spark. Sets it back when micro changed it; returns the name it had,
-    None when it already said spark or the file is absent or not JSON."""
-    import json
-    try:
-        with open(path, encoding="utf-8") as f:
-            d = json.load(f)
-    except (OSError, ValueError):
-        return None
-    if not isinstance(d, dict) or d.get("colorscheme", "spark") == "spark":
-        return None
-    was = str(d.get("colorscheme"))
-    d["colorscheme"] = "spark"
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(d, f, indent=4)
-        f.write("\n")
-    return was
-
-
 def set_theme(name):
-    """`spark theme NAME`: choose it in site.env, render the files that carry
-    it (install.sh; tmux, and micro's scheme, with the shell layer on), write theme.env
-    and console-colors, reload tmux; macOS also gets the Terminal profile.
-    SPARK_NO_APPLY=1 (tests) writes the key and the two runtime files only:
-    nothing outside $HOME/.config/spark, no tmux, no Terminal.app."""
+    """`spark theme NAME`: choose it in site.env, write theme.env and
+    console-colors; macOS also gets the Terminal profile. The rendered
+    look (tmux, starship, btop, micro) is spark-shell's: it reads
+    theme.env and re-renders on `spark-shell apply`. SPARK_NO_APPLY=1
+    (tests) writes the key and the two runtime files only: nothing
+    outside $HOME/.config/spark, no Terminal.app."""
     if name != "none" and name not in palettes():
         say("spark theme: no palette named %s -- one of: none %s" % (name, " ".join(palettes())))
         return 2
     from . import site
     site.set_keys(SITE_THEME=name)
-    if os.environ.get("SPARK_NO_APPLY"):
-        write_runtime(name)
-        return 0
-    rc, out = run(["sh", os.path.join(REPO, "install.sh")], timeout=120)
-    for line in out.splitlines():
-        if not line.startswith("ok ") and not line.endswith("to do") and line != "Nothing to do":
-            say("       " + line)
-    if rc != 0:
-        say("spark theme: install.sh failed -- sh %s says why" % os.path.join(REPO, "install.sh"))
-        return 1
     write_runtime(name)
+    if os.environ.get("SPARK_NO_APPLY"):
+        return 0
     if not IS_MAC and not is_wsl():
         site.apply(["vt-palette"], stream=True)        # the boot unit (sudo), idempotent
     if apply_console():
         say("ok     console      this console took the palette now" if name != "none"
             else "ok     console      this console has its own colours back")
-    micro_here = config.load().shell and shutil.which("micro")
-    if micro_here:
-        was = micro_colorscheme()
-        if was:
-            say("ok     micro        colorscheme spark (was %s); reopen micro" % was)
-    rc, _ = run(["tmux", "list-sessions"])
-    if rc == 0:
-        run(["tmux", "source-file", os.path.join(HOME, ".tmux.conf")])
-        say("ok     tmux         reloaded")
-    else:
-        say("       tmux         not running: the next tmux takes the palette")
     if IS_MAC:
         profile(config.load(), False)
     from . import check
     check.refresh()
     # nothing in a running shell holds the palette: starship re-reads its
-    # config on every prompt, the widget draws no colour of its own, and the
-    # hook reads console-colors alone -- so no shell restart is owed. Only a
-    # running editor is, and a terminal emulator keeps its own colours.
-    say("the next prompt has it, and tmux" + ("; a running micro: reopen it" if micro_here else ""))
+    # config on every prompt, the widget draws no colour of its own, and
+    # the hook reads console-colors alone -- so no shell restart is owed.
+    say("the next prompt has it")
     return 0
 
 

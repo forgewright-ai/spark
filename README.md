@@ -78,7 +78,7 @@ and your editor stay yours. `INSTALL.md` has every step and every key.
 ## Beside the core
 
 - Editors and tools that speak to spark: `APPS.md`
-- spark's own shell for a machine that is only an AI box: `SHELL.md`
+- spark's own shell for a machine that is an AI box: `SHELL.md`
 
 The page: https://spark.forgewright.ai -- the docs and the model list.
 

@@ -4,7 +4,7 @@
 # apply run prints what it CHANGED and what needs you, and nothing else:
 # a converged machine says only "Nothing to do".
 #
-#   ./bootstrap.sh                 apply (sudo only for apt, and the shell/headless rows)
+#   ./bootstrap.sh                 apply (sudo only for apt/pacman and the headless rows)
 #   ./bootstrap.sh --dry-run       print what would change; never sudo
 #   ./bootstrap.sh --verbose       every row, not only what changed
 #   ./bootstrap.sh --list-packages one package per line, as this site wants them
@@ -38,21 +38,15 @@ case ${1:-} in
 esac
 
 # ---------------------------------------------------------------- packages
-# Linux: the names live in distro/<id>.env (PKG_CORE PKG_ENGINE PKG_AI
-# PKG_SHELL PKG_CLI, plus PM PM_INSTALL PM_TARGET), one file per package
-# family, loaded after site_load once distro() has said which. macOS reads
-# Brewfile instead (the shell layer only: the AI needs nothing from
-# Homebrew). The verbs that ask a package manager are pkg_installed,
+# Linux: the names live in distro/<id>.env (PKG_CORE PKG_ENGINE PKG_AI,
+# plus PM PM_INSTALL PM_TARGET), one file per package family, loaded
+# after site_load once distro() has said which. macOS needs nothing
+# installed. The verbs that ask a package manager are pkg_installed,
 # pkg_available and pkg_install below -- the one place that switches on PM.
 
 # ------------------------------------------------------------ pinned bits
 # Everything not packaged is pinned by version and sha256. An empty sha
 # means "not pinned yet": the block skips with a notice, never guesses.
-STARSHIP_VERSION=1.26.0
-STARSHIP_SHA_X86_64=321f0dd7af8340a5f2e6a8fec6538a04f617486f9ec70d878f91c09cd8deef22
-STARSHIP_SHA_AARCH64=dc30189378d2f2e287384e8a692d3f95ad1df64cf0e8c36aa9201516028aed6b
-NERDFONT_VERSION=3.5.1
-NERDFONT_SHA=fab782a66f7d3019da64f6572db9fc5d3a4bcb19f9fa13e2d8a62e3693d6396e
 site_load
 # Every decision is python's: lib/spark/facts.py answers from the same
 # code the verbs use (distro, the build, WSL, memory, the engine home
@@ -78,15 +72,13 @@ model_rows_all() { [ -z "$MODEL_ROWS" ] || printf '%s\n' "$MODEL_ROWS"; }
 # the package family and its names: brew on macOS; on Linux the distro's
 # file (load_env sets only what the environment lacks, so a test may pin
 # a group); an unknown Linux keeps PM empty and the packages row says so
-PM=; [ "$OS" = Darwin ] && PM=brew
+PM=
 [ -z "$DISTRO" ] || load_env "$REPO/distro/$DISTRO.env" || exit 1
-: "${PM_INSTALL:=}" "${PM_TARGET:=}" "${PKG_CORE:=}" "${PKG_ENGINE:=}" "${PKG_AI:=}" "${PKG_SHELL:=}" "${PKG_CLI:=}"
+: "${PM_INSTALL:=}" "${PM_TARGET:=}" "${PKG_CORE:=}" "${PKG_ENGINE:=}" "${PKG_AI:=}"
 MODELS_DIR=${SPARK_MODELS_DIR:-$SPARK_DATA_DIR/models}
-# the two layers: the AI is always on; the shell (tmux, starship, the daily
-# tools, the font, the rc files, the console) only with SITE_SHELL=on. An
-# editor is neither: spark ships no app (spark-micro is micro's own plugin)
-shell=0; [ "$SITE_SHELL" = on ] && shell=1
-SHELL_OFF="SITE_SHELL=off (spark shell on)"
+# one layer: the AI. The shell -- tmux, starship, the daily tools, the
+# font, the rc files -- is spark-shell's, its own repository; an editor
+# is an app's plugin (spark-micro). spark ships neither.
 # a client: no model of its own and a peer answering (SITE_AI_MODEL=none +
 # SITE_PEER_AI_URL; spark client URL). No engine and no units here -- the
 # widget, the hook and the tokens are all a client needs
@@ -95,16 +87,11 @@ CLIENT_OF="a client of $SITE_PEER_AI_URL (spark client off serves here again)"
 
 # ------------------------------------------------------------- the lists
 list_packages() {
-    if [ "$OS" = Darwin ]; then
-        [ "$shell" = 1 ] || return 0
-        sed -nE 's/^(brew|cask) "([^"]+)".*/\2/p' "$REPO/Brewfile"
-    else
-        [ -n "$DISTRO" ] || return 0        # an unknown family: no list (the packages row says so)
-        set -- $PKG_CORE $PKG_ENGINE
-        [ "$AI_BUILD" = vulkan ] && set -- "$@" $PKG_AI
-        [ "$shell" = 1 ] && set -- "$@" $PKG_SHELL $PKG_CLI
-        printf '%s\n' "$@"
-    fi
+    [ "$OS" != Darwin ] || return 0     # the mac core needs nothing installed
+    [ -n "$DISTRO" ] || return 0        # an unknown family: no list (the packages row says so)
+    set -- $PKG_CORE $PKG_ENGINE
+    [ "$AI_BUILD" = vulkan ] && set -- "$@" $PKG_AI
+    printf '%s\n' "$@"
 }
 
 list_models() {
@@ -261,15 +248,6 @@ if [ ! -f "$SPARK_CONFIG_DIR/spark.env" ]; then
     fi
 fi
 ok name "$SITE_NAME  (user $SITE_USER)"
-# the shell layer: the git identity goes into ~/.gitconfig, the theme into tmux and starship
-if [ "$shell" = 1 ]; then
-    [ -z "$SPARK_GIT_GUESSED" ] || row todo identity \
-        "guessed, and it signs every commit -- set in site.env: $SPARK_GIT_GUESSED"
-    ok theme "$SITE_THEME | prompt $SITE_PROMPT/$SITE_PROMPT_STYLE"
-else
-    skip identity "$SHELL_OFF"
-    skip theme "$SHELL_OFF"
-fi
 pick=$(model_pick spark | awk '{ print $1 " (" $6 " GB)" }')
 case $SITE_AI_MODEL in
     none) ok model "none: no download; bring your own .gguf or set SITE_AI_MODEL" ;;
@@ -327,16 +305,7 @@ pkg_install() {   # pkg_install NAME... -- as root, the manager's own way
 }
 section packages
 if [ "$OS" = Darwin ]; then
-    if [ "$shell" = 0 ]; then
-        ok packages "nothing required (SITE_SHELL=off)"
-    elif ! command -v brew >/dev/null 2>&1; then
-        row todo packages "Homebrew is not installed: https://brew.sh (then run again)"
-    elif brew bundle check --file "$REPO/Brewfile" --no-upgrade >/dev/null 2>&1; then
-        ok packages "Brewfile satisfied ($(list_packages | wc -l | tr -d ' ') entries)"
-    elif need packages "brew bundle --file Brewfile"; then
-        brew bundle --file "$REPO/Brewfile" --no-upgrade
-        ok packages "Brewfile satisfied"
-    fi
+    ok packages "nothing required"
 elif [ -z "$PM" ]; then
     row todo packages "no package list for this Linux ($(sed -n 's/^PRETTY_NAME=//p' "${SPARK_OS_RELEASE:-/etc/os-release}" 2>/dev/null | tr -d '"')): distro/*.env know debian and arch -- install git curl python3 and libgomp by hand"
 else
@@ -364,44 +333,6 @@ fi
 
 # ============================================================== 4. pinned
 section pinned
-if [ "$OS" = Darwin ]; then
-    [ "$shell" = 1 ] && skip pinned "Homebrew provides starship and the Nerd Font here" || skip pinned "$SHELL_OFF"
-else
-    # starship
-    # look in ~/.local/bin explicitly: a non-login ssh shell has no such PATH
-    if [ "$shell" = 0 ]; then
-        skip starship "$SHELL_OFF"
-    elif [ -x "$HOME/.local/bin/starship" ] || command -v starship >/dev/null 2>&1; then
-        ok starship "$(PATH=$HOME/.local/bin:$PATH starship --version 2>/dev/null | head -1)"
-    else
-        case $ARCH in x86_64) sha=$STARSHIP_SHA_X86_64; tri=x86_64-unknown-linux-gnu ;;
-                      aarch64) sha=$STARSHIP_SHA_AARCH64; tri=aarch64-unknown-linux-musl ;;
-                      *) sha=; tri= ;; esac
-        if [ -z "$sha" ]; then
-            skip starship "no pin for $ARCH yet (NOTICE)"
-        elif need starship "install $STARSHIP_VERSION into ~/.local/bin"; then
-            fetch "https://github.com/starship/starship/releases/download/v$STARSHIP_VERSION/starship-$tri.tar.gz" "$TMP/starship.tgz" "$sha"
-            mkdir -p "$HOME/.local/bin"
-            tar -xzf "$TMP/starship.tgz" -C "$HOME/.local/bin" starship
-            ok starship "$STARSHIP_VERSION"
-        fi
-    fi
-    # Nerd Font
-    fontdir="$HOME/.local/share/fonts/JetBrainsMonoNerdFont"
-    if [ "$shell" = 0 ]; then
-        skip font "$SHELL_OFF"
-    elif ls "$fontdir"/*.ttf >/dev/null 2>&1; then
-        ok font "JetBrainsMono Nerd Font in $fontdir"
-    elif [ -z "$NERDFONT_SHA" ]; then
-        skip font "no pin yet (NOTICE)"
-    elif need font "install JetBrainsMono Nerd Font $NERDFONT_VERSION"; then
-        fetch "https://github.com/ryanoasis/nerd-fonts/releases/download/v$NERDFONT_VERSION/JetBrainsMono.zip" "$TMP/font.zip" "$NERDFONT_SHA"
-        mkdir -p "$fontdir"
-        unzip -q -o "$TMP/font.zip" -d "$fontdir" 'JetBrainsMonoNerdFont-*.ttf'
-        fc-cache -f "$fontdir" >/dev/null 2>&1 || true
-        ok font "JetBrainsMono Nerd Font $NERDFONT_VERSION (set it in your terminal)"
-    fi
-fi
 # llama.cpp engine: the pinned release tarball on both OSes (the AI layer,
 # always). A build of your own in SPARK_ENGINE_DIR wins; the tarball is
 # never fetched over it. The extracted dir carries a one-line `flavour`
@@ -480,10 +411,10 @@ fi
 
 # ================================================================ 6. dirs
 section dirs
-# the workspace is the shell layer's (the backup row watches it, a template
-# names it): a new user's machine gets no folder it did not ask for
-if [ "$shell" = 1 ]; then dirs="$SITE_WORKSPACE $MODELS_DIR"; else dirs="$MODELS_DIR"; skip dir "$SHELL_OFF, $SITE_WORKSPACE"; fi
-for d in $dirs "$HOME/.local/bin" "$SPARK_STATE_DIR"; do
+# a new user's machine gets no folder it did not ask for: the models,
+# the bin and the state dirs are spark's own (a projects folder is
+# spark-shell's business)
+for d in "$MODELS_DIR" "$HOME/.local/bin" "$SPARK_STATE_DIR"; do
     if [ -d "$d" ]; then ok dir "$d"
     elif need dir "mkdir $d"; then mkdir -p "$d"; ok dir "$d"; fi
 done
@@ -512,6 +443,24 @@ if [ "$old_plug" = 1 ] && need micro "the plugin moved to github.com/forgewright
     if [ -L "$mb" ]; then rm -f "$mb"; [ ! -f "$mb.bak" ] || mv "$mb.bak" "$mb"; fi
     ok micro "spark's links removed -- git clone https://github.com/forgewright-ai/spark-micro $mplug"
 fi
+# the shell layer left this repository (github.com/forgewright-ai/
+# spark-shell): rc files an older install.sh symlinked into this tree
+# now dangle. Hand them back once (.bak back, or gone); spark-shell
+# adopts the rendered look (tmux, starship, btop) in place.
+moved=0
+for f in .bashrc .bash_profile .zshrc .zprofile; do
+    [ -L "$HOME/$f" ] || continue
+    case $(readlink "$HOME/$f") in "$REPO"/*) moved=1 ;; esac
+done
+if [ "$moved" = 1 ] && need shell-moved "the shell layer moved to github.com/forgewright-ai/spark-shell: hand the rc files back"; then
+    for f in .bashrc .bash_profile .zshrc .zprofile; do
+        [ -L "$HOME/$f" ] || continue
+        case $(readlink "$HOME/$f") in
+            "$REPO"/*) rm -f "$HOME/$f"; [ ! -e "$HOME/$f.bak" ] || mv "$HOME/$f.bak" "$HOME/$f" ;;
+        esac
+    done
+    ok shell-moved "rc files handed back -- git clone https://github.com/forgewright-ai/spark-shell ~/.spark-shell"
+fi
 # the core rc hook: one marked line at the end of the login shell's rc file
 # (after fzf: the widget wraps Enter, so it loads last). The marker is
 # `config/spark/hook.`, so the line lands once. An rc file that is spark's
@@ -529,7 +478,7 @@ if [ -z "$rc" ]; then
 elif [ "$rc_shell" = bash ] && [ "${rc_major:-0}" -lt 4 ]; then
     row todo rc "bash ${rc_major:-3} cannot host the widget -- zsh can (chsh -s /bin/zsh)"
 elif [ "$rc_link" = 1 ]; then
-    ok rc "~${rc#"$HOME"} is spark's own (SITE_SHELL=on)"
+    ok rc "~${rc#"$HOME"} is a symlink into this repo (shell-moved hands it back)"
 elif grep -qF 'config/spark/hook.' "$rc" 2>/dev/null; then
     ok rc "~${rc#"$HOME"} sources the hook"
 elif need rc "add one line to ~${rc#"$HOME"}"; then
@@ -761,12 +710,7 @@ fi
 
 # ============================================================ 11. terminal
 section terminal
-if [ "$shell" = 0 ]; then
-    # the palette render and the terminfo are the shell layer -- one skip
-    # row per block. The console-font row and the quiet login/boot rows
-    # are core (appliance behaviour, spark quiet) and run below either way.
-    for r in theme terminfo; do skip "$r" "$SHELL_OFF"; done
-elif [ "$SITE_THEME" = none ]; then
+if [ "$SITE_THEME" = none ]; then
     skip theme "SITE_THEME=none: your terminal keeps its colours"
 else
     theme_load "$REPO"
@@ -785,23 +729,8 @@ else
         else "$HOME/.local/bin/spark" theme profile | sed 's/^/       /' || true; fi
     fi
 fi
-if [ "$shell" = 0 ]; then
-    :   # skipped above
-elif infocmp -1x tmux-256color 2>/dev/null | grep -q 'kUP='; then
-    ok terminfo "tmux-256color knows modified arrow keys"
-elif [ "$OS" = Darwin ]; then
-    nc=$(brew --prefix ncurses 2>/dev/null || true)
-    if [ ! -x "$nc/bin/infocmp" ]; then skip terminfo "Homebrew ncurses not installed yet"
-    elif need terminfo "compile tmux-256color from Homebrew ncurses into ~/.terminfo"; then
-        "$nc/bin/infocmp" -x tmux-256color > "$TMP/tmux.ti"
-        tic -x -o "$HOME/.terminfo" "$TMP/tmux.ti"
-        ok terminfo "compiled into ~/.terminfo"
-    fi
-else
-    skip terminfo "tmux-256color lacks kUP here; install a newer ncurses-term (Debian 13's is fine)"
-fi
-# the text console's font (console-setup), when chosen: core, not the
-# shell layer -- spark font sets SITE_FONT_FACE with the layer off too
+# the text console's font (console-setup), when chosen: core -- spark
+# font sets SITE_FONT_FACE either way
 if [ "$OS" = Darwin ]; then
     skip console "macOS: the font is in the Terminal.app profile (spark theme profile)"
 elif is_wsl; then

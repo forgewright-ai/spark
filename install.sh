@@ -11,12 +11,10 @@
 # existing regular file, or a symlink that points outside the repo, is
 # never overwritten: it is moved to <path>.bak.
 #
-# Two layers (site.env SITE_SHELL): the AI is always installed -- the
-# widgets, the banner, spark.env.example, the service units. The shell
-# layer -- the rc files, .gitconfig, .tmux.conf, btop, starship, and
-# micro's colorscheme when micro is here -- only with SITE_SHELL=on
-# (spark shell on). No editor and no plugin: an app is a client of spark,
-# installed its own way (github.com/forgewright-ai/spark-micro).
+# One layer: the AI -- the widgets, the banner, spark.env.example, the
+# service units. The shell (rc files, tmux, starship, the look) is
+# spark-shell's, its own repository; an editor's plugin is its own too
+# (github.com/forgewright-ai/spark-micro). spark installs neither.
 #
 #   install.sh --dry-run    print what would change, touch nothing
 #   install.sh --verbose    every row, not only what changed
@@ -38,14 +36,9 @@ OS=$(uname -s)
 case $OS in Darwin) OSDIR=macos ;; *) OSDIR=linux ;; esac
 
 site_load
-theme_load "$REPO"
 # a client (SITE_AI_MODEL=none + SITE_PEER_AI_URL, spark client URL) runs no
 # units: the systemd units and the launchd plists stay out
 client=0; [ "$SITE_AI_MODEL" = none ] && [ -n "$SITE_PEER_AI_URL" ] && client=1
-# micro's colorscheme and its seeded settings.json are the shell's look for
-# a micro the user has: rendered only with the layer on AND micro on PATH
-look_micro() { [ "$SITE_SHELL" = on ] && command -v micro >/dev/null 2>&1; }
-
 changes=0
 : "${VERBOSE:=0}"
 # An apply run says what it CHANGED. `ok` means a file was already in
@@ -82,15 +75,9 @@ link_one() {   # link_one SRC DST
 esc() { printf '%s' "$1" | sed -e 's/[\\&|]/\\&/g'; }
 
 render_expr() {
-    e="s|@HOME@|$(esc "$HOME")|g;s|@USER@|$(esc "$(id -un)")|g;s|@REPO@|$(esc "$REPO")|g"
-    e="$e;s|@WORKSPACE@|$(esc "$SITE_WORKSPACE")|g;s|@NAME@|$(esc "$SITE_NAME")|g"
-    e="$e;s|@GIT_NAME@|$(esc "$SITE_GIT_NAME")|g;s|@GIT_EMAIL@|$(esc "$SITE_GIT_EMAIL")|g"
+    # what the remaining templates (the launchd plists) actually use
+    e="s|@HOME@|$(esc "$HOME")|g"
     e="$e;s|@BREW_PREFIX@|$(esc "${HOMEBREW_PREFIX:-$(command -v brew >/dev/null 2>&1 && brew --prefix || echo /usr/local)}")|g"
-    for k in $THEME_KEYS; do
-        eval "v=\$$k"
-        # shellcheck disable=SC2154   # v is set by the eval above
-        e="$e;s|@$k@|$(esc "$v")|g"
-    done
     printf '%s' "$e"
 }
 
@@ -122,8 +109,6 @@ for tree in "$REPO/home" "$REPO/$OSDIR/home"; do
     for src in $(find "$tree" -type f | sort); do
         rel=${src#"$tree"/}
         case $rel in
-            .bashrc|.bash_profile|.zshrc|.zprofile)
-                [ "$SITE_SHELL" = on ] || continue ;;
             .config/systemd/user/*)
                 [ "$client" = 0 ] || continue ;;
         esac
@@ -134,30 +119,11 @@ done
 # --- 2. templates ---------------------------------------------------------
 for src in $(find "$REPO/templates" -type f | sort); do
     rel=${src#"$REPO"/templates/}
-    seed=0
     case $rel in
         .config/spark/launchd/*)
             [ "$OS" = Darwin ] || continue
             [ "$client" = 0 ] || continue ;;
-        .config/micro/settings.json)
-            # seeded once, then micro's own: micro rewrites it on every
-            # option change, so a file that exists is never re-rendered
-            look_micro || continue
-            seed=1 ;;
-        .config/micro/*)
-            look_micro || continue ;;
-        .gitconfig|.tmux.conf|.config/btop/*)
-            [ "$SITE_SHELL" = on ] || continue ;;
-        .config/starship.toml.*)
-            [ "$SITE_SHELL" = on ] || continue
-            [ "$SITE_PROMPT" = starship ] || continue
-            [ "${rel##*.}" = "$SITE_PROMPT_STYLE" ] || continue
-            rel=.config/starship.toml ;;
     esac
-    if [ "$seed" = 1 ] && { [ -e "$HOME/$rel" ] || [ -L "$HOME/$rel" ]; }; then
-        row ok "$HOME/$rel"
-        continue
-    fi
     render_one "$src" "$HOME/$rel"
 done
 

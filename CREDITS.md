@@ -15,30 +15,9 @@ Release b10689 (`LLAMA_VERSION` in `bootstrap.sh`), six flavours (macOS
 arm64, macOS x64, Linux x64, Linux x64 Vulkan, Linux arm64, Linux arm64
 Vulkan), each pinned by sha256.
 
-## The prompt
-
-starship -- https://github.com/starship/starship -- ISC
-(c) Starship Contributors
-
-Version 1.26.0 (`STARSHIP_VERSION` in `bootstrap.sh`), pinned by sha256
-on Linux; Homebrew installs the same tool on macOS with no version pin.
-
 ## The tale
 
 The text in `home/.config/spark/tale` is the maintainer's own, CC BY-NC-ND 4.0.
-
-## Fonts
-
-JetBrains Mono -- https://github.com/JetBrains/JetBrainsMono -- SIL Open
-Font License 1.1, Reserved Font Name "JetBrains Mono"
-
-Nerd Fonts -- https://github.com/ryanoasis/nerd-fonts -- MIT (the
-patcher)
-
-Nerd Fonts patches JetBrains Mono and renames the result "JetBrainsMono
-Nerd Font" -- version 3.5.1 (`NERDFONT_VERSION` in `bootstrap.sh`),
-pinned by sha256 on Linux; Homebrew's font-jetbrains-mono-nerd-font cask
-installs the same family on macOS with no version pin.
 
 ## Palettes
 
@@ -75,32 +54,17 @@ one project differently, both names are here.
   build only)
 - vulkan-intel -- MIT and others (Mesa's Intel driver, on Arch; the
   vulkan build only)
+- kbd -- https://kbd-project.org/ -- GPL-2.0-or-later (`setvtrgb`, the
+  console palette unit, on Arch)
 
-## Shell tools (apt or pacman / Homebrew, `spark shell on`)
+## The shell tools
 
-The shell layer's, installed from apt's, pacman's or Homebrew's own
-repositories, unpinned. No editor is among them: an app's plugin is its
-own repository with its own credits (github.com/forgewright-ai/<name> --
-spark-micro, spark-neovim, spark-vim, spark-helix, spark-nano).
-
-- bash -- GPL-3.0-or-later
-- tmux -- ISC
-- unzip -- Info-ZIP (the Nerd Font's archive)
-- fontconfig -- MIT-style
-- ncurses-bin -- MIT-style (ncurses)
-- diffutils -- GPL-3.0-or-later (`cmp`, for install.sh's rendered files, on Arch)
-- kbd -- https://kbd-project.org/ -- GPL-2.0-or-later (`setvtrgb`, the console palette unit, on Arch)
-- ncurses -- MIT-style (ncurses-bin, on Arch)
-- pacman-contrib -- GPL-2.0-or-later (`checkupdates`, on Arch)
-- bat -- MIT/Apache-2.0
-- eza -- MIT
-- fzf -- MIT
-- zoxide -- MIT
-- ripgrep -- MIT/Unlicense
-- fd-find -- MIT/Apache-2.0 (fd)
-- fd -- MIT/Apache-2.0 (fd-find, on Arch)
-- jq -- MIT
-- btop -- Apache-2.0
+The look and the workstation tools -- tmux, starship, the Nerd Font,
+bat, eza, fzf, zoxide, ripgrep, fd, jq, btop -- are spark-shell's, its
+own repository with its own credits
+(github.com/forgewright-ai/spark-shell). An editor's plugin is its own
+repository too (github.com/forgewright-ai/<name> -- spark-micro,
+spark-neovim, spark-vim, spark-helix, spark-nano).
 
 ## Models
 

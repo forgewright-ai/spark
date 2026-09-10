@@ -10,7 +10,7 @@ import re
 
 from . import IS_MAC, REPO, config, distro, run
 
-KEYS = ("PM", "PM_INSTALL", "PM_TARGET", "PKG_CORE", "PKG_ENGINE", "PKG_AI", "PKG_SHELL", "PKG_CLI")
+KEYS = ("PM", "PM_INSTALL", "PM_TARGET", "PKG_CORE", "PKG_ENGINE", "PKG_AI")
 GROUPS = ("PKG_CORE", "PKG_ENGINE", "PKG_AI", "PKG_SHELL", "PKG_CLI")
 NEVER_REMOVED = ("bash",)          # the login shell, whatever the family
 
@@ -150,16 +150,12 @@ def essential(pkg):
 
 
 def removable(repo=REPO):
-    """What spark uninstall names: the Brewfile's entries on macOS; on Linux
-    every group but PKG_CORE (the AI's four prerequisites stay), minus the
-    login shell and anything the manager calls essential."""
+    """What spark uninstall names: nothing on macOS (the mac core installs
+    no package); on Linux the engine and AI groups, minus anything the
+    manager calls essential (the four PKG_CORE prerequisites stay)."""
     if IS_MAC:
-        try:
-            with open(os.path.join(repo, "Brewfile"), encoding="utf-8") as f:
-                return re.findall(r'^(?:brew|cask) "([^"]+)"', f.read(), re.M)
-        except OSError:
-            return []
+        return []
     out = []
-    for g in ("PKG_ENGINE", "PKG_AI", "PKG_SHELL", "PKG_CLI"):
+    for g in ("PKG_ENGINE", "PKG_AI"):
         out += [p for p in groups(repo)[g] if p not in NEVER_REMOVED and not essential(p)]
     return out

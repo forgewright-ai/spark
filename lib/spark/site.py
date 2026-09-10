@@ -156,7 +156,6 @@ CONSOLEFONTS_DIR = "/usr/share/consolefonts"
 _FONT_FILE = re.compile(r"^[A-Za-z0-9]+-([A-Za-z]+?)(\d+(?:x\d+)?)\.psfu?(?:\.gz)?$")
 
 
-NERDFONT_DIR = os.path.join(HOME, ".local", "share", "fonts", "JetBrainsMonoNerdFont")
 
 
 def console_fonts():
@@ -214,8 +213,6 @@ def font_list():
     # the Nerd Font `spark shell on` installs is not one of these: the console
     # takes .psf faces, that one is a .ttf for a terminal emulator. Naming it
     # here is the only place the two meet.
-    if os.path.isdir(NERDFONT_DIR):
-        say("  JetBrainsMono Nerd Font is installed in ~%s" % NERDFONT_DIR[len(HOME):])
         say("  for your terminal emulator -- set it there; spark font is the console")
     return 0
 
@@ -591,6 +588,13 @@ def restore_rc():
         else:
             done.append((path, "removed (no %s.bak: there was no file before)" % name))
     return done
+
+
+def cmd_shell_gone(args):
+    """The shell layer moved to its own repository (one release of
+    pointer, like the v1.10 micro row): one signed line, exit 2."""
+    say("%s shell -- moved: the shell layer lives at github.com/forgewright-ai/spark-shell" % MARK)
+    return 2
 
 
 def main(sub, args):
