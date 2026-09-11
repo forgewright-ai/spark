@@ -15,6 +15,8 @@ SPARK
   spark @FILE words               ask about a file (first 4 kB, last 12 kB)
   spark edit [?] words < FILE     rewrite / complete (--at N) / ask (?) stdin
   spark ask < FILE                three questions that text does not answer
+  spark read <words> < FILE       what a source says, every line quoting it
+                                  (16 kB a part; --part N reads one)
   spark history [clear]           the threads kept here; clear removes them
   try:
   ? words   or   words?   Enter   the command lands in your line, hint above

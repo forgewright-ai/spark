@@ -116,6 +116,8 @@ class Stub(BaseHTTPRequestHandler):
             return self._sse(edit_pieces(system, user))
         if body.get("stream") and "you reply with questions" in system:
             return self._sse(ask_pieces())
+        if body.get("stream") and "answer from the source" in system:
+            return self._sse(read_pieces(user))
         if body.get("stream"):
             # `count` streams how many messages arrived, as the JSON shape does;
             # `wraptest` streams a long plain answer to prove the 80-col wrap
@@ -169,6 +171,27 @@ def ask_pieces():
             '"Who owns "Postgres" after March?"\n',   # wrapped whole: unwrapped, then kept
             'What else could "takes four hours" hide?\n',
             'Is "nightly" the only window?')
+
+
+READ_TEXT = ("The gate opens at nine and closes at noon.\n"
+             "Tickets are two dollars, free for children.\n")
+
+
+def read_pieces(user=""):
+    """spark read's reply (contract 11), line by line: a preamble that
+    quotes nothing, a grounded claim (arriving split mid-quote), a claim
+    whose quote is invented, and a second grounded claim. Two survive;
+    two are dropped, each by its own rule. STATE['read_none'] plays the
+    model whose every line fails the law; a `what repeats` question is
+    the parts case, answered with a quote every part of `big` holds."""
+    if STATE.get("read_none"):
+        return ("It is about a gate.\n", 'It costs "ten dollars" to enter.\n')
+    if "what repeats" in user:
+        return ('It repeats "word word" throughout.\n',)
+    return ("Here is what it says:\n",
+            'It opens "at nine" and clo', 'ses "at noon".\n',
+            'Entry costs "five dollars" for everyone.\n',
+            'Children go "free for children".\n')
 
 
 def is_do(messages):
@@ -953,11 +976,74 @@ def main():
              "ask --thread: the reading runs once, the first pair rides, the same text sends the words alone",
              json.dumps(msgs)[:200])
 
-        # contracts 11 and 13: the text is written, the code is not
-        t.skip("read: every claim quotes the source; an unanswered question is one line",
-               "contract 11 not built -- lib/spark/read.py, ROADMAP.md")
-        t.skip("read: past 16 kB, --part N, and the answer names the part it read",
-               "contract 11 not built -- lib/spark/read.py, ROADMAP.md")
+        # spark read: the reader's protocol (contract 11)
+        rc, out, _ = spark("read", "-h")
+        t.ok(rc == 0 and out.startswith("spark read -- "), "read -h is signed", out[:40])
+        rc, out, err = spark("read", "when", "does", "it", "open", stdin=READ_TEXT)
+        t.ok(rc == 0 and out == ('It opens "at nine" and closes "at noon".\n'
+                                 'Children go "free for children".\n'),
+             "read: grounded claims survive; a line that quotes nothing and an "
+             "invented quote do not", repr(out) + err)
+        t.ok(STATE.get("model") == "ember", "read: the request names the ember role", str(STATE.get("model")))
+        umsg = STATE["bodies"][-1]["messages"][-1]["content"]
+        t.ok(umsg.startswith("when does it open\n\nYou read this as: Portuguese, fiction.\nSource:\n")
+             and "[cwd" not in umsg and "Output:" not in umsg,
+             "read: the reading is restated, the source carries its own label, no cwd", repr(umsg[:110]))
+        turns = sorted(glob.glob(home + "/.local/state/spark/turns/*.jsonl"))
+        lt = json.loads(open(turns[-1]).read().splitlines()[-1]) if turns else {}
+        t.ok(lt.get("mode") == "read-source" and lt.get("kind") == "read" and lt.get("kept") == 2
+             and lt.get("dropped") == 2 and lt.get("part") == 1 and lt.get("parts") == 1
+             and not any(k in lt for k in ("line", "answer", "context")),
+             "read: the turn counts parts and kept lines, and keeps no words", json.dumps(lt)[:200])
+        rc, _out, _ = spark("read", stdin=READ_TEXT)
+        umsg = STATE["bodies"][-1]["messages"][-1]["content"]
+        t.ok(rc == 0 and umsg.startswith("What does this source cover?\n\n"),
+             "read: bare asks what the source covers", repr(umsg[:50]))
+        # nothing survives: one line composed from the source, exit 1, stdout untouched
+        STATE["read_none"] = True
+        rc, out, err = spark("read", "who", "wrote", "it", stdin=READ_TEXT)
+        STATE["read_none"] = False
+        t.ok(rc == 1 and out == "" and 'it opens: "The gate opens at nine' in err,
+             "read: when every line drops, the refusal shows the source's own opening words",
+             repr(out) + err)
+        # parts: 16 kB each, and the answer's first line names the one it read
+        big = "word " * 8000                       # 40000 chars -> 3 parts
+        from spark import read as readmod
+        t.ok(readmod.parts_of(len(big)) == 3
+             and readmod.part_slice(big, 1)[-readmod.PART_OVERLAP:] == readmod.part_slice(big, 2)[:readmod.PART_OVERLAP],
+             "read: three parts of 40000 chars, each opening with the last 400 of the one before")
+        n0 = len(STATE["bodies"])
+        rc, out, err = spark("read", "what", "repeats", stdin=big)
+        t.ok(rc == 1 and out == "" and "3 parts" in err and "--part N" in err
+             and len(STATE["bodies"]) == n0,
+             "read: a source past 16 kB is refused with the part count, nothing sent", err)
+        rc, out, err = spark("read", "--part", "2", "what", "repeats", stdin=big)
+        t.ok(rc == 0 and out == '[part 2 of 3]\nIt repeats "word word" throughout.\n',
+             "read: --part 2 answers, and the first line names the part it read", repr(out[:60]) + err)
+        rc, out, _ = spark("read", "--part", "9", stdin=big)
+        t.ok(rc == 2 and "no part 9" in out, "read: a part past the source is refused, exit 2", out)
+        rc, out, _ = spark("read", "--part", "x", stdin=READ_TEXT)
+        t.ok(rc == 2 and "--part N is" in out, "read: --part takes a number", out)
+        # the ledger (kind read): the questions asked, recorded, never suppressing
+        rc, out, err = spark("read", "--name", "a/b/page.txt", "when", "does", "it", "open", stdin=READ_TEXT)
+        t.ok(rc == 0 and '"at nine"' in out, "read --name answers and records the question", err)
+        rc, out, _ = spark("read", "--ledger", "--name", "page.txt")
+        t.ok(rc == 0 and out.splitlines()[0].startswith("page.txt: 1 question")
+             and "when does it open" in out, "read --ledger lists the questions asked, basenamed", out)
+        rc, out, _ = spark("ask", "--ledger", "--name", "page.txt")
+        t.ok(rc == 0 and out.startswith("page.txt: no question answered"),
+             "the ledger's kinds do not see each other: the questioner's is empty", out)
+        rc, out, err = spark("read", "--name", "page.txt", "when", "does", "it", "open", stdin=READ_TEXT)
+        t.ok(rc == 0 and '"at nine"' in out,
+             "read: a question asked twice is answered twice -- the ledger never suppresses", repr(out))
+        rc, out, _ = spark("read", "--ledger", "clear", "--name", "page.txt")
+        t.ok(rc == 0 and "dropped 1 question for page.txt" in out,
+             "read --ledger clear --name drops one source's", out)
+        rc, out, err = spark("read", stdin="")
+        t.ok(rc == 2 and out.startswith("spark read -- ") and "spark <words>" in out,
+             "read: no source is the usage and where a question goes, exit 2", out[:80] + err)
+
+        # contract 13: the text is written, the code is not
         t.skip("drill: a question whose answer is not in the source is dropped before it is asked",
                "contract 13 not built -- lib/spark/drill.py, ROADMAP.md")
         t.skip("drill: a missed item comes back on a widening interval until it is right twice",

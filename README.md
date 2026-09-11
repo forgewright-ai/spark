@@ -65,6 +65,7 @@ and your editor stay yours. `INSTALL.md` has every step and every key.
 | `spark <words>` | one answer, streamed; `spark @FILE words` reads a file |
 | `spark do <words>` | a task, one confirmed command at a time |
 | `spark ask < plan.md` | the questions that text does not answer: at most three, every line a question |
+| `spark read <words> < page.txt` | what a source says about your question, every line quoting it; a source past 16 kB is read one `--part N` at a time |
 | `spark soul edit` | who it is; `spark memory add <words>` adds a fact it keeps |
 | `spark model list` | 26 models, each with its license; `spark model NAME` serves one |
 | `spark ember NAME` | a second, bigger model for conversations |

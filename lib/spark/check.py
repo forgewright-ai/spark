@@ -989,7 +989,7 @@ def row_ledger(ctx):
     total = sum(counts.values())
     if total > ledger.TOTAL_MAX:
         return warn("%d records, %d are kept" % (total, ledger.TOTAL_MAX),
-                    "spark edit --ledger clear; spark ask --ledger clear")
+                    "spark edit --ledger clear; spark ask --ledger clear; spark read --ledger clear")
     if not total:
         return ok("sealed, empty (%s)" % ", ".join(sorted(ledger.RULES)))
     return ok("sealed, %s (%d of %d)" % (", ".join("%d %s" % (n, k) for k, n in sorted(counts.items())),

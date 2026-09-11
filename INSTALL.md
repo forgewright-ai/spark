@@ -198,7 +198,24 @@ shell cannot host the widget (another shell, or macOS's bash 3.2):
    `spark ask --answered --name plan.md` with the question on stdin;
    `spark ask --ledger --name plan.md` lists what you have answered,
    `--ledger clear` drops it. `spark ask -h` says the rest.
-8. `spark soul edit` writes the paragraph that tells the model who it is
+8. `spark read` answers a question from a source on stdin -- a page, a
+   message, a document -- and from nowhere else. Every line of the
+   answer quotes the source and the quote is checked: a line whose
+   quotes are not in the source, or that quotes nothing, is dropped
+   before you see it. When the source does not answer, the reply is one
+   line showing the source's own opening words, never a guess. A source
+   past 16000 characters is read one part at a time (`--part N`; the
+   answer's first line names the part).
+
+   ```sh
+   w3m -dump https://example.com | spark read "what is this page for"
+   spark read when does it open < page.txt
+   ```
+
+   `--name page.txt` records the question asked (never sent anywhere);
+   `spark read --ledger --name page.txt` lists what has been asked,
+   `--ledger clear` drops it. `spark read -h` says the rest.
+9. `spark soul edit` writes the paragraph that tells the model who it is
    (`~/.config/spark/soul`, at most 4000 characters; `spark soul` shows
    which is in use, `spark soul reset` goes back to the default). The
    default:
@@ -211,7 +228,7 @@ shell cannot host the widget (another shell, or macOS's bash 3.2):
    invent a flag, a path, or a command.
    ```
 
-9. `spark memory add <words>` adds a fact it keeps (`spark memory forget N` drops
+10. `spark memory add <words>` adds a fact it keeps (`spark memory forget N` drops
    one, `spark memory` lists them, `spark memory off` stops sending
    them; 40 facts of 200 characters). Soul and facts ride on every
    conversation, so a fact costs tokens every time: keep the ones that

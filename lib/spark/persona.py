@@ -306,6 +306,25 @@ MODE_ASK_QUESTIONS = (
     "text, and a question whose quotes are not in it is thrown away. Never state a fact, never answer your own "
     "question, never say what you would do or what the author should do: you are the one "
     "who asks. Ask in the text's own language.")
+# The reader (spark read, contract 11). The same law as contract 12,
+# turned from questions to claims: every line is checked against the
+# source and dropped unless a quote in it anchors -- a line that quotes
+# nothing is dropped too, because a claim about a source must show the
+# source. The brief says what is thrown away so a small model spends its
+# lines pointing at the source instead of summarising from memory.
+MODE_READ_SOURCE = (
+    "The reader hands you a source -- a page, a message, a document -- and asks about "
+    "it. You answer from the source and nowhere else: what the source does not say, "
+    "you do not say. Every line you write points at the source by weaving a short "
+    "piece of it -- character for character, at most twelve words, never across a "
+    "line -- between double quotes into your own words. Every quote is checked "
+    "against the source: a line whose quotes are not in it is thrown away before the "
+    "reader sees it, and so is a line that quotes nothing, so write no preamble, no "
+    "heading, no closing line. Plain text, no markdown marks; a few lines, fewer when "
+    "fewer answer. Never add what you know from elsewhere, never guess past the "
+    "source's edge, never write 'the text does not mention': when the source does not "
+    "answer, write nothing at all -- the refusal is composed for you. Answer in the "
+    "source's own language.")
 RECALL_SCHEMA = {
     "type": "object",
     "properties": {"candidates": {"type": "array", "items": {"type": "string"}}},
@@ -324,7 +343,8 @@ MODE_RECALL = (
     "do not reconstruct. `candidates` is the list; nothing else.")
 MODES.update({"edit-complete": MODE_EDIT_COMPLETE, "edit-rewrite": MODE_EDIT_REWRITE,
               "edit-answer": MODE_EDIT_ANSWER, "edit-read": MODE_EDIT_READ,
-              "ask-questions": MODE_ASK_QUESTIONS, "recall": MODE_RECALL})
+              "ask-questions": MODE_ASK_QUESTIONS, "read-source": MODE_READ_SOURCE,
+              "recall": MODE_RECALL})
 
 
 def _tools_line():
@@ -378,7 +398,7 @@ def mode_prefix(cfg, mode, shell):
     brief for everything else."""
     if mode in ("chat", "talk"):
         return machine_line(cfg) + "\n" + KNOW_CHAT
-    if mode.startswith(("edit-", "ask-")):
+    if mode.startswith(("edit-", "ask-", "read-")):
         # over a text -- in an editor, or a plan on stdin -- the shell
         # brief (tools, flags, spark's verbs) is noise for prose and code
         # alike, and it costs prompt
@@ -422,9 +442,9 @@ def user_message(text, cwd, context=""):
     if context:
         # an @FILE block, the editor's and the questioner's blocks, and the
         # widget's failure block (Command:/Exit:/Output:) carry their own label
-        labelled = context.startswith(("File ", "Text", "Selected ", "Plan ", "The author says",
-                                       "You read this as", "Declined before", "Answered before",
-                                       "Command: "))
+        labelled = context.startswith(("File ", "Text", "Selected ", "Plan ", "Source",
+                                       "The author says", "You read this as",
+                                       "Declined before", "Answered before", "Command: "))
         label = "" if labelled else "Output:\n"
         return head + (text + "\n\n" if text else "") + label + context
     return head + text

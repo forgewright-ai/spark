@@ -131,8 +131,9 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 model, and borrowed by spark recall to keep to lines that ran)
                 ledger (what you have already weighed: one sealed file, a kind per
                 contract, and the rule that retires a record is the contract's own)
-                ask (spark ask: contract 12) read drill (contracts 11 and 13: the
-                contract text and its constants, no code, nothing dispatched yet)
+                ask (spark ask: contract 12) read (spark read: contract 11)
+                drill (contract 13: the contract text and its constants,
+                no code, nothing dispatched yet)
                 forge (identity, threads, reply, the chat REPL, @FILE)
                 forgeserve (the FORGE server: spark forge, the API, the page) do (spark do)
                 version (the version, from git, cached: spark ver, check's header, forgeserve)
@@ -470,10 +471,36 @@ may change freely.
     `SPARK_HISTORY` days. `--ledger [clear] --name NAME` lists or drops them
     (the pane's `ledger` and `ledger clear` at the `spark>` prompt); no
     shell verb. The micro plugin depends on nothing else.
-11. `spark read` -- reserved, not built. The contract's text is in
-    `ROADMAP.md` and in `lib/spark/read.py`; nothing dispatches to it, and
-    `spark read` is an unknown word until one line lands in `bin/spark`'s
-    `VERBS`.
+11. `spark read` is the reader's protocol: the source on stdin -- a page,
+    a message, a document -- a question in the words, the answer raw
+    streamed text out; never a path, never a `[cwd]` line. Bare asks what
+    the source covers. The law is contract 12's turned from questions to
+    claims, enforced after the model (`text.Gate`, line by line): a line
+    whose quotes are not in the source is dropped (`text.UNGROUNDED`),
+    and so is a line that quotes nothing (`text.UNQUOTED`) -- an unquoted
+    sentence about a source is the model's own knowledge wearing the
+    source's clothes; kept lines stream marked. A reading pass runs first
+    (`session.reading`, contract 10's). When nothing survives, stdout
+    stays untouched and the reply is one line on stderr showing the
+    source's own opening words (`read.opening` -- composed in code, never
+    asked of the model), exit 1: a client tells "no answer" from "an
+    answer" by the exit code. At most `READ_MAX` (16000) chars a part: a
+    longer source is parts, each opening with the last `PART_OVERLAP`
+    (400) chars of the one before; without `--part N` it is refused in
+    one line naming the count (exit 1, nothing sent), and with it the
+    answer's first line is `[part N of M]`, written by the code before
+    the first kept line -- an answer from part 2 that does not say so
+    cannot be told from an answer about the whole. `--name NAME` (a
+    basename) never leaves the machine: it names the ledger record (kind
+    `read`, `ledger.RULES`) written after a kept answer -- the questions
+    asked of this source, so a second reader sees what has been asked;
+    nothing invalidates them but age and `--ledger clear`, and they never
+    suppress: a question asked twice of a source is a fair question
+    twice, unlike a note declined in a draft. `--ledger [clear] [--name
+    NAME]` lists or drops them. Exit 2 for the usage, a bad `--part`, or
+    empty stdin (the usage plus where a question for spark itself goes).
+    The turn record is numbers (`kind`, `chars`, `ms`, `part`, `parts`,
+    `kept`, `dropped`, `quotes`, `unanchored`).
 12. `spark ask` is the questioner's protocol: the text on stdin -- a plan,
     a draft, a decision -- and questions about it out, raw, one per line;
     never a path, never a `[cwd]` line. Mode from the argument shape, no

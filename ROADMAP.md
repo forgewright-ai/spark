@@ -1,32 +1,7 @@
 # Roadmap
 
-What comes after v1.19, in the order it is likely to happen. Nothing here
+What comes after v1.20, in the order it is likely to happen. Nothing here
 is a promise; a row in `CHANGELOG.md` is. A better idea is an issue away.
-
-## Contract 11: spark read
-
-`spark edit` works on text you are writing. There is no verb for text you
-are reading: the source on stdin, a question in the words, raw text out,
-never a path.
-
-- every claim quotes the source. A line whose quotes are not in it is
-  dropped, and so is a line that quotes nothing -- an unquoted sentence
-  about a source is the model's own knowledge wearing the source's
-  clothes
-- when the source does not answer, the whole reply is one line naming
-  what the source does cover, composed from the source's own words --
-  never "the text does not say, but generally ..."
-- 16 kB a part, `--part N` beyond that, and the answer names the part it
-  read in its first line: an answer from part 2 that does not say so
-  cannot be told from an answer about the whole
-- ledger kind `read`: the questions asked of this source, so a second
-  reader sees what has been asked. Nothing invalidates them -- a source
-  does not change, and that is what makes it a source -- and none of
-  them suppresses a question, unlike a note declined in a draft
-
-The gate `spark ask` landed -- `text.Gate`, `text.Ground` -- is the
-machinery. This is the second verb through it, and `lib/spark/read.py`
-holds this text beside the code that will fill it.
 
 ## Contract 13: spark drill
 

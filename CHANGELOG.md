@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.20
+
+- `spark read` (contract 11): the source on stdin -- a page, a message,
+  a document -- a question in the words, and an answer that says only
+  what the source says. Every line quotes the source and the quote is
+  checked; a line whose quotes are not in it, or that quotes nothing,
+  is dropped before the reader sees it. When the source does not
+  answer, the reply is one line showing the source's own opening words,
+  composed in code, never a model's guess. A source past 16 kB is parts
+  (`--part N`), and the answer's first line names the part it read.
+  `--name` records the question in the ledger (kind `read`, never
+  suppressing -- a source does not change); `--ledger [clear]` lists or
+  drops. The second verb through the gate `spark ask` landed.
+
 ## v1.19
 
 - The shell layer lives in its own repository:

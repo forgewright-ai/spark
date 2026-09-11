@@ -20,6 +20,7 @@
 #
 #   spark edit --ledger [clear] --name NAME   the editor's, in its pane
 #   spark ask  --ledger [clear] --name NAME   the questions answered
+#   spark read --ledger [clear] [--name NAME] the questions asked of a source
 
 import json
 import os
