@@ -21,12 +21,17 @@ on stdin, text out, never a path. Each app's plugin is its own
 | [spark-vim](https://github.com/forgewright-ai/spark-vim) | vim: your key opens `spark> ` |
 | [spark-helix](https://github.com/forgewright-ai/spark-helix) | helix: `A-s` pre-fills helix's prompt |
 | [spark-nano](https://github.com/forgewright-ai/spark-nano) | nano: `M-S` pre-fills nano's prompt |
-| [spark-w3m](https://github.com/forgewright-ai/spark-w3m) | w3m: `M-s` reads the page (`spark read`) |
+| [spark-w3m](https://github.com/forgewright-ai/spark-w3m) | w3m: `M-s` opens `spark> ` over the page |
 
-At `spark> `: Enter completes at the cursor, words rewrite, `? words`
-asks in a pane. helix and nano have no cursor hook: their key pre-fills
-`spark edit ` instead -- add words, press Enter. The rest of this file has
-each app's lines; an editor with a filter needs no plugin at all.
+One key in every app -- Alt-s (`M-s`, `A-s`: the same key by each
+tool's name) -- summons spark on what is in front of you, and one
+grammar answers it. At `spark> `: Enter does the surface's default
+(complete at the cursor where you write, the overview where you read),
+words do its natural act (rewrite where you write, ask where you read),
+and `? words` asks anywhere. helix and nano have no cursor hook: their
+key pre-fills `spark edit ` on the editor's own prompt instead -- add
+words, press Enter. The rest of this file has each app's lines; an
+editor with a filter needs no plugin at all.
 
 When apps need more than text, another contract is defined -- e-mail,
 for example -- and apps connect to it the same way.
@@ -124,11 +129,12 @@ ln -s ~/.w3m/spark/spark-w3m ~/.local/bin/spark-w3m
 cat ~/.w3m/spark/keymap.spark >> ~/.w3m/keymap
 ```
 
-`M-s` pipes the page you are reading to `spark read` (what does it
-cover?); `M-a` opens w3m's pipe prompt -- type `spark-w3m your words`
-for a question. A page past 16 kB answers with its part count
-(`spark-w3m --part 2 words` reads part 2). No plugin at all still
-works from any shell:
+`M-s` opens `spark> ` over the page you are reading: Enter or `?`
+alone is the overview (what does this page cover?), your words are
+your question, and a page past 16 kB answers with its part count
+(`--part 2 words` reads part 2; the answer's first line names its
+part). Ctrl-C is never mind. No plugin at all still works from any
+shell:
 
 ```sh
 w3m -dump https://example.com | spark read "what is this page for"
