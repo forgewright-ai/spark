@@ -1109,10 +1109,11 @@ class Sound:
 
 # ------------------------------------------------------------- the band --
 class Band:
-    """Eleven lines drawn below the prompt and redrawn in place: no
+    """Nine lines drawn below the prompt and redrawn in place: no
     alternate screen, so the last picture stays in the scrollback. A row is
     written only when it changed; SGR codes only where the attribute
-    changes; eight colours, bold, dim, nothing else."""
+    changes; eight colours, bold, dim, nothing else. The band may grow --
+    ending_rows hands draw() a tenth row -- and never shrinks back."""
 
     N = 9
 
@@ -1142,6 +1143,8 @@ class Band:
         return ("".join(parts) + "\033[0m").rstrip()
 
     def draw(self, rows):
+        if len(rows) > len(self.prev):
+            self.prev += [None] * (len(rows) - len(self.prev))
         out = []
         for i, row in enumerate(rows):
             s = self.render(row)
@@ -1149,12 +1152,12 @@ class Band:
                 out.append("\r" + s + "\033[K")
                 self.prev[i] = s
             out.append("\n")
-        out.append("\033[%dA" % self.N)
+        out.append("\033[%dA" % len(rows))
         self.out.write("".join(out))
         self.out.flush()
 
     def close(self):
-        self.out.write("\n" * self.N + "\033[?25h")
+        self.out.write("\n" * len(self.prev) + "\033[?25h")
         self.out.flush()
 
 

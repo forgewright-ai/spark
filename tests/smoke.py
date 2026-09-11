@@ -1973,6 +1973,23 @@ def main():
              "lua: a log stops the run; the jump over it resumes the run", "x %.1f -> %.1f" % (_x, _g.hero.x))
         art = _lua.letters("GAME OVER")
         t.ok(len(art) == 5 and len(set(len(r) for r in art)) == 1 and len(art[0]) < 60, "lua: GAME OVER is five even rows under 60 columns", str(art))
+        # the ending band is a row taller than play's nine (the caption
+        # moves under the banner): Band.draw must follow the growth, and
+        # close must step below the grown band -- the pty case above
+        # leaves with q and never draws an ending, so this is the one
+        # place a death or a win meets Band.draw
+        _g = _lua.Game(80, seed=1)
+        _tl2 = _lua.tale()
+        _band = _lua.Band(_io.StringIO())
+        _band.open()
+        _band.draw(_g.frame(_tl2))
+        for _kind in ("dead", "won"):
+            _g.over = _kind
+            _band.draw(_lua.ending_rows(_g, _tl2, _kind))
+        _band.close()
+        _end = _band.out.getvalue()
+        t.ok("\x1b[10A" in _end and _end.endswith("\n" * 10 + "\x1b[?25h"),
+             "lua: the ending band grows to ten rows and Band.draw follows it", repr(_end[-80:]))
         import fcntl
         import pty
         import struct
