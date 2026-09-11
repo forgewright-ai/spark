@@ -64,7 +64,7 @@ bat, eza, fzf, zoxide, ripgrep, fd, jq, btop -- are spark-shell's, its
 own repository with its own credits
 (github.com/forgewright-ai/spark-shell). An editor's plugin is its own
 repository too (github.com/forgewright-ai/<name> -- spark-micro,
-spark-neovim, spark-vim, spark-helix, spark-nano).
+spark-neovim, spark-vim, spark-helix, spark-nano, spark-w3m).
 
 ## Models
 

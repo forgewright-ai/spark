@@ -714,6 +714,9 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   the cursor; a prompt plugin (helix, nano -- editors with no cursor
   hook) pre-fills the editor's own prompt with `spark edit `, proven the
   same way, by a pty test whose config is the shipped snippet itself.
+  The reader's verb has its first client too: spark-w3m (contract 11,
+  `spark read`) -- a keymap snippet and a stderr-folding wrapper, the
+  same laws, its own repository.
   The known clients are listed in APPS.md, and every one of them is in
   CREDITS.md and on the page front -- docs_test reads the app names out
   of APPS.md and looks them up in those two; a new one is one line in
