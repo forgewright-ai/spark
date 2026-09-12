@@ -17,6 +17,11 @@ SPARK
   spark ask < FILE                three questions that text does not answer
   spark read <words> < FILE       what a source says, every line quoting it
                                   (16 kB a part; --part N reads one)
+  spark drill < FILE              the source becomes questions it answers;
+                                  --name keeps a widening schedule
+  <stream> | spark watch <words>  silent until a line matches, then one line
+                                  quoting it (tail -f, journalctl -f)
+  spark edit --watch FILE         comment on a draft as you save it
   spark history [clear]           the threads kept here; clear removes them
   try:
   ? words   or   words?   Enter   the command lands in your line, hint above

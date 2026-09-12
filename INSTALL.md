@@ -215,7 +215,36 @@ shell cannot host the widget (another shell, or macOS's bash 3.2):
    `--name page.txt` records the question asked (never sent anywhere);
    `spark read --ledger --name page.txt` lists what has been asked,
    `--ledger clear` drops it. `spark read -h` says the rest.
-9. `spark soul edit` writes the paragraph that tells the model who it is
+9. `spark drill` turns a source on stdin into practice: it asks a
+   question, you try it, then it shows the source's own words so you can
+   say whether you had it. Both the question and the answer are spans of
+   the source -- an answer the model invents is dropped before it is ever
+   asked -- and a source too thin to drill is one line, never padded from
+   the model's own knowledge.
+
+   ```sh
+   spark drill < notes.md
+   w3m -dump https://example.com | spark drill --name page
+   ```
+
+   `--name NAME` keeps a schedule: a missed item comes back on a widening
+   interval (1, 3, 7, 21, 60 days) until you have had it right twice in a
+   row; `spark drill --ledger --name NAME` shows the schedule, `--ledger
+   clear` drops it. Without `--name`, a session is practice kept nowhere.
+   `spark drill -h` says the rest.
+10. `spark watch` reads a live stream on stdin -- a log tail, a build, a
+    long migration -- and says nothing until a line matches what you asked
+    for, then one line quoting it. The quote is checked against the stream,
+    so it cannot report what is not there, and silence is the normal,
+    healthy state. The stream never leaves this machine.
+
+    ```sh
+    tail -f app.log | spark watch "a 500 appears"
+    journalctl -f  | spark watch "anything about the disk"
+    ```
+
+    `spark watch -h` says the rest.
+11. `spark soul edit` writes the paragraph that tells the model who it is
    (`~/.config/spark/soul`, at most 4000 characters; `spark soul` shows
    which is in use, `spark soul reset` goes back to the default). The
    default:
@@ -228,12 +257,12 @@ shell cannot host the widget (another shell, or macOS's bash 3.2):
    invent a flag, a path, or a command.
    ```
 
-10. `spark memory add <words>` adds a fact it keeps (`spark memory forget N` drops
-   one, `spark memory` lists them, `spark memory off` stops sending
-   them; 40 facts of 200 characters). Soul and facts ride on every
-   conversation, so a fact costs tokens every time: keep the ones that
-   change answers. The model never writes them. `spark history clear`
-   empties the turns and threads and never touches a fact.
+12. `spark memory add <words>` adds a fact it keeps (`spark memory forget N` drops
+    one, `spark memory` lists them, `spark memory off` stops sending
+    them; 40 facts of 200 characters). Soul and facts ride on every
+    conversation, so a fact costs tokens every time: keep the ones that
+    change answers. The model never writes them. `spark history clear`
+    empties the turns and threads and never touches a fact.
 
 ## 4. Models
 

@@ -239,6 +239,68 @@ def answered(cfg, name):
     return _paragraph("Answered before -- do not ask these again:\n", mine), folded
 
 
+def _day(offset=0):
+    """A YYYY-MM-DD date `offset` days from today, local time."""
+    return time.strftime("%Y-%m-%d", time.localtime(time.time() + offset * 86400))
+
+
+def drill_due(name):
+    """Contract 13: the scheduled items for `name` due today or earlier,
+    soonest first. A rested item (no `due`) does not come back; a drill
+    record never ages out (RULES: drill age is False)."""
+    name = os.path.basename((name or "").strip())
+    today = _day()
+    mine = [e for e in _load() if _kind(e) == KIND_DRILL and e["name"] == name
+            and e.get("due") and e["due"] <= today]
+    mine.sort(key=lambda e: e.get("due", ""))
+    return mine
+
+
+def drill_grade(name, question, answer, right, cfg=None):
+    """Contract 13: record how a drill item went and when it is next due --
+    the schedule, not a suppression. The item is keyed by its question; the
+    answer span rides so a later session can re-ask it. `drill.schedule`
+    owns the policy (right twice rests it, a miss widens the interval); this
+    only persists the state it returns. Drill records never age out."""
+    from . import drill as drillmod
+    from . import text as textmod
+    name = os.path.basename((name or "").strip())
+    if not name:
+        raise Refused("a drill schedule needs --name NAME (the source's name)")
+    q = " ".join((question or "").split())[:NOTE_MAX]
+    a = " ".join((answer or "").split())[:NOTE_MAX]
+    key = textmod.fold(q)
+    entries = _load()
+    rec = next((e for e in entries if _kind(e) == KIND_DRILL and e["name"] == name
+                and textmod.fold(e.get("note", "")) == key), None)
+    if rec is None:
+        rec = {"kind": KIND_DRILL, "name": name, "note": q, "answer": a, "misses": 0, "streak": 0, "due": ""}
+        entries.append(rec)
+    misses, streak, off = drillmod.schedule(rec.get("misses", 0), rec.get("streak", 0), right)
+    rec.update({"ts": time.strftime("%Y-%m-%d %H:%M:%S"), "answer": a,
+                "misses": misses, "streak": streak, "due": "" if off is None else _day(off)})
+    mine = [e for e in entries if _kind(e) == KIND_DRILL and e["name"] == name]
+    if len(mine) > PER_NAME:
+        drop = mine[:len(mine) - PER_NAME]
+        entries = [e for e in entries if e not in drop]
+    _save(entries)
+
+
+def drill_listing(name=None):
+    """Contract 13's records for a pane: the schedule, soonest due first."""
+    name = os.path.basename(name) if name else None
+    es = [e for e in _load() if _kind(e) == KIND_DRILL and (not name or e["name"] == name)]
+    head = (name + ": ") if name else ""
+    if not es:
+        return [head + "no drill scheduled (spark drill --name NAME keeps a schedule)"]
+    out = [head + "%d item%s, soonest due first" % (len(es), "" if len(es) == 1 else "s")]
+    for e in sorted(es, key=lambda e: e.get("due") or "~"):
+        due = e.get("due") or "rested"
+        out.append("  %-10s streak %d, misses %d   %s" % (due, e.get("streak", 0), e.get("misses", 0),
+                                                          e["note"][:48] + ("..." if len(e["note"]) > 48 else "")))
+    return out
+
+
 def clear(name=None, kind=KIND_EDIT):
     """Drop this kind's notes, or one name's; the count dropped."""
     name = os.path.basename(name) if name else None

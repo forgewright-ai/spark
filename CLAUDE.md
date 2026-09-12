@@ -132,8 +132,10 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 ledger (what you have already weighed: one sealed file, a kind per
                 contract, and the rule that retires a record is the contract's own)
                 ask (spark ask: contract 12) read (spark read: contract 11)
-                drill (contract 13: the contract text and its constants,
-                no code, nothing dispatched yet)
+                drill (spark drill: contract 13 -- a source becomes questions it
+                answers, self-graded, and the ledger schedules the misses)
+                watch (spark watch: contract 14 -- a live stream on stdin, silent
+                until a line matches, then one grounded line)
                 forge (identity, threads, reply, the chat REPL, @FILE)
                 forgeserve (the FORGE server: spark forge, the API, the page) do (spark do)
                 version (the version, from git, cached: spark ver, check's header, forgeserve)
@@ -471,6 +473,15 @@ may change freely.
     `SPARK_HISTORY` days. `--ledger [clear] --name NAME` lists or drops them
     (the pane's `ledger` and `ledger clear` at the `spark>` prompt); no
     shell verb. The micro plugin depends on nothing else.
+    `spark edit --watch FILE` is the live form: it watches a draft on disk
+    (poll by mtime, re-open by path so an atomic save is caught, a read
+    that fails mid-swap waits a tick) and runs the `?`/review path over
+    each fresh stanza as it is saved (`edit.stanzas`, `_review_context`,
+    `text.Anchors`), a whole-draft review after `EDIT_WATCH_IDLE`s idle. A
+    non-empty draft owes itself a review rather than baselining its work
+    into `seen`; a transient brain gap skips a comment in silence
+    (`session.once`); the writer answers back through the Alt-s ask key,
+    not a built-in chat -- the loop keeps to one concern.
 11. `spark read` is the reader's protocol: the source on stdin -- a page,
     a message, a document -- a question in the words, the answer raw
     streamed text out; never a path, never a `[cwd]` line. Bare asks what
@@ -533,10 +544,48 @@ may change freely.
     nothing survived is not written to the thread: a refusal is not a
     turn to follow up on. The turn record is numbers (`kind`, `chars`,
     `ms`, `asked`, `dropped`, `quotes`, `unanchored`).
-13. `spark drill` -- reserved, not built. The contract's text is in
-    `ROADMAP.md` and in `lib/spark/drill.py`; nothing dispatches to it.
-    Its ledger rule inverts every other one -- a missed item comes back
-    rather than being suppressed -- which is why `ledger.RULES` exists.
+13. `spark drill` is the practice protocol: the source on stdin, one
+    question at a time out, the answer at the terminal; never a path.
+    Both halves come from the source -- the model proposes a verbatim span
+    as the answer and a question that span answers (`persona.DRILL_SCHEMA`,
+    a JSON reply), and `drill._ground` drops any item whose answer does not
+    `text.anchor` in the source before it is ever asked: a drill built on
+    an invented answer teaches the invention. `DRILL_MAX` in, `ITEMS_MAX`
+    a session. Too little to drill is one line (the source's opening,
+    `read.opening`) and exit 1, never padded from the model's own
+    knowledge. Self-graded: the learner sees the source's span and says
+    whether they had it (model-grading is a second opinion, not the
+    source); the answers are graded on this machine and never sent. The
+    source comes on stdin, so the answers come from `/dev/tty` (the
+    `SPARK_DRILL_TTY` seam points them at a file in tests); no tty is a
+    signed refusal, exit 2. Ledger kind `drill`, and it SCHEDULES rather
+    than suppresses -- the inversion `ledger.RULES` exists for: `--name`
+    keeps a schedule (`ledger.drill_grade`/`drill_due`, records carrying
+    `misses`, `streak`, `due`), a missed item comes back at `INTERVALS`
+    days -- 1, 3, 7, 21, 60 -- widening each miss until `RIGHT_TWICE` in a
+    row rests it (`drill.schedule` is the policy), and alone among the
+    kinds these never age out (`age: False`): a schedule that expires is
+    not one. `--ledger [clear] --name NAME` lists or drops. Without
+    `--name`, a session is practice kept nowhere. The turn record is
+    numbers (`kind`, `chars`, `items`, `right`, `wrong`).
+14. `spark watch` is the monitor's protocol: a live stream on stdin -- log
+    lines, build output, a running process -- an instruction in the words,
+    and one line out when a line matches it; never a path. Bare (no words)
+    is refused. The law is the grounded one, enforced after the model
+    (`text.Gate`, `keep=GROUNDED`): the line out quotes the stream, so a
+    line whose quote is not in the window it was shown is dropped and "a
+    500 appeared" cannot fire when none did; silence is the answer when
+    nothing matches, and the healthy state. A window closes at
+    `WINDOW_LINES` lines or `WINDOW_SECS` old, whichever first, at most
+    `WATCH_MAX` chars to the model and no more than one call per
+    `MIN_INTERVAL` -- cheap enough to leave running; backlog accrued during
+    a call coalesces into the next window. A transient brain gap (down,
+    loading, timeout, cut) skips the window and the watch goes on
+    (`session.once`, the shared recovery `spark edit --watch` uses too);
+    stdin closing ends it (exit 0), SIGINT 130. No ledger: a live stream
+    has nothing stable to name. Local in the strongest sense -- the stream
+    never leaves the machine, the same brain the prompt uses. The turn
+    record is numbers.
 
 ## The grammar
 
@@ -683,12 +732,13 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   own report). The one release of migration is the `shell-moved`
   bootstrap row and the `spark shell` / `spark bar on|off` stubs, each
   one signed pointer line, exit 2.
-- **A grounded contract.** One law, four contracts (10, 11, 12, 13): what
-  a model says about a text is checked against that text before the reader
-  sees it. The judge is `lib/spark/text.py` -- `anchor()` at the span
-  level, `Ground.verdict()` at the unit level, `Gate` the stream that
+- **A grounded contract.** One law, five contracts (10, 11, 12, 13, 14):
+  what a model says about a text is checked against that text before the
+  reader sees it. The judge is `lib/spark/text.py` -- `anchor()` at the
+  span level, `Ground.verdict()` at the unit level, `Gate` the stream that
   marks what it keeps and drops what it refuses, so a contract can refuse
-  instead of invent. A new one states, in `CLAUDE.md` and in its module's
+  instead of invent (drill checks a single answer span with `anchor()`
+  directly; watch and read run the `Gate`). A new one states, in `CLAUDE.md` and in its module's
   own head: what grounds its output; what happens when grounding fails
   (one line, and what exit code says so); its caps; its ledger kind and
   the rule that retires a record there (`ledger.RULES` -- each contract's

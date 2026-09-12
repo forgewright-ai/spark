@@ -341,9 +341,47 @@ MODE_RECALL = (
     "most five, best match first, fewer when fewer fit, none when nothing in the history "
     "matches. A line you return that is not in the history verbatim is thrown away, so copy, "
     "do not reconstruct. `candidates` is the list; nothing else.")
+DRILL_SCHEMA = {
+    "type": "object",
+    "properties": {"items": {"type": "array", "items": {
+        "type": "object",
+        "properties": {"question": {"type": "string"}, "answer": {"type": "string"}},
+        "required": ["question", "answer"]}}},
+    "required": ["items"],
+}
+# the drill (spark drill, contract 13). Both halves come from the source:
+# the answer is a verbatim span of it and the question is one that span
+# answers. The grounding is enforced in code -- an item whose answer does
+# not anchor in the source is dropped before it is ever asked -- but a
+# brief that asks for spans, not prose, wastes fewer tokens getting there.
+MODE_DRILL_ITEMS = (
+    "You are given a source and you turn it into practice questions. For each item, choose "
+    "a short span OF THE SOURCE, word for word, as the answer -- at most a dozen words, "
+    "never across a line -- and write a question that this span, and this span alone, "
+    "answers. Both the question and the answer come from the source; invent neither. An "
+    "answer that is not a verbatim piece of the source is thrown away before it is ever "
+    "asked, and a drill built on an invented answer teaches the invention. Ask what the "
+    "source actually establishes -- a fact, a name, a number, a definition -- not what it "
+    "merely mentions in passing. `items` is the list, each with `question` and `answer`; a "
+    "handful is plenty, fewer when the source is thin, none at all when it holds nothing "
+    "worth drilling. Ask in the source's own language.")
+# the watcher (spark watch, contract 14). Silent until a line matches what
+# the reader named, then one line quoting the match. The law is enforced
+# after the model (text.Gate): a line whose quote is not among the ones it
+# was shown is dropped, so silence is the honest answer when nothing matches.
+MODE_WATCH = (
+    "You watch a live stream -- log lines, build output, a running process -- for the one "
+    "thing the reader named. Most of what flows past does not matter, and you say nothing "
+    "about it. When a line matches what they asked for, reply with ONE line: a few words of "
+    "your own, then the matching line's own text between double quotes, word for word. "
+    "Every quote is checked against the lines you were shown, and a line whose quote is not "
+    "among them is thrown away -- so quote what is really there, never what you expect to "
+    "see. No preamble, no summary, no 'nothing yet': when nothing matches, answer with "
+    "nothing at all. Silence is the normal, healthy state.")
 MODES.update({"edit-complete": MODE_EDIT_COMPLETE, "edit-rewrite": MODE_EDIT_REWRITE,
               "edit-answer": MODE_EDIT_ANSWER, "edit-read": MODE_EDIT_READ,
               "ask-questions": MODE_ASK_QUESTIONS, "read-source": MODE_READ_SOURCE,
+              "drill-items": MODE_DRILL_ITEMS, "watch-stream": MODE_WATCH,
               "recall": MODE_RECALL})
 
 
@@ -398,10 +436,10 @@ def mode_prefix(cfg, mode, shell):
     brief for everything else."""
     if mode in ("chat", "talk"):
         return machine_line(cfg) + "\n" + KNOW_CHAT
-    if mode.startswith(("edit-", "ask-", "read-")):
-        # over a text -- in an editor, or a plan on stdin -- the shell
-        # brief (tools, flags, spark's verbs) is noise for prose and code
-        # alike, and it costs prompt
+    if mode.startswith(("edit-", "ask-", "read-", "drill-", "watch-")):
+        # over a text -- in an editor, a plan on stdin, a source to drill,
+        # a stream to watch -- the shell brief (tools, flags, spark's verbs)
+        # is noise for prose and code alike, and it costs prompt
         return machine_line(cfg)
     return prefix(cfg, shell)
 

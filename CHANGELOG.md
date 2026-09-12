@@ -1,5 +1,29 @@
 # Changelog
 
+## v1.21
+
+- `spark drill` (contract 13): a source on stdin becomes practice
+  questions it answers. The model proposes a verbatim span of the source
+  as each answer and a question that span answers; an item whose answer is
+  not in the source is dropped before it is ever asked, and a source too
+  thin to drill is one line, never padded from the model's own knowledge.
+  Self-graded -- you see the source's own words and say whether you had it;
+  the answers are graded on this machine and never sent. `--name` keeps a
+  schedule: a missed item comes back on a widening interval (1, 3, 7, 21,
+  60 days) until it is right twice in a row, the one ledger kind that
+  schedules rather than suppresses. `--ledger [clear]` lists or drops it.
+- `spark watch` (contract 14): a live stream on stdin -- a log tail, a
+  build, a migration -- watched for the one thing you named. Silent until
+  a line matches, then one line quoting it; the quote is checked against
+  the stream, so it cannot report what is not there, and silence is the
+  healthy state. A window is a few lines or a few seconds, cheap enough to
+  leave running, and a brain that comes and goes underneath it is ridden
+  out rather than fatal. The stream never leaves the machine.
+- `spark edit --watch FILE`: the live form of the editor's `?`. It watches
+  a draft on disk and comments on each stanza as you save it, reviewing the
+  whole draft when you pause. Grounded like every `?`; the writer answers
+  back through the Alt-s ask key, not a built-in chat.
+
 ## v1.20
 
 - `spark read` (contract 11): the source on stdin -- a page, a message,

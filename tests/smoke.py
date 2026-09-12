@@ -112,12 +112,16 @@ class Stub(BaseHTTPRequestHandler):
             if STATE.get("read_fail"):
                 return self._send(500, {"error": "no reading today"})
             return self._send(200, {"choices": [{"message": {"content": json.dumps({"language": "Portuguese", "kind": "fiction"})}}], "timings": TIMINGS})
+        if "turn it into practice questions" in system:   # spark drill (contract 13), a JSON reply
+            return self._send(200, {"choices": [{"message": {"content": json.dumps(drill_items(user))}}], "timings": TIMINGS})
         if body.get("stream") and "inside an editor" in system:
             return self._sse(edit_pieces(system, user))
         if body.get("stream") and "you reply with questions" in system:
             return self._sse(ask_pieces())
         if body.get("stream") and "answer from the source" in system:
             return self._sse(read_pieces(user))
+        if body.get("stream") and "watch a live stream" in system:
+            return self._sse(watch_pieces(user))
         if body.get("stream"):
             # `count` streams how many messages arrived, as the JSON shape does;
             # `wraptest` streams a long plain answer to prove the 80-col wrap
@@ -192,6 +196,33 @@ def read_pieces(user=""):
             'It opens "at nine" and clo', 'ses "at noon".\n',
             'Entry costs "five dollars" for everyone.\n',
             'Children go "free for children".\n')
+
+
+DRILL_TEXT = ("Mitochondria make ATP for the cell.\n"
+              "The cell wall is rigid and gives the cell its shape.\n")
+
+
+def drill_items(user):
+    """spark drill's proposal (contract 13): two items whose answer is a
+    verbatim span of the source, one whose answer is invented (dropped by
+    the grounding), and a duplicate question (folded away). STATE['drill_thin']
+    plays a source with nothing worth drilling."""
+    if STATE.get("drill_thin"):
+        return {"items": []}
+    return {"items": [
+        {"question": "What makes ATP?", "answer": "Mitochondria"},
+        {"question": "What is invented?", "answer": "the nucleus sings at dawn"},
+        {"question": "What is rigid?", "answer": "The cell wall"},
+        {"question": "what MAKES atp?", "answer": "Mitochondria"}]}
+
+
+def watch_pieces(user):
+    """spark watch's reply (contract 14): one line quoting the match when a
+    500 is in the window, silence otherwise. The quote is a line the window
+    holds, so the gate keeps it; an empty stream is silence, not a cut."""
+    if "500" in user:
+        return ('A 500 error appeared: "GET /x 500"\n',)
+    return ()
 
 
 def is_do(messages):
@@ -1043,11 +1074,105 @@ def main():
         t.ok(rc == 2 and out.startswith("spark read -- ") and "spark <words>" in out,
              "read: no source is the usage and where a question goes, exit 2", out[:80] + err)
 
-        # contract 13: the text is written, the code is not
-        t.skip("drill: a question whose answer is not in the source is dropped before it is asked",
-               "contract 13 not built -- lib/spark/drill.py, ROADMAP.md")
-        t.skip("drill: a missed item comes back on a widening interval until it is right twice",
-               "contract 13 not built -- lib/spark/drill.py, ROADMAP.md")
+        # spark drill: the practice protocol (contract 13)
+        from spark import drill as drillmod
+        rc, out, _ = spark("drill", "-h")
+        t.ok(rc == 0 and out.startswith("spark drill -- "), "drill -h is signed", out[:40])
+        kept = drillmod._ground([{"question": "Q1", "answer": "Mitochondria"},
+                                 {"question": "Q2", "answer": "no such words in the source"},
+                                 {"question": "Q3", "answer": "The cell wall"}], DRILL_TEXT)
+        t.ok([k["answer"] for k in kept] == ["Mitochondria", "The cell wall"],
+             "drill: an item whose answer is not in the source is dropped before it is asked", str(kept))
+        # the schedule, pure: three misses widen 1 -> 3 -> 7; right twice rests
+        m, s, days = 0, 0, []
+        for _ in range(3):
+            m, s, d = drillmod.schedule(m, s, False)
+            days.append(d)
+        t.ok(days == [1, 3, 7], "drill: a missed item comes back on a widening interval", str(days))
+        _m1, _s1, d1 = drillmod.schedule(0, 0, True)
+        _m2, s2, d2 = drillmod.schedule(_m1, _s1, True)
+        t.ok(d1 == drillmod.INTERVALS[0] and d2 is None and s2 == drillmod.RIGHT_TWICE,
+             "drill: right once comes back soon, right twice in a row rests", "%s %s" % (d1, d2))
+        rc, out, err = spark("drill", stdin="")
+        t.ok(rc == 2 and out.startswith("spark drill -- ") and "spark <words>" in out,
+             "drill: no source is the usage and where a question goes, exit 2", out[:60] + err)
+        STATE["drill_thin"] = True
+        rc, out, err = spark("drill", stdin=DRILL_TEXT)
+        STATE["drill_thin"] = False
+        t.ok(rc == 1 and out == "" and "too little" in err,
+             "drill: too little to drill is one line, exit 1, never padded", err)
+        # a graded session: the answers come from the seam file (reveal, yes/no per item)
+        ansfile = home + "/drill-answers.txt"
+        with open(ansfile, "w") as f:
+            f.write("\nyes\n\nno\n")            # item 1 right, item 2 wrong
+        rc, out, err = spark("drill", "--name", "bio", stdin=DRILL_TEXT, extra={"SPARK_DRILL_TTY": ansfile})
+        t.ok(rc == 0, "drill --name: a graded session runs to the end", err[:160])
+        rc, out, _ = spark("drill", "--ledger", "--name", "bio")
+        t.ok(rc == 0 and "2 item" in out and "streak 1" in out and "misses 1" in out,
+             "drill --name: the graded items are scheduled -- one right, one to revisit", out)
+        rc, out, _ = spark("drill", "--ledger", "clear", "--name", "bio")
+        t.ok(rc == 0 and "dropped 2 item" in out, "drill --ledger clear drops the schedule", out)
+
+        # spark watch: the operational-stream monitor (contract 14)
+        rc, out, _ = spark("watch", "-h")
+        t.ok(rc == 0 and out.startswith("spark watch -- "), "watch -h is signed", out[:40])
+        rc, out, err = spark("watch", "when a 500 appears", stdin="GET /a 200 ok\nGET /x 500\n")
+        t.ok(rc == 0 and out.strip() == 'A 500 error appeared: "GET /x 500"',
+             "watch: a matching line is reported once, quoting it", repr(out) + err)
+        rc, out, err = spark("watch", "when a 500 appears", stdin="GET /a 200\nGET /b 204\n")
+        t.ok(rc == 0 and out == "", "watch: nothing matches, nothing is said -- silence is the answer", repr(out) + err)
+        rc, out, _ = spark("watch")
+        t.ok(rc == 2 and out.startswith("spark watch -- ") and "spark <words>" in out,
+             "watch: no words is the usage and where a question goes, exit 2", out[:60])
+        from spark import watch as watchmod
+        t.ok(not watchmod._due(0, None, 100.0) and not watchmod._due(3, 99.0, 100.0)
+             and watchmod._due(3, 96.0, 100.0) and watchmod._due(watchmod.WINDOW_LINES, 100.0, 100.0),
+             "watch: a window is due when it is full or old enough, never when empty")
+
+        # spark edit --watch: the live-writing companion (a mode of contract 10)
+        from spark import edit as editmod
+        t.ok(editmod.stanzas("one\n\ntwo\n\n\n  three  ") == ["one", "two", "three"],
+             "edit --watch: the draft splits into stanzas on blank lines", str(editmod.stanzas("one\n\ntwo")))
+        rc, out, err = spark("edit", "--watch", home + "/no-such-draft.md")
+        t.ok(rc == 1 and "no such file" in err, "edit --watch: a missing file is one line, exit 1", err)
+        draft = home + "/draft.md"
+        with open(draft, "w") as f:
+            f.write("The first paragraph is already written.\n")
+        p = subprocess.Popen([sys.executable, SPARK, "edit", "--watch", draft],
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                             env=dict(env, SPARK_EDIT_WATCH_POLL="0.1"))
+        try:
+            time.sleep(0.4)
+            with open(draft, "a") as f:
+                f.write("\nA second paragraph about the gate.\n")
+            time.sleep(0.6)
+        finally:
+            p.terminate()
+        wout, werr = p.communicate(timeout=10)
+        t.ok("edit --watch" in wout and len(wout.splitlines()) >= 2,
+             "edit --watch: it announces the draft and comments on a saved stanza", repr(wout[:200]) + werr[:200])
+
+        # session.once: a loop rides out a transient brain, dies on a real fault
+        from spark import session as sessmod, wire as wiremod
+        _drop = wiremod.drop_cache
+        wiremod.drop_cache = lambda: None
+        try:
+            ok1, val1 = sessmod.once(lambda: "S", lambda s: "ran:" + s)
+
+            def _boom(kind):
+                def run(_s):
+                    raise wiremod.BrainError(kind, "the brain went away")
+                return run
+            ok2, hint2 = sessmod.once(lambda: "S", _boom("cut"))
+            raised = False
+            try:
+                sessmod.once(lambda: "S", _boom("auth"))
+            except wiremod.BrainError:
+                raised = True
+        finally:
+            wiremod.drop_cache = _drop
+        t.ok(ok1 and val1 == "ran:S" and ok2 is False and hint2 == "the brain went away" and raised,
+             "session.once: success passes through, a cut is a skip, an auth fault is raised")
 
         # the Terminal.app profile carries the keys micro needs
         from spark import theme as thememod

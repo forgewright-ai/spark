@@ -8,7 +8,9 @@
 # with nothing to install. The turn record is numbers only.
 
 import os
+import re
 import sys
+import time
 
 from . import MARK, config, die, forge, ledger, persona, say, session, wire
 from . import text as textmod
@@ -19,12 +21,16 @@ EDIT_MAX = 12000                        # a rewrite: the whole text, or nothing
 EDIT_SEL_MAX = 12000                    # a selection inside a ?: whole up to this, else head + tail
 EDIT_WINDOW = 16000                     # a ? with --sel: the selection and the file around it
 EDIT_TIMEOUT = 180                      # a big selection takes a while to read
+EDIT_WATCH_POLL = 3                     # --watch: seconds between looks at the file
+EDIT_WATCH_IDLE = 90                    # --watch: a pause this long earns a whole-draft review
 
 EDIT_USAGE = """spark edit -- the editor's protocol (contract 10): the text on stdin
 
   spark edit --at N           prints what goes at byte offset N (a completion)
   spark edit <words>          prints the text rewritten as the words ask
   spark edit ? [words]        answers about the text; ? alone reviews it
+  spark edit --watch FILE      watch a draft as you write: a grounded comment
+                              on each stanza you save, a review when you pause
   --type FT                   the editor's filetype, a hint (markdown, python)
   --name NAME                 the file's name, a hint -- never its path
   --about TEXT                what the author says the text is, when it
@@ -52,7 +58,7 @@ EDIT_USAGE = """spark edit -- the editor's protocol (contract 10): the text on s
 def _edit_args(args):
     """(options, words) -- ValueError names a flag that lacks its value."""
     opts = {"type": "", "name": "", "about": "", "at": None, "part": False, "sel": None, "thread": "", "decline": False,
-            "ledger": None}
+            "ledger": None, "watch": ""}
     words, rest = [], list(args)
     while rest:
         a = rest.pop(0)
@@ -68,7 +74,7 @@ def _edit_args(args):
             if len(rest) < 2:
                 raise ValueError(a)
             opts["sel"] = (rest.pop(0), rest.pop(0))
-        elif a in ("--type", "--name", "--about", "--at", "--thread"):
+        elif a in ("--type", "--name", "--about", "--at", "--thread", "--watch"):
             if not rest:
                 raise ValueError(a)
             opts[a[2:]] = rest.pop(0)
@@ -105,6 +111,91 @@ def _edit_window(data, a, b):
     return "%s\n[selection starts]\n%s\n[selection ends]\n%s" % (before, sel, after)
 
 
+def _review_context(cfg, shell, data, name, head, label):
+    """The context a plain `?`/review carries: the reading restated, any
+    notes declined for this name, the label and the text. Shared by the
+    one-shot `?` and the --watch loop so they ground a comment the same way."""
+    read, tail = session.reading(cfg, data, shell)
+    return head + read + ledger.block(cfg, name, data) + label + "\n" + forge.clip(data) + tail
+
+
+def stanzas(text):
+    """The text's units, split on blank lines: what --watch comments on one
+    at a time, so a comment lands on the paragraph just written, not the
+    whole draft each save."""
+    return [s.strip() for s in re.split(r"\n\s*\n", text) if s.strip()]
+
+
+def _comment(cfg, shell, whole, piece, name, words):
+    """One grounded comment: on `piece` (a fresh stanza) if given, else a
+    review of `whole` (the idle pass). The comment's quotes are checked
+    against the text it is about (textmod.Anchors), and a transient brain
+    gap is skipped in silence -- the watch goes on."""
+    data = piece if piece is not None else whole
+    question = " ".join(words).strip() or persona.REVIEW
+    label = _edit_label(name, "", part=piece is not None)
+    context = _review_context(cfg, shell, data, name, "", label)
+    anchors = textmod.Anchors(sys.stdout, data)
+    fence = textmod.Fence(anchors, newline=None)
+
+    def run(s):
+        return s.ask_stream(question, context, fence.feed, max_tokens=600, timeout=EDIT_TIMEOUT)
+
+    ok, _res = session.once(lambda: session.Session(cfg, "edit-answer", shell, "", role="ember"), run)
+    fence.close()
+    anchors.close()
+    if ok and anchors.spoke:
+        sys.stdout.write("\n")
+        sys.stdout.flush()
+
+
+def _watch_draft(cfg, shell, path, words, name):
+    """--watch: comment on each stanza as it is saved, review the whole
+    draft after a pause. Mirrors the proven companion loop -- poll the file
+    by mtime (an atomic save swaps the inode; re-opening by path catches
+    it, and a read that fails mid-swap just waits for the next tick), and a
+    draft that already holds work owes it a review rather than baselining
+    it into `seen` unseen. Ctrl-C ends it."""
+    if not os.path.isfile(path):
+        die("no such file: %s" % path)
+    try:
+        text = open(path, encoding="utf-8", errors="replace").read()
+    except OSError as e:
+        die("cannot read %s: %s" % (path, e))
+    seen = set(stanzas(text))
+    last_mtime = os.path.getmtime(path)
+    started = bool(text.strip())
+    last_change = time.time() if started else None   # a non-empty draft owes a review
+    reviewed = not started
+    say("%s edit --watch %s -- a comment as you save, a review when you pause; Ctrl-C ends."
+        % (MARK, os.path.basename(path)))
+    poll = float(os.environ.get("SPARK_EDIT_WATCH_POLL") or EDIT_WATCH_POLL)   # a test seam
+    try:
+        while True:
+            time.sleep(poll)
+            try:
+                mtime = os.path.getmtime(path)
+            except OSError:
+                continue
+            if mtime != last_mtime:
+                last_mtime = mtime
+                try:
+                    text = open(path, encoding="utf-8", errors="replace").read()
+                except OSError:
+                    continue                     # save race: next tick wins
+                fresh = [s for s in stanzas(text) if s not in seen]
+                if not fresh:
+                    continue
+                seen.update(fresh)
+                last_change, reviewed = time.time(), False
+                _comment(cfg, shell, text, fresh[-1], name, words)
+            elif last_change is not None and not reviewed and time.time() - last_change >= EDIT_WATCH_IDLE:
+                reviewed = True
+                _comment(cfg, shell, text, None, name, words)
+    except KeyboardInterrupt:
+        return 130
+
+
 def cmd_edit(args):
     """The editor's protocol: the text on stdin, raw text out (no mark, no
     wrap -- the text goes back into a buffer). Three kinds by the words:
@@ -118,6 +209,11 @@ def cmd_edit(args):
     except ValueError as e:
         say("%s edit -- %s needs a value" % (MARK, e))
         return 2
+    if opts["watch"]:
+        # a live draft, not a one-shot: the file is the input, the writer's
+        # editor saves it, and the comments go to stdout. No stdin is read.
+        shell = os.path.basename(os.environ.get("SHELL") or "sh")
+        return _watch_draft(config.load(), shell, opts["watch"], words, os.path.basename(opts["name"].strip()))
     at = opts["at"]
     if at is not None:
         try:
@@ -201,8 +297,7 @@ def cmd_edit(args):
                        + " -- the question is about the part between the marks:\n"
                        + _edit_window(data, sel[0], sel[1]) + tail)
         else:
-            read, tail = session.reading(cfg, data, shell)
-            context = head + read + ledger.block(cfg, opts["name"], data) + label + "\n" + forge.clip(data) + tail
+            context = _review_context(cfg, shell, data, opts["name"], head, label)
     else:
         kind, role = "rewrite", "ember"
         if len(data) > EDIT_MAX:

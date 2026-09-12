@@ -113,6 +113,30 @@ def _resolve(cfg, fresh):
     return wire.resolve_brain(cfg, fresh=fresh)
 
 
+# the kinds of brain failure a long-running loop rides out rather than dies on
+LIVE_TRANSIENT = ("down", "loading", "timeout", "cut")
+
+
+def once(make_session, run):
+    """One model interaction for a loop that must not die of a transient
+    brain. `make_session()` builds a fresh Session -- so a moved or
+    restarted brain is picked up on the next call -- and `run(session)`
+    does the request. Returns (True, result) on success, or (False, hint)
+    on a transient failure (the served model down, loading, timing out, or
+    cut off mid-reply): the cache is dropped so the next call re-resolves,
+    and the caller skips this turn and goes on. Any other BrainError (auth,
+    a bad response) is a real fault and is raised, as it is for the one-shot
+    contracts. The one-shot contracts do not use this: they ask once and
+    die on any error, which is right when there is no loop to keep alive."""
+    try:
+        return True, run(make_session())
+    except wire.BrainError as e:
+        if e.kind in LIVE_TRANSIENT:
+            wire.drop_cache()
+            return False, e.hint
+        raise
+
+
 class Session:
     def __init__(self, cfg, mode, shell, cwd="", history=None, brain=None, mem=None, role=None):
         """`brain` is a callable(fresh) -> wire.Brain, else wire.resolve_brain:

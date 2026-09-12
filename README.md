@@ -66,6 +66,8 @@ and your editor stay yours. `INSTALL.md` has every step and every key.
 | `spark do <words>` | a task, one confirmed command at a time |
 | `spark ask < plan.md` | the questions that text does not answer: at most three, every line a question |
 | `spark read <words> < page.txt` | what a source says about your question, every line quoting it; a source past 16 kB is read one `--part N` at a time |
+| `spark drill < notes.md` | the source becomes questions it answers; you try each, then see its own words; `--name` keeps a schedule |
+| `tail -f log \| spark watch "a 500 appears"` | a live stream, silent until a line matches, then one line quoting it |
 | `spark soul edit` | who it is; `spark memory add <words>` adds a fact it keeps |
 | `spark model list` | 26 models, each with its license; `spark model NAME` serves one |
 | `spark ember NAME` | a second, bigger model for conversations |
@@ -98,7 +100,12 @@ Only to the server you configured (this machine's, or another of yours):
 - from an editor (`spark edit`), the file's name and its text: 6 kB
   around the cursor for a completion, 12 kB for a rewrite, 16 kB for a
   question -- never its path; a thread only when the editor asks for
-  one, sealed like a chat thread.
+  one, sealed like a chat thread; `--watch` sends each saved stanza the
+  same way;
+- for `spark drill` the source (16 kB); your answers are graded here,
+  against the source, and never sent;
+- for `spark watch` each window of the stream (a few lines at a time) --
+  never the whole stream at once, and nothing else.
 
 No telemetry, no analytics, no crash reports, no account. Downloads:
 `get` from raw.githubusercontent.com and the clone from github.com, one

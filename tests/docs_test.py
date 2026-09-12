@@ -128,7 +128,8 @@ def main():
               "ROADMAP.md has '## Contract %s: spark %s'" % (n, name))
         check(re.search(r"(?m)^%s\. `spark %s` -- reserved, not built" % (n, name), claude) is not None,
               "CLAUDE.md reserves contract %s for spark %s" % (n, name))
-    check(reserved > 0, "the reserved contracts are found by their modules (%d)" % reserved)
+    # reserved may be zero once the last one is built; the loop still guards
+    # any that remain (a module marked NOT BUILT that quietly gets dispatched)
     # contract 8: a signed line is `spark <verb> -- <one line>`, and the
     # verb it names has to be one that exists. Renaming a verb leaves these
     # behind -- `spark stop -- stopped` outlived `spark stop` by a whole
