@@ -31,12 +31,12 @@ USAGE = SIGN + """
   spark setup --name NAME       this machine's display name (SITE_NAME)
   spark setup --user NAME       your name (SITE_USER)
   spark setup --theme NAME      a palette from themes/, or none; never asked,
-                                gruvbox-dark unless it is said here
+                                none unless it is said here
   spark setup --no-serve        write and apply; leave the server down
 """
-# the look spark ships wearing when nothing has said otherwise -- never a
-# question, `spark theme NAME|none` is the choice
-DEFAULT_THEME = "gruvbox-dark"
+# setup changes no look: the terminal keeps its own colours until the
+# user names a palette -- `spark theme NAME|none` is the choice
+DEFAULT_THEME = "none"
 
 # the bootstrap rows that are the AI layer, by their names in bootstrap.sh
 # (the filter apply() uses when its output is captured; at a terminal the
@@ -167,9 +167,9 @@ def _model(cfg, opts, default, yes):
 
 
 def _theme(cfg, opts):
-    """Not a question. spark has a look and ships wearing it; `spark theme
-    NAME|none` changes it, like every other choice. The flag, else the
-    environment or site.env, else DEFAULT_THEME."""
+    """Not a question, and not a change: the terminal keeps its own
+    colours until the user names a palette (`spark theme NAME|none`).
+    The flag, else the environment or site.env, else DEFAULT_THEME."""
     from . import theme
     valid = ["none"] + theme.palettes()
     choices = "one of: none " + " ".join(theme.palettes())

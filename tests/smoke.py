@@ -1846,8 +1846,8 @@ def main():
         t.ok(re.search(r"^SITE_NAME=\S", site_env, re.M) and re.search(r"^SITE_USER=\S", site_env, re.M)
              and "SITE_AI_MODEL=none\n" in site_env,
              "setup wrote SITE_NAME, SITE_USER, SITE_AI_MODEL=none", site_env)
-        t.ok("SITE_THEME=gruvbox-dark\n" in site_env and "theme [" not in out,
-             "setup never asks the palette: gruvbox-dark is written unasked", site_env + out)
+        t.ok("SITE_THEME=none\n" in site_env and "theme [" not in out,
+             "setup never asks the palette: none is written unasked", site_env + out)
         t.ok(not os.path.exists(home + "/.config/spark/theme.env")
              and not os.path.exists(home + "/.config/spark/console-colors"),
              "setup applies no palette: the machine looks untouched (spark theme paints)", out)

@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.26
+
+- `spark setup` no longer picks a look: it writes `SITE_THEME=none`, so a
+  fresh machine keeps its terminal's own colours until `spark theme NAME`
+  says otherwise. It recorded gruvbox-dark before -- a choice the user
+  never made, which the theme row's remedy then offered to paint.
+
 ## v1.25
 
 - A shared-engine box converges again. The `share` row compared the token
