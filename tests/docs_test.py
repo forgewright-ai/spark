@@ -19,9 +19,9 @@ from spark import config  # noqa: E402
 
 fails = []
 # the docs a new user reads (the voice checks below), and every doc
-CUSTOMER_DOCS = ("README.md", "INSTALL.md", "CHEATSHEET.txt", "www/index.html")
+CUSTOMER_DOCS = ("README.md", "INSTALL.md", "CHEATSHEET.txt", "TOUR.md", "www/index.html")
 ALL_DOCS = ("README.md", "INSTALL.md", "CLAUDE.md", "CHEATSHEET.txt", "CREDITS.md", "CONTRIBUTING.md",
-            "AGENTS.md", "ROADMAP.md", "CHANGELOG.md", "site.env.example", "www/index.html")
+            "AGENTS.md", "ROADMAP.md", "CHANGELOG.md", "TOUR.md", "site.env.example", "www/index.html")
 
 
 def check(cond, what):
@@ -215,7 +215,7 @@ def main():
             check(app in read(doc), "%s names %s (APPS.md does)" % (doc, app))
     # and the two documents beside the core exist and say they are not
     # tied to a release, so nobody files them back under the landing rule
-    for doc in ("APPS.md", "SHELL.md"):
+    for doc in ("APPS.md", "SHELL.md", "TOUR.md"):
         check("not tied to a spark release" in read(doc), "%s says it is not release-gated" % doc)
     # the lists that are gone stay gone
     for doc in ("README.md", "INSTALL.md", "CLAUDE.md", "CHEATSHEET.txt", "CREDITS.md", "CONTRIBUTING.md",
