@@ -375,7 +375,9 @@ may change freely.
    `/manifest.webmanifest` and `/apple-touch-icon.png` (a 180x180 PNG the
    server draws) are the page, no token. The page is chat-first: both
    roles land in the chat view (hash routes chat|monitor|do|config|help,
-   chat the default), and the login link `/login#t=<token>` (the QR
+   chat the default; navigation is one header menu button -- for a user
+   only chat, settings and help exist, monitor and do redirecting to
+   chat), and the login link `/login#t=<token>` (the QR
    `spark forge --print-url` and `spark user add` draw at a tty) signs
    in by itself: the page reads the fragment before routing, strips it
    with history.replaceState, and POSTs it to `/api/login` ONCE -- a

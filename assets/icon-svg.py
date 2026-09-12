@@ -105,10 +105,12 @@ class Canvas:
             f.write(chunk(b"IEND", b""))
 
 
-def svg(path, size, rects, scale, ox, oy, tile=None):
+def svg(path, size, rects, scale, ox, oy, tile=None, ground=True):
     out = ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 %d %d" width="%d" height="%d" role="img" aria-label="spark">'
            % (size, size, size, size)]
-    if tile is None:
+    if not ground:
+        pass                  # transparent: the S alone, any theme behind it
+    elif tile is None:
         out.append('<rect width="%d" height="%d" fill="%s"/>' % (size, size, GROUND))
     else:
         tx, tw, tr = tile
@@ -154,6 +156,11 @@ def main():
     c.draw_grid(s_rects, scale, ox, oy)
     c.write_png(os.path.join(outdir, "icon-square-1024.png"))
 
+    # the page's mark: the favicon's geometry (108 canvas, the S 80 wide
+    # at x=14) with NO ground -- transparent, so the FORGE page can wear
+    # it on any theme (lib/spark/forge/mark.svg).
+    svg(os.path.join(outdir, "mark.svg"), 108, s_rects, 1.0, 14, 0, ground=False)
+
     # social card: the full banner centered on GROUND, 60px margin all round.
     # No tagline: rectangles only, no fonts.
     sw, sh, margin = 1280, 640, 60
@@ -163,7 +170,7 @@ def main():
     c.draw_grid(all_rects, scale, ox, oy)
     c.write_png(os.path.join(outdir, "social-1280x640.png"))
 
-    for f in ("icon-macos.svg", "icon-square.svg", "icon-macos-1024.png",
+    for f in ("icon-macos.svg", "icon-square.svg", "mark.svg", "icon-macos-1024.png",
               "icon-square-1024.png", "social-1280x640.png"):
         print("%s  %d bytes" % (os.path.join(outdir, f), os.path.getsize(os.path.join(outdir, f))))
 

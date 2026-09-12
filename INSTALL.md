@@ -393,12 +393,12 @@ The page, in any browser on the LAN:
    The QR is the token drawn as squares: show it (or a screenshot of
    it) only to the person it is for.
 2. Or type a token once; the browser keeps a cookie (90 days; a server
-   restart asks again). Everyone lands in the chat. The admin token
-   also opens the whole machine (every verb, `do`, the settings, the
-   log); a user's token opens that user's own chat, threads, memory and
-   a read-only activity page. Give each of the household their own
-   `spark user add NAME` -- it prints their token and their own QR to
-   scan, once.
+   restart asks again). Everyone lands in the chat. A user's token is
+   a chat app: their own threads and memory, plus their account behind
+   the one menu button. The admin token also opens the whole machine
+   (activity, `do`, the settings, the log). Give each of the household
+   their own `spark user add NAME` -- it prints their token and their
+   own QR to scan, once.
 3. On a phone, add it to the home screen (iOS: share > add to home
    screen, and it becomes an app; Android keeps a shortcut that opens in
    a browser tab). The page needs this machine reachable when it opens:

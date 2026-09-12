@@ -24,11 +24,13 @@
 <a class="skip" href="#main">skip to content</a>
 
 <header class="top">
-  <a class="mark" href="#/chat"><img src="/static/favicon.svg" alt="" width="26" height="26"><span>spark</span></a>
+  <a class="mark" href="#/chat"><img src="/static/mark.svg" alt="" width="26" height="26"><span>spark</span></a>
   <span id="site" class="site"></span>
+  <button id="nav-btn" type="button" class="quiet" aria-expanded="false"
+    aria-controls="menu" hidden>menu</button>
 </header>
 
-<nav class="tabs" aria-label="pages">
+<nav class="tabs" id="menu" aria-label="pages" hidden>
   <a href="#/chat" data-view="chat"><kbd>1</kbd> chat</a>
   <a href="#/monitor" data-view="monitor"><kbd>2</kbd> activity</a>
   <a href="#/do" data-view="do"><kbd>3</kbd> do</a>
@@ -40,7 +42,7 @@
 
 <section id="login" class="login" hidden>
   <div class="login-card">
-    <img class="s-mark" src="/static/favicon.svg" alt="" width="72" height="72">
+    <img class="s-mark" src="/static/mark.svg" alt="" width="72" height="72">
     <h1>spark</h1>
     <p id="login-hello" class="muted">your own AI, on your own box</p>
     <p class="muted web small">Ask the box's owner for a token
@@ -82,7 +84,7 @@
       <p id="chat-status" class="muted small status" aria-live="polite"></p>
     </div>
     <div id="hello" class="hello" hidden>
-      <img src="/static/favicon.svg" alt="" width="56" height="56">
+      <img src="/static/mark.svg" alt="" width="56" height="56">
       <h2 id="hello-hi">hi</h2>
       <p class="muted">this is your box's own AI -- ask it anything.</p>
       <div class="chips">
@@ -166,6 +168,7 @@
     <div class="actions">
       <button id="logout" type="button" class="quiet" hidden>log out</button>
     </div>
+    <p class="muted small usr"><a href="#/help">what is this page?</a></p>
   </div>
   <div class="card" id="pal-card">
     <h2>look</h2>
@@ -188,10 +191,10 @@
     <p class="muted small">your token is the only key to your history -- rotating logs your other devices out</p>
   </div>
   <div class="two">
-    <div class="card">
+    <div class="card adm">
       <div class="head">
         <h2>soul</h2>
-        <button id="soul-save" type="button" class="adm">save</button>
+        <button id="soul-save" type="button">save</button>
       </div>
       <textarea id="soul-text" rows="10" class="mono wide" aria-label="soul" spellcheck="false"></textarea>
       <p id="soul-status" class="muted small"></p>
@@ -288,7 +291,7 @@
       <tr><td><kbd>j</kbd> / <kbd>k</kbd></td><td>next / previous chat</td></tr>
       <tr><td><kbd>r</kbd></td><td>refresh the current page</td></tr>
       <tr><td><kbd>?</kbd></td><td>this page</td></tr>
-      <tr><td><kbd>Esc</kbd></td><td>stop the answer or the running command, else leave the input, else close the chat list</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>stop the answer or the running command, else leave the input, else close the menu or the chat list</td></tr>
       <tr><td><kbd>Enter</kbd></td><td>send (chat); <kbd>Shift</kbd>+<kbd>Enter</kbd> newline</td></tr>
       <tr class="tauri"><td><kbd>q</kbd></td><td>quit the app</td></tr>
       <tr><td><kbd>Tab</kbd></td><td>every control, in order</td></tr>

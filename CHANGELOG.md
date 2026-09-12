@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.29
+
+- The chat owns the screen: the bottom tab bar is gone, navigation is
+  one small menu button in the header on every screen size. A guest's
+  page is now just the chat plus their account (palette, rotate token,
+  clear chats, memory, log out) and help behind that button --
+  activity and do are the admin's alone, and redirect a guest to the
+  chat. The soul editor leaves the guest's settings too.
+- The page wears a transparent mark (`/static/mark.svg`, the S with no
+  ground, emitted by `assets/icon-svg.py`) in its header, login,
+  greeting and message avatars, so the logo sits on any theme; the
+  solid-ground favicon stays for the browser tab and the home screen.
+
 ## v1.28
 
 - The QR reads. v1.27 placed the format information transposed --

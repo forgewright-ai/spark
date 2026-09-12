@@ -54,7 +54,8 @@ LOG_MAX = 1_000_000             # forge.log rotates here, like serve.log
 STATIC = {"index.html": "text/html; charset=utf-8", "spark.css": "text/css; charset=utf-8",
           "spark.js": "text/javascript; charset=utf-8",
           "manifest.webmanifest": "application/manifest+json; charset=utf-8",
-          "favicon.svg": "image/svg+xml; charset=utf-8"}
+          "favicon.svg": "image/svg+xml; charset=utf-8",
+          "mark.svg": "image/svg+xml; charset=utf-8"}
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "forge")
 UPSTREAM_TTL = 60               # a resolved upstream is trusted this long
 UPSTREAM_MISS_TTL = 5           # a failed resolution is not retried sooner
