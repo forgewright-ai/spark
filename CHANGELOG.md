@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.25
+
+- A shared-engine box converges again. The `share` row compared the token
+  copy by contents, which the owner (not in the `spark` group) cannot read,
+  so every `bootstrap`/`spark update`/`spark check` showed a perpetual "1 to
+  do" and re-copied the token. Freshness is now by mtime -- the copy is
+  current when it is no older than the source -- readable by the owner, so
+  the row (and `spark share`) settle to `ok`. A rotated token still
+  re-syncs.
+
 ## v1.24
 
 - `spark share` no longer cries STALE at the owner. The shared token is

@@ -471,13 +471,16 @@ def no_share():
     return ""
 
 
-def _same_token(a, b):
-    """The two token files hold the same secret (trailing newline aside)."""
+def _token_fresh(copy, source):
+    """Is the shared copy current? By mtime, not contents: the owner is not
+    in the spark group and cannot read the 0640 copy, so a content compare
+    would false-alarm. The copy is fresh when it is no older than the source
+    (spark share on stamps it after any token change). Unknown source (a
+    user with no token of their own) is not our concern -- treat as fresh."""
     try:
-        with open(a, "rb") as fa, open(b, "rb") as fb:
-            return fa.read().strip() == fb.read().strip() and fa.tell() > 0
+        return os.stat(copy).st_mtime >= os.stat(source).st_mtime
     except OSError:
-        return False
+        return True
 
 
 def _share_url():
@@ -517,10 +520,7 @@ def share_facts(cfg):
         except (OSError, KeyError):
             mode, gname = "???", "?"
         perms = mode == "640" and gname == "spark"
-        # only the group reads the copy; the owner usually cannot, so a
-        # content check is possible only when it is readable here --
-        # unreadable is not stale (the perms are the health signal then).
-        stale = os.access(SHARE_TOKEN, os.R_OK) and not _same_token(SHARE_TOKEN, TOKEN_FILE)
+        stale = not _token_fresh(SHARE_TOKEN, TOKEN_FILE)
         facts.append(("shared token", perms and not stale, "%s (%s %s)%s" % (SHARE_TOKEN, mode, gname,
                       " -- STALE, spark share on re-syncs" if stale else "")))
     else:

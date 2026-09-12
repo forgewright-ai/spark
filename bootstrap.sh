@@ -736,7 +736,11 @@ elif [ ! -s "$tok" ]; then
 else
     if getent group spark >/dev/null 2>&1; then ok share "group spark exists"
     elif need share "groupadd spark (sudo)"; then as_root groupadd spark; ok share "group spark created"; fi
-    if [ -f "$share_tok" ] && cmp -s "$tok" "$share_tok" \
+    # freshness by mtime, not contents: the owner is not in the spark group
+    # and cannot read the 0640 copy, so a content compare would never
+    # converge -- the copy is current when it is no older than the source
+    if [ -f "$share_tok" ] \
+       && [ "$(stat -c %Y "$share_tok" 2>/dev/null || echo 0)" -ge "$(stat -c %Y "$tok" 2>/dev/null || echo 0)" ] \
        && [ "$(stat -c '%a %G' "$share_tok" 2>/dev/null)" = "640 spark" ]; then
         ok share "$share_tok (0640 root:spark)"
     elif need share "copy the api-token to $share_tok (0640 root:spark) (sudo)"; then
