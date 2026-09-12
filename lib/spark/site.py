@@ -13,7 +13,8 @@ import subprocess
 import sys
 from urllib.parse import urlsplit
 
-from . import CONFIG_DIR, HOME, IS_MAC, MARK, REPO, SITE_ENV, config, distro, glyph, is_wsl, say
+from . import (CONFIG_DIR, HOME, IS_MAC, MARK, REPO, SHARE_TOKEN, SITE_ENV, SPARK_ENV, TOKEN_FILE,
+               config, distro, glyph, is_wsl, say)
 
 # WSL 2: Linux, minus what the VT console and GRUB own (contract 8 lines)
 WSL_NO_FONT = "no console on WSL 2: the font lives in Windows Terminal's settings"
@@ -444,6 +445,104 @@ def cmd_headless(args):
     return apply(HEADLESS_ROWS)
 
 
+# ------------------------------------------------------------------ share
+SHARE_USAGE = """%s share -- one engine, shared with this machine's other OS users
+
+  spark share                what is set, and what is in effect here
+  spark share on             let a `spark` OS group read the api-token, so a
+                             group member's spark answers from this box's engine
+                             as a client -- their own soul and memory, one model
+                             loaded once for everyone
+  spark share off            the shared token goes; the engine is yours again
+
+  another OS user joins once (they log in again after):  sudo gpasswd -a NAME spark
+  then, as them:  spark client URL   (spark share prints the URL)
+""" % MARK
+SHARE_ROWS = ["share"]
+
+
+def no_share():
+    """Why a shared engine is not this machine's to set here ('' when it
+    is): macOS keeps one user per box in this version, WSL 2 is not a brain."""
+    if IS_MAC:
+        return "one user per box on macOS in this version -- a shared engine is a Linux box story"
+    if is_wsl():
+        return WSL_NO_BRAIN
+    return ""
+
+
+def _same_token(a, b):
+    """The two token files hold the same secret (trailing newline aside)."""
+    try:
+        with open(a, "rb") as fa, open(b, "rb") as fb:
+            return fa.read().strip() == fb.read().strip() and fa.tell() > 0
+    except OSError:
+        return False
+
+
+def _share_url():
+    """The engine URL a local user points `spark client` at: whatever serve
+    bound (reachable from localhost too), or a placeholder before it runs."""
+    from . import wire
+    return wire.serve_url() or "http://<this-host>:8080"
+
+
+def share_facts(cfg):
+    """Read-only: [(piece, good, detail)] -- the group and the shared token,
+    whether its perms are right and it still matches the live api-token.
+    The verb's status and the check row both read it."""
+    why = no_share()
+    if why:
+        return [("shared engine", not cfg.share, why)]
+    import grp
+    facts = []
+    try:
+        mem = grp.getgrnam("spark").gr_mem
+        facts.append(("spark group", True, "%d member%s%s" % (len(mem), "" if len(mem) == 1 else "s",
+                                                              (": " + ", ".join(mem)) if mem else "")))
+    except KeyError:
+        facts.append(("spark group", not cfg.share, "not created (spark share on)"))
+    if os.path.exists(SHARE_TOKEN):
+        try:
+            st = os.stat(SHARE_TOKEN)
+            mode = oct(st.st_mode & 0o777)[-3:]
+            gname = grp.getgrgid(st.st_gid).gr_name
+        except (OSError, KeyError):
+            mode, gname = "???", "?"
+        matches = _same_token(SHARE_TOKEN, TOKEN_FILE)
+        good = mode == "640" and gname == "spark" and matches
+        facts.append(("shared token", good, "%s (%s %s)%s" % (SHARE_TOKEN, mode, gname,
+                      "" if matches else " -- STALE, spark share on re-syncs")))
+    else:
+        facts.append(("shared token", not cfg.share, "%s absent" % SHARE_TOKEN))
+    return facts
+
+
+def cmd_share(args):
+    cfg = config.load()
+    if args and args[0] in ("-h", "--help", "help"):
+        say(SHARE_USAGE.rstrip())
+        return 0
+    if not args or args[0] == "status":
+        say("%s share -- SITE_SHARE=%s: %s" % (MARK, "yes" if cfg.share else "no",
+            "this box's engine is shared with its other OS users" if cfg.share
+            else "not shared (spark share on lets the spark group in)"))
+        for piece, good, detail in share_facts(cfg):
+            say("  %s %-14s %s" % (glyph("ok") if good else ("!" if cfg.share else glyph("na")), piece, detail))
+        if cfg.share and not no_share():
+            say("  a user joins:  sudo gpasswd -a NAME spark  (log in again), then  spark client %s" % _share_url())
+        return 0
+    if args[0] not in ("on", "off"):
+        say(SHARE_USAGE.rstrip())
+        return 2
+    why = no_share()
+    if args[0] == "on" and why:
+        say("%s share -- %s" % (MARK, why))
+        return 2
+    set_keys(SITE_SHARE="yes" if args[0] == "on" else "no")
+    return apply(SHARE_ROWS)
+
+
 # ----------------------------------------------------------------- client
 CLIENT_USAGE = """%s client -- a machine that answers from another machine's FORGE
 
@@ -454,6 +553,10 @@ CLIENT_USAGE = """%s client -- a machine that answers from another machine's FOR
                                 machine mints your token, spark user login
                                 NAME here presents it)
   spark client off              serve here again: spark model auto picks one
+
+  the URL may be this same box's engine (spark share on there): a group
+  member reads its shared token and answers from it, keeping their own
+  soul and memory -- no second model loaded.
 """ % MARK
 
 
@@ -494,6 +597,11 @@ def cmd_client(args):
         say("%s client -- URL is http://host:port, the FORGE's (spark forge --print-client there)" % MARK)
         return 2
     set_keys(SITE_PEER_AI_URL=url, SITE_AI_MODEL="none")
+    if not cfg.get("SPARK_API_KEY_FILE", "") and os.access(SHARE_TOKEN, os.R_OK):
+        # a shared engine on this box: use its group-readable token rather
+        # than mint one of our own (which the engine would not accept)
+        set_keys(_file=SPARK_ENV, SPARK_API_KEY_FILE=SHARE_TOKEN)
+        say("using this machine's shared engine token (%s)" % SHARE_TOKEN)
     rc = apply(["configs", "rc", "engine", "model", "services", "token"])
     if rc == 0:
         if not users.account()[0]:

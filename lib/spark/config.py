@@ -19,7 +19,7 @@ SITE_KEYS = ("SITE_NAME", "SITE_USER", "SITE_SET_HOSTNAME",
              "SITE_PEER_AI_URL", "SITE_PEER_SSH", "SITE_THEME",
              "SITE_AI_MODEL", "SITE_EMBER_MODEL", "SITE_AI_BUDGET", "SITE_AI_BUILD",
              "SITE_FONT_FACE", "SITE_FONT_SIZE", "SITE_QUIET_LOGIN", "SITE_QUIET_BOOT", "SITE_QUIET_START",
-             "SITE_QUIET_AUDIO", "SITE_HEADLESS")
+             "SITE_QUIET_AUDIO", "SITE_HEADLESS", "SITE_SHARE")
 SPARK_KEYS = ("SPARK_PORT", "SPARK_BASE_URL", "SPARK_PREFER_URL", "SPARK_SERVE_HOST", "SPARK_ENGINE_DIR",
               "SPARK_MODELS_DIR", "SPARK_MODEL", "SPARK_NGL", "SPARK_CTX", "SPARK_FLASH_ATTN", "SPARK_KV",
               "SPARK_THREADS", "SPARK_EXTRA_ARGS", "SPARK_MEM_NEEDED_GB", "SPARK_API_KEY_FILE",
@@ -186,6 +186,12 @@ class Config:
         return self.get("SITE_HEADLESS", "no") == "yes"
 
     @property
+    def share(self):
+        """yes: this box's engine is shared with its other OS users -- a
+        `spark` group may read the api-token (spark share on)."""
+        return self.get("SITE_SHARE", "no") == "yes"
+
+    @property
     def peer_ai_url(self):
         return self.get("SITE_PEER_AI_URL", "")
 
@@ -276,7 +282,17 @@ class Config:
 
     @property
     def token_file(self):
-        return self.get("SPARK_API_KEY_FILE", TOKEN_FILE)
+        # SPARK_API_KEY_FILE if set (spark client points a shared-engine user
+        # here); else the per-$HOME token; else, for a user who has none of
+        # their own, a readable shared-engine token (spark share). The
+        # engine they answer from is still their explicit choice.
+        from . import SHARE_TOKEN
+        chosen = self.get("SPARK_API_KEY_FILE", "")
+        if chosen:
+            return chosen
+        if os.path.exists(TOKEN_FILE) or not os.access(SHARE_TOKEN, os.R_OK):
+            return TOKEN_FILE
+        return SHARE_TOKEN
 
     @property
     def timeout(self):

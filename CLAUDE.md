@@ -286,7 +286,7 @@ may change freely.
    SITE_AI_MODEL SITE_EMBER_MODEL SITE_AI_BUDGET
    SITE_AI_BUILD SITE_FONT_FACE
    SITE_FONT_SIZE SITE_QUIET_LOGIN SITE_QUIET_BOOT SITE_QUIET_START SITE_QUIET_AUDIO
-   SITE_HEADLESS`;
+   SITE_HEADLESS SITE_SHARE`;
    `spark.env` -- `SPARK_PORT SPARK_BASE_URL SPARK_PREFER_URL SPARK_SERVE_HOST
    SPARK_ENGINE_DIR SPARK_MODELS_DIR SPARK_MODEL SPARK_NGL SPARK_CTX
    SPARK_FLASH_ATTN SPARK_KV SPARK_THREADS SPARK_EXTRA_ARGS SPARK_MEM_NEEDED_GB
@@ -789,7 +789,25 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   `model budget N`, `model rm`, `spark ember NAME` are refused with one
   line (`model._client_no`) -- each would have made a server of the
   client in silence. `spark client off` is the one deliberate promotion
-  (it ends the shape, then runs `spark model auto`).
+  (it ends the shape, then runs `spark model auto`). The peer may be this
+  same box's raw engine (`spark share on` there): the client injects its
+  OWN soul and memory (forge=False), so it stays sovereign, and
+  `cmd_client` records `SPARK_API_KEY_FILE=$SHARE_TOKEN` when that
+  group-readable token is present, rather than minting one the engine
+  would reject; `config.token_file` also falls back to it for a user with
+  none of their own.
+- **A shared engine.** `spark share on` (`SITE_SHARE=yes`, `site.cmd_share`)
+  lets a machine's other OS users answer from its one engine instead of
+  each loading the model: bootstrap's `share` row ensures a `spark` OS
+  group and a `0640 root:spark` copy of the api-token at `$SHARE_TOKEN`
+  (`/etc/spark/token`, `SPARK_SHARE_TOKEN` overrides), re-synced each apply;
+  the owner's own token stays `0600`. A group member joins as a client
+  (above). The `share` check row (CAPABILITY, `fixture=False` -- the group
+  needs root) reports the group and warns if the copy drifts from the live
+  token or loses its perms. Identity stays per-`$HOME`, compute is shared
+  and chosen explicitly -- spark never routes to an engine the user did not
+  name. Linux only in this version; macOS and WSL are one user per box
+  (`site.no_share`), a signed refusal from `spark share on` and a skip row.
 - **A model.** One list, `models.env`: a row (`MODEL_<NAME>`, the
   five fields), its `_LICENSE` (always), a `_NOTE` when one line helps,
   and `_TESTED="line"` only once the row has answered `spark line` with
@@ -841,7 +859,7 @@ sh tests/get_test.sh            # the one-liner: clone, pull, refusals, the hand
 sh tests/update_test.sh         # spark update: pull, move to a tag, dirty refused, --dry-run
 ```
 
-`spark check` has 35 rows today: 10 SOFTWARE, 17 CAPABILITY, 8
+`spark check` has 36 rows today: 10 SOFTWARE, 18 CAPABILITY, 8
 NONFUNCTIONAL (`grep -c '^@row' lib/spark/check.py`). `--selftest`
 proves every fixture-testable row flips, then a third pass for the
 client shape (the 7 rows in `check.CLIENT_ROWS` answer `na`), and on

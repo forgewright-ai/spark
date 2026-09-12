@@ -1,6 +1,6 @@
 # Roadmap
 
-What comes after v1.21, in the order it is likely to happen. Nothing here
+What comes after v1.22, in the order it is likely to happen. Nothing here
 is a promise; a row in `CHANGELOG.md` is. A better idea is an issue away.
 
 ## Chaos on a real box
@@ -19,8 +19,11 @@ Then the two shapes the suite still cannot express: a scenario whose
 remedy needs the network (a re-download after `spark model rm`), and
 one that must survive a reboot.
 
-## Per-OS user accounts
+## A shared engine as a system service
 
-Real OS users, each running their own spark against one shared engine:
-the port story, a shared model cache with per-user config, a system unit
-serving all of them. After the account layer has been lived with.
+`spark share` (v1.22) shares the owner's headless engine with the box's
+other OS users through a `spark` group. The heavier step, if it is ever
+wanted: the engine as a real system unit under its own service account,
+models in a shared path, so it needs no owner logged in at all. Bigger --
+root, a service user, paths outside any `$HOME` -- and only worth it once
+the group model has been lived with.

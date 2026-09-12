@@ -55,6 +55,8 @@ ON THE LAN (server / client)
   spark user token --new          rotate your token; old logins die
   spark headless [on|off]         up from boot, never asleep (the machine
                                   that stays on)
+  spark share [on|off]            one engine for this machine's OS users: a
+                                  spark group shares it (Linux); each own soul
   spark client [URL|off]          use another machine's spark; none here
   spark brain                     which server answers now
 

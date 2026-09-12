@@ -30,6 +30,9 @@ SPARK_ENV = os.path.join(CONFIG_DIR, "spark.env")
 SOUL_FILE = os.path.join(CONFIG_DIR, "soul")
 MEMORY_FILE = os.path.join(CONFIG_DIR, "memory")
 TOKEN_FILE = os.path.join(STATE_DIR, "api-token")
+# the api-token copy a shared engine's local users read (spark share): a
+# group-readable file outside any one $HOME. SPARK_SHARE_TOKEN overrides it.
+SHARE_TOKEN = os.environ.get("SPARK_SHARE_TOKEN") or "/etc/spark/token"
 SERVE_URL_FILE = os.path.join(STATE_DIR, "serve-url")
 PID_FILE = os.path.join(STATE_DIR, "serve.pid")
 SERVE_LOG = os.path.join(STATE_DIR, "serve.log")

@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.22
+
+- `spark share on|off`: one engine for every OS user on a machine. Instead
+  of each user loading the model again, the owner runs the engine (headless)
+  and a `spark` OS group reads a `0640` copy of the api-token; a group
+  member's spark answers from that shared engine as a client -- `spark
+  client http://<host>:8080` -- keeping their own soul, memory and threads
+  in their own `$HOME`. One model loaded once; every user sovereign. The
+  owner's own token stays `0600`; the shared copy is re-synced by `spark
+  share on` and the new `share` check row warns if it drifts. Explicit, not
+  automatic: which engine answers is always the user's own `spark client`
+  choice. Linux (a shared workstation); macOS and WSL keep one user per box
+  in this version. `spark check` gains the `share` row (36 rows).
+
 ## v1.21
 
 - `spark drill` (contract 13): a source on stdin becomes practice

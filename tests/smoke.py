@@ -1174,6 +1174,29 @@ def main():
         t.ok(ok1 and val1 == "ran:S" and ok2 is False and hint2 == "the brain went away" and raised,
              "session.once: success passes through, a cut is a skip, an auth fault is raised")
 
+        # spark share: one engine for the machine's other OS users (v1.22)
+        rc, out, _ = spark("share", "-h")
+        t.ok(rc == 0 and out.startswith("spark share -- "), "share -h is signed", out[:40])
+        rc, out, _ = spark("share")
+        t.ok(rc == 0 and "SITE_SHARE=no" in out, "share: status shows not-shared by default", out[:80])
+        from spark import site as sitemod, config as configmod
+        t.ok(isinstance(sitemod.no_share(), str) and isinstance(sitemod.share_facts(configmod.load()), list),
+             "share: no_share() and share_facts() answer on this OS without a crash")
+        # the join side: a shared-engine token is recorded for a client, not minted
+        os.makedirs(home + "/.config-share/spark", exist_ok=True)
+        sharetok = home + "/shared-token"
+        with open(sharetok, "w") as f:
+            f.write("SHAREDSECRET\n")
+        rc, out, err = spark("client", "http://127.0.0.1:8080", extra={
+            "XDG_CONFIG_HOME": home + "/.config-share", "XDG_STATE_HOME": home + "/.local/state-share",
+            "SPARK_SHARE_TOKEN": sharetok, "SPARK_NO_APPLY": "1"})
+        try:
+            sparkenv = open(home + "/.config-share/spark/spark.env").read()
+        except OSError:
+            sparkenv = ""
+        t.ok(rc == 0 and ("SPARK_API_KEY_FILE=" + sharetok) in sparkenv,
+             "spark client: a readable shared-engine token is recorded, not a token of its own", repr(sparkenv[-160:]) + err)
+
         # the Terminal.app profile carries the keys micro needs
         from spark import theme as thememod
         fixture_pal = dict(("THEME_ANSI_%d" % i, "#%02x%02x%02x" % (i, i, i)) for i in range(16))

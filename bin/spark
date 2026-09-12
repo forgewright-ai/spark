@@ -68,6 +68,8 @@ the FORGE: server/client
  spark user [add NAME]        the named users, each with sealed threads (-h)
  spark forge [on|off]         the FORGE on the LAN: the API and the page
  spark headless [on|off]      the FORGE up from boot, never asleep (a brain)
+ spark share [on|off]         one engine for every OS user here: a spark group
+                              reads the token; each keeps their own context
  spark client [URL|off]       answer from another machine's FORGE; none here
 """ % MARK
 
@@ -149,6 +151,7 @@ VERBS = {"setup": ("setup", "main", False), "check": ("check", "main", False),
          "shell": ("site", "cmd_shell_gone", False),
          "font": ("site", "cmd_font", False), "quiet": ("site", "cmd_quiet", False),
          "headless": ("site", "cmd_headless", False), "client": ("site", "cmd_client", False),
+         "share": ("site", "cmd_share", False),
          "model": ("model", "cmd_model", False), "ember": ("model", "cmd_ember", False),
          "serve": ("serve", "main", True),
          "forge": ("forgeserve", "main", False), "user": ("users", "main", False),

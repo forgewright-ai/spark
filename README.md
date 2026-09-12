@@ -74,6 +74,7 @@ and your editor stay yours. `INSTALL.md` has every step and every key.
 | `spark forge --print-url` | the same AI in a browser, on the LAN; on a phone, add it to the home screen |
 | `spark client URL` | another machine of yours uses this one's AI, no model of its own |
 | `spark headless on` | keeps it up from boot, on the machine that stays on |
+| `spark share on` | one engine for every OS user on this machine: a `spark` group shares it; each keeps their own soul and memory (Linux) |
 | `spark check` | every promise this machine makes, one row each; exit 0 when all are kept |
 | `spark off` | Enter is a plain Enter again; `spark on` brings it back |
 | `spark uninstall` | takes it all off; keeps your prose and your threads |

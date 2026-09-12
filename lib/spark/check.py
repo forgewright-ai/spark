@@ -1216,6 +1216,21 @@ def row_headless(ctx):
     return ok("daemons loaded, never sleeps, wake on LAN" if IS_MAC else "linger, sleep masked, lid ignored")
 
 
+@row("CAPABILITY", fixture=False, reason="reads the real spark group and the shared token; the group needs root to create")
+def row_share(ctx):
+    """This box's engine, shared with its other OS users: a `spark` group
+    reads a 0640 copy of the api-token (SITE_SHARE=yes; spark share on).
+    Never fails -- sharing is opt-in; a stale or mis-permissioned token warns."""
+    from . import site
+    if not ctx.cfg.share:
+        return na("not shared; spark share on lets this box's OS users in")
+    facts = site.share_facts(ctx.cfg)
+    bad = [piece for piece, good, _ in facts if not good]
+    if bad:
+        return warn("check: " + ", ".join(bad), "spark share on   (re-syncs the token; sudo)")
+    return ok(next((d for piece, _g, d in facts if piece == "spark group"), "shared with the spark group"))
+
+
 @row("NONFUNCTIONAL", fixture=False, reason="asks the package manager, cached an hour")
 def row_pending(ctx):
     n = ctx.cached("pending", 3600, packages.pending)

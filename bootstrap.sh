@@ -708,7 +708,40 @@ else
     fi
 fi
 
-# ============================================================ 11. terminal
+# =============================================================== 11. share
+# One engine for every OS user on this machine: a `spark` group may read a
+# 0640 copy of the api-token, so a group member's spark (spark client) uses
+# this box's llama-server without a token of its own -- its own soul and
+# memory, one model loaded once. The owner's api-token stays 0600 in $HOME;
+# the shared copy is re-synced here, so a rotated token is picked up. macOS
+# and WSL 2 keep one user per box in this version.
+section share
+share_tok=${SPARK_SHARE_TOKEN:-/etc/spark/token}
+if [ "$OS" = Darwin ] || is_wsl; then
+    if [ "$SITE_SHARE" = yes ]; then row todo share "one user per box here (macOS/WSL): a shared engine is a Linux box story"
+    else skip share "not shared (one user per box on macOS/WSL)"; fi
+elif [ "$SITE_SHARE" != yes ]; then
+    if [ -f "$share_tok" ] && need share "remove $share_tok (SITE_SHARE=no) (sudo)"; then
+        as_root rm -f "$share_tok"; ok share "not shared"
+    else skip share "not shared (SITE_SHARE=no; spark share on)"; fi
+elif [ ! -s "$tok" ]; then
+    row todo share "no api-token yet: spark serve first, then spark share on"
+else
+    if getent group spark >/dev/null 2>&1; then ok share "group spark exists"
+    elif need share "groupadd spark (sudo)"; then as_root groupadd spark; ok share "group spark created"; fi
+    if [ -f "$share_tok" ] && cmp -s "$tok" "$share_tok" \
+       && [ "$(stat -c '%a %G' "$share_tok" 2>/dev/null)" = "640 spark" ]; then
+        ok share "$share_tok (0640 root:spark)"
+    elif need share "copy the api-token to $share_tok (0640 root:spark) (sudo)"; then
+        as_root mkdir -p "$(dirname "$share_tok")"
+        as_root cp "$tok" "$share_tok"
+        as_root chgrp spark "$share_tok"
+        as_root chmod 0640 "$share_tok"
+        ok share "$share_tok (0640 root:spark)"
+    fi
+fi
+
+# ============================================================ 12. terminal
 section terminal
 if [ "$SITE_THEME" = none ]; then
     skip theme "SITE_THEME=none: your terminal keeps its colours"

@@ -45,7 +45,7 @@ _spark_model_names() {
 _spark() {
     local -a comp
     if (( CURRENT == 2 )); then
-        comp=(chat do recall serve check update headless client setup
+        comp=(chat do recall serve check update headless share client setup
               ver last status brain history stats bench model ember
               forge soul memory quiet theme font bar off
               on user explain edit ask read drill watch help uninstall)
@@ -55,7 +55,7 @@ _spark() {
             theme)   comp=(list show none status ${(f)"$(_spark_theme_names)"}) ;;
             model)   comp=(list verify budget rm add auto none status ${(f)"$(_spark_model_names)"}) ;;
             ember)   comp=(list auto none status ${(f)"$(_spark_model_names)"}) ;;
-            headless | forge | memory) comp=(on off status) ;;
+            headless | share | forge | memory) comp=(on off status) ;;
             bar)     comp=(line) ;;
             check)   comp=(--watch --porcelain --selftest --fresh --fetch) ;;
             uninstall) comp=(--dry-run --yes --purge --packages --keep-packages) ;;
