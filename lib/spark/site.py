@@ -13,7 +13,7 @@ import subprocess
 import sys
 from urllib.parse import urlsplit
 
-from . import (CONFIG_DIR, HOME, IS_MAC, MARK, REPO, SHARE_TOKEN, SITE_ENV, SPARK_ENV, TOKEN_FILE,
+from . import (CONFIG_DIR, HOME, IS_MAC, MARK, REPO, SHARE_TOKEN, SHARE_URL, SITE_ENV, SPARK_ENV, TOKEN_FILE,
                config, distro, glyph, is_wsl, say)
 
 # WSL 2: Linux, minus what the VT console and GRUB own (contract 8 lines)
@@ -481,9 +481,16 @@ def _same_token(a, b):
 
 
 def _share_url():
-    """The engine URL a local user points `spark client` at: whatever serve
-    bound (reachable from localhost too), or a placeholder before it runs."""
+    """The engine URL a local user points `spark client` at: the published
+    /etc/spark/url, else whatever serve bound, else a placeholder."""
     from . import wire
+    try:
+        with open(SHARE_URL, encoding="utf-8") as f:
+            url = f.read().strip()
+            if url:
+                return url
+    except OSError:
+        pass
     return wire.serve_url() or "http://<this-host>:8080"
 
 
@@ -515,6 +522,14 @@ def share_facts(cfg):
                       "" if matches else " -- STALE, spark share on re-syncs")))
     else:
         facts.append(("shared token", not cfg.share, "%s absent" % SHARE_TOKEN))
+    if os.path.exists(SHARE_URL):
+        try:
+            url = open(SHARE_URL, encoding="utf-8").read().strip()
+        except OSError:
+            url = "?"
+        facts.append(("engine url", bool(url), "%s (%s)" % (SHARE_URL, url or "empty")))
+    else:
+        facts.append(("engine url", not cfg.share, "%s absent (spark serve, then spark share on)" % SHARE_URL))
     return facts
 
 

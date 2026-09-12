@@ -359,6 +359,20 @@ this machine answers. `spark model` there prints this machine's table;
 choosing a model there is refused. `spark client off` gives it a model
 of its own again.
 
+Another OS user on this same machine (a shared workstation): the owner runs
+`spark share on` once (a `spark` group, one engine for everyone -- Linux).
+Then add the user to the group (`sudo gpasswd -a NAME spark`; they log in
+again), and they set up in userspace -- no sudo, no download:
+
+```sh
+curl -fsSL https://spark.forgewright.ai/get | sh     # clones spark's code only
+spark setup                                          # detects the shared engine, offers to join
+```
+
+`spark setup` sees the shared engine and joins it instead of the first-run:
+no model to download, no root, their own soul and memory in their own home,
+answering from the one engine. `spark share off` ends it.
+
 Any program, with the OpenAI shape (a request naming no `model` gets the
 conversation model with the identity; `model: spark` the bare prompt
 model):

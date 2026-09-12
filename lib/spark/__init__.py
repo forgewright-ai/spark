@@ -33,6 +33,9 @@ TOKEN_FILE = os.path.join(STATE_DIR, "api-token")
 # the api-token copy a shared engine's local users read (spark share): a
 # group-readable file outside any one $HOME. SPARK_SHARE_TOKEN overrides it.
 SHARE_TOKEN = os.environ.get("SPARK_SHARE_TOKEN") or "/etc/spark/token"
+# the shared engine's address, published beside the token so a joining OS
+# user finds it without reading the owner's $HOME (not secret; 0644).
+SHARE_URL = os.environ.get("SPARK_SHARE_URL") or "/etc/spark/url"
 SERVE_URL_FILE = os.path.join(STATE_DIR, "serve-url")
 PID_FILE = os.path.join(STATE_DIR, "serve.pid")
 SERVE_LOG = os.path.join(STATE_DIR, "serve.log")

@@ -800,14 +800,23 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   lets a machine's other OS users answer from its one engine instead of
   each loading the model: bootstrap's `share` row ensures a `spark` OS
   group and a `0640 root:spark` copy of the api-token at `$SHARE_TOKEN`
-  (`/etc/spark/token`, `SPARK_SHARE_TOKEN` overrides), re-synced each apply;
-  the owner's own token stays `0600`. A group member joins as a client
-  (above). The `share` check row (CAPABILITY, `fixture=False` -- the group
-  needs root) reports the group and warns if the copy drifts from the live
-  token or loses its perms. Identity stays per-`$HOME`, compute is shared
-  and chosen explicitly -- spark never routes to an engine the user did not
-  name. Linux only in this version; macOS and WSL are one user per box
-  (`site.no_share`), a signed refusal from `spark share on` and a skip row.
+  (`/etc/spark/token`, `SPARK_SHARE_TOKEN` overrides), re-synced each apply,
+  and publishes the engine's address to `$SHARE_URL` (`/etc/spark/url`,
+  `0644`) so a joiner finds it without reading the owner's `$HOME`; the
+  owner's own token stays `0600`. The `share` check row (CAPABILITY,
+  `fixture=False` -- the group needs root) reports the group, the token and
+  the url, and warns if the copy drifts. A group member joins as a client
+  with NO root: bootstrap's `share` row and `sudo_upfront` both short-circuit
+  for a client (`$client`), so a joining user never trips a root step or
+  removes the owner's token, and `spark setup` on such a box detects
+  `$SHARE_TOKEN` and offers the join -- the client shape written for them
+  (`SITE_AI_MODEL=none`, `SITE_PEER_AI_URL` from `$SHARE_URL`,
+  `SPARK_API_KEY_FILE=$SHARE_TOKEN`, `SITE_THEME=none`), no model
+  downloaded, their own soul and memory kept in `$HOME`. Identity stays
+  per-`$HOME`, compute is shared and chosen explicitly -- spark never routes
+  to an engine the user did not name. Linux only in this version; macOS and
+  WSL are one user per box (`site.no_share`), a signed refusal from `spark
+  share on` and a skip row.
 - **A model.** One list, `models.env`: a row (`MODEL_<NAME>`, the
   five fields), its `_LICENSE` (always), a `_NOTE` when one line helps,
   and `_TESTED="line"` only once the row has answered `spark line` with

@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.23
+
+- Joining a shared engine is now userspace -- no sudo, no download. When a
+  machine already runs a shared engine (`spark share on`), `spark setup`
+  detects it and offers to join instead of the full first-run: it writes the
+  client shape (no model, `SITE_THEME=none`), keeps the joining user's own
+  soul and memory in their `$HOME`, and touches nothing that needs root. A
+  second OS user sets up with the ordinary one-liner and answers from the
+  one engine in seconds. Fixes v1.22, where a second user hit the model
+  table, a second download, and a sudo wall they could not pass.
+- `spark share on` now also publishes the engine's address to
+  `/etc/spark/url` (0644, beside the token), so a joining user finds it
+  without reading the owner's home; `spark share` reports it.
+- `bootstrap.sh` makes a client of a shared engine truly root-free: it skips
+  the `share` section for a client (no longer trying to remove the owner's
+  token) and no longer asks for sudo up front when nothing needs it.
+
 ## v1.22
 
 - `spark share on|off`: one engine for every OS user on a machine. Instead

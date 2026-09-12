@@ -167,6 +167,7 @@ sudo_upfront() {
     # converged machine is exactly that.
     [ "$MODE" = apply ] || return 0
     [ "$(id -u)" -ne 0 ] || return 0
+    [ "$client" = 1 ] && return 0               # a client of a shared engine needs no root
     if ! command -v sudo >/dev/null 2>&1; then
         echo "bootstrap: no sudo here, and packages, the console and the units need root." >&2
         echo "bootstrap: run it as root, or install sudo first. Nothing was changed." >&2
@@ -717,12 +718,18 @@ fi
 # and WSL 2 keep one user per box in this version.
 section share
 share_tok=${SPARK_SHARE_TOKEN:-/etc/spark/token}
-if [ "$OS" = Darwin ] || is_wsl; then
+share_url=${SPARK_SHARE_URL:-/etc/spark/url}
+if [ "$client" = 1 ]; then
+    # a client joins a shared engine, it does not run one: never touch the
+    # owner's token or the group, and never a root step (a joining user has
+    # no sudo). This is what lets a second OS user set up in userspace.
+    skip share "$CLIENT_OF"
+elif [ "$OS" = Darwin ] || is_wsl; then
     if [ "$SITE_SHARE" = yes ]; then row todo share "one user per box here (macOS/WSL): a shared engine is a Linux box story"
     else skip share "not shared (one user per box on macOS/WSL)"; fi
 elif [ "$SITE_SHARE" != yes ]; then
-    if [ -f "$share_tok" ] && need share "remove $share_tok (SITE_SHARE=no) (sudo)"; then
-        as_root rm -f "$share_tok"; ok share "not shared"
+    if { [ -f "$share_tok" ] || [ -f "$share_url" ]; } && need share "remove $share_tok, $share_url (SITE_SHARE=no) (sudo)"; then
+        as_root rm -f "$share_tok" "$share_url"; ok share "not shared"
     else skip share "not shared (SITE_SHARE=no; spark share on)"; fi
 elif [ ! -s "$tok" ]; then
     row todo share "no api-token yet: spark serve first, then spark share on"
@@ -738,6 +745,17 @@ else
         as_root chgrp spark "$share_tok"
         as_root chmod 0640 "$share_tok"
         ok share "$share_tok (0640 root:spark)"
+    fi
+    # the engine's address, so a joining user finds it without reading the
+    # owner's $HOME. Not a secret (the token gates use): 0644.
+    surl=$(cat "$SPARK_STATE_DIR/serve-url" 2>/dev/null || true)
+    if [ -z "$surl" ]; then row todo share "engine URL unknown yet ($share_url): spark serve, then spark share on"
+    elif [ -f "$share_url" ] && [ "$(cat "$share_url" 2>/dev/null)" = "$surl" ]; then ok share "$share_url ($surl)"
+    elif need share "publish the engine URL to $share_url (sudo)"; then
+        as_root mkdir -p "$(dirname "$share_url")"
+        printf '%s\n' "$surl" | as_root tee "$share_url" >/dev/null
+        as_root chmod 0644 "$share_url"
+        ok share "$share_url ($surl)"
     fi
 fi
 

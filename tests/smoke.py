@@ -1196,6 +1196,20 @@ def main():
             sparkenv = ""
         t.ok(rc == 0 and ("SPARK_API_KEY_FILE=" + sharetok) in sparkenv,
              "spark client: a readable shared-engine token is recorded, not a token of its own", repr(sparkenv[-160:]) + err)
+        # a client on a shared-engine box makes NO root step and never removes
+        # the owner's token: bootstrap's share section skips for a client
+        ownertok = home + "/owner-token"
+        with open(ownertok, "w") as f:
+            f.write("OWNERSECRET\n")
+        benv = dict(env, SITE_AI_MODEL="none", SITE_PEER_AI_URL="http://127.0.0.1:8080", SPARK_SHARE_TOKEN=ownertok)
+        p = subprocess.run(["sh", os.path.join(REPO, "bootstrap.sh"), "--dry-run"],
+                           capture_output=True, text=True, env=benv, timeout=60)
+        lines = p.stdout.splitlines()
+        skipped = any(ln.startswith("skip") and "share" in ln for ln in lines)
+        removes = any(ln.startswith("would") and "share" in ln and "remove" in ln for ln in lines)
+        t.ok(skipped and not removes and os.path.exists(ownertok),
+             "share: a client skips the share section -- no root, the owner's token untouched",
+             "\n".join(ln for ln in lines if "share" in ln)[-200:] + p.stderr[-120:])
 
         # the Terminal.app profile carries the keys micro needs
         from spark import theme as thememod

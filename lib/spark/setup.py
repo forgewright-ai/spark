@@ -14,7 +14,8 @@ import subprocess
 import sys
 import time
 
-from . import HOME, IS_MAC, MARK, REPO, SITE_ENV, config, mem_total_gb, say, wait_ready
+from . import (HOME, IS_MAC, MARK, REPO, SHARE_TOKEN, SHARE_URL, SITE_ENV, SPARK_ENV, TOKEN_FILE,
+               config, mem_total_gb, say, wait_ready)
 from . import engine, packages, session, site, wire
 from . import model as modeltab      # `model` is a local name here: the chosen row
 
@@ -321,6 +322,49 @@ def _closing():
     say("spark ember NAME adds a second brain: a bigger model, just for conversation")
 
 
+def _joining(yes):
+    """This box shares an engine; join it? Default yes (it is the point of a
+    shared box, and running your own would need root a joining user lacks)."""
+    if yes:
+        return True
+    say("%s this machine already runs a shared spark engine." % MARK)
+    try:
+        ans = input("   join it? -- your own soul and memory, no model to download [Y/n]: ").strip().lower()
+    except EOFError:
+        return True
+    return ans in ("", "y", "yes")
+
+
+def _join(name, user, opts, yes):
+    """The userspace join: a client of this box's shared engine. No model,
+    no console, no units, no sudo -- only this user's ~/.config and
+    ~/.local/state, and their own sealed account. Mirrors spark client."""
+    url = ""
+    try:
+        with open(SHARE_URL, encoding="utf-8") as f:
+            url = f.read().strip()
+    except OSError:
+        pass
+    if not url:
+        url = "" if yes else input("   the shared engine's URL [http://127.0.0.1:8080]: ").strip()
+        url = url or "http://127.0.0.1:8080"
+    say()
+    _write(name, user, "none", "none")                      # SITE_AI_MODEL=none, SITE_THEME=none
+    site.set_keys(_quiet=True, SITE_PEER_AI_URL=url)
+    site.set_keys(_file=SPARK_ENV, _quiet=True, SPARK_API_KEY_FILE=SHARE_TOKEN)
+    say("ok     join         %s -- this box's shared engine (no model to download)" % url)
+    _account(user)                                          # this user's own sealed store, no root
+    rc = site.apply(CORE_ROWS, stream=True)
+    if rc != 0:
+        return rc
+    _rc_line()
+    cfg = config.load()
+    if opts["serve"]:
+        _first_question(cfg)                                # asks the shared engine
+    _closing()
+    return 0
+
+
 def _run(opts):
     from . import cli
     yes = opts["yes"] or not sys.stdin.isatty()
@@ -329,6 +373,10 @@ def _run(opts):
     say()
     name = _decide(cfg, "SITE_NAME", opts["name"], cfg.name, "this machine's name", yes)
     user = _decide(cfg, "SITE_USER", opts["user"], cfg.user, "your name", yes)
+    # a shared engine already runs on this box (spark share on) and this user
+    # has no server of their own: join it -- no model to download, no root
+    if os.access(SHARE_TOKEN, os.R_OK) and not os.path.exists(TOKEN_FILE) and _joining(yes):
+        return _join(name, user, opts, yes)
     if ASKED:
         say()          # one blank line after the questions; none when there were none
     default = _table(cfg)
