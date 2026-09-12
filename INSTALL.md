@@ -386,13 +386,19 @@ curl -sN http://<host>:8081/v1/chat/completions \
 
 The page, in any browser on the LAN:
 
-1. `spark forge --print-url` prints `http://<host>:8081/login` and, on a
-   terminal, the admin token.
-2. Type a token once; the browser keeps a cookie (90 days; a server
-   restart asks again). The admin token opens the whole machine (every
-   verb, `do`, the config, the log, this account's threads); a user's
-   token opens that user's own chat, threads, memory and a read-only
-   monitor. Give each of the household their own `spark user add NAME`.
+1. `spark forge --print-url` prints `http://<host>:8081/login` and, at a
+   terminal, the admin token and a QR code. Scan the QR with a phone's
+   camera and the page signs in by itself -- the token rides the link
+   after `#`, which stays in the browser and never reaches the server.
+   The QR is the token drawn as squares: show it (or a screenshot of
+   it) only to the person it is for.
+2. Or type a token once; the browser keeps a cookie (90 days; a server
+   restart asks again). Everyone lands in the chat. The admin token
+   also opens the whole machine (every verb, `do`, the settings, the
+   log); a user's token opens that user's own chat, threads, memory and
+   a read-only activity page. Give each of the household their own
+   `spark user add NAME` -- it prints their token and their own QR to
+   scan, once.
 3. On a phone, add it to the home screen (iOS: share > add to home
    screen, and it becomes an app; Android keeps a shortcut that opens in
    a browser tab). The page needs this machine reachable when it opens:

@@ -144,6 +144,12 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 spark made goes; yours stays unless --purge; the clone last)
                 chacha (ChaCha20-Poly1305 written from RFC 8439, pinned to its
                 vectors in tests/vault_test.py: the sealed stores' cipher)
+                qr (a QR encoder from ISO/IEC 18004: byte mode, EC level L,
+                versions 1-5 only -- single RS block, no version info -- all 8
+                masks with the penalty rules; pinned to the spec's format
+                table, the canonical RS vector and a decode-back in
+                tests/qr_test.py. forgeserve --print-url and users.cmd_add
+                print it at a tty: the login link, scannable)
                 vault (the sealed-file format and the key custody: a per-user
                 data key wrapped by the token; sha256 verifier; pbkdf2)
                 users (the named users, their store under state/users/, and
@@ -167,6 +173,8 @@ tests/          install_test.sh get_test.sh update_test.sh uninstall_test.sh smo
                 judge; not in the gate) vault_test.py site_test.py check_selftest.py
                 forge_smoke.py bench_smoke.py widget_pty.py check_selftest.py
                 vault_test.py (RFC 8439 vectors, round-trips, refusals)
+                qr_test.py (ISO 18004 format table, the RS vector, a full
+                decode-back, the render forms)
 .githooks/      pre-commit (privacy gate, syntax, tests, 80-col), commit-msg (the
                 same privacy patterns over the message -- history is public too),
                 pre-push (install test, selftest, chaos)
@@ -365,7 +373,16 @@ may change freely.
    unloaded}`, `roles` = `{role: model file stem}` per served role) -- the client's FORGE detector and the
    `forge` row's probe. `GET /`, `/login`, `/static/<f>`,
    `/manifest.webmanifest` and `/apple-touch-icon.png` (a 180x180 PNG the
-   server draws) are the page, no token. Auth: the forge-token is admin
+   server draws) are the page, no token. The page is chat-first: both
+   roles land in the chat view (hash routes chat|monitor|do|config|help,
+   chat the default), and the login link `/login#t=<token>` (the QR
+   `spark forge --print-url` and `spark user add` draw at a tty) signs
+   in by itself: the page reads the fragment before routing, strips it
+   with history.replaceState, and POSTs it to `/api/login` ONCE -- a
+   stale link is one 401, never a retry loop -- and a fragment is never
+   sent by the browser, so it cannot reach the server or its log (which
+   drops query strings besides, `_dispatch` logging `urlsplit().path`).
+   Auth: the forge-token is admin
    (the whole box, and the box account's own store); every other caller
    is a named user (`spark user add NAME`) presenting their personal
    token -- verified against its stored sha256, and unwrapping their

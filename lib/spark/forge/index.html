@@ -1,8 +1,10 @@
 <!doctype html>
 <!-- spark FORGE page: the one static document. Every view is a section here;
      spark.js shows one at a time by hash route and fills it from /api/*.
-     No inline script, no inline style, no inline handler (CSP: default-src
-     'self'). ASCII only: this file is read on the Linux console too. -->
+     Chat is the front door for both roles; the admin's cards live under
+     activity and settings. No inline script, no inline style, no inline
+     handler (CSP: default-src 'self'). ASCII only: this file is read on
+     the Linux console too. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -18,58 +20,96 @@
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="manifest" href="/manifest.webmanifest">
 </head>
-<body>
+<body class="logged-out">
 <a class="skip" href="#main">skip to content</a>
 
 <header class="top">
-  <a class="mark" href="#/monitor">spark</a>
+  <a class="mark" href="#/chat"><img src="/static/favicon.svg" alt="" width="26" height="26"><span>spark</span></a>
   <span id="site" class="site"></span>
-  <span id="role" class="role mono" hidden></span>
-  <span id="bar" class="bar mono" title="the tmux status line, live"></span>
-  <label class="pal">palette
-    <select id="palette" aria-label="palette (this browser only)"></select>
-  </label>
-  <button id="logout" type="button" class="quiet" hidden>logout</button>
 </header>
 
 <nav class="tabs" aria-label="pages">
-  <a href="#/monitor" data-view="monitor"><kbd>1</kbd> monitor</a>
-  <a href="#/chat" data-view="chat"><kbd>2</kbd> chat</a>
+  <a href="#/chat" data-view="chat"><kbd>1</kbd> chat</a>
+  <a href="#/monitor" data-view="monitor"><kbd>2</kbd> activity</a>
   <a href="#/do" data-view="do"><kbd>3</kbd> do</a>
-  <a href="#/config" data-view="config"><kbd>4</kbd> config</a>
+  <a href="#/config" data-view="config"><kbd>4</kbd> settings</a>
   <a href="#/help" data-view="help"><kbd>5</kbd> help</a>
 </nav>
 
 <main id="main">
 
-<section id="login" class="card login" hidden>
-  <img class="s-mark" src="/static/favicon.svg" alt="" width="54" height="54">
-  <h2>forge token</h2>
-  <p class="muted web">A token from the box: <code>forge-token</code> (admin) or
-    <code>ember-token</code> (user) under <code>~/.local/state/spark/</code>
-    (<code>spark forge --print-url [--user]</code> shows it).</p>
-  <p class="muted tauri">The FORGE's address and a token from the box
-    (<code>spark forge --print-url</code> shows both).</p>
-  <form id="login-form">
-    <label for="server-url" class="tauri">server url</label>
-    <input id="server-url" class="tauri" type="text" placeholder="http://box:8081"
-      autocomplete="off" spellcheck="false" inputmode="url">
-    <label for="token">token</label>
-    <input id="token" type="password" autocomplete="off" spellcheck="false" required>
-    <button type="submit" class="primary">log in</button>
-  </form>
-  <p id="login-error" class="err" role="alert"></p>
+<section id="login" class="login" hidden>
+  <div class="login-card">
+    <img class="s-mark" src="/static/favicon.svg" alt="" width="72" height="72">
+    <h1>spark</h1>
+    <p id="login-hello" class="muted">your own AI, on your own box</p>
+    <p class="muted web small">Ask the box's owner for a token
+      (<code>spark user add NAME</code> mints one and shows a QR to scan);
+      the admin's is at <code>spark forge --print-url</code>.</p>
+    <p class="muted tauri small">The FORGE's address and a token from the box
+      (<code>spark forge --print-url</code> shows both).</p>
+    <form id="login-form">
+      <label for="server-url" class="tauri">server url</label>
+      <input id="server-url" class="tauri" type="text" placeholder="http://box:8081"
+        autocomplete="off" spellcheck="false" inputmode="url">
+      <label for="token" class="vh">token</label>
+      <div class="token-row">
+        <input id="token" type="password" placeholder="paste your token"
+          autocomplete="off" autocapitalize="none" autocorrect="off"
+          spellcheck="false" required>
+        <button id="token-show" type="button" class="quiet"
+          aria-label="show the token" aria-pressed="false">show</button>
+      </div>
+      <button type="submit" class="primary big">log in</button>
+    </form>
+    <p id="login-wait" class="muted" hidden>signing you in...</p>
+    <p id="login-error" class="err" role="alert"></p>
+  </div>
+</section>
+
+<section id="view-chat" class="view chat" hidden>
+  <aside id="threads" class="threads">
+    <div class="head">
+      <h2>chats</h2>
+      <button id="thread-new" type="button" class="new">+ new chat</button>
+    </div>
+    <ul id="thread-list" class="list"></ul>
+  </aside>
+  <div id="scrim" class="scrim" aria-hidden="true"></div>
+  <div class="talk">
+    <div class="chatbar">
+      <button id="threads-toggle" type="button" class="quiet drawer-btn" aria-expanded="false">chats</button>
+      <p id="chat-status" class="muted small status" aria-live="polite"></p>
+    </div>
+    <div id="hello" class="hello" hidden>
+      <img src="/static/favicon.svg" alt="" width="56" height="56">
+      <h2 id="hello-hi">hi</h2>
+      <p class="muted">this is your box's own AI -- ask it anything.</p>
+      <div class="chips">
+        <button type="button" class="chip" data-chip="what can you do?">what can you do?</button>
+        <button type="button" class="chip" data-chip="tell me something interesting about this machine">about this machine</button>
+        <button type="button" class="chip" data-chip="help me write a short note">help me write</button>
+        <button type="button" class="chip" data-chip="explain something to me like I am five">explain like I'm five</button>
+      </div>
+    </div>
+    <div id="transcript" class="transcript" tabindex="0" aria-live="polite" aria-label="conversation"></div>
+    <form id="chat-form" class="composer">
+      <textarea id="chat-text" rows="1" data-main placeholder="message spark" aria-label="message"></textarea>
+      <button id="chat-stop" type="button" class="stop" hidden>stop</button>
+      <button id="chat-send" type="submit" class="send" aria-label="send">&#x2191;</button>
+    </form>
+  </div>
 </section>
 
 <section id="view-monitor" class="view" hidden>
   <div class="card">
     <div class="head">
-      <h2>check</h2>
+      <h2>health</h2>
       <span id="check-tally" class="mono"></span>
       <span id="check-age" class="muted"></span>
       <button id="check-refresh" type="button" class="quiet adm">refresh</button>
     </div>
-    <div id="check-table" class="check"></div>
+    <div id="check-table" class="check mono"></div>
   </div>
   <div class="card">
     <div class="head">
@@ -81,6 +121,10 @@
       </select>
     </div>
     <div id="stats-tiles" class="tiles"></div>
+  </div>
+  <div class="card adm" id="bar-card">
+    <h2>status line</h2>
+    <p id="bar" class="bar mono" title="the tmux status line, live"></p>
   </div>
   <div class="two adm">
     <div class="card">
@@ -100,26 +144,6 @@
   </div>
 </section>
 
-<section id="view-chat" class="view chat" hidden>
-  <button id="threads-toggle" type="button" class="quiet drawer-btn" aria-expanded="false">threads</button>
-  <aside id="threads" class="threads">
-    <div class="head">
-      <h2>threads</h2>
-      <button id="thread-new" type="button" class="quiet">new</button>
-    </div>
-    <ul id="thread-list" class="list"></ul>
-  </aside>
-  <div class="talk">
-    <div id="transcript" class="transcript mono" tabindex="0" aria-live="polite" aria-label="transcript"></div>
-    <form id="chat-form" class="ask">
-      <textarea id="chat-text" rows="1" data-main placeholder="ask (Enter sends, Shift+Enter newline)" aria-label="message"></textarea>
-      <button id="chat-stop" type="button" class="danger stop" hidden>stop</button>
-      <button id="chat-send" type="submit" class="primary">send</button>
-    </form>
-    <p id="chat-status" class="muted small" aria-live="polite"></p>
-  </div>
-</section>
-
 <section id="view-do" class="view" hidden>
   <div class="card">
     <h2>do</h2>
@@ -134,6 +158,53 @@
 </section>
 
 <section id="view-config" class="view" hidden>
+  <div class="card" id="session-card">
+    <div class="head">
+      <h2>session</h2>
+      <span id="role" class="role" hidden></span>
+    </div>
+    <div class="actions">
+      <button id="logout" type="button" class="quiet" hidden>log out</button>
+    </div>
+  </div>
+  <div class="card" id="pal-card">
+    <h2>look</h2>
+    <label class="pal">palette
+      <select id="palette2" aria-label="palette (your view only)"></select>
+    </label>
+    <p class="muted small">your view only -- this browser, not the box</p>
+  </div>
+  <div class="card usr" id="account-card" hidden>
+    <div class="head">
+      <h2>account</h2>
+      <span id="account-name" class="mono muted"></span>
+    </div>
+    <div class="actions">
+      <button id="user-rotate" type="button" class="danger">rotate my token</button>
+      <button id="user-clear" type="button" class="danger">clear my chats</button>
+      <span id="account-note" class="muted small"></span>
+    </div>
+    <p id="account-status" class="muted small mono"></p>
+    <p class="muted small">your token is the only key to your history -- rotating logs your other devices out</p>
+  </div>
+  <div class="two">
+    <div class="card">
+      <div class="head">
+        <h2>soul</h2>
+        <button id="soul-save" type="button" class="adm">save</button>
+      </div>
+      <textarea id="soul-text" rows="10" class="mono wide" aria-label="soul" spellcheck="false"></textarea>
+      <p id="soul-status" class="muted small"></p>
+    </div>
+    <div class="card">
+      <h2>memory</h2>
+      <ul id="memory-list" class="list"></ul>
+      <form id="memory-form" class="row">
+        <input id="memory-text" type="text" placeholder="remember ..." aria-label="a fact to remember" autocomplete="off">
+        <button type="submit">remember</button>
+      </form>
+    </div>
+  </div>
   <div class="two adm">
     <div class="card">
       <h2>theme</h2>
@@ -141,6 +212,7 @@
         <select id="theme-pick" data-main aria-label="theme"></select>
         <button type="submit" class="primary">apply</button>
       </form>
+      <p class="muted small">the box's own look: console, tmux, the tools</p>
     </div>
     <div class="card">
       <h2>font</h2>
@@ -187,7 +259,7 @@
     <div class="actions">
       <button type="button" class="danger" data-run="forge" data-args="token --new">rotate admin token</button>
     </div>
-    <p class="muted small">rotating logs the admin out everywhere; a user rotates their own below</p>
+    <p class="muted small">rotating logs the admin out everywhere; a user rotates their own above</p>
   </div>
   <div class="card adm" id="users-card">
     <div class="head">
@@ -195,43 +267,7 @@
       <span class="muted small">counts only -- the messages are sealed, there is no key here</span>
     </div>
     <table class="keys" id="users-table"></table>
-    <p class="muted small">spark user add NAME on the box mints an account; the token shows once</p>
-  </div>
-  <div class="card usr" id="account-card" hidden>
-    <div class="head">
-      <h2>account</h2>
-      <span id="account-name" class="mono muted"></span>
-    </div>
-    <div class="actions">
-      <button id="user-rotate" type="button" class="danger">rotate my token</button>
-      <button id="user-clear" type="button" class="danger">clear my threads</button>
-      <span id="account-note" class="muted small"></span>
-    </div>
-    <p id="account-status" class="muted small mono"></p>
-    <p class="muted small">your token is the only key to your history -- rotating logs your other devices out</p>
-  </div>
-  <div class="card usr" id="pal-card" hidden>
-    <h2>palette</h2>
-    <select id="palette2" aria-label="palette (your view only)"></select>
-    <p class="muted small">your view only -- this browser, not the box</p>
-  </div>
-  <div class="two">
-    <div class="card">
-      <div class="head">
-        <h2>soul</h2>
-        <button id="soul-save" type="button" class="adm">save</button>
-      </div>
-      <textarea id="soul-text" rows="10" class="mono wide" aria-label="soul" spellcheck="false"></textarea>
-      <p id="soul-status" class="muted small"></p>
-    </div>
-    <div class="card">
-      <h2>memory</h2>
-      <ul id="memory-list" class="list"></ul>
-      <form id="memory-form" class="row">
-        <input id="memory-text" type="text" placeholder="remember ..." aria-label="a fact to remember" autocomplete="off">
-        <button type="submit">remember</button>
-      </form>
-    </div>
+    <p class="muted small">spark user add NAME on the box mints an account; the token and its QR show once</p>
   </div>
   <div class="card adm">
     <div class="head">
@@ -246,13 +282,13 @@
   <div class="card">
     <h2>keys</h2>
     <table class="keys">
-      <tr><td><kbd>1</kbd> .. <kbd>5</kbd></td><td>monitor, chat, do, config, help</td></tr>
+      <tr><td><kbd>1</kbd> .. <kbd>5</kbd></td><td>chat, activity, do, settings, help</td></tr>
       <tr><td><kbd>/</kbd></td><td>focus the page's main input</td></tr>
-      <tr><td><kbd>n</kbd></td><td>new thread (chat)</td></tr>
-      <tr><td><kbd>j</kbd> / <kbd>k</kbd></td><td>next / previous thread (chat)</td></tr>
+      <tr><td><kbd>n</kbd></td><td>new chat</td></tr>
+      <tr><td><kbd>j</kbd> / <kbd>k</kbd></td><td>next / previous chat</td></tr>
       <tr><td><kbd>r</kbd></td><td>refresh the current page</td></tr>
       <tr><td><kbd>?</kbd></td><td>this page</td></tr>
-      <tr><td><kbd>Esc</kbd></td><td>stop the answer or the running command, else leave the input, else close the drawer</td></tr>
+      <tr><td><kbd>Esc</kbd></td><td>stop the answer or the running command, else leave the input, else close the chat list</td></tr>
       <tr><td><kbd>Enter</kbd></td><td>send (chat); <kbd>Shift</kbd>+<kbd>Enter</kbd> newline</td></tr>
       <tr class="tauri"><td><kbd>q</kbd></td><td>quit the app</td></tr>
       <tr><td><kbd>Tab</kbd></td><td>every control, in order</td></tr>
@@ -260,15 +296,13 @@
   </div>
   <div class="card">
     <h2>what this is</h2>
-    <p>What this page can do is what your shell can do: every button is a
-      <code>spark</code> verb run on the box, and every card is what
-      <code>spark check</code>, <code>spark stats</code>, <code>spark serve</code>
-      and <code>spark bench</code> print. The page never runs a command you did
-      not click.</p>
-    <p>The palette menu in the header changes this browser only; the theme
-      picker under config runs <code>spark theme</code> on the box.</p>
-    <p>The FORGE knows two roles. The user token talks to the ember and
-      shapes who it is; the admin token is the whole box.</p>
+    <p>Your box's own AI, in the browser. Chat is yours alone -- your
+      messages live in a sealed store only your token opens. What this
+      page can do is what your shell can do: every button is a
+      <code>spark</code> verb run on the box, and the page never runs a
+      command you did not click.</p>
+    <p>The palette under settings changes this browser only; the theme
+      picker (admin) runs <code>spark theme</code> on the box itself.</p>
     <p>API health: <code id="help-health"></code> (no token needed; everything
       else under <code>/api/</code> takes your token as a cookie or bearer).</p>
   </div>

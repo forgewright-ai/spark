@@ -71,7 +71,7 @@ and your editor stay yours. `INSTALL.md` has every step and every key.
 | `spark soul edit` | who it is; `spark memory add <words>` adds a fact it keeps |
 | `spark model list` | 26 models, each with its license; `spark model NAME` serves one |
 | `spark ember NAME` | a second, bigger model for conversations |
-| `spark forge --print-url` | the same AI in a browser, on the LAN; on a phone, add it to the home screen |
+| `spark forge --print-url` | the same AI in a browser, on the LAN; scan the QR it prints and a phone is in |
 | `spark client URL` | another machine of yours uses this one's AI, no model of its own |
 | `spark headless on` | keeps it up from boot, on the machine that stays on |
 | `spark share on` | one engine for every OS user on this machine: a `spark` group shares it; each keeps their own soul and memory (Linux) |

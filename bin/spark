@@ -64,8 +64,9 @@ the FORGE: server/client
  spark model list             the table; -h: budget N, add URL, verify, rm NAME
  spark serve [on|off]         one LAN address, token required (-h: --force)
  spark ember [NAME|auto|none] a second model for conversations; ember list
- spark forge --print-url      the login URL and token; --print-client for a peer
- spark user [add NAME]        the named users, each with sealed threads (-h)
+ spark forge --print-url      the login URL; at a tty a QR to scan and the token
+ spark user [add NAME]        the named users, each with sealed threads; add
+                              shows the token and its QR once (-h)
  spark forge [on|off]         the FORGE on the LAN: the API and the page
  spark headless [on|off]      the FORGE up from boot, never asleep (a brain)
  spark share [on|off]         one engine for every OS user here: a spark group

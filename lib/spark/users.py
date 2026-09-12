@@ -28,7 +28,8 @@ USAGE = """%s user -- the named users of this FORGE
 
   spark user                  who this machine is; the box's users
   spark user list             the table: name, threads, last activity
-  spark user add NAME         mint an account; the token is shown once
+  spark user add NAME         mint an account; the token and a QR of its
+                              login link are shown once (--no-qr)
   spark user remove NAME      delete the account and its sealed data
   spark user login [NAME]     paste a token: this machine acts as NAME
   spark user logout           forget the login (the sealed data stays)
@@ -253,6 +254,11 @@ def cmd_add(args):
         say("  the token -- shown once, never stored; it is the only key:")
         say("  %s" % token)
         say("")
+        if os.isatty(1) and "--no-qr" not in args:
+            from . import forgeserve   # local: forgeserve imports users
+            if forgeserve.print_qr(forgeserve.page_url() + "#t=" + token):
+                say("scan on %s's phone: the page signs them in" % name)
+                say("")
     else:
         say("spark user: the token is shown only at a terminal (--show-token to print it here)")
     # the first user on a machine with no login is its owner: log in.

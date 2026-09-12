@@ -37,7 +37,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from . import (BAR_CACHE, CHECK_JSON, CONFIG_DIR, EMBER_TOKEN_FILE, FORGE_LOCK, FORGE_LOG, FORGE_PID,
                FORGE_URL_FILE, HOME, IS_MAC, MARK, OFF_FLAG, REPO, SERVE_URL_FILE, SPARK_ENV,
                config, forge_url, lan_ip, log_exc, own_hostnames, say, state_dir, wait_ready)
-from . import engine, mem_total_gb, wire
+from . import engine, mem_total_gb, qr, wire
 from . import version as _version
 
 # resolved once, at daemon import: `spark forge` is a long-running process,
@@ -84,9 +84,11 @@ USAGE = """%s forge -- the served agent
   spark forge off --force      also a managed unit's, or one spark did not start
   spark forge --foreground     what the unit runs; exit 78 = misconfigured
                                (--host ADDR, --port N override the config)
-  spark forge --print-url      the page's login URL; the admin token on
-                               a tty (or with --show-token); a user logs
-                               in with their own (spark user add NAME)
+  spark forge --print-url      the page's login URL; at a tty the admin
+                               token and its QR -- scan it, the phone is
+                               in (--no-qr; --show-token when piped); a
+                               user logs in with their own QR or token
+                               (spark user add NAME)
   spark forge --print-client   what a peer machine needs: the URL, and
                                how to mint a user there
   spark forge token --new      rotate the admin token; its logins die
@@ -1441,6 +1443,27 @@ def cmd_status(args):
     return 0
 
 
+def page_url(cfg=None):
+    """The page's login URL -- the public seam users.cmd_add prints a
+    QR of (with a personal token in the fragment; _url_of stays ours)."""
+    return _url_of(cfg or config.load()) + "/login"
+
+
+def print_qr(link):
+    """The QR of a login link, printed at a tty only: the link IS a
+    token, and a pipe has no camera. False (and silence) when the URL
+    is still a placeholder or the link outgrows the encoder -- the
+    lines already printed stand."""
+    if "<" in link:
+        return False
+    block = qr.render(link)
+    if not block:
+        return False
+    say("")
+    say(block)
+    return True
+
+
 def cmd_print_url(args):
     cfg = config.load()
     if "--user" in args:
@@ -1449,7 +1472,11 @@ def cmd_print_url(args):
     url = _url_of(cfg)
     say(url + "/login")
     if "--show-token" in args or sys.stdout.isatty():
-        say("token  " + ensure_token(cfg))
+        tok = ensure_token(cfg)
+        say("token  " + tok)
+        if sys.stdout.isatty() and "--no-qr" not in args and print_qr(url + "/login#t=" + tok):
+            say("scan: the phone signs in as admin (guests: spark user add NAME)")
+            say("or open  %s/login#t=%s" % (url, tok))
     return 0
 
 

@@ -716,6 +716,63 @@ def main():
             ok(rc == 0 and out.strip() == url + "/login", "--print-url: the login URL only (no tty)", out)
             rc, out, _ = spark("forge", "--print-url", "--show-token")
             ok(rc == 0 and out.splitlines()[1] == "token  " + token, "--print-url --show-token", out)
+            ok("\u2588" not in out and "#t=" not in out,
+               "piped --print-url: no QR block, no login link", out)
+
+            # at a pty the QR and the link appear -- the block must be
+            # exactly what spark.qr renders for the login link
+            def at_pty(*args, extra=None):
+                import pty as _pty
+                m, s = _pty.openpty()
+                e = dict(env)
+                e.update(extra or {})
+                p = subprocess.Popen([sys.executable, SPARK] + list(args),
+                                     stdout=s, stderr=s, stdin=s, env=e, close_fds=True)
+                os.close(s)
+                buf = b""
+                while True:
+                    try:
+                        chunk = os.read(m, 4096)
+                    except OSError:
+                        break
+                    if not chunk:
+                        break
+                    buf += chunk
+                os.close(m)
+                rc = p.wait(timeout=60)
+                return rc, buf.decode("utf-8", "replace").replace("\r\n", "\n")
+
+            sys.path.insert(0, os.path.join(REPO, "lib"))
+            from spark import qr as _qr
+            link = url + "/login#t=" + token
+            rc, out = at_pty("forge", "--print-url")
+            ok(rc == 0 and out.splitlines()[0] == url + "/login"
+               and "token  " + token in out, "--print-url at a pty: url and token", out[:200])
+            ok(_qr.render(link, ascii_=False) in out or _qr.render(link, ascii_=True) in out,
+               "--print-url at a pty: the QR is qr.render of the login link")
+            ok("scan:" in out and link in out, "--print-url at a pty: the scan line and the link", out[-300:])
+            rc, out = at_pty("forge", "--print-url", "--no-qr")
+            ok(rc == 0 and "\u2588" not in out and "#t=" not in out
+               and len([l for l in out.splitlines() if l.strip()]) == 2,
+               "--print-url --no-qr: the two legacy lines", out)
+
+            rc, out = at_pty("user", "add", "qrguy")
+            got_tok = ""
+            for l in out.splitlines():
+                s = l.strip()
+                if len(s) == 43 and all(c.isalnum() or c in "-_" for c in s):
+                    got_tok = s
+            ok(rc == 0 and got_tok, "user add at a pty: a token printed", out[:200])
+            ok(_qr.render(url + "/login#t=" + got_tok, ascii_=False) in out
+               or _qr.render(url + "/login#t=" + got_tok, ascii_=True) in out,
+               "user add at a pty: the QR is qr.render of that user's link")
+            ok("scan on qrguy's phone" in out, "user add at a pty: the scan line", out[-200:])
+
+            # the page carries the fragment-login wiring
+            st, _, body = req(url, "GET", "/static/spark.js")
+            body = body.decode("utf-8", "replace")
+            ok(st == 200 and "history.replaceState" in body and "#t=" in body,
+               "spark.js: the fragment login is wired (replaceState, #t=)")
             rc, out, _ = spark("forge", "--print-url", "--user", "--show-token")
             ok(rc == 2 and "spark user add" in out, "--print-url --user: gone, names spark user add", out)
             rc, out, _ = spark("forge", "--print-client")
@@ -727,7 +784,7 @@ def main():
             ok(token not in out and "forge-token" not in out, "--print-client never hands out the admin token", out)
             rc, out, _ = spark("forge")
             ok(rc == 0 and url in out and "health   ok" in out and "stub-7b-q4" in out
-               and "admin" in out and "users    3" in out,
+               and "admin" in out and "users    4" in out,   # alice, bob, the box account, qrguy
                "spark forge (status): url, ok, model, admin token, the user count", out)
             rc, out, _ = spark("forge", "on")
             ok(rc == 0 and "already running" in out, "start while running: already running", out)

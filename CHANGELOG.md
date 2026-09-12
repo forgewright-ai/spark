@@ -1,6 +1,27 @@
 # Changelog
 
-## v1.26
+## v1.27
+
+- The page, redesigned: a chat-first webapp instead of a terminal
+  look-alike. Both roles land in the chat -- bubbles, a greeting with
+  suggestion chips, a bottom tab bar on the phone and a sidebar on a
+  desktop -- with activity, do (admin), settings and help beside it.
+  The same five hash routes; keys 1..5 now start at chat.
+- The page wears its own ember look, dark and light, sans-serif; the
+  machine palette (gruvbox and friends) is now an opt-in choice under
+  settings instead of the default. The login card no longer names the
+  ember-token (gone since v1.4).
+- Log in by QR: `spark forge --print-url` and `spark user add NAME`
+  print, at a tty, a QR of the login link `/login#t=<token>` beside the
+  token (`--no-qr` leaves it out). A phone's camera scans it and the
+  page signs itself in -- the token rides the URL fragment, which never
+  reaches the server or its log, and the page strips it before routing
+  and tries it exactly once. The QR is the token drawn as squares:
+  same custody.
+- `lib/spark/qr.py`: a QR encoder written from ISO/IEC 18004 (byte
+  mode, level L, versions 1-5, all 8 masks), pure stdlib, pinned in
+  `tests/qr_test.py` to the spec's format table, the canonical
+  Reed-Solomon vector and a full decode-back.
 
 - `spark setup` no longer picks a look: it writes `SITE_THEME=none`, so a
   fresh machine keeps its terminal's own colours until `spark theme NAME`
