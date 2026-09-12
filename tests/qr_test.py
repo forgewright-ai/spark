@@ -63,6 +63,16 @@ M = qr.encode(URL)
 N = len(M)
 check("the pinned URL is v4", N, 33)
 
+# --- 4a. the format cells, literally: a transposed layout decodes fine
+# in this file's own decoder and fails every camera -- pin the spec's
+# figure 25 as coordinates (v1, n=21), bit order 0..14 per copy
+check("format cells (v1)", qr._fmt_cells(21),
+      [(0, 8), (1, 8), (2, 8), (3, 8), (4, 8), (5, 8), (7, 8), (8, 8),
+       (8, 7), (8, 5), (8, 4), (8, 3), (8, 2), (8, 1), (8, 0),
+       (8, 20), (8, 19), (8, 18), (8, 17), (8, 16), (8, 15), (8, 14),
+       (8, 13),
+       (14, 8), (15, 8), (16, 8), (17, 8), (18, 8), (19, 8), (20, 8)])
+
 # --- 4. structure: finders, timing, only 0/1 cells
 check("cells are 0/1", sorted(set(v for row in M for v in row)), [0, 1])
 for name, r0, c0 in (("top-left", 0, 0), ("top-right", 0, N - 7),
@@ -138,8 +148,8 @@ for text in ("x" * 17, "spark", "http://spark.local:8081/login#t=" + "Q" * 43,
 
 # --- 6. render: dimensions, quiet zones, the two forms
 half = qr.render(URL, ascii_=False).split("\n")
-check("half-block lines for v4 (33+4)/2", len(half), (33 + 4 + 1) // 2)
-check("half-block width fits 80", max(len(l) for l in half) <= 33 + 4, True)
+check("half-block lines for v4 (33+8)/2", len(half), (33 + 8 + 1) // 2)
+check("half-block width fits 80", max(len(l) for l in half) <= 33 + 8, True)
 check("half-block glyph set",
       set("".join(half)) <= set(" \u2580\u2584\u2588"), True)
 check("quiet zone: the top line is all light",

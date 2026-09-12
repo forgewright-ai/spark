@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.28
+
+- The QR reads. v1.27 placed the format information transposed --
+  rows for columns, in both copies -- which this repo's own
+  decode-back test could not see (it read the same wrong cells) and
+  every camera could: the scan failed on a real phone. The cells now
+  match the spec's figure and the encoder is verified cell-for-cell
+  against an independent implementation across versions 1-5 and all
+  8 masks; `tests/qr_test.py` pins the cell coordinates literally, so
+  a transposition can never pass again. The half-block render also
+  grows the spec's full 4-module quiet zone (the console's ASCII form
+  keeps 1, to stay inside 80 columns).
+
 ## v1.27
 
 - The page, redesigned: a chat-first webapp instead of a terminal

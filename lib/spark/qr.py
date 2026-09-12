@@ -14,10 +14,12 @@
 #             score wins, as the spec asks of an encoder.
 #   render    half-block glyphs (two module rows per text line), LIGHT
 #             modules drawn as glyphs: a terminal's dark background
-#             plays the dark modules. Quiet zone 2. The ASCII fallback
+#             plays the dark modules. Quiet zone 4, the spec's own. The
+#             ASCII fallback
 #             (SPARK_ASCII=1 / the Linux console, the one switch in
 #             lib/spark/__init__.py) draws "##" per light module with
-#             quiet zone 1, so version 5 stays at 78 columns.
+#             quiet zone 1 -- sub-spec, so version 5 stays inside the
+#             console's 80 columns.
 #   custody   a QR of a login URL IS the token drawn as squares: it is
 #             printed only where the token itself would print.
 #
@@ -135,16 +137,21 @@ def _new(version):
 
 
 def _fmt_cells(n):
-    """The 30 format cells, in bit order 0..14 (LSB first) per copy:
-    copy 1 around the top-left finder, copy 2 beside the bottom-left
-    (bits 0-6, the dark module under them) and under the top-right
-    (bits 7-14)."""
-    one = [(8, 0), (8, 1), (8, 2), (8, 3), (8, 4), (8, 5), (8, 7), (8, 8),
-           (7, 8), (5, 8), (4, 8), (3, 8), (2, 8), (1, 8), (0, 8)]
-    two = [(n - 1, 8), (n - 2, 8), (n - 3, 8), (n - 4, 8), (n - 5, 8),
-           (n - 6, 8), (n - 7, 8),
-           (8, n - 8), (8, n - 7), (8, n - 6), (8, n - 5), (8, n - 4),
-           (8, n - 3), (8, n - 2), (8, n - 1)]
+    """The 30 format cells as (row, col), in bit order 0..14 (LSB
+    first) per copy. Copy 1 around the top-left finder: bits 0-5 down
+    beside it (rows 0-5, col 8), 6-7 at its corner, then 8-14 leftward
+    under it (row 8, cols 7..0). Copy 2: bits 0-7 under the top-right
+    finder (row 8, cols n-1..n-8), bits 8-14 beside the bottom-left one
+    (rows n-7..n-1, col 8). The layout of the spec's figure 25; getting
+    it transposed is invisible to a same-source decoder and fatal to a
+    camera, which is why tests/qr_test.py also pins these cells
+    literally."""
+    one = [(0, 8), (1, 8), (2, 8), (3, 8), (4, 8), (5, 8), (7, 8), (8, 8),
+           (8, 7), (8, 5), (8, 4), (8, 3), (8, 2), (8, 1), (8, 0)]
+    two = [(8, n - 1), (8, n - 2), (8, n - 3), (8, n - 4), (8, n - 5),
+           (8, n - 6), (8, n - 7), (8, n - 8),
+           (n - 7, 8), (n - 6, 8), (n - 5, 8), (n - 4, 8), (n - 3, 8),
+           (n - 2, 8), (n - 1, 8)]
     return one + two
 
 
@@ -302,7 +309,7 @@ def render(text, ascii_=None):
                 line.append("  " if v else "##")
             rows.append("".join(line).rstrip())
         return "\n".join(rows)
-    q = 2
+    q = 4
     w = n + 2 * q
     def at(r, c):
         if q <= r < q + n and q <= c < q + n:

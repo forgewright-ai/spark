@@ -1,6 +1,6 @@
 # Roadmap
 
-What comes after v1.27, in the order it is likely to happen. Nothing here
+What comes after v1.28, in the order it is likely to happen. Nothing here
 is a promise; a row in `CHANGELOG.md` is. A better idea is an issue away.
 
 ## Chaos on a real box
