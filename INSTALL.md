@@ -365,7 +365,7 @@ Then add the user to the group (`sudo gpasswd -a NAME spark`; they log in
 again), and they set up in userspace -- no sudo, no download:
 
 ```sh
-curl -fsSL https://spark.forgewright.ai/get | sh     # clones spark's code only
+curl -fsSL https://raw.githubusercontent.com/forgewright-ai/spark/main/get | sh   # clones spark's code only
 spark setup                                          # detects the shared engine, offers to join
 ```
 

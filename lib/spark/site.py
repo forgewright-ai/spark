@@ -516,10 +516,13 @@ def share_facts(cfg):
             gname = grp.getgrgid(st.st_gid).gr_name
         except (OSError, KeyError):
             mode, gname = "???", "?"
-        matches = _same_token(SHARE_TOKEN, TOKEN_FILE)
-        good = mode == "640" and gname == "spark" and matches
-        facts.append(("shared token", good, "%s (%s %s)%s" % (SHARE_TOKEN, mode, gname,
-                      "" if matches else " -- STALE, spark share on re-syncs")))
+        perms = mode == "640" and gname == "spark"
+        # only the group reads the copy; the owner usually cannot, so a
+        # content check is possible only when it is readable here --
+        # unreadable is not stale (the perms are the health signal then).
+        stale = os.access(SHARE_TOKEN, os.R_OK) and not _same_token(SHARE_TOKEN, TOKEN_FILE)
+        facts.append(("shared token", perms and not stale, "%s (%s %s)%s" % (SHARE_TOKEN, mode, gname,
+                      " -- STALE, spark share on re-syncs" if stale else "")))
     else:
         facts.append(("shared token", not cfg.share, "%s absent" % SHARE_TOKEN))
     if os.path.exists(SHARE_URL):

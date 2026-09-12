@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.24
+
+- `spark share` no longer cries STALE at the owner. The shared token is
+  `0640 root:spark`, so the owner (not in the `spark` group) cannot read the
+  copy to compare it -- and unreadable was being reported as stale. Now a
+  content check runs only when the file is readable here; otherwise the
+  perms are the health signal. A group member still gets the real check.
+- INSTALL's join one-liner named the wrong host (a 404); it now points at
+  `raw.githubusercontent.com/forgewright-ai/spark/main/get`, the same URL
+  the page and README use.
+
 ## v1.23
 
 - Joining a shared engine is now userspace -- no sudo, no download. When a
