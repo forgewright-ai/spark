@@ -467,7 +467,8 @@ may change freely.
     -- and one that does not
     anchor is followed by ` [not in the text]` where it stands (a span
     right after `->`, a Unicode arrow or `=>` is the model's proposal: not checked,
-    not counted); the turn
+    not counted, and followed by ` [proposed]` where it stands, so a
+    reader can tell a quote from a proposal); the turn
     records `quotes` and `unanchored`. `--sel A B` (a `?`; stdin is the
     whole file) sends one window of at most 16 kB (`edit._edit_window`):
     the selection whole (head + cut + tail past 12 kB) between the lines

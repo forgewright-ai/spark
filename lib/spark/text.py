@@ -207,6 +207,7 @@ class Fence:
 # knows which quotes to trust.
 QUOTE = re.compile(r'"([^"\n]{3,200})"|“([^”\n]{3,200})”|`([^`\n]{3,200})`')
 ANCHOR_MARK = " [not in the text]"
+PROPOSED_MARK = " [proposed]"
 
 
 PROPOSAL = re.compile(r"(->|→|=>)\s*$")
@@ -320,10 +321,16 @@ class Ground:
 
     def mark(self, unit):
         """`unit` with ANCHOR_MARK after every span the source does not
-        hold -- the marking rule, one unit at a time."""
+        hold, and PROPOSED_MARK after every span that is the model's own
+        proposal (after an arrow) -- unchecked, and it must not read as
+        a quotation of the text. The marking rule, one unit at a time."""
         out, last = [], 0
-        for span, _start, end in quotes(unit):
-            if not anchor(span, self.data, self.folded):
+        for m in QUOTE.finditer(unit):
+            span, end = m.group(m.lastindex), m.end()
+            if PROPOSAL.search(unit[:m.start()]):
+                out.append(unit[last:end] + PROPOSED_MARK)
+                last = end
+            elif not anchor(span, self.data, self.folded):
                 out.append(unit[last:end] + ANCHOR_MARK)
                 last = end
         out.append(unit[last:])

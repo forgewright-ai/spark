@@ -825,8 +825,8 @@ def main():
         rc, out, _ = spark("edit", "?", stdin="Some prose.\nAnd more here.\n")
         STATE["ask_quotes"] = False
         t.ok(rc == 0 and out == '1. "Some prose." reads flat\n2. "Sum prose" [not in the text] is misspelled\n'
-             '3. "prose. And more" runs on\n4. “more here,” drifts\n5. "Sum prose" [not in the text] -> "Some verse" reads better\nno newline',
-             "edit ?: a misquote is marked where it stands; verbatim, folded and curly quotes anchor; a proposal after -> is not checked; the last line flushes", repr(out))
+             '3. "prose. And more" runs on\n4. “more here,” drifts\n5. "Sum prose" [not in the text] -> "Some verse" [proposed] reads better\nno newline',
+             "edit ?: a misquote is marked where it stands; a proposal after -> is marked [proposed], not checked; the last line flushes", repr(out))
         turns = sorted(glob.glob(home + "/.local/state/spark/turns/*.jsonl"))
         lt = json.loads(open(turns[-1]).read().splitlines()[-1]) if turns else {}
         t.ok(lt.get("kind") == "answer" and lt.get("quotes") == 5 and lt.get("unanchored") == 2,
