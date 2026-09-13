@@ -262,6 +262,26 @@ if [ "$(uname -s)" != Darwin ]; then
     printf '%s\n' "$out" | grep -qE '^skip +vt-palette +no palette painted yet' && ok "no palette: the vt-palette row skips" || bad "vt-palette skip: $(printf '%s\n' "$out" | grep -E ' vt-palette ' | head -1)"
 fi
 
+# 9c. quiet-login restores only spark's own trace (Linux: the row is
+#     Linux's). A stock Ubuntu -- no /etc/motd, the distro's file at
+#     /usr/share/base-files/motd -- with SITE_QUIET_LOGIN=no was never
+#     quieted by spark: the row is a skip (loud already), never a
+#     `would ... (sudo)` that writes /etc/motd as root. With spark's
+#     own motd.orig beside it, the restore is offered.
+if [ "$(uname -s)" != Darwin ]; then
+    mkdir -p "$T/etc"
+    printf 'SITE_AI_MODEL=none\nSITE_QUIET_LOGIN=no\n' > "$HOME/.config/spark/site.env"
+    ql() { SPARK_ETC_MOTD="$T/etc/motd" SPARK_ETC_ISSUE="$T/etc/issue" SPARK_ETC_UNAME_MOTD="$T/etc/10-uname" \
+           PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1; }
+    out=$(ql) || bad "bootstrap --dry-run (stock, no .orig) failed: $out"
+    printf '%s\n' "$out" | grep -qE '^skip +quiet-login +loud' && ok "quiet-login: a stock box with no .orig is loud already (skip, not would)" || bad "quiet-login stock: $(printf '%s\n' "$out" | grep -E ' quiet-login ' | head -1)"
+    printf 'the distro notice\n' > "$T/etc/motd.orig"
+    out=$(ql) || bad "bootstrap --dry-run (with .orig) failed: $out"
+    printf '%s\n' "$out" | grep -qE '^would +quiet-login +restore' && ok "quiet-login: spark's own motd.orig makes the restore a would row" || bad "quiet-login .orig: $(printf '%s\n' "$out" | grep -E ' quiet-login ' | head -1)"
+    rm -f "$T/etc/motd.orig"
+    printf 'SITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
+fi
+
 # 10. Arch (the second family): ID=arch in os-release, pinned by
 #     SPARK_OS_RELEASE, and a pacman on PATH that answers -- the packages
 #     row asks it, the console and quiet-boot rows are honest skips, never

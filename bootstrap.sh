@@ -868,24 +868,31 @@ else
     # (ESC [?25h), because quiet boot's vt.global_cursor_default=0 is
     # global and would leave the login prompt cursorless without it
     cursor_on=$(printf '\033[?25h')
+    # the login files, seamed for the tests (SPARK_ETC_* pin a fixture)
+    motd=${SPARK_ETC_MOTD:-/etc/motd}
+    issue=${SPARK_ETC_ISSUE:-/etc/issue}
+    uname_motd=${SPARK_ETC_UNAME_MOTD:-/etc/update-motd.d/10-uname}
     if [ "$SITE_QUIET_LOGIN" != yes ]; then
-        if [ ! -s /etc/motd ] && [ -f /usr/share/base-files/motd ] || [ -f /etc/update-motd.d/10-uname ] && [ ! -x /etc/update-motd.d/10-uname ]; then
+        # restore only spark's own trace: $motd.orig is the backup a
+        # quieting made. A stock box (no /etc/motd, the distro's file at
+        # /usr/share/base-files/motd) was never quieted by spark, and its
+        # motd is not spark's to write as root.
+        if [ -f "$motd.orig" ]; then
             if need quiet-login "restore the distro notice, kernel line and login banner (sudo)"; then
-                if [ -f /etc/motd.orig ]; then as_root cp /etc/motd.orig /etc/motd
-                elif [ -f /usr/share/base-files/motd ]; then as_root cp /usr/share/base-files/motd /etc/motd; fi
-                [ -f /etc/update-motd.d/10-uname ] && as_root chmod +x /etc/update-motd.d/10-uname
-                [ -f /etc/issue.orig ] && as_root cp /etc/issue.orig /etc/issue
+                as_root cp "$motd.orig" "$motd"
+                [ -f "$uname_motd" ] && as_root chmod +x "$uname_motd"
+                [ -f "$issue.orig" ] && as_root cp "$issue.orig" "$issue"
                 ok quiet-login "loud: distro notice, kernel line and login banner back"
             fi
         else skip quiet-login "loud (SITE_QUIET_LOGIN=no)"; fi
-    elif [ ! -s /etc/motd ] && [ ! -x /etc/update-motd.d/10-uname ] && [ "$(cat /etc/issue 2>/dev/null)" = "$cursor_on" ]; then
+    elif [ ! -s "$motd" ] && [ ! -x "$uname_motd" ] && [ "$(cat "$issue" 2>/dev/null)" = "$cursor_on" ]; then
         ok quiet-login "motd empty, no kernel line, bare login prompt (cursor kept)"
     elif need quiet-login "empty /etc/motd and /etc/issue (cursor escape only), disable update-motd.d/10-uname (sudo)"; then
-        [ -s /etc/motd ] && as_root cp -n /etc/motd /etc/motd.orig 2>/dev/null
-        [ -f /etc/motd ] && as_root truncate -s 0 /etc/motd      # Arch ships none: an absent motd is quiet already
-        [ -x /etc/update-motd.d/10-uname ] && as_root chmod -x /etc/update-motd.d/10-uname
-        [ -s /etc/issue ] && ! grep -q '25h' /etc/issue && as_root cp -n /etc/issue /etc/issue.orig 2>/dev/null
-        printf '\033[?25h' | as_root tee /etc/issue >/dev/null
+        [ -s "$motd" ] && as_root cp -n "$motd" "$motd.orig" 2>/dev/null
+        [ -f "$motd" ] && as_root truncate -s 0 "$motd"      # Arch ships none: an absent motd is quiet already
+        [ -x "$uname_motd" ] && as_root chmod -x "$uname_motd"
+        [ -s "$issue" ] && ! grep -q '25h' "$issue" && as_root cp -n "$issue" "$issue.orig" 2>/dev/null
+        printf '\033[?25h' | as_root tee "$issue" >/dev/null
         ok quiet-login "motd empty, no kernel line, bare login prompt (cursor kept; originals: *.orig)"
     fi
     # a quiet boot: straight past GRUB's menu, a silent kernel line, and
