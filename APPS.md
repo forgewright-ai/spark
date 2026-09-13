@@ -22,6 +22,7 @@ on stdin, text out, never a path. Each app's plugin is its own
 | [spark-helix](https://github.com/forgewright-ai/spark-helix) | helix: `A-s` pre-fills helix's prompt |
 | [spark-nano](https://github.com/forgewright-ai/spark-nano) | nano: `M-S` pre-fills nano's prompt |
 | [spark-w3m](https://github.com/forgewright-ai/spark-w3m) | w3m: `M-s` opens `spark> ` over the page |
+| [spark-newsboat](https://github.com/forgewright-ai/spark-newsboat) | newsboat: `,s` asks the article you are on |
 
 One key in every app -- Alt-s (`M-s`, `A-s`: the same key by each
 tool's name) -- summons spark on what is in front of you, and one
@@ -116,7 +117,7 @@ One clone each, and the snippet's comment block is the help:
   `M-S words` rewrites the file or the marked region (`M-U` undoes),
   `M-F` fixes spelling in one keystroke.
 
-## Reading, not writing: w3m
+## Reading, not writing: w3m and newsboat
 
 `spark read` (spark 1.20 or newer) is the reader's verb: the source on
 stdin, an answer that says only what the source says -- every line
@@ -139,6 +140,21 @@ shell:
 ```sh
 w3m -dump https://example.com | spark read "what is this page for"
 ```
+
+newsboat, the RSS reader, is the second client -- the article you are
+on (open, or selected in the list), under the same law:
+
+```sh
+git clone https://github.com/forgewright-ai/spark-newsboat ~/.newsboat/spark
+ln -s ~/.newsboat/spark/spark-newsboat ~/.local/bin/spark-newsboat
+cat ~/.newsboat/spark/config.spark >> ~/.newsboat/config
+```
+
+`,s` (newsboat's macro prefix, then s) pipes the article to spark on
+the terminal newsboat hands over: the title, the `spark> ` prompt, the
+grounded answer line by line, Enter back to newsboat exactly as it
+was. The same grammar as everywhere; on newsboat 2.38 or newer a
+commented bind line in the snippet offers Alt-s.
 
 No plugin at all still works: an editor with a filter is a client
 already. The selection goes through `spark edit`, the whole file when

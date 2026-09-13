@@ -2,6 +2,11 @@
 
 ## v1.31
 
+- spark-newsboat, the second client of spark read: `,s` in newsboat
+  asks the article you are on, on the terminal newsboat hands over --
+  the grounded answer line by line, Enter back to newsboat untouched.
+  Its own repository, like every spark app.
+
 - The grounding audition gains a ninth case, read-about: "what is
   this text about" in words, where bare `spark read` (the overview)
   already answers well. The model misses it -- it summarises in its
