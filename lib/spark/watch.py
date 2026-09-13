@@ -64,9 +64,9 @@ def _window(lines):
     return text[-WATCH_MAX:] if len(text) > WATCH_MAX else text
 
 
-def _due(n_lines, opened, now):
+def _due(n_lines, opened, now, secs=WINDOW_SECS):
     """Is the open window ready to look at? Full, or old enough."""
-    return n_lines > 0 and (n_lines >= WINDOW_LINES or (opened is not None and now - opened >= WINDOW_SECS))
+    return n_lines > 0 and (n_lines >= WINDOW_LINES or (opened is not None and now - opened >= secs))
 
 
 def evaluate(cfg, shell, instruction, window):
@@ -107,21 +107,31 @@ def cmd_watch(args):
     cfg = config.load()
     shell = os.path.basename(os.environ.get("SHELL") or "sh")
     fd = sys.stdin.fileno()
+    win_secs = float(os.environ.get("SPARK_WATCH_SECS") or WINDOW_SECS)   # a test seam
     lines, opened, last_call = [], None, 0.0
+    tail = b""
     try:
         while True:
-            ready, _, _ = select.select([fd], [], [], WINDOW_SECS)
+            ready, _, _ = select.select([fd], [], [], win_secs)
             now = time.monotonic()
             if ready:
-                line = sys.stdin.readline()
-                if not line:                     # EOF: look at the tail, then done
+                # drain what arrived: readline() buffers up to 8 kB, so the
+                # rest of a burst would wait for the NEXT arrival to be seen
+                # -- select watches the fd, not the TextIOWrapper's buffer
+                chunk = os.read(fd, 65536)
+                if not chunk:                    # EOF: look at the tail, then done
+                    if tail:
+                        lines.append(tail.decode("utf-8", "replace"))
                     if lines:
                         evaluate(cfg, shell, instruction, _window(lines))
                     return 0
-                lines.append(line.rstrip("\n"))
-                if opened is None:
+                tail += chunk
+                parts = tail.split(b"\n")
+                tail = parts.pop()               # a partial line waits for its end
+                lines.extend(p.decode("utf-8", "replace") for p in parts)
+                if lines and opened is None:
                     opened = now
-            if _due(len(lines), opened, now) and now - last_call >= MIN_INTERVAL:
+            if _due(len(lines), opened, now, win_secs) and now - last_call >= MIN_INTERVAL:
                 evaluate(cfg, shell, instruction, _window(lines))
                 lines, opened, last_call = [], None, now
     except KeyboardInterrupt:

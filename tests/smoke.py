@@ -1155,6 +1155,34 @@ def main():
         rc, out, err = spark("watch", "when a 500 appears", stdin="connection error 5001 logged\n")
         t.ok(rc == 0 and out == "",
              "watch: a quote of \"error 500\" cannot ground against a window holding only 5001", repr(out) + err)
+        # a burst: 30 lines arriving at once must all be in the FIRST window.
+        # readline() buffered past select's sight and starved the window to
+        # one line per tick; the reader drains the fd now. The pipe is held
+        # open so only the window timer (1 s via the seam) can close it.
+        burst = "".join("burst line %02d\n" % i for i in range(30))
+        n0 = len(STATE["bodies"])
+        p = subprocess.Popen([sys.executable, SPARK, "watch", "when a 500 appears"],
+                             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                             stderr=subprocess.PIPE, text=True,
+                             env=dict(env, SPARK_WATCH_SECS="1"))
+        got = None
+        try:
+            p.stdin.write(burst)
+            p.stdin.flush()
+            deadline = time.time() + 10
+            while time.time() < deadline and got is None:
+                for b in STATE["bodies"][n0:]:
+                    u = b["messages"][-1].get("content", "")
+                    if "burst line 00" in u:
+                        got = u
+                        break
+                time.sleep(0.1)
+        finally:
+            p.stdin.close()
+            p.wait(timeout=10)
+        t.ok(got is not None and all(("burst line %02d" % i) in got for i in range(30)),
+             "watch: a 30-line burst is one window -- the reader drains what select saw",
+             "no window seen" if got is None else got[-100:])
         rc, out, _ = spark("watch")
         t.ok(rc == 2 and out.startswith("spark watch -- ") and "spark <words>" in out,
              "watch: no words is the usage and where a question goes, exit 2", out[:60])
