@@ -233,16 +233,46 @@ def fold(s):
     return " ".join(s.split()).translate(_MARKS).lower()
 
 
+# The floor a span must clear to count as grounding evidence: after
+# fold, at least two words or twelve characters, and not made entirely
+# of stop words. "the" anchors in any English text and grounds nothing;
+# the list is short and named, so it can be argued with (ask._GENERIC is
+# the shape).
+_STOP_WORDS = frozenset((
+    "the", "a", "an", "and", "or", "but", "of", "to", "in", "on", "at",
+    "is", "are", "was", "were", "be", "been", "it", "its", "this", "that",
+    "these", "those", "for", "with", "as", "by", "not", "no", "so", "if",
+    "he", "she", "they", "we", "you", "i", "his", "her", "their", "our",
+))
+
+
+def substantial(span):
+    """Does this span clear the floor to count as grounding evidence:
+    after fold, at least two words or twelve characters, and not made
+    entirely of stop words."""
+    f = fold(span)
+    words = [w for w in (t.strip('.,;:!?"()[]') for t in f.split()) if w]
+    if not words:
+        return False
+    if len(words) < 2 and len(f) < 12:
+        return False
+    return not all(w in _STOP_WORDS for w in words)
+
+
 def anchor(span, data, folded=None):
     """Is `span` in `data`: verbatim; else folded on both sides
     (whitespace, quote marks, case); else with the punctuation the model
     tucked inside the closing quote stripped. `folded` is fold(data)
-    when the caller has it already."""
-    if span in data:
-        return True
+    when the caller has it already. A span that is nothing after fold
+    anchors nowhere -- the verbatim check runs after that guard, so
+    three spaces cannot anchor in a run of spaces."""
     folded = fold(data) if folded is None else folded
     f = fold(span)
-    if f and f in folded:
+    if not f:
+        return False
+    if span in data:
+        return True
+    if f in folded:
         return True
     f = f.rstrip(".,;:!?")
     return bool(f) and f in folded
@@ -277,8 +307,12 @@ class Ground:
         self.folded = fold(data)
 
     def verdict(self, unit):
-        """(GROUNDED | UNGROUNDED | UNQUOTED, [spans the source lacks])"""
-        spans = [q[0] for q in quotes(unit)]
+        """(GROUNDED | UNGROUNDED | UNQUOTED, [spans the source lacks]).
+        Only a span past the floor (substantial) counts as grounding
+        evidence: quoting "the" against any English text proves nothing,
+        so a unit whose only spans fail the floor is UNQUOTED -- the
+        contracts that demand a quote refuse it."""
+        spans = [q[0] for q in quotes(unit) if substantial(q[0])]
         if not spans:
             return UNQUOTED, []
         misses = [q for q in spans if not anchor(q, self.data, self.folded)]

@@ -806,6 +806,21 @@ def main():
         an.write("1. \"said 'hum' and\" is dry\n2. \"HE SAID\" shouts\n3. \"and left\" runs on\n4. \"He sad\" typo\n5. \"was\" -> \"is\" tense\n")
         an.close()
         t.ok((an.quoted, an.missed) == (5, 2), "anchors: quote marks, case and line breaks fold; a typo and a misquote do not; a proposal is skipped", str((an.quoted, an.missed)))
+        # the floor: a span counts as grounding evidence only when it is
+        # substantial -- two words or twelve chars after fold, not all stop
+        # words. Quoting "the" against any English text proves nothing.
+        g = textmod.Ground("The cat sat on the mat.")
+        t.ok(g.verdict('The author proves "the" moon is made of cheese.')[0] == textmod.UNQUOTED,
+             "floor: a line whose only span is a stop word is refused (the cheese case)")
+        t.ok(g.verdict('It trails off "..." like that.')[0] == textmod.UNQUOTED,
+             "floor: a punctuation-only span is refused")
+        t.ok(g.verdict('It gapes "   " wide.')[0] == textmod.UNQUOTED,
+             "floor: a three-space span is refused")
+        t.ok(not textmod.anchor("   ", "spaces    here"),
+             "floor: a span that is nothing after fold anchors nowhere, even verbatim")
+        t.ok(g.verdict('He proves "the cat sat" happened.')[0] == textmod.GROUNDED
+             and g.verdict('He proves "the dog ran" happened.')[0] == textmod.UNGROUNDED,
+             "floor: a substantial span still grounds, and still fails honestly")
         STATE["ask_quotes"] = True
         rc, out, _ = spark("edit", "?", stdin="Some prose.\nAnd more here.\n")
         STATE["ask_quotes"] = False
