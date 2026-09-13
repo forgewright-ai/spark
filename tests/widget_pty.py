@@ -583,6 +583,17 @@ def main(shell, widget):
         sh.send("\x15")
         sh.expect(prompt)
 
+        # 7f. failure memory: a known shape's fix prints from the ONE
+        # file the hook may read -- no model call, no fork
+        with open(os.path.join(state, "spark", "fails"), "w") as f:
+            f.write("abcdefabcdefabcd sh 3 echo mended\n")
+        since = sh.mark()
+        sh.send("sh -c 'exit 3'\r")
+        ok(sh.expect("last time the fix was: echo mended"),
+           "a known failure shape offers its remembered fix", since())
+        os.remove(os.path.join(state, "spark", "fails"))
+        sh.expect(prompt)
+
         # 8. exit removes the marker
         sh.send("exit\r")
         sh.read(1.0)

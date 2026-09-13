@@ -1932,6 +1932,39 @@ def main():
              == ["vulkan-icd-loader", "vulkan-radeon"],
              "packages: the pacman -Rp parser reads the printed names")
 
+        # failure memory (contract 4's ledger kind fail): explain keeps
+        # the failure's shape, the accepted fix lands in the ledger and
+        # the plain index the prompt hook reads, and a fix whose tool
+        # left PATH retires
+        from spark import ledger as _led
+        _s1 = _led.fail_shape("sudo make install", 2, "boom:  first LINE")
+        _s2 = _led.fail_shape("make install", 2, "boom: first line")
+        _s3 = _led.fail_shape("make install", 3, "boom: first line")
+        t.ok(_s1 == _s2 and _s1 != _s3 and _s1[1] == "make" and len(_s1[0]) == 16,
+             "fail_shape: sudo and whitespace fold away; the exit code counts",
+             str((_s1, _s3)))
+        rc, out, err = spark("explain", stdin="make: *** No rule to make target x.  Stop.\n",
+                             extra={"SPARK_EXPLAIN_CMD": "make x", "SPARK_EXPLAIN_RC": "2"})
+        _pend = home + "/.local/state/spark/fail-pending"
+        t.ok(rc == 0 and os.path.isfile(_pend) and open(_pend).read().split()[1:] == ["make", "2"],
+             "explain: the failure's shape waits in fail-pending", out[:80] + err[:80])
+        rc, out, err = spark("history", "--fix-worked", "touch", "xfile")
+        _idx = home + "/.local/state/spark/fails"
+        t.ok(rc == 0 and os.path.isfile(_idx)
+             and re.match(r"^[0-9a-f]{16} make 2 touch xfile$", open(_idx).read().strip()),
+             "the accepted fix lands in the fails index: hash head rc fix",
+             open(_idx).read() if os.path.isfile(_idx) else "no index")
+        t.ok(not os.path.exists(_pend), "the pending failure is consumed", "")
+        rc, out, _ = spark("history")
+        t.ok("fixes remembered" in out and "touch xfile" in out,
+             "spark history lists the remembered fix", out)
+        rc, _, _ = spark("explain", stdin="zap: fatal error\n",
+                         extra={"SPARK_EXPLAIN_CMD": "zap --all", "SPARK_EXPLAIN_RC": "3"})
+        spark("history", "--fix-worked", "gonecmd12345", "--repair")
+        rc, out, _ = spark("history")
+        t.ok("gonecmd12345" not in out and "gonecmd12345" not in open(_idx).read(),
+             "a fix whose head word left PATH retires from the listing and the index", out)
+
         # the remedy lint: every remedy in check.py that starts with
         # `spark ` names a verb bin/spark dispatches, and its sub-word is
         # one the verb's help lists -- a renamed verb cannot leave a stale

@@ -23,12 +23,14 @@
 #   spark read --ledger [clear] [--name NAME] the questions asked of a source
 
 import fcntl
+import hashlib
 import json
 import os
+import shutil
 import time
 from contextlib import contextmanager
 
-from . import MARK, config, log_exc, say, vault
+from . import MARK, STATE_DIR, config, log_exc, say, vault
 
 NOTE_MAX = 300        # characters kept of one note
 PER_NAME = 30         # notes per name and kind; the oldest goes
@@ -36,6 +38,7 @@ TOTAL_MAX = 200       # notes in all
 SEND_MAX = 1200       # characters a request carries, newest first
 
 KIND_EDIT, KIND_ASK, KIND_READ, KIND_DRILL = "edit", "ask", "read", "drill"
+KIND_FAIL = "fail"
 # The table above, as the code reads it. `age`: SPARK_HISTORY days apply.
 # `retire`: what drops a record before its time -- "quote" is contract
 # 10's (the note's first quoted span left the text), "never" is every
@@ -45,7 +48,13 @@ RULES = {
     KIND_ASK: {"age": True, "retire": "never"},
     KIND_READ: {"age": True, "retire": "never"},
     KIND_DRILL: {"age": False, "retire": "never"},
+    # failure memory: the shape of a failure maps to the fix that worked;
+    # a fix whose head word left PATH retires -- a remedy naming a tool
+    # that is gone is noise, not memory
+    KIND_FAIL: {"age": True, "retire": "path"},
 }
+FAILS_INDEX = os.path.join(STATE_DIR, "fails")           # hash head rc fix -- the hook reads it
+FAIL_PENDING = os.path.join(STATE_DIR, "fail-pending")   # shape head rc -- explain writes it
 
 
 def _kind(e):
@@ -202,23 +211,120 @@ def entries(name=None, kind=KIND_EDIT):
     return [e for e in _load() if _kind(e) == kind and (not name or e["name"] == name)]
 
 
+def _retired(e, retire, data):
+    """This kind's own invalidation: `quote` -- the note's first quoted
+    span left the text; `path` -- the fix's head word left PATH."""
+    from . import text as textmod
+    if retire == "quote" and data is not None:
+        qs = textmod.quotes(e["note"])
+        return bool(qs) and not textmod.anchor(qs[0][0], data)
+    if retire == "path":
+        head = (e.get("note") or "").split()
+        return bool(head) and "/" not in head[0] and shutil.which(head[0]) is None
+    return False
+
+
 def _mine(cfg, kind, name, data=None):
     """(the kind's records for `name`, newest last; every record kept) --
     with this kind's own invalidation applied. `retire: "quote"` needs
     `data`, the text as it is now: a note whose first quoted span has
     left it is dropped from the file here and not sent."""
-    from . import text as textmod
     retire = RULES.get(kind, RULES[KIND_EDIT])["retire"]
     alive, mine = [], []
     for e in _fresh(_load(), cfg):
         if _kind(e) == kind and e["name"] == name:
-            if retire == "quote" and data is not None:
-                qs = textmod.quotes(e["note"])
-                if qs and not textmod.anchor(qs[0][0], data):
-                    continue                 # retired: the passage changed
+            if _retired(e, retire, data):
+                continue                     # retired by its own rule
             mine.append(e)
         alive.append(e)
     return mine, alive
+
+
+# ---------------------------------------------------------- failure memory
+def fail_shape(command, rc, first_err):
+    """The shape of a failure: sha256(head word, exit code, first stderr
+    line folded)[:16]. The head word is the command's own, past sudo/env/
+    nohup, so `sudo make` and `make` share a shape."""
+    from . import text as textmod
+    words = (command or "").split()
+    while words and words[0] in ("sudo", "env", "nohup"):
+        words = words[1:]
+    head = os.path.basename(words[0]) if words else ""
+    key = "%s\x00%s\x00%s" % (head, rc, textmod.fold(first_err or ""))
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()[:16], head
+
+
+def fail_pending(command, rc, first_err):
+    """explain's half: remember the failure's shape until a fix works
+    (state/fail-pending, one line, 0600). Quiet on any trouble."""
+    try:
+        from . import state_dir
+        state_dir()
+        shape, head = fail_shape(command, rc, first_err)
+        if not head:
+            return
+        fd = os.open(FAIL_PENDING, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write("%s %s %s\n" % (shape, head, rc))
+    except OSError:
+        log_exc("fail pending")
+
+
+def fail_fix(fix, cfg=None):
+    """The accepted fix for the pending failure: kept as kind `fail`
+    (keyed by shape, count incremented) and the plain index the prompt
+    hook reads (state/fails: `hash head rc fix`) rewritten. Quiet when
+    nothing is pending -- a fix with no failure is not a record."""
+    fix = " ".join((fix or "").split())[:NOTE_MAX]
+    try:
+        with open(FAIL_PENDING, encoding="utf-8") as f:
+            parts = f.read().split()
+    except OSError:
+        return 0
+    if len(parts) != 3 or not fix:
+        return 0
+    shape, head, rc = parts
+    with _locked():
+        entries = _fresh(_load(), cfg)
+        rec = next((e for e in entries if _kind(e) == KIND_FAIL and e.get("shape") == shape), None)
+        if rec is None:
+            rec = {"kind": KIND_FAIL, "name": head, "note": fix, "shape": shape,
+                   "head": head, "rc": rc, "count": 0}
+            entries.append(rec)
+        rec.update({"ts": time.strftime("%Y-%m-%d %H:%M:%S"), "note": fix,
+                    "count": int(rec.get("count", 0)) + 1})
+        mine = [e for e in entries if _kind(e) == KIND_FAIL]
+        if len(mine) > PER_NAME:
+            drop = mine[:len(mine) - PER_NAME]
+            entries = [e for e in entries if e not in drop]
+        _save(entries)
+        write_fails_index(entries, cfg)
+    try:
+        os.remove(FAIL_PENDING)
+    except OSError:
+        pass
+    return 0
+
+
+def write_fails_index(entries=None, cfg=None):
+    """state/fails, the ONE file the widgets' prompt hook may read: one
+    `hash head rc fix` line per living fail record. Retirement applies
+    here too, so the hook never offers a fix whose tool is gone."""
+    if entries is None:
+        entries = _fresh(_load(), cfg)
+    lines = []
+    for e in entries:
+        if _kind(e) != KIND_FAIL or _retired(e, "path", None):
+            continue
+        lines.append("%s %s %s %s\n" % (e.get("shape", ""), e.get("head", ""), e.get("rc", ""), e["note"]))
+    try:
+        from . import state_dir
+        state_dir()
+        fd = os.open(FAILS_INDEX, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write("".join(lines))
+    except OSError:
+        log_exc("fails index")
 
 
 def _paragraph(head, mine):

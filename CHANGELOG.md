@@ -88,6 +88,14 @@ The prompt, deeper:
   A proof that is not read-only is refused before it prints. After the
   command runs, the hint row offers the proof on Esc s; `spark do`
   runs it after each confirmed step and shows the result.
+- Failure memory: the third time you hit a failure is not the same
+  event as the first. `explain` remembers the failure's shape (head
+  word, exit code, first stderr line -- hashed locally), the fix that
+  then worked is kept when you accept it (ledger kind `fail`), and the
+  next failure of that shape says `failed (N) -- last time the fix
+  was: ...` with NO model call: the prompt hook reads one plain index
+  file and nothing else. A fix whose tool left PATH retires; records
+  age with SPARK_HISTORY; `spark history` lists them.
 
 The FORGE:
 

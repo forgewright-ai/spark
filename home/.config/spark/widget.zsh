@@ -238,7 +238,17 @@ _spark_failed() {
         _spark_note "$_spark_h failed ($rc) -- $_spark_head: not re-run; ? words asks about it"
     else
         _spark_fail=$cmd _spark_fail_rc=$rc _spark_explained='' _spark_explained_rc='' _spark_fix=''
-        if (( rc == 127 )); then
+        # failure memory: the ONE file this hook may read -- the
+        # hash->fix index the ledger writes. Builtins only: no fork.
+        local _fk='' _fh _fhd _frc _ffx
+        if [[ -r $SPARK_DIR/fails ]]; then
+            while read -r _fh _fhd _frc _ffx; do
+                if [[ $_fhd == "$_spark_head" && $_frc == "$rc" ]]; then _fk=$_ffx; break; fi
+            done < "$SPARK_DIR/fails"
+        fi
+        if [[ -n $_fk ]]; then
+            _spark_note "$_spark_h failed ($rc) -- last time the fix was: $_fk"
+        elif (( rc == 127 )); then
             _spark_note "$_spark_h failed (127) -- $_spark_head not found; Esc s offers the install line"
         else
             _spark_note "$_spark_h failed ($rc) -- press Esc s to ask why"
@@ -304,6 +314,9 @@ spark-ask() {
         _spark_offer_fix=''
         _spark_ask "? fix it"
     elif [[ -n $_spark_fix ]]; then
+        # the accepted fix also lands in the failure memory (a fork is
+        # fine HERE: Esc s is the user's own key, not the prompt hook)
+        "$SPARK_BIN" history --fix-worked "$_spark_fix" >/dev/null 2>&1
         fact="$_spark_explained failed until: $_spark_fix"
         BUFFER="spark memory add ${(qq)fact}"
         CURSOR=$#BUFFER

@@ -10,7 +10,7 @@ import sys
 import time
 
 from . import CONFIG_DIR, MARK, OFF_FLAG, REPO, STATE_DIR, WIDGETS_DIR, config, die, glyph, paged, say, state_dir
-from . import engine, forge, persona, session, version, wire
+from . import engine, forge, ledger, persona, session, version, wire
 from . import text as textmod
 
 HINT_COLS = 80             # a hint labels a command: terse
@@ -61,7 +61,8 @@ ON_USAGE = """spark on -- the prompt widget answers again
 """
 HISTORY_USAGE = """spark history -- the threads kept on this machine
 
-  spark history               where they live, and the newest five
+  spark history               where they live, the newest five, and the
+                              fixes the failure line remembers
   spark history clear         remove every turn and thread kept so far
 """
 VER_USAGE = """spark ver -- logo, version, credits
@@ -327,6 +328,11 @@ def cmd_explain(words):
     if not ctx and not cmd:
         die("explain reads stdin -- cmd 2>&1 | explain")
     if cmd:
+        if rc.isdigit() and rc != "0":
+            # failure memory: remember this failure's shape until a fix
+            # works (ledger.fail_fix, the widgets' second Esc s)
+            first = next((l for l in ctx.splitlines() if l.strip()), "") if ctx else ""
+            ledger.fail_pending(cmd, int(rc), first)
         ctx = "Command: %s\nExit: %s\nOutput:\n%s" % (cmd, rc or "unknown", ctx or "(none)\n")
     return _stream("explain", " ".join(words).strip(), context=ctx, line="[explain] " + " ".join(words))
 
@@ -574,6 +580,10 @@ def cmd_on(args):
 def cmd_history(args):
     if _help(args, HISTORY_USAGE):
         return 0
+    if args[:1] == ["--fix-worked"]:
+        # plumbing, the widgets' second Esc s: the fix that worked for
+        # the pending failure lands in the ledger and the fails index
+        return ledger.fail_fix(" ".join(args[1:]), config.load())
     if args[:1] == ["clear"]:
         n = session.clear()
         m = forge.clear()
@@ -591,6 +601,13 @@ def _history_show():
         say("  threads (?? words goes on with the newest):")
         for th in threads:
             say("  %s  %d turn%s  %s" % (th["id"], th["turns"], "" if th["turns"] == 1 else "s", th["title"]))
+    fixes = [e for e in ledger.entries(kind=ledger.KIND_FAIL)
+             if not ledger._retired(e, "path", None)]
+    if fixes:
+        say("  fixes remembered (the failure line offers them, no model call):")
+        for e in reversed(fixes[-5:]):
+            say("  %-10s exit %-3s x%-2d %s" % (e.get("head", "?"), e.get("rc", "?"),
+                                                int(e.get("count", 1)), e["note"][:48]))
     return 0
 
 
