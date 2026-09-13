@@ -68,7 +68,7 @@ _spark_say() {
 }
 
 _spark_ask() {
-    local line=$1 out kind cmd hint
+    local line=$1 out kind cmd hint line3
     # a long question wraps: empty the line first, so the cursor is back on
     # the prompt's row and the hint lands in the blank row above it
     BUFFER=''; CURSOR=0; zle -R
@@ -77,13 +77,17 @@ _spark_ask() {
     kind=${out%%$'\n'*}
     hint=${out#*$'\n'}
     hint=${hint%%$'\n'*}
+    line3=$(print -r -- "$out" | sed -n 3p)
+    _spark_proof='' _spark_proof_for=''
     case $kind in
         cmd$'\t'*)
             cmd=${kind#cmd$'\t'}
+            case $line3 in proof$'\t'*) _spark_proof=${line3#proof$'\t'} _spark_proof_for=$cmd ;; esac
             _spark_say "$_spark_h $hint"
             BUFFER=$cmd; CURSOR=$#BUFFER ;;
         danger$'\t'*)
             cmd=${kind#danger$'\t'}
+            case $line3 in proof$'\t'*) _spark_proof=${line3#proof$'\t'} _spark_proof_for=$cmd ;; esac
             _spark_say "$_spark_w $hint -- read it before Enter"
             BUFFER=$cmd; CURSOR=$#BUFFER ;;
         answer)
@@ -104,6 +108,7 @@ _spark_ask() {
 # the lines accumulate and the newline refuses the offer.
 typeset -g _spark_cmd='' _spark_fail='' _spark_fail_rc=0
 typeset -g _spark_explained='' _spark_explained_rc='' _spark_fix='' _spark_offer_fix=''
+typeset -g _spark_proof='' _spark_proof_for='' _spark_offer_proof=''
 # One list per judgment, the same lists in widget.bash (tests/smoke.py
 # compares them). DANGER: head words never offered a re-run. QUIET_ONE:
 # exit 1 means "no match" or "differs" for these, not a failure.
@@ -209,6 +214,13 @@ _spark_failed() {
                 *) _spark_fix=$cmd ;;     # the first success after an explain
             esac
         fi
+        if [[ -n $_spark_proof && $cmd == "$_spark_proof_for" ]]; then
+            # contract 4's proof line: the proposed command just ran --
+            # the read-only check is one Esc s away
+            _spark_offer_proof=$_spark_proof
+            _spark_note "$_spark_h done -- Esc s checks it: $_spark_proof"
+            _spark_proof='' _spark_proof_for=''
+        fi
         _spark_fail=''
         return 0
     fi
@@ -279,6 +291,13 @@ spark-ask() {
         BUFFER="{ $fact; } 2>&1 | explain"
         CURSOR=$#BUFFER
         _spark_say "$_spark_h Enter runs it: the failure, explained"
+    elif [[ -n $_spark_offer_proof ]]; then
+        # the proof the line proposed: lands ready to run, read-only
+        BUFFER=$_spark_offer_proof
+        CURSOR=$#BUFFER
+        _spark_offer_proof=''
+        _spark_say "$_spark_h Enter runs the proof"
+        zle -R
     elif [[ -n $_spark_offer_fix ]]; then
         # the second Esc s, right after the explain: the corrected command
         export SPARK_EXPLAIN_CMD=$_spark_explained SPARK_EXPLAIN_RC=${_spark_explained_rc:-1}

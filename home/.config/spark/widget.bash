@@ -70,19 +70,23 @@ _spark_say() {   # _spark_say TEXT  -- write into the row above, cursor untouche
 }
 
 _spark_ask() {   # _spark_ask LINE  -- ask, then edit READLINE_LINE
-    local line=$1 out kind cmd hint
+    local line=$1 out kind cmd hint line3
     _spark_say "$_spark_h $_spark_d"
     out=$("$SPARK_BIN" line --cwd "$PWD" --shell bash <<< "$line" 2>/dev/null)
     kind=${out%%$'\n'*}
     hint=${out#*$'\n'}
     hint=${hint%%$'\n'*}
+    line3=$(printf '%s\n' "$out" | sed -n 3p)
+    _spark_proof='' _spark_proof_for=''
     case $kind in
         cmd$'\t'*)
             cmd=${kind#cmd$'\t'}
+            case $line3 in proof$'\t'*) _spark_proof=${line3#proof$'\t'} _spark_proof_for=$cmd ;; esac
             _spark_say "$_spark_h $hint"
             READLINE_LINE=$cmd; READLINE_POINT=${#cmd} ;;
         danger$'\t'*)
             cmd=${kind#danger$'\t'}
+            case $line3 in proof$'\t'*) _spark_proof=${line3#proof$'\t'} _spark_proof_for=$cmd ;; esac
             _spark_say "$_spark_w $hint -- read it before Enter"
             READLINE_LINE=$cmd; READLINE_POINT=${#cmd} ;;
         answer)
@@ -101,6 +105,7 @@ _spark_ask() {   # _spark_ask LINE  -- ask, then edit READLINE_LINE
 # the lines accumulate and the newline refuses the offer.
 _spark_cmd='' _spark_fail='' _spark_fail_rc=0
 _spark_explained='' _spark_explained_rc='' _spark_fix='' _spark_offer_fix=''
+_spark_proof='' _spark_proof_for='' _spark_offer_proof=''
 # One list per judgment, the same lists in widget.zsh (tests/smoke.py
 # compares them). DANGER: head words never offered a re-run. QUIET_ONE:
 # exit 1 means "no match" or "differs" for these, not a failure.
@@ -209,6 +214,13 @@ _spark_failed() {
                 *) _spark_fix=$cmd ;;     # the first success after an explain
             esac
         fi
+        if [[ -n $_spark_proof && $cmd == "$_spark_proof_for" ]]; then
+            # contract 4's proof line: the proposed command just ran --
+            # the read-only check is one Esc s away
+            _spark_offer_proof=$_spark_proof
+            _spark_note "$_spark_h done -- Esc s checks it: $_spark_proof"
+            _spark_proof='' _spark_proof_for=''
+        fi
         _spark_fail=''
         return 0
     fi
@@ -295,6 +307,12 @@ _spark_ask_line() {
         READLINE_LINE="{ $fact; } 2>&1 | explain"
         READLINE_POINT=${#READLINE_LINE}
         _spark_say "$_spark_h Enter runs it: the failure, explained"
+    elif [[ -n $_spark_offer_proof ]]; then
+        # the proof the line proposed: lands ready to run, read-only
+        READLINE_LINE=$_spark_offer_proof
+        READLINE_POINT=${#READLINE_LINE}
+        _spark_offer_proof=''
+        _spark_say "$_spark_h Enter runs the proof"
     elif [[ -n $_spark_offer_fix ]]; then
         # the second Esc s, right after the explain: the corrected command
         export SPARK_EXPLAIN_CMD=$_spark_explained SPARK_EXPLAIN_RC=${_spark_explained_rc:-1}

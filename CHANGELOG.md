@@ -80,6 +80,15 @@ The audition:
   `--porcelain` carries it whole), the page's model table renders it,
   and `auto` prefers a grounded row when two fit at the same RAM.
 
+The prompt, deeper:
+
+- The command and the proof: a `? question` that lands a command can
+  land a third line too -- `proof<TAB>command`, ONE read-only check
+  that it did what was asked (`test ! -d build` after `rm -rf build`).
+  A proof that is not read-only is refused before it prints. After the
+  command runs, the hint row offers the proof on Esc s; `spark do`
+  runs it after each confirmed step and shows the result.
+
 The FORGE:
 
 - Logout revokes the session -- a replayed cookie is 401.

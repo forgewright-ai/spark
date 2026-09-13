@@ -22,7 +22,7 @@ def _turns_dir():
 # Turns are telemetry: numbers, enums, ids -- never what was said. The
 # words live only in the sealed threads; this is the one choke point that
 # keeps free text out of the turn log, whatever a caller passes.
-TEXT_FIELDS = ("line", "command", "hint", "answer", "cwd", "context")
+TEXT_FIELDS = ("line", "command", "hint", "answer", "cwd", "context", "proof")
 
 
 def record(cfg, **fields):

@@ -263,7 +263,8 @@ def answer_json(messages):
         if "goodsum" in goal:                   # the done claims the number the output printed
             if "Output of" in user:
                 return {"kind": "done", "command": "", "hint": "Total: 26", "danger": False}
-            return {"kind": "cmd", "command": "echo 26", "hint": "count things", "danger": False}
+            return {"kind": "cmd", "command": "echo 26", "hint": "count things", "danger": False,
+                    "proof": "test -d ."}
         if "missdo" in goal:                    # the step names a missing binary
             if "is not installed" in user:
                 return {"kind": "done", "command": "", "hint": "gave up", "danger": False}
@@ -279,6 +280,13 @@ def answer_json(messages):
         return {"kind": "cmd", "command": "find . -name '*.tmp' -delete", "hint": "Delete every .tmp file below here", "danger": True}
     if "rm-plain" in user:      # the model forgets to flag it; the regex must
         return {"kind": "cmd", "command": "rm -rf build", "hint": "Remove the build directory", "danger": False}
+    if "prooftest" in user:
+        return {"kind": "cmd", "command": "mkdir -p pdir", "hint": "makes the dir",
+                "danger": False, "proof": "test -d pdir"}
+    if "badproof" in user:
+        # a proof that writes is not a proof: cli must refuse to print it
+        return {"kind": "cmd", "command": "mkdir -p pdir", "hint": "makes the dir",
+                "danger": False, "proof": "rm -rf pdir"}
     if "titletest" in user:
         # a hostile answer carrying a title-setting OSC and a CSI: the
         # widget prints hints into a live terminal, so cli scrubs them
@@ -425,6 +433,18 @@ def main():
         t.ok(rc == 0 and out.splitlines() == ["answer", "Paris"], "line: answer", out)
         # a hostile answer carrying escape sequences: scrubbed before the
         # widget can print it into a live terminal
+        # contract 4's proof line: printed when read-only, refused when not
+        rc, out, _ = spark("line", stdin="prooftest?")
+        t.ok(rc == 0 and out.splitlines() == ["cmd\tmkdir -p pdir", "makes the dir", "proof\ttest -d pdir"],
+             "line: a read-only proof rides as the third line", repr(out))
+        rc, out, _ = spark("line", stdin="badproof?")
+        t.ok(rc == 0 and out.splitlines() == ["cmd\tmkdir -p pdir", "makes the dir"],
+             "line: a proof that writes is refused, never printed", repr(out))
+        from spark import persona as _pp
+        t.ok(_pp.proof_ok("test ! -d build") and _pp.proof_ok("git status") and _pp.proof_ok("systemctl is-active x")
+             and not _pp.proof_ok("rm -rf build") and not _pp.proof_ok("git push") and not _pp.proof_ok("ls > f")
+             and not _pp.proof_ok("test -d a && rm b"),
+             "proof_ok: the allowlist takes read-only heads and refuses writes, compounds, redirects")
         rc, out, _ = spark("line", stdin="titletest?")
         t.ok(rc == 0 and out.splitlines() == ["answer", "Paris"] and "\x1b" not in out,
              "line: escape sequences in an answer are scrubbed (title-set, colour)", repr(out))
@@ -1583,6 +1603,8 @@ def main():
         t.ok(("driving with " + fam) in out.splitlines()[0], "spark do: opens naming the model driving", out)
         rc, out, err = spark("do", "goodsum", stdin="\n", extra=hook, cwd=work)
         t.ok(rc == 0 and "unchecked" not in out and "done  Total: 26" in out, "spark do: a number an output backs passes clean", out + err)
+        t.ok("proof: test -d . -> ok" in out,
+             "spark do: a confirmed step's proof runs and shows its result", out)
         # the head-word guard in do: never offered, fed back, the loop goes on
         rc, out, err = spark("do", "missdo", "scan", stdin="", extra=hook, cwd=work)
         t.ok(rc == 0 and "frobnicate: not on this machine" in out and "gave up" in out and "Enter runs it" not in out,

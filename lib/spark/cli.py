@@ -23,7 +23,10 @@ LINE_USAGE = """spark line -- the widget's protocol (contract 4)
 
   spark line --cwd D --shell S   reads the prompt buffer on stdin; prints
                                  cmd|danger<TAB>command, answer or error,
-                                 then the hint / answer / reason
+                                 then the hint / answer / reason, then --
+                                 when a cmd earns one -- proof<TAB>command:
+                                 a read-only check that it worked (the
+                                 widget offers it on Esc s after the run)
 """
 EXPLAIN_USAGE = """spark explain -- what went wrong in the piped output, and the fix
 
@@ -234,8 +237,16 @@ def cmd_line(args):
                 hint = _one_line("<- " + facts + " -- " + hint)
         say(kind + "\t" + command)
         say(hint)
+        # contract 4's optional third line: one read-only command that
+        # shows the change happened. A proof that is not read-only
+        # (persona.proof_ok's allowlist) is refused here, never printed.
+        proof = _one_line(reply.get("proof", ""), 1000)
+        if proof and persona.proof_ok(proof):
+            say("proof\t" + proof)
+        else:
+            proof = ""
         shown = "`%s` -- %s" % (command, hint)
-        s.record(kind=kind, line=text, command=command, hint=hint, ms=ms, thread=thread)
+        s.record(kind=kind, line=text, command=command, hint=hint, proof=proof, ms=ms, thread=thread)
     else:
         kind = "answer"
         # an answer is the content, not a label: its budget is characters,

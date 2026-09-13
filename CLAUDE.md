@@ -338,7 +338,16 @@ may change freely.
    are `persona.blast`'s count for a recursive `rm` -- files, bytes and
    git-tracked, from the command, run nothing; the facts lead so the cut
    eats the model's words first;
-   the widget trims to the terminal's own width). Exit 0 for the first
+   the widget trims to the terminal's own width), and an OPTIONAL
+   line 3 = `proof<TAB>command` on a cmd/danger reply -- ONE read-only
+   check that the command did what was asked (`test ! -d build` after
+   `rm -rf build`). The brief asks for it; `persona.proof_ok` refuses a
+   proof that is not read-only (a named allowlist of head words: test,
+   ls, stat, grep, git status, systemctl is-active, ...; no compound,
+   no redirect), so a refused proof is never printed. The widgets show
+   it in the hint row after the command runs and offer it on Esc s;
+   `spark do` runs it after each confirmed step and shows the result.
+   Exit 0 for the first
    three, 1 for error. A buffer starting with `??` continues the newest
    thread; any other starts a new one (no heuristics). The shell widgets
    depend on nothing else.

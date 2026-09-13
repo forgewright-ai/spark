@@ -62,6 +62,7 @@ case $line in
   *hostile-huge*) printf 'cmd\techo '; awk 'BEGIN{while(i++<40000)printf "z"}'; printf ' EXECUTED-MARK\n'; awk 'BEGIN{while(i++<40000)printf "y"}'; printf '\n' ;;
   *hostile-dead*) exit 1 ;;
   *fix\ it*) printf 'cmd\techo FIXED-COMMAND\nthe corrected command\n' ;;
+  *proof-me*) printf 'cmd\ttrue\nruns true\nproof\ttest -d .\n' ;;
   *) if [ "${SPARK_EXPLAIN_RC:-}" = 127 ]; then
          printf 'cmd\tbrew install the-tool\ninstalls the missing tool\n'
      else printf 'cmd\techo EXECUTED-MARK\nA hint about it\n'; fi ;;
@@ -565,6 +566,20 @@ def main(shell, widget):
         got_mark = sh.expect("careful")
         ok(got_cmd and got_mark,
            "Esc r lands a danger candidate stripped of its ! prefix, warn mark shown", since())
+        sh.send("\x15")
+        sh.expect(prompt)
+
+        # 7e. the proof line: the landed command runs clean, the hint row
+        # says the proof is one Esc s away, and Esc s lands it
+        since = sh.mark()
+        sh.send("? proof-me\r")
+        ok(sh.expect("runs true"), "the proof case lands its command", since())
+        sh.send("\r")
+        ok(sh.expect("Esc s checks it: test -d ."), "after the run, the hint row offers the proof", since())
+        since = sh.mark()
+        sh.send("\x1bs")
+        got_p = sh.expect("test -d .") and sh.expect("runs the proof")
+        ok(got_p, "Esc s lands the read-only proof, ready to run", since())
         sh.send("\x15")
         sh.expect(prompt)
 

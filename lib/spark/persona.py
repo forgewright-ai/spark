@@ -183,8 +183,9 @@ LINE_SCHEMA = {
         "command": {"type": "string"},
         "hint": {"type": "string"},
         "danger": {"type": "boolean"},
+        "proof": {"type": "string"},
     },
-    "required": ["kind", "command", "hint", "danger"],
+    "required": ["kind", "command", "hint", "danger", "proof"],
 }
 
 MODE_LINE = (
@@ -193,7 +194,10 @@ MODE_LINE = (
     "unless unavoidable) and a `hint` of at most 70 characters saying what it does. Set danger=true when "
     "the command deletes, overwrites, kills, reboots, or changes permissions or history. If the question "
     "is not something a command answers, reply kind=answer with the answer in `hint` (one line, a "
-    "sentence or two, at most 250 characters) and an empty `command`."
+    "sentence or two, at most 250 characters) and an empty `command`. For kind=cmd also fill `proof`: "
+    "ONE read-only command that shows the change happened (test, ls, stat, grep, git status, "
+    "systemctl is-active), or an empty string when nothing needs proving. A proof never writes, "
+    "deletes, restarts or pipes."
 )
 MODE_ANSWER = (
     "Answer the user's question about their shell, tools, files or system. Be terse: a few lines, "
@@ -495,6 +499,32 @@ SH_BUILTINS = frozenset((
     "cd", "echo", "export", "set", "unset", "source", ".", "alias", "type", "printf",
     "test", "[", "kill", "wait", "jobs", "fg", "bg", "read", "eval", "exec", "shift",
     "trap", "umask"))
+
+
+# a proof is read-only or it is not a proof: the head words contract 4's
+# optional third line may start with -- a named list, one look, so it
+# can be argued with. git/systemctl/launchctl only with their read subs.
+PROOF_HEADS = ("test", "[", "ls", "stat", "grep", "wc", "file", "du", "df",
+               "head", "tail", "pgrep", "which", "diff", "cmp", "readlink")
+PROOF_PAIRS = (("git", ("status", "log", "diff", "show", "ls-files")),
+               ("systemctl", ("is-active", "is-enabled", "status")),
+               ("launchctl", ("print", "list")))
+
+
+def proof_ok(command):
+    """Is this line fit to be a proof: a single read-only command --
+    allowlisted head word, no compound, no redirect, nothing dangerous.
+    A proof that is not read-only is refused (never printed)."""
+    c = (command or "").strip()
+    if not c or is_dangerous(c) or re.search(r"[;&|<>`$]", c):
+        return False
+    w = c.split()
+    if w[0] in PROOF_HEADS:
+        return True
+    for head, subs in PROOF_PAIRS:
+        if w[0] == head and len(w) > 1 and w[1] in subs:
+            return True
+    return False
 
 
 def missing_word(command):

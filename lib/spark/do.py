@@ -119,9 +119,11 @@ def propose(cfg, thread, text, shell, cwd, history=None, brain=None):
     raw, ms = s.ask_json(text, DO_SCHEMA)
     command = " ".join(str(raw.get("command") or "").split())
     hint = " ".join(str(raw.get("hint") or "").split())
+    proof = " ".join(str(raw.get("proof") or "").split())
     kind = "cmd" if raw.get("kind") == "cmd" and command else "done"
     reply = {"kind": kind, "command": command if kind == "cmd" else "", "hint": hint,
-             "danger": kind == "cmd" and (bool(raw.get("danger")) or persona.is_dangerous(command))}
+             "danger": kind == "cmd" and (bool(raw.get("danger")) or persona.is_dangerous(command)),
+             "proof": proof if kind == "cmd" and persona.proof_ok(proof) else ""}
     user = persona.user_message(text, cwd)
     history.extend([{"role": "user", "content": user}, {"role": "assistant", "content": shown(reply)}])
     forge.append(cfg, thread, "user", text, mode="do", cwd=cwd)
@@ -245,6 +247,15 @@ def cmd_do(args):
             steps += 1
             record(kind="danger" if reply["danger"] else "cmd", command=command, hint=hint, rc=rc, ms=ms)
             text = feedback(command, rc, tail)
+            if rc == 0 and reply.get("proof"):
+                # contract 4's proof line: one read-only check that the
+                # step did what it claimed, run and shown -- the result
+                # rides the next request with the step's own output
+                prc, ptail = run(reply["proof"], shell, cwd)
+                say("%s    proof: %s -> %s" % (glyph("hammer"), reply["proof"],
+                                               "ok" if prc == 0 else "exit %d" % prc))
+                text += "\n\nProof `%s` exited %d.%s" % (
+                    reply["proof"], prc, ("\n" + ptail) if prc != 0 and ptail else "")
         else:
             say("%s step limit (%d) reached -- spark do again to continue" % (glyph("warn"), DO_MAX_STEPS))
             _prune(cfg)
