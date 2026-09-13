@@ -275,9 +275,12 @@ Two files:
 
 `spark model list` shows every row: file size, the RAM it needs against
 this machine's budget (`SITE_AI_BUDGET`, default 60 percent of RAM plus
-GPU memory), the license, `line` when tested, downloaded or serving,
-and its speed here (`~N tok/s` is an estimate until `spark bench` or a
-real turn measures it; `too big` when it does not fit). The tested rows:
+GPU memory), the license, the proof column (`line` when tested on the
+line; a `kept/run` score once the grounding audition measured how
+faithfully it quotes a source -- those rows win an `auto` tie),
+downloaded or serving, and its speed here (`~N tok/s` is an estimate
+until `spark bench` or a real turn measures it; `too big` when it does
+not fit). The tested rows:
 
 | name | file | RAM |
 |---|---|---|

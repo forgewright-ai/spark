@@ -105,6 +105,12 @@ def main():
             check(int(m.group(1)) == n_rows, "%s: '%s' is check.py's count (%d)" % (doc, m.group(0), n_rows))
     for m in re.finditer(r"spark check` answers (\d+)", read("IDEAS.md")):
         check(int(m.group(1)) == n_rows, "IDEAS.md: '%s' is check.py's count (%d)" % (m.group(0), n_rows))
+    # contract 3: every MODEL_*_GROUND in models.env has the audition's
+    # shape, "<kept>/<run> <YYYY-MM-DD>" (config refuses others at parse;
+    # this keeps the file honest without running spark)
+    for m in re.finditer(r'(?m)^(MODEL_[A-Z_0-9]+_GROUND)="?([^"\n]*)"?\s*$', read("models.env")):
+        check(re.match(r"^\d+/\d+ \d{4}-\d{2}-\d{2}$", m.group(2)) is not None,
+              "models.env: %s is '<kept>/<run> <YYYY-MM-DD>' (got %r)" % (m.group(1), m.group(2)))
     # the split by category CLAUDE.md states ("12 SOFTWARE, 17 CAPABILITY, 9 NONFUNCTIONAL")
     src_rows = read(os.path.join("lib", "spark", "check.py"))
     for cat in ("SOFTWARE", "CAPABILITY", "NONFUNCTIONAL"):

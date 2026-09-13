@@ -40,9 +40,14 @@ def _announce_downloads(pend):
 # ------------------------------------------------------------------ model
 MODEL_USAGE = """%s model -- which model this machine serves
 
-  spark model                   the table: size, RAM, license, tested,
-                                downloaded, serving, tok/s; the spark pick
-                                marked *, the ember +, your own rows u
+  spark model                   the table: size, RAM, license, the proof
+                                column (line, or the grounding audition's
+                                kept/run score), downloaded, serving,
+                                tok/s; the spark pick marked *, the ember
+                                +, your own rows u
+  spark model list --porcelain  the same as data: one row per line, tab
+                                separated (name, source, GB, RAM, license,
+                                line, grounded, state)
   spark model NAME              choose it: site.env, download, server restart
                                 (a row not under Apache-2.0 or MIT prints
                                 its license and asks first)
@@ -144,7 +149,7 @@ def model_rows(cfg, serving=None):
             pass
     out = []
     for row in config.model_tables():
-        name, fname, _url, nbytes, _sha, ram, source, tested, license_, note = row
+        name, fname, _url, nbytes, _sha, ram, source, tested, license_, note, ground = row
         speed, kind = engine.speed_of(cfg, row)
         out.append({"name": name, "gb": round(nbytes / 2**30, 1), "ram_gb": ram, "fits": (ram <= budget) if budget is not None else None,
                     "downloaded": os.path.isfile(os.path.join(cfg.models_dir, fname)),
@@ -152,15 +157,17 @@ def model_rows(cfg, serving=None):
                     "serving": bool(serving) and fname.replace(".gguf", "") == serving,
                     "speed": speed, "speed_kind": kind, "source": source,
                     "mark": SOURCE_MARKS.get(source, " "), "tested": tested,
-                    "license": license_, "open": config.is_open(license_), "note": note})
+                    "license": license_, "open": config.is_open(license_), "note": note,
+                    "ground": ground})
     return out
 
 
 def model_line(r, marks=None, width=13):
     """One table row: the pick mark (spark *, ember +), the source mark
     (blank the list, `u` yours), the name, the file size, the RAM verdict,
-    the license's first word (`open` marks one auto may take), `line` when
-    the row was proven on the line, downloaded / serving, and the speed --
+    the license's first word, the proof column (`line` for the line proof,
+    or the grounding audition's kept/run score when the row carries
+    MODEL_<NAME>_GROUND), downloaded / serving, and the speed --
     `~N tok/s` an estimate, `N tok/s` measured; nothing for a row that
     does not fit. `width` pads the name column (the caller widens it past
     13 for a longer name). Every row stays within 80 columns."""
@@ -171,11 +178,14 @@ def model_line(r, marks=None, width=13):
     else:
         speed = ("%s%d tok/s" % ("~" if r["speed_kind"] == "estimate" else "", r["speed"])) if r["fits"] else "too big"
     lic = ((r["license"] or "").split() or [""])[0][:10]
+    # the proof column: the ground score (kept/run of the grounding
+    # audition) when the row has one, else `line` for the line proof
+    proof = (r.get("ground") or "").split()[0] if r.get("ground") else ("line" if r["tested"] else "")
     # padded columns, right-aligned numbers: the eye reads a table, not a
-    # sentence; 57 + width columns, so a 23-char name still fits 80
-    return ("  %s%s %-*s %5.1f GB %2.0f GB %-10s %-4s %-10s %9s"
+    # sentence; 58 + width columns, so a 22-char name still fits 80
+    return ("  %s%s %-*s %5.1f GB %2.0f GB %-10s %-5s %-10s %9s"
             % (marks.get(r["role"], " "), r["mark"], width, r["name"], r["gb"], r["ram_gb"],
-               lic, "line" if r["tested"] else "", state, speed)).rstrip()
+               lic, proof, state, speed)).rstrip()
 
 
 def print_model_table(cfg):
@@ -400,7 +410,14 @@ def cmd_model(args):
                     "bad", width, r["name"], r["name"], r["name"]))
         return 1 if bad else 0
     rows = config.model_tables()
-    if not args or args[0] in ("list", "status"):
+    if not args or args[0] in ("list", "status", "--porcelain"):
+        if "--porcelain" in args:
+            for r in model_rows(cfg):
+                say("\t".join([r["name"], r["source"], "%.1f" % r["gb"], "%.0f" % r["ram_gb"],
+                               (r["license"].split() or [""])[0],
+                               "line" if r["tested"] else "-", r["ground"] or "-",
+                               "serving" if r["serving"] else ("downloaded" if r["downloaded"] else "-")]))
+            return 0
         return paged(lambda: print_model_table(cfg))
     if args[0] == "budget":
         if len(args) == 1:

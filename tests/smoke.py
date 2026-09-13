@@ -1837,6 +1837,34 @@ def main():
              == ["other", "llama.cpp-b800", "llama.cpp-b9999", "llama.cpp-b10689"],
              "engine dirs sort by build number, not as strings")
 
+        # MODEL_<NAME>_GROUND: the audition's score -- the grounded row
+        # wins an auto tie at the same RAM (it sorts after its twin), the
+        # proof column shows kept/run, and --porcelain carries it whole
+        _sha0 = "0" * 64
+        with open(user_models_file, "w") as f:
+            f.write('MODEL_GRD_B="b.gguf http://192.0.2.1/b 1000000 %s 2"\n' % _sha0
+                    + 'MODEL_GRD_B_LICENSE="MIT https://x"\n'
+                    + 'MODEL_GRD_B_TESTED="line"\n'
+                    + 'MODEL_GRD_B_GROUND="45/48 2026-01-01"\n'
+                    + 'MODEL_GRD_A="a.gguf http://192.0.2.1/a 1000000 %s 2"\n' % _sha0
+                    + 'MODEL_GRD_A_LICENSE="MIT https://x"\n'
+                    + 'MODEL_GRD_A_TESTED="line"\n')
+        _genv = {"SPARK_NO_APPLY": "1", "SPARK_MEM_TOTAL_GB": "4", "SITE_AI_MODEL": "auto",
+                 "SITE_AI_BUDGET": "60"}
+        rc, out, _ = spark("model", "list", extra=_genv)
+        star = [ln for ln in out.splitlines() if ln.startswith("  *")]
+        t.ok(rc == 0 and star and "grd-b" in star[0] and "45/48" in star[0],
+             "model list: the grounded row wins the auto tie and wears its score", out)
+        rc, outp, _ = spark("model", "list", "--porcelain", extra=_genv)
+        t.ok(rc == 0 and re.search(r"^grd-b\tuser\t[\d.]+\t2\tMIT\tline\t45/48 2026-01-01\t", outp, re.M),
+             "model list --porcelain: the ground score rides whole", outp)
+        with open(user_models_file, "a") as f:
+            f.write('MODEL_GRD_A_GROUND="not a score"\n')
+        rc, out, err = spark("model", "list", extra=_genv)
+        t.ok(rc == 2 and "_GROUND" in out + err,
+             "a malformed _GROUND refuses the file, naming the key", out + err)
+        os.remove(user_models_file)
+
         # the forge row: a FORGE serving an older version than the tree is
         # a warn with the bounce remedy -- spark update restarted nothing
         # before v1.30, so every row was green while the API ran old code

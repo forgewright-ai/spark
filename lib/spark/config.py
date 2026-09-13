@@ -409,20 +409,22 @@ def is_open(license_):
 
 def _parse_model_file(path, source):
     """[(name, file, url, bytes, sha256, ram_gb, source, tested, license,
-    note)] from one KEY=value model file. Every MODEL_<NAME> row is
-    exactly 5 fields (file url bytes sha256 ram_gb); anything else dies,
-    naming the file (config is data, wrong data is refused). The
+    note, ground)] from one KEY=value model file. Every MODEL_<NAME> row
+    is exactly 5 fields (file url bytes sha256 ram_gb); anything else
+    dies, naming the file (config is data, wrong data is refused). The
     side-keys are not rows: MODEL_<NAME>_LICENSE ("<name> <url>",
     required for every row), MODEL_<NAME>_TESTED ("line": the row was
-    proven on the line, so auto may pick it; absent otherwise) and
-    MODEL_<NAME>_NOTE (one line, optional). `source` is "repo"
-    (models.env) or "user" (~/.config/spark/models.env). Missing file
-    -> []."""
+    proven on the line, so auto may pick it; absent otherwise),
+    MODEL_<NAME>_NOTE (one line, optional) and MODEL_<NAME>_GROUND
+    ("<kept>/<run> <YYYY-MM-DD>", optional: the grounding audition's
+    score, written by hand from a --json run the way _TESTED carries
+    the line proof). `source` is "repo" (models.env) or "user"
+    (~/.config/spark/models.env). Missing file -> []."""
     kv = parse_env(path)
     base = os.path.basename(path)
     rows = []
     for k, v in kv.items():
-        if not k.startswith("MODEL_") or k.endswith(("_LICENSE", "_NOTE", "_TESTED")):
+        if not k.startswith("MODEL_") or k.endswith(("_LICENSE", "_NOTE", "_TESTED", "_GROUND")):
             continue
         parts = v.split()
         if len(parts) != 5:
@@ -432,10 +434,13 @@ def _parse_model_file(path, source):
         license_ = kv.get(k + "_LICENSE", "")
         note = kv.get(k + "_NOTE", "")
         tested = kv.get(k + "_TESTED", "") == "line"
+        ground = kv.get(k + "_GROUND", "")
+        if ground and not re.match(r"^\d+/\d+ \d{4}-\d{2}-\d{2}$", ground):
+            die('%s: %s_GROUND is "<kept>/<run> <YYYY-MM-DD>" (a --json audition run)' % (base, k), 2)
         if not license_:
             die("%s: %s has no %s_LICENSE" % (base, k, k), 2)
         rows.append((name, parts[0], parts[1], int(parts[2]), parts[3], float(parts[4]),
-                     source, tested, license_, note))
+                     source, tested, license_, note, ground))
     return rows
 
 
@@ -453,7 +458,7 @@ def models_table(repo=REPO):
 
 def model_tables(repo=REPO):
     """The one list plus yours: [(name, file, url, bytes, sha256, ram_gb,
-    source, tested, license, note)] from models.env ("repo") then
+    source, tested, license, note, ground)] from models.env ("repo") then
     ~/.config/spark/models.env ("user", when present -- yours, never in
     the repo). A name that appears in both is refused, naming both."""
     seen = {}

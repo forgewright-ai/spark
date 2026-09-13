@@ -71,6 +71,15 @@ The machine:
   the cached key in the same breath, and a store whose key is gone
   refuses with 78.
 
+The audition:
+
+- A model row can carry the grounding audition's score:
+  `MODEL_<NAME>_GROUND="<kept>/<run> <YYYY-MM-DD>"`, written by hand
+  from a `tests/audition.py --json` run the way `_TESTED` carries the
+  line proof. `spark model list` shows it in the proof column (and
+  `--porcelain` carries it whole), the page's model table renders it,
+  and `auto` prefers a grounded row when two fit at the same RAM.
+
 The FORGE:
 
 - Logout revokes the session -- a replayed cookie is 401.

@@ -111,7 +111,9 @@ def _pick(auto, all_rows, choice, budget, beside=0.0, cap_gb=None):
 def _choose(cfg, cap_gb):
     from . import mem_total_gb
     try:
-        rows = sorted(config.model_tables(), key=lambda r: r[5])
+        # grounded rows sort after ungrounded at the same RAM, so auto's
+        # usable[-1] prefers a row with a proven ground score on a tie
+        rows = sorted(config.model_tables(), key=lambda r: (r[5], bool(r[10])))
     except SystemExit:
         rows = []
     auto = config.auto_rows(rows)

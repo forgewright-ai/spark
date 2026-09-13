@@ -40,6 +40,7 @@ SPARK
 
 ON THE LAN (server / client)
   spark model [NAME|auto|none]    choose one; model list = the table
+                                  (--porcelain: data; grounded = audition)
   spark model budget [N]          percent of RAM+GPU auto may use (10-95)
   spark model add URL             add your own (--sha256, --license required)
   spark model verify              sha256 every downloaded file now, exit 1 bad

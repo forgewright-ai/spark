@@ -307,8 +307,14 @@ may change freely.
    `MODEL_<NAME>_LICENSE="<name> <url>"` (required, every row),
    `MODEL_<NAME>_TESTED="line"` (present only on a row proven on the
    line: with an open license -- `config.OPEN_LICENSES`, Apache-2.0 or
-   MIT -- it is a row `auto` may pick) and `MODEL_<NAME>_NOTE` (one line,
-   optional). A name in both files is refused, naming both;
+   MIT -- it is a row `auto` may pick), `MODEL_<NAME>_NOTE` (one line,
+   optional) and `MODEL_<NAME>_GROUND="<kept>/<run> <YYYY-MM-DD>"`
+   (optional: the grounding audition's score, written by hand from a
+   `tests/audition.py --json` run the way `_TESTED` carries the line
+   proof; `spark model list` shows it in the proof column, the page's
+   model table renders it, and `auto` prefers a grounded row when two
+   rows fit the budget at the same RAM). A name in both files is
+   refused, naming both;
    `distro/<id>.env` (one per Linux package family the oracle `distro()`
    knows -- `lib/spark/__init__.py` beside `is_wsl()`; bootstrap.sh
    eval's it from `lib/spark/facts.py`; `SPARK_OS_RELEASE` pins it) -- `PM PM_INSTALL
@@ -843,6 +849,8 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   share on` and a skip row.
 - **A model.** One list, `models.env`: a row (`MODEL_<NAME>`, the
   five fields), its `_LICENSE` (always), a `_NOTE` when one line helps,
+  a `_GROUND="<kept>/<run> <date>"` once the grounding audition scored
+  it here (tests/audition.py --json),
   and `_TESTED="line"` only once the row has answered `spark line` with
   valid JSON -- `auto` reads only tested rows under an open license
   (`config.auto_rows`, `bootstrap.sh model_rows`); a row under another
