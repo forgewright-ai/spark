@@ -262,6 +262,29 @@ if [ "$(uname -s)" != Darwin ]; then
     printf '%s\n' "$out" | grep -qE '^skip +vt-palette +no palette painted yet' && ok "no palette: the vt-palette row skips" || bad "vt-palette skip: $(printf '%s\n' "$out" | grep -E ' vt-palette ' | head -1)"
 fi
 
+# 9b. spark client URL on a machine that served (Linux): the enabled
+#     unit is disabled, its link removed, and the run says the engine
+#     that ran here is stopped -- spark serve off would refuse while
+#     the unit is loaded, so the promotion to client must do it itself
+if [ "$(uname -s)" != Darwin ]; then
+    mkdir -p "$HOME/.config/systemd/user" "$T/sysd"
+    ln -sf "$REPO/linux/home/.config/systemd/user/spark-serve.service" "$HOME/.config/systemd/user/spark-serve.service"
+    cat > "$T/sysd/systemctl" <<'SH'
+#!/bin/sh
+echo "systemctl $*" >> "$SYSD_LOG"
+case "$*" in *is-enabled*spark-serve*) echo enabled ;; *is-enabled*) echo disabled ;; esac
+exit 0
+SH
+    chmod +x "$T/sysd/systemctl"
+    out=$(SYSD_LOG="$T/sysd.log" SPARK_NO_APPLY=1 PATH="$T/sysd:$T/bin:$PATH" python3 "$REPO/bin/spark" client http://192.0.2.9:8081 2>&1) \
+        || bad "spark client URL failed: $out"
+    grep -q -- "--user disable --now spark-serve.service" "$T/sysd.log" 2>/dev/null \
+        && ok "client URL: the serve unit is stopped and disabled" || bad "client URL: no disable logged: $(cat "$T/sysd.log" 2>/dev/null | tr '\n' ' ')"
+    [ ! -e "$HOME/.config/systemd/user/spark-serve.service" ] && ok "client URL: the unit link is removed" || bad "client URL: the link stayed"
+    printf '%s\n' "$out" | grep -q "the engine that ran here is stopped" && ok "client URL: the stop is said" || bad "client URL says nothing: $out"
+    printf 'SITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
+fi
+
 # 9c. quiet-login restores only spark's own trace (Linux: the row is
 #     Linux's). A stock Ubuntu -- no /etc/motd, the distro's file at
 #     /usr/share/base-files/motd -- with SITE_QUIET_LOGIN=no was never

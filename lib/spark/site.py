@@ -631,8 +631,36 @@ def cmd_client(args):
         if not users.account()[0]:
             say("then log in as yourself: " + _login_hint(url))
         from . import engine
-        if engine.server_pids(cfg.port):
-            say("the server that ran here keeps running: spark serve off ends it")
+        # a machine that served: the unit would bring the engine back at
+        # boot, and spark serve off refuses while it is loaded -- stop
+        # and disable it here, remove its links, and say so
+        stopped = False
+        name = engine.unit_name("serve")
+        if IS_MAC:
+            plist = os.path.join(HOME, "Library", "LaunchAgents", name + ".plist")
+            if engine.service_state(cfg) == "loaded" or os.path.exists(plist):
+                subprocess.run(["launchctl", "bootout", "gui/%d/%s" % (os.getuid(), name)], capture_output=True)
+                stopped = True
+            if os.path.exists(plist):
+                os.remove(plist)
+        else:
+            link = os.path.join(HOME, ".config", "systemd", "user", name)
+            if engine.service_state(cfg) == "loaded" or os.path.lexists(link):
+                subprocess.run(["systemctl", "--user", "disable", "--now", name], capture_output=True)
+                stopped = True
+            if os.path.lexists(link):
+                os.remove(link)
+                subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True)
+        pids = engine.server_pids(cfg.port)
+        if pids:
+            engine.terminate(pids)
+            left = engine.wait_gone(pids, 15)
+            if left:
+                engine.terminate(left, force=True)
+            stopped = True
+        if stopped:
+            engine.forget()
+            say("the engine that ran here is stopped")
     return rc
 
 
