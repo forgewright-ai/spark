@@ -1348,6 +1348,36 @@ def porcelain(rows):
     return "\n".join("%s\t%s\t%s\t%s\t%s" % (r.category, r.status, r.name, r.value, r.remedy) for r in rows)
 
 
+def report(ctx, rows):
+    """The block a user pastes into an issue: version, OS and family,
+    arch, backend, RAM and budget, the model stems, then every row's
+    category, status and name -- never a value, a path, a hostname or a
+    user name. Its own output then runs through the privacy word lists
+    (the repo's and the personal file) and every hit is blanked, so
+    even an accident cannot leak a listed word."""
+    import platform
+    from . import engine, mem_total_gb, os_pretty, version
+    cfg = ctx.cfg
+    fam = distro() or ("wsl" if is_wsl() else "-")
+    lines = ["spark %s" % version.version(),
+             "%s (%s), %s" % (os_pretty(), fam, platform.machine()),
+             "backend %s, ram %.0f GB, budget %d%%" % (engine.backend(cfg), mem_total_gb(), cfg.ai_budget)]
+    try:
+        pair = engine.chosen_rows(cfg)
+    except SystemExit:
+        pair = {}
+    stems = ", ".join("%s %s" % (role, (pair.get(role)[1].replace(".gguf", "") if pair.get(role) else "none"))
+                      for role in ("spark", "ember"))
+    lines.append("models: " + stems)
+    for r in rows:
+        lines.append("%-13s %-4s %s" % (r.category, r.status, r.name))
+    text = "\n".join(lines)
+    for w in privacy_terms(cfg, ctx.repo):
+        if len(w) >= 2:
+            text = re.sub(re.escape(w), "*" * min(len(w), 6), text, flags=re.I)
+    return text
+
+
 # ----------------------------------------------------------------- selftest
 _STUB_BOOTSTRAP = """#!/bin/sh
 case ${1:-} in
@@ -1841,6 +1871,9 @@ USAGE = """%s check -- is this machine still what its repository says it is?
   spark check              the report; exit 0 iff no row failed
   spark check --watch N    redraw every N seconds
   spark check --porcelain  category<TAB>status<TAB>name<TAB>value<TAB>remedy
+  spark check --report     a block to paste into an issue: version, OS,
+                           backend, model stems and every row's status --
+                           never a value, a path, a name
   spark check --fresh      ignore cached answers (brew, git fetch results)
   spark check --fetch      ask origin before judging the git row
   spark check --selftest   prove every fixture-testable row can flip
@@ -1851,7 +1884,7 @@ USAGE = """%s check -- is this machine still what its repository says it is?
 
 
 def main(argv):
-    watch, porcelain_out, fresh, fetch, names = 0, False, False, False, []
+    watch, porcelain_out, report_out, fresh, fetch, names = 0, False, False, False, False, []
     it = iter(argv)
     for a in it:
         if a in ("-h", "--help", "help"):
@@ -1859,6 +1892,8 @@ def main(argv):
             return 0
         if a == "--watch":
             watch = int(next(it, "5"))
+        elif a == "--report":
+            report_out = True
         elif a == "--porcelain":
             porcelain_out = True
         elif a == "--fresh":
@@ -1880,6 +1915,9 @@ def main(argv):
     while True:
         rows = run_rows(ctx, names or None)
         write_snapshot(ctx, rows)
+        if report_out:
+            page(report(ctx, rows))
+            return 1 if any(r.status == FAIL for r in rows) else 0
         text = porcelain(rows) if porcelain_out else render(ctx, rows, color)
         if watch:
             sys.stdout.write("\033[2J\033[H" + text + "\n")

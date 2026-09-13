@@ -79,6 +79,8 @@ THE MACHINE
   spark check                     drift report; exit 0 = every promise kept
   spark check --watch 5           redraw every 5 s     --selftest  prove rows
   spark check --chaos             rehearse the failures: break, red, remedy
+  spark check --report            a paste-safe block for an issue: statuses
+                                  only -- no value, no path, no name
   spark update [--dry-run]        the newest release; main on a dev clone
   spark uninstall [--purge]       remove spark: shows, asks yes; keeps yours
   ./bootstrap.sh --dry-run        what a rebuild would change (never sudo)

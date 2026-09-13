@@ -88,6 +88,9 @@ def main():
                if re.match(r'^MODEL_[A-Z0-9_]+="', l) and not re.match(r'^MODEL_[A-Z0-9_]+_(LICENSE|NOTE|TESTED|GROUND)=', l))
     check(pages["models"].count("<tr>") == rows + 1, "models: every row of models.env is on the page (%d)" % rows)
     check("banner.svg" in pages[""] and 'id="ol"' in pages[""], "index: the banner and the one-liner")
+    check('href="tour/"' in pages[""], "index: stage 2 links the tour")
+    check("TOUR.md" in read(os.path.join(ROOT, "README.md")).split("## Use it")[1][:200],
+          "README: the Use it head links TOUR.md")
     check("spark chat" in pages[""], "index: spark chat and the prompt line")
     apps = sorted(set(re.findall(r"github\.com/forgewright-ai/(spark-[a-z0-9]+)",
                                  read(os.path.join(ROOT, "README.md")))))

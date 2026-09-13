@@ -1951,6 +1951,19 @@ def main():
              == ["vulkan-icd-loader", "vulkan-radeon"],
              "packages: the pacman -Rp parser reads the printed names")
 
+        # spark check --report: statuses only, and the privacy word lists
+        # run over the report's own output -- the fixture's listed user
+        # name and hostname never appear, and a listed word blanks
+        with open(home + "/.config/spark/privacy-terms", "w") as f:
+            f.write("fixtureuser\nfixturehost\nbackend\n")
+        rc, out, _ = spark("check", "--report",
+                           extra={"SITE_NAME": "fixturehost", "SITE_USER": "fixtureuser"})
+        t.ok(rc in (0, 1) and out.startswith("spark ") and "fixturehost" not in out
+             and "fixtureuser" not in out and "backend" not in out and "******" in out
+             and re.search(r"(?m)^SOFTWARE +\w+ +\w", out),
+             "check --report: statuses only, the word lists blank their own hits", out[:200])
+        os.remove(home + "/.config/spark/privacy-terms")
+
         # failure memory (contract 4's ledger kind fail): explain keeps
         # the failure's shape, the accepted fix lands in the ledger and
         # the plain index the prompt hook reads, and a fix whose tool

@@ -73,7 +73,9 @@ to the tree regardless.
 ## Where to ask
 
 Open an issue. `.github/ISSUE_TEMPLATE/` has a form for a model row and
-one for a bug; anything else is a blank issue.
+one for a bug; anything else is a blank issue. For a bug, paste `spark
+check --report`: it is statuses only -- no value, no path, no name --
+and it runs your privacy word list over itself before printing.
 
 ## Roadmap
 

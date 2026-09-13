@@ -9,7 +9,8 @@ labels: bug
 
 OS (Debian 13, Ubuntu 24.04, Arch, macOS, and the version):
 
-`spark check --porcelain` output:
+`spark check --report` output (statuses only -- safe to paste; --porcelain
+adds values if you are comfortable sharing them):
 
 What you typed:
 

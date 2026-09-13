@@ -629,6 +629,34 @@ When something stops working:
    serving user must be in the `render` group; log out of every session
    and in again.
 8. `SPARK_DEBUG=1 spark ...` and `~/.local/state/spark/debug.log`.
+9. For an issue: `spark check --report` prints a block safe to paste --
+   version, OS, backend, model stems and every row's status, never a
+   value, a path or a name (it runs the privacy word lists over its
+   own output besides).
+
+## 8. What an attacker can and cannot do
+
+The trust boundary is your LAN: spark serves plain HTTP to the
+addresses you gave it and nothing else.
+
+- **On your LAN**, an attacker can read the HTTP traffic (there is no
+  TLS), and a cookie or token they capture works until it is rotated
+  or its session is logged out -- logging out revokes the session on
+  the server, not only in the browser. They cannot log in by guessing:
+  a wrong token costs a second, ten wrong tokens a minute lock the
+  address out, and the login sleep is bounded so a burst cannot pin
+  the server's threads. The remedy is rotation: `spark user token
+  --new` for your own token (it re-keys your sessions on the spot),
+  `spark forge token --new` for the admin's.
+- **With the disk**, an attacker reads the box account's own store --
+  its key sits beside it so the box can work -- plus the soul (plain
+  config). Every NAMED user's store is ciphertext: the key is wrapped
+  by that user's token, the admin holds no copy, and a lost token is
+  lost history. There is no reset.
+- **With a stolen phone** that was logged in, they hold that one
+  user's chat and settings -- never another user's store, never the
+  box beyond it -- until `spark user token --new` from any logged-in
+  session, or the page's log out, ends it.
 
 ## Appendix: how it fits together
 

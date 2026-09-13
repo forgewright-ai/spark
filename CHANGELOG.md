@@ -102,6 +102,20 @@ The prompt, deeper:
   file and nothing else. A fix whose tool left PATH retires; records
   age with SPARK_HISTORY; `spark history` lists them.
 
+Trust:
+
+- `spark check --report`: a block safe to paste into an issue --
+  version, OS and family, arch, backend, RAM and budget, the model
+  stems, and every row's category, status and name. Never a value, a
+  path, a hostname or a user name; the privacy word lists run over the
+  report's own output and blank any hit. The bug template asks for it.
+- INSTALL.md states the threat model: what an attacker on the LAN, one
+  with the disk, and one with a stolen phone can and cannot do, with
+  the one remedy for each (rotation: `spark user token --new`,
+  `spark forge token --new`). docs_test keeps the section honest.
+- The tour is on the front door: TOUR.md renders on the page (tour/),
+  linked from the front's stage 2 and the README's "Use it" head.
+
 One identity, every door:
 
 - `??` across machines: on a logged-in client of a FORGE, `??` at the

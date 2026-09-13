@@ -105,6 +105,12 @@ def main():
             check(int(m.group(1)) == n_rows, "%s: '%s' is check.py's count (%d)" % (doc, m.group(0), n_rows))
     for m in re.finditer(r"spark check` answers (\d+)", read("IDEAS.md")):
         check(int(m.group(1)) == n_rows, "IDEAS.md: '%s' is check.py's count (%d)" % (m.group(0), n_rows))
+    # the threat model: the section exists and names the one remedy
+    inst = read("INSTALL.md")
+    m = re.search(r"## 8\. What an attacker can and cannot do\n(.*?)(?:\n## )", inst, re.S)
+    check(m is not None, "INSTALL.md has the threat model section (8)")
+    check(m is not None and "spark user token" in m.group(1) and "--new" in m.group(1),
+          "the threat model names spark user token --new")
     # contract 3: every MODEL_*_GROUND in models.env has the audition's
     # shape, "<kept>/<run> <YYYY-MM-DD>" (config refuses others at parse;
     # this keeps the file honest without running spark)

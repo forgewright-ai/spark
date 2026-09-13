@@ -55,6 +55,8 @@ and your editor stay yours. `INSTALL.md` has every step and every key.
 
 ## Use it
 
+The first hour, twelve small things to try: `TOUR.md`.
+
 | | |
 |---|---|
 | `? words` at the prompt | the command lands in your line; `??` follows up; `Esc s` asks about the line you are on |
