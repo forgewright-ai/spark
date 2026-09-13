@@ -130,6 +130,12 @@ def cmd_serve(args):
         say("\n".join(client_lines(cfg, url)))
         _warm(cfg, url)
         return 0
+    if st == "loading" and engine.service_state(cfg) == "loaded":
+        # the unit's own server is loading (503): a second spawn would
+        # fail to bind and then forget() the RUNNING server's pidfile and
+        # serve-url -- refuse, the way cmd_stop refuses while the unit
+        # owns the port
+        return _refuse("the unit's server is loading at %s -- it answers when ready" % url)
     others = engine.server_pids(cfg.port)
     mine = engine.pidfile_pid()
     if others and mine not in others:

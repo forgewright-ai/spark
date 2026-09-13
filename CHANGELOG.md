@@ -354,8 +354,8 @@
 - `spark check --chaos` rehearses the failures: it breaks a throwaway
   machine one known way at a time and proves the right row says so and
   the remedy that row prints heals it. `--selftest` proves a row can
-  flip; `--chaos` proves the sentence under it is true. Nine scenarios,
-  each on ports of its own, so a machine that is serving is left alone.
+  flip; `--chaos` proves the sentence under it is true. Each scenario
+  on ports of its own, so a machine that is serving is left alone.
 - A reply cut off mid-stream is an error, not half an answer. A severed
   connection is not an end of stream: the read simply stops, so a killed
   server handed back a truncated answer looking whole, and exited 0. The

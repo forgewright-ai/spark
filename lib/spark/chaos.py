@@ -490,6 +490,35 @@ def chaos_two_serves_at_once(m):
     return ""
 
 
+@scenario(heal=None, mood="loading",
+          unhealed="a serve over the unit's loading server must refuse, "
+                   "never forget the running server's records")
+def chaos_serve_while_unit_loads(m):
+    """The unit's llama-server is loading (503): `spark serve on` refuses
+    in one signed line, exit 2, and serve.pid and serve-url survive --
+    a second spawn used to fail its bind and forget() the RUNNING
+    server's records."""
+    m.env["SPARK_PORT"] = str(m.brain.port)
+    m.env["SPARK_SERVE_HOST"] = "127.0.0.1"
+    m.env["SPARK_SERVICE_STATE"] = "loaded"
+    pidfile = os.path.join(m.state, "serve.pid")
+    urlfile = os.path.join(m.state, "serve-url")
+    with open(pidfile, "w") as f:
+        f.write("%d\n" % m.brain.p.pid)
+    with open(urlfile, "w") as f:
+        f.write(m.brain.url + "\n")
+    rc, out = m.spark("serve", "on")
+    del m.env["SPARK_SERVICE_STATE"]
+    if rc != 2:
+        return "serve on exited %d, not 2 (a refusal): %r" % (rc, out.strip()[-200:])
+    if "loading" not in out:
+        return "the refusal does not say the unit is loading: %r" % out.strip()[-200:]
+    if not os.path.isfile(pidfile) or not os.path.isfile(urlfile):
+        return "the running server's records were forgotten (serve.pid or serve-url gone)"
+    m.note("serve on refused while the unit loads; serve.pid and serve-url survive")
+    return ""
+
+
 @scenario(heal=None, mood="garbage",
           unhealed="a hostile answer is the model's, not the machine's: "
                    "the line keeps contract 4 and the widget runs nothing")

@@ -642,7 +642,12 @@ def service_state(cfg, unit="serve"):
     (on macOS in gui/UID, or in system/ as a daemon when the box is headless);
     disabled = disabled on purpose; absent = on demand only. Always asks
     the manager: SPARK_SERVICE=none only stops bootstrap from enabling a
-    unit, it does not make one that exists invisible."""
+    unit, it does not make one that exists invisible.
+    SPARK_SERVICE_STATE pins the answer -- a test seam (chaos rehearses
+    `spark serve on` against a unit that is loading)."""
+    pin = os.environ.get("SPARK_SERVICE_STATE")
+    if pin:
+        return pin
     name = unit_name(unit)
     if IS_MAC:
         if service_domain(cfg, unit) == "system":
