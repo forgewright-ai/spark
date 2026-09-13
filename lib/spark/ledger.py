@@ -98,7 +98,7 @@ def _load(st=None):
     if not st or not os.path.isfile(st[0]):
         return []
     try:
-        recs = vault.read_sealed(st[0], st[1])
+        recs = vault.read_sealed(st[0], st[1], "ledger", st[2])
     except (OSError, vault.SealError):
         return []
     out = []

@@ -161,17 +161,24 @@ class Store:
 
     def load(self, tid):
         """Every message of a thread: [{"ts","role","text",...}]. A record
-        that does not open (or parse) is dropped, never fatal."""
+        that does not open (or parse) is dropped, never fatal. A file
+        whose header is not `thread tid` -- a renamed sealed file -- is
+        refused whole, counted (self.refused) and reported to the debug
+        log: read as another thread, its next append would fail its AAD
+        in silence."""
         out = []
         try:
-            for rec in vault.read_sealed(self._path(tid), self.dk):
+            for rec in vault.read_sealed(self._path(tid), self.dk, "thread", tid):
                 try:
                     d = json.loads(rec.decode("utf-8"))
                 except ValueError:
                     continue
                 if isinstance(d, dict) and d.get("role") and isinstance(d.get("text"), str):
                     out.append(d)
-        except (OSError, vault.SealError):
+        except vault.SealError:
+            self.refused = getattr(self, "refused", 0) + 1
+            log_exc("thread %s refused" % tid)
+        except OSError:
             pass
         return out
 
@@ -657,7 +664,7 @@ def _chat_history_lines():
             path = os.path.join(users.user_dir(name), "chat-history")
             dk = users.account_key()
             if dk and os.path.isfile(path):
-                recs = vault.read_sealed(path, dk)
+                recs = vault.read_sealed(path, dk, "chathist", name)
                 return recs[0].decode("utf-8", "replace").splitlines() if recs else []
         with open(CHAT_HISTORY_FILE, encoding="utf-8", errors="replace") as f:
             return [ln for ln in f.read().splitlines() if ln]

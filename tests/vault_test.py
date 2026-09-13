@@ -161,6 +161,18 @@ def test_vault():
         with open(renamed, "w", encoding="utf-8") as f:
             f.write(vault.header("thread", "2001-01-01-000000") + "\n" + body)
         refuse("renamed thread refused", lambda: vault.read_sealed(renamed, dk))
+        # a file renamed ON DISK keeps its own header: trusted, it reads
+        # as another thread and the next append fails its AAD in silence.
+        # The caller's expectation refuses it by name instead.
+        moved = os.path.join(d, "9999-01-01-000000.sealed")
+        with open(t, encoding="utf-8") as f:
+            whole = f.read()
+        with open(moved, "w", encoding="utf-8") as f:
+            f.write(whole)
+        refuse("a renamed sealed file is refused by the caller's expectation",
+               lambda: vault.read_sealed(moved, dk, "thread", "9999-01-01-000000"))
+        check("the matching expectation still reads",
+              vault.read_sealed(t, dk, "thread", "2000-01-01-000000"), msgs)
 
         # a whole-blob file (memory, chat-history)
         m = os.path.join(d, "memory")

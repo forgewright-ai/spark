@@ -293,7 +293,7 @@ def _claim_files(name, dk):
             path = os.path.join(user_dir(name), fname)
             have = []
             if os.path.isfile(path):
-                recs = vault.read_sealed(path, dk)
+                recs = vault.read_sealed(path, dk, kind, name)
                 have = recs[0].decode("utf-8", "replace").splitlines() if recs else []
             merged = have + [ln for ln in legacy if ln not in have]
             vault.write_sealed(path, dk, kind, name,

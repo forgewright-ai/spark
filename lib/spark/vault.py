@@ -124,9 +124,21 @@ def read_header(path):
     return parts[1], parts[2]
 
 
-def read_sealed(path, dk):
-    """Every record of a sealed file, decrypted, newest last."""
-    kind, name = read_header(path)
+def _expect(path, kind, name):
+    """The file's own header, refused when it is not the caller's
+    expectation: a renamed sealed file would otherwise read as another
+    thread, and the next append would fail its AAD in silence."""
+    fkind, fname = read_header(path)
+    if (kind is not None and fkind != kind) or (name is not None and fname != name):
+        raise SealError("sealed as '%s %s', expected '%s %s': %s"
+                        % (fkind, fname, kind or fkind, name or fname, path))
+    return fkind, fname
+
+
+def read_sealed(path, dk, kind=None, name=None):
+    """Every record of a sealed file, decrypted, newest last. `kind` and
+    `name`, when given, are what the caller believes this file is."""
+    kind, name = _expect(path, kind, name)
     hdr = header(kind, name)
     out = []
     with open(path, encoding="utf-8", errors="replace") as f:
@@ -137,10 +149,10 @@ def read_sealed(path, dk):
     return out
 
 
-def read_sealed_tail(path, dk, max_chars):
+def read_sealed_tail(path, dk, max_chars, kind=None, name=None):
     """The newest records whose decrypted sizes sum to <= max_chars (at
     least one when any exists): the cheap tail for a long thread."""
-    kind, name = read_header(path)
+    kind, name = _expect(path, kind, name)
     hdr = header(kind, name)
     with open(path, encoding="utf-8", errors="replace") as f:
         f.readline()

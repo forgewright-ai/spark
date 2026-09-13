@@ -62,7 +62,7 @@ def _lines(st=None):
     st = st or _store()
     if st and os.path.isfile(st[0]):
         try:
-            recs = vault.read_sealed(st[0], st[1])
+            recs = vault.read_sealed(st[0], st[1], "memory", st[2])
             return recs[0].decode("utf-8", "replace").splitlines() if recs else []
         except (OSError, vault.SealError):
             return []
