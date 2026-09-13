@@ -141,7 +141,7 @@ printf '%s\n' "$out" | grep -qE ' micro ' && bad "a micro row with nothing to ha
 printf 'SITE_HEADLESS=no\nSITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
 out=$(PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run failed"
 printf '%s\n' "$out" | grep -qE '^(skip|would) +sleep ' && ok "SITE_HEADLESS=no: sleep row is skip (or would undo)" || bad "no sleep row for SITE_HEADLESS=no"
-[ "$(uname -s)" = Darwin ] || { printf '%s\n' "$out" | grep -qE '^skip +linger ' && ok "SITE_HEADLESS=no: linger is skipped" || bad "linger row with SITE_HEADLESS=no"; }
+[ "$(uname -s)" = Darwin ] || { printf '%s\n' "$out" | grep -qE '^skip +(linger|systemd) ' && ok "SITE_HEADLESS=no: linger is skipped (or no user systemd session)" || bad "linger row with SITE_HEADLESS=no"; }
 printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "dry-run called sudo" || ok "dry-run never called sudo (workstation)"
 # the shell-moved migration: an rc file symlinked into this repository (an
 # older shell layer's) is announced for hand-back; the rc row names it
