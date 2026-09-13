@@ -1,5 +1,95 @@
 # Changelog
 
+## v1.30
+
+The law:
+
+- A quoted span must clear a floor to count as grounding evidence: two
+  words or twelve characters after fold, not made entirely of stop
+  words. Quoting "the" no longer grounds a claim; `spark read` refuses
+  such a line, `spark watch` drops it.
+- A span the model proposes (after `->` or `=>`) is marked
+  ` [proposed]` where it stands, so a reader can tell a quote from a
+  proposal.
+- `spark watch` and `spark recall` anchor at word boundaries: "500"
+  cannot ground against a window holding only "1500ms".
+- `spark recall` keeps only whole history lines -- a substring like
+  `rm -rf /` inside `rm -rf /tmp/build` is not a command that ran --
+  and a dangerous line carries the `!` mark into the prompt (Esc r
+  shows "careful").
+- `spark watch` drains its input, so a burst of lines is one window,
+  not one line per tick; matches end their line, so `| while read`
+  works; a rotated token or a broken server ends a watch (and `spark
+  edit --watch`) in one signed line instead of a traceback.
+- `spark drill`: no brain is one line, a missing terminal is a signed
+  refusal (exit 2).
+- The danger set sees `rm --recursive`/`--force`, `find -delete`,
+  `rsync --delete`, `git branch -D`, `chmod -R` and bare `> file`
+  truncation; the blast count reads only the `rm` segment of a
+  compound line, resolves after a leading `cd`, and expands `~`; the
+  widgets classify every segment, so `cp x y && rm -rf x` is never
+  re-offered whole.
+- Escape sequences and control characters are scrubbed from the hint
+  row and from every grounded stream: a model cannot retitle your
+  window.
+- The ledger takes a lock around every write (two editor panes cannot
+  lose a decline) and an answered question suppresses itself however
+  the gate printed it (numbered, anchor-marked).
+- README's "What leaves this machine" lists every sender -- ask, read
+  and recall included -- and the list is a test now.
+
+The machine:
+
+- Every `spark check` remedy names a live verb, and a lint keeps it
+  true (spark forge start/stop, spark remember/forget and friends are
+  gone).
+- CI's privacy gate: all three checks decide the step, not only the
+  last one.
+- `spark uninstall --packages` simulates first and refuses to take a
+  desktop with the engine libraries; uninstall undoes only the root
+  steps bootstrap recorded making (state/made), and `--purge` deletes
+  spark's files by name -- a file spark cannot name survives.
+- `spark model add --license` refuses a value contract 3 would refuse,
+  before it can poison the file; every config writer carries the guard.
+- `spark update` restarts the loaded units after a converge that moved
+  the tree, and the forge row warns when the running FORGE's version
+  is not the tree's.
+- A client's bootstrap is root-free: packages, hostname, console,
+  vt-palette and the quiet rows all skip.
+- `spark quiet login off` restores only spark's own trace
+  (/etc/motd.orig); a stock box is never written as root.
+- `spark serve on` refuses while the unit's server is loading instead
+  of forgetting the running server's records (a new chaos scenario
+  rehearses it).
+- `spark client URL` stops and disables the server that ran here,
+  removes its unit links, and says so.
+- Engine pins order by build number (b10689 beats b9999), and older
+  pins are offered for removal.
+- Drifts: lib/env.sh agrees with config.py on which file wins;
+  --dry-run writes nothing; console font values are validated before
+  the root sed; bf16 is documented; a freshly minted store key becomes
+  the cached key in the same breath, and a store whose key is gone
+  refuses with 78.
+
+The FORGE:
+
+- Logout revokes the session -- a replayed cookie is 401.
+- A non-ASCII token is a wrong token (401 with the 1 s cost), never a
+  500.
+- A client that leaves while queued pays no prefill and lands no
+  thread (499); a reply cut mid-stream keeps its thread -- the error
+  event names it and the page continues there.
+- Prune reaches every store the server holds a key for, and drops
+  header-only files from a failed first turn after a day.
+- `--foreground` binds before it writes its records: a failed second
+  start no longer deletes the running FORGE's forge-url and pid.
+- The page strips any `#t=` fragment, whatever its shape, and a
+  non-empty token gets exactly one login attempt.
+- The handler carries a 30 s socket timeout and the wrong-login sleep
+  is bounded, so a burst cannot hold a hundred threads.
+- A sealed file renamed on disk is refused by name instead of read as
+  another thread.
+
 ## v1.29
 
 - The chat owns the screen: the bottom tab bar is gone, navigation is
