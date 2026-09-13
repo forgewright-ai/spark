@@ -418,6 +418,19 @@ def step_packages(ctx):
     if ctx.packages is not True:
         ctx.row("skip", "packages", "kept -- %s removes them" % line)
         return
+    if not IS_MAC:
+        # simulate first: apt's reverse-dependency removal can take a
+        # desktop with the engine libraries. More than the named packages
+        # would go -> say the whole list and remove nothing.
+        would = pkg.remove_would(pkgs)
+        extra = sorted(set(would) - set(pkgs)) if would is not None else None
+        if would is None:
+            ctx.row("todo", "packages", "the manager cannot say what a removal takes -- kept; by hand: %s" % line)
+            return
+        if extra:
+            ctx.row("todo", "packages", "removing them would also take: %s -- kept; by hand: %s"
+                    % (" ".join(extra), line))
+            return
     if ctx.dry:
         ctx.row("would", "packages", line)
         return

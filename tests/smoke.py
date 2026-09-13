@@ -1786,6 +1786,26 @@ def main():
         os.remove(user_models_file)
         del STATE["head_body"]
 
+        # uninstall --packages simulates first: the apt -s parser against a
+        # captured transcript where removing the engine library takes a
+        # desktop's chain with it, and the pacman print form
+        from spark import packages as _pkgmod
+        _apt_sim = ("NOTE: This is only a simulation!\n"
+                    "Reading package lists...\n"
+                    "Building dependency tree...\n"
+                    "The following packages will be REMOVED:\n"
+                    "  libvulkan1 libgl1-mesa-dri gnome-shell\n"
+                    "0 upgraded, 0 newly installed, 3 to remove and 0 not upgraded.\n"
+                    "Remv gnome-shell [43.9-0ubuntu1]\n"
+                    "Remv libgl1-mesa-dri [22.3.6-1+deb12u1]\n"
+                    "Remv libvulkan1 [1.3.239.0-1]\n")
+        t.ok(_pkgmod.parse_apt_removal(_apt_sim) == ["gnome-shell", "libgl1-mesa-dri", "libvulkan1"],
+             "packages: the apt -s parser reads exactly the Remv lines",
+             str(_pkgmod.parse_apt_removal(_apt_sim)))
+        t.ok(_pkgmod.parse_pacman_removal("vulkan-radeon\nvulkan-icd-loader\n")
+             == ["vulkan-icd-loader", "vulkan-radeon"],
+             "packages: the pacman -Rp parser reads the printed names")
+
         # the remedy lint: every remedy in check.py that starts with
         # `spark ` names a verb bin/spark dispatches, and its sub-word is
         # one the verb's help lists -- a renamed verb cannot leave a stale

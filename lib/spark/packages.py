@@ -132,6 +132,33 @@ def remove_line(pkgs):
     return ("" if IS_MAC else "sudo ") + " ".join(argv)
 
 
+def parse_apt_removal(out):
+    """The package names an `apt-get -s remove` transcript says would go:
+    the `Remv <name> [version]` lines. Pure, so a fixture can prove it."""
+    return sorted(set(re.findall(r"(?m)^Remv (\S+)", out)))
+
+
+def parse_pacman_removal(out):
+    """The names `pacman -Rp --print-format %n` prints, one per line."""
+    return sorted(set(l.strip() for l in out.splitlines()
+                      if l.strip() and not l.startswith(("error", "warning", ":"))))
+
+
+def remove_would(pkgs):
+    """What the manager would REALLY remove for `pkgs`: apt takes the
+    reverse dependencies with it (libvulkan1 -> libgl1-mesa-dri -> ... ->
+    a desktop), so the caller must see the whole list before any removal.
+    A simulation, no root; None when the manager cannot say."""
+    pm = manager()
+    if pm == "apt":
+        rc, out = run(["apt-get", "-s", "remove"] + list(pkgs), timeout=180)
+        return parse_apt_removal(out) if rc == 0 else None
+    if pm == "pacman":
+        rc, out = run(["pacman", "-Rp", "--print-format", "%n"] + list(pkgs), timeout=180)
+        return parse_pacman_removal(out) if rc == 0 else None
+    return None
+
+
 def essential(pkg):
     """A package the manager refuses to remove (apt: dpkg's Essential flag,
     ncurses-bin is one; pacman: one another package requires): it never
