@@ -386,7 +386,10 @@ MODE_READ_SOURCE = (
     "against the source: a line whose quotes are not in it is thrown away before the "
     "reader sees it, and so is a line that quotes nothing, so write no preamble, no "
     "heading, no closing line. Plain text, no markdown marks; a few lines, fewer when "
-    "fewer answer. Never add what you know from elsewhere, never guess past the "
+    "fewer answer. A question asking what the source is, is about, or covers is not an "
+    "invitation to summarise in your own voice: answer it as coverage -- one line per "
+    "thing the source treats, each quoting the line that carries it, the quotes doing "
+    "the telling. Never add what you know from elsewhere, never guess past the "
     "source's edge, never write 'the text does not mention': when the source does not "
     "answer, write nothing at all -- the refusal is composed for you. Answer in the "
     "source's own language.")

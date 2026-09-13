@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.31
+
+- read-source knows an about-question: asking what a source is, is
+  about, or covers is answered the overview's way -- coverage, one
+  line per thing, each quoting the source -- instead of an own-voice
+  summary the gate drops into a refusal. A ninth ground case
+  (read-about) pins it. Found asking a web page "what is this page
+  about" through spark-w3m.
+
 ## v1.30
 
 The law:

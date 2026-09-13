@@ -72,6 +72,8 @@ GROUND = {
     "read-answered": dict(verb="read", src="orchard.txt",
                           words="how many rows of apple trees are there", expect="answer",
                           quote="forty rows"),
+    "read-about": dict(verb="read", src="orchard.txt",
+                       words="what is this text about", expect="answer", quote=""),
     "ask-complete": dict(verb="ask", src="note.txt", words="", expect="refuse"),
     "ask-plan": dict(verb="ask", src="plan.txt", words="", expect="answer", quote=""),
     "watch-quiet": dict(verb="watch", src="log-quiet.txt",
