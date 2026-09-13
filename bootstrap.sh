@@ -264,7 +264,9 @@ esac; fi
 
 # ============================================================ 2. identity
 section identity
-if [ "$SITE_SET_HOSTNAME" = yes ]; then
+if [ "$client" = 1 ] && [ "$SITE_SET_HOSTNAME" = yes ]; then
+    skip hostname "a client: the name is left as it is (the machine that serves owns its own)"
+elif [ "$SITE_SET_HOSTNAME" = yes ]; then
     if [ "$(hostname -s 2>/dev/null || hostname)" = "$SITE_NAME" ]; then
         ok hostname "$SITE_NAME"
     elif need hostname "set to $SITE_NAME (sudo)"; then
@@ -305,7 +307,9 @@ pkg_install() {   # pkg_install NAME... -- as root, the manager's own way
     esac
 }
 section packages
-if [ "$OS" = Darwin ]; then
+if [ "$client" = 1 ]; then
+    skip packages "a client: nothing to install here (python3 and curl already run this)"
+elif [ "$OS" = Darwin ]; then
     ok packages "nothing required"
 elif [ -z "$PM" ]; then
     row todo packages "no package list for this Linux ($(sed -n 's/^PRETTY_NAME=//p' "${SPARK_OS_RELEASE:-/etc/os-release}" 2>/dev/null | tr -d '"')): distro/*.env know debian and arch -- install git curl python3 and libgomp by hand"
@@ -785,7 +789,9 @@ else
 fi
 # the text console's font (console-setup), when chosen: core -- spark
 # font sets SITE_FONT_FACE either way
-if [ "$OS" = Darwin ]; then
+if [ "$client" = 1 ]; then
+    skip console "a client: the console keeps its font"
+elif [ "$OS" = Darwin ]; then
     skip console "macOS: the font is in the Terminal.app profile (spark theme profile)"
 elif is_wsl; then
     skip console "WSL 2: no console -- the font is Windows Terminal's"
@@ -812,7 +818,9 @@ fi
 # the .rgb twin of console-colors. No palette painted yet: nothing to do.
 vt_unit=/etc/systemd/system/spark-console.service
 vt_file="$SPARK_CONFIG_DIR/console-colors.rgb"
-if [ "$OS" = Darwin ]; then
+if [ "$client" = 1 ]; then
+    skip vt-palette "a client: no boot unit installed here"
+elif [ "$OS" = Darwin ]; then
     skip vt-palette "macOS: the palette is the Terminal.app profile's"
 elif is_wsl; then
     skip vt-palette "WSL 2: no console"
@@ -846,7 +854,10 @@ else
         ok vt-palette "spark-console.service: setvtrgb $vt_file at boot; the defaults set now"
     fi
 fi
-if [ "$OS" = Darwin ]; then
+if [ "$client" = 1 ]; then
+    skip quiet-login "a client: the login screen is left as it is"
+    skip quiet-boot "a client: the boot is left as it is"
+elif [ "$OS" = Darwin ]; then
     skip quiet-login "macOS: no motd"
     skip quiet-boot "macOS: no GRUB"
 else

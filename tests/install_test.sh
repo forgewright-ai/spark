@@ -290,6 +290,16 @@ if [ "$(uname -s)" != Darwin ]; then
     out=$(SPARK_OS_RELEASE="$T/os-release-arch" PATH="$T/arch:$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Arch, bare) failed: $out"
     printf '%s\n' "$out" | grep -qE '^would +packages +install:.*\(sudo\)$' && ok "Arch, nothing installed: the packages row would install (sudo)" || bad "Arch bare packages row: $(printf '%s\n' "$out" | grep -E ' packages ' | head -1)"
     printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "Arch bare dry-run called sudo" || ok "Arch bare dry-run: no sudo"
+    # 10b. a CLIENT on the same bare box: no root row at all -- the dry
+    # run holds no `sudo` word, and an APPLY makes no as_root call (the
+    # sudo stub would shout SUDO CALLED); python3 and curl are all it runs
+    printf 'SITE_AI_MODEL=none\nSITE_PEER_AI_URL=http://192.0.2.10:8081\nSITE_SET_HOSTNAME=yes\nSITE_FONT_FACE=Terminus\nSITE_FONT_SIZE=16x32\nSITE_QUIET_BOOT=yes\nSITE_QUIET_LOGIN=yes\n' > "$HOME/.config/spark/site.env"
+    out=$(SPARK_OS_RELEASE="$T/os-release-arch" PATH="$T/arch:$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (client, bare PM) failed: $out"
+    printf '%s\n' "$out" | grep -qE '^skip +packages +a client' && ok "client: the packages row skips even with a package missing" || bad "client packages row: $(printf '%s\n' "$out" | grep -E ' packages ' | head -1)"
+    printf '%s\n' "$out" | grep -qi 'sudo' && bad "client dry-run holds a sudo word: $(printf '%s\n' "$out" | grep -i sudo | head -2 | tr '\n' ' ')" || ok "client dry-run: no sudo word anywhere"
+    out=$(SPARK_OS_RELEASE="$T/os-release-arch" PATH="$T/arch:$T/bin:$PATH" sh "$REPO/bootstrap.sh" 2>&1) || bad "bootstrap apply (client) failed: $out"
+    printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "client apply called as_root: $out" || ok "client apply: no as_root call"
+    printf 'SITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
 fi
 
 [ "$fail" -eq 0 ] && echo "install_test: all ok" || { echo "install_test: FAILED"; exit 1; }
