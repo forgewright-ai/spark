@@ -225,7 +225,9 @@ def watch_pieces(user):
     if "5001" in user:
         return ('Saw "error 500" in the log.\n',)
     if "500" in user:
-        return ('A 500 error appeared: "GET /x 500"\n',)
+        # no trailing newline on purpose: the gate must end the line
+        # itself, or two matches concatenate and `| while read` starves
+        return ('A 500 error appeared: "GET /x 500"',)
     return ()
 
 
@@ -1148,8 +1150,8 @@ def main():
         rc, out, _ = spark("watch", "-h")
         t.ok(rc == 0 and out.startswith("spark watch -- "), "watch -h is signed", out[:40])
         rc, out, err = spark("watch", "when a 500 appears", stdin="GET /a 200 ok\nGET /x 500\n")
-        t.ok(rc == 0 and out.strip() == 'A 500 error appeared: "GET /x 500"',
-             "watch: a matching line is reported once, quoting it", repr(out) + err)
+        t.ok(rc == 0 and out == 'A 500 error appeared: "GET /x 500"\n',
+             "watch: a matching line is reported once, quoting it, newline-terminated", repr(out) + err)
         rc, out, err = spark("watch", "when a 500 appears", stdin="GET /a 200\nGET /b 204\n")
         t.ok(rc == 0 and out == "", "watch: nothing matches, nothing is said -- silence is the answer", repr(out) + err)
         rc, out, err = spark("watch", "when a 500 appears", stdin="connection error 5001 logged\n")

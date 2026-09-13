@@ -400,7 +400,12 @@ class Gate:
     def close(self):
         if self.buf:
             line, self.buf = self.buf, ""
-            self._unit(line, False)
+            # a dropping gate (watch, read) writes lines for a reader or a
+            # pipe: the last kept unit ends its line too, so two matches
+            # never concatenate and `| while read` fires. Anchors
+            # (keep=None) keeps the model's own shape -- raw text back
+            # into an editor's buffer.
+            self._unit(line, self.keep is not None)
         self.stream.flush()
 
 
