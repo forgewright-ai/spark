@@ -49,11 +49,8 @@ hint row, once, and then never again. `persona.PREFERRED` is the list.
 ## 2. One FORGE, many prompts
 
 Threads are sealed and per-user, and every client talks to one FORGE
-(contract 9) -- but the prompt does not use that yet.
+(contract 9). `??` across machines shipped in v1.30; what remains:
 
-- **`??` across machines.** Start a thread at the box's prompt, go on
-  with `??` from the laptop. Same identity, same thread, nothing in a
-  cloud. The thread routing is the work; the identity is done.
 - **Two people, one box.** Named users have sealed stores already: two
   prompts on one machine, one soul, and the admin genuinely cannot read
   the other's history. No hosted assistant can make that promise.
@@ -80,7 +77,6 @@ made of numbers spark already keeps and words that never leave.
 | The command you keep retyping | low -- counts, and v1.15's offer flow | history |
 | The tool you have and do not use | low -- `persona.PREFERRED` is the list | history |
 | The doctor | medium -- reads what exists | the machine |
-| `??` across machines | high -- thread routing at the prompt | new |
 
 ## Not prompt features
 

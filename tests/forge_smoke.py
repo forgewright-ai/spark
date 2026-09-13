@@ -765,6 +765,41 @@ def main():
                "prune reaches alice's store and drops her stale header-only file",
                (os.path.exists(oldp), os.path.exists(hdrp)))
 
+            # one identity, every door: `??` on a CLIENT continues the
+            # newest thread on the FORGE for the logged-in user, and the
+            # turn lands THERE -- the box's prompt, the client's prompt
+            # and the page share one thread
+            chome = tempfile.mkdtemp(prefix="spark-client-")
+            cenv = {k: v for k, v in env.items() if not k.startswith(("XDG_", "SITE_", "SPARK_BASE_URL"))}
+            cenv.update({"HOME": chome, "XDG_CONFIG_HOME": chome + "/.config",
+                         "XDG_STATE_HOME": chome + "/.local/state", "XDG_DATA_HOME": chome + "/.local/share",
+                         "SITE_AI_MODEL": "none", "SITE_PEER_AI_URL": url, "SPARK_NO_REFRESH": "1"})
+            os.makedirs(chome + "/.local/state/spark", mode=0o700)
+            with open(chome + "/.local/state/spark/account", "w") as f:
+                f.write("name=ualice\ntoken=%s\n" % utoken)
+            os.chmod(chome + "/.local/state/spark/account", 0o600)
+            st, _, raw = req(url, "GET", "/api/threads?n=1", headers=ubearer)
+            ntid = json.loads(raw)["threads"][0]["id"]
+            st, _, raw = req(url, "GET", "/api/threads/" + str(ntid), headers=ubearer)
+            n_msgs = len(json.loads(raw)["messages"])
+            p3 = subprocess.run([sys.executable, SPARK, "line", "--cwd", chome, "--shell", "zsh"],
+                                input="?? count", capture_output=True, text=True, env=cenv, timeout=30)
+            ok(p3.returncode == 0 and p3.stdout.startswith("answer"),
+               "a client's ?? answers through the peer", p3.stdout[:80] + p3.stderr[:120])
+            st, _, raw = req(url, "GET", "/api/threads/" + str(ntid), headers=ubearer)
+            ms4 = json.loads(raw)["messages"]
+            ok(len(ms4) == n_msgs + 2 and ms4[-2]["text"] == "count" and ms4[-2].get("mode") == "line"
+               and ms4[-1]["role"] == "assistant",
+               "the client's turn landed on the FORGE thread (user line + answer)",
+               (n_msgs, len(ms4), ms4[-2:]))
+            cthreads = []
+            cudir = chome + "/.local/state/spark/users"
+            for _r, _d, fs in os.walk(cudir):
+                cthreads += [f for f in fs if f.endswith(".sealed")]
+            ok(not cthreads, "no thread landed in the client's own store", cthreads)
+            import shutil as _sh2
+            _sh2.rmtree(chome, ignore_errors=True)
+
             bbearer = {"Authorization": "Bearer " + btoken}
             st, _, raw = req(url, "GET", "/api/threads", headers=bbearer)
             ok(st == 200 and json.loads(raw)["threads"] == [], "bob's thread list is empty", raw[:100])

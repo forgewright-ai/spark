@@ -433,6 +433,65 @@ def pick(cfg, more):
     return local_store(provision=True).pick(cfg, more)
 
 
+# --------------------------------------------- the peer's own store (`??`)
+def _peer_req(cfg, method, path, body=None):
+    """One contract-9 request to the peer FORGE as this machine's login.
+    (status, parsed json); (0, None) on any trouble -- the line must
+    never block on thread plumbing."""
+    import urllib.request
+    from . import users
+    token = users.account()[1]
+    if not token or not cfg.peer_ai_url:
+        return 0, None
+    url = cfg.peer_ai_url.rstrip("/") + path
+    headers = {"Authorization": "Bearer " + token}
+    data = None
+    if body is not None:
+        data = json.dumps(body).encode("utf-8")
+        headers.update({"Content-Type": "application/json", "X-Spark": "1"})
+    try:
+        req = urllib.request.Request(url, data=data, headers=headers)
+        with urllib.request.urlopen(req, timeout=5) as r:
+            return r.status, json.load(r)
+    except Exception:
+        return 0, None
+
+
+def peer_newest(cfg):
+    """The newest thread of the logged-in user's OWN store on the peer
+    FORGE, as (tid, chat history) -- what a client's `??` continues, so
+    the box's prompt, this prompt and the page share one thread (one
+    identity, every door). None on any trouble: the local path answers
+    as before."""
+    if not cfg.client:
+        return None
+    st, d = _peer_req(cfg, "GET", "/api/threads?n=1")
+    if st != 200 or not d or not d.get("threads"):
+        return None
+    tid = d["threads"][0].get("id")
+    st, d = _peer_req(cfg, "GET", "/api/threads/%s" % tid)
+    if st != 200 or not d:
+        return None
+    msgs = [{"role": m["role"], "content": m["text"]}
+            for m in d.get("messages", []) if m.get("role") in ("user", "assistant")]
+    total = sum(len(m["content"]) for m in msgs)
+    while msgs and total > HISTORY_MAX_CHARS:
+        total -= len(msgs.pop(0)["content"])
+        if msgs and msgs[0]["role"] == "assistant":
+            total -= len(msgs.pop(0)["content"])
+    return tid, msgs
+
+
+def peer_append(cfg, tid, role, text, **fields):
+    """One message onto the peer thread `??` continued (POST
+    /api/threads/<id>/append, the requester's own store). Quiet on
+    failure -- the turn was answered; the record is best-effort, like
+    every local append. No cwd ever rides: a client's paths stay home."""
+    body = dict(fields, role=role, text=text)
+    body.pop("cwd", None)
+    _peer_req(cfg, "POST", "/api/threads/%s/append" % tid, body)
+
+
 def list_threads(n=5):
     """The newest n threads that hold a turn: [{"id","ts","title","turns"}]."""
     return local_store().list_threads(n)

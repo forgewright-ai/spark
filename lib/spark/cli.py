@@ -226,7 +226,19 @@ def cmd_line(args):
                        "corrected command that does what it was trying to do."
                        % (fcmd, frc))
     cfg = config.load()
-    thread, history = forge.pick(cfg, more)
+    # `??` on a logged-in client of a FORGE continues the newest thread
+    # ON THE FORGE -- one identity, every door: the box's prompt, this
+    # prompt and the page share it. Any trouble falls back to the local
+    # store, as before.
+    remote = False
+    thread, history = None, []
+    if more and cfg.client:
+        got = forge.peer_newest(cfg)
+        if got:
+            thread, history = got
+            remote = True
+    if not remote:
+        thread, history = forge.pick(cfg, more)
     ask_text = (install_ctx + "\n\n" + text) if install_ctx else text
     try:
         s = session.Session(cfg, "line", shell, cwd, history)
@@ -301,8 +313,12 @@ def cmd_line(args):
         say("answer")
         say(shown)
         s.record(kind=kind, line=text, answer=shown, ms=ms, thread=thread)
-    forge.append(cfg, thread, "user", text, mode="line", cwd=cwd)
-    forge.append(cfg, thread, "assistant", shown, kind=kind)
+    if remote:
+        forge.peer_append(cfg, thread, "user", text, mode="line")
+        forge.peer_append(cfg, thread, "assistant", shown, kind=kind)
+    else:
+        forge.append(cfg, thread, "user", text, mode="line", cwd=cwd)
+        forge.append(cfg, thread, "assistant", shown, kind=kind)
     _prune(cfg)
     return 0
 

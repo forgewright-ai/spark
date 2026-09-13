@@ -623,6 +623,11 @@ class Handler(BaseHTTPRequestHandler):
             if path == "/api/threads":
                 return self.api_threads_clear()
             return self._error(404, "missing", "no such route")
+        if method == "POST" and path.startswith("/api/threads/") and path.endswith("/append"):
+            body = self._body()
+            if body is not None:
+                return self.api_thread_append(path[13:-7], body)
+            return None
         fn = {("POST", "/api/logout"): self.api_logout, ("POST", "/api/check/refresh"): self.api_check_refresh,
               ("POST", "/api/chat"): self.api_chat, ("POST", "/api/soul"): self.api_soul_write,
               ("POST", "/api/memory"): self.api_memory_add, ("POST", "/api/do/propose"): self.api_do_propose,
@@ -999,6 +1004,28 @@ class Handler(BaseHTTPRequestHandler):
         if not st.exists(tid):
             return self._error(404, "missing", "no thread %s" % tid)
         return self._json(200, {"id": tid, "messages": st.load(tid)})
+
+    def api_thread_append(self, tid, body):
+        """POST /api/threads/<id>/append: one message onto the requester's
+        OWN thread -- how a client's `??` lands its turn here, so the
+        box's prompt, the client's prompt and the page share one thread.
+        role user|assistant, text a non-empty string (cut at the history
+        cap); mode and kind ride as short fields, nothing else does."""
+        from . import forge
+        st = self._ustore()
+        if not forge.valid_id(tid) or not st.exists(tid):
+            return self._error(404, "missing", "no thread %s" % tid)
+        role, text = body.get("role"), body.get("text")
+        if role not in ("user", "assistant") or not isinstance(text, str) or not text.strip():
+            return self._error(400, "bad", "role is user|assistant and text a non-empty string")
+        fields = {}
+        for k in ("mode", "kind"):
+            v = body.get(k)
+            if isinstance(v, str) and 0 < len(v) <= 40:
+                fields[k] = v
+        st.append(self.server.cfg, tid, role, text[:forge.HISTORY_MAX_CHARS], **fields)
+        log("%s thread append %s" % (self._ip(), tid))
+        return self._json(200, {"ok": True})
 
     def api_threads_clear(self):
         """DELETE /api/threads: clear the requester's own threads."""

@@ -358,7 +358,11 @@ may change freely.
    user's own Enter; `spark off` and `SPARK_OFF` disable it.
    Exit 0 for the first
    three, 1 for error. A buffer starting with `??` continues the newest
-   thread; any other starts a new one (no heuristics). The shell widgets
+   thread; any other starts a new one (no heuristics). On a logged-in
+   client of a FORGE, `??` continues the newest thread ON THE FORGE
+   (forge.peer_newest, the requester's own store over contract 9) and
+   the turn lands there; any trouble falls back to the local store. The
+   shell widgets
    depend on nothing else.
 5. `spark brain --porcelain` prints `<url><TAB><model><TAB>forge|model`
    (`<model>` is the spark role's model -- the file stem; `forge` when
@@ -443,7 +447,12 @@ may change freely.
    also needs `X-Spark: 1`, a `Host` this machine
    answers to and, when sent, an `Origin` matching it (400/403); a
    `POST` there needs a JSON object body besides, a `DELETE` carries
-   no body; `POST /v1/chat/completions` needs only the bearer or cookie. `GET
+   no body; `POST /v1/chat/completions` needs only the bearer or cookie.
+   `POST /api/threads/<id>/append` (user-or-admin) puts one message
+   onto the requester's OWN thread -- `{role: user|assistant, text}`,
+   `mode` and `kind` as short optional fields -- how a client's `??`
+   lands its turn here, so the box's prompt, a client's prompt and the
+   page share one thread. `GET
    /api/check` returns `check.json` as written plus `age` (seconds).
    `POST /api/do/propose` answers `{thread, reply, ms, driver,
    unchecked}` -- `driver` the ember role's model stem, `unchecked` the

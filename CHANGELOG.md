@@ -102,6 +102,14 @@ The prompt, deeper:
   file and nothing else. A fix whose tool left PATH retires; records
   age with SPARK_HISTORY; `spark history` lists them.
 
+One identity, every door:
+
+- `??` across machines: on a logged-in client of a FORGE, `??` at the
+  prompt continues the newest thread ON THE FORGE -- the same thread
+  the box's prompt started and the phone's page shows -- and the turn
+  lands there (`POST /api/threads/<id>/append`, the requester's own
+  sealed store). Any trouble falls back to the local store, as before.
+
 The FORGE:
 
 - Logout revokes the session -- a replayed cookie is 401.
