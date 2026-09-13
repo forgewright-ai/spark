@@ -112,7 +112,9 @@ Only to the server you configured (this machine's, or another of yours):
 - for `spark watch` each window of the stream (a few lines at a time) --
   never the whole stream at once;
 - for `spark recall` (Esc r) the last 400 lines of this shell's own
-  history, with what you said the command did, and nothing else.
+  history, with what you said the command did;
+- for a multi-line paste into an empty prompt, the paste itself (8 kB
+  at most; bigger pastes are not sent at all), and nothing else.
 
 No telemetry, no analytics, no crash reports, no account. Downloads:
 `get` from raw.githubusercontent.com and the clone from github.com, one

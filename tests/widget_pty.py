@@ -39,6 +39,11 @@ import time
 
 STUB = r'''#!/bin/sh
 # a stand-in for `spark line` (and `spark recall`): canned replies.
+if [ "$1" = line ] && [ "$2" = "--paste" ]; then
+    cat > /dev/null
+    printf 'answer\ntwo echo lines, harmless\n'
+    exit 0
+fi
 if [ "$1" = recall ]; then
     # history arrives on stdin; grounding is cli's job, not the stub's --
     # here we hand back two plain lines and one danger-marked line (the
@@ -592,6 +597,18 @@ def main(shell, widget):
         ok(sh.expect("last time the fix was: echo mended"),
            "a known failure shape offers its remembered fix", since())
         os.remove(os.path.join(state, "spark", "fails"))
+        sh.expect(prompt)
+
+        # 7g. paste inspection: a two-line paste into an empty prompt gets
+        # one verdict line; the paste stays in the buffer and runs only on
+        # the user's own Enter
+        since = sh.mark()
+        sh.send("\x1b[200~echo P-ONE\necho P-TWO\x1b[201~")
+        ok(sh.expect("two echo lines, harmless"),
+           "a multi-line paste into an empty prompt gets its verdict", since())
+        sh.send("\r")
+        ok(sh.expect("P-ONE") and sh.expect("P-TWO"),
+           "the paste stayed in the buffer and ran only on Enter", since())
         sh.expect(prompt)
 
         # 8. exit removes the marker

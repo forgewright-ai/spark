@@ -375,5 +375,29 @@ spark-recall() {
 }
 zle -N spark-recall
 bindkey '\er' spark-recall
+
+# --- paste inspection: a multi-line paste into an EMPTY prompt --------------
+# The builtin widget inserts the paste (newlines literal -- nothing
+# runs); for two or more lines into an empty prompt, one answer/danger
+# line from `spark line --paste` lands in the hint row. spark off (and
+# SPARK_OFF at load) disable the inspection; the paste always lands.
+spark-bracketed-paste() {
+    local before=$BUFFER
+    zle .bracketed-paste
+    [[ -e $SPARK_DIR/off ]] && return
+    if [[ -z $before && $BUFFER == *$'\n'?* ]]; then
+        local out kind text
+        out=$(print -rn -- "$BUFFER" | "$SPARK_BIN" line --paste 2>/dev/null)
+        kind=${out%%$'\n'*}
+        text=${out#*$'\n'}
+        text=${text%%$'\n'*}
+        case $kind in
+            danger) _spark_say "$_spark_w $text -- pasted, not run" ;;
+            answer) _spark_say "$_spark_h $text -- pasted, not run" ;;
+        esac
+        zle -R
+    fi
+}
+zle -N bracketed-paste spark-bracketed-paste
 # Esc and s are two keystrokes: give them a full second to be one chord
 KEYTIMEOUT=100

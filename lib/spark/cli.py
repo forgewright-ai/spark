@@ -27,6 +27,9 @@ LINE_USAGE = """spark line -- the widget's protocol (contract 4)
                                  when a cmd earns one -- proof<TAB>command:
                                  a read-only check that it worked (the
                                  widget offers it on Esc s after the run)
+  spark line --paste             a multi-line paste on stdin: no command
+                                 back, one answer|danger line naming what
+                                 it does; over 8 kB nothing is sent
 """
 EXPLAIN_USAGE = """spark explain -- what went wrong in the piped output, and the fix
 
@@ -130,12 +133,54 @@ def _install_line(binary):
         "brew" if packages.IS_MAC else packages.manager(), binary, pkg)
 
 
+PASTE_MAX = 8000        # what a paste inspection reads, or it says so and sends nothing
+
+
+def _paste_verdict(shell):
+    """`spark line --paste`: the pasted lines on stdin, no command back --
+    one `answer` or `danger` line naming what the paste does (contract
+    4's shape, without a command to land: the paste stays in the buffer
+    and nothing runs). Over PASTE_MAX is one line saying so, NO model
+    call; a line the danger set knows forces `danger` whatever the model
+    says."""
+    data = sys.stdin.read()
+    if not data.strip():
+        say("error")
+        say("nothing pasted")
+        return 1
+    if len(data) > PASTE_MAX:
+        say("answer")
+        say("a %d-char paste -- too big to inspect; nothing was sent" % len(data))
+        return 0
+    local_danger = any(persona.is_dangerous(l) for l in data.splitlines())
+    cfg = config.load()
+    try:
+        s = session.Session(cfg, "paste", shell, "", role="spark")
+        reply, ms = s.ask_json(data, persona.PASTE_SCHEMA, max_tokens=120)
+    except wire.BrainError as e:
+        if local_danger:
+            say("danger")
+            say(_one_line("a pasted line can destroy -- read it before Enter", ANSWER_MAX))
+            return 0
+        say("error")
+        say(_one_line(e.hint))
+        return 1
+    summary = _one_line(str(reply.get("summary") or ""), ANSWER_MAX) or "a paste; nothing more to say"
+    danger = bool(reply.get("danger")) or local_danger
+    say("danger" if danger else "answer")
+    say(summary)
+    s.record(kind="paste", chars=len(data), ms=ms, danger=danger)
+    return 0
+
+
 def cmd_line(args):
     """Contract 4. stdin = the prompt buffer. stdout line 1 = cmd<TAB>command
     | danger<TAB>command | answer | error; line 2 = hint / answer / reason."""
     if _help(args, LINE_USAGE):
         return 0
     cwd, shell = "", _shell_default()
+    if "--paste" in args:
+        return _paste_verdict(shell)
     it = iter(args)
     for a in it:
         if a == "--cwd":

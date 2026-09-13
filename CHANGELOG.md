@@ -88,6 +88,11 @@ The prompt, deeper:
   A proof that is not read-only is refused before it prints. After the
   command runs, the hint row offers the proof on Esc s; `spark do`
   runs it after each confirmed step and shows the result.
+- Paste inspection: a multi-line paste into an empty prompt gets ONE
+  verdict line -- what running it would do, `!` when a line can
+  destroy -- while the paste stays in the buffer and nothing runs
+  until your own Enter. Over 8 kB nothing is sent at all; `spark off`
+  disables it.
 - Failure memory: the third time you hit a failure is not the same
   event as the first. `explain` remembers the failure's shape (head
   word, exit code, first stderr line -- hashed locally), the fix that

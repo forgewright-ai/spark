@@ -38,6 +38,7 @@ SENDS = (
     ("drill", "the source, 16 kB"),
     ("watch", "each window of the stream, 8 kB at most"),
     ("recall", "the last 400 lines of this shell's history"),
+    ("paste", "a multi-line paste at the prompt, 8 kB at most"),
 )
 
 _DANGER = [
@@ -260,8 +261,23 @@ MODE_DO = (
 # names stay accepted for one version, because thread and turn records
 # on disk carry them. Note "ask" is NOT reused as contract 12's mode:
 # a string that changes meaning would make old turn records lie.
+MODE_PASTE = (
+    "The user pasted these lines into their shell prompt but has NOT run them. In one sentence, "
+    "say what running them would do -- name the destructive part first when there is one. Set "
+    "danger=true when any line deletes, overwrites, downloads-and-runs, kills, reboots, or changes "
+    "permissions, credentials or startup files. Never rewrite or repeat the paste."
+)
+PASTE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "summary": {"type": "string"},
+        "danger": {"type": "boolean"},
+    },
+    "required": ["summary", "danger"],
+}
+
 MODES = {"line": MODE_LINE, "answer": MODE_ANSWER, "explain": MODE_EXPLAIN, "chat": MODE_CHAT,
-         "ask": MODE_ANSWER, "talk": MODE_CHAT, "do": MODE_DO}
+         "ask": MODE_ANSWER, "talk": MODE_CHAT, "do": MODE_DO, "paste": MODE_PASTE}
 
 # The editor (spark edit, contract 10): three briefs, one per kind. No
 # table routes by filetype or genre -- each brief tells the model to read

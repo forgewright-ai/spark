@@ -386,5 +386,36 @@ _spark_recall() {
     _spark_recall_show
 }
 bind -x '"\er": _spark_recall'
+
+# --- paste inspection: a multi-line paste into an EMPTY prompt --------------
+# Rebinding the paste-begin sequence takes the paste from readline: the
+# handler reads the terminal's own bytes up to the end marker, puts them
+# in the line UNTOUCHED (newlines stay literal -- nothing runs), and,
+# for two or more lines into an empty prompt, asks `spark line --paste`
+# for one answer/danger line. spark off (and SPARK_OFF at load) disable
+# the inspection; the paste itself always lands.
+_spark_paste() {
+    local before=$READLINE_LINE buf='' ch
+    while IFS= read -r -s -N1 -t 2 ch; do
+        buf+=$ch
+        [[ $buf == *$'\e[201~' ]] && { buf=${buf%$'\e[201~'}; break; }
+    done
+    READLINE_LINE=${READLINE_LINE:0:READLINE_POINT}$buf${READLINE_LINE:READLINE_POINT}
+    READLINE_POINT=$(( READLINE_POINT + ${#buf} ))
+    [[ -e $SPARK_DIR/off ]] && return
+    if [[ -z $before && $buf == *$'\n'?* ]]; then
+        local out kind text
+        out=$("$SPARK_BIN" line --paste <<< "$buf" 2>/dev/null)
+        kind=${out%%$'\n'*}
+        text=${out#*$'\n'}
+        text=${text%%$'\n'*}
+        case $kind in
+            danger) _spark_say "$_spark_w $text -- pasted, not run" ;;
+            answer) _spark_say "$_spark_h $text -- pasted, not run" ;;
+        esac
+    fi
+}
+bind -x '"\e[200~": _spark_paste'
+
 # Esc and s are two keystrokes: give them a full second to be one chord
 bind 'set keyseq-timeout 1000'

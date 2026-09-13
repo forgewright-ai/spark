@@ -109,6 +109,10 @@ class Stub(BaseHTTPRequestHandler):
         STATE["last_user"] = user                     # the newest user message, for the failure checks
         STATE.setdefault("bodies", []).append(body)   # every request, for the editor's checks
         system = messages[0]["content"]
+        if "pasted these lines" in system:           # spark line --paste (contract 4)
+            reply = {"summary": "downloads and runs a script" if "curl" in user else "two harmless echo lines",
+                     "danger": "curl" in user}
+            return self._send(200, {"choices": [{"message": {"content": json.dumps(reply)}}], "timings": TIMINGS})
         if "Say what this text is" in system:        # the editor's reading (spark edit ?)
             if STATE.get("read_fail"):
                 return self._send(500, {"error": "no reading today"})
@@ -433,6 +437,21 @@ def main():
         t.ok(rc == 0 and out.splitlines() == ["answer", "Paris"], "line: answer", out)
         # a hostile answer carrying escape sequences: scrubbed before the
         # widget can print it into a live terminal
+        # paste inspection (contract 4, --paste): no command back, one
+        # answer/danger line; a locally dangerous line forces danger; a
+        # paste over the cap is one line with NO model call
+        rc, out, _ = spark("line", "--paste", stdin="echo a\necho b\n")
+        t.ok(rc == 0 and out.splitlines() == ["answer", "two harmless echo lines"],
+             "line --paste: a harmless paste is one answer line, no command", repr(out))
+        rc, out, _ = spark("line", "--paste", stdin="echo hi\nrm -rf /tmp/xyz\n")
+        t.ok(rc == 0 and out.splitlines()[0] == "danger",
+             "line --paste: a locally dangerous line forces danger whatever the model says", repr(out))
+        _n0 = STATE["hits"]
+        rc, out, _ = spark("line", "--paste", stdin="x" * 9000 + "\ny\n")
+        t.ok(rc == 0 and out.splitlines()[0] == "answer" and "too big to inspect" in out
+             and STATE["hits"] == _n0,
+             "line --paste: over 8 kB is one line and NO model call", repr(out))
+
         # contract 4's proof line: printed when read-only, refused when not
         rc, out, _ = spark("line", stdin="prooftest?")
         t.ok(rc == 0 and out.splitlines() == ["cmd\tmkdir -p pdir", "makes the dir", "proof\ttest -d pdir"],

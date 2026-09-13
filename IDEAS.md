@@ -33,48 +33,7 @@ Those are marked **local-only**.
 The test for an idea in this file: could a chat window in another pane
 do it just as well? If yes, it is not a prompt feature.
 
-## 1. The line, before it runs
-
-### Paste inspection (local-only)
-
-Bracketed paste is visible to readline. A multi-line paste into a prompt
-is the most dangerous thing a shell accepts and the least likely thing
-anyone would upload to be checked. Read it here, say one line, run
-nothing:
-
-```
-~ > [paste]
-! 40 lines: downloads a tarball, pipes it to sh, writes /etc/profile.d
-```
-
-The refusal shape and the `!` mark exist; the work is in the widget.
-
-### The command and the proof
-
-Ask the line for the assertion as well as the command: `? delete the
-build dir` gives `rm -rf ./build` and `test ! -d build`. The prompt
-stops being a hopeful step and becomes a verified one. Pairs with
-`spark do`, which already runs one confirmed command at a time.
-
-## 2. The failure moment, further
-
-v1.15 catches the instant and offers prose. Two of its escalations are on
-the roadmap; this is the third, and the most expensive.
-
-### Failure memory (local-only)
-
-The third time you hit a failure is not the same event as the first.
-Hash the shape locally -- the command's head word, the exit code, the
-first line of stderr -- and the prompt can say what worked last time:
-
-```
-* failed (1) -- you hit this in April; the fix was: git config --global ...
-```
-
-`lib/spark/ledger.py` is the precedent to copy, down to the retirement
-rule: a note whose anchor is gone is dropped where it stands.
-
-## 3. History as a corpus (local-only)
+## 1. History as a corpus (local-only)
 
 ### The command you keep retyping
 
@@ -87,7 +46,7 @@ flow v1.15 already built for keeping a fix as a fact.
 Ten `find . -name` in a machine with `fd` on it earns one line in the
 hint row, once, and then never again. `persona.PREFERRED` is the list.
 
-## 4. One FORGE, many prompts
+## 2. One FORGE, many prompts
 
 Threads are sealed and per-user, and every client talks to one FORGE
 (contract 9) -- but the prompt does not use that yet.
@@ -99,7 +58,7 @@ Threads are sealed and per-user, and every client talks to one FORGE
   prompts on one machine, one soul, and the admin genuinely cannot read
   the other's history. No hosted assistant can make that promise.
 
-## 5. The machine's own doctor
+## 3. The machine's own doctor
 
 `spark check` answers 36 yes/no questions and `stats.py` keeps the
 numbers. Let a model read `check.json` and `bench.jsonl` and answer the
@@ -120,18 +79,8 @@ made of numbers spark already keeps and words that never leave.
 |---|---|---|
 | The command you keep retyping | low -- counts, and v1.15's offer flow | history |
 | The tool you have and do not use | low -- `persona.PREFERRED` is the list | history |
-| Paste inspection | medium -- widget work | the line |
-| The command and the proof | medium -- the line plus `do` | the line |
-| Failure memory | medium -- a ledger of its own | the failure |
 | The doctor | medium -- reads what exists | the machine |
 | `??` across machines | high -- thread routing at the prompt | new |
-
-Two to build first, if it were two:
-
-- **The command and the proof**, because it turns a hopeful line into a
-  verified one, and `spark do` already runs the confirmed half.
-- **Failure memory**, because the ledger it needs exists, and the third
-  time you hit a failure is not the same event as the first.
 
 ## Not prompt features
 

@@ -347,6 +347,15 @@ may change freely.
    no redirect), so a refused proof is never printed. The widgets show
    it in the hint row after the command runs and offer it on Esc s;
    `spark do` runs it after each confirmed step and shows the result.
+   `spark line --paste` is the paste inspection: a multi-line paste on
+   stdin, NO command back -- one `answer`/`danger` line naming what the
+   paste does (a locally dangerous line forces `danger` whatever the
+   model says); over 8 kB it is one line and nothing is sent. The
+   widgets hook the bracketed paste (bash rebinds the paste-begin
+   sequence, zsh wraps `bracketed-paste`): two or more lines into an
+   EMPTY prompt get the verdict in the hint row, the paste itself
+   always lands in the buffer untouched, and nothing runs until the
+   user's own Enter; `spark off` and `SPARK_OFF` disable it.
    Exit 0 for the first
    three, 1 for error. A buffer starting with `??` continues the newest
    thread; any other starts a new one (no heuristics). The shell widgets
