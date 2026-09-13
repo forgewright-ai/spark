@@ -78,6 +78,14 @@ made of numbers spark already keeps and words that never leave.
 | The tool you have and do not use | low -- `persona.PREFERRED` is the list | history |
 | The doctor | medium -- reads what exists | the machine |
 
+## Parked
+
+- **A shared engine as a system service.** `spark share` (v1.22) covers
+  the need through a `spark` group; the system-unit form (a service
+  account, models outside any `$HOME`) waits until the group model has
+  been lived with -- it costs root, a service user and new paths, and
+  nothing yet asks for them.
+
 ## Not prompt features
 
 These two came off the roadmap rather than out of the field. Neither

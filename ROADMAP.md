@@ -19,11 +19,5 @@ Then the two shapes the suite still cannot express: a scenario whose
 remedy needs the network (a re-download after `spark model rm`), and
 one that must survive a reboot.
 
-## A shared engine as a system service
-
-`spark share` (v1.22) shares the owner's headless engine with the box's
-other OS users through a `spark` group. The heavier step, if it is ever
-wanted: the engine as a real system unit under its own service account,
-models in a shared path, so it needs no owner logged in at all. Bigger --
-root, a service user, paths outside any `$HOME` -- and only worth it once
-the group model has been lived with.
+(A shared engine as a system service is parked in `IDEAS.md`: only
+worth weighing once the group model has been lived with.)
