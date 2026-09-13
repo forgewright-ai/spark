@@ -1786,6 +1786,46 @@ def main():
         os.remove(user_models_file)
         del STATE["head_body"]
 
+        # the remedy lint: every remedy in check.py that starts with
+        # `spark ` names a verb bin/spark dispatches, and its sub-word is
+        # one the verb's help lists -- a renamed verb cannot leave a stale
+        # remedy behind (spark forge start survived the on|off grammar)
+        import ast as _ast
+        _csrc = open(os.path.join(REPO, "lib", "spark", "check.py"), encoding="utf-8").read()
+        _vm = re.search(r"VERBS = \{(.*?)\)\}", open(os.path.join(REPO, "bin", "spark"), encoding="utf-8").read(), re.S)
+        _verbs = set(re.findall(r'"([a-z-]+)":', _vm.group(1))) | {"help"}
+        _cands = []
+
+        def _strs(node):
+            return [n.value for n in _ast.walk(node)
+                    if isinstance(n, _ast.Constant) and isinstance(n.value, str)]
+        _CMD = re.compile(r"\bspark ([a-z][a-z-]*)(?:\s+([a-z][a-z-]*))?")
+        for _node in _ast.walk(_ast.parse(_csrc)):
+            if not (isinstance(_node, _ast.Call) and isinstance(_node.func, _ast.Name)
+                    and _node.func.id in ("ok", "warn", "na", "fail") and _node.args):
+                continue
+            _texts = []
+            if len(_node.args) >= 2:                    # the remedy argument, whole
+                _texts.extend(_strs(_node.args[1]))
+            for _s in _strs(_node.args[0]):             # remedies inside message parens
+                _texts.extend(re.findall(r"\(([^()]*)\)", _s))
+            for _txt in _texts:
+                for _m in _CMD.finditer(_txt):
+                    _cands.append((_m.group(1), _m.group(2), _m.group(0)))
+        _helps, _badr = {}, []
+        for _verb, _sub, _seg in _cands:
+            if _verb not in _verbs:
+                _badr.append(_seg)
+                continue
+            if _sub:
+                if _verb not in _helps:
+                    _helps[_verb] = spark(_verb, "-h")[1]
+                if not re.search(r"(?<![a-z-])%s(?![a-z-])" % re.escape(_sub), _helps[_verb]):
+                    _badr.append(_seg)
+        t.ok(bool(_cands) and not _badr,
+             "check.py: every spark remedy names a live verb and a sub-word its help lists",
+             str(_badr[:8]))
+
         # the shell layer left the repository: the stub points, the help holds
         off = {"SPARK_NO_APPLY": "1"}
         rc, out, _ = spark("shell", extra=off)

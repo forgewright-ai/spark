@@ -311,7 +311,7 @@ def row_theme(ctx):
     path = config.theme_path(name, ctx.repo)
     want = _env_lines(path) if path else None
     if want is None:
-        return fail("SITE_THEME=%s: no %s.env in themes/ or ~/.config/spark/themes/" % (name, name), "spark theme list")
+        return fail("SITE_THEME=%s: no %s.env in themes/ or ~/.config/spark/themes/" % (name, name), "spark theme")
     have = _env_lines(os.path.join(CONFIG_DIR, "theme.env"))
     if have is None:
         return na("%s chosen, not painted (spark theme %s)" % (name, name))
@@ -700,7 +700,7 @@ def row_forge(ctx):
     if not url:
         if ctx.cfg.forge == "off":
             return na("off on purpose (spark forge on)")
-        return na("not started (spark forge start)")
+        return na("not started (spark forge on)")
     problems, loose = [], []
     tok = ctx.cfg.forge_token_file
     if not os.path.exists(tok) or os.stat(tok).st_mode & 0o077:
@@ -709,7 +709,7 @@ def row_forge(ctx):
     if "0.0.0.0" in url:
         problems.append("bound to 0.0.0.0")
     if problems:
-        return warn("; ".join(problems), "chmod 600 %s; spark forge stop; spark forge start   (SPARK_FORGE_HOST picks the address)"
+        return warn("; ".join(problems), "chmod 600 %s; spark forge off; spark forge on   (SPARK_FORGE_HOST picks the address)"
                     % " ".join(loose or [ctx.short(ctx.cfg.forge_token_file)]))
     where = url.split("//")[-1]
     host = where.split(":")[0]
@@ -719,7 +719,7 @@ def row_forge(ctx):
         if ip and host not in (ip, "127.0.0.1", "localhost"):
             st = engine.forge_service_state(ctx.cfg)
             return warn("moved: serving on %s but the LAN address is now %s (DHCP)" % (host, ip),
-                        "spark forge stop; spark forge start" if st == "absent" else "restart the unit")
+                        "spark forge off; spark forge on" if st == "absent" else "restart the unit")
         up = fh.get("upstream") or "down"
         model = os.path.basename(str(fh.get("model") or "-")).replace(".gguf", "")
         value = "at %s, model %s, upstream %s" % (where, model, up)
@@ -727,8 +727,8 @@ def row_forge(ctx):
             return warn(value, "spark serve")
         return ok(value)
     if fh is None:
-        return warn("forge-url says %s but what answers is not a FORGE" % where, "spark forge stop; spark forge start")
-    return warn("forge-url says %s but nothing answers" % where, "spark forge start   (or spark forge stop to forget it)")
+        return warn("forge-url says %s but what answers is not a FORGE" % where, "spark forge off; spark forge on")
+    return warn("forge-url says %s but nothing answers" % where, "spark forge on   (or spark forge off to forget it)")
 
 
 @row("CAPABILITY")
@@ -877,7 +877,7 @@ def row_throughput(ctx):
         return na("baseline %.1f tok/s; fewer than 3 recent turns per model" % base["tg"])
     if slow:
         return warn("%s -- below 70%% of the bench; on the CPU? (spark stats)" % "; ".join(parts),
-                    "spark tune show; spark bench --tune")
+                    "spark bench tune show; spark bench --tune")
     return ok("; ".join(parts) + " tok/s, recent vs bench")
 
 
@@ -949,7 +949,7 @@ def row_memory(ctx):
     except OSError:
         st = None
     if st is None and not sealed:
-        return ok("nothing kept yet (spark remember ...)")
+        return ok("nothing kept yet (spark memory add ...)")
     problems = []
     if st is not None and st.st_mode & 0o044:
         problems.append("readable by others")
@@ -963,7 +963,7 @@ def row_memory(ctx):
     if sum(len(f) for f in facts) > memory.TOTAL_MAX:
         problems.append("%d chars, %d are sent" % (sum(len(f) for f in facts), memory.TOTAL_MAX))
     if problems:
-        return warn("; ".join(problems), "chmod 600 %s; spark forget N" % ctx.short(MEMORY_FILE))
+        return warn("; ".join(problems), "chmod 600 %s; spark memory forget N" % ctx.short(MEMORY_FILE))
     return ok("%d fact%s%s" % (len(facts), "" if len(facts) == 1 else "s", ", sealed" if sealed else ""))
 
 
@@ -1016,9 +1016,9 @@ def row_disk(ctx):
     u = shutil.disk_usage("/")
     free = u.free / 2**30
     if free < 5:
-        return warn("%.0f GB free on / -- critical" % free, "ncdu ~   (or: dust ~)")
+        return warn("%.0f GB free on / -- critical" % free, "du -sh ~/*   (spark-shell's ncdu shows more)")
     if free < 20:
-        return warn("%.0f GB free on /" % free, "dust ~")
+        return warn("%.0f GB free on /" % free, "du -sh ~/*")
     return ok("%.0f GB free on /" % free)
 
 
