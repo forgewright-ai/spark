@@ -50,8 +50,18 @@ def cmd_update(args):
             continue
         if a == "--converge":
             # internal: the post-move half, running in the new tree
-            from . import site
-            return site.apply((), stream=True)
+            from . import config, engine, site
+            rc = site.apply((), stream=True)
+            if rc == 0:
+                # the tree moved under the running units: without a
+                # restart the API keeps serving the OLD code with every
+                # row green
+                cfg = config.load()
+                for unit in ("serve", "forge"):
+                    if engine.service_state(cfg, unit) == "loaded":
+                        if engine.kickstart(cfg, unit, restart=True):
+                            say("%s update -- spark-%s restarted on the new tree" % (MARK, unit))
+            return rc
         say("spark update: no option %s -- spark update -h" % a)
         return 2
     moved = False

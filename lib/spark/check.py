@@ -725,6 +725,12 @@ def row_forge(ctx):
         value = "at %s, model %s, upstream %s" % (where, model, up)
         if up != "ok":
             return warn(value, "spark serve")
+        # a converge that moved the tree leaves the unit serving the OLD
+        # code with every row green: the health's version must match
+        ver, mine = str(fh.get("version") or ""), version.version()
+        if ver and mine and ver != mine:
+            return warn("forge runs %s, the tree is %s" % (ver, mine),
+                        "spark forge off; spark forge on")
         return ok(value)
     if fh is None:
         return warn("forge-url says %s but what answers is not a FORGE" % where, "spark forge off; spark forge on")
@@ -1674,7 +1680,11 @@ def _stub_server():
             if self.path == "/health":
                 body = b'{"status":"ok"}'
             elif self.path == "/api/health":
-                body = b'{"status":"ok","forge":true,"name":"fixture","version":"0","model":"fixture.gguf","upstream":"ok"}'
+                # 1.1 is the fixture repo's own tag (make_fixture tags
+                # v1.1): the forge row compares this against the tree it
+                # runs in, and the good fixture must match
+                body = (b'{"status":"ok","forge":true,"name":"fixture","version":"1.1",'
+                        b'"model":"fixture.gguf","upstream":"ok"}')
             else:
                 body = (b'{"data":[{"id":"fixture.gguf","aliases":["spark"],"status":{"value":"loaded"}},'
                         b'{"id":"fixture-ember.gguf","aliases":["ember"],"status":{"value":"loaded"}}]}')

@@ -686,16 +686,18 @@ def service_stop(noreload, unit="serve"):
     return undo if noreload else "systemctl --user start " + short
 
 
-def kickstart(cfg, unit="serve"):
+def kickstart(cfg, unit="serve", restart=False):
     """(Re)start a loaded unit the way its manager does. A LaunchDaemon needs
     sudo, which no page or script can give: say so (a todo line) and return
-    False instead of failing quietly."""
+    False instead of failing quietly. `restart=True` bounces a RUNNING
+    unit (systemctl restart; launchctl kickstart -k already does): what
+    `spark update` needs after the tree moved under it."""
     if IS_MAC and service_domain(cfg, unit) == "system":
         from . import say
         say(daemon_note(cfg, unit))
         return False
     cmd = (["launchctl", "kickstart", "-k", service_target(cfg, unit)] if IS_MAC
-           else ["systemctl", "--user", "start", unit_name(unit)])
+           else ["systemctl", "--user", "restart" if restart else "start", unit_name(unit)])
     subprocess.run(cmd, capture_output=True)
     return True
 

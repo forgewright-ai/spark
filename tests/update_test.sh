@@ -59,10 +59,33 @@ out=$("$SPARK" update --dry-run 2>&1) && ok "--dry-run (pull) exits 0" || bad "-
 printf '%s\n' "$out" | grep -q 'would pull' && ok "--dry-run says it would pull" || bad "--dry-run pull: $out"
 [ "$(git -C "$T/work" rev-parse HEAD)" = "$before" ] && ok "--dry-run (pull) changed nothing" || bad "--dry-run pull moved HEAD"
 
+# a systemctl stub (Linux): is-enabled answers enabled, so a converge
+# that moved the tree must RESTART both units and say so -- without it
+# the API keeps serving the old code with every row green
+if [ "$(uname -s)" != Darwin ]; then
+    mkdir -p "$T/bin"
+    cat > "$T/bin/systemctl" <<'SH'
+#!/bin/sh
+echo "systemctl $*" >> "$SYSCTL_LOG"
+case "$*" in *is-enabled*) echo enabled ;; esac
+exit 0
+SH
+    chmod +x "$T/bin/systemctl"
+    SYSCTL_LOG="$T/systemctl.log"; export SYSCTL_LOG
+    PATH="$T/bin:$PATH"; export PATH
+fi
+
 # 3. the real run pulls it and names the count
 out=$("$SPARK" update 2>&1) && ok "pull exits 0" || bad "pull: rc $? $out"
 printf '%s\n' "$out" | grep -q ": 1 new commit" && ok "pull names the count" || bad "pull: $out"
 [ "$(git -C "$T/work" rev-parse HEAD)" = "$newc" ] && ok "pull moved HEAD to the new commit" || bad "pull: HEAD is $(git -C "$T/work" rev-parse HEAD)"
+if [ "$(uname -s)" != Darwin ]; then
+    grep -q -- "--user restart spark-serve.service" "$SYSCTL_LOG" 2>/dev/null \
+        && grep -q -- "--user restart spark-forge.service" "$SYSCTL_LOG" 2>/dev/null \
+        && ok "a pull that moved the tree restarts the loaded units" \
+        || bad "no restart logged: $(cat "$SYSCTL_LOG" 2>/dev/null | tr '\n' ' ')"
+    printf '%s\n' "$out" | grep -q "restarted on the new tree" && ok "the restart says so" || bad "restart not said: $out"
+fi
 
 out=$("$SPARK" update 2>&1) && ok "second pull run: up to date" || bad "second pull run: rc $? $out"
 printf '%s\n' "$out" | grep -q 'up to date' || bad "second pull run did not settle: $out"

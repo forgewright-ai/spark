@@ -1795,6 +1795,31 @@ def main():
         os.remove(user_models_file)
         del STATE["head_body"]
 
+        # the forge row: a FORGE serving an older version than the tree is
+        # a warn with the bounce remedy -- spark update restarted nothing
+        # before v1.30, so every row was green while the API ran old code
+        class OldForge(Stub):
+            def do_GET(self):
+                if self.path == "/api/health":
+                    return self._send(200, {"status": "ok", "forge": True, "name": "t",
+                                            "version": "0.0", "model": "m.gguf", "upstream": "ok"})
+                return Stub.do_GET(self)
+        srv3 = HTTPServer(("127.0.0.1", 0), OldForge)
+        threading.Thread(target=srv3.serve_forever, daemon=True).start()
+        _stdir = home + "/.local/state/spark"
+        with open(_stdir + "/forge-url", "w") as f:
+            f.write("http://127.0.0.1:%d\n" % srv3.server_address[1])
+        _ftok = _stdir + "/forge-token"
+        _fd = os.open(_ftok, os.O_WRONLY | os.O_CREAT, 0o600)
+        os.write(_fd, b"t\n")
+        os.close(_fd)
+        rc, outf, _ = spark("check", "--porcelain")
+        t.ok(re.search(r"^CAPABILITY\twarn\tforge\tforge runs 0\.0, the tree is [^\t]+\tspark forge off; spark forge on", outf, re.M) is not None,
+             "check: the forge row warns when the FORGE runs an older version than the tree",
+             "\n".join(l for l in outf.splitlines() if "\tforge\t" in l))
+        os.remove(_stdir + "/forge-url")
+        os.remove(_ftok)
+
         # uninstall --packages simulates first: the apt -s parser against a
         # captured transcript where removing the engine library takes a
         # desktop's chain with it, and the pacman print form
