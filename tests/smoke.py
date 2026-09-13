@@ -97,7 +97,8 @@ class Stub(BaseHTTPRequestHandler):
         n = int(self.headers.get("Content-Length", 0))
         body = json.loads(self.rfile.read(n) or b"{}")
         STATE["model"] = body.get("model")      # which role the request named
-        if not self._auth():
+        if STATE.get("auth_reject") or not self._auth():
+            # auth_reject plays a rotated token: every request is 401 now
             return self._send(401, {"error": "unauthorized"})
         if STATE["mode"] == "loading":
             return self._send(503, {"error": "loading model"})
@@ -1185,6 +1186,13 @@ def main():
         t.ok(got is not None and all(("burst line %02d" % i) in got for i in range(30)),
              "watch: a 30-line burst is one window -- the reader drains what select saw",
              "no window seen" if got is None else got[-100:])
+        # a rotated token mid-run: not a transient, so the loop ends in one
+        # signed line on stderr, exit 1 -- never a traceback
+        STATE["auth_reject"] = True
+        rc, out, err = spark("watch", "when a 500 appears", stdin="GET /x 500\n")
+        STATE["auth_reject"] = False
+        t.ok(rc == 1 and out == "" and err.startswith("spark watch -- ") and "Traceback" not in err,
+             "watch: a 401 mid-run is one signed line, exit 1", repr(err[:120]))
         rc, out, _ = spark("watch")
         t.ok(rc == 2 and out.startswith("spark watch -- ") and "spark <words>" in out,
              "watch: no words is the usage and where a question goes, exit 2", out[:60])
@@ -1215,6 +1223,23 @@ def main():
         wout, werr = p.communicate(timeout=10)
         t.ok("edit --watch" in wout and len(wout.splitlines()) >= 2,
              "edit --watch: it announces the draft and comments on a saved stanza", repr(wout[:200]) + werr[:200])
+        # a rotated token mid-run ends the companion the same way: one
+        # signed line on stderr, exit 1 -- never a traceback
+        STATE["auth_reject"] = True
+        p = subprocess.Popen([sys.executable, SPARK, "edit", "--watch", draft],
+                             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                             env=dict(env, SPARK_EDIT_WATCH_POLL="0.1"))
+        try:
+            time.sleep(0.3)
+            with open(draft, "a") as f:
+                f.write("\nA third paragraph, saved under a dead token.\n")
+            wout, werr = p.communicate(timeout=15)
+        except subprocess.TimeoutExpired:
+            p.kill()
+            wout, werr = p.communicate()
+        STATE["auth_reject"] = False
+        t.ok(p.returncode == 1 and "spark edit --watch -- " in werr and "Traceback" not in werr,
+             "edit --watch: a 401 mid-run is one signed line, exit 1", repr(werr[-160:]))
 
         # session.once: a loop rides out a transient brain, dies on a real fault
         from spark import session as sessmod, wire as wiremod

@@ -34,7 +34,7 @@ import select
 import sys
 import time
 
-from . import MARK, config, say, session
+from . import MARK, config, say, session, wire
 from . import text as textmod
 
 WINDOW_LINES = 40       # a window closes at this many lines...
@@ -134,5 +134,10 @@ def cmd_watch(args):
             if _due(len(lines), opened, now, win_secs) and now - last_call >= MIN_INTERVAL:
                 evaluate(cfg, shell, instruction, _window(lines))
                 lines, opened, last_call = [], None, now
+    except wire.BrainError as e:
+        # a transient gap was already ridden out (session.once); this is a
+        # rotated token or a broken server -- one line, not a traceback
+        print("%s watch -- %s" % (MARK, e.hint), file=sys.stderr)
+        return 1
     except KeyboardInterrupt:
         return 130

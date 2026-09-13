@@ -192,6 +192,11 @@ def _watch_draft(cfg, shell, path, words, name):
             elif last_change is not None and not reviewed and time.time() - last_change >= EDIT_WATCH_IDLE:
                 reviewed = True
                 _comment(cfg, shell, text, None, name, words)
+    except wire.BrainError as e:
+        # a transient gap was already ridden out (session.once); this is a
+        # rotated token or a broken server -- one line, not a traceback
+        print("%s edit --watch -- %s" % (MARK, e.hint), file=sys.stderr)
+        return 1
     except KeyboardInterrupt:
         return 130
 
