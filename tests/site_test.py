@@ -85,7 +85,7 @@ def main():
         check(page.count("<li>") >= items, "%s: %d list items -> %d <li>" % (slug, items, page.count("<li>")))
     check("<pre>SPARK CHEATSHEET" in pages["cheatsheet"], "cheatsheet: the text, verbatim")
     rows = sum(1 for l in read(os.path.join(ROOT, "models.env")).split("\n")
-               if re.match(r'^MODEL_[A-Z0-9_]+="', l) and not re.match(r'^MODEL_[A-Z0-9_]+_(LICENSE|NOTE|TESTED)=', l))
+               if re.match(r'^MODEL_[A-Z0-9_]+="', l) and not re.match(r'^MODEL_[A-Z0-9_]+_(LICENSE|NOTE|TESTED|GROUND)=', l))
     check(pages["models"].count("<tr>") == rows + 1, "models: every row of models.env is on the page (%d)" % rows)
     check("banner.svg" in pages[""] and 'id="ol"' in pages[""], "index: the banner and the one-liner")
     check("spark chat" in pages[""], "index: spark chat and the prompt line")

@@ -646,7 +646,8 @@ def main():
 
             st, _, raw = req(url, "POST", "/api/do/propose", {"text": "say hello"}, headers=post, timeout=30)
             d = json.loads(raw)
-            ok(st == 200 and d.get("thread") and d["reply"] == {"kind": "cmd", "command": "echo STEP-ONE", "hint": "say hello", "danger": False}
+            ok(st == 200 and d.get("thread") and d["reply"] == {"kind": "cmd", "command": "echo STEP-ONE",
+                                                                "hint": "say hello", "danger": False, "proof": ""}
                and isinstance(d.get("ms"), int), "/api/do/propose: the step, a thread, nothing run", raw[:300])
             dtid = d.get("thread", "")
             st, _, raw = req(url, "POST", "/api/do/run", {"command": "echo hi"}, headers=post)
