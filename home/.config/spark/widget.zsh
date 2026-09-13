@@ -316,7 +316,7 @@ spark-ask() {
     elif [[ -n $_spark_fix ]]; then
         # the accepted fix also lands in the failure memory (a fork is
         # fine HERE: Esc s is the user's own key, not the prompt hook)
-        "$SPARK_BIN" history --fix-worked "$_spark_fix" >/dev/null 2>&1
+        "$SPARK_BIN" history --fix-worked "$_spark_fix" >/dev/null 2>&1 </dev/null
         fact="$_spark_explained failed until: $_spark_fix"
         BUFFER="spark memory add ${(qq)fact}"
         CURSOR=$#BUFFER

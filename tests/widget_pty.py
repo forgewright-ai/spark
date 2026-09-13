@@ -39,6 +39,11 @@ import time
 
 STUB = r'''#!/bin/sh
 # a stand-in for `spark line` (and `spark recall`): canned replies.
+if [ "$1" = history ]; then
+    # the widgets' silent --fix-worked record: nothing to read, nothing
+    # to say -- and NEVER fall through to cat (it would eat the tty)
+    exit 0
+fi
 if [ "$1" = line ] && [ "$2" = "--paste" ]; then
     cat > /dev/null
     printf 'answer\ntwo echo lines, harmless\n'
