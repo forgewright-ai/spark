@@ -2,12 +2,15 @@
 
 ## v1.31
 
-- read-source knows an about-question: asking what a source is, is
-  about, or covers is answered the overview's way -- coverage, one
-  line per thing, each quoting the source -- instead of an own-voice
-  summary the gate drops into a refusal. A ninth ground case
-  (read-about) pins it. Found asking a web page "what is this page
-  about" through spark-w3m.
+- The grounding audition gains a ninth case, read-about: "what is
+  this text about" in words, where bare `spark read` (the overview)
+  already answers well. The model misses it -- it summarises in its
+  own voice and the gate rightly refuses -- and three brief rewrites
+  each traded that miss for false grounding on read-unanswered, so
+  the brief stays as it was and the case stays as the measure of the
+  gap. Found asking a web page "what is this page about" through
+  spark-w3m; until a model or mechanism closes it, the overview is
+  asked bare: Enter at the prompt, no words.
 
 ## v1.30
 
