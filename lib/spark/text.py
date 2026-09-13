@@ -225,6 +225,24 @@ def quotes(line):
 
 _MARKS = str.maketrans({"\u201c": '"', "\u201d": '"', "\u2018": "'", "\u2019": "'", "'": '"'})
 
+# terminal escape sequences and control characters have no place in a
+# line the widgets print into a live terminal or a gate writes to
+# stdout: a model -- or a log line it quotes -- could otherwise retitle
+# the window, move the cursor or repaint the screen
+_CSI = re.compile(r"\x1b\[[0-9;:?<=>!\"'#$%&*+,\-./ ]*[@-~]")
+_OSC = re.compile(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)?")
+_ESC_OTHER = re.compile(r"\x1b.?")
+
+
+def scrub(s, keep="\t\n"):
+    """`s` without terminal escape sequences (CSI, OSC and the rest) and
+    without control characters (\\x00-\\x1f, \\x7f) -- tabs and newlines
+    excepted where they belong (`keep`)."""
+    s = _CSI.sub("", s)
+    s = _OSC.sub("", s)
+    s = _ESC_OTHER.sub("", s)
+    return "".join(ch for ch in s if ch in keep or (ord(ch) >= 32 and ord(ch) != 127))
+
 
 def fold(s):
     """Whitespace runs to one space, every quote mark to ", lower case:
@@ -385,7 +403,7 @@ class Gate:
         self.quoted += len(qs)
         self.missed += sum(1 for q, _s, _e in qs
                            if not anchor(q, self.data, self.ground.folded, whole=self.ground.whole))
-        self.stream.write(self.ground.mark(line) + ("\n" if newline else ""))
+        self.stream.write(scrub(self.ground.mark(line), keep="\t") + ("\n" if newline else ""))
 
     def write(self, s):
         self.buf += s

@@ -11,6 +11,7 @@ import time
 
 from . import CONFIG_DIR, MARK, OFF_FLAG, REPO, STATE_DIR, WIDGETS_DIR, config, die, glyph, paged, say, state_dir
 from . import engine, forge, persona, session, version, wire
+from . import text as textmod
 
 HINT_COLS = 80             # a hint labels a command: terse
 ANSWER_MAX = 300           # an answer IS the content: the widget fits it
@@ -76,8 +77,10 @@ def _help(args, usage):
 
 def _one_line(s, width=HINT_COLS):
     """One line, cut at a word when it must be cut -- and the ellipsis
-    from the glyph table, so a console shows ... and not a blank box."""
-    s = " ".join((s or "").split())
+    from the glyph table, so a console shows ... and not a blank box.
+    Escape sequences and control characters are scrubbed first: the
+    widgets print this into a live terminal."""
+    s = " ".join(textmod.scrub(s or "").split())
     if len(s) <= width:
         return s
     e = glyph("cut")
@@ -368,7 +371,6 @@ def cmd_recall(args):
     on stderr, exit 1. Nothing is written; the turn record is numbers."""
     if _help(args, RECALL_USAGE):
         return 0
-    from . import text as textmod
     intent = " ".join(args).strip()
     history = sys.stdin.read()
     if not intent:

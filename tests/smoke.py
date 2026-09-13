@@ -279,6 +279,10 @@ def answer_json(messages):
         return {"kind": "cmd", "command": "find . -name '*.tmp' -delete", "hint": "Delete every .tmp file below here", "danger": True}
     if "rm-plain" in user:      # the model forgets to flag it; the regex must
         return {"kind": "cmd", "command": "rm -rf build", "hint": "Remove the build directory", "danger": False}
+    if "titletest" in user:
+        # a hostile answer carrying a title-setting OSC and a CSI: the
+        # widget prints hints into a live terminal, so cli scrubs them
+        return {"kind": "answer", "command": "", "hint": "Par\x1b]0;evil\x07is\x1b[31m", "danger": False}
     if "capital" in user:
         return {"kind": "answer", "command": "", "hint": "Paris", "danger": False}
     if "is not installed on this machine" in user:   # the head-word guard's retry
@@ -419,6 +423,15 @@ def main():
              "recall: empty history is exit 1", out + "|" + err)
         rc, out, _ = spark("line", stdin="what is the capital of France?")
         t.ok(rc == 0 and out.splitlines() == ["answer", "Paris"], "line: answer", out)
+        # a hostile answer carrying escape sequences: scrubbed before the
+        # widget can print it into a live terminal
+        rc, out, _ = spark("line", stdin="titletest?")
+        t.ok(rc == 0 and out.splitlines() == ["answer", "Paris"] and "\x1b" not in out,
+             "line: escape sequences in an answer are scrubbed (title-set, colour)", repr(out))
+        from spark import text as _text
+        t.ok(_text.scrub("a\x1b]0;evil\x07b\x1b[31mc\x1b[0m\td\x00e\x7ff") == "abc\tdef",
+             "scrub: OSC, CSI and control chars go; tabs stay",
+             repr(_text.scrub("a\x1b]0;evil\x07b\x1b[31mc\x1b[0m\td\x00e\x7ff")))
         rc, out, _ = spark("line", stdin="?   ")
         t.ok(rc == 1 and out.startswith("error"), "line: empty question is an error", out)
 
