@@ -929,6 +929,13 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---- P ----
     def api_logout(self, body):
+        # expiring the cookie is the browser's half; the server's half is
+        # the session entry, which stayed valid for anyone replaying the
+        # cookie until now
+        c = self._cookie()
+        if c:
+            with self.server._auth_lock:
+                self.server.sessions.pop(c, None)
         self._json(200, {"ok": True}, {"Set-Cookie": "%s=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0" % COOKIE})
 
     # ---- threads and chat ----

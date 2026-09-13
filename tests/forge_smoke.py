@@ -631,6 +631,17 @@ def main():
             ok(st == 200 and json.loads(raw).get("role") == "user", "/api/me with the user cookie: role user", raw[:100])
             st, _, raw = req(url, "GET", "/api/me", headers=ubearer)
             ok(st == 200 and json.loads(raw).get("role") == "user", "/api/me with the user bearer: role user", raw[:100])
+            # logout revokes the SESSION, not only the cookie: the same
+            # cookie replayed afterwards is 401
+            st, _, _ = req(url, "POST", "/api/logout", {}, headers=dict(ucookie, **{"X-Spark": "1", "Origin": url}))
+            ok(st == 200, "the user logs out", st)
+            st, _, _ = req(url, "GET", "/api/me", headers=ucookie)
+            ok(st == 401, "the logged-out cookie replayed -> 401 (the session died with it)", st)
+            st, h, raw = req(url, "POST", "/api/login", {"token": utoken})
+            usc = h.get("Set-Cookie", "")
+            ucookie = {"Cookie": usc.split(";")[0]}
+            st, _, raw = req(url, "GET", "/api/me", headers=ucookie)
+            ok(st == 200 and json.loads(raw).get("role") == "user", "a fresh login mints a working session again", raw[:100])
             upost = dict(ubearer, **{"X-Spark": "1", "Origin": url})
             st, h, raw = req(url, "POST", "/api/chat", {"text": "count"}, headers=upost, timeout=30)
             evs = sse(raw)
