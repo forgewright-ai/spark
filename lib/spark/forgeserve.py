@@ -112,6 +112,14 @@ def _read_token(path):
         return ""
 
 
+def same_token(a, b):
+    """Constant-time equality over the UTF-8 bytes: hmac.compare_digest
+    on str raises for non-ASCII, which made such a login a 500 that
+    skipped the 1 s cost and the failure counter -- a non-ASCII token is
+    simply a wrong one."""
+    return hmac.compare_digest(a.encode("utf-8"), b.encode("utf-8"))
+
+
 def cookie_value(token):
     return hmac.new(token.encode(), COOKIE_SALT, hashlib.sha256).hexdigest()
 
@@ -466,7 +474,7 @@ class Handler(BaseHTTPRequestHandler):
         auth = self.headers.get("Authorization") or ""
         if auth.startswith("Bearer "):
             given = auth[7:].strip()
-            if admin and hmac.compare_digest(given, admin):
+            if admin and same_token(given, admin):
                 return "admin", "", None
             hit = srv.user_by_bearer(given)
             if hit:
@@ -475,7 +483,7 @@ class Handler(BaseHTTPRequestHandler):
             return "", "", None
         c = self._cookie()
         if c:
-            if admin and hmac.compare_digest(c, cookie_value(admin)):
+            if admin and same_token(c, cookie_value(admin)):
                 return "admin", "", None
             s = srv.session_user(c)
             if s:
@@ -628,7 +636,7 @@ class Handler(BaseHTTPRequestHandler):
         given = body.get("token")
         tok, role, uname = "", "", ""
         if isinstance(given, str) and given:
-            if admin and hmac.compare_digest(given, admin):
+            if admin and same_token(given, admin):
                 tok, role = given, "admin"
             else:
                 hit = self.server.user_by_bearer(given)

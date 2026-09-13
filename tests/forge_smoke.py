@@ -208,6 +208,16 @@ def main():
             t0 = time.time()
             st, _, _ = req(url, "POST", "/api/login", {"token": "nope"})
             ok(st == 401 and time.time() - t0 >= 1.0, "wrong login -> 401 after >= 1 s (%.1f s)" % (time.time() - t0))
+            # a non-ASCII token is a WRONG token, never a 500: the compare
+            # runs over bytes, so the 1 s cost and the counter still apply
+            t0 = time.time()
+            st, _, raw = req(url, "POST", "/api/login", {"token": "café-token"})
+            ok(st == 401 and time.time() - t0 >= 1.0,
+               "a non-ASCII token login -> 401 after >= 1 s, not a 500", (st, raw[:80]))
+            st, _, _ = req(url, "GET", "/api/check", headers={"Authorization": "Bearer café"})
+            ok(st == 401, "a non-ASCII bearer -> 401, not a 500", st)
+            st, _, _ = req(url, "GET", "/api/check", headers={"Cookie": "spark_forge=café"})
+            ok(st == 401, "a non-ASCII cookie -> 401, not a 500", st)
             st, h, raw = req(url, "POST", "/api/login", {"token": token})
             sc = h.get("Set-Cookie", "")
             ok(st == 200 and sc.startswith("spark_forge=") and "HttpOnly" in sc and "SameSite=Strict" in sc and "Max-Age=7776000" in sc,
