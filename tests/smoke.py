@@ -2600,6 +2600,42 @@ def main():
         t.ok(b"\x1b[38;5" not in data and b"spark lua -- left in zone" in data, "lua on a pty: eight colours only, and q leaves with one line", repr(data[-200:]))
         t.ok(b"....." in data and b"Ele lembrou" not in data, "lua on a pty: the memory panel is on screen from the start, English only", repr(data[:900]))
 
+    # spark reveal: piped it is an exact copy (bytes, no pacing); at a
+    # tty it is paced -- 60 chars at 100 cps cannot land in an instant;
+    # a wrong CPS and a second word are the usage, signed
+    blob = ("abc éçÃo \n" * 40).encode() + b"tail with no newline"
+    p = subprocess.run([sys.executable, SPARK, "reveal"], input=blob,
+                       capture_output=True, env=env, timeout=30)
+    t.ok(p.returncode == 0 and p.stdout == blob, "reveal: piped is an exact copy, byte for byte",
+         repr(p.stdout[:80]))
+    p = subprocess.run([sys.executable, SPARK, "reveal", "999"], input=b"",
+                       capture_output=True, env=env, timeout=30)
+    t.ok(p.returncode == 2 and b"5..200" in p.stdout + p.stderr, "reveal: CPS out of range is the usage",
+         repr(p.stdout + p.stderr))
+    p = subprocess.run([sys.executable, SPARK, "reveal", "30", "x"], input=b"",
+                       capture_output=True, env=env, timeout=30)
+    t.ok(p.returncode == 2, "reveal: a second word is the usage")
+    _m, _s = pty.openpty()
+    p = subprocess.Popen([sys.executable, SPARK, "reveal", "100"],
+                         stdin=subprocess.PIPE, stdout=_s, stderr=_s, env=env)
+    os.close(_s)
+    _t0 = time.time()
+    p.stdin.write(b"x" * 60)
+    p.stdin.close()
+    _got = b""
+    while len(_got) < 60 and time.time() - _t0 < 15:
+        r, _, _ = select.select([_m], [], [], 0.2)
+        if r:
+            try:
+                _got += os.read(_m, 4096)
+            except OSError:
+                break
+    _dt = time.time() - _t0
+    os.close(_m)
+    p.wait(timeout=10)
+    t.ok(_got.count(b"x") == 60 and _dt >= 0.3,
+         "reveal: at a tty the characters are paced, not dumped", "%d chars in %.2fs" % (_got.count(b"x"), _dt))
+
     # completion drift guard: every verb the CLI dispatches (bin/spark's
     # one VERBS table) appears in completion.bash -- a new verb without a
     # completion word goes loud here. The zsh file shares the same

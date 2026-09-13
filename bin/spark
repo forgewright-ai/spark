@@ -48,6 +48,8 @@ spark
                               try each, --name keeps a schedule (-h)
  spark watch <words> < STREAM a live stream, silent until a line matches,
                               then one line quoting it (-h)
+ spark reveal [CPS]           stdin at a reader's pace, letter by letter at
+                              a terminal; an exact copy anywhere else (-h)
  try:
  ? words or words? ENTER      the command lands in your line, hint above
  ?? words ENTER               follow up on the last answer (same thread)
@@ -146,6 +148,7 @@ VERBS = {"setup": ("setup", "main", False), "check": ("check", "main", False),
          "ask": ("ask", "cmd_ask", False), "edit": ("edit", "cmd_edit", False),
          "read": ("read", "cmd_read", False), "drill": ("drill", "cmd_drill", False),
          "watch": ("watch", "cmd_watch", False),
+         "reveal": ("reveal", "cmd_reveal", False),
          "update": ("update", "cmd_update", False), "bar": ("bar", "main", False),
          "theme": ("theme", "main", False), "bench": ("bench", "main", True),
          "stats": ("stats", "main", False),

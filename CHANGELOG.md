@@ -2,6 +2,13 @@
 
 ## v1.31
 
+- `spark reveal [CPS]` -- stdin at a reader's pace: at a terminal the
+  text appears letter by letter (default 30 characters a second,
+  SPARK_REVEAL_CPS or the argument set it), so a slow brain's line
+  bursts read as a steady hand; a stall is never repaid as a burst.
+  Piped anywhere else it is an exact copy, byte for byte. Purely
+  local; the reading clients pipe through it.
+
 - spark-newsboat, the second client of spark read: `,s` in newsboat
   asks the article you are on, on the terminal newsboat hands over --
   the grounded answer line by line, Enter back to newsboat untouched.
