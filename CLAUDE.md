@@ -416,9 +416,10 @@ may change freely.
    /api/user/token` (user) rotates the requester's own token, returned
    once, never stored; `DELETE /api/threads` clears the requester's own
    store and answers `{cleared}`. Every `POST` and `DELETE` under `/api/` except `/api/login`
-   also needs `X-Spark: 1`, a JSON object body, a `Host` this machine
-   answers to and, when sent, an `Origin` matching it (400/403); `POST
-   /v1/chat/completions` needs only the bearer or cookie. `GET
+   also needs `X-Spark: 1`, a `Host` this machine
+   answers to and, when sent, an `Origin` matching it (400/403); a
+   `POST` there needs a JSON object body besides, a `DELETE` carries
+   no body; `POST /v1/chat/completions` needs only the bearer or cookie. `GET
    /api/check` returns `check.json` as written plus `age` (seconds).
    `POST /api/do/propose` answers `{thread, reply, ms, driver,
    unchecked}` -- `driver` the ember role's model stem, `unchecked` the
