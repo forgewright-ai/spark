@@ -357,7 +357,9 @@ if [ -z "$have" ] && [ -x "$ENGINE_DIR/llama-server" ] && [ -n "$ENGINE_FLAVOUR"
     if [ "$OS" = Linux ]; then
         if ls "$ENGINE_DIR"/libggml-vulkan.so* >/dev/null 2>&1; then have="ubuntu-vulkan-${ENGINE_FLAVOUR##*-}"; else have="ubuntu-${ENGINE_FLAVOUR##*-}"; fi
     fi
-    echo "$have" > "$ENGINE_DIR/flavour"
+    # named in memory either way; the note lands on disk only in an apply
+    # run -- a dry run changes nothing, one-line note or not
+    [ "$MODE" = dry ] || echo "$have" > "$ENGINE_DIR/flavour"
 fi
 if [ "$client" = 1 ]; then
     skip engine "$CLIENT_OF"
@@ -822,6 +824,12 @@ elif [ -z "$SITE_FONT_FACE" ]; then
     skip console "SITE_FONT_FACE unset: the console keeps its font"
 else
     size=${SITE_FONT_SIZE:-16x32}
+    # both values are interpolated into a root sed below: only the shapes
+    # a console font can have pass (face a word, size NxN or a height)
+    if ! printf '%s' "$SITE_FONT_FACE" | grep -qE '^[A-Za-z0-9._-]+$' \
+       || ! printf '%s' "$size" | grep -qE '^[0-9]+(x[0-9]+)?$'; then
+        row todo console "SITE_FONT_FACE=$SITE_FONT_FACE SITE_FONT_SIZE=$size: a face is [A-Za-z0-9._-]+ and a size NxN -- spark font FACE SIZE sets both"
+    else
     cur=$(sed -n 's/^FONTFACE="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p; s/^FONTSIZE="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' /etc/default/console-setup 2>/dev/null | paste -sd' ' -)
     if [ "$cur" = "$SITE_FONT_FACE $size" ]; then ok console "$SITE_FONT_FACE $size"
     elif need console "set $SITE_FONT_FACE $size in /etc/default/console-setup (sudo)"; then
@@ -831,6 +839,7 @@ else
         made console-font
         as_root setupcon --force 2>/dev/null || true
         ok console "$SITE_FONT_FACE $size"
+    fi
     fi
 fi
 # the console palette at boot: a user's escapes reach their own VT (the rc

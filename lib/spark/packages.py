@@ -11,7 +11,7 @@ import re
 from . import IS_MAC, REPO, config, distro, run
 
 KEYS = ("PM", "PM_INSTALL", "PM_TARGET", "PKG_CORE", "PKG_ENGINE", "PKG_AI")
-GROUPS = ("PKG_CORE", "PKG_ENGINE", "PKG_AI", "PKG_SHELL", "PKG_CLI")
+GROUPS = ("PKG_CORE", "PKG_ENGINE", "PKG_AI")
 NEVER_REMOVED = ("bash",)          # the login shell, whatever the family
 
 
@@ -22,7 +22,7 @@ def table(repo=REPO):
 
 
 def groups(repo=REPO):
-    """{group: [names]} for the five groups (empty lists when no file)."""
+    """{group: [names]} for the three groups (empty lists when no file)."""
     t = table(repo)
     return {g: t.get(g, "").split() for g in GROUPS}
 

@@ -127,6 +127,14 @@ printf '%s\n' "$out" | grep -qE "^would +dir +mkdir .*/projects" && bad "the wor
 [ "$(uname -s)" = Darwin ] && { printf '%s\n' "$out" | grep -qE '^ok +packages +nothing required' && ok "macOS: packages row is ok, nothing required" || bad "macOS packages row"; }
 [ -z "$(sh "$REPO/bootstrap.sh" --list-packages | grep -E '^(tmux|starship|bat|eza|fzf|btop)$')" ] && ok "--list-packages has no shell tool (spark-shell installs those)" || bad "--list-packages lists a shell tool"
 [ -z "$(sh "$REPO/bootstrap.sh" --list-packages | grep -E '^(micro|aspell|aspell-en|shellcheck)$')" ] && ok "no editor, no contributor tool in --list-packages" || bad "--list-packages still lists micro/aspell/shellcheck"
+# the sh twin's precedence matches python: a key in BOTH files -- the
+# later file of config.py's update order (spark.env) wins in lib/env.sh too
+mkdir -p "$T/prec/spark"
+printf 'SPARK_THREADS=1\n' > "$T/prec/spark/site.env"
+printf 'SPARK_THREADS=7\n' > "$T/prec/spark/spark.env"
+got=$(env -i PATH="$PATH" HOME="$HOME" XDG_CONFIG_HOME="$T/prec" sh -c '. "$0/lib/env.sh"; site_load; printf %s "$SPARK_THREADS"' "$REPO")
+[ "$got" = 7 ] && ok "env.sh: a key in both files -- spark.env wins, as config.py has it" || bad "env.sh precedence: got '$got'"
+
 # an older engine pin beside the current one is offered for removal, named
 mkdir -p "$HOME/.local/share/spark/engine/llama.cpp-b1"
 out=$(PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (old pin) failed"

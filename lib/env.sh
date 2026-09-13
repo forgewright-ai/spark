@@ -50,8 +50,11 @@ load_env() {
 }
 
 site_load() {
-    load_env "$SPARK_CONFIG_DIR/site.env" || return 1
+    # spark.env first: with load_env's only-if-unset semantics the FIRST
+    # file wins, and config.py lets spark.env override site.env (its
+    # later dict update) -- the twins must agree on who wins
     load_env "$SPARK_CONFIG_DIR/spark.env" || return 1    # SPARK_SERVICE, SPARK_PORT, dirs
+    load_env "$SPARK_CONFIG_DIR/site.env" || return 1
     : "${SITE_NAME:=$(short_host)}"
     : "${SITE_USER:=$(id -un)}"
     : "${SITE_SET_HOSTNAME:=no}"

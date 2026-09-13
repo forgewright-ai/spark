@@ -986,6 +986,41 @@ def main():
         t.ok(rc == 0 and out.splitlines()[0].startswith("race.md: 6 notes"),
              "ledger: six parallel declines all survive (flock around load-mutate-save)", out.splitlines()[0])
         spark("edit", "--ledger", "clear", "--name", "race.md")
+        # local_store: a stale account-key (an earlier login's unwrapped
+        # dk) must never seal a freshly minted store -- the minted key
+        # becomes the cached one, so a later unlock reads everything
+        import base64 as _b64
+        _xdg2 = {"XDG_STATE_HOME": home + "/.local/state-stale"}
+        _sd2 = home + "/.local/state-stale/spark"
+        os.makedirs(_sd2, exist_ok=True)
+        os.chmod(_sd2, 0o700)
+        with open(_sd2 + "/account", "w") as f:
+            f.write("name=ana\ntoken=tok-ana\n")
+        with open(_sd2 + "/account-key", "w") as f:
+            f.write(_b64.b64encode(os.urandom(32)).decode() + "\n")
+        for p in ("/account", "/account-key"):
+            os.chmod(_sd2 + p, 0o600)
+        rc, _o, _e = spark("edit", "--decline", "--name", "s.md", stdin="the first note\n", extra=_xdg2)
+        rc3, out3, _ = spark("edit", "--ledger", "--name", "s.md", extra=_xdg2)
+        from spark import vault as _vault
+        _wrapped = _vault.unwrap_key(_sd2 + "/users/ana/key", "tok-ana", "ana")
+        _cached = _b64.b64decode(open(_sd2 + "/account-key").read().strip())
+        t.ok(rc == 0 and rc3 == 0 and "the first note" in out3 and _wrapped == _cached,
+             "local_store: the cached account-key IS the minted wrapped key -- a login by token reads it all",
+             repr(out3) + (" (keys differ)" if _wrapped != _cached else ""))
+        # users/<name>/ there without `key`: the store's key is gone --
+        # nothing minted here could read those files: refuse, exit 78
+        _xdg3 = {"XDG_STATE_HOME": home + "/.local/state-gonekey"}
+        _sd3 = home + "/.local/state-gonekey/spark"
+        os.makedirs(_sd3 + "/users/bo", exist_ok=True)
+        with open(_sd3 + "/users/bo/token.hash", "w") as f:
+            f.write("stale-hash\n")              # the store's marker; `key` is gone
+        with open(_sd3 + "/account", "w") as f:
+            f.write("name=bo\ntoken=tok-bo\n")
+        os.chmod(_sd3 + "/account", 0o600)
+        rc, out, err = spark("edit", "--decline", "--name", "x.md", stdin="n\n", extra=_xdg3)
+        t.ok(rc == 78 and "key is gone" in err and "spark user login bo" in err,
+             "local_store: a store without its key refuses with 78, naming the login", out + err)
         rc, out, _ = spark("edit", "--type", "python", "--about", "a poem", "tighten", stdin="x = 1\n")
         body = STATE["bodies"][-1]
         t.ok(body["messages"][-1]["content"].startswith("tighten\n\nThe author says: a poem\nText (python):\n"), "edit: --about rides above the label", repr(body["messages"][-1]["content"][:80]))

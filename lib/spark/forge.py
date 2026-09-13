@@ -322,14 +322,25 @@ def local_store(provision=False):
             # a login without a store (a client, or a wiped users/): the
             # same token seals a fresh local store on first write
             if provision:
-                users.write_login(name, token)      # keep the login
                 d = users.user_dir(name)
-                if not os.path.isdir(d):
-                    users.make_dirs(name)
-                    vault.write_private(os.path.join(d, "token.hash"),
-                                        (vault.token_hash(token) + "\n").encode())
-                    vault.write_private(os.path.join(d, "key"),
-                                        vault.wrap_key(vault.new_key(), token, name).encode())
+                if os.path.isfile(os.path.join(d, "token.hash")):
+                    # the store was provisioned once (token.hash is its
+                    # marker) but its key file is gone: nothing minted
+                    # here could read those files, and a stale
+                    # account-key must never seal against a fresh key
+                    from . import die
+                    die("the account's key is gone -- spark user login %s again" % name, 78)
+                users.write_login(name, token)      # keep the login
+                users.make_dirs(name)
+                ndk = vault.new_key()
+                vault.write_private(os.path.join(d, "token.hash"),
+                                    (vault.token_hash(token) + "\n").encode())
+                vault.write_private(os.path.join(d, "key"),
+                                    vault.wrap_key(ndk, token, name).encode())
+                # refresh the cached account-key NOW, so account_key()
+                # below answers the key just minted -- an earlier login's
+                # stale cache must never seal what this key wraps
+                users.write_login(name, token, ndk)
             else:
                 return _NullStore()
         if not name:
