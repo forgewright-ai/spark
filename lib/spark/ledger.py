@@ -255,13 +255,15 @@ def block(cfg, name, data):
 def answered(cfg, name):
     """Contract 12: (the paragraph a question round carries, the folded
     questions already answered). Nothing invalidates these but age and
-    `ledger clear`: the plan may move, an answer stays an answer."""
-    from . import text as textmod
+    `ledger clear`: the plan may move, an answer stays an answer. The
+    comparison key is ask.bare on BOTH sides, so a record written before
+    v1.30 (with its `1.` or its anchor mark still on) matches too."""
+    from . import ask as askmod
     name = os.path.basename((name or "").strip())
     if not name:
         return "", set()
     mine, _alive = _mine(cfg, KIND_ASK, name)
-    folded = set(textmod.fold(e["note"]) for e in mine)
+    folded = set(askmod.bare(e["note"]) for e in mine)
     return _paragraph("Answered before -- do not ask these again:\n", mine), folded
 
 

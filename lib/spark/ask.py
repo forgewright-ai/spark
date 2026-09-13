@@ -84,10 +84,20 @@ _WORD = re.compile(r"[a-z0-9]{4,}")
 _LEAD = re.compile(r"^\s*(?:[-*]|\d+[.)])\s*")
 
 
+def plain(question):
+    """A question without the enumeration a model puts in front of it
+    (`- `, `1.`) and without the gate's marks (` [not in the text]`,
+    ` [proposed]`) -- the shape worth storing: what the user piped back
+    is the line as printed, marks and numbering included."""
+    q = _LEAD.sub("", question)
+    q = q.replace(textmod.ANCHOR_MARK, "").replace(textmod.PROPOSED_MARK, "")
+    return " ".join(q.split())
+
+
 def bare(question):
-    """A question without the enumeration a model puts in front of it:
-    what two askings of the same question have in common."""
-    return textmod.fold(_LEAD.sub("", question))
+    """plain(), folded: what two askings of the same question have in
+    common -- the comparison key on both the stored and the asking side."""
+    return textmod.fold(plain(question))
 
 
 def generic(question, data):
@@ -194,7 +204,10 @@ def cmd_ask(args):
         return 2
     if opts["answered"]:
         try:
-            ledger.keep(ledger.KIND_ASK, name, data, config.load(),
+            # stored plain: the user pipes back the question as printed,
+            # numbering and anchor marks included, and those must not
+            # keep it from matching next round
+            ledger.keep(ledger.KIND_ASK, name, plain(data), config.load(),
                         missing="an answered question needs --name NAME (the text's name)")
         except ledger.Refused as e:
             say("%s ask --answered -- %s" % (MARK, e.hint))

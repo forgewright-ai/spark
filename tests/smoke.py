@@ -1069,6 +1069,15 @@ def main():
              "ask: the answered questions ride above the text", repr(umsg[:220]))
         rc, out, _ = spark("ask", "--ledger", "clear", "--name", "plan.md")
         t.ok(rc == 0 and "dropped 1 question for plan.md" in out, "ask --ledger clear --name drops one text's", out)
+        # the pipe-back shape: a question comes back numbered and marked,
+        # exactly as the gate printed it -- it must still suppress itself
+        rc, out, err = spark("ask", "--answered", "--name", "plan.md",
+                             stdin='1. Who owns "Postgres" after March? [not in the text]\n')
+        rc2, out2, err2 = spark("ask", "--name", "plan.md", stdin=ASK_TEXT)
+        t.ok(rc == 0 and rc2 == 0 and "Postgres" not in out2 and out2.count("?") == 3,
+             "ask --answered: a numbered, anchor-marked pipe-back suppresses itself next round",
+             repr(out2) + err + err2)
+        spark("ask", "--ledger", "clear", "--name", "plan.md")
         # the shape of the law, unit by unit
         from spark import ask as askmod
         t.ok(askmod.generic("What is your timeline?", ASK_TEXT)
