@@ -103,6 +103,8 @@ def main():
     for doc in ("CLAUDE.md", "INSTALL.md"):
         for m in re.finditer(r"spark check`?\s+(?:has )?(\d+) rows", read(doc)):
             check(int(m.group(1)) == n_rows, "%s: '%s' is check.py's count (%d)" % (doc, m.group(0), n_rows))
+    for m in re.finditer(r"spark check` answers (\d+)", read("IDEAS.md")):
+        check(int(m.group(1)) == n_rows, "IDEAS.md: '%s' is check.py's count (%d)" % (m.group(0), n_rows))
     # the split by category CLAUDE.md states ("12 SOFTWARE, 17 CAPABILITY, 9 NONFUNCTIONAL")
     src_rows = read(os.path.join("lib", "spark", "check.py"))
     for cat in ("SOFTWARE", "CAPABILITY", "NONFUNCTIONAL"):
