@@ -70,6 +70,27 @@ The forecast is the same trick pointed forward -- "the disk fills in
 about three days at this rate" -- and it stays honest, because it is
 made of numbers spark already keeps and words that never leave.
 
+## 4. The source read before you ask (--warm)
+
+A reading client knows the source the moment its key is pressed; the
+question comes seconds later, typed by a human. Today those seconds
+are wasted and then the prefill is paid in full: on the box's 12B,
+12.8 s to the first line cold -- and 9.0 s asking the SAME article the
+SAME question again, so the server barely reuses the processed prefix
+(measured 2026-09-13; a working cache would make the rerun 2-3 s).
+
+`spark read --warm < source` would send the source ahead -- no
+question, no answer, one request that leaves the server's slot hot --
+and a client starts it the moment the key is pressed, in parallel with
+the typing. The first line then lands almost at Enter.
+
+The cost: a `--warm` path on contract 11, and first the honest
+investigation -- whether the wire asks for prompt caching
+(`cache_prompt`), whether the persona + source prefix is byte-stable
+between the warm call and the real one, and what `--cache-ram 0`
+(v1.7, the RAM-leak fix) takes away. The measurement above is the
+baseline any fix answers to.
+
 ## Where to start
 
 | idea | cost | surface |
