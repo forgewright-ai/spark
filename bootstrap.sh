@@ -156,6 +156,12 @@ need() {   # need WHAT WHY -- something must change; in apply mode the caller do
 as_root() {
     if [ "$(id -u)" -eq 0 ]; then "$@"; else sudo "$@"; fi
 }
+made() {   # made STEP -- record a root-side change THIS bootstrap made, so
+    # spark uninstall undoes only what spark did (state/made, one word a line)
+    [ "$MODE" = dry ] && return 0
+    mkdir -p "$SPARK_STATE_DIR" 2>/dev/null || true
+    grep -qx "$1" "$SPARK_STATE_DIR/made" 2>/dev/null || echo "$1" >> "$SPARK_STATE_DIR/made"
+}
 sudo_upfront() {
     # Ask once, here, before anything is touched. A run that stops at the
     # first root step has already changed things and springs a password
@@ -644,13 +650,13 @@ else
             skip linger "a workstation (SITE_HEADLESS=no): units run from login"
         elif [ "$(loginctl show-user "$(id -un)" -p Linger --value 2>/dev/null)" = yes ]; then ok linger "units run from boot"
         elif need linger "loginctl enable-linger $(id -un) (sudo)"; then
-            as_root loginctl enable-linger "$(id -un)"; ok linger "units run from boot"; fi
+            as_root loginctl enable-linger "$(id -un)"; made linger; ok linger "units run from boot"; fi
         # the render group is core on a vulkan build too: an ssh login has
         # no seat, so no ACL, and llama-server would fall back to the CPU
         if [ -e /dev/dri/renderD128 ] && getent group render >/dev/null 2>&1 && { [ "$headless" = 1 ] || [ "$AI_BUILD" = vulkan ]; }; then
             if id -nG | tr " " "\n" | grep -qx render; then ok render "in the render group"
             elif need render "usermod -aG render $(id -un) (sudo; then log in again)"; then
-                as_root usermod -aG render "$(id -un)"; ok render "added -- the units see the GPU once you log out of every session and in again"; fi
+                as_root usermod -aG render "$(id -un)"; made render; ok render "added -- the units see the GPU once you log out of every session and in again"; fi
         fi
         if [ "$(systemctl --user is-enabled spark-check.timer 2>/dev/null)" = enabled ]; then ok spark-check "timer enabled"
         elif need spark-check "systemctl --user enable --now spark-check.timer"; then
@@ -807,6 +813,7 @@ else
         # the original, once: spark uninstall puts it back
         as_root cp -n /etc/default/console-setup /etc/default/console-setup.spark-orig 2>/dev/null || true
         as_root sed -i "s/^FONTFACE=.*/FONTFACE=\"$SITE_FONT_FACE\"/; s/^FONTSIZE=.*/FONTSIZE=\"$size\"/" /etc/default/console-setup
+        made console-font
         as_root setupcon --force 2>/dev/null || true
         ok console "$SITE_FONT_FACE $size"
     fi
@@ -893,6 +900,7 @@ else
         [ -x "$uname_motd" ] && as_root chmod -x "$uname_motd"
         [ -s "$issue" ] && ! grep -q '25h' "$issue" && as_root cp -n "$issue" "$issue.orig" 2>/dev/null
         printf '\033[?25h' | as_root tee "$issue" >/dev/null
+        made motd
         ok quiet-login "motd empty, no kernel line, bare login prompt (cursor kept; originals: *.orig)"
     fi
     # a quiet boot: straight past GRUB's menu, a silent kernel line, and
@@ -950,6 +958,7 @@ GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT quiet splash loglevel=3 
     elif need quiet-boot "GRUB drop-in $grub_dropin; update-grub (sudo)"; then
         as_root mkdir -p /etc/default/grub.d
         printf '%s\n' "$grub_want" | as_root tee "$grub_dropin" >/dev/null
+        made grub
         if as_root update-grub >/dev/null 2>&1 && grub_live_quiet; then
             ok quiet-boot "silent: menu hidden, kernel line quiet (hold Shift at boot for the menu)"
         else

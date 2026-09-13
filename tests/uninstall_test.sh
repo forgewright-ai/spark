@@ -78,6 +78,23 @@ printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "--dry-run called sudo" || o
 printf '%s\n' "$out" | grep -qE '^would +clone +~/.spark removed' && ok "the default clone would go" || bad "clone row: $(printf '%s\n' "$out" | grep -E ' clone ')"
 printf '%s\n' "$out" | grep -q 'kept (yours): .*soul' && ok "the plan names what stays" || bad "no kept line: $out"
 
+# 1b. linger and the render group are undone only when state/made says
+# spark made them (Linux: the rows are Linux's). Unrecorded, they are a
+# todo naming the command -- yours to decide, never spark's to take away.
+if [ "$(uname -s)" != Darwin ]; then
+    mkdir -p "$T/root"
+    printf '#!/bin/sh\ncase "$*" in *Linger*) echo "Linger=yes" ;; esac\nexit 0\n' > "$T/root/loginctl"; chmod +x "$T/root/loginctl"
+    printf '#!/bin/sh\ncase "$1" in -nG) echo "users render" ;; *) exec /usr/bin/id "$@" ;; esac\n' > "$T/root/id"; chmod +x "$T/root/id"
+    out=$(PATH="$T/root:$PATH" spark uninstall --dry-run 2>&1) || bad "uninstall --dry-run (unrecorded root) failed"
+    printf '%s\n' "$out" | grep -qE '^todo +linger +.*yours to decide' && ok "linger spark did not record: a todo, not an undo" || bad "unrecorded linger: $(printf '%s\n' "$out" | grep -E ' linger ' | head -1)"
+    printf '%s\n' "$out" | grep -qE '^todo +render +.*yours to decide' && ok "render spark did not record: a todo, not an undo" || bad "unrecorded render: $(printf '%s\n' "$out" | grep -E ' render ' | head -1)"
+    printf 'linger\nrender\n' > "$XDG_STATE_HOME/spark/made"
+    out=$(PATH="$T/root:$PATH" spark uninstall --dry-run 2>&1) || bad "uninstall --dry-run (recorded root) failed"
+    printf '%s\n' "$out" | grep -qE '^would +linger +linger off' && ok "linger spark recorded: the undo is offered" || bad "recorded linger: $(printf '%s\n' "$out" | grep -E ' linger ' | head -1)"
+    printf '%s\n' "$out" | grep -qE '^would +render +' && ok "render spark recorded: the undo is offered" || bad "recorded render: $(printf '%s\n' "$out" | grep -E ' render ' | head -1)"
+    rm -f "$XDG_STATE_HOME/spark/made"
+fi
+
 # 2. a non-terminal without --yes: the plan, one line, exit 2
 rc2=0; out=$(spark uninstall </dev/null 2>&1) || rc2=$?
 [ "$rc2" = 2 ] && printf '%s\n' "$out" | grep -q -- '--yes runs it' && ok "not a terminal: refused with the --yes line, exit 2" || bad "non-tty: rc=$rc2 $out"
@@ -110,6 +127,15 @@ out=$(spark uninstall --yes --purge --keep-packages 2>&1) || bad "uninstall --pu
 left=$(cd "$HOME" && find . -path '*spark*' -not -path './Library/*' | sort | tr '\n' ' ')
 [ -z "$left" ] && ok "--purge: no path with spark in its name remains" || bad "--purge left: $left"
 [ ! -e "$HOME/.config/spark" ] && [ ! -e "$HOME/.local/state/spark" ] && ok "--purge: config and state dirs are gone" || bad "--purge left a spark dir"
+
+# 4b. --purge deletes spark's files BY NAME and leaves what it cannot
+# name: a stray file of yours under ~/.config/spark survives the purge
+build_home twob
+printf 'my own notes\n' > "$HOME/.config/spark/my-notes.txt"
+out=$(spark uninstall --yes --purge --keep-packages 2>&1) || bad "uninstall --purge (stray file) failed: $out"
+[ -f "$HOME/.config/spark/my-notes.txt" ] && ok "--purge: a file spark cannot name survives" || bad "--purge took my-notes.txt"
+[ ! -e "$HOME/.config/spark/soul" ] && [ ! -e "$HOME/.local/state/spark" ] && ok "--purge: spark's own files still go" || bad "--purge left spark's own files"
+printf '%s\n' "$out" | grep -q 'my-notes.txt' && ok "--purge names what it left" || bad "--purge silent about my-notes.txt"
 
 # 5. a developer checkout is never removed
 build_home three

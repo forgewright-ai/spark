@@ -346,16 +346,34 @@ def step_console(ctx):
         ctx.root("quiet", ["rm", "-f"] + origs, "%s removed (restored by the undo pass)" % " ".join(origs))
 
 
+def _made():
+    """The root-side changes bootstrap recorded (state/made): what spark
+    may undo. Linger a user enabled, a render group they joined
+    themselves, are not spark's to take away."""
+    try:
+        with open(os.path.join(STATE_DIR, "made"), encoding="utf-8") as f:
+            return set(f.read().split())
+    except OSError:
+        return set()
+
+
 def step_headless_leftovers(ctx):
     cfg = ctx.cfg
+    made = _made()
     user = os.environ.get("USER") or os.path.basename(HOME)
     if not IS_MAC and not is_wsl():
         rc, out = run(["loginctl", "show-user", user, "-p", "Linger"], timeout=5)
         if rc == 0 and "Linger=yes" in out:
-            ctx.root("linger", ["loginctl", "disable-linger", user], "linger off: the units end with the login")
+            if "linger" in made:
+                ctx.root("linger", ["loginctl", "disable-linger", user], "linger off: the units end with the login")
+            else:
+                ctx.row("todo", "linger", "linger is on and spark did not record enabling it -- yours to decide: loginctl disable-linger %s" % user)
         rc, out = run(["id", "-nG", user], timeout=5)
         if rc == 0 and "render" in out.split():
-            ctx.root("render", ["gpasswd", "-d", user, "render"], "%s left the render group (takes effect at the next login)" % user)
+            if "render" in made:
+                ctx.root("render", ["gpasswd", "-d", user, "render"], "%s left the render group (takes effect at the next login)" % user)
+            else:
+                ctx.row("todo", "render", "%s is in the render group and spark did not record adding them -- yours to decide: sudo gpasswd -d %s render" % (user, user))
     elif IS_MAC and cfg.headless:
         ctx.row("todo", "pmset", "spark set sleep 0, disksleep 0, womp 1, autorestart 1: sudo pmset -a sleep 1 disksleep 10 womp 0 autorestart 0 puts Apple's defaults back")
     if cfg.get("SITE_SET_HOSTNAME", "no") == "yes":
@@ -460,7 +478,11 @@ def step_state_config(ctx):
             if name in keep_config:
                 ctx.kept.append(p)
                 continue
-            if _spark_link(p) or (os.path.islink(p) and not os.path.exists(p)) or name in SPARK_CONFIG:
+            # with --purge, spark's kept files (soul, memory, ...) are
+            # known by name and go too; a file spark cannot name is not
+            # spark's to delete, purge or no purge
+            known = name in SPARK_CONFIG or (ctx.purge and name in KEEP_CONFIG)
+            if _spark_link(p) or (os.path.islink(p) and not os.path.exists(p)) or known:
                 ctx.remove("config", p)
             elif name == "launchd" or name.startswith("spark-") and name.endswith(".terminal"):
                 ctx.remove("config", p)
@@ -468,10 +490,6 @@ def step_state_config(ctx):
                 ctx.kept.append(p)          # not ours to judge: named at the end
         if not ctx.dry:
             _rmdir_empty(CONFIG_DIR)
-    if ctx.purge and not ctx.dry:
-        for d in (STATE_DIR, CONFIG_DIR):
-            if os.path.isdir(d):
-                shutil.rmtree(d, ignore_errors=True)
 
 
 def _default_clone():
