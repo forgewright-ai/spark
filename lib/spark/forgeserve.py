@@ -1334,12 +1334,19 @@ def cmd_foreground(args):
         return _die(why + " -- ./bootstrap.sh, or spark serve", EX_CONFIG)
     ensure_token(cfg)
     url = "http://%s:%d" % (host, port)
-    _write_url(url)
+    # bind FIRST, write the records after: writing forge-url before the
+    # bind meant a failed second start forget()'d the RUNNING FORGE's
+    # url and pid on its way out
     try:
         srv = ForgeServer((host, port), cfg, url)
     except OSError as e:
+        recorded = forge_url()
+        if recorded and isinstance(wire.forge_health(recorded), dict):
+            return _die("cannot bind %s: %s -- the FORGE at %s is running; its records stay"
+                        % (url, e.strerror or e, recorded))
         forget()
         return _die("cannot bind %s: %s" % (url, e.strerror or e))
+    _write_url(url)
     state_dir()
     with open(FORGE_PID, "w", encoding="utf-8") as f:
         f.write("%d\n" % os.getpid())

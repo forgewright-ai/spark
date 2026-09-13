@@ -966,6 +966,18 @@ def main():
             st, _, _ = req(url, "GET", "/api/check", headers={"Authorization": "Bearer " + utoken2})
             ok(st == 200, "the user token survived the admin rotation")
 
+            # a second --foreground on the taken port: exit 1, and the
+            # FIRST one's records survive (the url used to be written
+            # before the bind, so the loser forget()'d the winner's)
+            url_before = open(state + "/forge-url").read()
+            pid_before = open(state + "/forge.pid").read()
+            rc2, out2, err2 = spark("forge", "--foreground")
+            ok(rc2 == 1 and "cannot bind" in (out2 + err2) and "records stay" in (out2 + err2),
+               "a second --foreground on the taken port refuses, naming the running FORGE", out2 + err2)
+            ok(os.path.exists(state + "/forge-url") and open(state + "/forge-url").read() == url_before
+               and open(state + "/forge.pid").read() == pid_before,
+               "the running FORGE's forge-url and forge.pid survive the failed second start")
+
             # a machine that holds only its own login (no admin token) still answers the line
             os.rename(tok_path, tok_path + ".aside")
             try:
