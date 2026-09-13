@@ -161,8 +161,10 @@ def cmd_drill(args):
     source = source[:DRILL_MAX]
     cfg = config.load()
     shell = os.path.basename(os.environ.get("SHELL") or "sh")
-    s = session.Session(cfg, MODE, shell, "", role="ember")
     try:
+        # the Session resolves the brain: no brain is a BrainError here,
+        # one line and exit 1, never a traceback
+        s = session.Session(cfg, MODE, shell, "", role="ember")
         items = _propose(s, source, cfg, shell)
     except wire.BrainError as e:
         die(e.hint)
@@ -182,7 +184,10 @@ def cmd_drill(args):
     try:
         tty = open(ans_path)
     except OSError:
-        die("no terminal to answer at -- the source came on stdin, so drill needs /dev/tty")
+        # contract 13: a missing terminal is the invocation's fault -- a
+        # signed refusal on stdout, exit 2, like every other gate refusal
+        say("%s drill -- no terminal to answer at: run it at a tty" % MARK)
+        return 2
 
     def prompt(msg):
         sys.stderr.write(msg)

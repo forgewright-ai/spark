@@ -1146,6 +1146,14 @@ def main():
              "drill --name: the graded items are scheduled -- one right, one to revisit", out)
         rc, out, _ = spark("drill", "--ledger", "clear", "--name", "bio")
         t.ok(rc == 0 and "dropped 2 item" in out, "drill --ledger clear drops the schedule", out)
+        # no terminal to answer at is the invocation's fault: signed, exit 2
+        rc, out, err = spark("drill", stdin=DRILL_TEXT, extra={"SPARK_DRILL_TTY": home + "/no-such-tty"})
+        t.ok(rc == 2 and out.startswith("spark drill -- no terminal to answer at") and "Traceback" not in err,
+             "drill: no tty is a signed refusal, exit 2", out[:80] + err[:80])
+        # no brain is the world's fault: one line, exit 1, never a traceback
+        rc, out, err = spark("drill", stdin=DRILL_TEXT, extra={"SPARK_BASE_URL": "http://127.0.0.1:9"})
+        t.ok(rc == 1 and out == "" and err.strip() and "Traceback" not in err,
+             "drill: no brain is one line on stderr, exit 1", err[:120])
 
         # spark watch: the operational-stream monitor (contract 14)
         rc, out, _ = spark("watch", "-h")
