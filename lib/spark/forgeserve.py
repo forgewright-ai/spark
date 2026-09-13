@@ -137,6 +137,20 @@ def _hash_current(name, h):
         return False
 
 
+# a burst of wrong logins must not hold a hundred threads in time.sleep:
+# at most eight sleepers pay the second; the rest are refused just as
+# fast (the counter and the 429 do the real gating)
+_PUNISH = threading.BoundedSemaphore(8)
+
+
+def punish_sleep():
+    if _PUNISH.acquire(blocking=False):
+        try:
+            time.sleep(1)
+        finally:
+            _PUNISH.release()
+
+
 # -------------------------------------------------------------------- log
 _log_lock = threading.Lock()
 
@@ -398,6 +412,10 @@ class ForgeServer(ThreadingHTTPServer):
 
 class Handler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.0"               # one connection per request: an SSE stream owns its own
+    # a per-operation socket timeout: a body whose Content-Length never
+    # arrives no longer parks a daemon thread forever. SSE stays alive
+    # because the timeout is per op and keepalives write every 15 s.
+    timeout = 30
     server_version = "spark-forge/" + VERSION
     sys_version = ""
 
@@ -496,7 +514,7 @@ class Handler(BaseHTTPRequestHandler):
     def _punish(self, what):
         log("%s wrong %s" % (self._ip(), what))
         self.server.failed(self._ip())
-        time.sleep(1)
+        punish_sleep()
 
     def _host_ok(self):
         host = (self.headers.get("Host") or "").strip().lower()
@@ -648,7 +666,7 @@ class Handler(BaseHTTPRequestHandler):
         if not tok:
             log("%s login failed" % ip)
             self.server.failed(ip)
-            time.sleep(1)
+            punish_sleep()
             return self._error(401, "auth", "wrong token")
         log("%s login ok %s%s" % (ip, role, " " + uname if uname else ""))
         cookie = "%s=%s; HttpOnly; SameSite=Strict; Path=/; Max-Age=%d" % (COOKIE, cookie_value(tok), COOKIE_AGE)

@@ -232,6 +232,12 @@ def main():
             ok(st == 401, "a non-ASCII bearer -> 401, not a 500", st)
             st, _, _ = req(url, "GET", "/api/check", headers={"Cookie": "spark_forge=café"})
             ok(st == 401, "a non-ASCII cookie -> 401, not a 500", st)
+            # the handler carries a socket timeout, and the login sleep is
+            # bounded: a burst of wrong logins cannot hold 100 threads
+            from spark import forgeserve as _fsv
+            ok(_fsv.Handler.timeout == 30, "the handler carries a 30 s socket timeout")
+            ok(getattr(_fsv._PUNISH, "_initial_value", None) == 8,
+               "the login punish sleep is bounded by a semaphore of 8")
             st, h, raw = req(url, "POST", "/api/login", {"token": token})
             sc = h.get("Set-Cookie", "")
             ok(st == 200 and sc.startswith("spark_forge=") and "HttpOnly" in sc and "SameSite=Strict" in sc and "Max-Age=7776000" in sc,
@@ -977,6 +983,23 @@ def main():
             ok(os.path.exists(state + "/forge-url") and open(state + "/forge-url").read() == url_before
                and open(state + "/forge.pid").read() == pid_before,
                "the running FORGE's forge-url and forge.pid survive the failed second start")
+
+            # a burst of wrong logins: the sleepers are capped, the answers
+            # come fast, and the lockout may kick in -- LAST here, because
+            # it poisons 127.0.0.1 for a minute
+            burst = []
+            t0 = time.time()
+
+            def _wrong():
+                burst.append(req(url, "POST", "/api/login", {"token": "wrong-burst"})[0])
+            ths = [threading.Thread(target=_wrong) for _ in range(6)]
+            for th_ in ths:
+                th_.start()
+            for th_ in ths:
+                th_.join(timeout=15)
+            took = time.time() - t0
+            ok(burst.count(401) + burst.count(429) == 6 and took < 5,
+               "six wrong logins in parallel share the punish second, not six of them", (burst, round(took, 1)))
 
             # a machine that holds only its own login (no admin token) still answers the line
             os.rename(tok_path, tok_path + ".aside")
