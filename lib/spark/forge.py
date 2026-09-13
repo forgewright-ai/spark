@@ -441,6 +441,50 @@ def prune(cfg):
     local_store().prune(cfg)
 
 
+def _drop_stale_headers(tdir):
+    """Remove header-only thread files older than a day: a failed first
+    turn leaves them, and the header is plaintext -- no key needed to
+    see that nothing follows it."""
+    try:
+        cutoff = time.time() - 86400
+        for n in os.listdir(tdir):
+            if not n.endswith(".sealed"):
+                continue
+            p = os.path.join(tdir, n)
+            try:
+                if os.path.getmtime(p) >= cutoff or os.path.getsize(p) > 200:
+                    continue
+                with open(p, encoding="utf-8", errors="replace") as f:
+                    lines = [l for l in f.read().splitlines() if l.strip()]
+                if len(lines) <= 1:
+                    os.remove(p)
+            except OSError:
+                pass
+    except OSError:
+        pass
+
+
+def prune_stores(cfg, keys):
+    """The FORGE's prune: the box account's store and every named user's
+    whose data key the server holds ({name: dk} -- a session or a cached
+    bearer). A named store with no key in memory is skipped and counted
+    (returned); its header-only leftovers still go, aged a day, because
+    the header is plaintext."""
+    from . import users
+    local_store().prune(cfg)
+    own = users.account()[0]
+    skipped = 0
+    for name in users.list_users():
+        if name != own:
+            dk = keys.get(name)
+            if dk is not None:
+                store_for(name, dk).prune(cfg)
+            else:
+                skipped += 1
+        _drop_stale_headers(os.path.join(users.user_dir(name), "threads"))
+    return skipped
+
+
 # ------------------------------------------------------------------ claim
 def claim_legacy(name, dk):
     """Move the pre-v1.4 plaintext threads into a user's sealed store:

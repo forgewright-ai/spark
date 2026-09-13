@@ -735,6 +735,29 @@ def main():
                "alice's thread lands sealed under users/ualice", apath)
             st, _, raw = req(url, "GET", "/api/threads", headers=ubearer)
             ok(st == 200 and any(t["id"] == atid for t in json.loads(raw)["threads"]), "alice lists her thread", raw[:150])
+            # prune reaches every store the server holds a key for --
+            # alice's key is cached from her login -- and a header-only
+            # file from a failed first turn goes after a day, key or not
+            # (35 days old prunes under the default SPARK_HISTORY too)
+            import shutil as _sh
+            oldp = state + "/users/ualice/threads/2020-01-01-000001.sealed"
+            hdrp = state + "/users/ualice/threads/2020-01-01-000002.sealed"
+            _sh.copyfile(apath, oldp)
+            with open(hdrp, "w") as f:
+                f.write("spark-sealed-v1 thread 2020-01-01-000002\n")
+            oldt = time.time() - 35 * 86400
+            os.utime(oldp, (oldt, oldt))
+            hdt = time.time() - 2 * 86400
+            os.utime(hdrp, (hdt, hdt))
+            st, _, _ = req(url, "POST", "/api/chat", {"text": "count"},
+                           headers=dict(ubearer, **{"X-Spark": "1", "Origin": url}), timeout=30)
+            t_end = time.time() + 5
+            while (os.path.exists(oldp) or os.path.exists(hdrp)) and time.time() < t_end:
+                time.sleep(0.2)
+            ok(not os.path.exists(oldp) and not os.path.exists(hdrp),
+               "prune reaches alice's store and drops her stale header-only file",
+               (os.path.exists(oldp), os.path.exists(hdrp)))
+
             bbearer = {"Authorization": "Bearer " + btoken}
             st, _, raw = req(url, "GET", "/api/threads", headers=bbearer)
             ok(st == 200 and json.loads(raw)["threads"] == [], "bob's thread list is empty", raw[:100])

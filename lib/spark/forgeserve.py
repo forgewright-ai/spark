@@ -1106,7 +1106,16 @@ class Handler(BaseHTTPRequestHandler):
         used = rm.get("ember") or (sorted(rm.values())[0] if rm else "")
         self._emit("done", {"thread": thread, "ms": ms, "model": used})
         session.prune(cfg)
-        forge.prune(cfg)
+        # every store the server holds a key for is pruned, not only the
+        # box account's: named users' threads aged the same way, and
+        # header-only leftovers go regardless (their header is plaintext)
+        keys = {}
+        with self.server._auth_lock:
+            for _h, (n, dk) in self.server._user_keys.items():
+                keys[n] = dk
+            for _c, (n, dk, _th) in self.server.sessions.items():
+                keys[n] = dk
+        forge.prune_stores(cfg, keys)
         return None
 
     # ---- soul and memory ----
