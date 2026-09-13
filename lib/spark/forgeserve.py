@@ -22,7 +22,9 @@ import hmac
 import json
 import os
 import re
+import select
 import signal
+import socket
 import struct
 import subprocess
 import sys
@@ -1038,11 +1040,22 @@ class Handler(BaseHTTPRequestHandler):
 
     def _generating(self):
         """Take the chat lock; the SSE headers are out already, so a wait
-        longer than QUEUE_WAIT tells the client it is queued."""
+        longer than QUEUE_WAIT tells the client it is queued. While
+        queued, the socket is peeked between tries: a client that hung
+        up must not pay a prefill and land a junk partial thread --
+        None then, and the caller logs 499 and lands nothing (HTTP/1.0,
+        one request per connection: nothing else ever arrives here)."""
         lock = self.server.chat_lock
-        if not lock.acquire(timeout=QUEUE_WAIT):
-            self._emit("queued", {})
-            lock.acquire()
+        if lock.acquire(timeout=QUEUE_WAIT):
+            return lock
+        self._emit("queued", {})
+        while not lock.acquire(timeout=1.0):
+            try:
+                r, _w, _x = select.select([self.connection], [], [], 0)
+                if r and not self.connection.recv(1, socket.MSG_PEEK):
+                    return None
+            except OSError:
+                return None
         return lock
 
     def api_chat(self, body):
@@ -1066,6 +1079,10 @@ class Handler(BaseHTTPRequestHandler):
             return None
         self._sse()
         lock = self._generating()
+        if lock is None:
+            self._status = 499
+            log("%s chat 499 while queued" % self._ip())
+            return None
         try:
             try:
                 thread, _answer, ms = forge.reply(cfg, thread, text, cwd=cwd, shell=_shell(), mode=mode,

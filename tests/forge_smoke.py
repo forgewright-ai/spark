@@ -522,6 +522,44 @@ def main():
                and got[-1]["text"] and set(got[-1]["text"]) == {"a"},
                "a hung-up chat records the user line and the partial reply, partial=True", got)
 
+            # a client that hangs up WHILE QUEUED pays no prefill and
+            # lands no thread: A holds the model with a dripfeed, B gets
+            # `queued` and vanishes -- the server logs 499, nothing lands
+            st, _, raw = req(url, "GET", "/api/threads?n=50", headers=bearer)
+            n_before = len(json.loads(raw)["threads"])
+            a_done = []
+
+            def _chat_a():
+                a_done.append(req(url, "POST", "/api/chat", {"text": "dripfeed"}, headers=post, timeout=30))
+            ta = threading.Thread(target=_chat_a)
+            ta.start()
+            time.sleep(0.4)                    # A holds the chat lock now
+            cb = http.client.HTTPConnection(u2.hostname, u2.port, timeout=10)
+            cb.request("POST", "/api/chat", json.dumps({"text": "leftbehind"}).encode(),
+                       dict(post, **{"Content-Type": "application/json"}))
+            rb = cb.getresponse()
+            bufb, t_end = b"", time.time() + 10
+            while b"event: queued" not in bufb and time.time() < t_end:
+                ch = rb.read1(256)
+                if not ch:
+                    break
+                bufb += ch
+            rb.fp.raw._sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
+            rb.close()
+            cb.close()
+            ta.join(timeout=30)
+            time.sleep(0.5)
+            st, _, raw = req(url, "GET", "/api/threads?n=50", headers=bearer)
+            th = json.loads(raw)["threads"]
+            leftover = []
+            for t in th:
+                _st2, _, raw2 = req(url, "GET", "/api/threads/" + t["id"], headers=bearer)
+                if any(m.get("text") == "leftbehind" for m in json.loads(raw2).get("messages", [])):
+                    leftover.append(t["id"])
+            ok(b"event: queued" in bufb and not leftover and len(th) == n_before + 1,
+               "a client that left while queued lands no thread",
+               (bufb[:40], n_before, len(th), leftover))
+
             st, _, raw = req(url, "GET", "/api/soul", headers=bearer)
             d = json.loads(raw)
             ok(st == 200 and d == {"text": "Call yourself Fixture.", "source": "file"}, "/api/soul: the fixture soul", raw[:100])
