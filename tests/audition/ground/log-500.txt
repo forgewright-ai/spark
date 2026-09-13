@@ -1,0 +1,7 @@
+GET /api/list 200 12ms
+GET /api/item/4 200 9ms
+POST /api/save 201 1500ms
+GET /payments 500 88ms
+GET /api/list 200 11ms
+GET /health 200 1ms
+GET /api/item/2 200 7ms

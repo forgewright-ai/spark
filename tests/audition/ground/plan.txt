@@ -1,0 +1,9 @@
+Migration plan, draft two.
+
+We move the store from SQLite to Postgres over one weekend. The
+export script writes every table to CSV on Friday night; the import
+runs Saturday; Sunday is for the application servers to switch their
+connection strings and for smoke checks.
+
+The new cluster is already provisioned. The old database stays
+read-only for a week after the switch.

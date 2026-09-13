@@ -60,6 +60,27 @@ FIXTURES = {
                      ask="?", first=None),
 }
 KINDS = ("complete", "rewrite", "ask")
+# The grounded contracts, scored the same blind way: a source and a
+# question crafted to invite invention. expect "refuse" means silence /
+# exit 1 is the RIGHT answer (a kept line is false grounding); expect
+# "answer" means a kept answer is right (silence is over-refusal), and
+# `quote`, when set, must appear in it.
+GROUND_DIR = os.path.join(FIX, "ground")
+GROUND = {
+    "read-unanswered": dict(verb="read", src="orchard.txt",
+                            words="when should the trees be watered", expect="refuse"),
+    "read-answered": dict(verb="read", src="orchard.txt",
+                          words="how many rows of apple trees are there", expect="answer",
+                          quote="forty rows"),
+    "ask-complete": dict(verb="ask", src="note.txt", words="", expect="refuse"),
+    "ask-plan": dict(verb="ask", src="plan.txt", words="", expect="answer", quote=""),
+    "watch-quiet": dict(verb="watch", src="log-quiet.txt",
+                        words="when a 500 appears", expect="refuse"),
+    "watch-hit": dict(verb="watch", src="log-500.txt",
+                      words="when a 500 appears", expect="answer", quote="500"),
+    "drill-thin": dict(verb="drill", src="thin.txt", words="", expect="refuse"),
+    "drill-facts": dict(verb="drill", src="facts.txt", words="", expect="answer", quote=""),
+}
 EN = ("the", "and", "of", "to", "is", "in", "that", "it", "was", "with")
 PT = ("de", "que", "não", "uma", "com", "para", "os", "as", "do", "da", "em", "é", "um", "se")
 PREAMBLE = re.compile(r"^\s*(here is|here's|sure|certainly|of course|aqui está|claro|segue)", re.I)
@@ -154,6 +175,47 @@ def run_edit(args, stdin):
     return p.returncode, p.stdout, p.stderr, int((time.time() - t0) * 1000)
 
 
+def run_ground(verb, words, stdin):
+    """One grounded-contract run; drill answers come from a seam file
+    (blank reveal + no, enough for ITEMS_MAX)."""
+    env = dict(os.environ)
+    tmp = None
+    if verb == "drill":
+        tmp = tempfile.NamedTemporaryFile("w", suffix=".answers", delete=False)
+        tmp.write("\nno\n" * 20)
+        tmp.close()
+        env["SPARK_DRILL_TTY"] = tmp.name
+    t0 = time.time()
+    try:
+        p = subprocess.run([sys.executable, SPARK, verb] + (words.split() if words else []),
+                           input=stdin, capture_output=True, text=True, timeout=300, env=env)
+    finally:
+        if tmp:
+            os.unlink(tmp.name)
+    return p.returncode, p.stdout, p.stderr, int((time.time() - t0) * 1000)
+
+
+def ground_one(name, g, verbose):
+    """(right, kept_bad, over_refused, detail) for one ground fixture."""
+    with open(os.path.join(GROUND_DIR, g["src"]), encoding="utf-8") as f:
+        src = f.read()
+    rc, out, err, ms = run_ground(g["verb"], g["words"], src)
+    if verbose:
+        print("--- ground %s (%d ms, rc %d)\n%s\n---" % (name, ms, rc, (out or err).rstrip()))
+    kept = [l for l in out.splitlines() if l.strip()]
+    if g["verb"] == "drill":
+        kept = [l for l in (out + err).splitlines() if "the source says:" in l]
+    if g["expect"] == "refuse":
+        if kept:
+            return 0, len(kept), 0, "kept %d line%s it should have refused" % (len(kept), "" if len(kept) == 1 else "s")
+        return 1, 0, 0, "refused, rightly"
+    if not kept:
+        return 0, 0, 1, "refused an answer the source holds"
+    if g.get("quote") and g["quote"].lower() not in out.lower():
+        return 0, len(kept), 0, "answered without quoting %r" % g["quote"]
+    return 1, 0, 0, "answered, grounded"
+
+
 def one(name, fx, kind, verbose):
     """[(lint, ok)], ms, the answer (or the error)."""
     with open(os.path.join(FIX, name), encoding="utf-8") as f:
@@ -204,6 +266,7 @@ def last_model():
 
 def main(argv):
     times, kinds, names, as_json, verbose = 1, list(KINDS), list(FIXTURES), False, False
+    ground_only = False
     it = iter(argv)
     for a in it:
         if a == "--times":
@@ -212,13 +275,18 @@ def main(argv):
             kinds = [next(it)]
         elif a == "--fixture":
             names = [next(it)]
+        elif a == "--ground":
+            ground_only = True
         elif a == "--json":
             as_json = True
         elif a == "-v":
             verbose = True
         else:
-            print(__doc__ or "usage: audition.py [--times N] [--kind K] [--fixture NAME] [--json] [-v]")
+            print(__doc__ or "usage: audition.py [--times N] [--kind K] [--fixture NAME] [--ground] [--json] [-v]")
             return 2
+    unfiltered = kinds == list(KINDS) and names == list(FIXTURES)
+    if ground_only:
+        names = []
     up, why = brain_up()
     if not up:
         print("audition: no brain answers -- skipped (%s)" % why)
@@ -253,12 +321,38 @@ def main(argv):
         grand[1] += rt
         print("  %-11s %s%d/%d" % (name, row, rp, rt))
     med = "  ".join("%s %d ms" % (k, statistics.median(v)) for k, v in ms_by_kind.items() if v)
-    print("  %-11s %d/%d passed, %d %%   (median: %s)" % ("all", grand[0], grand[1], 100 * grand[0] // max(1, grand[1]), med))
+    if names:
+        print("  %-11s %d/%d passed, %d %%   (median: %s)" % ("all", grand[0], grand[1], 100 * grand[0] // max(1, grand[1]), med))
+    # the grounded contracts, when nothing narrowed the run to the editor
+    g_cells, g_right, g_kept_bad, g_over = {}, 0, 0, 0
+    if ground_only or unfiltered:
+        print("")
+        print("  the grounded contracts (right runs; false grounding; over-refusal):")
+        for gname, g in GROUND.items():
+            right = kept_bad = over = 0
+            detail = ""
+            for _ in range(times):
+                r, kb, ov, detail = ground_one(gname, g, verbose)
+                right += r
+                kept_bad += kb
+                over += ov
+            g_right += right
+            g_kept_bad += kept_bad
+            g_over += over
+            g_cells[gname] = (right, times)
+            print("  %-16s %d/%d  %s" % (gname, right, times, "-- " + detail if detail else ""))
+        print("  %-16s %d/%d right, %d falsely grounded line%s, %d over-refusal%s"
+              % ("ground", g_right, len(GROUND) * times, g_kept_bad,
+                 "" if g_kept_bad == 1 else "s", g_over, "" if g_over == 1 else "s"))
     if as_json:
         os.makedirs(STATE_DIR, exist_ok=True)
         rec = {"ts": time.strftime("%Y-%m-%d %H:%M:%S"), "model": last_model(), "briefs": briefs(), "times": times,
                "passed": grand[0], "total": grand[1],
                "cells": dict(("%s %s" % k, {"passed": v[0], "total": v[1]}) for k, v in cells.items())}
+        if g_cells:
+            rec["ground"] = {"right": g_right, "total": len(GROUND) * times,
+                             "false_grounding": g_kept_bad, "over_refusals": g_over,
+                             "cells": dict((k, {"right": v[0], "total": v[1]}) for k, v in g_cells.items())}
         with open(os.path.join(STATE_DIR, "audition.jsonl"), "a", encoding="utf-8") as f:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
         print("  recorded in %s" % os.path.join(STATE_DIR, "audition.jsonl"))
