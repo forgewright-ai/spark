@@ -251,8 +251,12 @@ def brain_up():
 
 
 def briefs():
+    # the editor's four, plus the grounded contracts' own: a ground score
+    # is only comparable under the briefs that produced it
+    keys = ("edit-complete", "edit-rewrite", "edit-answer", "edit-read",
+            "read-source", "ask-questions", "watch-stream", "drill-items")
     return dict((k, hashlib.sha256(persona.MODES[k].encode()).hexdigest()[:12])
-                for k in ("edit-complete", "edit-rewrite", "edit-ask", "edit-read"))
+                for k in keys if k in persona.MODES)
 
 
 def last_model():
