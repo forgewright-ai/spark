@@ -428,10 +428,13 @@ may change freely.
    Streams are SSE: `/api/chat` (mode `chat|answer`; `talk` and `ask` are
    the old names for `chat` and `answer`, accepted for one version, and
    records write the new ones) emits `queued` (when the model is busy),
-   `delta {t}`, `done {thread, ms, model}`, `error {kind, hint}`; a
+   `delta {t}`, `done {thread, ms, model}`, `error {kind, hint,
+   thread?}` -- `thread` rides a `cut`, whose partial already landed,
+   so the page continues that thread instead of opening a new one; a
    client that hangs up mid-stream (the stop button) still lands the
    turn -- the user line and any partial answer (`partial: true`) go on
-   the thread, and the log line says 499; `/api/run` emits
+   the thread, and the log line says 499 (a client that leaves while
+   QUEUED pays no prefill and lands nothing, 499 likewise); `/api/run` emits
    `line {s}` then `done {rc}`; `/api/events` emits `check`, `bar`, `serve`
    on change (`log` too, for an admin) and a `:keepalive` comment every
    15 s. `/v1/chat/completions` and `/v1/models` are OpenAI-shaped and

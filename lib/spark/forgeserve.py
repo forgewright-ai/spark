@@ -1091,7 +1091,13 @@ class Handler(BaseHTTPRequestHandler):
             except wire.BrainError as e:
                 if e.kind == "down":
                     self.server.upstream.resolve(fresh=True)
-                return self._emit("error", {"kind": e.kind, "hint": e.hint})
+                err = {"kind": e.kind, "hint": e.hint}
+                # a cut landed the partial and forge.reply put the thread
+                # id on the exception: without it the page opened a NEW
+                # thread for the retry and the partial was stranded
+                if getattr(e, "thread", None):
+                    err["thread"] = e.thread
+                return self._emit("error", err)
             except forge.RefError as e:
                 return self._emit("error", {"kind": "ref", "hint": e.hint})
         finally:

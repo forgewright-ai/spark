@@ -39,6 +39,8 @@ class Peek(smoke.Stub):
         msgs = SEEN["body"].get("messages") or [{}]
         if SEEN["body"].get("stream") and "dripfeed" in (msgs[-1].get("content") or ""):
             return self.drip()
+        if SEEN["body"].get("stream") and "cutfeed" in (msgs[-1].get("content") or ""):
+            return self.cut()
         self.rfile = io.BytesIO(raw)
         smoke.Stub.do_POST(self)
 
@@ -56,6 +58,18 @@ class Peek(smoke.Stub):
             self.wfile.write(b"data: [DONE]\n\n")
         except (BrokenPipeError, ConnectionResetError):
             self.close_connection = True
+
+    def cut(self):
+        """Half a reply, then the wire dies: the upstream promises more
+        bytes than it sends, so the read ends in a BrainError of kind
+        cut with the partial already streamed."""
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.send_header("Content-Length", "40000")
+        self.end_headers()
+        self.wfile.write(b'data: {"choices":[{"delta":{"content":"half an "}}]}\n\n')
+        self.wfile.flush()
+        self.close_connection = True
 
 
 def free_port():
@@ -559,6 +573,25 @@ def main():
             ok(b"event: queued" in bufb and not leftover and len(th) == n_before + 1,
                "a client that left while queued lands no thread",
                (bufb[:40], n_before, len(th), leftover))
+
+            # a reply cut mid-stream keeps its thread: the error event
+            # carries the id the partial landed on, and the next message
+            # continues that same thread
+            st, h, raw = req(url, "POST", "/api/chat", {"text": "cutfeed"}, headers=post, timeout=30)
+            evs = sse(raw)
+            cut_err = next((d for e, d in evs if e == "error"), None)
+            ctid = (cut_err or {}).get("thread", "")
+            ok(st == 200 and cut_err and cut_err.get("kind") == "cut" and ctid,
+               "a cut reply's error event names the thread the partial landed on", evs)
+            st, _, raw2 = req(url, "GET", "/api/threads/" + str(ctid), headers=bearer)
+            ms3 = json.loads(raw2).get("messages", []) if st == 200 else []
+            ok(st == 200 and any(m.get("text") == "cutfeed" for m in ms3)
+               and ms3 and ms3[-1].get("partial") is True,
+               "the cut thread holds the user line and the partial", (st, ms3))
+            st, _, raw3 = req(url, "POST", "/api/chat", {"text": "count", "thread": ctid}, headers=post, timeout=30)
+            evs3 = sse(raw3)
+            ok(st == 200 and next((d.get("thread") for e, d in evs3 if e == "done"), "") == ctid,
+               "the next message continues the same thread", evs3)
 
             st, _, raw = req(url, "GET", "/api/soul", headers=bearer)
             d = json.loads(raw)
