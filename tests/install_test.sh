@@ -127,6 +127,11 @@ printf '%s\n' "$out" | grep -qE "^would +dir +mkdir .*/projects" && bad "the wor
 [ "$(uname -s)" = Darwin ] && { printf '%s\n' "$out" | grep -qE '^ok +packages +nothing required' && ok "macOS: packages row is ok, nothing required" || bad "macOS packages row"; }
 [ -z "$(sh "$REPO/bootstrap.sh" --list-packages | grep -E '^(tmux|starship|bat|eza|fzf|btop)$')" ] && ok "--list-packages has no shell tool (spark-shell installs those)" || bad "--list-packages lists a shell tool"
 [ -z "$(sh "$REPO/bootstrap.sh" --list-packages | grep -E '^(micro|aspell|aspell-en|shellcheck)$')" ] && ok "no editor, no contributor tool in --list-packages" || bad "--list-packages still lists micro/aspell/shellcheck"
+# an older engine pin beside the current one is offered for removal, named
+mkdir -p "$HOME/.local/share/spark/engine/llama.cpp-b1"
+out=$(PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (old pin) failed"
+printf '%s\n' "$out" | grep -qE '^would +engine-old +remove older engine pins:.*llama\.cpp-b1' && ok "an older engine pin: would engine-old, naming it" || bad "engine-old row: $(printf '%s\n' "$out" | grep -E ' engine-old ' | head -1)"
+rm -rf "$HOME/.local/share/spark/engine"
 # the v1.10 migration row: links an older install.sh made into this repo's
 # home/.config/micro are handed back once (dry-run says would; apply is
 # proven by hand -- it needs a real bootstrap)

@@ -487,6 +487,13 @@ def pinned_engine_name():
     return "llama.cpp-" + pin if pin else ""
 
 
+def engine_dir_key(name):
+    """Numeric build order for engine/<name> dirs: llama.cpp-b10689 beats
+    llama.cpp-b9999, which a plain string sort got backwards."""
+    m = re.search(r"-b(\d+)$", name)
+    return (int(m.group(1)) if m else -1, name)
+
+
 def default_engine_dir():
     """Where llama-server lives when SPARK_ENGINE_DIR is unset (the one
     home: bootstrap.sh asks it through lib/spark/facts.py): the newest
@@ -497,7 +504,8 @@ def default_engine_dir():
     PATH), else the pinned directory bootstrap fills, so the error names
     where it would be."""
     try:
-        names = sorted(d for d in os.listdir(ENGINE_DIR) if os.path.isdir(os.path.join(ENGINE_DIR, d)))
+        names = sorted((d for d in os.listdir(ENGINE_DIR) if os.path.isdir(os.path.join(ENGINE_DIR, d))),
+                       key=engine_dir_key)
     except OSError:
         names = []
     for n in reversed(names):

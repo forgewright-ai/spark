@@ -386,6 +386,21 @@ elif need engine "install llama.cpp $LLAMA_VERSION $ENGINE_FLAVOUR$([ -z "$have"
     if [ "$OS" = Darwin ]; then xattr -dr com.apple.quarantine "$ENGINE_DIR" 2>/dev/null || true; fi
     ok engine "llama.cpp $LLAMA_VERSION $ENGINE_FLAVOUR"
 fi
+# older pins beside the current one: each is ~1 GB nobody runs any more
+case $ENGINE_DIR in
+    */llama.cpp-b*)
+        old_pins=''
+        for d in "$(dirname "$ENGINE_DIR")"/llama.cpp-b*; do
+            [ -d "$d" ] && [ "$d" != "$ENGINE_DIR" ] && old_pins="$old_pins $d"
+        done
+        if [ -n "$old_pins" ]; then
+            if need engine-old "remove older engine pins:$old_pins"; then
+                # shellcheck disable=SC2086
+                rm -rf $old_pins
+                ok engine-old "older pins removed:$old_pins"
+            fi
+        fi ;;
+esac
 # the models, one per role (both OSes): each pick's six fields become $1..$6
 for role in spark ember; do
     if [ "$role" = spark ]; then rname=model; choice=$SITE_AI_MODEL; else rname=ember; choice=$SITE_EMBER_MODEL; fi

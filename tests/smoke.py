@@ -1795,6 +1795,13 @@ def main():
         os.remove(user_models_file)
         del STATE["head_body"]
 
+        # engine pins order numerically: a string sort put b9999 over b10689
+        from spark import config as _cfgm
+        t.ok(sorted(["llama.cpp-b9999", "llama.cpp-b10689", "llama.cpp-b800", "other"],
+                    key=_cfgm.engine_dir_key)
+             == ["other", "llama.cpp-b800", "llama.cpp-b9999", "llama.cpp-b10689"],
+             "engine dirs sort by build number, not as strings")
+
         # the forge row: a FORGE serving an older version than the tree is
         # a warn with the bounce remedy -- spark update restarted nothing
         # before v1.30, so every row was green while the API ran old code
