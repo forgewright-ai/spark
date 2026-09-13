@@ -356,6 +356,28 @@ def main():
         rc, out, _ = spark("line", "--cwd", btree, stdin="delete the tmp files?")
         t.ok(rc == 0 and out.startswith("danger\t") and "<- " not in out,
              "line: a danger that is not a recursive rm shows no facts", out)
+        # the danger set sees the long flags and the hiders (v1.30), and
+        # is_dangerous and blast share ONE rm pattern
+        from spark import persona as _pers
+        _dang = ["rm --recursive build", "rm --force x", "find . -name '*.o' -delete",
+                 "rsync -a --delete src/ dst/", "git branch -D topic", "chmod -R 700 d",
+                 "> /var/log/syslog", "cd /tmp && > f", "cp x y && rm -rf x"]
+        _safe = ["echo hi > out.txt", "cat a >> log", "rm build.log", "git branch -d topic"]
+        t.ok(all(_pers.is_dangerous(c) for c in _dang) and not any(_pers.is_dangerous(c) for c in _safe),
+             "danger: --recursive/--force, find -delete, rsync --delete, git branch -D, chmod -R, bare > file",
+             str([c for c in _dang if not _pers.is_dangerous(c)] + [c for c in _safe if _pers.is_dangerous(c)]))
+        # blast: only the rm segment is counted, a leading cd moves the
+        # base, and ~ expands -- `cd X && rm -rf build` counts X/build
+        f_cd = _pers.blast("cd %s && rm -rf build" % btree)
+        f_seg = _pers.blast("cp a b && rm -rf build", btree)
+        _oldhome = os.environ.get("HOME")
+        os.environ["HOME"] = home
+        try:
+            f_tilde = _pers.blast("rm -rf ~/blast/build")
+        finally:
+            os.environ["HOME"] = _oldhome
+        t.ok(all(f.startswith("5 files") for f in (f_cd, f_seg, f_tilde)),
+             "blast: the rm segment alone, resolved after cd, ~ expanded", repr((f_cd, f_seg, f_tilde)))
         # command not found (127): a tool spark installs is named offline,
         # with no model call -- the stub brain is never asked
         n0 = STATE["hits"]

@@ -538,7 +538,11 @@ def main(shell, widget):
                               ("rm -rf build", 1, "danger"),
                               ("sudo rm -rf /x", 1, "danger"),
                               ("VAR=1 env kill -9 123", 1, "danger"),
-                              ("mkfs.ext4 /dev/sda", 1, "danger")):
+                              ("mkfs.ext4 /dev/sda", 1, "danger"),
+                              ("cp x y && rm -rf x", 1, "danger"),
+                              ("ls; sudo shred -u f", 1, "danger"),
+                              ("cat f | kill -9 123", 1, "danger"),
+                              ("cp x y && mv y z", 1, "ask")):
             since = sh.mark()
             sh.send("_spark_offer_kind '%s' %d\r" % (cmd, rc))
             got = sh.expect("%s\r\n" % want) or sh.expect("%s\n" % want)

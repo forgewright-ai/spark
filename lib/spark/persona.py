@@ -23,7 +23,6 @@ FLAGS = ("Flags that exist (use these, never invented ones): fd -e EXT, -S +1G, 
          "A correct flag beats a preferred tool: when unsure, use the classic tool.")
 
 _DANGER = [
-    r"\brm\s+(-[a-zA-Z]*[rRf][a-zA-Z]*\s+)+",      # rm -rf, rm -r, rm -f ...
     r"\brm\s+.*\s/\s*$", r"\brm\s+-[a-zA-Z]*\s+/(\s|$)",
     r"\bdd\s+.*\bof=/dev/",
     r"\bmkfs(\.\w+)?\b", r"\bfdisk\b", r"\bparted\b", r"\bdiskutil\s+(erase|partition|reformat)",
@@ -35,8 +34,21 @@ _DANGER = [
     r"\b(shutdown|reboot|halt|poweroff)\b", r"\bkill\s+-9\s+-1\b", r"\bkillall\b", r"\bpkill\s+-9\b",
     r"\bcrontab\s+-r\b", r"\btruncate\s+-s\s*0\b", r"\b(curl|wget)\b.*\|\s*(sudo\s+)?(ba|z)?sh\b",
     r"\bsudo\s+rm\b", r"\bsystemctl\s+(disable|mask|stop)\b", r"\blaunchctl\s+(bootout|unload|disable)\b",
+    # the ways to delete or destroy that hid from the list before v1.30 --
+    # a named line each, so any one can be argued with
+    r"\bfind\b.*\s-delete\b",                      # find ... -delete
+    r"\brsync\b.*\s--delete",                      # rsync --delete (and -after/-before)
+    r"\bgit\s+branch\s+-D\b",                      # git branch -D: drops unmerged work
+    r"\bchmod\s+(-[a-zA-Z]*R|--recursive)\b",      # chmod -R: a tree's permissions
+    r"(?:^|[;&|]\s*)>(?!>)\s*\S",                  # bare `> file`: truncation, not append
 ]
-DANGER = [re.compile(p) for p in _DANGER]
+# rm with a recursive (or force) flag, short or long -- ONE pattern pair,
+# shared by is_dangerous and blast, so the danger mark and the blast count
+# can never disagree about what "recursive" means
+_RM_FLAG = r"(?:-[a-zA-Z]+|--\S+)"
+RM_RECURSIVE = re.compile(r"\brm\s+(?:%s\s+)*(?:-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)(?=\s|$)" % _RM_FLAG)
+RM_FORCE = re.compile(r"\brm\s+(?:%s\s+)*(?:-[a-zA-Z]*f[a-zA-Z]*|--force)(?=\s|$)" % _RM_FLAG)
+DANGER = [re.compile(p) for p in _DANGER] + [RM_RECURSIVE, RM_FORCE]
 
 
 def is_dangerous(command):
@@ -44,9 +56,6 @@ def is_dangerous(command):
 
 
 import shlex as _shlex
-
-
-_RM_R = re.compile(r"\brm\s+(?:-\S+\s+)*-\S*[rR]")   # rm with a recursive flag
 
 
 def _human_bytes(n):
@@ -64,21 +73,39 @@ def blast(command, cwd=""):
     Only `rm -r...`, because that is the danger a count answers; a glob or
     an option is skipped, a path is resolved against `cwd`, and the walk is
     capped in entries and time so a huge tree cannot hang the prompt (the
-    count then ends `+`). Returns the one-line string, or `` when there is
-    nothing honest to say."""
-    if not _RM_R.search(command):
+    count then ends `+`). A compound line is split on `&&`, `;` and `|`
+    first and only the rm segment is counted -- `cd /tmp/x && rm -rf
+    build` must not count the `cd` word as an operand -- and a leading
+    `cd DIR` moves the base the operands resolve against. `~` expands.
+    Returns the one-line string, or `` when there is nothing honest to
+    say."""
+    base = os.path.abspath(os.path.expanduser(cwd)) if cwd else os.getcwd()
+    rm_seg = None
+    for seg in re.split(r"&&|\|\||[;|]", command):
+        seg = seg.strip()
+        if RM_RECURSIVE.search(seg):
+            rm_seg = seg
+            break
+        try:
+            w = _shlex.split(seg)
+        except ValueError:
+            w = []
+        if len(w) >= 2 and w[0] == "cd":
+            d = os.path.expanduser(w[1])
+            base = d if os.path.isabs(d) else os.path.join(base, d)
+    if rm_seg is None:
         return ""
     try:
-        words = _shlex.split(command)
+        words = _shlex.split(rm_seg)
     except ValueError:
         return ""
-    base = os.path.abspath(cwd) if cwd else os.getcwd()
     paths = []
     for w in words[1:] if words else []:
         if w == "rm" or w.startswith("-"):
             continue
         if any(c in w for c in "*?[]"):     # a glob: spark did not expand it
             return ""
+        w = os.path.expanduser(w)
         paths.append(w if os.path.isabs(w) else os.path.join(base, w))
     paths = [p for p in paths if os.path.lexists(p)]
     if not paths:

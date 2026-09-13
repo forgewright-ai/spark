@@ -113,35 +113,53 @@ _SPARK_QUIET_RC='130 131 146 148'
 # user looking around
 _SPARK_LOOKING='ls cd pwd clear cat echo bat eza exit spark explain'
 
-# what a failed command deserves: sets _spark_kind to ask (the offer),
-# danger (seen, never re-run) or none. The head word is the first word
-# past leading VAR=val assignments and sudo/env/command/time/nohup,
-# basename'd, mkfs.* folded to mkfs; a shell keyword (a continuation
-# fragment), a history bang and a line already piping to explain are none.
-_spark_kind_of() {
-    local cmd=$1 rc=$2 head i
+# the head word of one command: the first word past leading VAR=val
+# assignments and sudo/env/command/time/nohup, basename'd, mkfs.* folded
+# to mkfs. Sets _spark_seg_head.
+_spark_head_of() {
+    local i=0
     local -a w
-    _spark_kind=none _spark_head=''
-    case " $_SPARK_QUIET_RC " in *" $rc "*) return 0 ;; esac
-    [[ $cmd == *$'\n'* ]] && return 0
-    case $cmd in *"| explain"*|*"|explain"*) return 0 ;; esac
-    read -ra w <<< "$cmd"
-    i=0
+    read -ra w <<< "$1"
     while (( i < ${#w[@]} )); do
         case ${w[i]} in
             [A-Za-z_]*=*|sudo|env|command|time|nohup) (( i++ )) ;;
             *) break ;;
         esac
     done
-    head=${w[i]:-}
-    head=${head##*/}
-    [[ $head == mkfs.* ]] && head=mkfs
+    _spark_seg_head=${w[i]:-}
+    _spark_seg_head=${_spark_seg_head##*/}
+    [[ $_spark_seg_head == mkfs.* ]] && _spark_seg_head=mkfs
+}
+
+# what a failed command deserves: sets _spark_kind to ask (the offer),
+# danger (seen, never re-run) or none. A shell keyword (a continuation
+# fragment), a history bang and a line already piping to explain are
+# none. EVERY segment of a compound line (&&, ;, |) is classified: one
+# dangerous segment makes the whole line danger, so `cp x y && rm -rf x`
+# is never re-offered whole through explain.
+_spark_kind_of() {
+    local cmd=$1 rc=$2 head segs seg
+    _spark_kind=none _spark_head=''
+    case " $_SPARK_QUIET_RC " in *" $rc "*) return 0 ;; esac
+    [[ $cmd == *$'\n'* ]] && return 0
+    case $cmd in *"| explain"*|*"|explain"*) return 0 ;; esac
+    _spark_head_of "$cmd"
+    head=$_spark_seg_head
     _spark_head=$head
     case $head in ''|\!*|spark|explain|done|fi|esac|then|else|do) return 0 ;; esac
     if (( rc == 1 )); then
         case " $_SPARK_QUIET_ONE " in *" $head "*) return 0 ;; esac
     fi
-    case " $_SPARK_DANGER " in *" $head "*) _spark_kind=danger; return 0 ;; esac
+    segs=${cmd//&&/$'\n'}
+    segs=${segs//;/$'\n'}
+    segs=${segs//|/$'\n'}
+    while IFS= read -r seg; do
+        [[ -n ${seg//[[:space:]]/} ]] || continue
+        _spark_head_of "$seg"
+        case " $_SPARK_DANGER " in
+            *" $_spark_seg_head "*) _spark_kind=danger; _spark_head=$_spark_seg_head; return 0 ;;
+        esac
+    done <<< "$segs"
     _spark_kind=ask
     return 0
 }
