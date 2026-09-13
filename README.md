@@ -103,10 +103,16 @@ Only to the server you configured (this machine's, or another of yours):
   question -- never its path; a thread only when the editor asks for
   one, sealed like a chat thread; `--watch` sends each saved stanza the
   same way;
+- for `spark ask` the text (12 kB) with the `--name` and `--about`
+  hints you gave;
+- for `spark read` the source, 16 kB a part; `--name` stays here, in
+  the ledger;
 - for `spark drill` the source (16 kB); your answers are graded here,
   against the source, and never sent;
 - for `spark watch` each window of the stream (a few lines at a time) --
-  never the whole stream at once, and nothing else.
+  never the whole stream at once;
+- for `spark recall` (Esc r) the last 400 lines of this shell's own
+  history, with what you said the command did, and nothing else.
 
 No telemetry, no analytics, no crash reports, no account. Downloads:
 `get` from raw.githubusercontent.com and the clone from github.com, one

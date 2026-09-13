@@ -87,6 +87,17 @@ def main():
         # the family's name in the docs is the file's PM_TARGET, verbatim
         for doc in ("README.md", "INSTALL.md"):
             check(t.get("PM_TARGET", "") in read(doc), "%s names %s (distro/%s PM_TARGET)" % (doc, t.get("PM_TARGET", "?"), f))
+    # what leaves this machine: every sender in persona.SENDS is named in
+    # the README's disclosure section -- a new sender fails here until it
+    # is disclosed
+    from spark import persona
+    readme = read("README.md")
+    m = re.search(r"## What leaves this machine\n(.*?)(?:\n## |\Z)", readme, re.S)
+    check(m is not None, "README.md has a 'What leaves this machine' section")
+    section = m.group(1) if m else ""
+    for kind, _cap in persona.SENDS:
+        check(re.search(r"\b%s\b" % re.escape(kind), section) is not None,
+              "README.md 'What leaves this machine' names %s (persona.SENDS)" % kind)
     # counts the docs state
     n_rows = sum(1 for line in read(os.path.join("lib", "spark", "check.py")).split("\n") if line.startswith("@row"))
     for doc in ("CLAUDE.md", "INSTALL.md"):

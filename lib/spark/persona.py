@@ -22,6 +22,24 @@ FLAGS = ("Flags that exist (use these, never invented ones): fd -e EXT, -S +1G, 
          "du -sh; sort -h; wc -l; find -type f -size +1G -mtime -7. "
          "A correct flag beats a preferred tool: when unsure, use the classic tool.")
 
+# What leaves this machine, by kind: every verb that sends text to the
+# brain, and the cap on what one request carries. README's "What leaves
+# this machine" section must name every kind here -- tests/docs_test.py
+# walks this table, so a new sender fails the docs test until the README
+# discloses it.
+SENDS = (
+    ("line", "the line you typed, with the shell and OS name"),
+    ("chat", "the conversation: soul, remembered facts, earlier turns"),
+    ("do", "each step's output, last 4 kB"),
+    ("explain", "the piped text, last 6 kB"),
+    ("edit", "the text: 6 kB around the cursor, 12 kB rewrite, 16 kB question"),
+    ("ask", "the text, 12 kB, with the --name/--about hints"),
+    ("read", "the source, 16 kB a part"),
+    ("drill", "the source, 16 kB"),
+    ("watch", "each window of the stream, 8 kB at most"),
+    ("recall", "the last 400 lines of this shell's history"),
+)
+
 _DANGER = [
     r"\brm\s+.*\s/\s*$", r"\brm\s+-[a-zA-Z]*\s+/(\s|$)",
     r"\bdd\s+.*\bof=/dev/",
