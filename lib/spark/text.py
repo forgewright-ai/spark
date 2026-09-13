@@ -260,16 +260,23 @@ def substantial(span):
     return not all(w in _STOP_WORDS for w in words)
 
 
-def anchor(span, data, folded=None):
+def anchor(span, data, folded=None, whole=False):
     """Is `span` in `data`: verbatim; else folded on both sides
     (whitespace, quote marks, case); else with the punctuation the model
     tucked inside the closing quote stripped. `folded` is fold(data)
     when the caller has it already. A span that is nothing after fold
     anchors nowhere -- the verbatim check runs after that guard, so
-    three spaces cannot anchor in a run of spaces."""
+    three spaces cannot anchor in a run of spaces. `whole=True` matches
+    at word boundaries in the folded text: "500" must not anchor in a
+    window holding only "1500ms" (spark watch, spark recall)."""
     folded = fold(data) if folded is None else folded
     f = fold(span)
     if not f:
+        return False
+    if whole:
+        for cand in (f, f.rstrip(".,;:!?")):
+            if cand and re.search(r"(?<![a-z0-9])%s(?![a-z0-9])" % re.escape(cand), folded):
+                return True
         return False
     if span in data:
         return True
@@ -303,9 +310,10 @@ class Ground:
     `misses`: it does point at the text, and mark() says which half to
     distrust."""
 
-    def __init__(self, data):
+    def __init__(self, data, whole=False):
         self.data = data
         self.folded = fold(data)
+        self.whole = whole      # word-boundary anchoring (watch, recall)
 
     def verdict(self, unit):
         """(GROUNDED | UNGROUNDED | UNQUOTED, [spans the source lacks]).
@@ -316,7 +324,7 @@ class Ground:
         spans = [q[0] for q in quotes(unit) if substantial(q[0])]
         if not spans:
             return UNQUOTED, []
-        misses = [q for q in spans if not anchor(q, self.data, self.folded)]
+        misses = [q for q in spans if not anchor(q, self.data, self.folded, whole=self.whole)]
         return (UNGROUNDED if len(misses) == len(spans) else GROUNDED), misses
 
     def mark(self, unit):
@@ -330,7 +338,7 @@ class Ground:
             if PROPOSAL.search(unit[:m.start()]):
                 out.append(unit[last:end] + PROPOSED_MARK)
                 last = end
-            elif not anchor(span, self.data, self.folded):
+            elif not anchor(span, self.data, self.folded, whole=self.whole):
                 out.append(unit[last:end] + ANCHOR_MARK)
                 last = end
         out.append(unit[last:])
@@ -354,9 +362,9 @@ class Gate:
     contract 10's marker, whose only job is to say which quotes to
     trust."""
 
-    def __init__(self, stream, data, keep=None):
+    def __init__(self, stream, data, keep=None, whole=False):
         self.stream, self.data = stream, data
-        self.ground = Ground(data)
+        self.ground = Ground(data, whole)
         self.keep = keep
         self.buf = ""
         self.quoted = self.missed = self.kept = self.dropped = 0
@@ -375,7 +383,8 @@ class Gate:
             self.kept += 1
         qs = quotes(line)
         self.quoted += len(qs)
-        self.missed += sum(1 for q, _s, _e in qs if not anchor(q, self.data, self.ground.folded))
+        self.missed += sum(1 for q, _s, _e in qs
+                           if not anchor(q, self.data, self.ground.folded, whole=self.ground.whole))
         self.stream.write(self.ground.mark(line) + ("\n" if newline else ""))
 
     def write(self, s):

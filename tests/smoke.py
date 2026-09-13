@@ -219,7 +219,11 @@ def drill_items(user):
 def watch_pieces(user):
     """spark watch's reply (contract 14): one line quoting the match when a
     500 is in the window, silence otherwise. The quote is a line the window
-    holds, so the gate keeps it; an empty stream is silence, not a cut."""
+    holds, so the gate keeps it; an empty stream is silence, not a cut. A
+    window holding only "error 5001" draws a quote of "error 500" -- word
+    boundaries must refuse it."""
+    if "5001" in user:
+        return ('Saw "error 500" in the log.\n',)
     if "500" in user:
         return ('A 500 error appeared: "GET /x 500"\n',)
     return ()
@@ -821,6 +825,11 @@ def main():
         t.ok(g.verdict('He proves "the cat sat" happened.')[0] == textmod.GROUNDED
              and g.verdict('He proves "the dog ran" happened.')[0] == textmod.UNGROUNDED,
              "floor: a substantial span still grounds, and still fails honestly")
+        # whole: watch and recall anchor at word boundaries in the folded text
+        t.ok(not textmod.anchor("500", "took 1500ms", whole=True)
+             and textmod.anchor("error 500", "an error 500 came back", whole=True)
+             and not textmod.anchor("error 500", "an error 5001 came back", whole=True),
+             "anchor whole: a span matches at word boundaries, never inside a longer token")
         STATE["ask_quotes"] = True
         rc, out, _ = spark("edit", "?", stdin="Some prose.\nAnd more here.\n")
         STATE["ask_quotes"] = False
@@ -1136,6 +1145,9 @@ def main():
              "watch: a matching line is reported once, quoting it", repr(out) + err)
         rc, out, err = spark("watch", "when a 500 appears", stdin="GET /a 200\nGET /b 204\n")
         t.ok(rc == 0 and out == "", "watch: nothing matches, nothing is said -- silence is the answer", repr(out) + err)
+        rc, out, err = spark("watch", "when a 500 appears", stdin="connection error 5001 logged\n")
+        t.ok(rc == 0 and out == "",
+             "watch: a quote of \"error 500\" cannot ground against a window holding only 5001", repr(out) + err)
         rc, out, _ = spark("watch")
         t.ok(rc == 2 and out.startswith("spark watch -- ") and "spark <words>" in out,
              "watch: no words is the usage and where a question goes, exit 2", out[:60])

@@ -76,7 +76,9 @@ def evaluate(cfg, shell, instruction, window):
     def keep(_line, verdict, _misses):
         return verdict == textmod.GROUNDED   # it quotes, and the quote is in the window
 
-    gate = textmod.Gate(sys.stdout, window, keep)
+    # whole=True: a quote of the stream matches at word boundaries, so
+    # "500" cannot ground against a window holding only "1500ms"
+    gate = textmod.Gate(sys.stdout, window, keep, whole=True)
     fence = textmod.Fence(gate, newline=None)
 
     def run(s):

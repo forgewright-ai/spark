@@ -391,7 +391,7 @@ def cmd_recall(args):
         key = line.strip()
         if not key or key in seen:
             continue
-        if not textmod.anchor(key, history, folded):
+        if not textmod.anchor(key, history, folded, whole=True):
             continue                        # grounding: only a line that ran
         seen.add(key)
         out.append(line)
