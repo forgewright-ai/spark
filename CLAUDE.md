@@ -778,6 +778,9 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   answer through `_json`/`_sse` so it is `no-store` and logged; a case in
   `tests/forge_smoke.py`; a line in contract 9. The page calls verbs
   through `/api/run`'s allowlist (`RUN_VERBS`) rather than writing config.
+  The page is a door to the same identity, not a product of its own: a
+  page change lands only when it is the client side of a contract
+  change. No new page features in this release or the next.
 - **A shell thing.** Anything that is the look or the workstation
   tools -- a dotfile, a tmux piece, a prompt, an emulator font -- lands
   in spark-shell's repository (github.com/forgewright-ai/spark-shell),
