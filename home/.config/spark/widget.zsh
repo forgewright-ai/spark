@@ -283,15 +283,26 @@ bindkey '\es' spark-ask
 typeset -g _spark_recall_for=''
 typeset -ga _spark_recall_cands
 typeset -g _spark_recall_i=0
+# land candidate _spark_recall_i in the line; a `!<TAB>` prefix from
+# `spark recall` means the line can destroy -- stripped, and the warn
+# mark shows instead of the answer mark
+_spark_recall_show() {
+    local cand=${_spark_recall_cands[$_spark_recall_i]} mark=$_spark_h note=''
+    if [[ $cand == $'!\t'* ]]; then
+        cand=${cand#$'!\t'}
+        mark=$_spark_w note=' -- careful'
+    fi
+    BUFFER=$cand
+    CURSOR=$#BUFFER
+    _spark_recall_for=$cand
+    _spark_say "$mark $_spark_recall_i/${#_spark_recall_cands[@]}$note -- Esc r: next"
+    zle -R
+}
 spark-recall() {
     [[ -e $SPARK_DIR/off ]] && return
     if [[ -n $BUFFER && $BUFFER == $_spark_recall_for && ${#_spark_recall_cands[@]} -gt 0 ]]; then
         _spark_recall_i=$(( _spark_recall_i % ${#_spark_recall_cands[@]} + 1 ))
-        BUFFER=${_spark_recall_cands[_spark_recall_i]}
-        CURSOR=$#BUFFER
-        _spark_say "$_spark_h $_spark_recall_i/${#_spark_recall_cands[@]} -- Esc r: next"
-        _spark_recall_for=$BUFFER
-        zle -R
+        _spark_recall_show
         return
     fi
     local intent=$BUFFER
@@ -310,11 +321,7 @@ spark-recall() {
     fi
     _spark_recall_cands=("${(@f)out}")
     _spark_recall_i=1
-    BUFFER=${_spark_recall_cands[1]}
-    CURSOR=$#BUFFER
-    _spark_recall_for=$BUFFER
-    _spark_say "$_spark_h 1/${#_spark_recall_cands[@]} -- Esc r: next"
-    zle -R
+    _spark_recall_show
 }
 zle -N spark-recall
 bindkey '\er' spark-recall

@@ -353,8 +353,10 @@ RECALL_USAGE = """spark recall -- find a command you ran, by describing it (inte
   <history> | spark recall <words>   the shell pipes its history on stdin,
                                      you say what the command did; the lines
                                      that match, most likely first, at most 5
-                                     -- every one is a line from the history,
-                                     never invented. Esc r drives this.
+                                     -- every one is a whole line from the
+                                     history, never invented; one that can
+                                     destroy is prefixed `!` and a tab.
+                                     Esc r drives this.
 """
 
 
@@ -384,14 +386,17 @@ def cmd_recall(args):
         print("recall: " + e.hint, file=sys.stderr)
         return 1
     raw = reply.get("candidates") or []
-    folded = textmod.fold(history)
+    # the promise is line-level: a candidate is kept only when it equals
+    # a line of the history after fold -- a substring ("rm -rf /" inside
+    # "rm -rf /tmp/build") is not a command that ran
+    lines = set(textmod.fold(l) for l in history.splitlines() if l.strip())
     seen, out = set(), []
     for c in raw:
         line = str(c).rstrip("\n")
         key = line.strip()
         if not key or key in seen:
             continue
-        if not textmod.anchor(key, history, folded, whole=True):
+        if textmod.fold(key) not in lines:
             continue                        # grounding: only a line that ran
         seen.add(key)
         out.append(line)
@@ -402,7 +407,9 @@ def cmd_recall(args):
         print("recall: nothing in the history matches", file=sys.stderr)
         return 1
     for line in out:
-        print(line)
+        # a line that can destroy carries the warn mark, so the widget
+        # can show ! before the user re-runs it
+        print(("!\t" + line) if persona.is_dangerous(line.strip()) else line)
     return 0
 
 

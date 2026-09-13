@@ -237,10 +237,13 @@ def is_do(messages):
 def answer_json(messages):
     last = messages[-1].get("content", "")
     if "copied CHARACTER FOR CHARACTER" in messages[0].get("content", ""):
-        # spark recall: one line that is really in the history, one invented.
-        # cli.cmd_recall grounds against stdin, so only the real one survives.
+        # spark recall: one line that is really in the history, one invented,
+        # a substring of a line that ran ("rm -rf /" inside "rm -rf
+        # /tmp/build"), a prefix word, and the dangerous line itself.
+        # cli.cmd_recall keeps only whole history lines; danger carries !.
         return {"candidates": ["docker network rm $(docker network ls -q)",
-                               "docker network prune --force --invented"]}
+                               "docker network prune --force --invented",
+                               "rm -rf /", "ls", "rm -rf /tmp/build"]}
     if "sameagain" in " ".join(m.get("content", "") for m in messages):
         if "already tried and failed" in last and "sameagain-fix" in " ".join(m.get("content", "") for m in messages):
             return {"kind": "cmd", "command": "echo FIXED", "hint": "a different way", "danger": False}
@@ -372,13 +375,17 @@ def main():
                  "line: the prefix localizes to this Linux, not macOS", pfx[-300:])
 
         # spark recall: intent search grounded against the history on stdin.
-        # the stub returns one real line and one invented; only the real
-        # one is in the history, so only it prints.
-        hist = "ls -la\ndocker network rm $(docker network ls -q)\ngit status\ncd /tmp\n"
+        # the promise is line-level: a candidate survives only when it equals
+        # a history line after fold -- "rm -rf /" inside "rm -rf /tmp/build"
+        # is a substring, not a command that ran; the dangerous line that DID
+        # run prints with the ! mark for the widgets.
+        hist = ("ls -la\ndocker network rm $(docker network ls -q)\n"
+                "git status\nrm -rf /tmp/build\ncd /tmp\n")
         rc, out, err = spark("recall", "the", "docker", "network", "thing", stdin=hist)
-        t.ok(rc == 0 and out.strip() == "docker network rm $(docker network ls -q)"
+        t.ok(rc == 0 and out.splitlines() == ["docker network rm $(docker network ls -q)",
+                                              "!\trm -rf /tmp/build"]
              and "invented" not in out,
-             "recall: the line that ran prints; the invented one is dropped", out + "|" + err)
+             "recall: only whole history lines survive; rm -rf / and ls are dropped; danger carries !", out + "|" + err)
         rc, out, err = spark("recall", stdin=hist)
         t.ok(rc == 1 and "what the command did" in err,
              "recall: no intent is one line on stderr, exit 1", out + "|" + err)

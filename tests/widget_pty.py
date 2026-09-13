@@ -41,9 +41,10 @@ STUB = r'''#!/bin/sh
 # a stand-in for `spark line` (and `spark recall`): canned replies.
 if [ "$1" = recall ]; then
     # history arrives on stdin; grounding is cli's job, not the stub's --
-    # here we just hand back two lines for the widget to land and cycle
+    # here we hand back two plain lines and one danger-marked line (the
+    # `!<TAB>` prefix recall puts on a line that can destroy)
     cat > /dev/null
-    printf 'git commit --amend --no-edit\ndocker network prune -f\n'
+    printf 'git commit --amend --no-edit\ndocker network prune -f\n!\trm -rf ./build\n'
     exit 0
 fi
 line=$(cat)
@@ -554,6 +555,12 @@ def main(shell, widget):
         since = sh.mark()
         sh.send("\x1br")
         ok(sh.expect("docker network prune -f"), "Esc r again cycles to the next candidate", since())
+        since = sh.mark()
+        sh.send("\x1br")
+        got_cmd = sh.expect("rm -rf ./build")
+        got_mark = sh.expect("careful")
+        ok(got_cmd and got_mark,
+           "Esc r lands a danger candidate stripped of its ! prefix, warn mark shown", since())
         sh.send("\x15")
         sh.expect(prompt)
 

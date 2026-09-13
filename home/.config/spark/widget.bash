@@ -298,15 +298,26 @@ bind -x '"\es": _spark_ask_line'
 # goes to `spark recall` on stdin, and candidate 1 lands in the line. Press
 # again, buffer unchanged, to cycle. Ctrl-R is left to the shell.
 _spark_recall_cands=() _spark_recall_i=0 _spark_recall_for=''
+# land candidate _spark_recall_i in the line; a `!<TAB>` prefix from
+# `spark recall` means the line can destroy -- stripped, and the warn
+# mark shows instead of the answer mark
+_spark_recall_show() {
+    local cand=${_spark_recall_cands[_spark_recall_i]} mark=$_spark_h note=''
+    if [[ $cand == $'!\t'* ]]; then
+        cand=${cand#$'!\t'}
+        mark=$_spark_w note=' -- careful'
+    fi
+    READLINE_LINE=$cand
+    READLINE_POINT=${#cand}
+    _spark_recall_for=$cand
+    _spark_say "$mark $(( _spark_recall_i + 1 ))/${#_spark_recall_cands[@]}$note -- Esc r: next"
+}
 _spark_recall() {
     [[ -e $SPARK_DIR/off ]] && return
     if [[ -n $READLINE_LINE && $READLINE_LINE == "$_spark_recall_for" && ${#_spark_recall_cands[@]} -gt 0 ]]; then
         # a repeat with the landed candidate still in the line: cycle
         _spark_recall_i=$(( (_spark_recall_i + 1) % ${#_spark_recall_cands[@]} ))
-        READLINE_LINE=${_spark_recall_cands[_spark_recall_i]}
-        READLINE_POINT=${#READLINE_LINE}
-        _spark_say "$_spark_h $(( _spark_recall_i + 1 ))/${#_spark_recall_cands[@]} -- Esc r: next"
-        _spark_recall_for=$READLINE_LINE
+        _spark_recall_show
         return
     fi
     local intent=$READLINE_LINE
@@ -323,10 +334,7 @@ _spark_recall() {
     fi
     mapfile -t _spark_recall_cands <<< "$out"
     _spark_recall_i=0
-    READLINE_LINE=${_spark_recall_cands[0]}
-    READLINE_POINT=${#READLINE_LINE}
-    _spark_recall_for=$READLINE_LINE
-    _spark_say "$_spark_h 1/${#_spark_recall_cands[@]} -- Esc r: next"
+    _spark_recall_show
 }
 bind -x '"\er": _spark_recall'
 # Esc and s are two keystrokes: give them a full second to be one chord
