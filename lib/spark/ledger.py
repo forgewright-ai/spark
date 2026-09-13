@@ -22,9 +22,11 @@
 #   spark ask  --ledger [clear] --name NAME   the questions answered
 #   spark read --ledger [clear] [--name NAME] the questions asked of a source
 
+import fcntl
 import json
 import os
 import time
+from contextlib import contextmanager
 
 from . import MARK, config, log_exc, say, vault
 
@@ -67,6 +69,28 @@ def _store():
         if dk:
             return os.path.join(users.user_dir(name), "ledger"), dk, name
     return None
+
+
+@contextmanager
+def _locked():
+    """An exclusive flock on `.lock` beside the sealed file, around every
+    load-mutate-save (the serve.lock pattern in engine.py): two editor
+    panes declining at once must both survive, and a `?` writes on the
+    read path when a note aged. Blocking on purpose -- the hold is
+    milliseconds. No account yet means nobody to race with: the first
+    write provisions the store under the caller's own feet."""
+    from . import users
+    name = users.account()[0]
+    if not name:
+        yield
+        return
+    users.make_dirs(name)
+    fd = os.open(os.path.join(users.user_dir(name), "ledger.lock"), os.O_WRONLY | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(fd)
 
 
 def _load(st=None):
@@ -153,16 +177,17 @@ def keep(kind, name, note, cfg=None, missing=""):
     if not text:
         raise Refused("nothing to keep -- the note comes on stdin")
     text = text[:NOTE_MAX]
-    entries = _fresh(_load(), cfg)
-    entries = [e for e in entries if not (_kind(e) == kind and e["name"] == name and e["note"] == text)]
-    entries.append({"kind": kind, "name": name, "ts": time.strftime("%Y-%m-%d %H:%M:%S"), "note": text})
-    mine = [e for e in entries if _kind(e) == kind and e["name"] == name]
-    if len(mine) > PER_NAME:
-        drop = mine[:len(mine) - PER_NAME]
-        entries = [e for e in entries if e not in drop]
-    if len(entries) > TOTAL_MAX:
-        entries = entries[len(entries) - TOTAL_MAX:]
-    _save(entries)
+    with _locked():
+        entries = _fresh(_load(), cfg)
+        entries = [e for e in entries if not (_kind(e) == kind and e["name"] == name and e["note"] == text)]
+        entries.append({"kind": kind, "name": name, "ts": time.strftime("%Y-%m-%d %H:%M:%S"), "note": text})
+        mine = [e for e in entries if _kind(e) == kind and e["name"] == name]
+        if len(mine) > PER_NAME:
+            drop = mine[:len(mine) - PER_NAME]
+            entries = [e for e in entries if e not in drop]
+        if len(entries) > TOTAL_MAX:
+            entries = entries[len(entries) - TOTAL_MAX:]
+        _save(entries)
     return text
 
 
@@ -214,15 +239,16 @@ def block(cfg, name, data):
     name = os.path.basename((name or "").strip())
     if not name:
         return ""
-    all_e = _load()
-    if not all_e:
-        return ""
-    mine, alive = _mine(cfg, KIND_EDIT, name, data)
-    if len(alive) != len(all_e):
-        try:
-            _save(alive)
-        except OSError:
-            pass
+    with _locked():
+        all_e = _load()
+        if not all_e:
+            return ""
+        mine, alive = _mine(cfg, KIND_EDIT, name, data)
+        if len(alive) != len(all_e):
+            try:
+                _save(alive)
+            except OSError:
+                pass
     return _paragraph("Declined before -- do not raise these again:\n", mine)
 
 
@@ -270,20 +296,21 @@ def drill_grade(name, question, answer, right, cfg=None):
     q = " ".join((question or "").split())[:NOTE_MAX]
     a = " ".join((answer or "").split())[:NOTE_MAX]
     key = textmod.fold(q)
-    entries = _load()
-    rec = next((e for e in entries if _kind(e) == KIND_DRILL and e["name"] == name
-                and textmod.fold(e.get("note", "")) == key), None)
-    if rec is None:
-        rec = {"kind": KIND_DRILL, "name": name, "note": q, "answer": a, "misses": 0, "streak": 0, "due": ""}
-        entries.append(rec)
-    misses, streak, off = drillmod.schedule(rec.get("misses", 0), rec.get("streak", 0), right)
-    rec.update({"ts": time.strftime("%Y-%m-%d %H:%M:%S"), "answer": a,
-                "misses": misses, "streak": streak, "due": "" if off is None else _day(off)})
-    mine = [e for e in entries if _kind(e) == KIND_DRILL and e["name"] == name]
-    if len(mine) > PER_NAME:
-        drop = mine[:len(mine) - PER_NAME]
-        entries = [e for e in entries if e not in drop]
-    _save(entries)
+    with _locked():
+        entries = _load()
+        rec = next((e for e in entries if _kind(e) == KIND_DRILL and e["name"] == name
+                    and textmod.fold(e.get("note", "")) == key), None)
+        if rec is None:
+            rec = {"kind": KIND_DRILL, "name": name, "note": q, "answer": a, "misses": 0, "streak": 0, "due": ""}
+            entries.append(rec)
+        misses, streak, off = drillmod.schedule(rec.get("misses", 0), rec.get("streak", 0), right)
+        rec.update({"ts": time.strftime("%Y-%m-%d %H:%M:%S"), "answer": a,
+                    "misses": misses, "streak": streak, "due": "" if off is None else _day(off)})
+        mine = [e for e in entries if _kind(e) == KIND_DRILL and e["name"] == name]
+        if len(mine) > PER_NAME:
+            drop = mine[:len(mine) - PER_NAME]
+            entries = [e for e in entries if e not in drop]
+        _save(entries)
 
 
 def drill_listing(name=None):
@@ -304,10 +331,11 @@ def drill_listing(name=None):
 def clear(name=None, kind=KIND_EDIT):
     """Drop this kind's notes, or one name's; the count dropped."""
     name = os.path.basename(name) if name else None
-    all_e = _load()
-    alive = [e for e in all_e if _kind(e) != kind or (name and e["name"] != name)]
-    if len(alive) != len(all_e):
-        _save(alive)
+    with _locked():
+        all_e = _load()
+        alive = [e for e in all_e if _kind(e) != kind or (name and e["name"] != name)]
+        if len(alive) != len(all_e):
+            _save(alive)
     return len(all_e) - len(alive)
 
 

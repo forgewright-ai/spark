@@ -971,6 +971,21 @@ def main():
         rc, out, _ = spark("edit", "--ledger", "clear")
         t.ok(rc == 0 and out.startswith("dropped ") and spark("edit", "--ledger")[1].startswith("no declined note"),
              "edit --ledger clear drops them all", out)
+        # two writers at once: the .lock beside the sealed file makes
+        # load-mutate-save atomic, so no decline is lost to a race
+        procs = [subprocess.Popen([sys.executable, SPARK, "edit", "--decline", "--name", "race.md"],
+                                  stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE, text=True, env=env)
+                 for _i in range(6)]
+        for i, pr in enumerate(procs):
+            pr.stdin.write("race note %d\n" % i)
+            pr.stdin.close()
+        for pr in procs:
+            pr.wait(timeout=30)
+        rc, out, _ = spark("edit", "--ledger", "--name", "race.md")
+        t.ok(rc == 0 and out.splitlines()[0].startswith("race.md: 6 notes"),
+             "ledger: six parallel declines all survive (flock around load-mutate-save)", out.splitlines()[0])
+        spark("edit", "--ledger", "clear", "--name", "race.md")
         rc, out, _ = spark("edit", "--type", "python", "--about", "a poem", "tighten", stdin="x = 1\n")
         body = STATE["bodies"][-1]
         t.ok(body["messages"][-1]["content"].startswith("tighten\n\nThe author says: a poem\nText (python):\n"), "edit: --about rides above the label", repr(body["messages"][-1]["content"][:80]))
