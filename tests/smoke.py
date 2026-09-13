@@ -1734,9 +1734,18 @@ def main():
                                 extra={"SPARK_NO_APPLY": "1"})
         t.ok(rc != 0 and "--license" in outn + errn,
              "spark model add: no --license is refused, naming the flag", outn + errn)
+        # a license value contract 3 would refuse (parens) must be refused
+        # BEFORE it lands: written, it poisons the whole file and every
+        # verb dies with exit 2
+        user_models_file = home + "/.config/spark/models.env"
+        rc, outl, errl = spark("model", "add", add_url, "--sha256", content_sha,
+                               "--license", "Llama 3 Community (Meta) https://x",
+                               extra={"SPARK_NO_APPLY": "1"})
+        t.ok(rc == 2 and "cannot hold (" in outl and not os.path.exists(user_models_file),
+             "spark model add: a license with a contract-3 character is refused, file untouched",
+             outl + errl)
         rc, outb, errb = spark("model", "add", add_url, "--sha256", content_sha, "--license", "MIT https://x",
                                 extra={"SPARK_NO_APPLY": "1"})
-        user_models_file = home + "/.config/spark/models.env"
         user_env = open(user_models_file).read()
         t.ok(rc == 0 and re.search(r'MODEL_TINY_MODEL="tiny-model-Q4_K_M\.gguf \S+ \d+ %s \d+"' % content_sha, user_env),
              "spark model add --sha256: the user file gets a 5-field row, name tiny-model", outb + errb + user_env)

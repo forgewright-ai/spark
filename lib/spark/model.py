@@ -343,6 +343,12 @@ def _model_add(args):
     if not license_:
         say('spark model add: --license "NAME URL" is required -- your own row states its license too')
         return 2
+    bad = re.search(r"[;`$()|&<>]", license_)
+    if bad:
+        # contract 3 refuses the whole file over one such character, and
+        # then every verb dies with exit 2 -- refuse it before it lands
+        say("spark model add -- the license cannot hold %s (contract 3); use -- or , instead" % bad.group(0))
+        return 2
     nbytes, sha256, err = _probe_model_url(url, sha)
     if err:
         say("spark model add: %s" % err)

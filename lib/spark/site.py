@@ -51,7 +51,13 @@ def no_grub():
 
 def set_keys(_file=None, _quiet=False, **kv):
     """Rewrite KEY= lines in site.env (or _file; append the missing ones);
-    keep it 0600. One `ok site KEY=value` row per key unless _quiet."""
+    keep it 0600. One `ok site KEY=value` row per key unless _quiet.
+    A value contract 3 would refuse is refused HERE: written, it poisons
+    the whole file and every verb dies with exit 2 before its help."""
+    for key, val in kv.items():
+        bad = re.search(r"[;`$()|&<>]", str(val))
+        if bad:
+            raise ValueError("%s: a config value cannot hold %s (contract 3)" % (key, bad.group(0)))
     path = _file or SITE_ENV
     lines = []
     try:
