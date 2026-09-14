@@ -150,11 +150,13 @@ ln -s ~/.newsboat/spark/spark-newsboat ~/.local/bin/spark-newsboat
 cat ~/.newsboat/spark/config.spark >> ~/.newsboat/config
 ```
 
-`,s` (newsboat's macro prefix, then s) pipes the article to spark on
-the terminal newsboat hands over: the title, the `spark> ` prompt, the
-grounded answer line by line, Enter back to newsboat exactly as it
-was. The same grammar as everywhere; on newsboat 2.38 or newer a
-commented bind line in the snippet offers Alt-s.
+`,s` (newsboat's macro prefix, then s) opens the article's room on
+the terminal newsboat hands over: the header, then `chat> `. Enter
+alone is the overview (every line quoting the article, or an honest
+refusal); words are a conversation about it -- follow-ups ride the
+thread, an unheld quote is marked where it stands -- and `q` walks
+back to newsboat any time. On newsboat 2.38 or newer a commented bind
+line in the snippet offers Alt-s.
 
 No plugin at all still works: an editor with a filter is a client
 already. The selection goes through `spark edit`, the whole file when
