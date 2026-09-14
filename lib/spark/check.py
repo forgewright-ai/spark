@@ -859,34 +859,51 @@ def row_quiet(ctx):
 
 @row("CAPABILITY")
 def row_throughput(ctx):
-    from . import bench, stats
+    from . import bench, engine, stats
+    # anchor on the model(s) served NOW, not on whatever recent turns
+    # happen to be: right after `spark model NAME` the recent turns are
+    # still the old model, and a row that reads them names a model the
+    # box no longer serves (a stale gemma after a switch to qwen). The
+    # live stems come from the config -- spark, and ember when it is set.
+    live = []
+    for role in engine.ROLES:
+        f = engine.model_file(ctx.cfg, role)
+        stem = os.path.basename(f)
+        stem = stem[:-5] if stem.endswith(".gguf") else stem
+        if stem and stem not in live:
+            live.append(stem)
+    if not live:
+        return na("no model served here")
     base = bench.baseline(ctx.cfg)
     if not base:
         return na("no bench yet (spark bench)")
-    recent = [t for t in stats.turns(7) if t.get("tg_tps")][-10:]
-    if len(recent) < 3:
-        return na("baseline %.1f tok/s; fewer than 3 recent turns to compare" % base["tg"])
-    # two models may serve now; judge each turn against its own model's bench
+    # recent turns only for a live model -- a turn naming a model no
+    # longer served says nothing about the throughput now, and is
+    # dropped; a turn with no model field (an old record) counts toward
+    # the primary live model
+    recent = [t for t in stats.turns(7)
+              if t.get("tg_tps") and t.get("model", live[0]) in live][-10:]
     groups = {}
     for t in recent:
-        groups.setdefault(t.get("model", ""), []).append(t)
+        groups.setdefault(t.get("model") or live[0], []).append(t)
     parts, slow = [], []
-    for stem, ts in sorted(groups.items()):
-        b = bench.baseline_stem(stem) if stem else None
-        if b is None and len(groups) == 1:
-            b = base                      # old records without a model field
-        if b is None or not b.get("tg") or len(ts) < 3:
+    for stem in live:
+        b = bench.baseline_stem(stem)
+        if b is None or not b.get("tg"):
+            parts.append("%s no bench (spark bench)" % stem)
+            continue
+        ts = groups.get(stem, [])
+        if len(ts) < 3:
+            parts.append("%s bench %.1f tok/s, no recent turns yet" % (stem, b["tg"]))
             continue
         mean = sum(t["tg_tps"] for t in ts) / len(ts)
-        parts.append("%s %.1f vs %.1f" % (stem or "model", mean, b["tg"]))
+        parts.append("%s %.1f vs %.1f recent vs bench" % (stem, mean, b["tg"]))
         if mean < 0.7 * b["tg"]:
-            slow.append(stem or "the model")
-    if not parts:
-        return na("baseline %.1f tok/s; fewer than 3 recent turns per model" % base["tg"])
+            slow.append(stem)
     if slow:
         return warn("%s -- below 70%% of the bench; on the CPU? (spark stats)" % "; ".join(parts),
                     "spark bench tune show; spark bench --tune")
-    return ok("; ".join(parts) + " tok/s, recent vs bench")
+    return ok("; ".join(parts) + (" tok/s" if any("vs" in p for p in parts) else ""))
 
 
 @row("CAPABILITY")
@@ -1519,9 +1536,13 @@ def make_fixture(root, good, stub_url="", real_spark=False):
             f.write(json.dumps({"ts": time.strftime("%Y-%m-%d %H:%M:%S"), "kind": "cmd", "mode": "line",
                                 "tg_tps": 11.5 if good else 3.5, "pp_tps": 90.0, "ms": 900}) + "\n")
     os.makedirs(os.path.join(home, ".local", "share", "spark", "models"), exist_ok=True)
-    for mf in ("fixture.gguf", "fixture-ember.gguf"):
+    # fixture.gguf is written LAST so it is the newest .gguf -- with no
+    # SITE_AI_MODEL the spark role serves the newest, and the throughput
+    # row's live stem is then "fixture", the one the bench baseline names
+    for mf in ("fixture-ember.gguf", "fixture.gguf"):
         with open(os.path.join(home, ".local", "share", "spark", "models", mf), "w") as f:
             f.write("x" * 4096)
+        time.sleep(0.01)
     # the theme: the good machine's theme.env matches themes/fixture.env
     # and console-colors is in place; the bad one's theme.env is stale
     cfgd = os.path.join(home, ".config", "spark")
