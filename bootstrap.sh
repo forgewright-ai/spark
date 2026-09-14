@@ -652,6 +652,11 @@ elif [ "$OS" = Darwin ]; then
         as_root pmset -a $pm_set; ok sleep "never sleeps, wake on LAN (pmset)"
     fi
 else
+    # the user bus, as lib/spark/engine.py user_bus_env gives it to every
+    # systemctl --user: a plain ssh brings neither, and the manager runs on
+    XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"; export XDG_RUNTIME_DIR
+    DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}"
+    export DBUS_SESSION_BUS_ADDRESS
     if ! systemctl --user show-environment >/dev/null 2>&1; then
         skip systemd "no user systemd session (headless or container)"
     else

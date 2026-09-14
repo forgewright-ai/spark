@@ -646,11 +646,11 @@ def cmd_client(args):
         else:
             link = os.path.join(HOME, ".config", "systemd", "user", name)
             if engine.service_state(cfg) == "loaded" or os.path.lexists(link):
-                subprocess.run(["systemctl", "--user", "disable", "--now", name], capture_output=True)
+                engine.sysctl(["disable", "--now", name])
                 stopped = True
             if os.path.lexists(link):
                 os.remove(link)
-                subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True)
+                engine.sysctl(["daemon-reload"])
         pids = engine.server_pids(cfg.port)
         if pids:
             engine.terminate(pids)

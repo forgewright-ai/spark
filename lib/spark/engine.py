@@ -638,6 +638,32 @@ def daemon_note(cfg, unit="serve", verb="kickstart -k"):
         unit, "FORGE" if unit == "forge" else "server", verb, service_target(cfg, unit))
 
 
+def user_bus_env():
+    """The environment a `systemctl --user` call needs: XDG_RUNTIME_DIR and
+    the session bus address, defaulted to /run/user/UID when the shell
+    did not bring them -- a plain `ssh box spark model NAME` has neither,
+    and without them systemctl answers "Failed to connect to user scope
+    bus" while the user manager runs on. None on macOS."""
+    if IS_MAC:
+        return None
+    env = dict(os.environ)
+    rt = env.get("XDG_RUNTIME_DIR") or "/run/user/%d" % os.getuid()
+    env.setdefault("XDG_RUNTIME_DIR", rt)
+    env.setdefault("DBUS_SESSION_BUS_ADDRESS", "unix:path=%s/bus" % rt)
+    return env
+
+
+def sysctl(args, timeout=20):
+    """(rc, stdout, stderr) of `systemctl --user ARGS`, with the bus env;
+    never raises (rc -1 when systemctl is missing or hangs)."""
+    try:
+        p = subprocess.run(["systemctl", "--user"] + list(args), capture_output=True, text=True,
+                           timeout=timeout, env=user_bus_env())
+        return p.returncode, p.stdout, p.stderr
+    except (OSError, subprocess.SubprocessError):
+        return -1, "", ""
+
+
 def service_state(cfg, unit="serve"):
     """'loaded' | 'disabled' | 'absent' for an always-on unit here (serve
     by default; forge is the other). loaded = the service manager owns it
@@ -660,7 +686,7 @@ def service_state(cfg, unit="serve"):
             return "disabled"
         rc, _ = run(["launchctl", "print", dom + "/" + name])
         return "loaded" if rc == 0 else "absent"
-    rc, out = run(["systemctl", "--user", "is-enabled", name])
+    rc, out, _err = sysctl(["is-enabled", name], timeout=5)
     st = out.strip()
     if st == "enabled":
         return "loaded"
@@ -688,8 +714,8 @@ def service_stop(noreload, unit="serve"):
     short = name[:-8]
     undo = "systemctl --user enable --now " + short
     if noreload:
-        run(["systemctl", "--user", "disable", name], timeout=20)
-    run(["systemctl", "--user", "stop", name], timeout=30)
+        sysctl(["disable", name], timeout=20)
+    sysctl(["stop", name], timeout=30)
     return undo if noreload else "systemctl --user start " + short
 
 
@@ -703,10 +729,20 @@ def kickstart(cfg, unit="serve", restart=False):
         from . import say
         say(daemon_note(cfg, unit))
         return False
-    cmd = (["launchctl", "kickstart", "-k", service_target(cfg, unit)] if IS_MAC
-           else ["systemctl", "--user", "restart" if restart else "start", unit_name(unit)])
-    subprocess.run(cmd, capture_output=True)
-    return True
+    if IS_MAC:
+        subprocess.run(["launchctl", "kickstart", "-k", service_target(cfg, unit)], capture_output=True)
+        return True
+    verb = "restart" if restart else "start"
+    rc, out, err = sysctl([verb, unit_name(unit)], timeout=30)
+    if rc == 0:
+        return True
+    # a start that did not happen is not a start: the unit keeps serving
+    # what it served (or nothing), and a caller that waits on /health
+    # would wait 180 s on a server nobody asked for
+    from . import say
+    why = ((err or out).strip().splitlines() or ["systemctl exited %d" % rc])[0]
+    say("todo   %-12s systemctl --user %s %s failed: %s" % (unit, verb, unit_name(unit)[:-8], why))
+    return False
 
 
 # ------------------------------------------------------------------ speed

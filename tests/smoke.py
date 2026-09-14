@@ -459,6 +459,43 @@ def main():
         rc, out, _ = spark("line", stdin="badproof?")
         t.ok(rc == 0 and out.splitlines() == ["cmd\tmkdir -p pdir", "makes the dir"],
              "line: a proof that writes is refused, never printed", repr(out))
+        # the user bus over a bare ssh: every systemctl --user call carries
+        # XDG_RUNTIME_DIR and the bus address, and a start that fails says so
+        from spark import engine as _eng
+        _saved = {k: os.environ.pop(k, None) for k in ("XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS")}
+        _mac = _eng.IS_MAC
+        try:
+            _eng.IS_MAC = False
+            _benv = _eng.user_bus_env()
+            t.ok(_benv["XDG_RUNTIME_DIR"] == "/run/user/%d" % os.getuid()
+                 and _benv["DBUS_SESSION_BUS_ADDRESS"] == "unix:path=/run/user/%d/bus" % os.getuid(),
+                 "user_bus_env: the bus defaults to /run/user/UID when the shell brought none", _benv.get("XDG_RUNTIME_DIR"))
+            os.environ["XDG_RUNTIME_DIR"] = "/tmp/rt-x"
+            t.ok(_eng.user_bus_env()["XDG_RUNTIME_DIR"] == "/tmp/rt-x", "user_bus_env: a set XDG_RUNTIME_DIR is kept")
+            with tempfile.TemporaryDirectory() as _sd:
+                _stub = os.path.join(_sd, "systemctl")
+                with open(_stub, "w") as f:
+                    f.write("#!/bin/sh\necho 'Failed to connect to user scope bus via local transport' >&2\nexit 1\n")
+                os.chmod(_stub, 0o755)
+                _path = os.environ["PATH"]
+                os.environ["PATH"] = _sd + ":" + _path
+                import io, contextlib
+                _buf = io.StringIO()
+                with contextlib.redirect_stdout(_buf):
+                    _rc = _eng.kickstart(None)
+                t.ok(_rc is False and "systemctl --user start spark-serve failed: Failed to connect to user scope bus" in _buf.getvalue(),
+                     "kickstart: a start that did not happen returns False and says why", _buf.getvalue())
+                with open(_stub, "w") as f:
+                    f.write("#!/bin/sh\nexit 0\n")
+                t.ok(_eng.kickstart(None) is True, "kickstart: a start that happened returns True")
+                os.environ["PATH"] = _path
+        finally:
+            _eng.IS_MAC = _mac
+            for k, v in _saved.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
         from spark import persona as _pp
         t.ok(_pp.proof_ok("test ! -d build") and _pp.proof_ok("git status") and _pp.proof_ok("systemctl is-active x")
              and not _pp.proof_ok("rm -rf build") and not _pp.proof_ok("git push") and not _pp.proof_ok("ls > f")

@@ -424,7 +424,8 @@ Headless. On the machine that stays on, `spark headless on`:
 - Linux: the units run from boot without a login (linger), the GPU is
   reachable without a seat (the `render` group), sleep, suspend and
   hibernate are masked, the lid is ignored. `off` reverses all but
-  linger and the group.
+  linger and the group. Over a plain `ssh box spark model NAME` the
+  units are reached the same way: spark brings the user bus itself.
 - macOS: the three agents move to `/Library/LaunchDaemons` (no
   auto-login; FileVault's login screen is untouched) and `pmset` keeps
   the machine awake. Restart and stop then need `sudo launchctl` (the

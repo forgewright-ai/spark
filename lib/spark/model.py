@@ -101,7 +101,8 @@ def _restart_server(cfg):
         say("ok     server       restarting -- the model loads again (about 30 s) ...")
         engine.service_stop(noreload=False)
         engine.wait_gone(engine.server_pids(cfg.port), 30)
-        engine.kickstart(cfg)
+        if not engine.kickstart(cfg):
+            return
         url = wire.serve_url() or cfg.loopback_url()
         if wait_ready("", lambda: wire.health(url) == "ok", 180, 2):
             say("ok     server       ready")

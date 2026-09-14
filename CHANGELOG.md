@@ -17,6 +17,16 @@
   kind `reading`, numbers only), so `spark stats` shows what every
   grounded answer pays before it starts.
 
+- Every `systemctl --user` call spark makes -- `spark model`, `spark
+  serve`, `spark update`, the `services` row, `spark uninstall`, and
+  bootstrap's twin -- carries the user bus (`XDG_RUNTIME_DIR` and the
+  session bus address, defaulted to `/run/user/UID`), so a plain `ssh box
+  spark model NAME` reaches the unit instead of "Failed to connect to
+  user scope bus". A unit start that fails now says so in one `todo` line
+  and returns, where before it reported success and waited 180 s on a
+  server nobody had started, while the unit went on serving the old
+  model beside the hand-started one.
+
 ## v1.31
 
 - `spark reveal [CPS]` -- stdin at a reader's pace: at a terminal the

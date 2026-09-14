@@ -33,11 +33,16 @@ that speed. Three levers, in order:
   score beside a `tg` number per row on THIS box, and the reading
   contracts get the smallest row whose score holds. Nothing in the
   tree moves the first line more than halving the model.
-- **The reading pass, measured.** v1.32 records it as its own turn
-  (mode `edit-read`); `spark stats` shows its median. Paid before
-  every grounded answer, on the small model, on 800 chars: if it is
-  seconds and not tenths, it runs in parallel with nothing today and
-  the source's language could come from the answer brief alone.
+- **The reading pass, measured: 7.4 s of 34.4 s.** Recorded as its own
+  turn since v1.32 (mode `edit-read`). On the box it is not on a small
+  model: the ember is `none`, so the 12B answers both roles, and the
+  pass is 306 prompt tokens and 28 generated at 4.9 tok/s before the
+  answer starts -- a fifth of the whole wait for two words. The cheap
+  form: no second request; the answer brief asks for the reading as
+  the answer's first line (`Read as: LANGUAGE, KIND.`), which the gate
+  drops as unquoted and the reader never sees, ten tokens in-stream
+  instead of a round trip with its own prefill. The audition judges
+  it against the two-request form before it lands.
 - **`--warm` on contract 11.** The cold prefill is 20 s of the 43.7 s,
   and cold is the common case: a page is read once. A reading client
   sends the source the moment its key is pressed, no question yet,
@@ -45,7 +50,11 @@ that speed. Three levers, in order:
   prefix is reused by the real one; this is the one prefill lever.
 
 Not levers: the cache flag, the message order (the prefix already
-hits), a shorter brief (a few lines is already the ask).
+hits), a shorter brief (a few lines is already the ask). One note on
+the instrument: `first_ms` exists only on a kept answer -- a refusal
+has no first line, so a source cut where the answer is not (a man
+page's boilerplate, a wiki's navigation) measures the whole wait and
+records no first line; measure with a source that answers.
 
 ## 2. Grounding, graded on every row `auto` may pick
 

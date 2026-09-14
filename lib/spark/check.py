@@ -87,8 +87,8 @@ class Ctx:
         self.fetch = fetch
         self.home = HOME
 
-    def sh(self, cmd, timeout=10):
-        return run(cmd, timeout=timeout)
+    def sh(self, cmd, timeout=10, env=None):
+        return run(cmd, timeout=timeout, env=env)
 
     def cached(self, key, ttl, fn):
         """fn() at most once per ttl seconds; the value lives in state/cache.
@@ -389,11 +389,13 @@ def row_hooks(ctx):
 def _systemd_user(ctx, unit):
     """(enabled, active) strings for a user unit; ("", "") when there is
     no user systemd to ask (the same probe bootstrap.sh uses)."""
-    rc, _ = ctx.sh(["systemctl", "--user", "show-environment"], 10)
+    from . import engine
+    env = engine.user_bus_env()
+    rc, _ = ctx.sh(["systemctl", "--user", "show-environment"], 10, env=env)
     if rc != 0:
         return "", ""
-    rc, en = ctx.sh(["systemctl", "--user", "is-enabled", unit], 10)
-    rc, ac = ctx.sh(["systemctl", "--user", "is-active", unit], 10)
+    rc, en = ctx.sh(["systemctl", "--user", "is-enabled", unit], 10, env=env)
+    rc, ac = ctx.sh(["systemctl", "--user", "is-active", unit], 10, env=env)
     return en.strip() or "not-found", ac.strip() or "inactive"
 
 
