@@ -82,6 +82,16 @@ GROUND = {
                       words="when a 500 appears", expect="answer", quote="500"),
     "drill-thin": dict(verb="drill", src="thin.txt", words="", expect="refuse"),
     "drill-facts": dict(verb="drill", src="facts.txt", words="", expect="answer", quote=""),
+    # the reading-discussion posture (spark edit ? --source): a published
+    # source discussed, not a draft reviewed. The failure this pins
+    # (2026-09-14): gemma reviewed a priced page and said it named no
+    # price. Right = the answer names the price AND carries no editorial
+    # verb (`forbid`).
+    "discuss-price": dict(verb="edit", src="pricing.txt",
+                          words="? --source does it name a price", expect="answer",
+                          quote="$39",
+                          forbid=r"(?i)\b(rephrase|consider adding|break (it|this) into|"
+                                 r"could be clearer|i would (change|suggest)|a numbered)\b"),
 }
 EN = ("the", "and", "of", "to", "is", "in", "that", "it", "was", "with")
 PT = ("de", "que", "não", "uma", "com", "para", "os", "as", "do", "da", "em", "é", "um", "se")
@@ -215,6 +225,8 @@ def ground_one(name, g, verbose):
         return 0, 0, 1, "refused an answer the source holds"
     if g.get("quote") and g["quote"].lower() not in out.lower():
         return 0, len(kept), 0, "answered without quoting %r" % g["quote"]
+    if g.get("forbid") and re.search(g["forbid"], out):
+        return 0, len(kept), 0, "answered but slipped into the editor's posture"
     return 1, 0, 0, "answered, grounded"
 
 

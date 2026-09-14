@@ -2,6 +2,18 @@
 
 ## v1.32
 
+- `spark edit ? --source` is the reading-discussion posture: the text is
+  a published source you discuss -- a page, an article -- not a draft you
+  edit. It answers the reader's question from the text and never suggests
+  changes to it, while keeping every part of `spark edit ?` (the thread,
+  the ember, quotes checked and marked where the text does not hold them,
+  never dropped). The reading apps pass it; the editors never do. Found
+  on the box: asked whether a priced page named a price, the editor's
+  brief reviewed the prose ("rephrase this", "consider adding") and
+  concluded it named none while it named four. A ninth audition ground
+  case (`discuss-price`) pins the answer to the fact and forbids the
+  editor's verbs.
+
 - `spark stats` shows a row per mode -- turns, the prompt cache hit rate,
   the median latency and, for `spark read`, the median wait to the first
   kept line (`first_ms`, a new number on the read turn). One cache rate

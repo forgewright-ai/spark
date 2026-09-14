@@ -41,6 +41,9 @@ EDIT_USAGE = """spark edit -- the editor's protocol (contract 10): the text on s
                               about bytes A..B, the file around it context
   --thread ID                 ?: keep the exchange under ID (yours to name,
                               [A-Za-z0-9_-]); the same ID again continues it
+  --source                    ?: the text is a published source you discuss,
+                              not a draft to edit -- answer the question, never
+                              suggest changes (the reading apps pass this)
   --decline --name NAME       keep the note on stdin as declined for NAME: a
                               later ? about NAME is told not to raise it
   --ledger [clear] --name NAME  the notes declined for NAME (every file's
@@ -58,12 +61,14 @@ EDIT_USAGE = """spark edit -- the editor's protocol (contract 10): the text on s
 def _edit_args(args):
     """(options, words) -- ValueError names a flag that lacks its value."""
     opts = {"type": "", "name": "", "about": "", "at": None, "part": False, "sel": None, "thread": "", "decline": False,
-            "ledger": None, "watch": ""}
+            "ledger": None, "watch": "", "source": False}
     words, rest = [], list(args)
     while rest:
         a = rest.pop(0)
         if a == "--part":
             opts["part"] = True
+        elif a == "--source":
+            opts["source"] = True
         elif a == "--decline":
             opts["decline"] = True
         elif a == "--ledger":
@@ -322,8 +327,13 @@ def cmd_edit(args):
         fence.close()
         if anchors:
             anchors.close()
+    # --source picks the reading-discussion posture (a published source
+    # the reader discusses, not their draft) over the editor's review
+    # brief, keeping the kind -- the turn record and the Anchors gate --
+    # unchanged. The reading surfaces pass it; the editors never do.
+    mode = "edit-discuss" if (kind == "answer" and opts["source"]) else "edit-" + kind
     try:
-        s = session.Session(cfg, "edit-" + kind, shell, "", role=role,
+        s = session.Session(cfg, mode, shell, "", role=role,
                             history=history if kind == "answer" else None)
         out, ms = s.ask_stream(text, context, fence.feed, max_tokens=max_tokens, timeout=EDIT_TIMEOUT)
     except wire.BrainError as e:

@@ -524,7 +524,14 @@ may change freely.
     (`text_sha` on that message), else `File NAME, as it is now:` and the
     text; the reading runs on the first turn only; anchors always check
     the text on stdin now. Without `--thread`, or with history off, no
-    thread is kept. `--decline --name NAME` (the pane's `d`) keeps the
+    thread is kept. `--source` (a `?`) picks the reading-discussion brief
+    (`persona.MODE_EDIT_DISCUSS`, mode `edit-discuss`; the turn stays
+    `kind` answer) over the editor's review brief: the text is a
+    published source the reader discusses, not their draft, so the model
+    answers the question and never suggests edits to it. The reading apps
+    (spark-w3m, spark-newsboat) pass it; the editors never do -- the flag
+    is the caller declaring which posture, no auto-detection.
+    `--decline --name NAME` (the pane's `d`) keeps the
     note on stdin in the ledger (`lib/spark/ledger.py`: the account's
     sealed `users/<name>/ledger`, by file NAME, 300 chars a note, 30 a
     name, 200 in all); a later `?` about NAME carries `Declined before --

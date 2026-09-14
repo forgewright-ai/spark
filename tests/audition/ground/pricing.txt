@@ -1,0 +1,10 @@
+Introducing the Feathertouch Mini
+
+The Feathertouch Mini is a matchbox-sized controller, wired or wireless.
+It comes in two models: the Mini with Ethernet for $39, and the Mini W,
+wireless, for $42. In packs of three they drop to $33 and $36 per unit.
+
+The case is aluminium, about the footprint of a matchbox. It captures
+video at 1080p, presents keyboard and mouse over USB, and runs the same
+web interface as the full Feathertouch. Firmware is open source from day
+one, and the cloud and updates carry over unchanged.

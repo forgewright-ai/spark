@@ -119,6 +119,8 @@ class Stub(BaseHTTPRequestHandler):
             return self._send(200, {"choices": [{"message": {"content": json.dumps({"language": "Portuguese", "kind": "fiction"})}}], "timings": TIMINGS})
         if "turn it into practice questions" in system:   # spark drill (contract 13), a JSON reply
             return self._send(200, {"choices": [{"message": {"content": json.dumps(drill_items(user))}}], "timings": TIMINGS})
+        if body.get("stream") and "you are not its editor" in system:   # spark edit ? --source
+            return self._sse(('It gives a price: ', '"$39 wired"', ' -- the reader has the answer.'))
         if body.get("stream") and "inside an editor" in system:
             return self._sse(edit_pieces(system, user))
         if body.get("stream") and "you reply with questions" in system:
@@ -928,6 +930,25 @@ def main():
         umsg = STATE["bodies"][-1]["messages"][-1]["content"]
         t.ok(rc == 0 and out == "1. line 2: typo\n" and "You read this as" not in umsg and "Answer in" not in umsg, "edit: a failed reading is silent, the answer still streams", repr(umsg[:120]))
         t.ok(umsg.startswith("Review this.\n\n"), "edit: ? alone is a review", repr(umsg[:40]))
+        # --source: the reading-discussion posture. The brief the model
+        # gets is the discuss brief (a published source, not a draft), not
+        # the editor's review brief; the turn is still kind answer, mode
+        # edit-discuss; the answer names the fact and carries no editorial
+        # verb. The plain ? (no flag) stays the editor's brief.
+        page = 'The gadget costs "$39 wired" and forty-two wireless.\n'
+        rc, out, _ = spark("edit", "?", "--source", "does", "it", "give", "a", "price", stdin=page)
+        sysmsg = STATE["bodies"][-1]["messages"][0]["content"]
+        t.ok(rc == 0 and "you are not its editor" in sysmsg and "inside an editor" not in sysmsg,
+             "edit ? --source: the discuss brief, not the editor's review brief", repr(sysmsg[:80]))
+        t.ok("$39 wired" in out and not re.search(r"(?i)\b(rephrase|numbered|consider adding)\b", out),
+             "edit ? --source: names the fact, no editorial suggestion", repr(out))
+        _turns = sorted(glob.glob(home + "/.local/state/spark/turns/*.jsonl"))
+        lt = json.loads(open(_turns[-1]).read().splitlines()[-1]) if _turns else {}
+        t.ok(lt.get("mode") == "edit-discuss" and lt.get("kind") == "answer",
+             "edit ? --source: the turn is mode edit-discuss, kind answer", json.dumps(lt)[:160])
+        rc, out, _ = spark("edit", "?", "why", stdin="Some prose.\n")
+        sysmsg = STATE["bodies"][-1]["messages"][0]["content"]
+        t.ok("inside an editor" in sysmsg, "edit ?: without --source the editor's brief is unchanged", repr(sysmsg[:60]))
         # anchors: every quoted span of a ? answer is checked against the text
         import io
         from spark import text as textmod

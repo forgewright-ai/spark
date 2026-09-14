@@ -333,6 +333,32 @@ MODE_EDIT_ANSWER = (
     "[selection ends], the question is about what lies between them and the rest is "
     "context: never quote or comment on the mark lines themselves. In a continued "
     "exchange, the text is the one shown earlier unless a newer one is given.")
+# The discuss brief (spark edit ? --source): the same machinery as
+# edit-answer -- threads, the ember, quotes checked and MARKED not
+# dropped -- but the text is a PUBLISHED source the reader is talking
+# about, not their draft. The reading surfaces (spark-w3m, spark-newsboat)
+# pass --source; the editors never do. Found 2026-09-14: gemma reviewed a
+# priced web page ("Rephrase to...", "Consider adding...") and concluded
+# it named no price while it named four -- the editor's posture reading a
+# page. This brief forbids the edit posture and answers the question.
+MODE_EDIT_DISCUSS = (
+    "The reader shows you a PUBLISHED text below -- a web page, an article, a document, a "
+    "message -- and asks a question about it. It is not their draft and you are not its "
+    "editor: never suggest edits, rephrasings, or improvements to it, never a numbered "
+    "list of changes, never 'rephrase', 'consider adding', 'break this into', 'could be "
+    "clearer'. " + _READ +
+    "Answer the reader's QUESTION from the text: say plainly what it says, and when it "
+    "settles the question give the answer first -- if they ask whether it names a price "
+    "and it does, the price is the answer, not a note about the pricing table. Support "
+    "what you say by quoting the text between double quotes, character for character, at "
+    "most twelve words and never across a line -- every quote is checked, and one the "
+    "text does not hold is marked where it stands, never invented. Your own wording never "
+    "goes in double quotes: write it plain, after a colon or an arrow (->). Take a "
+    "position when they ask for one; say what the text does not settle when it does not. "
+    "Plain text for a narrow pane, no markdown marks (no **, no #, no tables, no "
+    "headings); a few lines, fewer when fewer answer. Never claim to remember earlier "
+    "drafts. Answer in the language of the QUESTION. In a continued exchange, the text is "
+    "the one shown earlier unless a newer one is given.")
 # The reading that precedes a question: the model says what the text is
 # (language, kind) from its first 800 chars, and that reading is restated
 # in the request. A small model drifts -- an English draft answered in
@@ -444,7 +470,8 @@ MODE_WATCH = (
     "see. No preamble, no summary, no 'nothing yet': when nothing matches, answer with "
     "nothing at all. Silence is the normal, healthy state.")
 MODES.update({"edit-complete": MODE_EDIT_COMPLETE, "edit-rewrite": MODE_EDIT_REWRITE,
-              "edit-answer": MODE_EDIT_ANSWER, "edit-read": MODE_EDIT_READ,
+              "edit-answer": MODE_EDIT_ANSWER, "edit-discuss": MODE_EDIT_DISCUSS,
+              "edit-read": MODE_EDIT_READ,
               "ask-questions": MODE_ASK_QUESTIONS, "read-source": MODE_READ_SOURCE,
               "drill-items": MODE_DRILL_ITEMS, "watch-stream": MODE_WATCH,
               "recall": MODE_RECALL})
