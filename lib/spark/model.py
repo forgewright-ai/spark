@@ -106,8 +106,17 @@ def _restart_server(cfg):
         # the brain cache names the model that WAS served (60 s): the next
         # `spark brain` after a swap must resolve afresh, not say the old stem
         wire.drop_cache()
-        url = wire.serve_url() or cfg.loopback_url()
-        if wait_ready("", lambda: wire.health(url) == "ok", 180, 2):
+        # the server binds to the LAN ip (serve.py does the same), and
+        # a just-restarted server has not written serve-url yet: falling
+        # back to 127.0.0.1 probed a host the server never binds to, so
+        # the wait timed out with "not ready" while the server was up on
+        # the LAN. Re-read serve-url each poll (the server writes it when
+        # ready), else the LAN url it will bind to.
+        from . import lan_ip
+        def _up():
+            url = wire.serve_url() or "http://%s:%d" % (cfg.serve_host or lan_ip() or "127.0.0.1", cfg.port)
+            return wire.health(url) == "ok"
+        if wait_ready("", _up, 180, 2):
             say("ok     server       ready")
         else:
             say("todo   server       not ready yet -- spark check --watch 5 follows it")

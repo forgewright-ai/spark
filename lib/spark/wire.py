@@ -327,12 +327,26 @@ def _post(cfg, url, body, timeout, stream=False, forge=False):
             raise BrainError("auth", _auth_hint(cfg, url, forge))
         if e.code == 503:
             raise BrainError("loading", "%s is still loading its model" % url)
+        # a FORGE classifies its own failures: the body is
+        # {"error": {"kind", "hint"}}. Honour it -- a 502 while the forge
+        # re-resolves a just-restarted upstream is "loading", not a raw
+        # HTTP dump in the reader's face. A bare 502/504 from any proxy
+        # is the same transient: the server is coming back.
         detail = ""
         try:
-            detail = e.read().decode(errors="replace")[:200]
+            detail = e.read().decode(errors="replace")
         except OSError:
             pass
-        raise BrainError("bad", "%s answered HTTP %d %s" % (url, e.code, detail))
+        try:
+            err = json.loads(detail).get("error", {})
+            if err.get("kind"):
+                kind = "loading" if err["kind"] in ("loading", "down") else err["kind"]
+                raise BrainError(kind, err.get("hint") or "the server is coming back -- ask again in a moment")
+        except ValueError:
+            pass
+        if e.code in (502, 504):
+            raise BrainError("loading", "the server is restarting -- ask again in a moment")
+        raise BrainError("bad", "%s answered HTTP %d %s" % (url, e.code, detail[:200]))
     except urllib.error.URLError as e:
         reason = str(getattr(e, "reason", e))
         if "timed out" in reason:
