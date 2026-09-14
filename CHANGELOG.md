@@ -27,6 +27,16 @@
   server nobody had started, while the unit went on serving the old
   model beside the hand-started one.
 
+- `spark model NAME` drops the brain cache after the restart, so the
+  next `spark brain` names the model now served, not the one before (the
+  cache is 60 s; a swap is faster).
+- Two more rows carry a grounding score, from one audition run each on
+  the maintainer's box: Qwen3 4B `5/9` and Gemma 3 12B `5/9`, beside the
+  8B's `21/27`. The 12B is slower (5.5 tok/s to the 8B's 8.7) and no
+  better grounded; the 4B is fast and its judgment folds (a cold read
+  over-generated and the gate dropped every line). The 8B is the box's
+  model for reading.
+
 ## v1.31
 
 - `spark reveal [CPS]` -- stdin at a reader's pace: at a terminal the

@@ -49,6 +49,23 @@ that speed. Three levers, in order:
   and the typing hides the prefill. The cache holds, so the warm call's
   prefix is reused by the real one; this is the one prefill lever.
 
+Measured 2026-09-14, the three rows that fit the box's 9 GB, one model
+in both roles, a 6 kB source that answers, the audition once each:
+
+| model | tg tok/s | reading pass | first line cold / warm | audition |
+|---|---|---|---|---|
+| Gemma 3 12B | 5.5 | 7.6 s | 20.1 s / 8.0 s | 5/9 |
+| Qwen3 8B | 8.7 | 3.9 s | 19.8 s / 5.0 s | 7/9 |
+| Qwen3 4B | 16.2 | 2.3 s | refused both | 5/9 |
+
+The decision is the 8B: faster than the 12B and better grounded, and
+the 4B's speed buys nothing when the gate drops every line it writes.
+`spark model qwen3-8b` on the box, one command, and the first lever is
+pulled. What stays open, in order: the reading pass in-stream (3.9 s of
+every read on the 8B), then `--warm` (the cold first line is 20 s on
+either model and 5 s warm: the prefill and the pass are the cold cost,
+and typing hides them).
+
 Not levers: the cache flag, the message order (the prefix already
 hits), a shorter brief (a few lines is already the ask). One note on
 the instrument: `first_ms` exists only on a kept answer -- a refusal
@@ -58,9 +75,11 @@ records no first line; measure with a source that answers.
 
 ## 2. Grounding, graded on every row `auto` may pick
 
-One model carries a `_GROUND` score today (Qwen3 8B, 21/27). The other
-four rows proven on the line carry none, and `auto` prefers a grounded
-row when two fit the budget -- so today the preference is blind.
+Three rows carry a `_GROUND` score (Qwen3 8B 21/27, Qwen3 4B 5/9,
+Gemma 3 12B 5/9 -- the two new ones from a single run, so plus or minus
+one). Three rows proven on the line carry none (1.7B, 14B, 30B-A3B),
+and `auto` prefers a grounded row when two fit the budget -- so the
+preference is still blind between those.
 
 - run `tests/audition.py --json` on each `_TESTED` row and write the
   score into `models.env` by hand, the way `_TESTED` carries the line

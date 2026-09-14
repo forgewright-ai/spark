@@ -103,6 +103,9 @@ def _restart_server(cfg):
         engine.wait_gone(engine.server_pids(cfg.port), 30)
         if not engine.kickstart(cfg):
             return
+        # the brain cache names the model that WAS served (60 s): the next
+        # `spark brain` after a swap must resolve afresh, not say the old stem
+        wire.drop_cache()
         url = wire.serve_url() or cfg.loopback_url()
         if wait_ready("", lambda: wire.health(url) == "ok", 180, 2):
             say("ok     server       ready")
