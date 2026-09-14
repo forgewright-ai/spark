@@ -519,6 +519,10 @@ def main():
         t.ok("12.3 tok/s (prompt 96 tok/s" in out, "last: shows the tokens per second the server reported", out)
         rc, out, _ = spark("stats", "--porcelain")
         t.ok(rc == 0 and "tg_mean\t12.3" in out and "cache_pct\t43" in out, "stats: mean tok/s and cache hits from the turns", out)
+        t.ok("mode_line\tturns=" in out and "mode_explain\tturns=" in out and "first_p50=" in out,
+             "stats: a row per mode, with its own cache rate and first-line wait", out)
+        rc, out, _ = spark("stats")
+        t.ok(rc == 0 and "by mode" in out and "line" in out, "stats: the by-mode table at the terminal", out)
         rc, out, _ = spark("brain", "--porcelain")
         t.ok(rc == 0 and out.strip() == url + "\tstub-7b-q4\tmodel", "brain --porcelain: url, model, and that it is a raw model", out)
         turns = os.listdir(home + "/.local/state/spark/turns")
@@ -1193,6 +1197,12 @@ def main():
              and lt.get("dropped") == 2 and lt.get("part") == 1 and lt.get("parts") == 1
              and not any(k in lt for k in ("line", "answer", "context")),
              "read: the turn counts parts and kept lines, and keeps no words", json.dumps(lt)[:200])
+        t.ok(isinstance(lt.get("first_ms"), int) and 0 <= lt["first_ms"] <= lt.get("ms", 0),
+             "read: the turn keeps the wait to the first kept line", json.dumps(lt)[:200])
+        rb = STATE["bodies"][-2]        # the reading pass, right before the answer
+        t.ok(rb.get("model") == "spark" and "json_schema" in str(rb) and rb.get("temperature") == 0,
+             "read: the reading pass is greedy, so the restated reading is the same bytes on the same source",
+             "%s %s" % (rb.get("model"), rb.get("temperature")))
         rc, _out, _ = spark("read", stdin=READ_TEXT)
         umsg = STATE["bodies"][-1]["messages"][-1]["content"]
         t.ok(rc == 0 and umsg.startswith("What does this source cover?\n\n"),

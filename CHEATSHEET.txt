@@ -99,7 +99,7 @@ THE INTERFACE
   spark font FACE SIZE | list     console font (Linux) / Terminal.app's font
 
 LESS OFTEN USED
-  spark stats [--week]            tok/s, latency, cache hits, GPU, baseline
+  spark stats [--week]            tok/s, latency, cache hits by mode, baseline
   spark bench [tune]              llama-bench; tune finds the best settings
   spark bench tune show | apply   the winner; apply writes spark.env, restarts
 

@@ -12,7 +12,7 @@ WINDOWS = {"--today": 1, "--week": 7, "--all": 3650}
 
 USAGE = """%s stats -- throughput from the turns on disk
 
-  spark stats                  today: tok/s, latency, cache hits, GPU, baseline
+  spark stats                  today: tok/s, latency, cache hits by mode, baseline
   spark stats --week | --all   a wider window
   spark stats --porcelain      key<TAB>value lines
 """ % MARK
@@ -57,7 +57,28 @@ def summarise(rows):
     cn = sum(t.get("cache_n", 0) for t in rows)
     return {"turns": len(rows), "tg_mean": sum(tg) / len(tg) if tg else 0, "tg_p50": pct(tg, 0.5), "tg_p05": pct(tg, 0.05),
             "pp_mean": sum(pp) / len(pp) if pp else 0, "ms_p50": pct(ms, 0.5), "ms_p95": pct(ms, 0.95),
-            "cache": (100.0 * cn / (cn + pn)) if (cn + pn) else 0}
+            "cache": (100.0 * cn / (cn + pn)) if (cn + pn) else 0, "modes": by_mode(rows)}
+
+
+def by_mode(rows):
+    """[(mode, {turns, cache, ms_p50, first_p50})], most turns first: the
+    prompt cache is a property of a mode's request shape (the line's
+    short prefix hits nearly always; a read carries a 16 kB source), so
+    one number over every turn hides the one that matters. first_p50 is
+    the median wait to the first kept line where a mode records it
+    (spark read), else 0."""
+    groups = {}
+    for t in rows:
+        groups.setdefault(t.get("mode") or "?", []).append(t)
+    out = []
+    for mode, v in sorted(groups.items(), key=lambda kv: (-len(kv[1]), kv[0])):
+        pn = sum(t.get("pp_n", 0) for t in v)
+        cn = sum(t.get("cache_n", 0) for t in v)
+        ms = [t["ms"] for t in v if isinstance(t.get("ms"), (int, float))]
+        first = [t["first_ms"] for t in v if isinstance(t.get("first_ms"), (int, float))]
+        out.append((mode, {"turns": len(v), "cache": (100.0 * cn / (cn + pn)) if (cn + pn) else 0,
+                           "ms_p50": pct(ms, 0.5), "first_p50": pct(first, 0.5)}))
+    return out
 
 
 def running_settings(cfg):
@@ -102,6 +123,8 @@ def _report(argv):
         say("ms_p50\t%d" % s["ms_p50"])
         say("ms_p95\t%d" % s["ms_p95"])
         say("cache_pct\t%.0f" % s["cache"])
+        for mode, m in s["modes"]:
+            say("mode_%s\tturns=%d cache_pct=%.0f ms_p50=%d first_p50=%d" % (mode, m["turns"], m["cache"], m["ms_p50"], m["first_p50"]))
         say("baseline_tg\t%s" % (base["tg"] if base else ""))
         g = engine.gpu_info()
         if g:
@@ -113,11 +136,18 @@ def _report(argv):
     if not s["turns"]:
         say("  no turns yet -- ask something at the prompt")
     else:
-        say("  turns       %d   (%s)" % (s["turns"], ", ".join("%s %d" % (m, sum(1 for t in rows if t.get("mode") == m))
-                                                              for m in ("line", "answer", "explain", "chat", "do", "ask", "talk") if any(t.get("mode") == m for t in rows))))
+        say("  turns       %d" % s["turns"])
         say("  generate    %.1f tok/s mean, %.1f p50, %.1f p05" % (s["tg_mean"], s["tg_p50"], s["tg_p05"]))
         say("  prompt      %.0f tok/s mean, %.0f%% of prompt tokens from the cache" % (s["pp_mean"], s["cache"]))
         say("  latency     %.1f s p50, %.1f s p95" % (s["ms_p50"] / 1000.0, s["ms_p95"] / 1000.0))
+        # per mode: the cache hit rate is where a slow rerun shows -- a read
+        # that carries its source again and hits 0 % is paying the prefill
+        # twice; first line is the wait a reader feels (spark read keeps it)
+        say("  by mode     %-12s %5s %6s %8s %10s" % ("", "turns", "cache", "p50", "first line"))
+        for mode, m in s["modes"]:
+            say("              %-12s %5d %5.0f%% %6.1f s %s" % (
+                mode, m["turns"], m["cache"], m["ms_p50"] / 1000.0,
+                "%8.1f s" % (m["first_p50"] / 1000.0) if m["first_p50"] else "%10s" % "-"))
         by = {}
         for t in rows:
             k = "%s (%s)" % (t.get("backend", "?").split("//")[-1], t.get("model", "?"))

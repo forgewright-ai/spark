@@ -1,6 +1,6 @@
 # Roadmap
 
-What comes after v1.31, in the order it is likely to happen. Nothing here
+What comes after v1.32, in the order it is likely to happen. Nothing here
 is a promise; a row in `CHANGELOG.md` is. `IDEAS.md` is the field this
 is picked from.
 
@@ -18,19 +18,29 @@ question again. A server reusing the processed prefix would land the
 rerun in 2-3 s; it barely does. Nothing else on this list moves what
 the prompt feels like as much.
 
-The likely cause is in the tree: `wire.py` sends `cache_prompt: true`
-on every request, and `engine.py` starts llama-server with
-`--cache-ram 0` in the common arguments and `cache-ram = 0` in the
-router's presets -- the v1.7 fix for the RAM leak. The server is asked
-to reuse a prefix it was told not to keep.
+What the tree says (read for v1.32): every request asks for the cache
+(`cache_prompt: true`); the system message is byte-stable per machine,
+mode and soul; the request's user message is the question, then the
+reading pass's words, then the source. Two things can throw the cached
+prefix away before the 16 kB source: the reading pass sampling a
+different word on the same source (v1.32 makes it greedy), and another
+request replacing the slot in between -- a chat, a `?` at the prompt --
+which `--cache-ram 0` (the v1.7 leak fix) makes unrecoverable. The
+server may also have hit every time, and the 9 s be the reading pass
+plus the first line's own generation; the numbers say which.
 
-- prove it: the rerun timed with a bounded `--cache-ram N` instead of
-  `0`, and the leak watched at the same time (the `serve` row and
-  `bench.jsonl` already keep both numbers)
-- prove the prefix is byte-stable: the persona plus the source must be
-  the same bytes on the warm call and the real one, or no cache helps
-- keep it: a rerun number beside the speed baseline in `spark bench`,
-  so it cannot quietly go back
+- read them: `spark stats` now shows the read mode's cache hit rate and
+  its median wait to the first line -- a rerun that hits shows a cache
+  rate near the prompt's length; one that does not shows 0 %
+- if the rate is low with v1.32: put the source ABOVE the question and
+  the reading line in the user message, so the big stable block is the
+  prefix whatever is asked of it (the audition judges the briefs after)
+- if a slot lost in between is the cause: `SPARK_EXTRA_ARGS=--cache-ram
+  1024` is the experiment, no code change, the `serve` row reports it
+  and the RAM is watched at the same time; a bounded default follows
+  only if the leak stays fixed
+- keep it: the first-line wait in `spark stats` is the number; a rerun
+  case beside the speed baseline in `spark bench` once it is known
 
 Done when the same question again lands its first line in 2-3 s and
 the leak stays fixed. Only then is `--warm` on contract 11 worth

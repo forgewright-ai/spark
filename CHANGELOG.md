@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.32
+
+- `spark stats` shows a row per mode -- turns, the prompt cache hit rate,
+  the median latency and, for `spark read`, the median wait to the first
+  kept line (`first_ms`, a new number on the read turn). One cache rate
+  over every turn hid the one that matters: the line's short prefix hits
+  nearly always, a read carries a 16 kB source. This is the instrument
+  for the roadmap's first item, the rerun that costs what the first run
+  cost. `--porcelain` adds `mode_<name>` lines.
+- The reading pass (`You read this as: ...`) is greedy, temperature 0.
+  It is restated above the source in the request that follows, so a
+  word sampled differently on the same source threw the served prompt's
+  cached prefix away right before the text, and the whole source was
+  processed again.
+
 ## v1.31
 
 - `spark reveal [CPS]` -- stdin at a reader's pace: at a terminal the

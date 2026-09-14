@@ -95,7 +95,12 @@ def reading(cfg, data, shell="", start=0, act="Answer"):
     request goes on without it."""
     try:
         s = Session(cfg, "edit-read", shell or "sh", "", role="spark")
-        reply, _ms = s.ask_json(data[start:start + READ_MAX], persona.READ_SCHEMA, max_tokens=30, timeout=180)
+        # greedy: the reading is restated ABOVE the text in the request
+        # that follows, so a word sampled differently on the same source
+        # breaks the served prompt's cached prefix right before the text
+        # and the whole source is processed again
+        reply, _ms = s.ask_json(data[start:start + READ_MAX], persona.READ_SCHEMA, max_tokens=30, timeout=180,
+                                temperature=0)
         lang, kind = [" ".join(str(reply.get(k, "")).split()) for k in ("language", "kind")]
     except Exception:
         return "", ""
@@ -185,13 +190,15 @@ class Session:
             self.url, self.model, self.forge = self._brain(True)
             return fn()
 
-    def ask_json(self, text, schema=None, max_tokens=None, timeout=None):
-        """One JSON reply shaped by `schema` (the line's by default)."""
+    def ask_json(self, text, schema=None, max_tokens=None, timeout=None, temperature=None):
+        """One JSON reply shaped by `schema` (the line's by default).
+        `temperature` None takes the wire's default; 0 is greedy."""
         t0 = time.time()
         schema = schema or persona.LINE_SCHEMA
+        kw = {} if temperature is None else {"temperature": temperature}
         reply, self.timings = self._retry_fresh(lambda: wire.chat_json(
             self.cfg, self.url, self._messages(text), schema, max_tokens=max_tokens or 200,
-            forge=self.forge, model=self.role, timeout=timeout))
+            forge=self.forge, model=self.role, timeout=timeout, **kw))
         return reply, int((time.time() - t0) * 1000)
 
     def ask_stream(self, text, context, on_delta, max_tokens=None, timeout=None):

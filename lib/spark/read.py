@@ -38,6 +38,7 @@
 
 import os
 import sys
+import time
 
 from . import MARK, config, die, ledger, log_exc, say, session, wire
 from . import text as textmod
@@ -98,8 +99,11 @@ class _Part:
 
     def __init__(self, stream, header):
         self.stream, self.header = stream, header
+        self.first = None       # when the first kept line went out
 
     def write(self, s):
+        if self.first is None:
+            self.first = time.time()
         if self.header:
             self.stream.write(self.header + "\n")
             self.header = ""
@@ -187,12 +191,14 @@ def cmd_read(args):
         return verdict == textmod.GROUNDED  # it quotes, and a quote anchors
 
     header = "[part %d of %d]" % (want, total) if total > 1 else ""
-    gate = textmod.Gate(_Part(sys.stdout, header), part, keep)
+    out = _Part(sys.stdout, header)
+    gate = textmod.Gate(out, part, keep)
     fence = textmod.Fence(gate, newline=None)
 
     def done():
         fence.close()
         gate.close()
+    t0 = time.time()
     try:
         s = session.Session(cfg, MODE, shell, "", role="ember")
         _out, ms = s.ask_stream(text, context, fence.feed, max_tokens=READ_TOKENS, timeout=READ_TIMEOUT)
@@ -210,8 +216,11 @@ def cmd_read(args):
             ledger.keep(ledger.KIND_READ, name, note, cfg)
         except (ledger.Refused, OSError):
             log_exc("read ledger")
+    # first_ms: the reading pass, the prefill and the first kept line --
+    # what a reader waits for, and the number the prompt cache moves
+    first = {"first_ms": int((out.first - t0) * 1000)} if out.first else {}
     s.record(kind="read", chars=len(part), ms=ms, part=want, parts=total,
-             kept=gate.kept, dropped=gate.dropped, quotes=gate.quoted, unanchored=gate.missed)
+             kept=gate.kept, dropped=gate.dropped, quotes=gate.quoted, unanchored=gate.missed, **first)
     if not gate.kept:
         where = "part %d of %d" % (want, total) if total > 1 else "the source"
         die('%s does not answer -- it opens: "%s"' % (where, opening(part)))

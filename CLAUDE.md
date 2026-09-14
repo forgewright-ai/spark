@@ -570,7 +570,12 @@ may change freely.
     NAME]` lists or drops them. Exit 2 for the usage, a bad `--part`, or
     empty stdin (the usage plus where a question for spark itself goes).
     The turn record is numbers (`kind`, `chars`, `ms`, `part`, `parts`,
-    `kept`, `dropped`, `quotes`, `unanchored`).
+    `kept`, `dropped`, `quotes`, `unanchored`, and `first_ms` -- the wait
+    to the first kept line, the number the prompt cache moves; `spark
+    stats` shows it beside each mode's cache hit rate). The reading pass
+    is greedy (temperature 0): its words are restated above the source
+    in the request that follows, so a word sampled differently on the
+    same source would break the served prompt's cached prefix.
 12. `spark ask` is the questioner's protocol: the text on stdin -- a plan,
     a draft, a decision -- and questions about it out, raw, one per line;
     never a path, never a `[cwd]` line. Mode from the argument shape, no
