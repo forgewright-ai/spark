@@ -1,9 +1,86 @@
 # Roadmap
 
 What comes after v1.31, in the order it is likely to happen. Nothing here
-is a promise; a row in `CHANGELOG.md` is. A better idea is an issue away.
+is a promise; a row in `CHANGELOG.md` is. `IDEAS.md` is the field this
+is picked from.
 
-## Chaos on a real box
+The rule for this stretch: spark has one user, on one box, and what
+that use measures goes first. No new contract and no new verb until the
+first two items below are done -- fourteen contracts is more surface
+than one person lives in, and the two numbers that describe the daily
+experience have been sitting in the ideas file behind the test suite.
+
+## 1. The rerun costs what the first run cost
+
+Measured 2026-09-13, on the box's 12B: 12.8 s to the first line of a
+`spark read` answer cold, and 9.0 s asking the SAME source the SAME
+question again. A server reusing the processed prefix would land the
+rerun in 2-3 s; it barely does. Nothing else on this list moves what
+the prompt feels like as much.
+
+The likely cause is in the tree: `wire.py` sends `cache_prompt: true`
+on every request, and `engine.py` starts llama-server with
+`--cache-ram 0` in the common arguments and `cache-ram = 0` in the
+router's presets -- the v1.7 fix for the RAM leak. The server is asked
+to reuse a prefix it was told not to keep.
+
+- prove it: the rerun timed with a bounded `--cache-ram N` instead of
+  `0`, and the leak watched at the same time (the `serve` row and
+  `bench.jsonl` already keep both numbers)
+- prove the prefix is byte-stable: the persona plus the source must be
+  the same bytes on the warm call and the real one, or no cache helps
+- keep it: a rerun number beside the speed baseline in `spark bench`,
+  so it cannot quietly go back
+
+Done when the same question again lands its first line in 2-3 s and
+the leak stays fixed. Only then is `--warm` on contract 11 worth
+building: a reading client sends the source the moment its key is
+pressed, no question yet, and the first line lands almost at Enter.
+
+## 2. Grounding, graded on every row `auto` may pick
+
+One model carries a `_GROUND` score today (Qwen3 8B, 21/27). The other
+four rows proven on the line carry none, and `auto` prefers a grounded
+row when two fit the budget -- so today the preference is blind.
+
+- run `tests/audition.py --json` on each `_TESTED` row and write the
+  score into `models.env` by hand, the way `_TESTED` carries the line
+  proof; the page's model table then shows the reader's quality, not
+  only the prompt's
+- the read-about case (the ninth in the audition) stays the measure of
+  the gap: three brief rewrites each traded that miss for false
+  grounding elsewhere, so the brief does not move again until a
+  mechanism, not a wording, closes it
+
+## 3. Live in it, and let the turn records pick
+
+`spark stats` reads the turn records -- numbers only, never words. For
+the length of this stretch the roadmap is read from them, not written
+from the founder's chair:
+
+- once a week, which verbs ran and which did not; a verb unused for a
+  month is a candidate to leave, and one that runs forty times a day is
+  where the next hour goes
+- a tag when something is stable enough to defend, not per commit:
+  `spark update` on a clone follows the newest tag, so a tag is a
+  promise to that clone
+- the two small history items that pass `IDEAS.md`'s test and cost
+  almost nothing, once the numbers say the hint row is read: the
+  command you keep retyping (an alias you do not have, offered once,
+  counts only), and the tool you have and do not use (ten `find` on a
+  box with `fd` earns one line, once; `persona.PREFERRED` is the list)
+
+## 4. The first other person
+
+Before an issue tracker exists: one person, known, installs spark
+unattended on their own machine with nothing but the README, and says
+what broke. CI's container proves the one-liner on a clean image; it
+does not prove it on a laptop with a life on it. Issues open after that
+conversation, not before -- a founder is the worst reporter of their
+own product, and a public tracker with nobody behind it is worse than a
+closed one.
+
+## 5. Chaos on a real box
 
 What a fixture cannot reach is the maintainer's, by hand, as the WSL
 pass is:
