@@ -498,7 +498,9 @@ may change freely.
     `--at` find no text, or no brain answers; 2 for the usage. No thread is kept; the turn record is numbers (`kind`,
     `chars`, `ms`). A `?` is two requests: the reading (`edit-read`, a
     JSON `{language, kind}` from the first 800 chars, restated as `You
-    read this as: ...`; any failure is silence) and the answer. A `?`
+    read this as: ...`; any failure is silence; its cost is a turn of its
+    own, mode `edit-read`, kind `reading`, so `spark stats` shows what
+    every grounded answer pays before it starts) and the answer. A `?`
     answer streams line by line through `text.Anchors`: every quoted
     span (double quotes, curly quotes, backticks; 3..200 chars) is
     checked against the text on stdin -- verbatim, then folded

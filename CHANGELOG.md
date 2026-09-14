@@ -13,7 +13,9 @@
   It is restated above the source in the request that follows, so a
   word sampled differently on the same source threw the served prompt's
   cached prefix away right before the text, and the whole source was
-  processed again.
+  processed again. It is also a turn of its own now (mode `edit-read`,
+  kind `reading`, numbers only), so `spark stats` shows what every
+  grounded answer pays before it starts.
 
 ## v1.31
 

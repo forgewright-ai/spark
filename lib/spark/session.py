@@ -99,9 +99,12 @@ def reading(cfg, data, shell="", start=0, act="Answer"):
         # that follows, so a word sampled differently on the same source
         # breaks the served prompt's cached prefix right before the text
         # and the whole source is processed again
-        reply, _ms = s.ask_json(data[start:start + READ_MAX], persona.READ_SCHEMA, max_tokens=30, timeout=180,
-                                temperature=0)
+        chunk = data[start:start + READ_MAX]
+        reply, ms = s.ask_json(chunk, persona.READ_SCHEMA, max_tokens=30, timeout=180, temperature=0)
         lang, kind = [" ".join(str(reply.get(k, "")).split()) for k in ("language", "kind")]
+        # its own turn (numbers): the pass is paid before every grounded
+        # answer, so its cost has to be visible beside the answer's
+        s.record(kind="reading", chars=len(chunk), ms=ms)
     except Exception:
         return "", ""
     parts = [p for p in (lang, kind) if p]

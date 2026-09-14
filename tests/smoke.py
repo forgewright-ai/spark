@@ -1199,6 +1199,10 @@ def main():
              "read: the turn counts parts and kept lines, and keeps no words", json.dumps(lt)[:200])
         t.ok(isinstance(lt.get("first_ms"), int) and 0 <= lt["first_ms"] <= lt.get("ms", 0),
              "read: the turn keeps the wait to the first kept line", json.dumps(lt)[:200])
+        rt = json.loads(open(turns[-1]).read().splitlines()[-2]) if turns else {}
+        t.ok(rt.get("mode") == "edit-read" and rt.get("kind") == "reading" and rt.get("chars") == len(READ_TEXT[:800])
+             and isinstance(rt.get("ms"), int) and not any(k in rt for k in ("line", "answer", "context")),
+             "read: the reading pass is a turn of its own, numbers only, right before the answer's", json.dumps(rt)[:200])
         rb = STATE["bodies"][-2]        # the reading pass, right before the answer
         t.ok(rb.get("model") == "spark" and "json_schema" in str(rb) and rb.get("temperature") == 0,
              "read: the reading pass is greedy, so the restated reading is the same bytes on the same source",

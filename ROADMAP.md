@@ -10,42 +10,42 @@ first two items below are done -- fourteen contracts is more surface
 than one person lives in, and the two numbers that describe the daily
 experience have been sitting in the ideas file behind the test suite.
 
-## 1. The rerun costs what the first run cost
+## 1. The wait for the first line is the model's own speed
 
-Measured 2026-09-13, on the box's 12B: 12.8 s to the first line of a
-`spark read` answer cold, and 9.0 s asking the SAME source the SAME
-question again. A server reusing the processed prefix would land the
-rerun in 2-3 s; it barely does. Nothing else on this list moves what
-the prompt feels like as much.
+Measured 2026-09-14 on the box's 12B with v1.32's instrument, a 14 kB
+source, the same question three times, a chat in between the second
+and the third:
 
-What the tree says (read for v1.32): every request asks for the cache
-(`cache_prompt: true`); the system message is byte-stable per machine,
-mode and soul; the request's user message is the question, then the
-reading pass's words, then the source. Two things can throw the cached
-prefix away before the 16 kB source: the reading pass sampling a
-different word on the same source (v1.32 makes it greedy), and another
-request replacing the slot in between -- a chat, a `?` at the prompt --
-which `--cache-ram 0` (the v1.7 leak fix) makes unrecoverable. The
-server may also have hit every time, and the 9 s be the reading pass
-plus the first line's own generation; the numbers say which.
+- cold: 3632 prompt tokens processed at 185 tok/s, 43.7 s in all
+- again: 1 prompt token processed, 3632 from the cache, 26.6 s
+- after a chat: 3632 from the cache still, 24.6 s
 
-- read them: `spark stats` now shows the read mode's cache hit rate and
-  its median wait to the first line -- a rerun that hits shows a cache
-  rate near the prompt's length; one that does not shows 0 %
-- if the rate is low with v1.32: put the source ABOVE the question and
-  the reading line in the user message, so the big stable block is the
-  prefix whatever is asked of it (the audition judges the briefs after)
-- if a slot lost in between is the cause: `SPARK_EXTRA_ARGS=--cache-ram
-  1024` is the experiment, no code change, the `serve` row reports it
-  and the RAM is watched at the same time; a bounded default follows
-  only if the leak stays fixed
-- keep it: the first-line wait in `spark stats` is the number; a rerun
-  case beside the speed baseline in `spark bench` once it is known
+So the prefix cache holds, the reading pass restates the same bytes, a
+chat in between does not evict it, and `--cache-ram 0` costs nothing.
+Item 1 as first written (the rerun costs what the first run cost) was
+wrong: the rerun saves exactly the prefill, and what remains is
+generation -- 90 tokens at 4.9 tok/s -- plus the reading pass. The 9 s
+first line of the original note is a 12B writing thirty-odd tokens at
+that speed. Three levers, in order:
 
-Done when the same question again lands its first line in 2-3 s and
-the leak stays fixed. Only then is `--warm` on contract 11 worth
-building: a reading client sends the source the moment its key is
-pressed, no question yet, and the first line lands almost at Enter.
+- **A faster ember for reading.** Generation speed is the wait, and it
+  is the model's. This is item 2 turned into a choice: the `_GROUND`
+  score beside a `tg` number per row on THIS box, and the reading
+  contracts get the smallest row whose score holds. Nothing in the
+  tree moves the first line more than halving the model.
+- **The reading pass, measured.** v1.32 records it as its own turn
+  (mode `edit-read`); `spark stats` shows its median. Paid before
+  every grounded answer, on the small model, on 800 chars: if it is
+  seconds and not tenths, it runs in parallel with nothing today and
+  the source's language could come from the answer brief alone.
+- **`--warm` on contract 11.** The cold prefill is 20 s of the 43.7 s,
+  and cold is the common case: a page is read once. A reading client
+  sends the source the moment its key is pressed, no question yet,
+  and the typing hides the prefill. The cache holds, so the warm call's
+  prefix is reused by the real one; this is the one prefill lever.
+
+Not levers: the cache flag, the message order (the prefix already
+hits), a shorter brief (a few lines is already the ask).
 
 ## 2. Grounding, graded on every row `auto` may pick
 
