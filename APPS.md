@@ -21,7 +21,7 @@ on stdin, text out, never a path. Each app's plugin is its own
 | [spark-vim](https://github.com/forgewright-ai/spark-vim) | vim: your key opens `spark> ` |
 | [spark-helix](https://github.com/forgewright-ai/spark-helix) | helix: `A-s` pre-fills helix's prompt |
 | [spark-nano](https://github.com/forgewright-ai/spark-nano) | nano: `M-S` pre-fills nano's prompt |
-| [spark-w3m](https://github.com/forgewright-ai/spark-w3m) | w3m: `M-s` opens `spark> ` over the page |
+| [spark-w3m](https://github.com/forgewright-ai/spark-w3m) | w3m: `M-s` opens the spark page |
 | [spark-newsboat](https://github.com/forgewright-ai/spark-newsboat) | newsboat: `,s` asks the article you are on |
 
 One key in every app -- Alt-s (`M-s`, `A-s`: the same key by each
@@ -128,14 +128,14 @@ first app outside the editors:
 git clone https://github.com/forgewright-ai/spark-w3m ~/.w3m/spark
 ln -s ~/.w3m/spark/spark-w3m ~/.local/bin/spark-w3m
 cat ~/.w3m/spark/keymap.spark >> ~/.w3m/keymap
+printf 'cgi_bin %s/.w3m/spark\n' "$HOME" >> ~/.w3m/config
 ```
 
-`M-s` opens `spark> ` over the page you are reading: Enter or `?`
-alone is the overview (what does this page cover?), your words are
-your question, and a page past 16 kB answers with its part count
-(`--part 2 words` reads part 2; the answer's first line names its
-part). Ctrl-C is never mind. No plugin at all still works from any
-shell:
+`M-s` stashes the page you are reading and opens the spark page -- a
+page of w3m's own: a `spark> ` form field, an `overview` link, part
+links past 16 kB. Nothing runs until you ask; the answer is a page
+carrying the field again, and `B` walks back. No plugin at all still
+works from any shell:
 
 ```sh
 w3m -dump https://example.com | spark read "what is this page for"
