@@ -2,6 +2,17 @@
 
 ## v1.32
 
+- A page piped in with one byte that is not UTF-8 no longer kills the
+  exchange with the engine's raw HTTP 500. Python keeps such a byte as
+  a lone surrogate (stdin is surrogateescape under C.UTF-8, the box's
+  locale), `json.dumps` passes it along, and the engine's JSON parser
+  refuses the request. Every stdin gate now decodes the raw bytes as
+  UTF-8 with the replacement mark (`text.stdin_text`; a strict locale
+  crashed outright before), and the wire scrubs every string in a
+  request the same way (`text.utf8`) as the last gate, whatever door
+  the text came in by. Found on the box: a w3m article with one
+  Latin-1 accent answered `HTTP 500 ... invalid string: surrogate`.
+
 - `spark edit ? --source` is the reading-discussion posture: the text is
   a published source you discuss -- a page, an article -- not a draft you
   edit. It answers the reader's question from the text and never suggests

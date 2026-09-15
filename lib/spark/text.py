@@ -244,6 +244,29 @@ def scrub(s, keep="\t\n"):
     return "".join(ch for ch in s if ch in keep or (ord(ch) >= 32 and ord(ch) != 127))
 
 
+_SURROGATE = re.compile("[\ud800-\udfff]")
+
+
+def utf8(s):
+    """`s` as strict UTF-8 text: a lone surrogate (what surrogateescape
+    keeps for a byte that was not UTF-8) becomes the replacement mark.
+    The engine's JSON parser refuses a lone surrogate with an HTTP 500,
+    so none may reach the wire or the stores."""
+    return _SURROGATE.sub("\ufffd", s)
+
+
+def stdin_text():
+    """stdin as text on every locale: the raw bytes decoded as UTF-8
+    with the replacement mark -- never a crash on a strict locale, never
+    a lone surrogate from a surrogateescape one (C.UTF-8 turns Python's
+    UTF-8 mode on, and a page piped in with one Latin-1 byte poisoned
+    every request built from it)."""
+    buf = getattr(sys.stdin, "buffer", None)
+    if buf is None:                       # a test's StringIO stand-in
+        return utf8(sys.stdin.read())
+    return buf.read().decode("utf-8", "replace")
+
+
 def fold(s):
     """Whitespace runs to one space, every quote mark to ", lower case:
     the shapes a faithful quote may still differ in (a line break, a

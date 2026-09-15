@@ -10,6 +10,7 @@ import urllib.error
 import urllib.request
 
 from . import BRAIN_CACHE, EMBER_TOKEN_FILE, IS_MAC, SERVE_URL_FILE, debug, forge_url, run, state_dir
+from . import text as textmod
 
 HEALTH_TIMEOUT = 2.0
 CACHE_TTL = 60
@@ -317,8 +318,21 @@ def resolve_brain(cfg, fresh=False):
 
 
 # ------------------------------------------------------------------- chat
+def _clean(o):
+    """`o` with every string strict UTF-8 (text.utf8): the last gate
+    before the wire -- a lone surrogate in a request is an HTTP 500 from
+    the engine's JSON parser, whatever door the text came in by."""
+    if isinstance(o, str):
+        return textmod.utf8(o)
+    if isinstance(o, list):
+        return [_clean(x) for x in o]
+    if isinstance(o, dict):
+        return {k: _clean(v) for k, v in o.items()}
+    return o
+
+
 def _post(cfg, url, body, timeout, stream=False, forge=False):
-    data = json.dumps(body).encode()
+    data = json.dumps(_clean(body)).encode()
     req = urllib.request.Request(url + "/v1/chat/completions", data=data, headers=_headers(cfg, forge=forge))
     try:
         return urllib.request.urlopen(req, timeout=timeout)

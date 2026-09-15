@@ -195,7 +195,7 @@ def cmd_ask(args):
                                        noun="question"):
                 say(line)
         return 0
-    data = "" if sys.stdin.isatty() else sys.stdin.read()
+    data = "" if sys.stdin.isatty() else textmod.stdin_text()
     if not data:
         # at a terminal with nothing piped in, this is almost always a
         # question meant for the prompt: say where it goes, do not guess

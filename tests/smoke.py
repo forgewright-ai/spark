@@ -437,6 +437,21 @@ def main():
              "recall: empty history is exit 1", out + "|" + err)
         rc, out, _ = spark("line", stdin="what is the capital of France?")
         t.ok(rc == 0 and out.splitlines() == ["answer", "Paris"], "line: answer", out)
+        # stdin that is not UTF-8 (one Latin-1 byte): the engine's JSON
+        # parser answers HTTP 500 to a lone surrogate, so the byte must
+        # reach the wire as the replacement mark instead -- C.UTF-8 turns
+        # Python's surrogateescape on (the box), a strict locale crashes
+        from spark import text as sparktext
+        t.ok(sparktext.utf8("caf\udce9") == "caf\ufffd"
+             and sparktext.utf8("ok \U0001f600") == "ok \U0001f600",
+             "text.utf8: a lone surrogate becomes the mark, a real astral char passes", "")
+        p = subprocess.run([sys.executable, SPARK, "line"],
+                           input=b"the capital of France? caf\xe9",
+                           capture_output=True, env=env, timeout=30)
+        sent = json.dumps(STATE["bodies"][-1])
+        t.ok(p.returncode == 0 and "\\udce9" not in sent and "caf\ufffd" in STATE["last_user"],
+             "line: a non-UTF-8 byte on stdin reaches the wire as the mark, never a surrogate",
+             repr(STATE["last_user"]) + "|" + p.stderr.decode(errors="replace")[:120])
         # a hostile answer carrying escape sequences: scrubbed before the
         # widget can print it into a live terminal
         # paste inspection (contract 4, --paste): no command back, one

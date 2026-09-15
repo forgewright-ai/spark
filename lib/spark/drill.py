@@ -151,7 +151,7 @@ def cmd_drill(args):
             for line in ledger.drill_listing(name or None):
                 say(line)
         return 0
-    source = "" if sys.stdin.isatty() else sys.stdin.read()
+    source = "" if sys.stdin.isatty() else textmod.stdin_text()
     if not source.strip():
         # a terminal with nothing piped: almost always a question for the
         # prompt -- say where it goes, do not guess

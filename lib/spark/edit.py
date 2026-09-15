@@ -247,7 +247,7 @@ def cmd_edit(args):
     if at is None and not words and not opts["decline"]:
         say(EDIT_USAGE.rstrip())
         return 2
-    data = "" if sys.stdin.isatty() else sys.stdin.read()
+    data = "" if sys.stdin.isatty() else textmod.stdin_text()
     if not data:
         # an empty buffer (a new file in the editor): words write it from
         # nothing; ? and --at have nothing to read or continue, and say so

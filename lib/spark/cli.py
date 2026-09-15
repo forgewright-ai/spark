@@ -143,7 +143,7 @@ def _paste_verdict(shell):
     and nothing runs). Over PASTE_MAX is one line saying so, NO model
     call; a line the danger set knows forces `danger` whatever the model
     says."""
-    data = sys.stdin.read()
+    data = textmod.stdin_text()
     if not data.strip():
         say("error")
         say("nothing pasted")
@@ -187,7 +187,7 @@ def cmd_line(args):
             cwd = next(it, "")
         elif a == "--shell":
             shell = next(it, shell)
-    text = sys.stdin.read().strip()
+    text = textmod.stdin_text().strip()
     more = text.startswith("??")            # `?? words`: go on with the newest thread
     if more:
         text = text[2:].strip()
@@ -332,7 +332,7 @@ def _prune(cfg):
 def _stdin_context():
     if sys.stdin.isatty():
         return ""
-    data = sys.stdin.read()
+    data = textmod.stdin_text()
     if len(data) > STDIN_TAIL:
         data = "[... %d chars cut ...]\n" % (len(data) - STDIN_TAIL) + data[-STDIN_TAIL:]
     return data
@@ -450,7 +450,7 @@ def cmd_recall(args):
     if _help(args, RECALL_USAGE):
         return 0
     intent = " ".join(args).strip()
-    history = sys.stdin.read()
+    history = textmod.stdin_text()
     if not intent:
         print("recall: say what the command did -- spark recall <words>", file=sys.stderr)
         return 1
