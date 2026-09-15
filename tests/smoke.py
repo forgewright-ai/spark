@@ -1193,6 +1193,12 @@ def main():
         t.ok(umsg.startswith("What does this not answer?\n\nYou read this as: Portuguese, fiction.\nText:\n")
              and "[cwd" not in umsg and "Output:" not in umsg,
              "ask: the reading is restated, the text carries its own label, no cwd", repr(umsg[:110]))
+        # the request's LAST line restates the whole task: at a real
+        # source's distance the model otherwise answers the task phrase
+        # itself, rephrased, and every page came back with no questions
+        t.ok(umsg.endswith("Now reply, in Portuguese, with your questions alone: "
+                           "at most three, one per line, each ending in its question mark."),
+             "ask: the task is restated after the source, in the reading's language", repr(umsg[-130:]))
         turns = sorted(glob.glob(home + "/.local/state/spark/turns/*.jsonl"))
         lt = json.loads(open(turns[-1]).read().splitlines()[-1]) if turns else {}
         t.ok(lt.get("mode") == "ask-questions" and lt.get("kind") == "questions" and lt.get("asked") == 3

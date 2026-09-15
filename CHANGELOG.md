@@ -2,6 +2,15 @@
 
 ## v1.32
 
+- `spark ask` asks real questions of a real page again. Over a few kB
+  of source the model answered the nearest question-shaped line -- the
+  task phrase itself, rephrased ("What does this text not answer
+  about...?") -- and the gate rightly dropped it, so every page came
+  back as a refusal (`asked: 0` on each one, in the turn numbers).
+  The request's last line now restates the whole task after the
+  source, in the reading's language; proven on the box against live
+  articles in both shapes, bare and with words.
+
 - A page piped in with one byte that is not UTF-8 no longer kills the
   exchange with the engine's raw HTTP 500. Python keeps such a byte as
   a lone surrogate (stdin is surrogateescape under C.UTF-8, the box's

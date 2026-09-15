@@ -234,6 +234,17 @@ def cmd_ask(args):
         context = "" if forge.same_text(tid, sha) else head + label.replace(":", ", as it is now:") + "\n" + forge.clip(data)
     else:
         read, tail = session.reading(cfg, data, shell, act="Ask")
+        # the thin tail ("Ask in english.") is not enough at a source's
+        # distance: after a few kB the model answers the nearest
+        # question-shaped line -- the task phrase itself, rephrased --
+        # instead of asking its own (found on the box: every real page
+        # came back `asked: 0, dropped: 1`). The request's last line
+        # restates the whole task, whatever the words above the source
+        # said; the language the reading named rides along.
+        lang = tail[len("\n\nAsk in "):-1] if tail.startswith("\n\nAsk in ") else ""
+        tail = ("\n\nNow reply%s with your questions alone: at most three, "
+                "one per line, each ending in its question mark."
+                % ((", in %s," % lang) if lang else ""))
         context = head + read + answered_block + label + "\n" + forge.clip(data) + tail
 
     kept = []
