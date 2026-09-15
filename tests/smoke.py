@@ -946,6 +946,15 @@ def main():
         lt = json.loads(open(_turns[-1]).read().splitlines()[-1]) if _turns else {}
         t.ok(lt.get("mode") == "edit-discuss" and lt.get("kind") == "answer",
              "edit ? --source: the turn is mode edit-discuss, kind answer", json.dumps(lt)[:160])
+        rc, out, _ = spark("edit", "?", "what", "is", "wrong", stdin=page)
+        umsg = STATE["bodies"][-1]["messages"][-1]["content"]
+        t.ok("Answer in Portuguese" in umsg, "edit ?: a draft is answered in the source's language (the reading pass)", repr(umsg[-120:]))
+        rc, out, _ = spark("edit", "?", "--source", "traduza", stdin=page)
+        sysmsg = STATE["bodies"][-1]["messages"][0]["content"]
+        umsg = STATE["bodies"][-1]["messages"][-1]["content"]
+        t.ok("inside an editor" not in sysmsg, "edit ? --source: still the discuss brief")
+        t.ok("Answer in the language of the question" in umsg and "Answer in Portuguese" not in umsg,
+             "edit ? --source: the reader is answered in the question's language, not the source's", repr(umsg[-140:]))
         rc, out, _ = spark("edit", "?", "why", stdin="Some prose.\n")
         sysmsg = STATE["bodies"][-1]["messages"][0]["content"]
         t.ok("inside an editor" in sysmsg, "edit ?: without --source the editor's brief is unchanged", repr(sysmsg[:60]))

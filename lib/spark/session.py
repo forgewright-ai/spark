@@ -81,7 +81,7 @@ def last_turn():
 READ_MAX = 800          # what the reading pass looks at: the first chars
 
 
-def reading(cfg, data, shell="", start=0, act="Answer"):
+def reading(cfg, data, shell="", start=0, act="Answer", answer="source"):
     """(`You read this as: LANGUAGE, KIND.\n`, `\n\n<act> in LANGUAGE.`) --
     the model's own reading of READ_MAX chars of `data` from `start`
     (persona.MODE_EDIT_READ), restated to it above the text, and the
@@ -90,9 +90,14 @@ def reading(cfg, data, shell="", start=0, act="Answer"):
     brief says. `act` is the verb of that last line -- "Answer" for a
     contract that replies, "Ask" for `spark ask`, which replies with
     questions: "Answer in ..." pushed small models to answer the text
-    instead of questioning it. Every grounded contract that shows a text
-    to the model opens with this. Any failure is two empty strings: the
-    request goes on without it."""
+    instead of questioning it. `answer` names WHICH language the last
+    line asks for: "source" (the text's own -- an author editing their
+    draft wants notes in the draft's language) or "question" (the
+    reader's, from the words they typed -- a reader discussing a
+    published source is answered in the language they asked in, not the
+    source's; `spark edit ? --source`). Every grounded contract that
+    shows a text to the model opens with this. Any failure is two empty
+    strings: the request goes on without it."""
     try:
         s = Session(cfg, "edit-read", shell or "sh", "", role="spark")
         # greedy: the reading is restated ABOVE the text in the request
@@ -110,7 +115,13 @@ def reading(cfg, data, shell="", start=0, act="Answer"):
     parts = [p for p in (lang, kind) if p]
     if not parts:
         return "", ""
-    tail = "\n\n%s in %s." % (act, lang) if lang and lang.lower() not in ("code", "source code", "none", "n/a") else ""
+    if answer == "question":
+        # the reader is answered in their language, not the source's --
+        # "translate to english" of a Portuguese page must not be
+        # overridden into Portuguese by the pass
+        tail = "\n\n%s in the language of the question." % act
+    else:
+        tail = "\n\n%s in %s." % (act, lang) if lang and lang.lower() not in ("code", "source code", "none", "n/a") else ""
     return "You read this as: %s.\n" % ", ".join(parts), tail
 
 

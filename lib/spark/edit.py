@@ -116,11 +116,14 @@ def _edit_window(data, a, b):
     return "%s\n[selection starts]\n%s\n[selection ends]\n%s" % (before, sel, after)
 
 
-def _review_context(cfg, shell, data, name, head, label):
+def _review_context(cfg, shell, data, name, head, label, answer="source"):
     """The context a plain `?`/review carries: the reading restated, any
     notes declined for this name, the label and the text. Shared by the
-    one-shot `?` and the --watch loop so they ground a comment the same way."""
-    read, tail = session.reading(cfg, data, shell)
+    one-shot `?` and the --watch loop so they ground a comment the same way.
+    `answer` names the reply language the reading pass asks for (see
+    session.reading): "source" for an author's draft, "question" for a
+    reader discussing a published source (`--source`)."""
+    read, tail = session.reading(cfg, data, shell, answer=answer)
     return head + read + ledger.block(cfg, name, data) + label + "\n" + forge.clip(data) + tail
 
 
@@ -294,6 +297,9 @@ def cmd_edit(args):
     elif words[0] == "?":
         kind, role, max_tokens = "answer", "ember", 600
         text = " ".join(words[1:]).strip() or persona.REVIEW
+        # a reader (--source) is answered in the language they ask in,
+        # not the source's; an author reviewing a draft in the draft's
+        ans = "question" if opts["source"] else "source"
         # a thread: the same id again continues it -- the words alone when
         # the text is the one the first turn carried, else the text again
         tid = forge.open_thread(cfg, tid) if tid else None
@@ -302,12 +308,12 @@ def cmd_edit(args):
         if history:
             context = "" if forge.same_text(tid, sha) else head + label.replace(":", ", as it is now:") + "\n" + forge.clip(data)
         elif sel:
-            read, tail = session.reading(cfg, data, shell, start=max(0, sel[0] - 200))
+            read, tail = session.reading(cfg, data, shell, start=max(0, sel[0] - 200), answer=ans)
             context = (head + read + ledger.block(cfg, opts["name"], data) + label[:-1]
                        + " -- the question is about the part between the marks:\n"
                        + _edit_window(data, sel[0], sel[1]) + tail)
         else:
-            context = _review_context(cfg, shell, data, opts["name"], head, label)
+            context = _review_context(cfg, shell, data, opts["name"], head, label, answer=ans)
     else:
         kind, role = "rewrite", "ember"
         if len(data) > EDIT_MAX:
