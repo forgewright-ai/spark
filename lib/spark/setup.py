@@ -384,7 +384,15 @@ def _run(opts):
     theme_name = _theme(cfg, opts)
     say()
     _write(name, user, model, theme_name)
-    _account(user)
+    if model == "none":
+        # no brain here yet, so no account yet: a box mints its own on the
+        # first thread write (spark model NAME), and a client of a FORGE
+        # logs in with a token minted THERE -- a client never mints, the
+        # FORGE it answers from is the account authority
+        say("skip   account      no model here -- spark model NAME mints one on first use; a client logs in")
+        say("                    (spark user add NAME on the FORGE, then spark user login NAME here)")
+    else:
+        _account(user)
     cfg = config.load()
     waiting = _sudo(_packages_pending(), yes)
     pend = [] if os.environ.get("SPARK_NO_APPLY") else modeltab._downloads_pending(cfg)

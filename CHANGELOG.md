@@ -1,5 +1,30 @@
 # Changelog
 
+## v1.33
+
+- A client never mints an account. `spark setup --model none` used to
+  mint this machine's own account and print its token -- an identity the
+  FORGE it would answer from never knew, so the first `spark line` there
+  said `token rejected`, and a login with the box's token was refused
+  because a local store already held the name. Now setup with no model
+  skips the account row and says where the login comes from, the first
+  thread write on a client without a login keeps nothing rather than
+  minting (the FORGE is the account authority: `spark user add NAME`
+  there, `spark user login NAME` here), the `peer` check row says
+  whether the FORGE accepts this machine's login, and the login refusal
+  on a machine whose store belongs to another name names the remedy
+  (`spark user remove NAME`). Found by reinstalling the maintainer's
+  laptop from the README one-liner.
+
+- `SPARK_YES=1` answers every `yes/NO` question, not only uninstall's:
+  `spark user remove NAME` and the license ask before a download take it
+  too (a script's form).
+
+- No model chosen, no engine downloaded: `spark setup --model none` on a
+  machine with no peer fetched the engine tarball for nothing; bootstrap
+  skips the row now (`spark model NAME` brings the engine with it, and
+  says so in its rows) and `spark check` reads `na` there, not a failure.
+
 ## v1.32
 
 - `spark ask` asks real questions of a real page again. Over a few kB

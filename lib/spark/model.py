@@ -447,7 +447,7 @@ def cmd_model(args):
         set_keys(SITE_AI_BUDGET=args[1])
         pend = [] if os.environ.get("SPARK_NO_APPLY") else _downloads_pending(config.load())
         _announce_downloads(pend)
-        rc = apply(["model", "ember"], stream=bool(pend))
+        rc = apply(["engine", "model", "ember"], stream=bool(pend))
         if rc != 0:
             return rc
         if not os.environ.get("SPARK_NO_APPLY"):
@@ -487,7 +487,7 @@ def cmd_model(args):
     set_keys(SITE_AI_MODEL=name)
     pend = [] if os.environ.get("SPARK_NO_APPLY") else _downloads_pending(config.load())
     _announce_downloads(pend)
-    rc = apply(["model"], stream=bool(pend))
+    rc = apply(["engine", "model"], stream=bool(pend))
     if rc != 0:
         return rc
     if os.environ.get("SPARK_NO_APPLY"):
@@ -550,7 +550,7 @@ def cmd_ember(args):
     set_keys(SITE_EMBER_MODEL=name)
     pend = [] if os.environ.get("SPARK_NO_APPLY") else _downloads_pending(config.load())
     _announce_downloads(pend)
-    rc = apply(["model", "ember"], stream=bool(pend))
+    rc = apply(["engine", "model", "ember"], stream=bool(pend))
     if rc != 0:
         return rc
     if os.environ.get("SPARK_NO_APPLY"):

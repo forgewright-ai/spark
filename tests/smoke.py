@@ -2370,6 +2370,30 @@ def main():
              and "spark ember NAME adds a second brain" in out,
              "setup printed the logo, the table header, the model line and the closing block", out)
         t.ok("no model chosen" in out, "setup with none says how to choose later", out)
+        t.ok("skip   account      no model here" in out and "the token, shown once" not in out
+             and "spark user login NAME" in out,
+             "setup with no model mints no account and prints no token (a client never mints)", out)
+        # a login with a token this machine's store does not hold names the
+        # remedy; SPARK_YES=1 answers the remove question (a script's form)
+        _xdg5 = {"XDG_STATE_HOME": home + "/.local/state-users"}
+        rc, out, _ = spark("user", "add", "ana", "--show-token", "--no-qr", extra=_xdg5)
+        t.ok(rc == 0 and "ok     user         ana" in out, "spark user add ana in a fresh state dir", out)
+        rc, out, _ = spark("user", "login", "bo", stdin="not-anas-token\n", extra=_xdg5)
+        t.ok(rc == 1 and "this machine's store is ana's" in out and "spark user remove ana frees it" in out,
+             "user login with a foreign token names the remedy (spark user remove NAME)", out)
+        rc, out, _ = spark("user", "remove", "ana", extra=_xdg5)
+        t.ok(rc == 0 and "spark user: kept" in out and os.path.isdir(home + "/.local/state-users/spark/users/ana"),
+             "user remove without a yes keeps the user", out)
+        rc, out, _ = spark("user", "remove", "ana", extra=dict(_xdg5, SPARK_YES="1"))
+        t.ok(rc == 0 and "ana removed" in out and not os.path.exists(home + "/.local/state-users/spark/users/ana"),
+             "SPARK_YES=1 answers the remove question", out)
+        # a client with no login answers and keeps nothing: the FORGE it
+        # answers from is the account authority, nothing is minted here
+        _xdg6 = {"XDG_STATE_HOME": home + "/.local/state-client", "SITE_AI_MODEL": "none", "SITE_PEER_AI_URL": url}
+        rc, out, err = spark("chat", "count", extra=_xdg6)
+        t.ok(rc == 0 and out.strip() and not os.path.exists(home + "/.local/state-client/spark/users")
+             and not os.path.exists(home + "/.local/state-client/spark/account"),
+             "a client with no login answers and mints nothing (a client never mints)", out + err)
         rc, out, _ = spark("setup", "--yes", "--no-serve", "--model", "nosuch", extra=off)
         t.ok(rc == 2 and "no model named nosuch" in out and "auto none qwen3" in out,
              "setup --model nosuch exits 2 naming the table", out)

@@ -317,14 +317,21 @@ def _provision():
     return name
 
 
-def local_store(provision=False):
+def local_store(provision=False, cfg=None):
     """This machine's own store: the logged-in account's, unlocked by the
     account-key file. With provision=True a machine with no account mints
     one (write paths); without, reads answer empty instead. Returns a
-    Store, or a _NullStore when there is none to be had."""
+    Store, or a _NullStore when there is none to be had. A CLIENT never
+    mints (cfg.client, no login): the FORGE it answers from is the account
+    authority -- spark user add NAME there, spark user login NAME here --
+    and until then the turn is answered, not kept."""
     from . import users
     try:
         name, token = users.account()
+        if not name and provision:
+            from . import config
+            if (cfg if cfg is not None else config.load()).client:
+                return _NullStore()
         if name and not users.exists(name) and token:
             # a login without a store (a client, or a wiped users/): the
             # same token seals a fresh local store on first write
@@ -376,7 +383,7 @@ def new_thread(cfg):
     """A fresh id on this machine's own store. None when history is off."""
     if cfg.history <= 0:
         return None
-    return local_store(provision=True).new_thread(cfg)
+    return local_store(provision=True, cfg=cfg).new_thread(cfg)
 
 
 def open_thread(cfg, tid):
@@ -384,7 +391,7 @@ def open_thread(cfg, tid):
     (the editor's `--thread`). None when history is off."""
     if cfg.history <= 0:
         return None
-    return local_store(provision=True).open_thread(cfg, tid)
+    return local_store(provision=True, cfg=cfg).open_thread(cfg, tid)
 
 
 def last_thread():

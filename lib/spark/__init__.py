@@ -151,7 +151,10 @@ def paged(fn):
 
 def confirm(question):
     """The one confirm shape (grammar rule 5): `<question>? yes/NO: ` --
-    only y or yes proceeds; Enter, anything else, or EOF is no."""
+    only y or yes proceeds; Enter, anything else, or EOF is no. SPARK_YES=1
+    answers yes without asking (a script's form, as uninstall --yes)."""
+    if os.environ.get("SPARK_YES") == "1":
+        return True
     try:
         return input("%s? yes/NO: " % question).strip().lower() in ("y", "yes")
     except EOFError:

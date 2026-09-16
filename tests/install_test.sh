@@ -105,6 +105,7 @@ done
 printf '%s\n' "$out" | grep -qE '^(would|skip) +(daemons|lid) ' && ok "headless dry-run only announces (would/skip)" || bad "headless dry-run applied something: $(printf '%s\n' "$out" | grep -E '^ok +(daemons|lid)')"
 printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "dry-run called sudo" || ok "dry-run never called sudo"
 printf '%s\n' "$out" | tail -1 | grep -qE '^([0-9]+ to do|Nothing to do)$' && ok "headless dry-run ends with a count line" || bad "no count line"
+printf '%s\n' "$out" | grep -qE '^skip +engine +no model chosen -- spark model NAME' && ok "no model chosen: the engine row skips (nothing to run it for)" || bad "engine row with SITE_AI_MODEL=none: $(printf '%s\n' "$out" | grep -E ' engine ' | head -1)"
 # the rc row (the core hook): a throwaway rc file without the line is a
 # `would`; with the line appended it is ok; an unknown login shell is a todo
 case $(uname -s) in Darwin) SHELL=/bin/zsh; rc=.zshrc ;; *) SHELL=/bin/bash; rc=.bashrc ;; esac

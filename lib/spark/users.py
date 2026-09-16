@@ -30,7 +30,8 @@ USAGE = """%s user -- the named users of this FORGE
   spark user list             the table: name, threads, last activity
   spark user add NAME         mint an account; the token and a QR of its
                               login link are shown once (--no-qr)
-  spark user remove NAME      delete the account and its sealed data
+  spark user remove NAME      delete the account and its sealed data (asks;
+                              SPARK_YES=1 answers yes, a script's form)
   spark user login [NAME]     paste a token: this machine acts as NAME
   spark user logout           forget the login (the sealed data stays)
   spark user token --new      rotate your token; other logins die
@@ -382,7 +383,8 @@ def cmd_login(args):
         return 1
     name = name or found
     if not name or not exists(name):
-        say("spark user: no user here matches that token")
+        say("spark user: no user here matches that token -- this machine's store is %s's; "
+            "spark user remove %s frees it (its sealed threads go)" % (", ".join(local), local[0]))
         return 1
     try:
         dk = unlock(name, token)

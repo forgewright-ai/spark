@@ -129,7 +129,7 @@ def _save(entries, st=None):
         st = _store()
     if st is None:
         log_exc("ledger store")
-        raise OSError("no account to hold the ledger")
+        raise OSError("no account to hold the ledger -- a client logs in first: spark user login NAME")
     path, dk, name = st
     users.make_dirs(name)
     vault.write_sealed(path, dk, "ledger", name,

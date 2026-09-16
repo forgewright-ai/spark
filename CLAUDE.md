@@ -418,7 +418,11 @@ may change freely.
    (the whole box, and the box account's own store); every other caller
    is a named user (`spark user add NAME`) presenting their personal
    token -- verified against its stored sha256, and unwrapping their
-   data key in memory only. `POST /api/login` takes `{token}`, sets the
+   data key in memory only. The FORGE is the account authority: a
+   client never mints (`spark setup --model none` skips the account
+   row; `forge.local_store` keeps nothing on a client with no login),
+   it logs in with a token minted here, and the `peer` row there says
+   whether this FORGE accepts it. `POST /api/login` takes `{token}`, sets the
    cookie derived from it and answers `{ok, name, role, user}` (1 s and
    401 when wrong; 429 after 10 wrong per minute from one address); a
    user cookie lives in an in-memory session, so a server restart sends

@@ -363,6 +363,10 @@ if [ -z "$have" ] && [ -x "$ENGINE_DIR/llama-server" ] && [ -n "$ENGINE_FLAVOUR"
 fi
 if [ "$client" = 1 ]; then
     skip engine "$CLIENT_OF"
+elif [ "$SITE_AI_MODEL" = none ]; then
+    # no model chosen, no peer either: nothing to run the engine for --
+    # spark model NAME brings it (a client never gets one, see above)
+    skip engine "no model chosen -- spark model NAME brings the engine with it"
 elif [ -n "${SPARK_ENGINE_DIR:-}" ] && [ -x "$SPARK_ENGINE_DIR/llama-server" ]; then
     ok engine "your build in $SPARK_ENGINE_DIR (SPARK_ENGINE_DIR)"
 elif [ -x "$ENGINE_DIR/llama-server" ] && { [ -z "$ENGINE_SHA" ] || [ "$have" = "$ENGINE_FLAVOUR" ]; }; then

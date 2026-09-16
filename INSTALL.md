@@ -356,9 +356,11 @@ Another machine of yours:
    token.
 3. `spark brain` there says which server answers.
 
-A client runs nothing of its own: no engine, no model, no units. `spark
-check` there reads `na` on those rows and the `peer` row says whether
-this machine answers. `spark model` there prints this machine's table;
+A client runs nothing of its own: no engine, no model, no units, and
+no account of its own -- the login is the token minted here, and until
+`spark user login NAME` there, answers are given but no thread is kept.
+`spark check` there reads `na` on those rows and the `peer` row says
+whether this machine answers and accepts that login. `spark model` there prints this machine's table;
 choosing a model there is refused. `spark client off` gives it a model
 of its own again.
 

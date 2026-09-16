@@ -190,6 +190,8 @@ def row_engine(ctx):
     from . import engine
     d = engine.engine_dir(ctx.cfg)
     if not os.access(os.path.join(d, "llama-server"), os.X_OK):
+        if ctx.cfg.model_choice.strip().lower() == "none":
+            return na("no model chosen -- spark model NAME brings the engine with it")
         return fail("no llama-server in %s" % ctx.short(d), "./bootstrap.sh   (row engine)")
     flavour = ""
     try:
@@ -767,7 +769,7 @@ def row_ember(ctx):
 @row("CAPABILITY")
 def row_peer(ctx):
     from . import wire
-    parts, worst = [], OK
+    parts, worst, remedy = [], OK, "off the LAN, or the peer is down"
     if ctx.cfg.peer_ai_url:
         # a FORGE answers /api/health (and 404 to /health); a raw llama-server the reverse
         host = ctx.cfg.peer_ai_url.split("//")[-1]
@@ -781,6 +783,21 @@ def row_peer(ctx):
             parts.append("ai %s %s" % (host, h))
         if h != "ok":
             worst = WARN
+        elif isinstance(fh, dict) and ctx.cfg.client:
+            # a client of a FORGE keeps its threads under the login the
+            # FORGE minted (a client never mints): say whether it holds
+            from . import users
+            me = users.account()[0]
+            if not me:
+                parts.append("no login")
+                worst, remedy = WARN, "spark user add NAME on %s (the token shows once), then spark user login NAME here" % host
+            else:
+                st = ctx.cached("peer-login", 300, lambda: _peer_status(ctx.cfg, "/api/threads?n=1"))
+                if st in (401, 403):
+                    parts.append("login %s rejected" % me)
+                    worst, remedy = WARN, "spark user add %s on %s (the token shows once), then spark user login %s here" % (me, host, me)
+                elif st == 200:
+                    parts.append("login %s accepted" % me)
     if ctx.cfg.peer_ssh:
         def probe():
             rc, _ = run(["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=4", ctx.cfg.peer_ssh, "true"], timeout=10)
@@ -791,7 +808,25 @@ def row_peer(ctx):
             worst = WARN
     if not parts:
         return na("no peer configured (SITE_PEER_AI_URL / SITE_PEER_SSH)")
-    return Row(worst, SEP.join(parts), "off the LAN, or the peer is down" if worst == WARN else "")
+    return Row(worst, SEP.join(parts), remedy if worst == WARN else "")
+
+
+def _peer_status(cfg, path):
+    """The HTTP status of one GET at the peer FORGE as this machine's
+    login (0 when it does not answer): 200 accepted, 401 rejected."""
+    import urllib.error
+    import urllib.request
+    from . import users
+    token = users.account()[1]
+    try:
+        req = urllib.request.Request(cfg.peer_ai_url.rstrip("/") + path,
+                                     headers={"Authorization": "Bearer " + token})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            return r.status
+    except urllib.error.HTTPError as e:
+        return e.code
+    except Exception:
+        return 0
 
 
 @row("CAPABILITY", fixture=False, reason="looks for a player on this machine's PATH")
