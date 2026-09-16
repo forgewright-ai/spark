@@ -36,13 +36,14 @@ PAGES = [
     ("contributing", "contributing", "CONTRIBUTING.md", "md"),
     ("credits", "credits", "CREDITS.md", "md"),
     ("tour", "tour", "TOUR.md", "md"),
+    ("grounding", "grounding", "GROUNDING.md", "md"),
 ]
 # a doc's own name in the text links to its page
 DOC_LINKS = {
     "README.md": "", "INSTALL.md": "install/", "CHEATSHEET.txt": "cheatsheet/",
     "CHANGELOG.md": "changelog/", "ROADMAP.md": "roadmap/",
     "CONTRIBUTING.md": "contributing/", "CREDITS.md": "credits/",
-    "models.env": "models/", "TOUR.md": "tour/",
+    "models.env": "models/", "TOUR.md": "tour/", "GROUNDING.md": "grounding/",
 }
 DOC_RE = re.compile(r"\b(%s)\b" % "|".join(re.escape(k) for k in DOC_LINKS))
 URL_RE = re.compile(r"https?://[^\s<>\"]+")

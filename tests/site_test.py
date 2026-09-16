@@ -13,7 +13,7 @@ import tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DOCS = {"install": "INSTALL.md", "changelog": "CHANGELOG.md", "roadmap": "ROADMAP.md",
-        "contributing": "CONTRIBUTING.md", "credits": "CREDITS.md"}
+        "contributing": "CONTRIBUTING.md", "credits": "CREDITS.md", "grounding": "GROUNDING.md"}
 fails = []
 
 

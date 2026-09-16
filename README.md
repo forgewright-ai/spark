@@ -81,6 +81,18 @@ The first hour, twelve small things to try: `TOUR.md`.
 | `spark off` | Enter is a plain Enter again; `spark on` brings it back |
 | `spark uninstall` | takes it all off; keeps your prose and your threads |
 
+## What spark is not
+
+spark is not an AI box. It runs no browser tab, no agent, no image
+model, no container: one binary, one model, one line in your rc file,
+Python's standard library and nothing else. Stacks that do all of that
+exist and are good at it; run one beside spark if you want one. What
+spark does that they do not is read: the line you are about to run,
+before Enter, and a source you hand it -- quoting the source on every
+line, and refusing when it cannot (`GROUNDING.md`). It fits where a
+shell is and Docker is not: a laptop, a console, a machine you reach
+over ssh.
+
 ## Beside the core
 
 - Editors and tools that speak to spark: `APPS.md`

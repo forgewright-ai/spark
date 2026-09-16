@@ -37,6 +37,13 @@
   over-generated and the gate dropped every line). The 8B is the box's
   model for reading.
 
+- `GROUNDING.md`: the grounding rule stated in five parts for a reader
+  outside the tree -- a claim carries a quote, the quote is looked up, a
+  line gets one verdict, a gate sits between the model and the reader,
+  a refusal is composed by code -- with what each of the five commands
+  keeps, and how to take `lib/spark/text.py` into another tool. The
+  README says what spark is not: an AI box.
+
 ## v1.31
 
 - `spark reveal [CPS]` -- stdin at a reader's pace: at a terminal the
