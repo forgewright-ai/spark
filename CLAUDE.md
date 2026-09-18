@@ -202,10 +202,6 @@ APPS.md         the editors and tools that speak to spark, and how each one
                 connects; outside the landing rule, kept true continuously
 SHELL.md        the shell layer's pointer: it lives at
                 forgewright-ai/spark-shell; outside the landing rule, like APPS.md
-GROUNDING.md    the grounding rule stated for a reader outside the tree: the
-                five parts, what each command keeps, how to take text.py into
-                another tool; outside the landing rule, like APPS.md (docs_test
-                checks it names the three exports and the five commands)
 ```
 
 Runtime paths: config `~/.config/spark/{site.env,spark.env,theme.env,
@@ -817,9 +813,7 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   the rule that retires a record there (`ledger.RULES` -- each contract's
   own, because a rule that generalised would fit none of them); and what
   leaves the machine. Text on stdin, raw text out, never a path: that is
-  what lets an editor with no plugin at all be a client. `GROUNDING.md`
-  is the rule for a reader outside the tree; a new contract adds its
-  row to the table there (what it keeps, what it drops).
+  what lets an editor with no plugin at all be a client.
 - **A spark app.** Nothing in this repository. A tool becomes smart by
   being a client of one spark surface -- text on stdin (`spark edit`,
   contract 10; `spark line`, contract 4), the shell (`? words`, `spark
