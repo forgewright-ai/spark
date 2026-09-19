@@ -275,6 +275,14 @@ def answer_json(messages):
             if "is not installed" in user:
                 return {"kind": "done", "command": "", "hint": "gave up", "danger": False}
             return {"kind": "cmd", "command": "frobnicate --all", "hint": "scan things", "danger": False}
+        if "proofleak" in goal:                 # the proof prints a secret and exits 1
+            if "Output of" in user:
+                return {"kind": "done", "command": "", "hint": "all done", "danger": False}
+            return {"kind": "cmd", "command": "echo ok", "hint": "do it", "danger": False,
+                    "proof": "head secret.txt /nonexistent"}
+        if "ctrlchar" in goal:                  # a terminal escape inside the command
+            return {"kind": "cmd", "command": "echo \x1b[2K\x1b[1Gbenign; rm -rf junk2",
+                    "hint": "say hi\x1b]0;evil\x07", "danger": False}
         if "Output of" in user or "STEP-ONE" in user or "skipped" in user:
             return {"kind": "done", "command": "", "hint": "all done", "danger": False}
         if "rm-plain" in goal:                  # unflagged by the model; the regex must
@@ -380,9 +388,22 @@ def main():
         _dang = ["rm --recursive build", "rm --force x", "find . -name '*.o' -delete",
                  "rsync -a --delete src/ dst/", "git branch -D topic", "chmod -R 700 d",
                  "> /var/log/syslog", "cd /tmp && > f", "cp x y && rm -rf x"]
-        _safe = ["echo hi > out.txt", "cat a >> log", "rm build.log", "git branch -d topic"]
+        _safe = ["cat a >> log", "rm build.log", "git branch -d topic"]
         t.ok(all(_pers.is_dangerous(c) for c in _dang) and not any(_pers.is_dangerous(c) for c in _safe),
              "danger: --recursive/--force, find -delete, rsync --delete, git branch -D, chmod -R, bare > file",
+             str([c for c in _dang if not _pers.is_dangerous(c)] + [c for c in _safe if _pers.is_dangerous(c)]))
+        # v1.35: a truncating > anywhere (`echo hi > out.txt` moved from
+        # the safe list), sudo anything, and the quiet destroyers
+        _dang = ["echo x > ~/.bashrc", "echo hi > out.txt", "sudo apt-get install -y x", "sudo rm -rf /x",
+                 "sed -i s/a/b/ f", "sed --in-place=.bak x f", "sed -Ei x f", "cmd | tee out.log", "tee f",
+                 "shred -u f", "ls | xargs rm", "find . | xargs -0 rm -f", "mv -f a b", "cp -rf a b",
+                 "cp --force a b", "history -c", "git stash drop", "git stash clear"]
+        _safe = ["cmd >> f", "cmd > /dev/null", "cmd 2>/dev/null", "cmd >&2", "cmd 2>&1 | less",
+                 "cmd >/dev/null 2>&1", "tee -a f", "cmd | tee -a log", "sed -n 1p f", "sed s/a/b/ f",
+                 "mv a b", "cp -r a b", "history", "git stash list", "stat -c %s f", "test -f x"]
+        t.ok(all(_pers.is_dangerous(c) for c in _dang) and not any(_pers.is_dangerous(c) for c in _safe),
+             "danger: > file, sudo, sed -i, tee, shred, xargs rm, mv/cp -f, history -c, git stash drop; "
+             ">>, 2>, >&, /dev/null, tee -a stay plain",
              str([c for c in _dang if not _pers.is_dangerous(c)] + [c for c in _safe if _pers.is_dangerous(c)]))
         # blast: only the rm segment is counted, a leading cd moves the
         # base, and ~ expands -- `cd X && rm -rf build` counts X/build
@@ -468,6 +489,17 @@ def main():
         t.ok(rc == 0 and out.splitlines()[0] == "answer" and "too big to inspect" in out
              and STATE["hits"] == _n0,
              "line --paste: over 8 kB is one line and NO model call", repr(out))
+        # a paste that looks like a secret never leaves: one line naming
+        # the shape, no model call; the plain two-line paste above was sent
+        _key = "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXkt\n-----END OPENSSH PRIVATE KEY-----\n"
+        rc, out, _ = spark("line", "--paste", stdin=_key)
+        t.ok(rc == 0 and out.splitlines() == ["answer", "looks like a secret (a private key): not sent"]
+             and STATE["hits"] == _n0,
+             "line --paste: a private key block is held back, NO model call", repr(out))
+        rc, out, _ = spark("line", "--paste", stdin="export FOO=1\nTOKEN=abcdefgh1234\n")
+        t.ok(rc == 0 and out.splitlines() == ["answer", "looks like a secret (a credential line): not sent"]
+             and STATE["hits"] == _n0,
+             "line --paste: a TOKEN=... line is held back, NO model call", repr(out))
 
         # contract 4's proof line: printed when read-only, refused when not
         rc, out, _ = spark("line", stdin="prooftest?")
@@ -518,6 +550,16 @@ def main():
              and not _pp.proof_ok("rm -rf build") and not _pp.proof_ok("git push") and not _pp.proof_ok("ls > f")
              and not _pp.proof_ok("test -d a && rm b"),
              "proof_ok: the allowlist takes read-only heads and refuses writes, compounds, redirects")
+        # v1.35: argv-based -- a denied option anywhere, a control
+        # character, an unbalanced quote; `head a b` and `test -f` still pass
+        t.ok(_pp.proof_ok("head a b") and _pp.proof_ok("test -f x") and _pp.proof_ok("stat -c %s f")
+             and _pp.proof_ok("tail -n 5 f") and _pp.proof_ok("git diff --stat")
+             and not _pp.proof_ok("git diff --output x") and not _pp.proof_ok("git log --output=x")
+             and not _pp.proof_ok("tail -f x") and not _pp.proof_ok("tail -fn 5 x")
+             and not _pp.proof_ok("git -c core.pager=x status") and not _pp.proof_ok("git show --textconv HEAD")
+             and not _pp.proof_ok("test -f \x1bx") and not _pp.proof_ok('ls "unterminated'),
+             "proof_ok: argv-based -- --output, tail -f (in a cluster too), git -c, --textconv, "
+             "a control character and a bad quote are refused; head a b and test -f pass")
         rc, out, _ = spark("line", stdin="titletest?")
         t.ok(rc == 0 and out.splitlines() == ["answer", "Paris"] and "\x1b" not in out,
              "line: escape sequences in an answer are scrubbed (title-set, colour)", repr(out))
@@ -1751,6 +1793,13 @@ def main():
         t.ok(rc == 0 and "stopped after 0 steps" in out and "again\n" not in out, "spark do: q quits before running", out + err)
         rc, out, err = spark("do", "forever", stdin="e\necho EDITED\nq\n", extra=hook, cwd=work)
         t.ok(rc == 0 and "EDITED" in out and "stopped after 1 step" in out, "spark do: e edits the command, then it runs", out + err)
+        # the record is what ran: the edited command lands on the thread
+        # the moment it ran, naming the proposal it replaced
+        newest = max(os.listdir(threads), key=lambda f: os.path.getmtime(os.path.join(threads, f)))
+        lines = read_thread(home, os.path.join(threads, newest))
+        t.ok(len(lines) == 4 and lines[2]["role"] == "user"
+             and lines[2]["text"].startswith("Output of `echo EDITED` (exit 0; edited from `echo again`):"),
+             "spark do: the thread records the command that ran, `edited from` the proposal", lines)
         rc, out, err = spark("do", "forever", stdin="s\nq\n", extra=dict(hook, SPARK_BASE_URL=url2), cwd=work)
         t.ok(rc == 0 and "skipped" in req["body"]["messages"][-1]["content"], "spark do: s tells the model the step was skipped", out + err)
         t.ok(req["body"].get("model") == "ember", "spark do proposes with the ember role", str(req["body"].get("model")))
@@ -1770,10 +1819,40 @@ def main():
         t.ok(rc == 0 and "! done  Total: 96 fields" in out and "unchecked: no command produced 96" in out,
              "spark do: a done number no output backs is marked unchecked", out + err)
         t.ok(("driving with " + fam) in out.splitlines()[0], "spark do: opens naming the model driving", out)
-        rc, out, err = spark("do", "goodsum", stdin="\n", extra=hook, cwd=work)
+        rc, out, err = spark("do", "goodsum", stdin="\n\n", extra=hook, cwd=work)
         t.ok(rc == 0 and "unchecked" not in out and "done  Total: 26" in out, "spark do: a number an output backs passes clean", out + err)
-        t.ok("proof: test -d . -> ok" in out,
-             "spark do: a confirmed step's proof runs and shows its result", out)
+        t.ok(out.count("Enter runs it") == 2 and "proof: test -d ." in out and "proof -> ok" in out
+             and out.index("proof: test -d .") < out.index("proof -> ok"),
+             "spark do: the proof is asked for like a step (Enter), then runs and shows its result", out)
+        # the proof's output never rides the next request: only its exit
+        # code does -- and the step's feedback lands on the thread even
+        # when the run stops right there (q at the proof)
+        open(work + "/secret.txt", "w").write("SECRET-PROOF-MARK\n")
+        rc, out, err = spark("do", "proofleak", stdin="\n\n", extra=dict(hook, SPARK_BASE_URL=url2), cwd=work)
+        _last = req["body"]["messages"][-1]["content"]
+        t.ok(rc == 0 and "proof -> exit 1" in out and "SECRET-PROOF-MARK" in out
+             and "Proof `head secret.txt /nonexistent` exited 1." in _last
+             and "SECRET-PROOF-MARK" not in json.dumps(req["body"]),
+             "spark do: a failed proof's exit code goes back, its output never does", _last[-200:] + out + err)
+        rc, out, err = spark("do", "goodsum", stdin="\nq\n", extra=hook, cwd=work)
+        newest = max(os.listdir(threads), key=lambda f: os.path.getmtime(os.path.join(threads, f)))
+        lines = read_thread(home, os.path.join(threads, newest))
+        t.ok(rc == 0 and "stopped after 1 step" in out and "proof ->" not in out
+             and len(lines) == 3 and lines[2]["role"] == "user"
+             and lines[2]["text"].startswith("Output of `echo 26` (exit 0):") and "Proof" not in lines[2]["text"],
+             "spark do: q at the proof skips it, and the last step is on the thread anyway", str(lines) + out)
+        # a control character in the model's command: refused whole, a done
+        os.mkdir(work + "/junk2")
+        rc, out, err = spark("do", "ctrlchar", stdin="\n", extra=hook, cwd=work)
+        t.ok(rc == 0 and "done  the model's command carried control characters -- refused" in out
+             and "Enter runs it" not in out and "\x1b" not in out and os.path.isdir(work + "/junk2"),
+             "spark do: a command carrying an escape is refused as done; nothing ran, nothing printed raw", repr(out) + err)
+        # the leash on a proof: rc 124 with the tail so far, the group killed
+        from spark import do as _do
+        _t0 = time.time()
+        _rc, _tail = _do.run("echo hi; sleep 20", "sh", timeout=0.5)
+        t.ok(_rc == 124 and "hi" in _tail and time.time() - _t0 < 5,
+             "do.run(timeout=): a proof that hangs is killed, rc 124, the tail kept", (_rc, _tail))
         # the head-word guard in do: never offered, fed back, the loop goes on
         rc, out, err = spark("do", "missdo", "scan", stdin="", extra=hook, cwd=work)
         t.ok(rc == 0 and "frobnicate: not on this machine" in out and "gave up" in out and "Enter runs it" not in out,

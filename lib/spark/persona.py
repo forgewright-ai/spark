@@ -38,7 +38,8 @@ SENDS = (
     ("drill", "the source, 16 kB"),
     ("watch", "each window of the stream, 8 kB at most"),
     ("recall", "the last 400 lines of this shell's history"),
-    ("paste", "a multi-line paste at the prompt, 8 kB at most"),
+    ("paste", "a multi-line paste at the prompt, 8 kB at most -- and nothing at all when it "
+              "looks like a secret (a private key, a token, a credential line)"),
 )
 
 _DANGER = [
@@ -52,7 +53,7 @@ _DANGER = [
     r"\bgit\s+clean\s+-[a-zA-Z]*f", r"\bgit\s+checkout\s+--\s+\.",
     r"\b(shutdown|reboot|halt|poweroff)\b", r"\bkill\s+-9\s+-1\b", r"\bkillall\b", r"\bpkill\s+-9\b",
     r"\bcrontab\s+-r\b", r"\btruncate\s+-s\s*0\b", r"\b(curl|wget)\b.*\|\s*(sudo\s+)?(ba|z)?sh\b",
-    r"\bsudo\s+rm\b", r"\bsystemctl\s+(disable|mask|stop)\b", r"\blaunchctl\s+(bootout|unload|disable)\b",
+    r"\bsystemctl\s+(disable|mask|stop)\b", r"\blaunchctl\s+(bootout|unload|disable)\b",
     # the ways to delete or destroy that hid from the list before v1.30 --
     # a named line each, so any one can be argued with
     r"\bfind\b.*\s-delete\b",                      # find ... -delete
@@ -60,6 +61,18 @@ _DANGER = [
     r"\bgit\s+branch\s+-D\b",                      # git branch -D: drops unmerged work
     r"\bchmod\s+(-[a-zA-Z]*R|--recursive)\b",      # chmod -R: a tree's permissions
     r"(?:^|[;&|]\s*)>(?!>)\s*\S",                  # bare `> file`: truncation, not append
+    # v1.35: what the list still let through -- a named line each
+    r"(?<![\d&>])>(?![>&])\s*(?!/dev/null(?:\s|$))\S",   # `cmd > file` anywhere: truncation
+                                                    # (>> appends, 2> and >& move streams,
+                                                    # /dev/null is nothing to lose)
+    r"\bsudo\b",                                   # sudo anything: root is the blast radius
+    r"\bsed\b(?:\s+\S+)*?\s+(?:-[a-zA-Z]*i\S*|--in-place)(?=\s|=|$)",   # sed -i: rewrites the file
+    r"\btee\b(?![^;|&]*\s(?:-[a-zA-Z]*a[a-zA-Z]*|--append)(?=\s|$))",   # tee without -a: truncation
+    r"\bshred\b",                                  # shred: gone for good
+    r"\bxargs\b[^;|&]*\brm\b",                     # xargs rm: a delete fed by a list
+    r"\b(?:mv|cp)\s+(?:-\S+\s+)*(?:-[a-zA-Z]*f[a-zA-Z]*|--force)(?=\s|$)",   # mv -f / cp -f: overwrites unasked
+    r"\bhistory\s+-c\b",                           # history -c: the shell's own record
+    r"\bgit\s+stash\s+(?:drop|clear)\b",           # git stash drop: unmerged work, gone
 ]
 # rm with a recursive (or force) flag, short or long -- ONE pattern pair,
 # shared by is_dangerous and blast, so the danger mark and the blast count
@@ -552,22 +565,64 @@ PROOF_HEADS = ("test", "[", "ls", "stat", "grep", "wc", "file", "du", "df",
 PROOF_PAIRS = (("git", ("status", "log", "diff", "show", "ls-files")),
                ("systemctl", ("is-active", "is-enabled", "status")),
                ("launchctl", ("print", "list")))
+# the options that turn a read-only head into a writer or a runner: a
+# proof carrying one anywhere in its argv is refused. A named line each,
+# so any one can be argued with; the heads after an option scope it to
+# the tools where it is the danger (`test -f` and `stat -c` are proofs,
+# `tail -f` and `git -c` are not), () means every head. A one-letter
+# option is caught inside a cluster too (`tail -fn 5`).
+PROOF_DENIED = (
+    ("--output", ()),           # git diff/log --output PATH (or =PATH): writes PATH
+    ("-o", ()),                 # the short spelling of an output file
+    ("--ext-diff", ()),         # git diff --ext-diff: runs diff.external
+    ("--textconv", ()),         # git diff/show --textconv: runs a filter
+    ("-f", ("tail",)),          # tail -f: never returns
+    ("-F", ("tail",)),          # tail -F: the same, with retries
+    ("--follow", ("tail",)),    # tail --follow, likewise
+    ("-c", ("git",)),           # git -c KEY=VAL: config injection (core.pager, diff.external)
+    ("--exec", ()),             # anything that runs a command per result
+    ("-exec", ()),              # find -exec
+    ("-execdir", ()),           # find -execdir
+    ("-delete", ()),            # find -delete
+)
+
+
+def _denied(opt, arg):
+    """Does this argv word carry the denied option: the option itself,
+    `--long=value`, or a one-letter option inside a cluster (`-fn`)."""
+    if arg == opt or (opt.startswith("--") and arg.startswith(opt + "=")):
+        return True
+    return len(opt) == 2 and re.match(r"-[A-Za-z]+$", arg) is not None and opt[1] in arg[1:]
 
 
 def proof_ok(command):
     """Is this line fit to be a proof: a single read-only command --
-    allowlisted head word, no compound, no redirect, nothing dangerous.
-    A proof that is not read-only is refused (never printed)."""
+    allowlisted head word, no compound, no redirect, no control
+    character, nothing dangerous, and none of PROOF_DENIED anywhere in
+    its argv (`git diff --output PATH` truncates PATH; `head SECRET
+    /nope` prints the secret and exits 1). A proof that is not read-only
+    is refused: never printed, never run."""
     c = (command or "").strip()
     if not c or is_dangerous(c) or re.search(r"[;&|<>`$]", c):
         return False
-    w = c.split()
-    if w[0] in PROOF_HEADS:
-        return True
-    for head, subs in PROOF_PAIRS:
-        if w[0] == head and len(w) > 1 and w[1] in subs:
-            return True
-    return False
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in c):
+        return False
+    try:
+        w = _shlex.split(c)
+    except ValueError:
+        return False
+    if not w:
+        return False
+    head = w[0]
+    if head not in PROOF_HEADS and not any(
+            head == h and len(w) > 1 and w[1] in subs for h, subs in PROOF_PAIRS):
+        return False
+    for opt, heads in PROOF_DENIED:
+        if heads and head not in heads:
+            continue
+        if any(_denied(opt, a) for a in w[1:]):
+            return False
+    return True
 
 
 def missing_word(command):

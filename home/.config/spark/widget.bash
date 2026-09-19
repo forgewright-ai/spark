@@ -316,7 +316,7 @@ _spark_ask_line() {
         export SPARK_EXPLAIN_CMD=$fact SPARK_EXPLAIN_RC=$_spark_fail_rc
         READLINE_LINE="{ $fact; } 2>&1 | explain"
         READLINE_POINT=${#READLINE_LINE}
-        _spark_say "$_spark_h Enter runs it: the failure, explained"
+        _spark_say "$_spark_h Enter re-runs it: the failure, explained"
     elif [[ -n $_spark_offer_proof ]]; then
         # the proof the line proposed: lands ready to run, read-only
         READLINE_LINE=$_spark_offer_proof

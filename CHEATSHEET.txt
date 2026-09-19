@@ -32,7 +32,8 @@ SPARK
   ?? words                        follow up on the last answer (same thread)
   ?? how do I change the model    spark knows itself: it names its own verbs
   [a multi-line paste]            2+ lines on an empty prompt: one verdict
-                                  line; nothing runs until your own Enter
+                                  line; nothing runs until your own Enter;
+                                  one that looks like a secret is not sent
   Esc s                           ask about the line you are on, no ?
   Esc s on an empty line          the failed command, piped to explain;
                                   again for the fix; the fix, as a fact

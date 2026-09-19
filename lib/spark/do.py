@@ -5,7 +5,13 @@
 # prompt: Enter runs it, e edits it first, s skips it, q quits; a step the
 # model or persona.is_dangerous flags runs only on the literal `yes`. The
 # output of each step (its last 4 kB) is the next user message, so the
-# model reads what happened before proposing the next one.
+# model reads what happened before proposing the next one; that message
+# lands on the thread the moment the step ran (land), naming the command
+# that actually ran, so the record is what happened and not what was
+# proposed. The step's proof (contract 4) is offered the same way, runs
+# on a leash, and only its exit code goes back: a proof's output never
+# rides a request -- the proof is the model's own line, and forwarding
+# what it printed would let the model choose what to read.
 #
 # propose() and run() take values and return values -- no terminal -- so
 # the prompt and (later) the page share one code path. cmd_do is the
@@ -13,17 +19,26 @@
 
 import os
 import re
+import signal
 import subprocess
 import sys
+import threading
 
 from . import MARK, config, die, glyph, say
 from . import forge, persona, session, wire
+from . import text as textmod
 
 DO_MAX_STEPS = 8
 OUTPUT_TAIL = 4000          # what a step's output sends at most: its last 4 kB
+PROOF_TIMEOUT = 30          # seconds a proof may run before it is killed (rc 124)
 NO_OUTPUT = "(no output)"
 SKIPPED = "The user skipped this step."
 STDIN_HOOK = "SPARK_DO_STDIN"   # =1: confirmations come from stdin lines (tests)
+# a control character in the model's command or proof: a terminal escape
+# can draw a benign fake over what Enter would run, so the reply is
+# refused whole -- it becomes a `done` with this hint
+CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+REFUSED_CONTROL = "the model's command carried control characters -- refused"
 
 DO_SCHEMA = dict(persona.LINE_SCHEMA, properties=dict(
     persona.LINE_SCHEMA["properties"], kind={"type": "string", "enum": ["cmd", "done"]}))
@@ -33,9 +48,11 @@ DO_USAGE = """%s do -- a task, step by step
   spark do <words>     the goal; one command at a time, you confirm each
 
   Every step:  Enter runs it, e edits it first, s skips it, q quits.
-  A step that can destroy data runs only when you type yes.
+  A step that can destroy data (sudo too) runs only when you type yes.
+  After a step, its proof -- one read-only check -- is offered the same
+  way; only its exit code goes back to the model, never its output.
   At most %d steps per run; the output of each (last 4 kB) goes back
-  to the model. Every step is recorded (spark last, spark history).
+  to the model. Every step is recorded as it ran (spark last, history).
 """
 
 
@@ -106,39 +123,75 @@ def _driver(cfg, url, model, is_forge):
     return model
 
 
-def propose(cfg, thread, text, shell, cwd, history=None, brain=None):
+def propose(cfg, thread, text, shell, cwd, history=None, brain=None, landed=False):
     """One step, no terminal: (reply, ms). reply is {"kind": cmd|done,
-    "command", "hint", "danger"} with danger normalised (the model's flag
-    or persona.is_dangerous). `history` is the run so far as chat
-    messages, extended in place; None reads the thread from disk. Both
-    messages land on the thread. `brain` goes to the Session (the FORGE's
-    own upstream). Never runs anything. Raises BrainError."""
+    "command", "hint", "danger", "proof"} with danger normalised (the
+    model's flag or persona.is_dangerous), the proof kept only when
+    persona.proof_ok takes it, and the hint scrubbed of escapes (it is
+    printed into a live terminal). A command or proof carrying a control
+    character is refused whole: the reply is a `done` whose hint is
+    REFUSED_CONTROL. `history` is the run so far as chat messages,
+    extended in place; None reads the thread from disk. `landed` says
+    `text` is already the newest user message of both (land() put it
+    there the moment the step ran), so the request rides the history up
+    to it and only the reply is appended; otherwise both messages land
+    here. `brain` goes to the Session (the FORGE's own upstream). Never
+    runs anything. Raises BrainError."""
     if history is None:
         history = forge.history(thread)
-    s = session.Session(cfg, "do", shell, cwd, history, brain)
+    s = session.Session(cfg, "do", shell, cwd, history[:-1] if landed else history, brain)
     raw, ms = s.ask_json(text, DO_SCHEMA)
     command = " ".join(str(raw.get("command") or "").split())
-    hint = " ".join(str(raw.get("hint") or "").split())
+    hint = " ".join(textmod.scrub(str(raw.get("hint") or "")).split())
     proof = " ".join(str(raw.get("proof") or "").split())
     kind = "cmd" if raw.get("kind") == "cmd" and command else "done"
+    if kind == "cmd" and (CONTROL.search(command) or CONTROL.search(proof)):
+        kind, command, hint = "done", "", REFUSED_CONTROL
     reply = {"kind": kind, "command": command if kind == "cmd" else "", "hint": hint,
              "danger": kind == "cmd" and (bool(raw.get("danger")) or persona.is_dangerous(command)),
              "proof": proof if kind == "cmd" and persona.proof_ok(proof) else ""}
-    user = persona.user_message(text, cwd)
-    history.extend([{"role": "user", "content": user}, {"role": "assistant", "content": shown(reply)}])
-    forge.append(cfg, thread, "user", text, mode="do", cwd=cwd)
+    if not landed:
+        land(cfg, thread, history, text, cwd)
+    history.append({"role": "assistant", "content": shown(reply)})
     forge.append(cfg, thread, "assistant", shown(reply), kind="danger" if reply["danger"] else kind)
     return reply, ms
 
 
-def run(command, shell, cwd="", echo=True):
+def land(cfg, thread, history, text, cwd):
+    """One user message onto the run, now: `history` in place (with the
+    [cwd] line the wire carries) and the thread on disk. cmd_do lands a
+    step's feedback here the moment the step ran, before any next
+    propose, so the record holds what ran even when the run stops there;
+    the next propose(landed=True) rides it without appending it again."""
+    history.append({"role": "user", "content": persona.user_message(text, cwd)})
+    forge.append(cfg, thread, "user", text, mode="do", cwd=cwd)
+
+
+def run(command, shell, cwd="", echo=True, timeout=None):
     """Run one step through `shell -c`, its output echoed live to stdout
-    (echo=False keeps quiet), stderr folded in. (rc, the last 4 kB)."""
+    (echo=False keeps quiet), stderr folded in. (rc, the last 4 kB).
+    `timeout` (seconds) is a leash: the command runs in its own process
+    group and the whole group is killed when it expires -- rc 124 with
+    the tail so far. The proof runs on one; a step does not."""
     try:
         p = subprocess.Popen([shell, "-c", command], cwd=cwd or None, stdin=subprocess.DEVNULL,
-                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+                             stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                             start_new_session=timeout is not None)
     except OSError as e:
         return 127, "%s: %s" % (shell, e.strerror or e)
+    expired = []
+
+    def _expire():
+        if p.poll() is None:
+            try:
+                os.killpg(p.pid, signal.SIGKILL)
+                expired.append(True)
+            except OSError:
+                pass
+    timer = threading.Timer(timeout, _expire) if timeout else None
+    if timer is not None:
+        timer.daemon = True
+        timer.start()
     tail = ""
     with p.stdout:
         for raw in p.stdout:
@@ -147,12 +200,22 @@ def run(command, shell, cwd="", echo=True):
                 sys.stdout.write(line)
                 sys.stdout.flush()
             tail = (tail + line)[-OUTPUT_TAIL:]
-    return p.wait(), tail
+    rc = p.wait()
+    if timer is not None:
+        timer.cancel()
+    return (124 if expired else rc), tail
 
 
-def feedback(command, rc, tail):
-    """The next user message: what the step printed, and how it ended."""
-    return "Output of `%s` (exit %d):\n%s" % (command, rc, tail.rstrip("\n") or NO_OUTPUT)
+def feedback(command, rc, tail, proposed="", proof="", prc=None):
+    """The record of a step as it ran, and the next user message: the
+    command that ran (`edited from` the proposal when the user changed
+    it), what it printed, how it ended, and the proof's exit code alone
+    when one ran -- never the proof's output."""
+    edited = ("; edited from `%s`" % proposed) if proposed and proposed != command else ""
+    s = "Output of `%s` (exit %d%s):\n%s" % (command, rc, edited, tail.rstrip("\n") or NO_OUTPUT)
+    if proof and prc is not None:
+        s += "\n\nProof `%s` exited %d." % (proof, prc)
+    return s
 
 
 # ------------------------------------------------------------------ prompt
@@ -201,7 +264,7 @@ def cmd_do(args):
         die(e.hint)
     thread = forge.new_thread(cfg)
     say("%s driving with %s (a silence is the model thinking)" % (glyph("hammer"), _driver(cfg, url, model, _forge)))
-    history, text, steps, seen = [], goal, 0, []
+    history, text, steps, seen, landed = [], goal, 0, [], False
 
     def record(**fields):
         session.record(cfg, backend=url, model=model, mode="do", thread=thread, line=goal, **fields)
@@ -210,9 +273,10 @@ def cmd_do(args):
         for n in range(1, DO_MAX_STEPS + 1):
             seen.append(text)
             try:
-                reply, ms = propose(cfg, thread, text, shell, cwd, history)
+                reply, ms = propose(cfg, thread, text, shell, cwd, history, landed=landed)
             except wire.BrainError as e:
                 die(e.hint)
+            landed = False
             if reply["kind"] == "done":
                 bad = unchecked(reply["hint"], seen)
                 say("%s done  %s" % (glyph("warn" if bad else "ok"), reply["hint"]))
@@ -221,7 +285,7 @@ def cmd_do(args):
                 record(kind="done", answer=reply["hint"], ms=ms)
                 _prune(cfg)
                 return 0
-            command, hint = reply["command"], reply["hint"]
+            proposed, command, hint = reply["command"], reply["command"], reply["hint"]
             missing = persona.missing_word(command)
             if missing:
                 # never offered to run: the model hears why and proposes
@@ -246,16 +310,32 @@ def cmd_do(args):
             rc, tail = run(command, shell, cwd)
             steps += 1
             record(kind="danger" if reply["danger"] else "cmd", command=command, hint=hint, rc=rc, ms=ms)
-            text = feedback(command, rc, tail)
-            if rc == 0 and reply.get("proof"):
+            proof, prc, pchoice = (reply.get("proof") if rc == 0 else ""), None, ""
+            if proof:
                 # contract 4's proof line: one read-only check that the
-                # step did what it claimed, run and shown -- the result
-                # rides the next request with the step's own output
-                prc, ptail = run(reply["proof"], shell, cwd)
-                say("%s    proof: %s -> %s" % (glyph("hammer"), reply["proof"],
-                                               "ok" if prc == 0 else "exit %d" % prc))
-                text += "\n\nProof `%s` exited %d.%s" % (
-                    reply["proof"], prc, ("\n" + ptail) if prc != 0 and ptail else "")
+                # step did what it claimed -- offered like a step (Enter
+                # runs it), run on a leash, and only its exit code goes
+                # back to the model: its output stays on this screen
+                say("%s    proof: %s" % (glyph("hammer"), proof))
+                try:
+                    pchoice = _confirm({"danger": False, "command": proof}, cwd)
+                    if pchoice == "edit":
+                        proof = _edit(proof)
+                        if not persona.proof_ok(proof):
+                            say("  %s not a read-only proof -- skipped" % glyph("warn"))
+                            pchoice = "skip"
+                except EOFError:
+                    pchoice = "quit"        # nobody there; the step still lands below
+                if pchoice == "run":
+                    prc, _ptail = run(proof, shell, cwd, timeout=PROOF_TIMEOUT)
+                    say("%s    proof -> %s" % (glyph("hammer"), "ok" if prc == 0 else "exit %d" % prc))
+            # the record of what ran, on the thread now -- not inside the
+            # next request, which a quit or the step limit never sends
+            text = feedback(command, rc, tail, proposed, proof if prc is not None else "", prc)
+            land(cfg, thread, history, text, cwd)
+            landed = True
+            if pchoice == "quit":
+                break
         else:
             say("%s step limit (%d) reached -- spark do again to continue" % (glyph("warn"), DO_MAX_STEPS))
             _prune(cfg)
