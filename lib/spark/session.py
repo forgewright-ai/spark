@@ -7,6 +7,7 @@ import time
 
 from . import TURNS_DIR, log_exc, state_dir
 from . import forge, persona, wire
+from . import text as textmod
 
 
 def _turns_dir():
@@ -36,7 +37,7 @@ def record(cfg, **fields):
         path = os.path.join(_turns_dir(), time.strftime("%Y-%m-%d") + ".jsonl")
         fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
         with os.fdopen(fd, "a", encoding="utf-8") as f:
-            f.write(json.dumps(fields, ensure_ascii=False) + "\n")
+            f.write(json.dumps(textmod.clean(fields), ensure_ascii=False) + "\n")
     except OSError:
         log_exc("record turn")
 

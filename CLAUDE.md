@@ -60,6 +60,13 @@ describes how things are, not how they came to be.
   console (also inside a tmux running on it, or with `SPARK_ASCII=1`) the
   report/bar glyphs fall back to `+ x - | v ^ ->`. The docs are ASCII too (the hook refuses
   anything else): they are read on that console as well.
+  Text in is strict UTF-8 as well: stdin is decoded with the replacement
+  mark (`text.stdin_text`), and every string bound for the wire or a
+  store -- a thread, the ledger, a turn record -- goes through
+  `text.clean` first. A lone surrogate (what surrogateescape keeps for a
+  byte that was not UTF-8 in argv or the environment under a POSIX
+  locale; a w3m page title on the box was one) is an HTTP 500 from the
+  engine's JSON parser and a crash at a store's strict encode.
 - **Symmetric.** Every feature exists on both OSes, using each OS's native
   mechanism (apt or pacman/brew, systemd/launchd, bash/zsh). Nothing
   OS-only ships. A Linux package family is one oracle beside `is_wsl()`

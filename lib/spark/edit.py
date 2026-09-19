@@ -226,7 +226,7 @@ def cmd_edit(args):
         # a live draft, not a one-shot: the file is the input, the writer's
         # editor saves it, and the comments go to stdout. No stdin is read.
         shell = os.path.basename(os.environ.get("SHELL") or "sh")
-        return _watch_draft(config.load(), shell, opts["watch"], words, os.path.basename(opts["name"].strip()))
+        return _watch_draft(config.load(), shell, opts["watch"], words, os.path.basename(textmod.utf8(opts["name"]).strip()))
     at = opts["at"]
     if at is not None:
         try:
@@ -283,7 +283,7 @@ def cmd_edit(args):
         return 2
     shell = os.path.basename(os.environ.get("SHELL") or "sh")
     ftype = opts["type"].strip() if opts["type"].strip() != "unknown" else ""
-    label = _edit_label(os.path.basename(opts["name"].strip()), ftype, opts["part"])
+    label = _edit_label(os.path.basename(textmod.utf8(opts["name"]).strip()), ftype, opts["part"])
     about = opts["about"].strip()
     head = "The author says: %s\n" % about if about else ""
     cfg = config.load()

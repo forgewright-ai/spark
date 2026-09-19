@@ -24,6 +24,7 @@ import time
 
 from . import THREADS_DIR, log_exc, state_dir, vault
 from . import memory, persona, soul
+from . import text as textmod
 
 HISTORY_MAX_CHARS = 20000     # what a continued thread sends at most; oldest pairs go first
 FILE_HEAD, FILE_TAIL = 4000, 12000
@@ -191,7 +192,7 @@ class Store:
         try:
             self._dir()
             vault.append_sealed(self._path(tid), self.dk, "thread", tid,
-                                json.dumps(d, ensure_ascii=False).encode("utf-8"))
+                                json.dumps(textmod.clean(d), ensure_ascii=False).encode("utf-8"))
         except (OSError, vault.SealError):
             log_exc("append thread")
 
@@ -591,7 +592,7 @@ def claim_legacy(name, dk):
             os.remove(st._path(tid))
         for d in msgs:
             vault.append_sealed(st._path(tid), dk, "thread", tid,
-                                json.dumps(d, ensure_ascii=False).encode("utf-8"))
+                                json.dumps(textmod.clean(d), ensure_ascii=False).encode("utf-8"))
         if len(st.load(tid)) >= len(msgs):     # the sealed copy opens: safe to drop
             os.remove(src)
             moved += 1

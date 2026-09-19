@@ -1342,6 +1342,21 @@ def main():
         rc, out, err = spark("read", stdin="")
         t.ok(rc == 2 and out.startswith("spark read -- ") and "spark <words>" in out,
              "read: no source is the usage and where a question goes, exit 2", out[:80] + err)
+        # a name that arrived as a lone surrogate (a byte that was not UTF-8
+        # in argv under surrogateescape: a w3m page title on the box) is
+        # kept as strict UTF-8 -- the store's encode never crashes after
+        # the answer, and the same title lists and clears the same records
+        rc, out, err = spark("read", "--name", "t\udce9tulo.txt", "when", "does", "it", "open", stdin=READ_TEXT)
+        t.ok(rc == 0 and '"at nine"' in out and "Traceback" not in err,
+             "read --name with a lone surrogate answers and records, no crash", err[-200:])
+        rc, out, _ = spark("read", "--ledger", "--name", "t\udce9tulo.txt")
+        t.ok(rc == 0 and out.splitlines()[0].startswith("t\ufffdtulo.txt: 1 question"),
+             "the ledger lists it under the name as strict UTF-8", out)
+        rc, out, _ = spark("read", "--ledger", "clear", "--name", "t\udce9tulo.txt")
+        t.ok(rc == 0 and "dropped 1 question" in out, "and clears it by the same name", out)
+        from spark import text as _txt
+        t.ok(_txt.clean({"a": ["x\udce9", {"b": "\udce9"}], "n": 1}) == {"a": ["x\ufffd", {"b": "\ufffd"}], "n": 1},
+             "text.clean: every string in a record strict UTF-8, the rest untouched")
 
         # spark drill: the practice protocol (contract 13)
         from spark import drill as drillmod

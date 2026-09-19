@@ -31,6 +31,7 @@ import time
 from contextlib import contextmanager
 
 from . import MARK, STATE_DIR, config, log_exc, say, vault
+from . import text as textmod
 
 NOTE_MAX = 300        # characters kept of one note
 PER_NAME = 30         # notes per name and kind; the oldest goes
@@ -55,6 +56,13 @@ RULES = {
 }
 FAILS_INDEX = os.path.join(STATE_DIR, "fails")           # hash head rc fix -- the hook reads it
 FAIL_PENDING = os.path.join(STATE_DIR, "fail-pending")   # shape head rc -- explain writes it
+
+
+def _name(name):
+    """A record's name: the basename, strict UTF-8 -- a title that arrived
+    with a byte that was not UTF-8 (a lone surrogate from argv) is the
+    same name every time, and never a crash at the store's encode."""
+    return os.path.basename(textmod.utf8((name or "").strip()))
 
 
 def _kind(e):
@@ -133,7 +141,7 @@ def _save(entries, st=None):
     path, dk, name = st
     users.make_dirs(name)
     vault.write_sealed(path, dk, "ledger", name,
-                       "".join(json.dumps(e, ensure_ascii=False) + "\n" for e in entries).encode("utf-8"))
+                       "".join(json.dumps(textmod.clean(e), ensure_ascii=False) + "\n" for e in entries).encode("utf-8"))
 
 
 def _fresh(entries, cfg):
@@ -179,8 +187,8 @@ def keep(kind, name, note, cfg=None, missing=""):
     """Keep one record of `kind` under a name; returns it as kept. The
     caps are the file's, shared by every kind; what the record means, and
     when it stops meaning it, is the contract's (RULES above)."""
-    name = os.path.basename((name or "").strip())
-    text = " ".join((note or "").split())
+    name = _name(name)
+    text = textmod.utf8(" ".join((note or "").split()))
     if not name:
         raise Refused(missing or "a declined note needs --name NAME (the file's name)")
     if not text:
@@ -207,7 +215,7 @@ def decline(name, note, cfg=None):
 
 def entries(name=None, kind=KIND_EDIT):
     """The kept records of one kind, oldest first; one name's when given."""
-    name = os.path.basename(name) if name else None
+    name = _name(name) if name else None
     return [e for e in _load() if _kind(e) == kind and (not name or e["name"] == name)]
 
 
@@ -342,7 +350,7 @@ def _paragraph(head, mine):
 def block(cfg, name, data):
     """Contract 10: the paragraph a ? about `name` carries, or "".
     Retirement by quote is this kind's rule and no other's."""
-    name = os.path.basename((name or "").strip())
+    name = _name(name)
     if not name:
         return ""
     with _locked():
@@ -365,7 +373,7 @@ def answered(cfg, name):
     comparison key is ask.bare on BOTH sides, so a record written before
     v1.30 (with its `1.` or its anchor mark still on) matches too."""
     from . import ask as askmod
-    name = os.path.basename((name or "").strip())
+    name = _name(name)
     if not name:
         return "", set()
     mine, _alive = _mine(cfg, KIND_ASK, name)
@@ -382,7 +390,7 @@ def drill_due(name):
     """Contract 13: the scheduled items for `name` due today or earlier,
     soonest first. A rested item (no `due`) does not come back; a drill
     record never ages out (RULES: drill age is False)."""
-    name = os.path.basename((name or "").strip())
+    name = _name(name)
     today = _day()
     mine = [e for e in _load() if _kind(e) == KIND_DRILL and e["name"] == name
             and e.get("due") and e["due"] <= today]
@@ -398,7 +406,7 @@ def drill_grade(name, question, answer, right, cfg=None):
     only persists the state it returns. Drill records never age out."""
     from . import drill as drillmod
     from . import text as textmod
-    name = os.path.basename((name or "").strip())
+    name = _name(name)
     if not name:
         raise Refused("a drill schedule needs --name NAME (the source's name)")
     q = " ".join((question or "").split())[:NOTE_MAX]
@@ -423,7 +431,7 @@ def drill_grade(name, question, answer, right, cfg=None):
 
 def drill_listing(name=None):
     """Contract 13's records for a pane: the schedule, soonest due first."""
-    name = os.path.basename(name) if name else None
+    name = _name(name) if name else None
     es = [e for e in _load() if _kind(e) == KIND_DRILL and (not name or e["name"] == name)]
     head = (name + ": ") if name else ""
     if not es:
@@ -438,7 +446,7 @@ def drill_listing(name=None):
 
 def clear(name=None, kind=KIND_EDIT):
     """Drop this kind's notes, or one name's; the count dropped."""
-    name = os.path.basename(name) if name else None
+    name = _name(name) if name else None
     with _locked():
         all_e = _load()
         alive = [e for e in all_e if _kind(e) != kind or (name and e["name"] != name)]

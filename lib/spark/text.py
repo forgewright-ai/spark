@@ -255,6 +255,22 @@ def utf8(s):
     return _SURROGATE.sub("\ufffd", s)
 
 
+def clean(o):
+    """`o` with every string strict UTF-8 (utf8), lists and dicts walked:
+    the last gate before the wire and before a store. A lone surrogate
+    (what surrogateescape keeps for a byte that was not UTF-8, in argv
+    or the environment under the box's POSIX locale -- a w3m page title
+    was one) is an HTTP 500 from the engine's JSON parser on the wire,
+    and a UnicodeEncodeError at a store's strict encode."""
+    if isinstance(o, str):
+        return utf8(o)
+    if isinstance(o, list):
+        return [clean(x) for x in o]
+    if isinstance(o, dict):
+        return {k: clean(v) for k, v in o.items()}
+    return o
+
+
 def stdin_text():
     """stdin as text on every locale: the raw bytes decoded as UTF-8
     with the replacement mark -- never a crash on a strict locale, never

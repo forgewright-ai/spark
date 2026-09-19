@@ -19,6 +19,16 @@
   re-reads site.env and spark.env when either changes, the rule the
   forge-token already had; a forge_smoke case pins it.
 
+- A page title with one byte that was not UTF-8 crashed `spark read`
+  after its answer: under the box's POSIX locale argv keeps such a byte
+  as a lone surrogate, and the ledger's strict encode refused it with a
+  traceback in the reader's face (seen through spark-w3m). The wire
+  got its gate in v1.32; the stores have it now: `text.clean` walks
+  every record bound for a thread, the ledger or a turn file, and the
+  ledger normalises a name on the way in, so the same title lists and
+  clears the same records. A smoke case drives it through `spark read
+  --name`.
+
 ## v1.33
 
 - A client never mints an account. `spark setup --model none` used to

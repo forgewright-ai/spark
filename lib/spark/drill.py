@@ -142,7 +142,7 @@ def cmd_drill(args):
     except ValueError as e:
         say("%s drill -- %s needs a value" % (MARK, e))
         return 2
-    name = os.path.basename(opts["name"].strip())
+    name = os.path.basename(textmod.utf8(opts["name"]).strip())
     if opts["ledger"]:
         if opts["ledger"] == "clear":
             n = ledger.clear(name or None, ledger.KIND_DRILL)
