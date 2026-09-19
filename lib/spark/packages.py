@@ -79,6 +79,54 @@ def upgrade_line():
     return {"brew": "brew upgrade", "apt": "sudo apt upgrade", "pacman": "sudo pacman -Syu"}.get(manager(), "")
 
 
+# the pending row's words for an Arch box with no arch-audit: the
+# security upgrades are there, unnamed, and one package names them
+SECURITY_UNNAMED = "security upgrades unnamed (pacman -S arch-audit)"
+
+
+def parse_apt_security(out):
+    """How many lines of an `apt list --upgradable` transcript come from a
+    security source: `name/suite version arch [upgradable from: ...]`,
+    the suite one or more comma-joined names, a security one ending in
+    -security (bookworm-security, noble-security). Pure, so a pasted
+    transcript proves it; the `Listing...` header has no slash."""
+    n = 0
+    for line in out.splitlines():
+        name, slash, rest = line.partition("/")
+        if not slash or not name.strip() or " " in name.strip():
+            continue
+        suites = rest.split()[0] if rest.split() else ""
+        if any(s.endswith("-security") for s in suites.split(",")):
+            n += 1
+    return n
+
+
+def parse_arch_audit(out):
+    """The package names `arch-audit -q` prints, one per line, nothing
+    else (a clean box prints nothing). Pure; sorted, each once."""
+    return sorted(set(l.strip() for l in out.splitlines()
+                      if l.strip() and " " not in l.strip() and not l.startswith(("error", "warning"))))
+
+
+def security():
+    """How many of the pending updates are security upgrades. apt: the
+    upgradable lines from a -security source. pacman: what arch-audit
+    names; None when arch-audit is not installed (the row then says
+    SECURITY_UNNAMED, no warning). -1 when the manager was asked and
+    could not answer. brew and an unknown Linux: None -- nothing there
+    names a security upgrade, and the row leaves the question alone."""
+    pm = manager()
+    if pm == "apt":
+        rc, out = run(["apt", "list", "--upgradable"], timeout=60)
+        return -1 if rc != 0 else parse_apt_security(out)
+    if pm == "pacman":
+        rc, out = run(["arch-audit", "-q"], timeout=120)
+        if rc == -1:
+            return None
+        return -1 if rc != 0 else len(parse_arch_audit(out))
+    return None
+
+
 def install_line(pkgs):
     """The line a human runs to install pkgs here (every remedy says it)."""
     if IS_MAC:

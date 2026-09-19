@@ -87,6 +87,21 @@ def main():
         # the family's name in the docs is the file's PM_TARGET, verbatim
         for doc in ("README.md", "INSTALL.md"):
             check(t.get("PM_TARGET", "") in read(doc), "%s names %s (distro/%s PM_TARGET)" % (doc, t.get("PM_TARGET", "?"), f))
+    # the SBOM (spark ver --sbom, lib/spark/sbom.py) says what the tree
+    # holds: its model set (name + sha256) is config.model_tables()'s and
+    # its engine flavours are the ones engine.env pins
+    from spark import sbom
+    from spark.engine import FLAVOURS
+    doc = sbom.build(ROOT)
+    got_models = {(c["name"], c["hashes"][0]["content"]) for c in doc["components"] if c["type"] == "data"}
+    want_models = {(r[0], r[4]) for r in config.model_tables(ROOT)}
+    pins = config.parse_env(os.path.join(ROOT, "engine.env"))
+    got_flav = sorted(p["value"] for c in doc["components"] if c["name"] == "llama.cpp"
+                      for p in c["properties"] if p["name"] == "spark:flavour")
+    want_flav = sorted(name for name, key in FLAVOURS.values() if key in pins)
+    check(got_models == want_models and got_flav == want_flav,
+          "the SBOM's models are config.model_tables()'s and its flavours engine.env's (%d models, %d flavours)"
+          % (len(want_models), len(want_flav)))
     # what leaves this machine: every sender in persona.SENDS is named in
     # the README's disclosure section -- a new sender fails here until it
     # is disclosed

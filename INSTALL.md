@@ -679,6 +679,14 @@ addresses you gave it and nothing else.
   user's chat and settings -- never another user's store, never the
   box beyond it -- until `spark user token --new` from any logged-in
   session, or the page's log out, ends it.
+- **What spark depends on** is one command: `spark ver --sbom` prints a
+  software bill of materials -- the list of every component this tree
+  pins, with versions and sha256s (the engine per flavour, every model
+  with its license, the distro packages, the python floor, the pinned
+  GitHub Actions), as CycloneDX 1.5 JSON -- and every release carries
+  it as `sbom.cdx.json`. The `pending` row of `spark check` counts the
+  security upgrades your package manager holds back (Debian's
+  `-security` sources; `arch-audit` on Arch) and warns while any waits.
 
 ## Appendix: how it fits together
 

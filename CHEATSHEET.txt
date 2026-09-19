@@ -7,6 +7,7 @@ SPARK
   spark memory add <words>        a fact it keeps  memory forget N  drops it
   spark memory [on|off|clear]     the facts it recalls on every answer
   spark ver                       about, version, credits
+  spark ver --sbom                what it depends on, as CycloneDX JSON
   spark chat [words]              a conversation (/help for its verbs)
   spark chat --thread N [words]   go on with an older thread (spark history)
   /resume [N]   /clear   /new     in the chat: an older thread, wipe, fresh

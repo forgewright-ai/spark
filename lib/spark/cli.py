@@ -71,6 +71,11 @@ HISTORY_USAGE = """spark history -- the threads kept on this machine
 VER_USAGE = """spark ver -- logo, version, credits
 
   spark ver                   the banner, the version (from git), the credits
+  spark ver --sbom            what the tree depends on, as CycloneDX 1.5 JSON:
+                              the engine per flavour, every model with its
+                              sha256 and license, the distro packages, the
+                              python floor, the pinned actions -- the JSON
+                              alone, so it pipes (the release's sbom.cdx.json)
 """
 
 
@@ -748,6 +753,12 @@ def logo_names():
 def cmd_ver(args):
     """logo, version, credits"""
     if _help(args, VER_USAGE):
+        return 0
+    if args[:1] == ["--sbom"]:
+        # the JSON and one newline, nothing else: no banner, no pager
+        from . import sbom
+        sys.stdout.write(sbom.dumps())
+        sys.stdout.flush()
         return 0
     for path in (os.path.join(CONFIG_DIR, "banner"), os.path.join(REPO, "home", ".config", "spark", "banner")):
         try:

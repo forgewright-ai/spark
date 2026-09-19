@@ -129,7 +129,12 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 facts (the machine's decisions as KEY=value for bootstrap's eval:
                 distro, build, WSL, memory, engine home + flavour, model picks)
                 packages (the family's names from distro/<id>.env, the manager's
-                questions -- installed, pending, install/remove lines -- switched once)
+                questions -- installed, pending, the security upgrades,
+                install/remove lines -- switched once)
+                sbom (spark ver --sbom: what the tree depends on, as CycloneDX
+                1.5 JSON -- the engine per flavour, every model with its sha256
+                and license, the distro packages, the python floor, the pinned
+                actions; the release's sbom.cdx.json)
                 chaos (spark check --chaos: the rehearsed failures --
                 break a throwaway machine, prove the row says so and its
                 own remedy heals it; a llama-server with a mood, as a
@@ -1066,8 +1071,10 @@ one. `verify-tag` with an ssh signature is git >= 2.34 and ssh-keygen
    push runs `release.yml`, which verifies the signature against
    `allowed-signers`, checks the CHANGELOG heading and that `spark ver`
    says `spark X.Y` at the tag, then creates the GitHub Release with that
-   CHANGELOG section as its notes and `get` as an asset
-   (`releases/latest/download/get`, the one-liner); nothing is rerun.
+   CHANGELOG section as its notes and two assets: `get`
+   (`releases/latest/download/get`, the one-liner) and `sbom.cdx.json`
+   (`spark ver --sbom` at the tag: what the tree depends on, CycloneDX
+   1.5, `lib/spark/sbom.py`); nothing is rerun.
 3. Deploy = `spark update` everywhere: a main checkout pulls, a checkout
    on a tag moves to the new one; either way it converges (bootstrap.sh,
    then `spark check`, must both come back clean). `spark ver` there

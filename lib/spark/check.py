@@ -1324,12 +1324,27 @@ def row_share(ctx):
 
 @row("NONFUNCTIONAL", fixture=False, reason="asks the package manager, cached an hour")
 def row_pending(ctx):
+    """What the package manager holds back, and how many of those are
+    security upgrades (Debian's -security sources; arch-audit on Arch --
+    absent, the value says so and nothing warns): one waiting is a warn
+    with the family's upgrade line. macOS counts as before."""
     n = ctx.cached("pending", 3600, packages.pending)
     if n < 0:
         return na("could not ask the package manager")
+    text = "%d updates pending" % n
+    if packages.manager() in ("apt", "pacman"):
+        sec = ctx.cached("security", 3600, packages.security)
+        if sec is None:
+            text += ", " + packages.SECURITY_UNNAMED
+        elif sec < 0:
+            text += ", security upgrades unknown"
+        elif sec:
+            return warn("%s, %d security" % (text, sec), packages.upgrade_line())
+        else:
+            text += ", no security upgrades pending"
     if n > 30:
-        return warn("%d updates pending" % n, packages.upgrade_line())
-    return ok("%d updates pending" % n)
+        return warn(text, packages.upgrade_line())
+    return ok(text)
 
 
 @row("NONFUNCTIONAL")

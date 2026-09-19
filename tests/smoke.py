@@ -681,6 +681,50 @@ def main():
              and re.search(r"by \S+ [·|] github\.com/\S+/\S+", out),
              "spark ver (the login greeting) still answers, credited", out)
 
+        # spark ver --sbom (v1.36, lib/spark/sbom.py): the JSON and one
+        # newline, nothing else -- CycloneDX 1.5 with its four top-level
+        # fields and the metadata; one data component per model row of
+        # models.env (a throwaway HOME holds no rows of its own), one
+        # llama.cpp component per pinned flavour of engine.env; and
+        # byte-identical across two runs but for the timestamp
+        rc, out, err = spark("ver", "--sbom")
+        rc2, out2, _ = spark("ver", "--sbom")
+        try:
+            doc = json.loads(out)
+        except ValueError:
+            doc = {}
+        meta = doc.get("metadata", {})
+        t.ok(rc == 0 and err == "" and out.endswith("}\n") and doc.get("bomFormat") == "CycloneDX"
+             and doc.get("specVersion") == "1.5" and doc.get("version") == 1
+             and re.match(r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$", meta.get("timestamp", ""))
+             and meta.get("component", {}).get("name") == "spark" and isinstance(doc.get("components"), list),
+             "ver --sbom: the CycloneDX 1.5 JSON alone, its four fields and the metadata", out[:120] + err[:120])
+        with open(os.path.join(REPO, "models.env")) as f:
+            n_models = len(re.findall(r'(?m)^MODEL_[A-Z0-9_]+="\S+\.gguf ', f.read()))
+        with open(os.path.join(REPO, "engine.env")) as f:
+            n_flav = len(re.findall(r"(?m)^LLAMA_SHA_[A-Z0-9_]+=[0-9a-f]{64}$", f.read()))
+        comps = doc.get("components", [])
+        models = [c for c in comps if c.get("type") == "data"]
+        flavours = [c for c in comps if c.get("name") == "llama.cpp"]
+        t.ok(len(models) == n_models and all(len(c["hashes"][0]["content"]) == 64 and c["licenses"][0]["license"]["name"]
+                                             and c["externalReferences"][0]["url"].startswith("https://") for c in models),
+             "ver --sbom: one data component per model row, each with its sha256, license and URL",
+             "%d components, %d rows" % (len(models), n_models))
+        t.ok(len(flavours) == n_flav and len({p["value"] for c in flavours for p in c["properties"]}) == n_flav
+             and all(c["purl"].startswith("pkg:github/ggml-org/llama.cpp@") for c in flavours),
+             "ver --sbom: one llama.cpp component per pinned flavour, its purl and sha256",
+             "%d components, %d pins" % (len(flavours), n_flav))
+        t.ok(any(c.get("type") == "platform" and c.get("name") == "python" for c in comps)
+             and any(c.get("name", "").startswith("actions/") and len(c.get("version", "")) == 40 for c in comps)
+             and any(p == {"name": "spark:family", "value": "debian"} for c in comps for p in c.get("properties", [])),
+             "ver --sbom: the python floor, a pinned action and a distro package are in it")
+
+        def _stamped(s):
+            return re.sub(r'"timestamp": "[^"]*"', '"timestamp": ""', s)
+        t.ok(rc2 == 0 and _stamped(out) == _stamped(out2), "ver --sbom: byte-identical across two runs but the timestamp")
+        rc, out, _ = spark("ver", "-h")
+        t.ok(rc == 0 and "--sbom" in out, "spark ver -h names --sbom", out)
+
         # a fork's credits line names its own remote (cli.credits(), from
         # `git remote get-url origin`), not the forgewright-ai literal.
         # The origin: a bare clone of this repo, with one commit on top of
@@ -2190,6 +2234,57 @@ def main():
         t.ok(_pkgmod.parse_pacman_removal("vulkan-radeon\nvulkan-icd-loader\n")
              == ["vulkan-icd-loader", "vulkan-radeon"],
              "packages: the pacman -Rp parser reads the printed names")
+        # the pending row's security count (v1.36), pure parsers over
+        # pasted transcripts, no manager asked: apt's -security sources
+        # (a comma-joined suite list counts once), arch-audit -q's names
+        _apt_up = ("Listing... Done\n"
+                   "curl/noble-security 8.5.0-2ubuntu10.6 amd64 [upgradable from: 8.5.0-2ubuntu10.5]\n"
+                   "libssl3t64/noble-updates,noble-security 3.0.13-0ubuntu3.5 amd64 [upgradable from: 3.0.13-0ubuntu3.4]\n"
+                   "git/noble-updates 1:2.43.0-1ubuntu7.2 amd64 [upgradable from: 1:2.43.0-1ubuntu7.1]\n"
+                   "libgomp1/trixie-security 14.2.0-19+deb13u1 amd64 [upgradable from: 14.2.0-19]\n"
+                   "tmux/noble 3.4-1ubuntu0.1 amd64 [upgradable from: 3.4-1]\n")
+        t.ok(_pkgmod.parse_apt_security(_apt_up) == 3 and _pkgmod.parse_apt_security("Listing... Done\n") == 0
+             and _pkgmod.parse_apt_security("") == 0,
+             "packages: the apt list --upgradable parser counts the -security lines (3 of 5), none on a clean box",
+             str(_pkgmod.parse_apt_security(_apt_up)))
+        t.ok(_pkgmod.parse_arch_audit("openssl\nlinux\nopenssl\n") == ["linux", "openssl"]
+             and _pkgmod.parse_arch_audit("") == []
+             and _pkgmod.parse_arch_audit("warning: something\nopenssl\n") == ["openssl"],
+             "packages: the arch-audit -q parser reads the names, each once, and nothing on a clean box",
+             str(_pkgmod.parse_arch_audit("openssl\nlinux\nopenssl\n")))
+        t.ok("pacman -S arch-audit" in _pkgmod.SECURITY_UNNAMED,
+             "packages: an Arch box without arch-audit is told the package that names them")
+        # and the row's four answers, the manager's answers stubbed (a Mac
+        # never reaches the apt branch otherwise): one security upgrade
+        # waiting warns with the family's upgrade line, none says so, Arch
+        # without arch-audit says they are unnamed, macOS counts as before
+        from spark import check as _chk
+
+        class _Ctx:
+            def cached(self, key, ttl, fn):
+                return fn()
+        _saved = (_pkgmod.manager, _pkgmod.pending, _pkgmod.security)
+        try:
+            _pkgmod.manager, _pkgmod.pending, _pkgmod.security = (lambda: "apt"), (lambda: 5), (lambda: 2)
+            r = _chk.row_pending(_Ctx())
+            t.ok((r.status, r.value, r.remedy) == ("warn", "5 updates pending, 2 security", "sudo apt upgrade"),
+                 "pending row: a security upgrade waiting is a warn with apt's upgrade line", str((r.status, r.value, r.remedy)))
+            _pkgmod.security = lambda: 0
+            r = _chk.row_pending(_Ctx())
+            t.ok((r.status, r.value) == ("ok", "5 updates pending, no security upgrades pending"),
+                 "pending row: none waiting keeps the ok text and says so", str((r.status, r.value)))
+            _pkgmod.manager, _pkgmod.security = (lambda: "pacman"), (lambda: None)
+            r = _chk.row_pending(_Ctx())
+            t.ok((r.status, r.value) == ("ok", "5 updates pending, " + _pkgmod.SECURITY_UNNAMED),
+                 "pending row: Arch without arch-audit says the upgrades are unnamed, no warning", str((r.status, r.value)))
+            _pkgmod.security = lambda: 1
+            r = _chk.row_pending(_Ctx())
+            t.ok((r.status, r.remedy) == ("warn", "sudo pacman -Syu"), "pending row: arch-audit's one is a warn with pacman's line", str((r.status, r.remedy)))
+            _pkgmod.manager = lambda: "brew"
+            r = _chk.row_pending(_Ctx())
+            t.ok((r.status, r.value) == ("ok", "5 updates pending"), "pending row: macOS counts as before, no security question", str((r.status, r.value)))
+        finally:
+            _pkgmod.manager, _pkgmod.pending, _pkgmod.security = _saved
 
         # spark check --report: statuses only, and the privacy word lists
         # run over the report's own output -- the fixture's listed user
