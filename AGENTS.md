@@ -62,6 +62,11 @@ sh tests/uninstall_test.sh
 
 (`tests/check_selftest.py` is the hook's entry to `spark check --selftest`.)
 
+`tests/forge_probe.py URL` is not in the gate: it probes a live FORGE's
+gates from the wire (`wire.probe_gates`, the `hardening` row's probes),
+one line per gate, exit 1 when any does not hold -- run it against a
+real box, or from forge_smoke.py against its own.
+
 `--selftest` proves every fixture-testable row CAN flip; `--chaos`
 proves the sentence a row prints under a real failure is true, and
 that the remedy it names heals it. The scenarios live in

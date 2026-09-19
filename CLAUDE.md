@@ -135,7 +135,8 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 own remedy heals it; a llama-server with a mood, as a
                 real process, so it can be killed mid-reply)
                 setup (spark setup: the guided first run)
-                stats (turns -> numbers) bench (llama-bench, bench tune [show|apply])
+                stats (turns -> numbers; --sends: bytes out by destination and
+                day, the sends row's source) bench (llama-bench, bench tune [show|apply])
                 soul memory (the identity files; memory's writers refuse a
                 sealed file that does not open, never write over it)
                 text (the streams: wrap, fence, and the grounding law -- anchor,
@@ -198,6 +199,9 @@ tests/          install_test.sh get_test.sh update_test.sh uninstall_test.sh smo
                 vault_test.py (RFC 8439 vectors, round-trips, refusals)
                 qr_test.py (ISO 18004 format table, the RS vector, a full
                 decode-back, the render forms)
+                forge_probe.py URL (a FORGE's gates asked from the wire --
+                wire.probe_gates, the hardening row's probes -- one line per
+                gate, exit 1 when any does not hold; against a real box)
 .githooks/      pre-commit (privacy gate, syntax, tests, 80-col), commit-msg (the
                 same privacy patterns over the message -- history is public too),
                 pre-push (install test, selftest, chaos)
@@ -867,7 +871,14 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   or `spark user claim` seals it away. Turns are the opposite pattern:
   telemetry, numbers only -- `session.record` strips every free-text
   field (`session.TEXT_FIELDS`), and the words live only in the sealed
-  threads.
+  threads. What a request weighed and where it went do ride the record:
+  `out_bytes` and `dest` (`host:port`, or `local` for loopback),
+  `wire._sent`'s pair on every chat shape's timings, so the `sends` row
+  and `spark stats --sends` count what left by destination and day
+  without a word of it; the `hardening` row asks contract 9's gates of
+  the served FORGE (the peer's, on a client) from the wire
+  (`wire.probe_gates`, the probes `tests/forge_probe.py` runs against a
+  real server).
 - **A route.** In `forgeserve.py`: pick its auth class (none; U = user
   or admin; A = admin-only, added to `ADMIN_GET`/`ADMIN_POST`; plus the
   POST rules) and put it in the matching branch of `_route`;
@@ -1026,7 +1037,7 @@ sh tests/get_test.sh            # the one-liner: clone, pull, refusals, the hand
 sh tests/update_test.sh         # spark update: pull, move to a signed tag, unsigned and dirty refused, --dry-run
 ```
 
-`spark check` has 37 rows today: 11 SOFTWARE, 18 CAPABILITY, 8
+`spark check` has 39 rows today: 11 SOFTWARE, 19 CAPABILITY, 9
 NONFUNCTIONAL (`grep -c '^@row' lib/spark/check.py`). `--selftest`
 proves every fixture-testable row flips, then a third pass for the
 client shape (the 7 rows in `check.CLIENT_ROWS` answer `na`), and on

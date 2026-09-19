@@ -23,7 +23,12 @@ def _turns_dir():
 
 # Turns are telemetry: numbers, enums, ids -- never what was said. The
 # words live only in the sealed threads; this is the one choke point that
-# keeps free text out of the turn log, whatever a caller passes.
+# keeps free text out of the turn log, whatever a caller passes. What a
+# request weighed and where it went ride the same record -- `out_bytes`
+# (the encoded body) and `dest` (`host:port`, or `local`), wire._sent's
+# pair, carried in the timings every chat shape returns -- so `spark
+# stats --sends` and check's `sends` row can count what left by
+# destination without a word of it.
 TEXT_FIELDS = ("line", "command", "hint", "answer", "cwd", "context", "proof")
 
 
@@ -269,5 +274,6 @@ class Session:
         return m
 
     def record(self, **fields):
-        """One turn, with the throughput the server reported for it."""
+        """One turn, with the throughput the server reported for it and
+        the request's own weight and destination (out_bytes, dest)."""
         record(self.cfg, backend=self.url, model=self.answered_model(), mode=self.mode, **dict(getattr(self, "timings", {}) or {}, **fields))

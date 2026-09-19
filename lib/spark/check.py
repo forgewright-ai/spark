@@ -856,6 +856,37 @@ def _peer_status(cfg, path):
         return 0
 
 
+@row("CAPABILITY", fixture=False, reason="probes the live forge (tests/forge_probe.py proves the gates against a real server)")
+def row_hardening(ctx):
+    """Contract 9's gates, asked from the wire (wire.probe_gates) of the
+    FORGE this machine serves, or of the peer on a client: the health
+    line, the page's four headers, the write gate, the bare 401, the
+    bearer-only model route. na when there is neither or it is down (the
+    forge and peer rows say that already); a gate that does not hold is
+    named, never a fail. Cached an hour: the probes are lines in the
+    forge's log, and the timer asks every five minutes."""
+    from . import forge_url, wire
+    url = forge_url() if not ctx.cfg.client else ""
+    if not url:
+        url = ctx.cfg.peer_ai_url
+    if not url:
+        return na("no FORGE served here and no peer (spark forge on, or spark client URL)")
+    where = url.split("//")[-1].rstrip("/")
+    if not isinstance(wire.forge_health(url), dict):
+        return na("%s is not up as a FORGE (the forge and peer rows say why)" % where)
+    v = ctx.cached("hardening", 3600, lambda: {"url": url, "gates": wire.probe_gates(url)})
+    if not isinstance(v, dict) or v.get("url") != url:     # a moved forge: ask it now, cached next run
+        v = {"url": url, "gates": wire.probe_gates(url)}
+    gates = [tuple(g) for g in v.get("gates") or []]
+    held = [g for g in gates if g[1]]
+    if len(held) != len(gates) or not gates:
+        broken = [g for g in gates if not g[1]] or [("probe", False, "no gates answered")]
+        return warn("%d of %d gates hold at %s -- %s" % (len(held), len(gates), where,
+                                                          "; ".join("%s: %s" % (g[0], g[2]) for g in broken[:3])),
+                    "spark forge off; spark forge on   (the FORGE must be this tree's; spark update)")
+    return ok("%d of %d gates hold at %s" % (len(held), len(gates), where))
+
+
 @row("CAPABILITY", fixture=False, reason="looks for a player on this machine's PATH")
 def row_audio(ctx):
     """The sounds spark plays (a bell, and what a game of its has): a
@@ -1188,6 +1219,29 @@ def row_privacy(ctx):
     words = ("no banned words (%d watched)" % len(terms)) if terms else \
         ("no word list (optional: %s)" % ctx.short(privacy_terms_file(ctx.cfg)))
     return ok("state 0700, token 0600, site.env private, %s, one address" % words)
+
+
+@row("NONFUNCTIONAL")
+def row_sends(ctx):
+    """What left this machine today, by destination, from the turn
+    records (`out_bytes`, `dest`: a count and a host, never a word). The
+    promise is that spark sends only to the server you named: local, the
+    peer, the FORGE or the engine served here, SPARK_BASE_URL. Bytes to
+    any other host are a warn, never a fail -- the records say where
+    they went, and `spark stats --sends` shows the days."""
+    from . import forge_url, stats, wire
+    today = time.strftime("%Y-%m-%d")
+    rows = stats.sends([t for t in stats.turns(1) if str(t.get("ts", "")).startswith(today)])
+    if not rows:
+        return ok("nothing sent today")
+    known = {"local"} | {wire.dest_of(u) for u in (ctx.cfg.base_url, ctx.cfg.prefer_url, ctx.cfg.peer_ai_url,
+                                                  forge_url(), wire.serve_url()) if u}
+    strange = [(dest, b) for _day, dest, b, _n in rows if dest not in known]
+    if strange:
+        dest, b = strange[0]
+        return warn("%s went to %s today, not your configured brain" % (stats.kb(b), dest),
+                    "spark stats --sends; spark brain   (SPARK_BASE_URL / SITE_PEER_AI_URL name the destination)")
+    return ok(", ".join("%s to %s" % (stats.kb(b), dest) for _day, dest, b, _n in rows) + " today")
 
 
 @row("NONFUNCTIONAL")
@@ -1613,6 +1667,11 @@ def make_fixture(root, good, stub_url="", real_spark=False):
         for _ in range(3):
             f.write(json.dumps({"ts": time.strftime("%Y-%m-%d %H:%M:%S"), "kind": "cmd", "mode": "line",
                                 "tg_tps": 11.5 if good else 3.5, "pp_tps": 90.0, "ms": 900}) + "\n")
+        # the sends row: today's bytes went to this machine (good) or to a
+        # host nothing here names (bad) -- no tg_tps, so throughput
+        # ignores the record
+        f.write(json.dumps({"ts": time.strftime("%Y-%m-%d %H:%M:%S"), "kind": "answer", "mode": "chat",
+                            "ms": 1200, "out_bytes": 2048, "dest": "local" if good else "203.0.113.9:8081"}) + "\n")
     os.makedirs(os.path.join(home, ".local", "share", "spark", "models"), exist_ok=True)
     # fixture.gguf is written LAST so it is the newest .gguf -- with no
     # SITE_AI_MODEL the spark role serves the newest, and the throughput
