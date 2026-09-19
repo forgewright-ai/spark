@@ -300,7 +300,7 @@ spark-ask() {
         export SPARK_EXPLAIN_CMD=$fact SPARK_EXPLAIN_RC=$_spark_fail_rc
         BUFFER="{ $fact; } 2>&1 | explain"
         CURSOR=$#BUFFER
-        _spark_say "$_spark_h Enter runs it: the failure, explained"
+        _spark_say "$_spark_h Enter re-runs it: the failure, explained"
     elif [[ -n $_spark_offer_proof ]]; then
         # the proof the line proposed: lands ready to run, read-only
         BUFFER=$_spark_offer_proof

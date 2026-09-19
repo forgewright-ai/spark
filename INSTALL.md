@@ -178,8 +178,12 @@ shell cannot host the widget (another shell, or macOS's bash 3.2):
    shell would glob (a trailing `?`, parentheses).
 6. `spark do <words>` proposes one command at a time: Enter runs it, `e`
    edits it first, `s` skips, `q` quits; a step that can destroy data
-   runs only when you type `yes`. Each step's output (last 4 kB) goes
-   back to the model until it says done, or after 8 steps.
+   (a `sudo` step counts) runs only when you type `yes`. After a step,
+   its proof -- one read-only check that it worked -- is offered the
+   same way, and only its exit code goes back to the model, never what
+   it printed. Each step's output (last 4 kB) goes back to the model
+   until it says done, or after 8 steps; every step is recorded as it
+   ran.
 7. `spark ask` reads a plan, a draft or a decision on stdin and answers
    with questions about it -- at most three, one per line, and nothing
    else. Every line of the output is a question: a line that is not one,

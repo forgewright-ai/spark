@@ -366,15 +366,33 @@ may change freely.
    line 3 = `proof<TAB>command` on a cmd/danger reply -- ONE read-only
    check that the command did what was asked (`test ! -d build` after
    `rm -rf build`). The brief asks for it; `persona.proof_ok` refuses a
-   proof that is not read-only (a named allowlist of head words: test,
-   ls, stat, grep, git status, systemctl is-active, ...; no compound,
-   no redirect), so a refused proof is never printed. The widgets show
-   it in the hint row after the command runs and offer it on Esc s;
-   `spark do` runs it after each confirmed step and shows the result.
+   proof that is not read-only -- argv-based (`shlex.split`; a bad
+   quote refuses): a named allowlist of head words (test, ls, stat,
+   grep, git status, systemctl is-active, ...), no compound, no
+   redirect, no control character, and none of `persona.PROOF_DENIED`
+   anywhere in argv -- the options that make a read-only head write or
+   run something (`--output`, `-o`, `--ext-diff`, `--textconv`, `tail
+   -f`, `git -c`, `-exec`, `-delete`, ...; a one-letter option is caught
+   inside a cluster too) -- so a refused proof is never printed. The
+   widgets show it in the hint row after the command runs and offer it
+   on Esc s; `spark do` offers it after each confirmed step like a step
+   of its own (Enter runs it, `do.PROOF_TIMEOUT` seconds at most), shows
+   the result, and sends the model its exit code alone -- a proof's
+   output never rides a request. `spark do` lands each step's feedback
+   (the command that ran, `edited from` the proposal when the user
+   changed it, its exit code, the proof's) on the thread the moment the
+   step ran (`do.land`), so the last step of a run is recorded like
+   every other; a command or proof carrying a control character is
+   refused whole (a `done`, `do.REFUSED_CONTROL`); a `sudo` step is a
+   danger step (the typed `yes`).
    `spark line --paste` is the paste inspection: a multi-line paste on
    stdin, NO command back -- one `answer`/`danger` line naming what the
    paste does (a locally dangerous line forces `danger` whatever the
-   model says); over 8 kB it is one line and nothing is sent. The
+   model says); over 8 kB it is one line and nothing is sent, and a
+   paste that looks like a secret (`cli.SECRET_SHAPES`: a private key
+   block, an AWS, GitHub, Slack or `sk-` token, a `password=`/`token:`
+   line, a 64+ run of base64) is one `answer` line naming the shape
+   and nothing is sent either. The
    widgets hook the bracketed paste (bash rebinds the paste-begin
    sequence, zsh wraps `bracketed-paste`): two or more lines into an
    EMPTY prompt get the verdict in the hint row, the paste itself
