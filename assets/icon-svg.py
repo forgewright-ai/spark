@@ -2,9 +2,10 @@
 # icon-svg.py -- spark's app icons and social card from the banner grid
 # (home/.config/spark/banner, the file banner-svg.py takes as its argument):
 # the letters as block rectangles, no font, so they draw the same
-# everywhere. www/favicon.svg and www/og.png came out of it. Emits two SVGs
-# and three PNGs; the PNGs are written directly with a stdlib zlib/struct
-# encoder (a block grid is a trivial raster, no external rasterizer).
+# everywhere. The page's favicon.svg and og.png came out of it (they live
+# where the page is rendered). Emits two SVGs and three PNGs; the PNGs are
+# written directly with a stdlib zlib/struct encoder (a block grid is a
+# trivial raster, no external rasterizer).
 # Usage: icon-svg.py [BANNER_FILE] [OUT_DIR]
 # Writes into OUT_DIR (default tools/out/):
 #   icon-macos.svg  icon-macos-1024.png   rounded #100e0c tile, the S at 60%

@@ -86,7 +86,8 @@ The first hour, twelve small things to try: `TOUR.md`.
 - Editors and tools that speak to spark: `APPS.md`
 - spark's own shell for a machine that is an AI box: `SHELL.md`
 
-The page: https://spark.forgewright.ai -- the docs and the model list.
+The page: https://spark.forgewright.ai -- the docs and the model list, at
+the newest release.
 
 ## What leaves this machine
 

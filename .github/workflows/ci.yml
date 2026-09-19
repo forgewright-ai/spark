@@ -66,7 +66,6 @@ jobs:
           python3 tests/bench_smoke.py
           python3 tests/vault_test.py
           python3 tests/qr_test.py
-          python3 tests/site_test.py
           python3 tests/docs_test.py
           python3 tests/widget_pty.py bash home/.config/spark/widget.bash
           python3 tests/widget_pty.py completion bash home/.config/spark/completion.bash

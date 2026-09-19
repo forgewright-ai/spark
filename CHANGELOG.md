@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.37
+
+- The page, spark.forgewright.ai, is rendered outside this tree, at the
+  newest signed release -- what `get` installs -- and never from main.
+  `www/`, `pages.yml`, `tests/site_test.py` and the palette lockstep in
+  docs_test leave with it; nothing here builds or publishes it any
+  more. Releasing gains a step: the page's render is run by hand after
+  the tag, or picks the tag up on its own within six hours.
+
 ## v1.36
 
 - The pre-commit hook reads the staged diff for the secret shapes

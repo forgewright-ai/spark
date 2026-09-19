@@ -204,10 +204,10 @@ templates/      rendered, not linked: .gitconfig .tmux.conf .config/btop/btop.co
                 both only with the layer on AND micro on PATH -- the look for a micro you have)
                 .config/starship.toml.{minimal,full} .config/spark/launchd/spark.{serve,forge,check}.plist
 tests/          install_test.sh get_test.sh update_test.sh uninstall_test.sh smoke.py serve_smoke.py
-                docs_test.py (the docs say what the tree holds: credits, counts, pages,
+                docs_test.py (the docs say what the tree holds: credits, counts,
                 the voice of what a new user reads)
                 audition.py + audition/ (the editor's briefs against a live brain, lints as the
-                judge; not in the gate) vault_test.py site_test.py check_selftest.py
+                judge; not in the gate) vault_test.py check_selftest.py
                 forge_smoke.py bench_smoke.py widget_pty.py check_selftest.py
                 policy_test.py (every row of forgeserve.ROUTES with three callers:
                 nobody, a user, the admin)
@@ -223,8 +223,6 @@ tests/          install_test.sh get_test.sh update_test.sh uninstall_test.sh smo
 .github/        ci.yml: the same on ubuntu (plus a real bootstrap) and macOS (python 3.9);
                 the new user's one-liner in a debian:13 and an archlinux container
                 release.yml: the GitHub Release from the CHANGELOG section, on a v* tag
-                pages.yml: www/ rendered and published to GitHub Pages on a doc change
-                and on a published release (the sign line links the release)
                 codeql.yml: GitHub's static analysis over the python and the
                 javascript, on a push to main, a pull request and weekly
                 advisories.yml: weekly, one issue when llama.cpp published a
@@ -232,14 +230,10 @@ tests/          install_test.sh get_test.sh update_test.sh uninstall_test.sh smo
                 dependabot.yml: the workflows' action sha pins, kept current weekly
 LICENSE         MIT, verbatim, ASCII (the hook checks it with the docs)
 assets/         banner.svg -- the banner as rectangles, for the README and the page
-                (banner-light.svg is the page's light-theme variant);
+                (banner-light.svg is the page's light-theme variant; the page reads
+                both from this tree at the newest release);
                 banner-svg.py makes both from home/.config/spark/banner; icon-svg.py
                 makes the favicon, the app icons and the social card the same way
-www/            the page, spark.forgewright.ai: build.py (stdlib) renders the docs
-                (INSTALL, CHEATSHEET, the model list, CHANGELOG, ROADMAP,
-                CONTRIBUTING, CREDITS) into www/dist/ with template.html; index.html
-                is the front: onboarding in three stages (the OS picker, the
-                one line, spark apps), every command on it a doc's own line
 CREDITS.md      every third-party project spark downloads or installs,
                 with its license; spark's own code is LICENSE
 ROADMAP.md      what comes after the current release, in order
@@ -359,10 +353,10 @@ may change freely.
    optional) and `MODEL_<NAME>_GROUND="<kept>/<run> <YYYY-MM-DD>"`
    (optional: the grounding audition's score, written by hand from a
    `tests/audition.py --json` run the way `_TESTED` carries the line
-   proof; `spark model list` shows it in the proof column, the page's
-   model table renders it, and `auto` prefers a grounded row when two
-   rows fit the budget at the same RAM -- among equals, the earlier row
-   of the list). A name in both files is
+   proof; `spark model list` shows it in the proof column,
+   spark.forgewright.ai/models/ renders it, and `auto` prefers a
+   grounded row when two rows fit the budget at the same RAM -- among
+   equals, the earlier row of the list). A name in both files is
    refused, naming both;
    `distro/<id>.env` (one per Linux package family the oracle `distro()`
    knows -- `lib/spark/__init__.py` beside `is_wsl()`; bootstrap.sh
@@ -862,25 +856,25 @@ One grammar for every verb; a verb that breaks a rule is a bug.
 
 ## Adding things
 
-- **A doc.** The page (`www/`, spark.forgewright.ai) is the docs rendered:
-  a change in INSTALL.md, CHEATSHEET.txt, models.env, CHANGELOG.md,
-  ROADMAP.md, CONTRIBUTING.md or CREDITS.md ships on the next push to main,
-  nothing to do. The look lives in `www/template.html` (dark and light, in
-  lockstep with `lib/spark/forge/spark.css` -- docs_test checks); the front in
-  `www/index.html` (onboarding in three stages; every command on it is a
-  line of INSTALL.md or the README, and site_test checks); the
-  markdown subset in `www/build.py` (tests/site_test.py holds its
-  invariants -- a new construct in a doc needs both). The docs are kept
+- **A doc.** The page (spark.forgewright.ai) is the docs rendered --
+  INSTALL.md, CHEATSHEET.txt, models.env, CHANGELOG.md, ROADMAP.md,
+  CONTRIBUTING.md, CREDITS.md, the tour -- outside this tree, at the
+  newest signed release tag (what `get` installs), never main: a change
+  here reaches it with the next release, nothing to do, and nothing in
+  this tree builds or publishes it (Releasing, step 3). Its look
+  mirrors the ember tokens of `lib/spark/forge/spark.css`; that
+  lockstep is checked where the page is rendered, against this tree,
+  so a token change here is a change there too. The docs are kept
   true by `tests/docs_test.py` (pre-commit, CI): every palette and every
   model upstream is in CREDITS.md, the check-row and model counts the
-  docs state are the tree's, every page has its source, no retired word
-  survives. A new fact a doc states that the tree can derive goes there
-  as one more check -- the test is the consistency, not a reviewer. What
-  a new user reads (README, INSTALL, CHEATSHEET, the page front) is
-  minimal and step by step and speaks two nouns, spark and spark apps:
-  no FORGE, ember or brain as a noun there, no "smart app", nothing
-  private named anywhere in the tree's docs (docs_test holds the word
-  list; this file and AGENTS.md keep the contracts' names).
+  docs state are the tree's, no retired word survives. A new fact a
+  doc states that the tree can derive goes there as one more check --
+  the test is the consistency, not a reviewer. What a new user reads
+  (README, INSTALL, CHEATSHEET, the page front) is minimal and step by
+  step and speaks two nouns, spark and spark apps: no FORGE, ember or
+  brain as a noun there, no "smart app", nothing private named
+  anywhere in the tree's docs (docs_test holds the word list; this
+  file and AGENTS.md keep the contracts' names).
 - **A package.** Linux: the right `PKG_*` group in every `distro/<id>.env`
   with a comment saying why (`PKG_CORE`/`PKG_ENGINE`/`PKG_AI` are the AI,
   always installed; the shell tools are spark-shell's own lists), under
@@ -1017,9 +1011,10 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   `spark read`) -- a keymap snippet and a stderr-folding wrapper, the
   same laws, its own repository.
   The known clients are listed in APPS.md, and every one of them is in
-  CREDITS.md and on the page front -- docs_test reads the app names out
-  of APPS.md and looks them up in those two; a new one is one line in
-  each. The core docs no longer name them at all. A pull
+  CREDITS.md and on the page front, which is checked the same way where
+  the page is rendered -- docs_test reads the app names out of APPS.md
+  and looks them up in CREDITS.md; a new one is one line in each. The
+  core docs no longer name them at all. A pull
   request that adds an app, an app package or an app check row here is
   turned into a pointer to the app's repository.
 - **The client shape.** `SITE_AI_MODEL=none` beside `SITE_PEER_AI_URL`
@@ -1150,9 +1145,9 @@ one. `verify-tag` with an ssh signature is git >= 2.34 and ssh-keygen
 (openssh) -- `get` asks for both before it clones.
 
 1. Write the `## vX.Y` section at the top of `CHANGELOG.md` (bullets, newest
-   first; until the tag exists the page renders that heading as
-   `vX.Y (unreleased)`, and `tests/docs_test.py` refuses a heading more
-   than one release ahead of the newest tag). The full gate, then `sh tests/install_test.sh`, `sh
+   first; the page shows the section only once the tag exists -- it
+   renders the newest tag -- and `tests/docs_test.py` refuses a heading
+   more than one release ahead of the newest tag). The full gate, then `sh tests/install_test.sh`, `sh
    tests/get_test.sh` and `sh tests/update_test.sh`. Commit, push, `gh
    run watch` until green.
 2. `git tag -s vX.Y -m 'spark vX.Y' && git push origin vX.Y`. The tag
@@ -1163,7 +1158,11 @@ one. `verify-tag` with an ssh signature is git >= 2.34 and ssh-keygen
    (`releases/latest/download/get`, the one-liner) and `sbom.cdx.json`
    (`spark ver --sbom` at the tag: what the tree depends on, CycloneDX
    1.5, `lib/spark/sbom.py`); nothing is rerun.
-3. Deploy = `spark update` everywhere: a main checkout pulls, a checkout
+3. The page (spark.forgewright.ai) is rendered outside this tree, at the
+   newest signed tag: run its render by hand now (`gh workflow run` in
+   the repository that renders it), or let its six-hourly run pick the
+   tag up. Nothing in this tree publishes it.
+4. Deploy = `spark update` everywhere: a main checkout pulls, a checkout
    on a tag moves to the new one; either way it converges (bootstrap.sh,
    then `spark check`, must both come back clean). `spark ver` there
    prints exactly `spark X.Y` at the tag, `spark X.Y+N` N commits past it

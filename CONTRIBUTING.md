@@ -45,7 +45,8 @@ nothing.
    that no longer matches the code. What a new user reads (README,
    INSTALL, CHEATSHEET, the page front) stays minimal and step by step,
    with two nouns, spark and spark apps; `tests/docs_test.py` says which
-   words are out.
+   words are out. The page, spark.forgewright.ai, is these docs rendered
+   at the newest release: a fix here reaches it with the next one.
 
 ## Code changes
 

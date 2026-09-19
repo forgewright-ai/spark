@@ -5,8 +5,10 @@
    true ornament) only; readable dim text uses --muted-text; hairlines
    use --line.
    lockstep: the ember values in the FIRST :root block (and the first
-   :root under the light media query) mirror www/template.html :root --
-   change them there and here together; tests/docs_test.py holds it.
+   :root under the light media query) are mirrored by the page's
+   template, spark.forgewright.ai, rendered outside this tree, which
+   checks itself against this file -- change them here knowing the page
+   follows.
    The design tokens (surfaces, radius, shadows, spacing, sans) live in
    the SECOND :root block so the lockstep parse stays trivial. */
 
