@@ -1,5 +1,24 @@
 # Changelog
 
+## v1.39
+
+- `spark quiet boot on` is real on an Arch that boots a Unified Kernel
+  Image (a `default_uki=` line in a mkinitcpio preset, the shape
+  systemd-boot installs get): one drop-in spark owns,
+  `/etc/cmdline.d/zz-spark-quiet.conf`, carries the same seven words as
+  the GRUB drop-in (mkinitcpio embeds it after `/etc/kernel/cmdline`);
+  the preset's `--splash` line (the Arch logo) is marked off with
+  `#spark-quiet# `, `loader.conf` gets `timeout 0`, `mkinitcpio -P`
+  rebuilds and the row proves the new image carries the line. `off`
+  undoes the three and rebuilds. The `quiet` check row reads
+  `/proc/cmdline` as the live proof and warns `boot quiet after a
+  reboot` until the machine has. Without a UKI the verb still refuses,
+  now naming where the kernel line lives (a loader entry's options
+  line, or GRUB_CMDLINE_LINUX_DEFAULT then grub-mkconfig) instead of
+  GRUB; `spark help` says `boot (menu)`. The `systemd.show_status=false`
+  word is what silences the Started and Stopping lines at boot and
+  shutdown: measured on the box, the kernel itself printed two lines.
+
 ## v1.38
 
 - The documents live in `docs/`: INSTALL.md, CHEATSHEET.txt, CHANGELOG.md,

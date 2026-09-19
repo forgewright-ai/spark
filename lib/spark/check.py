@@ -906,7 +906,7 @@ def row_quiet(ctx):
     start = "start %s" % ("on" if ctx.cfg.quiet_start else "off")
     if IS_MAC:
         return na("%s; macOS: no motd, no GRUB" % start)
-    parts, bad = [start], []
+    parts, bad, pending = [start], [], False
     if ctx.cfg.quiet_login:
         try:
             with open("/etc/issue", encoding="utf-8", errors="replace") as f:
@@ -924,6 +924,27 @@ def row_quiet(ctx):
     from . import site
     if ctx.cfg.quiet_boot and site.no_grub():
         parts.append("boot n/a (%s)" % site.no_grub())
+    elif ctx.cfg.quiet_boot and site.boot_shape() == "uki":
+        # the promise is spark's cmdline.d drop-in (the words) and no
+        # splash left in a preset; the running kernel's line is the LIVE
+        # proof, and a machine not yet rebooted is a warn, not a fault
+        try:
+            with open(site.CMDLINE_DROPIN, encoding="utf-8", errors="replace") as f:
+                quiet = f.read().strip() == site.QUIET_WORDS
+        except OSError:
+            quiet = False
+        quiet = quiet and not site.splash_live()
+        if not quiet:
+            parts.append("boot LOUD")
+            bad.append("boot")
+        else:
+            try:
+                with open(os.environ.get("SPARK_PROC_CMDLINE", "/proc/cmdline"), encoding="utf-8", errors="replace") as f:
+                    live = "loglevel=3" in f.read()
+            except OSError:
+                live = True
+            parts.append("boot quiet" if live else "boot quiet after a reboot")
+            pending = not live
     elif ctx.cfg.quiet_boot:
         # the promise is spark's GRUB drop-in (menu hidden + silent kernel
         # line), proven against the generated grub.cfg when it is readable
@@ -947,6 +968,8 @@ def row_quiet(ctx):
         parts.append("boot loud")
     if bad:
         return fail(", ".join(parts) + " -- site.env says otherwise", "./bootstrap.sh   (sudo)")
+    if pending:
+        return warn(", ".join(parts), "sudo systemctl reboot   (the image carries the quiet line; the running kernel does not)")
     return ok(", ".join(parts))
 
 

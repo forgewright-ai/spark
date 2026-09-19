@@ -949,12 +949,38 @@ else
     # initramfs, vt.global_cursor_default=0 stops the early blinking
     # cursor, fbcon=nodefer stops the framebuffer's mid-boot flicker.
     # update-grub is the Debian-family guard: no update-grub, no touch.
+    # The same seven words on every shape (site.QUIET_WORDS is the twin)
+    QUIET_WORDS='quiet splash loglevel=3 systemd.show_status=false udev.log_level=3 vt.global_cursor_default=0 fbcon=nodefer'
     grub_dropin=/etc/default/grub.d/zz-spark-quiet.cfg
     # the $GRUB_CMDLINE reference below is grub's to expand, not ours
-    # shellcheck disable=SC2016
-    grub_want='GRUB_TIMEOUT=0
+    grub_want="GRUB_TIMEOUT=0
 GRUB_TIMEOUT_STYLE=hidden
-GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT quiet splash loglevel=3 systemd.show_status=false udev.log_level=3 vt.global_cursor_default=0 fbcon=nodefer"'
+GRUB_CMDLINE_LINUX_DEFAULT=\"\$GRUB_CMDLINE_LINUX_DEFAULT $QUIET_WORDS\""
+    # Arch with a Unified Kernel Image (an uncommented `<preset>_uki=` in a
+    # mkinitcpio preset): no GRUB, no loader entry -- mkinitcpio embeds the
+    # kernel line from /etc/kernel/cmdline plus every /etc/cmdline.d/*.conf,
+    # so one drop-in spark owns is the GRUB drop-in's mirror; the Arch
+    # logo is the preset's `--splash`, marked off with spark's own prefix
+    # (stripped on off: no .orig); systemd-boot's menu wait is loader.conf's
+    # `timeout` (root to read: /boot is 0700 on Arch). The three land, then
+    # `mkinitcpio -P` rebuilds the images, and the next boot is the proof.
+    # The presets and the drop-in are seamed for the tests (SPARK_ETC_*).
+    mkinitcpio_d=${SPARK_ETC_MKINITCPIO_D:-/etc/mkinitcpio.d}
+    cmdline_dropin=${SPARK_ETC_CMDLINE_DROPIN:-/etc/cmdline.d/zz-spark-quiet.conf}
+    loader_conf=/boot/loader/loader.conf
+    splash_mark='#spark-quiet# '
+    uki_shape() { grep -qs '^[a-z_]*_uki=' "$mkinitcpio_d"/*.preset; }
+    splash_live() { grep -qs '^[a-z_]*_options=.*--splash' "$mkinitcpio_d"/*.preset; }
+    splash_marked() { grep -qs "^$splash_mark" "$mkinitcpio_d"/*.preset; }
+    uki_path() { sed -n 's/^[a-z_]*_uki="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' "$mkinitcpio_d"/*.preset 2>/dev/null | head -1; }
+    loader_timeout() {   # loader_timeout N -- systemd-boot's menu wait; nothing without a loader dir
+        as_root test -d "${loader_conf%/*}" || return 0
+        if as_root grep -qs '^#\{0,1\}timeout' "$loader_conf"; then
+            as_root sed -i "s/^#\{0,1\}timeout.*/timeout $1/" "$loader_conf"
+        else
+            printf 'timeout %s\n' "$1" | as_root tee -a "$loader_conf" >/dev/null
+        fi
+    }
     # /usr/sbin is not in a user's PATH on Debian: look for update-grub
     # there too (sudo's secure_path finds it at run time either way) --
     # `command -v` alone once mis-skipped a real Debian as "not GRUB"
@@ -968,7 +994,18 @@ GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT quiet splash loglevel=3 
     grub_live_quiet() { as_root grep -q 'loglevel=3' /boot/grub/grub.cfg 2>/dev/null; }
     grub_user_ok() { [ ! -r /boot/grub/grub.cfg ] || grep -q 'loglevel=3' /boot/grub/grub.cfg 2>/dev/null; }
     if [ "$SITE_QUIET_BOOT" != yes ]; then
-        if [ -f "$grub_dropin" ] || grep -q '^GRUB_TIMEOUT=0$' /etc/default/grub 2>/dev/null; then
+        if [ -f "$cmdline_dropin" ] || splash_marked; then
+            if need quiet-boot "show the boot menu again, 3 s; kernel messages and the splash back; mkinitcpio -P (sudo)"; then
+                as_root rm -f "$cmdline_dropin"
+                splash_marked && as_root sed -i "s/^$splash_mark//" "$mkinitcpio_d"/*.preset
+                loader_timeout 3
+                if as_root mkinitcpio -P >/dev/null 2>&1; then
+                    ok quiet-boot "loud: boot menu shown for 3 s, kernel messages and the splash back"
+                else
+                    row todo quiet-boot "mkinitcpio -P failed -- run: sudo mkinitcpio -P"
+                fi
+            fi
+        elif [ -f "$grub_dropin" ] || grep -q '^GRUB_TIMEOUT=0$' /etc/default/grub 2>/dev/null; then
             if need quiet-boot "show GRUB's menu again, 5 s; kernel messages back (sudo)"; then
                 as_root rm -f "$grub_dropin"
                 as_root sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=5/; s/^GRUB_TIMEOUT_STYLE=.*/GRUB_TIMEOUT_STYLE=menu/' /etc/default/grub
@@ -981,8 +1018,24 @@ GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT quiet splash loglevel=3 
         else skip quiet-boot "loud (SITE_QUIET_BOOT=no)"; fi
     elif is_wsl; then
         skip quiet-boot "WSL 2: no GRUB (Windows boots it)"
+    elif uki_shape; then
+        if [ "$(cat "$cmdline_dropin" 2>/dev/null)" = "$QUIET_WORDS" ] && ! splash_live; then
+            ok quiet-boot "silent: menu hidden, kernel line quiet, no splash ($cmdline_dropin)"
+        elif need quiet-boot "cmdline.d drop-in $cmdline_dropin, the preset's splash marked off, loader.conf timeout 0; mkinitcpio -P (sudo)"; then
+            as_root mkdir -p "${cmdline_dropin%/*}"
+            printf '%s\n' "$QUIET_WORDS" | as_root tee "$cmdline_dropin" >/dev/null
+            splash_live && as_root sed -i "s/^\([a-z_]*_options=.*--splash\)/$splash_mark\1/" "$mkinitcpio_d"/*.preset
+            loader_timeout 0
+            made uki
+            uki=$(uki_path)
+            if as_root mkinitcpio -P >/dev/null 2>&1 && as_root grep -aq 'loglevel=3' "$uki"; then
+                ok quiet-boot "silent after a reboot: menu hidden, kernel line quiet, no splash (hold Space at boot for the menu)"
+            else
+                row todo quiet-boot "the image does not carry the quiet line -- run: sudo mkinitcpio -P, then spark check"
+            fi
+        fi
     elif [ "$DISTRO" = arch ]; then
-        skip quiet-boot "Arch: no update-grub -- GRUB left alone in this version"
+        skip quiet-boot "Arch without a UKI: the kernel line is the boot loader's -- left alone"
     elif [ ! -f /etc/default/grub ]; then
         skip quiet-boot "no /etc/default/grub here"
     elif ! have_update_grub; then

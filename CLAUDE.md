@@ -462,8 +462,12 @@ may change freely.
    stops with its last window: not a brain (a Linux box is)` (exit 2). On
    Arch likewise: `spark font -- no console-setup on Arch: the console
    font is /etc/vconsole.conf's (FONT=), left alone in this version`
-   (show 0, set 2) and `spark quiet boot -- no update-grub on Arch: GRUB
-   is left alone in this version` (exit 2).
+   (show 0, set 2) and, unless a mkinitcpio preset builds a Unified
+   Kernel Image (`site.boot_shape()` is `uki`: then the verb is real,
+   through the `/etc/cmdline.d` drop-in), `spark quiet boot -- no UKI on
+   this Arch: the kernel line is the boot loader's (a loader entry's
+   options line, or GRUB_CMDLINE_LINUX_DEFAULT then grub-mkconfig)`
+   (exit 2).
 9. The FORGE's HTTP API (`lib/spark/forgeserve.py`, on
    `SPARK_FORGE_HOST:SPARK_FORGE_PORT`, one LAN address, never the
    unspecified address in any spelling: `bind_check` in

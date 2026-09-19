@@ -86,7 +86,7 @@ USAGE_MACHINE = """the machine
 
 USAGE_INTERFACE = """the interface
  spark theme [NAME|list|show] the palettes, and yours; show = its colours
- spark quiet [SUB on|off]     start (banner), login (motd), boot (GRUB), audio
+ spark quiet [SUB on|off]     start (banner), login (motd), boot (menu), audio
  spark font [FACE SIZE|list]  the console font (Linux) / Terminal.app's
  spark bar [line]             the machine's one-line status
 """

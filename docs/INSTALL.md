@@ -515,13 +515,23 @@ Arch:
 - No console-setup: `spark font` refuses to set and the `font` row says
   so; the console font is `/etc/vconsole.conf`'s (`FONT=ter-132n` with
   `terminus-font`; `sudo systemctl restart systemd-vconsole-setup`).
-- `spark quiet login on` works; `spark quiet boot` refuses (no
-  `update-grub`). By hand with systemd-boot: `timeout 0` in
-  `/boot/loader/loader.conf` and `quiet loglevel=3
-  systemd.show_status=false udev.log_level=3 vt.global_cursor_default=0
-  fbcon=nodefer` on the entry's `options` line under
-  `/boot/loader/entries/`. With GRUB: the same words in
-  `GRUB_CMDLINE_LINUX_DEFAULT`, `GRUB_TIMEOUT=0`,
+- `spark quiet login on` works. `spark quiet boot on` works on an Arch
+  that boots a Unified Kernel Image (a `default_uki=` line in
+  `/etc/mkinitcpio.d/linux.preset`, the shape `archinstall` makes with
+  systemd-boot): spark writes one drop-in, `/etc/cmdline.d/zz-spark-quiet.conf`
+  (mkinitcpio embeds it after `/etc/kernel/cmdline`), marks the preset's
+  `--splash` line off with `#spark-quiet# ` (the Arch logo), sets
+  `timeout 0` in `/boot/loader/loader.conf`, runs `mkinitcpio -P` and
+  proves the new image carries the line. The running kernel keeps its
+  old line until you reboot; the `quiet` row says `boot quiet after a
+  reboot` until then. `spark quiet boot off` removes the drop-in,
+  unmarks the splash, puts `timeout 3` back and rebuilds. Hold Space at
+  boot for the menu. Without a UKI the kernel line is your boot loader's
+  and `spark quiet boot` refuses: put the same words (`quiet splash
+  loglevel=3 systemd.show_status=false udev.log_level=3
+  vt.global_cursor_default=0 fbcon=nodefer`) on the entry's `options`
+  line under `/boot/loader/entries/`, or in
+  `GRUB_CMDLINE_LINUX_DEFAULT` with `GRUB_TIMEOUT=0` and
   `GRUB_TIMEOUT_STYLE=hidden`, then `sudo grub-mkconfig -o
   /boot/grub/grub.cfg`.
 
@@ -604,7 +614,7 @@ setup asks is optional and has a verb; editing the file and running
 | `SITE_THEME` | `none`, or a palette from `themes/` or `~/.config/spark/themes/` -- `spark theme NAME`; painted only when you ask | `none` |
 | `SITE_FONT_FACE` / `SITE_FONT_SIZE` | Linux console: a face and size from `spark font list` (`Terminus` `16x32`); macOS: Terminal.app's font and points -- `spark font FACE SIZE`. Refused on WSL 2 and Arch (no console-setup) | unset / `16x32` (Linux), `Menlo-Regular` / `13` (macOS) |
 | `SITE_QUIET_LOGIN` | Linux: `yes` bares the login (motd, `/etc/issue`; originals kept) -- `spark quiet login on` | `no` |
-| `SITE_QUIET_BOOT` | Linux: `yes` makes the boot silent (one GRUB drop-in) -- `spark quiet boot on`; refused on WSL 2 and Arch | `no` |
+| `SITE_QUIET_BOOT` | Linux: `yes` makes the boot silent (one drop-in: GRUB's on Debian, `/etc/cmdline.d` on an Arch kernel image) -- `spark quiet boot on`; refused on WSL 2 and on an Arch without a UKI | `no` |
 | `SITE_QUIET_START` | `yes`: no banner, one-line `serve`, `forge` and bare `spark` -- `spark quiet start on` | `no` |
 | `SITE_QUIET_AUDIO` | `yes`: no sound from spark -- `spark quiet audio on` | `no` |
 

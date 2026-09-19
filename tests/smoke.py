@@ -2864,9 +2864,28 @@ def main():
             rc, out, _ = spark("font", "Terminus", "16x32", extra=arch)
             t.ok(rc == 2 and "no console-setup on Arch" in out and open(home + "/.config/spark/site.env").read() == before,
                  "Arch: spark font FACE SIZE refuses with the same line, exit 2, site.env untouched", "%d %s" % (rc, out))
+            # no UKI preset (the dir is pinned empty): the kernel line is the
+            # boot loader's, the verb refuses in one signed line
+            arch["SPARK_ETC_MKINITCPIO_D"] = home + "/no-mkinitcpio.d"
             rc, out, _ = spark("quiet", "boot", "on", extra=dict(arch, SITE_SHELL="on"))
-            t.ok(rc == 2 and out.strip() == "spark quiet boot -- no update-grub on Arch: GRUB is left alone in this version",
-                 "Arch: spark quiet boot on refuses: no update-grub", out)
+            t.ok(rc == 2 and out.strip() == "spark quiet boot -- no UKI on this Arch: the kernel line is the boot loader's "
+                 "(a loader entry's options line, or GRUB_CMDLINE_LINUX_DEFAULT then grub-mkconfig)",
+                 "Arch without a UKI: spark quiet boot on refuses: the kernel line is the boot loader's", out)
+            # a Unified Kernel Image (a preset's default_uki=): the verb is
+            # real -- the key is set (SPARK_NO_APPLY keeps bootstrap off)
+            os.makedirs(home + "/mkinitcpio.d", exist_ok=True)
+            with open(home + "/mkinitcpio.d/linux.preset", "w") as f:
+                f.write('ALL_kver="/boot/vmlinuz-linux"\nPRESETS=(\'default\')\ndefault_uki="/boot/EFI/Linux/arch-linux.efi"\n'
+                        'default_options="--splash /usr/share/systemd/bootctl/splash-arch.bmp"\n')
+            uki = dict(arch, SPARK_ETC_MKINITCPIO_D=home + "/mkinitcpio.d", SITE_SHELL="on")
+            rc, out, _ = spark("quiet", "boot", "on", extra=uki)
+            t.ok(rc == 0 and "SITE_QUIET_BOOT=yes" in open(home + "/.config/spark/site.env").read(),
+                 "Arch with a UKI: spark quiet boot on sets the key (the cmdline.d drop-in is spark's there)", "%d %s" % (rc, out))
+            rc, out, _ = spark("quiet", "boot", extra=uki)
+            t.ok(rc == 0 and out.strip() == "spark quiet boot -- on", "Arch with a UKI: spark quiet boot shows on", out)
+            rc, out, _ = spark("quiet", "boot", "off", extra=uki)
+            t.ok(rc == 0 and "SITE_QUIET_BOOT=no" in open(home + "/.config/spark/site.env").read(),
+                 "Arch with a UKI: spark quiet boot off sets the key back", "%d %s" % (rc, out))
             rc, out, _ = spark("quiet", "login", "on", extra=dict(arch, SITE_SHELL="on"))
             t.ok(rc == 0 and "SITE_QUIET_LOGIN=yes" in open(home + "/.config/spark/site.env").read(),
                  "Arch: spark quiet login on still sets the key (the motd is real there)", "%d %s" % (rc, out))

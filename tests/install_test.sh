@@ -327,8 +327,8 @@ fi
 
 # 10. Arch (the second family): ID=arch in os-release, pinned by
 #     SPARK_OS_RELEASE, and a pacman on PATH that answers -- the packages
-#     row asks it, the console and quiet-boot rows are honest skips, never
-#     sudo. The names come from distro/arch.env (both OSes, the uname stub);
+#     row asks it, the console row and, without a UKI, the quiet-boot row
+#     are honest skips, never sudo. The names come from distro/arch.env (both OSes, the uname stub);
 #     the dry-run is Linux's (the rows are).
 printf 'ID=arch\nPRETTY_NAME="Arch Linux"\n' > "$T/os-release-arch"
 printf 'ID=manjaro\nID_LIKE=arch\nPRETTY_NAME="Manjaro Linux"\n' > "$T/os-release-manjaro"
@@ -343,11 +343,33 @@ if [ "$(uname -s)" != Darwin ]; then
     mkdir -p "$T/arch"
     printf '#!/bin/sh\ncase $1 in -Qq) shift; printf "%%s\\n" "$@" ;; -Sp) exit 0 ;; *) exit 1 ;; esac\n' > "$T/arch/pacman"; chmod +x "$T/arch/pacman"
     printf 'SITE_FONT_FACE=Terminus\nSITE_FONT_SIZE=16x32\nSITE_QUIET_BOOT=yes\nSITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
-    out=$(SPARK_OS_RELEASE="$T/os-release-arch" PATH="$T/arch:$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Arch) failed: $out"
+    out=$(SPARK_OS_RELEASE="$T/os-release-arch" SPARK_ETC_MKINITCPIO_D="$T/no-mkinitcpio.d" PATH="$T/arch:$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Arch) failed: $out"
     printf '%s\n' "$out" | grep -qE '^ok +packages ' && ok "Arch: the packages row answers through pacman (everything installed)" || bad "Arch packages row: $(printf '%s\n' "$out" | grep -E ' packages ' | head -1)"
     printf '%s\n' "$out" | grep -qE '^skip +console +Arch' && ok "Arch: the console row skips (no console-setup)" || bad "Arch console row: $(printf '%s\n' "$out" | grep -E ' console ' | head -1)"
-    printf '%s\n' "$out" | grep -qE '^skip +quiet-boot +Arch' && ok "Arch: the quiet-boot row skips (no update-grub)" || bad "Arch quiet-boot row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
+    printf '%s\n' "$out" | grep -qE '^skip +quiet-boot +Arch without a UKI' && ok "Arch: the quiet-boot row skips (no UKI: the kernel line is the boot loader's)" || bad "Arch quiet-boot row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
     printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "Arch dry-run called sudo" || ok "Arch dry-run: no sudo"
+    # 10a. Arch with a Unified Kernel Image (a preset's `default_uki=`, the
+    #     splash on its `default_options`): the quiet-boot row is REAL --
+    #     a would row naming the cmdline.d drop-in, never sudo in a dry
+    #     run; with the drop-in holding the words and the splash marked
+    #     off, ok; with the key off and the drop-in still there, a would
+    #     row puts the loud back. Both files are seamed (SPARK_ETC_*).
+    mkdir -p "$T/mkinitcpio.d"
+    printf 'ALL_kver="/boot/vmlinuz-linux"\nPRESETS=(%s)\ndefault_uki="/boot/EFI/Linux/arch-linux.efi"\ndefault_options="--splash /usr/share/systemd/bootctl/splash-arch.bmp"\n' "'default'" > "$T/mkinitcpio.d/linux.preset"
+    ukienv() { env SPARK_OS_RELEASE="$T/os-release-arch" SPARK_ETC_MKINITCPIO_D="$T/mkinitcpio.d" SPARK_ETC_CMDLINE_DROPIN="$T/zz-spark-quiet.conf" PATH="$T/arch:$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1; }
+    out=$(ukienv) || bad "bootstrap --dry-run (Arch UKI) failed: $out"
+    printf '%s\n' "$out" | grep -qE '^would +quiet-boot +cmdline.d drop-in .*zz-spark-quiet.conf' && ok "Arch UKI: the quiet-boot row would write the cmdline.d drop-in, mark the splash, rebuild" || bad "Arch UKI quiet-boot row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
+    printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "Arch UKI dry-run called sudo" || ok "Arch UKI dry-run: no sudo"
+    printf '%s\n' 'quiet splash loglevel=3 systemd.show_status=false udev.log_level=3 vt.global_cursor_default=0 fbcon=nodefer' > "$T/zz-spark-quiet.conf"
+    printf 'ALL_kver="/boot/vmlinuz-linux"\nPRESETS=(%s)\ndefault_uki="/boot/EFI/Linux/arch-linux.efi"\n#spark-quiet# default_options="--splash /usr/share/systemd/bootctl/splash-arch.bmp"\n' "'default'" > "$T/mkinitcpio.d/linux.preset"
+    out=$(ukienv) || bad "bootstrap --dry-run (Arch UKI, quiet) failed: $out"
+    printf '%s\n' "$out" | grep -qE '^ok +quiet-boot +silent' && ok "Arch UKI: the drop-in with the words and the splash marked off is ok" || bad "Arch UKI quiet row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
+    printf 'SITE_FONT_FACE=Terminus\nSITE_FONT_SIZE=16x32\nSITE_QUIET_BOOT=no\nSITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
+    out=$(ukienv) || bad "bootstrap --dry-run (Arch UKI, off) failed: $out"
+    printf '%s\n' "$out" | grep -qE '^would +quiet-boot +show the boot menu again' && ok "Arch UKI, key off with the drop-in there: a would row puts the loud back (never sudo in a dry run)" || bad "Arch UKI off row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
+    printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "Arch UKI off dry-run called sudo" || ok "Arch UKI off dry-run: no sudo"
+    rm -f "$T/zz-spark-quiet.conf"
+    printf 'SITE_FONT_FACE=Terminus\nSITE_FONT_SIZE=16x32\nSITE_QUIET_BOOT=yes\nSITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
     # a pacman that knows nothing installed: the row would install, as root
     printf '#!/bin/sh\ncase $1 in -Sp) exit 0 ;; *) exit 1 ;; esac\n' > "$T/arch/pacman"; chmod +x "$T/arch/pacman"
     out=$(SPARK_OS_RELEASE="$T/os-release-arch" PATH="$T/arch:$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Arch, bare) failed: $out"

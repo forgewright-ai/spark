@@ -20,9 +20,66 @@ from . import (CONFIG_DIR, HOME, IS_MAC, MARK, REPO, SHARE_TOKEN, SHARE_URL, SIT
 WSL_NO_FONT = "no console on WSL 2: the font lives in Windows Terminal's settings"
 WSL_NO_BOOT = "no GRUB on WSL 2: Windows boots it"
 WSL_NO_BRAIN = "WSL 2 stops with its last window: not a brain (a Linux box is)"
-# Arch: Linux, minus console-setup and update-grub (contract 8 lines)
+# Arch: Linux, minus console-setup, and minus the kernel line unless a
+# Unified Kernel Image carries it (contract 8 lines)
 ARCH_NO_FONT = "no console-setup on Arch: the console font is /etc/vconsole.conf's (FONT=), left alone in this version"
-ARCH_NO_BOOT = "no update-grub on Arch: GRUB is left alone in this version"
+ARCH_NO_BOOT = ("no UKI on this Arch: the kernel line is the boot loader's "
+                "(a loader entry's options line, or GRUB_CMDLINE_LINUX_DEFAULT then grub-mkconfig)")
+# the quiet kernel line, the same seven words on every shape (bootstrap.sh
+# QUIET_WORDS is the sh twin): quiet+loglevel=3 silence the kernel, splash
+# hands Plymouth the boot when it is installed (inert otherwise),
+# systemd.show_status=false keeps the Started/Stopping lines off the
+# console at boot and shutdown, udev.log_level=3 quiets the initramfs,
+# vt.global_cursor_default=0 the early cursor, fbcon=nodefer the flicker
+QUIET_WORDS = "quiet splash loglevel=3 systemd.show_status=false udev.log_level=3 vt.global_cursor_default=0 fbcon=nodefer"
+# the one drop-in spark owns on an Arch UKI: mkinitcpio embeds every
+# /etc/cmdline.d/*.conf after /etc/kernel/cmdline (zz- sorts it last)
+CMDLINE_DROPIN = os.environ.get("SPARK_ETC_CMDLINE_DROPIN", "/etc/cmdline.d/zz-spark-quiet.conf")
+SPLASH_MARK = "#spark-quiet# "
+
+
+def mkinitcpio_d():
+    return os.environ.get("SPARK_ETC_MKINITCPIO_D", "/etc/mkinitcpio.d")
+
+
+def boot_shape():
+    """How this Linux gets its kernel line, root-free: `uki` when a
+    mkinitcpio preset builds a Unified Kernel Image (an uncommented
+    `<preset>_uki=` line: the cmdline is /etc/kernel/cmdline plus
+    /etc/cmdline.d/*.conf, the splash the preset's --splash), `grub` when
+    /etc/default/grub is here, else ''. SPARK_ETC_MKINITCPIO_D pins the
+    preset dir in tests."""
+    if IS_MAC or is_wsl():
+        return ""
+    try:
+        names = sorted(n for n in os.listdir(mkinitcpio_d()) if n.endswith(".preset"))
+    except OSError:
+        names = []
+    for name in names:
+        try:
+            with open(os.path.join(mkinitcpio_d(), name), encoding="utf-8", errors="replace") as f:
+                if re.search(r"^[a-z_]+_uki=", f.read(), re.M):
+                    return "uki"
+        except OSError:
+            continue
+    return "grub" if os.path.isfile("/etc/default/grub") else ""
+
+
+def splash_live():
+    """True while a mkinitcpio preset still embeds a splash (an unmarked
+    `*_options=... --splash` line): the logo is on the next image."""
+    try:
+        names = sorted(n for n in os.listdir(mkinitcpio_d()) if n.endswith(".preset"))
+    except OSError:
+        return False
+    for name in names:
+        try:
+            with open(os.path.join(mkinitcpio_d(), name), encoding="utf-8", errors="replace") as f:
+                if re.search(r"^[a-z_]+_options=.*--splash", f.read(), re.M):
+                    return True
+        except OSError:
+            continue
+    return False
 
 
 def no_console_font():
@@ -39,12 +96,13 @@ def no_console_font():
 
 def no_grub():
     """The one line that says why quiet boot is not spark's to set here
-    ('' when it is): WSL 2 has no GRUB, Arch no update-grub."""
+    ('' when it is): WSL 2 has no GRUB; Arch has no update-grub, so only
+    a Unified Kernel Image (a cmdline.d drop-in) is spark's there."""
     if IS_MAC:
         return ""
     if is_wsl():
         return WSL_NO_BOOT
-    if distro() == "arch":
+    if distro() == "arch" and boot_shape() != "uki":
         return ARCH_NO_BOOT
     return ""
 
@@ -301,7 +359,8 @@ QUIET_USAGE = """%s quiet -- what spark and the machine keep silent
   spark quiet start [on|off]    spark's own noise, both OSes: no login banner,
                                 one-line serve and forge, one-line bare spark
   spark quiet login [on|off]    Linux: no distro notice, no kernel line
-  spark quiet boot [on|off]     Linux: straight past GRUB's menu
+  spark quiet boot [on|off]     Linux: straight past the boot menu, a silent
+                                kernel line (GRUB, or an Arch kernel image)
   spark quiet audio [on|off]    both OSes: no sound from spark (the audio row
                                 says which player it would use)
 """ % MARK
