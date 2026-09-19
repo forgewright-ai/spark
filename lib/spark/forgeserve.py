@@ -10,10 +10,11 @@
 # is a named user (spark user add NAME): their personal token, verified
 # against its sha256 and unwrapping their data key, scopes chat, threads
 # and memory to their own sealed store -- the server holds the key in
-# memory only. Bearer auth is stateless; a cookie login lives in an
-# in-memory session, so a restart sends browsers back to the login (the
-# key cannot come back from a cookie). The v1.3 shared ember-token is
-# gone: the server no longer accepts it. No TLS: the trust model is your
+# memory only. Bearer auth is stateless; a cookie login, the admin's
+# too, is a session id minted at random and kept in memory, so a restart
+# sends every browser back to the login (the key cannot come back from a
+# cookie). The v1.3 shared ember-token is gone: the server no longer
+# accepts it. No TLS: the trust model is your
 # LAN -- see README "What leaves this machine".
 
 import fcntl
@@ -22,6 +23,7 @@ import hmac
 import json
 import os
 import re
+import secrets
 import select
 import signal
 import socket
@@ -38,7 +40,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from . import (BAR_CACHE, CHECK_JSON, CONFIG_DIR, EMBER_TOKEN_FILE, FORGE_LOCK, FORGE_LOG, FORGE_PID,
                FORGE_URL_FILE, HOME, IS_MAC, MARK, OFF_FLAG, REPO, SERVE_URL_FILE, SPARK_ENV,
-               config, forge_url, lan_ip, log_exc, own_hostnames, say, state_dir, wait_ready)
+               bind_check, config, forge_url, lan_ip, log_exc, own_hostnames, say, state_dir, wait_ready)
 from . import engine, mem_total_gb, qr, wire
 from . import version as _version
 
@@ -48,9 +50,11 @@ VERSION = _version.version()
 
 EX_CONFIG = engine.EX_CONFIG
 COOKIE = "spark_forge"
-COOKIE_SALT = b"spark-forge-session"
-COOKIE_AGE = 7776000            # 90 days
+COOKIE_AGE = 7776000            # 90 days: the cookie's life, and its session's
 FAILS_PER_MIN = 10              # wrong logins from one address before 429
+TOKEN_MIN = 32                  # a SPARK_FORGE_TOKEN from the environment shorter than this is refused
+V1_MAX_TOKENS = 8192            # the most completion tokens a /v1 request may ask the model for
+CONTROL = re.compile(r"[\x00-\x1f\x7f]")   # what a do/run command must not carry
 BODY_MAX = 1_000_000            # a request body larger than this is 413
 LOG_MAX = 1_000_000             # forge.log rotates here, like serve.log
 STATIC = {"index.html": "text/html; charset=utf-8", "spark.css": "text/css; charset=utf-8",
@@ -122,8 +126,23 @@ def same_token(a, b):
     return hmac.compare_digest(a.encode("utf-8"), b.encode("utf-8"))
 
 
-def cookie_value(token):
-    return hmac.new(token.encode(), COOKIE_SALT, hashlib.sha256).hexdigest()
+def set_cookie(sid):
+    """The Set-Cookie value for a session id: HttpOnly, same-site, the
+    whole page, 90 days."""
+    return "%s=%s; HttpOnly; SameSite=Strict; Path=/; Max-Age=%d" % (COOKIE, sid, COOKIE_AGE)
+
+
+def cap_tokens(body):
+    """The forwarded request asks the model for at most V1_MAX_TOKENS:
+    max_tokens is set when absent, not a positive int (-1 is 'no limit'
+    upstream) or larger; n_predict and max_completion_tokens, the other
+    spellings llama-server reads, are capped the same when present."""
+    for k in ("max_tokens", "n_predict", "max_completion_tokens"):
+        if k == "max_tokens" or k in body:
+            v = body.get(k)
+            if isinstance(v, bool) or not isinstance(v, int) or not 0 < v <= V1_MAX_TOKENS:
+                body[k] = V1_MAX_TOKENS
+    return body
 
 
 def _hash_current(name, h):
@@ -318,7 +337,7 @@ class ForgeServer(ThreadingHTTPServer):
         self.run_lock = threading.Lock()       # one verb at a time
         self._admin, self._admin_t = "", None
         self._user_keys = {}                    # sha256(token) -> (name, dk), unlocked once
-        self.sessions = {}                      # cookie -> (name, dk, token hash); memory only
+        self.sessions = {}                      # session id -> (role, name, dk, token hash, expiry); memory only
         self._auth_lock = threading.Lock()
         self._models = (0.0, [])               # (epoch, [(alias, stem, loaded)])
         self._fails = {}                        # ip -> [epoch of wrong login]
@@ -355,8 +374,8 @@ class ForgeServer(ThreadingHTTPServer):
 
     def admin_token(self):
         """The forge-token, re-read when its file changes: `spark forge
-        token --new` takes effect without a restart, and every cookie
-        minted from the old token dies with it."""
+        token --new` takes effect without a restart, and every session
+        opened with the old token dies with it."""
         p = self.cfg.forge_token_file
         try:
             mt = os.stat(p).st_mtime
@@ -388,19 +407,46 @@ class ForgeServer(ThreadingHTTPServer):
             self._user_keys[h] = (name, dk)
         return (name, dk)
 
-    def session_user(self, cookie):
-        """(name, dk) of a logged-in browser, or None -- sessions live in
-        memory only: a restart sends every browser back to the login."""
-        with self._auth_lock:
-            s = self.sessions.get(cookie)
-        if s and _hash_current(s[0], s[2]):
-            return s[0], s[1]
-        return None
-
-    def remember_session(self, token, name, dk):
+    def session_of(self, sid):
+        """(role, name, dk) of a logged-in browser, or None. A session is
+        a random id minted at login, admin and user alike, in memory
+        only -- a restart sends every browser back to the login -- and
+        it dies with its token: a rotation (spark forge token --new,
+        spark user token --new) or a removal ends it, and so does its
+        expiry."""
         from . import vault
         with self._auth_lock:
-            self.sessions[cookie_value(token)] = (name, dk, vault.token_hash(token))
+            s = self.sessions.get(sid)
+        if not s:
+            return None
+        role, name, dk, h, expiry = s
+        if time.time() > expiry:
+            self.drop_session(sid)
+            return None
+        if role == "admin":
+            admin = self.admin_token()
+            if not admin or not hmac.compare_digest(h, vault.token_hash(admin)):
+                return None
+        elif not _hash_current(name, h):
+            return None
+        return role, name, dk
+
+    def new_session(self, role, token, name, dk):
+        """Mint a session for a login: the id is random, never derived
+        from the token, so no two logins share one and none can be
+        computed from a captured token. Expired ones are swept here."""
+        from . import vault
+        sid = secrets.token_urlsafe(32)
+        now = time.time()
+        with self._auth_lock:
+            for k in [k for k, v in self.sessions.items() if v[4] < now]:
+                del self.sessions[k]
+            self.sessions[sid] = (role, name, dk, vault.token_hash(token), now + COOKIE_AGE)
+        return sid
+
+    def drop_session(self, sid):
+        with self._auth_lock:
+            self.sessions.pop(sid, None)
 
     def models_list(self, url):
         """[(alias, stem, loaded)] of the upstream, best-effort: [] when
@@ -475,7 +521,13 @@ class Handler(BaseHTTPRequestHandler):
         self._json(code, {"error": {"kind": kind, "hint": hint}}, extra)
 
     def _body(self):
-        """The JSON body, or None (and a 400/413 already sent)."""
+        """The JSON body, or None (and a 400/413/415 already sent). Only
+        `Content-Type: application/json` is read: a form or text/plain
+        body is what a foreign page can post without a preflight."""
+        ctype = (self.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+        if ctype != "application/json":
+            self._error(415, "bad", "the body must be sent as Content-Type: application/json")
+            return None
         try:
             n = int(self.headers.get("Content-Length") or 0)
         except ValueError:
@@ -511,16 +563,20 @@ class Handler(BaseHTTPRequestHandler):
 
     def _auth(self):
         """(role, user name, data key) for this request's bearer or
-        cookie: the forge-token is admin; a personal token names its
-        user and unwraps their key. A wrong bearer costs a second and is
-        counted; an unknown cookie is only a 401 -- after a restart every
-        browser holds one, and punishing that would lock the door on the
-        way back to the login."""
+        cookie -- or None when a 429 was sent. The forge-token is admin;
+        a personal token names its user and unwraps their key; a cookie
+        is a session id, looked up and nothing more. A wrong bearer
+        costs a second and is counted, and a locked-out address is
+        refused before its bearer is compared; an unknown cookie is only
+        a 401 -- after a restart every browser holds one, and punishing
+        that would lock the door on the way back to the login."""
         srv = self.server
-        admin = srv.admin_token()
         auth = self.headers.get("Authorization") or ""
         if auth.startswith("Bearer "):
+            if self._locked():
+                return None
             given = auth[7:].strip()
+            admin = srv.admin_token()
             if admin and same_token(given, admin):
                 return "admin", "", None
             hit = srv.user_by_bearer(given)
@@ -530,11 +586,9 @@ class Handler(BaseHTTPRequestHandler):
             return "", "", None
         c = self._cookie()
         if c:
-            if admin and same_token(c, cookie_value(admin)):
-                return "admin", "", None
-            s = srv.session_user(c)
+            s = srv.session_of(c)
             if s:
-                return "user", s[0], s[1]
+                return s
             log("%s unknown cookie" % self._ip())
         return "", "", None
 
@@ -542,6 +596,17 @@ class Handler(BaseHTTPRequestHandler):
         log("%s wrong %s" % (self._ip(), what))
         self.server.failed(self._ip())
         punish_sleep()
+
+    def _locked(self):
+        """True, a 429 sent, when this address has FAILS_PER_MIN wrong
+        tokens in the last minute: a login and a bearer wait it out
+        alike (a cookie is never a guess, so it is not gated)."""
+        ip = self._ip()
+        if not self.server.locked_out(ip):
+            return False
+        log("%s locked out" % ip)
+        self._error(429, "locked", "too many wrong tokens from %s; wait a minute" % ip, {"Retry-After": "60"})
+        return True
 
     def _host_ok(self):
         host = (self.headers.get("Host") or "").strip().lower()
@@ -604,8 +669,8 @@ class Handler(BaseHTTPRequestHandler):
         # no auth
         if method == "GET" and path == "/api/health":
             return self.api_health()
-        if method == "POST" and path == "/api/login":
-            return self.api_login()
+        if method == "POST" and path == "/api/login":   # no auth, but the write gate
+            return self.api_login() if self._post_ok() else None
         if method == "GET" and path in ("/", "/login"):
             return self.static("index.html")
         if method == "GET" and path == "/manifest.webmanifest":
@@ -617,7 +682,10 @@ class Handler(BaseHTTPRequestHandler):
         if not path.startswith(("/api/", "/v1/")):
             return self._error(404, "missing", "no such page")
         # bearer or cookie; whichever token matched decides role and user
-        self.role, self.user, self.dk = self._auth()
+        who = self._auth()
+        if who is None:                       # a locked-out address: 429 sent
+            return None
+        self.role, self.user, self.dk = who
         if not self.role:
             return self._error(401, "auth", "log in with your token (spark user add NAME mints one on %s; the admin's is spark forge --print-url)" % srv.cfg.name)
         admin_only = path in (ADMIN_GET if method == "GET" else ADMIN_POST if method == "POST" else ())
@@ -637,6 +705,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self.api_thread(path[13:])
             return self._error(404, "missing", "no such route")
         if method == "POST" and path == "/v1/chat/completions":
+            # the bearer only: a browser's cookie must not open the model
+            # to a page on another origin (no X-Spark is asked for here)
+            if not (self.headers.get("Authorization") or "").startswith("Bearer "):
+                return self._error(401, "auth", "/v1/chat/completions takes a bearer token, not a cookie")
             body = self._body()
             if body is not None:
                 return self.v1_chat(body)
@@ -677,33 +749,35 @@ class Handler(BaseHTTPRequestHandler):
                          "roles": self.server.role_models(url if st == "ok" else "")})
 
     def api_login(self):
+        """`{token}` in, a session out: the id is minted at random for
+        this login, admin and user alike, and set as the cookie -- never
+        derived from the token. The write gate ran before this (_route),
+        so a page on another origin cannot log a browser in."""
         ip = self._ip()
-        if self.server.locked_out(ip):
-            log("%s login locked out" % ip)
-            return self._error(429, "locked", "too many wrong tokens from %s; wait a minute" % ip, {"Retry-After": "60"})
+        if self._locked():
+            return None
         body = self._body()
         if body is None:
             return None
         admin = self.server.admin_token()
         given = body.get("token")
-        tok, role, uname = "", "", ""
+        role, uname, dk = "", "", None
         if isinstance(given, str) and given:
             if admin and same_token(given, admin):
-                tok, role = given, "admin"
+                role = "admin"
             else:
                 hit = self.server.user_by_bearer(given)
                 if hit:
-                    tok, role, uname = given, "user", hit[0]
-                    self.server.remember_session(given, hit[0], hit[1])
-        if not tok:
+                    role, uname, dk = "user", hit[0], hit[1]
+        if not role:
             log("%s login failed" % ip)
             self.server.failed(ip)
             punish_sleep()
             return self._error(401, "auth", "wrong token")
+        sid = self.server.new_session(role, given, uname, dk)
         log("%s login ok %s%s" % (ip, role, " " + uname if uname else ""))
-        cookie = "%s=%s; HttpOnly; SameSite=Strict; Path=/; Max-Age=%d" % (COOKIE, cookie_value(tok), COOKIE_AGE)
         return self._json(200, {"ok": True, "name": self.server.cfg.name, "role": role, "user": uname},
-                          {"Set-Cookie": cookie})
+                          {"Set-Cookie": set_cookie(sid)})
 
     def static(self, name):
         if name not in STATIC:
@@ -717,7 +791,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._error(404, "missing", "the page is not installed here")
         etag = '"%x-%x"' % (st.st_mtime_ns, st.st_size)
         h = {"Content-Security-Policy": "default-src 'self'", "X-Frame-Options": "DENY",
-             "Referrer-Policy": "no-referrer", "ETag": etag, "Cache-Control": "no-cache"}
+             "Referrer-Policy": "no-referrer", "X-Content-Type-Options": "nosniff",
+             "ETag": etag, "Cache-Control": "no-cache"}
         if self.headers.get("If-None-Match") == etag:
             self._start(304, STATIC[name], h)
             self._status = 304
@@ -782,6 +857,7 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 msgs.insert(0, {"role": "system", "content": forge.system(cfg, "answer", "sh", mem)})
         body["messages"] = msgs
+        cap_tokens(body)
         stream = bool(body.get("stream"))
         try:
             up = self.server.upstream.require()
@@ -994,8 +1070,7 @@ class Handler(BaseHTTPRequestHandler):
         # cookie until now
         c = self._cookie()
         if c:
-            with self.server._auth_lock:
-                self.server.sessions.pop(c, None)
+            self.server.drop_session(c)
         self._json(200, {"ok": True}, {"Set-Cookie": "%s=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0" % COOKIE})
 
     # ---- threads and chat ----
@@ -1079,10 +1154,9 @@ class Handler(BaseHTTPRequestHandler):
         if self.role != "user":
             return self._error(403, "role", "the admin rotates with spark forge token --new")
         new = users.rewrap(self.user, self.dk)
-        self.server.remember_session(new, self.user, self.dk)
+        sid = self.server.new_session("user", new, self.user, self.dk)
         log("%s user token rotated %s" % (self._ip(), self.user))
-        cookie = "%s=%s; HttpOnly; SameSite=Strict; Path=/; Max-Age=%d" % (COOKIE, cookie_value(new), COOKIE_AGE)
-        return self._json(200, {"token": new}, {"Set-Cookie": cookie})
+        return self._json(200, {"token": new}, {"Set-Cookie": set_cookie(sid)})
 
     def _thread_of(self, body):
         """The thread a body names, checked against the requester's own
@@ -1185,8 +1259,9 @@ class Handler(BaseHTTPRequestHandler):
         with self.server._auth_lock:
             for _h, (n, dk) in self.server._user_keys.items():
                 keys[n] = dk
-            for _c, (n, dk, _th) in self.server.sessions.items():
-                keys[n] = dk
+            for _c, (role, n, dk, _th, _exp) in self.server.sessions.items():
+                if role == "user":
+                    keys[n] = dk
         forge.prune_stores(cfg, keys)
         return None
 
@@ -1259,16 +1334,25 @@ class Handler(BaseHTTPRequestHandler):
                                 "unchecked": do.conclusion_check(thread, reply)})
 
     def api_do_run(self, body):
-        """One step the user clicked, run as typed; the command is logged
-        (truncated), never re-judged here -- the page asked twice already."""
-        from . import do
+        """One step the user clicked, run as typed. The page asked twice
+        for a dangerous one; the server holds it to that: a command
+        persona.is_dangerous flags runs only with confirmed: true, and a
+        control character (a second line, an escape) is refused. The log
+        carries a sha256 prefix and the truncated text, then the rc."""
+        from . import do, persona
         command, cwd = body.get("command"), body.get("cwd") or ""
         if not isinstance(command, str) or not command.strip():
             return self._error(400, "bad", "command is empty")
+        if CONTROL.search(command):
+            return self._error(400, "bad", "a command is one line of printable text")
         if not isinstance(cwd, str):
             return self._error(400, "bad", "cwd must be a string")
-        log("%s do/run %s" % (self._ip(), " ".join(command.split())[:200]))
+        if persona.is_dangerous(command) and body.get("confirmed") is not True:
+            return self._error(400, "confirm", "a dangerous command runs only with confirmed: true")
+        digest = hashlib.sha256(command.encode("utf-8")).hexdigest()[:12]
+        log("%s do/run %s %s" % (self._ip(), digest, " ".join(command.split())[:200]))
         rc, tail = do.run(command, _shell(), cwd or HOME, echo=False)
+        log("%s do/run %s rc %d" % (self._ip(), digest, rc))
         return self._json(200, {"rc": rc, "tail": tail})
 
     # ---- the verb runner ----
@@ -1317,6 +1401,30 @@ def _shell():
 def _die(msg, code=1):
     print("spark forge: " + msg, file=sys.stderr, flush=True)
     return code
+
+
+def _env_token_ok():
+    """SPARK_FORGE_TOKEN from the environment stands in for the admin
+    token file; one shorter than TOKEN_MIN characters is refused with
+    the signed line, exit 2, before anything binds."""
+    tok = os.environ.get("SPARK_FORGE_TOKEN", "")
+    if tok and len(tok) < TOKEN_MIN:
+        say("%s forge -- SPARK_FORGE_TOKEN is shorter than %d characters: refused" % (MARK, TOKEN_MIN))
+        return False
+    return True
+
+
+def _bind_refused(host):
+    """The refusal for an address the forge must never bind, else "":
+    the unspecified address in any spelling. An address the whole
+    Internet can route to is bound, with a warning said and logged."""
+    verdict, why = bind_check(host)
+    if verdict == "refuse":
+        return why + " -- bind the one address the LAN should reach (--host ADDR)"
+    if verdict:
+        say("%s forge -- warning: %s" % (MARK, why))
+        log("warning: %s" % why)
+    return ""
 
 
 def _wait_lan_ip(foreground):
@@ -1393,12 +1501,15 @@ def forget():
 
 
 def cmd_foreground(args):
+    if not _env_token_ok():
+        return 2
     cfg = config.load()
     host, port = _host_port(cfg, args, True)
     if not host:
         return _die("no LAN address to bind -- set SPARK_FORGE_HOST", EX_CONFIG)
-    if host == "0.0.0.0":
-        return _die("0.0.0.0 is every interface -- bind the one address the LAN should reach (--host ADDR)", EX_CONFIG)
+    why = _bind_refused(host)
+    if why:
+        return _die(why, EX_CONFIG)
     if not (0 < port < 65536):
         return _die("bad port", EX_CONFIG)
     why = _misconfigured(cfg)
@@ -1442,12 +1553,15 @@ def cmd_foreground(args):
 
 
 def cmd_start(args):
+    if not _env_token_ok():
+        return 2
     cfg = config.load()
     host, port = _host_port(cfg, args, False)
     if not host:
         return _die("no LAN address to bind -- set SPARK_FORGE_HOST", EX_CONFIG)
-    if host == "0.0.0.0":
-        return _die("0.0.0.0 is every interface -- bind the one address the LAN should reach (--host ADDR)", EX_CONFIG)
+    why = _bind_refused(host)
+    if why:
+        return _die(why, EX_CONFIG)
     why = _misconfigured(cfg)
     if why:
         return _die(why + " -- ./bootstrap.sh, or spark serve", EX_CONFIG)

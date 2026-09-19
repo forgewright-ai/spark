@@ -348,6 +348,30 @@ def lan_ip():
         return ""
 
 
+def bind_check(host):
+    """What binding `host` would mean: ("refuse", why) for the unspecified
+    address in any spelling, ("warn", why) for an address neither private
+    nor loopback, ("", "") otherwise. IPv4 is read the way the socket
+    layer reads it -- inet_aton, so "0", "0.0" and "00.0.0.0" are 0.0.0.0
+    -- then judged with ipaddress; a name that is no address at all is
+    left alone (a hostname resolves elsewhere)."""
+    import ipaddress
+    import socket
+    try:
+        ip = ipaddress.ip_address(socket.inet_ntoa(socket.inet_aton(host)))
+    except (OSError, ValueError):
+        try:
+            ip = ipaddress.ip_address(host)
+        except ValueError:
+            return "", ""
+    if ip.is_unspecified:
+        return "refuse", ("%s is every interface" % host if host == str(ip)
+                          else "%s is %s, every interface" % (host, ip))
+    if not (ip.is_private or ip.is_loopback):
+        return "warn", "%s is not a LAN address: anyone who can route to it can reach spark" % host
+    return "", ""
+
+
 def own_hostnames():
     """Names this machine answers to: hostname, short hostname, and the
     mDNS name (macOS: scutil's LocalHostName). Never getfqdn, which can

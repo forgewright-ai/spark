@@ -405,7 +405,12 @@ may change freely.
    (show 0, set 2) and `spark quiet boot -- no update-grub on Arch: GRUB
    is left alone in this version` (exit 2).
 9. The FORGE's HTTP API (`lib/spark/forgeserve.py`, on
-   `SPARK_FORGE_HOST:SPARK_FORGE_PORT`, one LAN address, never `0.0.0.0`).
+   `SPARK_FORGE_HOST:SPARK_FORGE_PORT`, one LAN address, never the
+   unspecified address in any spelling: `bind_check` in
+   `lib/spark/__init__.py` reads IPv4 the way the socket layer does, so
+   `0`, `0.0` and `00.0.0.0` are `0.0.0.0` and refused like `::`, and an
+   address neither private nor loopback is bound with a warning said
+   and logged; `spark serve` shares it).
    `GET /api/health` answers without a token: `{status, forge: true, name,
    version, model, upstream, models, roles}` (`models` = `{role: loaded|
    unloaded}`, `roles` = `{role: model file stem}` per served role) -- the client's FORGE detector and the
@@ -430,16 +435,23 @@ may change freely.
    client never mints (`spark setup --model none` skips the account
    row; `forge.local_store` keeps nothing on a client with no login),
    it logs in with a token minted here, and the `peer` row there says
-   whether this FORGE accepts it. `POST /api/login` takes `{token}`, sets the
-   cookie derived from it and answers `{ok, name, role, user}` (1 s and
-   401 when wrong; 429 after 10 wrong per minute from one address); a
-   user cookie lives in an in-memory session, so a server restart sends
-   browsers back to the login (the key cannot come back from a cookie),
-   while a bearer is stateless. A wrong bearer costs 1 s and is
-   counted; an unknown cookie is only a 401 (after a restart every
-   browser holds one). The v1.3 shared ember-token is not accepted.
-   Every other `/api/*` and `/v1/*` route needs the cookie or a token
-   as a bearer, else 401. Admin-only: `GET` `/api/serve`, `/api/gpu`,
+   whether this FORGE accepts it. `POST /api/login` takes `{token}`,
+   goes through the write gate like every other POST (below: a page on
+   another origin cannot log a browser in) and answers `{ok, name, role,
+   user}`, setting the cookie: a session id minted at random for that
+   login, the admin's included, never derived from the token -- two
+   logins hold two cookies, and a captured token yields none. Sessions
+   live in memory only: one expires with its cookie (90 days), dies on
+   logout (`POST /api/logout` drops the session, not only the cookie)
+   and with its token's rotation or removal, and is gone on a restart,
+   which sends every browser, the admin's too, back to the login. A
+   wrong login costs 1 s and is counted (401; 429 after 10 wrong per
+   minute from one address, and while locked out that address gets 429
+   on a bearer as well, before it is compared); a wrong bearer costs
+   1 s and is counted likewise; an unknown cookie is only a 401 (after
+   a restart every browser holds one). The v1.3 shared ember-token is
+   not accepted. Every other `/api/*` and `/v1/*` route needs the
+   cookie or a token as a bearer, else 401. Admin-only: `GET` `/api/serve`, `/api/gpu`,
    `/api/bench`, `/api/config`, `/api/log`, `/api/users` and `POST`
    `/api/run`, `/api/do/propose`, `/api/do/run`, `/api/check/refresh`,
    `/api/soul` (the soul is the box's one identity) -- a user there
@@ -460,11 +472,18 @@ may change freely.
    body or a token: the whole of admin visibility. `POST
    /api/user/token` (user) rotates the requester's own token, returned
    once, never stored; `DELETE /api/threads` clears the requester's own
-   store and answers `{cleared}`. Every `POST` and `DELETE` under `/api/` except `/api/login`
-   also needs `X-Spark: 1`, a `Host` this machine
-   answers to and, when sent, an `Origin` matching it (400/403); a
-   `POST` there needs a JSON object body besides, a `DELETE` carries
-   no body; `POST /v1/chat/completions` needs only the bearer or cookie.
+   store and answers `{cleared}`. Every `POST` and `DELETE` under
+   `/api/`, `/api/login` included, also needs `X-Spark: 1`, a `Host`
+   this machine answers to and, when sent, an `Origin` matching it
+   (400/403); a `POST` there needs a JSON object body sent as
+   `Content-Type: application/json` besides (415 otherwise), a `DELETE`
+   carries no body; `POST /v1/chat/completions` takes the bearer only
+   -- a cookie does not open it (401), so a browser's login cannot be
+   ridden into the model from another origin -- and the forwarded body
+   asks for at most `forgeserve.V1_MAX_TOKENS` (8192) completion
+   tokens: `max_tokens` is set when absent, not a positive integer or
+   larger, `n_predict` and `max_completion_tokens` capped the same when
+   present.
    `POST /api/threads/<id>/append` (user-or-admin) puts one message
    onto the requester's OWN thread -- `{role: user|assistant, text}`,
    `mode` and `kind` as short optional fields -- how a client's `??`
@@ -474,7 +493,14 @@ may change freely.
    `POST /api/do/propose` answers `{thread, reply, ms, driver,
    unchecked}` -- `driver` the ember role's model stem, `unchecked` the
    done hint's numbers no user message of the thread backs (`[]`
-   otherwise).
+   otherwise). `POST /api/do/run` (admin) takes `{command, cwd?,
+   confirmed?}`, runs the command as typed through the login shell and
+   answers `{rc, tail}`; a control character in it is refused (400: one
+   line of printable text), and a command `persona.is_dangerous` flags
+   runs only with `confirmed: true` (400 `{error: {kind: confirm}}`
+   otherwise -- the page sends it after its second click); the log
+   line carries a sha256 prefix of the command beside its truncated
+   text, and a second line the rc.
    Streams are SSE: `/api/chat` (mode `chat|answer`; `talk` and `ask` are
    the old names for `chat` and `answer`, accepted for one version, and
    records write the new ones) emits `queued` (when the model is busy),
@@ -494,8 +520,10 @@ may change freely.
    sealed memory, the box account's for the admin) is injected into the
    system message only for an ember request, a `spark` request passing
    through untouched; JSON or SSE bytes come back as they are. Every `/api/*` answer is `Cache-Control:
-   no-store`; the page is served with `Content-Security-Policy:
-   default-src 'self'` and depends on nothing else. Errors are
+   no-store`; the page and its files are served with
+   `Content-Security-Policy: default-src 'self'`, `X-Frame-Options:
+   DENY`, `Referrer-Policy: no-referrer` and `X-Content-Type-Options:
+   nosniff`, and depend on nothing else. Errors are
    `{error: {kind, hint}}`.
 10. `spark edit` is the editor's protocol: the text on stdin; `--at N`
     prints what goes at byte offset N (a completion: 4 kB before the
