@@ -30,7 +30,7 @@ build_home() {
     export HOME="$T/$1" XDG_CONFIG_HOME="$T/$1/.config" XDG_STATE_HOME="$T/$1/.local/state" XDG_DATA_HOME="$T/$1/.local/share"
     mkdir -p "$HOME/.config/spark/themes" "$HOME/.local/state/spark/users/ana" "$HOME/.local/share/spark/engine/llama.cpp-b1" \
              "$HOME/.local/share/spark/engine/llama.cpp-b0" "$HOME/.local/share/spark/models" "$HOME/.local/bin" \
-             "$HOME/.local/share/fonts/JetBrainsMonoNerdFont" "$HOME/.terminfo/74" "$HOME/.config/micro"
+             "$HOME/.local/share/fonts/SomeEmulatorFace" "$HOME/.terminfo/74" "$HOME/.config/micro"
     # a real clone at the default place, carrying the WORKING tree (an
     # uncommitted verb must be testable), committed there so it is clean
     git clone -q "$REPO" "$HOME/.spark"
@@ -62,7 +62,7 @@ build_home() {
     printf '\033]P0282828\n' > "$HOME/.config/spark/console-colors"; printf '40\n40\n40\n' > "$HOME/.config/spark/console-colors.rgb"
     printf 'x' > "$HOME/.local/share/spark/engine/llama.cpp-b1/llama-server"; printf 'x' > "$HOME/.local/share/spark/engine/llama.cpp-b0/old"
     printf 'x' > "$HOME/.local/share/spark/models/x.gguf"; printf 'x' > "$HOME/.local/share/spark/models/y.gguf.part"
-    printf 'x' > "$HOME/.local/share/fonts/JetBrainsMonoNerdFont/a.ttf"; printf 'x' > "$HOME/.terminfo/74/tmux-256color"
+    printf 'x' > "$HOME/.local/share/fonts/SomeEmulatorFace/a.ttf"; printf 'x' > "$HOME/.terminfo/74/tmux-256color"
 }
 snapshot() { (cd "$HOME" && find . -not -path './.spark/*' -not -path './.spark' -not -path './Library/*' -not -path './Library' | sort); }
 spark() { python3 "$HOME/.spark/bin/spark" "$@"; }
@@ -111,7 +111,7 @@ grep -q tabsize "$HOME/.config/micro/settings.json" && grep -q colorscheme "$HOM
 [ ! -e "$HOME/.local/bin/spark" ] && [ ! -e "$HOME/.local/bin/explain" ] && ok "~/.local/bin/spark and explain are gone" || bad "bin links survived"
 [ ! -e "$HOME/.local/share/spark" ] && ok "the data dir (engine, models, .part) is gone" || bad "data dir survived: $(ls -R "$HOME/.local/share/spark")"
 [ -e "$HOME/.terminfo/74/tmux-256color" ] && ok "the terminfo entry stays (spark-shell's)" || bad "terminfo removed"
-[ -e "$HOME/.local/share/fonts/JetBrainsMonoNerdFont" ] && ok "the Nerd Font dir stays (spark-shell's)" || bad "the font dir removed"
+[ -e "$HOME/.local/share/fonts/SomeEmulatorFace" ] && ok "a user's font dir stays (never spark's to delete)" || bad "the font dir removed"
 [ ! -e "$HOME/.spark" ] && ok "the default clone is gone" || bad "~/.spark survived"
 state=$(cd "$HOME/.local/state/spark" && find . | sort | tr '\n' ' ')
 [ "$state" = ". ./account ./users ./users/ana ./users/ana/token.hash " ] && ok "state keeps only the sealed users and the account" || bad "state left: $state"

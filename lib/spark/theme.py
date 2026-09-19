@@ -49,7 +49,7 @@ def ns_font(name, size):
     ])
 
 
-def profile_dict(name, pal, font_name="JetBrainsMonoNFM-Regular", font_size=13.0):
+def profile_dict(name, pal, font_name="Menlo-Regular", font_size=13.0):
     keys = ["Black", "Red", "Green", "Yellow", "Blue", "Magenta", "Cyan", "White",
             "BrightBlack", "BrightRed", "BrightGreen", "BrightYellow", "BrightBlue",
             "BrightMagenta", "BrightCyan", "BrightWhite"]

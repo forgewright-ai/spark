@@ -2501,7 +2501,8 @@ def main():
         t.ok(rc == 0 and out.startswith("spark check ") and "memory" in out,
              "spark check piped with PAGER=/bin/false: the report prints", out)
         rc, out, _ = spark("bar", "line", extra=off)
-        t.ok(rc == 0 and out.strip(), "spark bar line answers (the line is core)", out)
+        t.ok(rc == 0 and out.strip() and "#[fg=#" not in out,
+             "spark bar line answers (the line is core), never a hex accent (a slot or default)", out)
         rc, out, _ = spark("bar", "on", extra=off)
         t.ok(rc == 2 and out.strip() == "spark bar on -- the tmux status line lives at github.com/forgewright-ai/spark-shell (spark-shell bar)",
              "spark bar on: the pointer (the tmux wiring moved), exit 2", out)
@@ -2540,9 +2541,8 @@ def main():
                 rc, out, _ = spark("font", "Menlo-Regular", "99", extra=dict(off, SPARK_NO_APPLY="1"))
                 t.ok(rc == 2 and "6 to 72" in out, "macOS: a size outside 6..72 points is refused", out)
                 rc, out, _ = spark("font", "list", extra=off)
-                nerd = _site.mac_font_installed("JetBrainsMonoNFM-Regular")
-                t.ok("Menlo-Regular" in out and (not nerd or "JetBrainsMonoNFM-Regular" in out),
-                     "macOS: spark font list names the faces every Mac ships, and the Nerd Font when installed", out)
+                t.ok("Menlo-Regular" in out and "the default" in out and "Nerd" not in out,
+                     "macOS: spark font list names the faces every Mac ships, Menlo-Regular as the default", out)
             else:
                 print("  skip macOS font guard: Spotlight indexing is off here")
         # quiet audio: both OSes, core, the key is the behaviour

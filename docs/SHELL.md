@@ -1,8 +1,8 @@
 # The shell layer
 
 spark's own shell for a machine that is an AI box -- tmux, starship,
-fzf, zoxide, eza, bat, btop, the JetBrainsMono Nerd Font, one palette
-on every surface -- lives in its own repository now:
+fzf, zoxide, eza, bat, btop, one plain look on every surface -- lives in
+its own repository now:
 
     https://github.com/forgewright-ai/spark-shell
 

@@ -1,7 +1,7 @@
 #!/bin/sh
 # spark tests/install_test.sh -- install.sh against a throwaway HOME.
 # Proves contract 2: the row shapes, link/render/back-up semantics,
-# idempotence, and that every theme and prompt style renders cleanly.
+# idempotence, and that a bad theme name is refused.
 set -eu
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 T=$(mktemp -d)
@@ -100,8 +100,7 @@ printf 'SITE_THEME=none\n' > "$HOME/.config/spark/site.env"
 
 # 7. bootstrap --dry-run with SITE_HEADLESS=yes announces the headless rows
 #    (contract 1: would/skip, a count line, never sudo -- a sudo on PATH that
-#    shouts proves it); SITE_HEADLESS=no leaves sleep alone; and the shell
-#    layer: SITE_SHELL unset skips every shell row, on announces them
+#    shouts proves it); SITE_HEADLESS=no leaves sleep alone
 mkdir -p "$T/bin"; printf '#!/bin/sh\necho "SUDO CALLED: $*" >&2; exit 97\n' > "$T/bin/sudo"; chmod +x "$T/bin/sudo"
 printf 'SITE_HEADLESS=yes\nSITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
 out=$(PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (headless) failed: $(printf '%s\n' "$out" | tail -3)"

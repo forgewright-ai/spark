@@ -238,8 +238,8 @@ def _console_font_row(ctx):
 @row("SOFTWARE", fixture=False, reason="reads the real /etc/default/console-setup (Linux) / the installed faces (macOS)")
 def row_font(ctx):
     """The console font choice (SITE_FONT_FACE, Linux) and the macOS
-    Terminal face -- the machine's own; an emulator font (a Nerd Font)
-    is spark-shell's business. WSL 2 has no console: the font is Windows
+    Terminal face -- the machine's own; a terminal emulator's font is
+    spark-shell's business. WSL 2 has no console: the font is Windows
     Terminal's, the row says so and stops."""
     from . import site
     why = site.no_console_font()
@@ -1658,7 +1658,7 @@ def make_fixture(root, good, stub_url="", real_spark=False):
     with open(os.path.join(home, ".config", "spark", "site.env"), "w") as f:
         f.write("SITE_PEER_AI_URL=%s\n" % (stub_url if good else "http://127.0.0.1:9"))
         f.write("SITE_THEME=fixture\n")     # the theme row: applied (good) or stale (bad)
-        if IS_MAC:                      # a face every Mac ships: the font row judges the Nerd Font, not Spotlight
+        if IS_MAC:                      # a face every Mac ships: the font row judges an installed face, not Spotlight's index
             f.write("SITE_FONT_FACE=Menlo-Regular\nSITE_FONT_SIZE=13\n")
         if good:
             f.write("SITE_EMBER_MODEL=auto\n")     # the default is none; auto fits an ember beside the spark row
@@ -1782,9 +1782,6 @@ def make_fixture(root, good, stub_url="", real_spark=False):
     if good:
         for name in ("spark", "explain"):
             os.symlink(os.path.join(repo, "bin", name), os.path.join(home, ".local", "bin", name))
-        fd = os.path.join(home, "Library", "Fonts") if IS_MAC else os.path.join(home, ".local", "share", "fonts")
-        os.makedirs(fd)
-        open(os.path.join(fd, "JetBrainsMonoNerdFont-Regular.ttf"), "w").close()
         _stub(os.path.join(engine, "llama-server"), "#!/bin/sh\nexit 0\n")
         with open(os.path.join(engine, "flavour"), "w") as f:     # the engine row names the tarball's flavour
             f.write("fixture-x64\n")

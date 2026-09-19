@@ -153,7 +153,7 @@ class Config:
 
     @property
     def font_face(self):
-        return self.get("SITE_FONT_FACE", "JetBrainsMonoNFM-Regular" if IS_MAC else "")
+        return self.get("SITE_FONT_FACE", "Menlo-Regular" if IS_MAC else "")
 
     @property
     def font_size(self):

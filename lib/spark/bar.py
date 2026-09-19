@@ -176,15 +176,34 @@ def _battery():
 
 
 def _accent():
-    """the palette's accent from theme.env, or a plain bold"""
+    """the palette's accent as a tmux slot (colour0..15: the THEME_ANSI_n
+    nearest THEME_ACCENT by RGB distance, the lowest on a tie), or
+    `default` with no theme.env. A slot, never the hex: the console draws
+    sixteen, and tmux's own hex-to-16 table is not the palette's."""
     try:
         from . import CONFIG_DIR
+        env = {}
         for line in open(os.path.join(CONFIG_DIR, "theme.env"), encoding="utf-8"):
-            if line.startswith("THEME_ACCENT="):
-                return line.strip().split("=", 1)[1]
+            if "=" in line and line.startswith("THEME_"):
+                k, v = line.strip().split("=", 1)
+                env[k] = v
     except OSError:
-        pass
-    return "default"
+        return "default"
+    def rgb(h):
+        h = h.lstrip("#")
+        return tuple(int(h[i:i + 2], 16) for i in (0, 2, 4)) if len(h) == 6 else None
+    want = rgb(env.get("THEME_ACCENT", ""))
+    if want is None:
+        return "default"
+    best = None
+    for n in range(16):
+        c = rgb(env.get("THEME_ANSI_%d" % n, ""))
+        if c is None:
+            continue
+        d = sum((a - b) ** 2 for a, b in zip(want, c))
+        if best is None or d < best[0]:
+            best = (d, n)
+    return "colour%d" % best[1] if best else "default"
 
 
 def line(cfg):

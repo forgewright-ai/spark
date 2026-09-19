@@ -59,8 +59,8 @@ one project differently, both names are here.
 
 ## The shell tools
 
-The look and the workstation tools -- tmux, starship, the Nerd Font,
-bat, eza, fzf, zoxide, ripgrep, fd, jq, btop -- are spark-shell's, its
+The look and the workstation tools -- tmux, starship, bat, eza, fzf,
+zoxide, ripgrep, fd, jq, btop -- are spark-shell's, its
 own repository with its own credits
 (github.com/forgewright-ai/spark-shell). An editor's plugin is its own
 repository too (github.com/forgewright-ai/<name> -- spark-micro,

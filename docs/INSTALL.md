@@ -602,7 +602,7 @@ setup asks is optional and has a verb; editing the file and running
 | `SITE_PEER_AI_URL` | another machine's URL (`spark forge --print-client` there) -- `spark client URL` | unset |
 | `SITE_HEADLESS` | `yes`: up from boot, never asleep -- `spark headless on\|off` | `no` |
 | `SITE_THEME` | `none`, or a palette from `themes/` or `~/.config/spark/themes/` -- `spark theme NAME`; painted only when you ask | `none` |
-| `SITE_FONT_FACE` / `SITE_FONT_SIZE` | Linux console: a face and size from `spark font list` (`Terminus` `16x32`); macOS: Terminal.app's font and points -- `spark font FACE SIZE`. Refused on WSL 2 and Arch (no console-setup) | unset / `16x32` (Linux), the Nerd Font / `13` (macOS) |
+| `SITE_FONT_FACE` / `SITE_FONT_SIZE` | Linux console: a face and size from `spark font list` (`Terminus` `16x32`); macOS: Terminal.app's font and points -- `spark font FACE SIZE`. Refused on WSL 2 and Arch (no console-setup) | unset / `16x32` (Linux), `Menlo-Regular` / `13` (macOS) |
 | `SITE_QUIET_LOGIN` | Linux: `yes` bares the login (motd, `/etc/issue`; originals kept) -- `spark quiet login on` | `no` |
 | `SITE_QUIET_BOOT` | Linux: `yes` makes the boot silent (one GRUB drop-in) -- `spark quiet boot on`; refused on WSL 2 and Arch | `no` |
 | `SITE_QUIET_START` | `yes`: no banner, one-line `serve`, `forge` and bare `spark` -- `spark quiet start on` | `no` |
@@ -626,8 +626,8 @@ it would do and never calls sudo:
 - always: the package manager for the `packages` row (`libgomp1` on
   Debian, the Vulkan libraries with a GPU) and the hostname when
   `SITE_SET_HOSTNAME=yes`; macOS the hostname only;
-- `spark shell on`: the shell tools, the console font and palette, the
-  quiet login and boot, each only when its key says so;
+- `spark font`, `spark theme` and `spark quiet`: the console font and
+  palette, the quiet login and boot, each only when its key says so;
 - `spark headless on`: linger, the `render` group, the sleep targets,
   the lid; macOS the LaunchDaemons and `pmset`.
 

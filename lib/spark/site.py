@@ -118,7 +118,7 @@ def apply(rows, stream=False):
 
 # ------------------------------------------------------------------- font
 # Core, not the shell layer: the console is the machine's face whether or
-# not spark owns the shell (the Nerd Font download stays with the layer).
+# not spark owns the shell (a terminal emulator's font is spark-shell's).
 FONT_USAGE = """%s font -- the terminal's font
 
   spark font                    what is set
@@ -133,8 +133,8 @@ FONT_USAGE = """%s font -- the terminal's font
   spark font none               Linux: leave the console's font alone
 """ % MARK
 # monospace faces a Mac may hold, by PostScript name: the list shows the installed ones
-MAC_MONO = ("JetBrainsMonoNFM-Regular", "JetBrainsMono-Regular", "Menlo-Regular", "Monaco", "SFMono-Regular",
-            "Courier", "CourierNewPSMT", "AndaleMono", "PTMono-Regular", "FiraCode-Regular", "Hack-Regular",
+MAC_MONO = ("Menlo-Regular", "Monaco", "SFMono-Regular", "JetBrainsMono-Regular", "Courier",
+            "CourierNewPSMT", "AndaleMono", "PTMono-Regular", "FiraCode-Regular", "Hack-Regular",
             "SourceCodePro-Regular", "CascadiaCode-Regular", "UbuntuMono-Regular", "DejaVuSansMono",
             "Inconsolata-Regular", "RobotoMono-Regular", "IBMPlexMono", "VictorMono-Regular")
 
@@ -197,7 +197,7 @@ def font_list():
     """`spark font list`: what FACE SIZE may name here."""
     if IS_MAC:
         say("%s font list -- macOS: the monospace faces installed here, by PostScript name; the size is points" % MARK)
-        notes = {"JetBrainsMonoNFM-Regular": "the Nerd Font spark installs (Brewfile): the default"}
+        notes = {"Menlo-Regular": "the default: every Mac ships it"}
         seen = 0
         for face in MAC_MONO:
             here = mac_font_installed(face)
@@ -217,10 +217,9 @@ def font_list():
             sizes = sorted({size_as_taken(x) for x in fonts[face]}, key=lambda s: tuple(int(p) for p in s.split("x")[::-1]))
             say("  %-16s %s" % (face, " ".join(sizes)))
         say("  spark font FACE SIZE sets one, e.g. spark font Terminus 16x32")
-    # the Nerd Font `spark shell on` installs is not one of these: the console
-    # takes .psf faces, that one is a .ttf for a terminal emulator. Naming it
-    # here is the only place the two meet.
-        say("  for your terminal emulator -- set it there; spark font is the console")
+    # a terminal emulator's face (a .ttf) is never one of these: the console
+    # takes .psf faces; the emulator's font is set in the emulator
+    say("  a terminal emulator's font is set in the emulator; spark font is the console")
     return 0
 
 

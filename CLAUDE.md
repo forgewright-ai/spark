@@ -28,8 +28,8 @@ describes how things are, not how they came to be.
   plugin lives in its own repository, named `spark-<app>` (micro first:
   forgewright-ai/spark-micro), installed the app's way. spark ships no
   app, no app package, no app check row, and no per-app verb. The
-  shell -- tmux, starship, the daily tools, the Nerd Font, one palette
-  on every surface -- is spark-shell's, its own repository
+  shell -- tmux, starship, the daily tools, one palette on every
+  surface -- is spark-shell's, its own repository
   (github.com/forgewright-ai/spark-shell; docs/SHELL.md points there),
   installed its own way; `~/.config/spark/theme.env` is the one
   interface it reads, and no shell code lives in this tree. The bar
@@ -981,7 +981,8 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   page change lands only when it is the client side of a contract
   change. No new page features in this release or the next.
 - **A shell thing.** Anything that is the look or the workstation
-  tools -- a dotfile, a tmux piece, a prompt, an emulator font -- lands
+  tools -- a dotfile, a tmux piece, a prompt, a terminal emulator's
+  font -- lands
   in spark-shell's repository (github.com/forgewright-ai/spark-shell),
   never here: no row, no package, no verb, no template of it in this
   tree. spark-shell reads `theme.env` and renders on `spark-shell
