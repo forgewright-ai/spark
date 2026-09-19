@@ -110,10 +110,12 @@ if [ -f bin/spark ] && [ -f lib/spark/check.py ]; then
 fi
 
 # --- 4. the printed cheatsheet must fit 80 columns -----------------------
-if [ -f CHEATSHEET.txt ]; then
-    long=$(awk 'length > 80 { printf "  line %d (%d cols)\n", NR, length }' CHEATSHEET.txt)
-    [ -z "$long" ] || bad "CHEATSHEET.txt wider than 80 columns:
+if [ -f docs/CHEATSHEET.txt ]; then
+    long=$(awk 'length > 80 { printf "  line %d (%d cols)\n", NR, length }' docs/CHEATSHEET.txt)
+    [ -z "$long" ] || bad "docs/CHEATSHEET.txt wider than 80 columns:
 $long"
+else
+    bad "docs/CHEATSHEET.txt is missing: the 80-column gate has nothing to read"
 fi
 
 # --- 4b. docs stay ASCII: they are read on the console too; so does the
@@ -122,11 +124,15 @@ fi
 # decodes UTF-8 for the named classes even under LC_ALL=C, so multibyte
 # characters slipped through. Bytes outside tab + printable ASCII fail.
 tab=$(printf '\t')
-for f in README.md INSTALL.md CLAUDE.md CHANGELOG.md CHEATSHEET.txt LICENSE \
-         CREDITS.md AGENTS.md CONTRIBUTING.md ROADMAP.md get docs/*.md \
+# The ten in docs/ are named (the glob would miss the .txt), and a named
+# file that is missing refuses: only the glob may come back empty.
+for f in README.md CLAUDE.md CREDITS.md AGENTS.md LICENSE get \
+         docs/INSTALL.md docs/CHEATSHEET.txt docs/CHANGELOG.md docs/ROADMAP.md docs/CONTRIBUTING.md \
+         docs/*.md \
          lib/spark/forge/index.html lib/spark/forge/spark.css lib/spark/forge/spark.js \
          lib/spark/forge/manifest.webmanifest lib/spark/forge/favicon.svg; do
-    [ -f "$f" ] || continue
+    case $f in 'docs/*.md') continue ;; esac
+    [ -f "$f" ] || { bad "$f is missing (the ASCII gate names it)"; continue; }
     hit=$(LC_ALL=C grep -n "[^ -~${tab}]" "$f" | head -3 || true)
     [ -z "$hit" ] || bad "non-ASCII in $f (docs are read on the console):
 $hit"

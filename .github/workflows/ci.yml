@@ -90,7 +90,7 @@ jobs:
     # `sudo -n true` says yes and bootstrap's apt row runs), stdin a pipe
     # (setup takes every default, asks nothing), no model. There is no
     # systemd in a container: the services rows skip, and `spark check`
-    # reads `na` for services, as INSTALL.md's Container note promises.
+    # reads `na` for services, as docs/INSTALL.md's Container note promises.
     runs-on: ubuntu-latest
     container: debian:13
     timeout-minutes: 20
@@ -131,7 +131,7 @@ jobs:
           sudo -u newuser -H sh -c '~/.local/bin/spark check --fresh' || true
           sudo -u newuser -H sh -c '~/.local/bin/spark check --porcelain --fresh' > /tmp/porcelain.txt
           awk -F'\t' '$1=="SOFTWARE" && $2=="fail" && $3!="services" { bad=1; print } END { exit bad }' /tmp/porcelain.txt
-          # INSTALL.md, Container: without a user systemd session the services row reads na
+          # docs/INSTALL.md, Container: without a user systemd session the services row reads na
           awk -F'\t' '$3=="services" { print; found=1; if ($2!="na") bad=1 } END { exit bad || !found }' /tmp/porcelain.txt
           # the core rc hook: one marked line at the end of the new user's .bashrc
           sudo -u newuser -H sh -c 'grep -q "config/spark/hook\." ~/.bashrc'

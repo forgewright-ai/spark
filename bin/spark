@@ -95,7 +95,9 @@ USAGE_TAIL = """less often used
  spark                        last, history [clear], stats [--week|--sends],
                               brain, bench [tune [show|apply]] -- each has -h
 
-beside the core
+docs/
+ docs/INSTALL.md              every step and every key; docs/CHEATSHEET.txt
+ docs/TOUR.md                 a first hour: twelve small things to try
  docs/APPS.md                 editors and tools that speak to spark
  docs/SHELL.md                spark's own shell for an AI box: the
                               spark-shell repository

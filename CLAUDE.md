@@ -93,7 +93,7 @@ Every change lands in four places, or it is not done:
 | 1 | apply | the live machine |
 | 2 | reproduce | `bootstrap.sh` / `install.sh` / `Brewfile` / `templates/` / `home/` |
 | 3 | detect | a row in `spark check` (`lib/spark/check.py`), fixture-tested by `--selftest` |
-| 4 | explain | `README.md` / `INSTALL.md` / this file / `CHEATSHEET.txt` |
+| 4 | explain | `README.md` / `docs/INSTALL.md` / this file / `docs/CHEATSHEET.txt` |
 
 Then commit and push. `spark check` has a `git` row that warns while the
 working tree is dirty or ahead of origin.
@@ -236,12 +236,17 @@ assets/         banner.svg -- the banner as rectangles, for the README and the p
                 makes the favicon, the app icons and the social card the same way
 CREDITS.md      every third-party project spark downloads or installs,
                 with its license; spark's own code is LICENSE
-ROADMAP.md      what comes after the current release, in order
-docs/           the documents beside the core -- outside the landing rule, kept
-                true continuously, not tied to a release, each saying so in its
-                first lines: TOUR.md (a first hour: twelve small things to try),
-                APPS.md (the editors and tools that speak to spark, and how each
-                one connects), SHELL.md (the shell layer's pointer: it lives at
+docs/           every document but the four at the root. With a release (the
+                landing rule): INSTALL.md (every step and every key),
+                CHEATSHEET.txt (one page, 80 columns, what `lp` prints),
+                CHANGELOG.md (release.yml reads its top section as the notes),
+                ROADMAP.md (what comes after the current release, in order),
+                CONTRIBUTING.md (how a change lands). Beside the core --
+                outside the landing rule, kept true continuously, not tied to
+                a release, each saying so in its first lines: TOUR.md (a first
+                hour: twelve small things to try), APPS.md (the editors and
+                tools that speak to spark, and how each one connects), SHELL.md
+                (the shell layer's pointer: it lives at
                 forgewright-ai/spark-shell), IDEAS.md (the field ROADMAP.md is
                 picked from), TROUBLESHOOTING.md (a box that will not join the
                 WiFi: one WiFi daemon per card, then the logs)
@@ -861,8 +866,9 @@ One grammar for every verb; a verb that breaks a rule is a bug.
 ## Adding things
 
 - **A doc.** The page (spark.forgewright.ai) is the docs rendered --
-  INSTALL.md, CHEATSHEET.txt, models.env, CHANGELOG.md, ROADMAP.md,
-  CONTRIBUTING.md, CREDITS.md, the tour -- outside this tree, at the
+  docs/INSTALL.md, docs/CHEATSHEET.txt, models.env, docs/CHANGELOG.md,
+  docs/ROADMAP.md, docs/CONTRIBUTING.md, CREDITS.md, docs/TOUR.md --
+  outside this tree, at the
   newest signed release tag (what `get` installs), never main: a change
   here reaches it with the next release, nothing to do, and nothing in
   this tree builds or publishes it (Releasing, step 3). Its look
@@ -878,9 +884,11 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   step and speaks two nouns, spark and spark apps: no FORGE, ember or
   brain as a noun there, no "smart app", nothing private named
   anywhere in the tree's docs (docs_test holds the word list; this
-  file and AGENTS.md keep the contracts' names). A document beside the
-  core lives in `docs/`, says it is not tied to a release, is in the
-  Layout and is pointed to -- a doc nobody is sent to is dead.
+  file and AGENTS.md keep the contracts' names). Every document but
+  README, CREDITS, this file and AGENTS.md lives in `docs/`; one beside
+  the core says it is not tied to a release, a core one does not, and
+  each is in the Layout and is pointed to -- a doc nobody is sent to is
+  dead.
 - **A package.** Linux: the right `PKG_*` group in every `distro/<id>.env`
   with a comment saying why (`PKG_CORE`/`PKG_ENGINE`/`PKG_AI` are the AI,
   always installed; the shell tools are spark-shell's own lists), under
@@ -895,7 +903,7 @@ One grammar for every verb; a verb that breaks a rule is a bug.
 - **A config file.** First ask whether the app *rewrites* its own config.
   If it only reads: put it in `home/` (shared) or `<os>/home/`; `install.sh`
   links it. If it rewrites: it cannot be linked -- seed it once from
-  `templates/` as a rendered regular file, and note it in INSTALL.md's trap
+  `templates/` as a rendered regular file, and note it in docs/INSTALL.md's trap
   table (docs/SHELL.md). Test by changing a setting in the app
   and running `ls -l` on the path: still a symlink, or now a regular file?
 - **A choice.** A `SITE_*` key with a default in `site.env.example`, applied
@@ -909,11 +917,12 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   CHEATSHEET / CHANGELOG. A key without a command, or a command without a
   row and a doc line, is half a feature.
   The rule binds the CORE documentation, and core documentation moves with
-  a release: README, INSTALL.md, CHEATSHEET.txt, `spark help`, this file
-  and CHANGELOG.md are updated as a version ships, together. Everything
-  in `docs/` is outside it -- kept true continuously, no release waits on
-  it, and nothing in it has to appear in help, the cheatsheet or a
-  changelog entry. Each file there says so in its own first lines, and
+  a release: README, docs/INSTALL.md, docs/CHEATSHEET.txt, `spark help`,
+  this file and docs/CHANGELOG.md are updated as a version ships,
+  together. The five beside them in `docs/` (TOUR, APPS, SHELL, IDEAS,
+  TROUBLESHOOTING) are outside it -- kept true continuously, no release
+  waits on them, and nothing in them has to appear in help, the
+  cheatsheet or a changelog entry. Each of those says so in its own first lines, and
   `tests/docs_test.py` checks that it does, that the Layout above names
   it and that README, INSTALL, CHEATSHEET or ROADMAP points to it, so
   none drifts back under the rule by accident and none goes unread.
@@ -1151,7 +1160,7 @@ new key; the old line comes out in a later release, signed by the new
 one. `verify-tag` with an ssh signature is git >= 2.34 and ssh-keygen
 (openssh) -- `get` asks for both before it clones.
 
-1. Write the `## vX.Y` section at the top of `CHANGELOG.md` (bullets, newest
+1. Write the `## vX.Y` section at the top of `docs/CHANGELOG.md` (bullets, newest
    first; the page shows the section only once the tag exists -- it
    renders the newest tag -- and `tests/docs_test.py` refuses a heading
    more than one release ahead of the newest tag). The full gate, then `sh tests/install_test.sh`, `sh

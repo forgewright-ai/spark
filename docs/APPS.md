@@ -7,7 +7,7 @@ app's way.
 
 This document is not tied to a spark release. It is kept true as things
 change, but it is outside the landing rule: nothing here has to appear in
-`spark help`, `CHEATSHEET.txt` or a `CHANGELOG.md` entry, and no release
+`spark help`, `docs/CHEATSHEET.txt` or a `docs/CHANGELOG.md` entry, and no release
 waits on it. It stays until the integration story is settled.
 
 A tool becomes smart as a client of one command, `spark edit`: text in

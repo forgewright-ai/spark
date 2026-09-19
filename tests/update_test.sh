@@ -107,13 +107,13 @@ out=$("$SPARK" update 2>&1) && ok "second pull run: up to date" || bad "second p
 printf '%s\n' "$out" | grep -q 'up to date' || bad "second pull run did not settle: $out"
 
 # 4. a dirty tree is refused, --dry-run or not, nothing changes
-echo dirty >> "$T/work/CHANGELOG.md"
+echo dirty >> "$T/work/docs/CHANGELOG.md"
 before=$(git -C "$T/work" rev-parse HEAD)
 if out=$("$SPARK" update 2>&1); then bad "dirty tree: not refused"; else ok "dirty tree: refused"; fi
 printf '%s\n' "$out" | grep -q 'dirty' && ok "dirty tree: the refusal names it" || bad "dirty tree: $out"
 if out=$("$SPARK" update --dry-run 2>&1); then bad "dirty tree --dry-run: not refused"; else ok "dirty tree --dry-run: refused"; fi
 [ "$(git -C "$T/work" rev-parse HEAD)" = "$before" ] && ok "dirty tree: HEAD unchanged" || bad "dirty tree: HEAD moved"
-git -C "$T/work" checkout -q -- CHANGELOG.md
+git -C "$T/work" checkout -q -- docs/CHANGELOG.md
 
 # 5. a detached clone: two tags on origin -- v1.0 unsigned (where the
 #    clone was put by hand), v1.1 signed -- checked out at the older one

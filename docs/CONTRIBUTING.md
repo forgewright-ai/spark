@@ -83,5 +83,5 @@ and it runs your privacy word list over itself before printing.
 
 ## Roadmap
 
-`ROADMAP.md` lists what comes next; an idea that is not there is an
+`docs/ROADMAP.md` lists what comes next; an idea that is not there is an
 issue away.

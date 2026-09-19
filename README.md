@@ -51,7 +51,7 @@ itself, never by running anything.
    ```
 
 One line goes into your rc file, nothing else: your shell, your colours
-and your editor stay yours. `INSTALL.md` has every step and every key.
+and your editor stay yours. `docs/INSTALL.md` has every step and every key.
 
 ## Use it
 
@@ -81,13 +81,18 @@ The first hour, twelve small things to try: `docs/TOUR.md`.
 | `spark off` | Enter is a plain Enter again; `spark on` brings it back |
 | `spark uninstall` | takes it all off; keeps your prose and your threads |
 
-## Beside the core
+## Documents
 
-Kept in `docs/`, not tied to a release:
+Everything but this file and `CREDITS.md` lives in `docs/`. Five move
+with each release: `docs/INSTALL.md` (every step and every key),
+`docs/CHEATSHEET.txt` (one page; `lp` prints it), `docs/CHANGELOG.md`,
+`docs/ROADMAP.md` and `docs/CONTRIBUTING.md`. Five are kept true
+continuously, not tied to a release:
 
 - A first hour, twelve small things to try: `docs/TOUR.md`
 - Editors and tools that speak to spark: `docs/APPS.md`
 - spark's own shell for a machine that is an AI box: `docs/SHELL.md`
+- The field the roadmap is picked from: `docs/IDEAS.md`
 - A box that will not join the WiFi: `docs/TROUBLESHOOTING.md`
 
 The page: https://spark.forgewright.ai -- the docs and the model list, at

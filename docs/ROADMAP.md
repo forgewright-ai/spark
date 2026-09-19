@@ -1,7 +1,7 @@
 # Roadmap
 
 What comes after v1.37, in the order it is likely to happen. Nothing here
-is a promise; a row in `CHANGELOG.md` is. `docs/IDEAS.md` is the field this
+is a promise; a row in `docs/CHANGELOG.md` is. `docs/IDEAS.md` is the field this
 is picked from.
 
 The rule for this stretch: spark has one user, on one box, and what

@@ -35,8 +35,8 @@ jobs:
       - name: the tag agrees with the CHANGELOG
         run: |
           v=${GITHUB_REF_NAME#v}
-          grep -qx "## v$v" CHANGELOG.md \
-            || { echo "release: tag $GITHUB_REF_NAME but CHANGELOG.md has no '## v$v' heading"; exit 1; }
+          grep -qx "## v$v" docs/CHANGELOG.md \
+            || { echo "release: tag $GITHUB_REF_NAME but docs/CHANGELOG.md has no '## v$v' heading"; exit 1; }
       - name: the tag agrees with spark ver
         run: |
           v=${GITHUB_REF_NAME#v}
@@ -50,8 +50,8 @@ jobs:
       - name: the notes are the CHANGELOG section
         run: |
           v=${GITHUB_REF_NAME#v}
-          awk -v h="## v$v" '$0 == h { on = 1; next } on && /^## / { exit } on' CHANGELOG.md > notes.md
-          [ -s notes.md ] || { echo "release: the '## v$v' section of CHANGELOG.md is empty"; exit 1; }
+          awk -v h="## v$v" '$0 == h { on = 1; next } on && /^## / { exit } on' docs/CHANGELOG.md > notes.md
+          [ -s notes.md ] || { echo "release: the '## v$v' section of docs/CHANGELOG.md is empty"; exit 1; }
           cat notes.md
       - name: create the release
         env:

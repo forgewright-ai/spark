@@ -1022,7 +1022,7 @@ def row_gpu(ctx):
     if size and vram and size > vram:
         word = "spark+ember" if len(files) > 1 else "model"
         return warn("%s %.1f GB > VRAM %.1f GB: it spills to GTT (%.1f GB) -- raise the BIOS UMA frame buffer" % (word, size / 2**30, vram / 2**30, gtt / 2**30),
-                    "INSTALL.md, per-OS notes; then spark bench")
+                    "docs/INSTALL.md, per-OS notes; then spark bench")
     chosen = " (SITE_AI_BUILD=%s)" % ctx.cfg.ai_build if ctx.cfg.ai_build in ("cpu", "vulkan") else ""
     return ok("%s: %.1f GB VRAM, %.1f GB GTT, %d%% busy; %s build%s" % (
         g.get("name", "gpu"), vram / 2**30, gtt / 2**30, g.get("busy", 0), build, chosen))

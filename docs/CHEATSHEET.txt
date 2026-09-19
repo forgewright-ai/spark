@@ -1,4 +1,4 @@
-SPARK CHEATSHEET                                          lp CHEATSHEET.txt
+SPARK CHEATSHEET                                     lp docs/CHEATSHEET.txt
 
 SPARK
   spark                           status: server, widget, soul, last answer
@@ -120,14 +120,18 @@ MACOS
   Alt is Option: Option-s, not Cmd-s
 
 WINDOWS (Ubuntu 24.04 on WSL 2 -- Linux to spark)
-  wsl --install -d Ubuntu-24.04    then INSTALL.md section 1, the Linux way
+  wsl --install -d Ubuntu-24.04    then docs/INSTALL.md section 1 (Linux)
   the CPU build; no console (the font is Windows Terminal's); no GRUB
   units: [boot] systemd=true in /etc/wsl.conf, then wsl --shutdown
 
-BESIDE THE CORE (kept in docs/, not tied to a release)
+DOCUMENTS (docs/ holds every document but README.md and CREDITS.md)
+  with a release: docs/INSTALL.md  docs/CHEATSHEET.txt  docs/CHANGELOG.md
+                  docs/ROADMAP.md  docs/CONTRIBUTING.md
+  not tied to a release:
   docs/TOUR.md                    a first hour: twelve small things to try
   docs/APPS.md                    editors and tools that speak to spark
   docs/SHELL.md                   spark's own shell for a machine that is
-                                  only an AI box: spark shell, spark bar
+                                  only an AI box (the spark-shell repository)
+  docs/IDEAS.md                   the field the roadmap is picked from
   docs/TROUBLESHOOTING.md         a box that will not join the WiFi: one
                                   WiFi daemon per card, then the logs

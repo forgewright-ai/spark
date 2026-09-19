@@ -19,8 +19,8 @@ the console, the units and the GPU there are the maintainer's too.
 A change is done only when it is in all of: `spark help` (a line in
 `bin/spark`'s `USAGE`), a `spark <verb>` that sets and applies it (never
 just a `site.env` key by hand), a `spark check` row when it is a promise
-the machine makes, and every doc (`README.md` / `INSTALL.md` /
-`CHEATSHEET.txt` / `CHANGELOG.md`). Apply it, reproduce it in
+the machine makes, and every doc (`README.md` / `docs/INSTALL.md` /
+`docs/CHEATSHEET.txt` / `docs/CHANGELOG.md`). Apply it, reproduce it in
 `bootstrap.sh` / `install.sh`, detect it in a check row, explain it in
 every doc -- or it is not done.
 
@@ -89,7 +89,7 @@ real box, or from forge_smoke.py against its own.
 proves the sentence a row prints under a real failure is true, and
 that the remedy it names heals it. The scenarios live in
 `lib/spark/chaos.py`; the rehearsals that need a real box are in
-ROADMAP.md, not here.
+docs/ROADMAP.md, not here.
 
 ## The audition: the editor's briefs, judged blind
 

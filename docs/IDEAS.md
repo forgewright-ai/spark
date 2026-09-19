@@ -1,14 +1,14 @@
 # Ideas
 
 What an AI at the shell prompt could do that nothing else can. This file
-is upstream of `ROADMAP.md`: the roadmap is what comes next in order,
+is upstream of `docs/ROADMAP.md`: the roadmap is what comes next in order,
 this is the wider field it is picked from. Nothing here is a promise; a
-row in `CHANGELOG.md` is. An idea that earns a place moves to the
+row in `docs/CHANGELOG.md` is. An idea that earns a place moves to the
 roadmap and leaves here.
 
 This document is not tied to a spark release. It is kept true as
 things change, but it is outside the landing rule: nothing here has to
-appear in `spark help`, `CHEATSHEET.txt` or a `CHANGELOG.md` entry,
+appear in `spark help`, `docs/CHEATSHEET.txt` or a `docs/CHANGELOG.md` entry,
 and no release waits on it.
 
 Each entry says what it is, what it looks like at the prompt, and what

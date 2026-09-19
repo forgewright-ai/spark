@@ -16,7 +16,7 @@
 # runs longer than its own timeout -- so the suite is a gate, not an
 # errand. The rehearsals that need a real box (a unit restarting a
 # killed server, a genuinely full disk) are the maintainer's, by hand,
-# as the WSL pass is; ROADMAP.md says so.
+# as the WSL pass is; docs/ROADMAP.md says so.
 
 import os
 import re

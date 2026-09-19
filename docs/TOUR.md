@@ -6,7 +6,7 @@ four acts. Each one is a habit worth keeping.
 
 This document is not tied to a spark release. It is kept true as
 things change, but it is outside the landing rule: nothing here has to
-appear in `spark help`, `CHEATSHEET.txt` or a `CHANGELOG.md` entry,
+appear in `spark help`, `docs/CHEATSHEET.txt` or a `docs/CHANGELOG.md` entry,
 and no release waits on it.
 
 Most of the tour needs only spark. A few stops use a spark app or the
@@ -73,7 +73,7 @@ no answer is a real answer here. (A long page is read in parts;
 
 Let spark teach you spark:
 
-    spark drill --name spark < ~/.spark/CHEATSHEET.txt
+    spark drill --name spark < ~/.spark/docs/CHEATSHEET.txt
 
 The cheatsheet becomes questions it answers; you say whether you had
 each one. `--name` keeps the schedule: a miss comes back tomorrow,
@@ -115,7 +115,7 @@ answers. No lesson in this one. It is just a good show.
 ## When you want more
 
 `spark <TAB>` completes every verb, `spark check` says what this
-machine promises, `lp CHEATSHEET.txt` prints the one-page reference --
+machine promises, `lp ~/.spark/docs/CHEATSHEET.txt` prints the one-page reference --
 and
 
     ? what should I try next with spark

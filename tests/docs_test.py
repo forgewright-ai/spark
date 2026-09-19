@@ -5,8 +5,9 @@
 # its count following: every themes/*.env upstream is in CREDITS.md; every
 # model row's license upstream is in CREDITS.md; the check-row count the
 # docs state is the count in check.py; the model count they state is the
-# count in models.env; every docs/X.md a doc names exists and every
-# document in docs/ is pointed to; no doc names the lists that are gone;
+# count in models.env; every docs/X a doc names exists, every document in
+# docs/ is pointed to and the root holds four; no doc names the lists that
+# are gone;
 # the docs a new user reads speak two nouns (spark, spark apps) and no
 # doc names what is private.
 # Hermetic, stdlib, fast.
@@ -19,13 +20,16 @@ sys.path.insert(0, os.path.join(ROOT, "lib"))
 from spark import config  # noqa: E402
 
 fails = []
-# the docs a new user reads (the voice checks below), the documents beside
-# the core (docs/, not tied to a release), and every doc
-CUSTOMER_DOCS = ("README.md", "INSTALL.md", "CHEATSHEET.txt", "docs/TOUR.md", "docs/TROUBLESHOOTING.md")
-BESIDE = tuple(sorted(f for f in os.listdir(os.path.join(ROOT, "docs")) if f.endswith(".md"))) \
-    if os.path.isdir(os.path.join(ROOT, "docs")) else ()
-ALL_DOCS = ("README.md", "INSTALL.md", "CLAUDE.md", "CHEATSHEET.txt", "CREDITS.md", "CONTRIBUTING.md",
-            "AGENTS.md", "ROADMAP.md", "CHANGELOG.md", "site.env.example") + tuple("docs/" + f for f in BESIDE)
+# the four documents at the root; the core docs that live in docs/ since
+# v1.38 (still release-gated by the landing rule); the documents beside the
+# core (docs/, not tied to a release); what docs/ holds, exactly; the docs a
+# new user reads (the voice checks below); and every doc
+ROOT_DOCS = ("README.md", "CREDITS.md", "CLAUDE.md", "AGENTS.md")
+CORE_IN_DOCS = ("INSTALL.md", "CHEATSHEET.txt", "CHANGELOG.md", "ROADMAP.md", "CONTRIBUTING.md")
+BESIDE = ("TOUR.md", "APPS.md", "SHELL.md", "IDEAS.md", "TROUBLESHOOTING.md")
+DOCS_DIR = CORE_IN_DOCS + BESIDE
+CUSTOMER_DOCS = ("README.md", "docs/INSTALL.md", "docs/CHEATSHEET.txt", "docs/TOUR.md", "docs/TROUBLESHOOTING.md")
+ALL_DOCS = ROOT_DOCS + tuple("docs/" + f for f in DOCS_DIR) + ("site.env.example",)
 
 
 def check(cond, what):
@@ -89,7 +93,7 @@ def main():
             for name in t.get(g, "").split():
                 check(re.search(r"(?m)^- %s -- " % re.escape(name), credits) is not None, "CREDITS.md names %s (distro/%s %s)" % (name, f, g))
         # the family's name in the docs is the file's PM_TARGET, verbatim
-        for doc in ("README.md", "INSTALL.md"):
+        for doc in ("README.md", "docs/INSTALL.md"):
             check(t.get("PM_TARGET", "") in read(doc), "%s names %s (distro/%s PM_TARGET)" % (doc, t.get("PM_TARGET", "?"), f))
     # the SBOM (spark ver --sbom, lib/spark/sbom.py) says what the tree
     # holds: its model set (name + sha256) is config.model_tables()'s and
@@ -119,15 +123,15 @@ def main():
               "README.md 'What leaves this machine' names %s (persona.SENDS)" % kind)
     # counts the docs state
     n_rows = sum(1 for line in read(os.path.join("lib", "spark", "check.py")).split("\n") if line.startswith("@row"))
-    for doc in ("CLAUDE.md", "INSTALL.md"):
+    for doc in ("CLAUDE.md", "docs/INSTALL.md"):
         for m in re.finditer(r"spark check`?\s+(?:has )?(\d+) rows", read(doc)):
             check(int(m.group(1)) == n_rows, "%s: '%s' is check.py's count (%d)" % (doc, m.group(0), n_rows))
     for m in re.finditer(r"spark check` answers (\d+)", read("docs/IDEAS.md")):
         check(int(m.group(1)) == n_rows, "docs/IDEAS.md: '%s' is check.py's count (%d)" % (m.group(0), n_rows))
     # the threat model: the section exists and names the one remedy
-    inst = read("INSTALL.md")
+    inst = read("docs/INSTALL.md")
     m = re.search(r"## 8\. What an attacker can and cannot do\n(.*?)(?:\n## )", inst, re.S)
-    check(m is not None, "INSTALL.md has the threat model section (8)")
+    check(m is not None, "docs/INSTALL.md has the threat model section (8)")
     check(m is not None and "spark user token" in m.group(1) and "--new" in m.group(1),
           "the threat model names spark user token --new")
     # contract 3: every MODEL_*_GROUND in models.env has the audition's
@@ -148,7 +152,7 @@ def main():
     spelled = "zero one two three four five six seven eight nine ten eleven twelve".split()
     if n_sc < len(spelled):
         rx = re.compile(r"\b(%s) (?:failures|scenarios)\b" % "|".join(spelled), re.I)
-        for doc in ("ROADMAP.md", "CHANGELOG.md", "README.md", "INSTALL.md", "CLAUDE.md", "AGENTS.md"):
+        for doc in ("docs/ROADMAP.md", "docs/CHANGELOG.md", "README.md", "docs/INSTALL.md", "CLAUDE.md", "AGENTS.md"):
             for m in rx.finditer(read(doc)):
                 check(m.group(1).lower() == spelled[n_sc],
                       "%s: '%s' is chaos.py's count (%s)" % (doc, m.group(0), spelled[n_sc]))
@@ -156,7 +160,7 @@ def main():
     # module, the roadmap and CLAUDE.md. Check the claims, not the prose --
     # and check that nothing quietly started dispatching to it
     verbs = read(os.path.join("bin", "spark"))
-    roadmap, claude = read("ROADMAP.md"), read("CLAUDE.md")
+    roadmap, claude = read("docs/ROADMAP.md"), read("CLAUDE.md")
     reserved = 0
     for f in sorted(os.listdir(os.path.join("lib", "spark"))):
         head = read(os.path.join("lib", "spark", f))[:600] if f.endswith(".py") else ""
@@ -169,7 +173,7 @@ def main():
         check('"%s":' % name not in verbs,
               "bin/spark does not dispatch %s (contract %s is not built)" % (name, n))
         check(re.search(r"(?m)^## Contract %s: spark %s$" % (n, name), roadmap) is not None,
-              "ROADMAP.md has '## Contract %s: spark %s'" % (n, name))
+              "docs/ROADMAP.md has '## Contract %s: spark %s'" % (n, name))
         check(re.search(r"(?m)^%s\. `spark %s` -- reserved, not built" % (n, name), claude) is not None,
               "CLAUDE.md reserves contract %s for spark %s" % (n, name))
     # reserved may be zero once the last one is built; the loop still guards
@@ -190,9 +194,9 @@ def main():
     check(not stale, "every signed line names a verb that exists%s"
           % ("" if not stale else " (found %s)" % ", ".join(stale[:3])))
     # the roadmap starts where the changelog's top section is
-    top = re.search(r"^## v(\d+\.\d+)", read("CHANGELOG.md"), re.M).group(1)
-    m = re.search(r"What comes after v(\d+\.\d+)", read("ROADMAP.md"))
-    check(m is not None and m.group(1) == top, "ROADMAP.md: 'What comes after v%s' names CHANGELOG.md's top section" % top)
+    top = re.search(r"^## v(\d+\.\d+)", read("docs/CHANGELOG.md"), re.M).group(1)
+    m = re.search(r"What comes after v(\d+\.\d+)", read("docs/ROADMAP.md"))
+    check(m is not None and m.group(1) == top, "docs/ROADMAP.md: 'What comes after v%s' names docs/CHANGELOG.md's top section" % top)
     # the gated row lists: CLAUDE.md states their counts, and names the
     # client's rows one by one
     src = read(os.path.join("lib", "spark", "check.py"))
@@ -210,7 +214,7 @@ def main():
     check(listed == named["CLIENT_ROWS"],
           "CLAUDE.md names check.CLIENT_ROWS in order (%s)" % ", ".join(named["CLIENT_ROWS"]))
     n_models = len(rows)
-    for doc in ("README.md", "INSTALL.md"):
+    for doc in ("README.md", "docs/INSTALL.md"):
         for m in re.finditer(r"(\d+) (models|rows), each with its license", read(doc)):
             check(int(m.group(1)) == n_models, "%s: '%s' is models.env's count (%d)" % (doc, m.group(0), n_models))
     # the CHANGELOG's top section is the newest tag or the one right after it
@@ -222,12 +226,12 @@ def main():
                              capture_output=True, text=True, check=True).stdout.strip()[1:]
     except (OSError, subprocess.CalledProcessError):
         tag = ""
-    top = re.search(r"^## v(\d+)\.(\d+)$", read("CHANGELOG.md"), re.M)
+    top = re.search(r"^## v(\d+)\.(\d+)$", read("docs/CHANGELOG.md"), re.M)
     if tag and top and re.match(r"^\d+\.\d+$", tag):
         major, minor = int(top.group(1)), int(top.group(2))
         tmaj, tmin = (int(x) for x in tag.split("."))
         check((major, minor) in ((tmaj, tmin), (tmaj, tmin + 1), (tmaj + 1, 0)),
-              "CHANGELOG.md: the top section v%d.%d is the newest tag v%s or the next release" % (major, minor, tag))
+              "docs/CHANGELOG.md: the top section v%d.%d is the newest tag v%s or the next release" % (major, minor, tag))
     # the customer-facing docs speak two nouns, spark and spark apps: the
     # names the code keeps (the FORGE, an ember, the brain, the seed) stay
     # in the maintainer's docs; no doc calls the shell layer frozen or
@@ -252,46 +256,68 @@ def main():
     for app in apps:
         for doc in ("CREDITS.md",):
             check(app in read(doc), "%s names %s (docs/APPS.md does)" % (doc, app))
-    # the documents beside the core live in docs/, and nothing there goes
-    # unnamed: each says it is not tied to a release (so nobody files it
-    # back under the landing rule), is in CLAUDE.md's Layout, and is pointed
-    # to from a core doc -- a doc nobody is sent to is dead
-    check(bool(BESIDE), "docs/ holds at least one document beside the core")
+    # docs/ holds exactly the ten: the five core docs that moved there with
+    # v1.38 and the five beside the core. A beside doc says it is not tied
+    # to a release (so nobody files it back under the landing rule); a core
+    # doc there does NOT (it is still release-gated); every one is in
+    # CLAUDE.md's Layout and is pointed to -- a doc nobody is sent to is dead
+    have = sorted(f for f in os.listdir(os.path.join(ROOT, "docs")) if not f.startswith("."))
+    check(have == sorted(DOCS_DIR), "docs/ holds exactly %s%s"
+          % (", ".join(DOCS_DIR), "" if have == sorted(DOCS_DIR) else " (found %s)" % ", ".join(have)))
     m = re.search(r"## Layout\n\n```\n(.*?)\n```", claude, re.S)
     layout = m.group(1) if m else ""
-    pointing = "".join(read(d) for d in ("README.md", "INSTALL.md", "CHEATSHEET.txt", "ROADMAP.md"))
+    pointing = "".join(read(d) for d in ("README.md", "docs/INSTALL.md", "docs/CHEATSHEET.txt", "docs/ROADMAP.md"))
     for name in BESIDE:
-        check("not tied to a spark release" in read("docs/" + name), "docs/%s says it is not release-gated" % name)
-        check(name in layout, "CLAUDE.md's Layout names docs/%s" % name)
+        check("This document is not tied to a spark release" in read("docs/" + name), "docs/%s says it is not release-gated" % name)
         check("docs/" + name in pointing, "README, INSTALL, CHEATSHEET or ROADMAP points to docs/%s" % name)
-    # every docs/X.md a doc or the help names exists (the successor of the
+    for name in CORE_IN_DOCS:
+        check("This document is not tied to a spark release" not in read("docs/" + name),
+              "docs/%s is core (the landing rule): it does not carry the beside-the-core line" % name)
+        check("docs/" + name in readme, "README.md points to docs/%s" % name)
+    for name in DOCS_DIR:
+        check(name in layout, "CLAUDE.md's Layout names docs/%s" % name)
+    # every docs/X a doc or the help names exists (the successor of the
     # page-source check; the CHANGELOG is history and may name what moved),
     # and README and the CHEATSHEET send a new user to the same set
-    live = tuple(d for d in ALL_DOCS if d != "CHANGELOG.md")
+    live = tuple(d for d in ALL_DOCS if d != "docs/CHANGELOG.md")
     named = set()
     for doc in live + ("bin/spark",):
-        named.update(re.findall(r"docs/([A-Z]+\.md)", read(doc)))
+        named.update(re.findall(r"docs/([A-Z]+\.(?:md|txt))", read(doc)))
     for name in sorted(named):
-        check(name in BESIDE, "docs/%s, which a doc names, exists" % name)
-    m = re.search(r"## Beside the core\n(.*?)(?:\n## |\Z)", readme, re.S)
-    in_readme = set(re.findall(r"docs/([A-Z]+\.md)", m.group(1) if m else ""))
-    m = re.search(r"BESIDE THE CORE[^\n]*\n(.*?)(?:\n\n|\Z)", read("CHEATSHEET.txt"), re.S)
-    in_cheat = set(re.findall(r"docs/([A-Z]+\.md)", m.group(1) if m else ""))
-    check(bool(in_readme) and in_readme == in_cheat,
-          "README's Beside the core and CHEATSHEET's BESIDE THE CORE name the same docs (%s)" % ", ".join(sorted(in_readme)))
-    # the root holds only the core docs (the check that would have caught a
+        check(name in DOCS_DIR, "docs/%s, which a doc names, exists" % name)
+    m = re.search(r"## Documents\n(.*?)(?:\n## |\Z)", readme, re.S)
+    in_readme = set(re.findall(r"docs/([A-Z]+\.(?:md|txt))", m.group(1) if m else ""))
+    m = re.search(r"^DOCUMENTS[^\n]*\n(.*?)(?:\n\n|\Z)", read("docs/CHEATSHEET.txt"), re.S | re.M)
+    in_cheat = set(re.findall(r"docs/([A-Z]+\.(?:md|txt))", m.group(1) if m else ""))
+    check(in_readme == set(DOCS_DIR) and in_cheat == set(DOCS_DIR),
+          "README's Documents and the CHEATSHEET's DOCUMENTS name every file in docs/ (%s)" % ", ".join(DOCS_DIR))
+    # a moved doc is named only by its new path: INSTALL.md, CHEATSHEET.txt,
+    # CHANGELOG.md, ROADMAP.md and CONTRIBUTING.md live in docs/ since v1.38,
+    # so a bare name (or ~/.spark/CHEATSHEET.txt) is a broken pointer. The
+    # CHANGELOG is history; CLAUDE.md's Layout block names files by their
+    # bare name under the docs/ entry, as every entry there does
+    old = re.compile(r"(?<!docs/)(?<![\w.-])(INSTALL\.md|CHEATSHEET\.txt|CHANGELOG\.md|ROADMAP\.md|CONTRIBUTING\.md)\b")
+    scan = list(live) + ["bin/spark"] + sorted(os.path.join("lib", "spark", f) for f in os.listdir(libdir) if f.endswith(".py"))
+    for d, _, fs in os.walk(os.path.join(ROOT, "templates")):
+        scan += [os.path.relpath(os.path.join(d, f), ROOT) for f in fs]
+    for doc in scan:
+        text = read(doc)
+        if doc == "CLAUDE.md":
+            text = text.replace(layout, "")
+        m = old.search(text)
+        check(m is None, "%s: no old root path%s" % (doc, " (found '%s')" % m.group(0) if m else ""))
+    # the root holds only the four (the check that would have caught a
     # stray folder), the page's source is named by no doc but the CHANGELOG,
     # and neither it nor the old folder exists
-    core = {"README.md", "INSTALL.md", "CHANGELOG.md", "ROADMAP.md", "CREDITS.md", "CONTRIBUTING.md", "AGENTS.md", "CLAUDE.md"}
-    loose = sorted(f for f in os.listdir(ROOT) if f.endswith(".md") and f not in core)
-    check(not loose, "no doc beside the core at the root%s" % ("" if not loose else " (found %s)" % ", ".join(loose)))
+    loose = sorted(f for f in os.listdir(ROOT) if f.endswith((".md", ".txt")) and f not in ROOT_DOCS)
+    check(not loose, "the root holds only README.md, CREDITS.md, CLAUDE.md, AGENTS.md%s"
+          % ("" if not loose else " (found %s)" % ", ".join(loose)))
     stale = [d for d in live if "www/" in read(d)]
     check(not stale, "www/ is gone%s" % ("" if not stale else " (named in %s)" % ", ".join(stale)))
     for gone in ("www", "user guide"):
         check(not os.path.exists(os.path.join(ROOT, gone)), "%s does not exist" % gone)
     # the lists that are gone stay gone
-    for doc in ("README.md", "INSTALL.md", "CLAUDE.md", "CHEATSHEET.txt", "CREDITS.md", "CONTRIBUTING.md",
-                "AGENTS.md", "ROADMAP.md", "site.env.example"):
+    for doc in ROOT_DOCS + ("docs/INSTALL.md", "docs/CHEATSHEET.txt", "docs/CONTRIBUTING.md", "docs/ROADMAP.md", "site.env.example"):
         check(not re.search(r"embers\.env|community\.env|\bcurated\b|PKG_QA|PKG_EDITOR|micro-aspell|\bbootconfig\b|SITE_SHELL|PKG_SHELL|PKG_CLI", read(doc)),
               "%s: no retired list word" % doc)
     # contract 9: the route table CLAUDE.md prints is forgeserve.ROUTES,
