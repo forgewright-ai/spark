@@ -1811,6 +1811,108 @@ def main():
         rc, out, _ = spark("last")
         t.ok(rc == 0 and "@f.txt why" in out, "last shows the @FILE turn as typed", out)
 
+        # ---- v1.36: what leaves is counted by destination (out_bytes and
+        # dest on every turn; spark stats --sends; the sends row), the
+        # FORGE's gates probed from the wire (wire.probe_gates,
+        # tests/forge_probe.py, the hardening row), and spark do's harness
+        # banner ------------------------------------------------------------
+        from spark import wire as _wire
+        t.ok(_wire.dest_of("http://127.0.0.1:8080") == "local" and _wire.dest_of("http://localhost:8081/") == "local"
+             and _wire.dest_of("http://192.0.2.7:8081") == "192.0.2.7:8081" and _wire.dest_of("http://box.local") == "box.local",
+             "wire.dest_of: loopback is local, anything else host:port")
+        spark("history", "clear")
+        spark("line", stdin="?biggest dir here")          # the JSON shape (chat_json)
+        spark("count?")                                   # the streamed shape (chat_stream)
+        turns = [json.loads(l) for f in os.listdir(home + "/.local/state/spark/turns")
+                 for l in open(home + "/.local/state/spark/turns/" + f) if l.strip()]
+        t.ok(len(turns) >= 2 and all(isinstance(x.get("out_bytes"), int) and x["out_bytes"] > 100 and x.get("dest") == "local" for x in turns),
+             "every turn records its bytes out and its destination (local: the stub is loopback), both shapes",
+             [(x.get("mode"), x.get("out_bytes"), x.get("dest")) for x in turns])
+        total = sum(x["out_bytes"] for x in turns)
+        today = time.strftime("%Y-%m-%d")
+        rc, out, _ = spark("stats", "--sends", "--porcelain")
+        t.ok(rc == 0 and [l.split("\t") for l in out.splitlines()] == [[today, "local", str(total), str(len(turns))]],
+             "stats --sends --porcelain: day, destination, bytes, turns -- the records' own sum", out)
+        rc, out, _ = spark("stats", "--sends")
+        t.ok(rc == 0 and "sends" in out and "last 7 days" in out and today in out and "local" in out and "%.1f" % (total / 1000.0) in out,
+             "stats --sends: the table at the terminal, in kB", out)
+        rc, out, _ = spark("check", "sends", "--porcelain")
+        t.ok(rc == 0 and "\tok\tsends\t%.1f kB to local today\t" % (total / 1000.0) in out,
+             "check sends: today's bytes all went to local -- ok", out)
+        with open(home + "/.local/state/spark/turns/" + today + ".jsonl", "a") as f:
+            f.write(json.dumps({"ts": today + " 12:00:00", "kind": "answer", "mode": "chat", "ms": 5,
+                                "out_bytes": 4000, "dest": "203.0.113.9:8081"}) + "\n")
+        rc, out, _ = spark("check", "sends", "--porcelain")
+        t.ok(rc == 0 and "\twarn\tsends\t4.0 kB went to 203.0.113.9:8081 today, not your configured brain\t" in out,
+             "check sends: bytes to a host nothing here names -- warn, naming the host", out)
+        rc, out, _ = spark("check", "hardening", "--porcelain")
+        t.ok(rc == 0 and "\tna\thardening\t" in out, "check hardening: no FORGE served here and no peer -- na", out)
+        spark("history", "clear")
+
+        class Hardened(BaseHTTPRequestHandler):
+            """A server that keeps contract 9's gates and nothing more:
+            what probe_gates must call held, every one."""
+            HEAD = {"Content-Security-Policy": "default-src 'self'", "X-Frame-Options": "DENY",
+                    "Referrer-Policy": "no-referrer", "X-Content-Type-Options": "nosniff"}
+
+            def log_message(self, *a):
+                pass
+
+            def _reply(self, code, body=b"{}", extra=None):
+                self.send_response(code)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                for k, v in (extra or {}).items():
+                    self.send_header(k, v)
+                self.end_headers()
+                self.wfile.write(body)
+
+            def do_GET(self):
+                if self.path == "/api/health":
+                    return self._reply(200, b'{"status":"ok","forge":true,"upstream":"ok"}')
+                if self.path == "/":
+                    return self._reply(200, b"<html></html>", self.HEAD)
+                self._reply(401, b'{"error":{"kind":"auth"}}')
+
+            def do_POST(self):
+                self.rfile.read(int(self.headers.get("Content-Length", 0)))
+                if self.path == "/api/login":
+                    return self._reply(403 if self.headers.get("X-Spark") != "1" else 200)
+                self._reply(200 if (self.headers.get("Authorization") or "").startswith("Bearer ") else 401)
+        hs = HTTPServer(("127.0.0.1", 0), Hardened)
+        threading.Thread(target=hs.serve_forever, daemon=True).start()
+        hurl = "http://127.0.0.1:%d" % hs.server_address[1]
+        gates = _wire.probe_gates(hurl, timeout=5)
+        t.ok([g[0] for g in gates] == list(_wire.GATES) and all(g[1] for g in gates),
+             "wire.probe_gates: a hardened FORGE holds all %d gates, in GATES order" % len(_wire.GATES), gates)
+        # the hardening row against it: ok naming the count and the host,
+        # then the same answer from its hour-long cache
+        with open(home + "/.local/state/spark/forge-url", "w") as f:
+            f.write(hurl + "\n")
+        rc, out, _ = spark("check", "hardening", "--porcelain", "--fresh")
+        rc2, out2, _ = spark("check", "hardening", "--porcelain")
+        os.remove(home + "/.local/state/spark/forge-url")
+        want = "\tok\thardening\t%d of %d gates hold at %s\t" % (len(_wire.GATES), len(_wire.GATES), hurl.split("//")[-1])
+        t.ok(rc == 0 and want in out and rc2 == 0 and want in out2,
+             "check hardening: the served FORGE holds every gate -- ok, fresh and from the cache", out + out2)
+        hs.shutdown()
+        gates = _wire.probe_gates(url, timeout=5)
+        t.ok(len(gates) == len(_wire.GATES) and not gates[0][1] and "not a FORGE" in gates[0][2]
+             and not any(g[1] for g in gates[1:7]) and gates[7][1],
+             "wire.probe_gates: the stub llama-server is not a FORGE -- only the bearer-only gate holds, each miss named", gates)
+        p = subprocess.run([sys.executable, os.path.join(REPO, "tests", "forge_probe.py"), url],
+                           capture_output=True, text=True, timeout=60)
+        plines = p.stdout.splitlines()
+        t.ok(p.returncode == 1 and len(plines) == len(_wire.GATES) and all(l.startswith(("  ok   ", "  FAIL ")) for l in plines)
+             and any(l.startswith("  FAIL ") for l in plines) and any(l.startswith("  ok   ") for l in plines),
+             "tests/forge_probe.py URL: one line per gate, exit 1 when any does not hold", p.stdout + p.stderr)
+        rc, out, err = spark("do", "say", "hello", stdin="\n", extra={"SPARK_DO_STDIN": "1"}, cwd=work)
+        t.ok(rc == 0 and "STEP-ONE" in out
+             and err.count("spark do: confirmations come from stdin (SPARK_DO_STDIN) -- a harness, not a person") == 1
+             and "harness" not in out,
+             "spark do: SPARK_DO_STDIN=1 says so once on stderr -- a harness, not a person; stdout stays the run", out + err)
+        # ---- end of the v1.36 block ------------------------------------------
+
         # spark do: one confirmed command at a time (SPARK_DO_STDIN=1 reads the confirmations from stdin)
         hook = {"SPARK_DO_STDIN": "1"}
         spark("history", "clear")

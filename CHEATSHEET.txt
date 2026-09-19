@@ -102,6 +102,7 @@ THE INTERFACE
 
 LESS OFTEN USED
   spark stats [--week]            tok/s, latency, cache hits by mode, baseline
+  spark stats --sends             what left, in bytes: by destination and day
   spark bench [tune]              llama-bench; tune finds the best settings
   spark bench tune show | apply   the winner; apply writes spark.env, restarts
 

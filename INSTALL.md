@@ -688,6 +688,12 @@ addresses you gave it and nothing else.
   security upgrades your package manager holds back (Debian's
   `-security` sources; `arch-audit` on Arch) and warns while any waits.
 
+What leaves is counted, never read: every request's size and destination
+ride its turn record (a number and a host), `spark stats --sends` prints
+them by destination and day for the last week, and the `sends` row of
+`spark check` warns the day any bytes went to a host other than the
+server you chose.
+
 ## Appendix: how it fits together
 
 ```
@@ -709,7 +715,7 @@ get -> spark setup -> bootstrap.sh (apply) -> install.sh (links, renders)
                       line; spark-shell adds spark's own shell; a spark app
                       is its own repository (spark-<app>)
 
-spark check   37 rows: every promise the machine makes, fixture-tested
+spark check   39 rows: every promise the machine makes, fixture-tested
 spark update  the newest signed tag, or main on a developer clone; converge
 
 what leaves the machine: pinned downloads in, your questions to the

@@ -34,6 +34,9 @@ PROOF_TIMEOUT = 30          # seconds a proof may run before it is killed (rc 12
 NO_OUTPUT = "(no output)"
 SKIPPED = "The user skipped this step."
 STDIN_HOOK = "SPARK_DO_STDIN"   # =1: confirmations come from stdin lines (tests)
+# said once on stderr when the hook is on, before any step is offered: a
+# transcript must show the confirmations were a harness's, not a person's
+STDIN_BANNER = "spark do: confirmations come from stdin (SPARK_DO_STDIN) -- a harness, not a person"
 # a control character in the model's command or proof: a terminal escape
 # can draw a benign fake over what Enter would run, so the reply is
 # refused whole -- it becomes a `done` with this hint
@@ -255,6 +258,9 @@ def cmd_do(args):
         return 0 if args else 2
     if not sys.stdin.isatty() and os.environ.get(STDIN_HOOK) != "1":
         die("spark do confirms every step -- run it in a terminal")
+    if os.environ.get(STDIN_HOOK) == "1":
+        sys.stderr.write(STDIN_BANNER + "\n")
+        sys.stderr.flush()
     goal = " ".join(args)
     cfg = config.load()
     cwd, shell = os.getcwd(), os.path.basename(os.environ.get("SHELL") or "sh")

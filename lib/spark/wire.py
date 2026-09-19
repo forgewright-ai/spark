@@ -142,6 +142,63 @@ def request_headers(cfg):
     return _headers(cfg)
 
 
+# ------------------------------------------------------------------ gates
+# The FORGE's gates as a client sees them from the wire (contract 9): the
+# eight probes below, in this order. tests/forge_probe.py runs them against
+# a real server; check's hardening row asks them of the FORGE served here
+# (or the peer's). Nothing rides a probe: no token, no words.
+GATES = ("health", "csp", "frame", "referrer", "nosniff", "write-gate", "auth", "bearer-only")
+_PAGE_HEADERS = (("csp", "Content-Security-Policy", ""), ("frame", "X-Frame-Options", "DENY"),
+                 ("referrer", "Referrer-Policy", ""), ("nosniff", "X-Content-Type-Options", "nosniff"))
+
+
+def _status(url, path, method="GET", headers=None, body=None, timeout=5.0):
+    """(HTTP status, headers) of one request; (0, {}) when nothing answers."""
+    req = urllib.request.Request(url + path, data=body, headers=headers or {}, method=method)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return r.status, r.headers
+    except urllib.error.HTTPError as e:
+        return e.code, e.headers
+    except (urllib.error.URLError, OSError, ValueError):
+        return 0, {}
+
+
+def _http(st):
+    return "HTTP %d" % st if st else "no answer"
+
+
+def probe_gates(url, timeout=5.0):
+    """[(gate, held, detail)] for every name in GATES, probed at `url`:
+    /api/health says forge: true; the page carries its four headers
+    (Content-Security-Policy, X-Frame-Options DENY, Referrer-Policy,
+    X-Content-Type-Options nosniff); a POST to /api/login without X-Spark
+    is 403; a bare GET /api/users is 401; a cookie alone does not open
+    POST /v1/chat/completions (401). A server that is down fails every
+    gate with `no answer` -- a caller says na before asking."""
+    url = url.rstrip("/")
+    out = []
+    fh = forge_health(url, timeout)
+    out.append(("health", isinstance(fh, dict),
+                "/api/health says forge: true" if isinstance(fh, dict) else
+                ("/api/health: nothing answers" if fh == "down" else "/api/health: not a FORGE")))
+    st, h = _status(url, "/", timeout=timeout)
+    for gate, header, want in _PAGE_HEADERS:
+        got = (h.get(header) or "").strip() if st else ""
+        held = bool(got) and (not want or got.lower() == want.lower())
+        out.append((gate, held, "GET / %s: %s" % (header, got or ("no answer" if not st else "HTTP %d, no header" % st))))
+    json_ = {"Content-Type": "application/json"}
+    st, _h = _status(url, "/api/login", "POST", json_, b'{"token":"probe"}', timeout)
+    out.append(("write-gate", st == 403, "POST /api/login without X-Spark: %s (403 expected)" % _http(st)))
+    st, _h = _status(url, "/api/users", timeout=timeout)
+    out.append(("auth", st == 401, "GET /api/users with no token: %s (401 expected)" % _http(st)))
+    st, _h = _status(url, "/v1/chat/completions", "POST", dict(json_, Cookie="spark_forge=probe"),
+                     b'{"messages":[]}', timeout)
+    out.append(("bearer-only", st == 401,
+                "POST /v1/chat/completions with a cookie only: %s (401 expected)" % _http(st)))
+    return out
+
+
 def _stem(s):
     return os.path.basename(str(s)).replace(".gguf", "")
 
@@ -185,6 +242,29 @@ def model_name(cfg, url, timeout=HEALTH_TIMEOUT):
         if alias == "spark":
             return stem
     return rows[0][1] if rows else "?"
+
+
+def dest_of(url):
+    """Where a request goes, as the turn record keeps it: `host:port` of
+    the URL (the host alone when it names no port), or `local` when the
+    host is loopback. A label, never a path, never a token."""
+    import ipaddress
+    import urllib.parse
+    try:
+        u = urllib.parse.urlsplit(url)
+        host, port = (u.hostname or "").lower(), u.port
+    except ValueError:
+        return "?"
+    if not host:
+        return "?"
+    if host == "localhost" or host.endswith(".localhost"):
+        return "local"
+    try:
+        if ipaddress.ip_address(host).is_loopback:
+            return "local"
+    except ValueError:
+        pass
+    return "%s:%d" % (host, port) if port else host
 
 
 # ------------------------------------------------------------------ brain
@@ -319,7 +399,22 @@ def resolve_brain(cfg, fresh=False):
 
 # ------------------------------------------------------------------- chat
 def _post(cfg, url, body, timeout, stream=False, forge=False):
-    data = json.dumps(textmod.clean(body)).encode()  # the gate before the wire (text.clean)
+    return _send(cfg, url, _encode(body), timeout, forge=forge)
+
+
+def _encode(body):
+    """The bytes a request sends -- text.clean is the gate before the wire
+    -- so their count is a fact of the encoding, not an estimate."""
+    return json.dumps(textmod.clean(body)).encode()
+
+
+def _sent(url, data):
+    """What the turn record keeps of a request: its size and where it
+    went (dest_of) -- numbers and a host, never the words."""
+    return {"out_bytes": len(data), "dest": dest_of(url)}
+
+
+def _send(cfg, url, data, timeout, forge=False):
     req = urllib.request.Request(url + "/v1/chat/completions", data=data, headers=_headers(cfg, forge=forge))
     try:
         return urllib.request.urlopen(req, timeout=timeout)
@@ -369,21 +464,24 @@ def chat_json(cfg, url, messages, schema, max_tokens=200, temperature=0.2, forge
             "response_format": {"type": "json_schema", "json_schema": {"name": "spark_line", "schema": schema}}}
     if model is not None:
         body["model"] = model
-    with _post(cfg, url, body, timeout or cfg.timeout, forge=forge) as r:
+    data = _encode(body)
+    with _send(cfg, url, data, timeout or cfg.timeout, forge=forge) as r:
         try:
             d = json.load(r)
             text = d["choices"][0]["message"]["content"]
         except (ValueError, KeyError, IndexError):
             raise BrainError("bad", "%s returned something that is not a chat completion" % url)
     try:
-        return json.loads(text), timings_of(d)
+        return json.loads(text), dict(timings_of(d), **_sent(url, data))
     except ValueError:
         raise BrainError("bad", "the model did not return JSON: %s" % text[:80].replace("\n", " "))
 
 
 def timings_of(d):
     """llama-server's per-request throughput, as spark records it: tokens
-    in, tokens out, tokens per second each way, prompt-cache hits."""
+    in, tokens out, tokens per second each way, prompt-cache hits. The
+    two chat shapes add _sent's pair to it: what the request weighed and
+    where it went ride the same turn record."""
     t = d.get("timings") if isinstance(d, dict) else None
     if not isinstance(t, dict):
         return {}
@@ -406,7 +504,8 @@ def chat_stream(cfg, url, messages, on_delta, max_tokens=600, temperature=0.3, f
     if model is not None:
         body["model"] = model
     out, timings, done = [], {}, False
-    with _post(cfg, url, body, timeout or cfg.timeout, stream=True, forge=forge) as r:
+    data = _encode(body)
+    with _send(cfg, url, data, timeout or cfg.timeout, forge=forge) as r:
         for raw in r:
             line = raw.decode("utf-8", errors="replace").strip()
             if not line.startswith("data:"):
@@ -435,4 +534,4 @@ def chat_stream(cfg, url, messages, on_delta, max_tokens=600, temperature=0.3, f
         # FORGE proxying its bytes) closes with [DONE]; its absence means
         # the reply was cut off, and the caller must say so.
         raise BrainError("cut", "%s stopped mid-reply -- the answer above is incomplete" % url)
-    return "".join(out), timings
+    return "".join(out), dict(timings, **_sent(url, data))

@@ -14,8 +14,13 @@ USAGE = """%s stats -- throughput from the turns on disk
 
   spark stats                  today: tok/s, latency, cache hits by mode, baseline
   spark stats --week | --all   a wider window
-  spark stats --porcelain      key<TAB>value lines
+  spark stats --sends          what left, in bytes: by destination and day,
+                               the last 7 days (local = this machine)
+  spark stats --porcelain      key<TAB>value lines; with --sends,
+                               day<TAB>destination<TAB>bytes<TAB>turns
 """ % MARK
+
+SENDS_DAYS = 7
 
 
 def turns(days):
@@ -81,6 +86,30 @@ def by_mode(rows):
     return out
 
 
+def sends(rows):
+    """[(day, dest, bytes, turns)] of the turns that carry `out_bytes` --
+    what left this machine, where, per day (wire._sent's pair on the
+    record): newest day first, the heaviest destination first within it.
+    A record from before the count was kept has no `out_bytes` and is
+    not a send here."""
+    acc = {}
+    for t in rows:
+        n = t.get("out_bytes")
+        if not isinstance(n, int) or isinstance(n, bool):
+            continue
+        key = (str(t.get("ts", ""))[:10], str(t.get("dest") or "?"))
+        b, c = acc.get(key, (0, 0))
+        acc[key] = (b + n, c + 1)
+    out = [(day, dest, b, c) for (day, dest), (b, c) in acc.items()]
+    out.sort(key=lambda r: (-r[2], r[1]))
+    out.sort(key=lambda r: r[0], reverse=True)
+    return out
+
+
+def kb(n):
+    return "%.1f kB" % (n / 1000.0)
+
+
 def running_settings(cfg):
     """The tuning flags of the llama-server that runs here, from its command line."""
     from . import run
@@ -99,9 +128,28 @@ def main(argv):
     if argv and argv[0] in ("-h", "--help", "help"):
         say(USAGE.rstrip())
         return 0
+    report = _sends if "--sends" in argv else _report
     if "--porcelain" in argv:
-        return _report(argv)        # porcelain never pages
-    return paged(lambda: _report(argv))
+        return report(argv)        # porcelain never pages
+    return paged(lambda: report(argv))
+
+
+def _sends(argv):
+    """Bytes out by destination and day, the last SENDS_DAYS days: the
+    turn records' own count (nothing is measured now, nothing is sent)."""
+    rows = sends(turns(SENDS_DAYS))
+    if "--porcelain" in argv:
+        for day, dest, b, c in rows:
+            say("%s\t%s\t%d\t%d" % (day, dest, b, c))
+        return 0
+    say("%s stats%ssends, last %d days" % (MARK, glyph("sep"), SENDS_DAYS))
+    if not rows:
+        say("  nothing sent in the last %d days -- ask something at the prompt" % SENDS_DAYS)
+        return 0
+    say("  %-12s %-28s %10s %6s" % ("day", "destination", "kB", "turns"))
+    for day, dest, b, c in rows:
+        say("  %-12s %-28s %10.1f %6d" % (day, dest[:28], b / 1000.0, c))
+    return 0
 
 
 def _report(argv):
