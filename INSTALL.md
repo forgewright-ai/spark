@@ -547,6 +547,13 @@ a branch pulls `--ff-only`. Either way it converges (bootstrap.sh runs,
 `spark check` re-reads); `--dry-run` says what it would do. By hand:
 `git -C ~/.spark pull --ff-only && ~/.spark/bootstrap.sh`.
 
+A release tag is signed, and `spark update` moves only to a tag signed
+by a key in the tree's `allowed-signers`; any other tag is refused in
+one line -- `spark update -- v1.36 is not signed by a known key:
+refused` -- and nothing moves (`get` keeps the same rule, and the
+`signed` row of `spark check` names the key that signed the tag you
+are on).
+
 Uninstall:
 
 ```sh
@@ -690,8 +697,8 @@ get -> spark setup -> bootstrap.sh (apply) -> install.sh (links, renders)
                       line; spark-shell adds spark's own shell; a spark app
                       is its own repository (spark-<app>)
 
-spark check   36 rows: every promise the machine makes, fixture-tested
-spark update  the newest tag, or main on a developer clone; converge
+spark check   37 rows: every promise the machine makes, fixture-tested
+spark update  the newest signed tag, or main on a developer clone; converge
 
 what leaves the machine: pinned downloads in, your questions to the
 server you chose, nothing else -- no telemetry, no account, one LAN address.

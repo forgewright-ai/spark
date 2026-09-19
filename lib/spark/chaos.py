@@ -142,8 +142,10 @@ class Machine:
         """A commit on the fixture repository, pushed, so the git row
         stays clean and level -- the scenario breaks it on purpose, not
         by accident. Returns "" or why it could not."""
+        # a tag here is signed (the fixture repository's config holds the
+        # throwaway key): `spark update` moves to a signed tag and no other
         for args in (("add", "-A"), ("commit", "-q", "-m", message),
-                     ("tag", tag) if tag else ("rev-parse", "HEAD"),
+                     ("tag", "-s", "-m", tag, tag) if tag else ("rev-parse", "HEAD"),
                      ("push", "-q", "origin", "main")):
             rc, out = self.git(*args)
             if rc != 0:

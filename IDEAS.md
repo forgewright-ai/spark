@@ -44,7 +44,7 @@ Threads are sealed and per-user, and every client talks to one FORGE
 
 ## 2. The machine's own doctor
 
-`spark check` answers 36 yes/no questions and `stats.py` keeps the
+`spark check` answers 37 yes/no questions and `stats.py` keeps the
 numbers. Let a model read `check.json` and `bench.jsonl` and answer the
 question the rows cannot:
 

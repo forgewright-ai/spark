@@ -3,9 +3,10 @@
 # file:// bare clone of this tree. Hermetic: no network, and a sudo that
 # shouts. Proves: a fresh clone with no SPARK_REF lands detached on the
 # newest tag on origin, SPARK_REF=main lands attached to main, the second
-# run on an attached clone pulls, a detached clone moves to a newer tag on
-# origin, the refusals (a foreign directory, no git, an old python3), the
-# pipe form, and the hand-off to `spark setup` in its non-interactive mode
+# run on an attached clone pulls, a detached clone moves to a newer SIGNED
+# tag on origin and stays put at an unsigned one (a fresh clone of which is
+# refused and removed), the refusals (a foreign directory, no git, an old
+# python3), the pipe form, and the hand-off to `spark setup` in its non-interactive mode
 # (SPARK_NO_APPLY=1: site.env is written, nothing is applied).
 set -eu
 REPO=$(cd "$(dirname "$0")/.." && pwd)
@@ -43,6 +44,22 @@ if [ -n "$(git -C "$REPO" status --porcelain)" ]; then
     git -C "$REPO" push -q --no-verify "$T/origin.git" "$commit:refs/heads/get-test"   # no pre-push hook: it runs this test
     git -C "$T/origin.git" symbolic-ref HEAD refs/heads/get-test
 fi
+# the real repository's release tags are signed by a key this fixture does
+# not hold: drop them, give the tested tip one commit whose allowed-signers
+# is a throwaway key's public half, and tag with that key -- get moves a
+# clone to a tag that key signed and to no other
+for t in $(git -C "$T/origin.git" tag -l); do git -C "$T/origin.git" tag -d "$t" >/dev/null; done
+ssh-keygen -q -t ed25519 -N '' -f "$T/key"
+printf 'spark-release namespaces="git" %s\n' "$(cut -d' ' -f1,2 "$T/key.pub")" > "$T/allowed-signers"
+head=$(git -C "$T/origin.git" symbolic-ref HEAD)
+tip=$(git -C "$T/origin.git" rev-parse "$head")
+blob=$(git -C "$T/origin.git" hash-object -w "$T/allowed-signers")
+stree=$(GIT_INDEX_FILE="$T/signers-index" sh -c 'git -C "$1" read-tree "$2" && git -C "$1" update-index --add --cacheinfo "100644,$3,allowed-signers" && git -C "$1" write-tree' sh "$T/origin.git" "$tip" "$blob")
+tip=$(git -C "$T/origin.git" commit-tree "$stree" -p "$tip" -m "get_test: the release key")
+git -C "$T/origin.git" update-ref "$head" "$tip"
+# sign TAG COMMIT: an annotated tag signed with the release key
+sign() { git -C "$T/origin.git" -c gpg.format=ssh -c user.signingkey="$T/key" tag -s -m "$1" "$1" "$2"; }
+sign v1.0 "$tip"
 export SPARK_URL="file://$T/origin.git"
 newest_tag=$(git -C "$T/origin.git" tag -l 'v[0-9]*' --sort=-v:refname | head -1)
 
@@ -86,10 +103,25 @@ if [ -n "$newest_tag" ]; then
     rtree=$(git -C "$T/origin.git" rev-parse "$base^{tree}")
     newer=$(git -C "$T/origin.git" commit-tree "$rtree" -p "$base" -m "get_test: a newer release")
     newer_tag="${newest_tag%.*}.$((${newest_tag##*.} + 1))"
-    git -C "$T/origin.git" tag "$newer_tag" "$newer"
+    sign "$newer_tag" "$newer"
     out=$(sh "$REPO/get" --clone-only 2>&1) && ok "moved run exits 0" || bad "moved run: $out"; note "$out"
-    printf '%s\n' "$out" | grep -q "moved to $newer_tag" && ok "detached clone moves to the newer tag" || bad "moved run: $out"
+    printf '%s\n' "$out" | grep -q "moved to $newer_tag" && ok "detached clone moves to the newer signed tag" || bad "moved run: $out"
     [ "$(git -C "$HOME/.spark" describe --tags --exact-match 2>/dev/null)" = "$newer_tag" ] && ok "landed on $newer_tag" || bad "not on $newer_tag"
+
+    # 4b. an unsigned tag on origin is no release: the detached clone stays
+    #     put, and a fresh clone is refused and removed -- exit 1, before
+    #     spark setup
+    unsigned="${newer_tag%.*}.$((${newer_tag##*.} + 1))"
+    c3=$(git -C "$T/origin.git" commit-tree "$rtree" -p "$newer" -m "get_test: $unsigned, unsigned")
+    git -C "$T/origin.git" tag "$unsigned" "$c3"
+    rc=0; out=$(sh "$REPO/get" --clone-only 2>&1) || rc=$?; note "$out"
+    [ "$rc" -eq 1 ] && ok "unsigned tag: the re-run refuses, exit 1" || bad "unsigned tag re-run: rc $rc: $out"
+    printf '%s\n' "$out" | grep -q "spark get: $unsigned is not signed by a known key: refused" && ok "unsigned tag: the refusal names it" || bad "unsigned tag: $out"
+    [ "$(git -C "$HOME/.spark" describe --tags --exact-match 2>/dev/null)" = "$newer_tag" ] && ok "unsigned tag: still at $newer_tag" || bad "unsigned tag: moved"
+    rc=0; out=$(SPARK_HOME="$T/refused" sh "$REPO/get" 2>&1 < /dev/null) || rc=$?; note "$out"
+    [ "$rc" -eq 1 ] && printf '%s\n' "$out" | grep -q "$unsigned is not signed by a known key: refused" && ok "unsigned tag: a fresh clone is refused before setup" || bad "unsigned tag fresh clone: rc $rc: $out"
+    [ ! -e "$T/refused" ] && ok "unsigned tag: the refused clone is gone" || bad "unsigned tag: the refused clone stayed"
+    git -C "$T/origin.git" tag -d "$unsigned" >/dev/null   # the runs below land on $newer_tag again
 fi
 
 # 5. a non-empty directory that is not spark is refused, untouched

@@ -11,13 +11,17 @@
 # default branch when there is none. An existing spark clone: fetch tags,
 # then pull --ff-only on a branch, or move to the newest tag when detached
 # -- so this line is also the updater (`spark update` is the same, from
-# inside a checkout). Any other non-empty directory is refused. It never
-# runs sudo: the package manager is spark setup's, asked once. The whole body is one
-# function called on the last line, so a download cut short runs nothing.
+# inside a checkout). A tag moves a clone only when a key in the clone's
+# own allowed-signers signed it (git >= 2.34 reads the ssh signature,
+# ssh-keygen checks it); any other tag is refused with nothing moved. Any
+# other non-empty directory is refused. It never runs sudo: the package
+# manager is spark setup's, asked once. The whole body is one function
+# called on the last line, so a download cut short runs nothing.
 set -eu
 
 notice() { printf 'NOTICE: %s\n' "$*"; }
 refuse() { printf 'spark get: %s\n' "$*" >&2; exit 1; }
+signed() { git -C "$1" -c "gpg.ssh.allowedSignersFile=$1/allowed-signers" verify-tag "$2" >/dev/null 2>&1; }
 
 main() {
     dir=${SPARK_HOME:-$HOME/.spark}
@@ -43,8 +47,8 @@ main() {
             ;;
         Linux)
             # the family by its package manager: the fix line below names it
-            if command -v apt-get >/dev/null 2>&1; then fix="sudo apt-get install -y git python3 curl"
-            elif command -v pacman >/dev/null 2>&1; then fix="sudo pacman -S --needed git python curl"
+            if command -v apt-get >/dev/null 2>&1; then fix="sudo apt-get install -y git openssh-client python3 curl"
+            elif command -v pacman >/dev/null 2>&1; then fix="sudo pacman -S --needed git openssh python curl"
             else refuse "no apt-get or pacman -- a Debian-family or Arch Linux in this version"; fi
             case $(uname -m) in
                 x86_64|aarch64) ;;
@@ -55,6 +59,8 @@ main() {
     esac
     missing=''
     command -v git >/dev/null 2>&1 || missing="$missing git"
+    # the release tag's signature is checked by ssh-keygen (openssh)
+    command -v ssh-keygen >/dev/null 2>&1 || missing="$missing ssh-keygen"
     if ! command -v python3 >/dev/null 2>&1 \
        || ! python3 -c 'import sys; sys.exit(sys.version_info < (3, 9))' 2>/dev/null; then
         missing="$missing python3>=3.9"
@@ -81,6 +87,7 @@ main() {
             newest=$(git -C "$dir" tag -l 'v[0-9]*' --sort=-v:refname | head -1)
             cur=$(git -C "$dir" describe --tags --exact-match 2>/dev/null) || cur=""
             if [ -n "$newest" ] && [ "$newest" != "$cur" ]; then
+                signed "$dir" "$newest" || refuse "$newest is not signed by a known key: refused -- $show stays at ${cur:-an untagged commit}"
                 git -C "$dir" checkout -q --detach "$newest" || refuse "git checkout --detach $newest failed in $show"
                 printf 'ok     clone        %s is spark already: moved to %s\n' "$show" "$newest"
             else
@@ -97,6 +104,9 @@ main() {
         else
             newest=$(git -C "$dir" tag -l 'v[0-9]*' --sort=-v:refname | head -1)
             if [ -n "$newest" ]; then
+                # the clone this line made goes with the refusal: a second
+                # run must not find it and run main as if it were a release
+                signed "$dir" "$newest" || { rm -rf "$dir"; refuse "$newest is not signed by a known key: refused -- nothing installed"; }
                 git -C "$dir" checkout -q --detach "$newest" || refuse "git checkout --detach $newest failed in $show"
                 printf 'ok     clone        %s at %s\n' "$show" "$newest"
             else

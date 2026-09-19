@@ -26,9 +26,11 @@ totals in the pull request -- the briefs are judged by lints, not taste.
 
 ## Branch model
 
-`main` is development; a git tag is a release. Users' clones follow the
-newest tag; a developer's clone follows `main`. `spark update` moves
-either one forward and converges the machine.
+`main` is development; a git tag signed by a release key (a line in
+`allowed-signers`) is a release. Users' clones follow the newest such
+tag; a developer's clone follows `main`. `spark update` moves either one
+forward and converges the machine; a tag no release key signed moves
+nothing.
 
 ## Three ways to contribute without writing code
 
