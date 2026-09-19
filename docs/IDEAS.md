@@ -78,10 +78,10 @@ made of numbers spark already keeps and words that never leave.
 
 ## Not prompt features
 
-These two came off the roadmap rather than out of the field. Neither
-passes the test at the top of this file -- they are maintainer tools,
-not things an AI at the prompt does -- so they sit apart here rather
-than pretending otherwise.
+These came off the roadmap, or off a reboot, rather than out of the
+field. None passes the test at the top of this file -- they are the
+machine's own tools, not things an AI at the prompt does -- so they sit
+apart here rather than pretending otherwise.
 
 - **Line-bench.** About forty questions per OS with a checker each,
   through the real `spark line` path: `spark bench --lines`, one pass
@@ -90,3 +90,16 @@ than pretending otherwise.
 - **`spark token`.** Bare `spark token` names which keys this machine
   holds (api-token, admin token, login) and whether the brain accepts
   each -- status only, never a value, with the remedy per stale key.
+- **Bind where promised.** A reboot can bring the WiFi up before the
+  wire: the serve and forge units start five seconds in, `lan_ip()`
+  reads the default route of that instant, and the engine lands on the
+  WiFi address while `/etc/spark/url` and every client still name the
+  wire -- seen on the box on 2026-09-19; a restart of the two units once
+  both links were up put it right. One rule at serve and forge start
+  would close it: when the machine has already promised an address (the
+  published `/etc/spark/url`, or the last `serve-url`), wait up to 30 s
+  for that address to appear on an interface before binding; otherwise
+  bind the lowest-metric default route's source, not the first route
+  that exists. A check-row remedy and a changelog line with it. The
+  no-code answer is a box with one link: drop the WiFi from its network
+  config and the race is gone.
