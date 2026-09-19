@@ -9,6 +9,9 @@
 # packages through pacman (Arch's base already holds the AI's library).
 # macos: syntax, the selftest and the zsh pty test under Apple's python
 # 3.9; then (not on a pull request) the real core bootstrap.
+# workflows: zizmor, a pinned version in a venv, over these workflows
+# themselves -- an unpinned action, a template expanded into a shell, a
+# permission nobody uses; medium and above fails.
 # No job downloads a model: SITE_AI_MODEL=none everywhere; the engine
 # tarball is the one real download.
 name: ci
@@ -23,6 +26,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
         with:
           fetch-depth: 0   # spark ver derives from git describe: get_test and update_test need real tags
+          persist-credentials: false
       - name: syntax
         run: |
           sh -n bootstrap.sh install.sh lib/env.sh get .githooks/pre-commit .githooks/pre-push tests/install_test.sh
@@ -102,6 +106,7 @@ jobs:
           # a full history: the new user's clone comes from this tree, and
           # `spark ver` describes it
           fetch-depth: 0
+          persist-credentials: false
       - name: a new user with sudo
         run: |
           apt-get update -qq && apt-get install -y -qq sudo git curl ca-certificates python3 >/dev/null
@@ -137,7 +142,7 @@ jobs:
     # Arch's base already holds gcc-libs, llama.cpp's OpenMP), the console
     # and GRUB rows honest skips.
     runs-on: ubuntu-latest
-    container: archlinux:latest
+    container: archlinux:latest   # zizmor: ignore[unpinned-images] a rolling distro: latest is the only Arch there is, and -Syu moves it to today anyway
     timeout-minutes: 20
     steps:
       # git first, as in the debian job; -Syu is the image's own rule (a
@@ -146,6 +151,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
         with:
           fetch-depth: 0
+          persist-credentials: false
       - name: a new user with sudo
         run: |
           pacman -S --noconfirm --needed sudo curl python >/dev/null
@@ -176,6 +182,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
         with:
           fetch-depth: 0   # spark ver derives from git describe: get_test and update_test need real tags
+          persist-credentials: false
       - name: syntax under Apple's python
         run: |
           /usr/bin/python3 --version
@@ -218,3 +225,22 @@ jobs:
           ~/.local/bin/spark check --fresh || true
           # a runner may have no gui launchd domain: the launchd rows skip and services may fail; nothing else may
           ~/.local/bin/spark check --porcelain --fresh | awk -F'\t' '$1=="SOFTWARE" && $2=="fail" && $3!="services" { bad=1; print } END { exit bad }'
+  workflows:
+    # the workflows are code too, and the gate does not read YAML: zizmor
+    # (pinned, in a venv of its own) reads every file under
+    # .github/workflows for an action pinned to a tag instead of a sha, a
+    # `${{ }}` expanded inside a run script, a job holding more permission
+    # than it uses, a checkout that leaves the token on disk. A finding
+    # this tree means is ignored inline, with its reason on the line.
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+        with:
+          persist-credentials: false
+      - name: zizmor over .github/workflows
+        run: |
+          python3 -m venv "$RUNNER_TEMP/zizmor"
+          "$RUNNER_TEMP/zizmor/bin/pip" install --quiet zizmor==1.30.1
+          "$RUNNER_TEMP/zizmor/bin/zizmor" --version
+          "$RUNNER_TEMP/zizmor/bin/zizmor" --min-severity medium .github/workflows

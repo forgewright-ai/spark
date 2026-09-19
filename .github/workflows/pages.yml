@@ -19,7 +19,7 @@ on:
   # release.yml creates the Release with the job's own GITHUB_TOKEN, and
   # GitHub raises no event for what that token does -- a `release: published`
   # trigger here never fires. Waiting for the release WORKFLOW instead does.
-  workflow_run:
+  workflow_run:   # zizmor: ignore[dangerous-triggers] nothing of the finished run is read: the job checks out main and publishes it
     workflows: [release]
     types: [completed]
   workflow_dispatch:
@@ -43,6 +43,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
         with:
           fetch-depth: 0   # the sign line names the newest tag
+          persist-credentials: false
       - name: render
         run: python3 www/build.py
       - uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b   # v5.0.0

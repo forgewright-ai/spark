@@ -1,0 +1,38 @@
+# spark codeql -- GitHub reads the code. CodeQL runs on GitHub's runners
+# over the python (bin/spark, lib/spark, tests) and the javascript
+# (lib/spark/forge/spark.js, the FORGE's page): static analysis without
+# a tool in the tree, so spark's own rule -- python3 stdlib, POSIX sh,
+# nothing else -- is untouched. Every push to main, every pull request,
+# and once a week for the queries that land between them. Findings show
+# under Security, Code scanning; nothing here runs on a user's machine.
+name: codeql
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '17 6 * * 1'   # Mondays, 06:17 UTC
+permissions:
+  contents: read
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [python, javascript-typescript]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: github/codeql-action/init@3ea06614dafe36dec890db3446326e0d40ce53d4   # v3.38.1
+        with:
+          languages: ${{ matrix.language }}
+      - uses: github/codeql-action/analyze@3ea06614dafe36dec890db3446326e0d40ce53d4   # v3.38.1
+        with:
+          category: /language:${{ matrix.language }}

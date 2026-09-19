@@ -49,6 +49,23 @@ $hit"
         hit=$(printf '%s\n' "$added" | grep -En '(^.|[^[:alnum:]/._-])/(home|Users)/[A-Za-z0-9_-]+' || true)
         [ -z "$hit" ] || bad "home path naming a user in staged change:
 $hit"
+        # secret shapes: the product's own list (SECRET_SHAPES in
+        # lib/spark/cli.py, what `spark line --paste` holds) minus the two
+        # tuned for a paste and not a tree -- "a credential line" reads
+        # `token = users.add(name)` as one, "a long base64 run" reads every
+        # sha256 pin and the key in allowed-signers as one. A hit names the
+        # shape, never the line; a line marked `spark:allow-secret` (a test
+        # fixture) is skipped. A cli.py that does not import refuses too.
+        if [ -f lib/spark/cli.py ]; then
+            hit=$(printf '%s\n' "$added" | grep -v 'spark:allow-secret' | PYTHONPATH=lib python3 -c '
+import re, sys
+from spark.cli import SECRET_SHAPES
+paste_only = ("a credential line", "a long base64 run")
+text = sys.stdin.buffer.read().decode("utf-8", "replace")
+print(", ".join(w for w, p in SECRET_SHAPES if w not in paste_only and re.search(p, text)))
+') || bad "secret shapes: lib/spark/cli.py does not import"
+            [ -z "$hit" ] || bad "a secret shape in the staged diff: $hit"
+        fi
     fi
 fi
 
@@ -71,7 +88,8 @@ else
     notice "zsh not found; zsh syntax not checked"
 fi
 if ls bin/spark lib/spark/*.py tests/*.py >/dev/null 2>&1; then
-    python3 -m py_compile bin/spark lib/spark/*.py tests/*.py || bad "py_compile"
+    # -W error: a SyntaxWarning (an invalid escape, `is` on a literal) refuses
+    python3 -W error -m py_compile bin/spark lib/spark/*.py tests/*.py || bad "py_compile (-W error)"
 fi
 
 # --- 3. tests for this OS ------------------------------------------------

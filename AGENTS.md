@@ -62,6 +62,25 @@ sh tests/uninstall_test.sh
 
 (`tests/check_selftest.py` is the hook's entry to `spark check --selftest`.)
 
+The hook also reads the staged diff for secret shapes -- `SECRET_SHAPES`
+in `lib/spark/cli.py`, the list `spark line --paste` holds, minus the two
+tuned for a paste and not a tree (a credential line, a long base64 run:
+every sha256 pin is one) -- names the shape and never the line, and skips
+a line marked `spark:allow-secret` (a test fixture); its py_compile runs
+`-W error`, so a SyntaxWarning refuses.
+CI is the second net (`.github/workflows/`): `ci.yml` runs the gate on
+Linux and macOS with a real bootstrap, and its `workflows` job runs
+zizmor (a pinned version, in a venv) over the workflows themselves,
+medium and above failing.
+`codeql.yml` is GitHub's static analysis over the python and the
+javascript (`lib/spark/forge/spark.js`) on a push to main, a pull request
+and weekly -- on GitHub's runner, nothing in the tree.
+`advisories.yml` asks GitHub weekly (or by hand) for llama.cpp security
+advisories published after the engine pin's date and opens one issue,
+`llama.cpp advisory after <pin>`, when there are any.
+`.github/dependabot.yml` keeps every workflow's `uses:` sha pin current,
+weekly.
+
 `--selftest` proves every fixture-testable row CAN flip; `--chaos`
 proves the sentence a row prints under a real failure is true, and
 that the remedy it names heals it. The scenarios live in

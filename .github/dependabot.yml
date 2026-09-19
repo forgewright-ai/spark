@@ -1,0 +1,12 @@
+# spark dependabot -- the one dependency this tree has is its own CI: the
+# actions every workflow pins by commit sha (a tag can move; a sha is the
+# code). Dependabot opens a pull request when one of them has a newer
+# release, so the pins stay current without a hand and without a
+# floating tag. Nothing else here is a package: python3 stdlib, POSIX
+# sh, and the engine pinned in engine.env by sha256, which is a commit.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
