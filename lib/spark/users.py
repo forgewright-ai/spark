@@ -105,6 +105,10 @@ def add(name):
 
 
 def remove(name):
+    """The user's store, gone. Only a valid name reaches rmtree: `../x`
+    is a path, not a user, whatever exists() says of it."""
+    if not valid_name(name):
+        raise ValueError("not a user name: %s" % name)
     shutil.rmtree(user_dir(name))
 
 
@@ -345,6 +349,9 @@ def cmd_remove(args):
         say(USAGE.rstrip())
         return 2
     name = args[0]
+    if not valid_name(name):
+        say("spark user: a name is a-z, 0-9 and -, starting with a letter, at most 32 chars")
+        return 2
     if not exists(name):
         say("spark user: no user named %s" % name)
         return 2

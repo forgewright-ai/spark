@@ -238,7 +238,11 @@ def cmd_edit(args):
         # the pane's ledger: what was declined for this file, or drop it; no text needed
         name = opts["name"] or None
         if opts["ledger"] == "clear":
-            n = ledger.clear(name)
+            try:
+                n = ledger.clear(name)
+            except ledger.Refused as e:
+                say("%s edit --ledger -- %s" % (MARK, e.hint))
+                return 2
             say("dropped %d note%s%s" % (n, "" if n == 1 else "s", (" for " + name) if name else ""))
         else:
             for line in ledger.listing(name):

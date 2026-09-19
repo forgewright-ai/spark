@@ -145,7 +145,11 @@ def cmd_drill(args):
     name = os.path.basename(textmod.utf8(opts["name"]).strip())
     if opts["ledger"]:
         if opts["ledger"] == "clear":
-            n = ledger.clear(name or None, ledger.KIND_DRILL)
+            try:
+                n = ledger.clear(name or None, ledger.KIND_DRILL)
+            except ledger.Refused as e:
+                say("%s drill --ledger -- %s" % (MARK, e.hint))
+                return 2
             say("dropped %d item%s%s" % (n, "" if n == 1 else "s", (" for " + name) if name else ""))
         else:
             for line in ledger.drill_listing(name or None):

@@ -15,6 +15,8 @@ from . import MARK, MEMORY_FILE, SPARK_ENV, config, log_exc, say, vault
 FACT_MAX = 200        # characters per fact
 FACTS_MAX = 40        # facts kept
 TOTAL_MAX = 2000      # characters sent, all facts together
+# what a writer says of a file it cannot read: never written over
+NO_OPEN = "the memory does not open -- spark user login again"
 
 MEMORY_USAGE = """%s memory -- what it keeps
 
@@ -55,16 +57,20 @@ def sealed_exists():
     return bool(st) and os.path.isfile(st[0])
 
 
-def _lines(st=None):
+def _lines(st=None, strict=False):
     """Every line of the memory, as written (comments and blanks too):
     the sealed store first, the pre-v1.4 plaintext as the fallback.
-    `st` names whose (store_of); None is this machine's own account."""
+    `st` names whose (store_of); None is this machine's own account. A
+    sealed file that does not open reads as empty -- except to a writer
+    (`strict`), which is refused rather than let to write over it."""
     st = st or _store()
     if st and os.path.isfile(st[0]):
         try:
             recs = vault.read_sealed(st[0], st[1], "memory", st[2])
             return recs[0].decode("utf-8", "replace").splitlines() if recs else []
         except (OSError, vault.SealError):
+            if strict:
+                raise Refused("closed", NO_OPEN)
             return []
     if st and st != _store():
         return []                  # a named user with no memory yet: never the box's file
@@ -75,9 +81,9 @@ def _lines(st=None):
         return []
 
 
-def _all_facts(st=None):
+def _all_facts(st=None, strict=False):
     """The facts in the file, uncapped, ignoring the on/off switch."""
-    return [ln.strip() for ln in _lines(st) if ln.strip() and not ln.lstrip().startswith("#")]
+    return [ln.strip() for ln in _lines(st, strict) if ln.strip() and not ln.lstrip().startswith("#")]
 
 
 def facts(cfg, st=None):
@@ -136,7 +142,8 @@ def _refresh():
 
 class Refused(Exception):
     """A fact that cannot be kept or dropped. reason: empty | long |
-    comment | duplicate | full ; hint: one line for a human."""
+    comment | duplicate | full | closed (the file does not open) ; hint:
+    one line for a human."""
 
     def __init__(self, reason, hint):
         super().__init__(hint)
@@ -153,20 +160,20 @@ def remember(text, st=None):
         raise Refused("long", "%d chars -- a fact is at most %d" % (len(fact), FACT_MAX))
     if fact.startswith("#"):
         raise Refused("comment", "a fact cannot start with # -- that is a comment")
-    have = _all_facts(st)
+    have = _all_facts(st, strict=True)
     if fact.lower() in (h.lower() for h in have):
         raise Refused("duplicate", "already kept: %s" % fact)
     if len(have) >= FACTS_MAX:
         raise Refused("full", "%d facts already -- spark forget one first" % FACTS_MAX)
-    _write(_lines(st) + [fact], st)
+    _write(_lines(st, strict=True) + [fact], st)
     _refresh()
     return fact
 
 
 def forget_n(n, st=None):
     """Drop fact N as `spark memory` numbers them; the fact, or None when
-    there is no such number."""
-    lines = _lines(st)
+    there is no such number. Raises Refused when the file does not open."""
+    lines = _lines(st, strict=True)
     idx = [i for i, ln in enumerate(lines) if ln.strip() and not ln.lstrip().startswith("#")]
     if not 1 <= n <= len(idx):
         return None
@@ -197,7 +204,11 @@ def cmd_forget(args):
     if args[0] in ("-h", "--help", "help"):
         say(MEMORY_USAGE.rstrip())
         return 0
-    lines = _lines()
+    try:
+        lines = _lines(strict=True)
+    except Refused as e:
+        say("spark forget: " + e.hint)
+        return 1
     idx = [i for i, ln in enumerate(lines) if ln.strip() and not ln.lstrip().startswith("#")]
     if not idx:
         say("spark forget: nothing is remembered")

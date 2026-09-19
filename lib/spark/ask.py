@@ -187,7 +187,11 @@ def cmd_ask(args):
     name = os.path.basename(textmod.utf8(opts["name"]).strip())
     if opts["ledger"]:
         if opts["ledger"] == "clear":
-            n = ledger.clear(name or None, ledger.KIND_ASK)
+            try:
+                n = ledger.clear(name or None, ledger.KIND_ASK)
+            except ledger.Refused as e:
+                say("%s ask --ledger -- %s" % (MARK, e.hint))
+                return 2
             say("dropped %d question%s%s" % (n, "" if n == 1 else "s", (" for " + name) if name else ""))
         else:
             for line in ledger.listing(name or None, ledger.KIND_ASK,

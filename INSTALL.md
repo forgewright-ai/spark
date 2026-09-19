@@ -635,7 +635,12 @@ When something stops working:
    serving user must be in the `render` group; log out of every session
    and in again.
 8. `SPARK_DEBUG=1 spark ...` and `~/.local/state/spark/debug.log`.
-9. For an issue: `spark check --report` prints a block safe to paste --
+9. `the ledger does not open -- spark user login again` (or the memory):
+   the key this machine holds is not the one that sealed the file --
+   a login by another token, or a byte that changed on disk. Nothing
+   is written over it; `spark user login NAME` with your token puts
+   the right key back.
+10. For an issue: `spark check --report` prints a block safe to paste --
    version, OS, backend, model stems and every row's status, never a
    value, a path or a name (it runs the privacy word lists over its
    own output besides).

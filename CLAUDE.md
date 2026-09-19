@@ -132,12 +132,16 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 real process, so it can be killed mid-reply)
                 setup (spark setup: the guided first run)
                 stats (turns -> numbers) bench (llama-bench, bench tune [show|apply])
-                soul memory (the identity files)
+                soul memory (the identity files; memory's writers refuse a
+                sealed file that does not open, never write over it)
                 text (the streams: wrap, fence, and the grounding law -- anchor,
                 Ground, Gate, shared by every contract that shows a text to a
                 model, and borrowed by spark recall to keep to lines that ran)
                 ledger (what you have already weighed: one sealed file, a kind per
-                contract, and the rule that retires a record is the contract's own)
+                contract, and the rule that retires a record is the contract's own;
+                a writer refuses a file that does not open -- `the ledger does not
+                open -- spark user login again` -- and the plain `state/fails` index
+                it writes carries `NAME=...` where NAME smells of a secret)
                 ask (spark ask: contract 12) read (spark read: contract 11)
                 drill (spark drill: contract 13 -- a source becomes questions it
                 answers, self-graded, and the ledger schedules the misses)
@@ -160,9 +164,13 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 tests/qr_test.py. forgeserve --print-url and users.cmd_add
                 print it at a tty: the login link, scannable)
                 vault (the sealed-file format and the key custody: a per-user
-                data key wrapped by the token; sha256 verifier; pbkdf2)
+                data key wrapped by the token; sha256 verifier; pbkdf2, its
+                count bounded by ITERS_MAX; an append holds an existing file
+                to the caller's header first, so an empty or foreign file
+                takes no record)
                 users (the named users, their store under state/users/, and
-                this machine's login: spark user)
+                this machine's login: spark user; a name is validated before
+                the store is touched, remove() included)
 lib/spark/forge/  index.html spark.css spark.js manifest.webmanifest favicon.svg
                   -- the page, ASCII, no inline script
 home/           shared $HOME mirror (linked): the two widgets, the two rc hooks
