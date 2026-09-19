@@ -32,6 +32,7 @@ KINDS = ("thread", "memory", "chathist", "ledger")
 # password -- so the KDF is belt-and-braces, not the wall. The iteration
 # count lives in the key file so it can rise without a format break.
 PBKDF2_ITERS = 200_000
+ITERS_MAX = 10_000_000   # a count past this is a tampered key file, not a slow one
 DK_LEN = 32
 
 
@@ -55,7 +56,7 @@ def new_key():
 
 def token_hash(token):
     """The lookup verifier: sha256 hex of the token. The token is 256-bit
-    random, so a fast hash is sound here; scrypt only gates the wrap."""
+    random, so a fast hash is sound here; pbkdf2 only gates the wrap."""
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
@@ -83,11 +84,16 @@ def unwrap_key(path, token, name):
         magic, kdf, iters, salt_b64, blob_b64 = parts
         if magic != KEY_MAGIC or kdf != "pbkdf2":
             raise ValueError(magic)
+        # the count is the file's word: a non-number is a refusal, and so
+        # is one that would pin a CPU for an hour
+        iters = int(iters)
+        if not 1 <= iters <= ITERS_MAX:
+            raise ValueError(iters)
         salt = base64.b64decode(salt_b64, validate=True)
         blob = base64.b64decode(blob_b64, validate=True)
     except (OSError, ValueError):
         raise SealError("unreadable key file: %s" % path)
-    kek = _kek(token, salt, int(iters))
+    kek = _kek(token, salt, iters)
     nonce, sealed = blob[:chacha.NONCE_LEN], blob[chacha.NONCE_LEN:]
     dk = chacha.unseal(kek, nonce, sealed, ("%s %s" % (KEY_MAGIC, name)).encode())
     if len(dk) != DK_LEN:
@@ -192,9 +198,13 @@ def write_sealed(path, dk, kind, name, blob):
 
 def append_sealed(path, dk, kind, name, record):
     """One record onto a sealed file, creating it (0600, header first) on
-    first use. O_APPEND keeps concurrent writers whole."""
+    first use. O_APPEND keeps concurrent writers whole. A file that is
+    there is first held to the caller's header: an empty or foreign file
+    would take records no reader will ever open."""
     hdr = header(kind, name)
-    if not os.path.exists(path):
+    if os.path.exists(path):
+        _expect(path, kind, name)
+    else:
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_APPEND, 0o600)
         with os.fdopen(fd, "w") as f:
             f.write(hdr + "\n")

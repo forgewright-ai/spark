@@ -6,12 +6,24 @@ prints for it: the block function (2.3.2), the stream (2.4.2), Poly1305
 (2.5.2), the one-time key (2.6.2) and the AEAD (2.8.2). Then property
 tests: seal/unseal round-trips, a flipped bit, a wrong key, a swapped
 AAD all refuse, and a throughput floor so a slow regression goes loud.
+Then the stores built on the vault, in a throwaway HOME: a writer never
+writes over a file it cannot open, a user name is validated before the
+store is touched, and the plain fails index carries no secret.
 """
 import os
+import shutil
 import struct
 import sys
+import tempfile
 import time
 
+# a throwaway HOME before spark is imported: its paths are read at import
+HOME = tempfile.mkdtemp(prefix="spark-vault-test-")
+for _k in list(os.environ):
+    if _k.startswith(("SPARK_", "XDG_", "SITE_")):
+        del os.environ[_k]
+os.environ.update({"HOME": HOME, "XDG_CONFIG_HOME": HOME + "/.config", "XDG_STATE_HOME": HOME + "/.local/state",
+                   "XDG_DATA_HOME": HOME + "/.local/share", "SPARK_NO_REFRESH": "1", "SPARK_YES": "1"})
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "lib"))
 from spark import chacha, vault  # noqa: E402
 
@@ -27,15 +39,35 @@ def check(name, got, want):
         print("ok   %s" % name)
 
 
-def refuse(name, fn):
+def refuse(name, fn, exc=chacha.SealError):
+    """fn() raises exactly `exc` -- any other exception (a ValueError out
+    of a tampered field) is a failure with a name, not a crash."""
     global FAILED
     try:
         fn()
-    except chacha.SealError:
+    except exc:
         print("ok   %s" % name)
+    except Exception as e:
+        FAILED += 1
+        print("FAIL %s -- %s instead of %s: %s" % (name, type(e).__name__, exc.__name__, e))
     else:
         FAILED += 1
-        print("FAIL %s -- opened instead of refusing" % name)
+        print("FAIL %s -- went through instead of refusing" % name)
+
+
+def read_bytes(path):
+    with open(path, "rb") as f:
+        return f.read()
+
+
+def corrupt(path):
+    """Flip the first character of the first record: still base64, so
+    the refusal is the tag's, not the parser's. Returns the new bytes."""
+    head, body = read_bytes(path).split(b"\n", 1)
+    body = (b"B" if body[:1] == b"A" else b"A") + body[1:]
+    with open(path, "wb") as f:
+        f.write(head + b"\n" + body)
+    return head + b"\n" + body
 
 
 SUNSCREEN = (b"Ladies and Gentlemen of the class of '99: If I could offer "
@@ -181,6 +213,131 @@ def test_vault():
         check("plaintext is not sealed", vault.is_sealed(keyfile), False)
 
 
+def test_key_file_iterations():
+    # the iteration count is the key file's word: a tampered one is a
+    # refusal, never a traceback (abc) or a CPU pinned for an hour
+    with tempfile.TemporaryDirectory() as d:
+        dk = vault.new_key()
+        parts = vault.wrap_key(dk, "tok-1", "alice").split()
+        p = os.path.join(d, "key")
+        for bad in ("abc", "0", "-5", "99999999999", "1e6", ""):
+            line = parts[:2] + ([bad] if bad else []) + parts[3:]
+            with open(p, "w", encoding="utf-8") as f:
+                f.write(" ".join(line) + "\n")
+            refuse("iteration count %r refused" % bad, lambda: vault.unwrap_key(p, "tok-1", "alice"))
+        line = parts[:2] + [str(vault.ITERS_MAX)] + parts[3:]   # inside the bound: tried, fails its tag
+        with open(p, "w", encoding="utf-8") as f:
+            f.write(" ".join(line) + "\n")
+        refuse("a count inside the bound is tried and fails its tag", lambda: vault.unwrap_key(p, "tok-1", "alice"))
+
+
+def test_append_expects_the_header():
+    # an append onto a file that is there holds it to the caller's header
+    # first: an empty or foreign file takes no record nobody will open
+    with tempfile.TemporaryDirectory() as d:
+        dk = vault.new_key()
+        empty = os.path.join(d, "empty.sealed")
+        open(empty, "w").close()
+        refuse("append onto an empty file refused", lambda: vault.append_sealed(empty, dk, "thread", "a", b"m"))
+        check("the empty file stays empty", os.path.getsize(empty), 0)
+        plain = os.path.join(d, "plain")
+        with open(plain, "w", encoding="utf-8") as f:
+            f.write("not sealed\n")
+        refuse("append onto a plaintext file refused", lambda: vault.append_sealed(plain, dk, "thread", "a", b"m"))
+        check("the plaintext file is as it was", read_bytes(plain), b"not sealed\n")
+        t = os.path.join(d, "t.sealed")
+        vault.append_sealed(t, dk, "thread", "2000-01-01-000000", b"m1")
+        before = read_bytes(t)
+        refuse("append as another thread refused",
+               lambda: vault.append_sealed(t, dk, "thread", "2001-01-01-000000", b"m2"))
+        refuse("append as another kind refused",
+               lambda: vault.append_sealed(t, dk, "ledger", "2000-01-01-000000", b"m2"))
+        check("the thread is byte-for-byte as it was", read_bytes(t), before)
+        vault.append_sealed(t, dk, "thread", "2000-01-01-000000", b"m2")
+        check("the matching header still appends", vault.read_sealed(t, dk), [b"m1", b"m2"])
+
+
+def test_stores_never_write_over():
+    # the ledger and the memory, in the throwaway HOME: a file that does
+    # not open (a flipped byte, a stale account-key) refuses every writer
+    # and is left byte-for-byte as it was; a reader sees it as empty
+    import base64
+    from spark import ACCOUNT_KEY_FILE, ledger, memory, users
+    token = users.add("alice")
+    users.write_login("alice", token, users.unlock("alice", token))
+    check("keep writes the ledger", ledger.keep(ledger.KIND_EDIT, "t.md", "the first note"), "the first note")
+    lpath = ledger.path()
+    good = read_bytes(lpath)
+    bad = corrupt(lpath)
+
+    def keep():
+        ledger.keep(ledger.KIND_EDIT, "t.md", "another note")
+    refuse("a corrupted ledger refuses keep", keep, ledger.Refused)
+    refuse("a corrupted ledger refuses clear", ledger.clear, ledger.Refused)
+    refuse("a corrupted ledger refuses drill_grade",
+           lambda: ledger.drill_grade("t.md", "q", "a", True), ledger.Refused)
+    check("the corrupted ledger is byte-for-byte as it was", read_bytes(lpath), bad)
+    check("a corrupted ledger reads as empty", ledger.entries("t.md"), [])
+    try:
+        keep()
+    except ledger.Refused as e:
+        check("the refusal names the remedy", "does not open -- spark user login again" in e.hint, True)
+    with open(lpath, "wb") as f:
+        f.write(good)
+    with open(ACCOUNT_KEY_FILE, "wb") as f:
+        f.write(base64.b64encode(os.urandom(32)) + b"\n")
+    refuse("a stale account-key refuses keep", keep, ledger.Refused)
+    check("the ledger under a stale key is byte-for-byte as it was", read_bytes(lpath), good)
+    users.write_login("alice", token, users.unlock("alice", token))
+    check("the right key writes again", ledger.keep(ledger.KIND_EDIT, "t.md", "another note"), "another note")
+    check("both notes are there", [e["note"] for e in ledger.entries("t.md")], ["the first note", "another note"])
+
+    check("remember writes the memory", memory.remember("the sky is blue"), "the sky is blue")
+    mpath = memory._store()[0]
+    bad = corrupt(mpath)
+    refuse("a corrupted memory refuses remember", lambda: memory.remember("another fact"), memory.Refused)
+    refuse("a corrupted memory refuses forget_n", lambda: memory.forget_n(1), memory.Refused)
+    check("spark forget on a corrupted memory says so", memory.cmd_forget(["sky"]), 1)
+    check("the corrupted memory is byte-for-byte as it was", read_bytes(mpath), bad)
+    check("a corrupted memory reads as empty", memory._all_facts(), [])
+
+
+def test_remove_validates_the_name():
+    # `spark user remove ../x`: refused before the store is touched, and
+    # remove() itself never hands a path to rmtree
+    from spark import STATE_DIR, users
+    victim = os.path.join(STATE_DIR, "x")
+    os.makedirs(victim, exist_ok=True)
+    open(os.path.join(victim, "key"), "w").close()      # exists("../x") would say yes
+    check("spark user remove ../x is refused, exit 2", users.cmd_remove(["../x"]), 2)
+    check("the directory beside the store is untouched", os.path.isfile(os.path.join(victim, "key")), True)
+    refuse("remove() refuses a path", lambda: users.remove("../x"), ValueError)
+    refuse("remove() refuses an empty name", lambda: users.remove(""), ValueError)
+    check("still untouched", os.path.isdir(victim), True)
+    check("a valid name that is no user is exit 2", users.cmd_remove(["nobody"]), 2)
+
+
+def test_fails_index_redacts():
+    # the plain index the prompt hook reads: NAME=value where NAME smells
+    # of a secret becomes NAME=...; PATH=/usr/bin stays
+    from spark import ledger
+    entries = [{"kind": "fail", "name": "env", "note": "env TOKEN=abc curl -s host", "shape": "a" * 16,
+                "head": "env", "rc": "1"},
+               {"kind": "fail", "name": "PATH=/usr/bin", "note": "PATH=/usr/bin make", "shape": "b" * 16,
+                "head": "make", "rc": "2"}]
+    ledger.write_fails_index(entries)
+    with open(ledger.FAILS_INDEX, encoding="utf-8") as f:
+        text = f.read()
+    check("the fails index redacts TOKEN=abc", "env TOKEN=... curl -s host" in text and "abc" not in text, True)
+    check("the fails index keeps PATH=/usr/bin", "PATH=/usr/bin make" in text, True)
+
+    def red(s):
+        return ledger.SECRET_RE.sub(r"\1=...", s)
+    check("api key, password, --auth and a quoted value", red("export API_KEY=x PASSWORD='p q' --auth=t path=y"),
+          "export API_KEY=... PASSWORD=... --auth=... path=y")
+    check("a plain word survives", red("make target=all"), "make target=all")
+
+
 def main():
     test_block_2_3_2()
     test_stream_2_4_2()
@@ -190,6 +347,11 @@ def main():
     test_round_trips()
     test_refusals()
     test_vault()
+    test_key_file_iterations()
+    test_append_expects_the_header()
+    test_stores_never_write_over()
+    test_remove_validates_the_name()
+    test_fails_index_redacts()
     test_throughput_floor()
     if FAILED:
         print("%d failed" % FAILED)
@@ -199,4 +361,7 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    finally:
+        shutil.rmtree(HOME, ignore_errors=True)

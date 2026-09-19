@@ -26,6 +26,7 @@ import fcntl
 import hashlib
 import json
 import os
+import re
 import shutil
 import time
 from contextlib import contextmanager
@@ -56,6 +57,12 @@ RULES = {
 }
 FAILS_INDEX = os.path.join(STATE_DIR, "fails")           # hash head rc fix -- the hook reads it
 FAIL_PENDING = os.path.join(STATE_DIR, "fail-pending")   # shape head rc -- explain writes it
+# a fix line can carry a secret (`export TOKEN=... && curl`): in the plain
+# index every NAME=value whose NAME smells of one becomes NAME=... -- the
+# sealed ledger keeps the line whole
+SECRET_RE = re.compile(r"(?i)\b(\w*(?:pass|pwd|token|secret|key|auth)\w*)=(?:\"[^\"]*\"|'[^']*'|\S+)")
+# what a writer says of a file it cannot read: never written over
+NO_OPEN = "the ledger does not open -- spark user login again"
 
 
 def _name(name):
@@ -110,13 +117,19 @@ def _locked():
         os.close(fd)
 
 
-def _load(st=None):
+def _load(st=None, strict=False):
+    """The records. No file is an empty ledger; a file that does not open
+    (a flipped byte, a stale account-key) reads as empty too -- except to
+    a writer (`strict`), which is refused: a load-mutate-save over it
+    would turn the whole ledger into its one new record."""
     st = st or _store()
     if not st or not os.path.isfile(st[0]):
         return []
     try:
         recs = vault.read_sealed(st[0], st[1], "ledger", st[2])
     except (OSError, vault.SealError):
+        if strict:
+            raise Refused(NO_OPEN)
         return []
     out = []
     for line in (recs[0].decode("utf-8", "replace").splitlines() if recs else []):
@@ -195,7 +208,7 @@ def keep(kind, name, note, cfg=None, missing=""):
         raise Refused("nothing to keep -- the note comes on stdin")
     text = text[:NOTE_MAX]
     with _locked():
-        entries = _fresh(_load(), cfg)
+        entries = _fresh(_load(strict=True), cfg)
         entries = [e for e in entries if not (_kind(e) == kind and e["name"] == name and e["note"] == text)]
         entries.append({"kind": kind, "name": name, "ts": time.strftime("%Y-%m-%d %H:%M:%S"), "note": text})
         mine = [e for e in entries if _kind(e) == kind and e["name"] == name]
@@ -293,7 +306,11 @@ def fail_fix(fix, cfg=None):
         return 0
     shape, head, rc = parts
     with _locked():
-        entries = _fresh(_load(), cfg)
+        try:
+            entries = _fresh(_load(strict=True), cfg)
+        except Refused as e:
+            say("spark history: " + e.hint)
+            return 1
         rec = next((e for e in entries if _kind(e) == KIND_FAIL and e.get("shape") == shape), None)
         if rec is None:
             rec = {"kind": KIND_FAIL, "name": head, "note": fix, "shape": shape,
@@ -324,7 +341,8 @@ def write_fails_index(entries=None, cfg=None):
     for e in entries:
         if _kind(e) != KIND_FAIL or _retired(e, "path", None):
             continue
-        lines.append("%s %s %s %s\n" % (e.get("shape", ""), e.get("head", ""), e.get("rc", ""), e["note"]))
+        lines.append("%s %s %s %s\n" % (e.get("shape", ""), e.get("head", ""), e.get("rc", ""),
+                                         SECRET_RE.sub(r"\1=...", e["note"])))
     try:
         from . import state_dir
         state_dir()
@@ -413,7 +431,7 @@ def drill_grade(name, question, answer, right, cfg=None):
     a = " ".join((answer or "").split())[:NOTE_MAX]
     key = textmod.fold(q)
     with _locked():
-        entries = _load()
+        entries = _load(strict=True)
         rec = next((e for e in entries if _kind(e) == KIND_DRILL and e["name"] == name
                     and textmod.fold(e.get("note", "")) == key), None)
         if rec is None:
@@ -448,7 +466,7 @@ def clear(name=None, kind=KIND_EDIT):
     """Drop this kind's notes, or one name's; the count dropped."""
     name = _name(name) if name else None
     with _locked():
-        all_e = _load()
+        all_e = _load(strict=True)
         alive = [e for e in all_e if _kind(e) != kind or (name and e["name"] != name)]
         if len(alive) != len(all_e):
             _save(alive)
