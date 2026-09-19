@@ -25,6 +25,7 @@ REPO = os.path.dirname(HERE)
 SPARK = os.path.join(REPO, "bin", "spark")
 sys.path.insert(0, HERE)
 import smoke  # noqa: E402  -- the stub llama-server
+import forge_probe  # noqa: E402  -- contract 9's gates, asked from the wire
 
 SEEN = {}                 # what the stub saw last: headers and body
 
@@ -201,6 +202,10 @@ def main():
                 time.sleep(0.3)
         try:
             ok(st == 200, "--foreground answers /api/health")
+            if st == 200:
+                # the same probes the hardening row and tests/forge_probe.py run
+                for name, held, detail in forge_probe.probe(url):
+                    ok(held, "gate: " + name, detail)
             if st != 200:
                 p.kill()
                 print(p.communicate()[0][-2000:])

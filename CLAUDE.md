@@ -225,6 +225,11 @@ tests/          install_test.sh get_test.sh update_test.sh uninstall_test.sh smo
                 release.yml: the GitHub Release from the CHANGELOG section, on a v* tag
                 pages.yml: www/ rendered and published to GitHub Pages on a doc change
                 and on a published release (the sign line links the release)
+                codeql.yml: GitHub's static analysis over the python and the
+                javascript, on a push to main, a pull request and weekly
+                advisories.yml: weekly, one issue when llama.cpp published a
+                security advisory after the engine pin's date
+                dependabot.yml: the workflows' action sha pins, kept current weekly
 LICENSE         MIT, verbatim, ASCII (the hook checks it with the docs)
 assets/         banner.svg -- the banner as rectangles, for the README and the page
                 (banner-light.svg is the page's light-theme variant);

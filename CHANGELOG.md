@@ -1,5 +1,73 @@
 # Changelog
 
+## v1.36
+
+- The pre-commit hook reads the staged diff for the secret shapes
+  `spark line --paste` holds (`cli.SECRET_SHAPES`, minus the two tuned
+  for a paste and not a tree), names the shape and never the line, and
+  skips a line marked `spark:allow-secret`; its py_compile runs
+  `-W error`, so a SyntaxWarning refuses.
+
+- CodeQL (`codeql.yml`) runs GitHub's static analysis over the python
+  and the javascript on every push to main, every pull request and
+  weekly, on GitHub's runner: the stdlib-only rule is untouched.
+  `ci.yml` gains a `workflows` job -- zizmor, pinned, over the workflows
+  themselves at medium and above -- and every checkout runs with
+  `persist-credentials: false`. `advisories.yml` asks GitHub weekly
+  whether llama.cpp published a security advisory after the engine pin's
+  date and opens one issue when it did. Dependabot keeps every
+  workflow's action pin current.
+
+- `spark ver --sbom` prints what the tree depends on as one CycloneDX
+  1.5 JSON document (`lib/spark/sbom.py`): the llama.cpp engine per
+  pinned flavour, every model with its sha256 and license, the distro
+  packages, the python floor, the GitHub Actions the workflows pin.
+  Deterministic but for the timestamp, the JSON alone so it pipes; every
+  release carries it as `sbom.cdx.json` beside `get`.
+
+- The `pending` row of `spark check` names the security upgrades among
+  what the package manager holds back: apt's `-security` sources,
+  `arch-audit` on Arch (absent, the row says so without warning). One
+  waiting is a warn with the family's upgrade line; none keeps the ok
+  text plus `no security upgrades pending`.
+
+- What leaves is counted: every request records its bytes out and its
+  destination (`host:port`, or `local`); `spark stats --sends` shows
+  them by destination and day; the `sends` check row warns the day bytes
+  go to a host that is not your configured server.
+
+- The FORGE's gates are probed from the wire: `tests/forge_probe.py URL`
+  (one line per gate, exit 1) and the `hardening` check row ask contract
+  9's eight promises of the served FORGE, or of the peer on a client,
+  every five minutes.
+
+- `spark do` under `SPARK_DO_STDIN` says so on stderr: a harness
+  confirmed, not a person.
+
+- Every route the server answers is one row of `forgeserve.ROUTES`
+  (`none`, `user` or `admin`), consulted by nothing else: a request off
+  the table is 404. CLAUDE.md contract 9 prints the table,
+  `tests/docs_test.py` holds it equal to the code, and the new
+  `tests/policy_test.py` sends three callers -- nobody, a user, the
+  admin -- at every row.
+
+- A sealed audit trail: every admin action -- a command run from the
+  page (its sha256 prefix and exit code, never its text), a verb run, a
+  user added, removed or rotated, the admin token rotated -- is one
+  record in the box account's `audit`, numbers and names only.
+  `spark forge audit [N]` reads the newest N (`--porcelain` for
+  machines); a trail that does not open is one signed line, exit 2,
+  never written over.
+
+- `GET /api/config` returns no key matching `KEY|TOKEN|SECRET`, whatever
+  spark.env holds; `GET /api/users` entries are exactly name, threads,
+  last. The chat-history save skips a sealed file that does not open,
+  one line on stderr, instead of writing over it.
+
+- Every non-human caller -- a script, an app, a CI job -- gets its own
+  user with `spark user add NAME` and its own token; the admin token is
+  the box's, never shared (INSTALL.md section 5).
+
 ## v1.35
 
 - A release is a signed tag. `spark update` and `get` verify a tag's ssh

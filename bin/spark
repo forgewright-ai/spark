@@ -34,7 +34,7 @@ spark
  spark off | on               silence / restore the widget, every pane at once
  spark soul [edit|reset]      who it is: ~/.config/spark/soul
  spark memory add <words>     a fact it keeps; memory forget N; memory
- spark ver                    about, version, credits
+ spark ver [--sbom]           about, version, credits; or what it depends on
  spark chat [words]           a conversation; /help lists its verbs, Ctrl-D ends
  spark [@FILE] <words>        ask about anything, or a file; a streamed answer
  spark do <words>             a task, one command at a time; you confirm each
@@ -70,6 +70,7 @@ the FORGE: server/client
  spark user [add NAME]        the named users, each with sealed threads; add
                               shows the token and its QR once (-h)
  spark forge [on|off]         the FORGE on the LAN: the API and the page
+ spark forge audit [N]        every admin action, sealed: runs, users, tokens
  spark headless [on|off]      the FORGE up from boot, never asleep (a brain)
  spark share [on|off]         one engine for every OS user here: a spark group
                               reads the token; each keeps their own context
@@ -91,8 +92,8 @@ USAGE_INTERFACE = """the interface
 """
 
 USAGE_TAIL = """less often used
- spark                        last, history [clear], stats [--week], brain,
-                              bench [tune [show|apply]] -- each has -h
+ spark                        last, history [clear], stats [--week|--sends],
+                              brain, bench [tune [show|apply]] -- each has -h
 
 beside the core
  APPS.md                      editors and tools that speak to spark

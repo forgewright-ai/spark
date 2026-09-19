@@ -57,6 +57,7 @@ ON THE LAN (server / client)
                                   token and a QR to scan (--no-qr)
   spark forge --print-client      what another machine needs: URL + a user
   spark forge token --new         rotate the admin token
+  spark forge audit [N]           every admin action, sealed (--porcelain)
   spark user [list]               the named users, each a sealed store
   spark user add NAME             mint an account; the token and its QR
                                   show once (--no-qr)

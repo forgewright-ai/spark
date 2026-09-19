@@ -59,7 +59,8 @@ _spark_complete() {
         theme)   words="list show none status $(_spark_theme_names)" ;;
         model)   words="list verify budget rm add auto none status $(_spark_model_names)" ;;
         ember)   words="list auto none status $(_spark_model_names)" ;;
-        headless | share | forge) words="on off status" ;;
+        headless | share) words="on off status" ;;
+        forge)   words="on off status audit token" ;;
         bar)     words="line" ;;
         memory)  words="add forget clear on off status" ;;
         check)   words="--watch --porcelain --selftest --fresh --fetch" ;;
