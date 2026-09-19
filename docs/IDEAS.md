@@ -90,16 +90,3 @@ apart here rather than pretending otherwise.
 - **`spark token`.** Bare `spark token` names which keys this machine
   holds (api-token, admin token, login) and whether the brain accepts
   each -- status only, never a value, with the remedy per stale key.
-- **Bind where promised.** A reboot can bring the WiFi up before the
-  wire: the serve and forge units start five seconds in, `lan_ip()`
-  reads the default route of that instant, and the engine lands on the
-  WiFi address while `/etc/spark/url` and every client still name the
-  wire -- seen on the box on 2026-09-19; a restart of the two units once
-  both links were up put it right. One rule at serve and forge start
-  would close it: when the machine has already promised an address (the
-  published `/etc/spark/url`, or the last `serve-url`), wait up to 30 s
-  for that address to appear on an interface before binding; otherwise
-  bind the lowest-metric default route's source, not the first route
-  that exists. A check-row remedy and a changelog line with it. The
-  no-code answer is a box with one link: drop the WiFi from its network
-  config and the race is gone.

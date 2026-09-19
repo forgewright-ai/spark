@@ -90,7 +90,26 @@ preference is still blind between those.
   grounding elsewhere, so the brief does not move again until a
   mechanism, not a wording, closes it
 
-## 3. Live in it, and let the turn records pick
+## 3. Bind where promised
+
+Seen twice on the box on 2026-09-19: a reboot brings the WiFi up before
+the wire, the serve and forge units start five seconds in, `lan_ip()`
+reads the default route of that instant, and the engine lands on the
+WiFi address while `/etc/spark/url` and every client still name the
+wire. A restart of the two units once both links were up put it right
+each time; the `serve` and `forge` rows already say `moved`.
+
+- one rule at serve and forge start: when the machine has already
+  promised an address (the published `/etc/spark/url`, or the last
+  `serve-url`), wait up to 30 s for it to appear on an interface before
+  binding; otherwise bind the lowest-metric default route's source, not
+  the first route that exists
+- the two rows' remedy stays `restart the unit`; a changelog line says
+  what the wait is and when it gives up
+- the no-code answer for a box with one link stays true: drop the WiFi
+  from its network config and the race is gone
+
+## 4. Live in it, and let the turn records pick
 
 `spark stats` reads the turn records -- numbers only, never words. For
 the length of this stretch the roadmap is read from them, not written
@@ -108,7 +127,7 @@ from the founder's chair:
   counts only), and the tool you have and do not use (ten `find` on a
   box with `fd` earns one line, once; `persona.PREFERRED` is the list)
 
-## 4. The first other person
+## 5. The first other person
 
 Before an issue tracker exists: one person, known, installs spark
 unattended on their own machine with nothing but the README, and says
@@ -118,7 +137,7 @@ conversation, not before -- a founder is the worst reporter of their
 own product, and a public tracker with nobody behind it is worse than a
 closed one.
 
-## 5. Chaos on a real box
+## 6. Chaos on a real box
 
 What a fixture cannot reach is the maintainer's, by hand, as the WSL
 pass is:
