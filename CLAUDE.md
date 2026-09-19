@@ -108,6 +108,10 @@ fixture-tested; the rest are listed as untestable with the reason.
 
 ```
 get             POSIX sh, both OSes: the one-liner. Clone (or pull) ~/.spark, exec spark setup
+allowed-signers the release keys, ssh allowed-signers form -- one line per key,
+                `spark-release namespaces="git" <keytype> <base64>`, never a
+                person's name: get, spark update and release.yml move to a
+                tag only when a key here signed it
 bootstrap.sh    POSIX sh, both OSes. --dry-run --list-packages --list-tools --list-models
 install.sh      POSIX sh, both OSes. Links home/ + <os>/home/ into $HOME; renders templates/
 lib/env.sh      the KEY=value reader for the two scripts (config.py is the python twin)
@@ -148,7 +152,9 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 forge (identity, threads, reply, the chat REPL, @FILE)
                 forgeserve (the FORGE server: spark forge, the API, the page) do (spark do)
                 version (the version, from git, cached: spark ver, check's header, forgeserve)
-                update (spark update: the newest tag, or main; converges)
+                update (spark update: the newest tag -- signed by a key in
+                allowed-signers, or refused -- or main; converges; `verified`
+                is the one signature check, check's signed row reuses it)
                 uninstall (spark uninstall: the plan, the word yes, then everything
                 spark made goes; yours stays unless --purge; the clone last)
                 chacha (ChaCha20-Poly1305 written from RFC 8439, pinned to its
@@ -963,10 +969,10 @@ python3 tests/widget_pty.py completion zsh home/.config/spark/completion.zsh
 git status -sb                  # clean, not ahead of origin
 spark check --porcelain | grep privacy   # the tree contains no banned word
 sh tests/get_test.sh            # the one-liner: clone, pull, refusals, the hand-off to setup
-sh tests/update_test.sh         # spark update: pull, move to a tag, dirty refused, --dry-run
+sh tests/update_test.sh         # spark update: pull, move to a signed tag, unsigned and dirty refused, --dry-run
 ```
 
-`spark check` has 36 rows today: 10 SOFTWARE, 18 CAPABILITY, 8
+`spark check` has 37 rows today: 11 SOFTWARE, 18 CAPABILITY, 8
 NONFUNCTIONAL (`grep -c '^@row' lib/spark/check.py`). `--selftest`
 proves every fixture-testable row flips, then a third pass for the
 client shape (the 7 rows in `check.CLIENT_ROWS` answer `na`), and on
@@ -979,8 +985,22 @@ a pacman stub).
 
 The git tag is the release: one control, not two. There is no `VERSION`
 constant -- `spark ver` derives it from git (`lib/spark/version.py`, cached:
-`1.0` exactly at a tag, `1.0+3` three commits past it). Update `CREDITS.md`
-when a pin or a model row changes.
+`1.0` exactly at a tag, `1.0+3` three commits past it). A release tag is
+signed: `get`, `spark update` and `release.yml` verify its ssh signature
+against the tree's `allowed-signers` (one line per key, the principal the
+literal `spark-release`, never a person's name) and move to no other tag
+-- so a pushed tag alone runs nothing on anyone's install; a key in that
+file does. The `signed` row of `spark check` names the key's principal on
+a release clone. Update `CREDITS.md` when a pin or a model row changes.
+
+Signing, once per machine: `git config gpg.format ssh` and `git config
+user.signingkey ~/.ssh/id_ed25519.pub` (the private half beside it, or
+in the agent). Key rotation is a commit that adds the new key's line to
+`allowed-signers`, released under a tag signed by the OLD key: every
+clone verifies with the file it has and moves to the tree that knows the
+new key; the old line comes out in a later release, signed by the new
+one. `verify-tag` with an ssh signature is git >= 2.34 and ssh-keygen
+(openssh) -- `get` asks for both before it clones.
 
 1. Write the `## vX.Y` section at the top of `CHANGELOG.md` (bullets, newest
    first; until the tag exists the page renders that heading as
@@ -988,10 +1008,12 @@ when a pin or a model row changes.
    than one release ahead of the newest tag). The full gate, then `sh tests/install_test.sh`, `sh
    tests/get_test.sh` and `sh tests/update_test.sh`. Commit, push, `gh
    run watch` until green.
-2. `git tag -a vX.Y -m 'spark vX.Y' && git push origin vX.Y`. The tag
-   push runs `release.yml`, which checks the CHANGELOG heading and that
-   `spark ver` says `spark X.Y` at the tag, then creates the GitHub
-   Release with that CHANGELOG section as its notes; nothing is rerun.
+2. `git tag -s vX.Y -m 'spark vX.Y' && git push origin vX.Y`. The tag
+   push runs `release.yml`, which verifies the signature against
+   `allowed-signers`, checks the CHANGELOG heading and that `spark ver`
+   says `spark X.Y` at the tag, then creates the GitHub Release with that
+   CHANGELOG section as its notes and `get` as an asset
+   (`releases/latest/download/get`, the one-liner); nothing is rerun.
 3. Deploy = `spark update` everywhere: a main checkout pulls, a checkout
    on a tag moves to the new one; either way it converges (bootstrap.sh,
    then `spark check`, must both come back clean). `spark ver` there

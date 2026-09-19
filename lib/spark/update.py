@@ -3,25 +3,62 @@
 # converge -- bootstrap.sh applies whatever changed and check re-reads.
 # The converge runs in a fresh exec of the NEW tree: this process was
 # imported from the old one, and mixing the two ends in ImportError.
+#
+# A release is a signed tag: before a release clone moves, the tag's ssh
+# signature is verified against the tree's own `allowed-signers` (one
+# line per key, principal `spark-release`), and a tag nobody known
+# signed is refused with nothing moved. Whoever can push a tag does not
+# thereby run code on every install; whoever holds a key in that file does.
 
 import fcntl
 import os
+import re
+import shutil
+import subprocess
 import sys
 
 from . import MARK, REPO, STATE_DIR, run, say, state_dir
 
 UPDATE_LOCK = os.path.join(STATE_DIR, "update.lock")
+SIGNERS = "allowed-signers"     # at the repo root: `spark-release namespaces="git" <keytype> <base64>`
 
 USAGE = """%s update -- move this checkout to the newest tag or main, then converge
 
   spark update             pull main (a branch), or move to the newest tag
-                            (a detached checkout); then applies and rechecks
+                            (a detached checkout; a tag signed by a key in
+                            allowed-signers, any other is refused); then
+                            applies and rechecks
   spark update --dry-run   say what would happen, change nothing
 """ % MARK
 
 
 def _git(args, timeout=15):
     return run(["git", "-C", REPO] + list(args), timeout=timeout)
+
+
+def verified(tag, repo=None):
+    """(principal, why): who signed `tag` per the tree's allowed-signers
+    ("spark-release", ""), or ("", one short reason) when nobody known
+    did. `git verify-tag` reads the ssh signature itself (git >= 2.34)
+    and hands it to ssh-keygen; its verdict comes back on stderr, so
+    this is the one git call here that does not go through run()."""
+    repo = repo or REPO
+    if not shutil.which("ssh-keygen"):
+        return "", "unverifiable: no ssh-keygen here (openssh)"
+    cmd = ["git", "-C", repo, "-c", "gpg.ssh.allowedSignersFile=" + os.path.join(repo, SIGNERS),
+           "verify-tag", tag]
+    try:
+        p = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=15)
+    except (OSError, subprocess.TimeoutExpired):
+        return "", "unverifiable: git verify-tag did not run"
+    m = re.search(r'^Good "git" signature for (\S+) with ', p.stdout, re.M)
+    if p.returncode == 0 and m:
+        return m.group(1), ""
+    _, v = run(["git", "--version"])
+    m = re.search(r"(\d+)\.(\d+)", v)
+    if m and (int(m.group(1)), int(m.group(2))) < (2, 34):
+        return "", "unverifiable by git %s.%s: an ssh signature needs git >= 2.34" % m.groups()
+    return "", "not signed by a known key"
 
 
 def _lock():
@@ -123,15 +160,23 @@ def cmd_update(args):
             return 1
         if cur == newest:
             say("%s update -- already at %s" % (MARK, cur))
-        elif dry:
-            say("%s update -- would move to %s (was %s)" % (MARK, newest, cur or "an untagged commit"))
         else:
-            rc, _ = _git(["checkout", "-q", "--detach", newest])
-            if rc != 0:
-                say("spark update: git checkout --detach %s failed" % newest)
+            # the signature first, --dry-run or not: a tag nobody known
+            # signed moves nothing, and a dry run says so the same way
+            who, why = verified(newest)
+            if not who:
+                say("%s update -- %s is %s: refused" % (MARK, newest, why))
                 return 1
-            say("%s update -- %s (was %s)" % (MARK, newest, cur or "an untagged commit"))
-            moved = True
+            if dry:
+                say("%s update -- would move to %s (signed by %s; was %s)"
+                    % (MARK, newest, who, cur or "an untagged commit"))
+            else:
+                rc, _ = _git(["checkout", "-q", "--detach", newest])
+                if rc != 0:
+                    say("spark update: git checkout --detach %s failed" % newest)
+                    return 1
+                say("%s update -- %s (signed by %s; was %s)" % (MARK, newest, who, cur or "an untagged commit"))
+                moved = True
 
     if dry:
         return 0

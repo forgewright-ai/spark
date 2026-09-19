@@ -377,6 +377,33 @@ def row_git(ctx):
     return ok("clean and level with origin")
 
 
+@row("SOFTWARE", fixture=False,
+     reason="the good fixture is on main, where the row is na by design; tests/update_test.sh proves the flip")
+def row_signed(ctx):
+    """The tag this checkout sits on was signed by a key in the tree's
+    allowed-signers -- the promise `spark update` keeps by moving to no
+    other tag. A branch (a developer clone) has no tag to verify."""
+    g = ["git", "-C", ctx.repo]
+    rc, _ = ctx.sh(g + ["rev-parse", "--git-dir"], 10)
+    if rc != 0:
+        return na("not a git repository: no tag to verify")
+    rc, branch = ctx.sh(g + ["symbolic-ref", "-q", "--short", "HEAD"], 10)
+    if rc == 0:
+        return na("on %s: a developer clone, no tag to verify" % branch.strip())
+    rc, cur = ctx.sh(g + ["describe", "--tags", "--exact-match"], 10)
+    if rc != 0:
+        return na("detached at an untagged commit: no tag to verify")
+    cur = cur.strip()
+    from .update import verified
+    who, why = verified(cur, ctx.repo)
+    if who:
+        return ok("%s signed by %s" % (cur, who))
+    if why.startswith("not signed"):
+        return warn("%s is not signed: spark update refuses unsigned tags" % cur,
+                    "release it signed: git tag -s   (CLAUDE.md, Releasing)")
+    return warn("%s %s" % (cur, why), "openssh and git >= 2.34 verify a release tag")
+
+
 @row("SOFTWARE")
 def row_hooks(ctx):
     rc, out = ctx.sh(["git", "-C", ctx.repo, "config", "core.hooksPath"], 10)
@@ -1516,10 +1543,22 @@ def make_fixture(root, good, stub_url="", real_spark=False):
     os.makedirs(pal_dir, exist_ok=True)
     with open(os.path.join(pal_dir, "fixture.env"), "w") as f:
         f.write("\n".join(fixture_theme) + "\n")
+    # a throwaway release key: its public half is the tree's allowed-signers,
+    # and the repository's own config signs any `git tag -s` with it -- a
+    # chaos scenario's tags, so `spark update` (which moves to a signed tag
+    # and nothing else) can still be a heal. v1.0 and v1.1 below stay
+    # unsigned: the signed row warns where the bad fixture sits, at v1.0
+    subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", os.path.join(root, "key")], check=True)
+    with open(os.path.join(root, "key.pub"), encoding="utf-8") as f:
+        keytype, blob = f.read().split()[:2]
+    with open(os.path.join(repo, "allowed-signers"), "w") as f:
+        f.write('spark-release namespaces="git" %s %s\n' % (keytype, blob))
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
     env.update({"HOME": home, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"})
     g = ["git", "-C", repo]
     subprocess.run(g + ["init", "-q", "-b", "main"], env=env, check=True)
+    subprocess.run(g + ["config", "gpg.format", "ssh"], env=env, check=True)
+    subprocess.run(g + ["config", "user.signingkey", os.path.join(root, "key")], env=env, check=True)
     subprocess.run(g + ["add", "-A"], env=env, check=True)
     subprocess.run(g + ["commit", "-q", "-m", "fixture"], env=env, check=True)
     subprocess.run(g + ["tag", "v1.0"], env=env, check=True)

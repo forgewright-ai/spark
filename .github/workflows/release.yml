@@ -1,8 +1,11 @@
 # spark release -- a v* tag on a green commit becomes a GitHub Release whose
-# notes are that version's CHANGELOG section. The tag must agree with the
-# code: the `## vX.Y` heading, and `spark ver` (which derives the version
-# from the tag itself, via git describe -- lib/spark/version.py) saying the
-# same thing. Nothing is rerun here; the Releasing section of CLAUDE.md
+# notes are that version's CHANGELOG section. The tag must be signed by a
+# key in the tree's allowed-signers (what spark update and get verify
+# before they move), and must agree with the code: the `## vX.Y` heading,
+# and `spark ver` (which derives the version from the tag itself, via git
+# describe -- lib/spark/version.py) saying the same thing. The release
+# carries `get` as an asset, so releases/latest/download/get is the
+# one-liner. Nothing is rerun here; the Releasing section of CLAUDE.md
 # says to tag only after ci is green.
 name: release
 on:
@@ -17,7 +20,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # spark ver needs the tag reachable to describe it
+          fetch-depth: 0   # spark ver needs the tag reachable to describe it; a full
+                           # fetch brings every tag object, the signed one included
+      - name: the tag is signed by a key in allowed-signers
+        run: |
+          git -c gpg.ssh.allowedSignersFile=allowed-signers verify-tag "$GITHUB_REF_NAME" \
+            || { echo "release: $GITHUB_REF_NAME is not signed by a key in allowed-signers (CLAUDE.md, Releasing)"; exit 1; }
       - name: the tag agrees with the CHANGELOG
         run: |
           v=${GITHUB_REF_NAME#v}
@@ -38,4 +46,5 @@ jobs:
       - name: create the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" --title "spark $GITHUB_REF_NAME" --notes-file notes.md --verify-tag
+        # `get` rides along as an asset: releases/latest/download/get is the one-liner
+        run: gh release create "$GITHUB_REF_NAME" --title "spark $GITHUB_REF_NAME" --notes-file notes.md --verify-tag get
