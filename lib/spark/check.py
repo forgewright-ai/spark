@@ -1072,6 +1072,10 @@ def row_ledger(ctx):
         problems.append("plaintext, not sealed")
     if problems:
         return warn("%s: %s" % (ctx.short(path), "; ".join(problems)), "chmod 600 %s" % ctx.short(path))
+    try:                        # a writer refuses a file that does not open: say so here first
+        ledger._load(strict=True)
+    except ledger.Refused as e:
+        return warn("%s does not open" % ctx.short(path), e.hint)
     counts = ledger.counts()
     total = sum(counts.values())
     if total > ledger.TOTAL_MAX:

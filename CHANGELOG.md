@@ -1,5 +1,90 @@
 # Changelog
 
+## v1.35
+
+- A release is a signed tag. `spark update` and `get` verify a tag's ssh
+  signature against the tree's `allowed-signers` (the principal is
+  `spark-release`) and refuse any other in one line, with nothing moved;
+  `release.yml` verifies the signature before it makes the release. A
+  new `signed` row in `spark check` names the key a release clone's tag
+  was signed by (37 rows). `get` asks for `ssh-keygen` (openssh) beside
+  git and python3 when it lands on a tag.
+
+- The one line comes from the release:
+  `curl -fsSL https://github.com/forgewright-ai/spark/releases/latest/download/get | sh`
+  in every doc and on the page front, `get` shipped as a release asset,
+  so an unreleased push to main is never what a new machine pipes to
+  `sh`.
+
+- The page's login goes through the write gate like every other POST --
+  `X-Spark: 1`, a Host this machine answers to, a matching Origin, a
+  body sent as `application/json` -- so a page on another origin cannot
+  log a browser in.
+
+- A cookie is a session id minted at random for that login, the admin's
+  included, never derived from the token: logout drops it on the server,
+  a token rotation ends it, and a restart sends every browser back to
+  the login.
+
+- A locked-out address gets 429 on a bearer as well, before any token is
+  compared; a `SPARK_FORGE_TOKEN` shorter than 32 characters is refused
+  when the forge starts.
+
+- The page's do console is held to its word on the server:
+  `POST /api/do/run` refuses a command carrying a control character and
+  runs a dangerous one only with `confirmed: true`, which the page sends
+  after its second click; the log names each run by a sha256 prefix and
+  records its exit code.
+
+- `/v1/chat/completions` takes the bearer only and asks the model for at
+  most 8192 completion tokens. The bind refusal covers every spelling of
+  the unspecified address for `spark forge` and `spark serve` alike, and
+  a public address binds with a warning. The page is served with
+  `X-Content-Type-Options: nosniff` beside its CSP.
+
+- A proof is asked for like a step: `spark do` offers it (Enter runs
+  it), runs it on a 30 s leash, and sends the model its exit code alone
+  -- a proof's output never rides a request. `persona.proof_ok` reads
+  argv, refuses a named list of writing options (`--output`, `-o`,
+  `--ext-diff`, `tail -f`, `git -c`, `-exec` and kin) and any control
+  character, so `git diff --output PATH` no longer truncates PATH.
+
+- A `spark do` command carrying a control character is refused whole,
+  and each step's feedback -- the command that ran, `edited from` the
+  proposal when it differs, its rc, the proof's rc -- lands on the
+  thread the moment the step ran, the last step included.
+
+- `persona.is_dangerous` flags a truncating `>` anywhere, `sudo`
+  anything (a `spark do` sudo step needs the typed `yes`), `sed -i`,
+  `tee` without `-a`, `shred`, `xargs rm`, `mv -f` and `cp -f`,
+  `history -c`, `git stash drop`; `>>`, `2>`, `>&`, `/dev/null` and
+  `tee -a` stay plain.
+
+- The paste inspection looks before it sends: a paste shaped like a
+  secret (a private key block, an AWS, GitHub, Slack or `sk-` token, a
+  `password=` or `token:` line, 64 or more base64 characters) is one
+  answer line naming the shape, and nothing is sent; `persona.SENDS`
+  says so. The widgets' Esc s hint after a failure says it re-runs the
+  command.
+
+- A sealed ledger or memory that does not open (a flipped byte, a stale
+  `account-key`) is never written over: every writer refuses with
+  `the ledger does not open -- spark user login again` (the memory
+  likewise) and readers still answer empty. A tampered iteration count
+  in a key file is a refusal, never a stalled CPU; an append onto an
+  empty or foreign sealed file is refused; `spark user remove` validates
+  the name like `add`; the plain `state/fails` index redacts
+  `NAME=value` where NAME smells of a secret.
+
+- `ci.yml` and `pages.yml` pin every action to the commit of its release
+  and `ci.yml` holds `contents: read` only; `bootstrap.sh` downloads are
+  https only, redirects included; `install.sh` never overwrites an
+  earlier back-up; the pre-commit privacy gate escapes each word and
+  scans the staged file names and the branch name too, and CI's privacy
+  hit names the file, never the line; `spark model add` says when a sha
+  came from Hugging Face's metadata; CREDITS points the llama.cpp pin at
+  `engine.env`.
+
 ## v1.34
 
 - Granite 4.2 8B (IBM, Apache-2.0) replaces the Granite 3.3 row in

@@ -1302,7 +1302,10 @@ class Handler(BaseHTTPRequestHandler):
         from . import memory
         if not rest.isdigit():
             return self._error(400, "bad", "DELETE /api/memory/N, N as spark memory lists it")
-        fact = memory.forget_n(int(rest), self._mstore())
+        try:
+            fact = memory.forget_n(int(rest), self._mstore())
+        except memory.Refused as e:          # a store that does not open is never written over
+            return self._error(400, e.reason, e.hint)
         if fact is None:
             return self._error(404, "missing", "no fact %s" % rest)
         return self._json(200, {"text": fact})

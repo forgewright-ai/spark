@@ -59,8 +59,9 @@ main() {
     esac
     missing=''
     command -v git >/dev/null 2>&1 || missing="$missing git"
-    # the release tag's signature is checked by ssh-keygen (openssh)
-    command -v ssh-keygen >/dev/null 2>&1 || missing="$missing ssh-keygen"
+    # the release tag's signature is checked by ssh-keygen (openssh) -- only
+    # when a tag is what we land on (SPARK_REF names a ref, unverified)
+    [ -n "${SPARK_REF:-}" ] || command -v ssh-keygen >/dev/null 2>&1 || missing="$missing ssh-keygen"
     if ! command -v python3 >/dev/null 2>&1 \
        || ! python3 -c 'import sys; sys.exit(sys.version_info < (3, 9))' 2>/dev/null; then
         missing="$missing python3>=3.9"
