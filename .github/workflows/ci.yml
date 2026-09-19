@@ -23,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
         with:
           fetch-depth: 0   # spark ver derives from git describe: get_test and update_test need real tags
           persist-credentials: false
@@ -100,7 +100,7 @@ jobs:
       # git first: without it in the container, actions/checkout downloads a
       # tarball with no .git, and the new user's clone has nothing to clone
       - run: apt-get update -qq && apt-get install -y -qq git ca-certificates >/dev/null
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
         with:
           # a full history: the new user's clone comes from this tree, and
           # `spark ver` describes it
@@ -147,7 +147,7 @@ jobs:
       # git first, as in the debian job; -Syu is the image's own rule (a
       # rolling distro: never -Sy alone)
       - run: pacman -Syu --noconfirm --needed git ca-certificates >/dev/null
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -178,7 +178,7 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
         with:
           fetch-depth: 0   # spark ver derives from git describe: get_test and update_test need real tags
           persist-credentials: false
@@ -234,7 +234,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
         with:
           persist-credentials: false
       - name: zizmor over .github/workflows
