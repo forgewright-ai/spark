@@ -12,6 +12,13 @@
   row of the list: the list is ranked, so a new row never takes the
   pick from the one above it (Granite 4.2 and Qwen3-8B both fit 7 GB).
 
+- The FORGE follows site.env. `spark model NAME` restarts spark-serve and
+  not the forge, and the forge answered `/api/models` and `/api/config`
+  from the config it started with, so a client's `spark model` kept the
+  star on the old pick until someone restarted the forge. The forge now
+  re-reads site.env and spark.env when either changes, the rule the
+  forge-token already had; a forge_smoke case pins it.
+
 ## v1.33
 
 - A client never mints an account. `spark setup --model none` used to

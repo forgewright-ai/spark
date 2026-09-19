@@ -442,7 +442,10 @@ may change freely.
    whom to greet. `GET /api/models` (user-or-admin) answers this box's
    model table `{name, total_gb, budget_gb, budget_pct, backend,
    cap_note, models: model.model_rows}` -- what `spark model` on a client
-   prints instead of its own numbers. The chat, thread and memory routes are scoped to the
+   prints instead of its own numbers. The forge answers every route from
+   site.env and spark.env as they are now (`ForgeServer.cfg` re-reads them
+   when either changes, the forge-token's rule): `spark model NAME` on
+   the box restarts spark-serve, not the forge. The chat, thread and memory routes are scoped to the
    requester's own sealed store -- a user's to their
    `users/<name>/`, the admin's to the box account's; nobody holds a
    key to anyone else's. `GET /api/users` (admin) answers `{users:

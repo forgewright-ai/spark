@@ -311,7 +311,7 @@ class ForgeServer(ThreadingHTTPServer):
 
     def __init__(self, addr, cfg, url):
         ThreadingHTTPServer.__init__(self, addr, Handler)
-        self.cfg, self.url = cfg, url
+        self._cfg, self._cfg_t, self.url = cfg, self._config_stamp(), url
         self.host, self.port = addr
         self.upstream = Upstream(cfg, url)
         self.chat_lock = threading.Lock()      # one generation at a time: the model is one
@@ -325,6 +325,33 @@ class ForgeServer(ThreadingHTTPServer):
         self._fails_lock = threading.Lock()
         names = {self.host, "127.0.0.1", "localhost"} | own_hostnames() | {lan_ip()}
         self.hosts = {n for n in names if n} | {"%s:%d" % (n, self.port) for n in names if n}
+
+    @staticmethod
+    def _config_stamp():
+        out = []
+        for p in (config.SITE_ENV, config.SPARK_ENV):
+            try:
+                out.append(os.stat(p).st_mtime_ns)
+            except OSError:
+                out.append(-2)
+        return tuple(out)
+
+    @property
+    def cfg(self):
+        """The config, re-read when site.env or spark.env changes: `spark
+        model NAME` (theme, ember, budget alike) restarts spark-serve and
+        not the forge, so a table answered from the config the forge
+        started with marked the old pick until someone restarted it. A
+        file that fails to parse keeps the last good config (the
+        forge-token follows the same rule, admin_token below)."""
+        stamp = self._config_stamp()
+        if stamp != self._cfg_t:
+            try:
+                self._cfg = config.load()
+            except SystemExit:
+                pass
+            self._cfg_t = stamp
+        return self._cfg
 
     def admin_token(self):
         """The forge-token, re-read when its file changes: `spark forge

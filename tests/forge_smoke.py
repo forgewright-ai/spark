@@ -320,6 +320,27 @@ def main():
                and isinstance(dm.get("models"), list) and dm["models"] and "fits" in dm["models"][0],
                "/api/models (a user): name, total_gb, backend, the rows with a verdict", raw[:200])
             ok(token not in raw.decode() and utoken not in raw.decode() and home not in raw.decode(), "/api/models carries no token, no path")
+            # the table follows site.env as it is NOW: `spark model NAME` restarts
+            # spark-serve, not the forge, and the forge used to answer from the
+            # config it started with (the star stayed on the old pick)
+            site_env = os.path.join(home, ".config", "spark", "site.env")
+            site_was = open(site_env).read() if os.path.exists(site_env) else None
+
+            def pick_after(name, when):
+                with open(site_env, "w") as f:
+                    f.write("SITE_AI_MODEL=%s\n" % name)
+                os.utime(site_env, (when, when))
+                st, _, raw = req(url, "GET", "/api/models", headers={"Authorization": "Bearer " + utoken}, timeout=30)
+                return st, [r["name"] for r in json.loads(raw)["models"] if r.get("role") == "spark"]
+            st1, pick1 = pick_after("qwen3-1-7b", time.time() + 5)
+            st2, pick2 = pick_after("qwen3-4b", time.time() + 10)
+            ok(st1 == 200 and pick1 == ["qwen3-1-7b"] and st2 == 200 and pick2 == ["qwen3-4b"],
+               "/api/models follows site.env without a restart (the pick moved)", "%s -> %s" % (pick1, pick2))
+            if site_was is None:
+                os.remove(site_env)
+            else:
+                with open(site_env, "w") as f:
+                    f.write(site_was)
             rc0, out0, _ = spark("model", extra={"SITE_AI_MODEL": "none", "SITE_PEER_AI_URL": url,
                                                  "SPARK_FORGE_TOKEN": utoken, "SPARK_MEM_TOTAL_GB": "1"})
             head0 = out0.splitlines()[0] if out0 else ""
