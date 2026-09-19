@@ -515,7 +515,12 @@ may change freely.
     JSON `{language, kind}` from the first 800 chars, restated as `You
     read this as: ...`; any failure is silence; its cost is a turn of its
     own, mode `edit-read`, kind `reading`, so `spark stats` shows what
-    every grounded answer pays before it starts) and the answer. A `?`
+    every grounded answer pays before it starts; when stderr is a
+    terminal it says so there -- `reading ...` while it runs, then the
+    language and kind it named, one line -- so the seconds before the
+    first answer line are something to read, and nothing when stderr is
+    a pipe: an editor's job, spark-w3m's capture and the tests keep
+    stdout and stderr as the contract states them) and the answer. A `?`
     answer streams line by line through `text.Anchors`: every quoted
     span (double quotes, curly quotes, backticks; 3..200 chars) is
     checked against the text on stdin -- verbatim, then folded

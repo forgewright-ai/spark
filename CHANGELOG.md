@@ -29,6 +29,15 @@
   clears the same records. A smoke case drives it through `spark read
   --name`.
 
+- The wait before a grounded answer is something to read. Every `read`,
+  `ask`, `edit ?` and `drill` pays a reading pass first (the language
+  and kind of the text, a few seconds on an 8B model), and the screen
+  stayed blank until the first answer line. At a terminal stderr now
+  says `reading ...` while the pass runs and then what it named --
+  `reading ... English, essay` -- one line; a pipe (an editor, spark-w3m,
+  a test) sees nothing, so every contract's stdout and stderr stay as
+  stated. A smoke case reads at a pty and in a pipe.
+
 ## v1.33
 
 - A client never mints an account. `spark setup --model none` used to

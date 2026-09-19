@@ -16,7 +16,10 @@
 #                     composed here, never asked of the model: no "the
 #                     text does not say, but generally ...". On stderr,
 #                     exit 1, stdout untouched: a client tells "no
-#                     answer" from "an answer" by the exit code.
+#                     answer" from "an answer" by the exit code. At a
+#                     terminal stderr also shows the reading pass as it
+#                     runs (`reading ... English, essay`); a pipe sees
+#                     nothing of it.
 #   caps              READ_MAX chars a part; past that the source is
 #                     parts (each carrying PART_OVERLAP chars of the one
 #                     before) and `--part N` reads one -- refused with

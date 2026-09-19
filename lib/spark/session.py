@@ -3,6 +3,7 @@
 
 import json
 import os
+import sys
 import time
 
 from . import TURNS_DIR, log_exc, state_dir
@@ -82,6 +83,23 @@ def last_turn():
 READ_MAX = 800          # what the reading pass looks at: the first chars
 
 
+READING_LINE = "reading ..."
+
+
+def _tell(s):
+    """Write `s` to stderr when stderr is a terminal (flushed, no
+    newline of its own); False when it is not -- a status line for a
+    person, never for a pipe. Returns whether it wrote."""
+    try:
+        if not sys.stderr.isatty():
+            return False
+        sys.stderr.write(s)
+        sys.stderr.flush()
+        return True
+    except (OSError, ValueError, AttributeError):
+        return False
+
+
 def reading(cfg, data, shell="", start=0, act="Answer", answer="source"):
     """(`You read this as: LANGUAGE, KIND.\n`, `\n\n<act> in LANGUAGE.`) --
     the model's own reading of READ_MAX chars of `data` from `start`
@@ -99,6 +117,12 @@ def reading(cfg, data, shell="", start=0, act="Answer", answer="source"):
     source's; `spark edit ? --source`). Every grounded contract that
     shows a text to the model opens with this. Any failure is two empty
     strings: the request goes on without it."""
+    # the wait is something to read: at a terminal, stderr says `reading
+    # ...` while the pass runs and then the language and kind it named,
+    # one line -- the seconds before a grounded answer's first line were
+    # a blank screen. Nothing in a pipe (an editor's job, spark-w3m's
+    # capture, a test): the contracts' stdout and stderr stay theirs.
+    tell = _tell(READING_LINE)
     try:
         s = Session(cfg, "edit-read", shell or "sh", "", role="spark")
         # greedy: the reading is restated ABOVE the text in the request
@@ -112,8 +136,12 @@ def reading(cfg, data, shell="", start=0, act="Answer", answer="source"):
         # answer, so its cost has to be visible beside the answer's
         s.record(kind="reading", chars=len(chunk), ms=ms)
     except Exception:
+        if tell:
+            _tell("\n")
         return "", ""
     parts = [p for p in (lang, kind) if p]
+    if tell:
+        _tell((" " + ", ".join(parts) if parts else "") + "\n")
     if not parts:
         return "", ""
     if answer == "question":

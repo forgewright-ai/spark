@@ -1357,6 +1357,39 @@ def main():
         from spark import text as _txt
         t.ok(_txt.clean({"a": ["x\udce9", {"b": "\udce9"}], "n": 1}) == {"a": ["x\ufffd", {"b": "\ufffd"}], "n": 1},
              "text.clean: every string in a record strict UTF-8, the rest untouched")
+        # the wait is something to read: at a terminal stderr says `reading
+        # ...` while the reading pass runs, then what it named; a pipe sees
+        # nothing of it (stdout and stderr stay the contract's)
+        import pty as _pty
+        import select as _sel
+        _m, _s = _pty.openpty()
+        _p = subprocess.Popen([sys.executable, SPARK, "read", "when", "does", "it", "open"],
+                              stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=_s, env=env, text=True)
+        os.close(_s)
+        _p.stdin.write(READ_TEXT)
+        _p.stdin.close()
+        _tty, _end = b"", time.time() + 30
+        while time.time() < _end:
+            r, _, _ = _sel.select([_m], [], [], 0.2)
+            if r:
+                try:
+                    chunk = os.read(_m, 4096)
+                except OSError:
+                    break
+                if not chunk:
+                    break
+                _tty += chunk
+            elif _p.poll() is not None:
+                break
+        os.close(_m)
+        _out = _p.stdout.read()
+        _p.wait(timeout=30)
+        _tty = _tty.decode("utf-8", "replace").replace("\r\n", "\n")
+        t.ok(_p.returncode == 0 and "reading ... Portuguese, fiction\n" in _tty and '"at nine"' in _out and "reading" not in _out,
+             "read at a terminal: stderr shows the reading pass as it runs, stdout stays the answer", repr(_tty[:80]) + repr(_out[:60]))
+        rc, out, err = spark("read", "when", "does", "it", "open", stdin=READ_TEXT)
+        t.ok(rc == 0 and '"at nine"' in out and "reading" not in err,
+             "read in a pipe: nothing of the reading pass on stderr", repr(err[:80]))
 
         # spark drill: the practice protocol (contract 13)
         from spark import drill as drillmod
