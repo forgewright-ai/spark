@@ -35,13 +35,13 @@ itself, never by running anything.
 2. One line, any OS:
 
    ```sh
-   curl -fsSL https://raw.githubusercontent.com/forgewright-ai/spark/main/get | sh
+   curl -fsSL https://github.com/forgewright-ai/spark/releases/latest/download/get | sh
    ```
 
    It asks three things -- this machine's name, yours, the model -- and
    asks the first question for you. About ten minutes, most of it one
    download. To read it first:
-   `curl -fsSLO https://raw.githubusercontent.com/forgewright-ai/spark/main/get; sh get`
+   `curl -fsSLO https://github.com/forgewright-ai/spark/releases/latest/download/get; sh get`
 
 3. Open a new shell:
 
@@ -119,7 +119,7 @@ Only to the server you configured (this machine's, or another of yours):
   at most; bigger pastes are not sent at all), and nothing else.
 
 No telemetry, no analytics, no crash reports, no account. Downloads:
-`get` from raw.githubusercontent.com and the clone from github.com, one
+`get` (the newest release's own copy) and the clone from github.com, one
 pinned llama.cpp release (sha256) from github.com, the model you chose
 from huggingface.co (size and sha256 in `models.env`). Nothing else.
 

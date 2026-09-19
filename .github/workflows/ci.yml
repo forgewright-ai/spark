@@ -13,12 +13,14 @@
 # tarball is the one real download.
 name: ci
 on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
 jobs:
   linux:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
         with:
           fetch-depth: 0   # spark ver derives from git describe: get_test and update_test need real tags
       - name: syntax
@@ -29,6 +31,8 @@ jobs:
           sudo apt-get install -y -qq shellcheck >/dev/null && shellcheck -S warning bootstrap.sh install.sh lib/env.sh get .githooks/pre-commit .githooks/pre-push
       - name: privacy gate over the whole tree
         # the personal word list is a repository secret (one word per line);
+        # each word escaped for grep -E, and -l: a hit names the file, never
+        # the line -- this log is public
         # a fork without it gets a NOTICE and the generic patterns only
         env:
           SPARK_PRIVACY_TERMS_SECRET: ${{ secrets.SPARK_PRIVACY_TERMS }}
@@ -37,9 +41,9 @@ jobs:
           # is exempt from errexit under bash -e, so only the last one ever
           # decided this step -- the first two could fail in silence
           printf '%s\n' "$SPARK_PRIVACY_TERMS_SECRET" > "$RUNNER_TEMP/privacy-terms"
-          terms=$(cat .privacy-terms "$RUNNER_TEMP/privacy-terms" | grep -v '^#' | grep -v '^[[:space:]]*$' | sort -u | paste -sd'|' -)
+          terms=$(cat .privacy-terms "$RUNNER_TEMP/privacy-terms" | grep -v '^#' | grep -v '^[[:space:]]*$' | sort -u | sed 's,[][\.*^$+?(){}|/],\\&,g' | paste -sd'|' -)
           if [ -z "$terms" ]; then echo "NOTICE: no privacy word list -- generic patterns only"; else
-            if git grep -i -w -E "$terms" -- . ':(exclude).privacy-terms'; then
+            if git grep -l -i -w -E "$terms" -- . ':(exclude).privacy-terms'; then
               echo "privacy: a listed word is in the tree"; exit 1; fi; fi
           hits=$(git grep -n -E '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' -- . | grep -v 'you@example.com' || true)
           if [ -n "$hits" ]; then
@@ -93,7 +97,7 @@ jobs:
       # git first: without it in the container, actions/checkout downloads a
       # tarball with no .git, and the new user's clone has nothing to clone
       - run: apt-get update -qq && apt-get install -y -qq git ca-certificates >/dev/null
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
         with:
           # a full history: the new user's clone comes from this tree, and
           # `spark ver` describes it
@@ -139,7 +143,7 @@ jobs:
       # git first, as in the debian job; -Syu is the image's own rule (a
       # rolling distro: never -Sy alone)
       - run: pacman -Syu --noconfirm --needed git ca-certificates >/dev/null
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
         with:
           fetch-depth: 0
       - name: a new user with sudo
@@ -169,7 +173,7 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
         with:
           fetch-depth: 0   # spark ver derives from git describe: get_test and update_test need real tags
       - name: syntax under Apple's python

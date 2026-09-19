@@ -393,8 +393,10 @@ def _model_add(args):
     set_keys(_file=USER_MODELS_FILE, _quiet=True, **{
         "MODEL_" + stem: '"%s %s %d %s %d"' % (fname, url, nbytes, sha256, ram_gb),
         "MODEL_" + stem + "_LICENSE": '"%s"' % license_})
-    say("ok     model        added %s (%.1f GB, ram %d GB) -- %s" % (
-        name, nbytes / 2**30, ram_gb, _short(USER_MODELS_FILE)))
+    # no --sha256 given: the pin came from the host's own metadata, so say so
+    pin = "" if sha else ", sha256 %s... from Hugging Face's metadata" % sha256[:12]
+    say("ok     model        added %s (%.1f GB, ram %d GB%s) -- %s" % (
+        name, nbytes / 2**30, ram_gb, pin, _short(USER_MODELS_FILE)))
     return cmd_model([name])
 
 

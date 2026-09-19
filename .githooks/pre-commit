@@ -8,7 +8,7 @@ fail=0
 notice() { printf 'NOTICE: %s\n' "$*"; }
 bad() { printf 'pre-commit: %s\n' "$*"; fail=1; }
 
-# --- 1. privacy gate: staged content only -------------------------------
+# --- 1. privacy gate: staged content, the staged names, the branch ------
 # Banned words (whole word, any case) from the union of .privacy-terms and
 # the local list -- $SPARK_PRIVACY_TERMS, else ~/.config/spark/privacy-terms
 # -- plus e-mail addresses, private IPv4 ranges and home-directory paths
@@ -17,9 +17,17 @@ bad() { printf 'pre-commit: %s\n' "$*"; fail=1; }
 staged_files=$(git diff --cached --name-only --diff-filter=ACMR)
 if [ -n "$staged_files" ]; then
     local_terms=${SPARK_PRIVACY_TERMS:-${XDG_CONFIG_HOME:-$HOME/.config}/spark/privacy-terms}
+    # each word escaped for grep -E: a dot or a bracket in a word stays literal
     terms=$(cat .privacy-terms "$local_terms" 2>/dev/null \
-            | sed 's/#.*//; s/^[[:space:]]*//; s/[[:space:]]*$//' | grep -v '^$' | sort -u | paste -sd'|' -)
+            | sed 's/#.*//; s/^[[:space:]]*//; s/[[:space:]]*$//' | grep -v '^$' | sort -u \
+            | sed 's,[][\.*^$+?(){}|/],\\&,g' | paste -sd'|' -)
     [ -n "$terms" ] || notice "no privacy word list ($(printf '%s' "$local_terms" | sed "s|^$HOME|~|")) -- generic patterns only"
+    # the names are public too: every staged path, and the branch itself
+    if [ -n "$terms" ]; then
+        hit=$(printf '%s\n%s\n' "$staged_files" "$(git rev-parse --abbrev-ref HEAD)" | grep -iE "\\b($terms)\\b" || true)
+        [ -z "$hit" ] || bad "banned word in a staged file name or the branch name:
+$hit"
+    fi
     # .privacy-terms is the one tracked file allowed to contain the words.
     added=$(git diff --cached --diff-filter=ACMR -U0 -- . ':(exclude).privacy-terms' \
             | grep '^+' | grep -v '^+++' || true)

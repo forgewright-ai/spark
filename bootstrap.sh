@@ -199,12 +199,13 @@ fetch() {   # fetch URL DEST SHA  -- download, verify, or die
     # PARTIAL is what the EXIT trap removes: a download that dies -- a
     # full disk, a cut LAN, a Ctrl-C, a bad sha -- leaves nothing behind,
     # least of all on the disk that was already full.
+    # https only, redirects included: a pinned download never drops to http.
     PARTIAL=$2
     if [ -t 2 ]; then
         printf '       downloading %s\n' "${1##*/}"
-        curl -fL --retry 3 --progress-bar -o "$2" "$1" || fetch_died "$1"
+        curl -fL --proto '=https' --proto-redir '=https' --retry 3 --progress-bar -o "$2" "$1" || fetch_died "$1"
     else
-        curl -fsSL --retry 3 -o "$2" "$1" || fetch_died "$1"
+        curl -fsSL --proto '=https' --proto-redir '=https' --retry 3 -o "$2" "$1" || fetch_died "$1"
     fi
     sha_ok "$2" "$3" || { echo "bootstrap: sha256 mismatch for $1" >&2; exit 1; }
     PARTIAL=

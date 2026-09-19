@@ -9,7 +9,8 @@
 # and `git status` shows every change. A rendered file exists only where a
 # value must be baked in (your name, a palette, an absolute path). An
 # existing regular file, or a symlink that points outside the repo, is
-# never overwritten: it is moved to <path>.bak.
+# never overwritten: it is moved to <path>.bak (<path>.bak.<epoch> when
+# an earlier back-up already holds that name).
 #
 # One layer: the AI -- the widgets, the banner, spark.env.example, the
 # service units. The shell (rc files, tmux, starship, the look) is
@@ -54,8 +55,10 @@ row() {
 backup() {
     changes=$((changes + 1))
     if [ "$DRY" -eq 1 ]; then row "would back up" "$1"; return; fi
-    mv "$1" "$1.bak"
-    row "back up" "$1 -> $1.bak"
+    # an earlier back-up is not overwritten either: the next one is stamped
+    to="$1.bak"; [ ! -e "$to" ] && [ ! -L "$to" ] || to="$1.bak.$(date +%s)"
+    mv "$1" "$to"
+    row "back up" "$1 -> $to"
 }
 
 link_one() {   # link_one SRC DST

@@ -11,7 +11,7 @@ own repositories. spark's own code is MIT (`LICENSE`). The banner in
 llama.cpp -- https://github.com/ggml-org/llama.cpp -- MIT
 (c) The ggml authors
 
-Release b10689 (`LLAMA_VERSION` in `bootstrap.sh`), six flavours (macOS
+Release b10689 (`LLAMA_VERSION` in `engine.env`), six flavours (macOS
 arm64, macOS x64, Linux x64, Linux x64 Vulkan, Linux arm64, Linux arm64
 Vulkan), each pinned by sha256.
 

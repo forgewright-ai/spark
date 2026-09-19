@@ -66,6 +66,13 @@ printf '%s\n' "$out" | grep -q '^would back up' && ok "dry-run announces the bac
 run >/dev/null
 [ "$(cat "$HOME/.config/spark/spark.env.example.bak")" = mine ] && ok "content preserved in .bak" || bad "back-up lost content"
 [ -L "$HOME/.config/spark/spark.env.example" ] && ok "then linked" || bad "not linked after back-up"
+# a second file in the way while the first .bak stands: stamped, the first survives
+rm "$HOME/.config/spark/spark.env.example"; echo again > "$HOME/.config/spark/spark.env.example"
+out=$(run)
+printf '%s\n' "$out" | grep -q '^back up .*spark\.env\.example -> .*\.bak\.[0-9][0-9]*$' \
+    && ok "a second back-up is stamped .bak.<epoch>" || bad "second back-up row: $(printf '%s\n' "$out" | grep '^back up' || echo none)"
+[ "$(cat "$HOME/.config/spark/spark.env.example.bak")" = mine ] && ok "the first .bak survives" || bad "the first .bak was overwritten"
+rm -f "$HOME"/.config/spark/spark.env.example.bak.[0-9]*
 rm "$HOME/.config/spark/spark.env.example" "$HOME/.config/spark/spark.env.example.bak"
 mkdir -p "$T/elsewhere"; echo theirs > "$T/elsewhere/file"
 ln -s "$T/elsewhere/file" "$HOME/.config/spark/spark.env.example"

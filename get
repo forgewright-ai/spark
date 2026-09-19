@@ -1,7 +1,7 @@
 #!/bin/sh
 # spark get -- the one-liner: clone spark to ~/.spark, then spark setup.
 #
-#   curl -fsSL https://raw.githubusercontent.com/forgewright-ai/spark/main/get | sh
+#   curl -fsSL https://github.com/forgewright-ai/spark/releases/latest/download/get | sh
 #   sh get [--clone-only]          the same from a file you read first
 #
 # SPARK_HOME is where the clone goes (default ~/.spark); SPARK_URL where it

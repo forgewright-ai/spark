@@ -73,12 +73,12 @@ Ubuntu, then Debian's step 3 and section 2.
 2. One line:
 
    ```sh
-   curl -fsSL https://raw.githubusercontent.com/forgewright-ai/spark/main/get | sh
+   curl -fsSL https://github.com/forgewright-ai/spark/releases/latest/download/get | sh
    ```
 
    It clones spark to `~/.spark`, lands on the newest release and runs
    `spark setup`. To read it first:
-   `curl -fsSLO https://raw.githubusercontent.com/forgewright-ai/spark/main/get; sh get`.
+   `curl -fsSLO https://github.com/forgewright-ai/spark/releases/latest/download/get; sh get`.
    With `wget`: `wget -qO- URL | sh`. By hand, the same two steps:
 
    ```sh
@@ -372,7 +372,7 @@ Then add the user to the group (`sudo gpasswd -a NAME spark`; they log in
 again), and they set up in userspace -- no sudo, no download:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/forgewright-ai/spark/main/get | sh   # clones spark's code only
+curl -fsSL https://github.com/forgewright-ai/spark/releases/latest/download/get | sh   # clones spark's code only
 spark setup                                          # detects the shared engine, offers to join
 ```
 
