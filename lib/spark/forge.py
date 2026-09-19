@@ -753,8 +753,18 @@ def _write_chat_history(readline):
         if isinstance(st, _NullStore):
             return
         st._dir()
-        vault.write_sealed(os.path.join(os.path.dirname(st.tdir), "chat-history"),
-                           st.dk, "chathist", st.name, blob)
+        path = os.path.join(os.path.dirname(st.tdir), "chat-history")
+        if os.path.isfile(path):
+            # a sealed file that does not open (a flipped byte, a stale
+            # account-key) is never written over: the save is skipped,
+            # said once, and the file stays as it is
+            try:
+                vault.read_sealed(path, st.dk, "chathist", st.name)
+            except (OSError, vault.SealError):
+                print("spark chat: the chat history does not open -- kept as it is; spark user login again",
+                      file=sys.stderr, flush=True)
+                return
+        vault.write_sealed(path, st.dk, "chathist", st.name, blob)
         try:
             os.remove(CHAT_HISTORY_FILE)
         except OSError:

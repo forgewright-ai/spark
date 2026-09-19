@@ -44,6 +44,7 @@ shellcheck -S warning bootstrap.sh install.sh lib/env.sh
 /usr/bin/python3 tests/smoke.py
 /usr/bin/python3 tests/serve_smoke.py
 /usr/bin/python3 tests/forge_smoke.py
+/usr/bin/python3 tests/policy_test.py
 /usr/bin/python3 tests/bench_smoke.py
 /usr/bin/python3 tests/docs_test.py
 /usr/bin/python3 tests/vault_test.py

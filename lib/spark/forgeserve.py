@@ -79,10 +79,69 @@ RUN_VERBS = {"theme": None, "model": None, "ember": None, "font": None, "quiet":
              "serve": None, "stop": None, "remember": None, "forget": None,
              "tune": lambda a: a[:1] == ["apply"],
              "forge": lambda a: a == ["token", "--new"]}
-# Admin-only routes (class A). Everything else under /api and /v1 that
-# needs auth is class U: user or admin. A user hitting A gets 403 "role".
-ADMIN_GET = frozenset(("/api/serve", "/api/gpu", "/api/bench", "/api/config", "/api/log", "/api/users"))
-ADMIN_POST = frozenset(("/api/run", "/api/do/propose", "/api/do/run", "/api/check/refresh", "/api/soul"))
+# Every route the server answers, and who may: none (open -- /api/login
+# still goes through the write gate, /v1/chat/completions takes a bearer
+# only), user (a named user or the admin), admin (the forge-token). A `*`
+# is one path segment. A request off this table is 404; a user on an
+# admin row is 403 "role". CLAUDE.md contract 9 prints the table and
+# tests/docs_test.py holds the two equal; tests/policy_test.py proves
+# every row with three callers.
+ROUTES = {
+    ("GET", "/"): "none",
+    ("GET", "/login"): "none",
+    ("GET", "/static/*"): "none",
+    ("GET", "/manifest.webmanifest"): "none",
+    ("GET", "/apple-touch-icon.png"): "none",
+    ("GET", "/api/health"): "none",
+    ("POST", "/api/login"): "none",
+    ("GET", "/api/me"): "user",
+    ("GET", "/api/check"): "user",
+    ("GET", "/api/stats"): "user",
+    ("GET", "/api/bar"): "user",
+    ("GET", "/api/theme"): "user",
+    ("GET", "/api/events"): "user",
+    ("GET", "/api/soul"): "user",
+    ("GET", "/api/memory"): "user",
+    ("GET", "/api/models"): "user",
+    ("GET", "/api/threads"): "user",
+    ("GET", "/api/threads/*"): "user",
+    ("GET", "/v1/models"): "user",
+    ("POST", "/v1/chat/completions"): "user",
+    ("POST", "/api/logout"): "user",
+    ("POST", "/api/chat"): "user",
+    ("POST", "/api/memory"): "user",
+    ("POST", "/api/threads/*/append"): "user",
+    ("POST", "/api/user/token"): "user",
+    ("DELETE", "/api/threads"): "user",
+    ("DELETE", "/api/memory/*"): "user",
+    ("GET", "/api/serve"): "admin",
+    ("GET", "/api/gpu"): "admin",
+    ("GET", "/api/bench"): "admin",
+    ("GET", "/api/config"): "admin",
+    ("GET", "/api/log"): "admin",
+    ("GET", "/api/users"): "admin",
+    ("POST", "/api/run"): "admin",
+    ("POST", "/api/do/propose"): "admin",
+    ("POST", "/api/do/run"): "admin",
+    ("POST", "/api/check/refresh"): "admin",
+    ("POST", "/api/soul"): "admin",
+}
+SECRET_KEY = re.compile("KEY|TOKEN|SECRET")   # a config key /api/config never returns
+
+
+def route_role(method, path):
+    """ROUTES' role for one request, or None: no such route. A `*` in a
+    pattern stands for one path segment."""
+    role = ROUTES.get((method, path))
+    if role is not None:
+        return role
+    segs = path.split("/")
+    for (m, pat), role in ROUTES.items():
+        if m == method and "*" in pat:
+            ps = pat.split("/")
+            if len(ps) == len(segs) and all(a == "*" or a == b for a, b in zip(ps, segs)):
+                return role
+    return None
 
 USAGE = """%s forge -- the served agent
 
@@ -100,6 +159,8 @@ USAGE = """%s forge -- the served agent
                                how to mint a user there
   spark forge token --new      rotate the admin token; its logins die
                                (a user rotates with spark user token --new)
+  spark forge audit [N]        the newest N admin actions (50), sealed in the
+                               box account's store (--porcelain: tab-separated)
 """ % MARK
 
 
@@ -632,6 +693,15 @@ class Handler(BaseHTTPRequestHandler):
                 return False
         return True
 
+    def _audit(self, action, **fields):
+        """One sealed audit record of this admin action (numbers and
+        names only); a trail that cannot take it is one log line, never
+        a failed action."""
+        from . import audit
+        why = audit.record(action, self._ip(), **fields)
+        if why:
+            log("%s audit not kept -- %s" % (self._ip(), why))
+
     # ---- dispatch ----
     def do_GET(self):
         self._dispatch("GET")
@@ -666,21 +736,21 @@ class Handler(BaseHTTPRequestHandler):
 
     def _route(self, method, path):
         srv = self.server
-        # no auth
-        if method == "GET" and path == "/api/health":
-            return self.api_health()
-        if method == "POST" and path == "/api/login":   # no auth, but the write gate
-            return self.api_login() if self._post_ok() else None
-        if method == "GET" and path in ("/", "/login"):
-            return self.static("index.html")
-        if method == "GET" and path == "/manifest.webmanifest":
-            return self.static("manifest.webmanifest")
-        if method == "GET" and path == "/apple-touch-icon.png":
-            return self.apple_touch_icon()
-        if method == "GET" and path.startswith("/static/"):
-            return self.static(path[8:])
-        if not path.startswith(("/api/", "/v1/")):
-            return self._error(404, "missing", "no such page")
+        role = route_role(method, path)       # the table decides who may; nothing else does
+        if role is None:
+            return self._error(404, "missing", "no such route" if path.startswith(("/api/", "/v1/")) else "no such page")
+        if role == "none":
+            if path == "/api/health":
+                return self.api_health()
+            if path == "/api/login":          # no auth, but the write gate
+                return self.api_login() if self._post_ok() else None
+            if path in ("/", "/login"):
+                return self.static("index.html")
+            if path == "/manifest.webmanifest":
+                return self.static("manifest.webmanifest")
+            if path == "/apple-touch-icon.png":
+                return self.apple_touch_icon()
+            return self.static(path[8:])      # /static/*
         # bearer or cookie; whichever token matched decides role and user
         who = self._auth()
         if who is None:                       # a locked-out address: 429 sent
@@ -688,8 +758,7 @@ class Handler(BaseHTTPRequestHandler):
         self.role, self.user, self.dk = who
         if not self.role:
             return self._error(401, "auth", "log in with your token (spark user add NAME mints one on %s; the admin's is spark forge --print-url)" % srv.cfg.name)
-        admin_only = path in (ADMIN_GET if method == "GET" else ADMIN_POST if method == "POST" else ())
-        if admin_only and self.role != "admin":
+        if role == "admin" and self.role != "admin":
             return self._error(403, "role", "this needs the admin token")
         if method == "GET":
             fn = {"/v1/models": self.v1_models, "/api/me": self.api_me, "/api/check": self.api_check,
@@ -981,7 +1050,7 @@ class Handler(BaseHTTPRequestHandler):
         _url, model, st = self.server.upstream.resolve()
 
         def clean(d):
-            return {k: v for k, v in d.items() if "KEY" not in k and "TOKEN" not in k}
+            return {k: v for k, v in d.items() if not SECRET_KEY.search(k)}
         self._json(200, {"site": clean(cfg.site_file), "spark": clean(cfg.spark_file),
                          "effective": clean({k: cfg.get(k, "") for k in config.KEYS}),
                          "themes": theme.palettes(), "models": modeltab.model_rows(cfg, model if st == "ok" else ""),
@@ -1156,6 +1225,7 @@ class Handler(BaseHTTPRequestHandler):
         new = users.rewrap(self.user, self.dk)
         sid = self.server.new_session("user", new, self.user, self.dk)
         log("%s user token rotated %s" % (self._ip(), self.user))
+        self._audit("user token", name=self.user)
         return self._json(200, {"token": new}, {"Set-Cookie": set_cookie(sid)})
 
     def _thread_of(self, body):
@@ -1356,6 +1426,7 @@ class Handler(BaseHTTPRequestHandler):
         log("%s do/run %s %s" % (self._ip(), digest, " ".join(command.split())[:200]))
         rc, tail = do.run(command, _shell(), cwd or HOME, echo=False)
         log("%s do/run %s rc %d" % (self._ip(), digest, rc))
+        self._audit("do/run", digest=digest, rc=rc)
         return self._json(200, {"rc": rc, "tail": tail})
 
     # ---- the verb runner ----
@@ -1380,6 +1451,7 @@ class Handler(BaseHTTPRequestHandler):
                                      stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             except OSError as e:
                 self._emit("line", {"s": "spark: cannot run: %s" % (e.strerror or e)})
+                self._audit("run", verb=verb, rc=127)
                 return self._emit("done", {"rc": 127})
             timer = threading.Timer(RUN_CAP, p.kill)
             timer.daemon = True
@@ -1393,6 +1465,7 @@ class Handler(BaseHTTPRequestHandler):
                 timer.cancel()
                 if p.poll() is None:
                     p.kill()
+        self._audit("run", verb=verb, rc=rc)
         return self._emit("done", {"rc": rc})
 
 
@@ -1754,6 +1827,10 @@ def cmd_token(args):
     ensure_token(cfg)
     say("%s forge -- new admin token in %s -- every admin client and browser must log in again (spark forge --print-url)"
         % (MARK, path))
+    from . import audit
+    why = audit.record("forge token")
+    if why:
+        say("%s forge -- the audit record was not kept: %s" % (MARK, why))
     return 0
 
 
@@ -1782,6 +1859,9 @@ def main(argv):
         return cmd_print_client(rest)
     if sub == "token":
         return cmd_token(rest)
+    if sub == "audit":
+        from . import audit
+        return audit.cmd_audit(rest)
     if sub in ("on", "off"):
         return cmd_onoff(sub, rest)
     say(USAGE.rstrip())

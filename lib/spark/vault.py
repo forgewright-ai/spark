@@ -8,8 +8,9 @@ One format for every encrypted file spark keeps:
 The header is the AAD of every record, so a sealed thread cannot be
 renamed into another thread or replayed as a memory file. The nonce is
 os.urandom(12) per record: append-safe, no counter state. A thread
-holds one record per message (appends stay cheap); memory and
-chat-history are one whole-blob record, rewritten wholesale.
+holds one record per message (appends stay cheap), and so does the
+audit trail; memory and chat-history are one whole-blob record,
+rewritten wholesale.
 
 Key custody: each user owns a random 32-byte data key (DK). The box
 stores only sha256(token) as a lookup verifier and the DK wrapped by a
@@ -25,7 +26,7 @@ from .chacha import SealError  # noqa: F401  -- the vault's error is the cipher'
 
 MAGIC = "spark-sealed-v1"
 KEY_MAGIC = "spark-key-v1"
-KINDS = ("thread", "memory", "chathist", "ledger")
+KINDS = ("thread", "memory", "chathist", "ledger", "audit")
 # PBKDF2-HMAC-SHA256, not scrypt: Apple's system python (the 3.9 floor)
 # links an OpenSSL without scrypt, and pbkdf2_hmac is guaranteed on both
 # OSes. The token is a 256-bit random spark minted -- never a human

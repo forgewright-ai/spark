@@ -229,6 +229,16 @@ def _show():
     return 0
 
 
+def _audit(action, name):
+    """One sealed audit record of a user minted, removed or rotated (the
+    box account's trail, lib/spark/audit.py); a trail that cannot take
+    it is one line here, never a failed verb."""
+    from . import audit
+    why = audit.record(action, name=name)
+    if why:
+        say("spark user: the audit record was not kept -- %s" % why)
+
+
 def _ask_token():
     import getpass
     try:
@@ -274,6 +284,7 @@ def cmd_add(args):
             say("ok     account      this machine is %s" % name)
         except vault.SealError:
             pass
+    _audit("user add", name)
     n = legacy_threads()
     if n and account()[0] == name and os.isatty(0):
         if confirm("claim the %d existing plaintext thread%s into %s -- sealed, then removed"
@@ -360,7 +371,9 @@ def cmd_remove(args):
         return 0
     remove(name)
     if account()[0] == name:
-        logout()
+        logout()          # the trail went with the store: nothing to record it in
+    else:
+        _audit("user remove", name)
     say("ok     user         %s removed" % name)
     return 0
 
@@ -429,6 +442,7 @@ def cmd_token(args):
         say("spark user: the stored token no longer opens %s's key -- spark user login again" % name)
         return 1
     write_login(name, new, unlock(name, new))
+    _audit("user token", name)
     say("ok     token        rotated -- shown once, never stored:")
     say("  %s" % new)
     say("  other machines and browsers must log in again")
