@@ -5,8 +5,10 @@
 # and `spark ver` (which derives the version from the tag itself, via git
 # describe -- lib/spark/version.py) saying the same thing. The release
 # carries `get` as an asset, so releases/latest/download/get is the
-# one-liner. Nothing is rerun here; the Releasing section of CLAUDE.md
-# says to tag only after ci is green.
+# one-liner, and sbom.cdx.json beside it: `spark ver --sbom`, the
+# CycloneDX bill of what this tree pins, read from the tree at the tag
+# so the bill and the code cannot disagree. Nothing is rerun here; the
+# Releasing section of CLAUDE.md says to tag only after ci is green.
 name: release
 on:
   push:
@@ -21,6 +23,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
         with:
           fetch-depth: 0   # spark ver needs the tag reachable to describe it
+          persist-credentials: false   # the fetch below reads a public repository; gh has its own token
       - name: the tag is signed by a key in allowed-signers
         # actions/checkout peels an annotated tag into a lightweight one on
         # the runner; the signature lives on the tag object, so fetch that
@@ -40,6 +43,10 @@ jobs:
           line=$(python3 bin/spark ver | grep '^spark ')
           [ "$line" = "spark $v" ] \
             || { echo "release: tag $GITHUB_REF_NAME but spark ver says: $line"; exit 1; }
+      - name: the SBOM
+        # what the release pins, as CycloneDX: spark ver --sbom reads the
+        # tree itself (engine.env, models.env), nothing is typed twice
+        run: python3 bin/spark ver --sbom > sbom.cdx.json
       - name: the notes are the CHANGELOG section
         run: |
           v=${GITHUB_REF_NAME#v}
@@ -49,5 +56,6 @@ jobs:
       - name: create the release
         env:
           GH_TOKEN: ${{ github.token }}
-        # `get` rides along as an asset: releases/latest/download/get is the one-liner
-        run: gh release create "$GITHUB_REF_NAME" --title "spark $GITHUB_REF_NAME" --notes-file notes.md --verify-tag get
+        # `get` rides along as an asset (releases/latest/download/get is the
+        # one-liner), and the SBOM beside it
+        run: gh release create "$GITHUB_REF_NAME" --title "spark $GITHUB_REF_NAME" --notes-file notes.md --verify-tag get sbom.cdx.json

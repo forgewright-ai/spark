@@ -1,0 +1,78 @@
+# spark advisories -- the engine is the one binary spark downloads: a
+# llama.cpp release pinned in engine.env (LLAMA_VERSION) and verified by
+# sha256. A pin does not follow upstream, so once a week (or by hand)
+# this asks GitHub whether llama.cpp published a security advisory after
+# the pin's own date, and opens ONE issue naming them when it did --
+# `llama.cpp advisory after <pin>` -- and none while that issue is open.
+# No advisory: a one-line summary, exit 0. Nothing here touches the pin;
+# a bump is a commit (engine.env, CREDITS.md), as ever. Every value from
+# the API lands in a file and is read with jq or python, never echoed
+# into a shell.
+name: advisories
+on:
+  schedule:
+    - cron: '23 7 * * 1'   # Mondays, 07:23 UTC
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  llama:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+        with:
+          persist-credentials: false
+      - name: the pin and its date
+        run: |
+          pin=$(sed -n 's/^LLAMA_VERSION=//p' engine.env)
+          [ -n "$pin" ] || { echo "advisories: engine.env has no LLAMA_VERSION"; exit 1; }
+          gh api "repos/ggml-org/llama.cpp/git/ref/tags/$pin" > ref.json
+          sha=$(jq -r '.object.sha' ref.json)
+          # an annotated tag is a tag object in front of the commit: peel it
+          if [ "$(jq -r '.object.type' ref.json)" = tag ]; then
+            gh api "repos/ggml-org/llama.cpp/git/tags/$sha" > tag.json
+            sha=$(jq -r '.object.sha' tag.json)
+          fi
+          gh api "repos/ggml-org/llama.cpp/commits/$sha" > commit.json
+          jq -r '.commit.committer.date' commit.json > pin-date
+          printf '%s\n' "$pin" > pin
+          echo "engine pin $pin, committed $(cat pin-date)"
+      - name: the advisories published after it
+        run: |
+          # --paginate prints one array per page; -s add makes them one
+          gh api 'repos/ggml-org/llama.cpp/security-advisories?state=published' --paginate \
+            | jq -s 'add // []' > advisories.json
+          python3 - <<'PY'
+          import json
+          cutoff = open("pin-date").read().strip()
+          after = [a for a in json.load(open("advisories.json"))
+                   if a.get("published_at", "") > cutoff]
+          after.sort(key=lambda a: a.get("published_at", ""))
+          with open("body.md", "w") as f:
+              if after:
+                  f.write("llama.cpp published these after the engine pin (%s):\n\n" % cutoff)
+                  for a in after:
+                      f.write("- %s (%s, %s): %s\n  %s\n" % (
+                          a.get("ghsa_id", "?"), a.get("severity", "?"),
+                          a.get("published_at", "?")[:10], a.get("summary", ""),
+                          a.get("html_url", "")))
+                  f.write("\nengine.env pins LLAMA_VERSION; a bump is a commit there and in CREDITS.md.\n")
+          print("%d advisor%s after the pin" % (len(after), "y" if len(after) == 1 else "ies"))
+          PY
+      - name: one issue, unless it is already open
+        run: |
+          pin=$(cat pin)
+          [ -s body.md ] || { echo "no llama.cpp advisory after $pin ($(cat pin-date)): nothing to do"; exit 0; }
+          title="llama.cpp advisory after $pin"
+          gh issue list --repo "$GITHUB_REPOSITORY" --state open --search "\"$title\" in:title" \
+            --json title > open.json
+          if jq -e --arg t "$title" 'any(.[]; .title == $t)' open.json >/dev/null; then
+            echo "an open issue already says so: $title"; exit 0
+          fi
+          gh issue create --repo "$GITHUB_REPOSITORY" --title "$title" --body-file body.md
