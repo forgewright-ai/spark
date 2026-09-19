@@ -1,5 +1,31 @@
 # Changelog
 
+## v1.38
+
+- The documents live in `docs/`: INSTALL.md, CHEATSHEET.txt, CHANGELOG.md,
+  ROADMAP.md and CONTRIBUTING.md moved there beside TOUR, APPS, SHELL,
+  IDEAS and TROUBLESHOOTING; the root keeps README.md, CREDITS.md,
+  CLAUDE.md, AGENTS.md and LICENSE. The five that moved stay tied to a
+  release (the landing rule); the five beside do not, and `docs_test`
+  now tells the two apart, holds docs/ to exactly the ten, and refuses a
+  moved file named by its old path. The release workflow reads
+  `docs/CHANGELOG.md`; the hook's 80-column and ASCII gates refuse a
+  missing doc instead of skipping it; the printed reference is
+  `lp ~/.spark/docs/CHEATSHEET.txt`.
+- macOS: with `SITE_FONT_FACE` unset, the Terminal.app face is
+  Menlo-Regular 13, a face every Mac ships, and `spark font` says so at
+  once. The profile on disk changes at the next `spark theme NAME`,
+  `spark theme profile`, `spark font FACE SIZE` or `spark setup`, which
+  also switches the open windows. A face set by hand keeps working; once
+  that font is uninstalled, the font row warns and names the remedy.
+- `spark bar line` paints its `ai` segment in a palette slot
+  (`colour0`..`colour15`, the nearest of the sixteen to the theme's
+  accent), never a hex colour: the console draws sixteen, and tmux's own
+  table is not the palette's.
+- The shell prose says what is so: the shell layer's tools are named
+  without a font, and `docs/INSTALL.md` no longer describes a
+  `spark shell on` that is a pointer.
+
 ## v1.37
 
 - The page, spark.forgewright.ai, is rendered outside this tree, at the
