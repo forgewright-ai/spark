@@ -198,6 +198,8 @@ def main():
         ok(rc == 78 and "client of" in err, "SPARK_BASE_URL set: serve refuses with 78", err)
         rc, out, err = spark("serve", "--host", "0.0.0.0")
         ok(rc == 78 and "0.0.0.0" in err, "0.0.0.0 refused", err)
+        rc, out, err = spark("serve", "--host", "0")
+        ok(rc == 78 and "0 is 0.0.0.0, every interface" in err, "0 (the short spelling of 0.0.0.0) refused", err)
         rc, out, err = spark("serve", "on", extra={"SPARK_MODELS_DIR": tmp + "/nope"})
         ok(rc == 78 and "bootstrap" in err, "no model: exit 78 naming bootstrap", err)
         rc, out, err = spark("serve", "on", extra={"SPARK_ENGINE_DIR": tmp + "/nope"})

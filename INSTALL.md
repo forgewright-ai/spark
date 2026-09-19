@@ -399,8 +399,9 @@ The page, in any browser on the LAN:
    after `#`, which stays in the browser and never reaches the server.
    The QR is the token drawn as squares: show it (or a screenshot of
    it) only to the person it is for.
-2. Or type a token once; the browser keeps a cookie (90 days; a server
-   restart asks again). Everyone lands in the chat. A user's token is
+2. Or type a token once; the browser keeps a cookie (90 days; logging
+   out or a server restart asks again, the admin's too). Everyone
+   lands in the chat. A user's token is
    a chat app: their own threads and memory, plus their account behind
    the one menu button. The admin token also opens the whole machine
    (activity, `do`, the settings, the log). Give each of the household

@@ -7,7 +7,7 @@ import subprocess
 import sys
 import time
 
-from . import IS_MAC, MARK, REPO, config, glyph, lan_ip, own_hostnames, say, wait_ready
+from . import IS_MAC, MARK, REPO, bind_check, config, glyph, lan_ip, own_hostnames, say, wait_ready
 from . import engine, wire
 
 USAGE = """%s serve -- the local model server for this LAN
@@ -108,8 +108,11 @@ def cmd_serve(args):
     host = host or cfg.serve_host or _wait_lan_ip(fg)
     if not host:
         return _die("no LAN address to bind -- set SPARK_SERVE_HOST", engine.EX_CONFIG)
-    if host == "0.0.0.0":
-        return _die("0.0.0.0 is every interface -- bind the one address the LAN should reach (--host ADDR)", engine.EX_CONFIG)
+    verdict, why = bind_check(host)
+    if verdict == "refuse":
+        return _die(why + " -- bind the one address the LAN should reach (--host ADDR)", engine.EX_CONFIG)
+    if verdict:
+        say("%s serve -- warning: %s" % (MARK, why))
     try:
         engine_bin, model = engine.resolve_for_spawn(cfg)
     except engine.EngineError as e:

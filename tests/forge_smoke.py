@@ -8,6 +8,7 @@ import http.client
 import io
 import json
 import os
+import re
 import signal
 import socket
 import struct
@@ -168,6 +169,17 @@ def main():
         # refusals before anything binds
         rc, out, err = spark("forge", "--foreground", "--host", "0.0.0.0")
         ok(rc == 78 and "0.0.0.0" in err, "--foreground --host 0.0.0.0 -> 78", err)
+        rc, out, err = spark("forge", "--foreground", "--host", "0")
+        ok(rc == 78 and "0 is 0.0.0.0, every interface" in err, "--foreground --host 0 (the short spelling) -> 78", err)
+        rc, out, err = spark("forge", "--foreground", extra={"SPARK_FORGE_TOKEN": "short"})
+        ok(rc == 2 and "spark forge -- SPARK_FORGE_TOKEN is shorter than 32 characters: refused" in out + err,
+           "a SPARK_FORGE_TOKEN shorter than 32 characters is refused, exit 2", out + err)
+        from spark import bind_check as _bc
+        ok(all(_bc(h)[0] == "refuse" for h in ("0", "0.0", "00.0.0.0", "0.0.0.0", "::")),
+           "bind_check refuses every spelling of the unspecified address")
+        ok(all(_bc(h) == ("", "") for h in ("192.0.2.10", "127.0.0.1", "::1", "localhost", "")),
+           "bind_check passes a LAN address, loopback, a hostname")
+        ok(_bc("8.8.8.8")[0] == "warn", "bind_check warns on a public address", _bc("8.8.8.8"))
         rc, out, err = spark("forge", "-h")
         ok(rc == 0 and out.splitlines()[0] == "spark forge -- the served agent", "spark forge -h signs (contract 8)", out)
         ok(all(len(l) <= 80 for l in out.splitlines()), "usage fits 80 columns")
@@ -213,6 +225,10 @@ def main():
             ok(int(open(state + "/forge.pid").read()) == p.pid, "forge.pid is the foreground pid")
             bearer = {"Authorization": "Bearer " + token}
             ubearer = {"Authorization": "Bearer " + utoken}
+            XS = {"X-Spark": "1"}             # the write gate: a login goes through it too
+
+            def login(tok, **kw):
+                return req(url, "POST", "/api/login", {"token": tok}, headers=XS, **kw)
 
             # auth
             st, h, raw = req(url, "GET", "/api/check")
@@ -220,12 +236,12 @@ def main():
             st, _, _ = req(url, "GET", "/api/check", headers={"Authorization": "Bearer nope"})
             ok(st == 401, "wrong bearer -> 401")
             t0 = time.time()
-            st, _, _ = req(url, "POST", "/api/login", {"token": "nope"})
+            st, _, _ = login("nope")
             ok(st == 401 and time.time() - t0 >= 1.0, "wrong login -> 401 after >= 1 s (%.1f s)" % (time.time() - t0))
             # a non-ASCII token is a WRONG token, never a 500: the compare
             # runs over bytes, so the 1 s cost and the counter still apply
             t0 = time.time()
-            st, _, raw = req(url, "POST", "/api/login", {"token": "café-token"})
+            st, _, raw = login("café-token")
             ok(st == 401 and time.time() - t0 >= 1.0,
                "a non-ASCII token login -> 401 after >= 1 s, not a 500", (st, raw[:80]))
             st, _, _ = req(url, "GET", "/api/check", headers={"Authorization": "Bearer café"})
@@ -238,7 +254,7 @@ def main():
             ok(_fsv.Handler.timeout == 30, "the handler carries a 30 s socket timeout")
             ok(getattr(_fsv._PUNISH, "_initial_value", None) == 8,
                "the login punish sleep is bounded by a semaphore of 8")
-            st, h, raw = req(url, "POST", "/api/login", {"token": token})
+            st, h, raw = login(token)
             sc = h.get("Set-Cookie", "")
             ok(st == 200 and sc.startswith("spark_forge=") and "HttpOnly" in sc and "SameSite=Strict" in sc and "Max-Age=7776000" in sc,
                "right login -> cookie HttpOnly, SameSite=Strict, 90 days", sc)
@@ -249,6 +265,28 @@ def main():
                "/api/me with the admin cookie: role admin, name, version", raw[:100])
             st, _, raw = req(url, "GET", "/api/me", headers=bearer)
             ok(st == 200 and json.loads(raw).get("role") == "admin", "/api/me with the admin bearer: role admin", raw[:100])
+            # the login goes through the write gate like every other POST:
+            # a page on another origin cannot log a browser in
+            st, _, _ = req(url, "POST", "/api/login", {"token": token})
+            ok(st == 403, "login without X-Spark -> 403 (the write gate)", st)
+            st, _, _ = req(url, "POST", "/api/login", {"token": token}, headers=dict(XS, Origin="http://evil.example"))
+            ok(st == 403, "login with a foreign Origin -> 403", st)
+            st, _, raw = req(url, "POST", "/api/login", {"token": token}, headers=dict(XS, **{"Content-Type": "text/plain"}))
+            ok(st == 415 and json.loads(raw)["error"]["kind"] == "bad", "login with a text/plain body -> 415", (st, raw[:80]))
+            # a session is minted, never derived: two logins, two cookies,
+            # neither computable from the token, and a logout kills its own
+            st, h2, _ = login(token)
+            cookie2 = {"Cookie": h2.get("Set-Cookie", "").split(";")[0]}
+            ok(st == 200 and cookie2["Cookie"] != cookie["Cookie"] and token not in cookie2["Cookie"],
+               "a second admin login: a different cookie, not the token", (cookie["Cookie"][:30], cookie2["Cookie"][:30]))
+            st, _, raw = req(url, "GET", "/api/me", headers=cookie2)
+            ok(st == 200 and json.loads(raw).get("role") == "admin", "the second admin cookie works", raw[:80])
+            st, _, _ = req(url, "POST", "/api/logout", {}, headers=dict(cookie2, **XS))
+            ok(st == 200, "the admin logs the second one out", st)
+            st, _, _ = req(url, "GET", "/api/me", headers=cookie2)
+            ok(st == 401, "the logged-out admin cookie replayed -> 401 (its session died)", st)
+            st, _, _ = req(url, "GET", "/api/me", headers=cookie)
+            ok(st == 200, "the first admin cookie is untouched by the other's logout", st)
             with open(state + "/check.json", "w") as f:
                 json.dump({"ts": int(time.time()) - 5, "name": "fixture", "version": "0", "counts": {"ok": 1, "fail": 0, "warn": 0, "na": 0},
                            "rows": [{"category": "SOFTWARE", "status": "ok", "name": "x", "value": "y", "remedy": ""}]}, f)
@@ -306,6 +344,21 @@ def main():
                "stream chat: the SSE deltas pass through", text[:200])
             st, _, _ = req(url, "POST", "/v1/chat/completions", {"messages": "x"}, headers=bearer)
             ok(st == 400, "messages not a list -> 400")
+            # the bearer only: a browser's cookie does not open the model
+            st, _, _ = req(url, "POST", "/v1/chat/completions", {"messages": [{"role": "user", "content": "what"}], "stream": False}, headers=cookie)
+            ok(st == 401, "/v1/chat/completions with a cookie only -> 401", st)
+            # the forwarded request asks for at most V1_MAX_TOKENS
+            for asked, expect in ((None, 8192), (99999, 8192), (-1, 8192), (100, 100)):
+                SEEN.clear()
+                vb = {"messages": [{"role": "user", "content": "what"}], "stream": False}
+                if asked is not None:
+                    vb["max_tokens"] = asked
+                req(url, "POST", "/v1/chat/completions", vb, headers=bearer)
+                ok(SEEN.get("body", {}).get("max_tokens") == expect,
+                   "max_tokens %s goes upstream as %d" % (asked, expect), SEEN.get("body", {}).get("max_tokens"))
+            SEEN.clear()
+            req(url, "POST", "/v1/chat/completions", {"messages": [{"role": "user", "content": "what"}], "stream": False, "n_predict": -1}, headers=bearer)
+            ok(SEEN.get("body", {}).get("n_predict") == 8192, "n_predict -1 (no limit upstream) is capped too", SEEN.get("body", {}).get("n_predict"))
             st, _, raw = req(url, "GET", "/v1/models", headers=bearer)
             ok(st == 200 and "stub-7b-q4" in raw.decode(), "/v1/models proxied", raw[:100])
 
@@ -442,7 +495,8 @@ def main():
             if os.path.isfile(os.path.join(REPO, "lib", "spark", "forge", "index.html")):
                 st, h, raw = req(url, "GET", "/")
                 ok(st == 200 and h.get("Content-Type", "").startswith("text/html") and h.get("Content-Security-Policy") == "default-src 'self'"
-                   and h.get("X-Frame-Options") == "DENY" and "ETag" in h, "GET / is the page with CSP", (st, h))
+                   and h.get("X-Frame-Options") == "DENY" and h.get("X-Content-Type-Options") == "nosniff" and "ETag" in h,
+                   "GET / is the page with CSP, DENY, nosniff", (st, h))
                 st, _, _ = req(url, "GET", "/", headers={"If-None-Match": h["ETag"]})
                 ok(st == 304, "ETag round trip -> 304")
                 st, _, _ = req(url, "GET", "/login")
@@ -679,6 +733,16 @@ def main():
             ok(st == 200 and json.loads(raw)["tail"].strip().endswith(os.path.basename(tmp)), "/api/do/run honours cwd", raw[:100])
             st, _, _ = req(url, "POST", "/api/do/run", {"command": ""}, headers=post)
             ok(st == 400, "/api/do/run with no command -> 400", st)
+            st, _, raw = req(url, "POST", "/api/do/run", {"command": "echo one\necho two"}, headers=post)
+            ok(st == 400, "/api/do/run with a control character (a second line) -> 400", (st, raw[:80]))
+            gone = os.path.join(tmp, "gone")
+            st, _, raw = req(url, "POST", "/api/do/run", {"command": "rm -rf " + gone}, headers=post)
+            kind = json.loads(raw).get("error", {}).get("kind") if st == 400 else ""
+            ok(st == 400 and kind == "confirm", "/api/do/run of a dangerous command without confirmed -> 400 confirm", (st, raw[:80]))
+            st, _, _ = req(url, "POST", "/api/do/run", {"command": "rm -rf " + gone, "confirmed": "yes"}, headers=post)
+            ok(st == 400, "confirmed must be true, not a word", st)
+            st, _, raw = req(url, "POST", "/api/do/run", {"command": "rm -rf " + gone, "confirmed": True}, headers=post)
+            ok(st == 200 and json.loads(raw)["rc"] == 0, "with confirmed: true the dangerous command runs", raw[:80])
             st, _, raw = req(url, "POST", "/api/do/propose", {"thread": dtid, "text": "Output of `echo STEP-ONE` (exit 0):\nSTEP-ONE"}, headers=post, timeout=30)
             d = json.loads(raw)
             ok(st == 200 and d["thread"] == dtid and d["reply"]["kind"] == "done", "/api/do/propose on the thread: done", raw[:200])
@@ -696,7 +760,9 @@ def main():
             ok(st == 200 and d["reply"]["kind"] == "done" and d.get("unchecked") == ["96"],
                "/api/do/propose: a done number no output backs comes back unchecked", raw[:300])
             lg = open(state + "/forge.log").read()
-            ok("do/run echo hi" in lg and "do/run false" in lg, "forge.log names the commands run", lg[-300:])
+            ok(re.search(r"do/run [0-9a-f]{12} echo hi$", lg, re.M) and re.search(r"do/run [0-9a-f]{12} false$", lg, re.M)
+               and re.search(r"do/run [0-9a-f]{12} rc 1$", lg, re.M),
+               "forge.log names the commands run with a sha256 prefix, and the rc after", lg[-300:])
 
             st, h, raw = req(url, "POST", "/api/run", {"verb": "model", "args": ["none"]}, headers=post, timeout=60)
             evs = sse(raw)
@@ -729,7 +795,7 @@ def main():
             ok(st == 401, "/api/threads bare -> 401", st)
 
             # the user role: a personal token
-            st, h, raw = req(url, "POST", "/api/login", {"token": utoken})
+            st, h, raw = login(utoken)
             usc = h.get("Set-Cookie", "")
             ok(st == 200 and usc.startswith("spark_forge=") and json.loads(raw).get("role") == "user"
                and json.loads(raw).get("user") == "ualice",
@@ -746,7 +812,7 @@ def main():
             ok(st == 200, "the user logs out", st)
             st, _, _ = req(url, "GET", "/api/me", headers=ucookie)
             ok(st == 401, "the logged-out cookie replayed -> 401 (the session died with it)", st)
-            st, h, raw = req(url, "POST", "/api/login", {"token": utoken})
+            st, h, raw = login(utoken)
             usc = h.get("Set-Cookie", "")
             ucookie = {"Cookie": usc.split(";")[0]}
             st, _, raw = req(url, "GET", "/api/me", headers=ucookie)
@@ -951,6 +1017,7 @@ def main():
             body = body.decode("utf-8", "replace")
             ok(st == 200 and "history.replaceState" in body and "#t=" in body,
                "spark.js: the fragment login is wired (replaceState, #t=)")
+            ok("confirmed: !!r.danger" in body, "spark.js: do/run carries confirmed after the second click")
             rc, out, _ = spark("forge", "--print-url", "--user", "--show-token")
             ok(rc == 2 and "spark user add" in out, "--print-url --user: gone, names spark user add", out)
             rc, out, _ = spark("forge", "--print-client")
@@ -992,17 +1059,6 @@ def main():
             rc, out, _ = spark("status", extra=client)
             ok(rc == 0 and "a FORGE" in out, "spark status names the FORGE", out)
 
-            # lockout: ten wrong logins in a minute, then 429
-            def bad():
-                req(url, "POST", "/api/login", {"token": "nope"})
-            ts = [threading.Thread(target=bad) for _ in range(10)]
-            for t in ts:
-                t.start()
-            for t in ts:
-                t.join()
-            st, _, _ = req(url, "POST", "/api/login", {"token": token})
-            ok(st == 429, "after 10 wrong logins even the right one is 429", st)
-
             # token rotation takes effect live, one principal at a time
             rc, out, _ = spark("forge", "token", "--new", "--user")
             ok(rc == 2 and "spark user token --new" in out, "forge token --new --user: gone, names spark user", out)
@@ -1041,23 +1097,6 @@ def main():
                and open(state + "/forge.pid").read() == pid_before,
                "the running FORGE's forge-url and forge.pid survive the failed second start")
 
-            # a burst of wrong logins: the sleepers are capped, the answers
-            # come fast, and the lockout may kick in -- LAST here, because
-            # it poisons 127.0.0.1 for a minute
-            burst = []
-            t0 = time.time()
-
-            def _wrong():
-                burst.append(req(url, "POST", "/api/login", {"token": "wrong-burst"})[0])
-            ths = [threading.Thread(target=_wrong) for _ in range(6)]
-            for th_ in ths:
-                th_.start()
-            for th_ in ths:
-                th_.join(timeout=15)
-            took = time.time() - t0
-            ok(burst.count(401) + burst.count(429) == 6 and took < 5,
-               "six wrong logins in parallel share the punish second, not six of them", (burst, round(took, 1)))
-
             # a machine that holds only its own login (no admin token) still answers the line
             os.rename(tok_path, tok_path + ".aside")
             try:
@@ -1067,6 +1106,46 @@ def main():
                    "spark line with only the personal login answers the cmd protocol", out)
             finally:
                 os.rename(tok_path + ".aside", tok_path)
+
+            # lockout: ten wrong logins in a minute, then 429 -- on the
+            # login and on a bearer alike, while a cookie (never a guess)
+            # still opens. LAST, with the burst below: it poisons
+            # 127.0.0.1 for a minute
+            st, h3, _ = login(token2)
+            cookie3 = {"Cookie": h3.get("Set-Cookie", "").split(";")[0]}
+            ok(st == 200, "a fresh admin login after the rotation", st)
+
+            def bad():
+                login("nope")
+            ts = [threading.Thread(target=bad) for _ in range(10)]
+            for t in ts:
+                t.start()
+            for t in ts:
+                t.join()
+            st, _, _ = login(token2)
+            ok(st == 429, "after 10 wrong logins even the right one is 429", st)
+            st, _, raw = req(url, "GET", "/api/me", headers={"Authorization": "Bearer " + token2})
+            ok(st == 429 and json.loads(raw)["error"]["kind"] == "locked",
+               "a locked-out address gets 429 on a right bearer too", (st, raw[:80]))
+            st, _, _ = req(url, "GET", "/api/me", headers=cookie3)
+            ok(st == 200, "a cookie is not a guess: the session still opens while locked out", st)
+
+            # a burst of wrong logins: the sleepers are capped, the answers
+            # come fast, and the lockout holds -- LAST here, because
+            # it poisons 127.0.0.1 for a minute
+            burst = []
+            t0 = time.time()
+
+            def _wrong():
+                burst.append(login("wrong-burst")[0])
+            ths = [threading.Thread(target=_wrong) for _ in range(6)]
+            for th_ in ths:
+                th_.start()
+            for th_ in ths:
+                th_.join(timeout=15)
+            took = time.time() - t0
+            ok(burst.count(401) + burst.count(429) == 6 and took < 5,
+               "six wrong logins in parallel share the punish second, not six of them", (burst, round(took, 1)))
         finally:
             p.send_signal(signal.SIGTERM)
             try:
