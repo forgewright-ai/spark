@@ -20,10 +20,13 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
         with:
-          fetch-depth: 0   # spark ver needs the tag reachable to describe it; a full
-                           # fetch brings every tag object, the signed one included
+          fetch-depth: 0   # spark ver needs the tag reachable to describe it
       - name: the tag is signed by a key in allowed-signers
+        # actions/checkout peels an annotated tag into a lightweight one on
+        # the runner; the signature lives on the tag object, so fetch that
+        # object back (forced: the peeled ref must give way) before verifying
         run: |
+          git fetch --force origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
           git -c gpg.ssh.allowedSignersFile=allowed-signers verify-tag "$GITHUB_REF_NAME" \
             || { echo "release: $GITHUB_REF_NAME is not signed by a key in allowed-signers (CLAUDE.md, Releasing)"; exit 1; }
       - name: the tag agrees with the CHANGELOG
