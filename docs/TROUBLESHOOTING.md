@@ -1,4 +1,9 @@
-# spark | troubleshooting guide
+# Troubleshooting
+
+This document is not tied to a spark release. It is kept true as
+things change, but it is outside the landing rule: nothing here has to
+appear in `spark help`, `CHEATSHEET.txt` or a `CHANGELOG.md` entry,
+and no release waits on it.
 
 ## WiFi adapter and connection
 
@@ -14,8 +19,8 @@ an installed system running NetworkManager.
 ### Rule 0: one WiFi daemon per card
 
 A WiFi card obeys exactly one manager. On the Arch live ISO that manager
-is `iwd`. If a `wpa_supplicant` is also running — started by hand, or
-left over from an earlier attempt — every `iwctl` command fails with
+is `iwd`. If a `wpa_supplicant` is also running -- started by hand, or
+left over from an earlier attempt -- every `iwctl` command fails with
 misleading errors while the rogue daemon quietly connects on its own.
 
 Check for squatters before anything else:
@@ -52,7 +57,7 @@ How to read what they say:
 |---|---|
 | `Could not register frame watch ... -114` | Another daemon owns the card. Go to Rule 0. |
 | `Unexpected connection related event -- is another supplicant running?` | Same. iwd is telling you outright. |
-| `event: connect-failed, status: 1` | iwd's attempt was refused — check the dmesg side. |
+| `event: connect-failed, status: 1` | iwd's attempt was refused -- check the dmesg side. |
 | `wlan0: authentication with <bssid> timed out` (repeating) | Auth frames not answered: weak signal, or two daemons interleaving. |
 | `wlan0: authenticated` then `associated` ... but iwctl says failed | The OTHER daemon connected, not iwd. Rule 0. |
 | `event: connect-info ... signal: -48` | Signal report. -40s excellent, -60s fine, -75 and worse is trouble. |
@@ -75,7 +80,7 @@ systemctl restart iwd                 # 3. fresh driver (see below for <driver>)
 #    does not reset the card.
 ```
 
-Find `<driver>` first — do not guess it:
+Find `<driver>` first -- do not guess it:
 
 ```
 dmesg | grep -iE 'iwlwifi|mt7|rtw|ath1'
@@ -106,7 +111,7 @@ Things worth knowing:
   country code), wait ~30 s, list again.
 - Saved credentials live as files in `/var/lib/iwd/` (one `.psk` per
   network). `ls` that directory to see what is cached; `rm` a file to
-  forget a network. An empty directory means nothing was ever saved —
+  forget a network. An empty directory means nothing was ever saved --
   a "cached bad password" theory is dead on arrival.
 - The command is `iwctl`. Under stress it becomes iwclt, iwcl, and
   mobprobe. zsh's autocorrect is on your side; read its prompt.
@@ -125,7 +130,7 @@ ping -c 2 -4 archlinux.org            # force IPv4
   try IPv6 and fail confusingly. `-4` cuts through.
 - Your router's client list is a CACHE, not the truth. It showing the
   box "connected" proves only that something held a lease recently.
-  `iwctl station wlan0 show` is the live answer — trust it.
+  `iwctl station wlan0 show` is the live answer -- trust it.
 
 ---
 
@@ -149,14 +154,14 @@ nmcli dev wifi connect "<ssid>" password '<passphrase>'
 
 Symptoms, in the order they appeared:
 
-1. `iwctl station wlan0 connect "<gateway-ssid>"` → `Operation failed`,
+1. `iwctl station wlan0 connect "<gateway-ssid>"` -> `Operation failed`,
    instantly, passphrase correct.
-2. `iwctl station wlan0 scan` → `Operation not supported`, repeatedly,
+2. `iwctl station wlan0 scan` -> `Operation not supported`, repeatedly,
    surviving `systemctl restart iwd`.
 3. Router's client page showed the box connected with an IP; `iwctl`
    said `disconnected`. The stale IP was visible in `ip a`.
 4. `dmesg` showed `authentication ... timed out` against both gateway
-   radios (`..:04`, `..:08`) — then, minutes later, a successful
+   radios (`..:04`, `..:08`) -- then, minutes later, a successful
    `authenticated` / `associated` nobody seemed to own.
 5. Theories burned along the way: weak signal, wedged card, cached bad
    password, WPA3 handshake quirk, wrong driver.
@@ -178,9 +183,9 @@ ps aux | grep -iE 'wpa_supplicant|iwd' | grep -v grep
 
 Root cause: a `wpa_supplicant` started by hand early in the session
 (the classic first-guide attempt) held `wlan0` the entire time. It
-caused symptoms 1–4 single-handedly: it blocked iwd's connects and
+caused symptoms 1-4 single-handedly: it blocked iwd's connects and
 scans, it was the "connected" client the router saw, and it owned the
-mystery association in dmesg. The signal was never weak — the box was
+mystery association in dmesg. The signal was never weak -- the box was
 simply fighting over the card and measuring the far AP.
 
 The fix, three commands and ten seconds:

@@ -9,6 +9,14 @@
   more. Releasing gains a step: the page's render is run by hand after
   the tag, or picks the tag up on its own within six hours.
 
+- The documents beside the core live in `docs/`: TOUR.md, APPS.md,
+  SHELL.md, IDEAS.md and TROUBLESHOOTING.md (a box that will not join
+  the WiFi -- one WiFi daemon per card, then the logs -- which nothing
+  had pointed to). Each says it is not tied to a release; docs_test
+  checks that, that every `docs/X.md` a doc names exists, that each is
+  in CLAUDE.md's layout and pointed to from README, INSTALL, CHEATSHEET
+  or ROADMAP, and that the root holds only the core docs.
+
 ## v1.36
 
 - The pre-commit hook reads the staged diff for the secret shapes

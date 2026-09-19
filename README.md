@@ -55,7 +55,7 @@ and your editor stay yours. `INSTALL.md` has every step and every key.
 
 ## Use it
 
-The first hour, twelve small things to try: `TOUR.md`.
+The first hour, twelve small things to try: `docs/TOUR.md`.
 
 | | |
 |---|---|
@@ -83,8 +83,12 @@ The first hour, twelve small things to try: `TOUR.md`.
 
 ## Beside the core
 
-- Editors and tools that speak to spark: `APPS.md`
-- spark's own shell for a machine that is an AI box: `SHELL.md`
+Kept in `docs/`, not tied to a release:
+
+- A first hour, twelve small things to try: `docs/TOUR.md`
+- Editors and tools that speak to spark: `docs/APPS.md`
+- spark's own shell for a machine that is an AI box: `docs/SHELL.md`
+- A box that will not join the WiFi: `docs/TROUBLESHOOTING.md`
 
 The page: https://spark.forgewright.ai -- the docs and the model list, at
 the newest release.

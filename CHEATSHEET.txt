@@ -124,8 +124,10 @@ WINDOWS (Ubuntu 24.04 on WSL 2 -- Linux to spark)
   the CPU build; no console (the font is Windows Terminal's); no GRUB
   units: [boot] systemd=true in /etc/wsl.conf, then wsl --shutdown
 
-BESIDE THE CORE (kept in the repository, not tied to a release)
-  TOUR.md                         a first hour: twelve small things to try
-  APPS.md                         editors and tools that speak to spark
-  SHELL.md                        spark's own shell for a machine that is
+BESIDE THE CORE (kept in docs/, not tied to a release)
+  docs/TOUR.md                    a first hour: twelve small things to try
+  docs/APPS.md                    editors and tools that speak to spark
+  docs/SHELL.md                   spark's own shell for a machine that is
                                   only an AI box: spark shell, spark bar
+  docs/TROUBLESHOOTING.md         a box that will not join the WiFi: one
+                                  WiFi daemon per card, then the logs

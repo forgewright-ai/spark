@@ -96,8 +96,8 @@ USAGE_TAIL = """less often used
                               brain, bench [tune [show|apply]] -- each has -h
 
 beside the core
- APPS.md                      editors and tools that speak to spark
- SHELL.md                     spark's own shell for an AI box: the
+ docs/APPS.md                 editors and tools that speak to spark
+ docs/SHELL.md                spark's own shell for an AI box: the
                               spark-shell repository
 
 version %s
@@ -105,7 +105,7 @@ version %s
 
 
 def usage():
-    """The help. The shell layer lives in its own repository (SHELL.md
+    """The help. The shell layer lives in its own repository (docs/SHELL.md
     points there); theme, quiet, font and the bar line are core. The
     version is formatted here, not at import: nothing on the `spark
     line` path may call git, and version() does, on a cache miss."""

@@ -5,9 +5,10 @@
 # its count following: every themes/*.env upstream is in CREDITS.md; every
 # model row's license upstream is in CREDITS.md; the check-row count the
 # docs state is the count in check.py; the model count they state is the
-# count in models.env; no doc names the lists that are gone; the docs a
-# new user reads speak two nouns (spark, spark apps) and no doc names
-# what is private.
+# count in models.env; every docs/X.md a doc names exists and every
+# document in docs/ is pointed to; no doc names the lists that are gone;
+# the docs a new user reads speak two nouns (spark, spark apps) and no
+# doc names what is private.
 # Hermetic, stdlib, fast.
 import os
 import re
@@ -18,10 +19,13 @@ sys.path.insert(0, os.path.join(ROOT, "lib"))
 from spark import config  # noqa: E402
 
 fails = []
-# the docs a new user reads (the voice checks below), and every doc
-CUSTOMER_DOCS = ("README.md", "INSTALL.md", "CHEATSHEET.txt", "TOUR.md")
+# the docs a new user reads (the voice checks below), the documents beside
+# the core (docs/, not tied to a release), and every doc
+CUSTOMER_DOCS = ("README.md", "INSTALL.md", "CHEATSHEET.txt", "docs/TOUR.md", "docs/TROUBLESHOOTING.md")
+BESIDE = tuple(sorted(f for f in os.listdir(os.path.join(ROOT, "docs")) if f.endswith(".md"))) \
+    if os.path.isdir(os.path.join(ROOT, "docs")) else ()
 ALL_DOCS = ("README.md", "INSTALL.md", "CLAUDE.md", "CHEATSHEET.txt", "CREDITS.md", "CONTRIBUTING.md",
-            "AGENTS.md", "ROADMAP.md", "CHANGELOG.md", "TOUR.md", "site.env.example")
+            "AGENTS.md", "ROADMAP.md", "CHANGELOG.md", "site.env.example") + tuple("docs/" + f for f in BESIDE)
 
 
 def check(cond, what):
@@ -118,8 +122,8 @@ def main():
     for doc in ("CLAUDE.md", "INSTALL.md"):
         for m in re.finditer(r"spark check`?\s+(?:has )?(\d+) rows", read(doc)):
             check(int(m.group(1)) == n_rows, "%s: '%s' is check.py's count (%d)" % (doc, m.group(0), n_rows))
-    for m in re.finditer(r"spark check` answers (\d+)", read("IDEAS.md")):
-        check(int(m.group(1)) == n_rows, "IDEAS.md: '%s' is check.py's count (%d)" % (m.group(0), n_rows))
+    for m in re.finditer(r"spark check` answers (\d+)", read("docs/IDEAS.md")):
+        check(int(m.group(1)) == n_rows, "docs/IDEAS.md: '%s' is check.py's count (%d)" % (m.group(0), n_rows))
     # the threat model: the section exists and names the one remedy
     inst = read("INSTALL.md")
     m = re.search(r"## 8\. What an attacker can and cannot do\n(.*?)(?:\n## )", inst, re.S)
@@ -238,20 +242,53 @@ def main():
     # what is private is named nowhere in the tree's docs
     for doc in ALL_DOCS:
         check(not re.search(r"\bfactor(y|ies)\b", read(doc), re.I), "%s: no factory" % doc)
-    # APPS.md is where the apps live now: the customer docs a new user reads
-    # are the core, and the apps and the shell layer are beside it, in their
-    # own files, outside the landing rule. Every app APPS.md names still has
-    # to be credited -- that one is not optional; the page front checks
-    # itself the same way where the page is rendered.
-    apps = sorted(set(re.findall(r"github\.com/forgewright-ai/(spark-[a-z0-9]+)", read("APPS.md"))))
-    check(bool(apps), "APPS.md names at least one spark app repo")
+    # docs/APPS.md is where the apps live now: the customer docs a new user
+    # reads are the core, and the apps and the shell layer are beside it, in
+    # their own files, outside the landing rule. Every app it names
+    # still has to be credited -- that one is not optional; the page front
+    # checks itself the same way where the page is rendered.
+    apps = sorted(set(re.findall(r"github\.com/forgewright-ai/(spark-[a-z0-9]+)", read("docs/APPS.md"))))
+    check(bool(apps), "docs/APPS.md names at least one spark app repo")
     for app in apps:
         for doc in ("CREDITS.md",):
-            check(app in read(doc), "%s names %s (APPS.md does)" % (doc, app))
-    # and the two documents beside the core exist and say they are not
-    # tied to a release, so nobody files them back under the landing rule
-    for doc in ("APPS.md", "SHELL.md", "TOUR.md"):
-        check("not tied to a spark release" in read(doc), "%s says it is not release-gated" % doc)
+            check(app in read(doc), "%s names %s (docs/APPS.md does)" % (doc, app))
+    # the documents beside the core live in docs/, and nothing there goes
+    # unnamed: each says it is not tied to a release (so nobody files it
+    # back under the landing rule), is in CLAUDE.md's Layout, and is pointed
+    # to from a core doc -- a doc nobody is sent to is dead
+    check(bool(BESIDE), "docs/ holds at least one document beside the core")
+    m = re.search(r"## Layout\n\n```\n(.*?)\n```", claude, re.S)
+    layout = m.group(1) if m else ""
+    pointing = "".join(read(d) for d in ("README.md", "INSTALL.md", "CHEATSHEET.txt", "ROADMAP.md"))
+    for name in BESIDE:
+        check("not tied to a spark release" in read("docs/" + name), "docs/%s says it is not release-gated" % name)
+        check(name in layout, "CLAUDE.md's Layout names docs/%s" % name)
+        check("docs/" + name in pointing, "README, INSTALL, CHEATSHEET or ROADMAP points to docs/%s" % name)
+    # every docs/X.md a doc or the help names exists (the successor of the
+    # page-source check; the CHANGELOG is history and may name what moved),
+    # and README and the CHEATSHEET send a new user to the same set
+    live = tuple(d for d in ALL_DOCS if d != "CHANGELOG.md")
+    named = set()
+    for doc in live + ("bin/spark",):
+        named.update(re.findall(r"docs/([A-Z]+\.md)", read(doc)))
+    for name in sorted(named):
+        check(name in BESIDE, "docs/%s, which a doc names, exists" % name)
+    m = re.search(r"## Beside the core\n(.*?)(?:\n## |\Z)", readme, re.S)
+    in_readme = set(re.findall(r"docs/([A-Z]+\.md)", m.group(1) if m else ""))
+    m = re.search(r"BESIDE THE CORE[^\n]*\n(.*?)(?:\n\n|\Z)", read("CHEATSHEET.txt"), re.S)
+    in_cheat = set(re.findall(r"docs/([A-Z]+\.md)", m.group(1) if m else ""))
+    check(bool(in_readme) and in_readme == in_cheat,
+          "README's Beside the core and CHEATSHEET's BESIDE THE CORE name the same docs (%s)" % ", ".join(sorted(in_readme)))
+    # the root holds only the core docs (the check that would have caught a
+    # stray folder), the page's source is named by no doc but the CHANGELOG,
+    # and neither it nor the old folder exists
+    core = {"README.md", "INSTALL.md", "CHANGELOG.md", "ROADMAP.md", "CREDITS.md", "CONTRIBUTING.md", "AGENTS.md", "CLAUDE.md"}
+    loose = sorted(f for f in os.listdir(ROOT) if f.endswith(".md") and f not in core)
+    check(not loose, "no doc beside the core at the root%s" % ("" if not loose else " (found %s)" % ", ".join(loose)))
+    stale = [d for d in live if "www/" in read(d)]
+    check(not stale, "www/ is gone%s" % ("" if not stale else " (named in %s)" % ", ".join(stale)))
+    for gone in ("www", "user guide"):
+        check(not os.path.exists(os.path.join(ROOT, gone)), "%s does not exist" % gone)
     # the lists that are gone stay gone
     for doc in ("README.md", "INSTALL.md", "CLAUDE.md", "CHEATSHEET.txt", "CREDITS.md", "CONTRIBUTING.md",
                 "AGENTS.md", "ROADMAP.md", "site.env.example"):

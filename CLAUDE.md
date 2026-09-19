@@ -30,7 +30,7 @@ describes how things are, not how they came to be.
   app, no app package, no app check row, and no per-app verb. The
   shell -- tmux, starship, the daily tools, the Nerd Font, one palette
   on every surface -- is spark-shell's, its own repository
-  (github.com/forgewright-ai/spark-shell; SHELL.md points there),
+  (github.com/forgewright-ai/spark-shell; docs/SHELL.md points there),
   installed its own way; `~/.config/spark/theme.env` is the one
   interface it reads, and no shell code lives in this tree. The bar
   line and `spark quiet` are core: appliance behaviour of an AI box,
@@ -237,10 +237,14 @@ assets/         banner.svg -- the banner as rectangles, for the README and the p
 CREDITS.md      every third-party project spark downloads or installs,
                 with its license; spark's own code is LICENSE
 ROADMAP.md      what comes after the current release, in order
-APPS.md         the editors and tools that speak to spark, and how each one
-                connects; outside the landing rule, kept true continuously
-SHELL.md        the shell layer's pointer: it lives at
-                forgewright-ai/spark-shell; outside the landing rule, like APPS.md
+docs/           the documents beside the core -- outside the landing rule, kept
+                true continuously, not tied to a release, each saying so in its
+                first lines: TOUR.md (a first hour: twelve small things to try),
+                APPS.md (the editors and tools that speak to spark, and how each
+                one connects), SHELL.md (the shell layer's pointer: it lives at
+                forgewright-ai/spark-shell), IDEAS.md (the field ROADMAP.md is
+                picked from), TROUBLESHOOTING.md (a box that will not join the
+                WiFi: one WiFi daemon per card, then the logs)
 ```
 
 Runtime paths: config `~/.config/spark/{site.env,spark.env,theme.env,
@@ -874,7 +878,9 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   step and speaks two nouns, spark and spark apps: no FORGE, ember or
   brain as a noun there, no "smart app", nothing private named
   anywhere in the tree's docs (docs_test holds the word list; this
-  file and AGENTS.md keep the contracts' names).
+  file and AGENTS.md keep the contracts' names). A document beside the
+  core lives in `docs/`, says it is not tied to a release, is in the
+  Layout and is pointed to -- a doc nobody is sent to is dead.
 - **A package.** Linux: the right `PKG_*` group in every `distro/<id>.env`
   with a comment saying why (`PKG_CORE`/`PKG_ENGINE`/`PKG_AI` are the AI,
   always installed; the shell tools are spark-shell's own lists), under
@@ -890,7 +896,7 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   If it only reads: put it in `home/` (shared) or `<os>/home/`; `install.sh`
   links it. If it rewrites: it cannot be linked -- seed it once from
   `templates/` as a rendered regular file, and note it in INSTALL.md's trap
-  table (SHELL.md). Test by changing a setting in the app
+  table (docs/SHELL.md). Test by changing a setting in the app
   and running `ls -l` on the path: still a symlink, or now a regular file?
 - **A choice.** A `SITE_*` key with a default in `site.env.example`, applied
   by `bootstrap.sh` or rendered by `install.sh`, **and** a `spark <verb>`
@@ -904,12 +910,13 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   row and a doc line, is half a feature.
   The rule binds the CORE documentation, and core documentation moves with
   a release: README, INSTALL.md, CHEATSHEET.txt, `spark help`, this file
-  and CHANGELOG.md are updated as a version ships, together. `APPS.md` and
-  `SHELL.md` are outside it -- they are kept true continuously, no release
-  waits on them, and nothing in them has to appear in help, the cheatsheet
-  or a changelog entry. Both say so in their own first lines, and
-  `tests/docs_test.py` checks that they do, so neither drifts back under
-  the rule by accident.
+  and CHANGELOG.md are updated as a version ships, together. Everything
+  in `docs/` is outside it -- kept true continuously, no release waits on
+  it, and nothing in it has to appear in help, the cheatsheet or a
+  changelog entry. Each file there says so in its own first lines, and
+  `tests/docs_test.py` checks that it does, that the Layout above names
+  it and that README, INSTALL, CHEATSHEET or ROADMAP points to it, so
+  none drifts back under the rule by accident and none goes unread.
 - **A check row.** A function `row_<name>(ctx)` in `lib/spark/check.py`
   decorated `@row(CATEGORY, fixture=True)` or `@row(CATEGORY, fixture=False,
   reason="...")`. If it is fixture-testable, extend `make_fixture` so the row
@@ -1010,11 +1017,11 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   The reader's verb has its first client too: spark-w3m (contract 11,
   `spark read`) -- a keymap snippet and a stderr-folding wrapper, the
   same laws, its own repository.
-  The known clients are listed in APPS.md, and every one of them is in
-  CREDITS.md and on the page front, which is checked the same way where
-  the page is rendered -- docs_test reads the app names out of APPS.md
-  and looks them up in CREDITS.md; a new one is one line in each. The
-  core docs no longer name them at all. A pull
+  The known clients are listed in docs/APPS.md, and every one of them is
+  in CREDITS.md and on the page front, which is checked the same way
+  where the page is rendered -- docs_test reads the app names out of
+  docs/APPS.md and looks them up in CREDITS.md; a new one is one line in
+  each. The core docs no longer name them at all. A pull
   request that adds an app, an app package or an app check row here is
   turned into a pointer to the app's repository.
 - **The client shape.** `SITE_AI_MODEL=none` beside `SITE_PEER_AI_URL`

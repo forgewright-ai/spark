@@ -34,7 +34,8 @@ Arch:
    the Wi-Fi you joined with `iwctl`; one HTTPS mirror as a custom server
    (`https://geo.mirror.pkgbuild.com/$repo/os/$arch`), because a router
    that inspects HTTP turns a mirror into `invalid or corrupted database
-   (PGP signature)`.
+   (PGP signature)`. A box that will not join the Wi-Fi:
+   `docs/TROUBLESHOOTING.md` (one Wi-Fi daemon per card, then the logs).
 3. Reboot, log in, `sudo pacman -Syu` once, then section 2.
 
 macOS: any Mac Apple still updates. `xcode-select --install` brings
@@ -572,7 +573,7 @@ spark uninstall
 1. It prints the plan, one row per thing, then asks for the word `yes`.
 2. Everything spark made goes: the units, the rc line, the console
    palette and font (VGA again), the shell layer's files back from their
-   `.bak` (SHELL.md), `~/.local/bin/spark`, the engine and every model,
+   `.bak` (docs/SHELL.md), `~/.local/bin/spark`, the engine and every model,
    `~/.config/spark`, `~/.local/state/spark`, and the clone at `~/.spark`
    when it is the one `get` made and clean. Headless and the quiet login
    and boot are undone first (sudo).

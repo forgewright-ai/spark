@@ -8,7 +8,7 @@ live; spark apps -- a tool becomes smart as a client of `spark edit`,
 each in its own `spark-<app>` repo (micro first); as apps ask for it,
 another contract is defined and apps connect the same way. The shell
 (the look and the tools for a machine that is an AI box) is
-spark-shell's, its own repository -- SHELL.md points there; theme.env
+spark-shell's, its own repository -- docs/SHELL.md points there; theme.env
 is the one interface it reads, and no shell code lives in this tree.
 CI has no WSL runner: the WSL 2 branch is pinned by fixture, and a real
 run there is the maintainer's, by hand. Arch is proven in a container:

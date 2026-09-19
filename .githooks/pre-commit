@@ -123,7 +123,7 @@ fi
 # characters slipped through. Bytes outside tab + printable ASCII fail.
 tab=$(printf '\t')
 for f in README.md INSTALL.md CLAUDE.md CHANGELOG.md CHEATSHEET.txt LICENSE \
-         CREDITS.md AGENTS.md CONTRIBUTING.md ROADMAP.md get \
+         CREDITS.md AGENTS.md CONTRIBUTING.md ROADMAP.md get docs/*.md \
          lib/spark/forge/index.html lib/spark/forge/spark.css lib/spark/forge/spark.js \
          lib/spark/forge/manifest.webmanifest lib/spark/forge/favicon.svg; do
     [ -f "$f" ] || continue

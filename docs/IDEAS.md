@@ -6,6 +6,11 @@ this is the wider field it is picked from. Nothing here is a promise; a
 row in `CHANGELOG.md` is. An idea that earns a place moves to the
 roadmap and leaves here.
 
+This document is not tied to a spark release. It is kept true as
+things change, but it is outside the landing rule: nothing here has to
+appear in `spark help`, `CHEATSHEET.txt` or a `CHANGELOG.md` entry,
+and no release waits on it.
+
 Each entry says what it is, what it looks like at the prompt, and what
 it would cost -- which contract it extends, or whether it needs a new
 one.

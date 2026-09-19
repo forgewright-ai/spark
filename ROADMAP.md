@@ -1,7 +1,7 @@
 # Roadmap
 
 What comes after v1.37, in the order it is likely to happen. Nothing here
-is a promise; a row in `CHANGELOG.md` is. `IDEAS.md` is the field this
+is a promise; a row in `CHANGELOG.md` is. `docs/IDEAS.md` is the field this
 is picked from.
 
 The rule for this stretch: spark has one user, on one box, and what
@@ -102,7 +102,7 @@ from the founder's chair:
 - a tag when something is stable enough to defend, not per commit:
   `spark update` on a clone follows the newest tag, so a tag is a
   promise to that clone
-- the two small history items that pass `IDEAS.md`'s test and cost
+- the two small history items that pass `docs/IDEAS.md`'s test and cost
   almost nothing, once the numbers say the hint row is read: the
   command you keep retyping (an alias you do not have, offered once,
   counts only), and the tool you have and do not use (ten `find` on a
@@ -134,5 +134,5 @@ Then the two shapes the suite still cannot express: a scenario whose
 remedy needs the network (a re-download after `spark model rm`), and
 one that must survive a reboot.
 
-(A shared engine as a system service is parked in `IDEAS.md`: only
+(A shared engine as a system service is parked in `docs/IDEAS.md`: only
 worth weighing once the group model has been lived with.)

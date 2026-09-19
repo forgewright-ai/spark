@@ -46,7 +46,8 @@ nothing.
    INSTALL, CHEATSHEET, the page front) stays minimal and step by step,
    with two nouns, spark and spark apps; `tests/docs_test.py` says which
    words are out. The page, spark.forgewright.ai, is these docs rendered
-   at the newest release: a fix here reaches it with the next one.
+   at the newest release: a fix here reaches it with the next one. A fix
+   in `docs/` needs no changelog entry.
 
 ## Code changes
 
