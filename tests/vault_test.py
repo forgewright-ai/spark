@@ -213,6 +213,22 @@ def test_vault():
         check("plaintext is not sealed", vault.is_sealed(keyfile), False)
 
 
+def test_audit_kind():
+    # the audit trail's kind seals and opens, and is held apart from the
+    # other kinds by the header
+    with tempfile.TemporaryDirectory() as d:
+        dk = vault.new_key()
+        p = os.path.join(d, "audit")
+        recs = [b'{"action":"do/run","digest":"0123456789ab","rc":0}', b'{"action":"run","rc":1,"verb":"model"}']
+        for r in recs:
+            vault.append_sealed(p, dk, "audit", "owner", r)
+        check("audit kind seals and opens", vault.read_sealed(p, dk, "audit", "owner"), recs)
+        check("audit header", vault.read_header(p), ("audit", "owner"))
+        refuse("an audit file read as a ledger is refused", lambda: vault.read_sealed(p, dk, "ledger", "owner"))
+        refuse("an append onto it as a thread is refused",
+               lambda: vault.append_sealed(p, dk, "thread", "owner", b"x"))
+
+
 def test_key_file_iterations():
     # the iteration count is the key file's word: a tampered one is a
     # refusal, never a traceback (abc) or a CPU pinned for an hour
@@ -302,6 +318,83 @@ def test_stores_never_write_over():
     check("a corrupted memory reads as empty", memory._all_facts(), [])
 
 
+def test_audit_store():
+    # the trail in the throwaway HOME (alice logged in by the test before):
+    # a record lands and reads back newest last, the reader's lines, a
+    # trail that does not open is one signed line and exit 2, a foreign
+    # file at its path takes no record and stays as it was, no login
+    # keeps nothing and says so
+    import contextlib
+    import io
+    from spark import ACCOUNT_FILE, audit, users
+    apath = os.path.join(users.user_dir("alice"), "audit")
+    check("a record is kept", audit.record("user add", name="bob"), "")
+    check("a record from an address is kept", audit.record("do/run", "192.0.2.10", digest="0123456789ab", rc=0), "")
+    recs = audit.records()
+    check("two records, newest last", [(r["action"], r["ip"]) for r in recs], [("user add", "cli"), ("do/run", "192.0.2.10")])
+    check("a record's keys", set(recs[1]), {"ts", "ip", "action", "digest", "rc"})
+    check("the newest N", [r["action"] for r in audit.records(1)], ["do/run"])
+    check("the trail is 0600", os.stat(apath).st_mode & 0o777, 0o600)
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        rc = audit.cmd_audit(["--porcelain"])
+    lines = out.getvalue().splitlines()
+    check("spark forge audit --porcelain: exit 0, a tab line a record",
+          (rc, len(lines), lines[-1].split("\t")[1:]), (0, 2, ["192.0.2.10", "do/run", "digest=0123456789ab rc=0"]))
+    good = read_bytes(apath)
+    bad = corrupt(apath)
+    refuse("a corrupted trail refuses to read", audit.records, audit.Refused)
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        rc = audit.cmd_audit([])
+    check("spark forge audit on a trail that does not open: one signed line, exit 2",
+          (rc, out.getvalue().strip()), (2, "spark forge -- " + audit.NO_OPEN))
+    check("the corrupted trail is byte-for-byte as it was", read_bytes(apath), bad)
+    with open(apath, "wb") as f:
+        f.write(b"not sealed\n")
+    check("a foreign file at the trail's path takes no record", audit.record("user add", name="c"), audit.NO_OPEN)
+    check("and is as it was", read_bytes(apath), b"not sealed\n")
+    with open(apath, "wb") as f:
+        f.write(good)
+    check("the trail reads again", len(audit.records()), 2)
+    os.rename(ACCOUNT_FILE, ACCOUNT_FILE + ".aside")
+    try:
+        check("no login: the record is not kept, and says so", audit.record("user add", name="d"), audit.NO_STORE)
+        refuse("no login: the reader refuses", audit.records, audit.Refused)
+    finally:
+        os.rename(ACCOUNT_FILE + ".aside", ACCOUNT_FILE)
+    check("the trail took nothing meanwhile", len(audit.records()), 2)
+
+
+def test_chat_history_never_written_over():
+    # the chat history (a whole-blob sealed file): a save onto one that
+    # does not open is skipped with one line on stderr, the file kept
+    import contextlib
+    import io
+    from spark import forge, users
+
+    class _RL:
+        def __init__(self, lines):
+            self.lines = lines
+
+        def get_current_history_length(self):
+            return len(self.lines)
+
+        def get_history_item(self, i):
+            return self.lines[i - 1]
+    dk = users.account_key()
+    cpath = os.path.join(users.user_dir("alice"), "chat-history")
+    forge._write_chat_history(_RL(["ls", "pwd"]))
+    check("the chat history is sealed", vault.read_sealed(cpath, dk, "chathist", "alice"), [b"ls\npwd\n"])
+    bad = corrupt(cpath)
+    err = io.StringIO()
+    with contextlib.redirect_stderr(err):
+        forge._write_chat_history(_RL(["ls", "pwd", "cd"]))
+    check("a chat history that does not open is kept as it is", read_bytes(cpath), bad)
+    check("and one line on stderr says so", err.getvalue().strip(),
+          "spark chat: the chat history does not open -- kept as it is; spark user login again")
+
+
 def test_remove_validates_the_name():
     # `spark user remove ../x`: refused before the store is touched, and
     # remove() itself never hands a path to rmtree
@@ -347,9 +440,12 @@ def main():
     test_round_trips()
     test_refusals()
     test_vault()
+    test_audit_kind()
     test_key_file_iterations()
     test_append_expects_the_header()
     test_stores_never_write_over()
+    test_audit_store()
+    test_chat_history_never_written_over()
     test_remove_validates_the_name()
     test_fails_index_redacts()
     test_throughput_floor()

@@ -281,6 +281,20 @@ def main():
                  ("accent", "accent"), ("muted", "muted-text")):
         check(t_light.get(a) == c_light.get(b), "template light --%s is spark.css light --%s (%s vs %s)"
               % (a, b, t_light.get(a), c_light.get(b)))
+    # contract 9: the route table CLAUDE.md prints is forgeserve.ROUTES,
+    # entry for entry -- a route added without its row, or a row without
+    # its route, fails here (the block is METHOD  PATH  ROLE lines)
+    from spark import forgeserve
+    m = re.search(r"```\n((?:[ ]*(?:GET|POST|DELETE)\s+\S+\s+(?:none|user|admin)\n)+)[ ]*```", claude)
+    check(m is not None, "CLAUDE.md contract 9 prints the route table (METHOD  PATH  ROLE)")
+    doc_routes = {}
+    for line in (m.group(1).split("\n") if m else []):
+        if line.strip():
+            method, path, role = line.split()
+            doc_routes[(method, path)] = role
+    off = sorted(k for k in set(doc_routes) | set(forgeserve.ROUTES) if doc_routes.get(k) != forgeserve.ROUTES.get(k))
+    check(not off, "CLAUDE.md's route table is forgeserve.ROUTES, entry for entry%s"
+          % ("" if not off else " (differs at %s)" % ", ".join("%s %s" % k for k in off[:3])))
     if fails:
         print("docs_test: %d failed" % len(fails))
         return 1

@@ -159,8 +159,16 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 an exact copy piped -- presentation only, nothing sent)
                 watch (spark watch: contract 14 -- a live stream on stdin, silent
                 until a line matches, then one grounded line)
-                forge (identity, threads, reply, the chat REPL, @FILE)
-                forgeserve (the FORGE server: spark forge, the API, the page) do (spark do)
+                forge (identity, threads, reply, the chat REPL, @FILE; the
+                chat-history save skips a sealed file that does not open,
+                one line on stderr, never written over)
+                forgeserve (the FORGE server: spark forge, the API, the page;
+                ROUTES is the one table of every route and its role) do (spark do)
+                audit (the sealed audit trail: one record per admin action,
+                appended into the box account's store -- users/<name>/audit,
+                kind audit -- numbers and names only, never a command's text;
+                spark forge audit [N] reads it, and a trail that does not
+                open is one signed line, exit 2, never written over)
                 version (the version, from git, cached: spark ver, check's header, forgeserve)
                 update (spark update: the newest tag -- signed by a key in
                 allowed-signers, or refused -- or main; converges; `verified`
@@ -201,6 +209,8 @@ tests/          install_test.sh get_test.sh update_test.sh uninstall_test.sh smo
                 audition.py + audition/ (the editor's briefs against a live brain, lints as the
                 judge; not in the gate) vault_test.py site_test.py check_selftest.py
                 forge_smoke.py bench_smoke.py widget_pty.py check_selftest.py
+                policy_test.py (every row of forgeserve.ROUTES with three callers:
+                nobody, a user, the admin)
                 vault_test.py (RFC 8439 vectors, round-trips, refusals)
                 qr_test.py (ISO 18004 format table, the RS vector, a full
                 decode-back, the render forms)
@@ -258,7 +268,8 @@ away), `chat-history` 0600, `brain`, `check.json`, `bar`,
 `bench.jsonl`, `tune.json`,
 `users/<name>/` (0700 per user: `token.hash` and `key` 0600 -- the sha256
 token verifier and the wrapped data key -- plus that user's sealed
-`threads/`, `memory`, `chat-history`, `ledger`), `account` 0600 (this machine's
+`threads/`, `memory`, `chat-history`, `ledger`, and in the box account's
+`audit`, the admin actions), `account` 0600 (this machine's
 login: name and token), `account-key` 0600 (the unwrapped data key, so
 the hot paths never pay the KDF)); data `~/.local/share/spark/{engine,models}`;
 tools linked into `~/.local/bin`. `spark uninstall` (`lib/spark/uninstall.py`)
@@ -472,7 +483,9 @@ may change freely.
    (the whole box, and the box account's own store); every other caller
    is a named user (`spark user add NAME`) presenting their personal
    token -- verified against its stored sha256, and unwrapping their
-   data key in memory only. The FORGE is the account authority: a
+   data key in memory only. Every non-human caller -- a script, an app,
+   a CI job -- is a named user of its own with its own token; the
+   admin's forge-token is the box's, never shared. The FORGE is the account authority: a
    client never mints (`spark setup --model none` skips the account
    row; `forge.local_store` keeps nothing on a client with no login),
    it logs in with a token minted here, and the `peer` row there says
@@ -491,13 +504,60 @@ may change freely.
    on a bearer as well, before it is compared); a wrong bearer costs
    1 s and is counted likewise; an unknown cookie is only a 401 (after
    a restart every browser holds one). The v1.3 shared ember-token is
-   not accepted. Every other `/api/*` and `/v1/*` route needs the
-   cookie or a token as a bearer, else 401. Admin-only: `GET` `/api/serve`, `/api/gpu`,
-   `/api/bench`, `/api/config`, `/api/log`, `/api/users` and `POST`
-   `/api/run`, `/api/do/propose`, `/api/do/run`, `/api/check/refresh`,
-   `/api/soul` (the soul is the box's one identity) -- a user there
-   gets 403 `{error: {kind: role}}`; every other authed route is
-   user-or-admin, and `GET /api/me` answers `{role, user, name,
+   not accepted. Every route the server answers is one row of
+   `forgeserve.ROUTES` -- `(method, pattern): none|user|admin`, a `*`
+   one path segment -- and `_route` consults nothing else: a request
+   off the table is 404; `none` is open (the two with a gate of their
+   own keep it: `/api/login` the write gate, `/v1/chat/completions` the
+   bearer); `user` needs the cookie or a token as a bearer, else 401;
+   `admin` is the forge-token, a user there 403 `{error: {kind:
+   role}}` (the soul is the box's one identity). The table --
+   `tests/docs_test.py` holds this block equal to the code, entry for
+   entry, and `tests/policy_test.py` proves every row with three
+   callers:
+
+   ```
+   GET     /                          none
+   GET     /login                     none
+   GET     /static/*                  none
+   GET     /manifest.webmanifest      none
+   GET     /apple-touch-icon.png      none
+   GET     /api/health                none
+   POST    /api/login                 none
+   GET     /api/me                    user
+   GET     /api/check                 user
+   GET     /api/stats                 user
+   GET     /api/bar                   user
+   GET     /api/theme                 user
+   GET     /api/events                user
+   GET     /api/soul                  user
+   GET     /api/memory                user
+   GET     /api/models                user
+   GET     /api/threads               user
+   GET     /api/threads/*             user
+   GET     /v1/models                 user
+   POST    /v1/chat/completions       user
+   POST    /api/logout                user
+   POST    /api/chat                  user
+   POST    /api/memory                user
+   POST    /api/threads/*/append      user
+   POST    /api/user/token            user
+   DELETE  /api/threads               user
+   DELETE  /api/memory/*              user
+   GET     /api/serve                 admin
+   GET     /api/gpu                   admin
+   GET     /api/bench                 admin
+   GET     /api/config                admin
+   GET     /api/log                   admin
+   GET     /api/users                 admin
+   POST    /api/run                   admin
+   POST    /api/do/propose            admin
+   POST    /api/do/run                admin
+   POST    /api/check/refresh         admin
+   POST    /api/soul                  admin
+   ```
+
+   `GET /api/me` answers `{role, user, name,
    version}`, which is how the page decides which console to draw and
    whom to greet. `GET /api/models` (user-or-admin) answers this box's
    model table `{name, total_gb, budget_gb, budget_pct, backend,
@@ -541,7 +601,17 @@ may change freely.
    runs only with `confirmed: true` (400 `{error: {kind: confirm}}`
    otherwise -- the page sends it after its second click); the log
    line carries a sha256 prefix of the command beside its truncated
-   text, and a second line the rc.
+   text, and a second line the rc. Every admin action is one sealed
+   record in the box account's `audit` (`lib/spark/audit.py`, kind
+   `audit`, `vault.append_sealed`): `do/run` `{ts, ip, action, digest,
+   rc}`, `/api/run` `{ts, ip, action, verb, rc}`, a user minted,
+   removed or rotated `{ts, ip|cli, action, name}` (`spark user
+   add|remove|token --new`, `POST /api/user/token`), `spark forge token
+   --new` `{ts, cli, action}` -- numbers and names, never a command's
+   text or its arguments; `spark forge audit [N] [--porcelain]` prints
+   the newest N (50), one line each, and a trail that does not open is
+   one signed line, exit 2, never written over. `GET /api/config`
+   returns no key matching `KEY|TOKEN|SECRET`, whatever spark.env holds.
    Streams are SSE: `/api/chat` (mode `chat|answer`; `talk` and `ask` are
    the old names for `chat` and `answer`, accepted for one version, and
    records write the new ones) emits `queued` (when the model is busy),
@@ -884,11 +954,13 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   the served FORGE (the peer's, on a client) from the wire
   (`wire.probe_gates`, the probes `tests/forge_probe.py` runs against a
   real server).
-- **A route.** In `forgeserve.py`: pick its auth class (none; U = user
-  or admin; A = admin-only, added to `ADMIN_GET`/`ADMIN_POST`; plus the
-  POST rules) and put it in the matching branch of `_route`;
-  answer through `_json`/`_sse` so it is `no-store` and logged; a case in
-  `tests/forge_smoke.py`; a line in contract 9. The page calls verbs
+- **A route.** In `forgeserve.py`: one row in `ROUTES` (`(method,
+  pattern): none|user|admin`; plus the POST rules) and its handler in
+  the matching branch of `_route`; answer through `_json`/`_sse` so it
+  is `no-store` and logged; the same row in contract 9's table
+  (`docs_test` holds the two equal; `policy_test` proves the row); a
+  case in `tests/forge_smoke.py`; an admin action writes its audit
+  record (`Handler._audit`). The page calls verbs
   through `/api/run`'s allowlist (`RUN_VERBS`) rather than writing config.
   The page is a door to the same identity, not a product of its own: a
   page change lands only when it is the client side of a contract

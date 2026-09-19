@@ -384,9 +384,11 @@ spark setup                                          # detects the shared engine
 no model to download, no root, their own soul and memory in their own home,
 answering from the one engine. `spark share off` ends it.
 
-Any program, with the OpenAI shape (a request naming no `model` gets the
-conversation model with the identity; `model: spark` the bare prompt
-model):
+Every non-human caller -- a script, an app, a CI job -- gets its own
+user with `spark user add NAME` and its own token; the admin token is
+this machine's and is never shared. Any program, with the OpenAI shape
+(a request naming no `model` gets the conversation model with the
+identity; `model: spark` the bare prompt model):
 
 ```sh
 curl -sN http://<host>:8081/v1/chat/completions \
@@ -419,7 +421,10 @@ The page, in any browser on the LAN:
 `spark forge` alone is the status (URL, health, model, unit, users);
 `spark forge on|off` enables or disables it. `spark forge token --new`
 rotates the admin token; `spark user token --new` rotates a user's;
-that principal logs in again.
+that principal logs in again. `spark forge audit` lists the newest
+admin actions -- a command run from the page (its sha256 prefix and
+exit code, never its text), a verb run, a user added, removed or
+rotated -- sealed in this machine's own store.
 
 Sealed stores: each user's threads, memory and chat history are
 encrypted (ChaCha20-Poly1305, written from RFC 8439) under a key wrapped

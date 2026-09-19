@@ -401,6 +401,14 @@ def main():
                and " 1 GB" not in head0,
                "spark model on a client of this FORGE prints the peer's table, not its own 1 GB", out0[:300])
             ok(any(ln.endswith("tok/s") or ln.endswith("too big") for ln in out0.splitlines()), "the peer's rows carry the peer's verdicts", out0[:300])
+            # /api/config with a spark.env naming the secret files (the real
+            # paths, so the running forge keeps its token) and a key with
+            # TOKEN in its name the reader accepts as it is
+            spark_env = os.path.join(home, ".config", "spark", "spark.env")
+            spark_was = open(spark_env).read() if os.path.exists(spark_env) else None
+            with open(spark_env, "w") as f:
+                f.write("SPARK_API_KEY_FILE=%s/api-token\nSPARK_FORGE_TOKEN_FILE=%s/forge-token\nSPARK_PAGE_TOKEN=abc\n"
+                        % (state, state))
             st, _, raw = req(url, "GET", "/api/config", headers=bearer, timeout=30)
             d = json.loads(raw)
 
@@ -415,8 +423,15 @@ def main():
                 return acc
             ks = keys(d, [])
             ok(st == 200 and "themes" in d and "models" in d and "effective" in d, "/api/config: themes, models, effective", raw[:200])
-            ok(not [k for k in ks if "TOKEN" in k or "KEY" in k], "/api/config names no *KEY* or *TOKEN*", [k for k in ks if "TOKEN" in k or "KEY" in k])
-            ok(token not in raw.decode() and smoke.TOKEN not in raw.decode(), "/api/config carries no token value")
+            secret = [k for k in ks if re.search("KEY|TOKEN|SECRET", k)]
+            ok(not secret, "/api/config never names a key matching KEY|TOKEN|SECRET (spark.env holds three)", secret)
+            ok(token not in raw.decode() and smoke.TOKEN not in raw.decode() and "forge-token" not in raw.decode()
+               and "api-token" not in raw.decode(), "/api/config carries no token value, no token file path")
+            if spark_was is None:
+                os.remove(spark_env)
+            else:
+                with open(spark_env, "w") as f:
+                    f.write(spark_was)
             st, _, raw = req(url, "GET", "/api/theme", headers=bearer)
             d = json.loads(raw)
             ok(st == 200 and d["name"] == "none" and d["palette"] is None and isinstance(d["palettes"], list), "/api/theme", raw[:100])
@@ -574,6 +589,8 @@ def main():
             st, _, _ = req(url, "POST", "/api/chat", {"thread": "../etc", "text": "x"}, headers=post)
             ok(st == 400, "chat with a bad thread id -> 400", st)
             st, _, _ = req(url, "GET", "/api/threads/../etc", headers=bearer)
+            ok(st == 404, "GET /api/threads/../etc -> 404 (two segments: off the table, no handler sees it)", st)
+            st, _, _ = req(url, "GET", "/api/threads/bad.id", headers=bearer)
             ok(st == 400, "GET /api/threads/<bad id> -> 400", st)
             st, _, _ = req(url, "POST", "/api/chat", {"text": "  "}, headers=post)
             ok(st == 400, "chat with empty text -> 400", st)
@@ -763,12 +780,49 @@ def main():
             ok(re.search(r"do/run [0-9a-f]{12} echo hi$", lg, re.M) and re.search(r"do/run [0-9a-f]{12} false$", lg, re.M)
                and re.search(r"do/run [0-9a-f]{12} rc 1$", lg, re.M),
                "forge.log names the commands run with a sha256 prefix, and the rc after", lg[-300:])
+            # the audit trail: one sealed record per admin action in the box
+            # account's store, numbers and names only, never the command
+            import base64 as _b64
+            import hashlib as _hl
+            from spark import vault as _vault
+            adk = _b64.b64decode(open(state + "/account-key").read().strip())
+
+            def audit_recs():
+                return [json.loads(r) for r in _vault.read_sealed(state + "/users/owner/audit", adk, "audit", "owner")]
+            arecs = audit_recs()
+            runs = [r for r in arecs if r.get("action") == "do/run"]
+            hi = [r for r in runs if r.get("digest") == _hl.sha256(b"echo hi").hexdigest()[:12]]
+            ok(len(hi) == 1 and set(hi[0]) == {"ts", "ip", "action", "digest", "rc"} and hi[0]["rc"] == 0
+               and hi[0]["ip"] == "127.0.0.1", "do/run echo hi landed one audit record: {ts, ip, action, digest, rc}", hi)
+            ok(len(runs) == 4 and all(isinstance(r["rc"], int) and re.match(r"^[0-9a-f]{12}$", r["digest"]) for r in runs),
+               "every do/run that ran (4) has its record: rc a number, digest 12 hex", runs)
+            blob = json.dumps(arecs)
+            ok("echo hi" not in blob and "rm -rf" not in blob and "pwd" not in blob and tmp not in blob,
+               "no command text, no path in the trail", blob[:200])
+            ok(oct(os.stat(state + "/users/owner/audit").st_mode & 0o777) == "0o600", "the trail is 0600")
 
             st, h, raw = req(url, "POST", "/api/run", {"verb": "model", "args": ["none"]}, headers=post, timeout=60)
             evs = sse(raw)
             lines = [d["s"] for e, d in evs if e == "line"]
             ok(st == 200 and any(l.startswith("ok     site") and "SITE_AI_MODEL=none" in l for l in lines) and ("done", {"rc": 0}) in evs,
                "/api/run model none: streams the verb's lines, done rc 0", evs)
+            last = audit_recs()[-1]
+            ok(set(last) == {"ts", "ip", "action", "verb", "rc"} and last["action"] == "run" and last["verb"] == "model"
+               and last["rc"] == 0 and last["ip"] == "127.0.0.1",
+               "/api/run model none landed one audit record: {ts, ip, action, verb, rc}", last)
+            ok("none" not in json.dumps(last), "the run record carries the verb, not its arguments", last)
+            rc, out, _ = spark("forge", "audit", "--porcelain")
+            cols = out.rstrip("\n").split("\n")[-1].split("\t")
+            ok(rc == 0 and len(cols) == 4 and cols[1] == "127.0.0.1" and cols[2] == "run" and cols[3] == "rc=0 verb=model",
+               "spark forge audit --porcelain: four tab-separated columns, the newest last", out[-200:])
+            rc, out, _ = spark("forge", "audit", "2")
+            ok(rc == 0 and len(out.splitlines()) == 2 and "echo hi" not in out and "do/run" in out and "run" in out,
+               "spark forge audit 2: two lines, no command text", out)
+            ok(any(r.get("action") == "user add" and r.get("name") == "ualice" and r.get("ip") == "cli"
+                   and set(r) == {"ts", "ip", "action", "name"} for r in audit_recs()),
+               "spark user add landed {ts, ip: cli, action, name}")
+            rc, out, _ = spark("forge", "audit", "x")
+            ok(rc == 2 and out.startswith("spark forge -- audit takes a count"), "spark forge audit x: signed, exit 2", out)
             ok("SITE_AI_MODEL=none" in open(home + "/.config/spark/site.env").read(), "site.env has SITE_AI_MODEL=none (SPARK_NO_APPLY)")
             st, h, raw = req(url, "POST", "/api/run", {"verb": "ember", "args": ["none"]}, headers=post, timeout=60)
             evs = sse(raw)
@@ -897,9 +951,10 @@ def main():
                "the admin's list is the box account's, never alice's", raw[:150])
             st, _, raw = req(url, "GET", "/api/users", headers=bearer)
             du = json.loads(raw)
-            ok(st == 200 and any(u["name"] == "ualice" and u["threads"] >= 1 for u in du["users"])
-               and all(set(u) == {"name", "threads", "last"} for u in du["users"]),
-               "/api/users: names, counts and stamps only", raw[:200])
+            ok(st == 200 and any(u["name"] == "ualice" and u["threads"] >= 1 for u in du["users"]),
+               "/api/users: names, counts and stamps", raw[:200])
+            ok(len(du["users"]) >= 3 and all(set(u) == {"name", "threads", "last"} for u in du["users"]),
+               "every /api/users entry carries exactly {name, threads, last} and nothing else", raw[:200])
             st, _, _ = req(url, "GET", "/api/users", headers=ubearer)
             ok(st == 403, "a user cannot list the users", st)
             st, _, _ = req(url, "GET", "/api/soul", headers=ubearer)
@@ -993,7 +1048,7 @@ def main():
             ok(rc == 0 and out.splitlines()[0] == url + "/login"
                and "token  " + token in out, "--print-url at a pty: url and token", out[:200])
             ok(_qr.render(link, ascii_=False) in out or _qr.render(link, ascii_=True) in out,
-               "--print-url at a pty: the QR is qr.render of the login link")
+               "--print-url at a pty: the QR is qr.render of the login link", repr(out[:1200]))
             ok("scan:" in out and link in out, "--print-url at a pty: the scan line and the link", out[-300:])
             rc, out = at_pty("forge", "--print-url", "--no-qr")
             ok(rc == 0 and "\u2588" not in out and "#t=" not in out
@@ -1078,6 +1133,12 @@ def main():
             rc, out, _ = spark("forge", "token", "--new")
             token2 = open(tok_path).read().strip()
             ok(rc == 0 and "admin" in out and "log in again" in out and token2 != token, "token --new rewrites the file", out)
+            last = audit_recs()[-1]
+            ok(set(last) == {"ts", "ip", "action"} and last["action"] == "forge token" and last["ip"] == "cli",
+               "spark forge token --new landed {ts, ip: cli, action}", last)
+            ok(any(r.get("action") == "user token" and r.get("name") == "ualice" and r.get("ip") == "127.0.0.1"
+                   and set(r) == {"ts", "ip", "action", "name"} for r in audit_recs()),
+               "POST /api/user/token landed {ts, ip, action, name}")
             st, _, _ = req(url, "GET", "/api/check", headers=cookie)
             ok(st == 401, "the old admin cookie died with the old token")
             st, _, _ = req(url, "GET", "/api/check", headers={"Authorization": "Bearer " + token2})
