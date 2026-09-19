@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.34
+
+- Granite 4.2 8B (IBM, Apache-2.0) replaces the Granite 3.3 row in
+  `models.env`, from IBM's own GGUF build: proven on the line and scored
+  by the grounding audition on the box, so `auto` may pick it. The
+  single-model server's `--reasoning off` keeps its think tags out of the
+  prompt line and the editor.
+
+- An `auto` tie among grounded rows at the same RAM goes to the earlier
+  row of the list: the list is ranked, so a new row never takes the
+  pick from the one above it (Granite 4.2 and Qwen3-8B both fit 7 GB).
+
 ## v1.33
 
 - A client never mints an account. `spark setup --model none` used to

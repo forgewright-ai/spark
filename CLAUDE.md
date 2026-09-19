@@ -315,7 +315,8 @@ may change freely.
    `tests/audition.py --json` run the way `_TESTED` carries the line
    proof; `spark model list` shows it in the proof column, the page's
    model table renders it, and `auto` prefers a grounded row when two
-   rows fit the budget at the same RAM). A name in both files is
+   rows fit the budget at the same RAM -- among equals, the earlier row
+   of the list). A name in both files is
    refused, naming both;
    `distro/<id>.env` (one per Linux package family the oracle `distro()`
    knows -- `lib/spark/__init__.py` beside `is_wsl()`; bootstrap.sh

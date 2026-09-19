@@ -112,8 +112,11 @@ def _choose(cfg, cap_gb):
     from . import mem_total_gb
     try:
         # grounded rows sort after ungrounded at the same RAM, so auto's
-        # usable[-1] prefers a row with a proven ground score on a tie
-        rows = sorted(config.model_tables(), key=lambda r: (r[5], bool(r[10])))
+        # usable[-1] prefers a row with a proven ground score on a tie;
+        # among equals the EARLIER row of the list wins (the list is
+        # ranked: Granite 4.2 must not take the ember from Qwen3-8B at 7 GB)
+        rows = sorted(enumerate(config.model_tables()), key=lambda ir: (ir[1][5], bool(ir[1][10]), -ir[0]))
+        rows = [r for _i, r in rows]
     except SystemExit:
         rows = []
     auto = config.auto_rows(rows)

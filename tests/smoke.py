@@ -2001,6 +2001,17 @@ def main():
         rc, outp, _ = spark("model", "list", "--porcelain", extra=_genv)
         t.ok(rc == 0 and re.search(r"^grd-b\tuser\t[\d.]+\t2\tMIT\tline\t45/48 2026-01-01\t", outp, re.M),
              "model list --porcelain: the ground score rides whole", outp)
+        # a second grounded row at the same RAM, later in the list: the
+        # earlier one keeps the pick (the list is ranked)
+        with open(user_models_file, "a") as f:
+            f.write('MODEL_GRD_C="c.gguf http://192.0.2.1/c 1000000 %s 2"\n' % _sha0
+                    + 'MODEL_GRD_C_LICENSE="MIT https://x"\n'
+                    + 'MODEL_GRD_C_TESTED="line"\n'
+                    + 'MODEL_GRD_C_GROUND="47/48 2026-01-02"\n')
+        rc, out, _ = spark("model", "list", extra=_genv)
+        star = [ln for ln in out.splitlines() if ln.startswith("  *")]
+        t.ok(rc == 0 and star and "grd-b" in star[0],
+             "model list: among two grounded rows at the same RAM the earlier wins", out)
         with open(user_models_file, "a") as f:
             f.write('MODEL_GRD_A_GROUND="not a score"\n')
         rc, out, err = spark("model", "list", extra=_genv)

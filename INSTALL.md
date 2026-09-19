@@ -277,7 +277,8 @@ Two files:
 this machine's budget (`SITE_AI_BUDGET`, default 60 percent of RAM plus
 GPU memory), the license, the proof column (`line` when tested on the
 line; a `kept/run` score once the grounding audition measured how
-faithfully it quotes a source -- those rows win an `auto` tie),
+faithfully it quotes a source -- those rows win an `auto` tie, and
+the earlier row of the list wins among equals),
 downloaded or serving, and its speed here (`~N tok/s` is an estimate
 until `spark bench` or a real turn measures it; `too big` when it does
 not fit). The tested rows:
@@ -289,12 +290,13 @@ not fit). The tested rows:
 | `qwen3-8b` | 4.7 GB | 7 GB |
 | `qwen3-14b` | 8.4 GB | 11 GB |
 | `qwen3-30b-a3b` | 17.4 GB | 21 GB |
+| `granite-4-2-8b` | 5.0 GB | 7 GB |
 
 The untested rows (Qwen3 4B-Thinking and Coder-30B-A3B, Qwen2.5 7B /
 14B / Coder-7B, Mistral 7B and Nemo 12B, Phi-4 mini and 14B,
-DeepSeek-R1 distills 7B / 14B, SmolLM2 1.7B, gpt-oss-20b, Granite 3.3
-8B, all Apache-2.0 or MIT; Llama 3.2 1B / 3B, Llama 3.1 8B and Gemma 3
-1B / 4B / 12B / 27B under their own terms) are yours by name. A row
+DeepSeek-R1 distills 7B / 14B, SmolLM2 1.7B, gpt-oss-20b, all
+Apache-2.0 or MIT; Llama 3.2 1B / 3B, Llama 3.1 8B and Gemma 3 1B / 4B
+/ 12B / 27B under their own terms) are yours by name. A row
 under a license that is not Apache-2.0 or MIT prints its license and
 asks `download it? yes/NO:` first. The page lists them all:
 https://spark.forgewright.ai/models/
