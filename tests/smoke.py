@@ -3147,18 +3147,29 @@ def main():
                  repr((_sp.paint("*", "accent", _tty), _sp.paint("chat>", "accent", _tty, readline=True))))
             with open(os.devnull, "w") as _dn:
                 t.ok(_sp.paint("*", "accent", _dn) == "*", "paint: piped is plain even when the var is set")
-            # Busy on a pty: the hint-row frames, then one clear; a pipe gets nothing
+            # Busy on a pty: the hint-row frames, then one clear; a pipe gets nothing.
+            # The slave's bytes reach the master a beat after the write (the
+            # tty layer), so read until the master has been quiet for a while.
+            import select as _select
+
+            def _drain(fd, quiet=0.3):
+                got = b""
+                while _select.select([fd], [], [], quiet)[0]:
+                    try:
+                        chunk = os.read(fd, 65536)
+                    except OSError:
+                        break
+                    if not chunk:
+                        break
+                    got += chunk
+                return got
             from spark import text as _tx
             _b = _tx.Busy(_tty, above=True)
             _b.start()
             time.sleep(0.8)
             _b.stop()
             _b.stop()                                     # idempotent
-            os.set_blocking(_m, False)
-            try:
-                _got = os.read(_m, 65536)
-            except OSError:
-                _got = b""
+            _got = _drain(_m)
             t.ok(_got.startswith(b"\x1b7\x1b[1A\r\x1b[2K\x1b[1;94m*\x1b[0m .")
                  and b"\x1b8" in _got and _got.endswith(b"\x1b7\x1b[1A\r\x1b[2K\x1b8")
                  and b"\x1b[38;5" not in _got and _got.count(b"\x1b7") >= 2,
@@ -3168,7 +3179,7 @@ def main():
             _b.start()
             time.sleep(0.4)
             _b.stop()
-            _got = os.read(_m, 65536)
+            _got = _drain(_m)
             t.ok(_got.startswith(b"\r\x1b[2K* .") and _got.endswith(b"\r\x1b[2K") and b"\x1b[" not in _got.replace(b"\x1b[2K", b""),
                  "Busy on the row: plain frames without the var, ASCII only, cleared once", repr(_got))
             _tty.close()
