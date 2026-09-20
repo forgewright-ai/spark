@@ -489,10 +489,15 @@ Linux:
 - The `render` group grants the GPU without a logind seat: bootstrap
   adds you on a vulkan build; log out of every session and in again for
   the units to see it.
-- `spark font Terminus 16x32` gives the text console a readable font
-  (`spark font list` shows the faces and sizes this box has, width by
-  height). The console cannot draw the check and arrow glyphs; spark
-  notices (`TERM=linux`) and prints ASCII; `SPARK_ASCII=1` forces it.
+- `spark font FACE SIZE` gives the text console a readable font;
+  `spark font list` shows what this machine has, a face and its size
+  (width by height) as the command takes them. The font lands in the
+  file the console reads: `/etc/default/console-setup` on Debian
+  (`spark font Terminus 16x32`), `/etc/vconsole.conf` on Arch (`spark
+  font Lat2-Terminus16 8x16`; `terminus-font` adds the `ter-*` faces);
+  the original is kept beside it and `spark uninstall` puts it back. The
+  console cannot draw the check and arrow glyphs; spark notices
+  (`TERM=linux`) and prints ASCII; `SPARK_ASCII=1` forces it.
 - `spark theme NAME` reaches the text console: the palette is sent to
   the console you type on and set at boot for every VT (the
   `spark-console` unit, `setvtrgb`). GUI terminals stay yours: apply
@@ -512,9 +517,11 @@ Arch:
 - Packages come through `pacman -S --needed`, never `-Sy` alone; when a
   name cannot be found the `packages` row says `sudo pacman -Syu` first.
   `gcc-libs` is in `base`: without a GPU nothing is installed.
-- No console-setup: `spark font` refuses to set and the `font` row says
-  so; the console font is `/etc/vconsole.conf`'s (`FONT=ter-132n` with
-  `terminus-font`; `sudo systemctl restart systemd-vconsole-setup`).
+- The console font is `/etc/vconsole.conf`'s `FONT=`, and `spark font`
+  writes it there: `spark font list` reads the kbd fonts (their size from
+  each file), `spark font Lat2-Terminus16 8x16` sets one and restarts
+  `systemd-vconsole-setup` so every VT redraws. `spark theme NAME` reaches
+  the console the same way as on Debian (the `spark-console` unit).
 - `spark quiet login on` works. `spark quiet boot on` works on an Arch
   that boots a Unified Kernel Image (a `default_uki=` line in
   `/etc/mkinitcpio.d/linux.preset`, the shape `archinstall` makes with
@@ -612,7 +619,7 @@ setup asks is optional and has a verb; editing the file and running
 | `SITE_PEER_AI_URL` | another machine's URL (`spark forge --print-client` there) -- `spark client URL` | unset |
 | `SITE_HEADLESS` | `yes`: up from boot, never asleep -- `spark headless on\|off` | `no` |
 | `SITE_THEME` | `none`, or a palette from `themes/` or `~/.config/spark/themes/` -- `spark theme NAME`; painted only when you ask | `none` |
-| `SITE_FONT_FACE` / `SITE_FONT_SIZE` | Linux console: a face and size from `spark font list` (`Terminus` `16x32`); macOS: Terminal.app's font and points -- `spark font FACE SIZE`. Refused on WSL 2 and Arch (no console-setup) | unset / `16x32` (Linux), `Menlo-Regular` / `13` (macOS) |
+| `SITE_FONT_FACE` / `SITE_FONT_SIZE` | Linux console: a face and size from `spark font list` (`Terminus` `16x32`); macOS: Terminal.app's font and points -- `spark font FACE SIZE`. Refused on WSL 2 (no console) | unset / `16x32` (Linux), `Menlo-Regular` / `13` (macOS) |
 | `SITE_QUIET_LOGIN` | Linux: `yes` bares the login (motd, `/etc/issue`; originals kept) -- `spark quiet login on` | `no` |
 | `SITE_QUIET_BOOT` | Linux: `yes` makes the boot silent (one drop-in: GRUB's on Debian, `/etc/cmdline.d` on an Arch kernel image) -- `spark quiet boot on`; refused on WSL 2 and on an Arch without a UKI | `no` |
 | `SITE_QUIET_START` | `yes`: no banner, one-line `serve`, `forge` and bare `spark` -- `spark quiet start on` | `no` |

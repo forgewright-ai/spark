@@ -1,6 +1,6 @@
 # Roadmap
 
-What comes after v1.39, in the order it is likely to happen. Nothing here
+What comes after v1.40, in the order it is likely to happen. Nothing here
 is a promise; a row in `docs/CHANGELOG.md` is. `docs/IDEAS.md` is the field this
 is picked from.
 

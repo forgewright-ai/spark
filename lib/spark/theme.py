@@ -11,7 +11,7 @@ import subprocess
 import sys
 import time
 
-from . import CONFIG_DIR, HOME, IS_MAC, MARK, REPO, config, glyph, is_wsl, run, say
+from . import CONFIG_DIR, IS_MAC, MARK, REPO, config, glyph, is_wsl, run, say
 
 
 
@@ -115,8 +115,11 @@ def show(cfg):
         say("  %-13s %s" % (k[6:].lower(), pal[k]))
     say("  ansi          " + " ".join(pal["THEME_ANSI_%d" % i] for i in range(8)))
     say("  bright        " + " ".join(pal["THEME_ANSI_%d" % i] for i in range(8, 16)))
-    say("  written to    %s (by bootstrap.sh or spark theme NAME)" % os.path.join(CONFIG_DIR, "theme.env"))
-    say("  console       %s (TERM=linux: now and at login; .rgb: setvtrgb at boot)" % os.path.join(CONFIG_DIR, "console-colors"))
+    say("  written to    %s (spark theme NAME; spark setup with a theme)" % os.path.join(CONFIG_DIR, "theme.env"))
+    if IS_MAC:
+        say("  terminal      the spark-%s profile in Terminal.app (spark theme profile rewrites it)" % cfg.theme)
+    else:
+        say("  console       %s (TERM=linux: now and at login; .rgb: setvtrgb at boot)" % os.path.join(CONFIG_DIR, "console-colors"))
     return 0
 
 
@@ -300,10 +303,10 @@ def yours(name):
 
 
 def write_runtime(name):
-    """The palette's two runtime files under ~/.config/spark, written by
-    `spark theme NAME` and `spark setup` only (one writer; bootstrap's
-    theme row writes theme.env too when the shell layer is on, and notes
-    console-colors when it sees it):
+    """The palette's runtime files under ~/.config/spark, written by
+    set_theme only -- `spark theme NAME`, and `spark setup` through it
+    when a theme was chosen (one writer; bootstrap's theme row paints
+    nothing, it reports whether theme.env is there):
       theme.env       KEY=value, what tmux/starship/btop were rendered from
                       and what the FORGE page reads (removed for `none`)
       console-colors  the Linux VT palette, precomputed: \\033]P<n><rrggbb>
@@ -378,9 +381,6 @@ def apply_console():
     sys.stdout.write(data + "\033[2J\033[H")
     sys.stdout.flush()
     return True
-
-
-MICRO_SETTINGS = os.path.join(HOME, ".config", "micro", "settings.json")
 
 
 def set_theme(name):

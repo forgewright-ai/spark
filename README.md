@@ -77,6 +77,8 @@ The first hour, twelve small things to try: `docs/TOUR.md`.
 | `spark client URL` | another machine of yours uses this one's AI, no model of its own |
 | `spark headless on` | keeps it up from boot, on the machine that stays on |
 | `spark share on` | one engine for every OS user on this machine: a `spark` group shares it; each keeps their own soul and memory (Linux) |
+| `spark theme NAME` | one palette on the text console (Terminal.app on a Mac); `spark theme list` shows the ones it ships, and your own |
+| `spark font FACE SIZE` | the console's font, from `spark font list` (Terminal.app's on a Mac) |
 | `spark check` | every promise this machine makes, one row each; exit 0 when all are kept |
 | `spark off` | Enter is a plain Enter again; `spark on` brings it back |
 | `spark uninstall` | takes it all off; keeps your prose and your threads |

@@ -327,8 +327,8 @@ fi
 
 # 10. Arch (the second family): ID=arch in os-release, pinned by
 #     SPARK_OS_RELEASE, and a pacman on PATH that answers -- the packages
-#     row asks it, the console row and, without a UKI, the quiet-boot row
-#     are honest skips, never sudo. The names come from distro/arch.env (both OSes, the uname stub);
+#     row asks it, the console row writes vconsole.conf's FONT= and, without
+#     a UKI, the quiet-boot row is an honest skip; never sudo. The names come from distro/arch.env (both OSes, the uname stub);
 #     the dry-run is Linux's (the rows are).
 printf 'ID=arch\nPRETTY_NAME="Arch Linux"\n' > "$T/os-release-arch"
 printf 'ID=manjaro\nID_LIKE=arch\nPRETTY_NAME="Manjaro Linux"\n' > "$T/os-release-manjaro"
@@ -343,11 +343,17 @@ if [ "$(uname -s)" != Darwin ]; then
     mkdir -p "$T/arch"
     printf '#!/bin/sh\ncase $1 in -Qq) shift; printf "%%s\\n" "$@" ;; -Sp) exit 0 ;; *) exit 1 ;; esac\n' > "$T/arch/pacman"; chmod +x "$T/arch/pacman"
     printf 'SITE_FONT_FACE=Terminus\nSITE_FONT_SIZE=16x32\nSITE_QUIET_BOOT=yes\nSITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
-    out=$(SPARK_OS_RELEASE="$T/os-release-arch" SPARK_ETC_MKINITCPIO_D="$T/no-mkinitcpio.d" PATH="$T/arch:$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Arch) failed: $out"
+    printf 'KEYMAP=us\nFONT=default8x16\n' > "$T/vconsole.conf"
+    out=$(SPARK_OS_RELEASE="$T/os-release-arch" SPARK_ETC_MKINITCPIO_D="$T/no-mkinitcpio.d" SPARK_ETC_CONSOLE_SETUP="$T/no-console-setup" SPARK_ETC_VCONSOLE="$T/vconsole.conf" PATH="$T/arch:$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Arch) failed: $out"
     printf '%s\n' "$out" | grep -qE '^ok +packages ' && ok "Arch: the packages row answers through pacman (everything installed)" || bad "Arch packages row: $(printf '%s\n' "$out" | grep -E ' packages ' | head -1)"
-    printf '%s\n' "$out" | grep -qE '^skip +console +Arch' && ok "Arch: the console row skips (no console-setup)" || bad "Arch console row: $(printf '%s\n' "$out" | grep -E ' console ' | head -1)"
+    printf '%s\n' "$out" | grep -qE '^would +console +FONT=Terminus in .*vconsole.conf; systemd-vconsole-setup' && ok "Arch: the console row would write FONT= into vconsole.conf (the vconsole shape, by mechanism)" || bad "Arch console row: $(printf '%s\n' "$out" | grep -E ' console ' | head -1)"
     printf '%s\n' "$out" | grep -qE '^skip +quiet-boot +Arch without a UKI' && ok "Arch: the quiet-boot row skips (no UKI: the kernel line is the boot loader's)" || bad "Arch quiet-boot row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
     printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "Arch dry-run called sudo" || ok "Arch dry-run: no sudo"
+    printf 'KEYMAP=us\nFONT=Terminus\n' > "$T/vconsole.conf"
+    out=$(SPARK_OS_RELEASE="$T/os-release-arch" SPARK_ETC_MKINITCPIO_D="$T/no-mkinitcpio.d" SPARK_ETC_CONSOLE_SETUP="$T/no-console-setup" SPARK_ETC_VCONSOLE="$T/vconsole.conf" PATH="$T/arch:$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Arch, font set) failed: $out"
+    printf '%s\n' "$out" | grep -qE '^ok +console +Terminus 16x32 \(.*vconsole.conf\)' && ok "Arch: vconsole.conf already naming the face is ok" || bad "Arch console ok row: $(printf '%s\n' "$out" | grep -E ' console ' | head -1)"
+    out=$(SPARK_OS_RELEASE="$T/os-release-arch" SPARK_ETC_MKINITCPIO_D="$T/no-mkinitcpio.d" SPARK_ETC_CONSOLE_SETUP="$T/no-console-setup" SPARK_ETC_VCONSOLE="$T/no-vconsole" PATH="$T/arch:$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (no console file) failed: $out"
+    printf '%s\n' "$out" | grep -qE '^skip +console +no console-setup and no vconsole.conf' && ok "no console file: the console row skips, naming both" || bad "bare console row: $(printf '%s\n' "$out" | grep -E ' console ' | head -1)"
     # 10a. Arch with a Unified Kernel Image (a preset's `default_uki=`, the
     #     splash on its `default_options`): the quiet-boot row is REAL --
     #     a would row naming the cmdline.d drop-in, never sudo in a dry

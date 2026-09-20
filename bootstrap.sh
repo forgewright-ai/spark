@@ -820,36 +820,56 @@ else
         skip theme "$SITE_THEME chosen, not painted (spark theme $SITE_THEME)"
     fi
 fi
-# the text console's font (console-setup), when chosen: core -- spark
-# font sets SITE_FONT_FACE either way
+# the text console's font, when chosen: core -- spark font sets
+# SITE_FONT_FACE either way. The file is the console's own, by mechanism
+# and never by family (site.console_shape is the twin): console-setup's
+# FONTFACE + FONTSIZE where /etc/default/console-setup is (Debian), else
+# vconsole.conf's FONT= where /etc/vconsole.conf is (Arch and every
+# systemd distro); seamed for the tests (SPARK_ETC_*)
+console_setup=${SPARK_ETC_CONSOLE_SETUP:-/etc/default/console-setup}
+vconsole=${SPARK_ETC_VCONSOLE:-/etc/vconsole.conf}
 if [ "$client" = 1 ]; then
     skip console "a client: the console keeps its font"
 elif [ "$OS" = Darwin ]; then
     skip console "macOS: the font is in the Terminal.app profile (spark theme profile)"
 elif is_wsl; then
     skip console "WSL 2: no console -- the font is Windows Terminal's"
-elif [ "$DISTRO" = arch ]; then
-    skip console "Arch: no console-setup -- the font is /etc/vconsole.conf's, left alone in this version"
 elif [ -z "$SITE_FONT_FACE" ]; then
     skip console "SITE_FONT_FACE unset: the console keeps its font"
+elif [ ! -f "$console_setup" ] && [ ! -f "$vconsole" ]; then
+    skip console "no console-setup and no vconsole.conf: the console keeps its font"
 else
     size=${SITE_FONT_SIZE:-16x32}
     # both values are interpolated into a root sed below: only the shapes
-    # a console font can have pass (face a word, size NxN or a height)
+    # a console font can have pass (face a word, size WxH)
     if ! printf '%s' "$SITE_FONT_FACE" | grep -qE '^[A-Za-z0-9._-]+$' \
-       || ! printf '%s' "$size" | grep -qE '^[0-9]+(x[0-9]+)?$'; then
-        row todo console "SITE_FONT_FACE=$SITE_FONT_FACE SITE_FONT_SIZE=$size: a face is [A-Za-z0-9._-]+ and a size NxN -- spark font FACE SIZE sets both"
+       || ! printf '%s' "$size" | grep -qE '^[0-9]+x[0-9]+$'; then
+        row todo console "SITE_FONT_FACE=$SITE_FONT_FACE SITE_FONT_SIZE=$size: a face is [A-Za-z0-9._-]+ and a size WxH -- spark font FACE SIZE sets both"
+    elif [ -f "$console_setup" ]; then
+        cur=$(sed -n 's/^FONTFACE="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p; s/^FONTSIZE="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' "$console_setup" 2>/dev/null | paste -sd' ' -)
+        if [ "$cur" = "$SITE_FONT_FACE $size" ]; then ok console "$SITE_FONT_FACE $size ($console_setup)"
+        elif need console "FONTFACE=$SITE_FONT_FACE FONTSIZE=$size in $console_setup; setupcon (sudo)"; then
+            # the original, once: spark uninstall puts it back
+            as_root cp -n "$console_setup" "$console_setup.spark-orig" 2>/dev/null || true
+            as_root sed -i "s/^FONTFACE=.*/FONTFACE=\"$SITE_FONT_FACE\"/; s/^FONTSIZE=.*/FONTSIZE=\"$size\"/" "$console_setup"
+            made console-font
+            as_root setupcon --force 2>/dev/null || true
+            ok console "$SITE_FONT_FACE $size ($console_setup)"
+        fi
     else
-    cur=$(sed -n 's/^FONTFACE="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p; s/^FONTSIZE="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' /etc/default/console-setup 2>/dev/null | paste -sd' ' -)
-    if [ "$cur" = "$SITE_FONT_FACE $size" ]; then ok console "$SITE_FONT_FACE $size"
-    elif need console "set $SITE_FONT_FACE $size in /etc/default/console-setup (sudo)"; then
-        # the original, once: spark uninstall puts it back
-        as_root cp -n /etc/default/console-setup /etc/default/console-setup.spark-orig 2>/dev/null || true
-        as_root sed -i "s/^FONTFACE=.*/FONTFACE=\"$SITE_FONT_FACE\"/; s/^FONTSIZE=.*/FONTSIZE=\"$size\"/" /etc/default/console-setup
-        made console-font
-        as_root setupcon --force 2>/dev/null || true
-        ok console "$SITE_FONT_FACE $size"
-    fi
+        cur=$(sed -n 's/^FONT="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' "$vconsole" 2>/dev/null | head -1)
+        if [ "$cur" = "$SITE_FONT_FACE" ]; then ok console "$SITE_FONT_FACE $size ($vconsole)"
+        elif need console "FONT=$SITE_FONT_FACE in $vconsole; systemd-vconsole-setup restarted (sudo)"; then
+            as_root cp -n "$vconsole" "$vconsole.spark-orig" 2>/dev/null || true
+            if grep -q '^FONT=' "$vconsole"; then
+                as_root sed -i "s/^FONT=.*/FONT=$SITE_FONT_FACE/" "$vconsole"
+            else
+                printf 'FONT=%s\n' "$SITE_FONT_FACE" | as_root tee -a "$vconsole" >/dev/null
+            fi
+            made console-font
+            as_root systemctl restart systemd-vconsole-setup 2>/dev/null || true
+            ok console "$SITE_FONT_FACE $size ($vconsole)"
+        fi
     fi
 fi
 # the console palette at boot: a user's escapes reach their own VT (the rc

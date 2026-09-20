@@ -218,24 +218,30 @@ def row_engine(ctx):
 
 
 def _console_font_row(ctx):
-    """The Linux console-setup half of the font row: ok/fail against
-    SITE_FONT_FACE, or None when nothing is chosen there."""
+    """The Linux half of the font row, by console shape: ok/fail against
+    SITE_FONT_FACE (console-setup's FONTFACE + FONTSIZE, or vconsole.conf's
+    FONT=), None when nothing is chosen there."""
+    from . import site
     if IS_MAC or not ctx.cfg.font_face:
         return None
     want = "%s %s" % (ctx.cfg.font_face, ctx.cfg.font_size)
-    cur = ""
+    shape, cur = site.console_shape(), ""
     try:
-        with open("/etc/default/console-setup", encoding="utf-8") as f:
+        with open(site.font_file(), encoding="utf-8") as f:
             kv = dict(l.strip().split("=", 1) for l in f if "=" in l and not l.startswith("#"))
-        cur = "%s %s" % (kv.get("FONTFACE", "").strip('"'), kv.get("FONTSIZE", "").strip('"'))
+        if shape == "setup":
+            cur = "%s %s" % (kv.get("FONTFACE", "").strip('"'), kv.get("FONTSIZE", "").strip('"'))
+        else:
+            cur = kv.get("FONT", "").strip('"')
     except (OSError, ValueError):
         pass
-    if cur != want:
-        return fail("console font is %s, site.env says %s" % (cur or "unset", want), "./bootstrap.sh   (sudo)")
-    return ok("console %s" % want)
+    if cur != (want if shape == "setup" else ctx.cfg.font_face):
+        return fail("console font is %s, site.env says %s (%s)" % (cur.strip() or "unset", want, site.font_file()),
+                    "./bootstrap.sh   (sudo)")
+    return ok("console %s (%s)" % (want, site.font_file()))
 
 
-@row("SOFTWARE", fixture=False, reason="reads the real /etc/default/console-setup (Linux) / the installed faces (macOS)")
+@row("SOFTWARE")
 def row_font(ctx):
     """The console font choice (SITE_FONT_FACE, Linux) and the macOS
     Terminal face -- the machine's own; a terminal emulator's font is
@@ -248,16 +254,19 @@ def row_font(ctx):
     console = na(why) if why and ctx.cfg.font_face else _console_font_row(ctx)
     if IS_MAC:
         # a face this Mac does not have makes Terminal.app fall back to its
-        # own font in silence (a console face such as VGA carried over)
-        if site.mac_font_installed(ctx.cfg.font_face) is False:
+        # own font in silence (a console face such as VGA carried over);
+        # an installed one is the promise kept; no Spotlight index, no verdict
+        installed = site.mac_font_installed(ctx.cfg.font_face)
+        if installed is False:
             return warn("SITE_FONT_FACE=%s is not installed here: Terminal.app falls back to its own font" % ctx.cfg.font_face,
                         "spark font list; spark font FACE %s" % ctx.cfg.font_size)
+        if installed:
+            return ok("Terminal.app profile: %s %s" % (ctx.cfg.font_face, ctx.cfg.font_size))
+        return na("Terminal.app profile: %s %s (Spotlight has no font index: not verified)" % (ctx.cfg.font_face, ctx.cfg.font_size))
     if console:
         return console
     if why:
         return na(why)
-    if IS_MAC:
-        return na("Terminal.app profile: %s %s (spark font FACE SIZE sets it)" % (ctx.cfg.font_face, ctx.cfg.font_size))
     return na("console not managed (spark font FACE SIZE; spark font list)")
 
 
@@ -1446,10 +1455,10 @@ def row_cost(ctx):
 # the selftest's fifth pass, on Linux, proves each says so
 WSL_ROWS = ("font", "quiet", "gpu")
 # the rows Arch answers differently (na or an Arch note on the half it
-# lacks -- console-setup, update-grub -- never a fault): the selftest's
-# sixth pass, on Linux, proves each says so and that the packages row
-# answers through pacman
-ARCH_ROWS = ("font", "quiet")
+# lacks -- the kernel line without a UKI -- never a fault): the selftest's
+# sixth pass, on Linux, proves each says so, that the font row is real
+# through vconsole.conf and that the packages row answers through pacman
+ARCH_ROWS = ("quiet",)
 # a client's rows: nothing runs here (SITE_AI_MODEL=none + SITE_PEER_AI_URL),
 # so the engine, the units, their snapshot, the local AI, its two servers and
 # a second model of its own are na before they look; the peer row is where a
@@ -1683,6 +1692,8 @@ def make_fixture(root, good, stub_url="", real_spark=False):
         f.write("SITE_THEME=fixture\n")     # the theme row: applied (good) or stale (bad)
         if IS_MAC:                      # a face every Mac ships: the font row judges an installed face, not Spotlight's index
             f.write("SITE_FONT_FACE=Menlo-Regular\nSITE_FONT_SIZE=13\n")
+        else:                           # the console font: console-setup's file (below) agrees (good) or not (bad)
+            f.write("SITE_FONT_FACE=Terminus\nSITE_FONT_SIZE=16x32\n")
         if good:
             f.write("SITE_EMBER_MODEL=auto\n")     # the default is none; auto fits an ember beside the spark row
         else:
@@ -1730,6 +1741,13 @@ def make_fixture(root, good, stub_url="", real_spark=False):
         f.write("".join("\033]P%x101010" % i for i in range(16)) + "\n")
     with open(os.path.join(cfgd, "console-colors.rgb"), "w") as f:
         f.write(("16," * 15 + "16\n") * 3)
+    # the console font files, pinned: console-setup's (the good machine's
+    # face and size, the bad one's another) and vconsole.conf's for the
+    # Arch pass (the same face, FONT= alone); the shape is which exists
+    with open(os.path.join(root, "console-setup"), "w") as f:
+        f.write('CHARMAP="UTF-8"\nFONTFACE="%s"\nFONTSIZE="16x32"\n' % ("Terminus" if good else "VGA"))
+    with open(os.path.join(root, "vconsole.conf"), "w") as f:
+        f.write("KEYMAP=us\nFONT=%s\n" % ("Terminus" if good else "default8x16"))
     # the live kernel palette the theme row compares with (sysfs, pinned)
     os.makedirs(os.path.join(root, "vt"))
     for ch in ("red", "grn", "blu"):
@@ -1887,6 +1905,8 @@ def make_fixture(root, good, stub_url="", real_spark=False):
             "SPARK_API_KEY": "stub-token", "SPARK_SERVICE": "none", "TMUX": "", "SPARK_SYSFS_DRM": os.path.join(root, "drm"),
             "SPARK_PROC_VERSION": os.path.join(root, "version"), "SPARK_SYSFS_VT": os.path.join(root, "vt"),
             "SPARK_OS_RELEASE": os.path.join(root, "os-release"),
+            "SPARK_ETC_CONSOLE_SETUP": os.path.join(root, "console-setup"), "SPARK_ETC_VCONSOLE": os.path.join(root, "vconsole.conf"),
+            "SPARK_MAC_FONTS": "Menlo-Regular" if good else "",     # macOS: the font row's installed faces, pinned
             "SPARK_MEM_TOTAL_GB": "16" if good else "8", "SHELL": "/bin/zsh" if IS_MAC else "/bin/bash",
             "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8"}
 
@@ -1984,8 +2004,9 @@ def selftest():
                 if len(parts) == 5:
                     results["wsl"][parts[2]] = (parts[1], parts[3])
         # the sixth pass, Linux only: the good fixture as Arch (ID=arch in
-        # os-release, a pacman stub) -- font and quiet say so on the half
-        # Arch lacks, never fail, and the packages row answers through pacman
+        # os-release, a pacman stub, vconsole.conf and no console-setup) --
+        # quiet says so on the half Arch lacks, never fails; the font row is
+        # ok through vconsole.conf; the packages row answers through pacman
         results["arch"] = {}
         if not IS_MAC:
             root = os.path.join(tmp, "arch")
@@ -1994,8 +2015,8 @@ def selftest():
             env.update(make_fixture(root, True, stub_url))
             with open(os.path.join(root, "os-release"), "w") as f:
                 f.write('ID=arch\nPRETTY_NAME="Arch Linux"\n')
-            env["SITE_QUIET_BOOT"] = "yes"                          # the boot half Arch leaves alone
-            env["SITE_FONT_FACE"] = "Terminus"                      # a console font Arch's console-setup-less VT ignores
+            env["SITE_QUIET_BOOT"] = "yes"                          # the boot half Arch leaves alone (no UKI in the fixture)
+            env["SPARK_ETC_CONSOLE_SETUP"] = os.path.join(root, "none")   # the vconsole shape: FONT= in vconsole.conf
             p = subprocess.run([sys.executable, os.path.join(REPO, "bin", "spark"), "check", "--porcelain", "--fresh"],
                                env=env, capture_output=True, text=True, timeout=180)
             for line in p.stdout.splitlines():
@@ -2038,10 +2059,12 @@ def selftest():
         off = [n for n in ARCH_ROWS
                if results["arch"].get(n, ("missing", ""))[0] not in (NA, OK) or "Arch" not in results["arch"].get(n, ("", ""))[1]]
         pk = results["arch"].get("packages", ("missing", ""))[0]
-        say("  %s arch: %d rows say Arch, packages %s via pacman%s" % (GLYPH[OK] if not off and pk == OK else GLYPH[FAIL],
-                                                                  len(ARCH_ROWS) - len(off), pk,
-                                                                  "" if not off else "   not so: " + " ".join(off)))
-        bad += bool(off) or pk != OK
+        font = results["arch"].get("font", ("missing", ""))
+        font_ok = font[0] == OK and "vconsole.conf" in font[1]
+        say("  %s arch: %d rows say Arch, packages %s via pacman, font %s via vconsole.conf%s"
+            % (GLYPH[OK] if not off and pk == OK and font_ok else GLYPH[FAIL], len(ARCH_ROWS) - len(off), pk, font[0],
+               "" if not off else "   not so: " + " ".join(off)))
+        bad += bool(off) or pk != OK or not font_ok
     say("  %d row%s failed to flip" % (bad, "" if bad == 1 else "s") if bad else "  every fixture-testable row flips")
     return 1 if bad else 0
 

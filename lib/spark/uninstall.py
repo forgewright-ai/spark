@@ -23,7 +23,7 @@ import subprocess
 import sys
 
 from . import (BIN_DIR, CONFIG_DIR, DATA_DIR, FORGE_PID, FORGE_URL_FILE, HOME, IS_MAC, MARK, REPO, STATE_DIR,
-               config, distro, is_wsl, run, say)
+               config, is_wsl, run, say)
 from . import packages as pkg
 
 USAGE = """%s uninstall -- remove spark from this machine: shows first, then asks for the word yes
@@ -47,8 +47,6 @@ KEEP_STATE = ("users", "account", "account-key")
 SPARK_CONFIG = ("site.env", "spark.env", "theme.env", "console-colors", "console-colors.rgb", "check.log")
 UNITS_LINUX = ("spark-serve.service", "spark-forge.service", "spark-check.timer", "spark-check.service")
 CONSOLE_UNIT = "/etc/systemd/system/spark-console.service"
-CONSOLE_SETUP = "/etc/default/console-setup"
-CONSOLE_ORIG = CONSOLE_SETUP + ".spark-orig"
 RC_CANDIDATES = (".bashrc", ".zshrc", ".bash_profile", ".zprofile")
 
 
@@ -334,11 +332,15 @@ def step_console(ctx):
         ctx.root("palette", ["systemctl", "disable", "--now", "spark-console.service"], "spark-console.service disabled")
         ctx.root("palette", ["rm", "-f", CONSOLE_UNIT], "%s removed" % CONSOLE_UNIT)
         ctx.root("palette", ["systemctl", "daemon-reload"], "systemd reloaded")
-    if os.path.exists(CONSOLE_ORIG):
-        ctx.root("console", ["sh", "-c", "cp %s %s && rm -f %s && (setupcon --force 2>/dev/null || true)" % (CONSOLE_ORIG, CONSOLE_SETUP, CONSOLE_ORIG)],
-                 "the console font is back as it was (%s)" % CONSOLE_ORIG,
-                 "sudo cp %s %s; sudo setupcon --force" % (CONSOLE_ORIG, CONSOLE_SETUP))
-    elif ctx.cfg.font_face and distro() == "debian":
+    from . import site
+    shape = site.console_shape()
+    path, orig = site.font_file(), site.font_file() + ".spark-orig"
+    redraw = "setupcon --force" if shape == "setup" else "systemctl restart systemd-vconsole-setup"
+    if shape and os.path.exists(orig):
+        ctx.root("console", ["sh", "-c", "cp %s %s && rm -f %s && (%s 2>/dev/null || true)" % (orig, path, orig, redraw)],
+                 "the console font is back as it was (%s)" % orig,
+                 "sudo cp %s %s; sudo %s" % (orig, path, redraw))
+    elif ctx.cfg.font_face and shape == "setup":
         ctx.row("todo", "console", "the font stays %s %s (no original kept before v1.12): sudo dpkg-reconfigure console-setup"
                 % (ctx.cfg.font_face, ctx.cfg.font_size))
     origs = [p for p in ("/etc/motd.orig", "/etc/issue.orig") if os.path.exists(p)]

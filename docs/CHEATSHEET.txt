@@ -94,7 +94,8 @@ THE MACHINE
   long output (help, check, lists) pages via $PAGER (less); piped stays plain
 
 THE INTERFACE
-  spark theme NAME | list | show  one palette: console, tmux, micro; none=off
+  spark theme NAME | list | show  one palette: the console (Terminal.app on
+                                  macOS); none=off
   ~/.config/spark/themes/NAME.env your own palette: the same 21 THEME_* keys
   spark quiet start on|off        no banner, one-line serve/forge + bare spark
   spark quiet login|boot on|off   Linux: motd; boot menu + kernel line

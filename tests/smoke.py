@@ -2513,8 +2513,8 @@ def main():
         t.ok(rc == 0 and out.splitlines()[0] == "spark font -- the terminal's font",
              "spark font -h signs (contract 8)", out)
         rc, out, _ = spark("font", "list", extra=off)
-        # a show answers on every family: where there is no console-setup
-        # to list (Arch, WSL 2) the answer is the signed refusal, still 0
+        # a show answers on every family: where there is no console file
+        # to list (WSL 2, a bare Linux) the answer is the signed refusal, still 0
         t.ok(rc == 0 and out.startswith(("spark font list -- ", "spark font -- no console")),
              "spark font list answers on either OS", out)
         from spark import site as _site2
@@ -2854,16 +2854,57 @@ def main():
                  "WSL 2: spark headless on refuses: not a brain", out)
             rc, out, _ = spark("status", extra=wsl)
             t.ok("(WSL 2)" in out, "WSL 2: the status line names it", out.splitlines()[0] if out else "")
-            # Arch (ID=arch in os-release): the console font and GRUB are not
-            # spark's there; the verbs say so in one signed line (contract 8)
-            arch = dict(SPARK_OS_RELEASE=home + "/os-release-arch", SPARK_PROC_VERSION=home + "/version-plain", SPARK_NO_APPLY="1")
+            # Arch (ID=arch in os-release): the console font is by mechanism
+            # -- vconsole.conf's FONT= names a kbd font file, its size in the
+            # file's own header (PSF1 and PSF2, gzip or plain); the fixture
+            # holds one of each, and no console-setup file
+            arch = dict(SPARK_OS_RELEASE=home + "/os-release-arch", SPARK_PROC_VERSION=home + "/version-plain", SPARK_NO_APPLY="1",
+                        SPARK_ETC_CONSOLE_SETUP=home + "/no-console-setup", SPARK_ETC_VCONSOLE=home + "/vconsole.conf",
+                        SPARK_CONSOLEFONTS_DIR=home + "/consolefonts")
+            import gzip as _gzip
+            import struct as _struct
+            os.makedirs(home + "/consolefonts", exist_ok=True)
+            with open(home + "/vconsole.conf", "w") as f:
+                f.write("KEYMAP=us\nFONT=default8x16\n")
+            psf2 = b"\x72\xb5\x4a\x86" + _struct.pack("<IIIIIII", 0, 32, 0, 256, 16, 16, 8) + b"\0" * 16   # 8x16
+            with _gzip.open(home + "/consolefonts/fixture16.psfu.gz", "wb") as f:
+                f.write(psf2)
+            with open(home + "/consolefonts/old12.psf", "wb") as f:
+                f.write(b"\x36\x04\x00\x0c" + b"\0" * 28)                              # PSF1, 8x12
+            with open(home + "/consolefonts/README", "w") as f:
+                f.write("not a font\n")
+            from spark import site as _site3
+            t.ok(_site3.psf_size(home + "/consolefonts/fixture16.psfu.gz") == "8x16" and _site3.psf_size(home + "/consolefonts/old12.psf") == "8x12"
+                 and _site3.psf_size(home + "/consolefonts/README") == "",
+                 "psf_size: a PSF2 (gzip) and a PSF1 (plain) header say their cell; anything else says nothing")
+            rc, out, _ = spark("font", "list", extra=arch)
+            t.ok(rc == 0 and "  fixture16                8x16" in out and "  old12                    8x12" in out and "README" not in out
+                 and "vconsole.conf" in out,
+                 "Arch: spark font list prints the kbd fonts with the size their headers say, and names vconsole.conf", out)
+            rc, out, _ = spark("font", "fixture16", "8x16", extra=arch)
+            site_env = open(home + "/.config/spark/site.env").read()
+            t.ok(rc == 0 and "SITE_FONT_FACE=fixture16\n" in site_env and "SITE_FONT_SIZE=8x16\n" in site_env,
+                 "Arch: spark font FACE SIZE sets both keys for a font the files hold", "%d %s" % (rc, out))
             rc, out, _ = spark("font", extra=arch)
-            t.ok(rc == 0 and out.strip() == "spark font -- no console-setup on Arch: the console font is /etc/vconsole.conf's (FONT=), left alone in this version",
-                 "Arch: spark font shows the one line (contract 8), exit 0", out)
+            t.ok(rc == 0 and out.strip() == "spark font -- console: fixture16 8x16 (%s/vconsole.conf)" % home,
+                 "Arch: spark font shows the choice and the file it lands in", out)
+            before = site_env
+            rc, out, _ = spark("font", "fixture16", "16x32", extra=arch)
+            t.ok(rc == 2 and "fixture16 comes in 8x16, not 16x32" in out and open(home + "/.config/spark/site.env").read() == before,
+                 "Arch: a size the file does not have is refused, naming the one it has; site.env untouched", "%d %s" % (rc, out))
+            rc, out, _ = spark("font", "nosuch", "8x16", extra=arch)
+            t.ok(rc == 2 and "no console font named nosuch" in out, "Arch: a font the files lack is refused", out)
+            rc, out, _ = spark("font", "none", extra=arch)
+            t.ok(rc == 0 and "SITE_FONT_FACE=\n" in open(home + "/.config/spark/site.env").read(), "Arch: spark font none clears the keys", out)
+            # neither file: not spark's to set, one signed line (contract 8)
+            bare = dict(arch, SPARK_ETC_VCONSOLE=home + "/no-vconsole")
+            rc, out, _ = spark("font", extra=bare)
+            t.ok(rc == 0 and out.strip() == "spark font -- no console-setup and no vconsole.conf here: the console font is not spark's to set",
+                 "no console file: spark font shows the one line (contract 8), exit 0", out)
             before = open(home + "/.config/spark/site.env").read()
-            rc, out, _ = spark("font", "Terminus", "16x32", extra=arch)
-            t.ok(rc == 2 and "no console-setup on Arch" in out and open(home + "/.config/spark/site.env").read() == before,
-                 "Arch: spark font FACE SIZE refuses with the same line, exit 2, site.env untouched", "%d %s" % (rc, out))
+            rc, out, _ = spark("font", "fixture16", "8x16", extra=bare)
+            t.ok(rc == 2 and "not spark's to set" in out and open(home + "/.config/spark/site.env").read() == before,
+                 "no console file: spark font FACE SIZE refuses with the same line, exit 2, site.env untouched", "%d %s" % (rc, out))
             # no UKI preset (the dir is pinned empty): the kernel line is the
             # boot loader's, the verb refuses in one signed line
             arch["SPARK_ETC_MKINITCPIO_D"] = home + "/no-mkinitcpio.d"

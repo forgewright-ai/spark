@@ -460,14 +460,16 @@ may change freely.
    lives in Windows Terminal's settings` (show 0, set 2), `spark quiet
    boot -- no GRUB on WSL 2: Windows boots it`, `spark headless -- WSL 2
    stops with its last window: not a brain (a Linux box is)` (exit 2). On
-   Arch likewise: `spark font -- no console-setup on Arch: the console
-   font is /etc/vconsole.conf's (FONT=), left alone in this version`
-   (show 0, set 2) and, unless a mkinitcpio preset builds a Unified
+   (show 0, set 2). On Arch, unless a mkinitcpio preset builds a Unified
    Kernel Image (`site.boot_shape()` is `uki`: then the verb is real,
    through the `/etc/cmdline.d` drop-in), `spark quiet boot -- no UKI on
    this Arch: the kernel line is the boot loader's (a loader entry's
    options line, or GRUB_CMDLINE_LINUX_DEFAULT then grub-mkconfig)`
-   (exit 2).
+   (exit 2). The console font is by mechanism, never by family
+   (`site.console_shape()`: console-setup's file, else vconsole.conf,
+   else none): a Linux with neither answers `spark font -- no
+   console-setup and no vconsole.conf here: the console font is not
+   spark's to set` (show 0, set 2).
 9. The FORGE's HTTP API (`lib/spark/forgeserve.py`, on
    `SPARK_FORGE_HOST:SPARK_FORGE_PORT`, one LAN address, never the
    unspecified address in any spelling: `bind_check` in
@@ -1141,8 +1143,8 @@ proves every fixture-testable row flips, then a third pass for the
 client shape (the 7 rows in `check.CLIENT_ROWS` answer `na`), and on
 Linux a fourth under a WSL 2 kernel line (the 3 rows in
 `check.WSL_ROWS` say so, never fail) and a fifth under `ID=arch` (the
-2 rows in `check.ARCH_ROWS` say so; the packages row answers through
-a pacman stub).
+1 row in `check.ARCH_ROWS` says so; the font row is ok through
+vconsole.conf and the packages row answers through a pacman stub).
 
 ## Releasing
 

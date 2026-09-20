@@ -4,7 +4,7 @@
 # the terminal, wait for the brain, ask the first question live, print the
 # measured speed and the three things to try. Every step reuses code that
 # exists: cmd_ver, print_model_table's rows, set_keys, apply, cmd_serve,
-# theme.write_runtime, `spark line`. Re-runnable: bootstrap's rows are
+# theme.set_theme, `spark line`. Re-runnable: bootstrap's rows are
 # idempotent, and a key site.env already holds is never asked again.
 
 import os
@@ -404,8 +404,11 @@ def _run(opts):
         say("                    (without %s, llama-server will not start)" % (packages.groups()["PKG_ENGINE"] or ["the engine's library"])[0])
     if rc != 0:
         return rc
-        if IS_MAC:
-            theme.profile(config.load(), False)
+    if theme_name != "none":
+        # paint what was chosen: theme.env and the console files, the
+        # vt-palette row on Linux, the Terminal.app profile on macOS
+        from . import theme
+        theme.set_theme(theme_name)
     _rc_line()
     if model == "none":
         say("no model chosen -- spark model NAME later, or SITE_PEER_AI_URL for another machine's brain")

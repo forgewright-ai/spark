@@ -24,8 +24,11 @@ The text in `home/.config/spark/tale` is the maintainer's own, CC BY-NC-ND 4.0.
 Colour values only, no code copied; the license is the upstream's:
 
 - Catppuccin -- https://github.com/catppuccin/catppuccin -- MIT
+- Dracula -- https://github.com/dracula/dracula-theme -- MIT
+- Everforest -- https://github.com/sainnhe/everforest -- MIT
 - Gruvbox -- https://github.com/morhetz/gruvbox -- MIT
 - Nord -- https://www.nordtheme.com -- MIT
+- Rose Pine -- https://github.com/rose-pine/rose-pine-theme -- MIT
 - Selenized -- https://github.com/jan-warchol/selenized -- MIT
 - Solarized -- https://ethanschoonover.com/solarized -- MIT
 - Tokyo Night -- https://github.com/folke/tokyonight.nvim -- Apache-2.0
@@ -55,7 +58,7 @@ one project differently, both names are here.
 - vulkan-intel -- MIT and others (Mesa's Intel driver, on Arch; the
   vulkan build only)
 - kbd -- https://kbd-project.org/ -- GPL-2.0-or-later (`setvtrgb`, the
-  console palette unit, on Arch)
+  console palette unit; the console fonts on Arch)
 
 ## The shell tools
 

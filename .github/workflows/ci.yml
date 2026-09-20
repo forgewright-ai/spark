@@ -139,7 +139,7 @@ jobs:
     # the second family: the same new user, the same one-liner, in an Arch
     # container -- packages through pacman (kbd proves the install path;
     # Arch's base already holds gcc-libs, llama.cpp's OpenMP), the console
-    # and GRUB rows honest skips.
+    # row unset here and the GRUB row an honest skip without a UKI.
     runs-on: ubuntu-latest
     container: archlinux:latest   # zizmor: ignore[unpinned-images] a rolling distro: latest is the only Arch there is, and -Syu moves it to today anyway
     timeout-minutes: 20

@@ -6,9 +6,11 @@
 # machine follows; editing site.env by hand and running bootstrap does
 # the same thing.
 
+import gzip
 import os
 import pwd
 import re
+import struct
 import subprocess
 import sys
 from urllib.parse import urlsplit
@@ -20,9 +22,9 @@ from . import (CONFIG_DIR, HOME, IS_MAC, MARK, REPO, SHARE_TOKEN, SHARE_URL, SIT
 WSL_NO_FONT = "no console on WSL 2: the font lives in Windows Terminal's settings"
 WSL_NO_BOOT = "no GRUB on WSL 2: Windows boots it"
 WSL_NO_BRAIN = "WSL 2 stops with its last window: not a brain (a Linux box is)"
-# Arch: Linux, minus console-setup, and minus the kernel line unless a
-# Unified Kernel Image carries it (contract 8 lines)
-ARCH_NO_FONT = "no console-setup on Arch: the console font is /etc/vconsole.conf's (FONT=), left alone in this version"
+# a Linux with neither console mechanism (contract 8 line); Arch keeps
+# only the kernel-line refusal, and only without a Unified Kernel Image
+NO_CONSOLE_FONT = "no console-setup and no vconsole.conf here: the console font is not spark's to set"
 ARCH_NO_BOOT = ("no UKI on this Arch: the kernel line is the boot loader's "
                 "(a loader entry's options line, or GRUB_CMDLINE_LINUX_DEFAULT then grub-mkconfig)")
 # the quiet kernel line, the same seven words on every shape (bootstrap.sh
@@ -82,15 +84,37 @@ def splash_live():
     return False
 
 
+# the two files a Linux sets its console font in, seamed for the tests
+CONSOLE_SETUP = os.environ.get("SPARK_ETC_CONSOLE_SETUP", "/etc/default/console-setup")
+VCONSOLE = os.environ.get("SPARK_ETC_VCONSOLE", "/etc/vconsole.conf")
+
+
+def console_shape():
+    """How this Linux sets its console font, root-free and by mechanism,
+    never by family: `setup` when console-setup's file is here (Debian:
+    FONTFACE and FONTSIZE, composed from /usr/share/consolefonts),
+    `vconsole` when /etc/vconsole.conf is (Arch, and every systemd distro
+    without console-setup: FONT= names one of the kbd font files), ''
+    when neither. bootstrap's console row is the sh twin."""
+    if IS_MAC or is_wsl():
+        return ""
+    if os.path.isfile(CONSOLE_SETUP):
+        return "setup"
+    if os.path.isfile(VCONSOLE):
+        return "vconsole"
+    return ""
+
+
 def no_console_font():
     """The one line that says why this Linux's console font is not spark's
-    to set ('' when it is): WSL 2 has no console, Arch no console-setup."""
+    to set ('' when it is): WSL 2 has no console; a Linux with neither
+    console-setup nor vconsole.conf has no file to write."""
     if IS_MAC:
         return ""
     if is_wsl():
         return WSL_NO_FONT
-    if distro() == "arch":
-        return ARCH_NO_FONT
+    if not console_shape():
+        return NO_CONSOLE_FONT
     return ""
 
 
@@ -180,15 +204,16 @@ def apply(rows, stream=False):
 FONT_USAGE = """%s font -- the terminal's font
 
   spark font                    what is set
-  spark font list               Linux: the console faces and sizes installed
-                                (/usr/share/consolefonts); macOS: the
-                                monospace faces installed here, by PostScript
-                                name, and how to find any other
+  spark font list               Linux: the console fonts installed here, as
+                                FACE and size (console-setup's faces, or the
+                                kbd font files); macOS: the monospace faces
+                                installed, by PostScript name
   spark font FACE SIZE          Linux console: a face and size from the list
-                                (e.g. Terminus 16x32); macOS: an installed
-                                font's PostScript name and points (13); one
-                                face and size for every spark profile
-  spark font none               Linux: leave the console's font alone
+                                (Terminus 16x32; Lat2-Terminus16 8x16);
+                                macOS: an installed font's PostScript name
+                                and points (13); one face and size for every
+                                spark profile
+  spark font none               the console keeps whatever font it has
 """ % MARK
 # monospace faces a Mac may hold, by PostScript name: the list shows the installed ones
 MAC_MONO = ("Menlo-Regular", "Monaco", "SFMono-Regular", "JetBrainsMono-Regular", "Courier",
@@ -209,6 +234,9 @@ def mac_font_installed(face):
     never refuses on no evidence."""
     if not IS_MAC:
         return None
+    seam = os.environ.get("SPARK_MAC_FONTS")          # the fixture's installed faces, colon-separated
+    if seam is not None:
+        return face in seam.split(":")
     if face in MAC_SYSTEM:
         return True
     from . import run
@@ -217,38 +245,76 @@ def mac_font_installed(face):
         return True
     rc, out = run(["mdutil", "-s", "/"], timeout=5)
     return False if rc == 0 and "Indexing enabled" in out else None
-CONSOLEFONTS_DIR = "/usr/share/consolefonts"
-_FONT_FILE = re.compile(r"^[A-Za-z0-9]+-([A-Za-z]+?)(\d+(?:x\d+)?)\.psfu?(?:\.gz)?$")
 
 
+# where a Linux keeps its console fonts: kbd's dir (Arch, Fedora), then
+# console-setup's (Debian); SPARK_CONSOLEFONTS_DIR pins one in tests
+CONSOLEFONTS_DIRS = ("/usr/share/kbd/consolefonts", "/usr/share/consolefonts")
+_COMPOSED_FILE = re.compile(r"^[A-Za-z0-9]+-([A-Za-z]+?)(\d+(?:x\d+)?)\.psfu?(?:\.gz)?$")   # console-setup: <codeset>-<Face><Size>
+_PSF_FILE = re.compile(r"^(.+?)\.psfu?(?:\.gz)?$")
+
+
+def consolefonts_dir():
+    want = os.environ.get("SPARK_CONSOLEFONTS_DIR")
+    for d in ((want,) if want else CONSOLEFONTS_DIRS):
+        if os.path.isdir(d):
+            return d
+    return ""
+
+
+def psf_size(path):
+    """A console font file's cell as WxH, from its own header (gzip or
+    plain): PSF1 (magic 36 04) is 8 wide with the height in byte 3; PSF2
+    (magic 72 b5 4a 86) keeps the height at offset 24 and the width at
+    28, little-endian. '' for anything else."""
+    try:
+        opener = gzip.open if path.endswith(".gz") else open
+        with opener(path, "rb") as f:
+            head = f.read(32)
+    except (OSError, EOFError):
+        return ""
+    if head[:2] == b"\x36\x04" and len(head) >= 4:
+        return "8x%d" % head[3]
+    if head[:4] == b"\x72\xb5\x4a\x86" and len(head) >= 32:
+        h, w = struct.unpack("<II", head[24:32])
+        return "%dx%d" % (w, h)
+    return ""
 
 
 def console_fonts():
-    """{face: set of sizes} parsed from /usr/share/consolefonts file names
-    (<codeset>-<Face><Size>.psf.gz -- the sizes there are HxW). {} when the
-    directory is unreadable (then nothing can be validated)."""
-    out = {}
+    """{face: set of sizes}, every size the way spark font takes it (WxH).
+    On the console-setup shape a face is what console-setup composes,
+    parsed from the file names (<codeset>-<Face><Size>, the sizes there
+    HxW -- size_as_taken flips them); on the vconsole shape a face is a
+    font file's stem and its size comes from the file's own header. {} when
+    the directory is unreadable (then nothing can be validated)."""
+    d = consolefonts_dir()
     try:
-        names = os.listdir(CONSOLEFONTS_DIR)
+        names = os.listdir(d) if d else []
     except OSError:
         return {}
+    composed = console_shape() == "setup"
+    out = {}
     for n in names:
-        m = _FONT_FILE.match(n)
-        if m:
-            out.setdefault(m.group(1), set()).add(m.group(2))
+        if composed:
+            m = _COMPOSED_FILE.match(n)
+            if m:
+                out.setdefault(m.group(1), set()).add(size_as_taken(m.group(2)))
+        else:
+            m = _PSF_FILE.match(n)
+            size = psf_size(os.path.join(d, n)) if m else ""
+            if size:
+                out.setdefault(m.group(1), set()).add(size)
     return out
 
 
-def _size_spellings(size):
-    """The file-name spellings one chosen size may match: as given, flipped
-    (console-setup writes WxH, the font files say HxW), and the height
-    alone (Fixed16.psf serves FONTSIZE=8x16)."""
-    names = {size}
-    if "x" in size:
-        w, h = size.split("x", 1)
-        names.add("%sx%s" % (h, w))
-        names.add(h)
-    return names
+def _size_key(size):
+    return tuple(int(p) for p in size.split("x")[::-1])
+
+
+def font_file():
+    """The file a chosen console font is written into on this Linux."""
+    return CONSOLE_SETUP if console_shape() == "setup" else VCONSOLE
 
 
 def font_list():
@@ -268,13 +334,12 @@ def font_list():
         return 0
     fonts = console_fonts()
     if not fonts:
-        say("%s font list -- nothing in %s (console-setup not installed?)" % (MARK, CONSOLEFONTS_DIR))
+        say("%s font list -- no console font files under %s" % (MARK, consolefonts_dir() or " or ".join(CONSOLEFONTS_DIRS)))
     else:
-        say("%s font list -- the console faces in %s, sizes as spark font takes them (WxH)" % (MARK, CONSOLEFONTS_DIR))
+        say("%s font list -- the console fonts in %s, as spark font takes them: FACE and WxH" % (MARK, consolefonts_dir()))
         for face in sorted(fonts):
-            sizes = sorted({size_as_taken(x) for x in fonts[face]}, key=lambda s: tuple(int(p) for p in s.split("x")[::-1]))
-            say("  %-16s %s" % (face, " ".join(sizes)))
-        say("  spark font FACE SIZE sets one, e.g. spark font Terminus 16x32")
+            say("  %-24s %s" % (face, " ".join(sorted(fonts[face], key=_size_key))))
+        say("  spark font FACE SIZE sets one: it lands in %s" % font_file())
     # a terminal emulator's face (a .ttf) is never one of these: the console
     # takes .psf faces; the emulator's font is set in the emulator
     say("  a terminal emulator's font is set in the emulator; spark font is the console")
@@ -282,9 +347,9 @@ def font_list():
 
 
 def size_as_taken(file_size):
-    """A font file's size the way spark font (console-setup's FONTSIZE)
-    spells it: the files say HxW, or the height alone for an 8-wide face
-    -- 32x16 is taken as 16x32, 16 as 8x16."""
+    """A composed font file's size the way spark font (console-setup's
+    FONTSIZE) spells it: the files say HxW, or the height alone for an
+    8-wide face -- 32x16 is taken as 16x32, 16 as 8x16."""
     if "x" in file_size:
         h, w = file_size.split("x", 1)
         return "%sx%s" % (w, h)
@@ -306,9 +371,9 @@ def cmd_font(args):
         if IS_MAC:
             say("%s font -- Terminal.app profile: %s %s   (spark theme profile applies it)" % (MARK, cfg.font_face, cfg.font_size))
         elif cfg.font_face:
-            say("%s font -- console: %s %s" % (MARK, cfg.font_face, cfg.font_size))
+            say("%s font -- console: %s %s (%s)" % (MARK, cfg.font_face, cfg.font_size, font_file()))
         else:
-            say("%s font -- console: not managed (SITE_FONT_FACE unset)" % MARK)
+            say("%s font -- console: not managed (SITE_FONT_FACE unset; %s keeps its font)" % (MARK, font_file()))
         return 0
     if args[0] == "list":
         return font_list()
@@ -330,17 +395,17 @@ def cmd_font(args):
             say("spark font: no font named %s is installed here -- spark font list shows the monospace ones" % face)
             return 2
     else:
-        if not re.match(r"^\d+(x\d+)?$", size):
+        if not re.match(r"^\d+x\d+$", size):
             say("spark font: %s is not a size -- WxH on the Linux console, e.g. 16x32 (spark font list)" % size)
             return 2
-        # refuse a face or size consolefonts does not hold, before anything
-        # is written; an unreadable consolefonts dir validates nothing
+        # refuse a face or size the font files do not hold, before anything
+        # is written; an unreadable fonts dir validates nothing
         fonts = console_fonts()
         if fonts and face not in fonts:
-            say("spark font: no console face named %s -- spark font list shows them" % face)
+            say("spark font: no console font named %s -- spark font list shows them" % face)
             return 2
-        if fonts and not (_size_spellings(size) & fonts[face]):
-            say("spark font: %s has no size %s -- spark font list shows them" % (face, size))
+        if fonts and size not in fonts[face]:
+            say("spark font: %s comes in %s, not %s -- spark font list" % (face, " ".join(sorted(fonts[face], key=_size_key)), size))
             return 2
     set_keys(SITE_FONT_FACE=face, SITE_FONT_SIZE=size)
     if IS_MAC:
@@ -349,7 +414,7 @@ def cmd_font(args):
             return 0
         from . import theme
         return theme.profile(config.load(), False)
-    return apply(["console", "font"])
+    return apply(["console"])
 
 
 # ------------------------------------------------------------------ quiet

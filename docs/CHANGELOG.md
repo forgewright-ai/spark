@@ -1,5 +1,24 @@
 # Changelog
 
+## v1.40
+
+- `spark font` works on Arch: the console font is chosen by mechanism,
+  never by family (`site.console_shape()`, bootstrap's `console` row):
+  console-setup's file where it exists (Debian, as before), else
+  `/etc/vconsole.conf`'s `FONT=` (Arch and every systemd distro), with
+  `systemd-vconsole-setup` restarted so every VT redraws; the original is
+  kept beside the file and `spark uninstall` puts it back. `spark font
+  list` reads the kbd font files there and takes each size from the
+  file's own header, so every row can be typed back as `FACE WxH`. The
+  `font` check row is fixture-tested now on both OSes (on macOS it is ok
+  for an installed face); `check.ARCH_ROWS` is the quiet row alone. A
+  Linux with neither file refuses in one line.
+- `spark setup` paints the theme it asked for: the chosen palette went
+  into site.env and nothing else (a dead line after a return). Three
+  palettes join the six: `dracula`, `everforest-dark` and `rose-pine`.
+  `spark theme show` names the Terminal.app profile on macOS instead of
+  the Linux console line.
+
 ## v1.39
 
 - `spark quiet boot on` is real on an Arch that boots a Unified Kernel
