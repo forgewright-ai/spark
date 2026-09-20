@@ -29,8 +29,9 @@ How it meets spark, the whole of it:
   `1;94`); spark paints its marks with them at a tty only. Unset,
   the prompt is plain; a pipe never sees an escape.
 - `~/.local/state/spark/prompt` -- `T=<epoch> MODEL=<stem or ->
-  AI=up|down`, a cache a prompt segment reads with shell builtins;
-  as fresh as the last bar tick or the last turn, never a probe.
+  AI=up|down`, a cache any status line may read with shell builtins
+  (spark-shell reads it nowhere since its v0.7); as fresh as the last
+  bar tick or the last turn, never a probe.
 - Nothing else. spark never calls spark-shell; spark-shell never
   writes spark's files.
 
