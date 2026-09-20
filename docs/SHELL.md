@@ -24,6 +24,13 @@ How it meets spark, the whole of it:
 - `spark bar line` -- the machine's one-line status (core). The
   rendered `.tmux.conf` runs it every 15 s in the status line; any
   other status bar can call the same line.
+- `SPARK_ACCENT_SGR`, `SPARK_MUTED_SGR`, `SPARK_WARN_SGR` -- three
+  optional exports the rendered rc sets from the palette (SGR codes,
+  `1;94`); spark paints its marks with them at a tty only. Unset,
+  the prompt is plain; a pipe never sees an escape.
+- `~/.local/state/spark/prompt` -- `T=<epoch> MODEL=<stem or ->
+  AI=up|down`, a cache a prompt segment reads with shell builtins;
+  as fresh as the last bar tick or the last turn, never a probe.
 - Nothing else. spark never calls spark-shell; spark-shell never
   writes spark's files.
 

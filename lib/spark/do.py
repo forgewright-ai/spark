@@ -24,8 +24,8 @@ import subprocess
 import sys
 import threading
 
-from . import MARK, config, die, glyph, say
-from . import forge, persona, session, wire
+from . import MARK, config, die, glyph, paint, say
+from . import bar, forge, persona, session, wire
 from . import text as textmod
 
 DO_MAX_STEPS = 8
@@ -252,6 +252,11 @@ def _confirm(reply, cwd=""):
     return {"": "run", "e": "edit", "s": "skip", "q": "quit"}.get(answer, "skip")
 
 
+def _mark():
+    """the answer mark, in the accent at a tty (plain piped or unset)"""
+    return paint(glyph("hammer"), "accent", sys.stdout)
+
+
 def cmd_do(args):
     if not args or args[0] in ("-h", "--help", "help"):
         say(DO_USAGE.rstrip() % (MARK, DO_MAX_STEPS))
@@ -269,7 +274,7 @@ def cmd_do(args):
     except wire.BrainError as e:
         die(e.hint)
     thread = forge.new_thread(cfg)
-    say("%s driving with %s (a silence is the model thinking)" % (glyph("hammer"), _driver(cfg, url, model, _forge)))
+    say("%s driving with %s (a silence is the model thinking)" % (_mark(), _driver(cfg, url, model, _forge)))
     history, text, steps, seen, landed = [], goal, 0, [], False
 
     def record(**fields):
@@ -279,8 +284,10 @@ def cmd_do(args):
         for n in range(1, DO_MAX_STEPS + 1):
             seen.append(text)
             try:
-                reply, ms = propose(cfg, thread, text, shell, cwd, history, landed=landed)
+                with textmod.Busy(sys.stderr):        # the pulse while the model proposes
+                    reply, ms = propose(cfg, thread, text, shell, cwd, history, landed=landed)
             except wire.BrainError as e:
+                bar.prompt_state(cfg, ai="down")
                 die(e.hint)
             landed = False
             if reply["kind"] == "done":
@@ -301,7 +308,10 @@ def cmd_do(args):
                                         _one_line("%s: not on this machine -- %s" % (missing, hint))))
                 text = "%s is not installed on this machine" % missing
                 continue
-            say("%s %d  %s   %s" % (glyph("warn") if reply["danger"] else glyph("hammer"), n, command, hint))
+            if reply["danger"]:
+                say(paint("%s %d  %s   %s" % (glyph("warn"), n, command, hint), "warn", sys.stdout))
+            else:
+                say("%s %d  %s   %s" % (_mark(), n, command, hint))
             choice = _confirm(reply, cwd)
             if choice == "edit":
                 command = _edit(command)
@@ -322,7 +332,7 @@ def cmd_do(args):
                 # step did what it claimed -- offered like a step (Enter
                 # runs it), run on a leash, and only its exit code goes
                 # back to the model: its output stays on this screen
-                say("%s    proof: %s" % (glyph("hammer"), proof))
+                say("%s    proof: %s" % (_mark(), proof))
                 try:
                     pchoice = _confirm({"danger": False, "command": proof}, cwd)
                     if pchoice == "edit":
@@ -334,7 +344,7 @@ def cmd_do(args):
                     pchoice = "quit"        # nobody there; the step still lands below
                 if pchoice == "run":
                     prc, _ptail = run(proof, shell, cwd, timeout=PROOF_TIMEOUT)
-                    say("%s    proof -> %s" % (glyph("hammer"), "ok" if prc == 0 else "exit %d" % prc))
+                    say("%s    proof -> %s" % (_mark(), "ok" if prc == 0 else "exit %d" % prc))
             # the record of what ran, on the thread now -- not inside the
             # next request, which a quit or the step limit never sends
             text = feedback(command, rc, tail, proposed, proof if prc is not None else "", prc)
@@ -348,7 +358,7 @@ def cmd_do(args):
             return 1
     except EOFError:
         say()
-    say("%s stopped after %d step%s" % (glyph("hammer"), steps, "" if steps == 1 else "s"))
+    say("%s stopped after %d step%s" % (_mark(), steps, "" if steps == 1 else "s"))
     _prune(cfg)
     return 0
 

@@ -10,7 +10,7 @@ import sys
 import time
 
 from . import CONFIG_DIR, MARK, OFF_FLAG, REPO, STATE_DIR, WIDGETS_DIR, config, die, glyph, paged, say, state_dir
-from . import engine, forge, ledger, persona, session, version, wire
+from . import bar, engine, forge, ledger, persona, session, version, wire
 from . import text as textmod
 
 HINT_COLS = 80             # a hint labels a command: terse
@@ -189,9 +189,11 @@ def _paste_verdict(shell):
         return 0
     local_danger = any(persona.is_dangerous(l) for l in data.splitlines())
     try:
-        s = session.Session(cfg, "paste", shell, "", role="spark")
-        reply, ms = s.ask_json(data, persona.PASTE_SCHEMA, max_tokens=120)
+        with textmod.Busy.hint_row():
+            s = session.Session(cfg, "paste", shell, "", role="spark")
+            reply, ms = s.ask_json(data, persona.PASTE_SCHEMA, max_tokens=120)
     except wire.BrainError as e:
+        bar.prompt_state(cfg, ai="down")
         if local_danger:
             say("danger")
             say(_one_line("a pasted line can destroy -- read it before Enter", ANSWER_MAX))
@@ -205,6 +207,47 @@ def _paste_verdict(shell):
     say(summary)
     s.record(kind="paste", chars=len(data), ms=ms, danger=danger)
     return 0
+
+
+def _guards(s, reply, command, hint, text, cwd, more, history, ms):
+    """The two re-asks a cmd reply may earn, then the danger verdict:
+    (reply, command, hint, kind, ms) with kind `cmd` or `danger`."""
+    # the head-word guard: a command whose head word nothing here
+    # answers to is re-asked once; failing that, the hint says so.
+    # Never blocks, never errors -- the user still sees a reply.
+    missing = persona.missing_word(command)
+    if missing:
+        try:
+            s.history.extend([{"role": "user", "content": persona.user_message(text, cwd)},
+                              {"role": "assistant", "content": "`%s` -- %s" % (command, hint)}])
+            retry, ms2 = s.ask_json("%s is not installed on this machine; use only commands that exist here." % missing)
+            ms += ms2
+            c2 = _one_line(retry.get("command", ""), 1000)
+            if retry.get("kind") == "cmd" and c2 and not persona.missing_word(c2):
+                reply, command, missing = retry, c2, ""
+                hint = _one_line(retry.get("hint", ""))
+        except wire.BrainError:
+            pass
+        if missing:
+            hint = _one_line("%s: not on this machine -- %s" % (missing, hint))
+    if more and command == _last_proposed(history):
+        # the repair guard: a ?? turn must not re-serve the very command
+        # the user just said failed. One re-ask; then honesty.
+        try:
+            s.history.extend([{"role": "user", "content": persona.user_message(text, cwd)},
+                              {"role": "assistant", "content": "`%s` -- %s" % (command, hint)}])
+            retry, ms2 = s.ask_json("that exact command was already tried and failed; propose a different one.")
+            ms += ms2
+            c3 = _one_line(retry.get("command", ""), 1000)
+            if retry.get("kind") == "cmd" and c3 and c3 != command:
+                reply, command = retry, c3
+                hint = _one_line(retry.get("hint", ""))
+            else:
+                hint = _one_line("already tried above -- %s" % hint)
+        except wire.BrainError:
+            hint = _one_line("already tried above -- %s" % hint)
+    flagged = bool(reply.get("danger")) or persona.is_dangerous(command)
+    return reply, command, hint, "danger" if flagged else "cmd", ms
 
 
 def cmd_line(args):
@@ -274,54 +317,29 @@ def cmd_line(args):
     if not remote:
         thread, history = forge.pick(cfg, more)
     ask_text = (install_ctx + "\n\n" + text) if install_ctx else text
+    # the pulse in the hint row (SPARK_HINT_ROW=1, the widgets' word) from
+    # the ask through its guards' re-asks; the reply prints after it
+    busy = textmod.Busy.hint_row().start()
     try:
-        s = session.Session(cfg, "line", shell, cwd, history)
-        reply, ms = s.ask_json(ask_text)
-    except wire.BrainError as e:
-        say("error")
-        say(_one_line(e.hint))
-        return 1
-    kind = reply.get("kind")
-    command = _one_line(reply.get("command", ""), 1000)
-    hint = _one_line(reply.get("hint", ""))
-    if kind == "cmd" and command:
-        # the head-word guard: a command whose head word nothing here
-        # answers to is re-asked once; failing that, the hint says so.
-        # Never blocks, never errors -- the user still sees a reply.
-        missing = persona.missing_word(command)
-        if missing:
-            try:
-                s.history.extend([{"role": "user", "content": persona.user_message(text, cwd)},
-                                  {"role": "assistant", "content": "`%s` -- %s" % (command, hint)}])
-                retry, ms2 = s.ask_json("%s is not installed on this machine; use only commands that exist here." % missing)
-                ms += ms2
-                c2 = _one_line(retry.get("command", ""), 1000)
-                if retry.get("kind") == "cmd" and c2 and not persona.missing_word(c2):
-                    reply, command, missing = retry, c2, ""
-                    hint = _one_line(retry.get("hint", ""))
-            except wire.BrainError:
-                pass
-            if missing:
-                hint = _one_line("%s: not on this machine -- %s" % (missing, hint))
-        if more and command == _last_proposed(history):
-            # the repair guard: a ?? turn must not re-serve the very command
-            # the user just said failed. One re-ask; then honesty.
-            try:
-                s.history.extend([{"role": "user", "content": persona.user_message(text, cwd)},
-                                  {"role": "assistant", "content": "`%s` -- %s" % (command, hint)}])
-                retry, ms2 = s.ask_json("that exact command was already tried and failed; propose a different one.")
-                ms += ms2
-                c3 = _one_line(retry.get("command", ""), 1000)
-                if retry.get("kind") == "cmd" and c3 and c3 != command:
-                    reply, command = retry, c3
-                    hint = _one_line(retry.get("hint", ""))
-                else:
-                    hint = _one_line("already tried above -- %s" % hint)
-            except wire.BrainError:
-                hint = _one_line("already tried above -- %s" % hint)
-        flagged = bool(reply.get("danger")) or persona.is_dangerous(command)
-        kind = "danger" if flagged else "cmd"
-        if flagged:
+        try:
+            s = session.Session(cfg, "line", shell, cwd, history)
+            reply, ms = s.ask_json(ask_text)
+        except wire.BrainError as e:
+            bar.prompt_state(cfg, ai="down")
+            busy.stop()
+            say("error")
+            say(_one_line(e.hint))
+            return 1
+        kind = reply.get("kind")
+        command = _one_line(reply.get("command", ""), 1000)
+        hint = _one_line(reply.get("hint", ""))
+        is_cmd = kind == "cmd" and bool(command)
+        if is_cmd:
+            reply, command, hint, kind, ms = _guards(s, reply, command, hint, text, cwd, more, history, ms)
+    finally:
+        busy.stop()
+    if is_cmd:
+        if kind == "danger":
             facts = persona.blast(command, cwd)
             if facts:
                 # the facts first, so contract 4's 80-char cut eats the
@@ -379,13 +397,24 @@ def stream_turn(cfg, mode, text, files=(), context="", thread=None, line=None, m
     the thread id. RefError, BrainError and KeyboardInterrupt pass through
     -- the wrap is closed first so a half-printed answer still ends in a
     newline; forge.reply keeps the raw text for the thread record."""
-    from . import text as textmod
     wrap = textmod.Wrap(sys.stdout, mark=mark)
+    # the pulse on stderr from the request until the first chunk (a tty
+    # only: piped, nothing is drawn); the wrap's mark takes over from it
+    busy = textmod.Busy(sys.stderr).start()
+
+    def feed(delta):
+        busy.stop()
+        wrap.feed(delta)
     try:
-        thread, _, _ = forge.reply(cfg, thread, text, files, os.getcwd(), _shell_default(), mode, wrap.feed, context, line)
-    except (wire.BrainError, KeyboardInterrupt):
+        thread, _, _ = forge.reply(cfg, thread, text, files, os.getcwd(), _shell_default(), mode, feed, context, line)
+    except (wire.BrainError, KeyboardInterrupt) as e:
+        busy.stop()
+        if isinstance(e, wire.BrainError):
+            bar.prompt_state(cfg, ai="down")
         wrap.close()
         raise
+    finally:
+        busy.stop()
     wrap.close()
     _prune(cfg)
     return thread

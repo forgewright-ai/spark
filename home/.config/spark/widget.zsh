@@ -57,6 +57,24 @@ _spark_is_question() {
     return 0
 }
 
+# --- colour: three optional exports, plain without them ---------------------
+# SPARK_ACCENT_SGR / SPARK_WARN_SGR are SGR parameter strings (`1;94`) a
+# shell layer exports from its palette (spark-shell does); unset, or not
+# digits and semicolons, the line stays plain. The text is cut to the
+# width first, then painted: the escapes never count as columns. A
+# `* ...` line gets the mark alone in the accent; a `! ...` line is
+# whole in warn. Sets _spark_out.
+_spark_paint() {
+    local t=$1
+    _spark_out=$t
+    case $t in
+        "$_spark_h "*) [[ -n ${SPARK_ACCENT_SGR:-} && -z ${SPARK_ACCENT_SGR//[0-9;]/} ]] \
+            && _spark_out=$'\e['"$SPARK_ACCENT_SGR"'m'"$_spark_h"$'\e[0m'"${t#"$_spark_h"}" ;;
+        "$_spark_w "*) [[ -n ${SPARK_WARN_SGR:-} && -z ${SPARK_WARN_SGR//[0-9;]/} ]] \
+            && _spark_out=$'\e['"$SPARK_WARN_SGR"'m'"$t"$'\e[0m' ;;
+    esac
+}
+
 # --- the hint row: the blank line above the prompt --------------------------
 # One row up from the cursor, so the edit line must be a single row when this
 # runs (a wrapped question would make "the row above" the prompt itself), and
@@ -64,7 +82,8 @@ _spark_is_question() {
 _spark_say() {
     local t=$1
     (( ${#t} > COLUMNS - 2 )) && t=${t[1,COLUMNS-3]}$_spark_d
-    print -n -- $'\e7\e[1A\r\e[2K'"$t"$'\e8'
+    _spark_paint "$t"
+    print -n -- $'\e7\e[1A\r\e[2K'"$_spark_out"$'\e8'
 }
 
 _spark_ask() {
@@ -73,7 +92,9 @@ _spark_ask() {
     # the prompt's row and the hint lands in the blank row above it
     BUFFER=''; CURSOR=0; zle -R
     _spark_say "$_spark_h $_spark_d"
-    out=$(print -r -- "$line" | "$SPARK_BIN" line --cwd "$PWD" --shell zsh 2>/dev/null)
+    # SPARK_HINT_ROW=1: spark line may pulse in that row (text.Busy) while
+    # the model answers; the child repaints the placeholder, nothing else
+    out=$(print -r -- "$line" | SPARK_HINT_ROW=1 "$SPARK_BIN" line --cwd "$PWD" --shell zsh 2>/dev/null)
     kind=${out%%$'\n'*}
     hint=${out#*$'\n'}
     hint=${hint%%$'\n'*}
@@ -181,7 +202,8 @@ _spark_offer_kind() { _spark_kind_of "$1" "$2"; print -r -- "$_spark_kind"; }
 _spark_note() {
     local t=$1
     (( ${#t} > COLUMNS - 1 )) && t=${t[1,COLUMNS-5]}$_spark_d
-    print -r -- "$t"
+    _spark_paint "$t"
+    print -r -- "$_spark_out"
 }
 
 # a capture still here means no prompt came between: a PS2 continuation
@@ -387,7 +409,7 @@ spark-bracketed-paste() {
     [[ -e $SPARK_DIR/off ]] && return
     if [[ -z $before && $BUFFER == *$'\n'?* ]]; then
         local out kind text
-        out=$(print -rn -- "$BUFFER" | "$SPARK_BIN" line --paste 2>/dev/null)
+        out=$(print -rn -- "$BUFFER" | SPARK_HINT_ROW=1 "$SPARK_BIN" line --paste 2>/dev/null)
         kind=${out%%$'\n'*}
         text=${out#*$'\n'}
         text=${text%%$'\n'*}

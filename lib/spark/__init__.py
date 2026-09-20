@@ -57,6 +57,7 @@ ACCOUNT_KEY_FILE = os.path.join(STATE_DIR, "account-key")
 BRAIN_CACHE = os.path.join(STATE_DIR, "brain")
 CHECK_JSON = os.path.join(STATE_DIR, "check.json")
 BAR_CACHE = os.path.join(STATE_DIR, "bar")
+PROMPT_FILE = os.path.join(STATE_DIR, "prompt")     # T= MODEL= AI= for a prompt segment (bar.prompt_state)
 CACHE_DIR = os.path.join(STATE_DIR, "cache")
 DEBUG_LOG = os.path.join(STATE_DIR, "debug.log")
 ENGINE_DIR = os.path.join(DATA_DIR, "engine")
@@ -102,6 +103,58 @@ REPO = os.environ.get("SPARK_REPO") or os.path.dirname(os.path.dirname(os.path.d
 
 def say(s=""):
     print(s, flush=True)
+
+
+# Colour at the prompt: three optional environment variables, SGR
+# parameter strings (`1;94`), that a shell layer exports from its palette
+# (spark-shell does). Unset = plain, today's output. Console-safe only:
+# bold, dim, their resets and the sixteen colours (30-37, 90-97) -- a
+# `38;5;n` or 24-bit value is dropped whole, never drawn -- and only at
+# a tty: a pipe never sees an escape.
+_SGR_VARS = {"accent": "SPARK_ACCENT_SGR", "muted": "SPARK_MUTED_SGR", "warn": "SPARK_WARN_SGR"}
+_SGR_OK = frozenset([0, 1, 2, 22] + list(range(30, 38)) + list(range(90, 98)))
+
+
+def sgr(role):
+    """The SGR parameters for `role` (accent, muted, warn), or '' when
+    the variable is unset, empty, or names anything outside the
+    console-safe set."""
+    v = os.environ.get(_SGR_VARS.get(role, ""), "")
+    if not v or not all(c in "0123456789;" for c in v):
+        return ""
+    parts = v.split(";")
+    if not all(p and int(p) in _SGR_OK for p in parts):
+        return ""
+    return v
+
+
+def _gnu_readline():
+    """GNU readline is the one line editor that skips \\001..\\002 when it
+    measures a prompt; libedit (Apple's python) counts the escape bytes
+    as columns and wraps early, so a coloured prompt there is a broken
+    prompt. Without readline, input() prints the prompt raw."""
+    try:
+        import readline
+    except ImportError:
+        return False
+    return "libedit" not in (readline.__doc__ or "")
+
+
+def paint(s, role, stream=None, readline=False):
+    """`s` in the role's colour when `stream` (stdout by default) is a tty
+    and the role has a value; plain otherwise. readline=True is for an
+    input() prompt (the `chat> ` prompt): each escape is bracketed in
+    \\001/\\002 so GNU readline counts the prompt's width right, and any
+    other line editor gets the plain text."""
+    try:
+        tty = (stream or sys.stdout).isatty()
+    except (AttributeError, ValueError):
+        tty = False
+    p = sgr(role) if tty else ""
+    if not p or (readline and not _gnu_readline()):
+        return s
+    a, b = ("\001", "\002") if readline else ("", "")
+    return "%s\033[%sm%s%s%s\033[0m%s" % (a, p, b, s, a, b)
 
 
 def die(s, code=1):
@@ -162,12 +215,14 @@ def confirm(question):
 
 
 def wait_ready(label, probe, timeout, interval=1.0):
-    """The one dot-spinner (grammar rule 6): write `label`, then call
-    probe() every `interval` seconds until it returns something truthy
-    (returned, the line left open for the caller's ` ready` tail) or
-    `timeout` seconds pass (the line is closed, None returned). An empty
-    label waits silently on the same clock. A probe that raises gets the
-    line closed first."""
+    """The one dot-spinner (grammar rule 6) for a server coming up: write
+    `label`, then call probe() every `interval` seconds until it returns
+    something truthy (returned, the line left open for the caller's
+    ` ready` tail) or `timeout` seconds pass (the line is closed, None
+    returned). An empty label waits silently on the same clock. A probe
+    that raises gets the line closed first. Its dots are plain writes on
+    purpose: they survive in a log. The other half of rule 6 is
+    `text.Busy`, the pulse while a reply is on its way (tty only)."""
     drawn = bool(label)
     if drawn:
         sys.stdout.write(label)

@@ -3121,6 +3121,125 @@ def main():
         t.ok(b"\x1b[38;5" not in data and b"spark lua -- left in zone" in data, "lua on a pty: eight colours only, and q leaves with one line", repr(data[-200:]))
         t.ok(b"....." in data and b"Ele lembrou" not in data, "lua on a pty: the memory panel is on screen from the start, English only", repr(data[:900]))
 
+        # ---- v1.41: colour and the pulse at the prompt ----------------------
+        # sgr()/paint(): three env vars, console-safe SGR only, a tty only
+        import pty as _pty
+        import spark as _sp
+        from spark import bar as _bar
+        _saved = {k: os.environ.pop(k) for k in ("SPARK_ACCENT_SGR", "SPARK_MUTED_SGR", "SPARK_WARN_SGR") if k in os.environ}
+        try:
+            _m, _s = _pty.openpty()
+            _tty = os.fdopen(_s, "w")
+            t.ok(_sp.sgr("accent") == "" and _sp.paint("*", "accent", _tty) == "*",
+                 "sgr/paint: unset means plain, even at a tty")
+            os.environ["SPARK_ACCENT_SGR"] = "1;94"
+            os.environ["SPARK_WARN_SGR"] = "1;31"
+            os.environ["SPARK_MUTED_SGR"] = "38;5;2"
+            t.ok(_sp.sgr("accent") == "1;94" and _sp.sgr("warn") == "1;31" and _sp.sgr("muted") == "",
+                 "sgr: 1;94 and 1;31 pass, a 38;5;2 value is dropped whole", repr((_sp.sgr("accent"), _sp.sgr("muted"))))
+            os.environ["SPARK_MUTED_SGR"] = "x;1"
+            t.ok(_sp.sgr("muted") == "" and _sp.paint("...", "muted", _tty) == "...",
+                 "sgr: a value that is not digits and semicolons is plain")
+            _rl = "\001\033[1;94m\002chat>\001\033[0m\002" if _sp._gnu_readline() else "chat>"
+            t.ok(_sp.paint("*", "accent", _tty) == "\033[1;94m*\033[0m"
+                 and _sp.paint("chat>", "accent", _tty, readline=True) == _rl,
+                 "paint: the escape at a tty; an input() prompt bracketed under GNU readline, plain under libedit",
+                 repr((_sp.paint("*", "accent", _tty), _sp.paint("chat>", "accent", _tty, readline=True))))
+            with open(os.devnull, "w") as _dn:
+                t.ok(_sp.paint("*", "accent", _dn) == "*", "paint: piped is plain even when the var is set")
+            # Busy on a pty: the hint-row frames, then one clear; a pipe gets nothing
+            from spark import text as _tx
+            _b = _tx.Busy(_tty, above=True)
+            _b.start()
+            time.sleep(0.8)
+            _b.stop()
+            _b.stop()                                     # idempotent
+            os.set_blocking(_m, False)
+            try:
+                _got = os.read(_m, 65536)
+            except OSError:
+                _got = b""
+            t.ok(_got.startswith(b"\x1b7\x1b[1A\r\x1b[2K\x1b[1;94m*\x1b[0m .")
+                 and b"\x1b8" in _got and _got.endswith(b"\x1b7\x1b[1A\r\x1b[2K\x1b8")
+                 and b"\x1b[38;5" not in _got and _got.count(b"\x1b7") >= 2,
+                 "Busy above: save, up, clear, the accent mark, ASCII dots, restore -- then one clear", repr(_got))
+            del os.environ["SPARK_ACCENT_SGR"]
+            _b = _tx.Busy(_tty, above=False)
+            _b.start()
+            time.sleep(0.4)
+            _b.stop()
+            _got = os.read(_m, 65536)
+            t.ok(_got.startswith(b"\r\x1b[2K* .") and _got.endswith(b"\r\x1b[2K") and b"\x1b[" not in _got.replace(b"\x1b[2K", b""),
+                 "Busy on the row: plain frames without the var, ASCII only, cleared once", repr(_got))
+            _tty.close()
+            os.close(_m)
+            _r, _w = os.pipe()
+            _pf = os.fdopen(_w, "w")
+            with _tx.Busy(_pf):
+                time.sleep(0.4)
+            _pf.close()
+            t.ok(os.read(_r, 100) == b"", "Busy on a pipe writes nothing at all")
+            os.close(_r)
+            _quiet = _tx.Busy.hint_row()
+            t.ok(not _quiet.live and _quiet.start() is _quiet and _quiet.stop() is None,
+                 "Busy.hint_row without SPARK_HINT_ROW=1 is silent")
+        finally:
+            for k in ("SPARK_ACCENT_SGR", "SPARK_MUTED_SGR", "SPARK_WARN_SGR"):
+                os.environ.pop(k, None)
+            os.environ.update(_saved)
+        # every piped path is byte-identical with the vars set: no escape
+        # reaches a pipe, the chat prompt stays `chat> `, do's marks stay
+        # bare; SPARK_HINT_ROW=1 with no controlling terminal (a new
+        # session) still answers, silently
+        _col = {"SPARK_ACCENT_SGR": "1;94", "SPARK_MUTED_SGR": "90", "SPARK_WARN_SGR": "1;31"}
+        _plain = spark("line", stdin="? files bigger than 1G")[1]
+        rc, out, err = spark("line", stdin="? files bigger than 1G", extra=_col)
+        t.ok(rc == 0 and out == _plain and "\033[" not in out + err, "line piped with the vars set: byte-identical", repr(out + err))
+        rc, out, err = spark("chat", stdin="count\n:q\n", extra=_col)
+        t.ok(rc == 0 and "\033[" not in out + err and "\001" not in out and "\nchat> * " in out,
+             "chat piped with the vars set: `chat> ` and the mark stay plain", repr(out + err))
+        rc, out, err = spark("what", "does", "this", "mean", extra=_col)
+        t.ok(rc == 0 and "\033[" not in out + err and out.startswith("* "), "an answer piped with the vars set: no escape", repr(out + err))
+        rc, out, err = spark("explain", stdin="ls: cannot access 'x': No such file\n", extra=_col)
+        t.ok(rc == 0 and "\033[" not in out + err, "explain piped with the vars set: no escape", repr(out + err))
+        rc, out, err = spark("do", "say", "hello", stdin="\n", extra=dict(_col, SPARK_DO_STDIN="1"), cwd=work)
+        t.ok(rc == 0 and "\033[" not in out + err and out.splitlines()[0].startswith("* driving with ")
+             and "\n* 1  echo STEP-ONE   say hello" in out,
+             "spark do piped with the vars set: the driving line and the step marks stay plain", repr(out + err))
+        p = subprocess.run([sys.executable, SPARK, "line"], input="? files bigger than 1G", capture_output=True, text=True,
+                           env=dict(env, SPARK_HINT_ROW="1", **_col), timeout=30, start_new_session=True)
+        t.ok(p.returncode == 0 and p.stdout == _plain and p.stderr == "",
+             "spark line with SPARK_HINT_ROW=1 and no terminal: the same two lines, nothing drawn", repr(p.stdout + p.stderr))
+        # state/prompt: the turn above said up + the model; a dead brain
+        # says down and keeps the model; the bar's tick writes it too
+        _pf = home + "/.local/state/spark/prompt"
+        _kv = dict(l.split("=", 1) for l in open(_pf).read().splitlines())
+        t.ok(sorted(_kv) == ["AI", "MODEL", "T"] and _kv["AI"] == "up" and _kv["MODEL"] == "stub-7b-q4" and _kv["T"].isdigit(),
+             "state/prompt after a turn: T=<epoch> MODEL=<stem> AI=up", repr(_kv))
+        rc, out, _ = spark("line", stdin="? anything", extra={"SPARK_BASE_URL": "http://127.0.0.1:9", "SPARK_TIMEOUT": "1"})
+        _kv2 = dict(l.split("=", 1) for l in open(_pf).read().splitlines())
+        t.ok(rc == 1 and _kv2["AI"] == "down" and _kv2["MODEL"] == "stub-7b-q4",
+             "state/prompt after a dead brain: AI=down, the model kept", repr((out, _kv2)))
+        _saved_pf = _bar.PROMPT_FILE
+        _bar.PROMPT_FILE = os.path.join(home, "prompt-unit")
+        try:
+            _bar.prompt_state(None, ai="up", model="/x/y/z-q4.gguf")
+            _bar.prompt_state(None, model="bad value")
+            _bar.prompt_state(None, ai="sideways")
+            _u = open(_bar.PROMPT_FILE).read()
+            t.ok(_u.startswith("T=") and "MODEL=z-q4\n" in _u and _u.endswith("AI=up\n") and _u.count("\n") == 3,
+                 "prompt_state: a stem from a path, a bad value or an unknown state keeps the last", repr(_u))
+            _bar.PROMPT_FILE = os.path.join(home, "no", "such", "dir", "prompt")
+            _bar.prompt_state(None, ai="down")
+            t.ok(True, "prompt_state never raises")
+        finally:
+            _bar.PROMPT_FILE = _saved_pf
+        rc, out, _ = spark("bar", "line")
+        _kv3 = dict(l.split("=", 1) for l in open(_pf).read().splitlines())
+        t.ok(rc == 0 and int(_kv3["T"]) >= int(_kv2["T"]) and _kv3["AI"] in ("up", "down") and _kv3["MODEL"] == "stub-7b-q4",
+             "spark bar line ticks state/prompt (the model from the brain cache)", repr(_kv3))
+        # ---- end of the v1.41 block ------------------------------------------
+
     # spark reveal: piped it is an exact copy (bytes, no pacing); at a
     # tty it is paced -- 60 chars at 100 cps cannot land in an instant;
     # a wrong CPS and a second word are the usage, signed

@@ -59,7 +59,17 @@ describes how things are, not how they came to be.
   `*` and `!` on every OS and terminal (one mark, both OSes), and on the
   console (also inside a tmux running on it, or with `SPARK_ASCII=1`) the
   report/bar glyphs fall back to `+ x - | v ^ ->`. The docs are ASCII too (the hook refuses
-  anything else): they are read on that console as well.
+  anything else): they are read on that console as well. Colour is
+  never spark's own: at a tty only, and only from three optional
+  environment variables -- `SPARK_ACCENT_SGR`, `SPARK_MUTED_SGR`,
+  `SPARK_WARN_SGR`, SGR parameter strings a shell layer exports
+  (spark-shell does) -- `sgr()`/`paint()` in `lib/spark/__init__.py`
+  keep to 30-37/90-97 plus bold and dim (a `38;5` or 24-bit value is
+  dropped whole), and a pipe never sees an escape: unset, every output
+  is today's, byte for byte. An input() prompt (`chat> `) is painted
+  only under GNU readline, bracketed in `\001`/`\002`; libedit counts
+  the escape bytes as columns, so there it stays plain. Every animation frame (`text.Busy`, the
+  pulse while a reply is on its way) is ASCII.
   Text in is strict UTF-8 as well: stdin is decoded with the replacement
   mark (`text.stdin_text`), and every string bound for the wire or a
   store -- a thread, the ledger, a turn record -- goes through
@@ -121,7 +131,9 @@ site.env.example, models.env, engine.env, themes/*.env       KEY=value data
                 (engine.env is the llama.cpp pin: version + one sha per flavour)
 bin/spark, bin/explain -> spark                  the one command
 lib/spark/      __init__ config wire engine serve session persona cli check
-                verify (sha256, cached: spark model verify, check's models row) bar theme
+                verify (sha256, cached: spark model verify, check's models row)
+                bar (the status line, and state/prompt -- prompt_state, the
+                KEY=value cache a prompt segment reads) theme
                 site (site.env custodian: set_keys/apply, rc custody, font quiet
                 headless client, the shell-gone stub) model (spark model /
                 spark ember: the table, add, verify, budget)
@@ -144,7 +156,8 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 day, the sends row's source) bench (llama-bench, bench tune [show|apply])
                 soul memory (the identity files; memory's writers refuse a
                 sealed file that does not open, never write over it)
-                text (the streams: wrap, fence, and the grounding law -- anchor,
+                text (the streams: wrap, fence, Busy -- the one pulse while a
+                reply is on its way, tty only -- and the grounding law -- anchor,
                 Ground, Gate, shared by every contract that shows a text to a
                 model, and borrowed by spark recall to keep to lines that ran)
                 ledger (what you have already weighed: one sealed file, a kind per
@@ -273,7 +286,10 @@ state `~/.local/state/spark/` (0700: `api-token` 0600, `serve-url`,
 models dir, written by `spark serve`), `off`, `widgets/`, `turns/`,
 `threads/` (pre-v1.4 plaintext threads only; `spark user claim` seals them
 away), `chat-history` 0600, `brain`, `check.json`, `bar`,
-`bench.jsonl`, `tune.json`,
+`bench.jsonl`, `tune.json`, `prompt` (`T=<epoch> MODEL=<stem or ->
+AI=up|down`, a cache for a shell prompt's segment: written by the bar's
+tick, by `session.record` after a turn and by the BrainError handlers --
+as fresh as the last of those, never a probe of its own),
 `users/<name>/` (0700 per user: `token.hash` and `key` 0600 -- the sha256
 token verifier and the wrapped data key -- plus that user's sealed
 `threads/`, `memory`, `chat-history`, `ledger`, and in the box account's
@@ -431,7 +447,13 @@ may change freely.
    thread; any other starts a new one (no heuristics). On a logged-in
    client of a FORGE, `??` continues the newest thread ON THE FORGE
    (forge.peer_newest, the requester's own store over contract 9) and
-   the turn lands there; any trouble falls back to the local store. The
+   the turn lands there; any trouble falls back to the local store.
+   `SPARK_HINT_ROW=1` in the environment (the widgets set it on their
+   two calls) lets `spark line` draw the pulse (`text.Busy.hint_row`) in
+   the row above the cursor on `/dev/tty` while the model answers --
+   each frame saves the cursor, goes up one row, clears it, draws the
+   mark and the dots, and restores; a hand-run `spark line` never
+   touches that row, and stdout stays the two lines either way. The
    shell widgets
    depend on nothing else.
 5. `spark brain --porcelain` prints `<url><TAB><model><TAB>forge|model`
@@ -862,9 +884,12 @@ One grammar for every verb; a verb that breaks a rule is a bug.
    proceeds; Enter or EOF is no (`confirm()` in `lib/spark/__init__.py`,
    beside `say()`). The one deliberate second shape, two users: `spark
    do`'s danger step and `spark uninstall` require the typed word `yes`.
-6. One progress vocabulary: curl's bar for downloads, and one
+6. One progress vocabulary: curl's bar for downloads, one
    dot-spinner -- `wait_ready(label, probe, timeout, interval)` in
-   `lib/spark/__init__.py` -- for every wait on a server coming up.
+   `lib/spark/__init__.py`, plain dots that survive in a log -- for
+   every wait on a server coming up, and one pulse -- `text.Busy`, the
+   mark and `.` `..` `...` redrawn in place, a tty only -- for every
+   wait on a reply (the hint row, chat, explain, an answer, `spark do`).
 7. Exit codes: 0 ok or show; 1 the world failed (stderr, via `die()`);
    2 the invocation -- usage, an unknown name, a gate refusal (stdout,
    signed); 78 misconfiguration (`EX_CONFIG`); 130 SIGINT.
@@ -995,7 +1020,11 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   apply`; `spark theme`, `spark font`, `spark quiet` and the bar line
   are core (the FORGE page reads `theme.env`; the VT console palette
   and font are the machine's face; the status line is the machine's
-  own report). The one release of migration is the `shell-moved`
+  own report). The whole interface between the two is `theme.env`,
+  the three `SPARK_*_SGR` exports a rendered rc may set (colour at the
+  prompt; unset, plain) and `state/prompt` (the cache a prompt segment
+  reads): core never calls spark-shell, spark-shell never writes
+  spark's files. The one release of migration is the `shell-moved`
   bootstrap row and the `spark shell` / `spark bar on|off` stubs, each
   one signed pointer line, exit 2.
 - **A grounded contract.** One law, five contracts (10, 11, 12, 13, 14):

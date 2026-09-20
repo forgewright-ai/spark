@@ -4,11 +4,14 @@
 # already-formatted output). The mark (glyph("hammer") + " ") prints once,
 # before the first character; close() writes it alone when nothing arrived.
 
+import os
 import re
 import shutil
 import sys
+import threading
+import time
 
-from . import glyph
+from . import glyph, paint
 
 
 class Wrap:
@@ -35,9 +38,10 @@ class Wrap:
         if not self.started:
             self.started = True
             if self.mark:
-                m = glyph("hammer") + " "
-                self.stream.write(m)
-                self.col += len(m)
+                # the mark in the accent at a tty (paint: plain when piped
+                # or unset); col counts what is visible, never the escape
+                self.stream.write(paint(glyph("hammer"), "accent", self.stream) + " ")
+                self.col += len(glyph("hammer")) + 1
 
     def _word_out(self, w):
         if not w:
@@ -127,6 +131,107 @@ class Wrap:
         self._start()
         self.stream.write("\n")
         self.stream.flush()
+
+
+class Busy:
+    """The pulse while a reply is on its way (grammar rule 6's other half,
+    beside wait_ready's dots for a server coming up): the mark and `.`
+    `..` `...` redrawn every 0.35 s on a daemon thread, ASCII always, the
+    mark in the accent and the dots muted (paint: colour only at a tty
+    and only from the three env vars). Silent unless `stream` is a tty,
+    so a pipe never sees a byte of it. above=True draws in the row above
+    the cursor and comes back (the widgets' own hint-row frame: save the
+    cursor, up one, clear, draw, restore -- one write per frame); else it
+    draws on the cursor's own row. stop() ends the thread, then clears
+    once from the calling thread; idempotent; a context manager. Any
+    OSError or ValueError on the stream goes silent -- the pulse is never
+    a reason to fail."""
+
+    FRAMES = (".", "..", "...")
+    STEP = 0.35
+
+    def __init__(self, stream=sys.stderr, above=False, mark=None, close=False):
+        self.stream = stream
+        self.above = above
+        self.mark = glyph("hammer") if mark is None else mark
+        self.close = close                      # close the stream in stop() (hint_row's /dev/tty)
+        self.on = False
+        self._stop = threading.Event()
+        self._thread = None
+        try:
+            self.live = bool(stream) and stream.isatty()
+        except (AttributeError, ValueError, OSError):
+            self.live = False
+
+    @classmethod
+    def hint_row(cls):
+        """The widgets' pulse: with SPARK_HINT_ROW=1 in the environment
+        (the widgets set it around `spark line`; a hand-run spark line
+        never touches the row above), a Busy drawing above the cursor on
+        /dev/tty; otherwise, or when /dev/tty will not open, a silent
+        one."""
+        if os.environ.get("SPARK_HINT_ROW") == "1":
+            try:
+                return cls(open("/dev/tty", "w"), above=True, close=True)
+            except OSError:
+                pass
+        return cls(None)
+
+    def _frame(self, dots):
+        body = paint(self.mark, "accent", self.stream) + " " + paint(dots, "muted", self.stream)
+        if self.above:
+            return "\x1b7\x1b[1A\r\x1b[2K" + body + "\x1b8"
+        return "\r\x1b[2K" + body
+
+    def _clear(self):
+        return "\x1b7\x1b[1A\r\x1b[2K\x1b8" if self.above else "\r\x1b[2K"
+
+    def _write(self, s):
+        try:
+            self.stream.write(s)
+            self.stream.flush()
+        except (OSError, ValueError):
+            self.live = False
+
+    def _run(self):
+        i = 0
+        while not self._stop.is_set() and self.live:
+            self._write(self._frame(self.FRAMES[i % len(self.FRAMES)]))
+            i += 1
+            self._stop.wait(self.STEP)
+
+    def start(self):
+        if self.on or not self.live:
+            return self
+        self.on = True
+        self._stop.clear()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+        return self
+
+    def stop(self):
+        if self.on:
+            self.on = False
+            self._stop.set()
+            if self._thread is not None:
+                self._thread.join()
+                self._thread = None
+            if self.live:
+                self._write(self._clear())
+        if self.close and self.stream is not None:
+            try:
+                self.stream.close()
+            except (OSError, ValueError):
+                pass
+            self.close = False
+            self.live = False
+
+    def __enter__(self):
+        return self.start()
+
+    def __exit__(self, *exc):
+        self.stop()
+        return False
 
 
 class Fence:

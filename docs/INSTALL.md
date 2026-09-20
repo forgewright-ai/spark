@@ -147,7 +147,13 @@ shell cannot host the widget (another shell, or macOS's bash 3.2):
    answer; `Esc s` asks about the line you are on; `cmd 2>&1 | explain`
    says what went wrong. `spark off` gives Enter back and quiets the
    failure line; `spark on` restores both. TAB completes the verbs and
-   their names, offline.
+   their names, offline. While the model answers, the mark pulses in
+   that row (`* .` `* ..` `* ...`), and the same pulse stands in for a
+   reply in `spark chat`, `explain` and `spark do`. The marks are
+   plain unless three environment variables say otherwise --
+   `SPARK_ACCENT_SGR`, `SPARK_MUTED_SGR`, `SPARK_WARN_SGR`, SGR codes
+   such as `1;94` -- which spark-shell exports from your palette; unset,
+   everything is plain, and a pipe never sees an escape either way.
 2. When a command fails, one line appears above the next prompt:
    `* failed (1) -- press Esc s to ask why`. `Esc s` on the empty line
    puts the command back, already piped to `explain`, and nothing runs

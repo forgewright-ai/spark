@@ -407,10 +407,11 @@ def set_theme(name):
         profile(config.load(), False)
     from . import check
     check.refresh()
-    # nothing in a running shell holds the palette: starship re-reads its
-    # config on every prompt, the widget draws no colour of its own, and
-    # the hook reads console-colors alone -- so no shell restart is owed.
-    say("the next prompt has it")
+    # nothing in a running shell holds the palette but the prompt's
+    # colour: starship re-reads its config on every prompt and the hook
+    # reads console-colors alone, while the widget's accent is the rc's
+    # own export (spark-shell renders it) -- a new shell after apply.
+    say("the next prompt has it; the prompt's colour: spark-shell apply, then a new shell")
     return 0
 
 

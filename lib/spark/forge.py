@@ -22,7 +22,7 @@ import re
 import sys
 import time
 
-from . import THREADS_DIR, log_exc, state_dir, vault
+from . import THREADS_DIR, log_exc, paint, state_dir, vault
 from . import memory, persona, soul
 from . import text as textmod
 
@@ -936,7 +936,9 @@ def cmd_chat(args):
                         termios.tcflush(sys.stdin.fileno(), termios.TCIFLUSH)
                     except Exception:
                         pass    # scrolled-in escape codes must not become input
-                text = input("chat> ")
+                # the prompt in the accent at a tty (readline-bracketed
+                # escapes; the plain text stays exactly `chat> `)
+                text = input(paint("chat>", "accent", sys.stdout, readline=True) + " ")
             except EOFError:
                 if tty:
                     say()

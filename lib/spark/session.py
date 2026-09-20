@@ -33,7 +33,14 @@ TEXT_FIELDS = ("line", "command", "hint", "answer", "cwd", "context", "proof")
 
 
 def record(cfg, **fields):
-    """Append one turn to today's JSONL (0600). SPARK_HISTORY=off keeps none."""
+    """Append one turn to today's JSONL (0600). SPARK_HISTORY=off keeps none.
+    A turn answered means the AI is up: the prompt cache hears so first
+    (bar.prompt_state; no words, the model's stem alone)."""
+    try:
+        from . import bar          # bar imports session late: resolved here the same way
+        bar.prompt_state(cfg, ai="up", model=fields.get("model"))
+    except Exception:
+        pass
     if cfg.history <= 0:
         return
     try:

@@ -1,5 +1,29 @@
 # Changelog
 
+## v1.41
+
+- Colour at the prompt, from the shell layer: three optional
+  environment variables -- `SPARK_ACCENT_SGR`, `SPARK_MUTED_SGR`,
+  `SPARK_WARN_SGR`, SGR codes such as `1;94` -- paint the `*` mark,
+  the `chat> ` prompt (under GNU readline; libedit, Apple's python,
+  keeps it plain: it counts escape bytes as columns), `spark do`'s
+  step lines (a danger step whole, in warn) and the widgets' hint
+  row, at a tty only; spark-shell exports them from the palette. `sgr()` keeps to the console-safe set
+  (30-37, 90-97, bold, dim; a `38;5` or 24-bit value is dropped whole)
+  and a pipe never sees an escape: unset, every output is what it was.
+  After `spark theme NAME` the prompt's colour follows `spark-shell
+  apply` and a new shell.
+- One busy pulse, `text.Busy`: the mark and `.` `..` `...` redrawn in
+  place while a reply is on its way -- in the hint row above the prompt
+  (`SPARK_HINT_ROW=1`, the widgets' word to `spark line`, drawn on
+  `/dev/tty`), in `spark chat`, `explain`, an answer and `spark do`.
+  ASCII on every terminal, silent on a pipe. `wait_ready`'s dots stay
+  the wait for a server coming up.
+- `~/.local/state/spark/prompt`: `T=<epoch> MODEL=<stem or ->
+  AI=up|down`, a cache for a shell prompt's segment (spark-shell's
+  starship module reads it), written by the bar's tick, after each
+  turn and when a brain fails to answer. No new verb, no check row.
+
 ## v1.40
 
 - `spark font` works on Arch: the console font is chosen by mechanism,

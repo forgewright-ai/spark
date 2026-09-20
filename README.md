@@ -51,7 +51,8 @@ itself, never by running anything.
    ```
 
 One line goes into your rc file, nothing else: your shell, your colours
-and your editor stay yours. `docs/INSTALL.md` has every step and every key.
+and your editor stay yours (the prompt's marks take a colour only when
+spark-shell exports one). `docs/INSTALL.md` has every step and every key.
 
 ## Use it
 

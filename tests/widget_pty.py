@@ -44,6 +44,9 @@ if [ "$1" = history ]; then
     # to say -- and NEVER fall through to cat (it would eat the tty)
     exit 0
 fi
+# what reached spark line from the widget's environment (v1.41: the
+# hint-row word), on a log of its own so the asked() count stays honest
+[ "$1" = line ] && printf 'SPARK_HINT_ROW=%s\n' "${SPARK_HINT_ROW-}" >> "$STUB_ENV"
 if [ "$1" = line ] && [ "$2" = "--paste" ]; then
     cat > /dev/null
     printf 'answer\ntwo echo lines, harmless\n'
@@ -312,8 +315,9 @@ def main(shell, widget):
         os.chmod(estub, 0o755)
         log = os.path.join(tmp, "asked.log")
         elog = os.path.join(tmp, "explained.log")
+        envlog = os.path.join(tmp, "env.log")
         env = {"HOME": home, "XDG_STATE_HOME": state, "SPARK_BIN": stub, "STUB_LOG": log,
-               "EXPLAIN_LOG": elog,
+               "EXPLAIN_LOG": elog, "STUB_ENV": envlog,
                "PATH": os.path.join(home, "bin") + ":" + os.environ.get("PATH", ""),
                "TERM": "xterm-256color", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "ZDOTDIR": home}
         prompt = "SPARKPROMPT> "
@@ -615,6 +619,46 @@ def main(shell, widget):
         ok(sh.expect("P-ONE") and sh.expect("P-TWO"),
            "the paste stayed in the buffer and ran only on Enter", since())
         sh.expect(prompt)
+
+        # 7h. colour: three exports, the widget paints after the width cut
+        # -- the mark alone in the accent, a danger line whole in warn;
+        # a value that is not digits and semicolons is plain; unset is
+        # plain again. Raw bytes: expect() matches the buffer as is.
+        sh.send("export SPARK_ACCENT_SGR='1;94' SPARK_WARN_SGR='1;31'\r")
+        sh.expect(prompt)
+        since = sh.mark()
+        sh.send("answer-me?\r")
+        ok(sh.expect("\x1b[1;94m*\x1b[0m Forty-two"), "accent set: the mark alone is painted, the text plain", since())
+        sh.send("\r")
+        sh.expect(prompt, 3)
+        since = sh.mark()
+        sh.send("? delete stuff\r")
+        ok(sh.expect("\x1b[1;31m! Deletes things"), "warn set: the danger line is painted whole", since())
+        sh.send("\x15")
+        time.sleep(0.2)
+        sh.send("export SPARK_ACCENT_SGR='x'\r")
+        sh.expect(prompt)
+        since = sh.mark()
+        sh.send("answer-me?\r")
+        ok(sh.expect("* Forty-two") and "\x1b[xm" not in since(), "a value that is not SGR digits: plain", since())
+        sh.send("\r")
+        sh.expect(prompt, 3)
+        sh.send("unset SPARK_ACCENT_SGR SPARK_WARN_SGR\r")
+        sh.expect(prompt)
+        since = sh.mark()
+        sh.send("answer-me?\r")
+        ok(sh.expect("* Forty-two") and "\x1b[1;94m" not in since(), "unset again: plain", since())
+        sh.send("\r")
+        sh.expect(prompt, 3)
+        # the widget's word to spark line: SPARK_HINT_ROW=1 on every ask
+        # (the pulse may draw in the hint row), the paste call included
+        try:
+            with open(envlog) as f:
+                seen_env = f.read().splitlines()
+        except OSError:
+            seen_env = []
+        ok(seen_env and all(l == "SPARK_HINT_ROW=1" for l in seen_env) and len(seen_env) >= asked(),
+           "every spark line call carried SPARK_HINT_ROW=1 (the ask and the paste)", seen_env[:5])
 
         # 8. exit removes the marker
         sh.send("exit\r")
