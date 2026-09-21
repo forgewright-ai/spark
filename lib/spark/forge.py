@@ -781,11 +781,14 @@ CHAT_USAGE = """%s chat -- a conversation
                                  or spark history list (1 = newest), or a
                                  literal thread id
   spark chat                     a conversation at the `chat> ` prompt
+  spark chat --reveal [CPS]      the replies at a reader's pace, letter by
+                                 letter (spark reveal's CPS, default 30;
+                                 a tty only); /reveal [CPS|off] inside
 
   Inside it: @FILE words asks about a file; /help lists the verbs (/new,
-  /resume, /clear, /last, /model); /q (or /quit, /exit, :q, quit, exit,
-  bye, Ctrl-D) ends, silently; Ctrl-C cancels a reply in progress without
-  ending the chat. Every turn is kept as a thread (spark history).
+  /resume, /clear, /last, /model, /reveal); /q (or /quit, /exit, :q, quit,
+  exit, bye, Ctrl-D) ends, silently; Ctrl-C cancels a reply in progress
+  without ending the chat. Every turn is kept as a thread (spark history).
 """
 
 # Any of these alone ends the conversation, silently. Generous on purpose:
@@ -814,6 +817,7 @@ def _slash_help(cfg, thread, args):
     say("/clear   wipe the screen; the thread goes on")
     say("/last    the last turn, with its tok/s")
     say("/model   which model is answering")
+    say("/reveal  [CPS|off] the replies letter by letter, at CPS a second")
     say("/q       end the conversation (Ctrl-D works too)")
     return thread
 
@@ -883,7 +887,30 @@ def _slash_model(cfg, thread, args):
 
 # /q is not here: QUIT_WORDS is checked first, so it never reaches this dict.
 # Every verb takes (cfg, thread, args) and returns the thread to go on with.
-SLASH_VERBS = {"/help": _slash_help, "/new": _slash_new, "/resume": _slash_resume,
+REVEAL = [0]           # the chat's pace: 0 = as the chunks come (/reveal, --reveal)
+
+
+def _slash_reveal(cfg, thread, args):
+    from . import MARK, reveal, say
+    word = args[0] if args else ""
+    if word == "off":
+        REVEAL[0] = 0
+        say("%s: the replies come as they are made" % MARK)
+        return thread
+    cps = word or os.environ.get("SPARK_REVEAL_CPS", "") or str(reveal.CPS_DEFAULT)
+    try:
+        n = int(cps)
+    except ValueError:
+        n = -1
+    if not reveal.CPS_MIN <= n <= reveal.CPS_MAX:
+        say("%s: /reveal takes a number, %d..%d characters a second, or off" % (MARK, reveal.CPS_MIN, reveal.CPS_MAX))
+        return thread
+    REVEAL[0] = n
+    say("%s: the replies at %d characters a second (/reveal off ends it)" % (MARK, n))
+    return thread
+
+
+SLASH_VERBS = {"/help": _slash_help, "/new": _slash_new, "/resume": _slash_resume, "/reveal": _slash_reveal,
                "/clear": _slash_clear, "/last": _slash_last, "/model": _slash_model}
 
 
@@ -894,6 +921,8 @@ def cmd_chat(args):
         say(CHAT_USAGE.rstrip() % MARK)
         return 0
     picked = None
+    args, cps = cli.reveal_flag(args)
+    REVEAL[0] = cps
     if args and args[0] == "--thread":
         if len(args) < 2:
             say(CHAT_USAGE.rstrip() % MARK)
@@ -912,7 +941,7 @@ def cmd_chat(args):
         thread = last_thread() if cfg.history > 0 else None    # `more`: go on with the newest
     if args:
         words, paths = refs(args)
-        return cli._stream("chat", " ".join(words), paths, thread=thread)
+        return cli._stream("chat", " ".join(words), paths, thread=thread, cps=REVEAL[0])
     tty = sys.stdin.isatty()
     hist_on = tty and cfg.history > 0
     readline = None
@@ -965,7 +994,7 @@ def cmd_chat(args):
                 continue
             words, paths = refs(text.split())
             try:
-                thread = cli.stream_turn(cfg, "chat", " ".join(words), paths, thread=thread)
+                thread = cli.stream_turn(cfg, "chat", " ".join(words), paths, thread=thread, cps=REVEAL[0])
             except (RefError, wire.BrainError) as e:
                 print("spark: " + e.hint, file=sys.stderr, flush=True)
             except KeyboardInterrupt as e:

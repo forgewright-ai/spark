@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.43
+
+- The reveal inside the streaming verbs: `spark chat --reveal [CPS]`,
+  `explain --reveal`, `spark --reveal words` pace the reply letter by
+  letter at a terminal (spark reveal's 5..200 a second, default 30 or
+  `SPARK_REVEAL_CPS`), `/reveal [CPS|off]` switches it inside a chat.
+  The pulse stays; the pace starts with the first token; piped, nothing
+  changes. `spark chat | spark reveal` could never work: a pipe puts
+  chat in plain mode and the prompt would flow through the filter.
+
 ## v1.42
 
 - A reply's Markdown is drawn at a terminal instead of printed raw:

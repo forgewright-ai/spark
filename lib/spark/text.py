@@ -24,9 +24,14 @@ class Wrap:
     next word) are kept apart so the mark's own trailing space is never
     doubled."""
 
-    def __init__(self, stream=sys.stdout, mark=True):
+    def __init__(self, stream=sys.stdout, mark=True, cps=0):
         self.stream = stream
         self.mark = mark
+        # the reveal: cps > 0 at a tty paces every visible character (the
+        # same clock as spark reveal: a stall is never repaid as a burst);
+        # 0, or piped, writes as the chunks come
+        self.cps = cps if stream.isatty() else 0
+        self.due = 0.0
         self.width = shutil.get_terminal_size((80, 24)).columns if stream.isatty() else 80
         self.col = 0
         self.need_space = False
@@ -47,13 +52,39 @@ class Wrap:
         self.em = False
         self.heading = False
 
+    def _emit(self, s):
+        """Every write goes through here: unpaced, one write; paced (cps),
+        a character at a time with an escape sequence written free."""
+        if not self.cps or not s:
+            self.stream.write(s)
+            return
+        step = 1.0 / self.cps
+        pos = 0
+        for m in SGR_RE.finditer(s):
+            for ch in s[pos:m.start()]:
+                self._tick(ch, step)
+            self.stream.write(m.group(0))
+            pos = m.end()
+        for ch in s[pos:]:
+            self._tick(ch, step)
+
+    def _tick(self, ch, step):
+        now = time.monotonic()
+        delay = self.due - now
+        if delay > 0:
+            time.sleep(delay)
+            now = self.due
+        self.stream.write(ch)
+        self.stream.flush()
+        self.due = now + step
+
     def _start(self):
         if not self.started:
             self.started = True
             if self.mark:
                 # the mark in the accent at a tty (paint: plain when piped
                 # or unset); col counts what is visible, never the escape
-                self.stream.write(paint(glyph("hammer"), "accent", self.stream) + " ")
+                self._emit(paint(glyph("hammer"), "accent", self.stream) + " ")
                 self.col += len(glyph("hammer")) + 1
 
     def _word_out(self, w):
@@ -63,12 +94,12 @@ class Wrap:
         n = len(SGR_RE.sub("", w))          # what is visible, never the escapes
         if self.need_space:
             if self.col + 1 + n > self.width - 1:
-                self.stream.write("\n")
+                self._emit("\n")
                 self.col = 0
             else:
-                self.stream.write(" ")
+                self._emit(" ")
                 self.col += 1
-        self.stream.write(w)
+        self._emit(w)
         self.col += n
         self.need_space = True
         self.stream.flush()
@@ -107,7 +138,7 @@ class Wrap:
     def _char(self, ch):
         if self.verbatim:
             self._start()
-            self.stream.write(ch)
+            self._emit(ch)
             self.col += 1
             self.stream.flush()
             return
@@ -139,7 +170,7 @@ class Wrap:
             self.word = ""
         self._start()
         self._reset_marks()
-        self.stream.write("\n")
+        self._emit("\n")
         self.stream.flush()
         self.col = 0
         self.need_space = False
@@ -167,7 +198,7 @@ class Wrap:
                         self.fenced = False
                     pending, self.line_head = self.line_head, ""
                     self._start()
-                    self.stream.write(pending)
+                    self._emit(pending)
                     self.col += len(pending)
                     self.stream.flush()
                     continue
@@ -193,7 +224,7 @@ class Wrap:
                 pending, self.line_head = self.line_head, ""
                 if self.verbatim:
                     self._start()
-                    self.stream.write(pending)
+                    self._emit(pending)
                     self.col += len(pending)
                     self.stream.flush()
                 else:

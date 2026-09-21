@@ -35,6 +35,8 @@ EXPLAIN_USAGE = """spark explain -- what went wrong in the piped output, and the
 
   cmd 2>&1 | explain [words]  reads stdin (the last 6 kB); explain on PATH
                               is a symlink to spark
+  --reveal [CPS]              the answer at a reader's pace, letter by
+                              letter (spark reveal's CPS); a tty only
 """
 LAST_USAGE = """spark last -- the last exchange, with its tok/s
 
@@ -390,14 +392,38 @@ def _stdin_context():
     return data
 
 
-def stream_turn(cfg, mode, text, files=(), context="", thread=None, line=None, mark=True):
+def reveal_flag(args):
+    """`--reveal [CPS]` anywhere in args -> (args without it, cps): the
+    number after it when there is one (reveal's 5..200, else a refusal
+    exit 2 via die), else SPARK_REVEAL_CPS, else reveal's default; no
+    flag -> 0 (as the chunks come). Piped, the wrap ignores cps anyway."""
+    from . import reveal
+    args = list(args)
+    if "--reveal" not in args:
+        return args, 0
+    i = args.index("--reveal")
+    cps = os.environ.get("SPARK_REVEAL_CPS", "") or str(reveal.CPS_DEFAULT)
+    rest = args[:i] + args[i + 1:]
+    if i < len(args) - 1 and args[i + 1].isdigit():
+        cps = args[i + 1]
+        rest = args[:i] + args[i + 2:]
+    try:
+        n = int(cps)
+    except ValueError:
+        n = -1
+    if not reveal.CPS_MIN <= n <= reveal.CPS_MAX:
+        die("--reveal takes a number, %d..%d characters a second" % (reveal.CPS_MIN, reveal.CPS_MAX))
+    return rest, n
+
+
+def stream_turn(cfg, mode, text, files=(), context="", thread=None, line=None, mark=True, cps=0):
     """One turn through forge.reply, wrapped to the terminal (80 when
     piped): the mark (mark=False keeps a conversation bare -- a dialog
     needs no mark), the answer as it streams, a trailing newline. Returns
     the thread id. RefError, BrainError and KeyboardInterrupt pass through
     -- the wrap is closed first so a half-printed answer still ends in a
     newline; forge.reply keeps the raw text for the thread record."""
-    wrap = textmod.Wrap(sys.stdout, mark=mark)
+    wrap = textmod.Wrap(sys.stdout, mark=mark, cps=cps)
     # the pulse on stderr from the request until the first chunk (a tty
     # only: piped, nothing is drawn); the wrap's mark takes over from it
     busy = textmod.Busy(sys.stderr).start()
@@ -420,28 +446,30 @@ def stream_turn(cfg, mode, text, files=(), context="", thread=None, line=None, m
     return thread
 
 
-def _stream(mode, text, files=(), context="", thread=None, line=None, mark=True):
+def _stream(mode, text, files=(), context="", thread=None, line=None, mark=True, cps=0):
     """stream_turn as a command: a refusal or a dead brain ends with exit 1."""
     try:
-        stream_turn(config.load(), mode, text, files, context, thread, line, mark)
+        stream_turn(config.load(), mode, text, files, context, thread, line, mark, cps)
     except (forge.RefError, wire.BrainError) as e:
         die(e.hint)
     return 0
 
 
 def cmd_ask(words):
+    words, cps = reveal_flag(words)
     words, paths = forge.refs(words)
     q = " ".join(words).strip()
     ctx = _stdin_context()
     if not q and not ctx and not paths:
         return cmd_status([])
     mode = "explain" if ctx and not q else "answer"
-    return _stream(mode, q, paths, ctx, line=None if q or paths else "[explain]")
+    return _stream(mode, q, paths, ctx, line=None if q or paths else "[explain]", cps=cps)
 
 
 def cmd_explain(words):
     if _help(words, EXPLAIN_USAGE):
         return 0
+    words, cps = reveal_flag(words)
     ctx = _stdin_context()
     # the widget's Esc s rides the failed command and its exit code along
     # (one-shot variables, cleared at the next prompt): with them, the

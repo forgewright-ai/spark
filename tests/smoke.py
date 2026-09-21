@@ -3239,6 +3239,34 @@ def main():
         rc, out, err = spark("chat", stdin="count\n:q\n", extra=_col)
         t.ok(rc == 0 and "\033[" not in out + err and "\001" not in out and "\nchat> * " in out,
              "chat piped with the vars set: `chat> ` and the mark stay plain", repr(out + err))
+        # v1.43: the reveal inside the streaming verbs
+        import time as _time
+        _p = _Tty()
+        _w = _tx2.Wrap(_p, mark=False, cps=100)
+        _t0 = _time.monotonic()
+        _w.feed("thirty characters go here now.\n")
+        _w.close()
+        _dt = _time.monotonic() - _t0
+        t.ok(0.22 <= _dt <= 1.5 and _p.getvalue() == "thirty characters go here now.\n\n", "Wrap cps=100 at a tty: ~0.3 s for 31 visible characters", "%.2f s" % _dt)
+        _q = _io.StringIO()
+        _t0 = _time.monotonic()
+        _w = _tx2.Wrap(_q, mark=False, cps=5)
+        _w.feed("thirty characters go here now.\n")
+        _w.close()
+        t.ok(_time.monotonic() - _t0 < 0.1 and _q.getvalue() == "thirty characters go here now.\n\n", "Wrap cps piped: no pace at all")
+        from spark import cli as _cli
+        t.ok(_cli.reveal_flag(["a", "b"]) == (["a", "b"], 0) and _cli.reveal_flag(["--reveal", "40", "x"]) == (["x"], 40)
+             and _cli.reveal_flag(["x", "--reveal"]) == (["x"], 30) and _cli.reveal_flag(["--reveal", "words", "here"]) == (["words", "here"], 30),
+             "reveal_flag: no flag 0; a number after it; the default 30 otherwise")
+        rc, out, err = spark("chat", "--reveal", "200", "count", extra=_col)
+        rc2, out2, err2 = spark("chat", "count", extra=_col)
+        t.ok(rc == 0 and rc2 == 0 and out.startswith("* ") and "\033[" not in out + err and len(out.splitlines()) == len(out2.splitlines()),
+             "chat --reveal piped: the same shape as chat without it, no pace, no escape", repr(out))
+        rc, out, err = spark("chat", "--reveal", "999", "count")
+        t.ok(rc != 0 and "5..200" in out + err, "chat --reveal 999: refused, the range named", repr(out + err))
+        rc, out, err = spark("chat", stdin="/reveal 50\n/reveal x\n/reveal off\n:q\n")
+        t.ok(rc == 0 and "at 50 characters a second" in out and "/reveal takes a number" in out and "as they are made" in out,
+             "/reveal 50, /reveal x, /reveal off inside chat", repr(out))
         rc, out, err = spark("what", "does", "this", "mean", extra=_col)
         t.ok(rc == 0 and "\033[" not in out + err and out.startswith("* "), "an answer piped with the vars set: no escape", repr(out + err))
         rc, out, err = spark("explain", stdin="ls: cannot access 'x': No such file\n", extra=_col)

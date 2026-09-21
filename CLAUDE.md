@@ -176,7 +176,10 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 drill (spark drill: contract 13 -- a source becomes questions it
                 answers, self-graded, and the ledger schedules the misses)
                 reveal (spark reveal: stdin at a reader's pace at a tty,
-                an exact copy piped -- presentation only, nothing sent)
+                an exact copy piped -- presentation only, nothing sent;
+                the same pace inside the streaming verbs: `--reveal [CPS]`
+                on chat, explain and bare words, `/reveal` in chat --
+                `text.Wrap(cps=)`, `cli.reveal_flag`)
                 watch (spark watch: contract 14 -- a live stream on stdin, silent
                 until a line matches, then one grounded line)
                 forge (identity, threads, reply, the chat REPL, @FILE; the
