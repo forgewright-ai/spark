@@ -9,6 +9,10 @@
   The pulse stays; the pace starts with the first token; piped, nothing
   changes. `spark chat | spark reveal` could never work: a pipe puts
   chat in plain mode and the prompt would flow through the filter.
+- A reply's socket that times out or drops MID-STREAM is one line
+  (`went quiet for Ns mid-reply -- the answer above is incomplete`),
+  never a traceback: the wire's connect had that answer, the read did
+  not (seen on the box when spark-serve was restarted under a chat).
 
 ## v1.42
 

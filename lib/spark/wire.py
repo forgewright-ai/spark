@@ -469,6 +469,10 @@ def chat_json(cfg, url, messages, schema, max_tokens=200, temperature=0.2, forge
         try:
             d = json.load(r)
             text = d["choices"][0]["message"]["content"]
+        except OSError as e:
+            if "timed out" in str(e):
+                raise BrainError("timeout", "%s went quiet for %ss mid-reply" % (url, timeout or cfg.timeout))
+            raise BrainError("cut", "%s dropped mid-reply (%s)" % (url, e))
         except (ValueError, KeyError, IndexError):
             raise BrainError("bad", "%s returned something that is not a chat completion" % url)
     try:
@@ -506,27 +510,36 @@ def chat_stream(cfg, url, messages, on_delta, max_tokens=600, temperature=0.3, f
     out, timings, done = [], {}, False
     data = _encode(body)
     with _send(cfg, url, data, timeout or cfg.timeout, forge=forge) as r:
-        for raw in r:
-            line = raw.decode("utf-8", errors="replace").strip()
-            if not line.startswith("data:"):
-                continue
-            payload = line[5:].strip()
-            if payload == "[DONE]":
-                done = True
-                break
-            try:
-                chunk = json.loads(payload)
-            except ValueError:
-                continue
-            if "timings" in chunk:
-                timings = timings_of(chunk)
-            try:
-                delta = chunk["choices"][0]["delta"].get("content") or ""
-            except (KeyError, IndexError, TypeError):
-                continue
-            if delta:
-                out.append(delta)
-                on_delta(delta)
+        try:
+            for raw in r:
+                line = raw.decode("utf-8", errors="replace").strip()
+                if not line.startswith("data:"):
+                    continue
+                payload = line[5:].strip()
+                if payload == "[DONE]":
+                    done = True
+                    break
+                try:
+                    chunk = json.loads(payload)
+                except ValueError:
+                    continue
+                if "timings" in chunk:
+                    timings = timings_of(chunk)
+                try:
+                    delta = chunk["choices"][0]["delta"].get("content") or ""
+                except (KeyError, IndexError, TypeError):
+                    continue
+                if delta:
+                    out.append(delta)
+                    on_delta(delta)
+        except OSError as e:
+            # the socket died or went quiet MID-REPLY (a server restarted
+            # under the answer, a model that stalled past the timeout):
+            # _send's try covers the connect only, so this is the read's
+            # own one-line answer -- never a traceback in a chat
+            if "timed out" in str(e):
+                raise BrainError("timeout", "%s went quiet for %ss mid-reply -- the answer above is incomplete" % (url, timeout or cfg.timeout))
+            raise BrainError("cut", "%s dropped mid-reply (%s) -- the answer above is incomplete" % (url, e))
     if not done:
         # a severed connection is not an end of stream: readline() answers
         # b"" and the loop simply stops, so half an answer would come back

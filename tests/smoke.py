@@ -134,6 +134,16 @@ class Stub(BaseHTTPRequestHandler):
             # `wraptest` streams a long plain answer to prove the 80-col wrap
             if "count" in user:
                 pieces = (str(len(messages)),)
+            elif "stall" in user:
+                # half an answer, then silence past the client's timeout
+                # (a model that hangs, a server restarted under the reply)
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.end_headers()
+                self.wfile.write(("data: " + json.dumps({"choices": [{"delta": {"content": "Half an "}}]}) + "\n\n").encode())
+                self.wfile.flush()
+                time.sleep(3)
+                return
             elif "wraptest" in user:
                 pieces = tuple("word%02d " % i for i in range(1, 41))
             else:
@@ -3239,6 +3249,12 @@ def main():
         rc, out, err = spark("chat", stdin="count\n:q\n", extra=_col)
         t.ok(rc == 0 and "\033[" not in out + err and "\001" not in out and "\nchat> * " in out,
              "chat piped with the vars set: `chat> ` and the mark stay plain", repr(out + err))
+        # a stream that goes quiet mid-reply is one line, never a traceback
+        rc, out, err = spark("chat", "stall", extra={"SPARK_TIMEOUT": "1"})
+        t.ok(rc != 0 and "Traceback" not in err and "went quiet for 1" in err and "incomplete" in err and out.startswith("* Half an"),
+             "chat: a reply that stalls past SPARK_TIMEOUT ends in one line, the half kept", repr(out + err))
+        rc, out, err = spark("chat", stdin="stall\n:q\n", extra={"SPARK_TIMEOUT": "1"})
+        t.ok(rc == 0 and "Traceback" not in err and err.startswith("spark: http"), "chat REPL: a stalled brain is one line, the chat goes on", repr(err))
         # v1.43: the reveal inside the streaming verbs
         import time as _time
         _p = _Tty()
