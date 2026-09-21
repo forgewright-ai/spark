@@ -3311,7 +3311,8 @@ def main():
         t.ok(_rv.auto_cps(None, turns=[{"tg_tps": 2.0, "tg_n": 10, "chars": 40}]) == 6, "auto_cps: a slow CPU model paces at 6, still smooth")
         t.ok(_rv.auto_cps(None, turns=[{"tg_tps": 10.0, "tg_n": 0, "chars": 0}, {"tg_tps": "x"}]) == 35, "auto_cps: no length recorded -> 4.2 chars a token; junk skipped")
         rc, out, err = spark("chat", "count")
-        _lt = _session.last_turn() if "_session" in dir() else __import__("spark.session", fromlist=["x"]).last_turn()
+        _tf = sorted(glob.glob(home + "/.local/state/spark/turns/*.jsonl"))
+        _lt = json.loads([l for l in open(_tf[-1], encoding="utf-8").read().splitlines() if l.strip()][-1]) if _tf else {}
         t.ok(isinstance(_lt.get("chars"), int) and _lt["chars"] > 0, "a turn records chars (a count, never the text)", repr(_lt))
         rc, out, err = spark("chat", "--reveal", "200", "count", extra=_col)
         rc2, out2, err2 = spark("chat", "count", extra=_col)
