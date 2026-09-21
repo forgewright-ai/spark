@@ -52,13 +52,13 @@ class Stub(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def _sse(self, pieces):
+    def _sse(self, pieces, finish="stop"):
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.end_headers()
         for piece in pieces:
             self.wfile.write(("data: " + json.dumps({"choices": [{"delta": {"content": piece}}]}) + "\n\n").encode())
-        self.wfile.write(("data: " + json.dumps({"choices": [{"delta": {}}], "timings": TIMINGS}) + "\n\n").encode())
+        self.wfile.write(("data: " + json.dumps({"choices": [{"delta": {}, "finish_reason": finish}], "timings": TIMINGS}) + "\n\n").encode())
         self.wfile.write(b"data: [DONE]\n\n")
 
     def do_GET(self):
@@ -146,6 +146,10 @@ class Stub(BaseHTTPRequestHandler):
                 return
             elif "wraptest" in user:
                 pieces = tuple("word%02d " % i for i in range(1, 41))
+            elif "capped" in user:
+                # the server's cap ended the reply: finish_reason length
+                STATE["last_max_tokens"] = body.get("max_tokens")
+                return self._sse(("Half an ", "answer"), finish="length")
             else:
                 pieces = ("The ", "output ", "means ", "X.")
             return self._sse(pieces)
@@ -3249,6 +3253,16 @@ def main():
         rc, out, err = spark("chat", stdin="count\n:q\n", extra=_col)
         t.ok(rc == 0 and "\033[" not in out + err and "\001" not in out and "\nchat> * " in out,
              "chat piped with the vars set: `chat> ` and the mark stay plain", repr(out + err))
+        # a reply the cap ended says so on the screen, not on the thread
+        rc, out, err = spark("chat", "capped")
+        t.ok(rc == 0 and out.startswith("* Half an answer\n! cut at the reply's length -- say: go on\n") and STATE.get("last_max_tokens") == 1200,
+             "chat: a finish_reason of length is a warn line, and chat's cap is 1200", repr(out) + " max_tokens=%r" % STATE.get("last_max_tokens"))
+        rc, out, err = spark("last")
+        t.ok(rc == 0 and "cut at the reply" not in out, "the cut line is not on the thread record", repr(out))
+        rc, out, err = spark("what", "does", "capped", "mean")
+        t.ok(rc == 0 and STATE.get("last_max_tokens") == 600, "an answer outside chat keeps the 600 cap", repr(STATE.get("last_max_tokens")))
+        _got = _wrap("use **`vi`** and **`llama.cpp`**, then `main`.\n", True)
+        t.ok(_got == "use \x1b[1m`vi`\x1b[22m and \x1b[1m`llama.cpp`\x1b[22m, then `main`.\n\n", "Wrap at a tty: a mark before a backtick opens", repr(_got))
         # a stream that goes quiet mid-reply is one line, never a traceback
         rc, out, err = spark("chat", "stall", extra={"SPARK_TIMEOUT": "1"})
         t.ok(rc != 0 and "Traceback" not in err and "went quiet for 1" in err and "incomplete" in err and out.startswith("* Half an"),

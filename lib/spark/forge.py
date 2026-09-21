@@ -700,7 +700,10 @@ def reply(cfg, thread, text, files=(), cwd="", shell="", mode="chat", on_delta=N
         e.thread = thread
 
     try:
-        answer, ms = s.ask_stream(text, context, on_delta_tap)
+        # a conversation gets a longer leash than a line's answer: the
+        # replies people ask for here run long, and a cap that ends one
+        # is said out loud below
+        answer, ms = s.ask_stream(text, context, on_delta_tap, max_tokens=CHAT_TOKENS if mode == "chat" else None)
     except (KeyboardInterrupt, BrokenPipeError, ConnectionResetError) as e:
         land(e)
         raise
@@ -713,6 +716,12 @@ def reply(cfg, thread, text, files=(), cwd="", shell="", mode="chat", on_delta=N
             raise
         land(e)
         raise
+    if (s.timings or {}).get("finish") == "length":
+        # the cap ended the reply, not the model: say so on the screen
+        # (never on the thread -- the record keeps the words that came)
+        from . import glyph
+        tap("\n%s cut at the reply's length -- say: go on" % glyph("warn"))
+        collected.pop()      # said on the screen, not kept on the thread
     s.record(kind="answer", ms=ms, thread=thread)
     st.append(cfg, thread, "user", line, mode=mode, cwd=cwd)
     st.append(cfg, thread, "assistant", answer, kind="answer")
@@ -888,6 +897,7 @@ def _slash_model(cfg, thread, args):
 # /q is not here: QUIT_WORDS is checked first, so it never reaches this dict.
 # Every verb takes (cfg, thread, args) and returns the thread to go on with.
 REVEAL = [0]           # the chat's pace: 0 = as the chunks come (/reveal, --reveal)
+CHAT_TOKENS = 1200     # a conversation's reply cap (a line's answer keeps 600)
 
 
 def _slash_reveal(cfg, thread, args):

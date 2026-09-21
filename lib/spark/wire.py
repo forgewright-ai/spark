@@ -526,6 +526,12 @@ def chat_stream(cfg, url, messages, on_delta, max_tokens=600, temperature=0.3, f
                 if "timings" in chunk:
                     timings = timings_of(chunk)
                 try:
+                    fin = chunk["choices"][0].get("finish_reason")
+                    if fin:
+                        timings["finish"] = fin      # "stop", or "length": the cap ended it
+                except (KeyError, IndexError, TypeError, AttributeError):
+                    pass
+                try:
                     delta = chunk["choices"][0]["delta"].get("content") or ""
                 except (KeyError, IndexError, TypeError):
                     continue

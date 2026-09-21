@@ -112,7 +112,7 @@ class Wrap:
             return
         # left-flanking opens (a letter after, no letter before), right-
         # flanking closes (a letter before, none after): 2*3*4 stays
-        opens = (nxt.isalnum() or nxt in "\"'([") and not self.prev.isalnum()
+        opens = (nxt.isalnum() or nxt in "\"'([`") and not self.prev.isalnum()
         closes = self.prev != "" and not self.prev.isspace() and not nxt.isalnum()
         kinds = [("bold", 2)] if run == "**" else [("em", 1)] if run == "*" else [("bold", 2), ("em", 1)]
         for kind, width in kinds:
