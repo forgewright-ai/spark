@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.42
+
+- A reply's Markdown is drawn at a terminal instead of printed raw:
+  `**bold**` and a `# heading` line as bold, an `*emphasis*` as plain
+  text, the marks dropped only when they flank a word (`*.txt`, `**/`,
+  `2*3*4` and `_names_` pass through), and a ``` fence opens a block
+  that passes through whole, marks and all, until the closing fence.
+  Piped, the bytes are the model's, as before. Models keep sending
+  marks however the persona asks; the terminal now reads them.
+
 ## v1.41
 
 - Colour at the prompt, from the shell layer: three optional

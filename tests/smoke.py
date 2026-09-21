@@ -3198,6 +3198,36 @@ def main():
             for k in ("SPARK_ACCENT_SGR", "SPARK_MUTED_SGR", "SPARK_WARN_SGR"):
                 os.environ.pop(k, None)
             os.environ.update(_saved)
+        # v1.42: a reply's Markdown drawn at a tty, raw when piped; a fence
+        # passes through whole
+        import io as _io
+        from spark import text as _tx2
+
+        class _Tty(_io.StringIO):
+            def isatty(self):
+                return True
+
+        def _wrap(src, tty, width=200, step=3):
+            out = _Tty() if tty else _io.StringIO()
+            w = _tx2.Wrap(out, mark=False)
+            w.width = width
+            for i in range(0, len(src), step):        # streamed in small chunks
+                w.feed(src[i:i + step])
+            w.close()
+            return out.getvalue()
+        _md = ("From *Camellia sinensis* leaves.\n- **How it's made**: heated.\n## Varieties\n"
+               "Keep *.txt and **/ and _names_ and 2*3*4 alone.\n```\n**not** rendered *here*\n"
+               "    indented **stays**\n```\nAfter **bold again**.\n#### four stay\n**unclosed to the end\n")
+        _got = _wrap(_md, True)
+        t.ok(_got.startswith("From Camellia sinensis leaves.\n- \x1b[1mHow it's made\x1b[22m: heated.\n\x1b[1mVarieties\x1b[0m\n"),
+             "Wrap at a tty: *em* plain, **bold** bold, a # heading bold", repr(_got[:120]))
+        t.ok("Keep *.txt and **/ and _names_ and 2*3*4 alone." in _got, "Wrap at a tty: marks that flank no word pass through", repr(_got))
+        t.ok("```\n**not** rendered *here*\n    indented **stays**\n```\nAfter \x1b[1mbold again\x1b[22m." in _got,
+             "Wrap at a tty: a fenced block passes through whole, marks and all", repr(_got))
+        t.ok("#### four stay\n\x1b[1munclosed to the end\x1b[0m\n" in _got, "Wrap at a tty: four hashes stay; an unclosed bold ends with the line", repr(_got[-80:]))
+        t.ok(_wrap(_md, False) == _md + "\n", "Wrap piped: the model's bytes, not a mark touched")
+        _w = _wrap("with **a long bold phrase that must wrap** cleanly at forty\n", True, width=40)
+        t.ok(_w == "with \x1b[1ma long bold phrase that must wrap\x1b[22m\ncleanly at forty\n\n", "Wrap at a tty: the width counts glyphs, never escapes (38 visible fit in 40)", repr(_w))
         # every piped path is byte-identical with the vars set: no escape
         # reaches a pipe, the chat prompt stays `chat> `, do's marks stay
         # bare; SPARK_HINT_ROW=1 with no controlling terminal (a new

@@ -69,7 +69,14 @@ describes how things are, not how they came to be.
   is today's, byte for byte. An input() prompt (`chat> `) is painted
   only under GNU readline, bracketed in `\001`/`\002`; libedit counts
   the escape bytes as columns, so there it stays plain. Every animation frame (`text.Busy`, the
-  pulse while a reply is on its way) is ASCII.
+  pulse while a reply is on its way) is ASCII. A reply's Markdown is
+  drawn at a tty, never stripped blind: `text.Wrap` renders `**bold**`
+  as bold and a `# heading` line as bold, drops the `*` marks of an
+  emphasis, and only when they flank a word (a letter after an opening
+  mark and none before it; the reverse to close) -- `*.txt`, `**/`,
+  `2*3*4` and `_names_` pass through; a ``` fence opens a block that
+  passes through whole, marks and all, until the closing fence. Piped,
+  the bytes are the model's.
   Text in is strict UTF-8 as well: stdin is decoded with the replacement
   mark (`text.stdin_text`), and every string bound for the wire or a
   store -- a thread, the ledger, a turn record -- goes through

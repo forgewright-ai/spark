@@ -13,6 +13,8 @@ import time
 
 from . import glyph, paint
 
+SGR_RE = re.compile(r"\x1b\[[0-9;]*m")
+
 
 class Wrap:
     """feed(delta) a chunk at a time; close() when the stream ends. Width is
@@ -33,6 +35,17 @@ class Wrap:
         self.line_head = ""       # a line's first chars, while undecided
         self.deciding = True      # still buffering line_head
         self.verbatim = False     # this line passes through unwrapped
+        # Markdown, drawn at a tty (raw when piped): `**bold**` as bold and
+        # `*em*` as plain, a `# heading` line bold, marks dropped only when
+        # they open before a letter and close after one (`*.txt`, `**/`
+        # pass through); a ``` fence opens a block that passes through whole
+        self.render = stream.isatty()
+        self.fenced = False       # inside ``` ... ```: every line verbatim
+        self.stars = ""           # a run of `*` waiting for the char after
+        self.prev = ""            # the char before that run
+        self.bold = False
+        self.em = False
+        self.heading = False
 
     def _start(self):
         if not self.started:
@@ -47,17 +60,49 @@ class Wrap:
         if not w:
             return
         self._start()
+        n = len(SGR_RE.sub("", w))          # what is visible, never the escapes
         if self.need_space:
-            if self.col + 1 + len(w) > self.width - 1:
+            if self.col + 1 + n > self.width - 1:
                 self.stream.write("\n")
                 self.col = 0
             else:
                 self.stream.write(" ")
                 self.col += 1
         self.stream.write(w)
-        self.col += len(w)
+        self.col += n
         self.need_space = True
         self.stream.flush()
+
+    # --- the marks: a run of `*` is decided by the char after it
+    def _stars_out(self, nxt):
+        run, self.stars = self.stars, ""
+        if not self.render or not run or len(run) > 3:
+            self.word += run
+            return
+        # left-flanking opens (a letter after, no letter before), right-
+        # flanking closes (a letter before, none after): 2*3*4 stays
+        opens = (nxt.isalnum() or nxt in "\"'([") and not self.prev.isalnum()
+        closes = self.prev != "" and not self.prev.isspace() and not nxt.isalnum()
+        kinds = [("bold", 2)] if run == "**" else [("em", 1)] if run == "*" else [("bold", 2), ("em", 1)]
+        for kind, width in kinds:
+            on = getattr(self, kind)
+            if not on and opens:
+                setattr(self, kind, True)
+                if kind == "bold":
+                    self.word += "\033[1m"
+            elif on and closes:
+                setattr(self, kind, False)
+                if kind == "bold" and not self.heading:
+                    self.word += "\033[22m"
+            else:
+                self.word += "*" * width
+
+    def _reset_marks(self):
+        if self.render and (self.bold or self.heading):
+            self.stream.write("\033[0m")
+        self.bold = self.em = self.heading = False
+        self.stars = ""
+        self.prev = ""
 
     def _char(self, ch):
         if self.verbatim:
@@ -66,6 +111,13 @@ class Wrap:
             self.col += 1
             self.stream.flush()
             return
+        if ch == "*" and self.render:
+            if not self.stars:
+                self.prev = self.word[-1:] if self.word else " "
+            self.stars += ch
+            return
+        if self.stars:
+            self._stars_out(ch)
         if ch == " ":
             if self.word:
                 self._word_out(self.word)
@@ -80,10 +132,13 @@ class Wrap:
             pending, self.line_head = self.line_head, ""
             for ch in pending:
                 self._char(ch)
+        if self.stars:
+            self._stars_out("\n")
         if self.word:
             self._word_out(self.word)
             self.word = ""
         self._start()
+        self._reset_marks()
         self.stream.write("\n")
         self.stream.flush()
         self.col = 0
@@ -101,12 +156,40 @@ class Wrap:
                 self.line_head += ch
                 spaces = self.line_head == " " * len(self.line_head)
                 fence = self.line_head == "`" * len(self.line_head)
-                if spaces and len(self.line_head) < 4:
+                if self.fenced:
+                    # inside a fence every line is verbatim; three
+                    # backticks at the start close it
+                    if fence and len(self.line_head) < 3:
+                        continue
+                    self.deciding = False
+                    self.verbatim = True
+                    if fence:
+                        self.fenced = False
+                    pending, self.line_head = self.line_head, ""
+                    self._start()
+                    self.stream.write(pending)
+                    self.col += len(pending)
+                    self.stream.flush()
                     continue
-                if fence and len(self.line_head) < 3:
+                head = self.line_head
+                hashes = head.rstrip(" ") == "#" * len(head.rstrip(" ")) and 0 < len(head.rstrip(" ")) <= 3
+                if spaces and len(head) < 4:
+                    continue
+                if fence and len(head) < 3:
+                    continue
+                if self.render and hashes and not head.endswith(" ") and len(head) <= 3:
                     continue
                 self.deciding = False
+                if self.render and hashes and head.endswith(" "):
+                    # a heading: the marks go, the line is bold
+                    self.heading = True
+                    self.line_head = ""
+                    self._start()
+                    self.stream.write("\033[1m")
+                    continue
                 self.verbatim = spaces or fence
+                if fence:
+                    self.fenced = True
                 pending, self.line_head = self.line_head, ""
                 if self.verbatim:
                     self._start()
@@ -125,10 +208,13 @@ class Wrap:
             pending, self.line_head = self.line_head, ""
             for ch in pending:
                 self._char(ch)
+        if self.stars:
+            self._stars_out("\n")
         if self.word:
             self._word_out(self.word)
             self.word = ""
         self._start()
+        self._reset_marks()
         self.stream.write("\n")
         self.stream.flush()
 
