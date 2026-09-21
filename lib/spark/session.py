@@ -79,6 +79,27 @@ def clear():
     return n
 
 
+def recent_turns(n=8):
+    """The newest n turn records, newest first, across today's and the
+    days before (the JSONL files sorted by name); [] when none."""
+    out = []
+    try:
+        names = sorted(x for x in os.listdir(TURNS_DIR) if x.endswith(".jsonl"))
+        for name in reversed(names):
+            with open(os.path.join(TURNS_DIR, name), encoding="utf-8") as f:
+                lines = [l for l in f.read().splitlines() if l.strip()]
+            for line in reversed(lines):
+                try:
+                    out.append(json.loads(line))
+                except ValueError:
+                    continue
+                if len(out) >= n:
+                    return out
+    except OSError:
+        pass
+    return out
+
+
 def last_turn():
     try:
         names = sorted(n for n in os.listdir(TURNS_DIR) if n.endswith(".jsonl"))

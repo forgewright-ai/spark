@@ -3290,17 +3290,42 @@ def main():
         t.ok(_time.monotonic() - _t0 < 0.1 and _q.getvalue() == "thirty characters go here now.\n\n", "Wrap cps piped: no pace at all")
         from spark import cli as _cli
         t.ok(_cli.reveal_flag(["a", "b"]) == (["a", "b"], 0) and _cli.reveal_flag(["--reveal", "40", "x"]) == (["x"], 40)
-             and _cli.reveal_flag(["x", "--reveal"]) == (["x"], 30) and _cli.reveal_flag(["--reveal", "words", "here"]) == (["words", "here"], 30),
-             "reveal_flag: no flag 0; a number after it; the default 30 otherwise")
+             and _cli.reveal_flag(["x", "--reveal"]) == (["x"], "auto") and _cli.reveal_flag(["--reveal", "off", "w"]) == (["w"], 0)
+             and _cli.reveal_flag(["--reveal", "words", "here"]) == (["words", "here"], "auto"),
+             "reveal_flag: no flag = the standing choice (off); N, auto, off after it")
+        os.environ["SPARK_REVEAL"] = "auto"
+        t.ok(_cli.reveal_flag(["a"]) == (["a"], "auto"), "SPARK_REVEAL=auto is a choice, not the default")
+        _saved_rv = os.environ.pop("SPARK_REVEAL", None)
+        os.environ["SPARK_REVEAL"] = "off"
+        t.ok(_cli.reveal_flag(["a"]) == (["a"], 0), "SPARK_REVEAL=off is the standing choice")
+        os.environ["SPARK_REVEAL"] = "25"
+        t.ok(_cli.reveal_flag(["a"]) == (["a"], 25), "SPARK_REVEAL=25 is the standing choice")
+        os.environ.pop("SPARK_REVEAL", None)
+        if _saved_rv is not None:
+            os.environ["SPARK_REVEAL"] = _saved_rv
+        from spark import reveal as _rv
+        t.ok(_rv.auto_cps(None, turns=[]) == 30, "auto_cps: nothing measured -> 30")
+        t.ok(_rv.auto_cps(None, turns=[{"tg_tps": 8.0, "tg_n": 100, "chars": 420}]) == 28,
+             "auto_cps: 8 tok/s x 4.2 chars/token = 33.6 cps -> 85%% = 28", _rv.auto_cps(None, turns=[{"tg_tps": 8.0, "tg_n": 100, "chars": 420}]))
+        t.ok(_rv.auto_cps(None, turns=[{"tg_tps": 60.0, "tg_n": 50, "chars": 200}]) == 40, "auto_cps: a fast model is capped at a reader's 40")
+        t.ok(_rv.auto_cps(None, turns=[{"tg_tps": 2.0, "tg_n": 10, "chars": 40}]) == 6, "auto_cps: a slow CPU model paces at 6, still smooth")
+        t.ok(_rv.auto_cps(None, turns=[{"tg_tps": 10.0, "tg_n": 0, "chars": 0}, {"tg_tps": "x"}]) == 35, "auto_cps: no length recorded -> 4.2 chars a token; junk skipped")
+        rc, out, err = spark("chat", "count")
+        _lt = _session.last_turn() if "_session" in dir() else __import__("spark.session", fromlist=["x"]).last_turn()
+        t.ok(isinstance(_lt.get("chars"), int) and _lt["chars"] > 0, "a turn records chars (a count, never the text)", repr(_lt))
         rc, out, err = spark("chat", "--reveal", "200", "count", extra=_col)
         rc2, out2, err2 = spark("chat", "count", extra=_col)
         t.ok(rc == 0 and rc2 == 0 and out.startswith("* ") and "\033[" not in out + err and len(out.splitlines()) == len(out2.splitlines()),
              "chat --reveal piped: the same shape as chat without it, no pace, no escape", repr(out))
         rc, out, err = spark("chat", "--reveal", "999", "count")
         t.ok(rc != 0 and "5..200" in out + err, "chat --reveal 999: refused, the range named", repr(out + err))
-        rc, out, err = spark("chat", stdin="/reveal 50\n/reveal x\n/reveal off\n:q\n")
-        t.ok(rc == 0 and "at 50 characters a second" in out and "/reveal takes a number" in out and "as they are made" in out,
-             "/reveal 50, /reveal x, /reveal off inside chat", repr(out))
+        rc, out, err = spark("chat", stdin="/reveal 50\n/reveal x\n/reveal off\n/reveal\n/reveal auto\n:q\n")
+        t.ok(rc == 0 and "at 50 characters a second" in out and "/reveal takes a number" in out and "as they are made" in out
+             and "the model writes" in out and "characters a second" in out and "never waits on it (auto = " in out and "now: off" in out
+             and "at the measured threshold" in out,
+             "/reveal 50, x, off, bare (the benchmark), auto inside chat", repr(out))
+        rc, out, err = spark("stats")
+        t.ok(rc == 0 and "  pace        the model writes" in out and "never waits on it" in out, "spark stats: the pace lines (what the model writes, the threshold)", repr(out))
         rc, out, err = spark("what", "does", "this", "mean", extra=_col)
         t.ok(rc == 0 and "\033[" not in out + err and out.startswith("* "), "an answer piped with the vars set: no escape", repr(out + err))
         rc, out, err = spark("explain", stdin="ls: cannot access 'x': No such file\n", extra=_col)

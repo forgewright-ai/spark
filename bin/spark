@@ -50,7 +50,7 @@ spark
                               then one line quoting it (-h)
  spark reveal [CPS]           stdin at a reader's pace, letter by letter at
                               a terminal; an exact copy anywhere else (-h);
-                              chat/explain/words take --reveal [CPS] too
+                              chat/explain/words: --reveal [N|auto|off]
  try:
  ? words or words? ENTER      the command lands in your line, hint above
  ?? words ENTER               follow up on the last answer (same thread)

@@ -51,6 +51,18 @@ describes how things are, not how they came to be.
   The personal words are not published either: they live in
   `~/.config/spark/privacy-terms` (or `SPARK_PRIVACY_TERMS`), 0600, one per
   line, and the hook and the `privacy` row read the union of both lists.
+- **Two paces.** A conversation can be paced for the reader; the
+  prompt line is speed alone. Where a person reads a reply as it comes
+  (chat, explain, a bare question) spark measures what the model
+  writes (the newest turns' tokens a second and characters a token,
+  `reveal.measured`) and offers the threshold a reveal stays under so
+  the hand never waits and never bursts (`reveal.auto_cps`: 85% of it,
+  a reader's 40 a second at most) -- `spark stats` and a bare `/reveal`
+  show the numbers. The choice is the reader's, never imposed:
+  `--reveal N|auto|off`, `/reveal`, `SPARK_REVEAL`; off (as the chunks
+  come) is the default. Where a person is typing commands (the widget's
+  line, `spark do`'s steps) nothing is paced: the answer lands as fast
+  as it exists. Piped, nothing is paced anywhere.
 - **Text-first.** Plain-text output that pipes; `--porcelain` for machines;
   no curses; keyboard-only. Long output pages at a terminal (`$PAGER`, else
   `less`; `page()`/`paged()` in `lib/spark/__init__.py`) and is always
@@ -375,7 +387,7 @@ may change freely.
    `spark.env` -- `SPARK_PORT SPARK_BASE_URL SPARK_PREFER_URL SPARK_SERVE_HOST
    SPARK_ENGINE_DIR SPARK_MODELS_DIR SPARK_MODEL SPARK_NGL SPARK_CTX
    SPARK_FLASH_ATTN SPARK_KV SPARK_THREADS SPARK_EXTRA_ARGS SPARK_MEM_NEEDED_GB
-   SPARK_API_KEY_FILE SPARK_TIMEOUT SPARK_MAX_TOKENS SPARK_HISTORY SPARK_MEMORY SPARK_SERVICE
+   SPARK_API_KEY_FILE SPARK_TIMEOUT SPARK_MAX_TOKENS SPARK_REVEAL SPARK_HISTORY SPARK_MEMORY SPARK_SERVICE
    SPARK_FORGE SPARK_FORGE_HOST SPARK_FORGE_PORT SPARK_FORGE_TOKEN_FILE`
    (`SPARK_PERSONA_EXTRA` is still read, as the soul's fallback, in this
    version only; the `soul` row warns while it is set);

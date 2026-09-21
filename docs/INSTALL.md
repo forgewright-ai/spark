@@ -637,6 +637,7 @@ lists them all); the ones with a verb:
 | key | values | default |
 |---|---|---|
 | `SPARK_MEMORY` | `on`/`off`: send the remembered facts -- `spark memory on\|off` | `on` |
+| `SPARK_REVEAL` | `off`/`auto`/N: a reply's pace at a terminal (chat, explain, a question) -- `--reveal` on the verb, `/reveal` in chat; `spark stats` shows the measured threshold | `off` |
 | `SPARK_FORGE` | `auto`/`on`/`off`: serve the page and the API -- `spark forge on\|off` | `auto` |
 | `SPARK_FORGE_HOST` / `SPARK_FORGE_PORT` | the address and port (never `0.0.0.0`) | the LAN address / `8081` |
 | `SPARK_HISTORY` | days of turns and threads kept; `off` keeps none | `30` |

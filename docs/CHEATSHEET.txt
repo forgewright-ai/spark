@@ -24,8 +24,9 @@ SPARK
                                   quoting it (tail -f, journalctl -f)
   ... | spark reveal [CPS]        the answer letter by letter at a reader's
                                   pace (default 30 a second); only at a tty
-  spark chat --reveal [CPS]       the same pace inside chat (/reveal [CPS|off]
-                                  at the prompt), explain and words too
+  spark chat --reveal [N|auto|off]  a reply's pace at a terminal: N a second,
+                                  auto (the measured threshold), off (as it
+                                  comes); /reveal in chat shows the numbers
   spark edit --watch FILE         comment on a draft as you save it
   spark history [clear]           the threads kept here; clear removes them
   try:

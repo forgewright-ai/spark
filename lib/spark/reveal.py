@@ -17,6 +17,70 @@ import time
 
 CPS_DEFAULT = 30        # ~350 words a minute at six characters a word
 CPS_MIN, CPS_MAX = 5, 200
+READ_CPS = 40           # the ceiling of `auto`: a reader's pace, ~450 words a minute
+MODEL_SHARE = 0.85      # `auto` stays under the model's own pace, so the hand never waits
+CHARS_PER_TOKEN = 4.2   # the fallback when a turn recorded no length
+
+
+def measured(turns):
+    """(tokens a second, characters a token, turns counted) over the
+    given turn records; (0, CHARS_PER_TOKEN, 0) when none carry a speed."""
+    tps, cpt, n = 0.0, 0.0, 0
+    for t in turns:
+        try:
+            r = float(t.get("tg_tps") or 0)
+            k = int(t.get("tg_n") or 0)
+            c = int(t.get("chars") or 0)
+        except (TypeError, ValueError, AttributeError):
+            continue
+        if r <= 0:
+            continue
+        tps += r
+        cpt += (c / k) if (k > 0 and c > 0) else CHARS_PER_TOKEN
+        n += 1
+    if n == 0:
+        return 0.0, CHARS_PER_TOKEN, 0
+    return tps / n, cpt / n, n
+
+
+def pace_report(cfg, current=None):
+    """The benchmark, as lines: what the model writes (characters a
+    second, from its newest turns), the threshold a smooth reveal stays
+    under, and what is chosen now. The choice is the reader's."""
+    from . import session
+    tps, cpt, n = measured(session.recent_turns(8))
+    if n == 0:
+        return ["no turn measured yet -- ask something first; a reveal without a measure is %d a second" % CPS_DEFAULT]
+    model_cps = tps * cpt
+    thr = auto_cps(cfg)
+    lines = ["the model writes %.0f characters a second (%.1f tokens a second, %.1f characters a token, %d turns)" % (model_cps, tps, cpt, n),
+             "under %d a second a reveal never waits on it (auto = %d); above, the model's own pauses show" % (int(model_cps * MODEL_SHARE), thr)]
+    if current is not None:
+        if current == "auto":
+            now = "auto (%d a second)" % thr
+        elif current:
+            now = "%d a second" % current
+        else:
+            now = "off -- the replies as they come"
+        lines.append("now: %s (/reveal N | auto | off; SPARK_REVEAL for the standing choice)" % now)
+    return lines
+
+
+def auto_cps(cfg, turns=None):
+    """The pace of `auto`, from the model's own measured speed: the
+    newest turns of the answering model (today's and yesterday's JSONL,
+    tokens a second and characters a token as they were recorded), scaled
+    to MODEL_SHARE so the writer always has text in hand, capped at
+    READ_CPS so a fast model still reads like a hand; CPS_DEFAULT when
+    nothing was measured yet. A threshold offered, never imposed: the
+    reader picks off, auto or a number (the prompt line never streams,
+    so it is never asked there)."""
+    from . import session
+    tps, cpt, n = measured(turns if turns is not None else session.recent_turns(8))
+    if n == 0:
+        return CPS_DEFAULT
+    cps = int(min(READ_CPS, tps * cpt * MODEL_SHARE))
+    return max(CPS_MIN, min(CPS_MAX, cps))
 
 USAGE = """spark reveal -- stdin to stdout, letter by letter at a reader's pace
 

@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.44
+
+- Two paces, a principle (CLAUDE.md): a conversation can be paced for
+  the reader, the prompt line is speed alone. The benchmark: a turn
+  records `chars` now (a count), so `spark stats` and a bare `/reveal`
+  in chat say what the model writes (characters a second, from its
+  newest turns) and the threshold a reveal stays under to never wait on
+  it (85% of that, a reader's 40 a second at most). The choice stays
+  yours: `--reveal N|auto|off` on chat, explain and a bare question,
+  `/reveal N|auto|off` in chat, `SPARK_REVEAL` in spark.env for the
+  standing one; `auto` is that threshold, off (as the chunks come)
+  stays the default. The widget's line and `spark do` are untouched.
+
 ## v1.43
 
 - The reveal inside the streaming verbs: `spark chat --reveal [CPS]`,

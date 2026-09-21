@@ -23,7 +23,7 @@ SITE_KEYS = ("SITE_NAME", "SITE_USER", "SITE_SET_HOSTNAME",
 SPARK_KEYS = ("SPARK_PORT", "SPARK_BASE_URL", "SPARK_PREFER_URL", "SPARK_SERVE_HOST", "SPARK_ENGINE_DIR",
               "SPARK_MODELS_DIR", "SPARK_MODEL", "SPARK_NGL", "SPARK_CTX", "SPARK_FLASH_ATTN", "SPARK_KV",
               "SPARK_THREADS", "SPARK_EXTRA_ARGS", "SPARK_MEM_NEEDED_GB", "SPARK_API_KEY_FILE",
-              "SPARK_TIMEOUT", "SPARK_MAX_TOKENS", "SPARK_HISTORY", "SPARK_MEMORY", "SPARK_PERSONA_EXTRA", "SPARK_SERVICE",
+              "SPARK_TIMEOUT", "SPARK_MAX_TOKENS", "SPARK_REVEAL", "SPARK_HISTORY", "SPARK_MEMORY", "SPARK_PERSONA_EXTRA", "SPARK_SERVICE",
               "SPARK_FORGE", "SPARK_FORGE_HOST", "SPARK_FORGE_PORT", "SPARK_FORGE_TOKEN_FILE")
 KEYS = SITE_KEYS + SPARK_KEYS
 
@@ -300,6 +300,26 @@ class Config:
             return float(self.get("SPARK_TIMEOUT", "20"))
         except ValueError:
             die("SPARK_TIMEOUT is not a number", 2)
+
+    @property
+    def reveal(self):
+        """The standing pace of a reply at a terminal (chat, explain, a
+        bare question): 0 for off (the default: as the chunks come),
+        "auto" (the measured threshold, reveal.auto_cps) or N characters
+        a second. SPARK_REVEAL in spark.env; --reveal on the verb wins."""
+        from . import reveal
+        word = self.get("SPARK_REVEAL", "off").strip() or "off"
+        if word == "auto":
+            return "auto"
+        if word == "off":
+            return 0
+        try:
+            n = int(word)
+        except ValueError:
+            n = -1
+        if not reveal.CPS_MIN <= n <= reveal.CPS_MAX:
+            die("SPARK_REVEAL is auto, off, or a number %d..%d" % (reveal.CPS_MIN, reveal.CPS_MAX), 2)
+        return n
 
     @property
     def max_tokens(self):

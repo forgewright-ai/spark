@@ -204,6 +204,12 @@ def _report(argv):
             for k, v in by.items():
                 ss = summarise(v)
                 say("    %-44s %3d turns, %.1f tok/s" % (k, ss["turns"], ss["tg_mean"]))
+    # the pace a reader can choose against: what the model writes, the
+    # threshold a reveal stays under to never wait on it
+    if s["turns"]:
+        from . import reveal
+        for ln in reveal.pace_report(cfg, cfg.reveal)[:2]:
+            say("  pace        %s" % ln)
     if base:
         line = "  baseline    %.1f tok/s generate, %.1f prompt (spark bench, %s)" % (base["tg"], base["pp"], base["ts"][:10])
         bstem = base.get("model", "")

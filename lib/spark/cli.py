@@ -35,8 +35,10 @@ EXPLAIN_USAGE = """spark explain -- what went wrong in the piped output, and the
 
   cmd 2>&1 | explain [words]  reads stdin (the last 6 kB); explain on PATH
                               is a symlink to spark
-  --reveal [CPS]              the answer at a reader's pace, letter by
-                              letter (spark reveal's CPS); a tty only
+  --reveal [N|auto|off]       the pace of the answer at a terminal: N a
+                              second, auto (the measured threshold), off
+                              (as it comes, the default); spark stats
+                              shows the numbers
 """
 LAST_USAGE = """spark last -- the last exchange, with its tok/s
 
@@ -393,27 +395,40 @@ def _stdin_context():
 
 
 def reveal_flag(args):
-    """`--reveal [CPS]` anywhere in args -> (args without it, cps): the
-    number after it when there is one (reveal's 5..200, else a refusal
-    exit 2 via die), else SPARK_REVEAL_CPS, else reveal's default; no
-    flag -> 0 (as the chunks come). Piped, the wrap ignores cps anyway."""
+    """`--reveal [N|auto|off]` anywhere in args -> (args without it, pace):
+    the word after it when it is one of those (N in reveal's 5..200,
+    else a refusal, exit 2), `auto` with no word; no flag -> the
+    standing choice, SPARK_REVEAL in spark.env (off by default). The
+    pace is "auto", 0 (off) or N; stream_turn resolves auto at the turn.
+    Piped, the wrap ignores it anyway."""
     from . import reveal
     args = list(args)
     if "--reveal" not in args:
-        return args, 0
+        return args, config.load().reveal
     i = args.index("--reveal")
-    cps = os.environ.get("SPARK_REVEAL_CPS", "") or str(reveal.CPS_DEFAULT)
+    word = "auto"
     rest = args[:i] + args[i + 1:]
-    if i < len(args) - 1 and args[i + 1].isdigit():
-        cps = args[i + 1]
+    if i < len(args) - 1 and (args[i + 1].isdigit() or args[i + 1] in ("auto", "off")):
+        word = args[i + 1]
         rest = args[:i] + args[i + 2:]
+    return rest, reveal_word(word, lambda m: die(m))
+
+
+def reveal_word(word, refuse):
+    """auto -> "auto", off -> 0, N -> N within reveal's range; anything
+    else -> refuse(message), whose return is handed back."""
+    from . import reveal
+    if word == "auto":
+        return "auto"
+    if word == "off":
+        return 0
     try:
-        n = int(cps)
+        n = int(word)
     except ValueError:
         n = -1
     if not reveal.CPS_MIN <= n <= reveal.CPS_MAX:
-        die("--reveal takes a number, %d..%d characters a second" % (reveal.CPS_MIN, reveal.CPS_MAX))
-    return rest, n
+        return refuse("--reveal takes auto, off, or a number %d..%d (characters a second)" % (reveal.CPS_MIN, reveal.CPS_MAX))
+    return n
 
 
 def stream_turn(cfg, mode, text, files=(), context="", thread=None, line=None, mark=True, cps=0):
@@ -423,6 +438,9 @@ def stream_turn(cfg, mode, text, files=(), context="", thread=None, line=None, m
     the thread id. RefError, BrainError and KeyboardInterrupt pass through
     -- the wrap is closed first so a half-printed answer still ends in a
     newline; forge.reply keeps the raw text for the thread record."""
+    if cps == "auto":
+        from . import reveal
+        cps = reveal.auto_cps(cfg)
     wrap = textmod.Wrap(sys.stdout, mark=mark, cps=cps)
     # the pulse on stderr from the request until the first chunk (a tty
     # only: piped, nothing is drawn); the wrap's mark takes over from it

@@ -721,7 +721,9 @@ def reply(cfg, thread, text, files=(), cwd="", shell="", mode="chat", on_delta=N
         from . import glyph
         tap("\n%s cut at the reply's length -- say: go on" % glyph("warn"))
         collected.pop()      # said on the screen, not kept on the thread
-    s.record(kind="answer", ms=ms, thread=thread)
+    # chars is a count, never the text: with tg_n it is this model's
+    # characters a token, what `auto` paces a reply by
+    s.record(kind="answer", ms=ms, thread=thread, chars=len(answer))
     st.append(cfg, thread, "user", line, mode=mode, cwd=cwd)
     st.append(cfg, thread, "assistant", answer, kind="answer")
     return thread, answer, ms
@@ -789,9 +791,15 @@ CHAT_USAGE = """%s chat -- a conversation
                                  or spark history list (1 = newest), or a
                                  literal thread id
   spark chat                     a conversation at the `chat> ` prompt
-  spark chat --reveal [CPS]      the replies at a reader's pace, letter by
-                                 letter (spark reveal's CPS, default 30;
-                                 a tty only); /reveal [CPS|off] inside
+  spark chat --reveal [N|auto|off]
+                                 the pace of a reply at a terminal: N
+                                 characters a second, auto (the measured
+                                 threshold: under the model's own speed,
+                                 a reader's 40 at most), off (as the chunks
+                                 come, the default); /reveal inside shows
+                                 the numbers, /reveal N|auto|off sets it;
+                                 SPARK_REVEAL in spark.env is the standing
+                                 choice
 
   Inside it: @FILE words asks about a file; /help lists the verbs (/new,
   /resume, /clear, /last, /model, /reveal); /q (or /quit, /exit, :q, quit,
@@ -825,7 +833,8 @@ def _slash_help(cfg, thread, args):
     say("/clear   wipe the screen; the thread goes on")
     say("/last    the last turn, with its tok/s")
     say("/model   which model is answering")
-    say("/reveal  [CPS|off] the replies letter by letter, at CPS a second")
+    say("/reveal  bare: the model's measured pace and the threshold under it;")
+    say("         N | auto | off sets the pace of the replies (off = as they come)")
     say("/q       end the conversation (Ctrl-D works too)")
     return thread
 
@@ -895,26 +904,35 @@ def _slash_model(cfg, thread, args):
 
 # /q is not here: QUIT_WORDS is checked first, so it never reaches this dict.
 # Every verb takes (cfg, thread, args) and returns the thread to go on with.
-REVEAL = [0]           # the chat's pace: 0 = as the chunks come (/reveal, --reveal)
+REVEAL = [0]           # the chat's pace: 0 (as the chunks come, the default) | auto | N (/reveal, --reveal, SPARK_REVEAL)
 
 
 def _slash_reveal(cfg, thread, args):
     from . import MARK, reveal, say
-    word = args[0] if args else ""
+    if not args:
+        # the benchmark: what the model writes, the threshold under it,
+        # and what this chat does now -- the choice stays yours
+        for ln in reveal.pace_report(cfg, REVEAL[0]):
+            say("%s: %s" % (MARK, ln))
+        return thread
+    word = args[0]
     if word == "off":
         REVEAL[0] = 0
         say("%s: the replies come as they are made" % MARK)
         return thread
-    cps = word or os.environ.get("SPARK_REVEAL_CPS", "") or str(reveal.CPS_DEFAULT)
+    if word == "auto":
+        REVEAL[0] = "auto"
+        say("%s: the replies at the measured threshold (%d a second now; /reveal shows the numbers)" % (MARK, reveal.auto_cps(cfg)))
+        return thread
     try:
-        n = int(cps)
+        n = int(word)
     except ValueError:
         n = -1
     if not reveal.CPS_MIN <= n <= reveal.CPS_MAX:
-        say("%s: /reveal takes a number, %d..%d characters a second, or off" % (MARK, reveal.CPS_MIN, reveal.CPS_MAX))
+        say("%s: /reveal takes a number, %d..%d characters a second, auto, or off" % (MARK, reveal.CPS_MIN, reveal.CPS_MAX))
         return thread
     REVEAL[0] = n
-    say("%s: the replies at %d characters a second (/reveal off ends it)" % (MARK, n))
+    say("%s: the replies at %d characters a second (/reveal auto or off)" % (MARK, n))
     return thread
 
 
