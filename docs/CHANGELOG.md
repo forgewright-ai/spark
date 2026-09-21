@@ -15,8 +15,11 @@
   not (seen on the box when spark-serve was restarted under a chat).
 - A reply the cap ended says so: `! cut at the reply's length -- say:
   go on` on the screen (the thread keeps the words that came, not the
-  line), read from the server's `finish_reason`. A conversation's cap
-  is 1200 tokens now (`forge.CHAT_TOKENS`); a line's answer keeps 600.
+  line), read from the server's `finish_reason`. The cap of the three
+  streaming verbs (chat, explain, a bare question) is 1200 tokens now,
+  `SPARK_MAX_TOKENS` in spark.env sets another (50..32000); 600 dated
+  from the 1.7B days. The line's JSON answer and the editor verbs keep
+  their own caps.
 - A mark before a backtick opens (`**`vi`**` is bold now, not raw).
 
 ## v1.42

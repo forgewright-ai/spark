@@ -3260,7 +3260,11 @@ def main():
         rc, out, err = spark("last")
         t.ok(rc == 0 and "cut at the reply" not in out, "the cut line is not on the thread record", repr(out))
         rc, out, err = spark("what", "does", "capped", "mean")
-        t.ok(rc == 0 and STATE.get("last_max_tokens") == 600, "an answer outside chat keeps the 600 cap", repr(STATE.get("last_max_tokens")))
+        t.ok(rc == 0 and STATE.get("last_max_tokens") == 1200, "a bare question has the same 1200 cap", repr(STATE.get("last_max_tokens")))
+        rc, out, err = spark("what", "does", "capped", "mean", extra={"SPARK_MAX_TOKENS": "333"})
+        t.ok(rc == 0 and STATE.get("last_max_tokens") == 333, "SPARK_MAX_TOKENS sets the cap", repr(STATE.get("last_max_tokens")))
+        rc, out, err = spark("what", "does", "capped", "mean", extra={"SPARK_MAX_TOKENS": "7"})
+        t.ok(rc == 2 and "50..32000" in out + err, "SPARK_MAX_TOKENS outside 50..32000 is refused", repr(out + err))
         _got = _wrap("use **`vi`** and **`llama.cpp`**, then `main`.\n", True)
         t.ok(_got == "use \x1b[1m`vi`\x1b[22m and \x1b[1m`llama.cpp`\x1b[22m, then `main`.\n\n", "Wrap at a tty: a mark before a backtick opens", repr(_got))
         # a stream that goes quiet mid-reply is one line, never a traceback

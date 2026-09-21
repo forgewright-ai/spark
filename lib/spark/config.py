@@ -23,7 +23,7 @@ SITE_KEYS = ("SITE_NAME", "SITE_USER", "SITE_SET_HOSTNAME",
 SPARK_KEYS = ("SPARK_PORT", "SPARK_BASE_URL", "SPARK_PREFER_URL", "SPARK_SERVE_HOST", "SPARK_ENGINE_DIR",
               "SPARK_MODELS_DIR", "SPARK_MODEL", "SPARK_NGL", "SPARK_CTX", "SPARK_FLASH_ATTN", "SPARK_KV",
               "SPARK_THREADS", "SPARK_EXTRA_ARGS", "SPARK_MEM_NEEDED_GB", "SPARK_API_KEY_FILE",
-              "SPARK_TIMEOUT", "SPARK_HISTORY", "SPARK_MEMORY", "SPARK_PERSONA_EXTRA", "SPARK_SERVICE",
+              "SPARK_TIMEOUT", "SPARK_MAX_TOKENS", "SPARK_HISTORY", "SPARK_MEMORY", "SPARK_PERSONA_EXTRA", "SPARK_SERVICE",
               "SPARK_FORGE", "SPARK_FORGE_HOST", "SPARK_FORGE_PORT", "SPARK_FORGE_TOKEN_FILE")
 KEYS = SITE_KEYS + SPARK_KEYS
 
@@ -300,6 +300,19 @@ class Config:
             return float(self.get("SPARK_TIMEOUT", "20"))
         except ValueError:
             die("SPARK_TIMEOUT is not a number", 2)
+
+    @property
+    def max_tokens(self):
+        """The reply cap of the streaming verbs (chat, explain, bare words):
+        a valve against a reply that runs on, and the room a reply keeps
+        beside the thread in the context. 1200 unless SPARK_MAX_TOKENS."""
+        try:
+            n = int(self.get("SPARK_MAX_TOKENS", "1200"))
+        except ValueError:
+            die("SPARK_MAX_TOKENS is not a number", 2)
+        if not 50 <= n <= 32000:
+            die("SPARK_MAX_TOKENS is 50..32000", 2)
+        return n
 
     @property
     def history(self):
