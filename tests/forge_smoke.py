@@ -1030,7 +1030,10 @@ def main():
                 m, s = _pty.openpty()
                 e = dict(env)
                 e.update(extra or {})
-                p = subprocess.Popen([sys.executable, SPARK] + list(args),
+                # the slave stays open a beat after spark exits: macOS drops
+                # the tail of a large write (the QR block) when the slave
+                # closes before the master has drained it (a CI flake, 3x)
+                p = subprocess.Popen(["/bin/sh", "-c", '"$0" "$@"; rc=$?; sleep 0.5; exit $rc', sys.executable, SPARK] + list(args),
                                      stdout=s, stderr=s, stdin=s, env=e, close_fds=True)
                 os.close(s)
                 buf = b""

@@ -240,11 +240,16 @@ MODE_CHAT = (
 # shell modes; KNOW_CHAT the same surface, grouped, for a conversation.
 KNOW_SHELL = (
     "spark's own commands -- when the user asks how to change or run spark itself, "
-    "answer with these: spark chat; spark do WORDS; spark serve|stop; spark check; "
-    "spark update; spark theme NAME; spark model NAME|list; spark ember NAME; "
-    "spark font FACE SIZE; spark quiet start|login|boot on|off; spark shell on|off; "
-    "spark bar on|off; spark soul edit; spark remember WORDS; spark history; "
-    "spark stats|bench; spark forge on|off; spark setup."
+    "answer with these: spark chat [--reveal N|auto|off]; spark do WORDS; spark serve|stop; "
+    "spark check; spark update; spark theme NAME; spark model NAME|list; spark ember NAME; "
+    "spark font FACE SIZE; spark quiet start|login|boot|audio on|off; spark headless on|off; "
+    "spark client URL|off; spark user add|login; spark soul edit; spark remember WORDS; "
+    "spark memory on|off; spark history; spark stats|bench; spark forge on|off; spark setup; "
+    "cmd | explain; spark read WORDS < text; spark ask < plan; spark drill < text; "
+    "stream | spark watch WORDS; spark edit (an editor's); spark bar (the status line). "
+    "Settings live in ~/.config/spark/spark.env (SPARK_REVEAL, SPARK_MAX_TOKENS, "
+    "SPARK_TIMEOUT, SPARK_HISTORY) and site.env; the shell look is spark-shell's "
+    "(spark-shell on|off|apply|desktop|theme follows spark theme)."
 )
 KNOW_CHAT = (
     "You run as spark; when asked how to change or run spark itself, these are "
@@ -255,10 +260,17 @@ KNOW_CHAT = (
     "on the LAN; spark history -- the threads; spark stats|bench -- the numbers.\n"
     "The machine: spark serve|stop -- the model server; spark model NAME|list -- "
     "the table, or choose one; spark check -- the drift report; spark update -- "
-    "the newest version; spark setup -- the guided first run; spark shell on|off "
-    "-- the shell layer; spark quiet start|login|boot on|off -- a quieter machine.\n"
+    "the newest version; spark setup -- the guided first run; spark quiet "
+    "start|login|boot|audio on|off -- a quieter machine; spark headless on|off; "
+    "spark client URL|off -- another machine's spark; spark user add|login.\n"
+    "Reading and writing: cmd | explain; spark read WORDS < text; spark ask < plan; "
+    "spark drill < text; stream | spark watch WORDS; spark edit, from an editor.\n"
+    "The pace of a reply: spark chat --reveal N|auto|off, /reveal in a chat, "
+    "SPARK_REVEAL in ~/.config/spark/spark.env (the settings file, with "
+    "SPARK_MAX_TOKENS, SPARK_TIMEOUT, SPARK_HISTORY).\n"
     "The look: spark theme NAME -- the palette; spark font FACE SIZE -- the "
-    "console font; spark bar on|off -- the tmux status line."
+    "console font; spark bar -- the status line; the shell layer is spark-shell "
+    "(spark-shell on|off|apply|desktop), which follows spark theme."
 )
 MODE_DO = (
     "You are completing a task in steps. Propose ONE shell command as kind=cmd with a one-line `hint` "

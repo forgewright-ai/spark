@@ -19,6 +19,19 @@
   "unauthorized: Invalid API Key" in the server's journal on every
   resolution -- what the watch was reporting. The client's brain
   resolution does the same.
+- spark knows itself as it is: the self-knowledge maps (`persona.KNOW_SHELL`,
+  `KNOW_CHAT`) name today's verbs -- chat --reveal, read, ask, drill,
+  watch, edit, memory, headless, client, user, the spark.env keys and
+  spark-shell for the look -- and no longer `spark shell on|off` or
+  `spark bar on|off`, retired in v1.19 (`spark do set spark reveal to
+  22` proposed `spark shell on` four times over).
+- `spark do`: a step the user skipped is named to the model ("do not
+  propose it again"); the same step coming back is re-asked once,
+  silently, and a second time ends the run in one line -- the user never
+  answers the same skipped step twice.
+- forge_smoke's `--print-url at a pty` no longer flakes on macOS: the
+  pty's slave stays open a beat after spark exits (macOS drops the tail
+  of a large write otherwise).
 
 ## v1.44
 

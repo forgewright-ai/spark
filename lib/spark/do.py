@@ -32,7 +32,7 @@ DO_MAX_STEPS = 8
 OUTPUT_TAIL = 4000          # what a step's output sends at most: its last 4 kB
 PROOF_TIMEOUT = 30          # seconds a proof may run before it is killed (rc 124)
 NO_OUTPUT = "(no output)"
-SKIPPED = "The user skipped this step."
+SKIPPED = "The user skipped this step (%s). Do not propose it again: propose a different step, or reply done."
 STDIN_HOOK = "SPARK_DO_STDIN"   # =1: confirmations come from stdin lines (tests)
 # said once on stderr when the hook is on, before any step is offered: a
 # transcript must show the confirmations were a harness's, not a person's
@@ -276,6 +276,7 @@ def cmd_do(args):
     thread = forge.new_thread(cfg)
     say("%s driving with %s (a silence is the model thinking)" % (_mark(), _driver(cfg, url, model, _forge)))
     history, text, steps, seen, landed = [], goal, 0, [], False
+    skipped, reasked = set(), set()          # steps the user skipped; those re-asked once
 
     def record(**fields):
         session.record(cfg, backend=url, model=model, mode="do", thread=thread, line=goal, **fields)
@@ -299,6 +300,16 @@ def cmd_do(args):
                 _prune(cfg)
                 return 0
             proposed, command, hint = reply["command"], reply["command"], reply["hint"]
+            if command.strip() in skipped:
+                # the repair guard of a run: a step the user skipped comes
+                # back verbatim -- once it is re-asked, twice it is the end
+                if command.strip() in reasked:
+                    say("%s the same step again after a skip -- stopped (say the goal another way)" % glyph("warn"))
+                    record(kind="stopped", answer="the same skipped step twice", ms=ms)
+                    return 1
+                reasked.add(command.strip())
+                text = SKIPPED % command
+                continue
             missing = persona.missing_word(command)
             if missing:
                 # never offered to run: the model hears why and proposes
@@ -321,7 +332,8 @@ def cmd_do(args):
             if choice == "quit":
                 break
             if choice == "skip":
-                text = SKIPPED
+                skipped.add(command.strip())
+                text = SKIPPED % command
                 continue
             rc, tail = run(command, shell, cwd)
             steps += 1

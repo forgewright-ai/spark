@@ -1751,7 +1751,8 @@ def main():
         t.ok("the box is called forge" in esys and "remembered" in esys, "the remembered fact goes in the ember's system message", esys[:200])
         t.ok(home not in sent, "the ember request carries no HOME path either")
         t.ok("Flags that exist" in esys and "Preferred when installed" in esys, "ask keeps the full shell prefix", esys[:200])
-        t.ok("spark's own commands" in esys and "spark quiet start|login|boot on|off" in esys,
+        t.ok("spark's own commands" in esys and "spark quiet start|login|boot|audio on|off" in esys and "--reveal" in esys
+             and "spark shell on|off" not in esys,
              "ask knows spark's own commands (the machine can explain itself)", esys[:200])
         t.ok("spark's own commands" in system1, "the line prompt knows spark's own commands too", system1[:200])
         # chat sheds the shell costume: one machine line + identity + the mode
@@ -1977,7 +1978,13 @@ def main():
              and lines[2]["text"].startswith("Output of `echo EDITED` (exit 0; edited from `echo again`):"),
              "spark do: the thread records the command that ran, `edited from` the proposal", lines)
         rc, out, err = spark("do", "forever", stdin="s\nq\n", extra=dict(hook, SPARK_BASE_URL=url2), cwd=work)
-        t.ok(rc == 0 and "skipped" in req["body"]["messages"][-1]["content"], "spark do: s tells the model the step was skipped", out + err)
+        t.ok("skipped this step (" in req["body"]["messages"][-1]["content"] and "Do not propose it again" in req["body"]["messages"][-1]["content"],
+             "spark do: s tells the model the step was skipped, naming it", out + err)
+        # the stub proposes the same step forever: after the skip it is
+        # re-asked once, silently, then the run stops -- the user never
+        # answers the same skipped step twice
+        t.ok(rc == 1 and "the same step again after a skip -- stopped" in out and out.count("Enter runs it") == 1,
+             "spark do: a skipped step that comes back is re-asked once, then the run stops", out + err)
         t.ok(req["body"].get("model") == "ember", "spark do proposes with the ember role", str(req["body"].get("model")))
         rc, out, err = spark("do", "say", "hello", stdin="\n", cwd=work)
         t.ok(rc == 1 and "terminal" in err, "spark do: without a terminal it refuses", err)
