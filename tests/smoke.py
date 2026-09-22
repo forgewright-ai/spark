@@ -140,9 +140,12 @@ class Stub(BaseHTTPRequestHandler):
                 self.send_response(200)
                 self.send_header("Content-Type", "text/event-stream")
                 self.end_headers()
-                self.wfile.write(("data: " + json.dumps({"choices": [{"delta": {"content": "Half an "}}]}) + "\n\n").encode())
-                self.wfile.flush()
-                time.sleep(3)
+                try:
+                    self.wfile.write(("data: " + json.dumps({"choices": [{"delta": {"content": "Half an "}}]}) + "\n\n").encode())
+                    self.wfile.flush()
+                    time.sleep(3)
+                except (BrokenPipeError, ConnectionResetError):
+                    pass            # the client gave up first: the point of the test
                 return
             elif "wraptest" in user:
                 pieces = tuple("word%02d " % i for i in range(1, 41))
