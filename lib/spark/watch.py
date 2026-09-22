@@ -30,6 +30,7 @@
 #                     sense, the same brain the prompt uses.
 
 import os
+import re
 import select
 import sys
 import time
@@ -38,8 +39,17 @@ from . import MARK, config, say, session, wire
 from . import text as textmod
 
 WINDOW_LINES = 40       # a window closes at this many lines...
-WINDOW_SECS = 3.0       # ...or this many seconds old, whichever comes first
-MIN_INTERVAL = 1.0      # at most one model call this often -- leave it running
+WINDOW_SECS = 10.0      # ...or this many seconds old, whichever comes first
+MIN_INTERVAL = 10.0     # at most one model call this often -- leave it running
+# The watcher must never watch itself. spark's own units log into the
+# journal (spark-serve carries llama-server's every slot and task line;
+# spark-forge its requests), and a `journalctl -f | spark watch` would
+# feed the brain's own inference back to it -- each look writing the
+# lines that trigger the next look, the GPU pinned, the info lines
+# quoted as failures (seen on the box, 2026-09-21). A journal line whose
+# identifier is spark's, and a bare llama-server log line, are dropped
+# before the window; a window of only those is no call at all.
+OWN_LINE = re.compile(r"(?:^|\s)spark\[\d+\]:\s|(?:^|\s)\d+\.\d{2}\.\d{3}\.\d{3} [IWEDV] (?:srv|slot|main|load|init|sched|update|launch|que|log)\b")
 WATCH_MAX = 8000        # chars of the window the model sees (newest kept)
 WATCH_TOKENS = 120      # a match is one short line
 WATCH_TIMEOUT = 60
@@ -56,6 +66,12 @@ WATCH_USAGE = """spark watch -- a live stream, watched for the one thing that ma
   From a pipe: tail -f app.log | spark watch "a 500 appears"
                journalctl -f  | spark watch "anything about the disk"
 """
+
+
+def own_line(line):
+    """Is this the brain's own log line (spark's units in the journal, or
+    llama-server's log shape)? Never shown to the model."""
+    return bool(OWN_LINE.search(line))
 
 
 def _window(lines):
@@ -108,7 +124,10 @@ def cmd_watch(args):
     shell = os.path.basename(os.environ.get("SHELL") or "sh")
     fd = sys.stdin.fileno()
     win_secs = float(os.environ.get("SPARK_WATCH_SECS") or WINDOW_SECS)   # a test seam
-    lines, opened, last_call = [], None, 0.0
+    min_gap = float(os.environ.get("SPARK_WATCH_INTERVAL") or MIN_INTERVAL)
+    # monotonic() starts near 0 on some platforms (Apple's 3.9): the first
+    # window must never wait the interval out
+    lines, opened, last_call = [], None, -min_gap
     tail = b""
     try:
         while True:
@@ -120,7 +139,7 @@ def cmd_watch(args):
                 # -- select watches the fd, not the TextIOWrapper's buffer
                 chunk = os.read(fd, 65536)
                 if not chunk:                    # EOF: look at the tail, then done
-                    if tail:
+                    if tail and not own_line(tail.decode("utf-8", "replace")):
                         lines.append(tail.decode("utf-8", "replace"))
                     if lines:
                         evaluate(cfg, shell, instruction, _window(lines))
@@ -128,10 +147,10 @@ def cmd_watch(args):
                 tail += chunk
                 parts = tail.split(b"\n")
                 tail = parts.pop()               # a partial line waits for its end
-                lines.extend(p.decode("utf-8", "replace") for p in parts)
+                lines.extend(p for p in (q.decode("utf-8", "replace") for q in parts) if not own_line(p))
                 if lines and opened is None:
                     opened = now
-            if _due(len(lines), opened, now, win_secs) and now - last_call >= MIN_INTERVAL:
+            if _due(len(lines), opened, now, win_secs) and now - last_call >= min_gap:
                 evaluate(cfg, shell, instruction, _window(lines))
                 lines, opened, last_call = [], None, now
     except wire.BrainError as e:

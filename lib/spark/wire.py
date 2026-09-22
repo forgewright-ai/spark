@@ -123,12 +123,17 @@ def health(url, timeout=HEALTH_TIMEOUT):
         return "down"
 
 
-def forge_health(url, timeout=HEALTH_TIMEOUT):
+def forge_health(url, timeout=HEALTH_TIMEOUT, cfg=None):
     """GET /api/health: the FORGE's answer (a dict with "forge": true), or
     "down" when nothing listens there, or None for anything that is not a
-    FORGE (a llama-server says 404, or 503 while loading)."""
+    FORGE (a llama-server says 404, or 503 while loading). With cfg the
+    api-token rides along: a llama-server under --api-key answers 401 to
+    any unknown path BEFORE routing and logs "unauthorized" for it, so a
+    keyless probe of a plain server was a warning in its journal every
+    time an upstream was resolved; a FORGE ignores the header here."""
+    headers = _headers(cfg) if cfg is not None else {}
     try:
-        with urllib.request.urlopen(urllib.request.Request(url + "/api/health"), timeout=timeout) as r:
+        with urllib.request.urlopen(urllib.request.Request(url + "/api/health", headers=headers), timeout=timeout) as r:
             d = json.load(r)
         return d if isinstance(d, dict) and d.get("forge") is True else None
     except urllib.error.HTTPError:
@@ -366,7 +371,7 @@ def resolve_brain(cfg, fresh=False):
             return hit
     loading = None
     for url in cands:
-        fh = forge_health(url)
+        fh = forge_health(url, cfg=cfg)
         if fh == "down":
             debug("health %s -> down" % url)
             continue

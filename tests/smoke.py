@@ -1549,6 +1549,19 @@ def main():
         rc, out, err = spark("watch", "when a 500 appears", stdin="connection error 5001 logged\n")
         t.ok(rc == 0 and out == "",
              "watch: a quote of \"error 500\" cannot ground against a window holding only 5001", repr(out) + err)
+        # the watcher never watches itself: spark's own journal lines and a
+        # llama-server log line are dropped before the window, and a window
+        # of only those is no model call at all
+        n_own = len(STATE["bodies"])
+        own = ("Sep 21 19:40:37 spark spark[989563]: 654.40.690.647 W srv    operator(): unauthorized: Invalid API Key\n"
+               "655.33.238.200 I slot get_availabl: id  2 | task -1 | selected slot by LCP similarity\n"
+               "Sep 21 19:41:00 spark spark[989568]: 192.0.2.5 - \"POST /v1/chat/completions\" 200\n")
+        rc, out, err = spark("watch", "anything that fails", stdin=own)
+        t.ok(rc == 0 and out == "" and len(STATE["bodies"]) == n_own, "watch: the brain's own log lines make no window and no call", repr(out) + err)
+        rc, out, err = spark("watch", "when a 500 appears", stdin=own + "GET /x 500\n")
+        t.ok(rc == 0 and out == 'A 500 error appeared: "GET /x 500"\n' and len(STATE["bodies"]) == n_own + 1
+             and "slot get_availabl" not in (STATE.get("last_user") or "") and "spark[989563]" not in (STATE.get("last_user") or ""),
+             "watch: the own lines are gone from the window, the real line still matches", repr(out) + repr(STATE.get("last_user"))[:200])
         # a burst: 30 lines arriving at once must all be in the FIRST window.
         # readline() buffered past select's sight and starved the window to
         # one line per tick; the reader drains the fd now. The pipe is held
@@ -1576,7 +1589,7 @@ def main():
             p.wait(timeout=10)
         t.ok(got is not None and all(("burst line %02d" % i) in got for i in range(30)),
              "watch: a 30-line burst is one window -- the reader drains what select saw",
-             "no window seen" if got is None else got[-100:])
+             ("no window seen: " + p.stderr.read()[-300:]) if got is None else got[-100:])
         # a rotated token mid-run: not a transient, so the loop ends in one
         # signed line on stderr, exit 1 -- never a traceback
         STATE["auth_reject"] = True
@@ -1589,7 +1602,7 @@ def main():
              "watch: no words is the usage and where a question goes, exit 2", out[:60])
         from spark import watch as watchmod
         t.ok(not watchmod._due(0, None, 100.0) and not watchmod._due(3, 99.0, 100.0)
-             and watchmod._due(3, 96.0, 100.0) and watchmod._due(watchmod.WINDOW_LINES, 100.0, 100.0),
+             and watchmod._due(3, 89.0, 100.0) and watchmod._due(watchmod.WINDOW_LINES, 100.0, 100.0),
              "watch: a window is due when it is full or old enough, never when empty")
 
         # spark edit --watch: the live-writing companion (a mode of contract 10)

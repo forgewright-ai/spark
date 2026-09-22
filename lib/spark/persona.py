@@ -480,8 +480,10 @@ MODE_WATCH = (
     "your own, then the matching line's own text between double quotes, word for word. "
     "Every quote is checked against the lines you were shown, and a line whose quote is not "
     "among them is thrown away -- so quote what is really there, never what you expect to "
-    "see. No preamble, no summary, no 'nothing yet': when nothing matches, answer with "
-    "nothing at all. Silence is the normal, healthy state.")
+    "see. A line that only reports progress or state -- a task started, a slot chosen, a "
+    "request served, a file opened -- is not a match unless the reader asked for exactly "
+    "that; it is silence. No preamble, no summary, no 'nothing yet': when nothing matches, "
+    "answer with nothing at all. Silence is the normal, healthy state.")
 MODES.update({"edit-complete": MODE_EDIT_COMPLETE, "edit-rewrite": MODE_EDIT_REWRITE,
               "edit-answer": MODE_EDIT_ANSWER, "edit-discuss": MODE_EDIT_DISCUSS,
               "edit-read": MODE_EDIT_READ,

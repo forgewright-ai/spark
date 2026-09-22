@@ -342,7 +342,7 @@ class Upstream:
         """(url, model, state) now: state ok | loading | down."""
         loading = ""
         for u in self.candidates():
-            fh = wire.forge_health(u)
+            fh = wire.forge_health(u, cfg=self.cfg)
             if fh == "down" or (fh and fh.get("forge")):
                 continue                    # nothing there, or a FORGE: not for us
             st = wire.health(u)

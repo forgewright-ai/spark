@@ -1,5 +1,25 @@
 # Changelog
 
+## v1.45
+
+- `spark watch` never watches itself: with `journalctl -f` on the box,
+  spark-serve's own journal lines (llama-server's every slot and task
+  line) fed each look back into the next -- the GPU pinned at 99%, the
+  info lines quoted as failures. A journal line under spark's identifier
+  and a bare llama-server log line are dropped before the window; a
+  window of only those makes no call. The window closes at 10 s and
+  looks come no closer than 10 s apart (were 3 and 1): a chatty log is
+  a look every ten seconds, not a pinned GPU. The brief says a line
+  that only reports progress or state is silence. The first window no
+  longer waits the interval out on a platform where monotonic() starts
+  at zero (Apple's 3.9).
+- The FORGE's upstream probe carries the api-token: a llama-server
+  under --api-key answers 401 to any unknown path before routing, so the
+  keyless `GET /api/health` that tells a FORGE from a plain server left
+  "unauthorized: Invalid API Key" in the server's journal on every
+  resolution -- what the watch was reporting. The client's brain
+  resolution does the same.
+
 ## v1.44
 
 - Two paces, a principle (CLAUDE.md): a conversation can be paced for

@@ -868,8 +868,16 @@ may change freely.
     nothing matches, and the healthy state. A window closes at
     `WINDOW_LINES` lines or `WINDOW_SECS` old, whichever first, at most
     `WATCH_MAX` chars to the model and no more than one call per
-    `MIN_INTERVAL` -- cheap enough to leave running; backlog accrued during
-    a call coalesces into the next window. A transient brain gap (down,
+    `MIN_INTERVAL` (10 s each since v1.45: a chatty journal is one look
+    every ten seconds, not a pinned GPU) -- cheap enough to leave running;
+    backlog accrued during a call coalesces into the next window. The
+    watcher never watches itself: spark's own units log into the journal
+    (spark-serve carries llama-server's every slot and task line), and a
+    `journalctl -f | spark watch` fed the brain's own inference back to
+    it, each look writing the lines that triggered the next; a journal
+    line under spark's identifier and a bare llama-server log line are
+    dropped before the window (`watch.own_line`, `OWN_LINE`), and a
+    window of only those is no call at all. A transient brain gap (down,
     loading, timeout, cut) skips the window and the watch goes on
     (`session.once`, the shared recovery `spark edit --watch` uses too);
     stdin closing ends it (exit 0), SIGINT 130. No ledger: a live stream
