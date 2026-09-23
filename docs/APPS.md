@@ -23,6 +23,7 @@ on stdin, text out, never a path. Each app's plugin is its own
 | [spark-nano](https://github.com/forgewright-ai/spark-nano) | nano: `M-S` pre-fills nano's prompt |
 | [spark-w3m](https://github.com/forgewright-ai/spark-w3m) | w3m: `M-s` opens the spark page -- chat, overview, questions |
 | [spark-newsboat](https://github.com/forgewright-ai/spark-newsboat) | newsboat: `,s` asks the article you are on |
+| [spark-aerc](https://github.com/forgewright-ai/spark-aerc) | aerc: `A-s` opens `spark> ` on the mail you are on |
 
 One key in every app -- Alt-s (`M-s`, `A-s`: the same key by each
 tool's name) -- summons spark on what is in front of you, and one
@@ -34,8 +35,8 @@ key pre-fills `spark edit ` on the editor's own prompt instead -- add
 words, press Enter. The rest of this file has each app's lines; an
 editor with a filter needs no plugin at all.
 
-When apps need more than text, another contract is defined -- e-mail,
-for example -- and apps connect to it the same way.
+When apps need more than text, another contract is defined, and apps
+connect to it the same way.
 
 ## The command they all use
 
@@ -117,7 +118,7 @@ One clone each, and the snippet's comment block is the help:
   `M-S words` rewrites the file or the marked region (`M-U` undoes),
   `M-F` fixes spelling in one keystroke.
 
-## Reading, not writing: w3m and newsboat
+## Reading, not writing: w3m, newsboat and aerc
 
 `spark read` (spark 1.20 or newer) is the reader's verb: the source on
 stdin, an answer that says only what the source says -- every line
@@ -160,6 +161,26 @@ refusal); words are a conversation about it -- follow-ups ride the
 thread, an unheld quote is marked where it stands -- and `q` walks
 back to newsboat any time. On newsboat 2.38 or newer a commented bind
 line in the snippet offers Alt-s.
+
+aerc, the mail client, is the third -- the mail you are on (open, or
+selected in the list). A mail is someone else's text, so spark (1.46
+or newer) holds back what looks like a secret in it -- a one-time
+code, a reset link's token, a key -- before it leaves: the model sees
+`[held]`, and spark says how many it held.
+
+```sh
+git clone https://github.com/forgewright-ai/spark-aerc ~/.local/share/spark-aerc
+ln -s ~/.local/share/spark-aerc/spark-aerc ~/.local/bin/spark-aerc
+```
+
+Then append `binds.spark` to aerc's `binds.conf` (`~/.config/aerc` on
+Linux, `~/Library/Preferences/aerc` on macOS; start from aerc's own
+when you have none) -- the repository's README has each line. `A-s`
+opens the mail's header on a new tab, then `spark> `: Enter is the
+overview, words ask, `q` goes back to aerc. On the review screen,
+before you send, `A-s` asks about your own draft; the lines you quote
+stay here. Writing a mail is your `$EDITOR`'s: with micro, neovim or
+vim and its spark app, Alt-s is already there.
 
 No plugin at all still works: an editor with a filter is a client
 already. The selection goes through `spark edit`, the whole file when

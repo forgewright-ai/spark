@@ -23,6 +23,10 @@
   `SOURCE_SHAPES`, `hold_secrets`); `spark line --paste` holds the same
   list as before. README's "What leaves this machine" names every shape,
   and the docs test holds it to the list.
+- A new spark app: spark-aerc (github.com/forgewright-ai/spark-aerc)
+  puts spark in aerc, the mail client -- `A-s` on a mail opens
+  `spark> `, and the review screen asks about your draft. It needs this
+  release: a mail is a source, and its secrets stay here.
 
 ## v1.45
 
