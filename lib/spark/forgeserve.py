@@ -1382,8 +1382,12 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---- do ----
     def api_do_propose(self, body):
-        """One step proposed, nothing run; the thread continues or starts."""
-        from . import do, forge
+        """One step proposed, nothing run; the thread continues or starts.
+        On a continued thread the text is a step's output (the page's
+        `Output of` feedback): held like do.feedback's tail before the
+        model sees it. Every proposal is a turn record (mode do), with
+        the server's timings."""
+        from . import do, forge, text as textmod
         cfg = self.server.cfg
         text, cwd = self._text_cwd(body)
         if text is None:
@@ -1391,15 +1395,23 @@ class Handler(BaseHTTPRequestHandler):
         thread, ok = self._thread_of(body)
         if not ok:
             return None
+        held = 0
         if thread is None:
             thread = forge.new_thread(cfg)
+        else:
+            spans, _names = textmod.held_spans(text)
+            held = len(spans)
+            if held:
+                text = textmod.hold_spans(text, spans)
         with self.server.chat_lock:
             try:
-                reply, ms = do.propose(cfg, thread, text, _shell(), cwd or HOME, brain=self.server.upstream.brain)
+                reply, ms, s = do.propose(cfg, thread, text, _shell(), cwd or HOME, brain=self.server.upstream.brain)
             except wire.BrainError as e:
                 if e.kind == "down":
                     self.server.upstream.resolve(fresh=True)
                 return self._error(502, e.kind, e.hint)
+        s.record(kind="danger" if reply["danger"] else reply["kind"], thread=thread, ms=ms,
+                 **({"held": held} if held else {}))
         rm = self.server.role_models(self.server.upstream.resolve()[0])
         driver = rm.get("ember") or (sorted(rm.values())[0] if rm else "")
         return self._json(200, {"thread": thread, "reply": reply, "ms": ms,
@@ -1410,8 +1422,10 @@ class Handler(BaseHTTPRequestHandler):
         """One step the user clicked, run as typed. The page asked twice
         for a dangerous one; the server holds it to that: a command
         persona.is_dangerous flags runs only with confirmed: true, and a
-        control character (a second line, an escape) is refused. The log
-        carries a sha256 prefix and the truncated text, then the rc."""
+        control character (a second line, an escape) is refused. Nobody
+        watches it at a terminal: do.STEP_TIMEOUT is its leash (rc 124,
+        the whole process group killed). The log carries a sha256 prefix
+        and the truncated text, then the rc."""
         from . import do, persona
         command, cwd = body.get("command"), body.get("cwd") or ""
         if not isinstance(command, str) or not command.strip():
@@ -1424,7 +1438,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._error(400, "confirm", "a dangerous command runs only with confirmed: true")
         digest = hashlib.sha256(command.encode("utf-8")).hexdigest()[:12]
         log("%s do/run %s %s" % (self._ip(), digest, " ".join(command.split())[:200]))
-        rc, tail = do.run(command, _shell(), cwd or HOME, echo=False)
+        rc, tail = do.run(command, _shell(), cwd or HOME, echo=False, timeout=do.STEP_TIMEOUT)
         log("%s do/run %s rc %d" % (self._ip(), digest, rc))
         self._audit("do/run", digest=digest, rc=rc)
         return self._json(200, {"rc": rc, "tail": tail})

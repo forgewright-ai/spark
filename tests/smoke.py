@@ -299,6 +299,18 @@ def answer_json(messages):
                 return {"kind": "done", "command": "", "hint": "all done", "danger": False}
             return {"kind": "cmd", "command": "echo ok", "hint": "do it", "danger": False,
                     "proof": "head secret.txt /nonexistent"}
+        if "bigout" in goal:                    # never done, 4 kB a step: the budget must cut
+            return {"kind": "cmd", "command": "yes 'filler line of output for the budget' | head -n 100",
+                    "hint": "print a lot", "danger": False}
+        if "leakstep" in goal:                  # a step prints a secret: held before it rides
+            if "Output of" in user:
+                return {"kind": "done", "command": "", "hint": "all done", "danger": False}
+            return {"kind": "cmd", "command": "cat creds.txt", "hint": "read the file", "danger": False}
+        if "badflag" in goal or "goodflag" in goal:   # a step refused for an option (or not)
+            if "Output of" in user:
+                return {"kind": "done", "command": "", "hint": "all done", "danger": False}
+            return {"kind": "cmd", "command": "fakeflag --frob" if "badflag" in goal else "fakeflag --ok",
+                    "hint": "use the tool", "danger": False}
         if "ctrlchar" in goal:                  # a terminal escape inside the command
             return {"kind": "cmd", "command": "echo \x1b[2K\x1b[1Gbenign; rm -rf junk2",
                     "hint": "say hi\x1b]0;evil\x07", "danger": False}
@@ -2132,6 +2144,127 @@ def main():
         rc, out, err = spark("do", "missdo", "scan", stdin="", extra=dict(hook, SPARK_BASE_URL=url2), cwd=work)
         t.ok(rc == 0 and "frobnicate is not installed on this machine" in req["body"]["messages"][-1]["content"],
              "spark do: the model hears the missing binary as feedback", req["body"]["messages"][-1]["content"][:120])
+
+        # ---- v1.47: do, measured, bounded, held; the OS documents its tools
+        from spark import reveal as _reveal
+
+        def do_turns():
+            tdir = home + "/.local/state/spark/turns"
+            return [json.loads(l) for f in sorted(os.listdir(tdir)) for l in open(os.path.join(tdir, f)) if l.strip()
+                    and json.loads(l).get("mode") == "do"]
+        # every proposal is a turn with the server's timings: the prompt
+        # cache's hits are measured, and the model is the stem that answered
+        t0 = len(do_turns())
+        n0 = len(STATE["bodies"])
+        rc, out, err = spark("do", "say", "hello", stdin="\n", extra=hook, cwd=work)
+        new = do_turns()[t0:]
+        t.ok(rc == 0 and [x["kind"] for x in new] == ["cmd", "done"]
+             and all(x.get("pp_n") == 40 and x.get("cache_n") == 30 and x.get("tg_tps") for x in new)
+             and all(x.get("model") == "stub-ember-q4" for x in new),
+             "spark do: every proposal is a turn with pp_n/cache_n/tg_tps, the ember stem that answered", new)
+        t0 = len(do_turns())
+        rc, out, err = spark("do", "forever", stdin="s\nq\n", extra=hook, cwd=work)
+        spark("do", "forever", stdin="q\n", extra=hook, cwd=work)
+        new = do_turns()[t0:]
+        t.ok([x["kind"] for x in new] == ["skipped", "reasked", "stopped", "quit"]
+             and all(x.get("pp_n") == 40 and x.get("cache_n") == 30 for x in new),
+             "spark do: a skip, the silent re-ask, the stop and a quit are turns too, measured", [x.get("kind") for x in new])
+        rc, out, _ = spark("stats", "--porcelain")
+        t.ok(re.search(r"^mode_do\tturns=\d+ cache_pct=43 ", out, re.M) is not None,
+             "spark stats: do's cache hits are real (30 of 70 prompt tokens: 43%)", out)
+        # system message and goal: byte-identical at every step (the prefix a cache hits)
+        n0 = len(STATE["bodies"])
+        rc, out, err = spark("do", "forever", stdin="\n\n\nq\n", extra=hook, cwd=work)
+        bodies = [b for b in STATE["bodies"][n0:] if is_do(b["messages"])]
+        t.ok(len(bodies) == 4 and all(b["messages"][0] == bodies[0]["messages"][0] and b["messages"][1] == bodies[0]["messages"][1]
+                                      for b in bodies)
+             and bodies[0]["messages"][1]["content"] == "[cwd %s]\nforever" % os.path.realpath(work),
+             "spark do: the system message and message 0 (the goal) are byte-identical across steps",
+             [len(b["messages"]) for b in bodies])
+        # the budget: 4 kB a step into a 4096-token context -- the oldest
+        # outputs shortened first, the goal kept, the roles alternating
+        n0 = len(STATE["bodies"])
+        rc, out, err = spark("do", "bigout", "goal", stdin="\n" * 9, extra=dict(hook, SPARK_CTX="4096"), cwd=work)
+        bodies = [b for b in STATE["bodies"][n0:] if is_do(b["messages"])]
+        cap = int((4096 - _do.DO_MAX_TOKENS) * _reveal.CHARS_PER_TOKEN * _do.CTX_SHARE)
+        sizes = [sum(len(m["content"]) for m in b["messages"]) for b in bodies]
+        last = bodies[-1]["messages"] if bodies else []
+        t.ok(rc == 1 and len(bodies) == 8 and max(sizes) <= cap and sum(len(m["content"]) for m in last[1:]) > 4000,
+             "spark do: a run of 4 kB outputs stays under the budget of the served context", (sizes, cap))
+        t.ok(all(b["messages"][1]["content"] == "[cwd %s]\nbigout goal" % os.path.realpath(work) for b in bodies)
+             and "(output trimmed, exit 0)" in [m["content"] for m in last]
+             and [m["role"] for m in last[1:]] == ["user", "assistant"] * ((len(last) - 1) // 2) + ["user"] * ((len(last) - 1) % 2),
+             "spark do: the goal is kept, the oldest outputs become (output trimmed, exit N), the roles alternate",
+             [m["content"][:40] for m in last])
+        _fit = _do.fit([{"role": "user", "content": "G" * 50}] + [{"role": r, "content": c} for r, c in (
+            ("assistant", "`a` -- x"), ("user", "Output of `a` (exit 3):\n" + "o" * 500),
+            ("assistant", "`b` -- y"), ("user", "Output of `b` (exit 0; edited from `c`):\n" + "p" * 500),
+            ("assistant", "`d` -- z"), ("user", "Output of `d` (exit 1):\n" + "q" * 500))], 640)
+        t.ok([m["content"][:25] for m in _fit] == ["G" * 25, "`b` -- y", "(output trimmed, exit 0)", "`d` -- z",
+                                                   "Output of `d` (exit 1):\nq"],
+             "do.fit: outputs trimmed oldest first with their exit code, then the oldest exchange dropped; goal and newest kept",
+             [m["content"][:30] for m in _fit])
+        # a step's output passes text.hold_secrets before it is fed back
+        _gh = "ghp_Z9y8X7w6V5u4T3s2R1q0P9o8N7m6L5k4J3i2"  # spark:allow-secret
+        with open(work + "/creds.txt", "w") as f:
+            f.write("deploy token " + _gh + "\n")  # spark:allow-secret
+        t0 = len(do_turns())
+        rc, out, err = spark("do", "leakstep", stdin="\n", extra=hook, cwd=work)
+        sent = json.dumps(STATE["bodies"][-1])
+        newest = max(os.listdir(threads), key=lambda f: os.path.getmtime(os.path.join(threads, f)))
+        kept = json.dumps(read_thread(home, os.path.join(threads, newest)))
+        cmdturn = [x for x in do_turns()[t0:] if x.get("kind") == "cmd"]
+        t.ok(rc == 0 and _gh in out and _gh not in sent and "deploy token [held]" in sent and _gh not in kept
+             and "held back 1 span that looks like a secret (a GitHub token)" in err
+             and cmdturn and cmdturn[0].get("held") == 1,
+             "spark do: a secret a step printed is held before the model or the thread sees it; held=1 on the turn",
+             err + sent[-300:])
+        # the OS documents its tools: a step refused for an option brings
+        # back its own man page's lines about it -- man as argv, the tool
+        # never run for it, the pager variables dropped, MANWIDTH=80
+        mbin = home + "/mbin"
+        os.makedirs(mbin, exist_ok=True)
+        with open(mbin + "/fakeflag", "w") as f:
+            f.write("#!/bin/sh\necho x >> \"$HOME/fakeflag-ran\"\n"
+                    "echo \"fakeflag: unrecognized option '$1'\"\n"
+                    "[ \"$1\" = --ok ] && exit 0\nexit 2\n")
+        with open(mbin + "/man", "w") as f:
+            f.write("#!/bin/sh\nprintf '%s\\n' \"$*\" > \"$HOME/man-argv\"\n"
+                    "printf 'MANWIDTH=%s MANPAGER=%s PAGER=%s MANOPT=%s\\n' \"$MANWIDTH\" \"${MANPAGER-unset}\" "
+                    "\"${PAGER-unset}\" \"${MANOPT-unset}\" > \"$HOME/man-env\"\n"
+                    "printf 'FAKEFLAG(1)\\n\\nS\\bSY\\bYN\\bNO\\bOP\\bPS\\bSI\\bIS\\bS\\n"
+                    "     fakeflag [--frobnicate] [-v]\\n\\nOPTIONS\\n"
+                    "     -\\b--\\b-f\\bfr\\bro\\bob\\bb  _\\bnever an option here\\n     -v      verbose\\n'\n")
+        for x in ("fakeflag", "man"):
+            os.chmod(mbin + "/" + x, 0o755)
+        menv = dict(hook, PATH=mbin + ":" + env["PATH"], MANPAGER="false", PAGER="false", MANOPT="-X")
+        for x in ("man-argv", "fakeflag-ran"):
+            if os.path.exists(home + "/" + x):
+                os.remove(home + "/" + x)
+        rc, out, err = spark("do", "badflag", stdin="\n", extra=menv, cwd=work)
+        umsg = STATE["bodies"][-1]["messages"][-1]["content"]
+        t.ok(rc == 0 and "From man fakeflag:\nOPTIONS\n     --frob  never an option here\n     -v      verbose" in umsg
+             and "\x08" not in umsg and umsg.index("From man") > umsg.index("unrecognized option")
+             and "From man fakeflag: 3 lines go back with the output" in out,
+             "spark do: a step refused for an option -- the next request carries its man page's lines about it", repr(umsg[-300:]) + out)
+        t.ok(open(home + "/man-argv").read() == "-P cat fakeflag\n"
+             and open(home + "/man-env").read() == "MANWIDTH=80 MANPAGER=unset PAGER=unset MANOPT=unset\n"
+             and open(home + "/fakeflag-ran").read() == "x\n",
+             "spark do: man runs as argv (-P cat HEAD), pager variables dropped, MANWIDTH=80; the tool ran once, as the step",
+             open(home + "/man-env").read() if os.path.exists(home + "/man-env") else "no man-env")
+        os.remove(home + "/man-argv")
+        rc, out, err = spark("do", "goodflag", stdin="\n", extra=menv, cwd=work)
+        umsg = STATE["bodies"][-1]["messages"][-1]["content"]
+        t.ok(rc == 0 and "unrecognized option" in umsg and "From man" not in umsg and not os.path.exists(home + "/man-argv"),
+             "spark do: the same words from a step that exited 0 read no man page", umsg[-200:])
+        t.ok(_do.man_excerpt("fakeflag --frob", 2, "no complaint here") == ""
+             and _do.man_excerpt("/bin/fakeflag --frob", 2, "unrecognized option '--frob'") == ""
+             and _do.man_excerpt("no-such-tool-here --frob", 2, "unrecognized option '--frob'") == "",
+             "do.man_excerpt: nothing without the error words, for a path, or for a tool `which` does not find")
+        _sends = [(k, v) for k, v in _pers.SENDS if "man page" in v]
+        t.ok(len(_sends) == 1 and _sends[0][0] == "do" and "%.1f kB" % (_do.MAN_MAX / 1000.0) in _sends[0][1]
+             and any(k == "do" and "held back" in v for k, v in _pers.SENDS),
+             "persona.SENDS: do's man-page row names its cap (do.MAN_MAX), and do's output row the hold", _sends)
         # the ember verb: status, choose, refuse, the shared table's marks
         mem = {"SPARK_NO_APPLY": "1", "SPARK_MEM_TOTAL_GB": "64"}
         rc, out, _ = spark("ember", extra=mem)

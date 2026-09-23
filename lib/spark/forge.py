@@ -196,11 +196,22 @@ class Store:
         except (OSError, vault.SealError):
             log_exc("append thread")
 
-    def history(self, tid):
+    def history(self, tid, mode="", room=None):
         """The thread as chat messages [{"role","content"}], the oldest
-        pairs dropped until at most HISTORY_MAX_CHARS remain."""
+        pairs dropped until at most HISTORY_MAX_CHARS remain. For `spark
+        do` (mode "do") the run is rebuilt as it was sent -- each user
+        message with its [cwd] line (persona.user_message, from the cwd
+        land() stored), so a replayed run's prefix is the served one's
+        -- and cut by do.fit to `room` (HISTORY_MAX_CHARS when None),
+        which never drops the goal. No other mode sees a path."""
         if not tid:
             return []
+        if mode == "do":
+            from . import do        # do imports this module: resolved here
+            msgs = [{"role": m["role"], "content": persona.user_message(m["text"], m.get("cwd") or "")
+                     if m["role"] == "user" else m["text"]}
+                    for m in self.load(tid) if m["role"] in ("user", "assistant")]
+            return do.fit(msgs, HISTORY_MAX_CHARS if room is None else room)
         msgs = [{"role": m["role"], "content": m["text"]}
                 for m in self.load(tid) if m["role"] in ("user", "assistant")]
         total = sum(len(m["content"]) for m in msgs)
@@ -279,7 +290,7 @@ class _NullStore:
     def append(self, cfg, tid, role, text, **fields):
         pass
 
-    def history(self, tid):
+    def history(self, tid, mode="", room=None):
         return []
 
     def pick(self, cfg, more):
@@ -412,9 +423,10 @@ def append(cfg, tid, role, text, **fields):
     local_store(provision=True).append(cfg, tid, role, text, **fields)
 
 
-def history(tid):
-    """The thread as chat messages [{"role","content"}], capped."""
-    return local_store().history(tid)
+def history(tid, mode="", room=None):
+    """The thread as chat messages [{"role","content"}], capped (a `do`
+    run as it was sent: Store.history)."""
+    return local_store().history(tid, mode, room)
 
 
 def text_sha(data):

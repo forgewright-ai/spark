@@ -28,6 +28,13 @@ import smoke  # noqa: E402  -- the stub llama-server
 import forge_probe  # noqa: E402  -- contract 9's gates, asked from the wire
 
 SEEN = {}                 # what the stub saw last: headers and body
+# the foreground forge runs with do.STEP_TIMEOUT set to this (the module
+# constant, patched in the forge's own process before bin/spark runs), so
+# a hanging /api/do/run step is cut in seconds, not do's 120
+STEP_TIMEOUT = 2
+FORGE_WRAP = ("import runpy, sys; sys.path.insert(0, sys.argv[1]); from spark import do; "
+              "do.STEP_TIMEOUT = %d; sys.argv = sys.argv[2:]; runpy.run_path(sys.argv[0], run_name='__main__')"
+              % STEP_TIMEOUT)
 
 
 class Peek(smoke.Stub):
@@ -190,7 +197,8 @@ def main():
         ok(rc == 0 and "not running" in out, "stop before start: not running, exit 0", out)
 
         # the server, in the foreground
-        p = subprocess.Popen([sys.executable, SPARK, "forge", "--foreground"], env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        p = subprocess.Popen([sys.executable, "-c", FORGE_WRAP, os.path.join(REPO, "lib"), SPARK, "forge", "--foreground"],
+                             env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         deadline = time.time() + 20
         st = 0
         while time.time() < deadline and st != 200:
@@ -747,6 +755,13 @@ def main():
                                                                 "hint": "say hello", "danger": False, "proof": ""}
                and isinstance(d.get("ms"), int), "/api/do/propose: the step, a thread, nothing run", raw[:300])
             dtid = d.get("thread", "")
+            first_sent = SEEN["body"]["messages"]
+            dturns = [json.loads(l) for f in sorted(os.listdir(state + "/turns")) for l in open(state + "/turns/" + f)
+                      if l.strip() and json.loads(l).get("mode") == "do"]
+            dturn = dturns[-1] if dturns else {}
+            ok(dturn.get("kind") == "cmd" and dturn.get("pp_n") == 40 and dturn.get("cache_n") == 30
+               and dturn.get("model") == hj["roles"]["ember"] and dturn.get("thread") == dtid,
+               "/api/do/propose records its turn: mode do, pp_n/cache_n, the ember's stem", dturns)
             st, _, raw = req(url, "POST", "/api/do/run", {"command": "echo hi"}, headers=post)
             ok(st == 200 and json.loads(raw) == {"rc": 0, "tail": "hi\n"}, "/api/do/run echo hi -> rc 0, tail", raw[:100])
             st, _, raw = req(url, "POST", "/api/do/run", {"command": "false"}, headers=post)
@@ -768,6 +783,11 @@ def main():
             st, _, raw = req(url, "POST", "/api/do/propose", {"thread": dtid, "text": "Output of `echo STEP-ONE` (exit 0):\nSTEP-ONE"}, headers=post, timeout=30)
             d = json.loads(raw)
             ok(st == 200 and d["thread"] == dtid and d["reply"]["kind"] == "done", "/api/do/propose on the thread: done", raw[:200])
+            replay = SEEN["body"]["messages"]
+            ok(replay[1]["content"].startswith("[cwd ") and replay[1] == first_sent[1] and replay[0] == first_sent[0]
+               and replay[2] == {"role": "assistant", "content": "`echo STEP-ONE` -- say hello"},
+               "a replayed page do thread: the goal as it was sent, [cwd] line and all -- the prefix the cache holds",
+               (replay[1]["content"][:60], first_sent[1]["content"][:60]))
             ok(d.get("driver") == hj["roles"]["ember"] and d.get("unchecked") == [],
                "/api/do/propose done: driver is the ember's stem, unchecked empty", (d.get("driver"), d.get("unchecked")))
             st, _, raw = req(url, "GET", "/api/threads/" + dtid, headers=bearer)
@@ -805,6 +825,22 @@ def main():
             ok("echo hi" not in blob and "rm -rf" not in blob and "pwd" not in blob and tmp not in blob,
                "no command text, no path in the trail", blob[:200])
             ok(oct(os.stat(state + "/users/owner/audit").st_mode & 0o777) == "0o600", "the trail is 0600")
+            # nobody watches a page step at a terminal: do.STEP_TIMEOUT is its leash
+            t0 = time.time()
+            st, _, raw = req(url, "POST", "/api/do/run", {"command": "echo started; sleep 30"}, headers=post, timeout=30)
+            took = time.time() - t0
+            d = json.loads(raw) if st == 200 else {}
+            ok(d.get("rc") == 124 and "started" in d.get("tail", "") and STEP_TIMEOUT <= took < STEP_TIMEOUT + 8,
+               "/api/do/run of a hanging step: rc 124 at do.STEP_TIMEOUT, the tail so far", (st, raw[:100], round(took, 1)))
+            # a continued page thread's text is a step's output: held before the model sees it
+            gh = "ghp_Z9y8X7w6V5u4T3s2R1q0P9o8N7m6L5k4J3i2"  # spark:allow-secret
+            st, _, raw = req(url, "POST", "/api/do/propose",
+                             {"thread": dtid, "text": "Output of `cat creds` (exit 0):\ndeploy token " + gh}, headers=post, timeout=30)
+            sent = json.dumps(SEEN["body"])
+            dturns = [json.loads(l) for f in sorted(os.listdir(state + "/turns")) for l in open(state + "/turns/" + f)
+                      if l.strip() and json.loads(l).get("mode") == "do"]
+            ok(st == 200 and gh not in sent and "deploy token [held]" in sent and dturns and dturns[-1].get("held") == 1,
+               "/api/do/propose on a thread: a secret in the step's output is held; held=1 on the turn", sent[-200:])
 
             st, h, raw = req(url, "POST", "/api/run", {"verb": "model", "args": ["none"]}, headers=post, timeout=60)
             evs = sse(raw)

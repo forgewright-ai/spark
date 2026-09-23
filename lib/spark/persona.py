@@ -30,7 +30,11 @@ FLAGS = ("Flags that exist (use these, never invented ones): fd -e EXT, -S +1G, 
 SENDS = (
     ("line", "the line you typed, with the shell and OS name"),
     ("chat", "the conversation: soul, remembered facts, earlier turns"),
-    ("do", "each step's output, last 4 kB"),
+    ("do", "each step's output, last 4 kB -- a span that looks like a secret is held back"),
+    # a step refused for an option: spark reads that command's own man
+    # page (never runs the tool) and the lines about the option go back
+    ("do", "after a step refused for an option, the lines of that command's man page "
+           "about it, 1.5 kB at most"),
     ("explain", "the piped text, last 6 kB"),
     ("edit", "the text: 6 kB around the cursor, 12 kB rewrite, 16 kB question -- "
              "in a question about a source (--source), a span that looks like a secret is held back"),
