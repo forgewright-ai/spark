@@ -664,7 +664,7 @@ def cmd_status(args, _bare=False):
             # a single model is just the model
             ember = next((s for role, s, _l in _role_rows(cfg, url, is_forge) if role == "ember"), None)
             what = ("ember %s" % ember) if ember else ("model %s" % model)
-            say("%s -- %s at %s (spark status for the rest)" % (MARK, what, url))
+            say("%s -- %s at %s%s (spark status for the rest)" % (MARK, what, url, _waiting(", ")))
         except wire.BrainError as e:
             say("%s -- %s (spark status for the rest)" % (MARK, e.hint))
         return 0
@@ -698,7 +698,16 @@ def cmd_status(args, _bare=False):
     say("  history  %s" % ("off" if cfg.history <= 0 else "%d days, %s, %d thread%s"
                            % (cfg.history, _short(os.path.join(STATE_DIR, "turns")), n, "" if n == 1 else "s")))
     say("  last     " + _fmt_turn(session.last_turn()).replace("\n", "\n           "))
+    if _waiting():
+        say("  runs     %s (spark do --review)" % _waiting())
     return 0
+
+
+def _waiting(lead=""):
+    """`N runs waiting` (sandboxed, for review), or '' when none do."""
+    from . import sandbox
+    n = len(sandbox.runs())
+    return "%s%d run%s waiting" % (lead, n, "" if n == 1 else "s") if n else ""
 
 
 def _short(path):

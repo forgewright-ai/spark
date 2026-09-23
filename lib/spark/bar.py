@@ -1,7 +1,8 @@
 # spark.bar -- one line for tmux's status-right, on both OSes.
 #
 # load · mem · disk · net · ai (when a model is loaded: 9 GB must never be
-# invisible) · check heartbeat · battery · clock. Written to state/bar with
+# invisible) · check heartbeat · runs waiting (spark do --sandbox, when
+# any) · battery · clock. Written to state/bar with
 # a timestamp so `spark check` can tell when the bar stopped ticking.
 
 import json
@@ -276,6 +277,14 @@ def _accent():
     return "colour%d" % best[1] if best else "default"
 
 
+def _runs():
+    """`N runs waiting` while sandboxed runs wait for review (spark do
+    --review); nothing when none do."""
+    from . import sandbox
+    n = len(sandbox.runs())
+    return "%d run%s waiting" % (n, "" if n == 1 else "s") if n else ""
+
+
 def line(cfg):
     now = time.time()
     prev = {}
@@ -292,6 +301,7 @@ def line(cfg):
         _rate(tuple(prev.get("net") or ()), net, now - prev.get("t", 0)),
         _ai(cfg, _accent()),
         _check(),
+        _runs(),
         _battery(),
         time.strftime("%H:%M"),
     ]
@@ -308,7 +318,7 @@ def line(cfg):
 
 USAGE = """spark bar -- the machine's one-line status
 
-  spark bar            print it: load, mem, disk, net, ai, check, clock
+  spark bar            print it: load, mem, disk, net, ai, check, runs, clock
   spark bar line       the same line (what a status bar runs every 15 s)
 """
 

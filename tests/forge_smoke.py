@@ -150,6 +150,13 @@ def main():
             with open(os.path.join(bins, name), "w") as f:
                 f.write("#!/bin/sh\nexit 1\n")
             os.chmod(os.path.join(bins, name), 0o755)
+        # a tool that refuses an option, and a man that documents it: the
+        # page's /api/do/run carries the man excerpt as the prompt does
+        for name, body in (("fakeflag", "#!/bin/sh\necho \"fakeflag: unrecognized option '$1'\"\nexit 2\n"),
+                           ("man", "#!/bin/sh\nprintf 'OPTIONS\\n     --frob  never an option here\\n'\n")):
+            with open(os.path.join(bins, name), "w") as f:
+                f.write(body)
+            os.chmod(os.path.join(bins, name), 0o755)
         with open(os.path.join(home, ".config", "spark", "soul"), "w") as f:
             f.write("Call yourself Fixture.\n")
         os.chmod(os.path.join(home, ".config", "spark", "soul"), 0o600)
@@ -766,6 +773,11 @@ def main():
             ok(st == 200 and json.loads(raw) == {"rc": 0, "tail": "hi\n"}, "/api/do/run echo hi -> rc 0, tail", raw[:100])
             st, _, raw = req(url, "POST", "/api/do/run", {"command": "false"}, headers=post)
             ok(st == 200 and json.loads(raw)["rc"] == 1, "/api/do/run false -> rc 1 (run as clicked, not re-judged)", raw[:100])
+            st, _, raw = req(url, "POST", "/api/do/run", {"command": "fakeflag --frob"}, headers=post)
+            d = json.loads(raw) if st == 200 else {}
+            ok(st == 200 and d.get("rc") == 2 and "unrecognized option" in d.get("tail", "")
+               and d.get("man") == "From man fakeflag:\nOPTIONS\n     --frob  never an option here",
+               "/api/do/run of a step refused for an option -> {rc, tail, man}: its man page's lines", raw[:300])
             st, _, raw = req(url, "POST", "/api/do/run", {"command": "pwd", "cwd": tmp}, headers=post)
             ok(st == 200 and json.loads(raw)["tail"].strip().endswith(os.path.basename(tmp)), "/api/do/run honours cwd", raw[:100])
             st, _, _ = req(url, "POST", "/api/do/run", {"command": ""}, headers=post)
@@ -819,8 +831,8 @@ def main():
             hi = [r for r in runs if r.get("digest") == _hl.sha256(b"echo hi").hexdigest()[:12]]
             ok(len(hi) == 1 and set(hi[0]) == {"ts", "ip", "action", "digest", "rc"} and hi[0]["rc"] == 0
                and hi[0]["ip"] == "127.0.0.1", "do/run echo hi landed one audit record: {ts, ip, action, digest, rc}", hi)
-            ok(len(runs) == 4 and all(isinstance(r["rc"], int) and re.match(r"^[0-9a-f]{12}$", r["digest"]) for r in runs),
-               "every do/run that ran (4) has its record: rc a number, digest 12 hex", runs)
+            ok(len(runs) == 5 and all(isinstance(r["rc"], int) and re.match(r"^[0-9a-f]{12}$", r["digest"]) for r in runs),
+               "every do/run that ran (5) has its record: rc a number, digest 12 hex", runs)
             blob = json.dumps(arecs)
             ok("echo hi" not in blob and "rm -rf" not in blob and "pwd" not in blob and tmp not in blob,
                "no command text, no path in the trail", blob[:200])

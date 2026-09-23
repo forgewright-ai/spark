@@ -37,7 +37,9 @@ spark
  spark ver [--sbom]           about, version, credits; or what it depends on
  spark chat [words]           a conversation; /help lists its verbs, Ctrl-D ends
  spark [@FILE] <words>        ask about anything, or a file; a streamed answer
- spark do <words>             a task, one command at a time; you confirm each
+ spark do [--sandbox] <words> a task, one command at a time; you confirm each,
+                              or, sandboxed, the changes once at the end
+ spark do --review [ID]       sandboxed runs waiting: the diff, then yes
  spark edit [?] [words]       the text on stdin: words rewrite it, ? asks,
                               --at N completes; an editor's client (-h)
  spark ask < FILE             the questions that text does not answer: at

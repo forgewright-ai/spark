@@ -311,6 +311,22 @@ def answer_json(messages):
                 return {"kind": "done", "command": "", "hint": "all done", "danger": False}
             return {"kind": "cmd", "command": "fakeflag --frob" if "badflag" in goal else "fakeflag --ok",
                     "hint": "use the tool", "danger": False}
+        outs = sum(1 for m in messages[1:] if m.get("role") == "user" and "Output of" in m.get("content", ""))
+        if "boxwork" in goal:                   # a sandboxed run: write, then delete (a danger step), then done
+            if outs == 0:
+                return {"kind": "cmd", "command": "echo hello >> notes.txt", "hint": "write a note",
+                        "danger": False, "proof": "test -f notes.txt"}
+            if outs == 1:
+                return {"kind": "cmd", "command": "rm -f old.txt", "hint": "drop the old file", "danger": False}
+            return {"kind": "done", "command": "", "hint": "wrote notes.txt, removed old.txt", "danger": False}
+        if "boxlook" in goal:                   # a sandboxed run that changes nothing
+            if outs:
+                return {"kind": "done", "command": "", "hint": "looked", "danger": False}
+            return {"kind": "cmd", "command": "ls", "hint": "look", "danger": False}
+        if "sumstep" in goal:                   # a checksum line and a token on one output
+            if outs:
+                return {"kind": "done", "command": "", "hint": "all done", "danger": False}
+            return {"kind": "cmd", "command": "cat sums.txt", "hint": "show the sums", "danger": False}
         if "ctrlchar" in goal:                  # a terminal escape inside the command
             return {"kind": "cmd", "command": "echo \x1b[2K\x1b[1Gbenign; rm -rf junk2",
                     "hint": "say hi\x1b]0;evil\x07", "danger": False}
@@ -2265,6 +2281,169 @@ def main():
         t.ok(len(_sends) == 1 and _sends[0][0] == "do" and "%.1f kB" % (_do.MAN_MAX / 1000.0) in _sends[0][1]
              and any(k == "do" and "held back" in v for k, v in _pers.SENDS),
              "persona.SENDS: do's man-page row names its cap (do.MAN_MAX), and do's output row the hold", _sends)
+
+        # ---- v1.47: the sandbox, the review, detach
+        # a coreutils checksum line keeps its digest (do.CHECKSUM_LINE);
+        # a real token on the same output is still held
+        _dig = hashlib.sha256(b"spark").hexdigest()
+        with open(work + "/sums.txt", "w") as f:
+            f.write("%s  spark.tar.gz\n%s *spark.bin\ndeploy token %s\n" % (_dig, _dig, _gh))  # spark:allow-secret
+        rc, out, err = spark("do", "sumstep", stdin="\n", extra=hook, cwd=work)
+        umsg = STATE["bodies"][-1]["messages"][-1]["content"]
+        t.ok(rc == 0 and ("%s  spark.tar.gz" % _dig) in umsg and ("%s *spark.bin" % _dig) in umsg
+             and _gh not in umsg and "deploy token [held]" in umsg and "held back 1 span" in err,
+             "do.CHECKSUM_LINE: a sha256sum line keeps its digest; a token on the same output is still held",
+             umsg[-300:] + err)
+        t.ok(_do.hold(_dig + "\n")[1] == 1 and _do.hold("x " + _dig + "  f\n")[1] == 1
+             and _do.hold(_dig + "  f\n") == (_dig + "  f\n", 0, []),
+             "do.hold: only a line shaped DIGEST  NAME is exempt -- a bare digest or one mid-line is held")
+
+        rc, out, err = spark("do", "--", "-la", "help", stdin="q\n", extra=hook, cwd=work)
+        t.ok(rc == 0 and STATE["bodies"][-1]["messages"][1]["content"].endswith("]\n-la help"),
+             "spark do --: the words after it are the goal, a leading - and help included", out + err)
+        rc, out, err = spark("do", "--", "help", stdin="q\n", extra=hook, cwd=work)
+        t.ok(rc == 0 and "driving with" in out and not out.startswith("spark do --"),
+             "spark do -- help: help after -- is a goal, not the usage", out)
+        rc, out, _ = spark("do", "--sandbx", "fix", "it", cwd=work)
+        t.ok(rc == 2 and out.startswith("spark do -- no option --sandbx:"),
+             "spark do: an option it does not take is refused, signed, exit 2", out)
+        rc, out, _ = spark("do", "--detach", "x", cwd=work)
+        t.ok(rc == 2 and "--detach runs sandboxed only" in out, "spark do --detach: sandboxed only", out)
+        rc, out, _ = spark("do", "-h")
+        t.ok(all(w in out for w in ("--sandbox", "--detach", "--review [ID]", "--accept ID", "--discard ID",
+                                    "spark do -- <words>", "held back", "man page"))
+             and not [l for l in out.splitlines() if len(l) > 80],
+             "spark do -h names every option, the hold and the man page, within 80 columns", out)
+
+        # the sandbox, for real where this machine has one (sandbox-exec on
+        # macOS, bwrap 0.11+ on Linux); a CI container has none: skipped
+        from spark import sandbox as _sb      # its names only: its state paths are this process's HOME
+        rc, out, _ = spark("check", "sandbox", "--porcelain", "--fresh")
+        _row = (out.splitlines() or [""])[0].split("\t")
+        if len(_row) < 4 or _row[1] != "ok":
+            t.skip("spark do --sandbox: the real sandboxed runs", "no sandbox here: " + " ".join(_row[1:4]))
+        else:
+            box = os.path.realpath(tempfile.mkdtemp(prefix="spark-box-"))
+            subprocess.run(["git", "init", "-q"], cwd=box, env=env)
+
+            def reset_box():
+                for n in os.listdir(box):
+                    if n != ".git":
+                        os.remove(os.path.join(box, n))
+                with open(box + "/old.txt", "w") as f:
+                    f.write("old\n")
+                old = time.time() - 60        # older than any run's start
+                os.utime(box + "/old.txt", (old, old))
+
+            runs_dir = home + "/.local/state/spark/runs"
+
+            def waiting():
+                """the ids of the runs waiting, read from the smoke HOME"""
+                out = []
+                for n in sorted(os.listdir(runs_dir)) if os.path.isdir(runs_dir) else []:
+                    try:
+                        if json.load(open(os.path.join(runs_dir, n, "meta.json")))["state"] == "waiting":
+                            out.append(n)
+                    except (OSError, ValueError, KeyError):
+                        pass
+                return out
+            reset_box()
+            n0 = len(STATE["bodies"])
+            rc, out, err = spark("do", "--sandbox", "boxwork", stdin="yes\n", extra=hook, cwd=box)
+            bodies = [b for b in STATE["bodies"][n0:] if is_do(b["messages"])]
+            goal = bodies[0]["messages"][1]["content"] if bodies else ""
+            t.ok(rc == 0 and "Enter runs it" not in out and "proof -> ok" in out
+                 and "can destroy data -- it runs in the sandbox's copy" in out
+                 and "added      notes.txt" in out and "+hello" in out and "deleted    old.txt" in out
+                 and "apply 2 changes to" in out and "applied 2 changes to" in out
+                 and open(box + "/notes.txt").read() == "hello\n" and not os.path.exists(box + "/old.txt")
+                 and not waiting(),
+                 "spark do --sandbox: steps run without asking (a danger step named), the review, yes applies", out + err)
+            where = (os.path.realpath(runs_dir) + "/") if _sb.OS == "macos" else box
+            t.ok(goal.startswith("[cwd " + where) and goal.endswith("boxwork\n\n" + _do.SANDBOX_NOTE)
+                 and (_sb.OS != "macos" or goal.split("]")[0].endswith("/clone")),
+                 "spark do --sandbox: the goal says where it runs ([cwd] the clone on macOS) and carries the note",
+                 goal)
+            plain = [b for b in STATE["bodies"][:n0] if is_do(b["messages"])][-1]["messages"][0]
+            t.ok(bodies and all(b["messages"][0] == plain for b in bodies),
+                 "spark do --sandbox: the system message is byte-identical to plain do's")
+            reset_box()
+            rc, out, err = spark("do", "--sandbox", "boxwork", stdin="no\n", extra=hook, cwd=box)
+            ids = waiting()
+            t.ok(rc == 0 and len(ids) == 1 and ("spark do --review %s" % ids[0]) in out
+                 and os.path.exists(box + "/old.txt") and not os.path.exists(box + "/notes.txt"),
+                 "spark do --sandbox: anything but yes leaves the run waiting, the project untouched", out + err)
+            rid = ids[0] if ids else "none"
+            rc, out, _ = spark("do", "--review", cwd=box)
+            t.ok(rc == 0 and re.search(r"^%s\s+\S+\s+2 changes\s+boxwork$" % rid, out, re.M) is not None,
+                 "spark do --review: the waiting runs -- id, age, changes, the goal's first words (from the thread)", out)
+            meta = open(os.path.join(runs_dir, rid, "meta.json")).read() if ids else ""
+            t.ok("boxwork" not in meta and '"thread"' in meta, "the run's record keeps no words of the goal", meta)
+            rc, out, _ = spark("bar", cwd=box)
+            rc2, out2, _ = spark("status", cwd=box)
+            t.ok("1 run waiting" in out and "runs     1 run waiting (spark do --review)" in out2,
+                 "the bar line and spark status count the runs waiting", out + out2)
+            rc, out, _ = spark("do", "--review", rid, cwd=box)
+            t.ok(rc == 2 and ("spark do --accept %s" % rid) in out,
+                 "spark do --review ID: not at a terminal it points at --accept", out)
+            rc, out, err = spark("do", "--review", rid, stdin="yes\n", extra=hook, cwd=box)
+            t.ok(rc == 0 and "+hello" in out and "applied 2 changes" in out and not waiting()
+                 and os.path.exists(box + "/notes.txt"),
+                 "spark do --review ID: the diff, then yes applies it", out + err)
+            rc, out, _ = spark("do", "--review", rid, cwd=box)
+            rc2, out2, _ = spark("do", "--review", "../x", cwd=box)
+            t.ok(rc == 2 and "applied already" in out and rc2 == 2 and "not a sandboxed run's id" in out2,
+                 "spark do --review: an applied run, and an id that is not one, are refused", out + out2)
+            rc, out, _ = spark("bar", cwd=box)
+            t.ok("waiting" not in out, "the bar line says nothing of runs when none wait", out)
+            # --accept and --discard by id; a conflict applies nothing
+            reset_box()
+            spark("do", "--sandbox", "boxwork", stdin="no\n", extra=hook, cwd=box)
+            spark("do", "--sandbox", "boxwork", stdin="no\n", extra=hook, cwd=box)
+            ids = waiting()
+            rc, out, _ = spark("do", "--discard", ids[0] if ids else "none", cwd=box)
+            rc2, out2, _ = spark("do", "--accept", ids[-1] if ids else "none", cwd=box)
+            t.ok(len(ids) == 2 and rc == 0 and "discarded" in out and rc2 == 0 and "applied 2 changes" in out2
+                 and not waiting() and not os.path.exists(box + "/old.txt"),
+                 "spark do --discard ID drops a run; --accept ID applies one without asking", out + out2)
+            reset_box()
+            spark("do", "--sandbox", "boxwork", stdin="no\n", extra=hook, cwd=box)
+            with open(box + "/old.txt", "w") as f:
+                f.write("changed here meanwhile\n")
+            ids = waiting()
+            rc, out, err = spark("do", "--accept", ids[0] if ids else "none", cwd=box)
+            t.ok(rc == 1 and "changed here since the run began" in err and "old.txt" in err
+                 and ("spark do --review %s" % (ids[0] if ids else "")) in err and waiting() == ids
+                 and not os.path.exists(box + "/notes.txt"),
+                 "spark do --accept: a file changed here since the run began -- nothing applied, the run waits", err)
+            spark("do", "--discard", ids[0] if ids else "none", cwd=box)
+            # nothing changed: said, and the run goes
+            rc, out, err = spark("do", "--sandbox", "boxlook", stdin="", extra=hook, cwd=box)
+            t.ok(rc == 0 and "nothing changed in the copy" in out and not waiting() and "type yes" not in out,
+                 "spark do --sandbox: a run that changed nothing says so and leaves nothing waiting", out + err)
+            # detached: no terminal, the id printed, the changes wait; one at a time
+            reset_box()
+            rc, out, err = spark("do", "--sandbox", "--detach", "boxwork", stdin="", cwd=box)
+            ids = waiting()
+            t.ok(rc == 0 and len(ids) == 1 and ("sandbox %s" % ids[0]) in out
+                 and ("spark do --review %s" % ids[0]) in out and "type yes" not in out
+                 and not os.path.exists(box + "/notes.txt"),
+                 "spark do --sandbox --detach: no terminal needed, the run's id printed, its changes wait", out + err)
+            spark("do", "--discard", ids[0] if ids else "none", cwd=box)
+            import fcntl
+            _lfd = os.open(os.path.join(runs_dir, _do.DETACH_LOCK), os.O_RDWR | os.O_CREAT, 0o600)
+            fcntl.flock(_lfd, fcntl.LOCK_EX)
+            rc, out, err = spark("do", "--sandbox", "--detach", "boxwork", stdin="", cwd=box)
+            os.close(_lfd)
+            t.ok(rc == 2 and "a detached run is running already: one at a time" in out and not waiting(),
+                 "spark do --detach: a second detached run while one holds the lock is refused", out + err)
+            rc, out, err = spark("do", "--sandbox", "boxwork", stdin="yes\n", extra=hook, cwd=home)
+            t.ok(rc == 2 and out.strip() == "spark do -- " + _sb.NEEDS_PROJECT and not waiting(),
+                 "spark do --sandbox in ~ is refused: the sandbox needs a project directory", out + err)
+            for r in waiting():
+                spark("do", "--discard", r, cwd=box)
+            import shutil
+            shutil.rmtree(box, ignore_errors=True)
         # the ember verb: status, choose, refuse, the shared table's marks
         mem = {"SPARK_NO_APPLY": "1", "SPARK_MEM_TOTAL_GB": "64"}
         rc, out, _ = spark("ember", extra=mem)
@@ -3663,6 +3842,16 @@ def main():
                      if not re.search(r"(?<![A-Za-z-])%s(?![A-Za-z-])" % re.escape(w), comp))
     t.ok(not missing, "completion.bash names every dispatch verb and cli command",
          "missing: " + " ".join(missing))
+    # and every option spark do takes (do.OPTIONS, the help pair aside)
+    # is a word after `do` in both files
+    from spark import do as _dod
+    for cf in ("completion.bash", "completion.zsh"):
+        src = open(os.path.join(REPO, "home", ".config", "spark", cf)).read()
+        m = re.search(r"^\s*do\)\s+(?:words=\"|comp=\()([^\")]*)", src, re.M)
+        have = set(m.group(1).split()) if m else set()
+        want = set(_dod.OPTIONS) - {"-h", "--help"}
+        t.ok(have == want, "%s completes every spark do option (do.OPTIONS)" % cf,
+             "have %s, want %s" % (sorted(have), sorted(want)))
 
     # palette drift guard: the page's theme.builtin map is a hand copy of
     # themes/*.env (the page has no build step) -- parse spark.js and

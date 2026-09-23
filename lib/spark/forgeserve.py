@@ -1387,7 +1387,7 @@ class Handler(BaseHTTPRequestHandler):
         `Output of` feedback): held like do.feedback's tail before the
         model sees it. Every proposal is a turn record (mode do), with
         the server's timings."""
-        from . import do, forge, text as textmod
+        from . import do, forge
         cfg = self.server.cfg
         text, cwd = self._text_cwd(body)
         if text is None:
@@ -1399,10 +1399,7 @@ class Handler(BaseHTTPRequestHandler):
         if thread is None:
             thread = forge.new_thread(cfg)
         else:
-            spans, _names = textmod.held_spans(text)
-            held = len(spans)
-            if held:
-                text = textmod.hold_spans(text, spans)
+            text, held, _names = do.hold(text)
         with self.server.chat_lock:
             try:
                 reply, ms, s = do.propose(cfg, thread, text, _shell(), cwd or HOME, brain=self.server.upstream.brain)
@@ -1425,7 +1422,9 @@ class Handler(BaseHTTPRequestHandler):
         control character (a second line, an escape) is refused. Nobody
         watches it at a terminal: do.STEP_TIMEOUT is its leash (rc 124,
         the whole process group killed). The log carries a sha256 prefix
-        and the truncated text, then the rc."""
+        and the truncated text, then the rc. `man` rides the answer when
+        the step was refused for an option (do.man_excerpt): the lines of
+        its own man page, which the page's next proposal carries."""
         from . import do, persona
         command, cwd = body.get("command"), body.get("cwd") or ""
         if not isinstance(command, str) or not command.strip():
@@ -1441,7 +1440,8 @@ class Handler(BaseHTTPRequestHandler):
         rc, tail = do.run(command, _shell(), cwd or HOME, echo=False, timeout=do.STEP_TIMEOUT)
         log("%s do/run %s rc %d" % (self._ip(), digest, rc))
         self._audit("do/run", digest=digest, rc=rc)
-        return self._json(200, {"rc": rc, "tail": tail})
+        man = do.man_excerpt(command, rc, tail)      # the page appends it, as the prompt's feedback does
+        return self._json(200, dict({"rc": rc, "tail": tail}, **({"man": man} if man else {})))
 
     # ---- the verb runner ----
     def api_run(self, body):
