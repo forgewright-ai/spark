@@ -825,7 +825,7 @@ def test_step_mac_shape():
           "(allow file-read-metadata)" not in text)
     check("PROFILE: the default stays allow, the network denied",
           "(allow default)" in text and "(deny network*)" in text)
-    for path in ("/private/var/folders", "/private/tmp", "/Library/Keychains", "/private/var/root",
+    for path in ("/private/var/folders", "/private/tmp", "/private/var/tmp", "/Library/Keychains", "/private/var/root",
                  "/opt/homebrew/etc", "/usr/local/etc"):
         check("PROFILE: reads under %s are denied" % path, '(subpath "%s")' % path in text)
     for exe in ("shortcuts", "automator", "defaults", "osacompile", "pbcopy", "sfltool", "screencapture"):
@@ -1056,7 +1056,8 @@ for name in sys.argv[1:]:
 def mac_denies(run):
     """PROFILE's extended lines, for real: the reads, the delegating tools
     and the services behind them."""
-    for path in ("/private/var/folders", "/private/tmp", "/Library/Keychains", "/opt/homebrew/etc"):
+    for path in ("/private/var/folders", "/private/tmp", "/private/var/tmp", "/Library/Keychains",
+                 "/opt/homebrew/etc"):
         if os.path.isdir(path):
             rc, out = step(run, "ls %s" % path)
             check("mac: reads under %s are denied" % path, rc != 0 and "not permitted" in out, out)

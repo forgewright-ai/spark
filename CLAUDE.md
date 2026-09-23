@@ -554,8 +554,8 @@ may change freely.
    breaks dyld) and denies: every network socket, TCP and unix (so the
    ssh and gpg agents are out of reach); reads of /Users, /Volumes, the
    home, spark's state and config, /private/etc/spark, the per-user and
-   shared temp dirs (/private/var/folders, /private/tmp), the system
-   keychain, root's home and the package manager's service config
+   shared temp dirs (/private/var/folders, /private/tmp,
+   /private/var/tmp), the system keychain, root's home and the package manager's service config
    (/opt/homebrew/etc, /usr/local/etc, but the public files git,
    openssl, node and clang read); every write but the clone, the run's
    own home and temp and the null devices; the terminal; Apple events,
@@ -1121,9 +1121,9 @@ may change freely.
     or it is too large to show; `exec` true when the file became
     executable; `reason` why it is held or refused, else a note (the
     setuid bit dropped, a binary's size, too large to show), '' when
-    none; `control` true when its name,
-    link target or text holds a control character; every item inside a
-    git directory is its own entry) and
+    none; `control` true when its name, link target or text holds a
+    control character; every item inside a git directory is its own
+    entry) and
     `{"ev":"end","reason":"done|cap|quit|refused|stopped|error","hint","rc"}`.
     `stopped` is spark stopping the run (a skipped step proposed again,
     verbatim, after it was re-asked once). A sandboxed run's `end` is its

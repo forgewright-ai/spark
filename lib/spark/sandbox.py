@@ -166,7 +166,8 @@ PROFILE = (
     ('(deny file-read* (subpath "/Users") (subpath "/Volumes") (subpath "/private/etc/spark")'
      ' (subpath (param "HOME")) (subpath (param "STATE")) (subpath (param "CONFIG")))',
      "no home, no other volume, no spark token or state"),
-    ('(deny file-read* (subpath "/private/var/folders") (subpath "/private/tmp"))',
+    ('(deny file-read* (subpath "/private/var/folders") (subpath "/private/tmp")'
+     ' (subpath "/private/var/tmp"))',
      "no user's temp and cache dirs, no other program's temp files"),
     ('(deny file-read* (subpath "/Library/Keychains") (subpath "/private/var/root"))',
      "no system keychain, no root's home"),
