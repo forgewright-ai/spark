@@ -121,6 +121,11 @@ def main():
     for kind, _cap in persona.SENDS:
         check(re.search(r"\b%s\b" % re.escape(kind), section) is not None,
               "README.md 'What leaves this machine' names %s (persona.SENDS)" % kind)
+    # a sender's row that names a man page (do's excerpt) is disclosed
+    # as one: the section says "man page" too
+    if any("man page" in cap for _kind, cap in persona.SENDS):
+        check("man page" in " ".join(section.split()),
+              "README.md 'What leaves this machine' names the man page lines (persona.SENDS)")
     # and what a source has held back before it leaves: every shape in
     # text.SOURCE_SHAPES is named there, so a new shape is disclosed too
     from spark import text as textmod

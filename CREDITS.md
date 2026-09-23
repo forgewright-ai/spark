@@ -68,7 +68,7 @@ own repository with its own credits
 (github.com/forgewright-ai/spark-shell). An app's plugin is its own
 repository too (github.com/forgewright-ai/<name> -- spark-micro,
 spark-neovim, spark-vim, spark-helix, spark-nano, spark-w3m,
-spark-newsboat, spark-aerc).
+spark-newsboat, spark-aerc, spark-acp).
 
 ## Models
 

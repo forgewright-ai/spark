@@ -13,6 +13,10 @@ SPARK
   /resume [N]   /clear   /new     in the chat: an older thread, wipe, fresh
   spark <words>                   one answer, streamed     spark last  again
   spark do <words>                a task, one confirmed command at a time
+  spark do --sandbox <words>      the same in a copy, no network: it runs on
+                                  its own, then the diff -- yes applies it
+  spark do --sandbox --detach ... nobody there (a timer): its changes wait
+  spark do --review [ID]          the runs waiting; --accept ID, --discard ID
   spark @FILE words               ask about a file (first 4 kB, last 12 kB)
   spark edit [?] words < FILE     rewrite / complete (--at N) / ask (?) stdin
   spark ask < FILE                three questions that text does not answer

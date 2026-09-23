@@ -67,6 +67,7 @@ The first hour, twelve small things to try: `docs/TOUR.md`.
 | `spark chat` | a conversation; `/help` lists its verbs |
 | `spark <words>` | one answer, streamed; `spark @FILE words` reads a file |
 | `spark do <words>` | a task, one confirmed command at a time |
+| `spark do --sandbox <words>` | the same task in a copy of this directory, no network: the commands run on their own, then you see the changes and type `yes` to apply them |
 | `spark ask < plan.md` | the questions that text does not answer: at most three, every line a question |
 | `spark read <words> < page.txt` | what a source says about your question, every line quoting it; a source past 16 kB is read one `--part N` at a time |
 | `spark drill < notes.md` | the source becomes questions it answers; you try each, then see its own words; `--name` keeps a schedule |
@@ -112,7 +113,10 @@ Only to the server you configured (this machine's, or another of yours):
   earlier turns;
 - for `explain` the piped text (last 6 kB); for `@FILE` its first 4 kB
   and last 12 kB under the name you typed; for `spark do` each step's
-  output (last 4 kB);
+  output (last 4 kB) -- a span that looks like a secret is held back --
+  and, after a step refused for an option, the lines of that command's
+  man page about it (1.5 kB at most; spark reads the page, the command
+  never runs for it);
 - from an editor (`spark edit`), the file's name and its text: 6 kB
   around the cursor for a completion, 12 kB for a rewrite, 16 kB for a
   question -- never its path; a thread only when the editor asks for

@@ -109,6 +109,18 @@ describes how things are, not how they came to be.
   verbs that own those refuse in one signed line, their rows say so, never
   fail). CI has no WSL runner: `check.WSL_ROWS` and a fifth selftest pass
   pin the branch by fixture; a real run there is the maintainer's, by hand.
+- **The OS is the harness.** An agent's harness is its tools, its
+  permissions, its context, its triggers and its memory, and spark
+  brings only the last: the tools are the programs on PATH and their
+  man pages (a step refused for an option brings back its own page's
+  lines); the permissions are the kernel's sandbox (bubblewrap's
+  namespaces and no_new_privs, `sandbox-exec` on macOS) and a person's
+  Enter or `yes`; the context is the shell -- the directory, the exit
+  code, the output; the triggers are the OS's own timers (a systemd
+  user timer, launchd, cron, a `spark watch` line) starting `spark do
+  --sandbox --detach`; the memory and the audit are the FORGE's sealed
+  threads. No tool schema rides a request: a small model's context
+  holds the task, not the harness.
 - **The user chooses.** Theme, prompt, model, workstation name, user -- all
   `site.env` keys with defaults. Nothing aesthetic or sized-to-hardware is
   baked in.
@@ -200,7 +212,13 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 chat-history save skips a sealed file that does not open,
                 one line on stderr, never written over)
                 forgeserve (the FORGE server: spark forge, the API, the page;
-                ROUTES is the one table of every route and its role) do (spark do)
+                ROUTES is the one table of every route and its role) do (spark do:
+                the one loop, a face per driver -- the terminal, --porcelain
+                (contract 15) -- the budget, the hold, the man excerpt)
+                sandbox (spark do --sandbox: a copy the kernel keeps the
+                steps inside -- bwrap's overlay on Linux, an APFS clone under
+                sandbox-exec on macOS -- the probe, the review, the apply;
+                every list that decides is a named line)
                 audit (the sealed audit trail: one record per admin action,
                 appended into the box account's store -- users/<name>/audit,
                 kind audit -- numbers and names only, never a command's text;
@@ -248,6 +266,10 @@ tests/          install_test.sh get_test.sh update_test.sh uninstall_test.sh smo
                 forge_smoke.py bench_smoke.py widget_pty.py check_selftest.py
                 policy_test.py (every row of forgeserve.ROUTES with three callers:
                 nobody, a user, the admin)
+                sandbox_test.py (the review and every named apply refusal, the
+                locks, the conflict, the links, the held git files; the real
+                escapes -- home, token, network, /etc, sudo -- where the
+                probe says this machine has a sandbox)
                 vault_test.py (RFC 8439 vectors, round-trips, refusals)
                 qr_test.py (ISO 18004 format table, the RS vector, a full
                 decode-back, the render forms)
@@ -314,6 +336,12 @@ away), `chat-history` 0600, `brain`, `check.json`, `bar`,
 AI=up|down`, a cache for a shell prompt's segment: written by the bar's
 tick, by `session.record` after a turn and by the BrainError handlers --
 as fresh as the last of those, never a probe of its own),
+`runs/<id>/` (0700: a sandboxed run -- `meta.json` 0600, numbers and
+names only; `up/` and `wk/` the overlay's on Linux, `clone/`,
+`manifest.json`, `home/`, `tmp/` and `profile.sb` on macOS, removed
+once the run is applied or discarded) and `runs/detach.lock` (the one
+detached run's flock), `sandbox/probe.json` (the probe's verdict,
+keyed by the bwrap version, the kernel and the AppArmor userns switch),
 `users/<name>/` (0700 per user: `token.hash` and `key` 0600 -- the sha256
 token verifier and the wrapped data key -- plus that user's sealed
 `threads/`, `memory`, `chat-history`, `ledger`, and in the box account's
@@ -453,6 +481,71 @@ may change freely.
    every other; a command or proof carrying a control character is
    refused whole (a `done`, `do.REFUSED_CONTROL`); a `sudo` step is a
    danger step (the typed `yes`).
+   `spark do` is bounded, measured and held. A proposal's messages fit
+   the served context (`do.budget`: `SPARK_CTX`, 8192 when unknown, at
+   `reveal.CHARS_PER_TOKEN`, a `CTX_SHARE` of 0.8, less the system
+   message and the reply's `DO_MAX_TOKENS`): `do.fit` keeps the goal and
+   the newest step, shortens the oldest outputs to `(output trimmed,
+   exit N)` first, then drops the oldest exchanges; `forge.history`
+   (mode `do`) cuts the same way and rebuilds each user message with its
+   `[cwd]` line, so a replayed prefix is the one that was served. Every
+   proposal is a turn record through `Session.record`, the server's
+   timings and the stem that answered, kind `cmd`, `danger`, `done`,
+   `skipped`, `reasked`, `missing`, `stopped` or `quit`, with `held` and
+   `man` (numbers) on a step. What a step printed passes `do.hold` before
+   it rides a request -- `text.SOURCE_SHAPES`, one stderr line, `held=N`
+   -- with one named exemption, `do.CHECKSUM_LINE`: a coreutils checksum
+   line keeps its digest. A step that exits non-zero with an option
+   refused (`do.BAD_OPTION`) brings back `do.man_excerpt`: `man -P cat
+   HEAD` as argv, HEAD a plain name `which` finds, the pager variables
+   dropped, `MANWIDTH=80`, `MAN_TIMEOUT` 5 s, overstrikes stripped, at
+   most `MAN_MAX` 1500 bytes around the refused flag -- the tool never
+   runs for it, and `persona.SENDS` names it. A step no person watches
+   runs on `do.STEP_TIMEOUT` (120 s; rc 124, the process group killed):
+   the page's, a sandboxed one, a program's.
+   `spark do --sandbox` (`lib/spark/sandbox.py`) moves the person's
+   Enter; it never removes it. Containment replaces the per-step Enter
+   and the Enter moves to the apply. `sandbox.probe()` answers first
+   (the `sandbox` row; no: one signed line with the reason and the
+   install line, exit 2), and `sandbox.new_run` refuses a run dir
+   inside the cwd -- `spark do -- the sandbox needs a project directory,
+   not ~ or /` -- and a sixth run waiting. Linux: one bwrap a step --
+   `--ro-bind / /`, an empty tmpfs over each of `sandbox.HIDDEN` (the
+   homes, /root, /run, /tmp, /media, /mnt, /etc/spark), the git config
+   files read-only one by one, the project an overlay whose upper dir
+   keeps every write, `sandbox.BWRAP_FLAGS` (the user, ipc, pid, net,
+   uts and cgroup namespaces, `--disable-userns`, `--die-with-parent`,
+   `--new-session`), `--clearenv` and `sandbox.STEP_ENV`; bwrap sets
+   no_new_privs, so sudo and setuid do not elevate. macOS: an APFS clone
+   (`cp -c`, the same volume, `SANDBOX_MAX_ENTRIES` listed within
+   `SANDBOX_LIST_SECONDS`, a manifest at clone time) under `sandbox-exec`
+   with `sandbox.PROFILE`, a named line each, every path a `-D`
+   parameter; there `[cwd]` names the clone. Steps and proofs run
+   without asking (`proof_ok` still applies), `STEP_TIMEOUT` each, under
+   RLIMIT_FSIZE (`sandbox.preexec`), the copy's total checked between
+   steps against `SANDBOX_MAX_BYTES` (1 GB), 8 steps; a danger step runs,
+   contained, and is named. The goal carries `do.SANDBOX_NOTE`; the
+   system message stays byte-identical to plain do's. The review
+   (`sandbox.changes`, `diff_text` through `page()`), then `apply N
+   changes to DIR? type yes:`. `sandbox.apply` never applies
+   `.git/hooks` or `.git/config` (a hook planted in the copy would run
+   outside it on the next git command), masks setuid and setgid,
+   refuses a device, a fifo, a socket and a link that leaves the
+   project, marks an added `+x`, writes fd-relative with O_NOFOLLOW at
+   every component, and refuses whole on a `.git` lock or a conflict (a
+   touched path newer than the run's start) -- the run then waits.
+   Anything but `yes` leaves the run waiting; a run that changed nothing
+   is said and discarded; Ctrl-C or SIGTERM leaves it waiting too.
+   `runs/<id>/meta.json` holds numbers and names (id, thread, cwd,
+   start, os, state) -- the goal's words live in the sealed thread.
+   `--detach` needs no tty, holds `runs/detach.lock` (an flock: one
+   detached run at a time, refused in one signed line), prints the id
+   and leaves the changes waiting; `--review` lists the runs waiting
+   (id, age, changes, the goal's first words from the thread),
+   `--review ID` is the diff and the typed `yes`, `--accept ID` applies
+   without asking (every named refusal still holds), `--discard ID`
+   drops it; bare `spark` and the bar line say `N runs waiting`. `--`
+   ends the options: a goal that starts with `-` or is `help` is words.
    `spark line --paste` is the paste inspection: a multi-line paste on
    stdin, NO command back -- one `answer`/`danger` line naming what the
    paste does (a locally dangerous line forces `danger` whatever the
@@ -654,9 +747,14 @@ may change freely.
    `POST /api/do/propose` answers `{thread, reply, ms, driver,
    unchecked}` -- `driver` the ember role's model stem, `unchecked` the
    done hint's numbers no user message of the thread backs (`[]`
-   otherwise). `POST /api/do/run` (admin) takes `{command, cwd?,
-   confirmed?}`, runs the command as typed through the login shell and
-   answers `{rc, tail}`; a control character in it is refused (400: one
+   otherwise); on a continued thread the text is held (`do.hold`)
+   before the model sees it, and the proposal is a turn record. `POST
+   /api/do/run` (admin) takes `{command, cwd?, confirmed?}`, runs the
+   command as typed through the login shell on `do.STEP_TIMEOUT` (120 s:
+   rc 124, the process group killed) and answers `{rc, tail}`, plus
+   `man` -- `do.man_excerpt`'s lines -- when the step was refused for an
+   option (the page appends it to the feedback it proposes on, as the
+   prompt does); a control character in it is refused (400: one
    line of printable text), and a command `persona.is_dangerous` flags
    runs only with `confirmed: true` (400 `{error: {kind: confirm}}`
    otherwise -- the page sends it after its second click); the log
@@ -907,6 +1005,36 @@ may change freely.
     has nothing stable to name. Local in the strongest sense -- the stream
     never leaves the machine, the same brain the prompt uses. The turn
     record is numbers.
+15. `spark do --porcelain [--sandbox] [--] <words>` is the task verb for a
+    program: contract 4's `spark do`, driven over a pipe. No tty is
+    needed; one stderr line (`do.PORCELAIN_BANNER`) says a program drives
+    the run; stdout carries JSON Lines and nothing else, one object a
+    line: `{"ev":"start","thread","sandbox","run"}` (`run` null outside
+    the sandbox), `{"ev":"step","n","command","hint","danger","proof"}`,
+    `{"ev":"output","n","text"}` (the step's last 4 kB after `do.hold`:
+    what the model reads), `{"ev":"rc","n","rc"}`, `{"ev":"note","text"}`
+    (the driver line, a refusal, a skip, the man excerpt's count, an
+    apply's result), `{"ev":"review","run","files":[{"path","status",
+    "old","new"}]}` (`path` relative to the cwd; `status` one of
+    `sandbox.STATUSES`; `old`/`new` the whole texts, a link's targets, a
+    mode's octal, null where there is none; git's own files one entry)
+    and `{"ev":"end","reason":"done|cap|quit|refused|error","hint","rc"}`
+    last. `n` counts step events, a proof's included. stdin is read only
+    when something waits, one word a line: outside the sandbox a step
+    waits for `run`, `skip`, `quit` or `edit <command>`, and its proof is
+    a step of its own (hint `proof of step N`, danger false, proof null)
+    that waits for `run`, `skip` or `quit`; inside it nothing waits per
+    step -- steps and proofs run -- and the review waits for `accept` or
+    `discard` (`quit` or EOF: the run waits for `spark do --review`).
+    There is no `yes` word: a danger step outside the sandbox -- and an
+    edit that is one -- is refused without waiting (a note, and the model
+    hears it was skipped); danger is confirmed at a terminal only. EOF
+    while a step waits is quit. A refusal before the run (the probe, the
+    cwd, the lock) is one `end` with reason `refused` and rc 2. Outside
+    the sandbox the steps run on `do.STEP_TIMEOUT`; SIGTERM ends the run
+    and its step. The exit code is the `end` event's rc. Its first
+    client is spark-acp (docs/APPS.md), an Agent Client Protocol agent:
+    a step a Run or Skip, a review one Accept or Discard.
 
 ## The grammar
 
@@ -935,8 +1063,9 @@ One grammar for every verb; a verb that breaks a rule is a bug.
    config read -- signed per contract 8.
 5. One confirm shape: `<question>? yes/NO: ` -- only `y` or `yes`
    proceeds; Enter or EOF is no (`confirm()` in `lib/spark/__init__.py`,
-   beside `say()`). The one deliberate second shape, two users: `spark
-   do`'s danger step and `spark uninstall` require the typed word `yes`.
+   beside `say()`). The one deliberate second shape, the typed word
+   `yes`: `spark do`'s danger step, the sandbox's apply (`apply N changes
+   to DIR? type yes:`) and `spark uninstall`.
 6. One progress vocabulary: curl's bar for downloads, one
    dot-spinner -- `wait_ready(label, probe, timeout, interval)` in
    `lib/spark/__init__.py`, plain dots that survive in a log -- for
@@ -1114,7 +1243,10 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   same way, by a pty test whose config is the shipped snippet itself.
   The reader's verb has its first client too: spark-w3m (contract 11,
   `spark read`) -- a keymap snippet and a stderr-folding wrapper, the
-  same laws, its own repository.
+  same laws, its own repository. And the task verb: spark-acp (contract
+  15, `spark do --porcelain`) -- an Agent Client Protocol agent for Toad
+  or Zed that starts nothing but spark, never speaks HTTP, and has no
+  `yes` to give.
   The known clients are listed in docs/APPS.md, and every one of them is
   in CREDITS.md and on the page front, which is checked the same way
   where the page is rendered -- docs_test reads the app names out of

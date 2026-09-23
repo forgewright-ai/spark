@@ -190,7 +190,74 @@ shell cannot host the widget (another shell, or macOS's bash 3.2):
    same way, and only its exit code goes back to the model, never what
    it printed. Each step's output (last 4 kB) goes back to the model
    until it says done, or after 8 steps; every step is recorded as it
-   ran.
+   ran. What looks like a secret in that output is held back (the model
+   sees `[held]`; a checksum line keeps its digest), and a step refused
+   for an option brings back the lines of that command's own man page
+   about it -- spark reads the page, the command never runs for it.
+
+   `spark do --sandbox <words>` does the same task in a copy of this
+   directory:
+
+   1. Every step runs on its own, two minutes at most: no network,
+      nothing outside the copy writable, your home out of sight.
+   2. At the end you see what changed, as a diff, and type `yes` to
+      apply it here. A git hook or git config a step wrote is never
+      applied, and a file you changed meanwhile stops the apply.
+   3. Anything but `yes` keeps the changes waiting: `spark do --review`
+      lists the runs waiting, `spark do --review ID` shows one and asks
+      again, `spark do --accept ID` applies one without asking, `spark
+      do --discard ID` drops it. `spark` and the status line say
+      `1 run waiting` while one does.
+
+   Nobody has to be there: `spark do --sandbox --detach "<words>"`
+   prints the run's id and leaves its changes waiting for you. One
+   detached run at a time. Start it from the machine's own timer --
+   Linux, a systemd user timer (`spark headless on` keeps it running
+   after you log out):
+
+   ```ini
+   # ~/.config/systemd/user/spark-notes.service
+   [Service]
+   Type=oneshot
+   WorkingDirectory=%h/notes
+   ExecStart=%h/.local/bin/spark do --sandbox --detach "fix the broken links"
+
+   # ~/.config/systemd/user/spark-notes.timer
+   [Timer]
+   OnCalendar=daily
+
+   [Install]
+   WantedBy=timers.target
+   ```
+
+   then `systemctl --user enable --now spark-notes.timer`. macOS, a
+   launchd agent, `~/Library/LaunchAgents/spark.notes.plist`:
+
+   ```xml
+   <?xml version="1.0" encoding="UTF-8"?>
+   <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+   <plist version="1.0">
+   <dict>
+     <key>Label</key><string>spark.notes</string>
+     <key>ProgramArguments</key>
+     <array>
+       <string>/bin/sh</string><string>-c</string>
+       <string>cd "$HOME/notes" &amp;&amp; exec "$HOME/.local/bin/spark" do --sandbox --detach "fix the broken links"</string>
+     </array>
+     <key>StartCalendarInterval</key>
+     <dict><key>Hour</key><integer>6</integer></dict>
+   </dict>
+   </plist>
+   ```
+
+   then `launchctl bootstrap gui/$UID ~/Library/LaunchAgents/spark.notes.plist`.
+   A stream can start one too: `spark watch` says one line when a line
+   matches, and that line can be the task --
+
+   ```sh
+   tail -f build.log | spark watch "the build fails" |
+     while read -r line; do spark do --sandbox --detach "fix it: $line"; done
+   ```
 7. `spark ask` reads a plan, a draft or a decision on stdin and answers
    with questions about it -- at most three, one per line, and nothing
    else. Every line of the output is a question: a line that is not one,
@@ -476,6 +543,12 @@ macOS:
   likewise); `launchctl kickstart -k gui/$UID/spark.serve` restarts one.
   There is no root-free GPU counter, so `stats` and the `gpu` row say so.
 - `Alt-s` is Option-s; `Esc` then `s`, quickly, is the same keys.
+- `spark do --sandbox` copies the project first (an APFS clone: instant,
+  no extra space until a step writes) and runs each step under
+  `sandbox-exec`: no network, nothing under `/Users` or `/Volumes`
+  readable but the copy, nothing writable outside it. The model is told
+  the copy's path. The `sandbox` row of `spark check` says whether it
+  works here.
 
 Linux:
 
@@ -511,6 +584,13 @@ Linux:
   `spark-console` unit, `setvtrgb`). GUI terminals stay yours: apply
   `theme.env` in their settings by hand. Nothing is painted until you
   ask.
+- `spark do --sandbox` needs bubblewrap 0.11 or newer (`sudo apt-get
+  install bubblewrap`, `sudo pacman -S --needed bubblewrap`): Debian 13
+  and Arch ship 0.12; Ubuntu 24.04's 0.9 has no overlay, and the
+  `sandbox` row of `spark check` says `na` there. Each step sees the
+  machine read-only with the homes, `/run` and `/tmp` hidden, no
+  network, and the project as an overlay that keeps every write;
+  bubblewrap sets no_new_privs, so `sudo` inside cannot become root.
 - Units: `systemctl --user status spark-serve spark-forge
   spark-check.timer`; `journalctl --user -u spark-serve -n 50`. Without a
   user systemd session (a container) the `services` row reads `na`; run
@@ -711,6 +791,12 @@ addresses you gave it and nothing else.
   user's chat and settings -- never another user's store, never the
   box beyond it -- until `spark user token --new` from any logged-in
   session, or the page's log out, ends it.
+- **A command the model proposes** runs only after your Enter (a
+  command that can destroy data, only after your `yes`). Sandboxed
+  (`spark do --sandbox`), it runs in a copy with no network and no view
+  of your home, and nothing lands here until you have seen the diff and
+  typed `yes`; a git hook or git config it wrote is never applied, and a
+  link that leads out of the project is refused.
 - **What spark depends on** is one command: `spark ver --sbom` prints a
   software bill of materials -- the list of every component this tree
   pins, with versions and sha256s (the engine per flavour, every model

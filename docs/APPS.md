@@ -1,7 +1,8 @@
 # spark apps
 
 A tool becomes smart by being a client of a spark verb: `spark edit`
-for text you are writing, `spark read` for text you are reading. spark
+for text you are writing, `spark read` for text you are reading, `spark
+do` for a task. spark
 ships no app: each plugin lives in its own repository and installs the
 app's way.
 
@@ -24,6 +25,7 @@ on stdin, text out, never a path. Each app's plugin is its own
 | [spark-w3m](https://github.com/forgewright-ai/spark-w3m) | w3m: `M-s` opens the spark page -- chat, overview, questions |
 | [spark-newsboat](https://github.com/forgewright-ai/spark-newsboat) | newsboat: `,s` asks the article you are on |
 | [spark-aerc](https://github.com/forgewright-ai/spark-aerc) | aerc: `A-s` opens `spark> ` on the mail you are on |
+| [spark-acp](https://github.com/forgewright-ai/spark-acp) | Toad, Zed, any ACP client: `spark do` there, each command a Run or Skip |
 
 One key in every app -- Alt-s (`M-s`, `A-s`: the same key by each
 tool's name) -- summons spark on what is in front of you, and one
@@ -199,3 +201,22 @@ Coming from spark v1.9, where the plugin came with spark: `spark update`
 hands the old links back (the `micro` row says so), then clone as above.
 Another editor joins the same way: one client of `spark edit`, in a
 repository of its own.
+
+## Doing, not writing: spark-acp
+
+`spark do --porcelain` (spark 1.47 or newer) is the task verb for a
+program: one command at a time as JSON lines, one word back when
+something waits. spark-acp speaks it to any Agent Client Protocol
+client -- Toad in a terminal, Zed in the editor:
+
+```sh
+git clone https://github.com/forgewright-ai/spark-acp ~/.local/share/spark-acp
+ln -s ~/.local/share/spark-acp/spark-acp ~/.local/bin/spark-acp
+toad acp "spark-acp"
+```
+
+Each command the model proposes is a Run or Skip in the client; in the
+sandbox mode the commands run in a copy of the directory and the diff
+comes back once, to Accept or Discard. A command that can destroy data
+runs at a terminal (`spark do`) only: through a client, spark refuses
+it and says so. The repository's README has Zed's lines.
