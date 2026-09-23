@@ -14,9 +14,12 @@ SPARK
   spark <words>                   one answer, streamed     spark last  again
   spark do <words>                a task, one confirmed command at a time
   spark do --sandbox <words>      the same in a copy, no network: it runs on
-                                  its own, then the diff -- yes applies it
+                                  its own, then the diff -- yes applies
+                                  exactly what it showed
   spark do --sandbox --detach ... nobody there (a timer): its changes wait
-  spark do --review [ID]          the runs waiting; --accept ID, --discard ID
+  spark do --review [ID]          the runs waiting; --accept ID applies one
+                                  unseen (a script), --discard ID drops it
+  spark do -- <words>             a goal that starts with - (8 kB at most)
   spark @FILE words               ask about a file (first 4 kB, last 12 kB)
   spark edit [?] words < FILE     rewrite / complete (--at N) / ask (?) stdin
   spark ask < FILE                three questions that text does not answer

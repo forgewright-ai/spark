@@ -215,8 +215,15 @@ ln -s ~/.local/share/spark-acp/spark-acp ~/.local/bin/spark-acp
 toad acp "spark-acp"
 ```
 
-Each command the model proposes is a Run or Skip in the client; in the
-sandbox mode the commands run in a copy of the directory and the diff
-comes back once, to Accept or Discard. A command that can destroy data
-runs at a terminal (`spark do`) only: through a client, spark refuses
-it and says so. The repository's README has Zed's lines.
+Each command the model proposes is a Run or Skip in the client. Outside
+the sandbox, spark refuses two kinds of command through a client and
+says so: one that can destroy data, and one whose effect cannot be read
+from the line (a command substitution, `eval`, code handed to an
+interpreter, an upload); those run at a terminal (`spark do`). Anything
+else runs on your Run, as you. In the sandbox mode every command runs
+in a copy of the directory, those two kinds included, and the diff
+comes back once, to Accept or Discard: the diff is the gate. Accept
+applies exactly what the diff showed. A client set to approve on its
+own answers Run and Accept without you; in the sandbox mode its
+commands still run in the copy, with no network.
+The repository's README has Zed's lines.

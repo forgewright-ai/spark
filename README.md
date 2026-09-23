@@ -113,10 +113,10 @@ Only to the server you configured (this machine's, or another of yours):
   earlier turns;
 - for `explain` the piped text (last 6 kB); for `@FILE` its first 4 kB
   and last 12 kB under the name you typed; for `spark do` each step's
-  output (last 4 kB) -- a span that looks like a secret is held back --
-  and, after a step refused for an option, the lines of that command's
-  man page about it (1.5 kB at most; spark reads the page, the command
-  never runs for it);
+  output (last 4 kB) -- a span that looks like a secret, and any copy
+  of spark's own tokens, is held back -- and, after a step refused for
+  an option, the lines of that command's man page about it (1.5 kB at
+  most; spark reads the page, the command never runs for it);
 - from an editor (`spark edit`), the file's name and its text: 6 kB
   around the cursor for a completion, 12 kB for a rewrite, 16 kB for a
   question -- never its path; a thread only when the editor asks for

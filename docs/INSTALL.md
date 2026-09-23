@@ -190,24 +190,36 @@ shell cannot host the widget (another shell, or macOS's bash 3.2):
    same way, and only its exit code goes back to the model, never what
    it printed. Each step's output (last 4 kB) goes back to the model
    until it says done, or after 8 steps; every step is recorded as it
-   ran. What looks like a secret in that output is held back (the model
-   sees `[held]`; a checksum line keeps its digest), and a step refused
+   ran. What looks like a secret in that output is held back, and so is
+   any of spark's own tokens (the model sees `[held]`; the digest a
+   checksum tool such as `sha256sum` prints is kept), and a step refused
    for an option brings back the lines of that command's own man page
    about it -- spark reads the page, the command never runs for it.
+
+   A goal is at most 8 kB. A goal that starts with `-` goes after
+   `--`: `spark do -- -v fails in the build`.
 
    `spark do --sandbox <words>` does the same task in a copy of this
    directory:
 
    1. Every step runs on its own, two minutes at most: no network,
-      nothing outside the copy writable, your home out of sight.
+      nothing outside the copy writable, your home out of sight. A run
+      writes 1 GB at most; past that, the step stops.
    2. At the end you see what changed, as a diff, and type `yes` to
-      apply it here. A git hook or git config a step wrote is never
-      applied, and a file you changed meanwhile stops the apply.
-   3. Anything but `yes` keeps the changes waiting: `spark do --review`
-      lists the runs waiting, `spark do --review ID` shows one and asks
-      again, `spark do --accept ID` applies one without asking, `spark
-      do --discard ID` drops it. `spark` and the status line say
-      `1 run waiting` while one does.
+      apply it here. A control character in a file shows as an escape
+      (`\x1b`), and the file is marked `(control characters)`.
+   3. `yes` applies exactly what you saw: if the copy changed after the
+      diff, nothing is applied and the run waits. A file you changed
+      here meanwhile stops the apply too. Inside a git directory only
+      git's own records apply -- its objects, refs, logs, index and
+      HEAD; its config, its hooks and anything that points git
+      elsewhere are held back, listed with the reason.
+   4. Anything but `yes` keeps the changes waiting: `spark do --review`
+      lists the runs (a run still going says `running`), `spark do
+      --review ID` shows one and asks again, `spark do --accept ID`
+      applies one without showing it (for a script), `spark do
+      --discard ID` drops it. An applied or dropped run is gone.
+      `spark` and the status line say `1 run waiting` while one does.
 
    Nobody has to be there: `spark do --sandbox --detach "<words>"`
    prints the run's id and leaves its changes waiting for you. One
@@ -544,11 +556,27 @@ macOS:
   There is no root-free GPU counter, so `stats` and the `gpu` row say so.
 - `Alt-s` is Option-s; `Esc` then `s`, quickly, is the same keys.
 - `spark do --sandbox` copies the project first (an APFS clone: instant,
-  no extra space until a step writes) and runs each step under
-  `sandbox-exec`: no network, nothing under `/Users` or `/Volumes`
-  readable but the copy, nothing writable outside it. The model is told
-  the copy's path. The `sandbox` row of `spark check` says whether it
-  works here.
+  no extra space until a step writes) and runs each step in it under
+  `sandbox-exec`. The model is told the copy's path. The `sandbox` row
+  of `spark check` says whether it works here. A step:
+  - opens no network socket, TCP or unix -- the ssh and gpg agents are
+    out of reach too;
+  - writes only to the copy and the run's own home and temp;
+  - cannot read your home, other volumes, the per-user and shared temp
+    directories, the system keychain, root's home, spark's state and
+    token, or Homebrew's service configuration;
+  - cannot run the tools that hand work to a service outside the
+    sandbox (osascript, open, launchctl, sudo, security, the clipboard,
+    Shortcuts, Automator, defaults, lsregister, Quick Look, disk
+    images, cron and at), and a program it builds cannot reach those
+    services either; setuid programs do not run.
+
+  It does not make the machine private: a step reads everything else
+  on the system (/Applications, /Library, /etc, other users'
+  world-readable files), sees the process list, and can talk to any
+  system service not named above. The diff is the gate: read it before
+  you type `yes`. `sandbox-exec` is Apple's own tool, and its man page
+  tells developers to move off it.
 
 Linux:
 
@@ -587,10 +615,13 @@ Linux:
 - `spark do --sandbox` needs bubblewrap 0.11 or newer (`sudo apt-get
   install bubblewrap`, `sudo pacman -S --needed bubblewrap`): Debian 13
   and Arch ship 0.12; Ubuntu 24.04's 0.9 has no overlay, and the
-  `sandbox` row of `spark check` says `na` there. Each step sees the
-  machine read-only with the homes, `/run` and `/tmp` hidden, no
-  network, and the project as an overlay that keeps every write;
-  bubblewrap sets no_new_privs, so `sudo` inside cannot become root.
+  `sandbox` row of `spark check` says `na` there. Each step runs in
+  fresh user, pid, network, ipc and hostname namespaces: no network,
+  the homes, `/run`, `/tmp`, `/var/tmp`, `/media`, `/mnt` and
+  `/etc/spark` hidden, and the project as an overlay that keeps every
+  write. bubblewrap sets no_new_privs, so `sudo` inside cannot become
+  root. The rest of the system stays readable -- `/usr`, `/etc`,
+  `/opt`: the diff is the gate there too.
 - Units: `systemctl --user status spark-serve spark-forge
   spark-check.timer`; `journalctl --user -u spark-serve -n 50`. Without a
   user systemd session (a container) the `services` row reads `na`; run
@@ -794,9 +825,15 @@ addresses you gave it and nothing else.
 - **A command the model proposes** runs only after your Enter (a
   command that can destroy data, only after your `yes`). Sandboxed
   (`spark do --sandbox`), it runs in a copy with no network and no view
-  of your home, and nothing lands here until you have seen the diff and
-  typed `yes`; a git hook or git config it wrote is never applied, and a
-  link that leads out of the project is refused.
+  of your home. At the terminal nothing lands here until you have seen
+  the diff and typed `yes`, and `yes` applies only what the diff
+  showed. `spark do --accept ID` applies a waiting run without showing
+  it (for a script), and an app's Accept applies too -- an app set to
+  approve on its own accepts without you. Either way, a git hook or git
+  config it wrote is never applied, and a link that leads out of the
+  project is refused. The sandbox keeps a step's writes in the copy;
+  it does not hide the whole machine (section 6 names what a step can
+  still read).
 - **What spark depends on** is one command: `spark ver --sbom` prints a
   software bill of materials -- the list of every component this tree
   pins, with versions and sha256s (the engine per flavour, every model

@@ -6,33 +6,51 @@
   with the server's timings, so `spark stats` shows do's real cache
   hits; the messages fit the served context (the goal is never dropped,
   the oldest outputs shrink to `(output trimmed, exit N)` first); what
-  a step printed is held back like a source's secrets before the model
-  sees it (a checksum line keeps its digest); the page's steps stop
-  after 120 s.
+  a step printed is held back like a source's secrets, and any copy of
+  spark's own tokens, before a program or the model sees it (the digest
+  a checksum tool prints is kept); the page's steps stop after 120 s.
+- An edited proof runs (an edit used to drop it), when it is still one
+  read-only check. A control character in the model's command, its
+  proof or your edit -- a terminal escape, a C1 or a bidi control -- is
+  refused whole.
 - The OS documents its tools: a step refused for an option brings back
   the lines of that command's own man page about it (`man -P cat`,
   1.5 kB at most); the command itself never runs for it. The page's
   steps carry the same lines.
 - `spark do --sandbox <words>`: every step runs in a copy of the
   project -- bubblewrap 0.11+ on Linux, an APFS clone under
-  `sandbox-exec` on macOS -- with no network, the homes out of sight
-  and nothing else writable, without asking. At the end, the diff and
-  a typed `yes` apply it. A git hook or git config the copy grew is
-  never applied, a link out of the project is refused, a file changed
-  here meanwhile stops the whole apply. The `sandbox` row says whether
-  this machine can (40 rows).
+  `sandbox-exec` on macOS -- with no network, the homes and the temp
+  directories out of sight and nothing else writable, without asking;
+  a run writes 1 GB at most, weighed during each step. At the
+  end, the diff and a typed `yes` apply it -- exactly what the diff
+  showed: a copy changed after it applies nothing. The diff shows a
+  control character as an escape and marks the file. A git directory
+  is known by its shape (`.git`, or HEAD beside objects/), and only
+  git's own records apply from it -- objects, refs, logs, index, HEAD;
+  its config, hooks and anything pointing git elsewhere are held back,
+  each listed. A link out of the project is refused, a file changed
+  here meanwhile (by mtime or ctime) stops the whole apply. The
+  `sandbox` row says whether this machine can (40 rows).
 - `spark do --sandbox --detach <words>` runs with nobody there -- a
   timer, cron, launchd, a `spark watch` line -- one at a time, and its
   changes wait: `spark do --review [ID]` shows them and asks `yes`,
-  `--accept ID` applies without asking, `--discard ID` drops them. Bare
-  `spark` and the status line say `N runs waiting`.
+  `--accept ID` applies without showing them (a script), `--discard ID`
+  drops them. Each claims the run and refuses one still running; an
+  applied or discarded run is removed. Bare `spark` and the status line
+  say `N runs waiting`.
 - `spark do --porcelain [--sandbox]` is contract 15: JSON Lines for a
   program (start, step, output, rc, note, review, end), one word back
   when something waits (run, skip, quit, edit, accept, discard). There
-  is no `yes` over a pipe: a step that can destroy data outside the
-  sandbox is refused, and the model hears it was skipped.
+  is no `yes` over a pipe: outside the sandbox a step that can destroy
+  data, or whose effect cannot be read from the line (a command
+  substitution, eval, inline code for an interpreter, an upload), is
+  refused, and the model hears it was skipped; anything else runs on
+  the program's `run`. `accept` applies only what the review event
+  showed. A refusal before the run is one `end` event, and `end` is
+  always the last line -- Ctrl-C and SIGTERM included.
 - `spark do --` ends the options: a goal that starts with `-`, or is
-  the word help, is words.
+  the word help, is words; without it, such a goal is refused. A goal
+  is at most 8 kB -- at the prompt, over `--porcelain` and on the page.
 - The first client of contract 15: spark-acp
   (github.com/forgewright-ai/spark-acp) puts `spark do` in any Agent
   Client Protocol client -- `toad acp "spark-acp"` in a terminal, Zed in
