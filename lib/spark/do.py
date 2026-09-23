@@ -30,9 +30,14 @@
 # writable, no new privileges, STEP_TIMEOUT a step -- so containment
 # replaces the per-step Enter, and the person's Enter moves to the apply:
 # the review (the diff), then the typed `yes`. A run nobody watches
-# (--detach) waits for that review (--review, --accept, --discard).
-# _drive is the one loop; a face (_Terminal) is who it asks and tells.
+# (--detach) waits for that review (--review, --accept, --discard). A
+# program drives a run over --porcelain (contract 15): JSON Lines out,
+# one word in when something waits, and no `yes` word at all -- a step
+# that can destroy data outside the sandbox is refused, never confirmed
+# over a pipe. _drive is the one loop; a face (_Terminal, _Porcelain) is
+# who it asks and tells.
 
+import json
 import os
 import re
 import shlex
@@ -65,12 +70,17 @@ STDIN_HOOK = "SPARK_DO_STDIN"   # =1: confirmations come from stdin lines (tests
 # said once on stderr when the hook is on, before any step is offered: a
 # transcript must show the confirmations were a harness's, not a person's
 STDIN_BANNER = "spark do: confirmations come from stdin (SPARK_DO_STDIN) -- a harness, not a person"
+# said once on stderr by --porcelain: stdout is the program's (contract 15)
+PORCELAIN_BANNER = "spark do: a program drives this run (--porcelain) -- its answers are a program's, not a person's"
 # the goal of a sandboxed run says where it runs (the system prompt stays
 # byte-identical to plain do's: the served prefix is shared)
 SANDBOX_NOTE = "[sandbox: no network; only this directory is writable; changes are reviewed at the end]"
+# no `yes` word exists over a pipe: outside the sandbox such a step is
+# refused, the model hears it was skipped, and the run goes on
+REFUSED_DANGER = "`%s` can destroy data -- refused over --porcelain; a person runs it at a terminal (spark do)"
 OVER_CAP = "the run wrote more than %d MB -- stopped; review what it did"
 DETACH_LOCK = "detach.lock"   # in STATE/runs: one detached run at a time (an flock)
-OPTIONS = ("-h", "--help", "--sandbox", "--detach", "--review", "--accept", "--discard")
+OPTIONS = ("-h", "--help", "--sandbox", "--detach", "--porcelain", "--review", "--accept", "--discard")
 # a coreutils checksum line -- md5sum, sha1sum, sha256sum, sha512sum:
 # `DIGEST  NAME`, or `DIGEST *NAME` in binary mode -- keeps its digest:
 # a hash a step was asked to print is not a secret, and 64 hex digits
@@ -119,6 +129,8 @@ DO_USAGE = """%s do -- a task, step by step
   spark do --review [ID]       the runs waiting; with an ID its diff, then yes
   spark do --accept ID         apply a waiting run without asking (a script)
   spark do --discard ID        drop a waiting run
+  spark do --porcelain [--sandbox] <words>
+                               JSON Lines, for a program (contract 15)
   spark do -- <words>          a goal that starts with - or is the word help
 
   Every step:  Enter runs it, e edits it first, s skips it, q quits.
@@ -636,6 +648,158 @@ class _Terminal:
         pass
 
 
+class _Porcelain:
+    """A program on stdin and stdout: contract 15, JSON Lines. stdout
+    carries the events and nothing else; stdin is read only when a step,
+    a proof or the review waits. No `yes` word exists here."""
+    echo = False
+
+    def __init__(self):
+        self.k = 0               # the step events so far: each one's n
+        self.at = 0              # the n the next output and rc belong to
+        self.step_n = 0          # the step a proof proves
+        self.box = False
+
+    def emit(self, **ev):
+        sys.stdout.write(json.dumps(ev) + "\n")
+        sys.stdout.flush()
+
+    def read(self):
+        line = sys.stdin.readline()
+        return line.strip() if line else None
+
+    def refuse(self, text):
+        self.end("refused", text, 2)
+        return 2
+
+    def begin(self, driver, box, cwd, thread):
+        self.box = box is not None
+        self.emit(ev="start", thread=thread, sandbox=self.box, run=box["id"] if box else None)
+        self.note("driving with %s" % driver)
+
+    def think(self, fn):
+        return fn()
+
+    def brain(self, hint):
+        pass                                  # the end event carries it
+
+    def done(self, hint, bad):
+        if bad:
+            self.note("unchecked: no command produced %s -- believe the outputs above" % ", ".join(bad))
+        if self.box:
+            self.note("done -- " + hint)      # the end event is the review's
+
+    def warn(self, text):
+        self.note(text)
+
+    def note(self, text):
+        self.emit(ev="note", text=text)
+
+    def missing(self, n, command, hint, word):
+        self.note("%s: not on this machine -- `%s` not offered" % (word, command))
+
+    def _step(self, command, hint, danger, proof):
+        self.k += 1
+        self.at = self.k
+        self.emit(ev="step", n=self.k, command=command, hint=hint, danger=danger, proof=proof)
+
+    def step(self, n, reply, contained):
+        self._step(reply["command"], reply["hint"], bool(reply["danger"]), reply.get("proof") or None)
+        self.step_n = self.k
+
+    def _word(self, words):
+        """The next answer among `words` (EOF is quit); an edit when
+        `edit` is one of them."""
+        while True:
+            w = self.read()
+            if w is None:
+                return "quit", ""
+            head, _, rest = w.partition(" ")
+            if w in words or (head == "edit" and "edit" in words):
+                return head, rest
+            self.note("not an answer here: %s -- %s" % (w[:40], ", ".join(words)))
+
+    def confirm(self, reply, cwd):
+        command = reply["command"]
+        if reply["danger"]:
+            self.note(REFUSED_DANGER % command)
+            return "skip", command
+        choice, rest = self._word(("run", "skip", "quit", "edit"))
+        if choice != "edit":
+            return choice, command
+        new = " ".join(rest.split())
+        if not new or CONTROL.search(rest):
+            self.note("an edit is one line of printable text -- skipped")
+            return "skip", command
+        if persona.is_dangerous(new):
+            self.note(REFUSED_DANGER % new)
+            return "skip", new
+        self.note("step %d runs `%s` (edited)" % (self.at, new))
+        return "run", new
+
+    def ran(self, rc, shown):
+        if shown:
+            self.emit(ev="output", n=self.at, text=shown)
+        self.emit(ev="rc", n=self.at, rc=rc)
+
+    def man(self, man):
+        self.note("%s %d lines go back with the output" % (man.splitlines()[0], len(man.splitlines()) - 1))
+
+    def proof(self, proof, cwd, contained, n):
+        self._step(proof, "proof of step %d" % self.step_n, False, None)
+        if contained:
+            return "run", proof
+        return self._word(("run", "skip", "quit"))[0], proof
+
+    def proof_ran(self, prc, shown):
+        self.ran(prc, shown)
+
+    def cap(self):
+        if self.box:
+            self.note("step limit (%d) reached" % DO_MAX_STEPS)
+
+    def eof(self):
+        pass
+
+    def stopped(self, steps):
+        pass
+
+    def review(self, box, entries, n):
+        """yes | discard | keep: the review event, then accept or discard
+        (EOF, quit: the run waits)."""
+        files = []
+        for e in entries:
+            old, new = e.get("old"), e.get("new")
+            if e["status"] == "mode":
+                old, new = "%o" % ((e["mode_old"] or 0) & 0o7777), "%o" % ((e["mode_new"] or 0) & 0o7777)
+            elif "items" in e:
+                old = new = None
+            files.append({"path": e["path"], "status": e["status"], "old": old, "new": new})
+        self.emit(ev="review", run=box["id"], files=files)
+        choice = self._word(("accept", "discard", "quit"))[0]
+        return {"accept": "yes", "discard": "discard"}.get(choice, "keep")
+
+    def nothing(self, box):
+        self.note("nothing changed in the copy -- nothing to apply")
+
+    def applied(self, box, n, problems):
+        self.note("applied %s to %s" % (_plural(n, "change"), box["cwd"]))
+        for p in problems:
+            self.note(p)
+
+    def unapplied(self, box, text, paths):
+        self.note(text + ("" if not paths else " (" + ", ".join(paths) + ")"))
+
+    def discarded(self, box):
+        pass
+
+    def waits(self, box, n):
+        pass
+
+    def end(self, reason, hint, rc):
+        self.emit(ev="end", reason=reason, hint=hint, rc=rc)
+
+
 def _confirm(reply, cwd=""):
     """What the user wants for this step: run | edit | skip | quit."""
     if reply["danger"]:
@@ -877,10 +1041,17 @@ def cmd_do(args):
     if not goal:
         say(DO_USAGE.rstrip() % (MARK, STEP_TIMEOUT, DO_MAX_STEPS))
         return 2
-    boxed, detach = "--sandbox" in flags, "--detach" in flags
+    boxed, detach, porcelain = "--sandbox" in flags, "--detach" in flags, "--porcelain" in flags
     if detach and not boxed:
         say("%s do -- --detach runs sandboxed only: spark do --sandbox --detach <words>" % MARK)
         return 2
+    if detach and porcelain:
+        say("%s do -- --detach and --porcelain do not mix: a detached run has no program to answer" % MARK)
+        return 2
+    if porcelain:
+        sys.stderr.write(PORCELAIN_BANNER + "\n")
+        sys.stderr.flush()
+        return _start(_Porcelain(), goal, boxed, STEP_TIMEOUT)
     if not detach and not sys.stdin.isatty() and os.environ.get(STDIN_HOOK) != "1":
         if boxed:
             die("spark do --sandbox asks yes before it applies -- run it in a terminal, or add --detach")
@@ -908,6 +1079,9 @@ def _start(face, goal, boxed, timeout):
     try:
         url, model, _forge = wire.resolve_brain(cfg)
     except wire.BrainError as e:
+        if isinstance(face, _Porcelain):
+            face.end("error", e.hint, 1)
+            return 1
         die(e.hint)
     box, mcwd, text = None, cwd, goal
     if boxed:

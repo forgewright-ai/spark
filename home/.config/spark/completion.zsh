@@ -62,7 +62,7 @@ _spark() {
             uninstall) comp=(--dry-run --yes --purge --packages --keep-packages) ;;
             serve)   comp=(on off status --foreground --host --print-client) ;;
             chat)    comp=(--thread) ;;
-            do)      comp=(--sandbox --detach --review --accept --discard) ;;
+            do)      comp=(--sandbox --detach --porcelain --review --accept --discard) ;;
             soul)    comp=(show edit reset) ;;
             history) comp=(clear) ;;
             tune)    comp=(show apply) ;;

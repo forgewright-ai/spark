@@ -2282,7 +2282,7 @@ def main():
              and any(k == "do" and "held back" in v for k, v in _pers.SENDS),
              "persona.SENDS: do's man-page row names its cap (do.MAN_MAX), and do's output row the hold", _sends)
 
-        # ---- v1.47: the sandbox, the review, detach
+        # ---- v1.47: the sandbox, the review, detach, porcelain (contract 15)
         # a coreutils checksum line keeps its digest (do.CHECKSUM_LINE);
         # a real token on the same output is still held
         _dig = hashlib.sha256(b"spark").hexdigest()
@@ -2298,8 +2298,55 @@ def main():
              and _do.hold(_dig + "  f\n") == (_dig + "  f\n", 0, []),
              "do.hold: only a line shaped DIGEST  NAME is exempt -- a bare digest or one mid-line is held")
 
-        rc, out, err = spark("do", "--", "-la", "help", stdin="q\n", extra=hook, cwd=work)
-        t.ok(rc == 0 and STATE["bodies"][-1]["messages"][1]["content"].endswith("]\n-la help"),
+        def events(out):
+            """stdout of --porcelain, one JSON object a line -- None when
+            any line is not one (stdout carries nothing else)."""
+            try:
+                evs = [json.loads(l) for l in out.splitlines()]
+            except ValueError:
+                return None
+            return evs if all(isinstance(e, dict) and "ev" in e for e in evs) else None
+
+        def kinds(evs):
+            return [e["ev"] for e in evs or []]
+        # porcelain, plain: a step waits for run; its proof is a step of its own
+        rc, out, err = spark("do", "--porcelain", "goodsum", stdin="run\nrun\n", cwd=work)
+        evs = events(out)
+        t.ok(rc == 0 and kinds(evs) == ["start", "note", "step", "output", "rc", "step", "rc", "end"]
+             and evs[0] == {"ev": "start", "thread": evs[0]["thread"], "sandbox": False, "run": None}
+             and evs[2] == {"ev": "step", "n": 1, "command": "echo 26", "hint": "count things", "danger": False,
+                            "proof": "test -d ."}
+             and evs[3] == {"ev": "output", "n": 1, "text": "26\n"} and evs[4] == {"ev": "rc", "n": 1, "rc": 0}
+             and evs[5] == {"ev": "step", "n": 2, "command": "test -d .", "hint": "proof of step 1",
+                            "danger": False, "proof": None}
+             and evs[7] == {"ev": "end", "reason": "done", "hint": "Total: 26", "rc": 0},
+             "spark do --porcelain: start, the step, its output and rc, the proof as its own step, end (contract 15)",
+             out + err)
+        t.ok(err.count(_do.PORCELAIN_BANNER) == 1 and "driving" not in err,
+             "spark do --porcelain: a stderr banner says a program drives it; stdout is only JSON lines", err)
+        os.makedirs(work + "/junk", exist_ok=True)
+        rc, out, err = spark("do", "--porcelain", "rm-plain", "junk", stdin="run\n", cwd=work)
+        evs = events(out)
+        t.ok(rc == 0 and kinds(evs) == ["start", "note", "step", "note", "end"] and evs[2]["danger"] is True
+             and "refused over --porcelain" in evs[3]["text"] and evs[4]["reason"] == "done"
+             and os.path.isdir(work + "/junk") and "skipped this step" in STATE["last_user"],
+             "spark do --porcelain: a danger step is refused without waiting -- no yes word; the model hears skipped",
+             out + err)
+        rc, out, err = spark("do", "--porcelain", "forever", stdin="edit echo EDITED\nquit\n", cwd=work)
+        evs = events(out)
+        t.ok(rc == 0 and kinds(evs) == ["start", "note", "step", "note", "output", "rc", "step", "end"]
+             and evs[4]["text"] == "EDITED\n" and evs[7]["reason"] == "quit",
+             "spark do --porcelain: edit <command> runs the edit, quit ends the run", out + err)
+        rc, out, err = spark("do", "--porcelain", "say", "hello", stdin="skip\n", cwd=work)
+        evs = events(out)
+        t.ok(rc == 0 and kinds(evs) == ["start", "note", "step", "end"] and "skipped this step" in STATE["last_user"],
+             "spark do --porcelain: skip -- the model hears it, the run goes on", out + err)
+        rc, out, err = spark("do", "--porcelain", "forever", stdin="", cwd=work)
+        evs = events(out)
+        t.ok(rc == 0 and kinds(evs) == ["start", "note", "step", "end"] and evs[-1]["reason"] == "quit",
+             "spark do --porcelain: EOF while a step waits is quit", out + err)
+        rc, out, err = spark("do", "--porcelain", "--", "-la", "help", stdin="", cwd=work)
+        t.ok(events(out) is not None and STATE["bodies"][-1]["messages"][1]["content"].endswith("]\n-la help"),
              "spark do --: the words after it are the goal, a leading - and help included", out + err)
         rc, out, err = spark("do", "--", "help", stdin="q\n", extra=hook, cwd=work)
         t.ok(rc == 0 and "driving with" in out and not out.startswith("spark do --"),
@@ -2308,12 +2355,14 @@ def main():
         t.ok(rc == 2 and out.startswith("spark do -- no option --sandbx:"),
              "spark do: an option it does not take is refused, signed, exit 2", out)
         rc, out, _ = spark("do", "--detach", "x", cwd=work)
-        t.ok(rc == 2 and "--detach runs sandboxed only" in out, "spark do --detach: sandboxed only", out)
+        rc2, out2, _ = spark("do", "--sandbox", "--detach", "--porcelain", "x", cwd=work)
+        t.ok(rc == 2 and "--detach runs sandboxed only" in out and rc2 == 2 and "do not mix" in out2,
+             "spark do --detach: sandboxed only, and never with --porcelain", out + out2)
         rc, out, _ = spark("do", "-h")
         t.ok(all(w in out for w in ("--sandbox", "--detach", "--review [ID]", "--accept ID", "--discard ID",
-                                    "spark do -- <words>", "held back", "man page"))
+                                    "--porcelain", "contract 15", "spark do -- <words>", "held back", "man page"))
              and not [l for l in out.splitlines() if len(l) > 80],
-             "spark do -h names every option, the hold and the man page, within 80 columns", out)
+             "spark do -h names every option, contract 15, the hold and the man page, within 80 columns", out)
 
         # the sandbox, for real where this machine has one (sandbox-exec on
         # macOS, bwrap 0.11+ on Linux); a CI container has none: skipped
@@ -2440,6 +2489,27 @@ def main():
             rc, out, err = spark("do", "--sandbox", "boxwork", stdin="yes\n", extra=hook, cwd=home)
             t.ok(rc == 2 and out.strip() == "spark do -- " + _sb.NEEDS_PROJECT and not waiting(),
                  "spark do --sandbox in ~ is refused: the sandbox needs a project directory", out + err)
+            # porcelain, sandboxed: nothing waits per step; the review waits
+            for word, want in (("accept", "done"), ("discard", "done"), ("", "quit")):
+                reset_box()
+                rc, out, err = spark("do", "--porcelain", "--sandbox", "boxwork", stdin=word + "\n" if word else "",
+                                     cwd=box)
+                evs = events(out) or []
+                rev = [e for e in evs if e["ev"] == "review"]
+                files = rev[0]["files"] if rev else []
+                ok = (rc == 0 and evs and evs[0]["sandbox"] is True and evs[0]["run"]
+                      and kinds(evs).count("step") == 3 and [e for e in evs if e["ev"] == "step"][2]["danger"] is True
+                      and files == [{"path": "notes.txt", "status": "added", "old": None, "new": "hello\n"},
+                                    {"path": "old.txt", "status": "deleted", "old": "old\n", "new": None}]
+                      and evs[-1]["ev"] == "end" and evs[-1]["reason"] == want)
+                if word == "accept":
+                    ok = ok and os.path.exists(box + "/notes.txt") and not waiting()
+                elif word == "discard":
+                    ok = ok and not os.path.exists(box + "/notes.txt") and not waiting()
+                else:
+                    ok = ok and waiting() == [evs[0]["run"]] and ("--review " + evs[0]["run"]) in evs[-1]["hint"]
+                t.ok(ok, "spark do --porcelain --sandbox: steps run, the review event, %s" % (
+                    word or "EOF leaves the run waiting"), out + err)
             for r in waiting():
                 spark("do", "--discard", r, cwd=box)
             import shutil

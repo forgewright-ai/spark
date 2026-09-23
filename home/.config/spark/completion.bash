@@ -67,7 +67,7 @@ _spark_complete() {
         uninstall) words="--dry-run --yes --purge --packages --keep-packages" ;;
         serve)   words="on off status --foreground --host --print-client" ;;
         chat)    words="--thread" ;;
-        do)      words="--sandbox --detach --review --accept --discard" ;;
+        do)      words="--sandbox --detach --porcelain --review --accept --discard" ;;
         soul)    words="show edit reset" ;;
         history) words="clear" ;;
         tune)    words="show apply" ;;
