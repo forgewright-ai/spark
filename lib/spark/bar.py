@@ -279,10 +279,10 @@ def _accent():
 
 def waiting(lead=""):
     """`N runs waiting` (after `lead`) while sandboxed runs wait for
-    review (spark do --review); '' when none do. The bar and spark
-    status say it the same way."""
+    review (spark do --review); '' when none do -- a run still running
+    is not waiting. The bar and spark status say it the same way."""
     from . import sandbox
-    n = len(sandbox.runs())
+    n = sum(1 for r in sandbox.runs() if not r["running"])
     return "%s%d run%s waiting" % (lead, n, "" if n == 1 else "s") if n else ""
 
 

@@ -94,7 +94,6 @@ REFUSED_DANGER = "`%s` can destroy data -- refused over --porcelain; a person ru
 REFUSED_OPAQUE = ("`%s` -- %s: what it does cannot be read from the line -- refused over --porcelain;"
                   " a person runs it at a terminal, or --sandbox holds it")
 OVER_CAP = "the run wrote more than %d MB -- stopped; review what it did"
-DETACH_LOCK = "detach.lock"   # in STATE/runs: one detached run at a time (an flock)
 OPTIONS = ("-h", "--help", "--sandbox", "--detach", "--porcelain", "--review", "--accept", "--discard")
 # a checksum tool's line -- `DIGEST  NAME`, or `DIGEST *NAME` in binary
 # mode -- keeps its digest: a hash a step was asked to print is not a
@@ -119,10 +118,6 @@ OWN_SECRET_MIN = 16         # shorter contents are no token of spark's (and woul
 # reply is refused whole (a `done` with REFUSED_CONTROL), an edit skipped
 CONTROL = re.compile("[\x00-\x1f\x7f-\x9f\u200e\u200f\u202a-\u202e\u2066-\u2069]")
 REFUSED_CONTROL = "the model's command carried control characters -- refused"
-# a sandboxed step's live echo: those characters shown, never sent (a
-# newline and a tab pass) -- output nobody confirmed cannot redraw the
-# screen the review is read on
-_UNSEEN = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f\u200e\u200f\u202a-\u202e\u2066-\u2069]")
 
 # The OS documents its tools: a step refused for an option brings back
 # the lines of that command's own man page (man_excerpt). What a tool
@@ -364,12 +359,6 @@ def _killpg(p):
         pass
 
 
-def _visible(s):
-    """`s` with every _UNSEEN character shown as its escape (\\x1b,
-    \\u202e), never sent to the terminal."""
-    return _UNSEEN.sub(lambda m: ("\\x%02x" if ord(m.group()) < 0x100 else "\\u%04x") % ord(m.group()), s)
-
-
 def run(command, shell, cwd="", echo=True, timeout=None, box=None):
     """Run one step through `shell -c`, its output echoed live to stdout
     (echo=False keeps quiet), stderr folded in. (rc, the last 4 kB).
@@ -381,7 +370,8 @@ def run(command, shell, cwd="", echo=True, timeout=None, box=None):
     step no person watches (STEP_TIMEOUT: the page, a sandbox, a
     program); a step at the terminal does not -- the person there has
     Ctrl-C. `box` (a sandbox run) contains the step (sandbox.step, under
-    sandbox.preexec), echoes it _visible, kills its group when the step
+    sandbox.preexec), echoes each line through sandbox.visible (output
+    nobody confirmed cannot redraw the screen the review is read on), kills its group when the step
     ends too (a background writer must not outlive it), and every
     WATCH_SECONDS weighs the copy: past sandbox.SANDBOX_MAX_BYTES the
     group is killed, rc 124. A run stopped mid-step (Ctrl-C, SIGTERM)
@@ -416,7 +406,10 @@ def run(command, shell, cwd="", echo=True, timeout=None, box=None):
             g.daemon = True
             g.start()
     decode = codecs.getincrementaldecoder("utf-8")("replace").decode
-    show = _visible if box is not None else (lambda s: s)
+    if box is not None:
+        show = lambda t: "\n".join(map(sandbox.visible, t.split("\n")))    # noqa: E731 -- the newlines kept
+    else:
+        show = lambda t: t    # noqa: E731
     fd, tail, grace, ended = p.stdout.fileno(), "", None, False
     try:
         while True:
@@ -915,15 +908,19 @@ class _Porcelain:
 
     def review(self, box, entries, n):
         """yes | discard | keep: the review event, then accept or discard
-        (EOF, quit: the run waits)."""
+        (EOF, quit: the run waits). An entry a change, git's own items
+        each one: path, status, old and new (the texts, a link's targets,
+        a mode's octal; null where there is none), exec (it became
+        executable), reason (why it is held or refused; '' none), control
+        (its name or text holds a control character)."""
         files = []
         for e in entries:
             old, new = e.get("old"), e.get("new")
             if e["status"] == "mode":
                 old, new = "%o" % ((e["mode_old"] or 0) & 0o7777), "%o" % ((e["mode_new"] or 0) & 0o7777)
-            elif "items" in e:
-                old = new = None
-            files.append({"path": e["path"], "status": e["status"], "old": old, "new": new})
+            files.append({"path": e["path"], "status": e["status"], "old": old, "new": new,
+                          "exec": bool(e.get("exec_added")), "reason": e.get("reason") or "",
+                          "control": bool(e.get("control"))})
         self.emit(ev="review", run=box["id"], files=files)
         choice = self._word(("accept", "discard", "quit"))[0]
         return {"accept": "yes", "discard": "discard"}.get(choice, "keep")
@@ -1082,11 +1079,13 @@ def _drive(face, cfg, thread, goal, text, shell, cwd, box=None, timeout=None):
 def _settle(face, box):
     """The review of a sandboxed run: (rc, reason, hint). Nothing changed:
     said, and the run goes. Else the face shows the changes and asks;
-    yes applies them, discard drops them, anything else leaves the run
-    waiting for spark do --review."""
+    yes applies what it showed (sandbox.apply's `reviewed`), discard
+    drops them, anything else leaves the run waiting for spark do
+    --review."""
     try:
         entries = sandbox.changes(box)
     except sandbox.SandboxError as e:
+        _wait(box)
         face.unapplied(box, str(e), e.paths)
         return 1, "error", str(e)
     n = sandbox.count(entries)
@@ -1096,13 +1095,22 @@ def _settle(face, box):
         return 0, "done", "nothing changed"
     answer = face.review(box, entries, n)
     if answer == "yes":
-        return _apply(face, box)
+        return _apply(face, box, entries)
     if answer == "discard":
         sandbox.discard(box)
         face.discarded(box)
         return 0, "done", "discarded run %s; nothing was applied" % box["id"]
+    _wait(box)
     face.waits(box, n)
     return 0, "quit", "the run waits: spark do --review %s" % box["id"]
+
+
+def _wait(box):
+    """The run waits for spark do --review (its record says so)."""
+    try:
+        sandbox.mark(box, "waiting")
+    except OSError:
+        pass                          # its dir is gone: nothing waits
 
 
 def _leave(face, box):
@@ -1116,37 +1124,24 @@ def _leave(face, box):
     if not n:
         sandbox.discard(box)
         return False
+    _wait(box)
     face.waits(box, n)
     return True
 
 
-def _apply(face, box):
-    """sandbox.apply, told: (rc, reason, hint). A refusal (a git lock, a
-    conflict, a project that does not open) applies nothing and leaves the
-    run waiting."""
+def _apply(face, box, reviewed=None):
+    """sandbox.apply, told: (rc, reason, hint). `reviewed` is what the
+    face showed (None: --accept, nothing shown). A refusal -- the copy
+    changed after the review, a git lock, a conflict, a project that does
+    not open -- applies nothing and leaves the run waiting."""
     try:
-        n, problems = sandbox.apply(box)
+        n, problems = sandbox.apply(box, reviewed=reviewed)
     except (sandbox.SandboxError, OSError) as e:
+        _wait(box)
         face.unapplied(box, str(e), getattr(e, "paths", []))
         return 1, "error", "%s -- the run waits: spark do --review %s" % (e, box["id"])
     face.applied(box, n, problems)
     return 0, "done", "applied %s" % _plural(n, "change")
-
-
-def _detach_lock():
-    """The one detached run: an flock on STATE/runs/detach.lock, held
-    until this process ends (the kernel lets go when it dies, so no stale
-    lock outlives a killed run). None while another run holds it."""
-    import fcntl
-    sandbox._mkdirs(sandbox.RUNS_DIR)
-    fd = os.open(os.path.join(sandbox.RUNS_DIR, DETACH_LOCK),
-                 os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0), 0o600)
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    except OSError:
-        os.close(fd)
-        return None
-    return fd
 
 
 def _options(args):
@@ -1209,9 +1204,10 @@ def cmd_do(args):
         sys.stderr.flush()
     if not detach:
         return _start(face, goal, boxed, STEP_TIMEOUT if boxed else None)
-    lock = _detach_lock()
-    if lock is None:
-        return face.refuse("a detached run is running already: one at a time")
+    try:
+        lock = sandbox.detach_lock()
+    except sandbox.SandboxError as e:
+        return face.refuse("%s: one at a time" % e)
     try:
         return _start(_Terminal(detach=True), goal, True, STEP_TIMEOUT)
     finally:
@@ -1265,13 +1261,24 @@ def _start(face, goal, boxed, timeout):
             box = sandbox.new_run(cwd, "")
         except sandbox.SandboxError as e:
             return face.refuse(str(e))
-        mcwd = sandbox.step(box, _shell_path(shell), "true")[1]    # macOS: the clone
+        mcwd = sandbox.step_cwd(box)      # macOS: the clone
         text = goal + "\n\n" + SANDBOX_NOTE
+    try:
+        return _run_box(face, cfg, goal, text, shell, cwd, mcwd, box, timeout, _driver(cfg, url, model, _forge))
+    finally:
+        if box is not None:
+            sandbox.release(box)          # applied, discarded or waiting: this process is done with it
+
+
+def _run_box(face, cfg, goal, text, shell, cwd, mcwd, box, timeout, driver):
+    """The thread, the run, and a sandboxed run's review: the exit code.
+    The run is `running` while this drives it; it waits only once
+    _settle or _leave says so."""
     thread = forge.new_thread(cfg)
     if box is not None:
         box["thread"] = thread or ""
-        sandbox.mark(box, "waiting")      # the run's record names its thread
-    face.begin(_driver(cfg, url, model, _forge), box, cwd, thread)
+        sandbox.mark(box, "running")      # the run's record names its thread
+    face.begin(driver, box, cwd, thread)
     try:
         rc, reason, hint = _drive(face, cfg, thread, goal, text, shell, mcwd, box, timeout)
     except (KeyboardInterrupt, SystemExit):
@@ -1312,7 +1319,9 @@ def _age(start_ns):
 
 
 def _runs_verb(flags, verbs, words):
-    """--review [ID], --accept ID, --discard ID: the runs waiting."""
+    """--review [ID], --accept ID, --discard ID: the runs waiting. An ID's
+    run is claimed (sandbox.claim: its lock held here; a run still
+    running is refused) and let go at the end."""
     verb = verbs[0]
     if len(verbs) > 1 or len(flags) > 1 or len(words) > 1 or (verb != "--review" and len(words) != 1):
         say("%s do -- %s takes one run's id (spark do --review lists them)" % (MARK, verb))
@@ -1320,38 +1329,41 @@ def _runs_verb(flags, verbs, words):
     if verb == "--review" and not words:
         return _list_runs()
     try:
-        box = sandbox.load(words[0])
+        box = sandbox.claim(words[0])
     except sandbox.SandboxError as e:
         say("%s do -- %s" % (MARK, e))
         return 2
-    if box["state"] != "waiting":
-        say("%s do -- run %s is %s already" % (MARK, box["id"], box["state"]))
-        return 2
     face = _Terminal()
-    if verb == "--discard":
-        sandbox.discard(box)
-        face.discarded(box)
-        return 0
-    if verb == "--accept":
-        return _apply(face, box)[0]
-    if not sys.stdin.isatty() and os.environ.get(STDIN_HOOK) != "1":
-        say("%s do -- --review asks yes at a terminal; spark do --accept %s applies without asking"
-            % (MARK, box["id"]))
-        return 2
-    return _settle(face, box)[0]
+    try:
+        if verb == "--discard":
+            sandbox.discard(box)
+            face.discarded(box)
+            return 0
+        if verb == "--accept":
+            return _apply(face, box)[0]
+        if not sys.stdin.isatty() and os.environ.get(STDIN_HOOK) != "1":
+            say("%s do -- --review asks yes at a terminal; spark do --accept %s applies without asking"
+                % (MARK, box["id"]))
+            return 2
+        return _settle(face, box)[0]
+    finally:
+        sandbox.release(box)
 
 
 def _list_runs():
-    waiting = sandbox.runs()
-    if not waiting:
+    listed = sandbox.runs()
+    if not listed:
         say("no sandboxed run waits for review")
         return 0
-    for r in waiting:
-        try:
-            n = sandbox.count(sandbox.changes(r))
-        except sandbox.SandboxError:
-            n = 0
-        say("%s  %4s  %-11s %s" % (r["id"], _age(r["start"]), _plural(n, "change"), _goal_words(r)))
+    for r in listed:
+        if r["running"]:
+            what = "running"          # its driver holds it: no count while it writes
+        else:
+            try:
+                what = _plural(sandbox.count(sandbox.changes(r)), "change")
+            except sandbox.SandboxError:
+                what = "?"
+        say("%s  %4s  %-11s %s" % (r["id"], _age(r["start"]), what, _goal_words(r)))
     say("spark do --review ID shows one and asks yes; --accept ID applies it, --discard ID drops it")
     return 0
 

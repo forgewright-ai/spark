@@ -317,9 +317,6 @@ def mkdirs(path):
     return path
 
 
-_mkdirs = mkdirs    # compatibility: do.py's detach lock, until it calls detach_lock()
-
-
 def _write_private(path, data):
     from . import vault
     vault.write_private(path, data)

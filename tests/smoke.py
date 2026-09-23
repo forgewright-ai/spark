@@ -2634,11 +2634,11 @@ def main():
                  "spark do --sandbox --detach: no terminal needed, the run's id printed, its changes wait", out + err)
             spark("do", "--discard", ids[0] if ids else "none", cwd=box)
             import fcntl
-            _lfd = os.open(os.path.join(runs_dir, _do.DETACH_LOCK), os.O_RDWR | os.O_CREAT, 0o600)
+            _lfd = os.open(os.path.join(runs_dir, _sb.DETACH_LOCK), os.O_RDWR | os.O_CREAT, 0o600)
             fcntl.flock(_lfd, fcntl.LOCK_EX)
             rc, out, err = spark("do", "--sandbox", "--detach", "boxwork", stdin="", cwd=box)
             os.close(_lfd)
-            t.ok(rc == 2 and "a detached run is running already: one at a time" in out and not waiting(),
+            t.ok(rc == 2 and out.strip() == "spark do -- %s: one at a time" % _sb.DETACHED and not waiting(),
                  "spark do --detach: a second detached run while one holds the lock is refused", out + err)
             rc, out, err = spark("do", "--sandbox", "boxwork", stdin="yes\n", extra=hook, cwd=home)
             t.ok(rc == 2 and out.strip() == "spark do -- " + _sb.NEEDS_PROJECT and not waiting(),
@@ -2653,8 +2653,10 @@ def main():
                 files = rev[0]["files"] if rev else []
                 ok = (rc == 0 and evs and evs[0]["sandbox"] is True and evs[0]["run"]
                       and kinds(evs).count("step") == 3 and [e for e in evs if e["ev"] == "step"][2]["danger"] is True
-                      and files == [{"path": "notes.txt", "status": "added", "old": None, "new": "hello\n"},
-                                    {"path": "old.txt", "status": "deleted", "old": "old\n", "new": None}]
+                      and files == [{"path": "notes.txt", "status": "added", "old": None, "new": "hello\n",
+                                     "exec": False, "reason": "", "control": False},
+                                    {"path": "old.txt", "status": "deleted", "old": "old\n", "new": None,
+                                     "exec": False, "reason": "", "control": False}]
                       and evs[-1]["ev"] == "end" and evs[-1]["reason"] == want)
                 if word == "accept":
                     ok = ok and os.path.exists(box + "/notes.txt") and not waiting()
@@ -2671,6 +2673,68 @@ def main():
             # do.STEP_TIMEOUT), so a fast `head -c` loop crosses it in time
             for r in waiting():
                 spark("do", "--discard", r, cwd=box)
+
+            def copy_file(rid, rel):
+                """a file of a run's copy: the clone (macOS), the upper dir (Linux)"""
+                return os.path.join(runs_dir, rid, "clone" if _sb.OS == "macos" else "up", rel)
+
+            def read_until(p, done, secs=20):
+                """p's stdout until done(text) holds (or secs pass)"""
+                buf, end = b"", time.time() + secs
+                while not done(buf.decode("utf-8", "replace")) and time.time() < end:
+                    if select.select([p.stdout], [], [], 0.2)[0]:
+                        chunk = os.read(p.stdout.fileno(), 65536)
+                        if not chunk:
+                            break
+                        buf += chunk
+                return buf.decode("utf-8", "replace")
+            # the apply is of what was reviewed: a copy that changed after
+            # the review applies nothing (sandbox.CHANGED), and the run waits
+            reset_box()
+            _p = subprocess.Popen([sys.executable, SPARK, "do", "--sandbox", "boxwork"], stdin=subprocess.PIPE,
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=dict(env, **hook), cwd=box)
+            _seen = read_until(_p, lambda o: "type yes: " in o)
+            _m = re.search(r"sandbox (\S+): a copy", _seen)
+            _rid = _m.group(1) if _m else "none"
+            if os.path.exists(copy_file(_rid, "notes.txt")):
+                with open(copy_file(_rid, "notes.txt"), "w") as f:
+                    f.write("changed after the review\n")
+            _out, _err = _p.communicate(b"yes\n", timeout=30)
+            _err = _err.decode("utf-8", "replace")
+            t.ok(_p.returncode == 1 and "type yes: " in _seen and _sb.CHANGED in _err and waiting() == [_rid]
+                 and not os.path.exists(box + "/notes.txt") and os.path.exists(box + "/old.txt"),
+                 "spark do --sandbox: yes after the copy changed behind the review applies nothing -- the run waits",
+                 _seen[-300:] + _err)
+            spark("do", "--discard", _rid, cwd=box)
+            # ... and over --porcelain; while the driver holds the run, it
+            # is running: --review ID is refused (sandbox.claim), the bar
+            # and spark status do not count it as waiting, the listing
+            # says running
+            reset_box()
+            _p = subprocess.Popen([sys.executable, SPARK, "do", "--porcelain", "--sandbox", "boxwork"],
+                                  stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, env=env, cwd=box)
+            _seen = read_until(_p, lambda o: '"ev": "review"' in o)
+            _evs = events(_seen) or [{}]
+            _rid = _evs[0].get("run") or "none"
+            rc, out, _ = spark("do", "--review", _rid, cwd=box)
+            t.ok(rc == 2 and out.strip() == "spark do -- " + _sb.RUNNING % _rid,
+                 "spark do --review ID: a run its driver still holds is refused (sandbox.claim)", out)
+            rc, out, _ = spark("bar", cwd=box)
+            rc2, out2, _ = spark("do", "--review", cwd=box)
+            t.ok("waiting" not in out and re.search(r"^%s\s+\S+\s+running\s+boxwork$" % _rid, out2, re.M) is not None,
+                 "a running run is not waiting: the bar does not count it; --review lists it as running", out + out2)
+            if os.path.exists(copy_file(_rid, "notes.txt")):
+                with open(copy_file(_rid, "notes.txt"), "w") as f:
+                    f.write("changed after the review\n")
+            _out, _err = _p.communicate(b"accept\n", timeout=30)
+            evs = events(_seen + _out.decode("utf-8", "replace")) or [{}]
+            rc, out, _ = spark("bar", cwd=box)
+            t.ok(_p.returncode == 1 and any(e.get("ev") == "note" and _sb.CHANGED in e.get("text", "") for e in evs)
+                 and evs[-1].get("reason") == "error" and waiting() == [_rid] and "1 run waiting" in out
+                 and not os.path.exists(box + "/notes.txt"),
+                 "spark do --porcelain --sandbox: accept after the copy changed applies nothing; the run then waits",
+                 str(evs[-3:]) + out)
+            spark("do", "--discard", _rid, cwd=box)
             wrap = home + "/spark-smallcap.py"
             with open(wrap, "w") as f:
                 f.write("import runpy, sys\nsys.path.insert(0, %r)\nfrom spark import do, sandbox\n"
