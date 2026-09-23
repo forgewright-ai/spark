@@ -2441,7 +2441,7 @@ def main():
                  "spark do --review ID: the diff, then yes applies it", out + err)
             rc, out, _ = spark("do", "--review", rid, cwd=box)
             rc2, out2, _ = spark("do", "--review", "../x", cwd=box)
-            t.ok(rc == 2 and "applied already" in out and rc2 == 2 and "not a sandboxed run's id" in out2,
+            t.ok(rc == 2 and ("no sandboxed run %s" % rid) in out and rc2 == 2 and "not a sandboxed run's id" in out2,
                  "spark do --review: an applied run, and an id that is not one, are refused", out + out2)
             rc, out, _ = spark("bar", cwd=box)
             t.ok("waiting" not in out, "the bar line says nothing of runs when none wait", out)
