@@ -1,5 +1,44 @@
 # Changelog
 
+## v1.47
+
+- `spark do` is measured, bounded and held: every proposal is a turn
+  with the server's timings, so `spark stats` shows do's real cache
+  hits; the messages fit the served context (the goal is never dropped,
+  the oldest outputs shrink to `(output trimmed, exit N)` first); what
+  a step printed is held back like a source's secrets before the model
+  sees it (a checksum line keeps its digest); the page's steps stop
+  after 120 s.
+- The OS documents its tools: a step refused for an option brings back
+  the lines of that command's own man page about it (`man -P cat`,
+  1.5 kB at most); the command itself never runs for it. The page's
+  steps carry the same lines.
+- `spark do --sandbox <words>`: every step runs in a copy of the
+  project -- bubblewrap 0.11+ on Linux, an APFS clone under
+  `sandbox-exec` on macOS -- with no network, the homes out of sight
+  and nothing else writable, without asking. At the end, the diff and
+  a typed `yes` apply it. A git hook or git config the copy grew is
+  never applied, a link out of the project is refused, a file changed
+  here meanwhile stops the whole apply. The `sandbox` row says whether
+  this machine can (40 rows).
+- `spark do --sandbox --detach <words>` runs with nobody there -- a
+  timer, cron, launchd, a `spark watch` line -- one at a time, and its
+  changes wait: `spark do --review [ID]` shows them and asks `yes`,
+  `--accept ID` applies without asking, `--discard ID` drops them. Bare
+  `spark` and the status line say `N runs waiting`.
+- `spark do --porcelain [--sandbox]` is contract 15: JSON Lines for a
+  program (start, step, output, rc, note, review, end), one word back
+  when something waits (run, skip, quit, edit, accept, discard). There
+  is no `yes` over a pipe: a step that can destroy data outside the
+  sandbox is refused, and the model hears it was skipped.
+- `spark do --` ends the options: a goal that starts with `-`, or is
+  the word help, is words.
+- The first client of contract 15: spark-acp
+  (github.com/forgewright-ai/spark-acp) puts `spark do` in any Agent
+  Client Protocol client -- `toad acp "spark-acp"` in a terminal, Zed in
+  the editor: each command a Run or Skip, a sandboxed run's diff one
+  Accept or Discard.
+
 ## v1.46
 
 - A source's secrets are held back before it leaves: `spark read` and
