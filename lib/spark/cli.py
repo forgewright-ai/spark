@@ -143,28 +143,11 @@ def _install_line(binary):
 
 
 PASTE_MAX = 8000        # what a paste inspection reads, or it says so and sends nothing
-# a paste that looks like a secret never leaves this machine: a local
-# look before anything is sent (a pasted private key or .env would
-# otherwise ride to the brain -- over the LAN, on a client). A named
-# line each, with what the verdict calls it; a false positive only
-# withholds the verdict, the paste itself always lands in the buffer.
-SECRET_SHAPES = (
-    ("a private key", r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
-    ("an AWS access key", r"\bAKIA[0-9A-Z]{16}\b"),
-    ("a GitHub token", r"\bghp_[A-Za-z0-9]{30,}"),
-    ("a Slack token", r"\bxox[baprs]-[A-Za-z0-9-]{10,}"),
-    ("an API key", r"\bsk-[A-Za-z0-9]{20,}"),
-    ("a credential line", r"(?i)\b(?:password|passwd|token|secret|api[_-]?key|private[_-]?key)\b\s*[=:]\s*\S{8,}"),
-    ("a long base64 run", r"[A-Za-z0-9+/=]{64,}"),
-)
-
-
-def secret_shape(data):
-    """What in the text looks like a secret (SECRET_SHAPES' name), or ''."""
-    for what, pat in SECRET_SHAPES:
-        if re.search(pat, data):
-            return what
-    return ""
+# a paste that looks like a secret never leaves this machine: the list
+# and the look live in spark.text (SECRET_SHAPES, secret_shape), beside
+# the source's own (SOURCE_SHAPES, hold_secrets); the names stay here too
+SECRET_SHAPES = textmod.SECRET_SHAPES
+secret_shape = textmod.secret_shape
 
 
 def _paste_verdict(shell):

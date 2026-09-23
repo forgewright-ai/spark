@@ -117,11 +117,16 @@ Only to the server you configured (this machine's, or another of yours):
   around the cursor for a completion, 12 kB for a rewrite, 16 kB for a
   question -- never its path; a thread only when the editor asks for
   one, sealed like a chat thread; `--watch` sends each saved stanza the
-  same way;
+  same way; a question about a source (`--source`, what the reading
+  apps pass) has each span that looks like a secret held back first,
+  in the text and in its name, as `spark read` does;
 - for `spark ask` the text (12 kB) with the `--name` and `--about`
   hints you gave;
 - for `spark read` the source, 16 kB a part; `--name` stays here, in
-  the ledger;
+  the ledger; a span that looks like a secret is held back first -- a
+  private key, an AWS access key, a GitHub token, a Slack token, an API
+  key, a credential line, a long base64 run, a one-time code, a link
+  token -- and the model sees `[held]`;
 - for `spark drill` the source (16 kB); your answers are graded here,
   against the source, and never sent;
 - for `spark watch` each window of the stream (a few lines at a time) --

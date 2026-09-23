@@ -216,7 +216,9 @@ shell cannot host the widget (another shell, or macOS's bash 3.2):
    before you see it. When the source does not answer, the reply is one
    line showing the source's own opening words, never a guess. A source
    past 16000 characters is read one part at a time (`--part N`; the
-   answer's first line names the part).
+   answer's first line names the part). What in the source looks like a
+   secret -- a key, a token, a one-time code, a link's token -- is held
+   back before it leaves: the model sees `[held]`.
 
    ```sh
    w3m -dump https://example.com | spark read "what is this page for"

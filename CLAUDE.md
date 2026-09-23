@@ -178,7 +178,9 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 text (the streams: wrap, fence, Busy -- the one pulse while a
                 reply is on its way, tty only -- and the grounding law -- anchor,
                 Ground, Gate, shared by every contract that shows a text to a
-                model, and borrowed by spark recall to keep to lines that ran)
+                model, and borrowed by spark recall to keep to lines that ran --
+                and what a source holds back: SECRET_SHAPES, the paste's
+                list, and SOURCE_SHAPES, the source's, with hold_secrets)
                 ledger (what you have already weighed: one sealed file, a kind per
                 contract, and the rule that retires a record is the contract's own;
                 a writer refuses a file that does not open -- `the ledger does not
@@ -455,7 +457,7 @@ may change freely.
    stdin, NO command back -- one `answer`/`danger` line naming what the
    paste does (a locally dangerous line forces `danger` whatever the
    model says); over 8 kB it is one line and nothing is sent, and a
-   paste that looks like a secret (`cli.SECRET_SHAPES`: a private key
+   paste that looks like a secret (`text.SECRET_SHAPES`: a private key
    block, an AWS, GitHub, Slack or `sk-` token, a `password=`/`token:`
    line, a 64+ run of base64) is one `answer` line naming the shape
    and nothing is sent either. The
@@ -747,7 +749,24 @@ may change freely.
     published source the reader discusses, not their draft, so the model
     answers the question and never suggests edits to it. The reading apps
     (spark-w3m, spark-newsboat) pass it; the editors never do -- the flag
-    is the caller declaring which posture, no auto-detection.
+    is the caller declaring which posture, no auto-detection. A source
+    is someone else's text, so a `? --source` holds back every span that
+    looks like a secret (`text.SOURCE_SHAPES`: the paste's shapes plus a
+    one-time code -- its digits, whole or split once or twice by a space
+    or a hyphen, within 30 chars after or before code/otp/pin/passcode/
+    verification -- and a link token -- every token-like parameter of an
+    http(s) URL, found as a pair: the URL first, then its parameters, so
+    no one regex backtracks over a crafted megabyte; a named `s` group
+    is the part held) right after stdin is read: each becomes `[held]`,
+    and the reading, the context, `--sel`'s offsets, the anchors and the
+    thread's `text_sha` all see the held text -- what the model saw.
+    `--name`, `--about` and `--type` ride in the same message and are
+    held the same way (the ledger keeps the name as given). One stderr
+    line says how many and which shapes; the turn records `held` (a
+    number). A rewrite, `--at` and a `?` without `--source` send the
+    author's own text as it is. `--` ends the options: every argument
+    after it is a word, so a question that says `--name` cannot eat the
+    flag after it.
     `--decline --name NAME` (the pane's `d`) keeps the
     note on stdin in the ledger (`lib/spark/ledger.py`: the account's
     sealed `users/<name>/ledger`, by file NAME, 300 chars a note, 30 a
@@ -802,6 +821,10 @@ may change freely.
     is greedy (temperature 0): its words are restated above the source
     in the request that follows, so a word sampled differently on the
     same source would break the served prompt's cached prefix.
+    The source is always held back first (`text.hold_secrets`, contract
+    10's `--source` rule): every span that looks like a secret becomes
+    `[held]` before the parts are cut, one stderr line names the count
+    and the shapes, and the turn records `held`.
 12. `spark ask` is the questioner's protocol: the text on stdin -- a plan,
     a draft, a decision -- and questions about it out, raw, one per line;
     never a path, never a `[cwd]` line. Mode from the argument shape, no

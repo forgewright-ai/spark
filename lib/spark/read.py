@@ -38,6 +38,8 @@
 #   what leaves       the source's text and the question, to the model
 #                     this machine answers from. No name, no path, no
 #                     cwd: --name stays in the ledger on this machine.
+#                     A span that looks like a secret (text.SOURCE_SHAPES)
+#                     is held back first: the model sees [held].
 
 import os
 import sys
@@ -68,6 +70,8 @@ READ_USAGE = """spark read -- what a source says, and only what it says (contrac
   quotes are not in it, or that quotes nothing, never reaches you. When
   the source does not answer, the reply is one line showing its opening
   words -- composed here, never the model's guess -- and exit 1.
+  spans that look like secrets (a key, a token, a one-time code) are
+  held back before the source leaves: the model sees [held].
   From a pipe: w3m -dump URL | spark read "what is this page for"
 """
 
@@ -178,6 +182,13 @@ def cmd_read(args):
         say(READ_USAGE.rstrip())
         say("\n  a question for spark itself is: spark %s" % (" ".join(words) or "<words>"))
         return 2
+    # a source is someone else's text: what looks like a secret in it (a
+    # key, a token, a one-time code) is held back here, before the parts,
+    # the reading, the gate and the model see it -- they all see [held]
+    spans, names = textmod.held_spans(data)
+    held = len(spans)
+    if held:
+        data = textmod.hold_spans(data, spans)
     total = parts_of(len(data))
     if total > 1 and want is None:
         die("the source is %d chars, %d parts of %d -- read one: --part N"
@@ -191,6 +202,8 @@ def cmd_read(args):
     cfg = config.load()
     shell = os.path.basename(os.environ.get("SHELL") or "sh")
     text = " ".join(words).strip() or "What does this source cover?"
+    if held:        # said once nothing can refuse any more: the source is on its way
+        print(textmod.held_line(held, names), file=sys.stderr, flush=True)
     read, tail = session.reading(cfg, part, shell)
     context = read + "Source:\n" + part + tail
 
@@ -227,7 +240,8 @@ def cmd_read(args):
     # what a reader waits for, and the number the prompt cache moves
     first = {"first_ms": int((out.first - t0) * 1000)} if out.first else {}
     s.record(kind="read", chars=len(part), ms=ms, part=want, parts=total,
-             kept=gate.kept, dropped=gate.dropped, quotes=gate.quoted, unanchored=gate.missed, **first)
+             kept=gate.kept, dropped=gate.dropped, quotes=gate.quoted, unanchored=gate.missed,
+             **dict(first, **({"held": held} if held else {})))
     if not gate.kept:
         where = "part %d of %d" % (want, total) if total > 1 else "the source"
         die('%s does not answer -- it opens: "%s"' % (where, opening(part)))

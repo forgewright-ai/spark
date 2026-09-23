@@ -49,21 +49,25 @@ $hit"
         hit=$(printf '%s\n' "$added" | grep -En '(^.|[^[:alnum:]/._-])/(home|Users)/[A-Za-z0-9_-]+' || true)
         [ -z "$hit" ] || bad "home path naming a user in staged change:
 $hit"
-        # secret shapes: the product's own list (SECRET_SHAPES in
-        # lib/spark/cli.py, what `spark line --paste` holds) minus the two
-        # tuned for a paste and not a tree -- "a credential line" reads
-        # `token = users.add(name)` as one, "a long base64 run" reads every
-        # sha256 pin and the key in allowed-signers as one. A hit names the
-        # shape, never the line; a line marked `spark:allow-secret` (a test
-        # fixture) is skipped. A cli.py that does not import refuses too.
-        if [ -f lib/spark/cli.py ]; then
+        # secret shapes: the product's own list (SOURCE_SHAPES in
+        # lib/spark/text.py -- SECRET_SHAPES, what `spark line --paste`
+        # holds, plus the two only a source needs) minus the lines tuned
+        # for a paste or a source and not a tree -- "a credential line"
+        # reads `token = users.add(name)` as one, "a long base64 run" reads
+        # every sha256 pin and the key in allowed-signers as one, "a
+        # one-time code" reads any "code ... 1234", "a link token" any
+        # test URL with a key. A hit names the shape, never the line; a
+        # line marked `spark:allow-secret` (a test fixture) is skipped. A
+        # text.py that does not import refuses too.
+        if [ -f lib/spark/text.py ]; then
             hit=$(printf '%s\n' "$added" | grep -v 'spark:allow-secret' | PYTHONPATH=lib python3 -c '
 import re, sys
-from spark.cli import SECRET_SHAPES
+from spark.text import SOURCE_SHAPES
 paste_only = ("a credential line", "a long base64 run")
+source_only = ("a one-time code", "a link token")
 text = sys.stdin.buffer.read().decode("utf-8", "replace")
-print(", ".join(w for w, p in SECRET_SHAPES if w not in paste_only and re.search(p, text)))
-') || bad "secret shapes: lib/spark/cli.py does not import"
+print(", ".join(w for w, p in SOURCE_SHAPES if w not in paste_only + source_only and re.search(p, text)))
+') || bad "secret shapes: lib/spark/text.py does not import"
             [ -z "$hit" ] || bad "a secret shape in the staged diff: $hit"
         fi
     fi

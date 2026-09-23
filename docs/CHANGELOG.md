@@ -1,5 +1,29 @@
 # Changelog
 
+## v1.46
+
+- A source's secrets are held back before it leaves: `spark read` and
+  `spark edit ? --source` (what the reading apps pass) replace every
+  span that looks like a secret with `[held]` right after stdin is
+  read -- before a client sends it over the LAN, before the reading,
+  the anchors and a thread see it. The shapes are the paste's (a
+  private key, an AWS access key, a GitHub token, a Slack token, an API
+  key, a credential line, a long base64 run) plus two a mail or a page
+  carries: a one-time code (4-8 digits, or split like 482 913 or
+  48-29-13, just after or before code, OTP, PIN, passcode or
+  verification) and a link token (the value of every token, key, code,
+  reset, sig, signature, auth or otp parameter in a URL). A question's
+  `--name`, `--about` and `--type` are held the same way. One stderr
+  line says how many and which; the turn records `held`, a number.
+- A rewrite, a completion and a `?` without `--source` are the author's
+  own text: sent as it is, byte for byte back.
+- `spark edit --` ends the options: every argument after it is a word,
+  so a question that says `--name` cannot swallow the flag after it.
+- The shapes live in `lib/spark/text.py` now (`SECRET_SHAPES`,
+  `SOURCE_SHAPES`, `hold_secrets`); `spark line --paste` holds the same
+  list as before. README's "What leaves this machine" names every shape,
+  and the docs test holds it to the list.
+
 ## v1.45
 
 - `spark watch` never watches itself: with `journalctl -f` on the box,

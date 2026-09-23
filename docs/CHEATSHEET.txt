@@ -17,7 +17,8 @@ SPARK
   spark edit [?] words < FILE     rewrite / complete (--at N) / ask (?) stdin
   spark ask < FILE                three questions that text does not answer
   spark read <words> < FILE       what a source says, every line quoting it
-                                  (16 kB a part; --part N reads one)
+                                  (16 kB a part; --part N reads one); what
+                                  looks like a secret is held back: [held]
   spark drill < FILE              the source becomes questions it answers;
                                   --name keeps a widening schedule
   <stream> | spark watch <words>  silent until a line matches, then one line

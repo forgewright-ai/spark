@@ -44,10 +44,12 @@ EDIT_USAGE = """spark edit -- the editor's protocol (contract 10): the text on s
   --source                    ?: the text is a published source you discuss,
                               not a draft to edit -- answer the question, never
                               suggest changes (the reading apps pass this)
+                              -- its secret-shaped spans are held back
   --decline --name NAME       keep the note on stdin as declined for NAME: a
                               later ? about NAME is told not to raise it
   --ledger [clear] --name NAME  the notes declined for NAME (every file's
                               without a name), newest first; clear drops them
+  --                          the end of the options: the rest are words
 
   raw streamed text: no mark, no wrap, a code fence around the answer is
   removed; an empty text with words is written from nothing (a new file);
@@ -65,6 +67,11 @@ def _edit_args(args):
     words, rest = [], list(args)
     while rest:
         a = rest.pop(0)
+        if a == "--":
+            # the end of the options: every word after it is a word, so a
+            # question that says "--name" cannot eat the flag after it
+            words.extend(rest)
+            break
         if a == "--part":
             opts["part"] = True
         elif a == "--source":
@@ -281,14 +288,36 @@ def cmd_edit(args):
         if not 0 <= sel[0] <= sel[1] <= len(data):
             say("%s edit -- --sel A B are byte offsets, 0 <= A <= B <= %d" % (MARK, len(data)))
             return 2
+    # a source (`? --source`: a page, a mail) is someone else's text: what
+    # looks like a secret in it is held back here, before the reading, the
+    # context, the anchors and the thread's text_sha see it -- they all see
+    # what the model sees. A rewrite, --at and a plain ? are the author's
+    # own text, untouched (a rewrite replaces its input)
+    # the hints ride in the same message (a mail's subject as --name), so
+    # they are held the same way; the ledger keeps the name as given
+    held, names = 0, []
+    sent = {k: opts[k] for k in ("name", "about", "type")}
+    if opts["source"] and at is None and words[0] == "?":
+        spans, names = textmod.held_spans(data)
+        if spans:
+            if sel:
+                sel = (textmod.held_offset(spans, sel[0]), textmod.held_offset(spans, sel[1], end=True))
+            data, held = textmod.hold_spans(data, spans), len(spans)
+        for k in sent:
+            hs, hn = textmod.held_spans(sent[k])
+            if hs:
+                sent[k], held, names = textmod.hold_spans(sent[k], hs), held + len(hs), names + hn
+        names = textmod.shape_order(names)
     tid = opts["thread"].strip()
     if tid and not forge.valid_id(tid):
         say("%s edit -- --thread ID is [A-Za-z0-9_-]" % MARK)
         return 2
+    if held:        # said once nothing can refuse any more: the text is on its way
+        print(textmod.held_line(held, names), file=sys.stderr, flush=True)
     shell = os.path.basename(os.environ.get("SHELL") or "sh")
-    ftype = opts["type"].strip() if opts["type"].strip() != "unknown" else ""
-    label = _edit_label(os.path.basename(textmod.utf8(opts["name"]).strip()), ftype, opts["part"])
-    about = opts["about"].strip()
+    ftype = sent["type"].strip() if sent["type"].strip() != "unknown" else ""
+    label = _edit_label(os.path.basename(textmod.utf8(sent["name"]).strip()), ftype, opts["part"])
+    about = sent["about"].strip()
     head = "The author says: %s\n" % about if about else ""
     cfg = config.load()
     if at is not None:
@@ -354,6 +383,8 @@ def cmd_edit(args):
         raise
     done()
     counts = {"quotes": anchors.quoted, "unanchored": anchors.missed} if anchors else {}
+    if held:
+        counts["held"] = held
     if kind == "answer" and tid:
         forge.append(cfg, tid, "user", persona.user_message(text, "", context), text_sha=sha)
         forge.append(cfg, tid, "assistant", out or "")

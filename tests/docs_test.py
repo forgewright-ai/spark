@@ -121,6 +121,13 @@ def main():
     for kind, _cap in persona.SENDS:
         check(re.search(r"\b%s\b" % re.escape(kind), section) is not None,
               "README.md 'What leaves this machine' names %s (persona.SENDS)" % kind)
+    # and what a source has held back before it leaves: every shape in
+    # text.SOURCE_SHAPES is named there, so a new shape is disclosed too
+    from spark import text as textmod
+    folded = " ".join(section.split())
+    for what, _pat in textmod.SOURCE_SHAPES:
+        check(what in folded,
+              "README.md 'What leaves this machine' names '%s' (text.SOURCE_SHAPES)" % what)
     # counts the docs state
     n_rows = sum(1 for line in read(os.path.join("lib", "spark", "check.py")).split("\n") if line.startswith("@row"))
     for doc in ("CLAUDE.md", "docs/INSTALL.md"):

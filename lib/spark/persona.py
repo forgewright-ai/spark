@@ -32,9 +32,10 @@ SENDS = (
     ("chat", "the conversation: soul, remembered facts, earlier turns"),
     ("do", "each step's output, last 4 kB"),
     ("explain", "the piped text, last 6 kB"),
-    ("edit", "the text: 6 kB around the cursor, 12 kB rewrite, 16 kB question"),
+    ("edit", "the text: 6 kB around the cursor, 12 kB rewrite, 16 kB question -- "
+             "in a question about a source (--source), a span that looks like a secret is held back"),
     ("ask", "the text, 12 kB, with the --name/--about hints"),
-    ("read", "the source, 16 kB a part"),
+    ("read", "the source, 16 kB a part -- a span that looks like a secret is held back"),
     ("drill", "the source, 16 kB"),
     ("watch", "each window of the stream, 8 kB at most"),
     ("recall", "the last 400 lines of this shell's history"),

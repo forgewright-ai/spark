@@ -505,6 +505,144 @@ def stdin_text():
     return buf.read().decode("utf-8", "replace")
 
 
+# ------------------------------------------------------------ held back
+# a paste that looks like a secret never leaves this machine: a local
+# look before anything is sent (a pasted private key or .env would
+# otherwise ride to the brain -- over the LAN, on a client). A named
+# line each, with what the verdict calls it; a false positive only
+# withholds the verdict, the paste itself always lands in the buffer.
+# `spark line --paste` reads this list; the pre-commit hook scans the
+# staged diff with it (minus the lines tuned for a paste). A named group
+# `s` is the part hold_secrets replaces; without one, the whole match.
+SECRET_SHAPES = (
+    ("a private key", r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
+    ("an AWS access key", r"\bAKIA[0-9A-Z]{16}\b"),
+    ("a GitHub token", r"\bghp_[A-Za-z0-9]{30,}"),
+    ("a Slack token", r"\bxox[baprs]-[A-Za-z0-9-]{10,}"),
+    ("an API key", r"\bsk-[A-Za-z0-9]{20,}"),
+    ("a credential line", r"(?i)\b(?:password|passwd|token|secret|api[_-]?key|private[_-]?key)\b\s*[=:]\s*(?P<s>\S{8,})"),
+    ("a long base64 run", r"[A-Za-z0-9+/=]{64,}"),
+)
+
+# a source -- a page, a mail, a feed item the reader discusses (`spark
+# read`, `spark edit ? --source`) -- is someone else's text: it can carry
+# the reader's one-time code or a reset link's token, which are not the
+# reader's to hand to a model. Held back before the text leaves the
+# process (so also before a client sends it over the LAN): the secret
+# shapes above, and the lines only a source needs, a named line each so
+# it can be argued with. A false positive hides a span, never the rest.
+# A line's pattern is a regex, or a pair (OUTER, INNER): every INNER
+# match inside each OUTER match -- a URL found first, then each of its
+# parameters, so no pattern ever scans the text for both at once (one
+# regex doing both backtracks for seconds on a crafted megabyte).
+_OTP_WORD = r"\b(?:code|otp|pin|passcode|verification)"
+# 4-8 digits, or split once or twice by a space or a hyphen (482 913,
+# 48-29-13); never part of a longer digit run
+_OTP_DIGITS = r"(?<!\d)(?P<s>\d{4,8}|\d{2,4}(?:[ -]\d{2,4}){1,2})(?!\d)"
+SOURCE_SHAPES = SECRET_SHAPES + (
+    # the digits within ~30 chars after the word that names them:
+    # "Your verification code is 482913", "PIN: 48-29-13"
+    ("a one-time code", "(?i)" + _OTP_WORD + r"[^\d]{0,30}?" + _OTP_DIGITS),
+    # ... or before it: "482913 is your verification code",
+    # "G-482 913 is your Google verification code"
+    ("a one-time code", "(?i)" + _OTP_DIGITS + r"[^\d]{0,30}?" + _OTP_WORD),
+    # the value (12+ chars) of every token-like parameter of an http(s)
+    # URL: ?token=, &key=, #access_token=, ?reset=, &sig=, &oobCode=,
+    # ?resetToken=, &otp=, ?X-Amz-Signature=, &auth= -- each one held
+    ("a link token", (r"(?i)\bhttps?://\S+",
+                      r"(?i)[?&#;][\w.-]{0,64}?(?:token|key|code|reset|sig|signature|auth|otp)"
+                      r"=(?P<s>[A-Za-z0-9%._~+/=-]{12,})")),
+)
+
+HELD = "[held]"
+
+
+def secret_shape(data):
+    """What in the text looks like a secret (SECRET_SHAPES' name), or ''."""
+    for what, pat in SECRET_SHAPES:
+        if re.search(pat, data):
+            return what
+    return ""
+
+
+def _matches(pat, data):
+    """Every match of a SOURCE_SHAPES pattern: a regex's, or for a pair
+    (OUTER, INNER) every INNER match inside each OUTER match."""
+    if isinstance(pat, str):
+        return re.finditer(pat, data)
+    outer, inner = re.compile(pat[0]), re.compile(pat[1])
+    return (m for o in outer.finditer(data) for m in inner.finditer(data, o.start(), o.end()))
+
+
+def shape_order(names):
+    """`names`, distinct, in SOURCE_SHAPES order."""
+    order = []
+    for what, _pat in SOURCE_SHAPES:
+        if what in names and what not in order:
+            order.append(what)
+    return order
+
+
+def held_spans(data):
+    """([(start, end)], names): every SOURCE_SHAPES match in `data` (its
+    `s` group when it has one, else the whole match), overlapping or
+    touching spans merged into one, in order; the names of the shapes
+    that matched, distinct, in SOURCE_SHAPES order. Every shape reads the
+    text as it came, so one shape's match cannot hide or feed another."""
+    spans, names = [], []
+    for what, pat in SOURCE_SHAPES:
+        for m in _matches(pat, data):
+            s, e = m.span("s") if "s" in m.re.groupindex else m.span()
+            if e > s:
+                spans.append((s, e))
+                if what not in names:
+                    names.append(what)
+    merged = []
+    for s, e in sorted(spans):
+        if merged and s <= merged[-1][1]:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], e))
+        else:
+            merged.append((s, e))
+    return merged, names
+
+
+def hold_spans(data, spans):
+    """`data` with each (start, end) span of held_spans replaced by HELD."""
+    out, last = [], 0
+    for s, e in spans:
+        out.append(data[last:s] + HELD)
+        last = e
+    out.append(data[last:])
+    return "".join(out)
+
+
+def held_offset(spans, x, end=False):
+    """Where offset `x` of the original text lands in the held one: past
+    a span it moves by what the span lost; inside one it goes to the
+    HELD's start (`end` False) or its end (`end` True)."""
+    shift = 0
+    for s, e in spans:
+        if x <= s:
+            break
+        if x < e:
+            return s - shift + (len(HELD) if end else 0)
+        shift += (e - s) - len(HELD)
+    return x - shift
+
+
+def hold_secrets(data):
+    """(held_text, names): `data` with every span that looks like a secret
+    (SOURCE_SHAPES) replaced by HELD, and the names of the shapes held."""
+    spans, names = held_spans(data)
+    return hold_spans(data, spans), names
+
+
+def held_line(n, names):
+    """The one stderr line a verb prints when it held something back."""
+    what = "span that looks like a secret" if n == 1 else "spans that look like secrets"
+    return "spark: held back %d %s (%s) -- the model saw %s" % (n, what, ", ".join(names), HELD)
+
+
 def fold(s):
     """Whitespace runs to one space, every quote mark to ", lower case:
     the shapes a faithful quote may still differ in (a line break, a

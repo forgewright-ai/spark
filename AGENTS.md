@@ -67,10 +67,12 @@ sh tests/uninstall_test.sh
 
 (`tests/check_selftest.py` is the hook's entry to `spark check --selftest`.)
 
-The hook also reads the staged diff for secret shapes -- `SECRET_SHAPES`
-in `lib/spark/cli.py`, the list `spark line --paste` holds, minus the two
-tuned for a paste and not a tree (a credential line, a long base64 run:
-every sha256 pin is one) -- names the shape and never the line, and skips
+The hook also reads the staged diff for secret shapes -- `SOURCE_SHAPES`
+in `lib/spark/text.py` (`SECRET_SHAPES`, the list `spark line --paste`
+holds, plus the two a source adds), minus the two tuned for a paste and
+not a tree (a credential line, a long base64 run: every sha256 pin is
+one) and the two tuned for a source (a one-time code, a link token) --
+names the shape and never the line, and skips
 a line marked `spark:allow-secret` (a test fixture); its py_compile runs
 `-W error`, so a SyntaxWarning refuses.
 CI is the second net (`.github/workflows/`): `ci.yml` runs the gate on

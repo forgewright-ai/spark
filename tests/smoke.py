@@ -120,6 +120,8 @@ class Stub(BaseHTTPRequestHandler):
         if "turn it into practice questions" in system:   # spark drill (contract 13), a JSON reply
             return self._send(200, {"choices": [{"message": {"content": json.dumps(drill_items(user))}}], "timings": TIMINGS})
         if body.get("stream") and "you are not its editor" in system:   # spark edit ? --source
+            if "[held]" in user:        # a source with spans held back: quote one of them
+                return self._sse(('The code is hidden: ', '"verification code is [held]"', '.\n'))
             return self._sse(('It gives a price: ', '"$39 wired"', ' -- the reader has the answer.'))
         if body.get("stream") and "inside an editor" in system:
             return self._sse(edit_pieces(system, user))
@@ -1076,6 +1078,57 @@ def main():
         rc, out, _ = spark("edit", "?", "why", stdin="Some prose.\n")
         sysmsg = STATE["bodies"][-1]["messages"][0]["content"]
         t.ok("inside an editor" in sysmsg, "edit ?: without --source the editor's brief is unchanged", repr(sysmsg[:60]))
+        # a source's secrets are held back before it leaves: a mail with a
+        # one-time code, a reset link's token and an API key -- the request
+        # carries [held] three times and none of the values, stderr names
+        # the shapes, the turn records held=3; an answer quoting [held] is
+        # anchored (the anchors read what the model saw)
+        _code, _tok, _key = "482913", "Zq8xT3kLmN4pW7vR2s", "sk-" + "abcdefghijklmnopqrstuvwx1234"  # spark:allow-secret
+        mail = ("Subject: your sign-in\n\nYour verification code is 482913.\n"  # spark:allow-secret
+                "Reset it here: https://192.0.2.7/r?reset=Zq8xT3kLmN4pW7vR2s\n"  # spark:allow-secret
+                "Your new key is " + _key + " -- keep it safe.\n")
+        n0 = len(STATE["bodies"])
+        rc, out, err = spark("edit", "?", "--source", "what", "is", "this", stdin=mail)
+        sent = json.dumps(STATE["bodies"][n0:])
+        umsg = STATE["bodies"][-1]["messages"][-1]["content"]
+        t.ok(rc == 0 and umsg.count("[held]") == 3 and not any(v in sent for v in (_code, _tok, _key)),
+             "edit ? --source: a code, a link token and a key are held back, none of them sent",
+             repr(umsg[-240:]) + err)
+        t.ok(err.strip().splitlines()[:1] == ["spark: held back 3 spans that look like secrets (an API key, "
+                                              "a one-time code, a link token) -- the model saw [held]"],
+             "edit ? --source: one stderr line names what was held", repr(err))
+        _turns = sorted(glob.glob(home + "/.local/state/spark/turns/*.jsonl"))
+        lt = json.loads(open(_turns[-1]).read().splitlines()[-1]) if _turns else {}
+        t.ok(lt.get("held") == 3 and lt.get("mode") == "edit-discuss", "edit ? --source: the turn records held=3",
+             json.dumps(lt)[:200])
+        t.ok('"verification code is [held]"' in out and "[not in the text]" not in out and lt.get("unanchored") == 0,
+             "edit ? --source: a quote of [held] anchors in what the model saw", repr(out))
+        # the hints ride in the same message: a subject as --name, an --about
+        # carrying a code are held too, counted in the one line
+        rc, out, err = spark("edit", "?", "--source", "--name", "Your verification code is 482913",  # spark:allow-secret
+                             "--about", "a mail, PIN 7731", "what", stdin="Hello there.\n")  # spark:allow-secret
+        sent = json.dumps(STATE["bodies"][-2:])
+        t.ok(rc == 0 and "482913" not in sent and "7731" not in sent
+             and "spark: held back 2 spans that look like secrets (a one-time code)" in err,
+             "edit ? --source: a code in --name or --about is held back too", sent[-300:] + err)
+        # `--` ends the options: a question saying --name cannot eat --source
+        rc, out, err = spark("edit", "--source", "--", "?", "why", "--name", stdin=mail)
+        umsg = STATE["bodies"][-1]["messages"][-1]["content"]
+        t.ok(rc == 0 and umsg.startswith("why --name\n") and umsg.count("[held]") == 3 and _code not in umsg,
+             "edit --: the words after it are words, the flags before it hold", repr(umsg[:80]) + err)
+        _a = mail.index(_code)          # --sel over the code itself: the offsets follow the held text
+        rc, out, err = spark("edit", "?", "--source", "--sel", str(_a - 4), str(_a + len(_code)), "what", stdin=mail)
+        umsg = STATE["bodies"][-1]["messages"][-1]["content"]
+        t.ok(rc == 0 and "[selection starts]\n is [held]\n[selection ends]" in umsg and _code not in umsg,
+             "edit ? --source --sel: the selection's offsets move with what was held", repr(umsg[-300:]))
+        rc, out, err = spark("edit", "?", "what", "is", "this", stdin=mail)
+        umsg = STATE["bodies"][-1]["messages"][-1]["content"]
+        t.ok(rc == 0 and all(v in umsg for v in (_code, _tok, _key)) and "[held]" not in umsg and "held back" not in err,
+             "edit ?: without --source the author's text is sent untouched", repr(umsg[-200:]) + err)
+        envtext = "HOST=192.0.2.9\nAPI_KEY=" + _key + "\npassword = hunter2hunter2\n"  # spark:allow-secret
+        rc, out, err = spark("edit", "keep", "it", stdin=envtext)
+        t.ok(rc == 0 and out == envtext and "held back" not in err and _key in STATE["bodies"][-1]["messages"][-1]["content"],
+             "edit: a rewrite of a .env text comes back byte for byte, nothing held", repr(out) + err)
         # anchors: every quoted span of a ? answer is checked against the text
         import io
         from spark import text as textmod
@@ -1402,6 +1455,42 @@ def main():
         umsg = STATE["bodies"][-1]["messages"][-1]["content"]
         t.ok(rc == 0 and umsg.startswith("What does this source cover?\n\n"),
              "read: bare asks what the source covers", repr(umsg[:50]))
+        # a source always has its secrets held back: the reading and the
+        # answer see [held], never the values; one stderr line; held=N
+        n0 = len(STATE["bodies"])
+        rc, out, err = spark("read", "when", "does", "it", "open", stdin=READ_TEXT + mail)
+        sent = json.dumps(STATE["bodies"][n0:])
+        umsg = STATE["bodies"][-1]["messages"][-1]["content"]
+        t.ok(rc == 0 and umsg.count("[held]") == 3 and not any(v in sent for v in (_code, _tok, _key))
+             and "spark: held back 3 spans that look like secrets (" in err,
+             "read: a source's code, link token and key are held back, none of them sent", repr(umsg[-200:]) + err)
+        turns = sorted(glob.glob(home + "/.local/state/spark/turns/*.jsonl"))
+        lt = json.loads(open(turns[-1]).read().splitlines()[-1]) if turns else {}
+        t.ok(lt.get("held") == 3 and lt.get("mode") == "read-source", "read: the turn records held=3", json.dumps(lt)[:200])
+        rc, out, err = spark("read", stdin="The code on the door is 4417, the gate code.\n")  # spark:allow-secret
+        t.ok("spark: held back 1 span that looks like a secret (a one-time code) -- the model saw [held]" in err
+             and "4417" not in json.dumps(STATE["bodies"][-2:]),
+             "read: one span held is said in the singular", repr(err))
+        # the shapes a mail takes: a code before its word, split digits,
+        # every token parameter of a link; and a crafted megabyte holds fast
+        from spark import text as _text
+        for _src, _left in (("482913 is your verification code", "482913"),  # spark:allow-secret
+                            ("G-482913 is your Google verification code", "482913"),  # spark:allow-secret
+                            ("Your code: 482 913", "482 913"),  # spark:allow-secret
+                            ("PIN 48-29-13 today", "48-29-13"),  # spark:allow-secret
+                            ("https://192.0.2.7/r?reset=AAAAAAAAAAAAAAAA&sig=BBBBBBBBBBBBBBBB", "BBBB"),  # spark:allow-secret
+                            ("https://192.0.2.7/a?oobCode=CCCCCCCCCCCCCCCC&resetToken=DDDDDDDDDDDDDDDD&otp=EEEEEEEEEEEEEEEE",  # spark:allow-secret
+                             "CCCC DDDD EEEE")):
+            _h, _names = _text.hold_secrets(_src)
+            t.ok(_names and not any(v in _h for v in _left.split(" ") if len(v) > 3) and _left not in _h
+                 and _text.hold_secrets(_h)[1] == [],
+                 "hold: %r holds its secret" % _src[:44], _h)
+        for _what, _d in (("a URL that never ends", "http://" * 285 + "?" + "_" * 1000000),
+                          ("a megabyte of codes", ("pin: 12-34 https://x?token=" + "a" * 40 + " ") * 15000)):
+            _t0 = time.time()
+            _text.held_spans(_d)
+            _dt = time.time() - _t0
+            t.ok(_dt < 1.0, "hold: %s (%d chars) holds in under a second" % (_what, len(_d)), "%.2fs" % _dt)
         # nothing survives: one line composed from the source, exit 1, stdout untouched
         STATE["read_none"] = True
         rc, out, err = spark("read", "who", "wrote", "it", stdin=READ_TEXT)
