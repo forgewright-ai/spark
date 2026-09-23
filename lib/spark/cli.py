@@ -664,7 +664,7 @@ def cmd_status(args, _bare=False):
             # a single model is just the model
             ember = next((s for role, s, _l in _role_rows(cfg, url, is_forge) if role == "ember"), None)
             what = ("ember %s" % ember) if ember else ("model %s" % model)
-            say("%s -- %s at %s%s (spark status for the rest)" % (MARK, what, url, _waiting(", ")))
+            say("%s -- %s at %s%s (spark status for the rest)" % (MARK, what, url, bar.waiting(", ")))
         except wire.BrainError as e:
             say("%s -- %s (spark status for the rest)" % (MARK, e.hint))
         return 0
@@ -698,21 +698,19 @@ def cmd_status(args, _bare=False):
     say("  history  %s" % ("off" if cfg.history <= 0 else "%d days, %s, %d thread%s"
                            % (cfg.history, _short(os.path.join(STATE_DIR, "turns")), n, "" if n == 1 else "s")))
     say("  last     " + _fmt_turn(session.last_turn()).replace("\n", "\n           "))
-    if _waiting():
-        say("  runs     %s (spark do --review)" % _waiting())
+    runs = bar.waiting()
+    if runs:
+        say("  runs     %s (spark do --review)" % runs)
     return 0
 
 
-def _waiting(lead=""):
-    """`N runs waiting` (sandboxed, for review), or '' when none do."""
-    from . import sandbox
-    n = len(sandbox.runs())
-    return "%s%d run%s waiting" % (lead, n, "" if n == 1 else "s") if n else ""
-
-
 def _short(path):
-    home = os.path.expanduser("~")
-    return "~" + path[len(home):] if path.startswith(home + "/") else path
+    """`path` with the home directory as ~ -- its real path too (a
+    sandboxed run's cwd is real)."""
+    for home in (os.path.expanduser("~"), os.path.realpath(os.path.expanduser("~"))):
+        if path.startswith(home + "/"):
+            return "~" + path[len(home):]
+    return path
 
 
 def cmd_off(args):

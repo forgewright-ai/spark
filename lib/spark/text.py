@@ -583,12 +583,14 @@ def shape_order(names):
     return order
 
 
-def held_spans(data):
+def held_spans(data, exact=()):
     """([(start, end)], names): every SOURCE_SHAPES match in `data` (its
-    `s` group when it has one, else the whole match), overlapping or
-    touching spans merged into one, in order; the names of the shapes
-    that matched, distinct, in SOURCE_SHAPES order. Every shape reads the
-    text as it came, so one shape's match cannot hide or feed another."""
+    `s` group when it has one, else the whole match), and every copy of
+    each `exact` (name, string) pair's string, overlapping or touching
+    spans merged into one, in order; the names of the shapes that
+    matched, distinct, in SOURCE_SHAPES order, then the exact pairs'.
+    Every shape reads the text as it came, so one shape's match cannot
+    hide or feed another."""
     spans, names = [], []
     for what, pat in SOURCE_SHAPES:
         for m in _matches(pat, data):
@@ -597,6 +599,13 @@ def held_spans(data):
                 spans.append((s, e))
                 if what not in names:
                     names.append(what)
+    for what, value in exact:
+        at = data.find(value) if value else -1
+        while at >= 0:
+            spans.append((at, at + len(value)))
+            if what not in names:
+                names.append(what)
+            at = data.find(value, at + 1)
     merged = []
     for s, e in sorted(spans):
         if merged and s <= merged[-1][1]:

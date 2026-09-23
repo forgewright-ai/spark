@@ -13,6 +13,7 @@ import json
 import os
 import re
 import select
+import signal
 import subprocess
 import sys
 import tempfile
@@ -323,10 +324,36 @@ def answer_json(messages):
             if outs:
                 return {"kind": "done", "command": "", "hint": "looked", "danger": False}
             return {"kind": "cmd", "command": "ls", "hint": "look", "danger": False}
-        if "sumstep" in goal:                   # a checksum line and a token on one output
+        if "sumstep" in goal or "catsum" in goal:   # checksum lines and a token on one output: a tool's, or cat's
             if outs:
                 return {"kind": "done", "command": "", "hint": "all done", "danger": False}
-            return {"kind": "cmd", "command": "cat sums.txt", "hint": "show the sums", "danger": False}
+            return {"kind": "cmd", "command": "sha256sum sums.txt" if "sumstep" in goal else "cat sums.txt",
+                    "hint": "show the sums", "danger": False}
+        if "tokstep" in goal:                   # a step prints one of spark's own tokens
+            if outs:
+                return {"kind": "done", "command": "", "hint": "all done", "danger": False}
+            return {"kind": "cmd", "command": "cat tok.txt", "hint": "read the file", "danger": False}
+        if "opaquestep" in goal:                # an interpreter handed its code: not readable from the line
+            if outs or "skipped this step" in user:
+                return {"kind": "done", "command": "", "hint": "all done", "danger": False}
+            return {"kind": "cmd", "command": "sh -c 'echo hi'", "hint": "say hi", "danger": False}
+        if "surrogate" in goal:                 # a lone surrogate in the model's JSON
+            if outs:
+                return {"kind": "done", "command": "", "hint": "all done \udcff", "danger": False}
+            return {"kind": "cmd", "command": "echo \udcff hi", "hint": "say \udcff hi", "danger": False}
+        if "c1char" in goal or "bidichar" in goal:   # a C1 CSI, or a right-to-left override
+            return {"kind": "cmd", "command": "echo \x9b2K hi" if "c1char" in goal else "echo \u202e hi",
+                    "hint": "say hi", "danger": False}
+        if "diskfill" in goal:                  # a sandboxed step that writes until it is stopped
+            if outs:
+                return {"kind": "done", "command": "", "hint": "all done", "danger": False}
+            return {"kind": "cmd", "command": "i=0; while :; do head -c 65536 /dev/zero > f$i; i=$((i+1)); done",
+                    "hint": "fill the disk", "danger": False}
+        if "bgwriter" in goal:                  # a sandboxed step that leaves a writer running
+            if outs:
+                return {"kind": "done", "command": "", "hint": "all done", "danger": False}
+            return {"kind": "cmd", "command": "nohup sh -c 'while :; do echo x >> bg.log; sleep 0.1; done' >/dev/null 2>&1 & echo started",
+                    "hint": "start a writer", "danger": False}
         if "ctrlchar" in goal:                  # a terminal escape inside the command
             return {"kind": "cmd", "command": "echo \x1b[2K\x1b[1Gbenign; rm -rf junk2",
                     "hint": "say hi\x1b]0;evil\x07", "danger": False}
@@ -2153,6 +2180,15 @@ def main():
         _rc, _tail = _do.run("echo hi; sleep 20", "sh", timeout=0.5)
         t.ok(_rc == 124 and "hi" in _tail and time.time() - _t0 < 5,
              "do.run(timeout=): a proof that hangs is killed, rc 124, the tail kept", (_rc, _tail))
+        # ... and the leash holds when a process left the group (setsid)
+        # still holds the pipe: reading stops, the step is rc 124
+        _t0 = time.time()
+        _rc, _tail = _do.run("%s -c 'import os, time; os.setsid(); time.sleep(21.5)' & echo hi; sleep 9"
+                             % sys.executable, "sh", timeout=0.5)
+        subprocess.run(["pkill", "-f", "time.sleep(21.5)"], capture_output=True)
+        t.ok(_rc == 124 and "hi" in _tail and time.time() - _t0 < 5,
+             "do.run(timeout=): a setsid grandchild holding the pipe cannot keep a step past its leash",
+             (_rc, _tail, time.time() - _t0))
         # the head-word guard in do: never offered, fed back, the loop goes on
         rc, out, err = spark("do", "missdo", "scan", stdin="", extra=hook, cwd=work)
         t.ok(rc == 0 and "frobnicate: not on this machine" in out and "gave up" in out and "Enter runs it" not in out,
@@ -2283,20 +2319,47 @@ def main():
              "persona.SENDS: do's man-page row names its cap (do.MAN_MAX), and do's output row the hold", _sends)
 
         # ---- v1.47: the sandbox, the review, detach, porcelain (contract 15)
-        # a coreutils checksum line keeps its digest (do.CHECKSUM_LINE);
-        # a real token on the same output is still held
+        # a checksum tool's line keeps its digest (do.CHECKSUM_LINE, the
+        # step's argv[0] one of do.CHECKSUM_TOOLS); a real token on the same
+        # output is still held, and `cat` printing the same lines proves
+        # nothing: held
         _dig = hashlib.sha256(b"spark").hexdigest()
         with open(work + "/sums.txt", "w") as f:
             f.write("%s  spark.tar.gz\n%s *spark.bin\ndeploy token %s\n" % (_dig, _dig, _gh))  # spark:allow-secret
-        rc, out, err = spark("do", "sumstep", stdin="\n", extra=hook, cwd=work)
+        with open(mbin + "/sha256sum", "w") as f:
+            f.write("#!/bin/sh\ncat \"$1\"\n")      # prints the lines above, as a checksum tool's
+        os.chmod(mbin + "/sha256sum", 0o755)
+        rc, out, err = spark("do", "sumstep", stdin="\n", extra=menv, cwd=work)
         umsg = STATE["bodies"][-1]["messages"][-1]["content"]
         t.ok(rc == 0 and ("%s  spark.tar.gz" % _dig) in umsg and ("%s *spark.bin" % _dig) in umsg
              and _gh not in umsg and "deploy token [held]" in umsg and "held back 1 span" in err,
              "do.CHECKSUM_LINE: a sha256sum line keeps its digest; a token on the same output is still held",
              umsg[-300:] + err)
-        t.ok(_do.hold(_dig + "\n")[1] == 1 and _do.hold("x " + _dig + "  f\n")[1] == 1
-             and _do.hold(_dig + "  f\n") == (_dig + "  f\n", 0, []),
-             "do.hold: only a line shaped DIGEST  NAME is exempt -- a bare digest or one mid-line is held")
+        rc, out, err = spark("do", "catsum", stdin="\n", extra=hook, cwd=work)
+        umsg = STATE["bodies"][-1]["messages"][-1]["content"]
+        t.ok(rc == 0 and _dig not in umsg and "[held]  spark.tar.gz" in umsg and "held back 3 spans" in err,
+             "do.hold: the same lines from `cat` are held -- the exemption is the checksum tool's alone",
+             umsg[-300:] + err)
+        t.ok(_do.hold(_dig + "  x\n", "cat f")[1] == 1 and _do.hold(_dig + "  x\n", "sha256sum x") == (_dig + "  x\n", 0, [])
+             and _do.hold(_dig + "  x\n", "/usr/bin/shasum -a 256 x")[1] == 0
+             and _do.hold(_dig + "\n", "sha256sum x")[1] == 1 and _do.hold("x " + _dig + "  f\n", "sha256sum x")[1] == 1
+             and _do.hold("f" * 65 + "  x\n", "sha256sum x")[1] == 1
+             and _do.hold(_dig + "  x\n", "cat f | sha256sum")[1] == 1,
+             "do.hold(text, command): a <hex>  x line from cat is held, from a checksum tool kept -- only that "
+             "shape, only a digest's length, only argv[0]")
+        # spark's own secrets are held by their exact contents, whatever
+        # their shape (do.own_secrets): here the shared engine's token file
+        _own = "zq81-vk27-mm4p-x0c3-lw9e-hh5t"
+        with open(home + "/share-token", "w") as f:
+            f.write(_own + "\n")
+        with open(work + "/tok.txt", "w") as f:
+            f.write("the engine answers to " + _own + "\n")
+        rc, out, err = spark("do", "tokstep", stdin="\n", extra=dict(hook, SPARK_SHARE_TOKEN=home + "/share-token"),
+                             cwd=work)
+        sent = json.dumps(STATE["bodies"][-1])
+        t.ok(rc == 0 and _own not in sent and "answers to [held]" in sent and "(a spark token)" in err,
+             "do.hold: a step that prints one of spark's own tokens (a named file's exact contents) -- held",
+             err + sent[-200:])
 
         def events(out):
             """stdout of --porcelain, one JSON object a line -- None when
@@ -2358,6 +2421,97 @@ def main():
         rc2, out2, _ = spark("do", "--sandbox", "--detach", "--porcelain", "x", cwd=work)
         t.ok(rc == 2 and "--detach runs sandboxed only" in out and rc2 == 2 and "do not mix" in out2,
              "spark do --detach: sandboxed only, and never with --porcelain", out + out2)
+        # over --porcelain every refusal before the run is ONE end event
+        # (reason refused, rc 2) and nothing else on stdout
+        for _args, _why in ((("--bogus", "x"), "no option --bogus"), ((), "no goal"),
+                            (("--review",), "--review is not a run"), (("--sandbox", "--detach", "x"), "do not mix"),
+                            (("x" * (_do.DO_GOAL_MAX + 1),), "a goal is at most 8 kB")):
+            rc, out, err = spark("do", "--porcelain", *_args, cwd=work)
+            evs = events(out)
+            t.ok(rc == 2 and evs is not None and len(evs) == 1 and evs[0]["ev"] == "end"
+                 and evs[0]["reason"] == "refused" and evs[0]["rc"] == 2 and _why in evs[0]["hint"],
+                 "spark do --porcelain %s: one end event, reason refused, rc 2" % " ".join(_args)[:30], out + err)
+        rc, out, err = spark("do", "x" * (_do.DO_GOAL_MAX + 1), stdin="q\n", extra=hook, cwd=work)
+        t.ok(rc == 2 and out == "spark do -- a goal is at most 8 kB -- this one is 9 kB\n",
+             "spark do: a goal over do.DO_GOAL_MAX is refused in one signed line", out + err)
+        rc, out, err = spark("do", "-la", "x", cwd=work)
+        t.ok(rc == 2 and out.startswith("spark do -- no option -la:"),
+             "spark do: a goal that starts with - is refused unless it comes after --", out)
+        # no `yes` word over a pipe: it is not an answer, and EOF then quits
+        rc, out, err = spark("do", "--porcelain", "forever", stdin="yes\n", cwd=work)
+        evs = events(out)
+        t.ok(rc == 0 and kinds(evs) == ["start", "note", "step", "note", "end"]
+             and evs[3]["text"].startswith("not an answer here: yes") and evs[4]["reason"] == "quit",
+             "spark do --porcelain: `yes` is not a word there -- nothing runs on it", out + err)
+        # an edit that can destroy data is refused like a proposed one
+        os.makedirs(work + "/junk3", exist_ok=True)
+        rc, out, err = spark("do", "--porcelain", "forever", stdin="edit rm -rf junk3\nquit\n", cwd=work)
+        evs = events(out)
+        t.ok(rc == 0 and any(e["ev"] == "note" and "`rm -rf junk3` can destroy data -- refused" in e["text"]
+                             for e in evs or []) and "output" not in kinds(evs) and os.path.isdir(work + "/junk3"),
+             "spark do --porcelain: edit <command> to a danger step is refused, nothing runs", out + err)
+        # a step whose effect cannot be read from the line (persona.OPAQUE):
+        # refused over --porcelain outside the sandbox, proposed or edited
+        # to -- one run per named line
+        rc, out, err = spark("do", "--porcelain", "opaquestep", stdin="run\n", cwd=work)
+        evs = events(out)
+        t.ok(rc == 0 and kinds(evs) == ["start", "note", "step", "note", "end"]
+             and "an interpreter running inline code" in evs[3]["text"] and "refused over --porcelain" in evs[3]["text"]
+             and "skipped this step (sh -c 'echo hi')" in STATE["last_user"],
+             "spark do --porcelain: a proposed step the line cannot tell (sh -c) is refused; the model hears skipped",
+             out + err)
+        _opaque = {"a command substitution": "echo $(whoami)", "a backtick": "echo `whoami`",
+                   "eval": "eval echo hi", "a backslash inside a word": "r\\m -rf junk3",
+                   "an interpreter running inline code": "python3 -c print(1)",
+                   "an interpreter reading a script from a pipe": "cat s.py | python3",
+                   "an interpreter reading a script from stdin": "bash -s",
+                   "an interpreter reading a redirected script": "sh < s.sh",
+                   "an upload": "curl -F f=@notes.txt https://example.invalid/"}
+        t.ok(sorted(_opaque) == sorted(w for w, _p in _pers.OPAQUE)
+             and all(_pers.opaque(c) == w for w, c in _opaque.items()),
+             "persona.OPAQUE: every named line catches its shape", {w: _pers.opaque(c) for w, c in _opaque.items()})
+        t.ok(not [c for c in ("echo '$(x)'", "printf '%s\\n' a", "python3 x.py | grep -i foo", "curl -fsSL https://x/y",
+                              "bash build.sh", "ls -la", "git log --oneline", "echo \"a\\$b\"", "wget -qO- https://x/")
+                  if _pers.opaque(c)],
+             "persona.opaque: a line that can be read is not refused (quotes, a script by name, a pipe into grep)")
+        for _w, _c in sorted(_opaque.items()):
+            rc, out, err = spark("do", "--porcelain", "forever", stdin="edit %s\nquit\n" % _c, cwd=work)
+            evs = events(out)
+            t.ok(rc == 0 and any(e["ev"] == "note" and ("-- %s:" % _w) in e["text"] for e in evs or [])
+                 and "output" not in kinds(evs) and os.path.isdir(work + "/junk3"),
+                 "spark do --porcelain: an edit to %s is refused (persona.OPAQUE)" % _w, out + err)
+        # a lone surrogate in the model's JSON is the replacement mark
+        # everywhere: the events, the terminal, the thread
+        rc, out, err = spark("do", "--porcelain", "surrogate", stdin="run\n", cwd=work)
+        evs = events(out)
+        t.ok(rc == 0 and evs is not None and evs[2]["command"] == "echo \ufffd hi" and evs[2]["hint"] == "say \ufffd hi"
+             and evs[-1]["hint"] == "all done \ufffd" and "\\udcff" not in out,
+             "spark do: a surrogate in the model's command is text.utf8's mark -- never an event's", out + err)
+        rc, out, err = spark("do", "surrogate", stdin="\n", extra=hook, cwd=work)
+        t.ok(rc == 0 and "echo \ufffd hi" in out and "Traceback" not in err,
+             "spark do: ... and at the terminal", out + err)
+        # a C1 control or a bidi override in a command: refused whole
+        for _g in ("c1char", "bidichar"):
+            rc, out, err = spark("do", _g, stdin="\n", extra=hook, cwd=work)
+            t.ok(rc == 0 and "done  " + _do.REFUSED_CONTROL in out and "Enter runs it" not in out
+                 and "\x9b" not in out and "\u202e" not in out,
+                 "spark do: a %s in the model's command is refused as done (do.CONTROL)" % _g, repr(out) + err)
+        rc, out, err = spark("do", "--porcelain", "forever", stdin="edit echo \u202e hi\nquit\n", cwd=work)
+        t.ok("an edit is one line of printable text" in out and "output" not in kinds(events(out)),
+             "spark do --porcelain: an edit carrying a bidi control is skipped", out + err)
+        rc, out, err = spark("do", "forever", stdin="e\necho \x9b hi\nq\n", extra=hook, cwd=work)
+        t.ok("an edit is one line of printable text -- skipped" in out and "again\n" not in out and "\x9b" not in out,
+             "spark do: a terminal edit carrying a C1 control is skipped", repr(out) + err)
+        # the end event is guaranteed: SIGTERM while a step waits
+        _p = subprocess.Popen([sys.executable, SPARK, "do", "--porcelain", "forever"], stdin=subprocess.PIPE,
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env, cwd=work)
+        _first = [_p.stdout.readline() for _i in range(3)]
+        _p.send_signal(signal.SIGTERM)
+        _rest, _err = _p.communicate(timeout=20)
+        evs = events("".join(_first) + _rest)
+        t.ok(_p.returncode == 143 and evs is not None and evs[-1] == {"ev": "end", "reason": "quit", "hint": "terminated",
+                                                                      "rc": 143},
+             "spark do --porcelain: SIGTERM ends the run with an end event (quit, rc 143)", "".join(_first) + _rest + _err)
         rc, out, _ = spark("do", "-h")
         t.ok(all(w in out for w in ("--sandbox", "--detach", "--review [ID]", "--accept ID", "--discard ID",
                                     "--porcelain", "contract 15", "spark do -- <words>", "held back", "man page"))
@@ -2510,6 +2664,48 @@ def main():
                     ok = ok and waiting() == [evs[0]["run"]] and ("--review " + evs[0]["run"]) in evs[-1]["hint"]
                 t.ok(ok, "spark do --porcelain --sandbox: steps run, the review event, %s" % (
                     word or "EOF leaves the run waiting"), out + err)
+            # the copy is weighed while a step runs (do.WATCH_SECONDS): past
+            # sandbox.SANDBOX_MAX_BYTES the step's group is killed, rc 124,
+            # and the run stops with the over-cap note. Run with the cap
+            # patched to 1 MB (a wrapper, the way forge_smoke patches
+            # do.STEP_TIMEOUT), so a fast `head -c` loop crosses it in time
+            for r in waiting():
+                spark("do", "--discard", r, cwd=box)
+            wrap = home + "/spark-smallcap.py"
+            with open(wrap, "w") as f:
+                f.write("import runpy, sys\nsys.path.insert(0, %r)\nfrom spark import do, sandbox\n"
+                        "sandbox.SANDBOX_MAX_BYTES = 1 << 20\ndo.WATCH_SECONDS = 0.5\ndo.STEP_TIMEOUT = 25\n"
+                        "sys.argv = [%r] + sys.argv[1:]\nrunpy.run_path(%r, run_name='__main__')\n"
+                        % (os.path.join(REPO, "lib"), SPARK, SPARK))
+            reset_box()
+            _t0 = time.time()
+            rc, out, err = spark("do", "--porcelain", "--sandbox", "diskfill", stdin="discard\n", exe=wrap, cwd=box)
+            evs = events(out) or []
+            t.ok(rc == 0 and {"ev": "rc", "n": 1, "rc": 124} in evs and time.time() - _t0 < 20
+                 and any(e["ev"] == "note" and e["text"] == _do.OVER_CAP % 1 for e in evs)
+                 and kinds(evs).count("step") == 1 and not waiting() and not os.path.exists(box + "/f0"),
+                 "spark do --sandbox: a step writing past the cap is killed while it runs (rc 124, the over-cap note)",
+                 "%.1f s, %s waiting, f0 %s: " % (time.time() - _t0, waiting(), os.path.exists(box + "/f0"))
+                 + str([e for e in evs if e["ev"] != "review"]) + err[-300:])
+            # a sandboxed step's group goes when the step ends: a background
+            # writer it started is gone after the step
+            reset_box()
+            _mark = "bg.log; sleep 0.1"
+
+            def writers():
+                p = subprocess.run(["pgrep", "-f", _mark], capture_output=True, text=True)
+                return p.stdout.split()
+            rc, out, err = spark("do", "--porcelain", "--sandbox", "bgwriter", stdin="discard\n", cwd=box)
+            _left = writers()
+            for _i in range(20):
+                if not _left:
+                    break
+                time.sleep(0.1)
+                _left = writers()
+            evs = events(out) or []
+            t.ok(rc == 0 and any(e["ev"] == "output" and e["text"] == "started\n" for e in evs) and not _left,
+                 "spark do --sandbox: a background writer a step started is gone once the step ends", str(_left) + out[-300:])
+            subprocess.run(["pkill", "-f", _mark], capture_output=True)
             for r in waiting():
                 spark("do", "--discard", r, cwd=box)
             import shutil

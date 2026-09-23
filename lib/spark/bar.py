@@ -277,12 +277,13 @@ def _accent():
     return "colour%d" % best[1] if best else "default"
 
 
-def _runs():
-    """`N runs waiting` while sandboxed runs wait for review (spark do
-    --review); nothing when none do."""
+def waiting(lead=""):
+    """`N runs waiting` (after `lead`) while sandboxed runs wait for
+    review (spark do --review); '' when none do. The bar and spark
+    status say it the same way."""
     from . import sandbox
     n = len(sandbox.runs())
-    return "%d run%s waiting" % (n, "" if n == 1 else "s") if n else ""
+    return "%s%d run%s waiting" % (lead, n, "" if n == 1 else "s") if n else ""
 
 
 def line(cfg):
@@ -301,7 +302,7 @@ def line(cfg):
         _rate(tuple(prev.get("net") or ()), net, now - prev.get("t", 0)),
         _ai(cfg, _accent()),
         _check(),
-        _runs(),
+        waiting(),
         _battery(),
         time.strftime("%H:%M"),
     ]

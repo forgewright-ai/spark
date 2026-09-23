@@ -14,14 +14,15 @@
 # what it printed would let the model choose what to read.
 #
 # propose() and run() take values and return values -- no terminal -- so
-# the prompt and (later) the page share one code path. cmd_do is the
-# terminal around them.
+# the prompt, the page (forgeserve's /api/do routes) and a program share
+# one code path; _drive is the one loop around them.
 #
 # Bounded and held: a proposal's messages fit the served context (fit,
 # budget: the goal is never dropped, the oldest outputs go first), a
-# step's output passes text.hold_secrets before it is fed back, and a
-# step refused for an option it does not take brings back the lines of
-# that command's own man page (man_excerpt) -- spark reads the page, the
+# step's output passes hold() once before it is shown to a program or
+# fed back (text.SOURCE_SHAPES and spark's own tokens), and a step
+# refused for an option it does not take brings back the lines of that
+# command's own man page (man_excerpt) -- spark reads the page, the
 # tool never runs for it. Every proposal is a turn record with the
 # server's timings (Session.record), so do's cache hits are measured.
 #
@@ -34,36 +35,47 @@
 # program drives a run over --porcelain (contract 15): JSON Lines out,
 # one word in when something waits, and no `yes` word at all -- a step
 # that can destroy data outside the sandbox is refused, never confirmed
-# over a pipe. _drive is the one loop; a face (_Terminal, _Porcelain) is
-# who it asks and tells.
+# over a pipe, and so is one whose effect cannot be read from the line
+# (persona.OPAQUE). A face (_Terminal, _Porcelain) is who _drive asks
+# and tells.
 
+import codecs
 import json
 import os
 import re
+import select
 import shlex
 import shutil
 import signal
 import subprocess
 import sys
 import threading
+import time
 
-from . import MARK, config, die, glyph, page, paint, say
-from . import bar, forge, persona, reveal, sandbox, session, wire
+from . import (ACCOUNT_KEY_FILE, EMBER_TOKEN_FILE, MARK, SHARE_TOKEN, TOKEN_FILE, config, die, glyph, page,
+               paint, say)
+from . import bar, forge, persona, reveal, sandbox, session, users, wire
 from . import text as textmod
+from .cli import _one_line, _short
 
 DO_MAX_STEPS = 8
 OUTPUT_TAIL = 4000          # what a step's output sends at most: its last 4 kB
 PROOF_TIMEOUT = 30          # seconds a proof may run before it is killed (rc 124)
 STEP_TIMEOUT = 120          # seconds a step no person watches may run (the page, a sandbox, a program): then rc 124
 DO_MAX_TOKENS = 200         # a proposal's reply cap; the budget leaves it room
+DO_GOAL_MAX = 8192          # bytes a goal may carry: the budget keeps the goal whole, so it must fit
+GOAL_TOO_LONG = "a goal is at most %d kB -- this one is %d kB"
+WATCH_SECONDS = 2           # how often a sandboxed step's copy is weighed against SANDBOX_MAX_BYTES
+LEASH_GRACE = 0.5           # seconds a step's pipe is still read once its leash killed the group
 CTX_FALLBACK = 8192         # the served context when SPARK_CTX says nothing usable
 # the share of the context the messages may fill: CHARS_PER_TOKEN is an
 # average over prose, and a command's output (paths, hashes, columns)
 # spends more tokens a character than that
 CTX_SHARE = 0.8
 TRIMMED = "(output trimmed, exit %s)"   # an old step's output, once the budget needs its room
-# a feedback message as land() keeps it: the [cwd] line, then its first line
-FEEDBACK_HEAD = re.compile(r"\A(?:\[cwd [^\n]*\]\n)?Output of `.*` \(exit (-?\d+)[;)]")
+# a feedback message as land() keeps it: the [cwd] line, then its first
+# line -- the command that ran, and its exit code
+FEEDBACK_HEAD = re.compile(r"\A(?:\[cwd [^\n]*\]\n)?Output of `(.*)` \(exit (-?\d+)[;)]")
 NO_OUTPUT = "(no output)"
 SKIPPED = "The user skipped this step (%s). Do not propose it again: propose a different step, or reply done."
 STDIN_HOOK = "SPARK_DO_STDIN"   # =1: confirmations come from stdin lines (tests)
@@ -78,20 +90,39 @@ SANDBOX_NOTE = "[sandbox: no network; only this directory is writable; changes a
 # no `yes` word exists over a pipe: outside the sandbox such a step is
 # refused, the model hears it was skipped, and the run goes on
 REFUSED_DANGER = "`%s` can destroy data -- refused over --porcelain; a person runs it at a terminal (spark do)"
+# ... and so is a step whose effect cannot be read from the line
+REFUSED_OPAQUE = ("`%s` -- %s: what it does cannot be read from the line -- refused over --porcelain;"
+                  " a person runs it at a terminal, or --sandbox holds it")
 OVER_CAP = "the run wrote more than %d MB -- stopped; review what it did"
 DETACH_LOCK = "detach.lock"   # in STATE/runs: one detached run at a time (an flock)
 OPTIONS = ("-h", "--help", "--sandbox", "--detach", "--porcelain", "--review", "--accept", "--discard")
-# a coreutils checksum line -- md5sum, sha1sum, sha256sum, sha512sum:
-# `DIGEST  NAME`, or `DIGEST *NAME` in binary mode -- keeps its digest:
-# a hash a step was asked to print is not a secret, and 64 hex digits
-# read as "a long base64 run". do's one exemption from the hold, a line
-# of that exact shape only; anything else on the output is still held
+# a checksum tool's line -- `DIGEST  NAME`, or `DIGEST *NAME` in binary
+# mode -- keeps its digest: a hash a step was asked to print is not a
+# secret, and 64 hex digits read as "a long base64 run". do's one
+# exemption from the hold, and a narrow one: the step's command is one
+# of CHECKSUM_TOOLS (argv[0]'s basename), the line has that exact shape
+# and the digest one of DIGEST_LENGTHS; anything else is still held --
+# `cat` printing a line of that shape proves nothing about it
 CHECKSUM_LINE = re.compile(r"^([0-9a-f]{32,128})((?: \*|  )\S)", re.M)
-# a control character in the model's command or proof: a terminal escape
-# can draw a benign fake over what Enter would run, so the reply is
-# refused whole -- it becomes a `done` with this hint
-CONTROL = re.compile(r"[\x00-\x1f\x7f]")
+CHECKSUM_TOOLS = ("md5sum", "sha1sum", "sha224sum", "sha256sum", "sha384sum", "sha512sum", "shasum", "b2sum")
+DIGEST_LENGTHS = (32, 40, 56, 64, 96, 128)     # md5, sha1, sha224, sha256, sha384, sha512 and b2
+# spark's own secrets, held wherever a step prints them: the exact
+# contents of the files that keep them, as far as this user can read
+# them (own_secrets). A token is a long random word, so a copy of one in
+# a step's output is that token, whatever shape it takes there.
+OWN_SECRET = "a spark token"
+OWN_SECRET_MIN = 16         # shorter contents are no token of spark's (and would hold common words)
+# a control character in the model's command or proof, or in an edit: a
+# terminal escape (C0 or C1) can draw a benign fake over what Enter
+# would run, and a bidi control (U+200E/F, U+202A-E, U+2066-9) can show
+# the line's words in another order than the shell reads them -- so the
+# reply is refused whole (a `done` with REFUSED_CONTROL), an edit skipped
+CONTROL = re.compile("[\x00-\x1f\x7f-\x9f\u200e\u200f\u202a-\u202e\u2066-\u2069]")
 REFUSED_CONTROL = "the model's command carried control characters -- refused"
+# a sandboxed step's live echo: those characters shown, never sent (a
+# newline and a tab pass) -- output nobody confirmed cannot redraw the
+# screen the review is read on
+_UNSEEN = re.compile("[\x00-\x08\x0b-\x1f\x7f-\x9f\u200e\u200f\u202a-\u202e\u2066-\u2069]")
 
 # The OS documents its tools: a step refused for an option brings back
 # the lines of that command's own man page (man_excerpt). What a tool
@@ -231,7 +262,7 @@ def _trimmed(msg):
     """A step's feedback as one line, TRIMMED with its exit code; None
     for any other message (the goal, a skip, an assistant step)."""
     m = FEEDBACK_HEAD.match(msg["content"]) if msg.get("role") == "user" else None
-    return TRIMMED % m.group(1) if m else None
+    return TRIMMED % m.group(2) if m else None
 
 
 def fit(msgs, room):
@@ -256,15 +287,34 @@ def fit(msgs, room):
     return out
 
 
+def _plain(s):
+    """`s` as one line a terminal draws as it reads: escapes and CONTROL
+    characters gone, whitespace runs one space."""
+    return " ".join(CONTROL.sub(" ", textmod.scrub(s)).split())
+
+
+def _thread_messages(thread):
+    """The run on disk as it was sent: each user message rebuilt with its
+    [cwd] line (persona.user_message, from the cwd land() stored), so a
+    replayed run's prefix is the one that was served."""
+    if not thread:
+        return []
+    return [{"role": m["role"], "content": persona.user_message(m["text"], m.get("cwd") or "")
+             if m["role"] == "user" else m["text"]}
+            for m in forge.load(thread) if m["role"] in ("user", "assistant")]
+
+
 def propose(cfg, thread, text, shell, cwd, history=None, brain=None, landed=False):
     """One step, no terminal: (reply, ms, session). reply is {"kind": cmd|done,
     "command", "hint", "danger", "proof"} with danger normalised (the
     model's flag or persona.is_dangerous), the proof kept only when
-    persona.proof_ok takes it, and the hint scrubbed of escapes (it is
-    printed into a live terminal). A command or proof carrying a control
-    character is refused whole: the reply is a `done` whose hint is
-    REFUSED_CONTROL. `history` is the run so far as chat messages,
-    extended in place; None reads the thread from disk. `landed` says
+    persona.proof_ok takes it, every field strict UTF-8 (text.utf8: a
+    lone surrogate in the model's JSON is no string to print or store)
+    and the hint _plain (it is printed into a live terminal). A command
+    or proof carrying a CONTROL character is refused whole: the reply is
+    a `done` whose hint is REFUSED_CONTROL. `history` is the run so far
+    as chat messages, extended in place; None reads the thread from disk
+    (_thread_messages). `landed` says
     `text` is already the newest user message of both (land() put it
     there the moment the step ran), so the request rides the history up
     to it and only the reply is appended; otherwise both messages land
@@ -276,13 +326,13 @@ def propose(cfg, thread, text, shell, cwd, history=None, brain=None, landed=Fals
     s = session.Session(cfg, "do", shell, cwd, None, brain)
     room = budget(cfg, len(s._system()))
     if history is None:
-        history = forge.history(thread, mode="do", room=room)
+        history = _thread_messages(thread)
     sent = history if landed else history + [{"role": "user", "content": persona.user_message(text, cwd)}]
     s.history = fit(sent, room)[:-1]        # the newest message is `text`'s own, rebuilt by ask_json
     raw, ms = s.ask_json(text, DO_SCHEMA, max_tokens=DO_MAX_TOKENS)
-    command = " ".join(str(raw.get("command") or "").split())
-    hint = " ".join(textmod.scrub(str(raw.get("hint") or "")).split())
-    proof = " ".join(str(raw.get("proof") or "").split())
+    command = " ".join(textmod.utf8(str(raw.get("command") or "")).split())
+    hint = _plain(textmod.utf8(str(raw.get("hint") or "")))
+    proof = " ".join(textmod.utf8(str(raw.get("proof") or "")).split())
     kind = "cmd" if raw.get("kind") == "cmd" and command else "done"
     if kind == "cmd" and (CONTROL.search(command) or CONTROL.search(proof)):
         kind, command, hint = "done", "", REFUSED_CONTROL
@@ -298,7 +348,7 @@ def propose(cfg, thread, text, shell, cwd, history=None, brain=None, landed=Fals
 
 def land(cfg, thread, history, text, cwd):
     """One user message onto the run, now: `history` in place (with the
-    [cwd] line the wire carries) and the thread on disk. cmd_do lands a
+    [cwd] line the wire carries) and the thread on disk. _drive lands a
     step's feedback here the moment the step ran, before any next
     propose, so the record holds what ran even when the run stops there;
     the next propose(landed=True) rides it without appending it again."""
@@ -306,84 +356,164 @@ def land(cfg, thread, history, text, cwd):
     forge.append(cfg, thread, "user", text, mode="do", cwd=cwd)
 
 
-def run(command, shell, cwd="", echo=True, timeout=None, argv=None, env=None, preexec_fn=None):
+def _killpg(p):
+    """SIGKILL to a leashed step's whole process group (its own session)."""
+    try:
+        os.killpg(p.pid, signal.SIGKILL)
+    except OSError:
+        pass
+
+
+def _visible(s):
+    """`s` with every _UNSEEN character shown as its escape (\\x1b,
+    \\u202e), never sent to the terminal."""
+    return _UNSEEN.sub(lambda m: ("\\x%02x" if ord(m.group()) < 0x100 else "\\u%04x") % ord(m.group()), s)
+
+
+def run(command, shell, cwd="", echo=True, timeout=None, box=None):
     """Run one step through `shell -c`, its output echoed live to stdout
     (echo=False keeps quiet), stderr folded in. (rc, the last 4 kB).
     `timeout` (seconds) is a leash: the command runs in its own process
-    group and the whole group is killed when it expires -- rc 124 with
-    the tail so far. The proof runs on one, and so does a step no person
-    watches (STEP_TIMEOUT: the page, a sandbox, a program); a step at the
-    terminal does not -- the person there has Ctrl-C. A sandboxed step
-    passes sandbox.step's `argv`, `cwd` and `env` and sandbox.preexec as
-    `preexec_fn`. A run stopped mid-step (Ctrl-C, SIGTERM) takes a leashed
-    step's group down with it: its own session is no terminal's to kill."""
+    group, and when it expires the whole group is killed and the step
+    is rc 124 with the tail so far -- the pipe is read LEASH_GRACE more
+    and no longer, so a process that left the group (setsid) holding it
+    cannot keep the step alive. The proof runs on one, and so does a
+    step no person watches (STEP_TIMEOUT: the page, a sandbox, a
+    program); a step at the terminal does not -- the person there has
+    Ctrl-C. `box` (a sandbox run) contains the step (sandbox.step, under
+    sandbox.preexec), echoes it _visible, kills its group when the step
+    ends too (a background writer must not outlive it), and every
+    WATCH_SECONDS weighs the copy: past sandbox.SANDBOX_MAX_BYTES the
+    group is killed, rc 124. A run stopped mid-step (Ctrl-C, SIGTERM)
+    takes a leashed step's group down with it: its own session is no
+    terminal's to kill."""
+    argv, env, pre = [shell, "-c", command], None, None
+    if box is not None:
+        argv, cwd, env = sandbox.step(box, _shell_path(shell), command)
+        pre = sandbox.preexec
+    leashed = timeout is not None or box is not None
     try:
-        p = subprocess.Popen(argv or [shell, "-c", command], cwd=cwd or None, env=env, preexec_fn=preexec_fn,
+        p = subprocess.Popen(argv, cwd=cwd or None, env=env, preexec_fn=pre,
                              stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                             start_new_session=timeout is not None)
+                             start_new_session=leashed)
     except OSError as e:
-        return 127, "%s: %s" % ((argv or [shell])[0], e.strerror or e)
-    expired = []
+        return 127, "%s: %s" % (argv[0], e.strerror or e)
+    fired, done = threading.Event(), threading.Event()     # the leash or the cap killed it; the step is over
 
-    def _expire():
-        if p.poll() is None:
-            try:
-                os.killpg(p.pid, signal.SIGKILL)
-                expired.append(True)
-            except OSError:
-                pass
-    timer = threading.Timer(timeout, _expire) if timeout else None
-    if timer is not None:
-        timer.daemon = True
-        timer.start()
-    tail = ""
+    def _fire():
+        _killpg(p)
+        fired.set()
+
+    def _weigh():
+        while not done.wait(WATCH_SECONDS):
+            if sandbox.used_bytes(box) > sandbox.SANDBOX_MAX_BYTES:
+                _fire()
+                return
+    timer = threading.Timer(timeout, _fire) if timeout else None
+    watcher = threading.Thread(target=_weigh) if box is not None else None
+    for g in (timer, watcher):
+        if g is not None:
+            g.daemon = True
+            g.start()
+    decode = codecs.getincrementaldecoder("utf-8")("replace").decode
+    show = _visible if box is not None else (lambda s: s)
+    fd, tail, grace, ended = p.stdout.fileno(), "", None, False
     try:
-        with p.stdout:
-            for raw in p.stdout:
-                line = raw.decode("utf-8", errors="replace")
-                if echo:
-                    sys.stdout.write(line)
-                    sys.stdout.flush()
-                tail = (tail + line)[-OUTPUT_TAIL:]
+        while True:
+            if leashed:
+                if fired.is_set():
+                    grace = grace or time.monotonic() + LEASH_GRACE
+                    if time.monotonic() > grace:
+                        break
+                elif box is not None and not ended and p.poll() is not None:
+                    ended = True
+                    _killpg(p)                # the step ended: whatever it left running goes too
+                if not select.select([fd], [], [], 0.1)[0]:
+                    continue
+            chunk = os.read(fd, 65536)
+            text = decode(chunk, final=not chunk)
+            if echo and text:
+                sys.stdout.write(show(text))
+                sys.stdout.flush()
+            tail = (tail + text)[-OUTPUT_TAIL:]
+            if not chunk:
+                break
         rc = p.wait()
     except BaseException:
-        if timeout is not None and p.poll() is None:
-            try:
-                os.killpg(p.pid, signal.SIGKILL)
-            except OSError:
-                pass
+        if leashed:
+            _killpg(p)
         raise
     finally:
+        done.set()
         if timer is not None:
             timer.cancel()
-    return (124 if expired else rc), tail
+        p.stdout.close()
+    if box is not None:
+        _killpg(p)
+    return (124 if fired.is_set() else rc), tail
 
 
-def hold(tail):
-    """(held tail, spans held, their shapes' names): what a step printed,
-    every span that looks like a secret (text.SOURCE_SHAPES) replaced by
-    [held] -- the digest of a CHECKSUM_LINE excepted, read as blanks."""
-    shown = CHECKSUM_LINE.sub(lambda m: "-" * len(m.group(1)) + m.group(2), tail)
-    spans, names = textmod.held_spans(shown)
-    return (textmod.hold_spans(tail, spans) if spans else tail), len(spans), names
+def _checksum_tool(command):
+    """Is the step's argv[0] (its basename) one of CHECKSUM_TOOLS?"""
+    try:
+        words = shlex.split(command or "")
+    except ValueError:
+        return False
+    return bool(words) and os.path.basename(words[0]) in CHECKSUM_TOOLS
+
+
+def own_secrets():
+    """[(OWN_SECRET, value)]: the exact contents of spark's own secret
+    files this user can read -- a named line each -- and the login's
+    token, longest first; a content under OWN_SECRET_MIN is none."""
+    cfg = config.load()
+    files = (
+        TOKEN_FILE,                 # the api-token: the engine's bearer
+        cfg.token_file,             # ...or the file SPARK_API_KEY_FILE names
+        cfg.forge_token_file,       # the forge-token: the admin's, a shell on the box
+        EMBER_TOKEN_FILE,           # the v1.3 ember-token, where one is left
+        SHARE_TOKEN,                # /etc/spark/token: a shared engine's copy
+        ACCOUNT_KEY_FILE,           # this login's unwrapped data key
+    )
+    values = {users.account()[1]}   # the account file's token: who this machine acts as
+    for f in files:
+        try:
+            with open(f, encoding="utf-8", errors="replace") as fh:
+                values.add(fh.read().strip())
+        except OSError:
+            pass
+    return [(OWN_SECRET, v) for v in sorted(values, key=len, reverse=True) if len(v) >= OWN_SECRET_MIN]
+
+
+def hold(text, command=""):
+    """(held text, spans held, their shapes' names): what a step printed,
+    every span that looks like a secret (text.SOURCE_SHAPES) and every
+    copy of one of spark's own (own_secrets) replaced by [held]. One
+    exemption: when `command` is a checksum tool's (_checksum_tool), a
+    CHECKSUM_LINE whose digest is one of DIGEST_LENGTHS is read as
+    blanks."""
+    seen = text
+    if _checksum_tool(command):
+        seen = CHECKSUM_LINE.sub(lambda m: ("-" * len(m.group(1)) if len(m.group(1)) in DIGEST_LENGTHS
+                                            else m.group(1)) + m.group(2), text)
+    spans, names = textmod.held_spans(seen, exact=own_secrets())
+    return (textmod.hold_spans(text, spans) if spans else text), len(spans), names
 
 
 def feedback(command, rc, tail, proposed="", proof="", prc=None, man=""):
     """The record of a step as it ran, and the next user message: the
     command that ran (`edited from` the proposal when the user changed
-    it), what it printed, how it ended, `man` (man_excerpt's block) when
-    there is one, and the proof's exit code alone when one ran -- never
-    the proof's output. What it printed passes hold() first: a key or a
-    token a step printed is the machine's, not the model's.
-    (message, held, names): the spans held back, and their shapes."""
-    tail, held, names = hold(tail)
+    it), what it printed -- `tail` as hold() left it: a key or a token a
+    step printed is the machine's, not the model's -- how it ended, `man`
+    (man_excerpt's block) when there is one, and the proof's exit code
+    alone when one ran -- never the proof's output."""
     edited = ("; edited from `%s`" % proposed) if proposed and proposed != command else ""
     s = "Output of `%s` (exit %d%s):\n%s" % (command, rc, edited, tail.rstrip("\n") or NO_OUTPUT)
     if man:
         s += "\n\n" + man
     if proof and prc is not None:
         s += "\n\nProof `%s` exited %d." % (proof, prc)
-    return s, held, names
+    return s
 
 
 def _refused_flag(line):
@@ -401,27 +531,39 @@ def _refused_flag(line):
     return ""
 
 
+def _abs_path():
+    """$PATH with its empty and relative entries dropped: an entry like
+    `.` or `bin` resolves against the step's directory, which the model
+    chose -- a `man` or a HEAD planted there is not the machine's."""
+    return os.pathsep.join(d for d in (os.environ.get("PATH") or "").split(os.pathsep) if os.path.isabs(d))
+
+
 def _man_page(head):
-    """`man -P cat HEAD` as argv, stdout only, overstrikes and escapes
-    dropped; '' when man is missing, fails, or outlives MAN_TIMEOUT (its
-    whole process group is killed: groff must not linger)."""
+    """`man -P cat HEAD` as argv -- man found on _abs_path, run from / --
+    stdout only, overstrikes and escapes dropped; '' when man is missing,
+    fails, or outlives MAN_TIMEOUT (its whole process group is killed:
+    groff must not linger)."""
+    man = shutil.which("man", path=_abs_path())
+    if not man:
+        return ""
     env = dict(os.environ)
     for k in MAN_ENV_DROP:
         env.pop(k, None)
     env["MANWIDTH"] = str(MAN_WIDTH)
+    env["PATH"] = _abs_path()
     try:
-        p = subprocess.Popen(["man", "-P", "cat", head], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+        p = subprocess.Popen([man, "-P", "cat", head], cwd="/", stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
                              stderr=subprocess.DEVNULL, env=env, start_new_session=True)
     except OSError:
         return ""
     try:
         out, _err = p.communicate(timeout=MAN_TIMEOUT)
     except subprocess.TimeoutExpired:
+        _killpg(p)
         try:
-            os.killpg(p.pid, signal.SIGKILL)
-        except OSError:
+            p.communicate(timeout=1)     # a child that left the group may still hold the pipe
+        except subprocess.TimeoutExpired:
             pass
-        p.communicate()
         return ""
     if p.returncode != 0:
         return ""
@@ -433,7 +575,7 @@ def man_excerpt(command, rc, tail):
     option a step was refused for, or ''. Only when the step exited
     non-zero and its output says an option was refused (BAD_OPTION);
     HEAD is the command's first word (shlex), a plain name (MAN_NAME)
-    that `which` finds. spark reads the page (_man_page); the tool
+    that `which` finds on _abs_path. spark reads the page (_man_page); the tool
     itself never runs for it. Around the refused flag where the page
     names it (its own entry first, MAN_BEFORE lines above), else from
     the SYNOPSIS, else the page's first lines: MAN_MAX bytes at most,
@@ -448,7 +590,7 @@ def man_excerpt(command, rc, tail):
     except ValueError:
         return ""
     head = words[0] if words else ""
-    if not MAN_NAME.match(head) or not shutil.which(head):
+    if not MAN_NAME.match(head) or not shutil.which(head, path=_abs_path()):
         return ""
     page = _man_page(head)
     if not page.strip():
@@ -499,15 +641,6 @@ def _mark():
     return paint(glyph("hammer"), "accent", sys.stdout)
 
 
-def _short(path):
-    """path with the home directory as ~ (its real path too: a sandboxed
-    run's cwd is real)."""
-    for home in (os.path.expanduser("~"), os.path.realpath(os.path.expanduser("~"))):
-        if path.startswith(home + "/"):
-            return "~" + path[len(home):]
-    return path
-
-
 def _plural(n, word):
     return "%d %s%s" % (n, word, "" if n == 1 else "s")
 
@@ -552,7 +685,6 @@ class _Terminal:
         say("%s %s" % (_mark(), text))
 
     def missing(self, n, command, hint, word):
-        from .cli import _one_line
         say("%s %d  %s   %s" % (glyph("warn"), n, command, _one_line("%s: not on this machine -- %s" % (word, hint))))
 
     def step(self, n, reply, contained):
@@ -564,26 +696,32 @@ class _Terminal:
             say("%s %d  %s   %s" % (_mark(), n, reply["command"], reply["hint"]))
 
     def confirm(self, reply, cwd):
-        """(run|skip|quit, the command): Enter, e, s, q -- danger needs `yes`."""
+        """(run|skip|quit, the command): Enter, e, s, q -- danger needs `yes`.
+        An edit carrying a CONTROL character is skipped (the proposal is
+        what the model hears was skipped)."""
         command = reply["command"]
         choice = _confirm(reply, cwd)
         if choice == "edit":
             command = _edit(command)
+            if CONTROL.search(command):
+                say("  %s an edit is one line of printable text -- skipped" % glyph("warn"))
+                return "skip", reply["command"]
             reply["danger"] = bool(reply["danger"]) or persona.is_dangerous(command)
             choice = "run"
-            if reply["danger"] and _confirm(reply, cwd) != "run":
+            if reply["danger"] and _confirm(dict(reply, command=command), cwd) != "run":
                 choice = "skip"
         return choice, command
 
-    def ran(self, rc, shown):
+    def ran(self, rc, text):
         pass                                  # the output was echoed as it came
 
     def man(self, man):
         # what leaves is said: the page's lines ride the next request
         say("%s    %s %d lines go back with the output" % (_mark(), man.splitlines()[0], len(man.splitlines()) - 1))
 
-    def proof(self, proof, cwd, contained, n):
-        """(run|skip|quit, the proof) -- offered like a step; sandboxed it runs."""
+    def proof(self, proof, cwd, contained):
+        """(run|skip|quit, the proof) -- offered like a step; sandboxed it
+        runs. An edited proof runs when it is still one (proof_ok)."""
         say("%s    proof: %s" % (_mark(), proof))
         if contained:
             return "run", proof
@@ -592,14 +730,14 @@ class _Terminal:
             if choice == "edit":
                 proof = _edit(proof)
                 choice = "run"
-                if not persona.proof_ok(proof):
+                if CONTROL.search(proof) or not persona.proof_ok(proof):
                     say("  %s not a read-only proof -- skipped" % glyph("warn"))
                     choice = "skip"
         except EOFError:
             choice = "quit"        # nobody there; the step still lands
         return choice, proof
 
-    def proof_ran(self, prc, shown):
+    def proof_ran(self, prc, text):
         say("%s    proof -> %s" % (_mark(), "ok" if prc == 0 else "exit %d" % prc))
 
     def cap(self):
@@ -651,17 +789,20 @@ class _Terminal:
 class _Porcelain:
     """A program on stdin and stdout: contract 15, JSON Lines. stdout
     carries the events and nothing else; stdin is read only when a step,
-    a proof or the review waits. No `yes` word exists here."""
+    a proof or the review waits. No `yes` word exists here: outside the
+    sandbox a step that can destroy data, or whose effect cannot be read
+    from the line (persona.opaque), is refused. The `end` event is the
+    last line, always (_porcelain)."""
     echo = False
 
     def __init__(self):
-        self.k = 0               # the step events so far: each one's n
-        self.at = 0              # the n the next output and rc belong to
+        self.k = 0               # the step events so far: each one's n, and the n its output and rc carry
         self.step_n = 0          # the step a proof proves
         self.box = False
+        self.ended = False
 
     def emit(self, **ev):
-        sys.stdout.write(json.dumps(ev) + "\n")
+        sys.stdout.write(json.dumps(textmod.clean(ev)) + "\n")
         sys.stdout.flush()
 
     def read(self):
@@ -700,7 +841,6 @@ class _Porcelain:
 
     def _step(self, command, hint, danger, proof):
         self.k += 1
-        self.at = self.k
         self.emit(ev="step", n=self.k, command=command, hint=hint, danger=danger, proof=proof)
 
     def step(self, n, reply, contained):
@@ -719,10 +859,20 @@ class _Porcelain:
                 return head, rest
             self.note("not an answer here: %s -- %s" % (w[:40], ", ".join(words)))
 
+    def _refused(self, command, danger):
+        """True, said in a note, when `command` may not run over a pipe:
+        it can destroy data, or its effect cannot be read from the line."""
+        if danger:
+            self.note(REFUSED_DANGER % command)
+            return True
+        what = persona.opaque(command)
+        if what:
+            self.note(REFUSED_OPAQUE % (command, what))
+        return bool(what)
+
     def confirm(self, reply, cwd):
         command = reply["command"]
-        if reply["danger"]:
-            self.note(REFUSED_DANGER % command)
+        if self._refused(command, reply["danger"]):
             return "skip", command
         choice, rest = self._word(("run", "skip", "quit", "edit"))
         if choice != "edit":
@@ -731,28 +881,27 @@ class _Porcelain:
         if not new or CONTROL.search(rest):
             self.note("an edit is one line of printable text -- skipped")
             return "skip", command
-        if persona.is_dangerous(new):
-            self.note(REFUSED_DANGER % new)
+        if self._refused(new, persona.is_dangerous(new)):
             return "skip", new
-        self.note("step %d runs `%s` (edited)" % (self.at, new))
+        self.note("step %d runs `%s` (edited)" % (self.k, new))
         return "run", new
 
-    def ran(self, rc, shown):
-        if shown:
-            self.emit(ev="output", n=self.at, text=shown)
-        self.emit(ev="rc", n=self.at, rc=rc)
+    def ran(self, rc, text):
+        if text:
+            self.emit(ev="output", n=self.k, text=text)
+        self.emit(ev="rc", n=self.k, rc=rc)
 
     def man(self, man):
         self.note("%s %d lines go back with the output" % (man.splitlines()[0], len(man.splitlines()) - 1))
 
-    def proof(self, proof, cwd, contained, n):
+    def proof(self, proof, cwd, contained):
         self._step(proof, "proof of step %d" % self.step_n, False, None)
         if contained:
             return "run", proof
         return self._word(("run", "skip", "quit"))[0], proof
 
-    def proof_ran(self, prc, shown):
-        self.ran(prc, shown)
+    def proof_ran(self, prc, text):
+        self.ran(prc, text)
 
     def cap(self):
         if self.box:
@@ -797,7 +946,9 @@ class _Porcelain:
         pass
 
     def end(self, reason, hint, rc):
-        self.emit(ev="end", reason=reason, hint=hint, rc=rc)
+        if not self.ended:
+            self.ended = True
+            self.emit(ev="end", reason=reason, hint=hint, rc=rc)
 
 
 def _confirm(reply, cwd=""):
@@ -817,18 +968,9 @@ def _shell_path(shell):
     return shutil.which(shell) or "/bin/sh"
 
 
-def _step(face, command, shell, cwd, box, timeout):
-    """(rc, tail) of one step: as typed here, or contained in the sandbox."""
-    if box is None:
-        return run(command, shell, cwd, echo=face.echo, timeout=timeout)
-    argv, scwd, env = sandbox.step(box, _shell_path(shell), command)
-    return run(command, shell, scwd, echo=face.echo, timeout=timeout, argv=argv, env=env,
-               preexec_fn=sandbox.preexec)
-
-
 def _drive(face, cfg, thread, goal, text, shell, cwd, box=None, timeout=None):
     """One run, whoever drives it: (rc, reason, hint) -- reason is done,
-    cap, quit, refused or error. `text` is the goal as sent (a sandboxed
+    cap, quit, stopped or error. `text` is the goal as sent (a sandboxed
     run's carries SANDBOX_NOTE); `cwd` is where the steps run as the model
     reads it (a sandboxed run on macOS: the clone). Sandboxed (`box`),
     steps and proofs run without asking, on `timeout` each, and the run
@@ -868,7 +1010,7 @@ def _drive(face, cfg, thread, goal, text, shell, cwd, box=None, timeout=None):
                     msg = "the same step again after a skip -- stopped (say the goal another way)"
                     face.warn(msg)
                     record(s, kind="stopped", answer="the same skipped step twice", ms=ms)
-                    return 1, "refused", msg
+                    return 1, "stopped", msg
                 reasked.add(command.strip())
                 record(s, kind="reasked", ms=ms)
                 text = SKIPPED % command
@@ -897,9 +1039,10 @@ def _drive(face, cfg, thread, goal, text, shell, cwd, box=None, timeout=None):
                 skipped.add(command.strip())
                 text = SKIPPED % command
                 continue
-            rc, tail = _step(face, command, shell, cwd, box, timeout)
+            rc, tail = run(command, shell, cwd, echo=face.echo, timeout=timeout, box=box)
             steps += 1
-            face.ran(rc, hold(tail)[0])
+            tail, held, names = hold(tail, command)
+            face.ran(rc, tail)
             man = man_excerpt(command, rc, tail)
             if man:
                 face.man(man)
@@ -909,16 +1052,19 @@ def _drive(face, cfg, thread, goal, text, shell, cwd, box=None, timeout=None):
                 # step did what it claimed -- offered like a step (Enter
                 # runs it; sandboxed it runs), on a leash, and only its
                 # exit code goes back to the model: its output stays here
-                pchoice, proof = face.proof(proof, cwd, box is not None, n)
+                pchoice, proof = face.proof(proof, cwd, box is not None)
                 if pchoice == "run":
-                    prc, ptail = _step(face, proof, shell, cwd, box, PROOF_TIMEOUT)
-                    face.proof_ran(prc, hold(ptail)[0])
+                    prc, ptail = run(proof, shell, cwd, echo=face.echo, timeout=PROOF_TIMEOUT, box=box)
+                    face.proof_ran(prc, hold(ptail, proof)[0])
             # the record of what ran, on the thread now -- not inside the
             # next request, which a quit or the step limit never sends
-            text, held, names = feedback(command, rc, tail, proposed, proof if prc is not None else "", prc, man)
+            text = feedback(command, rc, tail, proposed, proof if prc is not None else "", prc, man)
+            extra = {}
             if held:
                 print(textmod.held_line(held, names), file=sys.stderr, flush=True)
-            extra = dict({"held": held} if held else {}, **({"man": len(man.encode("utf-8"))} if man else {}))
+                extra["held"] = held
+            if man:
+                extra["man"] = len(man.encode("utf-8"))
             record(s, kind="danger" if reply["danger"] else "cmd", command=command, hint=hint, rc=rc, ms=ms, **extra)
             land(cfg, thread, history, text, cwd)
             landed = True
@@ -1004,54 +1150,56 @@ def _detach_lock():
 
 
 def _options(args):
-    """(flags, words): the leading options, then the goal's words; `--`
-    ends the options. (None, the word) for an option spark do does not
-    take -- a goal that starts with - comes after `--`."""
-    flags, i = [], 0
-    while i < len(args):
-        a = args[i]
-        if a == "--":
-            i += 1
-            break
-        if not a.startswith("-") or a == "-":
-            break
-        if a not in OPTIONS:
-            return None, a
-        flags.append(a)
+    """(flags, words): the leading words that start with -, then the
+    goal's words; `--` ends the options (a goal that starts with - comes
+    after it). A flag spark do does not take is the caller's to refuse."""
+    i = 0
+    while i < len(args) and args[i].startswith("-") and args[i] != "-":
+        if args[i] == "--":
+            return args[:i], args[i + 1:]
         i += 1
-    return flags, args[i:]
+    return args[:i], args[i:]
+
+
+def _usage(rc):
+    say(DO_USAGE.rstrip() % (MARK, STEP_TIMEOUT, DO_MAX_STEPS))
+    return rc
 
 
 def cmd_do(args):
     if not args or args[0] in ("-h", "--help", "help"):
-        say(DO_USAGE.rstrip() % (MARK, STEP_TIMEOUT, DO_MAX_STEPS))
-        return 0 if args else 2
+        return _usage(0 if args else 2)
     flags, words = _options(args)
-    if flags is None:
-        say("%s do -- no option %s: spark do -h lists them; spark do -- <words> for a goal that starts with -"
-            % (MARK, words))
-        return 2
+    porcelain = "--porcelain" in flags
+    # a refusal before the run is one signed line -- over --porcelain,
+    # one `end` event (reason refused, rc 2) and nothing else on stdout
+    face = _Porcelain() if porcelain else _Terminal()
+    bad = next((f for f in flags if f not in OPTIONS), "")
+    if bad:
+        return face.refuse("no option %s: spark do -h lists them; spark do -- <words> for a goal that starts with -"
+                           % bad)
     if "-h" in flags or "--help" in flags:
-        say(DO_USAGE.rstrip() % (MARK, STEP_TIMEOUT, DO_MAX_STEPS))
-        return 0
+        return _usage(0)
     verbs = [f for f in flags if f in ("--review", "--accept", "--discard")]
+    if verbs and porcelain:
+        return face.refuse("%s is not a run: spark do %s without --porcelain" % (verbs[0], verbs[0]))
     if verbs:
         return _runs_verb(flags, verbs, words)
-    goal = " ".join(words).strip()
+    goal = textmod.utf8(" ".join(words).strip())
     if not goal:
-        say(DO_USAGE.rstrip() % (MARK, STEP_TIMEOUT, DO_MAX_STEPS))
-        return 2
-    boxed, detach, porcelain = "--sandbox" in flags, "--detach" in flags, "--porcelain" in flags
+        return face.refuse("no goal: spark do --porcelain <words>") if porcelain else _usage(2)
+    size = len(goal.encode("utf-8"))
+    if size > DO_GOAL_MAX:
+        return face.refuse(GOAL_TOO_LONG % (DO_GOAL_MAX >> 10, (size + 1023) >> 10))
+    boxed, detach = "--sandbox" in flags, "--detach" in flags
     if detach and not boxed:
-        say("%s do -- --detach runs sandboxed only: spark do --sandbox --detach <words>" % MARK)
-        return 2
+        return face.refuse("--detach runs sandboxed only: spark do --sandbox --detach <words>")
     if detach and porcelain:
-        say("%s do -- --detach and --porcelain do not mix: a detached run has no program to answer" % MARK)
-        return 2
+        return face.refuse("--detach and --porcelain do not mix: a detached run has no program to answer")
     if porcelain:
         sys.stderr.write(PORCELAIN_BANNER + "\n")
         sys.stderr.flush()
-        return _start(_Porcelain(), goal, boxed, STEP_TIMEOUT)
+        return _porcelain(face, goal, boxed)
     if not detach and not sys.stdin.isatty() and os.environ.get(STDIN_HOOK) != "1":
         if boxed:
             die("spark do --sandbox asks yes before it applies -- run it in a terminal, or add --detach")
@@ -1060,29 +1208,53 @@ def cmd_do(args):
         sys.stderr.write(STDIN_BANNER + "\n")
         sys.stderr.flush()
     if not detach:
-        return _start(_Terminal(), goal, boxed, STEP_TIMEOUT if boxed else None)
+        return _start(face, goal, boxed, STEP_TIMEOUT if boxed else None)
     lock = _detach_lock()
     if lock is None:
-        say("%s do -- a detached run is running already: one at a time" % MARK)
-        return 2
+        return face.refuse("a detached run is running already: one at a time")
     try:
         return _start(_Terminal(detach=True), goal, True, STEP_TIMEOUT)
     finally:
         os.close(lock)
 
 
+def _porcelain(face, goal, boxed):
+    """_start over --porcelain, its `end` event guaranteed: whatever ends
+    the run early -- Ctrl-C (quit, 130), SIGTERM (quit, 143), an error
+    (error, 1) -- the program reads an `end` before the exception goes
+    on."""
+    try:
+        return _start(face, goal, boxed, STEP_TIMEOUT)
+    except BaseException as e:
+        if isinstance(e, KeyboardInterrupt):
+            reason, hint, rc = "quit", "interrupted", 130
+        elif isinstance(e, SystemExit) and e.code == 143:
+            reason, hint, rc = "quit", "terminated", 143
+        else:
+            code = e.code if isinstance(e, SystemExit) and isinstance(e.code, int) and e.code else 1
+            reason, hint, rc = "error", "the run stopped on an error (%s)" % type(e).__name__, code
+        try:
+            face.end(reason, hint, rc)
+        except OSError:
+            pass                                  # the program is gone
+        raise
+
+
 def _start(face, goal, boxed, timeout):
     """Resolve the brain, make the sandbox's run and the thread, drive the
-    run, and settle a sandboxed one: the exit code."""
+    run, and settle a sandboxed one: the exit code. A run no person
+    watches (a sandbox, a program) ends on SIGTERM as on Ctrl-C: the
+    step's own process group goes with it."""
+    if boxed or timeout is not None:
+        signal.signal(signal.SIGTERM, lambda *_a: sys.exit(143))
     cfg = config.load()
     cwd, shell = os.getcwd(), os.path.basename(os.environ.get("SHELL") or "sh")
     try:
         url, model, _forge = wire.resolve_brain(cfg)
     except wire.BrainError as e:
-        if isinstance(face, _Porcelain):
-            face.end("error", e.hint, 1)
-            return 1
-        die(e.hint)
+        face.brain(e.hint)
+        face.end("error", e.hint, 1)
+        return 1
     box, mcwd, text = None, cwd, goal
     if boxed:
         good, detail = sandbox.probe()
@@ -1095,11 +1267,6 @@ def _start(face, goal, boxed, timeout):
             return face.refuse(str(e))
         mcwd = sandbox.step(box, _shell_path(shell), "true")[1]    # macOS: the clone
         text = goal + "\n\n" + SANDBOX_NOTE
-        # a SIGTERM (a timer's stop, a client's) ends the run as Ctrl-C does:
-        # the step's own process group goes with it
-        signal.signal(signal.SIGTERM, lambda *_a: sys.exit(143))
-    elif timeout is not None:
-        signal.signal(signal.SIGTERM, lambda *_a: sys.exit(143))
     thread = forge.new_thread(cfg)
     if box is not None:
         box["thread"] = thread or ""
@@ -1130,12 +1297,13 @@ def _goal_words(run, n=8):
     msgs = [m for m in forge.load(tid) if m.get("role") == "user"]
     if not msgs:
         return "-"
-    words = (msgs[0].get("text") or "").split("\n", 1)[0].split()
+    words = _plain((msgs[0].get("text") or "").split("\n", 1)[0]).split()
     return " ".join(words[:n]) + (" ..." if len(words) > n else "")
 
 
+# not ledger._age: that one reads a stored timestamp to the day; a run
+# waiting is minutes old, from its start in ns
 def _age(start_ns):
-    import time
     secs = max(0, int(time.time() - start_ns / 1e9))
     for unit, size in (("d", 86400), ("h", 3600), ("m", 60)):
         if secs >= size:

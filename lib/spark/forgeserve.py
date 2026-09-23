@@ -54,7 +54,6 @@ COOKIE_AGE = 7776000            # 90 days: the cookie's life, and its session's
 FAILS_PER_MIN = 10              # wrong logins from one address before 429
 TOKEN_MIN = 32                  # a SPARK_FORGE_TOKEN from the environment shorter than this is refused
 V1_MAX_TOKENS = 8192            # the most completion tokens a /v1 request may ask the model for
-CONTROL = re.compile(r"[\x00-\x1f\x7f]")   # what a do/run command must not carry
 BODY_MAX = 1_000_000            # a request body larger than this is 413
 LOG_MAX = 1_000_000             # forge.log rotates here, like serve.log
 STATIC = {"index.html": "text/html; charset=utf-8", "spark.css": "text/css; charset=utf-8",
@@ -1381,28 +1380,51 @@ class Handler(BaseHTTPRequestHandler):
         return self._json(200, {"text": fact})
 
     # ---- do ----
+    def _do_cwd(self, cwd):
+        """Where a do step runs: `cwd` as sent (HOME when empty), or None
+        with a 400 sent -- one line of printable text, an absolute path,
+        a directory."""
+        from . import do
+        if not cwd:
+            return HOME
+        if do.CONTROL.search(cwd):
+            self._error(400, "bad", "cwd is one line of printable text")
+            return None
+        if not os.path.isabs(cwd) or not os.path.isdir(cwd):
+            self._error(400, "bad", "cwd must be the absolute path of a directory")
+            return None
+        return cwd
+
     def api_do_propose(self, body):
         """One step proposed, nothing run; the thread continues or starts.
-        On a continued thread the text is a step's output (the page's
-        `Output of` feedback): held like do.feedback's tail before the
-        model sees it. Every proposal is a turn record (mode do), with
-        the server's timings."""
+        A new thread's text is the goal: do.DO_GOAL_MAX at most. On a
+        continued thread the text is a step's output (the page's `Output
+        of` feedback): held as do.hold holds a step's tail -- the command
+        read from its first line -- before the model sees it. Every
+        proposal is a turn record (mode do), with the server's timings."""
         from . import do, forge
         cfg = self.server.cfg
         text, cwd = self._text_cwd(body)
         if text is None:
+            return None
+        cwd = self._do_cwd(cwd)
+        if cwd is None:
             return None
         thread, ok = self._thread_of(body)
         if not ok:
             return None
         held = 0
         if thread is None:
+            size = len(text.encode("utf-8", "replace"))
+            if size > do.DO_GOAL_MAX:
+                return self._error(400, "bad", do.GOAL_TOO_LONG % (do.DO_GOAL_MAX >> 10, (size + 1023) >> 10))
             thread = forge.new_thread(cfg)
         else:
-            text, held, _names = do.hold(text)
+            m = do.FEEDBACK_HEAD.match(text)
+            text, held, _names = do.hold(text, m.group(1) if m else "")
         with self.server.chat_lock:
             try:
-                reply, ms, s = do.propose(cfg, thread, text, _shell(), cwd or HOME, brain=self.server.upstream.brain)
+                reply, ms, s = do.propose(cfg, thread, text, _shell(), cwd, brain=self.server.upstream.brain)
             except wire.BrainError as e:
                 if e.kind == "down":
                     self.server.upstream.resolve(fresh=True)
@@ -1419,7 +1441,8 @@ class Handler(BaseHTTPRequestHandler):
         """One step the user clicked, run as typed. The page asked twice
         for a dangerous one; the server holds it to that: a command
         persona.is_dangerous flags runs only with confirmed: true, and a
-        control character (a second line, an escape) is refused. Nobody
+        control character (a second line, an escape, do.CONTROL) is
+        refused, and a cwd that is not an absolute directory. Nobody
         watches it at a terminal: do.STEP_TIMEOUT is its leash (rc 124,
         the whole process group killed). The log carries a sha256 prefix
         and the truncated text, then the rc. `man` rides the answer when
@@ -1429,15 +1452,18 @@ class Handler(BaseHTTPRequestHandler):
         command, cwd = body.get("command"), body.get("cwd") or ""
         if not isinstance(command, str) or not command.strip():
             return self._error(400, "bad", "command is empty")
-        if CONTROL.search(command):
+        if do.CONTROL.search(command):
             return self._error(400, "bad", "a command is one line of printable text")
         if not isinstance(cwd, str):
             return self._error(400, "bad", "cwd must be a string")
+        cwd = self._do_cwd(cwd)
+        if cwd is None:
+            return None
         if persona.is_dangerous(command) and body.get("confirmed") is not True:
             return self._error(400, "confirm", "a dangerous command runs only with confirmed: true")
         digest = hashlib.sha256(command.encode("utf-8")).hexdigest()[:12]
         log("%s do/run %s %s" % (self._ip(), digest, " ".join(command.split())[:200]))
-        rc, tail = do.run(command, _shell(), cwd or HOME, echo=False, timeout=do.STEP_TIMEOUT)
+        rc, tail = do.run(command, _shell(), cwd, echo=False, timeout=do.STEP_TIMEOUT)
         log("%s do/run %s rc %d" % (self._ip(), digest, rc))
         self._audit("do/run", digest=digest, rc=rc)
         man = do.man_excerpt(command, rc, tail)      # the page appends it, as the prompt's feedback does

@@ -780,6 +780,18 @@ def main():
                "/api/do/run of a step refused for an option -> {rc, tail, man}: its man page's lines", raw[:300])
             st, _, raw = req(url, "POST", "/api/do/run", {"command": "pwd", "cwd": tmp}, headers=post)
             ok(st == 200 and json.loads(raw)["tail"].strip().endswith(os.path.basename(tmp)), "/api/do/run honours cwd", raw[:100])
+            # the cwd of a do route: one line, absolute, a directory -- else 400
+            for route, extra in (("/api/do/run", {"command": "pwd"}), ("/api/do/propose", {"text": "say hello"})):
+                for bad in ("relative/dir", os.path.join(tmp, "no-such-dir"), tmp + "\x1b[2K", tmp + "\u202e"):
+                    st, _, raw = req(url, "POST", route, dict(extra, cwd=bad), headers=post, timeout=30)
+                    err = json.loads(raw).get("error", {}) if st == 400 else {}
+                    ok(st == 400 and err.get("kind") == "bad" and "cwd" in err.get("hint", ""),
+                       "%s with cwd %r -> 400 {error: {kind: bad}}" % (route, bad[-14:]), (st, raw[:120]))
+            # a new thread's goal: do.DO_GOAL_MAX at most
+            st, _, raw = req(url, "POST", "/api/do/propose", {"text": "x" * 9000}, headers=post, timeout=30)
+            err = json.loads(raw).get("error", {}) if st == 400 else {}
+            ok(st == 400 and err.get("kind") == "bad" and err.get("hint") == "a goal is at most 8 kB -- this one is 9 kB",
+               "/api/do/propose: a goal over 8 kB -> 400, the house error shape", (st, raw[:120]))
             st, _, _ = req(url, "POST", "/api/do/run", {"command": ""}, headers=post)
             ok(st == 400, "/api/do/run with no command -> 400", st)
             st, _, raw = req(url, "POST", "/api/do/run", {"command": "echo one\necho two"}, headers=post)

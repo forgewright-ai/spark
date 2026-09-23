@@ -92,6 +92,77 @@ def is_dangerous(command):
     return any(p.search(command) for p in DANGER)
 
 
+# A command whose effect cannot be read from the line: what it does is
+# decided by text the line does not show (another command's output, a
+# string handed to an interpreter, a script on stdin, a word the shell
+# rewrites), so neither is_dangerous nor a reader can judge it. Over
+# `spark do --porcelain` outside the sandbox nobody reads the line
+# before it runs, so such a step is refused (do._Porcelain); at a
+# terminal a person reads it, and in the sandbox the kernel holds it.
+# A named line each, so any one can be argued with. The patterns read
+# the line as the shell does (_shell_text): the inside of '...' is
+# plain text and never matches.
+_INTERP = (r"(?:^|(?<=[\s;&|(]))(?:\S*/)?"
+           r"(?:sh|bash|zsh|dash|ksh|fish|python[\d.]*|perl|ruby|node|php|lua|osascript)(?=$|[\s;&|)<])")
+_OPTS = r"(?:\s+-\S*)*"             # the interpreter's options before what it runs
+OPAQUE = (
+    ("a command substitution", r"\$\("),                # $(cmd): runs what another command prints
+    ("a backtick", r"`"),                               # `cmd`: the same, the old spelling
+    ("eval", r"(?:^|[\s;&|(])eval(?=\s|$)"),            # eval: runs a string built at run time
+    ("a backslash inside a word", r"\\"),               # r\m -rf reads as rm -rf to the shell, not to a regex
+    # an interpreter handed its program on the line: sh -c, bash -lc,
+    # python3 -c, perl -e / -pi -e, ruby -e, node -e / -p, lua -e, php -r
+    ("an interpreter running inline code",
+     _INTERP + _OPTS + r"\s+(?:-[A-Za-z]*[ceEipr][A-Za-z]*|--eval|--print|--command)(?=\s|=|$)"),
+    ("an interpreter reading a script from a pipe",     # ... | python3, curl ... | sh
+     r"\|\s*" + _INTERP + _OPTS + r"\s*(?:$|[;&|)])"),
+    ("an interpreter reading a script from stdin",      # bash -s, python3 -
+     _INTERP + _OPTS + r"\s+-s?(?=\s|$)"),
+    ("an interpreter reading a redirected script",      # python3 <<EOF, sh < x.sh
+     _INTERP + _OPTS + r"\s*<"),
+    # curl/wget sending data out: what leaves is named elsewhere (a file,
+    # a variable), never on the line
+    ("an upload", r"\b(?:curl|wget)\b[^;&|]*\s(?:-[A-Za-z]*[dFT]|--data\S*|--form\S*|--json|"
+                  r"--upload-file|--post-file|--post-data)(?=\s|=|$)"),
+)
+_OPAQUE = [(what, re.compile(p)) for what, p in OPAQUE]
+
+
+def _shell_text(line):
+    """`line` as the shell reads its quotes: the inside of '...' dropped
+    (plain text to the shell), and inside "..." a backslash dropped with
+    the character it escapes kept; an unquoted backslash is kept -- it
+    is what "a backslash inside a word" looks for."""
+    out, quote, i = [], "", 0
+    while i < len(line):
+        ch = line[i]
+        if quote == "'":
+            if ch == "'":
+                quote = ""
+                out.append(ch)
+        elif quote == '"':
+            if ch == "\\" and i + 1 < len(line):
+                i += 1
+                out.append(line[i])
+            else:
+                if ch == '"':
+                    quote = ""
+                out.append(ch)
+        else:
+            if ch in "'\"":
+                quote = ch
+            out.append(ch)
+        i += 1
+    return "".join(out)
+
+
+def opaque(command):
+    """The OPAQUE line `command` matches (its name), or '' when its
+    effect can be read from the line."""
+    text = _shell_text(command or "")
+    return next((what for what, p in _OPAQUE if p.search(text)), "")
+
+
 import shlex as _shlex
 
 
