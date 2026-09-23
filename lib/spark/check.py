@@ -896,6 +896,21 @@ def row_hardening(ctx):
     return ok("%d of %d gates hold at %s" % (len(held), len(gates), where))
 
 
+@row("CAPABILITY", fixture=False, reason="runs one real sandboxed step (bwrap or sandbox-exec); tests/sandbox_test.py proves it")
+def row_sandbox(ctx):
+    """spark do --sandbox's containment, proven by one real step
+    (sandbox.probe: a write in the copy lands, a write outside, the home
+    and the network do not): `bwrap X overlay` on Linux, `sandbox-exec`
+    on macOS, else na with the first line of why. Cached until bwrap's
+    version, the kernel or the AppArmor userns switch changes. A
+    capability: plain `spark do` works without it, so never a warn."""
+    from . import sandbox
+    good, detail = sandbox.probe(fresh=ctx.fresh)
+    if good:
+        return ok(detail)
+    return na(detail, sandbox.install_hint())
+
+
 @row("CAPABILITY", fixture=False, reason="looks for a player on this machine's PATH")
 def row_audio(ctx):
     """The sounds spark plays (a bell, and what a game of its has): a

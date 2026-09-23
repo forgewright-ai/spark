@@ -747,7 +747,7 @@ get -> spark setup -> bootstrap.sh (apply) -> install.sh (links, renders)
                       line; spark-shell adds spark's own shell; a spark app
                       is its own repository (spark-<app>)
 
-spark check   39 rows: every promise the machine makes, fixture-tested
+spark check   40 rows: every promise the machine makes, fixture-tested
 spark update  the newest signed tag, or main on a developer clone; converge
 
 what leaves the machine: pinned downloads in, your questions to the

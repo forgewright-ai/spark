@@ -1219,7 +1219,7 @@ sh tests/get_test.sh            # the one-liner: clone, pull, refusals, the hand
 sh tests/update_test.sh         # spark update: pull, move to a signed tag, unsigned and dirty refused, --dry-run
 ```
 
-`spark check` has 39 rows today: 11 SOFTWARE, 19 CAPABILITY, 9
+`spark check` has 40 rows today: 11 SOFTWARE, 20 CAPABILITY, 9
 NONFUNCTIONAL (`grep -c '^@row' lib/spark/check.py`). `--selftest`
 proves every fixture-testable row flips, then a third pass for the
 client shape (the 7 rows in `check.CLIENT_ROWS` answer `na`), and on
