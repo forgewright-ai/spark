@@ -155,3 +155,29 @@ one that must survive a reboot.
 
 (A shared engine as a system service is parked in `docs/IDEAS.md`: only
 worth weighing once the group model has been lived with.)
+
+## 7. A refused field is a refused option
+
+Seen 2026-09-23 on the box: a step ran `ps -p ... -o pid,cmd,%mem,%vsz`
+and procps answered `error: improper AIX field descriptor`.
+`do.BAD_OPTION` knows `unrecognized|invalid|unknown option` and `illegal
+option`, not procps' wording, so no man page lines came back and the
+model guessed at the next flag twice.
+
+- widen `do.BAD_OPTION` with the wordings the tools on the box print
+  for a bad option or field (procps: `improper ... field descriptor`,
+  `unknown user-defined format specifier`), each a named line with a
+  smoke case, the man excerpt then finds the field's own lines
+
+## 8. spark do goes on
+
+Seen the same evening: `spark do again` ran as a new goal with nothing
+to go on and spent its eight steps listing the home directory; the
+run before it had its answer in `free -h` at step two and never said so.
+`spark line` continues its newest thread with `??`; `spark do` has no
+way to say "the last run: again" or "go on".
+
+- `spark do ?? [words]`: continue the newest do thread -- its goal and
+  steps as the history (the same budget, the goal kept), the words as
+  the next user message, bare `??` as "go on"
+- `??` then means the newest thread everywhere, one grammar
