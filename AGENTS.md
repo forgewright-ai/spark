@@ -6,14 +6,14 @@ leaves the machine except pinned downloads and your own talk to a model
 you run. Its spine is three lines: choose your OS, one line, spark is
 live; spark apps -- a tool becomes smart as a client of `spark edit`,
 each in its own `spark-<app>` repo (micro first); as apps ask for it,
-another contract is defined and apps connect the same way. The shell
-(the look and the tools for a machine that is an AI box) is
-spark-shell's, its own repository -- docs/SHELL.md points there; its
-whole interface is theme.env (it reads), the three optional
-`SPARK_ACCENT_SGR` / `SPARK_MUTED_SGR` / `SPARK_WARN_SGR` exports
-(colour at the prompt, a tty only; unset, plain) and `state/prompt`
-(the cache a prompt segment reads), and no shell code lives in this
-tree.
+another contract is defined and apps connect the same way. The look
+and the tools of a machine are not spark's business; spark's side of
+any renderer is generic: `~/.config/spark/theme.env` (the palette, a
+KEY=value file any renderer or terminal may read), the three optional
+`SPARK_ACCENT_SGR` / `SPARK_MUTED_SGR` / `SPARK_WARN_SGR` variables
+(colour at the prompt's marks when an rc exports them, a tty only;
+unset, plain) and `spark bar line` (the machine's one-line status, for
+any status bar to run), and no shell code lives in this tree.
 CI has no WSL runner: the WSL 2 branch is pinned by fixture, and a real
 run there is the maintainer's, by hand. Arch is proven in a container:
 the console, the units and the GPU there are the maintainer's too.
@@ -31,7 +31,7 @@ every doc -- or it is not done.
 ## The grammar
 
 Bare verb = show, never mutate (`spark bar` piped still prints the bar
-line -- tmux depends on it); `on|off` is the only switch vocabulary at
+line -- a status bar runs it piped); `on|off` is the only switch vocabulary at
 the CLI (storage stays `yes|no`); `status` = bare, `list` = the table;
 `-h` answers first, signed `spark <sub> -- <one line>`; confirms are
 `<question>? yes/NO: ` (`confirm()`); waits are one dot-spinner

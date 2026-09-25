@@ -1,5 +1,27 @@
 # Changelog
 
+## v1.48
+
+- spark's core knows nothing of a shell layer. Its side of any renderer
+  is three generic things, named as such. `~/.config/spark/theme.env`
+  is the palette `spark theme` writes: a `KEY=value` file any renderer
+  or terminal may read (the page reads it); the console palette and
+  font are the machine's own. The three optional `SPARK_ACCENT_SGR`,
+  `SPARK_MUTED_SGR` and `SPARK_WARN_SGR` variables colour the prompt's
+  marks when your rc exports them, and the marks are plain otherwise.
+  `spark bar line` is the machine's one-line status, for any status
+  bar or the page to run.
+- The `spark shell` verb and the `spark bar on|off` pointers are gone:
+  an unknown word answers with the usage. The `shell-moved` bootstrap
+  row is gone, and so is the uninstall hand-back of a pre-cut layer's
+  rc symlinks and `.gitconfig`: uninstall takes the hook line out of
+  your rc file and removes spark's own files.
+- `state/prompt` is no longer written (nothing read it); `theme_load`
+  in `lib/env.sh` is gone; `THEME_BTOP` leaves `theme.env`, so a
+  palette is 20 `THEME_*` keys. `spark theme` closes on its own
+  output. The model is no longer told about a shell layer. The disk
+  row's remedy is `du -sh ~/*`. `docs/SHELL.md` is gone.
+
 ## v1.47
 
 - `spark do` is measured, bounded and held: every proposal is a turn

@@ -152,7 +152,7 @@ shell cannot host the widget (another shell, or macOS's bash 3.2):
    reply in `spark chat`, `explain` and `spark do`. The marks are
    plain unless three environment variables say otherwise --
    `SPARK_ACCENT_SGR`, `SPARK_MUTED_SGR`, `SPARK_WARN_SGR`, SGR codes
-   such as `1;94` -- which spark-shell exports from your palette; unset,
+   such as `1;94` -- which your rc may export from a palette; unset,
    everything is plain, and a pipe never sees an escape either way.
 2. When a command fails, one line appears above the next prompt:
    `* failed (1) -- press Esc s to ask why`. `Esc s` on the empty line
@@ -707,16 +707,16 @@ spark uninstall
 ```
 
 1. It prints the plan, one row per thing, then asks for the word `yes`.
-2. Everything spark made goes: the units, the rc line, the console
-   palette and font (VGA again), the shell layer's files back from their
-   `.bak` (docs/SHELL.md), `~/.local/bin/spark`, the engine and every model,
-   `~/.config/spark`, `~/.local/state/spark`, and the clone at `~/.spark`
-   when it is the one `get` made and clean. Headless and the quiet login
-   and boot are undone first (sudo).
+2. Everything spark made goes: the units, the hook line from your rc
+   file, the console palette and font (VGA again), `~/.local/bin/spark`,
+   the engine and every model, `~/.config/spark`, `~/.local/state/spark`,
+   and the clone at `~/.spark` when it is the one `get` made and clean.
+   Headless and the quiet login and boot are undone first (sudo).
 3. What stays, on purpose: your soul, your memory, the sealed users'
    stores with their keys, your `models.env`, your themes and
-   `privacy-terms`; `--purge` takes those too. The shell layer's packages
-   are a question (`--packages` / `--keep-packages` answer up front).
+   `privacy-terms`; `--purge` takes those too. The packages spark
+   installed for the engine and the AI are a question (`--packages` /
+   `--keep-packages` answer up front).
    `--dry-run` shows the plan; `--yes` skips the question for a script.
 4. Named at the end with the line that puts it back: a hostname it set,
    macOS's `pmset` values, a console font set before v1.12. A root step
@@ -867,8 +867,7 @@ spark chat | do | explain -> spark <verb> -+-> spark's server :8081 --> another
 
 get -> spark setup -> bootstrap.sh (apply) -> install.sh (links, renders)
                       the engine, the model, the token, the units, one rc
-                      line; spark-shell adds spark's own shell; a spark app
-                      is its own repository (spark-<app>)
+                      line; a spark app is its own repository (spark-<app>)
 
 spark check   40 rows: every promise the machine makes, fixture-tested
 spark update  the newest signed tag, or main on a developer clone; converge

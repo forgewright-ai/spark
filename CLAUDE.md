@@ -28,11 +28,9 @@ describes how things are, not how they came to be.
   plugin lives in its own repository, named `spark-<app>` (micro first:
   forgewright-ai/spark-micro), installed the app's way. spark ships no
   app, no app package, no app check row, and no per-app verb. The
-  shell -- tmux, starship, the daily tools, one palette on every
-  surface -- is spark-shell's, its own repository
-  (github.com/forgewright-ai/spark-shell; docs/SHELL.md points there),
-  installed its own way; `~/.config/spark/theme.env` is the one
-  interface it reads, and no shell code lives in this tree. The bar
+  shell -- the look, the daily tools, a prompt, a status bar -- is not
+  spark's business: `~/.config/spark/theme.env` is a palette any
+  renderer may read, and no shell code lives in this tree. The bar
   line and `spark quiet` are core: appliance behaviour of an AI box,
   beside `spark headless`.
 - **The seed and the FORGE.** spark is the seed; the FORGE is the agent it
@@ -74,8 +72,8 @@ describes how things are, not how they came to be.
   anything else): they are read on that console as well. Colour is
   never spark's own: at a tty only, and only from three optional
   environment variables -- `SPARK_ACCENT_SGR`, `SPARK_MUTED_SGR`,
-  `SPARK_WARN_SGR`, SGR parameter strings a shell layer exports
-  (spark-shell does) -- `sgr()`/`paint()` in `lib/spark/__init__.py`
+  `SPARK_WARN_SGR`, SGR parameter strings an rc may export --
+  `sgr()`/`paint()` in `lib/spark/__init__.py`
   keep to 30-37/90-97 plus bold and dim (a `38;5` or 24-bit value is
   dropped whole), and a pipe never sees an escape: unset, every output
   is today's, byte for byte. An input() prompt (`chat> `) is painted
@@ -163,10 +161,9 @@ site.env.example, models.env, engine.env, themes/*.env       KEY=value data
 bin/spark, bin/explain -> spark                  the one command
 lib/spark/      __init__ config wire engine serve session persona cli check
                 verify (sha256, cached: spark model verify, check's models row)
-                bar (the status line, and state/prompt -- prompt_state, the
-                KEY=value cache a prompt segment reads) theme
+                bar (the status line) theme
                 site (site.env custodian: set_keys/apply, rc custody, font quiet
-                headless client, the shell-gone stub) model (spark model /
+                headless client) model (spark model /
                 spark ember: the table, add, verify, budget)
                 edit (spark edit: contract 10)
                 facts (the machine's decisions as KEY=value for bootstrap's eval:
@@ -253,12 +250,10 @@ home/           shared $HOME mirror (linked): the two widgets, the two rc hooks
                 (.config/spark/hook.bash hook.zsh: PATH, the widget, the blank row, completion,
                 the VT palette -- TERM=linux only), the two completion files (.config/spark/completion.bash completion.zsh:
                 TAB completes the verbs and their names, offline), the banner, spark.env.example
-linux/home/     .bashrc .bash_profile, the systemd user units (spark-serve spark-forge spark-check)
-macos/home/     .zshrc .zprofile
-templates/      rendered, not linked: .gitconfig .tmux.conf .config/btop/btop.conf
-                .config/micro/colorschemes/spark.micro .config/micro/settings.json (seeded once;
-                both only with the layer on AND micro on PATH -- the look for a micro you have)
-                .config/starship.toml.{minimal,full} .config/spark/launchd/spark.{serve,forge,check}.plist
+linux/home/     the systemd user units (.config/systemd/user: spark-serve spark-forge
+                spark-check.service + spark-check.timer)
+templates/      rendered, not linked: .config/spark/launchd/spark.{serve,forge,check}.plist
+                (the three launchd agents)
 tests/          install_test.sh get_test.sh update_test.sh uninstall_test.sh smoke.py serve_smoke.py
                 docs_test.py (the docs say what the tree holds: credits, counts,
                 the voice of what a new user reads)
@@ -309,9 +304,8 @@ docs/           every document but the four at the root. With a release (the
                 outside the landing rule, kept true continuously, not tied to
                 a release, each saying so in its first lines: TOUR.md (a first
                 hour: twelve small things to try), APPS.md (the editors and
-                tools that speak to spark, and how each one connects), SHELL.md
-                (the shell layer's pointer: it lives at
-                forgewright-ai/spark-shell), IDEAS.md (the field ROADMAP.md is
+                tools that speak to spark, and how each one connects),
+                IDEAS.md (the field ROADMAP.md is
                 picked from), TROUBLESHOOTING.md (a box that will not join the
                 WiFi: one WiFi daemon per card, then the logs)
 ```
@@ -337,10 +331,7 @@ state `~/.local/state/spark/` (0700: `api-token` 0600, `serve-url`,
 models dir, written by `spark serve`), `off`, `widgets/`, `turns/`,
 `threads/` (pre-v1.4 plaintext threads only; `spark user claim` seals them
 away), `chat-history` 0600, `brain`, `check.json`, `bar`,
-`bench.jsonl`, `tune.json`, `prompt` (`T=<epoch> MODEL=<stem or ->
-AI=up|down`, a cache for a shell prompt's segment: written by the bar's
-tick, by `session.record` after a turn and by the BrainError handlers --
-as fresh as the last of those, never a probe of its own),
+`bench.jsonl`, `tune.json`,
 `runs/<id>/` (0700: a sandboxed run -- `meta.json` 0600, numbers and
 names only; `lock`, the flock its driver or a `--review`/`--accept`/
 `--discard` holds; `up/` and `wk/` the overlay's on Linux, `clone/`,
@@ -393,26 +384,22 @@ may change freely.
    `rc` row appends one marked line (marker `config/spark/hook.`) to the
    end of the login shell's rc file -- `~/.bashrc` or `~/.zshrc`, by
    `$SHELL` else the passwd entry -- creating it if absent and never
-   truncating it; a rc file that is spark's own symlink is `ok` as it is;
-   another shell, or bash < 4, is a `todo` naming the fix. On bash, a
-   regular `~/.bash_profile` that neither sources `~/.bashrc` nor holds
-   the marker shadows the hook on a console login -- the `rc-login` row
-   appends the same marked line there. `spark shell off` restores an rc
-   file from its `.bak`, or removes it when there was no file before --
-   never an empty husk.
+   truncating it; a symlinked rc file is treated like any other file
+   (the marker looked for, the line appended); another shell, or
+   bash < 4, is a `todo` naming the fix. On bash, a regular
+   `~/.bash_profile` that neither sources `~/.bashrc` nor holds the
+   marker shadows the hook on a console login -- the `rc-login` row
+   appends the same marked line there.
 2. `install.sh --dry-run` prints rows `ok|would link|would render|would back
    up  <path>` and the same final line. Apply is quiet the same way: an
    `ok` row (already in place) prints only with `--verbose`. Link = symlink into the repo; render
-   = a regular file written from `templates/` (the launchd plists are
-   the only templates left; the look's templates live at
-   forgewright-ai/spark-shell). An existing regular file, or a symlink
-   that points outside the repo, is moved to `<path>.bak`, never
-   overwritten (a stale symlink into the repo is replaced). Two
-   hand-back rows cover what older sparks made: `micro` (the plugin
-   links a pre-v1.10 install left under `~/.config/micro`) and
-   `shell-moved` (rc files a pre-cut shell layer symlinked into this
-   tree: `.bak` back or gone, one release of migration; the rendered
-   look is left in place for spark-shell to adopt).
+   = a regular file written from `templates/` (the launchd plists). An
+   existing regular file, or a symlink that points outside the repo, is
+   moved to `<path>.bak`, never overwritten (a stale symlink into the
+   repo is replaced). The rc file is contract 1's: the hook line is
+   appended to it, and a symlinked rc is treated like any file. One
+   hand-back row covers what older sparks made: `micro` (the plugin
+   links a pre-v1.10 install left under `~/.config/micro`).
 3. Config files are `KEY=value` lines; any other non-blank, non-comment line
    is refused by every reader (`^[A-Z_0-9]+=[^;`$()|&<>]*$`). Keys:
    `site.env` -- `SITE_NAME SITE_USER SITE_SET_HOSTNAME
@@ -448,10 +435,10 @@ may change freely.
    PM_TARGET PKG_CORE PKG_ENGINE PKG_AI`, the same six
    keys in every file (`packages.KEYS`; tests/docs_test.py asserts it);
    `themes/<name>.env` -- `THEME_BG THEME_FG THEME_ACCENT THEME_MUTED
-   THEME_BTOP THEME_ANSI_0..15` (the same 21 keys in `lib/env.sh`
-   `THEME_KEYS` and `config.theme_palette`: the two validators agree);
+   THEME_ANSI_0..15` (the same 20 keys in `config.theme_palette` and
+   the `theme` row's `check.THEME_KEYS`: the validators agree);
    `~/.config/spark/themes/<name>.env` is yours, the same keys, and wins
-   on a name clash (`config.theme_path`, `lib/env.sh theme_load`).
+   on a name clash (`config.theme_path`).
    `THEME_LOGO` is optional in either: six colour names, one per banner
    row (`bright-` allowed), and `spark ver` draws the logo in them
    (`cli.recolour`); unset, the logo keeps its own. It rides in
@@ -684,10 +671,8 @@ may change freely.
    is `spark <sub> -- <one line>` -- plain ASCII, so every terminal can draw it.
    `spark setup --` is the offer bare `spark` prints, after the
    banner, on a clone with no `site.env` at a terminal; and a refusal
-   signs the same way: `spark shell` and `spark bar on|off` answer one
-   signed pointer line naming forgewright-ai/spark-shell and exit 2
-   (one release of migration). `spark theme`, `spark font`, `spark
-   quiet` and `spark bar` are core: they answer everywhere.
+   signs the same way. `spark theme`, `spark font`, `spark quiet` and
+   `spark bar` are core: they answer everywhere.
    `spark uninstall -- not a terminal: spark uninstall --yes runs it` is
    the refusal of a non-terminal without `--yes` (the plan printed, 2). On
    WSL 2 the same shape: `spark font -- no console on WSL 2: the font
@@ -1169,11 +1154,11 @@ may change freely.
 One grammar for every verb; a verb that breaks a rule is a bug.
 
 1. A bare verb shows; it never mutates. The one carve-out: `spark bar`
-   with stdout not a tty still prints the bar line itself -- tmux's
-   status-right runs `spark bar` and must always get the line, never a
+   with stdout not a tty still prints the bar line itself -- a status
+   bar runs `spark bar` piped and must always get the line, never a
    state change.
-2. `on|off` is the only switch vocabulary at the CLI (shell, bar,
-   headless, serve, forge, quiet, memory) -- including the two servers,
+2. `on|off` is the only switch vocabulary at the CLI (headless, serve,
+   forge, quiet, memory) -- including the two servers,
    which hold the same kind of state and so answer the same way; there
    is no `start`/`stop` pair beside it, and `--force`/`--noreload` are
    flags of `off`. Stored values are storage, not
@@ -1232,7 +1217,7 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   dead.
 - **A package.** Linux: the right `PKG_*` group in every `distro/<id>.env`
   with a comment saying why (`PKG_CORE`/`PKG_ENGINE`/`PKG_AI` are the AI,
-  always installed; the shell tools are spark-shell's own lists), under
+  always installed; spark installs no shell tool), under
   the name that family's manager knows, and its credit in `CREDITS.md`
   (docs_test looks every name up). The mac core needs nothing from
   Homebrew. No editor, no app and no contributor tool
@@ -1244,8 +1229,8 @@ One grammar for every verb; a verb that breaks a rule is a bug.
 - **A config file.** First ask whether the app *rewrites* its own config.
   If it only reads: put it in `home/` (shared) or `<os>/home/`; `install.sh`
   links it. If it rewrites: it cannot be linked -- seed it once from
-  `templates/` as a rendered regular file, and note it in docs/INSTALL.md's trap
-  table (docs/SHELL.md). Test by changing a setting in the app
+  `templates/` as a rendered regular file, and note it in docs/INSTALL.md.
+  Test by changing a setting in the app
   and running `ls -l` on the path: still a symlink, or now a regular file?
 - **A choice.** A `SITE_*` key with a default in `site.env.example`, applied
   by `bootstrap.sh` or rendered by `install.sh`, **and** a `spark <verb>`
@@ -1260,7 +1245,7 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   The rule binds the CORE documentation, and core documentation moves with
   a release: README, docs/INSTALL.md, docs/CHEATSHEET.txt, `spark help`,
   this file and docs/CHANGELOG.md are updated as a version ships,
-  together. The five beside them in `docs/` (TOUR, APPS, SHELL, IDEAS,
+  together. The four beside them in `docs/` (TOUR, APPS, IDEAS,
   TROUBLESHOOTING) are outside it -- kept true continuously, no release
   waits on them, and nothing in them has to appear in help, the
   cheatsheet or a changelog entry. Each of those says so in its own first lines, and
@@ -1321,22 +1306,16 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   The page is a door to the same identity, not a product of its own: a
   page change lands only when it is the client side of a contract
   change. No new page features in this release or the next.
-- **A shell thing.** Anything that is the look or the workstation
-  tools -- a dotfile, a tmux piece, a prompt, a terminal emulator's
-  font -- lands
-  in spark-shell's repository (github.com/forgewright-ai/spark-shell),
-  never here: no row, no package, no verb, no template of it in this
-  tree. spark-shell reads `theme.env` and renders on `spark-shell
-  apply`; `spark theme`, `spark font`, `spark quiet` and the bar line
-  are core (the FORGE page reads `theme.env`; the VT console palette
-  and font are the machine's face; the status line is the machine's
-  own report). The whole interface between the two is `theme.env`,
-  the three `SPARK_*_SGR` exports a rendered rc may set (colour at the
-  prompt; unset, plain) and `state/prompt` (the cache a prompt segment
-  reads): core never calls spark-shell, spark-shell never writes
-  spark's files. The one release of migration is the `shell-moved`
-  bootstrap row and the `spark shell` / `spark bar on|off` stubs, each
-  one signed pointer line, exit 2.
+- **A shell thing.** The look and the tools of a machine are not
+  spark's business. spark's side of any renderer is `theme.env` (the
+  palette `spark theme` writes, a `KEY=value` file any renderer or
+  terminal may read), the three `SPARK_*_SGR` variables an rc may
+  export (colour at the prompt's marks; unset, plain) and the bar line
+  (`spark bar line`, for any status bar to run). `spark theme`, `spark
+  font`, `spark quiet` and the bar line are core: the FORGE page reads
+  `theme.env`, the console palette and font are the machine's own, the
+  status line is the machine's own report. Nothing in this tree names
+  a renderer.
 - **A grounded contract.** One law, five contracts (10, 11, 12, 13, 14):
   what a model says about a text is checked against that text before the
   reader sees it. The judge is `lib/spark/text.py` -- `anchor()` at the
@@ -1445,14 +1424,13 @@ One grammar for every verb; a verb that breaks a rule is a bug.
   is always required there. `spark model verify` (and the `models` check
   row, cached) re-hashes every downloaded file (`lib/spark/verify.py`).
 - **A palette.** Two files, nothing else hand-listed: `themes/<name>.env`
-  with the full 21-key `THEME_*` set (contract 3; the header comment names
-  the upstream project and its license; `THEME_BTOP` names a theme btop
-  ships, else `Default`), and its flat 20-value row in `spark.js`'s
+  with the full 20-key `THEME_*` set (contract 3; the header comment names
+  the upstream project and its license), and its flat 20-value row in `spark.js`'s
   `theme.builtin` map (the page has no build step). `tests/install_test.sh`
   renders every palette by glob, and `tests/smoke.py` asserts the
   `theme.builtin` map matches `themes/*.env` value for value -- a gap in
   either goes loud. A palette of the user's own is one file,
-  `~/.config/spark/themes/<name>.env`, the same 21 keys, and lives nowhere
+  `~/.config/spark/themes/<name>.env`, the same 20 keys, and lives nowhere
   else: not on the page, not in `CREDITS.md`, not in that map. On macOS
   `spark theme NAME` also switches every open Terminal.app window to the
   profile (`theme._switch_windows`): the running app reads its
