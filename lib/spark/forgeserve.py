@@ -142,7 +142,7 @@ def route_role(method, path):
                 return role
     return None
 
-USAGE = """%s forge -- the served agent
+USAGE = """%s forge -- the page and its server
 
   spark forge                  status: url, health, model, unit, token, log tail
   spark forge on | off         SPARK_FORGE in spark.env; the unit; runs it
@@ -154,12 +154,12 @@ USAGE = """%s forge -- the served agent
                                in (--no-qr; --show-token when piped); a
                                user logs in with their own QR or token
                                (spark user add NAME)
-  spark forge --print-client   what a peer machine needs: the URL, and
-                               how to mint a user there
+  spark forge --print-client   what a client needs: the URL, and how to
+                               mint a user there
   spark forge token --new      rotate the admin token; its logins die
                                (a user rotates with spark user token --new)
-  spark forge audit [N]        the newest N admin actions (50), sealed in the
-                               box account's store (--porcelain: tab-separated)
+  spark forge audit [N]        the newest N admin actions (50), sealed in
+                               the admin's store (--porcelain: tab-separated)
 """ % MARK
 
 

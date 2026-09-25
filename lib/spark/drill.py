@@ -61,7 +61,8 @@ DRILL_USAGE = """spark drill -- practice against a source (contract 13)
   --name NAME                 keep a schedule for this source: a missed item
                               comes back on a widening interval until it is
                               right twice; without --name, nothing is kept
-  --ledger [clear] [--name NAME]  the schedule, soonest due first; clear drops it
+  --ledger [clear] [--name NAME]  the schedule, soonest due first; clear
+                              drops it
 
   both the question and its answer are spans of the source -- an invented
   answer is dropped before it is ever asked. Too little to drill is one

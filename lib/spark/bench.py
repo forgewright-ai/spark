@@ -146,15 +146,15 @@ def pause_server(cfg):
 # ------------------------------------------------------------------- bench
 USAGE = """%s bench -- how fast is this machine, with llama-bench
 
-  spark bench              prompt 512 / generate 128, current settings; saved as
-                           the baseline of the measured file -- the ember when
-                           one is served, else the spark model (one per file)
+  spark bench              prompt 512 / generate 128, current settings; saved
+                           as the baseline of the measured file (the chat
+                           model when one is served, else the spark model)
   spark bench --spark      measure the spark role (the prompt line's model)
-  spark bench --ember      measure the ember; an error when none is served
+  spark bench --ember      measure the chat model; an error when none is served
   spark bench --quick      smaller sizes, fewer repetitions
   spark bench tune         try GPU/CPU, flash attention, KV types, thread counts
   spark bench tune show    the last tune's result against what runs now
-  spark bench tune apply   write the winner to spark.env and restart the server
+  spark bench tune apply   write the winner to spark.env and restart the engine
 """ % MARK
 
 

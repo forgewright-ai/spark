@@ -715,10 +715,10 @@ def main():
 
         # grammar rule 4: the loop verbs answer -h first, signed (contract 8)
         for sub, first in (("last", "spark last -- the last exchange, with its tok/s"),
-                           ("status", "spark status -- the full picture: brain, widget, service, soul, memory, last"),
-                           ("brain", "spark brain -- what answers right now: a FORGE or a llama-server"),
-                           ("off", "spark off -- silence the prompt widget, every pane at once"),
-                           ("on", "spark on -- the prompt widget answers again"),
+                           ("status", "spark status -- the model, prompt line, server, soul, memory, last answer"),
+                           ("brain", "spark brain -- what answers right now: the page's server or the engine"),
+                           ("off", "spark off -- silence the prompt line, every pane at once"),
+                           ("on", "spark on -- the prompt line answers again"),
                            ("history", "spark history -- the threads kept on this machine"),
                            ("ver", "spark ver -- logo, version, credits")):
             rc, out, _ = spark(sub, "-h")
@@ -856,6 +856,18 @@ def main():
         t.ok(rc == 2 and "try: spark quiet" in out, "a misspelled verb with arguments is a typo, not a question", out)
         rc, out, _ = spark("quiett")
         t.ok(rc == 2 and "try: spark quiet" in out, "a misspelled verb alone points at the right spelling", out)
+        # a verb that is gone, or a word people reach for, is refused whatever
+        # follows -- `spark shell on` never becomes a question for the model
+        for gone in (("shell", "on"), ("remember", "a", "fact"), ("stop",), ("talk", "to", "me")):
+            hits0 = STATE["hits"]
+            rc, out, _ = spark(*gone)
+            t.ok(rc == 2 and out.strip() == "spark: no command named %s -- spark help lists them" % gone[0]
+                 and STATE["hits"] == hits0,
+                 "spark %s: a gone verb answers the no-command line, exit 2, no model call" % " ".join(gone), out)
+        hits0 = STATE["hits"]
+        rc, out, _ = spark("how", "big", "is", "the", "model")
+        t.ok(rc == 0 and out.startswith("* ") and STATE["hits"] > hits0,
+             "a real question of several words still reaches the model", out)
 
         # config hygiene
         with open(home + "/.config/spark/spark.env", "w") as f:
@@ -2022,7 +2034,7 @@ def main():
             f.write(json.dumps({"ts": today + " 12:00:00", "kind": "answer", "mode": "chat", "ms": 5,
                                 "out_bytes": 4000, "dest": "203.0.113.9:8081"}) + "\n")
         rc, out, _ = spark("check", "sends", "--porcelain")
-        t.ok(rc == 0 and "\twarn\tsends\t4.0 kB went to 203.0.113.9:8081 today, not your configured brain\t" in out,
+        t.ok(rc == 0 and "\twarn\tsends\t4.0 kB went to 203.0.113.9:8081 today, not the address you configured\t" in out,
              "check sends: bytes to a host nothing here names -- warn, naming the host", out)
         rc, out, _ = spark("check", "hardening", "--porcelain")
         t.ok(rc == 0 and "\tna\thardening\t" in out, "check hardening: no FORGE served here and no peer -- na", out)
@@ -2784,7 +2796,7 @@ def main():
         t.ok(rc == 0 and re.search(r"^  spark", out, re.M) and re.search(r"^  ember", out, re.M),
              "spark ember: one line per role", out)
         rc, out, _ = spark("ember", "-h")
-        t.ok(rc == 0 and out.splitlines()[0] == "spark ember -- the conversational model",
+        t.ok(rc == 0 and out.splitlines()[0] == "spark ember -- the chat model",
              "spark ember -h signs (contract 8)", out)
         rc, out, _ = spark("ember", "nosuch", extra=mem)
         t.ok(rc == 2 and "spark ember list" in out, "an unknown ember name is refused, naming the list", out)
@@ -3262,11 +3274,25 @@ def main():
              "the failure moment is in help", out)
         wide = [l for l in out.splitlines() if len(l) > 80]
         t.ok(not wide, "every help line fits 80 columns", "\n".join(wide))
+        # one voice (docs/CONTRIBUTING.md, Voice): help and every usage text
+        # say the model, the page's server, the chat model, a spark app --
+        # never brain, FORGE, the ember, a smart app -- and fit 80 columns.
+        # The verbs help lists, plus the less often used ones it names.
+        _old = re.compile(r"\bbrain\b|\bthe ember\b|\ban ember\b|\bsmart (?:app|apps|os)\b|\bstranger", re.I)
+        _verbs = sorted(set(re.findall(r"^ spark ([a-z]+)", out, re.M))
+                        | {"last", "history", "stats", "bench", "status", "line", "explain", "recall", "off", "on"})
+        _bad = []
+        for _v in [""] + _verbs:
+            _rc, _txt, _ = spark(*([_v, "-h"] if _v else ["help"]), extra=off)
+            for _l in _txt.splitlines():
+                if _old.search(_l) or re.search(r"\bFORGE\b", _l) or len(_l) > 80:
+                    _bad.append("%s: %s" % (_v or "help", _l))
+        t.ok(not _bad, "spark help and every usage text: one voice, every line within 80 columns", "\n".join(_bad[:8]))
 
         # the pager: piped output never touches $PAGER -- a pager that would
         # fail (/bin/false) proves page() never ran it off a tty
         rc, out, _ = spark("help", extra={"PAGER": "/bin/false"})
-        t.ok(rc == 0 and "your own AI, on your own machine" in out,
+        t.ok(rc == 0 and "your own AI, on a machine you own" in out,
              "spark help piped with PAGER=/bin/false: rc 0, the usage prints", out)
         rc, out, _ = spark("check", "memory", extra={"PAGER": "/bin/false"})
         t.ok(rc == 0 and out.startswith("spark check ") and "memory" in out,
@@ -3428,13 +3454,13 @@ def main():
         t.ok(rc == 0 and "SITE_AI_MODEL=auto\n" in site_env and "the peer stays first" in out,
              "spark client off hands the model choice back to auto", out)
         rc, out, _ = spark("client", "-h")
-        t.ok(rc == 0 and out.splitlines()[0] == "spark client -- a machine that answers from another machine's FORGE",
+        t.ok(rc == 0 and out.splitlines()[0] == "spark client -- a client of another machine's server",
              "spark client -h signs (contract 8)", out)
 
         # spark setup: the guided first run, non-interactive, nothing applied
         os.remove(home + "/.config/spark/site.env")
         rc, out, _ = spark("setup", "-h")
-        t.ok(rc == 0 and out.splitlines()[0] == "spark setup -- pick the model this machine earns and light it up",
+        t.ok(rc == 0 and out.splitlines()[0] == "spark setup -- choose the model this machine can run",
              "spark setup -h signs (contract 8)", out)
         rc, out, _ = spark(extra=off)
         t.ok(rc == 0 and "'s AI on" in out, "bare spark with no site.env, not a tty: the status (the offer is tty-only)", out)
@@ -3533,7 +3559,7 @@ def main():
         # spark uninstall: signed, shows and never mutates without the word;
         # SPARK_NO_APPLY = the plan only (the real run is tests/uninstall_test.sh)
         rc, out, _ = spark("uninstall", "-h")
-        t.ok(rc == 0 and out.splitlines()[0] == "spark uninstall -- remove spark from this machine: shows first, then asks for the word yes",
+        t.ok(rc == 0 and out.splitlines()[0] == "spark uninstall -- remove spark from this machine: shows first, then asks yes",
              "spark uninstall -h signs (contract 8)", out)
         snap = sorted(os.listdir(home + "/.config/spark"))
         rc, out, _ = spark("uninstall", extra={"SPARK_NO_APPLY": "1"})

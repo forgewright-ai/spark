@@ -55,14 +55,15 @@ WATCH_TOKENS = 120      # a match is one short line
 WATCH_TIMEOUT = 60
 MODE = "watch-stream"   # persona.MODES key
 
-WATCH_USAGE = """spark watch -- a live stream, watched for the one thing that matters (contract 14)
+WATCH_USAGE = """spark watch -- a live stream, watched for one thing (contract 14)
 
   <stream> | spark watch <words>   watch stdin; say nothing until a line
                                    matches <words>, then one line quoting it
 
   silence is the normal, healthy state; a match is one line, the matching
-  text quoted and checked, so it cannot report what is not there. Local
-  only: the stream never leaves this machine.
+  text quoted and checked, so it cannot report what is not there. A window
+  of the stream, up to 40 lines or 10 seconds and 8 kB at most, goes to the
+  server you chose; the whole stream never does.
   From a pipe: tail -f app.log | spark watch "a 500 appears"
                journalctl -f  | spark watch "anything about the disk"
 """

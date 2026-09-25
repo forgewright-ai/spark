@@ -23,7 +23,7 @@ MEMORY_USAGE = """%s memory -- what it keeps
   spark memory                  the facts, numbered
   spark memory on | off         recall them on every answer, or not
   spark memory clear            forget them all
-  spark memory add <words>      keep a fact (at most %d chars, %d facts)
+  spark memory add <words>      keep a fact (at most %d characters, %d facts)
   spark memory forget N         drop fact N as listed above
   spark memory forget <words>   drop the one fact containing the words
 

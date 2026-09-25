@@ -27,11 +27,12 @@ if _LIB not in sys.path:
 
 from spark import MARK, page, say  # noqa: E402
 
-USAGE_HEAD = """%s -- your own AI, on your own machine, at no cost
+USAGE_HEAD = """%s -- your own AI, on a machine you own: no account, no cloud, nothing leaves
 
 spark
- spark                        status: brain, widget, server, soul, memory, last
- spark off | on               silence / restore the widget, every pane at once
+ spark                        status: the model, the prompt line, the server,
+                              soul, memory, last answer
+ spark off | on               silence / restore the prompt line in every pane
  spark soul [edit|reset]      who it is: ~/.config/spark/soul
  spark memory add <words>     a fact it keeps; memory forget N; memory
  spark ver [--sbom]           about, version, credits; or what it depends on
@@ -41,7 +42,7 @@ spark
                               or, sandboxed, the changes once at the end
  spark do --review [ID]       sandboxed runs waiting: the diff, then yes
  spark edit [?] [words]       the text on stdin: words rewrite it, ? asks,
-                              --at N completes; an editor's client (-h)
+                              --at N completes; the verb a spark app calls (-h)
  spark ask < FILE             the questions that text does not answer: at
                               most three, every line one question (-h)
  spark read <words> < FILE    what a source says about your question, every
@@ -54,8 +55,8 @@ spark
                               a terminal; an exact copy anywhere else (-h);
                               chat/explain/words: --reveal [N|auto|off]
  try:
- ? words or words? ENTER      the command lands in your line, hint above
- ?? words ENTER               follow up on the last answer (same thread)
+ ? words or words? Enter      the command lands in your line, hint above
+ ?? words Enter               follow up on the last answer (same thread)
  Esc s                        ask about the line you are on, no ? needed
  Esc s on an empty line       the failed command piped to explain; again
                               proposes the fix; a 127 offers the install line
@@ -64,25 +65,25 @@ spark
  cmd 2>&1 | explain           what went wrong, and the fix
  spark <TAB>                  the verbs, then each verb's words -- offline
 
-the FORGE: server/client
+the model and the page
  spark model [NAME|auto|none] the served model: download, restart (-h: more)
  spark model list             the table; -h: budget N, add URL, verify, rm NAME
  spark serve [on|off]         one LAN address, token required (-h: --force)
- spark ember [NAME|auto|none] a second model for conversations; ember list
+ spark ember [NAME|auto|none] the chat model, a second one; ember list
  spark forge --print-url      the login URL; at a tty a QR to scan and the token
  spark user [add NAME]        the named users, each with sealed threads; add
                               shows the token and its QR once (-h)
- spark forge [on|off]         the FORGE on the LAN: the API and the page
+ spark forge [on|off]         the page's server on the LAN: the API and the page
  spark forge audit [N]        every admin action, sealed: runs, users, tokens
- spark headless [on|off]      the FORGE up from boot, never asleep (a brain)
+ spark headless [on|off]      the page's server up from boot, never asleep
  spark share [on|off]         one engine for every OS user here: a spark group
                               reads the token; each keeps their own context
- spark client [URL|off]       answer from another machine's FORGE; none here
+ spark client [URL|off]       a client of another machine's server; none here
 """ % MARK
 
 USAGE_MACHINE = """the machine
  spark setup                  the guided first run: name, user, model (-h)
- spark check                  drift report; exit 0 = every promise kept (-h)
+ spark check                  the machine row by row; exit 0 = every row ok (-h)
  spark update [--dry-run]     the newest tag, or main on a developer clone
  spark uninstall [--purge]    remove spark from this machine: shows, asks yes
 """
@@ -96,7 +97,7 @@ USAGE_INTERFACE = """the interface
 
 USAGE_TAIL = """less often used
  spark                        last, history [clear], stats [--week|--sends],
-                              brain, bench [tune [show|apply]] -- each has -h
+                              bench [tune [show|apply]] -- each has -h
 
 docs/
  docs/INSTALL.md              every step and every key; docs/CHEATSHEET.txt
@@ -128,6 +129,11 @@ def main(argv):
         mod = importlib.import_module("spark." + spec[0])
         fn = getattr(mod, spec[1])
         return fn(sub, rest) if spec[2] else fn(rest)
+    if sub in KNOWN_GONE:
+        # a verb that once existed, or a word people reach for: refused
+        # whatever follows -- `spark shell on` is not a question
+        say("spark: no command named %s -- spark help lists them" % sub)
+        return 2
     if len(argv) == 1 and " " not in sub and not sub.endswith("?") and not sub.startswith("@"):
         # one word that is not a command: a slip, not a question -- questions
         # are several words (quoted or not), end with ?, or name a file (@FILE)
@@ -171,6 +177,11 @@ VERBS = {"setup": ("setup", "main", False), "check": ("check", "main", False),
          "recall": ("cli", "cmd_recall", False), "lua": ("cli", "cmd_lua", False),
          "ver": ("cli", "cmd_ver", False), "version": ("cli", "cmd_ver", False),
          "--version": ("cli", "cmd_ver", False)}
+
+# Words that were verbs once, or that a new user reaches for: never a
+# question, whatever follows. `spark ask` is a verb (contract 12) and is
+# dispatched above, so it is not here.
+KNOWN_GONE = ("shell", "stop", "remember", "talk")
 
 
 def near_verb(word):

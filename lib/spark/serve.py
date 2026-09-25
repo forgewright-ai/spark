@@ -10,14 +10,14 @@ import time
 from . import IS_MAC, MARK, REPO, bind_check, config, glyph, lan_ip, own_hostnames, say, wait_ready
 from . import engine, wire
 
-USAGE = """%s serve -- the local model server for this LAN
+USAGE = """%s serve -- the engine, served on this LAN
 
   spark serve                 status: the url, whether it answers, the model
   spark serve on              start it in the background, wait until it answers
-  spark serve off             stop a server spark serve started
+  spark serve off             stop an engine spark serve started
   spark serve off --force     also the unit's, or one spark did not start
   spark serve off --force --noreload   and disable the unit so it stays down
-  spark serve --foreground    become the server (what the unit runs)
+  spark serve --foreground    become the engine (what the unit runs)
   spark serve --host ADDR     bind ADDR instead of this machine's LAN address
   spark serve --print-client  the two lines another machine needs to use it
 """ % MARK

@@ -44,15 +44,15 @@
   <div class="login-card">
     <img class="s-mark" src="/static/mark.svg" alt="" width="72" height="72">
     <h1>spark</h1>
-    <p id="login-hello" class="muted">your own AI, on your own box</p>
-    <p class="muted web small">Ask the box's owner for a token
+    <p id="login-hello" class="muted">your own AI, on a machine you own</p>
+    <p class="muted web small">Ask the machine's admin for a token
       (<code>spark user add NAME</code> mints one and shows a QR to scan);
       the admin's is at <code>spark forge --print-url</code>.</p>
-    <p class="muted tauri small">The FORGE's address and a token from the box
+    <p class="muted tauri small">The address of the page's server and a token from that machine
       (<code>spark forge --print-url</code> shows both).</p>
     <form id="login-form">
       <label for="server-url" class="tauri">server url</label>
-      <input id="server-url" class="tauri" type="text" placeholder="http://box:8081"
+      <input id="server-url" class="tauri" type="text" placeholder="http://host:8081"
         autocomplete="off" spellcheck="false" inputmode="url">
       <label for="token" class="vh">token</label>
       <div class="token-row">
@@ -86,7 +86,7 @@
     <div id="hello" class="hello" hidden>
       <img src="/static/mark.svg" alt="" width="56" height="56">
       <h2 id="hello-hi">hi</h2>
-      <p class="muted">this is your box's own AI -- ask it anything.</p>
+      <p class="muted">this is your own AI -- ask it anything.</p>
       <div class="chips">
         <button type="button" class="chip" data-chip="what can you do?">what can you do?</button>
         <button type="button" class="chip" data-chip="tell me something interesting about this machine">about this machine</button>
@@ -175,7 +175,7 @@
     <label class="pal">palette
       <select id="palette2" aria-label="palette (your view only)"></select>
     </label>
-    <p class="muted small">your view only -- this browser, not the box</p>
+    <p class="muted small">your view only -- this browser, not the machine</p>
   </div>
   <div class="card usr" id="account-card" hidden>
     <div class="head">
@@ -215,7 +215,7 @@
         <select id="theme-pick" data-main aria-label="theme"></select>
         <button type="submit" class="primary">apply</button>
       </form>
-      <p class="muted small">the box's own look: the console</p>
+      <p class="muted small">the machine's own look: the console</p>
     </div>
     <div class="card">
       <h2>font</h2>
@@ -231,8 +231,8 @@
       <h2>model</h2>
       <button type="button" class="quiet" data-run="model" data-args="auto">auto</button>
       <button type="button" class="quiet" data-run="model" data-args="none">none</button>
-      <label class="pal">ember
-        <select id="ember-pick" aria-label="ember model"></select>
+      <label class="pal">chat model
+        <select id="ember-pick" aria-label="chat model"></select>
       </label>
     </div>
     <div id="model-table"></div>
@@ -270,7 +270,7 @@
       <span class="muted small">counts only -- the messages are sealed, there is no key here</span>
     </div>
     <table class="keys" id="users-table"></table>
-    <p class="muted small">spark user add NAME on the box mints an account; the token and its QR show once</p>
+    <p class="muted small">spark user add NAME on the machine mints an account; the token and its QR show once</p>
   </div>
   <div class="card adm">
     <div class="head">
@@ -299,13 +299,13 @@
   </div>
   <div class="card">
     <h2>what this is</h2>
-    <p>Your box's own AI, in the browser. Chat is yours alone -- your
+    <p>Your own AI, in the browser. Chat is yours alone -- your
       messages live in a sealed store only your token opens. What this
       page can do is what your shell can do: every button is a
-      <code>spark</code> verb run on the box, and the page never runs a
+      <code>spark</code> verb run on the machine, and the page never runs a
       command you did not click.</p>
     <p>The palette under settings changes this browser only; the theme
-      picker (admin) runs <code>spark theme</code> on the box itself.</p>
+      picker (admin) runs <code>spark theme</code> on the machine itself.</p>
     <p>API health: <code id="help-health"></code> (no token needed; everything
       else under <code>/api/</code> takes your token as a cookie or bearer).</p>
   </div>

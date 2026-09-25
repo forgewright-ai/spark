@@ -24,9 +24,9 @@ from . import (ACCOUNT_FILE, ACCOUNT_KEY_FILE, MARK, THREADS_DIR, USERS_DIR,
 
 NAME_RE = re.compile(r"^[a-z][a-z0-9-]{0,31}$")
 
-USAGE = """%s user -- the named users of this FORGE
+USAGE = """%s user -- the named users of the page
 
-  spark user                  who this machine is; the box's users
+  spark user                  who this machine is; the users here
   spark user list             the table: name, threads, last activity
   spark user add NAME         mint an account; the token and a QR of its
                               login link are shown once (--no-qr)
@@ -38,7 +38,7 @@ USAGE = """%s user -- the named users of this FORGE
   spark user claim            seal the pre-v1.4 plaintext history into
                               your store (re-runnable, verifies first)
 
-  A name is a-z, 0-9 and -, starting with a letter, at most 32 chars.
+  A name is a-z, 0-9 and -, starting with a letter, at most 32 characters.
   The token is the only key to the data: keep it, there is no reset.
 """ % MARK
 

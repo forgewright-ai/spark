@@ -771,7 +771,7 @@ def row_forge(ctx):
                         "spark forge off; spark forge on")
         return ok(value)
     if fh is None:
-        return warn("forge-url says %s but what answers is not a FORGE" % where, "spark forge off; spark forge on")
+        return warn("forge-url says %s but what answers is not the page's server" % where, "spark forge off; spark forge on")
     return warn("forge-url says %s but nothing answers" % where, "spark forge on   (or spark forge off to forget it)")
 
 
@@ -803,7 +803,7 @@ def row_ember(ctx):
 @row("CAPABILITY")
 def row_peer(ctx):
     from . import wire
-    parts, worst, remedy = [], OK, "off the LAN, or the peer is down"
+    parts, worst, remedy = [], OK, "off the LAN, or the other machine is down"
     if ctx.cfg.peer_ai_url:
         # a FORGE answers /api/health (and 404 to /health); a raw llama-server the reverse
         host = ctx.cfg.peer_ai_url.split("//")[-1]
@@ -877,10 +877,10 @@ def row_hardening(ctx):
     if not url:
         url = ctx.cfg.peer_ai_url
     if not url:
-        return na("no FORGE served here and no peer (spark forge on, or spark client URL)")
+        return na("no page served here and no other machine named (spark forge on, or spark client URL)")
     where = url.split("//")[-1].rstrip("/")
     if not isinstance(wire.forge_health(url), dict):
-        return na("%s is not up as a FORGE (the forge and peer rows say why)" % where)
+        return na("%s is not up as the page's server (the forge and peer rows say why)" % where)
     v = ctx.cached("hardening", 3600, lambda: {"url": url, "gates": wire.probe_gates(url)})
     if not isinstance(v, dict) or v.get("url") != url:     # a moved forge: ask it now, cached next run
         v = {"url": url, "gates": wire.probe_gates(url)}
@@ -890,7 +890,7 @@ def row_hardening(ctx):
         broken = [g for g in gates if not g[1]] or [("probe", False, "no gates answered")]
         return warn("%d of %d gates hold at %s -- %s" % (len(held), len(gates), where,
                                                           "; ".join("%s: %s" % (g[0], g[2]) for g in broken[:3])),
-                    "spark forge off; spark forge on   (the FORGE must be this tree's; spark update)")
+                    "spark forge off; spark forge on   (the page's server must be this tree's; spark update)")
     return ok("%d of %d gates hold at %s" % (len(held), len(gates), where))
 
 
@@ -1284,7 +1284,7 @@ def row_sends(ctx):
     strange = [(dest, b) for _day, dest, b, _n in rows if dest not in known]
     if strange:
         dest, b = strange[0]
-        return warn("%s went to %s today, not your configured brain" % (stats.kb(b), dest),
+        return warn("%s went to %s today, not the address you configured" % (stats.kb(b), dest),
                     "spark stats --sends; spark brain   (SPARK_BASE_URL / SITE_PEER_AI_URL name the destination)")
     return ok(", ".join("%s to %s" % (stats.kb(b), dest) for _day, dest, b, _n in rows) + " today")
 
@@ -1398,7 +1398,7 @@ def row_headless(ctx):
     """A box that is the brain keeps the FORGE up from boot with nobody logged
     in and never sleeps (SITE_HEADLESS=yes; bootstrap applies it)."""
     if not ctx.cfg.headless:
-        return na("a workstation; spark headless on for a brain")
+        return na("under your login; spark headless on keeps it up from boot")
     from . import site
     missing = [piece for piece, good, _ in site.headless_facts(ctx.cfg) if not good]
     if missing:
@@ -1413,7 +1413,7 @@ def row_share(ctx):
     Never fails -- sharing is opt-in; a stale or mis-permissioned token warns."""
     from . import site
     if not ctx.cfg.share:
-        return na("not shared; spark share on lets this box's OS users in")
+        return na("not shared; spark share on lets this machine's OS users in")
     facts = site.share_facts(ctx.cfg)
     bad = [piece for piece, good, _ in facts if not good]
     if bad:
@@ -2091,9 +2091,9 @@ def refresh():
 
 
 # --------------------------------------------------------------------- main
-USAGE = """%s check -- is this machine still what its repository says it is?
+USAGE = """%s check -- this machine against what its repository says
 
-  spark check              the report; exit 0 iff no row failed
+  spark check              every row; exit 0 when no row failed
   spark check --watch N    redraw every N seconds
   spark check --porcelain  category<TAB>status<TAB>name<TAB>value<TAB>remedy
   spark check --report     a block to paste into an issue: version, OS,

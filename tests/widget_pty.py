@@ -208,7 +208,7 @@ def pager_main():
     marker. Then again with an absent $PAGER: plain output, no error."""
     repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     spark = os.path.join(repo, "bin", "spark")
-    first = "spark -- your own AI, on your own machine, at no cost"
+    first = "spark -- your own AI, on a machine you own: no account, no cloud, nothing leaves"
     fails = 0
 
     def ok(cond, what, extra=""):
@@ -234,7 +234,7 @@ def pager_main():
         ok(first in logged, "the usage went through the pager", logged)
 
         sh = Shell([sys.executable, spark, "help"], dict(env, PAGER="some-absent-command-xyz"), tmp, rows=10, cols=80)
-        ok(sh.expect("your own AI, on your own machine"), "an absent $PAGER falls back to plain output",
+        ok(sh.expect("your own AI, on a machine you own"), "an absent $PAGER falls back to plain output",
            sh.buf.decode("utf-8", "replace"))
         sh.close()
 

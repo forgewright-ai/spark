@@ -490,14 +490,15 @@ def cmd_quiet(args):
 
 
 # --------------------------------------------------------------- headless
-HEADLESS_USAGE = """%s headless -- a machine that is the brain
+HEADLESS_USAGE = """%s headless -- the machine that stays on and answers
 
   spark headless                what is set, and what is in effect here
-  spark headless on             the FORGE up from boot, nobody logged in, never
-                                asleep. Linux: linger, the render group, sleep
-                                masked, the lid ignored. macOS: LaunchDaemons in
-                                system/, pmset never sleeps, wake on LAN
-  spark headless off            a workstation again (macOS: pmset untouched)
+  spark headless on             the page's server up from boot, nobody logged
+                                in, never asleep. Linux: linger, the render
+                                group, sleep masked, the lid ignored. macOS:
+                                LaunchDaemons in system/, pmset never sleeps,
+                                wake on LAN
+  spark headless off            under your login again (macOS: pmset untouched)
 """ % MARK
 HEADLESS_ROWS = ["headless", "linger", "render", "sleep", "lid", "daemons", r"spark\.(serve|forge|check)"]
 SLEEP_TARGETS = ("sleep.target", "suspend.target", "hibernate.target", "hybrid-sleep.target")
@@ -578,12 +579,12 @@ SHARE_USAGE = """%s share -- one engine, shared with this machine's other OS use
 
   spark share                what is set, and what is in effect here
   spark share on             let a `spark` OS group read the api-token, so a
-                             group member's spark answers from this box's engine
-                             as a client -- their own soul and memory, one model
-                             loaded once for everyone
+                             group member's spark answers from this machine's
+                             engine as a client -- their own soul and memory,
+                             one model loaded once for everyone
   spark share off            the shared token goes; the engine is yours again
 
-  another OS user joins once (they log in again after):  sudo gpasswd -a NAME spark
+  another OS user joins once, then logs in again:  sudo gpasswd -a NAME spark
   then, as them:  spark client URL   (spark share prints the URL)
 """ % MARK
 SHARE_ROWS = ["share"]
@@ -690,17 +691,18 @@ def cmd_share(args):
 
 
 # ----------------------------------------------------------------- client
-CLIENT_USAGE = """%s client -- a machine that answers from another machine's FORGE
+CLIENT_USAGE = """%s client -- a client of another machine's server
 
-  spark client                  what is set here, and whether the peer answers
-  spark client URL              answer from the FORGE at URL: no model, no
+  spark client                  what is set here, and whether the other
+                                machine answers
+  spark client URL              answer from the server at URL: no model, no
                                 engine, nothing runs here; the prompt, chat and
                                 explain do (spark user add NAME on the other
                                 machine mints your token, spark user login
                                 NAME here presents it)
   spark client off              serve here again: spark model auto picks one
 
-  the URL may be this same box's engine (spark share on there): a group
+  the URL may be this same machine's engine (spark share on there): a group
   member reads its shared token and answers from it, keeping their own
   soul and memory -- no second model loaded.
 """ % MARK

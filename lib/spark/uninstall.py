@@ -26,9 +26,9 @@ from . import (BIN_DIR, CONFIG_DIR, DATA_DIR, FORGE_PID, FORGE_URL_FILE, HOME, I
                config, is_wsl, run, say)
 from . import packages as pkg
 
-USAGE = """%s uninstall -- remove spark from this machine: shows first, then asks for the word yes
+USAGE = """%s uninstall -- remove spark from this machine: shows first, then asks yes
 
-  spark uninstall              the plan (every row), then: remove all of it? type yes
+  spark uninstall              the plan, then: remove all of it? type yes
   spark uninstall --dry-run    the plan only, nothing changes
   spark uninstall --yes        no question (SPARK_YES=1 too); a script's form
   --purge                      your soul, memory, sealed users, models.env,
