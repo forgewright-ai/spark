@@ -19,7 +19,7 @@ from . import (HOME, IS_MAC, MARK, REPO, SHARE_TOKEN, SHARE_URL, SITE_ENV, SPARK
 from . import engine, packages, session, site, wire
 from . import model as modeltab      # `model` is a local name here: the chosen row
 
-SIGN = "%s setup -- pick the model this machine earns and light it up" % MARK
+SIGN = "%s setup -- choose the model this machine can run" % MARK
 USAGE = SIGN + """
 
   spark setup                   ask this machine's name, yours and the
@@ -32,7 +32,7 @@ USAGE = SIGN + """
   spark setup --user NAME       your name (SITE_USER)
   spark setup --theme NAME      a palette from themes/, or none; never asked,
                                 none unless it is said here
-  spark setup --no-serve        write and apply; leave the server down
+  spark setup --no-serve        write and apply; leave the engine down
 """
 # setup changes no look: the terminal keeps its own colours until the
 # user names a palette -- `spark theme NAME|none` is the choice

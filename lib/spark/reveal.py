@@ -88,7 +88,7 @@ USAGE = """spark reveal -- stdin to stdout, letter by letter at a reader's pace
                               or SPARK_REVEAL_CPS)
 
   at a terminal the text appears as if written by hand, so a slow
-  brain's bursts read as a steady line; piped anywhere else it is an
+  model's bursts read as a steady line; piped anywhere else it is an
   exact copy, byte for byte. Nothing is sent anywhere.
 
       spark read <words> < page.txt | spark reveal

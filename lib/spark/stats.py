@@ -12,7 +12,8 @@ WINDOWS = {"--today": 1, "--week": 7, "--all": 3650}
 
 USAGE = """%s stats -- throughput from the turns on disk
 
-  spark stats                  today: tok/s, latency, cache hits by mode, baseline
+  spark stats                  today: tok/s, latency, cache hits by mode,
+                               and the baseline
   spark stats --week | --all   a wider window
   spark stats --sends          what left, in bytes: by destination and day,
                                the last 7 days (local = this machine)

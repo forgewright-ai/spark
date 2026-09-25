@@ -196,7 +196,7 @@ def main():
            "bind_check passes a LAN address, loopback, a hostname")
         ok(_bc("8.8.8.8")[0] == "warn", "bind_check warns on a public address", _bc("8.8.8.8"))
         rc, out, err = spark("forge", "-h")
-        ok(rc == 0 and out.splitlines()[0] == "spark forge -- the served agent", "spark forge -h signs (contract 8)", out)
+        ok(rc == 0 and out.splitlines()[0] == "spark forge -- the page and its server", "spark forge -h signs (contract 8)", out)
         ok(all(len(l) <= 80 for l in out.splitlines()), "usage fits 80 columns")
         rc, out, _ = spark("forge")
         ok(rc == 0 and "not running" in out, "status before start: not running", out)

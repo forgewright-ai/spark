@@ -43,16 +43,16 @@ MODEL_USAGE = """%s model -- which model this machine serves
   spark model                   the table: size, RAM, license, the proof
                                 column (line, or the grounding audition's
                                 kept/run score), downloaded, serving,
-                                tok/s; the spark pick marked *, the ember
-                                +, your own rows u
+                                tok/s; the spark pick marked *, the chat
+                                model +, your own rows u
   spark model list --porcelain  the same as data: one row per line, tab
                                 separated (name, source, GB, RAM, license,
                                 line, grounded, state)
-  spark model NAME              choose it: site.env, download, server restart
+  spark model NAME              choose it: site.env, download, engine restart
                                 (a row not under Apache-2.0 or MIT prints
                                 its license and asks first)
   spark model auto | none       auto: the largest tested open-license row
-                                that fits (smallest beside an ember);
+                                that fits (smallest beside a chat model);
                                 none: no model here
   spark model budget [N]        percent of RAM+GPU auto may use (10-95)
   spark model rm NAME           delete a downloaded file that is not in use
@@ -63,8 +63,8 @@ MODEL_USAGE = """%s model -- which model this machine serves
                                 a mismatch (spark check's models row is the
                                 cached, daily version of this)
 
-  On a client (spark client URL) the table is the peer's and every choice
-  is refused: choose there, or spark client off to serve here again.
+  On a client (spark client URL) the table is the other machine's and every
+  choice is refused: choose there, or spark client off to serve here again.
 """ % MARK
 
 
@@ -503,14 +503,14 @@ def cmd_model(args):
 
 
 # ------------------------------------------------------------------ ember
-EMBER_USAGE = """%s ember -- the conversational model
+EMBER_USAGE = """%s ember -- the chat model
 
   spark ember                   the two roles: model, file, loaded or not
-  spark ember NAME              choose it: site.env, download, server restart
+  spark ember NAME              choose it: site.env, download, engine restart
   spark ember auto              the largest that fits beside the spark model
   spark ember none              no second model -- spark answers everything
   spark ember list              the model table, the spark pick marked *,
-                                the ember + (the same table as spark model)
+                                the chat model + (the same table as spark model)
 """ % MARK
 
 

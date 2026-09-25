@@ -55,7 +55,7 @@ ASK_USAGE = """spark ask -- the questions a text does not answer (contract 12): 
   every line out is a question: one that does not end in `?`, one whose
   every quote is not in the text, and one that could be asked of any
   plan never reach you. Nothing survives -> one line and exit 1: a
-  reader with nothing to ask says nothing. At most 12000 chars in.
+  reader with nothing to ask says nothing. At most 12000 characters in.
   From a pipe: spark ask < plan.md
 """
 

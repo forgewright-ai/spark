@@ -19,14 +19,14 @@ ANSWER_MAX = 300           # an answer IS the content: the widget fits it
 STDIN_TAIL = 6000          # what `explain` sends at most: the last 6 kB
 
 # Grammar rule 4: every verb answers -h first, signed per contract 8.
-LINE_USAGE = """spark line -- the widget's protocol (contract 4)
+LINE_USAGE = """spark line -- the prompt line's protocol (contract 4)
 
   spark line --cwd D --shell S   reads the prompt buffer on stdin; prints
                                  cmd|danger<TAB>command, answer or error,
                                  then the hint / answer / reason, then --
                                  when a cmd earns one -- proof<TAB>command:
                                  a read-only check that it worked (the
-                                 widget offers it on Esc s after the run)
+                                 prompt line offers it on Esc s after the run)
   spark line --paste             a multi-line paste on stdin: no command
                                  back, one answer|danger line naming what
                                  it does; over 8 kB nothing is sent
@@ -45,24 +45,24 @@ LAST_USAGE = """spark last -- the last exchange, with its tok/s
   spark last                  the newest turn: the line, the answer, the
                               model that answered and its speed
 """
-STATUS_USAGE = """spark status -- the full picture: brain, widget, service, soul, memory, last
+STATUS_USAGE = """spark status -- the model, prompt line, server, soul, memory, last answer
 
   spark status                what bare spark shows (SITE_QUIET_START=yes makes
                               bare spark one line; spark status stays full)
 """
-BRAIN_USAGE = """spark brain -- what answers right now: a FORGE or a llama-server
+BRAIN_USAGE = """spark brain -- what answers right now: the page's server or the engine
 
   spark brain                 the url, the model, the roles it serves
   spark brain --porcelain     url<TAB>model<TAB>forge|model; exit 1 when none
   spark brain --fresh         ignore the cached answer
 """
-OFF_USAGE = """spark off -- silence the prompt widget, every pane at once
+OFF_USAGE = """spark off -- silence the prompt line, every pane at once
 
   spark off                   Enter is the shell's again and a failure says
                               nothing; Esc s and spark <words> still work;
                               spark on restores
 """
-ON_USAGE = """spark on -- the prompt widget answers again
+ON_USAGE = """spark on -- the prompt line answers again
 
   spark on                    ? words and words? go to the model again
 """

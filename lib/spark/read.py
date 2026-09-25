@@ -59,8 +59,8 @@ READ_USAGE = """spark read -- what a source says, and only what it says (contrac
 
   spark read <words>          the answer, every line quoting the source
   spark read                  the same, asked what the source covers
-  --part N                    a source past 16000 chars is parts; read one,
-                              and the answer's first line names it
+  --part N                    a source past 16000 characters is parts; read
+                              one, and the answer's first line names it
   --name NAME                 the ledger's name for this source: the question
                               is recorded under it, never sent anywhere
   --ledger [clear] [--name NAME]  the questions asked, newest first;
