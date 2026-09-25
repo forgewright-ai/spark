@@ -62,14 +62,13 @@ _spark_complete() {
         forge)   words="on off status audit token" ;;
         bar)     words="line" ;;
         memory)  words="add forget clear on off status" ;;
-        check)   words="--watch --porcelain --selftest --fresh --fetch" ;;
+        check)   words="--watch --porcelain --report --fresh --fetch --selftest --chaos" ;;
         uninstall) words="--dry-run --yes --purge --packages --keep-packages" ;;
         serve)   words="on off status --foreground --host --print-client" ;;
         chat)    words="--thread" ;;
         do)      words="--sandbox --detach --porcelain --review --accept --discard" ;;
         soul)    words="show edit reset" ;;
         history) words="clear" ;;
-        tune)    words="show apply" ;;
         font)    words="list none status" ;;
         client)  words="off status" ;;
         user)    words="list add remove login logout token claim status" ;;

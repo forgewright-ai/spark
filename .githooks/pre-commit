@@ -78,13 +78,13 @@ for f in bootstrap.sh install.sh get .githooks/pre-commit .githooks/pre-push tes
     [ -f "$f" ] || continue
     sh -n "$f" || bad "sh -n $f"
 done
-if [ -f home/.config/spark/widget.bash ]; then
-    bash -n home/.config/spark/widget.bash home/.config/spark/completion.bash \
-        linux/home/.bashrc linux/home/.bash_profile 2>/dev/null \
-        || bad "bash -n widget.bash / completion.bash / .bashrc"
-fi
+# one file per call: `bash -n A B` parses A and hands B to it as $1
+for f in home/.config/spark/completion.bash home/.config/spark/hook.bash home/.config/spark/widget.bash; do
+    [ -f "$f" ] || continue
+    bash -n "$f" || bad "bash -n $f"
+done
 if command -v zsh >/dev/null 2>&1; then
-    for f in home/.config/spark/widget.zsh home/.config/spark/completion.zsh macos/home/.zshrc macos/home/.zprofile; do
+    for f in home/.config/spark/completion.zsh home/.config/spark/hook.zsh home/.config/spark/widget.zsh; do
         [ -f "$f" ] || continue
         zsh -n "$f" || bad "zsh -n $f"
     done
@@ -97,7 +97,7 @@ if ls bin/spark lib/spark/*.py tests/*.py >/dev/null 2>&1; then
 fi
 
 # --- 3. tests for this OS ------------------------------------------------
-for t in tests/smoke.py tests/serve_smoke.py tests/forge_smoke.py tests/bench_smoke.py tests/vault_test.py tests/sandbox_test.py tests/qr_test.py tests/docs_test.py; do
+for t in tests/smoke.py tests/serve_smoke.py tests/forge_smoke.py tests/bench_smoke.py tests/vault_test.py tests/sandbox_test.py tests/qr_test.py tests/docs_test.py tests/policy_test.py; do
     [ -f "$t" ] && { python3 "$t" >/dev/null || bad "$t"; }
 done
 if [ -f tests/widget_pty.py ]; then
