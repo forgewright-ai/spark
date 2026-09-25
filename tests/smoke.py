@@ -3278,7 +3278,7 @@ def main():
         # say the model, the page's server, the chat model, a spark app --
         # never brain, FORGE, the ember, a smart app -- and fit 80 columns.
         # The verbs help lists, plus the less often used ones it names.
-        _old = re.compile(r"\bbrain\b|\bthe ember\b|\ban ember\b|\bsmart (?:app|apps|os)\b|\bstranger", re.I)
+        _old = re.compile(r"\b(?:the|a) brain\b|\bthe ember\b|\ban ember\b|\bsmart (?:app|apps|os)\b|\bstranger", re.I)
         _verbs = sorted(set(re.findall(r"^ spark ([a-z]+)", out, re.M))
                         | {"last", "history", "stats", "bench", "status", "line", "explain", "recall", "off", "on"})
         _bad = []

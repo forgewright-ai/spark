@@ -97,7 +97,7 @@ USAGE_INTERFACE = """the interface
 
 USAGE_TAIL = """less often used
  spark                        last, history [clear], stats [--week|--sends],
-                              bench [tune [show|apply]] -- each has -h
+                              brain, bench [tune [show|apply]] -- each has -h
 
 docs/
  docs/INSTALL.md              every step and every key; docs/CHEATSHEET.txt
