@@ -118,9 +118,8 @@ class Ctx:
 
 # Two value areas cut across the categories: the AI infrastructure rows
 # (engine, models, serving, speed) and the core rows (the contracts, the
-# FORGE, identity, the machine's promises). The shell layer and the apps
-# have no row by design: each lives in its own repository, with its own
-# doctor where it needs one.
+# FORGE, identity, the machine's promises). An app has no row by design:
+# it lives in its own repository, with its own doctor where it needs one.
 # ------------------------------------------------------------ SOFTWARE rows
 @row("SOFTWARE", fixture=not IS_MAC, reason="the mac core installs no package; the Linux gates prove the row")
 def row_packages(ctx):
@@ -245,7 +244,7 @@ def _console_font_row(ctx):
 def row_font(ctx):
     """The console font choice (SITE_FONT_FACE, Linux) and the macOS
     Terminal face -- the machine's own; a terminal emulator's font is
-    spark-shell's business. WSL 2 has no console: the font is Windows
+    set in the emulator. WSL 2 has no console: the font is Windows
     Terminal's, the row says so and stops."""
     from . import site
     why = site.no_console_font()
@@ -286,7 +285,7 @@ def _env_lines(path):
     return out
 
 
-THEME_KEYS = (["THEME_BG", "THEME_FG", "THEME_ACCENT", "THEME_MUTED", "THEME_BTOP"]
+THEME_KEYS = (["THEME_BG", "THEME_FG", "THEME_ACCENT", "THEME_MUTED"]
               + ["THEME_ANSI_%d" % i for i in range(16)])
 
 
@@ -306,14 +305,13 @@ def _vt_palette(sysfs):
 
 @row("SOFTWARE")
 def row_theme(ctx):
-    """The chosen palette actually applied: ~/.config/spark/theme.env (what
-    tmux, starship, btop, micro and the FORGE page were fed) matches
-    the palette's file -- yours under ~/.config/spark/themes/ first, else
+    """The chosen palette actually applied: ~/.config/spark/theme.env (the
+    palette the FORGE page and any renderer read) matches the palette's
+    file -- yours under ~/.config/spark/themes/ first, else
     themes/<SITE_THEME>.env -- key for key, and on Linux console-colors (the
-    VT palette the rc hook applies) is in place. SITE_THEME is chosen
-    outside the shell gate, but the palette is only PAINTED with the layer
-    on or by `spark theme NAME`: a key naming a palette nothing has applied
-    yet is `na`, not a fault."""
+    VT palette the rc hook applies) is in place. A palette is only PAINTED
+    by `spark theme NAME`: a key naming one nothing has applied yet is
+    `na`, not a fault."""
     from . import CONFIG_DIR
     name = ctx.cfg.theme
     if name == "none":
@@ -603,14 +601,14 @@ def row_prompt(ctx):
     absent = [os.path.basename(f) for f in files if not os.path.isfile(f)]
     if absent:
         return warn("missing: %s" % " ".join(absent), "sh install.sh")
-    # the rc hook: spark's own rc file (a link), the one marked line, or neither
+    # the rc hook: the one marked line in the rc file, or not
     shell = site.login_shell()
     state, rc = site.rc_hook_state(shell)
     if state == "missing":
         if rc is None:
             return warn("shell %s: no widget for it" % shell, "bash 4+ or zsh hosts one (chsh -s /bin/zsh)")
         return warn("%s lacks the spark line" % ctx.short(rc), "./bootstrap.sh   (row rc), or paste: " + site.RC_LINE[shell])
-    via = "%s (%s)" % (ctx.short(rc), "hook" if state == "hook" else "own rc")
+    via = "%s (hook)" % ctx.short(rc)
     live = cli.live_widgets()
     if os.path.exists(OFF_FLAG):
         return na("switched off on purpose (spark on)")
@@ -1185,7 +1183,7 @@ def row_disk(ctx):
     u = shutil.disk_usage("/")
     free = u.free / 2**30
     if free < 5:
-        return warn("%.0f GB free on / -- critical" % free, "du -sh ~/*   (spark-shell's ncdu shows more)")
+        return warn("%.0f GB free on / -- critical" % free, "du -sh ~/*")
     if free < 20:
         return warn("%.0f GB free on /" % free, "du -sh ~/*")
     return ok("%.0f GB free on /" % free)
@@ -1622,14 +1620,13 @@ def make_fixture(root, good, stub_url="", real_spark=False):
     # the repository
     _stub(os.path.join(repo, "bootstrap.sh"), _STUB_BOOTSTRAP)
     _stub(os.path.join(repo, "install.sh"),
-          "#!/bin/sh\n" + ("printf 'ok             %s/.tmux.conf\\nNothing to do\\n' \"$HOME\"\n" if good
-                            else "printf 'would link     %s/.tmux.conf\\n1 to do\\n' \"$HOME\"\n"))
+          "#!/bin/sh\n" + ("printf 'ok             %s/.config/spark/widget.bash\\nNothing to do\\n' \"$HOME\"\n" if good
+                            else "printf 'would link     %s/.config/spark/widget.bash\\n1 to do\\n' \"$HOME\"\n"))
     if real_spark:
         os.symlink(os.path.join(REPO, "bin", "spark"), os.path.join(repo, "bin", "spark"))
     else:
         _stub(os.path.join(repo, "bin", "spark"), "#!/bin/sh\necho stub\n")
     os.symlink("spark", os.path.join(repo, "bin", "explain"))
-    open(os.path.join(repo, "Brewfile"), "w").close()
     # the package tables are data the packages row reads (packages.table):
     # the real files, so the row asks the stubbed manager for the real names
     shutil.copytree(os.path.join(REPO, "distro"), os.path.join(repo, "distro"))
@@ -1656,7 +1653,6 @@ def make_fixture(root, good, stub_url="", real_spark=False):
     os.makedirs(os.path.join(repo, "themes"))
     fixture_theme = ["%s=#%06x" % (k, 0x101010 + n) for n, k in enumerate(
         ["THEME_BG", "THEME_FG", "THEME_ACCENT", "THEME_MUTED"] + ["THEME_ANSI_%d" % i for i in range(16)])]
-    fixture_theme.append("THEME_BTOP=Default")
     # the good machine keeps the palette as its own (~/.config/spark/themes/),
     # the bad one in the repository: the row must find it in either place
     pal_dir = os.path.join(home, ".config", "spark", "themes") if good else os.path.join(repo, "themes")
@@ -1718,8 +1714,6 @@ def make_fixture(root, good, stub_url="", real_spark=False):
     # hook is armed); the bad one is a pre-hook shell -- the failure row
     with open(os.path.join(state, "widgets", str(os.getpid())), "w") as f:
         f.write("bash %d %d%s\n" % (os.getpid(), int(time.time()), " hook" if good else ""))
-    with open(os.path.join(state, "bar"), "w") as f:
-        json.dump({"t": time.time() if good else time.time() - 3600, "net": None, "line": "x"}, f)
     with open(os.path.join(state, "check.json"), "w") as f:
         json.dump({"ts": int(time.time()) - (10 if good else 3600), "counts": {}, "rows": []}, f)
     # throughput: a baseline and three turns near it (good) or at 30 % of it (bad)
@@ -1834,14 +1828,12 @@ def make_fixture(root, good, stub_url="", real_spark=False):
                       ("mem_info_gtt_used", 0), ("mem_info_gtt_total", 8 * 2**30)):
         with open(os.path.join(drm, name), "w") as f:
             f.write("%d\n" % val)
-    _stub(os.path.join(bin_, "tmux"), "#!/bin/sh\nexit 0\n")
     if good:
         for name in ("spark", "explain"):
             os.symlink(os.path.join(repo, "bin", name), os.path.join(home, ".local", "bin", name))
         _stub(os.path.join(engine, "llama-server"), "#!/bin/sh\nexit 0\n")
         with open(os.path.join(engine, "flavour"), "w") as f:     # the engine row names the tarball's flavour
             f.write("fixture-x64\n")
-        _stub(os.path.join(home, ".local", "bin", "starship"), "#!/bin/sh\nexit 0\n")   # where bootstrap pins it
         for sh in ("bash", "zsh"):
             # the failure row wants the exit-code hook's sentinel in each
             # widget (the bad fixture has no widgets at all, so both the

@@ -54,7 +54,7 @@ import time
 
 from . import (ACCOUNT_KEY_FILE, EMBER_TOKEN_FILE, MARK, SHARE_TOKEN, TOKEN_FILE, config, die, glyph, page,
                paint, say)
-from . import bar, forge, persona, reveal, sandbox, session, users, wire
+from . import forge, persona, reveal, sandbox, session, users, wire
 from . import text as textmod
 from .cli import _one_line, _short
 
@@ -990,7 +990,6 @@ def _drive(face, cfg, thread, goal, text, shell, cwd, box=None, timeout=None):
             try:
                 reply, ms, s = face.think(lambda: propose(cfg, thread, text, shell, cwd, history, landed=landed))
             except wire.BrainError as e:
-                bar.prompt_state(cfg, ai="down")
                 face.brain(e.hint)
                 return 1, "error", e.hint
             landed = False

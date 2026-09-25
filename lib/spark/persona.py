@@ -324,8 +324,7 @@ KNOW_SHELL = (
     "cmd | explain; spark read WORDS < text; spark ask < plan; spark drill < text; "
     "stream | spark watch WORDS; spark edit (an editor's); spark bar (the status line). "
     "Settings live in ~/.config/spark/spark.env (SPARK_REVEAL, SPARK_MAX_TOKENS, "
-    "SPARK_TIMEOUT, SPARK_HISTORY) and site.env; the shell look is spark-shell's "
-    "(spark-shell on|off|apply|desktop|theme follows spark theme)."
+    "SPARK_TIMEOUT, SPARK_HISTORY) and site.env."
 )
 KNOW_CHAT = (
     "You run as spark; when asked how to change or run spark itself, these are "
@@ -345,8 +344,7 @@ KNOW_CHAT = (
     "SPARK_REVEAL in ~/.config/spark/spark.env (the settings file, with "
     "SPARK_MAX_TOKENS, SPARK_TIMEOUT, SPARK_HISTORY).\n"
     "The look: spark theme NAME -- the palette; spark font FACE SIZE -- the "
-    "console font; spark bar -- the status line; the shell layer is spark-shell "
-    "(spark-shell on|off|apply|desktop), which follows spark theme."
+    "console font; spark bar -- the status line."
 )
 MODE_DO = (
     "You are completing a task in steps. Propose ONE shell command as kind=cmd with a one-line `hint` "

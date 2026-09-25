@@ -1,7 +1,7 @@
 # spark.uninstall -- `spark uninstall`: take spark off this machine.
 #
-# Everything spark made goes: the units, the look, the console palette, the
-# rc line, the engine and the models, the state, the links, the clone.
+# Everything spark made goes: the units, the console palette, the rc
+# line, the engine and the models, the state, the links, the clone.
 # What is yours stays -- the soul, the memory, the sealed users' stores
 # (and the account keys that open them), your models.env, your themes,
 # privacy-terms -- unless --purge. The packages spark installed are a
@@ -112,20 +112,6 @@ def _spark_link(path):
     return site._spark_link(path)
 
 
-def _restore_or_remove(ctx, what, path):
-    """A rendered file of ours: back from its .bak, or removed (never a husk)."""
-    bak = path + ".bak"
-    if ctx.dry:
-        ctx.row("would", what, "%s: %s" % (_tilde(path), "back from .bak" if os.path.lexists(bak) else "removed"))
-        return
-    os.remove(path)
-    if os.path.lexists(bak):
-        os.rename(bak, path)
-        ctx.row("ok", what, "%s restored from its .bak" % _tilde(path))
-    else:
-        ctx.row("ok", what, "%s removed (no .bak: there was no file before)" % _tilde(path))
-
-
 def _rmdir_empty(path):
     try:
         if os.path.isdir(path) and not os.listdir(path):
@@ -230,29 +216,8 @@ def step_services(ctx):
 
 
 def step_look(ctx):
-    """What older sparks left in the way: rc symlinks a pre-cut shell
-    layer made (the shell-moved bootstrap row's twin, kept one release),
-    and the old plugin links. The rendered look is spark-shell's now."""
-    from . import site
-    if ctx.dry:
-        for name in site.RC_FILES:
-            path = os.path.join(HOME, name)
-            if _spark_link(path):
-                ctx.row("would", "rc", "%s: spark's link goes, %s" % (_tilde(path), "back from .bak" if os.path.lexists(path + ".bak") else "removed"))
-    else:
-        for path, what in site.restore_rc():
-            ctx.row("ok", "rc", "%s -- %s" % (_tilde(path), what))
-    # a pre-cut render of ours (".gitconfig, rendered by spark") goes back
-    # to its .bak too -- kept one release, like the rc half above
-    gitconfig = os.path.join(HOME, ".gitconfig")
-    try:
-        with open(gitconfig, encoding="utf-8", errors="replace") as f:
-            ours = "rendered by spark" in f.read()
-    except OSError:
-        ours = False
-    if ours and not os.path.islink(gitconfig):
-        _restore_or_remove(ctx, "look", gitconfig)
-    # a pre-v1.10 install's plugin links (the micro bootstrap row's twin)
+    """What an older spark left in the way: a pre-v1.10 install's plugin
+    links (the micro bootstrap row's twin)."""
     plug = os.path.join(HOME, ".config", "micro", "plug", "spark")
     if _spark_link(os.path.join(plug, "spark.lua")):
         if ctx.dry:

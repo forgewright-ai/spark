@@ -22,7 +22,7 @@ echo "install_test: $T"
 out=$(run --dry-run)
 if printf '%s\n' "$out" | grep -qE '^(ok|link|render|back up) '; then bad "dry-run printed a non-would row"; else ok "dry-run prints only would rows"; fi
 printf '%s\n' "$out" | grep -q '^would link .*\.config/spark/spark.env.example$' && ok "would link a home/ file" || bad "would link"
-printf '%s\n' "$out" | grep -q '^would .*\.gitconfig$' && bad ".gitconfig announced" || ok "no .gitconfig row (the look is spark-shell's)"
+printf '%s\n' "$out" | grep -q '^would .*\.gitconfig$' && bad ".gitconfig announced" || ok "no .gitconfig row (spark renders none)"
 [ ! -e "$HOME/.config/spark/spark.env.example" ] && ok "dry-run created nothing" || bad "dry-run wrote a file"
 printf '%s\n' "$out" | tail -1 | grep -qE '^[0-9]+ to do$' && ok "dry-run summary line" || bad "summary line"
 
@@ -36,7 +36,7 @@ done
 for f in .bashrc .bash_profile .zshrc .zprofile .config/micro .gitconfig .tmux.conf .config/btop .config/starship.toml; do
     [ ! -e "$HOME/$f" ] && [ ! -L "$HOME/$f" ] || bad "$f was installed"
 done
-ok "no rc file, no .gitconfig, .tmux.conf, btop or starship"
+ok "no rc file, no dotfile of another tool"
 case $(uname -s) in
     Darwin) [ -f "$HOME/.config/spark/launchd/spark.serve.plist" ] && ok "plists rendered on macOS" || bad "plist"
             [ -f "$HOME/.config/spark/launchd/spark.forge.plist" ] && ok "spark.forge.plist rendered too" || bad "forge plist"
@@ -132,7 +132,7 @@ printf '%s\n' "$out" | grep -qE '^skip +hostname +SITE_SET_HOSTNAME=no' && ok "t
 printf '%s\n' "$out" | grep -qE ' micro-aspell ' && bad "a micro-aspell row survives (spark ships no app)" || ok "no micro-aspell row: spark installs no editor"
 printf '%s\n' "$out" | grep -qE "^would +dir +mkdir .*/projects" && bad "the workspace folder would be made" || ok "no workspace folder for a new user"
 [ "$(uname -s)" = Darwin ] && { printf '%s\n' "$out" | grep -qE '^ok +packages +nothing required' && ok "macOS: packages row is ok, nothing required" || bad "macOS packages row"; }
-[ -z "$(sh "$REPO/bootstrap.sh" --list-packages | grep -E '^(tmux|starship|bat|eza|fzf|btop)$')" ] && ok "--list-packages has no shell tool (spark-shell installs those)" || bad "--list-packages lists a shell tool"
+[ -z "$(sh "$REPO/bootstrap.sh" --list-packages | grep -E '^(tmux|starship|bat|eza|fzf|btop)$')" ] && ok "--list-packages has no shell tool (spark installs none)" || bad "--list-packages lists a shell tool"
 [ -z "$(sh "$REPO/bootstrap.sh" --list-packages | grep -E '^(micro|aspell|aspell-en|shellcheck)$')" ] && ok "no editor, no contributor tool in --list-packages" || bad "--list-packages still lists micro/aspell/shellcheck"
 # the sh twin's precedence matches python: a key in BOTH files -- the
 # later file of config.py's update order (spark.env) wins in lib/env.sh too
@@ -163,14 +163,23 @@ out=$(PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootst
 printf '%s\n' "$out" | grep -qE '^(skip|would) +sleep ' && ok "SITE_HEADLESS=no: sleep row is skip (or would undo)" || bad "no sleep row for SITE_HEADLESS=no"
 [ "$(uname -s)" = Darwin ] || { printf '%s\n' "$out" | grep -qE '^skip +(linger|systemd) ' && ok "SITE_HEADLESS=no: linger is skipped (or no user systemd session)" || bad "linger row with SITE_HEADLESS=no"; }
 printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "dry-run called sudo" || ok "dry-run never called sudo (workstation)"
-# the shell-moved migration: an rc file symlinked into this repository (an
-# older shell layer's) is announced for hand-back; the rc row names it
-case $(uname -s) in Darwin) rc=.zshrc ;; *) rc=.bashrc ;; esac
-ln -sfn "$REPO/$([ "$rc" = .zshrc ] && echo macos || echo linux)/home/$rc" "$HOME/$rc"
-out=$(PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (rc linked) failed"
-printf '%s\n' "$out" | grep -qE '^would +shell-moved +the shell layer moved to github.com/forgewright-ai/spark-shell' && ok "shell-moved: the migration row announces the hand-back" || bad "shell-moved row: $(printf '%s\n' "$out" | grep -E ' shell-moved ' | head -1)"
-printf '%s\n' "$out" | grep -qE "^ok +rc +~/$rc is a symlink into this repo" && ok "rc: a repo symlink is named (shell-moved hands it back)" || bad "rc: linked: $(printf '%s\n' "$out" | grep -E ' rc ')"
-printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "dry-run called sudo (rc linked)" || ok "dry-run never called sudo (rc linked)"
+# an rc file that is a symlink of yours (a dotfiles folder) is a file like
+# any other: the rc row would append the hook line through the link when
+# the target lacks it, and finds it there when it has it -- no migration
+# row, no hand-back
+case $(uname -s) in Darwin) rc=.zshrc; hook='[[ -r ~/.config/spark/hook.zsh ]] && source ~/.config/spark/hook.zsh   # spark: the AI at the prompt' ;;
+                     *) rc=.bashrc; hook='[ -r ~/.config/spark/hook.bash ] && . ~/.config/spark/hook.bash   # spark: the AI at the prompt' ;;
+esac
+mkdir -p "$T/dotfiles"
+printf '# my rc, kept in a dotfiles folder\n' > "$T/dotfiles/$rc"
+ln -sfn "$T/dotfiles/$rc" "$HOME/$rc"
+out=$(PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (rc symlink) failed"
+printf '%s\n' "$out" | grep -qE ' shell-moved ' && bad "a shell-moved row survives" || ok "no migration row: a symlinked rc is yours"
+printf '%s\n' "$out" | grep -qE "^would +rc +add one line to ~/$rc" && ok "rc: a symlinked rc without the line would get it appended" || bad "rc: symlink: $(printf '%s\n' "$out" | grep -E ' rc ')"
+printf '\n%s\n' "$hook" >> "$T/dotfiles/$rc"
+out=$(PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (rc symlink, hooked) failed"
+printf '%s\n' "$out" | grep -qE "^ok +rc +~/$rc sources the hook" && ok "rc: a symlinked rc that has the line is found through the link" || bad "rc: symlink hooked: $(printf '%s\n' "$out" | grep -E ' rc ')"
+printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "dry-run called sudo (rc symlink)" || ok "dry-run never called sudo (rc symlink)"
 rm -f "$HOME/$rc"
 
 # 8. bootstrap --list-models names both roles' picks (the choosing rule;

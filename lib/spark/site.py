@@ -1,10 +1,9 @@
 # spark.site -- the site.env custodian and the machine-shape verbs:
 # set_keys/apply (every choice lands through them), the rc-hook custody,
 # `spark font`, `spark quiet`, `spark headless`, `spark client` (and
-# `spark theme` in theme.py, `spark model`/`ember` in model.py, `spark
-# shell` in shell.py). Each writes the key, then runs bootstrap.sh so the
-# machine follows; editing site.env by hand and running bootstrap does
-# the same thing.
+# `spark theme` in theme.py, `spark model`/`ember` in model.py). Each
+# writes the key, then runs bootstrap.sh so the machine follows; editing
+# site.env by hand and running bootstrap does the same thing.
 
 import gzip
 import os
@@ -199,8 +198,8 @@ def apply(rows, stream=False):
 
 
 # ------------------------------------------------------------------- font
-# Core, not the shell layer: the console is the machine's face whether or
-# not spark owns the shell (a terminal emulator's font is spark-shell's).
+# The console is the machine's face: its font is spark's to set (a
+# terminal emulator's font is set in the emulator).
 FONT_USAGE = """%s font -- the terminal's font
 
   spark font                    what is set
@@ -793,14 +792,12 @@ def _login_hint(url):
 
 
 # --------------------------------------------------------------------- rc
-# The core rc hook: bootstrap's `rc` row appends one marked line to the
-# login shell's rc file; `spark shell on` may replace that file with spark's
-# own symlink; `spark shell off` hands it back (restore_rc). Pure functions:
+# The rc hook: bootstrap's `rc` row appends one marked line to the login
+# shell's rc file -- yours, a file or a symlink alike. Pure functions:
 # the callers print the rows.
 RC_MARKER = "config/spark/hook."
 RC_LINE = {"bash": "[ -r ~/.config/spark/hook.bash ] && . ~/.config/spark/hook.bash   # spark: the AI at the prompt",
            "zsh": "[[ -r ~/.config/spark/hook.zsh ]] && source ~/.config/spark/hook.zsh   # spark: the AI at the prompt"}
-RC_FILES = (".zshrc", ".zprofile") if IS_MAC else (".bashrc", ".bash_profile")
 
 
 def login_shell():
@@ -832,14 +829,12 @@ def _spark_link(path):
 
 
 def rc_hook_state(shell):
-    """("link" | "hook" | "missing", path): the rc file is spark's own
-    symlink, sources the hook (the marker line), or lacks it (path None
-    for a shell without an rc file to hook)."""
+    """("hook" | "missing", path): the rc file sources the hook (the
+    marker line) or lacks it (path None for a shell without an rc file
+    to hook)."""
     path = rc_file(shell)
     if not path:
         return ("missing", None)
-    if _spark_link(path):
-        return ("link", path)
     try:
         with open(path, encoding="utf-8", errors="replace") as f:
             if RC_MARKER in f.read():
@@ -847,37 +842,6 @@ def rc_hook_state(shell):
     except OSError:
         pass
     return ("missing", path)
-
-
-def restore_rc():
-    """spark shell off: every rc file of this OS that is spark's symlink goes
-    back to the user -- the link removed, <file>.bak moved back when it
-    exists, else the file is gone (that was the pre-spark state). An empty
-    ~/.bash_profile is a trap, not a restore: a bash login shell stops
-    there and ~/.profile -- the one that sources ~/.bashrc and the hook --
-    never runs, so spark vanishes from a console login. The rc row
-    recreates ~/.bashrc with the hook line right after. Returns
-    [(path, what)]."""
-    done = []
-    for name in RC_FILES:
-        path = os.path.join(HOME, name)
-        if not _spark_link(path):
-            continue
-        os.unlink(path)
-        bak = path + ".bak"
-        if os.path.lexists(bak):
-            os.rename(bak, path)
-            done.append((path, "restored from %s.bak" % name))
-        else:
-            done.append((path, "removed (no %s.bak: there was no file before)" % name))
-    return done
-
-
-def cmd_shell_gone(args):
-    """The shell layer moved to its own repository (one release of
-    pointer, like the v1.10 micro row): one signed line, exit 2."""
-    say("%s shell -- moved: the shell layer lives at github.com/forgewright-ai/spark-shell" % MARK)
-    return 2
 
 
 def main(sub, args):

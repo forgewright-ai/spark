@@ -180,7 +180,6 @@ def _paste_verdict(shell):
             s = session.Session(cfg, "paste", shell, "", role="spark")
             reply, ms = s.ask_json(data, persona.PASTE_SCHEMA, max_tokens=120)
     except wire.BrainError as e:
-        bar.prompt_state(cfg, ai="down")
         if local_danger:
             say("danger")
             say(_one_line("a pasted line can destroy -- read it before Enter", ANSWER_MAX))
@@ -312,7 +311,6 @@ def cmd_line(args):
             s = session.Session(cfg, "line", shell, cwd, history)
             reply, ms = s.ask_json(ask_text)
         except wire.BrainError as e:
-            bar.prompt_state(cfg, ai="down")
             busy.stop()
             say("error")
             say(_one_line(e.hint))
@@ -436,8 +434,6 @@ def stream_turn(cfg, mode, text, files=(), context="", thread=None, line=None, m
         thread, _, _ = forge.reply(cfg, thread, text, files, os.getcwd(), _shell_default(), mode, feed, context, line)
     except (wire.BrainError, KeyboardInterrupt) as e:
         busy.stop()
-        if isinstance(e, wire.BrainError):
-            bar.prompt_state(cfg, ai="down")
         wrap.close()
         raise
     finally:

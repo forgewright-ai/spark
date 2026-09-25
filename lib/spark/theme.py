@@ -109,7 +109,7 @@ def show(cfg):
     pal = palette(cfg)
     say("%s theme show -- %s" % (MARK, cfg.theme))
     if not pal:
-        say("  SITE_THEME=none: the terminal keeps its own colours -- tmux and starship use named ones")
+        say("  SITE_THEME=none: the terminal keeps its own colours")
         return 0
     for k in ("THEME_BG", "THEME_FG", "THEME_ACCENT", "THEME_MUTED"):
         say("  %-13s %s" % (k[6:].lower(), pal[k]))
@@ -307,8 +307,8 @@ def write_runtime(name):
     set_theme only -- `spark theme NAME`, and `spark setup` through it
     when a theme was chosen (one writer; bootstrap's theme row paints
     nothing, it reports whether theme.env is there):
-      theme.env       KEY=value, what tmux/starship/btop were rendered from
-                      and what the FORGE page reads (removed for `none`)
+      theme.env       KEY=value, the palette: what the FORGE page and any
+                      renderer read (removed for `none`)
       console-colors  the Linux VT palette, precomputed: \\033]P<n><rrggbb>
                       per ansi colour 0-15 -- what a user can print on their
                       own VT: apply_console now (then a redraw), the rc hook
@@ -333,7 +333,7 @@ def write_runtime(name):
                 f.write(vt_lines(VGA))
         return
     pal = config.theme_palette(name, REPO)
-    order = (["THEME_BG", "THEME_FG", "THEME_ACCENT", "THEME_MUTED", "THEME_BTOP"] + ["THEME_ANSI_%d" % i for i in range(16)]
+    order = (["THEME_BG", "THEME_FG", "THEME_ACCENT", "THEME_MUTED"] + ["THEME_ANSI_%d" % i for i in range(16)]
              + ["THEME_LOGO"])          # optional: present only when the palette names it
     with open(theme_env, "w", encoding="utf-8") as f:       # bootstrap's order, so it agrees
         f.write("".join("%s=%s\n" % (k, pal[k]) for k in order if k in pal))
@@ -384,10 +384,9 @@ def apply_console():
 
 
 def set_theme(name):
-    """`spark theme NAME`: choose it in site.env, write theme.env and
-    console-colors; macOS also gets the Terminal profile. The rendered
-    look (tmux, starship, btop, micro) is spark-shell's: it reads
-    theme.env and re-renders on `spark-shell apply`. SPARK_NO_APPLY=1
+    """`spark theme NAME`: choose it in site.env, write theme.env (the
+    palette: what the FORGE page and any renderer read) and
+    console-colors; macOS also gets the Terminal profile. SPARK_NO_APPLY=1
     (tests) writes the key and the two runtime files only: nothing
     outside $HOME/.config/spark, no Terminal.app."""
     if name != "none" and name not in palettes():
@@ -407,19 +406,17 @@ def set_theme(name):
         profile(config.load(), False)
     from . import check
     check.refresh()
-    # nothing in a running shell holds the palette but the prompt's
-    # colour: starship re-reads its config on every prompt and the hook
-    # reads console-colors alone, while the widget's accent is the rc's
-    # own export (spark-shell renders it) -- a new shell after apply.
-    say("the next prompt has it; the prompt's colour: spark-shell apply, then a new shell")
+    # a running shell holds only what its rc exported (the three
+    # SPARK_*_SGR, if any): the palette lands at the next prompt
+    say("the next prompt has it")
     return 0
 
 
 USAGE = """%s theme -- the palette SITE_THEME chose
 
   spark theme                  the palettes, and which one is current
-  spark theme NAME             choose one (or none): site.env, tmux, starship,
-                               btop, theme.env
+  spark theme NAME             choose one (or none): site.env, theme.env,
+                               the console
   spark theme show             the current palette's colours
   spark theme profile          macOS: a Terminal.app profile, imported, default
 """ % MARK

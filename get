@@ -76,7 +76,7 @@ main() {
             if [ -x "$d/brew" ]; then PATH="$d:$PATH"; export PATH; break; fi
         done
         command -v brew >/dev/null 2>&1 \
-            || notice "no Homebrew: fine for the AI; spark shell on wants it (https://brew.sh)"
+            || notice "no Homebrew: fine for the AI"
     fi
 
     if [ -x "$dir/bin/spark" ] && [ -d "$dir/.git" ]; then

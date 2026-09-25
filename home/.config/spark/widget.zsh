@@ -58,8 +58,8 @@ _spark_is_question() {
 }
 
 # --- colour: three optional exports, plain without them ---------------------
-# SPARK_ACCENT_SGR / SPARK_WARN_SGR are SGR parameter strings (`1;94`) a
-# shell layer exports from its palette (spark-shell does); unset, or not
+# SPARK_ACCENT_SGR / SPARK_WARN_SGR are SGR parameter strings (`1;94`);
+# any rc may export them from a palette. Unset, or not
 # digits and semicolons, the line stays plain. The text is cut to the
 # width first, then painted: the escapes never count as columns. A
 # `* ...` line gets the mark alone in the accent; a `! ...` line is
