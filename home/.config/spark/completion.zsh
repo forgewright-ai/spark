@@ -1,7 +1,7 @@
 # spark completion.zsh -- TAB completes spark's verbs and their names.
 # Self-contained and sourced by hook.zsh. Registered only when compinit is
-# live -- with the layer off nothing here runs compinit, and this
-# file degrades silently (functions defined, nothing bound). Offline
+# live -- nothing here runs compinit, so without it this file degrades
+# silently (functions defined, nothing bound). Offline
 # always, no python: the dynamic names come from the repository
 # `command -v spark` links into (readlink), themes by glob, models by sed
 # over the four model lists; when any of that fails, the static words
@@ -41,7 +41,6 @@ _spark_model_names() {
 }
 
 # lua: excluded on purpose -- not a verb anyone is told about
-# shell, bar on|off: moved to spark-shell -- the stubs answer for one release
 _spark() {
     local -a comp
     if (( CURRENT == 2 )); then

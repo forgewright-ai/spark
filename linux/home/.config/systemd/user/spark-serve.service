@@ -6,7 +6,7 @@ Description=spark serve -- local llama-server for this LAN
 After=network-online.target
 
 [Service]
-# the user's tools (starship, the engine, spark itself) live in ~/.local/bin
+# the user's tools (the engine, spark itself) live in ~/.local/bin
 Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 Type=simple
 ExecStart=%h/.local/bin/spark serve --foreground

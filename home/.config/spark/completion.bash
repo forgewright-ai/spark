@@ -40,7 +40,6 @@ _spark_model_names() {
 }
 
 # lua: excluded on purpose -- not a verb anyone is told about
-# shell, bar on|off: moved to spark-shell -- the stubs answer for one release
 _spark_complete() {
     local cur words
     cur=${COMP_WORDS[COMP_CWORD]}

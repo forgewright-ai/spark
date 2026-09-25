@@ -26,7 +26,7 @@ fails = []
 # new user reads (the voice checks below); and every doc
 ROOT_DOCS = ("README.md", "CREDITS.md", "CLAUDE.md", "AGENTS.md")
 CORE_IN_DOCS = ("INSTALL.md", "CHEATSHEET.txt", "CHANGELOG.md", "ROADMAP.md", "CONTRIBUTING.md")
-BESIDE = ("TOUR.md", "APPS.md", "SHELL.md", "IDEAS.md", "TROUBLESHOOTING.md")
+BESIDE = ("TOUR.md", "APPS.md", "IDEAS.md", "TROUBLESHOOTING.md")
 DOCS_DIR = CORE_IN_DOCS + BESIDE
 CUSTOMER_DOCS = ("README.md", "docs/INSTALL.md", "docs/CHEATSHEET.txt", "docs/TOUR.md", "docs/TROUBLESHOOTING.md")
 ALL_DOCS = ROOT_DOCS + tuple("docs/" + f for f in DOCS_DIR) + ("site.env.example",)
@@ -152,7 +152,7 @@ def main():
     for m in re.finditer(r'(?m)^(MODEL_[A-Z_0-9]+_GROUND)="?([^"\n]*)"?\s*$', read("models.env")):
         check(re.match(r"^\d+/\d+ \d{4}-\d{2}-\d{2}$", m.group(2)) is not None,
               "models.env: %s is '<kept>/<run> <YYYY-MM-DD>' (got %r)" % (m.group(1), m.group(2)))
-    # the split by category CLAUDE.md states ("12 SOFTWARE, 17 CAPABILITY, 9 NONFUNCTIONAL")
+    # the split by category CLAUDE.md states ("11 SOFTWARE, 20 CAPABILITY, 9 NONFUNCTIONAL")
     src_rows = read(os.path.join("lib", "spark", "check.py"))
     for cat in ("SOFTWARE", "CAPABILITY", "NONFUNCTIONAL"):
         n_cat = len(re.findall(r'^@row\("%s"' % cat, src_rows, re.M))
@@ -246,7 +246,7 @@ def main():
               "docs/CHANGELOG.md: the top section v%d.%d is the newest tag v%s or the next release" % (major, minor, tag))
     # the customer-facing docs speak two nouns, spark and spark apps: the
     # names the code keeps (the FORGE, an ember, the brain, the seed) stay
-    # in the maintainer's docs; no doc calls the shell layer frozen or
+    # in the maintainer's docs; no doc calls anything frozen or
     # deprecated, and nobody is called a stranger
     taxonomy = r"\b(the|a) forge\b|\b(the|an) ember\b|\bthe brain\b|\bsmart (app|apps|os)\b|\bthe seed\b"
     for doc in CUSTOMER_DOCS:
@@ -259,8 +259,8 @@ def main():
     for doc in ALL_DOCS:
         check(not re.search(r"\bfactor(y|ies)\b", read(doc), re.I), "%s: no factory" % doc)
     # docs/APPS.md is where the apps live now: the customer docs a new user
-    # reads are the core, and the apps and the shell layer are beside it, in
-    # their own files, outside the landing rule. Every app it names
+    # reads are the core, and the apps are beside it, in their own file,
+    # outside the landing rule. Every app it names
     # still has to be credited -- that one is not optional; the page front
     # checks itself the same way where the page is rendered.
     apps = sorted(set(re.findall(r"github\.com/forgewright-ai/(spark-[a-z0-9]+)", read("docs/APPS.md"))))
@@ -268,8 +268,8 @@ def main():
     for app in apps:
         for doc in ("CREDITS.md",):
             check(app in read(doc), "%s names %s (docs/APPS.md does)" % (doc, app))
-    # docs/ holds exactly the ten: the five core docs that moved there with
-    # v1.38 and the five beside the core. A beside doc says it is not tied
+    # docs/ holds exactly the nine: the five core docs that moved there with
+    # v1.38 and the four beside the core. A beside doc says it is not tied
     # to a release (so nobody files it back under the landing rule); a core
     # doc there does NOT (it is still release-gated); every one is in
     # CLAUDE.md's Layout and is pointed to -- a doc nobody is sent to is dead
@@ -332,6 +332,15 @@ def main():
     for doc in ROOT_DOCS + ("docs/INSTALL.md", "docs/CHEATSHEET.txt", "docs/CONTRIBUTING.md", "docs/ROADMAP.md", "site.env.example"):
         check(not re.search(r"embers\.env|community\.env|\bcurated\b|PKG_QA|PKG_EDITOR|micro-aspell|\bbootconfig\b|SITE_SHELL|PKG_SHELL|PKG_CLI", read(doc)),
               "%s: no retired list word" % doc)
+    # v1.48: the core knows nothing of a shell layer, and neither does a
+    # doc -- the generic contracts (theme.env, the console, the three
+    # SPARK_*_SGR variables, spark bar line) are described as generic; the
+    # CHANGELOG alone keeps the history
+    for doc in ALL_DOCS:
+        if doc == "docs/CHANGELOG.md":
+            continue
+        m = re.search(r"spark-shell|(?i:shell layer)|SHELL\.md|THEME_BTOP", read(doc))
+        check(m is None, "%s: no shell layer%s" % (doc, " (found '%s')" % m.group(0) if m else ""))
     # contract 9: the route table CLAUDE.md prints is forgeserve.ROUTES,
     # entry for entry -- a route added without its row, or a row without
     # its route, fails here (the block is METHOD  PATH  ROLE lines)

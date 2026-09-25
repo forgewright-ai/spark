@@ -49,7 +49,7 @@ TALE_FILES = (os.path.join(CONFIG_DIR, "tale"), os.path.join(REPO, "home", ".con
 PALETTE_NAME = "canarinho"
 PALETTE = (
     "# Canarinho -- spark's own, written by the one who crossed the forest (MIT, like spark)",
-    "THEME_BG=#0a1a33", "THEME_FG=#f4f4ec", "THEME_ACCENT=#ffdf00", "THEME_MUTED=#4c6e5a", "THEME_BTOP=Default",
+    "THEME_BG=#0a1a33", "THEME_FG=#f4f4ec", "THEME_ACCENT=#ffdf00", "THEME_MUTED=#4c6e5a",
     "THEME_ANSI_0=#11233f", "THEME_ANSI_1=#d94f4f", "THEME_ANSI_2=#009c3b", "THEME_ANSI_3=#ffdf00",
     "THEME_ANSI_4=#2e6fd6", "THEME_ANSI_5=#a86fcf", "THEME_ANSI_6=#3aa6a6", "THEME_ANSI_7=#d8dccf",
     "THEME_ANSI_8=#3d5a80", "THEME_ANSI_9=#f07070", "THEME_ANSI_10=#33cc66", "THEME_ANSI_11=#ffe94d",

@@ -6,7 +6,6 @@
 #
 # load_env FILE      set every KEY the environment does not already set
 # site_load          load ~/.config/spark/site.env, then apply defaults
-# theme_load REPO    export THEME_* for $SITE_THEME (a palette, or neutral)
 
 SPARK_CONFIG_DIR=${XDG_CONFIG_HOME:-$HOME/.config}/spark
 SPARK_STATE_DIR=${XDG_STATE_HOME:-$HOME/.local/state}/spark
@@ -76,34 +75,4 @@ site_load() {
     export SITE_NAME SITE_USER SITE_SET_HOSTNAME SITE_THEME \
            SITE_AI_MODEL SITE_EMBER_MODEL SITE_AI_BUDGET SITE_AI_BUILD \
            SITE_FONT_FACE SITE_FONT_SIZE SITE_QUIET_LOGIN SITE_QUIET_BOOT SITE_QUIET_START SITE_QUIET_AUDIO SITE_HEADLESS SITE_SHARE SITE_PEER_AI_URL SITE_PEER_SSH
-}
-
-THEME_KEYS="THEME_BG THEME_FG THEME_ACCENT THEME_MUTED THEME_BTOP THEME_ANSI_0 THEME_ANSI_1 THEME_ANSI_2 THEME_ANSI_3 THEME_ANSI_4 THEME_ANSI_5 THEME_ANSI_6 THEME_ANSI_7 THEME_ANSI_8 THEME_ANSI_9 THEME_ANSI_10 THEME_ANSI_11 THEME_ANSI_12 THEME_ANSI_13 THEME_ANSI_14 THEME_ANSI_15"
-
-theme_load() {
-    if [ "$SITE_THEME" = none ]; then
-        # names both tmux and starship understand: the terminal's own colours
-        THEME_BG=default THEME_FG=default THEME_ACCENT=blue THEME_MUTED=white THEME_BTOP=Default
-        THEME_ANSI_0=black THEME_ANSI_1=red THEME_ANSI_2=green THEME_ANSI_3=yellow
-        THEME_ANSI_4=blue THEME_ANSI_5=magenta THEME_ANSI_6=cyan THEME_ANSI_7=white
-        THEME_ANSI_8=black THEME_ANSI_9=red THEME_ANSI_10=green THEME_ANSI_11=yellow
-        THEME_ANSI_12=blue THEME_ANSI_13=magenta THEME_ANSI_14=cyan THEME_ANSI_15=white
-    else
-        # yours first (~/.config/spark/themes), then the repository's:
-        # config.theme_path is the python twin
-        f="$SPARK_CONFIG_DIR/themes/$SITE_THEME.env"
-        [ -f "$f" ] || f="$1/themes/$SITE_THEME.env"
-        if [ ! -f "$f" ]; then
-            printf 'spark: SITE_THEME=%s: no such palette (themes/*.env, ~/.config/spark/themes/*.env)\n' "$SITE_THEME" >&2
-            return 1
-        fi
-        load_env "$f" || return 1
-    fi
-    for k in $THEME_KEYS; do
-        eval "v=\${$k:-}"
-        if [ -z "$v" ]; then printf 'spark: theme %s lacks %s\n' "$SITE_THEME" "$k" >&2; return 1; fi
-        export "${k?}"
-    done
-    # THEME_LOGO is optional: the banner's row colours (spark ver), else its own
-    [ -z "${THEME_LOGO:-}" ] || export THEME_LOGO
 }

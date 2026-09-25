@@ -1854,7 +1854,7 @@ def main():
         # the Terminal.app profile carries the keys micro needs
         from spark import theme as thememod
         fixture_pal = dict(("THEME_ANSI_%d" % i, "#%02x%02x%02x" % (i, i, i)) for i in range(16))
-        fixture_pal.update({"THEME_BG": "#111111", "THEME_FG": "#eeeeee", "THEME_ACCENT": "#ff0000", "THEME_MUTED": "#888888", "THEME_BTOP": "Default"})
+        fixture_pal.update({"THEME_BG": "#111111", "THEME_FG": "#eeeeee", "THEME_ACCENT": "#ff0000", "THEME_MUTED": "#888888"})
         pd = thememod.profile_dict("spark-fixture", fixture_pal, "Menlo", 13)
         t.ok(pd.get("useOptionAsMetaKey") is True and pd["keyMapBoundKeys"]["$F701"] == "\x1b[1;2B" and len(pd["keyMapBoundKeys"]) == 8,
              "profile: Option is Meta and Shift/Ctrl arrows are bound", json.dumps(pd.get("keyMapBoundKeys")))
@@ -1899,6 +1899,10 @@ def main():
              and "spark shell on|off" not in esys,
              "ask knows spark's own commands (the machine can explain itself)", esys[:200])
         t.ok("spark's own commands" in system1, "the line prompt knows spark's own commands too", system1[:200])
+        from spark import persona as _persona
+        _know = _persona.KNOW_SHELL + _persona.KNOW_CHAT
+        t.ok("spark-shell" not in _know and "shell layer" not in _know.lower() and "spark bar" in _know,
+             "KNOW_SHELL and KNOW_CHAT name spark's own verbs (the bar line) and no shell layer", _know[-160:])
         # chat sheds the shell costume: one machine line + identity + the mode
         spark("chat", "hello", extra={"SPARK_BASE_URL": url2})
         csys = req["body"]["messages"][0]["content"]
@@ -1929,7 +1933,7 @@ def main():
         t.ok("stray-model" not in p2.stdout and "no answer from the peer http://127.0.0.1:9" in p2.stdout,
              "model none + dead peer: the hint names the peer, not the stray file", p2.stdout)
         os.remove(stray + "/stray-model.gguf")
-        rc, out, _ = spark("bar", extra={"SITE_SHELL": "on"})       # a status-right runs with the layer on
+        rc, out, _ = spark("bar")       # a status bar runs it without a tty
         t.ok(rc == 0 and "load " in out and "spark bar" not in out,
              "bare spark bar without a tty draws the line (a status-right cannot toggle itself off)", out)
         # ver: the login greeting. The version line comes from git describe
@@ -3242,19 +3246,18 @@ def main():
              "check.py: every spark remedy names a live verb and a sub-word its help lists",
              str(_badr[:8]))
 
-        # the shell layer left the repository: the stub points, the help holds
+        # the interface is theme, quiet, font and the bar line; `shell` is
+        # no verb of spark's -- an unknown word like any other
         off = {"SPARK_NO_APPLY": "1"}
         rc, out, _ = spark("shell", extra=off)
-        t.ok(rc == 2 and out.strip() == "spark shell -- moved: the shell layer lives at github.com/forgewright-ai/spark-shell",
-             "spark shell: one signed pointer line, exit 2 (one release)", out)
-        rc, out2, _ = spark("shell", "on", extra=off)
-        t.ok(rc == 2 and out2 == out, "spark shell on: the same pointer", out2)
+        t.ok(rc == 2 and out.startswith("spark: no command named shell"),
+             "spark shell: an unknown verb -- the no-command line, exit 2", out)
         rc, out, _ = spark("help", extra=off)
         gated = [l for l in out.splitlines() if l.startswith(" spark shell")]
-        t.ok(rc == 0 and "spark font" in out and "spark theme" in out and not gated and "SHELL.md" in out,
-             "spark help: core only (theme, font); no spark shell line, SHELL.md points instead", gated or out)
-        rc, out2, _ = spark("help", extra=dict(off, SITE_SHELL="on"))
-        t.ok(rc == 0 and out2 == out, "spark help reads the same whatever a stale key says", out2[:200])
+        t.ok(rc == 0 and "spark font" in out and "spark theme" in out and not gated,
+             "spark help: theme and font are there, no spark shell line", gated or out)
+        t.ok("spark-shell" not in out and "SHELL.md" not in out and "shell layer" not in out.lower(),
+             "spark help names no shell layer", out)
         t.ok("Esc s" in out and "empty line" in out,
              "the failure moment is in help", out)
         wide = [l for l in out.splitlines() if len(l) > 80]
@@ -3272,11 +3275,11 @@ def main():
         t.ok(rc == 0 and out.strip() and "#[fg=#" not in out,
              "spark bar line answers (the line is core), never a hex accent (a slot or default)", out)
         rc, out, _ = spark("bar", "on", extra=off)
-        t.ok(rc == 2 and out.strip() == "spark bar on -- the tmux status line lives at github.com/forgewright-ai/spark-shell (spark-shell bar)",
-             "spark bar on: the pointer (the tmux wiring moved), exit 2", out)
+        t.ok(rc == 2 and out.startswith("spark bar -- ") and "spark bar line" in out,
+             "spark bar on: an unknown word -- the usage, exit 2", out)
         # spark font: it shows, lists and sets, core
         rc, out, _ = spark("font", extra=off)
-        t.ok(rc == 0 and out.startswith("spark font -- "), "spark font shows with the layer off (core)", out)
+        t.ok(rc == 0 and out.startswith("spark font -- "), "spark font shows (core)", out)
         rc, out, _ = spark("font", "-h", extra=off)
         t.ok(rc == 0 and out.splitlines()[0] == "spark font -- the terminal's font",
              "spark font -h signs (contract 8)", out)
@@ -3318,7 +3321,7 @@ def main():
         with open(home + "/.config/spark/site.env") as f:
             site_env = f.read()
         t.ok(rc == 0 and "audio is quiet" in out and "SITE_QUIET_AUDIO=yes\n" in site_env,
-             "spark quiet audio on writes the key and says so, shell layer off or not", out)
+             "spark quiet audio on writes the key and says so", out)
         rc, out, _ = spark("quiet", extra=off)
         t.ok(rc == 0 and "audio on" in out, "spark quiet shows the audio state with the others", out)
         rc, out, _ = spark("quiet", "audio", "off", extra=off)
@@ -3359,7 +3362,7 @@ def main():
                  "spark quiet login on writes the key (core, no gate)", out)
             spark("quiet", "login", "off", extra=off)
         rc, out, _ = spark("theme", "-h", extra=off)
-        t.ok(rc == 0 and out.startswith("spark theme -- "), "spark theme stays usable with the layer off", out)
+        t.ok(rc == 0 and out.startswith("spark theme -- "), "spark theme -h signs (contract 8)", out)
         # the palette's runtime files, one writer: spark theme NAME writes
         # theme.env, console-colors (the VT escapes) and console-colors.rgb
         # (setvtrgb's three lines, for the boot unit); none removes theme.env
@@ -3367,8 +3370,8 @@ def main():
         rc, out, _ = spark("theme", "gruvbox-dark", extra=off)
         theme_env = open(home + "/.config/spark/theme.env").read()
         cc = open(home + "/.config/spark/console-colors").read()
-        t.ok(rc == 0 and "THEME_BG=#282828\n" in theme_env and "THEME_BTOP=gruvbox_dark\n" in theme_env,
-             "spark theme NAME writes theme.env from the palette", theme_env)
+        t.ok(rc == 0 and "THEME_BG=#282828\n" in theme_env and "THEME_BTOP" not in theme_env,
+             "spark theme NAME writes theme.env from the palette (20 keys, no THEME_BTOP)", theme_env)
         t.ok(cc.startswith("\033]P0282828") and "\033]P9fb4934" in cc and "\033]Pfebdbb2" in cc,
              "console-colors holds the sixteen VT escapes, ansi 0-15 in hex", repr(cc))
         rgb = open(home + "/.config/spark/console-colors.rgb").read()
@@ -3384,18 +3387,6 @@ def main():
              "spark theme none removes theme.env and leaves the VGA sixteen in both console files", out)
         rc, out, _ = spark("theme", "nosuch", extra=off)
         t.ok(rc == 2 and out.startswith("spark theme -- "), "spark theme nosuch: usage, exit 2", out)
-        # the shell-moved migration: an rc symlink into this repo is handed
-        # back by bootstrap's row (the sh side is proven in install_test;
-        # here: the stub never mutates, whatever the argument)
-        rcname = ".zshrc" if sys.platform == "darwin" else ".bashrc"
-        os.symlink(os.path.join(REPO, "macos" if sys.platform == "darwin" else "linux", "home", rcname), home + "/" + rcname)
-        with open(home + "/" + rcname + ".bak", "w") as f:
-            f.write("# mine\n")
-        rc, out, _ = spark("shell", "off", extra=off)
-        t.ok(rc == 2 and os.path.islink(home + "/" + rcname),
-             "spark shell off: the stub points and mutates nothing (bootstrap's shell-moved row hands back)", out)
-        os.remove(home + "/" + rcname)
-        os.rename(home + "/" + rcname + ".bak", home + "/" + rcname)
 
         # the client shape: spark client (state, URL, off); the check's client rows
         rc, out, _ = spark("client", extra=off)
@@ -3515,7 +3506,7 @@ def main():
              "setup --model NAME writes the name", out)
 
         # your own palettes: ~/.config/spark/themes/<name>.env, found by
-        # config.theme_path (python) and lib/env.sh theme_load (POSIX),
+        # config.theme_path,
         # listed as yours, and winning over the repository's on a clash
         mine_dir = home + "/.config/spark/themes"
         os.makedirs(mine_dir, exist_ok=True)
@@ -3537,9 +3528,6 @@ def main():
             theme_env = f.read()
         t.ok(rc == 0 and "THEME_BG=#202020" in theme_env, "theme: yours wins over the repository's on a name clash", out + err)
         os.remove(mine_dir + "/nord.env")
-        sh = subprocess.run(["sh", "-c", '. "$1/lib/env.sh"; SITE_THEME=mine; theme_load "$1" && printf %s "$THEME_BG"', "x", REPO],
-                            capture_output=True, text=True, env=env, timeout=30)
-        t.ok(sh.stdout == "#101010", "lib/env.sh theme_load reads your palette too", sh.stdout + sh.stderr)
         rc, out, _ = spark("mine")
         t.ok(rc == 2 and "is a palette -- spark theme mine" in out, "a bare palette name of yours is a slip, not a question", out)
         # spark uninstall: signed, shows and never mutates without the word;
@@ -3614,7 +3602,7 @@ def main():
             rc, out, _ = spark("font", "Terminus", "16x32", extra=wsl)
             t.ok(rc == 2 and "no console on WSL 2" in out and open(home + "/.config/spark/site.env").read() == before,
                  "WSL 2: spark font FACE SIZE refuses with the same line, exit 2, site.env untouched", "%d %s" % (rc, out))
-            rc, out, _ = spark("quiet", "boot", "on", extra=dict(wsl, SITE_SHELL="on"))
+            rc, out, _ = spark("quiet", "boot", "on", extra=wsl)
             t.ok(rc == 2 and out.strip() == "spark quiet boot -- no GRUB on WSL 2: Windows boots it",
                  "WSL 2: spark quiet boot on refuses: no GRUB", out)
             rc, out, _ = spark("headless", "on", extra=wsl)
@@ -3676,7 +3664,7 @@ def main():
             # no UKI preset (the dir is pinned empty): the kernel line is the
             # boot loader's, the verb refuses in one signed line
             arch["SPARK_ETC_MKINITCPIO_D"] = home + "/no-mkinitcpio.d"
-            rc, out, _ = spark("quiet", "boot", "on", extra=dict(arch, SITE_SHELL="on"))
+            rc, out, _ = spark("quiet", "boot", "on", extra=arch)
             t.ok(rc == 2 and out.strip() == "spark quiet boot -- no UKI on this Arch: the kernel line is the boot loader's "
                  "(a loader entry's options line, or GRUB_CMDLINE_LINUX_DEFAULT then grub-mkconfig)",
                  "Arch without a UKI: spark quiet boot on refuses: the kernel line is the boot loader's", out)
@@ -3686,7 +3674,7 @@ def main():
             with open(home + "/mkinitcpio.d/linux.preset", "w") as f:
                 f.write('ALL_kver="/boot/vmlinuz-linux"\nPRESETS=(\'default\')\ndefault_uki="/boot/EFI/Linux/arch-linux.efi"\n'
                         'default_options="--splash /usr/share/systemd/bootctl/splash-arch.bmp"\n')
-            uki = dict(arch, SPARK_ETC_MKINITCPIO_D=home + "/mkinitcpio.d", SITE_SHELL="on")
+            uki = dict(arch, SPARK_ETC_MKINITCPIO_D=home + "/mkinitcpio.d")
             rc, out, _ = spark("quiet", "boot", "on", extra=uki)
             t.ok(rc == 0 and "SITE_QUIET_BOOT=yes" in open(home + "/.config/spark/site.env").read(),
                  "Arch with a UKI: spark quiet boot on sets the key (the cmdline.d drop-in is spark's there)", "%d %s" % (rc, out))
@@ -3695,10 +3683,10 @@ def main():
             rc, out, _ = spark("quiet", "boot", "off", extra=uki)
             t.ok(rc == 0 and "SITE_QUIET_BOOT=no" in open(home + "/.config/spark/site.env").read(),
                  "Arch with a UKI: spark quiet boot off sets the key back", "%d %s" % (rc, out))
-            rc, out, _ = spark("quiet", "login", "on", extra=dict(arch, SITE_SHELL="on"))
+            rc, out, _ = spark("quiet", "login", "on", extra=arch)
             t.ok(rc == 0 and "SITE_QUIET_LOGIN=yes" in open(home + "/.config/spark/site.env").read(),
                  "Arch: spark quiet login on still sets the key (the motd is real there)", "%d %s" % (rc, out))
-            rc, out, _ = spark("quiet", "login", "off", extra=dict(arch, SITE_SHELL="on"))
+            rc, out, _ = spark("quiet", "login", "off", extra=arch)
 
         # the egg (lib/spark/lua.py): the forest, headless through --sim, then a pty
         rc, out, _ = spark("lua", "--sim", "1", "auto")
@@ -3751,7 +3739,7 @@ def main():
         rc, out, err = spark("theme", "canarinho", extra={"SPARK_NO_APPLY": "1"})
         with open(home + "/.config/spark/theme.env") as f:
             theme_env = f.read()
-        t.ok(rc == 0 and "THEME_ACCENT=#ffdf00" in theme_env and theme_env.count("THEME_") == 22
+        t.ok(rc == 0 and "THEME_ACCENT=#ffdf00" in theme_env and theme_env.count("THEME_") == 21
              and "THEME_LOGO=bright-green" in theme_env,
              "spark theme canarinho: the prize applies like any palette, its logo colours with it", out + err)
         from spark import cli as _cli
@@ -3762,9 +3750,6 @@ def main():
         t.ok(rows[0].startswith("\\033[1;92m") and rows[1].startswith("\\033[92m") and rows[2].startswith("\\033[93m")
              and rows[4].startswith("\\033[94m") and painted.count("\\033[0m") == banner.count("\\033[0m"),
              "spark ver: the banner takes THEME_LOGO's colours, row by row, the first bold", rows[0][:20])
-        sh = subprocess.run(["sh", "-c", '. "$1/lib/env.sh"; SITE_THEME=canarinho; theme_load "$1" && printf %s "$THEME_LOGO"', "x", REPO],
-                            capture_output=True, text=True, env=env, timeout=30)
-        t.ok(sh.stdout.startswith("bright-green bright-green"), "lib/env.sh theme_load carries THEME_LOGO too", sh.stdout + sh.stderr)
         import wave as _wave
         import io as _io
         # a death: running and hopping, never firing
@@ -3893,7 +3878,6 @@ def main():
         # sgr()/paint(): three env vars, console-safe SGR only, a tty only
         import pty as _pty
         import spark as _sp
-        from spark import bar as _bar
         _saved = {k: os.environ.pop(k) for k in ("SPARK_ACCENT_SGR", "SPARK_MUTED_SGR", "SPARK_WARN_SGR") if k in os.environ}
         try:
             _m, _s = _pty.openpty()
@@ -4093,34 +4077,6 @@ def main():
                            env=dict(env, SPARK_HINT_ROW="1", **_col), timeout=30, start_new_session=True)
         t.ok(p.returncode == 0 and p.stdout == _plain and p.stderr == "",
              "spark line with SPARK_HINT_ROW=1 and no terminal: the same two lines, nothing drawn", repr(p.stdout + p.stderr))
-        # state/prompt: the turn above said up + the model; a dead brain
-        # says down and keeps the model; the bar's tick writes it too
-        _pf = home + "/.local/state/spark/prompt"
-        _kv = dict(l.split("=", 1) for l in open(_pf).read().splitlines())
-        t.ok(sorted(_kv) == ["AI", "MODEL", "T"] and _kv["AI"] == "up" and _kv["MODEL"] == "stub-7b-q4" and _kv["T"].isdigit(),
-             "state/prompt after a turn: T=<epoch> MODEL=<stem> AI=up", repr(_kv))
-        rc, out, _ = spark("line", stdin="? anything", extra={"SPARK_BASE_URL": "http://127.0.0.1:9", "SPARK_TIMEOUT": "1"})
-        _kv2 = dict(l.split("=", 1) for l in open(_pf).read().splitlines())
-        t.ok(rc == 1 and _kv2["AI"] == "down" and _kv2["MODEL"] == "stub-7b-q4",
-             "state/prompt after a dead brain: AI=down, the model kept", repr((out, _kv2)))
-        _saved_pf = _bar.PROMPT_FILE
-        _bar.PROMPT_FILE = os.path.join(home, "prompt-unit")
-        try:
-            _bar.prompt_state(None, ai="up", model="/x/y/z-q4.gguf")
-            _bar.prompt_state(None, model="bad value")
-            _bar.prompt_state(None, ai="sideways")
-            _u = open(_bar.PROMPT_FILE).read()
-            t.ok(_u.startswith("T=") and "MODEL=z-q4\n" in _u and _u.endswith("AI=up\n") and _u.count("\n") == 3,
-                 "prompt_state: a stem from a path, a bad value or an unknown state keeps the last", repr(_u))
-            _bar.PROMPT_FILE = os.path.join(home, "no", "such", "dir", "prompt")
-            _bar.prompt_state(None, ai="down")
-            t.ok(True, "prompt_state never raises")
-        finally:
-            _bar.PROMPT_FILE = _saved_pf
-        rc, out, _ = spark("bar", "line")
-        _kv3 = dict(l.split("=", 1) for l in open(_pf).read().splitlines())
-        t.ok(rc == 0 and int(_kv3["T"]) >= int(_kv2["T"]) and _kv3["AI"] in ("up", "down") and _kv3["MODEL"] == "stub-7b-q4",
-             "spark bar line ticks state/prompt (the model from the brain cache)", repr(_kv3))
         # ---- end of the v1.41 block ------------------------------------------
 
     # spark reveal: piped it is an exact copy (bytes, no pacing); at a
@@ -4205,6 +4161,34 @@ def main():
          "js only: %s; themes only: %s; differing: %s" % (
              sorted(set(js_map) - set(env_map)), sorted(set(env_map) - set(js_map)),
              sorted(k for k in set(js_map) & set(env_map) if js_map[k] != env_map[k])))
+
+    # the guard (v1.48): spark's core is decoupled from any shell layer.
+    # Nothing a user installs or runs names one -- not a message, a check
+    # row, a help line, a model prompt, a verb, a comment, a fixture. The
+    # generic contracts stay and are described as generic: theme.env (the
+    # palette any renderer reads), the console palette and font, the
+    # three SPARK_*_SGR variables, `spark bar line`. A hit names file:line.
+    _guard = re.compile(r"spark-shell|(?i:shell layer)|SITE_SHELL|shell-moved|THEME_BTOP|state/prompt")
+    _hits = []
+    for _r in ("bin", "lib", "home", "linux", "templates", "themes", "get", "bootstrap.sh", "install.sh", "uninstall"):
+        _p = os.path.join(REPO, _r)
+        if os.path.isfile(_p):
+            _files = [_p]
+        elif os.path.isdir(_p):
+            _files = [os.path.join(d, f) for d, _, fs in os.walk(_p) for f in fs
+                      if "__pycache__" not in d and not f.endswith(".pyc")]
+        else:
+            continue
+        for _f in sorted(_files):
+            with open(_f, "rb") as fh:
+                _raw = fh.read()
+            if b"\0" in _raw:
+                continue                    # an image, a font
+            for _n, _l in enumerate(_raw.decode("utf-8", "replace").split("\n"), 1):
+                if _guard.search(_l):
+                    _hits.append("%s:%d" % (os.path.relpath(_f, REPO), _n))
+    t.ok(not _hits, "core knows nothing of a shell layer: no core file names one (bin, lib, home, linux, templates, themes, get, bootstrap.sh, install.sh)",
+         " ".join(_hits[:12]))
 
     # widget drift guard: the failure moment's word lists live in two
     # files, one per shell, with no compiler between them. A word added to

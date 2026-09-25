@@ -135,11 +135,11 @@ def install_line(pkgs):
     return ("%s %s" % (t.get("PM_INSTALL", "install"), " ".join(pkgs))).strip()
 
 
-# the binary a shell tries to run, to the package that provides it, for
-# the handful spark itself installs where the two names differ or where a
-# family renames it (Debian ships fd as fd-find, bat as batcat). Anything
-# not here is left to the model to name -- this map only spares a model
-# call for tools spark already knows.
+# the binary a shell tries to run, to the package that provides it: the
+# tools an exit-127 hint may name, where the package name differs from
+# the command or a family renames it (Debian ships fd as fd-find, bat as
+# batcat). Anything not here is left to the model to name -- this map
+# only spares a model call for tools spark already knows.
 _TOOL_PKG = {
     "fd": {"apt": "fd-find", "pacman": "fd", "brew": "fd"},
     "fdfind": {"apt": "fd-find", "pacman": "fd", "brew": "fd"},

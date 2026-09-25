@@ -102,17 +102,14 @@ docs/
  docs/INSTALL.md              every step and every key; docs/CHEATSHEET.txt
  docs/TOUR.md                 a first hour: twelve small things to try
  docs/APPS.md                 editors and tools that speak to spark
- docs/SHELL.md                spark's own shell for an AI box: the
-                              spark-shell repository
 
 version %s
 """
 
 
 def usage():
-    """The help. The shell layer lives in its own repository (docs/SHELL.md
-    points there); theme, quiet, font and the bar line are core. The
-    version is formatted here, not at import: nothing on the `spark
+    """The help: theme, quiet, font and the bar line are the interface.
+    The version is formatted here, not at import: nothing on the `spark
     line` path may call git, and version() does, on a cache miss."""
     from spark import version
     tail = USAGE_TAIL % version.version()
@@ -158,7 +155,6 @@ VERBS = {"setup": ("setup", "main", False), "check": ("check", "main", False),
          "update": ("update", "cmd_update", False), "bar": ("bar", "main", False),
          "theme": ("theme", "main", False), "bench": ("bench", "main", True),
          "stats": ("stats", "main", False),
-         "shell": ("site", "cmd_shell_gone", False),
          "font": ("site", "cmd_font", False), "quiet": ("site", "cmd_quiet", False),
          "headless": ("site", "cmd_headless", False), "client": ("site", "cmd_client", False),
          "share": ("site", "cmd_share", False),

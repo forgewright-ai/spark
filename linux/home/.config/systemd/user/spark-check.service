@@ -4,7 +4,7 @@
 Description=spark check -- drift report snapshot
 
 [Service]
-# the user's tools (starship, the engine, spark itself) live in ~/.local/bin
+# the user's tools (the engine, spark itself) live in ~/.local/bin
 Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 Type=oneshot
 ExecStart=%h/.local/bin/spark check --porcelain

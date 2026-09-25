@@ -1,17 +1,17 @@
-# spark.bar -- one line for tmux's status-right, on both OSes.
+# spark.bar -- the machine's one-line status (a status bar or the FORGE
+# page runs it), on both OSes.
 #
 # load · mem · disk · net · ai (when a model is loaded: 9 GB must never be
 # invisible) · check heartbeat · runs waiting (spark do --sandbox, when
-# any) · battery · clock. Written to state/bar with
-# a timestamp so `spark check` can tell when the bar stopped ticking.
+# any) · battery · clock. Written to state/bar with a timestamp: the
+# FORGE page's tick reads it there.
 
 import json
 import os
-import re
 import shutil
 import time
 
-from . import BAR_CACHE, BRAIN_CACHE, CHECK_JSON, IS_MAC, PROMPT_FILE, SERVE_URL_FILE, config, glyph, lan_ip, run, say, state_dir
+from . import BAR_CACHE, BRAIN_CACHE, CHECK_JSON, IS_MAC, SERVE_URL_FILE, config, glyph, lan_ip, run, say, state_dir
 
 INTERVAL = 5          # the cache age the forge page's tick reads (seconds)
 SEP = glyph("sep")
@@ -112,70 +112,6 @@ def _server_here():
     """a llama-server process on this machine"""
     rc, _ = run(["pgrep", "-x", "llama-server"])
     return rc == 0
-
-
-# --- the prompt cache: state/prompt --------------------------------------
-# One KEY=value file a shell prompt reads with builtins (spark-shell's
-# starship segment does): T=<epoch> MODEL=<stem or -> AI=up|down. A
-# cache, as fresh as the last tick of the bar line or the last turn:
-# written here on every tick, by session.record after a turn (up, the
-# model that answered) and by the BrainError handlers (down). A field
-# not given keeps the file's last value; nothing here ever raises.
-_PROMPT_RE = re.compile(r"^[A-Za-z0-9_.+-]*$")
-
-
-def _prompt_read():
-    d = {}
-    try:
-        with open(PROMPT_FILE, encoding="utf-8") as f:
-            for line in f:
-                k, _, v = line.strip().partition("=")
-                if k and _PROMPT_RE.match(v):
-                    d[k] = v
-    except OSError:
-        pass
-    return d
-
-
-def prompt_state(cfg, ai=None, model=None):
-    try:
-        d = _prompt_read()
-        if ai in ("up", "down"):
-            d["AI"] = ai
-        if model:
-            m = os.path.basename(str(model)).replace(".gguf", "")
-            if _PROMPT_RE.match(m):
-                d["MODEL"] = m
-        d["T"] = str(int(time.time()))
-        state_dir()
-        tmp = PROMPT_FILE + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
-            f.write("T=%s\nMODEL=%s\nAI=%s\n" % (d["T"], d.get("MODEL") or "-", d.get("AI") or "down"))
-        os.replace(tmp, PROMPT_FILE)
-    except Exception:
-        pass
-
-
-def _prompt_tick(cfg):
-    """the tick's view: the cached brain's model; up or down by the
-    llama-server process when this machine serves its own model. A
-    client is never called down here (its brain is elsewhere): up while
-    the brain cache is fresh (a resolution answered within wire's TTL),
-    else the last word stands."""
-    model, fresh = None, False
-    try:
-        with open(BRAIN_CACHE, encoding="utf-8") as f:
-            d = json.load(f)
-        model = d.get("model")
-        from . import wire
-        fresh = time.time() - float(d.get("t", 0)) < wire.CACHE_TTL
-    except (OSError, ValueError, AttributeError, TypeError):
-        pass
-    if cfg.client:
-        ai = "up" if fresh else None
-    else:
-        ai = "up" if _server_here() else "down"
-    prompt_state(cfg, ai=ai, model=model)
 
 
 def _ai(cfg, accent):
@@ -313,7 +249,6 @@ def line(cfg):
             json.dump({"t": now, "net": net, "line": s}, f)
     except OSError:
         pass
-    _prompt_tick(cfg)
     return s
 
 
@@ -333,9 +268,5 @@ def main(argv):
         # bare = show (grammar rule 1): the line is the whole show
         say(line(config.load()))
         return 0
-    if sub in ("on", "off", "toggle"):
-        # the tmux wiring moved with the shell layer (one release of pointer)
-        say("spark bar %s -- the tmux status line lives at github.com/forgewright-ai/spark-shell (spark-shell bar)" % sub)
-        return 2
     say(USAGE.rstrip())
     return 2

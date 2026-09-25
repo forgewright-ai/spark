@@ -12,9 +12,9 @@
 # never overwritten: it is moved to <path>.bak (<path>.bak.<epoch> when
 # an earlier back-up already holds that name).
 #
-# One layer: the AI -- the widgets, the banner, spark.env.example, the
-# service units. The shell (rc files, tmux, starship, the look) is
-# spark-shell's, its own repository; an editor's plugin is its own too
+# One layer: the AI -- the widgets, the hooks, the banner,
+# spark.env.example, the service units. The rc files are yours (bootstrap's
+# rc row adds one line); an editor's plugin is its own repository's
 # (github.com/forgewright-ai/spark-micro). spark installs neither.
 #
 #   install.sh --dry-run    print what would change, touch nothing

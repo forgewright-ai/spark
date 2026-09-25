@@ -76,9 +76,9 @@ PM=
 [ -z "$DISTRO" ] || load_env "$REPO/distro/$DISTRO.env" || exit 1
 : "${PM_INSTALL:=}" "${PM_TARGET:=}" "${PKG_CORE:=}" "${PKG_ENGINE:=}" "${PKG_AI:=}"
 MODELS_DIR=${SPARK_MODELS_DIR:-$SPARK_DATA_DIR/models}
-# one layer: the AI. The shell -- tmux, starship, the daily tools, the
-# font, the rc files -- is spark-shell's, its own repository; an editor
-# is an app's plugin (spark-micro). spark ships neither.
+# one layer: the AI. The rc files stay yours (the rc row adds one line);
+# an editor is an app's plugin (spark-micro). spark ships no tool of its
+# own beyond the engine.
 # a client: no model of its own and a peer answering (SITE_AI_MODEL=none +
 # SITE_PEER_AI_URL; spark client URL). No engine and no units here -- the
 # widget, the hook and the tokens are all a client needs
@@ -445,8 +445,7 @@ fi
 # ================================================================ 6. dirs
 section dirs
 # a new user's machine gets no folder it did not ask for: the models,
-# the bin and the state dirs are spark's own (a projects folder is
-# spark-shell's business)
+# the bin and the state dirs are spark's own (no projects folder)
 for d in "$MODELS_DIR" "$HOME/.local/bin" "$SPARK_STATE_DIR"; do
     if [ -d "$d" ]; then ok dir "$d"
     elif need dir "mkdir $d"; then mkdir -p "$d"; ok dir "$d"; fi
@@ -476,28 +475,10 @@ if [ "$old_plug" = 1 ] && need micro "the plugin moved to github.com/forgewright
     if [ -L "$mb" ]; then rm -f "$mb"; [ ! -f "$mb.bak" ] || mv "$mb.bak" "$mb"; fi
     ok micro "spark's links removed -- git clone https://github.com/forgewright-ai/spark-micro $mplug"
 fi
-# the shell layer left this repository (github.com/forgewright-ai/
-# spark-shell): rc files an older install.sh symlinked into this tree
-# now dangle. Hand them back once (.bak back, or gone); spark-shell
-# adopts the rendered look (tmux, starship, btop) in place.
-moved=0
-for f in .bashrc .bash_profile .zshrc .zprofile; do
-    [ -L "$HOME/$f" ] || continue
-    case $(readlink "$HOME/$f") in "$REPO"/*) moved=1 ;; esac
-done
-if [ "$moved" = 1 ] && need shell-moved "the shell layer moved to github.com/forgewright-ai/spark-shell: hand the rc files back"; then
-    for f in .bashrc .bash_profile .zshrc .zprofile; do
-        [ -L "$HOME/$f" ] || continue
-        case $(readlink "$HOME/$f") in
-            "$REPO"/*) rm -f "$HOME/$f"; [ ! -e "$HOME/$f.bak" ] || mv "$HOME/$f.bak" "$HOME/$f" ;;
-        esac
-    done
-    ok shell-moved "rc files handed back -- git clone https://github.com/forgewright-ai/spark-shell ~/.spark-shell"
-fi
-# the core rc hook: one marked line at the end of the login shell's rc file
+# the rc hook: one marked line at the end of the login shell's rc file
 # (after fzf: the widget wraps Enter, so it loads last). The marker is
-# `config/spark/hook.`, so the line lands once. An rc file that is spark's
-# own symlink (SITE_SHELL=on) already sources the widget.
+# `config/spark/hook.`, so the line lands once -- in a file or through a
+# symlink of yours alike.
 rc_bin=$(login_shell); rc_shell=${rc_bin##*/}; rc_major=
 case $rc_shell in
     bash) rc="$HOME/.bashrc"; rc_line='[ -r ~/.config/spark/hook.bash ] && . ~/.config/spark/hook.bash   # spark: the AI at the prompt'
@@ -505,13 +486,10 @@ case $rc_shell in
     zsh)  rc="$HOME/.zshrc";  rc_line='[[ -r ~/.config/spark/hook.zsh ]] && source ~/.config/spark/hook.zsh   # spark: the AI at the prompt' ;;
     *)    rc=; rc_line= ;;
 esac
-rc_link=0; [ -n "$rc" ] && [ -L "$rc" ] && case $(readlink "$rc") in "$REPO"/*) rc_link=1 ;; esac
 if [ -z "$rc" ]; then
     row todo rc "shell $rc_shell: no widget for it -- bash 4+ or zsh hosts one (chsh -s /bin/zsh)"
 elif [ "$rc_shell" = bash ] && [ "${rc_major:-0}" -lt 4 ]; then
     row todo rc "bash ${rc_major:-3} cannot host the widget -- zsh can (chsh -s /bin/zsh)"
-elif [ "$rc_link" = 1 ]; then
-    ok rc "~${rc#"$HOME"} is a symlink into this repo (shell-moved hands it back)"
 elif grep -qF 'config/spark/hook.' "$rc" 2>/dev/null; then
     ok rc "~${rc#"$HOME"} sources the hook"
 elif need rc "add one line to ~${rc#"$HOME"}"; then
@@ -894,7 +872,7 @@ elif [ ! -d /run/systemd/system ]; then
 else
     vt_want=$(printf '[Unit]\nDescription=spark: the console palette (setvtrgb)\nAfter=console-setup.service systemd-vconsole-setup.service\nConditionPathExists=%s\n\n[Service]\nType=oneshot\nExecStart=/usr/bin/setvtrgb %s\n\n[Install]\nWantedBy=multi-user.target\n' "$vt_file" "$vt_file")
     # the kernel's live defaults (sysfs, the red line) must be the file's:
-    # spark theme and spark shell off rewrite the file under a unit that
+    # spark theme rewrites the file under a unit that
     # already exists, and the defaults follow only when someone sets them
     vt_live=$(cat "${SPARK_SYSFS_VT:-/sys/module/vt/parameters}/default_red" 2>/dev/null || true)
     vt_mine=$(sed -n 1p "$vt_file")

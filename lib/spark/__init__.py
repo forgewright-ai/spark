@@ -57,7 +57,6 @@ ACCOUNT_KEY_FILE = os.path.join(STATE_DIR, "account-key")
 BRAIN_CACHE = os.path.join(STATE_DIR, "brain")
 CHECK_JSON = os.path.join(STATE_DIR, "check.json")
 BAR_CACHE = os.path.join(STATE_DIR, "bar")
-PROMPT_FILE = os.path.join(STATE_DIR, "prompt")     # T= MODEL= AI= for a prompt segment (bar.prompt_state)
 CACHE_DIR = os.path.join(STATE_DIR, "cache")
 DEBUG_LOG = os.path.join(STATE_DIR, "debug.log")
 ENGINE_DIR = os.path.join(DATA_DIR, "engine")
@@ -106,8 +105,8 @@ def say(s=""):
 
 
 # Colour at the prompt: three optional environment variables, SGR
-# parameter strings (`1;94`), that a shell layer exports from its palette
-# (spark-shell does). Unset = plain, today's output. Console-safe only:
+# parameter strings (`1;94`); any rc may export them from a palette.
+# Unset = plain, today's output. Console-safe only:
 # bold, dim, their resets and the sixteen colours (30-37, 90-97) -- a
 # `38;5;n` or 24-bit value is dropped whole, never drawn -- and only at
 # a tty: a pipe never sees an escape.
