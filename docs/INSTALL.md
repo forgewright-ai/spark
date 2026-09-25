@@ -5,7 +5,7 @@ is the runbook, in the order you need it.
 
 ## 1. A machine from zero
 
-About ten minutes, with `sudo` once. One model download takes most of
+About 10 minutes, with `sudo` once. One model download takes most of
 it, usually 2.3 to 17 GB. Section 4 says which model.
 
 Debian:
@@ -19,7 +19,7 @@ Debian:
 3. Log in and install what spark needs:
 
    ```sh
-   sudo apt-get update && sudo apt-get install -y git curl python3
+   sudo apt-get update && sudo apt-get install -y git curl python3 openssh-client
    ```
 
 4. Continue at section 2.
@@ -51,7 +51,7 @@ Open Ubuntu, then do Debian's step 3.
 
 ## 2. Install spark
 
-1. Check the five things spark needs: `sudo` once for the package
+1. Check the 5 things spark needs: `sudo` once for the package
    manager, `git`, `curl`, `python3` 3.9 or newer, and `ssh-keygen`.
    The last one checks the release's signature.
 
@@ -102,7 +102,7 @@ Open Ubuntu, then do Debian's step 3.
 
    ```sh
    exec $SHELL      # the prompt line goes live
-   spark check      # every row ok
+   spark check      # exit 0 when no row fails
    ```
 
 What `get` does first. It checks the ground: the command line tools on
@@ -112,7 +112,7 @@ line. It never runs `sudo`. `SPARK_HOME` moves the clone, `SPARK_URL`
 points it at another repository, and `SPARK_REF=main` follows
 development. `sh get --clone-only` stops after the clone.
 
-What `spark setup` does. It asks three things and never more: this
+What `spark setup` does. It asks 3 things and never more: this
 machine's name, yours, and the model. The name defaults to the short
 hostname, yours to your login. The model row this machine earns is
 marked `*`. Then it:
@@ -123,12 +123,12 @@ marked `*`. Then it:
    library in `base`, so it asks only with a GPU. macOS needs nothing.
 3. Runs `bootstrap.sh`: the engine, one pinned llama.cpp tarball for
    this OS, checked by sha256. The model, with curl's progress bar. The
-   token, the prompt line, one rc line, and the units: the engine's
-   server, the page's server and a check timer every five minutes.
-4. Brings the server up and waits for it.
+   token, the prompt line, one rc line, and the units: the engine, the
+   page's server and a check timer every 5 minutes.
+4. Brings the engine up and waits for it.
 5. Asks `? how big is this dir` for you and prints the tok/s it
    measured.
-6. Prints the three things to try.
+6. Prints the 3 things to try.
 
 It paints nothing: the machine looks as it did. You can run it again at
 any time. `--yes` takes every default, and is implied when stdin is not
@@ -150,9 +150,11 @@ keeps a blank row above the prompt for the hint, and loads `TAB`
 completion. Completion is offline: the verbs, then each verb's words.
 The line goes last, after fzf, because the prompt line wraps `Enter`.
 If `spark setup` prints a `todo rc` row, the login shell cannot host
-the prompt line: another shell, or macOS's bash 3.2. Run `chsh -s
-/bin/zsh`, then `spark setup` again. A bare zsh needs your own
-`autoload -Uz compinit && compinit` in `~/.zshrc` for completion.
+the prompt line. The row reads `no prompt line for it -- bash 4+ or
+zsh hosts one` for another shell, or `bash 3 cannot host the prompt
+line -- zsh can` for macOS's bash 3.2. Run `chsh -s /bin/zsh`, then
+`spark setup` again. A bare zsh needs your own `autoload -Uz compinit
+&& compinit` in `~/.zshrc` for completion.
 
 ## 3. Use it
 
@@ -200,7 +202,7 @@ done, or after 8 steps. A goal is at most 8 kB, and one that starts
 with `-` goes after `--`.
 
 `spark do --sandbox <words>` does the same task in a copy of this
-directory. Every step runs on its own, two minutes at most, with no
+directory. Every step runs on its own, 2 minutes at most, with no
 network, nothing outside the copy writable, and your home out of
 sight. A run writes 1 GB at most. At the end you see the diff and type
 `yes` to apply it here. `yes` applies exactly what you saw, and a copy
@@ -217,7 +219,7 @@ run at a time. A systemd user timer or a launchd agent can run it
 daily, and `spark watch` can start it when a line matches.
 
 `spark ask < plan.md` answers with the questions the text does not
-answer: at most three, one per line, and nothing else. A line that is
+answer: at most 3, one per line, and nothing else. A line that is
 not a question, one quoting words the text lacks, and one that fits
 any plan are dropped. Nothing left is one line and exit 1. The text is
 at most 12 kB. `--answered --name NAME` keeps a question from coming
@@ -238,7 +240,7 @@ until you have it right twice in a row.
 
 `tail -f app.log | spark watch "a 500 appears"` reads a live stream,
 silent until a line matches, then one line quoting it. The quote is
-checked against the stream. A window of up to 40 lines or ten seconds,
+checked against the stream. A window of up to 40 lines or 10 seconds,
 8 kB at most, goes to the server you chose, never the whole stream.
 
 `spark soul edit` writes the paragraph that tells the model who it is:
@@ -305,21 +307,22 @@ anyway. When nothing under the cap fits, it takes the smallest row
 that fits.
 
 1. `spark model NAME` chooses a model. It downloads the file, checks
-   its size and sha256 against the row, and restarts the server. `spark
+   its size and sha256 against the row, and restarts the engine. `spark
    model auto` goes back to the rule above. `spark model rm NAME`
    deletes a file not in use.
 2. `spark model budget N`, 10 to 95, sets the percent and prints the
    table.
 3. A `.gguf` of your own in `~/.local/share/spark/models` is served
    with `SPARK_MODEL=<file>` in `spark.env`.
-4. `spark ember NAME` adds a second, bigger model for conversations.
-   The prompt line stays with the small one, at context 4096 with
-   reasoning off, so a thinking model answers fast. Every conversation
-   goes to the second: `spark <words>`, `chat`, `do`, the page, and any
-   `/v1` client naming no model. One server, one port, one token: the
-   request's `model` field picks. `spark ember auto` pairs the smallest
-   tested row with the largest that fits beside it. `spark ember none`,
-   the default, runs one model in both roles.
+4. `spark ember NAME` adds the chat model: a second, larger model for
+   conversations. The prompt line stays with the small one, at context
+   4096 with reasoning off, so a thinking model answers fast. Every
+   conversation goes to the chat model: `spark <words>`, `chat`, `do`,
+   the page, and any `/v1` client naming no model. One engine, one
+   port, one token: the request's `model` field picks. `spark ember
+   auto` pairs the smallest tested row with the largest that fits
+   beside it. `spark ember none`, the default, runs one model in both
+   roles.
 5. `spark model add URL` adds your own row. A huggingface.co
    `.../resolve/<rev>/<file>` URL is checked from its redirect headers,
    and any other URL needs `--sha256 HEX`. `--license "NAME URL"` is
@@ -337,23 +340,24 @@ tries GPU layers, flash attention, KV cache types and thread counts,
 and `spark bench tune apply` writes the winner to `spark.env`. `spark
 stats [--week]` sums up what real turns measured. The engine keeps no
 prompt cache in RAM, `--cache-ram 0`, because llama-server would
-otherwise keep up to 8 GiB of replaced prompts in host memory.
-`SPARK_EXTRA_ARGS=--cache-ram N` in `spark.env` sets a budget in MiB.
+otherwise keep up to 8 GB of replaced prompts in host memory.
+`SPARK_EXTRA_ARGS=--cache-ram N` in `spark.env` sets a budget in MB.
 
 ## 5. Other machines and your phone
 
-spark serves the same AI, with its soul, memory and threads, on one LAN
-address: `http://<host>:8081`. The admin token stays on this machine.
+spark serves the same model, with its soul, memory and threads, on one
+LAN address: `http://<host>:8081`. The admin token stays on this
+machine.
 Everyone else is a named user with a token of their own.
 
-The servers. Two run on this machine. The engine's server, llama-server
-on port 8080, holds the model. The page's server on port 8081 holds the
-soul, the memory and the threads, and answers the page, the API and
-every client. `spark serve on` starts the engine's server and waits
-until it answers. `spark serve off` stops it, and `--force` also stops
-the unit's, or one spark did not start. `--host ADDR` binds another
-address, `--print-client` prints the two lines another machine needs,
-and `--foreground` is what the unit runs.
+The servers. Two run on this machine. The engine, llama-server on port
+8080, holds the model. The page's server on port 8081 holds the soul,
+the memory and the threads, and answers the page, the API and every
+client. `spark serve on` starts the engine and waits until it answers.
+`spark serve off` stops it, `--force` also stops the unit's, or one
+spark did not start, and `--noreload` keeps it down. `--host ADDR`
+binds another address, `--print-client` prints the two lines another
+machine needs, and `--foreground` is what the unit runs.
 
 Another machine of yours:
 
@@ -382,7 +386,7 @@ ends it.
 Every program that calls spark, a script, an app or a CI job, gets its
 own user with `spark user add NAME` and its own token. The admin token
 is never shared. Any program with the OpenAI shape works. A request
-naming no `model` gets the conversation model with the identity, and
+naming no `model` gets the chat model with the identity, and
 `model: spark` the bare prompt model:
 
 ```sh
@@ -409,7 +413,7 @@ The page, in any browser on the LAN:
    prints the URL alone, and `--show-token` adds the token. Scan the
    QR with a phone's camera and the page signs in by itself. The token
    rides the link after `#`, which never reaches the server. The QR is
-   the token drawn as squares: show it only to the person it is for.
+   the token drawn as squares: show it only to the user it is for.
 2. Or type a token once. The browser keeps a cookie for 90 days, and
    logging out or a server restart asks again. A user's token opens a
    chat app: their own threads and memory, plus their account behind
@@ -423,7 +427,7 @@ The page, in any browser on the LAN:
 `spark forge` alone is the status: URL, health, model, unit, token and
 the log tail. `spark forge on|off` enables or disables it. `spark forge
 token --new` rotates the admin token, and `spark user token --new`
-rotates a user's. That person logs in again. `spark forge audit` lists
+rotates a user's. That user logs in again. `spark forge audit` lists
 the newest admin actions, sealed in this machine's own store. Each is a
 command run from the page, with its sha256 prefix and exit code and
 never its text, a verb run, or a user added, removed or rotated.
@@ -442,7 +446,7 @@ Headless. On the machine that stays on, `spark headless on`:
   hibernate are masked, and the lid is ignored. `off` reverses all but
   linger and the group. Over a plain `ssh HOST spark model NAME` the
   units are reached the same way: spark brings the user bus itself.
-- macOS: the three agents move to `/Library/LaunchDaemons`, with no
+- macOS: the 3 agents move to `/Library/LaunchDaemons`, with no
   auto-login, and FileVault's login screen is untouched. `pmset` keeps
   the machine awake. Restart and stop then need `sudo launchctl`, and
   the verbs print the line. `off` puts the login agents back.
@@ -472,20 +476,19 @@ macOS:
 - Units: `launchctl print gui/$UID/spark.serve`, and `.forge` and
   `.check` likewise. `launchctl kickstart -k gui/$UID/spark.serve`
   restarts one.
-- There is no root-free GPU counter, so `spark stats` and the `gpu`
-  row say so.
+- `spark stats` and the `gpu` row say the counter needs root.
 - `Alt-s` is Option-s. `Esc` then `s`, quickly, is the same keys.
 - `spark do --sandbox` copies the project as an APFS clone and runs
   each step in it under `sandbox-exec`. A step opens no network socket
   and writes only to the copy and the run's own home and temp. It
   cannot read your home, other volumes, the temp directories, the
-  keychain or spark's state and token. It cannot run `osascript`, `open`,
-  `launchctl`, `sudo`, `security`, the clipboard, Shortcuts, Automator,
-  `defaults`, `cron` or `at`. It still reads the rest of the system,
-  such as `/Applications` and `/etc`, and sees the process list. The
-  diff is the gate: read it before you type `yes`. The `sandbox` row
-  says whether it works here. `sandbox-exec` is Apple's own tool, and
-  its man page tells developers to move off it.
+  keychain or spark's state and token. It cannot run `osascript`,
+  `open`, `launchctl`, `sudo`, `security`, the clipboard, Shortcuts,
+  Automator, `defaults`, `cron` or `at`. It still reads the rest of the
+  system, such as `/Applications` and `/etc`, and sees the process
+  list. The diff is the gate: read it before you type `yes`. The
+  `sandbox` row says whether it works here. `sandbox-exec` is Apple's
+  own tool, and its man page tells developers to move off it.
 
 Linux:
 
@@ -503,10 +506,10 @@ Linux:
   a name such as "UMA frame buffer size". If the `gpu` row says the
   model is larger than VRAM, raise it there, 8 GB for a 4B to 8B
   model, then `spark bench` again.
-- The `render` group grants the GPU without a logind seat. `bootstrap.sh`
-  adds you on a Vulkan build. Log out of every session and in again for
-  the units to see it.
-- `spark font FACE SIZE` gives the text console a readable font, and
+- The `render` group grants the GPU without a logind seat.
+  `bootstrap.sh` adds you on a Vulkan build. Log out of every session
+  and in again for the units to see it.
+- `spark font FACE SIZE` gives the console a readable font, and
   `spark font list` shows what this machine has. The font lands in the
   file the console reads: `/etc/default/console-setup` on Debian, as in
   `spark font Terminus 16x32`, and `/etc/vconsole.conf` on Arch, as in
@@ -622,7 +625,7 @@ spark uninstall
    set, macOS's `pmset` values, a console font set before v1.12. A root
    step whose `sudo` refuses becomes a `todo` row, never a failure.
 
-The keys. Everything in `~/.config/spark/site.env` beyond the three
+The keys. Everything in `~/.config/spark/site.env` beyond the 3
 things setup asks is optional and has a verb. Editing the file and
 running `./bootstrap.sh` does the same.
 
@@ -631,8 +634,8 @@ running `./bootstrap.sh` does the same.
 | `SITE_NAME` | this machine's display name | short hostname |
 | `SITE_USER` | your display name | your login |
 | `SITE_SET_HOSTNAME` | `yes`: the OS hostname follows `SITE_NAME` (sudo) | `no` |
-| `SITE_AI_MODEL` | `auto`, `none`, or a name -- `spark model NAME`. `none` beside a peer URL is a client | `auto` |
-| `SITE_EMBER_MODEL` | `none`, `auto`, or a name: the second model for conversations -- `spark ember NAME` | `none` |
+| `SITE_AI_MODEL` | `auto`, `none`, or a name -- `spark model NAME`. `none` beside the other machine's URL is a client | `auto` |
+| `SITE_EMBER_MODEL` | `none`, `auto`, or a name: the chat model -- `spark ember NAME` | `none` |
 | `SITE_AI_BUDGET` | 10 to 95: the percent of RAM plus GPU memory `auto` may use -- `spark model budget N` | `60` |
 | `SITE_AI_BUILD` | `auto`, `cpu` or `vulkan`: the Linux engine build. macOS ignores it, and WSL 2 lands on `cpu` | `auto` |
 | `SITE_PEER_AI_URL` | another machine's URL, from `spark forge --print-client` there -- `spark client URL` | unset |
@@ -646,8 +649,8 @@ running `./bootstrap.sh` does the same.
 | `SITE_QUIET_START` | `yes`: no banner, and one-line `serve`, `forge` and bare `spark` -- `spark quiet start on` | `no` |
 | `SITE_QUIET_AUDIO` | `yes`: no sound from spark -- `spark quiet audio on` | `no` |
 
-Runtime keys live in `~/.config/spark/spark.env`, and `spark.env.example`
-lists them all. The ones with a verb:
+Runtime keys live in `~/.config/spark/spark.env`, and
+`spark.env.example` lists them all. The ones with a verb:
 
 | key | values | default |
 |---|---|---|
@@ -674,7 +677,7 @@ is yours to decide: `echo 'you ALL=(ALL) NOPASSWD:ALL' | sudo tee
 /etc/sudoers.d/you` is fine for a test bench.
 
 The check. `spark check` has 40 rows, one per promise this machine
-makes, and exits 0 when every row is ok. `--watch N` redraws every N
+makes, and exits 0 when no row fails. `--watch N` redraws every N
 seconds. `--porcelain` prints one tab-separated row per line, for a
 program. `--fresh` ignores cached answers, and `--fetch` asks origin
 before judging the `git` row. `--selftest` proves every fixture-tested
@@ -689,7 +692,7 @@ When something stops working:
 1. `spark check` names the row and the remedy. Long output pages
    through `$PAGER`, plain when piped.
 2. `./bootstrap.sh --dry-run` says what a rebuild would change.
-3. `spark` says which server answers and which shells have the prompt
+3. `spark` says which engine answers and which shells have the prompt
    line.
 4. A stale server after a DHCP move shows as `moved` on the `serve`
    row: `spark serve off; spark serve on`. The `forge` row likewise:
@@ -720,7 +723,7 @@ addresses you gave it and nothing else.
   no TLS. A cookie or token they capture works until it is rotated or
   its session is logged out. Logging out revokes the session on the
   server, not only in the browser. They cannot log in by guessing. A
-  wrong token costs a second, and ten wrong tokens in a minute lock the
+  wrong token costs a second, and 10 wrong tokens in a minute lock the
   address out for a minute. The login sleep is bounded, so a burst
   cannot pin the server's threads. The remedy is rotation: `spark user
   token --new` for your own token, which re-keys your sessions on the
@@ -757,7 +760,7 @@ destination ride its turn record, as a number and a host. `spark stats
 `sends` row of `spark check` warns the day any bytes went to a host
 other than the server you chose.
 
-## Appendix: how it fits together
+## How it fits together
 
 ```
 your shell                    this machine                        the LAN

@@ -38,7 +38,7 @@ you write and ask where you read. `? words` asks anywhere. helix and
 nano have no cursor hook, so their key puts `spark edit ` on the
 editor's own prompt instead. Add words and press `Enter`.
 
-## The editors: micro, neovim, vim, helix and nano
+## The editors
 
 `spark edit` is the editors' verb. The text goes in on stdin and the
 text comes out, never a path. micro is the first app. Clone the
@@ -80,7 +80,7 @@ vim 8.2 or newer, the usual huge build:
 git clone https://github.com/forgewright-ai/spark-vim ~/.vim/pack/spark/start/spark
 ```
 
-Then three lines in `~/.vimrc`. The first teaches terminal vim the
+Then 3 lines in `~/.vimrc`. The first teaches terminal vim the
 key:
 
 ```vim
@@ -130,7 +130,7 @@ update` hands the old links back, and its `micro` row says so. Then
 clone as above. Another editor joins the same way: one client of
 `spark edit`, in a repository of its own.
 
-## The readers: w3m, newsboat and aerc
+## The readers
 
 `spark read` is the readers' verb, since spark 1.20. The source goes
 in on stdin, and the answer says only what the source says: every line
@@ -174,9 +174,9 @@ to newsboat at any time. On newsboat 2.38 or newer a commented bind
 line in the snippet offers `Alt-s`.
 
 aerc, the mail client, is the third. It reads the mail you are on,
-open or selected in the list. A mail is someone else's text, so spark
-1.46 or newer holds back what looks like a secret in it before it
-leaves. That is a one-time code, a reset link's token or a key. The
+open or selected in the list. A mail is text that is not yours, so
+spark 1.46 or newer holds back what looks like a secret in it before
+it leaves. That is a one-time code, a reset link's token or a key. The
 model sees `[held]`, and spark says how many it held.
 
 ```sh
@@ -194,7 +194,7 @@ own draft, and the lines you quote stay here. Writing a mail is your
 editor's job. With micro, neovim or vim and its spark app, `Alt-s` is
 already there.
 
-## The task client: spark-acp
+## The task app, spark-acp
 
 `spark do --porcelain` is the task verb for a program, since spark
 1.47. spark-acp speaks it to any Agent Client Protocol client, Toad in

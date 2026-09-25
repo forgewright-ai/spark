@@ -11,7 +11,7 @@ repositories. spark's own code is MIT (`LICENSE`). The banner in
 llama.cpp -- https://github.com/ggml-org/llama.cpp -- MIT
 (c) The ggml authors
 
-Release b10689 (`LLAMA_VERSION` in `engine.env`), six flavours, each
+Release b10689 (`LLAMA_VERSION` in `engine.env`), 6 flavours, each
 pinned by sha256: macOS arm64, macOS x64, Linux x64, Linux x64 Vulkan,
 Linux arm64, Linux arm64 Vulkan.
 
@@ -34,10 +34,10 @@ Colour values only, no code copied. The license is the upstream's:
 - Solarized -- https://ethanschoonover.com/solarized -- MIT.
 - Tokyo Night -- https://github.com/folke/tokyonight.nvim -- Apache-2.0.
 
-## The AI's packages
+## The packages
 
 apt or pacman installs these from the distro's own repositories,
-unpinned; macOS needs none. The names are the distro's own, as
+unpinned. macOS needs none. The names are the distro's own, as
 `distro/debian.env` and `distro/arch.env` list them, and
 `tests/docs_test.py` checks that every name there is credited here.
 Where the two families name one project differently, both names are
@@ -98,13 +98,13 @@ and unsloth, and IBM's own for Granite.
 The v1.0 refactor and simplification were designed and implemented with
 Claude (Anthropic) in Claude Code, directed and reviewed by the
 maintainer. That work was the layer split, the guided first run, the
-model catalog, the chooser, the chat, the fresh-account proofs, and
+model catalogue, the chooser, the chat, the fresh-account proofs, and
 these docs. Every
 such commit carries a `Co-Authored-By: Claude` trailer, so `git log`
 tells the same story as this paragraph. The mistakes are the
 maintainer's.
 
-## The page's glyphs
+## The site's glyphs
 
 Simple Icons -- https://simpleicons.org -- CC0 1.0. The Debian, Arch,
 Apple and GitHub glyphs inline on the front of spark.forgewright.ai,

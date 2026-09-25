@@ -6,7 +6,7 @@ except pinned downloads and your own words to a model you run. One
 line installs it, and spark is live. A tool becomes a spark app as a
 client of `spark edit`, in its own `spark-<app>` repository, and no
 shell code lives in this tree. `CLAUDE.md` is the full reference: the
-principles, the layout, the fifteen contracts, the grammar and the
+principles, the layout, the 15 contracts, the grammar and the
 release steps. This file is the short brief.
 
 ## The landing rule
@@ -32,7 +32,7 @@ row, explain it in every doc. Otherwise it is not done.
   the bar line: a status bar runs `spark bar` piped.
 - `on|off` is the only switch vocabulary at the CLI. Storage stays
   `yes|no`.
-- `status` is bare; `list` is the table.
+- `status` is bare, and `list` is the table.
 - `-h` answers first, signed `spark <sub> -- <one line>`.
 - A confirm is `<question>? yes/NO: ` (`confirm()`).
 - A wait is one dot-spinner (`wait_ready()`) for a server coming up,
@@ -79,7 +79,7 @@ python3 bin/spark check --selftest
 python3 bin/spark check --chaos
 ```
 
-The hooks call `bin/spark` directly; `tests/check_selftest.py` is a
+The hooks call `bin/spark` directly. `tests/check_selftest.py` is a
 standalone entry to `spark check --selftest`. The privacy gate also
 reads the staged diff for secret shapes: `SOURCE_SHAPES` in
 `lib/spark/text.py`, minus the two tuned for a paste and the two tuned
@@ -105,18 +105,18 @@ the remedy it names heals it: ten scenarios in `lib/spark/chaos.py`.
 ## The audition
 
 The audition is not in the gate: it needs a live model, and it is the
-one test that judges words. `tests/audition.py` runs eight fixtures in
+one test that judges words. `tests/audition.py` runs 8 fixtures in
 `tests/audition/` (a poem, a chapter, a README, a commit message,
 Portuguese prose, Go, Python, shell) through the real `spark edit`
 (complete, rewrite, `?`). It scores every answer with mechanical lints
 only. `tests/audition/ground/` holds 10 cases for the grounded
-contracts, scored the same way; `--ground` runs only those. It prints a
-table and never an answer unless `-v`. A change to any `edit-*` brief
-in `persona.py` carries the audition's before and after totals in the
-pull request (`--times 3`: a small model is not deterministic).
-`--json` appends the model, the briefs' hashes and the totals to
-`STATE_DIR/audition.jsonl`, so two briefs are compared by number, never
-by taste.
+contracts, scored the same way, and `--ground` runs only those. It
+prints a table and never an answer unless `-v`. A change to any
+`edit-*` brief in `persona.py` carries the audition's before and after
+totals in the pull request (`--times 3`: a small model is not
+deterministic). `--json` appends the model, the briefs' hashes and the
+totals to `STATE_DIR/audition.jsonl`, so two briefs are compared by
+number, never by taste.
 
 ## Contracts
 
@@ -126,8 +126,8 @@ the rest. Read them there. Do not duplicate them here.
 
 ## Privacy
 
-No person, machine or project name belongs in this tree. The personal
-word list lives outside the repository at
+No real name, machine name or project name belongs in this tree. The
+personal word list lives outside the repository at
 `~/.config/spark/privacy-terms`, one word per line, 0600, never
 committed. The pre-commit hook prints a notice when that list is
 absent, which is expected on a fresh clone or a fork. It still enforces
@@ -161,9 +161,9 @@ whole of it.
   not documented, and `tests/docs_test.py` refuses the word for that
   tooling.
 - Bring the contracts' names into what a new user reads. `README.md`,
-  `docs/INSTALL.md`, `docs/CHEATSHEET.txt` and the page front speak two
-  nouns, spark and spark apps. `docs_test.py` holds the word list;
-  `CLAUDE.md` keeps the names.
+  `docs/INSTALL.md`, `docs/CHEATSHEET.txt` and the site's front speak
+  two nouns, spark and spark apps. `docs_test.py` holds the word list,
+  and `CLAUDE.md` keeps the names.
 
 ## Voice
 

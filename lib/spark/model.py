@@ -72,7 +72,7 @@ def _client_no(cfg, what):
     """The one line a client answers to a model choice: nothing is served
     here, so a budget, a model or an ember chosen here would silently
     make this machine a server (that is spark client off, by name)."""
-    say("%s %s -- a client of %s serves nothing; choose on the peer, or spark client off to serve here again"
+    say("%s %s -- a client of %s serves nothing; choose on the other machine, or spark client off to serve here again"
         % (MARK, what, cfg.peer_ai_url))
     return 2
 
@@ -218,14 +218,14 @@ def print_model_table(cfg):
         # speeds); else the rows alone, no verdict
         peer = peer_models(cfg)
         if peer:
-            say("%s model -- a client of %s: the peer's table: %.0f GB for models, budget %.0f GB (%d%%), %s" % (
+            say("%s model -- a client of %s: the other machine's table: %.0f GB for models, budget %.0f GB (%d%%), %s" % (
                 MARK, cfg.peer_ai_url, peer.get("total_gb", 0), peer.get("budget_gb", 0),
                 peer.get("budget_pct", 0), peer.get("backend", "?")))
             if peer.get("cap_note"):
                 say("  " + peer["cap_note"])
             rows = peer["models"]
         else:
-            say("%s model -- a client of %s: nothing is served here; what fits is the peer's business (spark model there)" % (
+            say("%s model -- a client of %s: nothing is served here; what fits is the other machine's (spark model there)" % (
                 MARK, cfg.peer_ai_url))
             rows = model_rows(cfg)
     else:

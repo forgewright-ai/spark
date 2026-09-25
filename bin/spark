@@ -44,7 +44,7 @@ spark
  spark edit [?] [words]       the text on stdin: words rewrite it, ? asks,
                               --at N completes; the verb a spark app calls (-h)
  spark ask < FILE             the questions that text does not answer: at
-                              most three, every line one question (-h)
+                              most 3, every line one question (-h)
  spark read <words> < FILE    what a source says about your question, every
                               line quoting it; 16 kB a part (-h)
  spark drill < FILE           the source becomes questions it answers; you
@@ -70,21 +70,21 @@ the model and the page
  spark model list             the table; -h: budget N, add URL, verify, rm NAME
  spark serve [on|off]         one LAN address, token required (-h: --force)
  spark ember [NAME|auto|none] the chat model, a second one; ember list
- spark forge --print-url      the login URL; at a tty a QR to scan and the token
+ spark forge --print-url      the login URL; at a terminal a QR and the token
  spark user [add NAME]        the named users, each with sealed threads; add
                               shows the token and its QR once (-h)
  spark forge [on|off]         the page's server on the LAN: the API and the page
  spark forge audit [N]        every admin action, sealed: runs, users, tokens
  spark headless [on|off]      the page's server up from boot, never asleep
- spark share [on|off]         one engine for every OS user here: a spark group
-                              reads the token; each keeps their own context
+ spark share [on|off]         one engine for every OS user here (a spark
+                              group); each keeps their own soul and memory
  spark client [URL|off]       a client of another machine's server; none here
 """ % MARK
 
 USAGE_MACHINE = """the machine
  spark setup                  the guided first run: name, user, model (-h)
- spark check                  the machine row by row; exit 0 = every row ok (-h)
- spark update [--dry-run]     the newest tag, or main on a developer clone
+ spark check                  the machine row by row; exit 0 when no row fails
+ spark update [--dry-run]     the newest release tag; main on a developer clone
  spark uninstall [--purge]    remove spark from this machine: shows, asks yes
 """
 
@@ -101,7 +101,7 @@ USAGE_TAIL = """less often used
 
 docs/
  docs/INSTALL.md              every step and every key; docs/CHEATSHEET.txt
- docs/TOUR.md                 a first hour: twelve small things to try
+ docs/TOUR.md                 a first hour: 12 small things to try
  docs/APPS.md                 editors and tools that speak to spark
 
 version %s

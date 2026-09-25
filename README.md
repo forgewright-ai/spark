@@ -22,7 +22,7 @@ command itself and runs nothing.
 
    ```sh
    # Debian 13 / Ubuntu 24.04 or newer
-   sudo apt-get update && sudo apt-get install -y git curl python3
+   sudo apt-get update && sudo apt-get install -y git curl python3 openssh-client
    # Arch Linux
    sudo pacman -S --needed git curl python openssh
    # macOS
@@ -38,8 +38,8 @@ command itself and runs nothing.
    curl -fsSL https://github.com/forgewright-ai/spark/releases/latest/download/get | sh
    ```
 
-   It asks three things: this machine's name, yours and the model. Then
-   it asks the first question for you. About ten minutes, most of it
+   It asks 3 things: this machine's name, yours and the model. Then
+   it asks the first question for you. About 10 minutes, most of it
    one model download. To read the script first:
 
    ```sh
@@ -60,7 +60,7 @@ key.
 
 ## Use it
 
-The first three things to type:
+The first 3 things to type:
 
 ```
 ? how big is this dir           a command in your line, a hint above it
@@ -78,12 +78,12 @@ hour in `docs/TOUR.md`:
   and a live stream watched for one thing. Every line quotes the
   source.
 - `spark model list`: 26 models, each with its license. `spark ember
-  NAME` adds a second, bigger model for conversations.
-- `spark forge --print-url`: the same AI in a browser on the LAN, and
-  on a phone that scans the QR. `spark client URL` lets another
-  machine of yours use this one's model.
-- `spark check`: every promise this machine makes, one row each, exit 0
-  when all are kept. `spark uninstall` takes it all off.
+  NAME` adds the chat model, a bigger second one.
+- `spark forge --print-url`: the same model, soul and memory in a
+  browser on the LAN, and on a phone that scans the QR. `spark client
+  URL` lets another machine of yours use this one's model.
+- `spark check`: every promise this machine makes, one row each. It
+  exits 0 when no row fails. `spark uninstall` takes it all off.
 
 ## Documents
 
@@ -98,7 +98,7 @@ Four files sit at the root: this one, `CREDITS.md`, `CLAUDE.md` and
 
 Four are kept true as things change, outside a release:
 
-- `docs/TOUR.md`: a first hour, twelve small things to try.
+- `docs/TOUR.md`: a first hour, 12 small things to try.
 - `docs/APPS.md`: editors and tools that speak to spark.
 - `docs/IDEAS.md`: the field the roadmap is picked from.
 - `docs/TROUBLESHOOTING.md`: a machine that will not join the Wi-Fi.
@@ -131,7 +131,7 @@ another machine of yours (`spark client URL`). What each verb sends:
 - `read`: the source, 16 kB a part. `--name` stays here, in the ledger.
 - `drill`: the source, 16 kB. Your answers are graded here, against the
   source, and never sent.
-- `watch`: each window of the stream, up to 40 lines or ten seconds,
+- `watch`: each window of the stream, up to 40 lines or 10 seconds,
   8 kB at most. Never the whole stream at once.
 - `recall` (`Esc r`): the last 400 lines of this shell's own history,
   with what you said the command did.

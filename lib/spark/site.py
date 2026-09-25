@@ -200,7 +200,7 @@ def apply(rows, stream=False):
 # ------------------------------------------------------------------- font
 # The console is the machine's face: its font is spark's to set (a
 # terminal emulator's font is set in the emulator).
-FONT_USAGE = """%s font -- the terminal's font
+FONT_USAGE = """%s font -- the console font, or Terminal.app's
 
   spark font                    what is set
   spark font list               Linux: the console fonts installed here, as
@@ -592,7 +592,8 @@ SHARE_ROWS = ["share"]
 
 def no_share():
     """Why a shared engine is not this machine's to set here ('' when it
-    is): macOS keeps one user per box in this version, WSL 2 is not a brain."""
+    is): macOS keeps one user per machine in this version, and WSL 2
+    cannot stay on and answer."""
     if IS_MAC:
         return "one user per machine on macOS in this version -- a shared engine is a Linux story"
     if is_wsl():
@@ -736,7 +737,7 @@ def cmd_client(args):
         # the one deliberate promotion: the client shape ends here, then
         # `spark model auto` runs as on any server (cmd_model refuses a
         # choice while the shape holds)
-        say("the peer stays first while it answers; this machine's own model is the fallback")
+        say("the other machine stays first while it answers; this machine's own model is the fallback")
         set_keys(SITE_AI_MODEL="auto")
         from . import model
         return model.cmd_model(["auto"])
