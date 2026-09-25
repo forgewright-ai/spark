@@ -9,15 +9,15 @@ labels: bug
 
 OS (Debian 13, Ubuntu 24.04, Arch, macOS, and the version):
 
-`spark check --report` output (statuses only -- safe to paste; --porcelain
-adds values if you are comfortable sharing them):
+`spark check --report` output. It is statuses only, safe to paste;
+`--porcelain` adds values, if you are comfortable sharing them:
 
 What you typed:
 
-What you saw (paste the exact output):
+What you saw, the exact output:
 
 What you expected instead:
 
 spark sends nothing off this machine except pinned downloads and, with a
-model configured, your own line to it -- so nothing private is asked
-here. Paste freely.
+model configured, your own line to it. Nothing private is asked here.
+Paste freely.

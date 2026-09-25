@@ -5,18 +5,19 @@ title: "model: NAME"
 labels: model
 ---
 
-File URL on huggingface.co (a `.../resolve/main/<file>.gguf`, Q4_K_M):
+The file URL on huggingface.co (a `.../resolve/main/<file>.gguf`, Q4_K_M):
 
-Size (bytes) and sha256 -- `x-linked-size` and `x-linked-etag` on the
-redirect `curl -sI '<url>?download=true'` answers with:
+The size in bytes and the sha256. They are `x-linked-size` and
+`x-linked-etag` on the redirect `curl -sI '<url>?download=true'`
+answers with:
 
-License name and URL (required; Apache-2.0 and MIT are the ones `auto`
-may pick):
+The license name and URL. Required; `auto` may pick Apache-2.0 and MIT
+only:
 
-Note (optional, one line -- what this model is for, or a warning):
+A note, optional, one line: what this model is for, or a warning:
 
-Line proof (optional; the row is marked tested only with it -- the
+The line proof, optional. The row is marked tested only with it: the
 output of piping a question through `spark line` with this model
-loaded, showing valid JSON on line 1):
+loaded, showing valid JSON on line 1:
 
-One row per issue / pull request, please.
+One row per issue or pull request, please.
