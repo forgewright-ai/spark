@@ -1,5 +1,38 @@
 # Changelog
 
+## v1.49
+
+- Every document, help text and usage text speaks with one voice:
+  simple and direct English, one word per thing, short sentences in
+  the present tense. The style sheet is the new Voice section of
+  `docs/CONTRIBUTING.md`, and `tests/docs_test.py` holds its
+  mechanical half. Rewritten in it: `README.md`, `docs/INSTALL.md`,
+  `docs/CHEATSHEET.txt`, `docs/TOUR.md`, `docs/TROUBLESHOOTING.md`,
+  `docs/APPS.md`, `docs/IDEAS.md`, `docs/ROADMAP.md`,
+  `docs/CONTRIBUTING.md`, `CREDITS.md`, `AGENTS.md`, `CLAUDE.md`,
+  `site.env.example` and `spark.env.example`. The history below this
+  entry stays as it was written.
+- The docs say what the code does. The Arch install line names
+  `openssh`. A token is shown once, when you ask for it. A watch
+  window is up to 40 lines or 10 seconds, 8 kB at most. A palette is
+  20 `THEME_*` keys. The `spark check` flags, the `spark serve` flags,
+  `spark user remove`, `spark theme profile`, `spark font none`,
+  `spark forge --show-token` and `spark bar line` are documented with
+  their verbs. The keys table names `SITE_SHARE` and `SITE_PEER_SSH`.
+- `spark help` opens with the tagline the README carries, and its
+  status line names the model, the prompt line, the server, soul,
+  memory and the last answer. The model's briefing no longer names
+  `spark stop` or `spark remember`. A verb that is gone, followed by a
+  second word, answers "no command named" and points at the usage
+  instead of becoming a question.
+- The gate runs what it says. `tests/policy_test.py` is in the
+  pre-commit hook and in CI, and each shell file is syntax-checked on
+  its own. The `SITE_GIT` keys that nothing read are gone from CI.
+- The completions lose the dead `tune` case and complete
+  `spark check`'s flags.
+- `docs/IDEAS.md` drops "Two people, one box": named users and
+  `spark share` are it.
+
 ## v1.48
 
 - spark's core knows nothing of a shell layer. Its side of any renderer
