@@ -1,170 +1,173 @@
 # spark -- for agents and contributors
 
-spark is a local AI at your shell prompt, bare bones, for Linux (the
-Debian and Arch families), macOS and Windows through WSL 2; nothing
-leaves the machine except pinned downloads and your own talk to a model
-you run. Its spine is three lines: choose your OS, one line, spark is
-live; spark apps -- a tool becomes smart as a client of `spark edit`,
-each in its own `spark-<app>` repo (micro first); as apps ask for it,
-another contract is defined and apps connect the same way. The look
-and the tools of a machine are not spark's business; spark's side of
-any renderer is generic: `~/.config/spark/theme.env` (the palette, a
-KEY=value file any renderer or terminal may read), the three optional
-`SPARK_ACCENT_SGR` / `SPARK_MUTED_SGR` / `SPARK_WARN_SGR` variables
-(colour at the prompt's marks when an rc exports them, a tty only;
-unset, plain) and `spark bar line` (the machine's one-line status, for
-any status bar to run), and no shell code lives in this tree.
-CI has no WSL runner: the WSL 2 branch is pinned by fixture, and a real
-run there is the maintainer's, by hand. Arch is proven in a container:
-the console, the units and the GPU there are the maintainer's too.
+spark is a local AI at the shell prompt, for Linux (the Debian and Arch
+families), macOS and Windows through WSL 2. Nothing leaves the machine
+except pinned downloads and your own words to a model you run. One
+line installs it, and spark is live. A tool becomes a spark app as a
+client of `spark edit`, in its own `spark-<app>` repository, and no
+shell code lives in this tree. `CLAUDE.md` is the full reference: the
+principles, the layout, the fifteen contracts, the grammar and the
+release steps. This file is the short brief.
 
 ## The landing rule
 
-A change is done only when it is in all of: `spark help` (a line in
-`bin/spark`'s `USAGE`), a `spark <verb>` that sets and applies it (never
-just a `site.env` key by hand), a `spark check` row when it is a promise
-the machine makes, and every doc (`README.md` / `docs/INSTALL.md` /
-`docs/CHEATSHEET.txt` / `docs/CHANGELOG.md`). Apply it, reproduce it in
-`bootstrap.sh` / `install.sh`, detect it in a check row, explain it in
-every doc -- or it is not done.
+A change is done only when it is in all of these. `CLAUDE.md`, "Adding
+things", has the reasons.
+
+- `spark help`: a line in `bin/spark`'s usage text.
+- A `spark <verb>` that sets and applies it, never a `site.env` key by
+  hand.
+- A `spark check` row, when it is a promise the machine makes.
+- Every doc: `README.md`, `docs/INSTALL.md`, `docs/CHEATSHEET.txt` and
+  `docs/CHANGELOG.md`.
+
+Apply it, reproduce it in `bootstrap.sh` or `install.sh`, detect it in a
+row, explain it in every doc. Otherwise it is not done.
 
 ## The grammar
 
-Bare verb = show, never mutate (`spark bar` piped still prints the bar
-line -- a status bar runs it piped); `on|off` is the only switch vocabulary at
-the CLI (storage stays `yes|no`); `status` = bare, `list` = the table;
-`-h` answers first, signed `spark <sub> -- <one line>`; confirms are
-`<question>? yes/NO: ` (`confirm()`); waits are one dot-spinner
-(`wait_ready()`) for a server coming up and one pulse (`text.Busy`,
-a tty only) for a reply, downloads curl's bar; exit codes: 0 ok/show, 1 the
-world (stderr), 2 the invocation (stdout, signed), 78 config, 130
-SIGINT. `CLAUDE.md`'s "The grammar" is the full text.
+`CLAUDE.md`, "The grammar", is the full text.
 
-## The gate, before every commit
+- A bare verb shows and never mutates. `spark bar` piped still prints
+  the bar line: a status bar runs `spark bar` piped.
+- `on|off` is the only switch vocabulary at the CLI. Storage stays
+  `yes|no`.
+- `status` is bare; `list` is the table.
+- `-h` answers first, signed `spark <sub> -- <one line>`.
+- A confirm is `<question>? yes/NO: ` (`confirm()`).
+- A wait is one dot-spinner (`wait_ready()`) for a server coming up,
+  one pulse (`text.Busy`, a tty only) for a reply, and curl's bar for a
+  download.
+- Exit codes: 0 ok or show, 1 the world (stderr), 2 the invocation
+  (stdout, signed), 78 config, 130 `SIGINT`.
+
+## The gate
+
+The pre-commit hook runs the fast half and the pre-push hook the slow
+half. Together they are the gate. `git config core.hooksPath
+.githooks` turns them on.
+
+pre-commit:
 
 ```sh
-/usr/bin/python3 -m py_compile lib/spark/*.py bin/spark
-sh -n bootstrap.sh install.sh lib/env.sh
-shellcheck -S warning bootstrap.sh install.sh lib/env.sh
-/usr/bin/python3 tests/smoke.py
-/usr/bin/python3 tests/serve_smoke.py
-/usr/bin/python3 tests/forge_smoke.py
-/usr/bin/python3 tests/policy_test.py
-/usr/bin/python3 tests/bench_smoke.py
-/usr/bin/python3 tests/docs_test.py
-/usr/bin/python3 tests/vault_test.py
-/usr/bin/python3 tests/sandbox_test.py
-/usr/bin/python3 tests/qr_test.py
-/usr/bin/python3 tests/widget_pty.py zsh home/.config/spark/widget.zsh
-/usr/bin/python3 tests/widget_pty.py pager
-/usr/bin/python3 tests/widget_pty.py completion zsh home/.config/spark/completion.zsh
-/usr/bin/python3 bin/spark check --selftest
-/usr/bin/python3 bin/spark check --chaos
+# the privacy gate: the staged diff, the staged names and the branch
+# syntax, one file per call: sh -n, bash -n, zsh -n, py_compile -W error
+python3 tests/smoke.py
+python3 tests/serve_smoke.py
+python3 tests/forge_smoke.py
+python3 tests/bench_smoke.py
+python3 tests/vault_test.py
+python3 tests/sandbox_test.py
+python3 tests/qr_test.py
+python3 tests/docs_test.py
+python3 tests/policy_test.py
+python3 tests/widget_pty.py zsh home/.config/spark/widget.zsh          # bash on Linux
+python3 tests/widget_pty.py completion zsh home/.config/spark/completion.zsh
+python3 tests/widget_pty.py pager
+python3 bin/spark check --selftest
+# docs/CHEATSHEET.txt within 80 columns; the docs and the page ASCII; shellcheck
+```
+
+pre-push:
+
+```sh
 sh tests/install_test.sh
 sh tests/get_test.sh
 sh tests/update_test.sh
 sh tests/uninstall_test.sh
+python3 bin/spark check --selftest
+python3 bin/spark check --chaos
 ```
 
-(`tests/check_selftest.py` is the hook's entry to `spark check --selftest`.)
+The hooks call `bin/spark` directly; `tests/check_selftest.py` is a
+standalone entry to `spark check --selftest`. The privacy gate also
+reads the staged diff for secret shapes: `SOURCE_SHAPES` in
+`lib/spark/text.py`, minus the two tuned for a paste and the two tuned
+for a source. It names the shape, never the line, and skips a line
+marked `spark:allow-secret`. shellcheck is the contributor's tool, not
+a user's package, and the hook skips it with a notice when absent.
 
-The hook also reads the staged diff for secret shapes -- `SOURCE_SHAPES`
-in `lib/spark/text.py` (`SECRET_SHAPES`, the list `spark line --paste`
-holds, plus the two a source adds), minus the two tuned for a paste and
-not a tree (a credential line, a long base64 run: every sha256 pin is
-one) and the two tuned for a source (a one-time code, a link token) --
-names the shape and never the line, and skips
-a line marked `spark:allow-secret` (a test fixture); its py_compile runs
-`-W error`, so a SyntaxWarning refuses.
-CI is the second net (`.github/workflows/`): `ci.yml` runs the gate on
-Linux and macOS with a real bootstrap, and its `workflows` job runs
-zizmor (a pinned version, in a venv) over the workflows themselves,
-medium and above failing.
-`codeql.yml` is GitHub's static analysis over the python and the
-javascript (`lib/spark/forge/spark.js`) on a push to main, a pull request
-and weekly -- on GitHub's runner, nothing in the tree.
-`advisories.yml` asks GitHub weekly (or by hand) for llama.cpp security
-advisories published after the engine pin's date and opens one issue,
-`llama.cpp advisory after <pin>`, when there are any.
-`.github/dependabot.yml` keeps every workflow's `uses:` sha pin current,
-weekly.
-`tests/forge_probe.py URL` is not in the gate: it probes a live FORGE's
-gates from the wire (`wire.probe_gates`, the `hardening` row's probes),
-one line per gate, exit 1 when any does not hold -- run it against a
-real box, or from forge_smoke.py against its own.
+CI is the second net, `.github/workflows/`. In `ci.yml` the `linux` and
+`macos` jobs run the hermetic tests, then a real bootstrap on the
+runner. The `debian` and `arch` jobs run the one-liner as a new user in
+a container. The `workflows` job runs zizmor over the workflows, medium
+and above failing. `codeql.yml` is GitHub's static analysis over the
+python and the javascript. `advisories.yml` opens one issue when
+llama.cpp publishes a security advisory after the engine pin's date.
+`dependabot.yml` keeps every action's sha pin current.
+`tests/forge_probe.py URL` is not in the gate: it asks a live `FORGE`'s
+gates from the wire, one line per gate, exit 1 when any does not hold.
 
-`--selftest` proves every fixture-testable row CAN flip; `--chaos`
-proves the sentence a row prints under a real failure is true, and
-that the remedy it names heals it. The scenarios live in
-`lib/spark/chaos.py`; the rehearsals that need a real box are in
-docs/ROADMAP.md, not here.
+`--selftest` proves every fixture-testable row can flip. `--chaos`
+proves the sentence a row prints under a real failure is true, and that
+the remedy it names heals it: ten scenarios in `lib/spark/chaos.py`.
 
-## The audition: the editor's briefs, judged blind
+## The audition
 
-Not in the gate -- it needs a live brain -- and the one test that judges
-words. `tests/audition.py` runs eight fixtures (`tests/audition/`: a poem,
-a chapter, a README, a commit message, Portuguese prose, Go, Python,
-shell) through the real `spark edit` -- complete, rewrite, `?` -- against
-the brain this machine answers from, and scores every answer with
-mechanical lints only (no fence, no preamble, a poem keeps its lines,
-code still compiles, the language holds, at most five notes, every quote
-anchors, no `"X" -> "X"`, no praise opener). It prints a table and never
-an answer unless `-v`.
-
-The rule: a change to any `edit-*` brief in `persona.py` carries the
-audition's before and after totals in the PR (`--times 3`: a small model
-is not deterministic). `--json` appends the model, the briefs' hashes
-and the totals to `STATE_DIR/audition.jsonl`, so two briefs are compared
-by number, never by taste.
+The audition is not in the gate: it needs a live model, and it is the
+one test that judges words. `tests/audition.py` runs eight fixtures in
+`tests/audition/` (a poem, a chapter, a README, a commit message,
+Portuguese prose, Go, Python, shell) through the real `spark edit`
+(complete, rewrite, `?`). It scores every answer with mechanical lints
+only. `tests/audition/ground/` holds 10 cases for the grounded
+contracts, scored the same way; `--ground` runs only those. It prints a
+table and never an answer unless `-v`. A change to any `edit-*` brief
+in `persona.py` carries the audition's before and after totals in the
+pull request (`--times 3`: a small model is not deterministic).
+`--json` appends the model, the briefs' hashes and the totals to
+`STATE_DIR/audition.jsonl`, so two briefs are compared by number, never
+by taste.
 
 ## Contracts
 
-The interfaces between parts -- `spark line`, `spark check`, config file
-shape, the FORGE's HTTP API and the rest -- live in `CLAUDE.md`. Read
-them there; do not duplicate them here or let this file drift from it.
+The interfaces between parts live in `CLAUDE.md`, "Contracts": `spark
+line`, `spark check`, the config file shape, the `FORGE` HTTP API and
+the rest. Read them there. Do not duplicate them here.
 
 ## Privacy
 
-No person, machine, or project name belongs in this tree. The personal
-word list lives outside the repo, at `~/.config/spark/privacy-terms`
-(one word per line, 0600), never committed. The pre-commit hook prints a
-NOTICE when that list is absent -- expected on a fresh clone or a fork --
-and still enforces e-mail addresses, private IPv4 ranges, and absolute
-home paths naming a user, with no skip path for those.
+No person, machine or project name belongs in this tree. The personal
+word list lives outside the repository at
+`~/.config/spark/privacy-terms`, one word per line, 0600, never
+committed. The pre-commit hook prints a notice when that list is
+absent, which is expected on a fresh clone or a fork. It still enforces
+e-mail addresses, private IPv4 ranges and absolute home paths naming a
+user, with no skip path. `CLAUDE.md`, "Privacy by design", has the
+whole of it.
 
 ## Never
 
-- Apply `bootstrap.sh` or `install.sh` against a real `HOME` in a test --
-  use a throwaway `HOME` and the matching `XDG_*` dirs.
+- Apply `bootstrap.sh` or `install.sh` against a real `HOME` in a test.
+  Use a throwaway `HOME` and the matching `XDG_*` dirs.
 - Change the banner (`home/.config/spark/banner`): it is spark's own
   artwork.
 - Put an app inside this repository: no plugin, no app package, no app
-  check row. An app is a client of one spark verb (`spark edit`, `spark
-  line`, the FORGE's API), in a repository of its own -- spark-micro is
-  the shape.
+  check row. An app is a client of one spark verb, in a repository of
+  its own. spark-micro is the shape.
 - Add a model row without its size and sha256 from Hugging Face's file
-  metadata and its license, or mark one `_TESTED="line"` without the
-  line proof (`spark line` answers valid JSON for it).
-- Call `git` on `spark line`'s path: the widgets depend on nothing but
+  metadata and its license. Mark one `_TESTED="line"` only with the line
+  proof: `spark line` answers valid JSON for it.
+- Call `git` on `spark line`'s path. The widgets depend on nothing but
   the line contract, and it must never block.
-- Fork, call a model or write a file in the widgets' prompt hook (the
-  failure line): it runs before every prompt, and it is a `$?` test, a
-  few variable writes and at most one `printf`. The ONE read it may do:
-  `state/fails`, the plain hash->fix index the ledger writes (failure
-  memory) -- opened with shell builtins, never a fork, never a model
-  call. Its state is otherwise per pane and in memory -- never
+- Fork, call a model or write a file in the widgets' prompt hook, the
+  failure line. It runs before every prompt: a `$?` test, a few variable
+  writes and at most one `printf`. The one read it may do is
+  `state/fails`, the plain hash-to-fix index the ledger writes, opened
+  with shell builtins. Its other state is per pane and in memory: never
   exported, never on disk.
-- Write non-ASCII into a doc: the pre-commit hook refuses it, because
-  these docs are read on the Linux console too.
-- Name a private repository or tool in any doc: what is not public is
-  not documented (`tests/docs_test.py` refuses the word for the tooling
-  that makes distros and apps).
-- Bring the taxonomy into what a new user reads: README, INSTALL,
-  CHEATSHEET and the page front speak two nouns, spark and spark apps,
-  step by step (docs_test holds the word list); `CLAUDE.md` keeps the
-  contracts' names.
+- Write non-ASCII into a doc. The pre-commit hook refuses it, because
+  the docs are read on the Linux console too.
+- Name a private repository or tool in any doc. What is not public is
+  not documented, and `tests/docs_test.py` refuses the word for that
+  tooling.
+- Bring the contracts' names into what a new user reads. `README.md`,
+  `docs/INSTALL.md`, `docs/CHEATSHEET.txt` and the page front speak two
+  nouns, spark and spark apps. `docs_test.py` holds the word list;
+  `CLAUDE.md` keeps the names.
 
 ## Voice
 
-Lowercase messages, one mark (`*` answer, `!` warn, both OSes), `--`
+Every document, help text and usage text speaks with one voice.
+`docs/CONTRIBUTING.md`, "Voice", is the style sheet. Messages are
+lowercase, with one mark (`*` answer, `!` warn, both OSes) and `--`
 before the remedy when there is one.
