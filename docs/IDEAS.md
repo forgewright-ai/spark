@@ -19,7 +19,7 @@ one.
 
 Two things are already built, and almost nothing else has both:
 
-- The line is ours: the `Esc s` binding reads the line you typed,
+- The line is spark's: the `Esc s` binding reads the line you typed,
   calls `spark line` (contract 4) and puts the answer back in the line
   before the shell runs it. A pane that prints an answer beside your
   shell is a different, smaller thing.

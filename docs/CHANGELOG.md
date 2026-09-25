@@ -12,13 +12,15 @@
   `docs/CONTRIBUTING.md`, `CREDITS.md`, `AGENTS.md`, `CLAUDE.md`,
   `site.env.example` and `spark.env.example`. The history below this
   entry stays as it was written.
-- The docs say what the code does. The Arch install line names
-  `openssh`. A token is shown once, when you ask for it. A watch
-  window is up to 40 lines or 10 seconds, 8 kB at most. A palette is
-  20 `THEME_*` keys. The `spark check` flags, the `spark serve` flags,
-  `spark user remove`, `spark theme profile`, `spark font none`,
-  `spark forge --show-token` and `spark bar line` are documented with
-  their verbs. The keys table names `SITE_SHARE` and `SITE_PEER_SSH`.
+- The docs say what the code does. The install lines name `openssh`
+  (Arch) and `openssh-client` (Debian). A token is shown once, when
+  you ask for it. A watch window is up to 40 lines or 10 seconds, 8 kB
+  at most. A palette is 20 `THEME_*` keys. `spark check` exits 0 when
+  no row fails, and every doc says so. The `spark check` flags, the
+  `spark serve` flags, `spark user remove`, `spark theme profile`,
+  `spark font none`, `spark forge --show-token` and `spark bar line`
+  are documented with their verbs. The keys table names `SITE_SHARE`
+  and `SITE_PEER_SSH`.
 - `spark help` opens with the tagline the README carries, and its
   status line names the model, the prompt line, the server, soul,
   memory and the last answer. The model's briefing no longer names

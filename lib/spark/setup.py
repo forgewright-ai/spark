@@ -352,7 +352,7 @@ def _join(name, user, opts, yes):
     _write(name, user, "none", "none")                      # SITE_AI_MODEL=none, SITE_THEME=none
     site.set_keys(_quiet=True, SITE_PEER_AI_URL=url)
     site.set_keys(_file=SPARK_ENV, _quiet=True, SPARK_API_KEY_FILE=SHARE_TOKEN)
-    say("ok     join         %s -- this box's shared engine (no model to download)" % url)
+    say("ok     join         %s -- this machine's shared engine (no model to download)" % url)
     _account(user)                                          # this user's own sealed store, no root
     rc = site.apply(CORE_ROWS, stream=True)
     if rc != 0:

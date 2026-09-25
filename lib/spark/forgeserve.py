@@ -149,7 +149,7 @@ USAGE = """%s forge -- the page and its server
   spark forge off --force      also a managed unit's, or one spark did not start
   spark forge --foreground     what the unit runs; exit 78 = misconfigured
                                (--host ADDR, --port N override the config)
-  spark forge --print-url      the page's login URL; at a tty the admin
+  spark forge --print-url      the page's login URL; at a terminal the admin
                                token and its QR -- scan it, the phone is
                                in (--no-qr; --show-token when piped); a
                                user logs in with their own QR or token

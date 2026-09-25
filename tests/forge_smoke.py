@@ -417,9 +417,9 @@ def main():
             rc0, out0, _ = spark("model", extra={"SITE_AI_MODEL": "none", "SITE_PEER_AI_URL": url,
                                                  "SPARK_FORGE_TOKEN": utoken, "SPARK_MEM_TOTAL_GB": "1"})
             head0 = out0.splitlines()[0] if out0 else ""
-            ok(rc0 == 0 and "a client of " + url in head0 and "the peer's table" in head0 and "%.0f GB for models" % dm["total_gb"] in head0
+            ok(rc0 == 0 and "a client of " + url in head0 and "the other machine's table" in head0 and "%.0f GB for models" % dm["total_gb"] in head0
                and " 1 GB" not in head0,
-               "spark model on a client of this FORGE prints the peer's table, not its own 1 GB", out0[:300])
+               "spark model on a client of this FORGE prints the other machine's table, not its own 1 GB", out0[:300])
             ok(any(ln.endswith("tok/s") or ln.endswith("too big") for ln in out0.splitlines()), "the peer's rows carry the peer's verdicts", out0[:300])
             # /api/config with a spark.env naming the secret files (the real
             # paths, so the running forge keeps its token) and a key with

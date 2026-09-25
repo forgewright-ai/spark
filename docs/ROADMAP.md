@@ -13,7 +13,7 @@ experience have sat in the ideas file behind the test suite.
 ## 1. The wait for the first line is the model's own speed
 
 Measured 2026-09-14 on the box's 12B with v1.32's instrument: a 14 kB
-source, the same question three times, a chat between the second and
+source, the same question 3 times, a chat between the second and
 the third.
 
 - Cold: 3632 prompt tokens processed at 185 tok/s, 43.7 seconds in
@@ -49,12 +49,12 @@ form before it lands.
 
 The third lever is `--warm` on contract 11. The cold prefill is 20
 seconds of the 43.7, and cold is the common case: a page is read once.
-A reading client sends the source the moment its key is pressed, with
+A reading app sends the source the moment its key is pressed, with
 no question yet, and the typing hides the prefill. The cache holds, so
 the real call reuses the warm call's prefix. This is the one prefill
 lever.
 
-Measured 2026-09-14 on the three rows that fit the box's 9 GB, one
+Measured 2026-09-14 on the 3 rows that fit the box's 9 GB, one
 model in both roles, a 6 kB source that answers, the audition once
 each:
 
@@ -86,12 +86,12 @@ Gemma 3 12B 5/9 and Granite 4.2 8B 25/30, the best. The 4B and the
 12B scores come from a single run, so plus or minus one. Three rows
 proven on the line carry none: the 1.7B, the 14B and the 30B-A3B.
 `auto` prefers a grounded row when two fit the budget, so between
-those three the preference is still blind.
+those 3 the preference is still blind.
 
 - Run `tests/audition.py --json` on each `_TESTED` row and write the
   score into `models.env` by hand, the way `_TESTED` carries the line
-  proof. The page's model table then shows the reader's quality, not
-  only the prompt's.
+  proof. spark.forgewright.ai/models/ then shows the reader's quality,
+  not only the prompt's.
 - The read-about case, the ninth in the audition, stays the measure of
   the gap. Three brief rewrites each traded that miss for false
   grounding elsewhere, so the brief does not move again until a
@@ -127,10 +127,10 @@ from the maintainer's chair.
   month is a candidate to leave, and one that runs 40 times a day is
   where the next hour goes.
 - A tag when something is stable enough to defend, not per commit.
-  `spark update` on a clone follows the newest tag, so a tag is a
-  promise to that clone.
-- The two small history items that pass the test in `docs/IDEAS.md`
-  and cost almost nothing, once the numbers say the hint row is read.
+  `spark update` on a clone follows the newest release tag, so a tag
+  is a promise to that clone.
+- The two small history items, which pass the ideas test and cost
+  almost nothing, once the numbers say the hint row is read.
   The first is the command you keep retyping: an alias you do not
   have, offered once, counts only.
 - The second is the tool you have and do not use: 10 `find` on a
@@ -139,9 +139,9 @@ from the maintainer's chair.
 
 ## 5. The first new user
 
-Before an issue tracker exists: one new user, someone known, installs
-spark unattended on their own machine with nothing but `README.md`,
-and says what broke. CI's container proves the one-liner on a clean
+Before an issue tracker exists: a known user, new to spark, installs
+it unattended on their own machine with nothing but `README.md`, and
+says what broke. CI's container proves the one-liner on a clean
 image. It does not prove it on a laptop with a life on it. Issues open
 after that conversation, not before. The maintainer is the worst
 reporter of the product, and a public tracker with nobody behind it is
@@ -183,7 +183,7 @@ and the model guessed at the next flag twice.
 ## 8. spark do goes on
 
 Seen the same evening: `spark do again` ran as a new goal with nothing
-to go on and spent its eight steps listing the home directory. The run
+to go on and spent its 8 steps listing the home directory. The run
 before it had its answer in `free -h` at step two and never said so.
 `spark line` continues its newest thread with `??`. `spark do` has no
 way to say "the last run: again" or "go on".

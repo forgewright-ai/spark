@@ -3307,7 +3307,7 @@ def main():
         rc, out, _ = spark("font", extra=off)
         t.ok(rc == 0 and out.startswith("spark font -- "), "spark font shows (core)", out)
         rc, out, _ = spark("font", "-h", extra=off)
-        t.ok(rc == 0 and out.splitlines()[0] == "spark font -- the terminal's font",
+        t.ok(rc == 0 and out.splitlines()[0] == "spark font -- the console font, or Terminal.app's",
              "spark font -h signs (contract 8)", out)
         rc, out, _ = spark("font", "list", extra=off)
         # a show answers on every family: where there is no console file
@@ -3451,7 +3451,7 @@ def main():
              "the refusals wrote nothing", site_env)
         rc, out, _ = spark("client", "off", extra=off)
         site_env = open(home + "/.config/spark/site.env").read()
-        t.ok(rc == 0 and "SITE_AI_MODEL=auto\n" in site_env and "the peer stays first" in out,
+        t.ok(rc == 0 and "SITE_AI_MODEL=auto\n" in site_env and "the other machine stays first" in out,
              "spark client off hands the model choice back to auto", out)
         rc, out, _ = spark("client", "-h")
         t.ok(rc == 0 and out.splitlines()[0] == "spark client -- a client of another machine's server",

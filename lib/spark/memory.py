@@ -27,7 +27,8 @@ MEMORY_USAGE = """%s memory -- what it keeps
   spark memory forget N         drop fact N as listed above
   spark memory forget <words>   drop the one fact containing the words
 
-  The file is ~/.config/spark/memory, one fact per line, # for comments.
+  The facts live sealed in your store. The pre-v1.4 file
+  ~/.config/spark/memory is read until the first write.
   Quote a fact that carries ( ) * ? or | -- the shell eats them first.
 """ % (MARK, FACT_MAX, FACTS_MAX)
 

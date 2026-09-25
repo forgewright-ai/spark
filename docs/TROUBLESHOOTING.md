@@ -5,14 +5,14 @@ things change, and no release waits on it.
 
 ## The Wi-Fi adapter and connection
 
-A machine on Wi-Fi that will not connect looks broken in five ways at
+A machine on Wi-Fi that will not connect looks broken in 5 ways at
 once. It is almost always one cause. Work this section top to bottom,
-and do not skip to theories.
+in order.
 
 This applies to the Arch live ISO, which runs `iwd` and `iwctl`, and,
 where noted, to an installed system running NetworkManager.
 
-### Rule 0: one Wi-Fi daemon per card
+### One Wi-Fi daemon per card
 
 A Wi-Fi card obeys one manager. On the Arch live ISO that manager is
 `iwd`. When a `wpa_supplicant` also runs, started by hand or left over
@@ -34,9 +34,9 @@ rm -f /etc/wpa_supplicant/wpa_supplicant.conf
 systemctl restart iwd
 ```
 
-Then connect as usual. Do not debug anything else first.
+Then connect as usual. This comes before anything else.
 
-### Rule 1: read the logs before forming a theory
+### The logs first
 
 Two commands name the real problem. Run them after any failure:
 
@@ -49,11 +49,11 @@ How to read what they say:
 
 | Log line | Meaning |
 |---|---|
-| `Could not register frame watch ... -114` | Another daemon owns the card. Go to Rule 0. |
+| `Could not register frame watch ... -114` | Another daemon owns the card. One daemon per card, above. |
 | `Unexpected connection related event -- is another supplicant running?` | The same. iwd says it outright. |
 | `event: connect-failed, status: 1` | iwd's attempt was refused. Check the dmesg side. |
 | `wlan0: authentication with <bssid> timed out`, repeating | Auth frames not answered: a weak signal, or two daemons taking turns. |
-| `wlan0: authenticated` then `associated`, but iwctl says failed | The other daemon connected, not iwd. Rule 0. |
+| `wlan0: authenticated` then `associated`, but iwctl says failed | The other daemon connected, not iwd. One daemon per card. |
 | `event: connect-info ... signal: -48` | The signal report. -40s is excellent, -60s fine, -75 and worse is trouble. |
 
 ### The reset ladder
@@ -72,14 +72,14 @@ systemctl restart iwd                 # 3. a fresh driver (find <driver> below)
 #    reboot does not reset the card.
 ```
 
-Find `<driver>` first. Do not guess it:
+Find `<driver>` first. dmesg names it:
 
 ```
 dmesg | grep -iE 'iwlwifi|mt7|rtw|ath1'
 ```
 
 `iwlwifi` is Intel, `mt79xx` is MediaTek, `rtw` is Realtek, `ath` is
-Qualcomm. In the worked example below, the card announced itself as
+Qualcomm. In the real session below, the card announced itself as
 `iwlwifi` after an hour of MediaTek guesses. dmesg knows.
 
 ### Scanning and connecting with iwctl
@@ -134,7 +134,7 @@ nmcli dev wifi                        # the list, with signal
 nmcli dev wifi connect "<ssid>" password '<passphrase>'
 ```
 
-### Worked example: a real session, names changed
+### A real session
 
 Symptoms, in the order they appeared:
 
@@ -172,7 +172,7 @@ scans, it was the "connected" client the router saw, and it owned the
 mystery association in dmesg. The signal was never weak. The machine
 was fighting over the card and measuring the far access point.
 
-The fix, three commands and ten seconds:
+The fix, 3 commands and 10 seconds:
 
 ```
 kill 1058
@@ -181,5 +181,6 @@ systemctl restart iwd
 iwctl station wlan0 connect "<home-ssid>"     # connected, -48 dBm
 ```
 
-The lesson: Rule 0 and Rule 1 exist because every minute spent on
-theories was answered, in plain English, by a log nobody had read yet.
+The lesson: the first two sections exist because every minute spent
+on theories was answered, in plain English, by a log nobody had read
+yet.

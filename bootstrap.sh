@@ -487,9 +487,9 @@ case $rc_shell in
     *)    rc=; rc_line= ;;
 esac
 if [ -z "$rc" ]; then
-    row todo rc "shell $rc_shell: no widget for it -- bash 4+ or zsh hosts one (chsh -s /bin/zsh)"
+    row todo rc "shell $rc_shell: no prompt line for it -- bash 4+ or zsh hosts one (chsh -s /bin/zsh)"
 elif [ "$rc_shell" = bash ] && [ "${rc_major:-0}" -lt 4 ]; then
-    row todo rc "bash ${rc_major:-3} cannot host the widget -- zsh can (chsh -s /bin/zsh)"
+    row todo rc "bash ${rc_major:-3} cannot host the prompt line -- zsh can (chsh -s /bin/zsh)"
 elif grep -qF 'config/spark/hook.' "$rc" 2>/dev/null; then
     ok rc "~${rc#"$HOME"} sources the hook"
 elif need rc "add one line to ~${rc#"$HOME"}"; then
