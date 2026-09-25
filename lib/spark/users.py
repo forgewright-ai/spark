@@ -395,7 +395,7 @@ def cmd_login(args):
             say("spark user: on this machine say who you are -- spark user login NAME")
             return 2
         write_login(name, token)
-        say("ok     account      this machine is %s (verified by the FORGE on first use)" % name)
+        say("ok     account      this machine is %s (verified by the page's server on first use)" % name)
         return 0
     found = find_by_token(token)
     if name and found and name != found:
@@ -434,7 +434,7 @@ def cmd_token(args):
         say("spark user: no login here -- spark user login NAME first")
         return 2
     if not exists(name):
-        say("spark user: %s's sealed store is not on this machine -- rotate on the box" % name)
+        say("spark user: %s's sealed store is not on this machine -- rotate on the machine that holds it" % name)
         return 2
     try:
         new = rotate(name, token)

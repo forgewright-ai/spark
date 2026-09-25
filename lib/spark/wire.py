@@ -186,7 +186,7 @@ def probe_gates(url, timeout=5.0):
     fh = forge_health(url, timeout)
     out.append(("health", isinstance(fh, dict),
                 "/api/health says forge: true" if isinstance(fh, dict) else
-                ("/api/health: nothing answers" if fh == "down" else "/api/health: not a FORGE")))
+                ("/api/health: nothing answers" if fh == "down" else "/api/health: not the page's server")))
     st, h = _status(url, "/", timeout=timeout)
     for gate, header, want in _PAGE_HEADERS:
         got = (h.get(header) or "").strip() if st else ""
@@ -340,21 +340,21 @@ def no_brain_hint(cfg):
     if cfg.base_url:
         return "no answer from SPARK_BASE_URL %s" % cfg.base_url
     if cfg.prefer_url:
-        return "no answer from the peer %s -- is it up? (spark serve starts a local brain)" % cfg.prefer_url
+        return "no answer from the peer %s -- is it up? (spark serve starts a local engine)" % cfg.prefer_url
     from . import engine
     st = engine.service_state(cfg)
     if st == "loaded":
         if IS_MAC:
             dom = engine.service_domain(cfg)
-            return "no brain awake -- %slaunchctl kickstart -k %s" % ("sudo " if dom == "system" else "", engine.service_target(cfg))
-        return "no brain awake -- systemctl --user restart spark-serve"
+            return "no engine awake -- %slaunchctl kickstart -k %s" % ("sudo " if dom == "system" else "", engine.service_target(cfg))
+        return "no engine awake -- systemctl --user restart spark-serve"
     if st == "disabled":
-        return "no brain awake -- the service is disabled on purpose; `spark serve` starts one by hand"
+        return "no engine awake -- the service is disabled on purpose; `spark serve` starts one by hand"
     m = engine.model_file(cfg)
     if not m:
-        return "no brain awake -- no model in %s (./bootstrap.sh downloads one)" % cfg.models_dir
+        return "no engine awake -- no model in %s (./bootstrap.sh downloads one)" % cfg.models_dir
     gb = os.path.getsize(m) / 2**30
-    return "no brain awake -- `spark serve` loads %s (%.1f GB)" % (os.path.basename(m), gb)
+    return "no engine awake -- `spark serve` loads %s (%.1f GB)" % (os.path.basename(m), gb)
 
 
 def resolve_brain(cfg, fresh=False):

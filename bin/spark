@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-# spark -- your own AI, on your own machine, at no cost
+# spark -- your own AI, on a machine you own: no account, no cloud, nothing leaves
 #
 #   spark chat                 a conversation; spark @FILE words asks about a file
 #   spark <words>              ask; a streamed answer
 #   spark do <words>           a task, one confirmed command at a time
 #   ? how big is this dir?     at the prompt: the answer lands in your line
 #   cmd 2>&1 | explain         what went wrong (explain is a symlink to spark)
-#   spark serve [on|off]       the local model server
-#   spark check                is this machine still what its repo says?
+#   spark serve [on|off]       the engine: one LAN address, token required
+#   spark check                the machine row by row; exit 0 = every row ok
 #   spark bar                  the machine's one-line status
 #
 # Python 3.9+, stdlib only. The package lives in lib/spark/ beside the real

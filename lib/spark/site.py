@@ -20,7 +20,7 @@ from . import (CONFIG_DIR, HOME, IS_MAC, MARK, REPO, SHARE_TOKEN, SHARE_URL, SIT
 # WSL 2: Linux, minus what the VT console and GRUB own (contract 8 lines)
 WSL_NO_FONT = "no console on WSL 2: the font lives in Windows Terminal's settings"
 WSL_NO_BOOT = "no GRUB on WSL 2: Windows boots it"
-WSL_NO_BRAIN = "WSL 2 stops with its last window: not a brain (a Linux box is)"
+WSL_NO_BRAIN = "WSL 2 stops with its last window: it cannot stay on and answer (a Linux machine can)"
 # a Linux with neither console mechanism (contract 8 line); Arch keeps
 # only the kernel-line refusal, and only without a Unified Kernel Image
 NO_CONSOLE_FONT = "no console-setup and no vconsole.conf here: the console font is not spark's to set"
@@ -557,8 +557,8 @@ def cmd_headless(args):
         return 0
     if not args or args[0] == "status":
         say("%s headless -- SITE_HEADLESS=%s: %s" % (MARK, "yes" if cfg.headless else "no",
-                                                    "a brain (the FORGE up from boot, never asleep)" if cfg.headless
-                                                    else "a workstation (spark headless on for a brain)"))
+                                                    "stays on and answers (the page's server up from boot, never asleep)" if cfg.headless
+                                                    else "under your login (spark headless on makes it stay on and answer)"))
         for piece, good, detail in headless_facts(cfg):
             say("  %s %-26s %s" % (glyph("ok") if good else ("!" if cfg.headless else glyph("na")), piece, detail))
         return 0
@@ -594,7 +594,7 @@ def no_share():
     """Why a shared engine is not this machine's to set here ('' when it
     is): macOS keeps one user per box in this version, WSL 2 is not a brain."""
     if IS_MAC:
-        return "one user per box on macOS in this version -- a shared engine is a Linux box story"
+        return "one user per machine on macOS in this version -- a shared engine is a Linux story"
     if is_wsl():
         return WSL_NO_BRAIN
     return ""
@@ -718,15 +718,15 @@ def cmd_client(args):
         if not cfg.client:
             say("%s client -- not a client: SITE_AI_MODEL=%s, SITE_PEER_AI_URL=%s" % (
                 MARK, cfg.model_choice, cfg.peer_ai_url or "unset"))
-            say("  spark client URL answers from another machine's FORGE, nothing served here")
+            say("  spark client URL answers from another machine's server, nothing served here")
             return 0
         say("%s client -- of %s (SITE_AI_MODEL=none: nothing runs here)" % (MARK, cfg.peer_ai_url))
         fh = wire.forge_health(cfg.peer_ai_url)
         if isinstance(fh, dict):
             up = fh.get("upstream", "down")
-            peer = "forge %s%s" % ("ok, " + fh.get("model", "?") if up == "ok" else "up, its model " + up, "")
+            peer = "page's server %s%s" % ("ok, " + fh.get("model", "?") if up == "ok" else "up, its model " + up, "")
         else:
-            peer = "down" if fh == "down" else "server " + wire.health(cfg.peer_ai_url)
+            peer = "down" if fh == "down" else "engine " + wire.health(cfg.peer_ai_url)
         say("  %s %-12s %s" % (glyph("ok") if "ok" in peer else "!", "peer", peer))
         me = users.account()[0]
         say("  %s %-12s %s" % (glyph("ok") if me else "!", "account",
@@ -742,7 +742,7 @@ def cmd_client(args):
         return model.cmd_model(["auto"])
     url = args[0].rstrip("/")
     if not re.match(r"^https?://[^/\s]+$", url):
-        say("%s client -- URL is http://host:port, the FORGE's (spark forge --print-client there)" % MARK)
+        say("%s client -- URL is http://host:port, the other machine's server (spark forge --print-client there)" % MARK)
         return 2
     set_keys(SITE_PEER_AI_URL=url, SITE_AI_MODEL="none")
     if not cfg.get("SPARK_API_KEY_FILE", "") and os.access(SHARE_TOKEN, os.R_OK):

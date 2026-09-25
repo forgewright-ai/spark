@@ -615,7 +615,7 @@ def cmd_brain(args):
     if porcelain:                       # contract 5: the spark role's stem
         say("%s\t%s\t%s" % (url, model, "forge" if is_forge else "model"))
         return 0
-    say("%s  %s  (%s)" % (url, model, "a FORGE" if is_forge else "a llama-server"))
+    say("%s  %s  (%s)" % (url, model, "the page's server" if is_forge else "the engine"))
     for role, stem, loaded in _role_rows(cfg, url, is_forge):
         say("  %s  %s  %s" % (role, stem, "loaded" if loaded else "unloaded"))
     return 0
@@ -659,7 +659,7 @@ def cmd_status(args, _bare=False):
             # only a machine that really serves an ember role says "ember";
             # a single model is just the model
             ember = next((s for role, s, _l in _role_rows(cfg, url, is_forge) if role == "ember"), None)
-            what = ("ember %s" % ember) if ember else ("model %s" % model)
+            what = ("chat model %s" % ember) if ember else ("model %s" % model)
             say("%s -- %s at %s%s (spark status for the rest)" % (MARK, what, url, bar.waiting(", ")))
         except wire.BrainError as e:
             say("%s -- %s (spark status for the rest)" % (MARK, e.hint))
@@ -672,11 +672,11 @@ def cmd_status(args, _bare=False):
         rows = _role_rows(cfg, url, is_forge)
         if rows:
             model = " - ".join("%s %s" % (role, stem) for role, stem, _loaded in rows)
-        say("  brain    %s  (%s%s, /health %dms)" % (url, model, ", a FORGE" if is_forge else "", int((time.time() - t0) * 1000)))
+        say("  model    %s  (%s%s, /health %dms)" % (url, model, ", the page's server" if is_forge else "", int((time.time() - t0) * 1000)))
     except wire.BrainError as e:
-        say("  brain    " + e.hint)
+        say("  model    " + e.hint)
     w = live_widgets()
-    say("  widget   %s%s" % ("off (spark on)" if os.path.exists(OFF_FLAG) else "on",
+    say("  prompt   %s%s" % ("off (spark on)" if os.path.exists(OFF_FLAG) else "on",
                               "  in %s" % ", ".join("%s %d" % x for x in w) if w else "  (no shell has sourced it)"))
     st = engine.service_state(cfg)
     say("  service  %s" % {"loaded": "always-on", "disabled": "disabled on purpose", "absent": "on demand (spark serve)"}[st])

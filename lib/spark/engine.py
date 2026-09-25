@@ -638,7 +638,7 @@ def service_target(cfg, unit="serve"):
 def daemon_note(cfg, unit="serve", verb="kickstart -k"):
     """The one honest line when a unit is a LaunchDaemon: the user must sudo."""
     return "todo   %-12s the %s runs as a daemon (spark headless): sudo launchctl %s %s" % (
-        unit, "FORGE" if unit == "forge" else "server", verb, service_target(cfg, unit))
+        unit, "page's server" if unit == "forge" else "engine", verb, service_target(cfg, unit))
 
 
 def user_bus_env():

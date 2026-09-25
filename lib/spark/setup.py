@@ -232,7 +232,7 @@ def _rc_line():
     if path:
         say("todo   rc           ~%s does not source the hook -- ./bootstrap.sh --dry-run says why" % path[len(HOME):])
     else:
-        say("todo   rc           shell %s: no widget for it -- bash 4+ or zsh hosts one (chsh -s /bin/zsh)" % shell)
+        say("todo   rc           shell %s: no prompt line for it -- bash 4+ or zsh hosts one (chsh -s /bin/zsh)" % shell)
 
 
 def _serve(cfg):
@@ -319,7 +319,7 @@ def _closing():
     say("  spark chat                      a conversation")
     say("  ? how big is this dir           a command in your line, a hint above it")
     say("  cmd 2>&1 | explain              what went wrong, and the fix")
-    say("spark ember NAME adds a second brain: a bigger model, just for conversation")
+    say("spark ember NAME adds a chat model: a bigger one, just for conversation")
 
 
 def _joining(yes):
@@ -390,7 +390,7 @@ def _run(opts):
         # logs in with a token minted THERE -- a client never mints, the
         # FORGE it answers from is the account authority
         say("skip   account      no model here -- spark model NAME mints one on first use; a client logs in")
-        say("                    (spark user add NAME on the FORGE, then spark user login NAME here)")
+        say("                    (spark user add NAME on the other machine, then spark user login NAME here)")
     else:
         _account(user)
     cfg = config.load()
@@ -411,7 +411,7 @@ def _run(opts):
         theme.set_theme(theme_name)
     _rc_line()
     if model == "none":
-        say("no model chosen -- spark model NAME later, or SITE_PEER_AI_URL for another machine's brain")
+        say("no model chosen -- spark model NAME later, or SITE_PEER_AI_URL for another machine's model")
     if opts["serve"] and (model != "none" or cfg.prefer_url):
         cfg = config.load()
         # SPARK_NO_APPLY (tests): no server here, but the question still

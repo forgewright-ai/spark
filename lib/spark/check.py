@@ -530,7 +530,7 @@ def row_ai(ctx):
     else:
         missing.append("a model in %s" % ctx.short(ctx.cfg.models_dir))
     if m and not e and engine.chosen_model_name(ctx.cfg, "ember"):
-        missing.append("the ember %s" % engine.chosen_model_name(ctx.cfg, "ember").replace(".gguf", ""))
+        missing.append("the chat model %s" % engine.chosen_model_name(ctx.cfg, "ember").replace(".gguf", ""))
     if not which("spark"):
         missing.append("spark on PATH")
     if missing:
@@ -606,7 +606,7 @@ def row_prompt(ctx):
     state, rc = site.rc_hook_state(shell)
     if state == "missing":
         if rc is None:
-            return warn("shell %s: no widget for it" % shell, "bash 4+ or zsh hosts one (chsh -s /bin/zsh)")
+            return warn("shell %s: no prompt line for it" % shell, "bash 4+ or zsh hosts one (chsh -s /bin/zsh)")
         return warn("%s lacks the spark line" % ctx.short(rc), "./bootstrap.sh   (row rc), or paste: " + site.RC_LINE[shell])
     via = "%s (hook)" % ctx.short(rc)
     live = cli.live_widgets()
@@ -615,12 +615,12 @@ def row_prompt(ctx):
     if not live:
         if ctx.cfg.headless:
             return na("headless: no interactive shell open (the prompt works when one is)")
-        return warn("no shell has sourced the widget", "open a new shell (the rc file sources ~/.config/spark/widget.*)")
+        return warn("no shell has sourced the prompt line", "open a new shell (the rc file sources ~/.config/spark/widget.*)")
     url, model = _brain(ctx)
     who = ", ".join("%s %d" % (s, p) for s, p in live[:3])
     if not url:
-        return na("widget in %s -- %s" % (who, model), model)
-    return ok("%s; widget in %s -- %s at %s" % (via, who, model, url.split("//")[-1]))
+        return na("prompt line in %s -- %s" % (who, model), model)
+    return ok("%s; prompt line in %s -- %s at %s" % (via, who, model, url.split("//")[-1]))
 
 
 @row("CAPABILITY")
@@ -664,7 +664,7 @@ def row_failure(ctx):
     if not armed:
         if ctx.cfg.headless:
             return na("headless: no interactive shell open (armed when one is)")
-        return warn("no shell has sourced the widget", "open a new shell")
+        return warn("no shell has sourced the prompt line", "open a new shell")
     return ok("armed in %s -- a nonzero exit offers explain (Esc s)" % ", ".join(armed[:3]))
 
 
@@ -767,7 +767,7 @@ def row_forge(ctx):
         # code with every row green: the health's version must match
         ver, mine = str(fh.get("version") or ""), version.version()
         if ver and mine and ver != mine:
-            return warn("forge runs %s, the tree is %s" % (ver, mine),
+            return warn("the page's server runs %s, the tree is %s" % (ver, mine),
                         "spark forge off; spark forge on")
         return ok(value)
     if fh is None:
@@ -811,10 +811,10 @@ def row_peer(ctx):
         if isinstance(fh, dict):
             up = fh.get("upstream", "down")
             h = "ok" if up == "ok" else "up, its model %s" % up
-            parts.append("forge %s %s" % (host, h))
+            parts.append("page's server %s %s" % (host, h))
         else:
             h = "down" if fh == "down" else wire.health(ctx.cfg.peer_ai_url)
-            parts.append("ai %s %s" % (host, h))
+            parts.append("engine %s %s" % (host, h))
         if h != "ok":
             worst = WARN
         elif isinstance(fh, dict) and ctx.cfg.client:
@@ -1236,10 +1236,10 @@ def row_privacy(ctx):
         pass
     url = wire.serve_url()
     if url and "0.0.0.0" in url:
-        problems.append("server bound to 0.0.0.0")
+        problems.append("the engine bound to 0.0.0.0")
     furl = forge_url()
     if furl and "0.0.0.0" in furl:
-        problems.append("forge bound to 0.0.0.0")
+        problems.append("the page's server bound to 0.0.0.0")
     ftok = ctx.cfg.forge_token_file
     if os.path.exists(ftok) and os.stat(ftok).st_mode & 0o077:
         problems.append("forge-token not 0600")

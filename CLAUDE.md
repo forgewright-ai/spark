@@ -680,7 +680,8 @@ and may change freely.
    same shape: `spark font -- no console on WSL 2: the font lives in
    Windows Terminal's settings` (show 0, set 2), `spark quiet boot -- no
    GRUB on WSL 2: Windows boots it` and `spark headless -- WSL 2 stops
-   with its last window: not a brain (a Linux box is)` (exit 2). On Arch
+   with its last window: it cannot stay on and answer (a Linux machine
+   can)` (exit 2). On Arch
    the verb is real only when a mkinitcpio preset builds a Unified
    Kernel Image (`site.boot_shape()` is `uki`), through the
    `/etc/cmdline.d` drop-in. Otherwise it answers `spark quiet boot --
