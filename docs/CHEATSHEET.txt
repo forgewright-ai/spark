@@ -142,8 +142,6 @@ DOCUMENTS (docs/ holds every document but README.md and CREDITS.md)
   not tied to a release:
   docs/TOUR.md                    a first hour: twelve small things to try
   docs/APPS.md                    editors and tools that speak to spark
-  docs/SHELL.md                   spark's own shell for a machine that is
-                                  only an AI box (the spark-shell repository)
   docs/IDEAS.md                   the field the roadmap is picked from
   docs/TROUBLESHOOTING.md         a box that will not join the WiFi: one
                                   WiFi daemon per card, then the logs

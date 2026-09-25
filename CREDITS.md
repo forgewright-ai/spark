@@ -60,15 +60,12 @@ one project differently, both names are here.
 - kbd -- https://kbd-project.org/ -- GPL-2.0-or-later (`setvtrgb`, the
   console palette unit; the console fonts on Arch)
 
-## The shell tools
+## The apps
 
-The look and the workstation tools -- tmux, starship, bat, eza, fzf,
-zoxide, ripgrep, fd, jq, btop -- are spark-shell's, its
-own repository with its own credits
-(github.com/forgewright-ai/spark-shell). An app's plugin is its own
-repository too (github.com/forgewright-ai/<name> -- spark-micro,
-spark-neovim, spark-vim, spark-helix, spark-nano, spark-w3m,
-spark-newsboat, spark-aerc, spark-acp).
+An app's plugin is its own repository with its own credits
+(github.com/forgewright-ai/<name> -- spark-micro, spark-neovim,
+spark-vim, spark-helix, spark-nano, spark-w3m, spark-newsboat,
+spark-aerc, spark-acp).
 
 ## Models
 

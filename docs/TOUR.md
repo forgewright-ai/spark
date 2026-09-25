@@ -10,7 +10,7 @@ appear in `spark help`, `docs/CHEATSHEET.txt` or a `docs/CHANGELOG.md` entry,
 and no release waits on it.
 
 Most of the tour needs only spark. A few stops use a spark app or the
-shell (micro with spark-micro, tmux and btop from spark-shell) and say
+shell (micro with spark-micro, tmux and btop if you have them) and say
 so; skip what you have not installed yet.
 
 ## Act 1 -- the prompt is alive
