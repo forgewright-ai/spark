@@ -1180,7 +1180,7 @@ def main():
             rc, out, _ = spark("line", stdin="x?", extra=dict(client, SPARK_FORGE_TOKEN="wrong"))
             ok(rc == 1 and "spark user" in out, "a wrong forge token -> error naming spark user", out)
             rc, out, _ = spark("status", extra=client)
-            ok(rc == 0 and "a FORGE" in out, "spark status names the FORGE", out)
+            ok(rc == 0 and "the page's server" in out, "spark status names the page's server", out)
 
             # token rotation takes effect live, one principal at a time
             rc, out, _ = spark("forge", "token", "--new", "--user")

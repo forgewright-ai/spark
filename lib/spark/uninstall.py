@@ -210,7 +210,7 @@ def step_services(ctx):
             except OSError:
                 pass
         engine.forget()
-        ctx.row("ok", "processes", "the FORGE and the server are down")
+        ctx.row("ok", "processes", "the page's server and the engine are down")
     launchd = os.path.join(CONFIG_DIR, "launchd")
     ctx.remove("launchd", launchd)
 

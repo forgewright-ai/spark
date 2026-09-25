@@ -188,7 +188,7 @@ def cmd_bench(args):
     files = engine.roles(cfg)
     want = "ember" if "--ember" in args else ("spark" if "--spark" in args else "")
     if want == "ember" and not files["ember"]:
-        say("spark bench: no ember to measure -- spark ember NAME chooses one, ./bootstrap.sh downloads it")
+        say("spark bench: no chat model to measure -- spark ember NAME chooses one, ./bootstrap.sh downloads it")
         return engine.EX_CONFIG
     role = want or ("ember" if files["ember"] else "spark")
     model = files[role]

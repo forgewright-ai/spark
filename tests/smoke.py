@@ -703,7 +703,7 @@ def main():
         rc, out, _ = spark("line", stdin="anything?", extra={"SPARK_HISTORY": "off"})
         t.ok(rc == 0 and not os.listdir(home + "/.local/state/spark/turns"), "SPARK_HISTORY=off writes nothing")
         rc, out, _ = spark("status")
-        t.ok(rc == 0 and out.startswith("spark") and "brain    " + url in out, "status", out)
+        t.ok(rc == 0 and out.startswith("spark") and "model    " + url in out, "status", out)
 
         # off / on
         rc, out, _ = spark("off")
@@ -726,10 +726,10 @@ def main():
 
         # SITE_QUIET_START=yes: bare spark is one line; spark status stays full
         rc, out, _ = spark(extra={"SITE_QUIET_START": "yes"})
-        t.ok(rc == 0 and out.strip() == "spark -- ember stub-ember-q4 at %s (spark status for the rest)" % url,
+        t.ok(rc == 0 and out.strip() == "spark -- chat model stub-ember-q4 at %s (spark status for the rest)" % url,
              "SITE_QUIET_START=yes: bare spark answers with one line", out)
         rc, out, _ = spark("status", extra={"SITE_QUIET_START": "yes"})
-        t.ok(rc == 0 and "brain    " in out, "spark status stays the full report under quiet start", out)
+        t.ok(rc == 0 and "model    " in out, "spark status stays the full report under quiet start", out)
 
         # the brain cache is keyed on the candidates
         rc, out, _ = spark("brain", "--porcelain", extra={"SPARK_BASE_URL": "http://127.0.0.1:9"})
@@ -2088,9 +2088,9 @@ def main():
              "check hardening: the served FORGE holds every gate -- ok, fresh and from the cache", out + out2)
         hs.shutdown()
         gates = _wire.probe_gates(url, timeout=5)
-        t.ok(len(gates) == len(_wire.GATES) and not gates[0][1] and "not a FORGE" in gates[0][2]
+        t.ok(len(gates) == len(_wire.GATES) and not gates[0][1] and "not the page's server" in gates[0][2]
              and not any(g[1] for g in gates[1:7]) and gates[7][1],
-             "wire.probe_gates: the stub llama-server is not a FORGE -- only the bearer-only gate holds, each miss named", gates)
+             "wire.probe_gates: the stub llama-server is not the page's server -- only the bearer-only gate holds, each miss named", gates)
         p = subprocess.run([sys.executable, os.path.join(REPO, "tests", "forge_probe.py"), url],
                            capture_output=True, text=True, timeout=60)
         plines = p.stdout.splitlines()
@@ -3095,7 +3095,7 @@ def main():
         os.write(_fd, b"t\n")
         os.close(_fd)
         rc, outf, _ = spark("check", "--porcelain")
-        t.ok(re.search(r"^CAPABILITY\twarn\tforge\tforge runs 0\.0, the tree is [^\t]+\tspark forge off; spark forge on", outf, re.M) is not None,
+        t.ok(re.search(r"^CAPABILITY\twarn\tforge\tthe page's server runs 0\.0, the tree is [^\t]+\tspark forge off; spark forge on", outf, re.M) is not None,
              "check: the forge row warns when the FORGE runs an older version than the tree",
              "\n".join(l for l in outf.splitlines() if "\tforge\t" in l))
         os.remove(_stdir + "/forge-url")
@@ -3487,7 +3487,7 @@ def main():
         t.ok(rc == 0 and "SITE_THEME=none\n" in open(home + "/.config/spark/site.env").read(),
              "setup --theme none writes none (the flag is how you say no)", out)
         t.ok("\u2588" in out and "GB for models" in out and "SITE_AI_MODEL=none" in out and "open a new shell" in out
-             and "spark ember NAME adds a second brain" in out,
+             and "spark ember NAME adds a chat model" in out,
              "setup printed the logo, the table header, the model line and the closing block", out)
         t.ok("no model chosen" in out, "setup with none says how to choose later", out)
         t.ok("skip   account      no model here" in out and "the token, shown once" not in out
@@ -3633,7 +3633,7 @@ def main():
                  "WSL 2: spark quiet boot on refuses: no GRUB", out)
             rc, out, _ = spark("headless", "on", extra=wsl)
             t.ok(rc == 2 and "WSL 2 stops with its last window" in out and "SITE_HEADLESS=yes" not in open(home + "/.config/spark/site.env").read(),
-                 "WSL 2: spark headless on refuses: not a brain", out)
+                 "WSL 2: spark headless on refuses: it cannot stay on", out)
             rc, out, _ = spark("status", extra=wsl)
             t.ok("(WSL 2)" in out, "WSL 2: the status line names it", out.splitlines()[0] if out else "")
             # Arch (ID=arch in os-release): the console font is by mechanism
