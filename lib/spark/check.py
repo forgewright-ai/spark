@@ -1465,11 +1465,11 @@ def row_cost(ctx):
 
 # ------------------------------------------------------------------- runner
 # the rows WSL 2 answers differently (na or a WSL 2 note, never a fault):
-# the selftest's fifth pass, on Linux, proves each says so
+# the selftest's fourth pass, on Linux, proves each says so
 WSL_ROWS = ("font", "quiet", "gpu")
 # the rows Arch answers differently (na or an Arch note on the half it
 # lacks -- the kernel line without a UKI -- never a fault): the selftest's
-# sixth pass, on Linux, proves each says so, that the font row is real
+# fifth pass, on Linux, proves each says so, that the font row is real
 # through vconsole.conf and that the packages row answers through pacman
 ARCH_ROWS = ("quiet",)
 # a client's rows: nothing runs here (SITE_AI_MODEL=none + SITE_PEER_AI_URL),
@@ -1992,7 +1992,7 @@ def selftest():
             parts = line.split("\t")
             if len(parts) == 5:
                 results["client"][parts[2]] = (parts[1], parts[3])
-        # the fifth pass, Linux only: the good fixture under WSL 2 (a kernel
+        # the fourth pass, Linux only: the good fixture under WSL 2 (a kernel
         # line naming microsoft) -- font, quiet and gpu say so, never fail
         results["wsl"] = {}
         if not IS_MAC:
@@ -2010,7 +2010,7 @@ def selftest():
                 parts = line.split("\t")
                 if len(parts) == 5:
                     results["wsl"][parts[2]] = (parts[1], parts[3])
-        # the sixth pass, Linux only: the good fixture as Arch (ID=arch in
+        # the fifth pass, Linux only: the good fixture as Arch (ID=arch in
         # os-release, a pacman stub, vconsole.conf and no console-setup) --
         # quiet says so on the half Arch lacks, never fails; the font row is
         # ok through vconsole.conf; the packages row answers through pacman

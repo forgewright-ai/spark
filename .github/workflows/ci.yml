@@ -28,9 +28,10 @@ jobs:
           fetch-depth: 0   # spark ver derives from git describe: get_test and update_test need real tags
           persist-credentials: false
       - name: syntax
+        # one file per call: `sh -n A B` parses A and hands B to it as $1
         run: |
-          sh -n bootstrap.sh install.sh lib/env.sh get .githooks/pre-commit .githooks/pre-push tests/install_test.sh
-          bash -n home/.config/spark/widget.bash home/.config/spark/completion.bash linux/home/.bashrc
+          for f in bootstrap.sh install.sh lib/env.sh get .githooks/pre-commit .githooks/pre-push tests/install_test.sh; do sh -n "$f"; done
+          for f in home/.config/spark/completion.bash home/.config/spark/hook.bash home/.config/spark/widget.bash; do bash -n "$f"; done
           python3 -m py_compile bin/spark lib/spark/*.py tests/*.py
           sudo apt-get install -y -qq shellcheck >/dev/null && shellcheck -S warning bootstrap.sh install.sh lib/env.sh get .githooks/pre-commit .githooks/pre-push
       - name: privacy gate over the whole tree
@@ -68,6 +69,7 @@ jobs:
           python3 tests/sandbox_test.py
           python3 tests/qr_test.py
           python3 tests/docs_test.py
+          python3 tests/policy_test.py
           python3 tests/widget_pty.py bash home/.config/spark/widget.bash
           python3 tests/widget_pty.py completion bash home/.config/spark/completion.bash
           python3 tests/widget_pty.py pager
@@ -91,7 +93,8 @@ jobs:
     # `sudo -n true` says yes and bootstrap's apt row runs), stdin a pipe
     # (setup takes every default, asks nothing), no model. There is no
     # systemd in a container: the services rows skip, and `spark check`
-    # reads `na` for services, as docs/INSTALL.md's Container note promises.
+    # reads `na` for services, as docs/INSTALL.md, section 6 (the container
+    # note) promises.
     runs-on: ubuntu-latest
     container: debian:13
     timeout-minutes: 20
@@ -121,7 +124,7 @@ jobs:
           # SPARK_REF: a new user lands on the newest tag, which is the release
           # before this one -- the job proves the tree under test, so name its branch
           ref=$(git -C "$GITHUB_WORKSPACE" symbolic-ref -q --short HEAD || echo ci)
-          sudo -u newuser -H env SITE_AI_MODEL=none SITE_GIT_NAME=ci SITE_GIT_EMAIL=you@example.com SPARK_URL="file://$GITHUB_WORKSPACE" SPARK_REF="$ref" \
+          sudo -u newuser -H env SITE_AI_MODEL=none SPARK_URL="file://$GITHUB_WORKSPACE" SPARK_REF="$ref" \
             sh -c 'cat "$1" | sh' _ "$GITHUB_WORKSPACE/get"
       - name: converged, checked, hooked
         run: |
@@ -132,7 +135,7 @@ jobs:
           sudo -u newuser -H sh -c '~/.local/bin/spark check --fresh' || true
           sudo -u newuser -H sh -c '~/.local/bin/spark check --porcelain --fresh' > /tmp/porcelain.txt
           awk -F'\t' '$1=="SOFTWARE" && $2=="fail" && $3!="services" { bad=1; print } END { exit bad }' /tmp/porcelain.txt
-          # docs/INSTALL.md, Container: without a user systemd session the services row reads na
+          # docs/INSTALL.md, section 6 (the container note): without a user systemd session the services row reads na
           awk -F'\t' '$3=="services" { print; found=1; if ($2!="na") bad=1 } END { exit bad || !found }' /tmp/porcelain.txt
           # the core rc hook: one marked line at the end of the new user's .bashrc
           sudo -u newuser -H sh -c 'grep -q "config/spark/hook\." ~/.bashrc'
@@ -162,7 +165,7 @@ jobs:
       - name: the one-liner, pipe form, from the tree under test
         run: |
           ref=$(git -C "$GITHUB_WORKSPACE" symbolic-ref -q --short HEAD || echo ci)
-          sudo -u newuser -H env SITE_AI_MODEL=none SITE_GIT_NAME=ci SITE_GIT_EMAIL=you@example.com SPARK_URL="file://$GITHUB_WORKSPACE" SPARK_REF="$ref" \
+          sudo -u newuser -H env SITE_AI_MODEL=none SPARK_URL="file://$GITHUB_WORKSPACE" SPARK_REF="$ref" \
             sh -c 'cat "$1" | sh' _ "$GITHUB_WORKSPACE/get"
       - name: converged, checked, hooked
         run: |
@@ -186,7 +189,8 @@ jobs:
       - name: syntax under Apple's python
         run: |
           /usr/bin/python3 --version
-          zsh -n home/.config/spark/widget.zsh home/.config/spark/completion.zsh macos/home/.zshrc macos/home/.zprofile
+          # one file per call: `zsh -n A B` parses A and hands B to it as $1
+          for f in home/.config/spark/completion.zsh home/.config/spark/hook.zsh home/.config/spark/widget.zsh; do zsh -n "$f"; done
           /usr/bin/python3 -m py_compile bin/spark lib/spark/*.py tests/*.py
       - name: hermetic tests
         run: |
@@ -199,6 +203,7 @@ jobs:
           /usr/bin/python3 tests/forge_smoke.py
           /usr/bin/python3 tests/bench_smoke.py
           /usr/bin/python3 tests/docs_test.py
+          /usr/bin/python3 tests/policy_test.py
           /usr/bin/python3 tests/vault_test.py
           /usr/bin/python3 tests/sandbox_test.py
           /usr/bin/python3 tests/qr_test.py
@@ -218,7 +223,7 @@ jobs:
           SHELL: /bin/zsh
         run: |
           mkdir -p ~/.config/spark
-          printf 'SITE_AI_MODEL=none\nSITE_GIT_NAME=ci\nSITE_GIT_EMAIL=you@example.com\n' > ~/.config/spark/site.env
+          printf 'SITE_AI_MODEL=none\n' > ~/.config/spark/site.env
           time ./bootstrap.sh
           ./bootstrap.sh --dry-run | tee /tmp/dry.txt
           [ "$(tail -1 /tmp/dry.txt)" = 'Nothing to do' ]

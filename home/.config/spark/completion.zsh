@@ -6,7 +6,7 @@
 # `command -v spark` links into (readlink), themes by glob, models by sed
 # over the four model lists; when any of that fails, the static words
 # still complete, silently. Binds no key of its own.
-# Not completed on purpose (plumbing, gone, or aliases of ver):
+# Not completed on purpose (plumbing, or aliases of ver):
 #   line version --version
 
 _spark_repo() {
@@ -57,14 +57,13 @@ _spark() {
             headless | share | memory) comp=(on off status) ;;
             forge) comp=(on off status audit token) ;;
             bar)     comp=(line) ;;
-            check)   comp=(--watch --porcelain --selftest --fresh --fetch) ;;
+            check)   comp=(--watch --porcelain --report --fresh --fetch --selftest --chaos) ;;
             uninstall) comp=(--dry-run --yes --purge --packages --keep-packages) ;;
             serve)   comp=(on off status --foreground --host --print-client) ;;
             chat)    comp=(--thread) ;;
             do)      comp=(--sandbox --detach --porcelain --review --accept --discard) ;;
             soul)    comp=(show edit reset) ;;
             history) comp=(clear) ;;
-            tune)    comp=(show apply) ;;
             font)    comp=(list none status) ;;
             client)  comp=(off status) ;;
             user)    comp=(list add remove login logout token claim status) ;;
