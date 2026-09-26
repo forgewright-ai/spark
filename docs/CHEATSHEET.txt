@@ -136,6 +136,9 @@ LINUX
   journalctl --user -u spark-serve -n 50     (spark-forge likewise)
   ~/.local/state/spark/forge.log             one line per request (both OSes)
   arch: sudo pacman -S --needed PKG. Never -Sy alone (sudo pacman -Syu first)
+  void: sudo xbps-install -Sy PKG. If xbps refuses, sudo xbps-install -Su first
+  void: sv status ~/.config/spark/sv/*        (sv restart DIR after a change)
+  void: tail ~/.local/state/spark/log/spark-serve/current   (spark-forge too)
 
 MACOS
   launchctl print gui/$UID/spark.serve         is the agent loaded? (.forge too)

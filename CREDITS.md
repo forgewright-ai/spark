@@ -2,9 +2,9 @@
 
 spark vendors none of the projects below. `bootstrap.sh` downloads each
 one, pinned by version and sha256, from its own upstream to your
-machine at install time. apt and pacman install the rest from their own
-repositories. spark's own code is MIT (`LICENSE`). The banner in
-`home/.config/spark/banner` is spark's own artwork.
+machine at install time. apt, pacman and xbps install the rest from
+their own repositories. spark's own code is MIT (`LICENSE`). The banner
+in `home/.config/spark/banner` is spark's own artwork.
 
 ## The engine
 
@@ -36,31 +36,40 @@ Colour values only, no code copied. The license is the upstream's:
 
 ## The packages
 
-apt or pacman installs these from the distro's own repositories,
+apt, pacman or xbps installs these from the distro's own repositories,
 unpinned. macOS needs none. The names are the distro's own, as
-`distro/debian.env` and `distro/arch.env` list them, and
-`tests/docs_test.py` checks that every name there is credited here.
-Where the two families name one project differently, both names are
-here.
+`distro/debian.env`, `distro/arch.env` and `distro/void.env` list
+them, and `tests/docs_test.py` checks that every name there is
+credited here. Where the families name one project differently, every
+name is here.
 
 - git -- GPL-2.0-only.
 - curl -- the curl license.
 - ca-certificates -- MPL-2.0, Mozilla's bundle as the distro ships it.
-- python3 -- PSF-2.0.
+- python3 -- PSF-2.0, on Debian and Void.
 - python -- PSF-2.0, Arch's name for python3.
 - libgomp1 -- GPL-3.0-or-later, with the GCC runtime exception.
 - gcc-libs -- GPL-3.0-or-later, with the GCC runtime exception. Arch's
   libgomp, in `base` there.
+- libgomp -- GPL-3.0-or-later, with the GCC runtime exception. Void's
+  libgomp, its own package there.
 - libvulkan1 -- Apache-2.0, the vulkan build only.
 - vulkan-icd-loader -- Apache-2.0, Arch's libvulkan1, the vulkan build
+  only.
+- vulkan-loader -- Apache-2.0, Void's libvulkan1, the vulkan build
   only.
 - mesa-vulkan-drivers -- MIT and others, the vulkan build only.
 - vulkan-radeon -- MIT and others, Mesa's AMD driver on Arch, the vulkan
   build only.
 - vulkan-intel -- MIT and others, Mesa's Intel driver on Arch, the
   vulkan build only.
+- mesa-vulkan-radeon -- MIT and others, Mesa's AMD driver on Void, the
+  vulkan build only.
+- mesa-vulkan-intel -- MIT and others, Mesa's Intel driver on Void, the
+  vulkan build only.
 - kbd -- https://kbd-project.org/ -- GPL-2.0-or-later. `setvtrgb` for
-  the console palette unit, and the console fonts on Arch.
+  the console palette, and `setfont` and the console fonts on Arch and
+  Void.
 
 ## The apps
 
@@ -107,9 +116,9 @@ maintainer's.
 ## The site's glyphs
 
 Simple Icons -- https://simpleicons.org -- CC0 1.0. The Debian, Arch,
-Apple and GitHub glyphs inline on the front of spark.forgewright.ai,
-which is rendered outside this tree. The Windows panes are drawn by
-hand.
+Void, Apple and GitHub glyphs inline on the front of
+spark.forgewright.ai, which is rendered outside this tree. The Windows
+panes are drawn by hand.
 
 ## Corrections
 

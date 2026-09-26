@@ -16,10 +16,10 @@ git config core.hooksPath .githooks
 
 The pre-commit and pre-push hooks together run the gate. `AGENTS.md`,
 "The gate", lists every step. CI runs the gate on Ubuntu and macOS, and
-the one-liner in Debian 13 and Arch containers. shellcheck is a
+the one-liner in Debian 13, Arch and Void containers. shellcheck is a
 contributor's tool, not a user's package: `apt-get install shellcheck`,
-`pacman -S shellcheck` or `brew install shellcheck`. The hook skips it
-with a notice when absent.
+`pacman -S shellcheck`, `xbps-install shellcheck` or `brew install
+shellcheck`. The hook skips it with a notice when absent.
 
 A change to one of the editor's briefs (`persona.MODE_EDIT_*`) needs
 more. Run `tests/audition.py` against a live model and put its before
