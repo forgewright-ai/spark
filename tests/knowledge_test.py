@@ -366,6 +366,7 @@ def test_fingerprint():
     prog(os.path.join(BIN, "newcomer"))
     _c, _b, stale, _s = intake.status()
     check("fingerprint: a PATH dir that gains a file makes the store stale", stale and not intake.fresh())
+    check("fingerprint: the stale store names the dir that moved", BIN in intake.changed(), intake.changed())
     build()
     s = intake.LocalStore()
     check("the next refresh reads the new program", s.entry("newcomer") is not None and not intake.status()[2])

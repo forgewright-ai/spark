@@ -60,6 +60,7 @@ jobs:
           for p in $(python3 tests/line_audition.py packages --os arch); do
             pacman -S --noconfirm "$p" >/dev/null 2>&1 || echo "not installed: $p"
           done
+          ls /usr/share/man/man8/pacman.8* /usr/share/man/man1 2>/dev/null | wc -l
       - name: collect
         run: python3 tests/line_audition.py collect --os arch --out help-arch.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a   # v7.0.1
@@ -80,11 +81,18 @@ jobs:
           persist-credentials: false
       - name: the tools the cases name, with their man pages
         run: |
-          # a noextract line would drop the man pages: none may stay
-          for f in /etc/xbps.d/*.conf; do [ -f "$f" ] && sed -i '/^noextract/d' "$f"; done
-          for p in $(python3 tests/line_audition.py packages --os void); do
-            xbps-install -y "$p" >/dev/null 2>&1 || echo "not installed: $p"
+          # a noextract line would drop the man pages: none may stay, in
+          # /etc/xbps.d or in the image's own /usr/share/xbps.d; a copy in
+          # /etc/xbps.d with the same name overrides the shipped one
+          mkdir -p /etc/xbps.d
+          for f in /etc/xbps.d/*.conf /usr/share/xbps.d/*.conf; do
+            [ -f "$f" ] && grep -q '^noextract' "$f" && sed '/^noextract/d' "$f" > "/etc/xbps.d/$(basename "$f")"
           done
+          # -f reinstalls what the image already holds, so its pages land too
+          for p in $(python3 tests/line_audition.py packages --os void); do
+            xbps-install -fy "$p" >/dev/null 2>&1 || xbps-install -y "$p" >/dev/null 2>&1 || echo "not installed: $p"
+          done
+          ls /usr/share/man/man1 | wc -l
       - name: collect
         run: python3 tests/line_audition.py collect --os void --out help-void.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a   # v7.0.1

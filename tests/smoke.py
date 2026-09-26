@@ -527,9 +527,7 @@ def know_store(path):
     """A tiny snapshot store for the judged line (the measuring seam
     SPARK_KNOWLEDGE_SNAPSHOT, read under SPARK_LINE_BENCH=1 alone): ps
     with BSD options, tar, micro, sv, ls -- the index built the store's
-    way (name x3, what x2, synopsis and option lines x1) through
-    grounding's own tokenizer. Returns the path."""
-    from spark import grounding
+    way, through intake's own index builder. Returns the path."""
     entries = {
         "ps": {"kind": "program", "source": "man", "what": "process status",
                "synopsis": "ps [-AaCcEefhjlMmrSTvwXx] [-O fmt | -o fmt] [-p pid]",
@@ -552,18 +550,10 @@ def know_store(path):
                "options": {"long": [], "short": "ABCFGHLOPRSTUWabcdefghiklmnopqrstuvwxy1", "words": []},
                "lines": [["-a", "Include directory entries whose names begin with a dot"]]},
     }
-    names, lens, post = list(entries), [], {}
-    for i, name in enumerate(names):
-        e, tf = entries[name], {}
-        body = e["synopsis"] + " " + " ".join("  ".join(x) for x in e["lines"])
-        for text, w in ((name, 3), (e["what"], 2), (body, 1)):
-            for word in grounding.words(text):
-                tf[word] = tf.get(word, 0) + w
-        lens.append(sum(tf.values()))
-        for word, n in tf.items():
-            post.setdefault(word, []).append("%d:%d" % (i, n))
-    index = {"v": 1, "names": names, "len": lens, "avg": sum(lens) / float(len(lens)),
-             "post": {w: " ".join(p) for w, p in post.items()}}
+    # the index built by intake's own builder (the one format there is),
+    # so this store can never drift from what a machine's store holds
+    from spark import intake
+    index = intake.index_of([(name, intake.entry_terms(dict(e, name=name))) for name, e in entries.items()])
     with open(path, "w", encoding="utf-8") as f:
         json.dump({"line_audition_store": 1, "entries": entries, "index": index}, f)
     return path

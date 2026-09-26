@@ -754,24 +754,42 @@ def _places(meta):
     return progs, mans, app_dirs()
 
 
-def fingerprint(meta=None):
-    """What this machine has, as a stamp: the package databases, the
-    program dirs, the man dirs (and their sections), the app dirs,
-    spark's tree -- every one's mtime and size. A cheap stat each."""
+def stamps(meta=None):
+    """What this machine has, path by path: the package databases, the
+    program dirs, the man dirs (and their sections), the app dirs --
+    each one's "mtime size" (or "-" when absent), and spark's tree. A
+    cheap stat each; fingerprint() hashes it, changed() compares it."""
     progs, mans, apps = _places(meta or {})
     paths = list(progs) + list(apps) + _db_paths()
     for m in mans:
         paths.append(m)
         paths += [os.path.join(m, "man" + s) for s in SECTIONS]
-    h = hashlib.sha256()
+    out = {}
     for p in paths:
         try:
             st = os.stat(p)
-            h.update(("%s %d %d\n" % (p, st.st_mtime_ns, st.st_size)).encode())
+            out[p] = "%d %d" % (st.st_mtime_ns, st.st_size)
         except OSError:
-            h.update(("%s -\n" % p).encode())
-    h.update(tree_stamp().encode())
+            out[p] = "-"
+    out["spark tree"] = tree_stamp()
+    return out
+
+
+def fingerprint(meta=None, stamped=None):
+    """The machine's stamps() as one short hash."""
+    h = hashlib.sha256()
+    for p, v in (stamped if stamped is not None else stamps(meta)).items():
+        h.update(("%s %s\n" % (p, v)).encode())
     return h.hexdigest()[:32]
+
+
+def changed(meta=None):
+    """The paths whose stamp moved since the build (a stale store's why):
+    [path], empty when the store is fresh or keeps no stamps."""
+    meta = meta if meta is not None else summary()
+    was = meta.get("stamps") or {}
+    now = stamps(meta)
+    return sorted(p for p in set(was) | set(now) if was.get(p) != now.get(p))
 
 
 # ------------------------------------------------------------ owners
@@ -1499,19 +1517,24 @@ class _Build:
         self.docs = {}              # name -> {"key", "file", "kind", "source", "tf"}
         self.skipped = 0
         self.partial = False
+        self.stamped = {}
         self.lock = threading.Lock()
 
     def late(self):
         return time.monotonic() >= self.end
 
     def run(self):
-        fp = fingerprint(self.prev_meta)
         tree = tree_stamp()
         prev = _load(os.path.join(self.root, DOCS_FILE), 32 << 20) or {}
         if not isinstance(prev, dict) or self.prev_meta.get("tree") != tree \
                 or self.prev_meta.get("v") != INDEX_V:
             prev = {}               # a new spark tree, or index shape, reads everything again
         progs_dirs, man_roots, apps_dirs = _places(self.prev_meta)
+        # stamped from exactly the dirs this build stores (fresh() asks the
+        # same question later); read again at the end: a machine that moved
+        # during the build is partial, so the next refresh reads it again
+        self.stamped = stamps({"path": progs_dirs})
+        fp = fingerprint(stamped=self.stamped)
         src = _sources()
         progs, self.skipped = scan_programs(progs_dirs) if "programs" in src else ({}, 0)
         if "spark" in src:
@@ -1822,6 +1845,8 @@ class _Build:
 
     def _write_meta(self, fp, tree, dirs, programs):
         built = int(time.time())
+        if stamps({"path": [d for d in dirs if os.path.isabs(d)]}) != self.stamped:
+            self.partial = True
         vals = list(self.docs.values())
         counts = {"program": sum(1 for d in vals if d["kind"] == "program"),
                   "manual": sum(1 for d in vals if d["kind"] == "program" and d["source"] == "man"),
@@ -1832,7 +1857,8 @@ class _Build:
                 "apps": counts["app"], "verbs": counts["spark"], "executables": programs,
                 "skipped": self.skipped + sum(d.get("skipped", 0) for d in vals),
                 "held": sum(d.get("held", 0) for d in vals),
-                "partial": self.partial, "pending": self.pending, "path": [d for d in dirs if os.path.isabs(d)]}
+                "partial": self.partial, "pending": self.pending, "path": [d for d in dirs if os.path.isabs(d)],
+                "stamps": self.stamped}
         _write(os.path.join(self.root, META_FILE), meta)
 
 
@@ -1842,7 +1868,11 @@ def _main(argv):
     `build` refreshes it (waiting for the lock) and prints the row's
     words."""
     if argv[:1] == ["fresh"]:
-        return 0 if fresh() else 1
+        if fresh():
+            return 0
+        for p in changed()[:20]:
+            print("changed since the build: %s" % p, file=sys.stderr)
+        return 1
     if argv[:1] == ["build"]:
         refresh(wait=True)
         print(row_words())
