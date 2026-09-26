@@ -5367,6 +5367,51 @@ print("restart", engine.restart_line("serve"), "|", engine.restart_line("check")
     t.ok(_got.count(b"x") == 60 and _dt >= 0.3,
          "reveal: at a tty the characters are paced, not dumped", "%d chars in %.2fs" % (_got.count(b"x"), _dt))
 
+    # typed at a terminal with nothing piped in, it never waits on the
+    # keyboard (it once did, until Ctrl-C, keeping nothing): a pace is
+    # kept in spark.env, and bare shows the numbers and the pace now
+    import tempfile as _tf
+    _cfgd = _tf.mkdtemp(prefix="spark-reveal-")
+    _renv = dict(env, HOME=_cfgd, XDG_CONFIG_HOME=_cfgd + "/config", XDG_STATE_HOME=_cfgd + "/state")
+
+    def _at_tty(*words):
+        m, s = pty.openpty()
+        q = subprocess.Popen([sys.executable, SPARK, "reveal"] + list(words), stdin=s, stdout=s, stderr=s, env=_renv)
+        os.close(s)
+        out, end = b"", time.time() + 10
+        while time.time() < end:
+            r, _, _ = select.select([m], [], [], 0.2)
+            if r:
+                try:
+                    chunk = os.read(m, 4096)
+                except OSError:
+                    break
+                if not chunk:
+                    break
+                out += chunk
+            elif q.poll() is not None:
+                break
+        os.close(m)
+        try:
+            rc = q.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            q.kill()
+            rc = None
+        return rc, out.decode("utf-8", "replace")
+
+    _kept = _cfgd + "/config/spark/spark.env"
+    rc, out = _at_tty("22")
+    kept = open(_kept).read() if os.path.exists(_kept) else ""
+    t.ok(rc == 0 and "22 characters a second" in out and "SPARK_REVEAL=22" in kept,
+         "reveal 22 at a terminal: returns at once and keeps the pace in spark.env", repr(out) + " | " + kept[-60:])
+    rc, out = _at_tty()
+    t.ok(rc == 0 and "now: 22 a second" in out, "bare reveal at a terminal: the numbers and the pace now", repr(out))
+    rc, out = _at_tty("off")
+    kept = open(_kept).read() if os.path.exists(_kept) else ""
+    t.ok(rc == 0 and "as they come" in out and "SPARK_REVEAL=off" in kept, "reveal off at a terminal: kept", repr(out))
+    rc, out = _at_tty("fast")
+    t.ok(rc == 2 and "auto, or off" in out, "reveal with a wrong word at a terminal: the one line, exit 2", repr(out))
+
     # completion drift guard: every verb the CLI dispatches (bin/spark's
     # one VERBS table) appears in completion.bash -- a new verb without a
     # completion word goes loud here. The zsh file shares the same

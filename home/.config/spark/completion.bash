@@ -62,6 +62,7 @@ _spark_complete() {
         forge)   words="on off status audit token" ;;
         bar)     words="line" ;;
         memory)  words="add forget clear on off" ;;
+        reveal)  words="auto off" ;;
         check)   words="--watch --porcelain --report --fresh --fetch --selftest --chaos" ;;
         uninstall) words="--dry-run --yes --purge --packages --keep-packages" ;;
         serve)   words="on off status --foreground --host --print-client" ;;

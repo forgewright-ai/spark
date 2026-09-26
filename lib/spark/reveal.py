@@ -49,12 +49,13 @@ def pace_report(cfg, current=None):
     under, and what is chosen now. The choice is the reader's."""
     from . import session
     tps, cpt, n = measured(session.recent_turns(8))
-    if n == 0:
-        return ["no turn measured yet -- ask something first; a reveal without a measure is %d a second" % CPS_DEFAULT]
-    model_cps = tps * cpt
     thr = auto_cps(cfg)
-    lines = ["the model writes %.0f characters a second (%.1f tokens a second, %.1f characters a token, %d turns)" % (model_cps, tps, cpt, n),
-             "under %d a second a reveal never waits on it (auto = %d); above, the model's own pauses show" % (int(model_cps * MODEL_SHARE), thr)]
+    if n == 0:
+        lines = ["no turn measured yet -- ask something first; a reveal without a measure is %d a second" % CPS_DEFAULT]
+    else:
+        model_cps = tps * cpt
+        lines = ["the model writes %.0f characters a second (%.1f tokens a second, %.1f characters a token, %d turns)" % (model_cps, tps, cpt, n),
+                 "under %d a second a reveal never waits on it (auto = %d); above, the model's own pauses show" % (int(model_cps * MODEL_SHARE), thr)]
     if current is not None:
         if current == "auto":
             now = "auto (%d a second)" % thr
@@ -62,7 +63,7 @@ def pace_report(cfg, current=None):
             now = "%d a second" % current
         else:
             now = "off -- the replies as they come"
-        lines.append("now: %s (/reveal N | auto | off; SPARK_REVEAL for the standing choice)" % now)
+        lines.append("now: %s (spark reveal N | auto | off keeps it; /reveal in a chat is for that chat)" % now)
     return lines
 
 
@@ -82,17 +83,50 @@ def auto_cps(cfg, turns=None):
     cps = int(min(READ_CPS, tps * cpt * MODEL_SHARE))
     return max(CPS_MIN, min(CPS_MAX, cps))
 
-USAGE = """spark reveal -- stdin to stdout, letter by letter at a reader's pace
+USAGE = """spark reveal -- the pace replies appear at, and a filter at that pace
 
-  spark reveal [CPS]          characters a second (%d..%d, default %d,
-                              or SPARK_REVEAL_CPS)
+  spark reveal                what the model writes, and the pace now
+  spark reveal N|auto|off     keep the pace for chat, explain and bare
+                              words in spark.env (N: %d..%d a second)
+  ... | spark reveal [N]      piped in: stdin to stdout letter by letter,
+                              N a second (default %d, or SPARK_REVEAL_CPS)
 
-  at a terminal the text appears as if written by hand, so a slow
-  model's bursts read as a steady line; piped anywhere else it is an
-  exact copy, byte for byte. Nothing is sent anywhere.
+  Piped in and out to anything but a terminal, the filter is an exact
+  copy, byte for byte. Nothing is sent anywhere.
 
       spark read <words> < page.txt | spark reveal
 """ % (CPS_MIN, CPS_MAX, CPS_DEFAULT)
+
+
+def _standing(args):
+    """`spark reveal [N|auto|off]` typed at a terminal, with nothing
+    piped in: show or keep the standing pace (SPARK_REVEAL). The filter
+    read the keyboard here and waited for Ctrl-C, keeping nothing."""
+    from spark import SPARK_ENV, config, say
+    cfg = config.load()
+    if not args:
+        for line in pace_report(cfg, cfg.reveal):
+            say(line)
+        return 0
+    word = args[0].strip().lower()
+    if word not in ("auto", "off"):
+        try:
+            n = int(word)
+        except ValueError:
+            n = -1
+        if not CPS_MIN <= n <= CPS_MAX:
+            say("spark reveal -- the pace is a number, %d..%d, auto, or off" % (CPS_MIN, CPS_MAX))
+            return 2
+        word = str(n)
+    from . import site
+    site.set_keys(_file=SPARK_ENV, SPARK_REVEAL=word)
+    if word == "off":
+        say("replies in chat, explain and bare words now appear as they come")
+    elif word == "auto":
+        say("replies in chat, explain and bare words now appear at the measured pace, %d a second now" % auto_cps(cfg))
+    else:
+        say("replies in chat, explain and bare words now appear at %s characters a second" % word)
+    return 0
 
 
 def cmd_reveal(args):
@@ -100,6 +134,11 @@ def cmd_reveal(args):
     if args and args[0] in ("-h", "--help", "help"):
         page(USAGE.rstrip())
         return 0
+    if len(args) > 1:
+        say("spark reveal -- one optional pace: a number, auto, or off")
+        return 2
+    if sys.stdin.isatty():
+        return _standing(args)
     cps = os.environ.get("SPARK_REVEAL_CPS", "")
     if args:
         cps = args[0]

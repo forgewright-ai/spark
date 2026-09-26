@@ -31,11 +31,11 @@ SPARK
                                   --name keeps a widening schedule
   <stream> | spark watch <words>  silent until a line matches, then one line
                                   quoting it (tail -f, journalctl -f)
-  ... | spark reveal [CPS]        the answer letter by letter at a reader's
-                                  pace (default 30 a second), only at a terminal
-  spark chat --reveal [N|auto|off]  a reply's pace at a terminal: N a second,
-                                  auto (the measured threshold), off (as it
-                                  comes). /reveal in chat shows the numbers
+  spark reveal [N|auto|off]       keep a reply's pace at a terminal: N a
+                                  second, auto (the measured threshold), off
+                                  (as it comes). Bare: the numbers and the pace
+  ... | spark reveal [N]          the answer letter by letter at that pace
+  spark chat --reveal [N|auto|off]  the pace for one chat. /reveal in chat too
   spark edit --watch FILE         comment on a draft as you save it
   spark history [clear]           the threads kept here. clear removes them
   ~/.local/bin/spark ...          the full path a script, cron or ssh uses

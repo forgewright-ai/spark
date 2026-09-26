@@ -1,5 +1,35 @@
 # Changelog
 
+## v1.53
+
+The prompt line answers from this machine: its manuals, its programs,
+its apps and spark's own verbs.
+
+- spark reads what this machine can run into a local index: every
+  program on the PATH with its manual, its apps, and spark's own verbs
+  from each verb's help. `./bootstrap.sh` builds it, and the check timer
+  keeps it fresh. A program with no manual is read from its `--help`,
+  and only inside the sandbox.
+- Before a command lands in your line, spark checks it against that
+  index: the program must be here, and every option must be in its
+  manual. A command that fails is asked again once, with the manual's
+  own lines, and your line never shows the wrong one.
+- spark's own verbs in the model's brief come from the tree, so a verb
+  is never missing and a retired one never lingers.
+- The model's `!` is lowered only when spark's own read-only check
+  proves every part of the command only reads. spark's own danger check
+  always wins, and it now also catches `find -exec rm`, `dd of=` to any
+  file, `2>` and `&>` to a file, and `crontab FILE`.
+- The `knowledge` row of `spark check` says what the index holds and
+  how old it is. `SPARK_KNOWLEDGE=off` in `spark.env` returns the prompt
+  line to v1.52's.
+- `spark reveal 22` at a terminal keeps the pace replies appear at, in
+  `spark.env`, and bare `spark reveal` shows the numbers and the pace.
+  Typed at a terminal it used to wait on the keyboard until Ctrl-C and
+  keep nothing. Piped, it is the filter it always was.
+- spark do's manual excerpt works on Void: `man -P cat` fails on the
+  mandoc man, and the manual is now read with `MANPAGER=cat`.
+
 ## v1.52
 
 The prompt line is faster: the command lands first. On the box's

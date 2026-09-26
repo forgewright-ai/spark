@@ -759,7 +759,7 @@ Runtime keys live in `~/.config/spark/spark.env`, and
 | key | values | default |
 |---|---|---|
 | `SPARK_MEMORY` | `on` or `off`: send the remembered facts -- `spark memory on\|off` | `on` |
-| `SPARK_REVEAL` | `off`, `auto` or N: a reply's pace at a terminal in chat, explain and a question -- `--reveal` on the verb, `/reveal` in chat. `spark stats` shows the measured threshold | `off` |
+| `SPARK_REVEAL` | `off`, `auto` or N: a reply's pace at a terminal in chat, explain and a question -- `spark reveal N`, `auto` or `off` sets it, `--reveal` on the verb and `/reveal` in chat for one time. `spark stats` shows the measured threshold | `off` |
 | `SPARK_FORGE` | `auto`, `on` or `off`: serve the page and the API -- `spark forge on\|off` | `auto` |
 | `SPARK_FORGE_HOST` / `SPARK_FORGE_PORT` | the page's address and port, never `0.0.0.0` | the LAN address / `8081` |
 | `SPARK_HISTORY` | days of turns and threads kept. `off` keeps none | `30` |

@@ -51,9 +51,9 @@ spark
                               try each, --name keeps a schedule (-h)
  spark watch <words> < STREAM a live stream, silent until a line matches,
                               then one line quoting it (-h)
- spark reveal [CPS]           stdin at a reader's pace, letter by letter at
-                              a terminal; an exact copy anywhere else (-h);
-                              chat/explain/words: --reveal [N|auto|off]
+ spark reveal [N|auto|off]    the pace replies appear at in chat, explain
+                              and words, kept in spark.env; piped, text at
+                              that pace (-h)
  try:
  ? words or words? Enter      the command lands in your line, hint above
  ?? words Enter               follow up on the last answer (same thread)

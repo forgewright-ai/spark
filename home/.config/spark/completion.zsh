@@ -56,6 +56,7 @@ _spark() {
             ember)   comp=(list auto none status ${(f)"$(_spark_model_names)"}) ;;
             headless | share) comp=(on off status) ;;
             memory)  comp=(add forget clear on off) ;;
+            reveal)  comp=(auto off) ;;
             forge) comp=(on off status audit token) ;;
             bar)     comp=(line) ;;
             check)   comp=(--watch --porcelain --report --fresh --fetch --selftest --chaos) ;;
