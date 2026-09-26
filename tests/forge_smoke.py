@@ -1086,28 +1086,45 @@ def main():
             # at a pty the QR and the link appear -- the block must be
             # exactly what spark.qr renders for the login link
             def at_pty(*args, extra=None):
+                """(rc, every byte spark wrote) with a pty as its stdio.
+                OPOST off on the slave: with ONLCR, macOS writes the CR of
+                a newline, finds the output queue full for the LF, and
+                writes the CR again on the retry -- a stray \\r inside the
+                QR block whenever this reader falls behind (under load).
+                The slave stays open here until spark has exited and the
+                master is drained: nothing is lost to a hangup, and no
+                sleep decides when the output is complete."""
                 import pty as _pty
+                import select as _select
+                import termios as _termios
                 m, s = _pty.openpty()
+                a = _termios.tcgetattr(s)
+                a[1] &= ~_termios.OPOST
+                _termios.tcsetattr(s, _termios.TCSANOW, a)
                 e = dict(env)
                 e.update(extra or {})
-                # the slave stays open a beat after spark exits: macOS drops
-                # the tail of a large write (the QR block) when the slave
-                # closes before the master has drained it (a CI flake, 3x)
-                p = subprocess.Popen(["/bin/sh", "-c", '"$0" "$@"; rc=$?; sleep 0.5; exit $rc', sys.executable, SPARK] + list(args),
+                p = subprocess.Popen([sys.executable, SPARK] + list(args),
                                      stdout=s, stderr=s, stdin=s, env=e, close_fds=True)
-                os.close(s)
                 buf = b""
-                while True:
-                    try:
-                        chunk = os.read(m, 4096)
-                    except OSError:
-                        break
-                    if not chunk:
-                        break
-                    buf += chunk
-                os.close(m)
-                rc = p.wait(timeout=60)
-                return rc, buf.decode("utf-8", "replace").replace("\r\n", "\n")
+                deadline = time.time() + 60
+                try:
+                    while True:
+                        gone = p.poll() is not None
+                        # once spark is gone every byte it wrote is queued:
+                        # drain without waiting, stop at the first empty poll
+                        ready, _, _ = _select.select([m], [], [], 0 if gone else 0.05)
+                        if ready:
+                            buf += os.read(m, 65536)
+                        elif gone:
+                            break
+                        elif time.time() > deadline:
+                            p.kill()
+                            p.wait()
+                            break
+                finally:
+                    os.close(s)
+                    os.close(m)
+                return p.returncode, buf.decode("utf-8", "replace")
 
             sys.path.insert(0, os.path.join(REPO, "lib"))
             from spark import qr as _qr
