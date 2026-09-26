@@ -477,7 +477,11 @@ and may change freely.
    one line, cut at a word to a character budget. A hint or a reason is
    80 at most, an answer `cli.ANSWER_MAX`. Line 1 is written the moment
    the command is complete, and lines 2 and 3 follow; after line 1, a
-   failure makes line 2 its reason and exits 1. A `danger` line's hint may
+   failure makes line 2 its reason and exits 1. The request asks the
+   engine for slot 0 (`id_slot`), so the line's prefix stays warm; a
+   server that refuses the field is asked again without it.
+   `SPARK_LINE_BENCH=1` (`spark bench --line`, the audition) keeps the
+   turn's numbers, marked `bench`, and opens no thread. A `danger` line's hint may
    open with `<- <facts> -- `: `persona.blast`'s count for a recursive
    `rm`, the files, bytes and git-tracked, read from the command with
    nothing run. The facts lead, so the cut eats the model's words first.

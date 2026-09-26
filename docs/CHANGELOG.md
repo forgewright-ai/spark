@@ -2,8 +2,26 @@
 
 ## v1.52
 
-Six small things the v1.51 tour found, each fixed.
+The prompt line is faster: the command lands first. Also a way to
+measure it, and six small things the v1.51 tour found.
 
+- The prompt line streams. The command lands in your line the moment
+  it is complete, and the hint fills the row above it. A command that
+  deletes shows its `!` before the command appears. `Enter` is still
+  yours.
+- The model answers in a new order: kind, danger, command, hint, proof.
+  The danger mark is known before the command.
+- The prompt line asks the engine for its own slot, so a chat does not
+  push its prompt out. A second question starts warm.
+- A command from the model that carries a control character is refused
+  whole. Before, only some were cleaned out.
+- `tests/line_audition.py` grades the prompt line per OS and on spark's
+  own verbs against a live model: 141 cases for Debian, Arch, Void,
+  macOS and spark itself. Each OS's `--help` output and spark's tree
+  are the judges.
+- `spark bench --line` and the audition leave no thread in your
+  history. Their turns keep only numbers, marked bench.
+- TAB after `spark memory` offers the words it takes.
 - A script, a cron job and `ssh HOST 'spark ...'` name
   `~/.local/bin/spark` in full. A stock `~/.bashrc` returns before
   spark's hook in a shell that is not interactive. INSTALL section 3

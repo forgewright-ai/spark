@@ -605,6 +605,7 @@ def persona_env(os_name, snap, data, scratch, url):
     package manager is that OS's, and the head-word guard does not
     re-ask for a tool the OS would have). The stubs are never run."""
     env = dict(os.environ)
+    env["SPARK_LINE_BENCH"] = "1"          # the turn's numbers, marked bench; no thread
     for k in ("SPARK_EXPLAIN_CMD", "SPARK_EXPLAIN_RC", "SPARK_HINT_ROW", "SPARK_DEBUG"):
         env.pop(k, None)
     stubs = os.path.join(scratch, "bin")

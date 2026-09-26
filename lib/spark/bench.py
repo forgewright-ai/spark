@@ -324,6 +324,7 @@ def time_line(words, cwd, shell, deadline=LINE_DEADLINE):
     cmd = [sys.executable, os.path.join(REPO, "bin", "spark"), "line", "--cwd", cwd, "--shell", shell]
     env = dict(os.environ)
     env.pop("SPARK_HINT_ROW", None)     # the table owns this terminal: no pulse above it
+    env["SPARK_LINE_BENCH"] = "1"       # numbers kept, marked bench; no thread in the person's history
     t0 = time.monotonic()
     p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                          stderr=subprocess.DEVNULL, cwd=cwd, env=env)

@@ -531,12 +531,16 @@ def cmd_line(args):
     # store, as before.
     remote = False
     thread, history = None, []
-    if more and cfg.client:
+    # a measuring run (spark bench --line, the prompt-line audition) keeps
+    # the turn's numbers, marked bench, and no thread: its questions are
+    # not the person's history
+    bench = os.environ.get("SPARK_LINE_BENCH") == "1"
+    if more and cfg.client and not bench:
         got = forge.peer_newest(cfg)
         if got:
             thread, history = got
             remote = True
-    if not remote:
+    if not remote and not bench:
         thread, history = forge.pick(cfg, more)
     ask_text = (install_ctx + "\n\n" + text) if install_ctx else text
     # the pulse in the hint row (SPARK_HINT_ROW=1, the widgets' word) from
@@ -544,7 +548,7 @@ def cmd_line(args):
     # one -- then in the reply's own mark until line 2
     busy = _Pulse.hint_row().start()
     early = _Early(cwd, more, history, busy)
-    s, extra = None, {}
+    s, extra = None, ({"bench": 1} if bench else {})
     try:
         s = session.Session(cfg, "line", shell, cwd, history)
         reply, ms = _line_ask(s, ask_text, early.feed)
@@ -562,7 +566,7 @@ def cmd_line(args):
             s.record(kind=early.head, failed=e.kind, cmd_ms=early.cmd_ms, ms=ms, thread=thread)
             return 1
         # lines 1 and 2 are whole: the reply stands, without its proof
-        reply, extra = dict(early.parse.fields, proof=""), {"failed": e.kind}
+        reply, extra = dict(early.parse.fields, proof=""), dict(extra, failed=e.kind)
     if early.head is None:
         # nothing went early: the whole reply, the guards, then the lines
         kind = reply.get("kind")

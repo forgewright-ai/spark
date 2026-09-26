@@ -4589,7 +4589,13 @@ print("restart", engine.restart_line("serve"), "|", engine.restart_line("check")
         t.ok(rc == 0 and "slots not recorded" in out and re.search(r"^   1  how much disk does this use .* -  -$", out, re.M),
              "bench --line with history off: the times, no slot", repr(out + err))
         n0 = len(STATE.get("bodies", []))
+        _tb = sorted(os.listdir(tdir())) if tdir() else []
         rc, out, err = spark("bench", "--line", "3")
+        _turns = [json.loads(ln) for f in sorted(_glob.glob(home + "/.local/state/spark/turns/*.jsonl"))
+                  for ln in open(f) if ln.strip()]
+        t.ok((sorted(os.listdir(tdir())) if tdir() else []) == _tb
+             and [x.get("bench") for x in _turns[-3:]] == [1, 1, 1],
+             "bench --line: the questions leave no thread; their turns are marked bench", repr(_turns[-3:])[:300])
         table = [ln for ln in out.splitlines() if not ln.startswith("  saved in ")]
         t.ok(rc == 0 and out.startswith("spark bench --line") and len(re.findall(r"^\s+\d  .* warm$", out, re.M)) == 3
              and re.search(r"^      median\s+\d+\.\d\d s\s+\d+\.\d\d s\s+40\s+12$", out, re.M)

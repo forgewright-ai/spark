@@ -184,9 +184,12 @@ line -- zsh can` for macOS's bash 3.2. Run `chsh -s /bin/zsh`, then
 ## 3. Use it
 
 The prompt line. Type `? words` or `words?` and press `Enter`. The
-command lands in your line with a hint above it, and `Enter` again
-runs it. A command that deletes comes back marked `!`, and a recursive
-`rm` says how many files and bytes it clears. `?? words` follows up on
+command lands in your line the moment it is complete, and its hint
+fills the row above it. `Enter` again runs it. Everything spark or the
+model says sits in that row, and your line holds only the command. A
+command that deletes comes back marked `!`, and a recursive `rm` says
+how many files and bytes it clears. The `!` is there before the
+command is. `?? words` follows up on
 the last answer. `Esc s` asks about the line you are on. `spark off`
 gives `Enter` back, and `spark on` restores it. `TAB` completes the
 verbs and their words, offline. While the model answers, the mark
