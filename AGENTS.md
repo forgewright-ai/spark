@@ -120,6 +120,21 @@ deterministic). `--json` appends the model, the briefs' hashes and the
 totals to `STATE_DIR/audition.jsonl`, so two briefs are compared by
 number, never by taste.
 
+`tests/line_audition.py` is the prompt line's audition, not in the
+gate either. `tests/line_audition/cases.json` holds about 25 questions
+per OS (debian, arch, void, macos) and 27 about spark itself. A case
+names what makes an answer right: the head commands, the must-nots, the
+danger flag. `run --os OS --model NAME` sends each case through the
+real `spark line`. The OS comes from spark's own seams, so one Linux
+speaks as another family too. macOS runs on a Mac. The grader trusts
+outcomes. The head command must exist in that OS's help snapshot,
+`help-<os>.json`, and every option must appear in its help. A spark
+verb must appear in the TAB completion files. `collect` writes a
+snapshot on the OS it describes, and `line-audition-help.yml` runs it
+in the CI images. `report FILE...` prints one table per model.
+`serve-candidate` starts a second engine for a model on trial.
+`selftest` needs no model: `python3 tests/line_audition.py selftest`.
+
 ## Contracts
 
 The interfaces between parts live in `CLAUDE.md`, "Contracts": `spark
