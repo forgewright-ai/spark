@@ -26,7 +26,7 @@ jobs:
       DEBIAN_FRONTEND: noninteractive
     steps:
       - run: apt-get update -qq && apt-get install -y -qq git ca-certificates python3 >/dev/null
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
         with:
           persist-credentials: false
       - name: the tools the cases name, with their man pages
@@ -49,7 +49,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - run: pacman -Syu --noconfirm --needed git ca-certificates python >/dev/null
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
         with:
           persist-credentials: false
       - name: the tools the cases name, with their man pages
@@ -75,7 +75,7 @@ jobs:
       # xbps itself first (a rolling distro refuses every install while
       # xbps is behind); libstdc++ for the runner's node, as in ci.yml
       - run: xbps-install -Syu xbps >/dev/null 2>&1 || true; xbps-install -Syu >/dev/null; xbps-install -Sy git ca-certificates bash libstdc++ python3 >/dev/null
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
         with:
           persist-credentials: false
       - name: the tools the cases name, with their man pages
@@ -98,7 +98,7 @@ jobs:
     runs-on: macos-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
         with:
           persist-credentials: false
       - name: collect
