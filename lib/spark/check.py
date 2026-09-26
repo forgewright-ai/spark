@@ -1513,7 +1513,7 @@ WSL_ROWS = ("font", "quiet", "gpu")
 # through vconsole.conf and that the packages row answers through pacman
 ARCH_ROWS = ("quiet",)
 # the rows Void answers differently (na or a Void note on the half it
-# lacks -- a GRUB that reads no drop-in -- never a fault): the selftest's
+# lacks -- no GRUB -- never a fault): the selftest's
 # sixth pass, on Linux, proves each says so, that the font row is real
 # through rc.conf, that the packages row answers through xbps and the
 # services row through sv
@@ -2105,8 +2105,8 @@ def selftest():
         # the sixth pass, Linux only: the good fixture as Void (ID="void" in
         # os-release, xbps and sv stubs, /etc/runit and /var/service dirs,
         # rc.conf with neither console-setup nor vconsole.conf, spark-check's
-        # service dir present without a `down` file) -- quiet says so on the
-        # half Void lacks, never fails; the font row is ok through rc.conf;
+        # service dir present without a `down` file, no /etc/default/grub) --
+        # quiet says so on the half that Void lacks, never fails; the font row is ok through rc.conf;
         # the packages row answers through xbps and the services row through sv
         results["void"] = {}
         if not IS_MAC:
@@ -2116,7 +2116,8 @@ def selftest():
             env.update(make_fixture(root, True, stub_url))
             with open(os.path.join(root, "os-release"), "w") as f:
                 f.write('ID="void"\nPRETTY_NAME="Void Linux"\n')
-            env["SITE_QUIET_BOOT"] = "yes"                          # the boot half Void lacks (GRUB reads no drop-in)
+            env["SITE_QUIET_BOOT"] = "yes"                          # the boot half a Void without GRUB lacks
+            env["SPARK_ETC_DEFAULT_GRUB"] = os.path.join(root, "none")   # a runner's own GRUB is not this Void's
             env["SPARK_ETC_CONSOLE_SETUP"] = os.path.join(root, "none")
             env["SPARK_ETC_VCONSOLE"] = os.path.join(root, "none")    # the rcconf shape: FONT= in rc.conf beside /etc/runit
             env["SPARK_ETC_RUNIT"] = os.path.join(root, "runit")
