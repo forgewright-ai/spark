@@ -402,21 +402,19 @@ def _relock(name, token):
     that serves, a token is minted there, never pasted in."""
     from . import config
     cfg = config.load()
-    if not cfg.client:
+    if not cfg.client or cfg.forge == "on":         # a page server here mints its own
         return False
     cur, old = account()
     if cur != name:
+        return False
+    try:
+        dk = unlock(name, old)                       # the cipher proves the key; a cached one could be stale
+    except vault.SealError:
         return False
     if _box_user(cfg.peer_ai_url, token) != name:
         say("spark user: %s did not accept that token as %s -- the store stays as it is"
             % (cfg.peer_ai_url, name))
         return False
-    dk = account_key()
-    if dk is None:
-        try:
-            dk = unlock(name, old)
-        except vault.SealError:
-            return False
     rewrap(name, dk, token)
     say("ok     store        %s's sealed threads now open with the new token" % name)
     return True

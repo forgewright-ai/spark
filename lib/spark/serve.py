@@ -145,6 +145,13 @@ def cmd_serve(args):
 
     quiet = cfg.quiet_start
     st = wire.health(url)
+    if st == "ok" and fg:
+        # the unit cannot be the server: another one answers on the port
+        # (a hand-started spark serve, another llama-server). 78 stands the
+        # unit down on both inits (finish runs sv down, systemd's
+        # SuccessExitStatus); a 0 made runsv restart it every second
+        say("%s serve -- %s already answers, so this unit stands down" % (MARK, url))
+        return engine.EX_CONFIG
     if st == "ok":
         engine.write_serve_url(url)
         if quiet:

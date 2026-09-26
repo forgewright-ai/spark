@@ -16,8 +16,9 @@ Void on a real machine. What the first install found.
   service gets a `control/t`: it stops the 3 services, then the
   supervisor. Before, the supervisor quit first, and the shutdown
   signalled the engine twice, so it skipped its clean exit.
-- A service stopped on purpose no longer waits 15 seconds in its
-  `finish`. The wait stays for a crash.
+- A service stopped or restarted on purpose no longer waits 15
+  seconds in its `finish`. The wait stays for a crash. A unit that
+  finds another server on its port stands down, on both inits.
 - The helper that warms the model after a start no longer lingers as
   a dead process beside the engine. On every Linux.
 - `spark quiet boot on` works on Void with GRUB: 3 marked lines at the

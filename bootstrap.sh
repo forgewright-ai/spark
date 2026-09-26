@@ -717,12 +717,16 @@ EOF
                 # the services running, so Void's shutdown signalled each one
                 # twice (runsv and pkill) and llama-server skipped its clean
                 # exit. Stop them first, one TERM each (KILL after 15 s), then
-                # HUP ends runsvdir; exit 0 = runsv sends no TERM of its own
+                # HUP ends runsvdir; exit 0 = runsv sends no TERM of its own.
+                # sv runs as the user (chpst), on the three names run's own
+                # directory holds: the supervise files there are the user's,
+                # and root never writes through them
                 root_t="$root_sv/control/t"
                 t_want=$(cat <<EOF
 #!/bin/sh
 # rendered by spark bootstrap.sh -- stop $me's services cleanly, then runsvdir
-sv -w 15 force-stop "$svdir"/* >/dev/null 2>&1
+d="$HOME/.config/spark/sv"
+chpst -u "$me" sv -w 15 force-stop "\$d/spark-check" "\$d/spark-serve" "\$d/spark-forge" >/dev/null 2>&1
 kill -HUP "\$(cat supervise/pid)" 2>/dev/null
 exit 0
 EOF
@@ -1166,7 +1170,7 @@ GRUB_CMDLINE_LINUX_DEFAULT=\"\$GRUB_CMDLINE_LINUX_DEFAULT $QUIET_WORDS\""
                     row todo quiet-boot "update-grub failed -- run: sudo update-grub"
                 fi
             fi
-        elif [ -f "$grub_dropin" ] || grep -q '^GRUB_TIMEOUT=0$' /etc/default/grub 2>/dev/null; then
+        elif [ -f "$grub_dropin" ] || { [ "$DISTRO" != void ] && grep -q '^GRUB_TIMEOUT=0$' /etc/default/grub 2>/dev/null; }; then
             if need quiet-boot "show GRUB's menu again, 5 s; kernel messages back (sudo)"; then
                 as_root rm -f "$grub_dropin"
                 as_root sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=5/; s/^GRUB_TIMEOUT_STYLE=.*/GRUB_TIMEOUT_STYLE=menu/' /etc/default/grub
@@ -1204,6 +1208,8 @@ GRUB_CMDLINE_LINUX_DEFAULT=\"\$GRUB_CMDLINE_LINUX_DEFAULT $QUIET_WORDS\""
             ok quiet-boot "silent: menu hidden, kernel line quiet (the marked lines in $default_grub)"
         elif need quiet-boot "3 marked lines at the end of $default_grub; update-grub (sudo)"; then
             as_root sed -i "/ $grub_mark\$/d" "$default_grub"
+            # a file with no final newline would glue the first line onto its last
+            [ -z "$(tail -c1 "$default_grub")" ] || printf '\n' | as_root tee -a "$default_grub" >/dev/null
             printf '%s\n' "$grub_want" | sed "s/\$/ $grub_mark/" | as_root tee -a "$default_grub" >/dev/null
             made grub
             if as_root update-grub >/dev/null 2>&1 && grub_live_quiet; then

@@ -621,28 +621,30 @@ def prefix(cfg, shell):
     return "\n".join(lines)
 
 
-def machine_line(cfg):
+def machine_line(cfg, local=False):
     """The one machine fact a conversation needs. The full prefix is for
-    the shell modes (line/ask/explain/do); chat sheds the costume. On a
-    Linux with no display the model is told so: a small model on a Void
-    console answered a font question with Alacritty's config."""
+    the shell modes (line/ask/explain/do); chat sheds the costume. A
+    person's own session (local) on a Linux with no display is told so: a
+    small model on a Void console answered a font question with
+    Alacritty's config. The page's server is no session: its environment
+    says nothing about the browser at the other end."""
     line = "You are on %s's machine %s: %s, %s." % (cfg.user, cfg.name, os_pretty(), platform.machine())
-    if platform.system() == "Linux" and not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+    if local and platform.system() == "Linux" and not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
         line += " This session has no graphical display: a text console or an ssh login."
     return line
 
 
-def mode_prefix(cfg, mode, shell):
+def mode_prefix(cfg, mode, shell, local=False):
     """The stable part of the system prompt for a mode: one machine line
     plus spark's own commands for a conversation (chat), the whole shell
     brief for everything else."""
     if mode in ("chat", "talk"):
-        return machine_line(cfg) + "\n" + KNOW_CHAT
+        return machine_line(cfg, local) + "\n" + KNOW_CHAT
     if mode.startswith(("edit-", "ask-", "read-", "drill-", "watch-")):
         # over a text -- in an editor, a plan on stdin, a source to drill,
         # a stream to watch -- the shell brief (tools, flags, spark's verbs)
         # is noise for prose and code alike, and it costs prompt
-        return machine_line(cfg)
+        return machine_line(cfg, local)
     return prefix(cfg, shell)
 
 

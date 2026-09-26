@@ -236,7 +236,7 @@ class Session:
         against a FORGE gets prefix + mode (the FORGE adds the identity);
         an ember against a raw server gets the whole thing."""
         if self.role == "spark" or self.forge:
-            return persona.mode_prefix(self.cfg, self.mode, self.shell) + "\n\n" + persona.MODES[self.mode]
+            return persona.mode_prefix(self.cfg, self.mode, self.shell, local=True) + "\n\n" + persona.MODES[self.mode]
         return forge.system(self.cfg, self.mode, self.shell, self.mem)
 
     def _messages(self, text, context=""):

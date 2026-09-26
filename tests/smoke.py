@@ -1957,15 +1957,17 @@ def main():
         try:
             for k in ("DISPLAY", "WAYLAND_DISPLAY"):
                 os.environ.pop(k, None)
-            _plain = _persona.machine_line(_config.load())
+            _plain = _persona.machine_line(_config.load(), local=True)
+            _page = _persona.machine_line(_config.load())
             os.environ["DISPLAY"] = ":0"
-            _shown = _persona.machine_line(_config.load())
+            _shown = _persona.machine_line(_config.load(), local=True)
         finally:
             os.environ.clear()
             os.environ.update(_pers_env)
         _linux = _platform.system() == "Linux"
-        t.ok(("no graphical display" in _plain) == _linux and "no graphical display" not in _shown,
-             "machine line: a Linux session with no display says so, a display does not", _plain)
+        t.ok(("no graphical display" in _plain) == _linux and "no graphical display" not in _shown
+             and "no graphical display" not in _page,
+             "machine line: a Linux session with no display says so; a display, or the page's server, does not", _plain)
         t.ok("no markdown marks" in csys, "chat rules out markdown for the terminal", csys[-200:])
         t.ok("spark's own commands" in csys and "The look: spark theme NAME" in csys,
              "chat knows spark's own commands, grouped with meanings", csys[:200])

@@ -182,6 +182,9 @@ def main():
         time.sleep(1.0)
         rc, out, err = spark("serve", "on")
         ok(rc == 0 and "already serving" in out, "a healthy foreign server on the port: used, not fought", out + err)
+        rc, out, err = spark("serve", "--foreground")
+        ok(rc == 78 and "this unit stands down" in out,
+           "--foreground with a server already on the port: exit 78, the unit stands down (no restart every second)", out + err)
         os.remove(state + "/serve-url")
         rc, out, err = spark("serve", "off")
         ok(rc == 1 and "not started by spark" in err, "stop leaves a foreign server alone", err)
