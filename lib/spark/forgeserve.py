@@ -109,6 +109,7 @@ ROUTES = {
     ("POST", "/api/logout"): "user",
     ("POST", "/api/chat"): "user",
     ("POST", "/api/memory"): "user",
+    ("POST", "/api/threads"): "user",
     ("POST", "/api/threads/*/append"): "user",
     ("POST", "/api/user/token"): "user",
     ("DELETE", "/api/threads"): "user",
@@ -126,6 +127,7 @@ ROUTES = {
     ("POST", "/api/soul"): "admin",
 }
 SECRET_KEY = re.compile("KEY|TOKEN|SECRET")   # a config key /api/config never returns
+ID_HINT = "a thread id is 1 to 64 letters, digits, - and _"   # forge.valid_id, said to a client
 
 
 def route_role(method, path):
@@ -797,7 +799,8 @@ class Handler(BaseHTTPRequestHandler):
             return None
         fn = {("POST", "/api/logout"): self.api_logout, ("POST", "/api/check/refresh"): self.api_check_refresh,
               ("POST", "/api/chat"): self.api_chat, ("POST", "/api/soul"): self.api_soul_write,
-              ("POST", "/api/memory"): self.api_memory_add, ("POST", "/api/do/propose"): self.api_do_propose,
+              ("POST", "/api/memory"): self.api_memory_add, ("POST", "/api/threads"): self.api_threads_create,
+              ("POST", "/api/do/propose"): self.api_do_propose,
               ("POST", "/api/do/run"): self.api_do_run, ("POST", "/api/run"): self.api_run,
               ("POST", "/api/user/token"): self.api_user_token}.get((method, path))
         if not fn:
@@ -1170,17 +1173,40 @@ class Handler(BaseHTTPRequestHandler):
         from . import forge
         st = self._ustore()
         if not forge.valid_id(tid):
-            return self._error(400, "bad", "a thread id is letters, digits, - and _")
+            return self._error(400, "bad", ID_HINT)
         if not st.exists(tid):
             return self._error(404, "missing", "no thread %s" % tid)
         return self._json(200, {"id": tid, "messages": st.load(tid)})
 
+    def api_threads_create(self, body):
+        """POST /api/threads: a KEPT thread in the requester's OWN store,
+        made with no model turn -- a program keeping what it must not
+        lose. {"id"?}: none mints a timestamp id (201); a new id is made
+        (201); an id already kept answers as it is (200); a regular
+        thread of that id is moved to kept, a rename, every record still
+        opening (200). 409 full past forge.KEEP_MAX, 409 both when the id
+        is in both directories. SPARK_HISTORY does not reach it."""
+        from . import forge
+        tid = body.get("id")
+        if tid is not None and not forge.valid_id(tid):
+            return self._error(400, "bad", ID_HINT)
+        try:
+            tid, created = self._ustore().keep(tid)
+        except forge.KeepError as e:
+            return self._error(409 if e.kind in ("full", "both") else 500, e.kind, e.hint)
+        log("%s thread keep %s" % (self._ip(), tid))
+        return self._json(201 if created else 200, {"id": tid, "kept": True})
+
     def api_thread_append(self, tid, body):
         """POST /api/threads/<id>/append: one message onto the requester's
         OWN thread -- how a client's `??` lands its turn here, so the
-        box's prompt, the client's prompt and the page share one thread.
-        role user|assistant, text a non-empty string (cut at the history
-        cap); mode and kind ride as short fields, nothing else does."""
+        box's prompt, the client's prompt and the page share one thread,
+        and how a program writes its kept thread. role user|assistant,
+        text a non-empty string (cut at the history cap, and the answer
+        says so); mode and kind ride as short fields, nothing else does.
+        The answer tells the truth: 200 {ok, chars, cut} when stored, 409
+        off when history is off and the thread is not kept, 500 store
+        when the store failed."""
         from . import forge
         st = self._ustore()
         if not forge.valid_id(tid) or not st.exists(tid):
@@ -1193,15 +1219,24 @@ class Handler(BaseHTTPRequestHandler):
             v = body.get(k)
             if isinstance(v, str) and 0 < len(v) <= 40:
                 fields[k] = v
-        st.append(self.server.cfg, tid, role, text[:forge.HISTORY_MAX_CHARS], **fields)
+        cfg = self.server.cfg
+        if cfg.history <= 0 and not st.is_kept(tid):
+            return self._error(409, "off", "history is off here (SPARK_HISTORY) and thread %s is not kept -- "
+                                           "POST /api/threads with its id keeps it" % tid)
+        stored = text[:forge.HISTORY_MAX_CHARS]
+        if not st.append(cfg, tid, role, stored, **fields):
+            return self._error(500, "store", "thread %s did not take the message -- see state/debug.log" % tid)
         log("%s thread append %s" % (self._ip(), tid))
-        return self._json(200, {"ok": True})
+        return self._json(200, {"ok": True, "chars": len(stored), "cut": len(stored) < len(text)})
 
     def api_threads_clear(self):
-        """DELETE /api/threads: clear the requester's own threads."""
-        n = self._ustore().clear()
-        log("%s threads clear %d" % (self._ip(), n))
-        return self._json(200, {"cleared": n})
+        """DELETE /api/threads: clear the requester's own regular threads;
+        the answer says how many kept threads stay."""
+        st = self._ustore()
+        n = st.clear()
+        k = st.kept_count()
+        log("%s threads clear %d, %d kept" % (self._ip(), n, k))
+        return self._json(200, {"cleared": n, "kept": k})
 
     def api_users(self):
         """The named users, counts and stamps only -- never a title, a
@@ -1209,8 +1244,8 @@ class Handler(BaseHTTPRequestHandler):
         from . import users
         out = []
         for n in users.list_users():
-            count, newest = users._thread_stats(n)
-            out.append({"name": n, "threads": count,
+            count, newest, kept = users._thread_stats(n)
+            out.append({"name": n, "threads": count, "kept": kept,
                         "last": time.strftime("%Y-%m-%d %H:%M", time.localtime(newest)) if newest else ""})
         self._json(200, {"users": out})
 
@@ -1235,7 +1270,7 @@ class Handler(BaseHTTPRequestHandler):
         if tid is None or tid == "":
             return None, True
         if not forge.valid_id(tid):
-            self._error(400, "bad", "a thread id is letters, digits, - and _")
+            self._error(400, "bad", ID_HINT)
             return None, False
         if not self._ustore().exists(tid):
             self._error(404, "missing", "no thread %s" % tid)

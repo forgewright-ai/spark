@@ -40,7 +40,8 @@ EDIT_USAGE = """spark edit -- the editor's protocol (contract 10): the text on s
   --sel A B                   ?: stdin is the whole file; the question is
                               about bytes A..B, the file around it context
   --thread ID                 ?: keep the exchange under ID (yours to name,
-                              [A-Za-z0-9_-]); the same ID again continues it
+                              1 to 64 of [A-Za-z0-9_-]); the same ID again
+                              continues it
   --source                    ?: the text is a published source you discuss,
                               not a draft to edit -- answer the question, never
                               suggest changes (the reading apps pass this)
@@ -310,7 +311,7 @@ def cmd_edit(args):
         names = textmod.shape_order(names)
     tid = opts["thread"].strip()
     if tid and not forge.valid_id(tid):
-        say("%s edit -- --thread ID is [A-Za-z0-9_-]" % MARK)
+        say("%s edit -- --thread ID is 1 to 64 of [A-Za-z0-9_-]" % MARK)
         return 2
     if held:        # said once nothing can refuse any more: the text is on its way
         print(textmod.held_line(held, names), file=sys.stderr, flush=True)

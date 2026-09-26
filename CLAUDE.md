@@ -208,8 +208,9 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 copy piped; the same pace inside the streaming verbs: `--reveal
                 [CPS]` on chat, explain and bare words, `/reveal` in chat --
                 `text.Wrap(cps=)`, `cli.reveal_flag`)
-                forge (identity, threads, reply, the chat loop, @FILE; the
-                chat-history save skips a sealed file that does not open)
+                forge (identity, threads and the kept ones, reply, the chat
+                loop, @FILE; the chat-history save skips a sealed file that
+                does not open)
                 forgeserve (the page's server: spark forge, the API, the page;
                 ROUTES is the one table of every route and its role)
                 do (spark do: the one loop, a face per driver -- the terminal,
@@ -365,7 +366,9 @@ State is `~/.local/state/spark/`, 0700:
   the kernel and the AppArmor userns switch.
 - `users/<name>/` 0700 per user: `token.hash` and `key` 0600 (the sha256
   token verifier and the wrapped data key), plus that user's sealed
-  `threads/`, `memory`, `chat-history` and `ledger`. The box account's
+  `threads/`, `kept/`, `memory`, `chat-history` and `ledger`. `kept/`
+  (0700, made on first use) holds the kept threads: the same sealed
+  files, the same header, never pruned or cleared. The box account's
   store holds `audit` too, the admin actions.
 - `account` 0600, this machine's login (name and token), and
   `account-key` 0600, the unwrapped data key, so the hot paths never pay
@@ -687,8 +690,10 @@ and may change freely.
    answer in the hint row. The paste itself always lands in the buffer
    untouched, and nothing runs until the user's own Enter. `spark off`
    and `SPARK_OFF` disable it. Exit 0 for the first 3 kinds, 1 for
-   error. A buffer starting with `??` continues the newest thread. Any
-   other starts a new one, no heuristics. On a logged-in client of a
+   error. A buffer starting with `??` continues the newest thread, kept
+   or not. A file that is a header alone is skipped: a thread a program
+   made and has not written yet is not a conversation to go on with.
+   Any other starts a new one, no heuristics. On a logged-in client of a
    `FORGE`, `??` continues the newest thread on the `FORGE`
    (`forge.peer_newest`, the requester's own store over contract 9) and
    the turn lands there. Any trouble falls back to the local store.
@@ -827,6 +832,7 @@ and may change freely.
    POST    /api/logout                user
    POST    /api/chat                  user
    POST    /api/memory                user
+   POST    /api/threads               user
    POST    /api/threads/*/append      user
    POST    /api/user/token            user
    DELETE  /api/threads               user
@@ -856,26 +862,54 @@ and may change freely.
    scoped to the requester's own sealed store: a user's to their
    `users/<name>/`, the admin's to the box account's. Nobody holds a key
    to anyone else's. `GET /api/users` (admin) answers `{users: [{name,
-   threads, last}]}`: counts and stamps, never a title, a body or a
-   token. That is the whole of admin visibility. `POST /api/user/token`
-   (user) rotates the requester's own token, returned once, never
-   stored. `DELETE /api/threads` clears the requester's own store and
-   answers `{cleared}`. Every `POST` and `DELETE` under `/api/`,
-   `/api/login` included, also needs `X-Spark: 1`, a `Host` this machine
-   answers to and, when sent, an `Origin` matching it (400 or 403). A
-   `POST` there needs a JSON object body sent as `Content-Type:
-   application/json` besides (415 otherwise). A `DELETE` carries no
-   body. `POST /v1/chat/completions` takes the bearer only. A cookie
-   does not open it (401), so a browser's login cannot be ridden into
-   the model from another origin. The forwarded body asks for at most
+   threads, kept, last}]}`: counts and stamps, never a title, a body or
+   a token. `kept` counts the kept threads among `threads`, read from
+   the plaintext headers without a key. That is the whole of admin
+   visibility. `POST /api/user/token` (user) rotates the requester's own
+   token, returned once, never stored. `DELETE /api/threads` clears the
+   requester's own regular threads and answers `{cleared, kept}`: the
+   kept threads stay, and `kept` says how many. `GET /api/threads` rows
+   are `{id, ts, title, turns, kept}`. Every `POST` and `DELETE` under
+   `/api/`, `/api/login` included, also needs `X-Spark: 1`, a `Host`
+   this machine answers to and, when sent, an `Origin` matching it (400
+   or 403). A `POST` there needs a JSON object body sent as
+   `Content-Type: application/json` besides (415 otherwise). A `DELETE`
+   carries no body. `POST /v1/chat/completions` takes the bearer only. A
+   cookie does not open it (401), so a browser's login cannot be ridden
+   into the model from another origin. The forwarded body asks for at most
    `forgeserve.V1_MAX_TOKENS` (8192) completion tokens: `max_tokens` is
    set when absent, not a positive integer or larger, and `n_predict`
    and `max_completion_tokens` are capped the same when present. `POST
+   /api/threads` makes a kept thread in the requester's own store with
+   no model turn: how a program keeps what it must not lose. The body is
+   `{id?}`. A thread id is `forge.valid_id`: 1 to 64 letters, digits,
+   `-` and `_`, checked before any path is joined, else 400. No id
+   mints a timestamp one the way `Store.new_thread` does (`-2`, `-3` on
+   a clash), 201 `{id, kept: true}`. A new id is made, 201. An id
+   already kept answers 200 as it is. A regular thread of that id is
+   moved to kept, a rename: the header is the AAD (`thread <id>`), so
+   every record still opens, 200. An id in both directories is 409
+   `{error: {kind: both}}` and left as it is. A user keeps at most
+   `forge.KEEP_MAX` (2000) threads, counted over `kept/*.sealed`: past
+   it, 409 `{error: {kind: full}}`. It works with `SPARK_HISTORY` off.
+   Kept threads live in `kept/` beside `threads/` in the same store.
+   `Store.prune`, `forge.prune_stores`, the stale-header sweep and
+   `Store.clear` read `threads/` alone. A kept thread leaves through
+   `/keep off` in `spark chat` (a rename back to `threads/`) or `spark
+   user remove NAME` (the whole store). Every store method that takes
+   an id finds the thread in either directory, `kept/` first. `POST
    /api/threads/<id>/append` puts one message onto the requester's own
    thread: `{role: user|assistant, text}`, with `mode` and `kind` as
    short optional fields. That is how a client's `??` lands its turn
    here, so the machine's prompt line, a client's prompt line and the
-   page share one thread. `GET /api/check` returns `check.json` as
+   page share one thread, and how a program writes its kept thread. The
+   answer tells the truth. Stored is 200 `{ok: true, chars, cut}`:
+   `chars` the length stored, `cut` true when the text was cut at
+   `forge.HISTORY_MAX_CHARS`. History off and the thread not kept is
+   409 `{error: {kind: off}}`, nothing stored. A kept thread takes
+   appends with history off. The store failing (a seal or disk error,
+   logged) is 500 `{error: {kind: store}}`. `Store.append` returns
+   True or False to say which. `GET /api/check` returns `check.json` as
    written plus `age` in seconds. `POST /api/do/propose` answers
    `{thread, reply, ms, driver, unchecked}`: `driver` is the `ember`
    role's model stem, `unchecked` the done hint's numbers no user
@@ -1362,7 +1396,11 @@ One grammar for every verb. A verb that breaks a rule is a bug.
   `spark user claim` seals it away. Turns are the opposite pattern:
   telemetry, numbers only. `session.record` strips every free-text field
   (`session.TEXT_FIELDS`), and the words live only in the sealed
-  threads. What a request weighed and where it went do ride the record:
+  threads. A thread lives `SPARK_HISTORY` days, unless it is kept: a
+  kept thread sits in `kept/` beside `threads/`, and pruning and
+  `history clear` never touch it (`/keep` in `spark chat`, `POST
+  /api/threads` for a program, contract 9). What a request weighed and
+  where it went do ride the record:
   `out_bytes` and `dest` (`host:port`, or `local` for loopback),
   `wire._sent`'s pair on every chat shape's timings. So the `sends` row
   and `spark stats --sends` count what left by destination and day

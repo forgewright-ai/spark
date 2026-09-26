@@ -163,6 +163,8 @@ On this machine: the server binds one LAN address, never `0.0.0.0`,
 behind tokens kept at 0600. A token is shown once, when you ask
 (`spark forge --print-url`, `spark user add`). Turns and threads live
 30 days under `~/.local/state/spark/` (`SPARK_HISTORY=off` keeps none).
+A thread you keep (`/keep` in `spark chat`, or a program through the
+page's server API) stays until you let it go.
 A turn record holds numbers, never words. Each named user
 (`spark user add NAME`) has a sealed store. Its cipher is
 ChaCha20-Poly1305, written from RFC 8439, under a key only that user's

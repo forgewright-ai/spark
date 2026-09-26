@@ -1,5 +1,33 @@
 # Changelog
 
+## v1.54
+
+A program that talks to the page's server can keep threads that outlive
+the history.
+
+- `POST /api/threads` makes a kept thread in the caller's own store,
+  with no model turn. Without an id the server names it by the time, as
+  it names every new thread. Given the id of a regular thread, it moves
+  that thread to kept, and every message in it still opens.
+- A kept thread lives in `kept/` beside the regular threads.
+  `SPARK_HISTORY`, the prune and `spark history clear` never touch it,
+  and it takes new messages when history is off. It leaves with `/keep
+  off` or with `spark user remove`.
+- An append to a thread says what happened. It answers the characters
+  it stored and whether the text was cut at the history cap. It answers
+  409 when history is off and the thread is not kept, and 500 when the
+  store failed. It used to answer ok either way.
+- `/keep` in `spark chat` keeps the current thread, and `/keep off` lets
+  it go. With history off, `spark chat` goes on with the newest kept
+  thread. `spark history`, `spark user list` and the page count the
+  kept threads, and a clear says how many stay.
+- `??` goes on with the newest thread that holds a message. A thread a
+  program made and has not written yet is skipped.
+- A thread id is 1 to 64 letters, digits, `-` and `_`. The API and
+  `--thread` refuse a longer one.
+- A user holds at most 2000 kept threads. Past that, the server refuses
+  a new one with 409 `full`.
+
 ## v1.53
 
 The prompt line answers from this machine: its manuals, its programs,

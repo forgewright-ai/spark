@@ -71,7 +71,8 @@ HISTORY_USAGE = """spark history -- the threads kept on this machine
 
   spark history               where they live, the newest five, and the
                               fixes the failure line remembers
-  spark history clear         remove every turn and thread kept so far
+  spark history clear         remove every turn and thread but the kept
+                              ones (/keep in spark chat)
 """
 VER_USAGE = """spark ver -- logo, version, credits
 
@@ -1340,7 +1341,10 @@ def cmd_history(args):
     if args[:1] == ["clear"]:
         n = session.clear()
         m = forge.clear()
-        say("%s history: removed %d day file%s and %d thread%s" % (MARK, n, "" if n == 1 else "s", m, "" if m == 1 else "s"))
+        k = forge.kept_count()
+        say("%s history: removed %d day file%s and %d thread%s%s" % (
+            MARK, n, "" if n == 1 else "s", m, "" if m == 1 else "s",
+            "" if not k else "; %d kept thread%s stay%s" % (k, "" if k == 1 else "s", "s" if k == 1 else "")))
         return 0
     return paged(_history_show)
 
@@ -1348,14 +1352,19 @@ def cmd_history(args):
 def _history_show():
     cfg = config.load()
     say("%s history: %s" % (MARK, "off" if cfg.history <= 0 else "%d days under %s" % (cfg.history, _short(STATE_DIR))))
-    say("  spark history clear   removes every turn and thread kept so far")
+    say("  spark history clear   removes every turn and thread but the kept ones")
     held = forge.list_threads(10**6)       # the count status and spark user say
     threads = held[:5]
     if threads:
         say("  threads%s (?? words goes on with the newest):"
             % (", newest 5 of %d" % len(held) if len(held) > 5 else ""))
         for th in threads:
-            say("  %s  %d turn%s  %s" % (th["id"], th["turns"], "" if th["turns"] == 1 else "s", th["title"]))
+            say("  %s  %d turn%s  %s%s" % (th["id"], th["turns"], "" if th["turns"] == 1 else "s", th["title"],
+                                         "  (kept)" if th.get("kept") else ""))
+    k = forge.kept_count()
+    if k:
+        say("  %d kept thread%s past SPARK_HISTORY and clear (/keep off lets one go)"
+            % (k, " stays" if k == 1 else "s stay"))
     fixes = [e for e in ledger.entries(kind=ledger.KIND_FAIL)
              if not ledger._retired(e, "path", None)]
     if fixes:

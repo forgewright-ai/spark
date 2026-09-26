@@ -46,7 +46,8 @@ ASK_USAGE = """spark ask -- the questions a text does not answer (contract 12): 
   --name NAME                 the text's name, a hint -- never its path
   --about TEXT                what you say the text is ("a migration plan")
   --thread ID                 keep the exchange under ID (yours to name,
-                              [A-Za-z0-9_-]); the same ID again continues it
+                              1 to 64 of [A-Za-z0-9_-]); the same ID again
+                              continues it
   --answered --name NAME      keep the question on stdin as answered for
                               NAME: it is not asked again
   --ledger [clear] --name NAME  the questions answered for NAME, newest
@@ -223,7 +224,7 @@ def cmd_ask(args):
         die("the text is %d chars; ask takes at most %d -- select less" % (len(data), ASK_MAX))
     tid = opts["thread"].strip()
     if tid and not forge.valid_id(tid):
-        say("%s ask -- --thread ID is [A-Za-z0-9_-]" % MARK)
+        say("%s ask -- --thread ID is 1 to 64 of [A-Za-z0-9_-]" % MARK)
         return 2
     cfg = config.load()
     shell = os.path.basename(os.environ.get("SHELL") or "sh")

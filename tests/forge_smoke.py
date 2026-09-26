@@ -32,9 +32,12 @@ SEEN = {}                 # what the stub saw last: headers and body
 # constant, patched in the forge's own process before bin/spark runs), so
 # a hanging /api/do/run step is cut in seconds, not do's 120
 STEP_TIMEOUT = 2
-FORGE_WRAP = ("import runpy, sys; sys.path.insert(0, sys.argv[1]); from spark import do; "
-              "do.STEP_TIMEOUT = %d; sys.argv = sys.argv[2:]; runpy.run_path(sys.argv[0], run_name='__main__')"
-              % STEP_TIMEOUT)
+# and forge.KEEP_MAX to this, so a user's kept threads reach the cap in
+# a handful of requests, not two thousand
+KEEP_MAX = 6
+FORGE_WRAP = ("import runpy, sys; sys.path.insert(0, sys.argv[1]); from spark import do, forge; "
+              "do.STEP_TIMEOUT = %d; forge.KEEP_MAX = %d; sys.argv = sys.argv[2:]; "
+              "runpy.run_path(sys.argv[0], run_name='__main__')" % (STEP_TIMEOUT, KEEP_MAX))
 
 
 class Peek(smoke.Stub):
@@ -1018,10 +1021,134 @@ def main():
             du = json.loads(raw)
             ok(st == 200 and any(u["name"] == "ualice" and u["threads"] >= 1 for u in du["users"]),
                "/api/users: names, counts and stamps", raw[:200])
-            ok(len(du["users"]) >= 3 and all(set(u) == {"name", "threads", "last"} for u in du["users"]),
-               "every /api/users entry carries exactly {name, threads, last} and nothing else", raw[:200])
+            ok(len(du["users"]) >= 3 and all(set(u) == {"name", "threads", "kept", "last"} for u in du["users"]),
+               "every /api/users entry carries exactly {name, threads, kept, last} and nothing else", raw[:200])
             st, _, _ = req(url, "GET", "/api/users", headers=ubearer)
             ok(st == 403, "a user cannot list the users", st)
+
+            # kept threads: a program keeps a thread with no model turn, in
+            # its OWN store (kept/ beside threads/); SPARK_HISTORY and a
+            # clear never reach it, and an append says whether it was kept.
+            # The forge runs with forge.KEEP_MAX = KEEP_MAX (FORGE_WRAP).
+            from spark import forge as _forge
+            HMAX = _forge.HISTORY_MAX_CHARS
+            akept = state + "/users/ualice/kept/"
+            SEEN.clear()
+            st, _, raw = req(url, "POST", "/api/threads", {}, headers=upost)
+            d = json.loads(raw)
+            kid = str(d.get("id", ""))
+            ok(st == 201 and d.get("kept") is True and re.fullmatch(r"\d{4}-\d\d-\d\d-\d{6}(-\d+)?", kid)
+               and os.path.isfile(akept + kid + ".sealed") and oct(os.stat(akept + kid + ".sealed").st_mode & 0o777) == "0o600"
+               and oct(os.stat(akept).st_mode & 0o777) == "0o700"
+               and open(akept + kid + ".sealed").read() == "spark-sealed-v1 thread %s\n" % kid and not SEEN,
+               "POST /api/threads {}: 201, a minted id, kept/ 0700, the file 0600, header only, no model turn", (st, raw[:120]))
+            st, _, raw = req(url, "POST", "/api/threads", {"id": "notes-1"}, headers=upost)
+            st2, _, raw2 = req(url, "POST", "/api/threads", {"id": "notes-1"}, headers=upost)
+            ok(st == 201 and json.loads(raw) == {"id": "notes-1", "kept": True}
+               and st2 == 200 and json.loads(raw2) == {"id": "notes-1", "kept": True},
+               "POST /api/threads {id}: 201 made, the same id again 200 as it is", (st, st2, raw2[:80]))
+            st, _, raw = req(url, "POST", "/api/threads", {"id": "notes-1"}, headers=bearer)
+            ok(st == 403, "POST /api/threads without X-Spark -> 403 (the write gate)", st)
+            st, _, raw = req(url, "POST", "/api/threads/notes-1/append", {"role": "user", "text": "note one"}, headers=upost)
+            ok(st == 200 and json.loads(raw) == {"ok": True, "chars": 8, "cut": False},
+               "append to a kept thread: 200 {ok, chars, cut false}", raw[:120])
+            st, _, raw = req(url, "POST", "/api/threads/notes-1/append",
+                             {"role": "assistant", "text": "y" * (HMAX + 5)}, headers=upost)
+            ok(st == 200 and json.loads(raw) == {"ok": True, "chars": HMAX, "cut": True},
+               "an append past the history cap is cut there and says so (cut true)", raw[:120])
+            st, _, raw = req(url, "GET", "/api/threads/notes-1", headers=ubearer)
+            ms = json.loads(raw).get("messages", [])
+            ok(st == 200 and [m["text"][:8] for m in ms] == ["note one", "y" * 8] and len(ms[1]["text"]) == HMAX,
+               "the kept thread reads back: 2 messages, the second at the cap", raw[:120])
+            st, _, raw = req(url, "GET", "/api/threads?n=50", headers=ubearer)
+            rows = json.loads(raw)["threads"]
+            ok(st == 200 and any(t["id"] == "notes-1" and t["kept"] is True for t in rows)
+               and all(t["kept"] is False for t in rows if t["id"] != "notes-1") and rows[0]["id"] != kid,
+               "GET /api/threads rows say kept, and a header-only kept thread is not the newest", raw[:200])
+            st, _, raw = req(url, "GET", "/api/threads/notes-1", headers=bbearer)
+            ok(st == 404, "bob cannot read alice's kept thread", st)
+            # a regular thread's id: moved to kept/, a rename -- the header is
+            # the AAD, so every record still opens
+            n_at = len(json.loads(req(url, "GET", "/api/threads/" + str(atid), headers=ubearer)[2])["messages"])
+            st, _, raw = req(url, "POST", "/api/threads", {"id": atid}, headers=upost)
+            st2, _, raw2 = req(url, "GET", "/api/threads/" + str(atid), headers=ubearer)
+            ok(st == 200 and json.loads(raw) == {"id": atid, "kept": True} and os.path.isfile(akept + atid + ".sealed")
+               and not os.path.exists(state + "/users/ualice/threads/" + atid + ".sealed")
+               and st2 == 200 and n_at >= 2 and len(json.loads(raw2)["messages"]) == n_at,
+               "a regular thread kept by its id: moved (200), every record still opens", (st, raw[:80], n_at))
+            # an id in both directories is left as it is
+            with open(state + "/users/ualice/threads/notes-1.sealed", "w") as f:
+                f.write("spark-sealed-v1 thread notes-1\n")
+            st, _, raw = req(url, "POST", "/api/threads", {"id": "notes-1"}, headers=upost)
+            ok(st == 409 and json.loads(raw)["error"]["kind"] == "both", "an id in threads/ and kept/ at once -> 409 both", raw[:120])
+            os.remove(state + "/users/ualice/threads/notes-1.sealed")
+            # the id: 1 to 64 letters, digits, - and _, checked before any path
+            sts = [req(url, "POST", "/api/threads", {"id": bad}, headers=upost)[0]
+                   for bad in ("a" * 65, "../etc", "", "a.b", "a/b", 5)]
+            ok(sts == [400] * 6, "POST /api/threads with a bad id (65 long, a path, empty, a dot, not a string) -> 400", sts)
+            ok(req(url, "GET", "/api/threads/" + "a" * 65, headers=ubearer)[0] == 400,
+               "GET /api/threads/<65 characters> -> 400")
+            st, _, raw = req(url, "POST", "/api/threads", {"id": "a" * 64}, headers=upost)
+            ok(st == 201, "a 64-character id is one", (st, raw[:80]))
+            # a clear takes the regular threads and says how many kept stay
+            nkept = len([f for f in os.listdir(akept) if f.endswith(".sealed")])
+            st, _, raw = req(url, "DELETE", "/api/threads", headers=upost)
+            d = json.loads(raw)
+            ok(st == 200 and d.get("kept") == nkept == 4 and not os.listdir(state + "/users/ualice/threads")
+               and len(os.listdir(akept)) == nkept,
+               "DELETE /api/threads clears the regular threads, the kept ones stay and are counted", raw[:100])
+            st, _, raw = req(url, "GET", "/api/users", headers=bearer)
+            ua = next((u for u in json.loads(raw)["users"] if u["name"] == "ualice"), {})
+            ok(st == 200 and ua.get("threads") == 2 and ua.get("kept") == 2,
+               "/api/users counts alice's kept threads without her key (the 2 that hold a record)", ua)
+            # SPARK_HISTORY=off: a regular thread refuses an append (409 off),
+            # a kept one takes it, and a new kept thread is made
+            spark_env = os.path.join(home, ".config", "spark", "spark.env")
+            spark_was = open(spark_env).read() if os.path.exists(spark_env) else None
+            with open(spark_env, "w") as f:
+                f.write("SPARK_HISTORY=off\n")
+            with open(state + "/users/ualice/threads/2020-02-02-000000.sealed", "w") as f:
+                f.write("spark-sealed-v1 thread 2020-02-02-000000\n")
+            try:
+                st, _, raw = req(url, "POST", "/api/threads/2020-02-02-000000/append",
+                                 {"role": "user", "text": "x"}, headers=upost)
+                ok(st == 409 and json.loads(raw)["error"]["kind"] == "off",
+                   "history off: an append to a regular thread -> 409 off, nothing stored", raw[:120])
+                st, _, raw = req(url, "POST", "/api/threads/notes-1/append", {"role": "user", "text": "under off"},
+                                 headers=upost)
+                ok(st == 200 and json.loads(raw) == {"ok": True, "chars": 9, "cut": False},
+                   "history off: a kept thread still takes an append", raw[:120])
+                st, _, raw = req(url, "POST", "/api/threads", {"id": "made-while-off"}, headers=upost)
+                ok(st == 201 and os.path.isfile(akept + "made-while-off.sealed"),
+                   "history off: POST /api/threads still makes a kept thread", raw[:120])
+            finally:
+                if spark_was is None:
+                    os.remove(spark_env)
+                else:
+                    with open(spark_env, "w") as f:
+                        f.write(spark_was)
+                os.remove(state + "/users/ualice/threads/2020-02-02-000000.sealed")
+            # a kept thread whose file breaks cannot take an append: 500 store
+            with open(akept + "made-while-off.sealed", "w") as f:
+                f.write("spark-sealed-v1 thread someone-else\n")
+            st, _, raw = req(url, "POST", "/api/threads/made-while-off/append", {"role": "user", "text": "x"},
+                             headers=upost)
+            ok(st == 500 and json.loads(raw)["error"]["kind"] == "store",
+               "an append the store refuses (a foreign header) -> 500 store, never a quiet ok", raw[:120])
+            # KEEP_MAX: bob keeps up to the cap, then 409 full; a kept id still answers
+            bpost = dict(bbearer, **{"X-Spark": "1", "Origin": url})
+            sts = [req(url, "POST", "/api/threads", {"id": "b%d" % i}, headers=bpost)[0] for i in range(KEEP_MAX)]
+            st, _, raw = req(url, "POST", "/api/threads", {}, headers=bpost)
+            ok(sts == [201] * KEEP_MAX and st == 409 and json.loads(raw)["error"]["kind"] == "full",
+               "past KEEP_MAX kept threads a create -> 409 full", (sts, st, raw[:120]))
+            ok(req(url, "POST", "/api/threads", {"id": "b0"}, headers=bpost)[0] == 200
+               and sorted(os.listdir(state + "/users/ubob/kept")) == ["b%d.sealed" % i for i in range(KEEP_MAX)],
+               "at the cap a kept id still answers 200, and bob's kept threads are his alone")
+            # the admin keeps into the box account's own store
+            st, _, raw = req(url, "POST", "/api/threads", {"id": "admin-kept"}, headers=post)
+            ok(st == 201 and os.path.isfile(state + "/users/owner/kept/admin-kept.sealed")
+               and len(__import__("glob").glob(state + "/users/*/kept/admin-kept.sealed")) == 1,
+               "the admin's kept thread lands in the box account's store", raw[:80])
             st, _, _ = req(url, "GET", "/api/soul", headers=ubearer)
             ok(st == 200, "user GET /api/soul 200", st)
             st, _, _ = req(url, "POST", "/api/soul", {"text": "Call yourself Fixture."}, headers=upost)

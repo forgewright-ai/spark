@@ -11,7 +11,7 @@ SPARK
   spark ver --sbom                what it depends on, as CycloneDX JSON
   spark chat [words]              a conversation (/help for its verbs)
   spark chat --thread N [words]   go on with an older thread (spark history)
-  /resume [N]   /clear   /new     in the chat: an older thread, wipe, fresh
+  /resume [N] /clear /new /keep   in the chat: older thread, wipe, fresh, keep
   spark <words>                   one answer, streamed     spark last  again
   spark do <words>                a task, one confirmed command at a time
   spark do --sandbox <words>      the same in a copy, no network: it runs on
@@ -37,7 +37,7 @@ SPARK
   ... | spark reveal [N]          the answer letter by letter at that pace
   spark chat --reveal [N|auto|off]  the pace for one chat. /reveal in chat too
   spark edit --watch FILE         comment on a draft as you save it
-  spark history [clear]           the threads kept here. clear removes them
+  spark history [clear]           the threads here. clear leaves the kept ones
   ~/.local/bin/spark ...          the full path a script, cron or ssh uses
   try:
   ? words   or   words?   Enter   the command lands in your line, hint above

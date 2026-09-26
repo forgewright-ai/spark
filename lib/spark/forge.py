@@ -12,6 +12,13 @@
 # thread; `?? words` and `spark chat` continue the newest.
 # SPARK_HISTORY=off keeps no threads at all, so `??` behaves like `?`.
 #
+# A KEPT thread lives in kept/ beside threads/ (the same parent, the
+# same header: the AAD is "thread <id>", so a move is a rename and every
+# record still opens). Pruning, the header sweep and a clear read
+# threads/ alone, so a kept thread stays past SPARK_HISTORY and takes
+# appends when history is off. It leaves through unkeep (`/keep off`)
+# or `spark user remove`. An id is in one directory, never both.
+#
 # reply() is one turn of the FORGE without a terminal: the prompt, the
 # REPL and the page all go through it. `@FILE` words name files whose
 # text rides along in the request's context slot.
@@ -31,7 +38,14 @@ FILE_HEAD, FILE_TAIL = 4000, 12000
 FILE_MAX = FILE_HEAD + FILE_TAIL  # what an @FILE sends at most: its head, a cut mark, its tail
 SUMMARISE = "Summarise this file."  # the question when @FILE comes alone
 TITLE_COLS = 60
-_ID = re.compile(r"^[A-Za-z0-9_-]+$")
+# a thread id: a file name under the store, so a short plain word and
+# never a path -- 1 to 64 letters, digits, - and _ (a timestamp id is 17,
+# an app's pane id well under the cap)
+_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")     # always fullmatch: `$` alone takes "id\n"
+# the most kept threads one user holds, so it can be argued with: a
+# program keeping what it must not lose is one kept thread each, and a
+# create past this is refused (full) rather than filling the disk
+KEEP_MAX = 2000
 
 
 class RefError(Exception):
@@ -40,6 +54,16 @@ class RefError(Exception):
     def __init__(self, hint):
         super().__init__(hint)
         self.hint = hint
+
+
+class KeepError(Exception):
+    """A thread that cannot be kept or let go: kind full (KEEP_MAX),
+    both (the id in threads/ and kept/ at once), store (the disk or no
+    store at all); hint is the one line for a human or a program."""
+
+    def __init__(self, kind, hint):
+        super().__init__(hint)
+        self.kind, self.hint = kind, hint
 
 
 # --------------------------------------------------------------- identity
@@ -62,7 +86,7 @@ def system(cfg, mode, shell, mem=None):
 
 # ---------------------------------------------------------------- threads
 def valid_id(tid):
-    return bool(tid) and isinstance(tid, str) and bool(_ID.match(tid))
+    return bool(tid) and isinstance(tid, str) and bool(_ID.fullmatch(tid))
 
 
 def _title(s):
@@ -70,53 +94,94 @@ def _title(s):
     return s if len(s) <= TITLE_COLS else s[:TITLE_COLS - 3] + "..."
 
 
+def _written(path):
+    """Whether a thread file holds a record after its header. A header
+    alone is a thread made and not yet written: a first turn that
+    failed, or a thread a program made over the API."""
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            f.readline()
+            return any(line.strip() for line in f)
+    except OSError:
+        return False
+
+
 class Store:
     """One user's sealed thread store: the directory and the data key.
     Every read decrypts, every write seals; a caller without the key has
-    no store. The module-level functions below are this machine's own."""
+    no store. The module-level functions below are this machine's own.
+    The regular threads live in `tdir`, the kept ones in `kdir`, a
+    directory named kept beside it."""
 
     def __init__(self, tdir, dk, name=""):
         self.tdir, self.dk, self.name = tdir, dk, name
+        self.kdir = os.path.join(os.path.dirname(tdir), "kept")
 
-    def _dir(self):
+    def _dir(self, kept=False):
         if self.name:
             from . import users
             users.make_dirs(self.name)
+        else:
+            state_dir()
+            os.makedirs(self.tdir, mode=0o700, exist_ok=True)
+            try:
+                os.chmod(self.tdir, 0o700)
+            except OSError:
+                pass
+        if not kept:
             return self.tdir
-        state_dir()
-        os.makedirs(self.tdir, mode=0o700, exist_ok=True)
-        try:
-            os.chmod(self.tdir, 0o700)
-        except OSError:
-            pass
-        return self.tdir
+        os.makedirs(self.kdir, mode=0o700, exist_ok=True)
+        os.chmod(self.kdir, 0o700)
+        return self.kdir
 
-    def _path(self, tid):
+    def _in(self, d, tid):
+        return os.path.join(d, tid + ".sealed")
+
+    def _where(self, tid):
+        """(path, kept): the kept file when there is one, else the regular
+        path (where a new file goes). ValueError on a bad id."""
         if not valid_id(tid):
             raise ValueError("bad thread id: %r" % (tid,))
-        return os.path.join(self.tdir, tid + ".sealed")
+        k = self._in(self.kdir, tid)
+        if os.path.isfile(k):
+            return k, True
+        return self._in(self.tdir, tid), False
+
+    def _path(self, tid):
+        return self._where(tid)[0]
 
     def exists(self, tid):
-        return valid_id(tid) and os.path.isfile(self._path(tid))
+        return valid_id(tid) and (os.path.isfile(self._in(self.kdir, tid))
+                                  or os.path.isfile(self._in(self.tdir, tid)))
+
+    def is_kept(self, tid):
+        return valid_id(tid) and os.path.isfile(self._in(self.kdir, tid))
+
+    def _mint(self, d, other):
+        """A fresh timestamp id with its file (header only) made now in
+        `d`: two threads born in the same second get -2, -3, and an id
+        the `other` directory holds is never taken. None past 99."""
+        base = time.strftime("%Y-%m-%d-%H%M%S")
+        for n in range(1, 100):
+            tid = base if n == 1 else "%s-%d" % (base, n)
+            if os.path.exists(self._in(other, tid)):
+                continue
+            try:
+                fd = os.open(self._in(d, tid), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+                with os.fdopen(fd, "w") as f:
+                    f.write(vault.header("thread", tid) + "\n")
+                return tid
+            except FileExistsError:
+                continue
+        return None
 
     def new_thread(self, cfg):
         """A fresh id, its file (header only) created now so two threads
         born in the same second get -2, -3. None when history is off."""
         if cfg.history <= 0:
             return None
-        base = time.strftime("%Y-%m-%d-%H%M%S")
         try:
-            d = self._dir()
-            for n in range(1, 100):
-                tid = base if n == 1 else "%s-%d" % (base, n)
-                try:
-                    fd = os.open(os.path.join(d, tid + ".sealed"),
-                                 os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-                    with os.fdopen(fd, "w") as f:
-                        f.write(vault.header("thread", tid) + "\n")
-                    return tid
-                except FileExistsError:
-                    continue
+            return self._mint(self._dir(), self.kdir)
         except OSError:
             log_exc("new thread")
         return None
@@ -124,9 +189,14 @@ class Store:
     def open_thread(self, cfg, tid):
         """A thread under the caller's own id (the editor names its panes'
         threads: no id can come back through a raw text stream): created,
-        header only, when absent. None when history is off or the id is
-        not one (forge.valid_id)."""
-        if cfg.history <= 0 or not valid_id(tid):
+        header only, when absent. None when the id is not one
+        (forge.valid_id), or when history is off and the thread is not
+        kept."""
+        if not valid_id(tid):
+            return None
+        if self.is_kept(tid):
+            return tid
+        if cfg.history <= 0:
             return None
         try:
             p = self._path(tid)
@@ -142,23 +212,33 @@ class Store:
             log_exc("open thread")
             return None
 
-    def _files(self):
-        """[(mtime_ns, id)] of every thread file, unsorted."""
+    def _files(self, kept_only=False):
+        """[(mtime_ns, id, kept)] of every thread file, unsorted: the
+        regular ones and the kept ones, or the kept ones alone."""
         out = []
-        try:
-            for name in os.listdir(self.tdir):
-                if name.endswith(".sealed") and _ID.match(name[:-7]):
+        dirs = ((self.kdir, True),) if kept_only else ((self.tdir, False), (self.kdir, True))
+        for d, kept in dirs:
+            try:
+                names = os.listdir(d)
+            except OSError:
+                continue
+            for name in names:
+                if name.endswith(".sealed") and _ID.fullmatch(name[:-7]):
                     try:
-                        out.append((os.stat(os.path.join(self.tdir, name)).st_mtime_ns, name[:-7]))
+                        out.append((os.stat(os.path.join(d, name)).st_mtime_ns, name[:-7], kept))
                     except OSError:
                         pass
-        except OSError:
-            pass
         return out
 
-    def last_thread(self):
-        fs = self._files()
-        return max(fs)[1] if fs else None
+    def last_thread(self, kept_only=False):
+        """The id of the thread written last, kept or not (kept_only: the
+        kept ones alone), or None. A file that is a header alone is
+        skipped: a thread a program made and has not written yet is not
+        what `??` goes on with."""
+        for _, tid, kept in sorted(self._files(kept_only), reverse=True):
+            if _written(self._in(self.kdir if kept else self.tdir, tid)):
+                return tid
+        return None
 
     def load(self, tid):
         """Every message of a thread: [{"ts","role","text",...}]. A record
@@ -184,17 +264,28 @@ class Store:
         return out
 
     def append(self, cfg, tid, role, text, **fields):
-        """One sealed message onto a thread. Nothing when history is off."""
-        if cfg.history <= 0 or not tid:
-            return
+        """One sealed message onto a thread: True when it was stored.
+        False when history is off and the thread is not kept, or when the
+        store failed (a seal or disk error, logged)."""
+        if not tid:
+            return False
+        try:
+            path, kept = self._where(tid)
+        except ValueError:
+            log_exc("append thread")
+            return False
+        if cfg.history <= 0 and not kept:
+            return False
         d = {"ts": time.strftime("%Y-%m-%d %H:%M:%S"), "role": role, "text": text}
         d.update(fields)
         try:
-            self._dir()
-            vault.append_sealed(self._path(tid), self.dk, "thread", tid,
+            self._dir(kept)
+            vault.append_sealed(path, self.dk, "thread", tid,
                                 json.dumps(textmod.clean(d), ensure_ascii=False).encode("utf-8"))
+            return True
         except (OSError, vault.SealError):
             log_exc("append thread")
+            return False
 
     def history(self, tid):
         """The thread as chat messages [{"role","content"}], the oldest
@@ -220,21 +311,92 @@ class Store:
         return self.new_thread(cfg), []
 
     def list_threads(self, n=5):
-        """The newest n threads that hold a turn: [{"id","ts","title","turns"}]."""
+        """The newest n threads that hold a turn, kept or not:
+        [{"id","ts","title","turns","kept"}]."""
         out = []
-        for _, tid in sorted(self._files(), reverse=True):
+        for _, tid, kept in sorted(self._files(), reverse=True):
             msgs = self.load(tid)
             users = [m for m in msgs if m["role"] == "user"]
             if not users:
                 continue
             out.append({"id": tid, "ts": users[0].get("ts", ""),
-                        "title": _title(users[0]["text"]), "turns": len(users)})
+                        "title": _title(users[0]["text"]), "turns": len(users), "kept": kept})
             if len(out) >= n:
                 break
         return out
 
+    def kept_count(self):
+        """How many kept threads: every kept/*.sealed, written or not --
+        what KEEP_MAX counts."""
+        return len(self._files(kept_only=True))
+
+    def keep(self, tid=None):
+        """Make a thread kept, with no model turn: (id, created). No id
+        mints a timestamp one, header only; a new id is made header only;
+        a regular thread is moved (a rename: the same header, so every
+        record still opens); a kept one answers as it is. ValueError on a
+        bad id; KeepError full past KEEP_MAX, both when the id is in both
+        directories, store when the disk refuses."""
+        if tid is not None and not valid_id(tid):
+            raise ValueError("bad thread id: %r" % (tid,))
+        kp = rp = ""
+        inr = False
+        if tid is not None:
+            kp, rp = self._in(self.kdir, tid), self._in(self.tdir, tid)
+            ink, inr = os.path.isfile(kp), os.path.isfile(rp)
+            if ink and inr:
+                raise KeepError("both", "thread %s is both kept and not: it is left as it is" % tid)
+            if ink:
+                return tid, False
+        if self.kept_count() >= KEEP_MAX:
+            raise KeepError("full", "%d kept threads is the most one user keeps: let one go first" % KEEP_MAX)
+        try:
+            d = self._dir(kept=True)
+            if tid is None:
+                tid = self._mint(d, self.tdir)
+                if tid is None:
+                    raise KeepError("store", "no free thread id this second: try again")
+                return tid, True
+            if inr:
+                try:
+                    os.rename(rp, kp)
+                    return tid, False
+                except FileNotFoundError:
+                    # it moved or went while this looked: kept by another
+                    # request is kept, gone is made anew below
+                    if os.path.isfile(kp):
+                        return tid, False
+            fd = os.open(kp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "w") as f:
+                f.write(vault.header("thread", tid) + "\n")
+            return tid, True
+        except FileExistsError:
+            return tid, False
+        except OSError:
+            log_exc("keep thread")
+            raise KeepError("store", "the thread could not be kept -- see state/debug.log")
+
+    def unkeep(self, tid):
+        """A kept thread back among the regular ones (a rename), where
+        SPARK_HISTORY ages it like any other. True when it moved, False
+        when it was not kept; KeepError both or store."""
+        if not self.is_kept(tid):
+            return False
+        kp, rp = self._in(self.kdir, tid), self._in(self.tdir, tid)
+        if os.path.isfile(rp):
+            raise KeepError("both", "thread %s is both kept and not: it is left as it is" % tid)
+        try:
+            self._dir()
+            os.rename(kp, rp)
+            return True
+        except FileNotFoundError:
+            return False
+        except OSError:
+            log_exc("let a thread go")
+            raise KeepError("store", "the thread could not be let go -- see state/debug.log")
+
     def clear(self):
-        """Remove every thread; how many."""
+        """Remove every regular thread; how many. A kept thread stays."""
         n = 0
         try:
             for name in os.listdir(self.tdir):
@@ -246,7 +408,8 @@ class Store:
         return n
 
     def prune(self, cfg):
-        """Delete threads untouched for more than SPARK_HISTORY days."""
+        """Delete regular threads untouched for more than SPARK_HISTORY
+        days. A kept thread is never looked at."""
         try:
             cutoff = time.time() - cfg.history * 86400
             for name in os.listdir(self.tdir):
@@ -264,20 +427,23 @@ class _NullStore:
     def exists(self, tid):
         return False
 
+    def is_kept(self, tid):
+        return False
+
     def new_thread(self, cfg):
         return None
 
     def open_thread(self, cfg, tid):
         return None
 
-    def last_thread(self):
+    def last_thread(self, kept_only=False):
         return None
 
     def load(self, tid):
         return []
 
     def append(self, cfg, tid, role, text, **fields):
-        pass
+        return False
 
     def history(self, tid):
         return []
@@ -287,6 +453,15 @@ class _NullStore:
 
     def list_threads(self, n=5):
         return []
+
+    def kept_count(self):
+        return 0
+
+    def keep(self, tid=None):
+        raise KeepError("store", "no store here: log in first (spark user login NAME)")
+
+    def unkeep(self, tid):
+        return False
 
     def clear(self):
         return 0
@@ -389,15 +564,17 @@ def new_thread(cfg):
 
 def open_thread(cfg, tid):
     """The thread `tid` on this machine's own store, created when absent
-    (the editor's `--thread`). None when history is off."""
+    (the editor's `--thread`). None when history is off, unless the
+    thread is kept."""
     if cfg.history <= 0:
-        return None
+        return tid if local_store().is_kept(tid) else None
     return local_store(provision=True, cfg=cfg).open_thread(cfg, tid)
 
 
-def last_thread():
-    """The id of the thread touched last, or None."""
-    return local_store().last_thread()
+def last_thread(kept_only=False):
+    """The id of the thread written last (kept_only: the newest kept
+    one), or None."""
+    return local_store().last_thread(kept_only)
 
 
 def load(tid):
@@ -406,10 +583,31 @@ def load(tid):
 
 
 def append(cfg, tid, role, text, **fields):
-    """One sealed message onto a thread. Nothing when history is off."""
-    if cfg.history <= 0 or not tid:
-        return
-    local_store(provision=True).append(cfg, tid, role, text, **fields)
+    """One sealed message onto a thread: True when it was stored. Nothing
+    when history is off, unless the thread is kept."""
+    if not tid:
+        return False
+    return local_store(provision=cfg.history > 0).append(cfg, tid, role, text, **fields)
+
+
+def is_kept(tid):
+    """Whether this machine's own thread `tid` is a kept one."""
+    return local_store().is_kept(tid)
+
+
+def keep(tid):
+    """Keep this machine's own thread `tid` (Store.keep): (id, created)."""
+    return local_store().keep(tid)
+
+
+def unkeep(tid):
+    """Let this machine's own kept thread `tid` go (Store.unkeep)."""
+    return local_store().unkeep(tid)
+
+
+def kept_count():
+    """How many kept threads this machine's own store holds."""
+    return local_store().kept_count()
 
 
 def history(tid):
@@ -501,24 +699,27 @@ def peer_append(cfg, tid, role, text, **fields):
 
 
 def list_threads(n=5):
-    """The newest n threads that hold a turn: [{"id","ts","title","turns"}]."""
+    """The newest n threads that hold a turn, kept or not:
+    [{"id","ts","title","turns","kept"}]."""
     return local_store().list_threads(n)
 
 
 def clear():
-    """Remove every thread; how many."""
+    """Remove every regular thread; how many. A kept thread stays."""
     return local_store().clear()
 
 
 def prune(cfg):
-    """Delete threads untouched for more than SPARK_HISTORY days."""
+    """Delete regular threads untouched for more than SPARK_HISTORY days
+    (a kept thread is never looked at)."""
     local_store().prune(cfg)
 
 
 def _drop_stale_headers(tdir):
     """Remove header-only thread files older than a day: a failed first
     turn leaves them, and the header is plaintext -- no key needed to
-    see that nothing follows it."""
+    see that nothing follows it. `tdir` is a store's threads/, never its
+    kept/: a kept thread a program made and has not written yet stays."""
     try:
         cutoff = time.time() - 86400
         for n in os.listdir(tdir):
@@ -567,7 +768,7 @@ def claim_legacy(name, dk):
     st = store_for(name, dk)
     moved = 0
     try:
-        names = [f for f in os.listdir(THREADS_DIR) if f.endswith(".jsonl") and _ID.match(f[:-6])]
+        names = [f for f in os.listdir(THREADS_DIR) if f.endswith(".jsonl") and _ID.fullmatch(f[:-6])]
     except OSError:
         return 0
     for fname in sorted(names):
@@ -588,6 +789,13 @@ def claim_legacy(name, dk):
         except OSError:
             continue
         st._dir()
+        if st.is_kept(tid):
+            # claimed once and kept since: that sealed copy is the one to
+            # keep, never re-sealed over; the plaintext goes when it opens
+            if len(st.load(tid)) >= len(msgs):
+                os.remove(src)
+                moved += 1
+            continue
         if st.exists(tid):                     # a crashed earlier claim: re-seal fresh
             os.remove(st._path(tid))
         for d in msgs:
@@ -802,9 +1010,11 @@ CHAT_USAGE = """%s chat -- a conversation
                                  choice
 
   Inside it: @FILE words asks about a file; /help lists the verbs (/new,
-  /resume, /clear, /last, /model, /reveal); /q (or /quit, /exit, :q, quit,
-  exit, bye, Ctrl-D) ends, silently; Ctrl-C cancels a reply in progress
-  without ending the chat. Every turn is kept as a thread (spark history).
+  /resume, /clear, /keep, /last, /model, /reveal); /q (or /quit, /exit, :q,
+  quit, exit, bye, Ctrl-D) ends, silently; Ctrl-C cancels a reply in progress
+  without ending the chat. Every turn is kept as a thread (spark history) for
+  SPARK_HISTORY days; /keep keeps this one past that and past /clear, and
+  /keep off lets it go.
 """
 
 # Any of these alone ends the conversation, silently. Generous on purpose:
@@ -831,6 +1041,7 @@ def _slash_help(cfg, thread, args):
     say("/new     a fresh thread")
     say("/resume  an older thread: bare lists the newest 5, /resume N picks")
     say("/clear   wipe the screen; the thread goes on")
+    say("/keep    keep this thread past SPARK_HISTORY; /keep off lets it go")
     say("/last    the last turn, with its tok/s")
     say("/model   which model is answering")
     say("/reveal  bare: the model's measured pace and the threshold under it;")
@@ -875,6 +1086,37 @@ def _slash_clear(cfg, thread, args):
     if sys.stdout.isatty():
         sys.stdout.write("\033[2J\033[3J\033[H")
         sys.stdout.flush()
+    return thread
+
+
+def _slash_keep(cfg, thread, args):
+    # /keep moves the current thread into kept/ (pruning and a clear never
+    # look there), /keep off moves it back to age like any other. The
+    # thread goes on either way: only where its file lives changes.
+    from . import say
+    if args not in ([], ["off"]):
+        print("spark: /keep takes nothing, or off", file=sys.stderr, flush=True)
+        return thread
+    if not thread:
+        if cfg.history <= 0:
+            print("spark: history is off (SPARK_HISTORY) and nothing is kept, so this chat has no thread to keep",
+                  file=sys.stderr, flush=True)
+        else:
+            print("spark: this chat has no thread yet, and its first turn makes the one /keep keeps",
+                  file=sys.stderr, flush=True)
+        return thread
+    try:
+        if args == ["off"]:
+            if unkeep(thread):
+                say("let go: this thread lives SPARK_HISTORY days like any other")
+            else:
+                say("this thread is not kept, so there is nothing to let go")
+            return thread
+        keep(thread)
+    except KeepError as e:
+        print("spark: " + e.hint, file=sys.stderr, flush=True)
+        return thread
+    say("kept: this thread stays past SPARK_HISTORY and /clear")
     return thread
 
 
@@ -937,7 +1179,7 @@ def _slash_reveal(cfg, thread, args):
 
 
 SLASH_VERBS = {"/help": _slash_help, "/new": _slash_new, "/resume": _slash_resume, "/reveal": _slash_reveal,
-               "/clear": _slash_clear, "/last": _slash_last, "/model": _slash_model}
+               "/clear": _slash_clear, "/keep": _slash_keep, "/last": _slash_last, "/model": _slash_model}
 
 
 def cmd_chat(args):
@@ -964,7 +1206,9 @@ def cmd_chat(args):
             say("%s chat -- no thread %s (spark history lists them)" % (MARK, picked))
             return 2
     else:
-        thread = last_thread() if cfg.history > 0 else None    # `more`: go on with the newest
+        # `more`: go on with the newest -- with history off, the newest
+        # kept thread, the one kind a turn still lands on
+        thread = last_thread(kept_only=cfg.history <= 0)
     if args:
         words, paths = refs(args)
         return cli._stream("chat", " ".join(words), paths, thread=thread, cps=REVEAL[0])

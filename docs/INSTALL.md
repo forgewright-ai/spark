@@ -224,6 +224,9 @@ not on `PATH`.
 `spark chat` is a conversation at a `chat> ` prompt. `/help` lists its
 verbs. `/q` or `Ctrl-D` ends, and `Ctrl-C` cancels a reply. `spark chat
 --thread N` continues an older thread from the `spark history` list.
+A thread lives `SPARK_HISTORY` days. `/keep` keeps this one past that
+and past `spark history clear`, and `/keep off` lets it go. With
+`SPARK_HISTORY=off`, `spark chat` goes on with the newest kept thread.
 
 `spark <words>` streams one answer. `spark @FILE words` sends a text
 file's first 4 kB and last 12 kB with the question.
@@ -453,11 +456,25 @@ curl -sN http://<host>:8081/v1/chat/completions \
   -d '{"messages":[{"role":"user","content":"what is this machine for?"}],"stream":true}'
 ```
 
-The users. `spark user list` shows them with their threads and last
-activity. `spark user add NAME` mints an account and shows its token
-and a QR of its login link once, and `--no-qr` skips the QR. `spark
-user remove NAME` deletes the account and its sealed data, and asks
-first. `SPARK_YES=1` answers yes, for a script. `spark user login NAME`
+A program keeps its own threads the same way, in its user's store.
+`POST /api/threads` makes a thread that `SPARK_HISTORY` never ages,
+with no model turn. It goes with its user (`spark user remove NAME`).
+`POST /api/threads/ID/append` adds one message, and its answer says
+whether the message was kept. A write carries `X-Spark: 1`:
+
+```sh
+curl -s http://<host>:8081/api/threads \
+  -H "Authorization: Bearer $YOUR_SPARK_USER_TOKEN" \
+  -H "Content-Type: application/json" -H "X-Spark: 1" \
+  -d '{"id":"notes"}'
+```
+
+The users. `spark user list` shows them with their threads, the kept
+ones counted, and last activity. `spark user add NAME` mints an account
+and shows its token and a QR of its login link once, and `--no-qr`
+skips the QR. `spark user remove NAME` deletes the account and its
+sealed data, kept threads too, and asks first. `SPARK_YES=1` answers
+yes, for a script. `spark user login NAME`
 pastes a token so this machine acts as NAME. `spark user logout`
 forgets the login, and the sealed data stays. `spark user token --new`
 rotates your token, and other logins die. A name is a-z, 0-9 and `-`,
@@ -762,7 +779,7 @@ Runtime keys live in `~/.config/spark/spark.env`, and
 | `SPARK_REVEAL` | `off`, `auto` or N: a reply's pace at a terminal in chat, explain and a question -- `spark reveal N`, `auto` or `off` sets it, `--reveal` on the verb and `/reveal` in chat for one time. `spark stats` shows the measured threshold | `off` |
 | `SPARK_FORGE` | `auto`, `on` or `off`: serve the page and the API -- `spark forge on\|off` | `auto` |
 | `SPARK_FORGE_HOST` / `SPARK_FORGE_PORT` | the page's address and port, never `0.0.0.0` | the LAN address / `8081` |
-| `SPARK_HISTORY` | days of turns and threads kept. `off` keeps none | `30` |
+| `SPARK_HISTORY` | days a turn or a thread lives. `off` keeps none. A kept thread (`/keep` in `spark chat`) stays until you let it go | `30` |
 | `SPARK_NGL` `SPARK_FLASH_ATTN` `SPARK_KV` `SPARK_THREADS` | the engine's tuning -- `spark bench tune apply` | auto |
 | `SPARK_API_KEY_FILE` | a token file you already have | `~/.local/state/spark/api-token` |
 

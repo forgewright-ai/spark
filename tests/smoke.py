@@ -1797,7 +1797,7 @@ def main():
         hits0 = STATE["hits"]
         rc, out, err = spark("chat", stdin="/help\n:q\n")
         t.ok(rc == 0 and STATE["hits"] == hits0, "chat: /help hits the stub zero times", out + err)
-        for v in ("/help", "/new", "/resume", "/clear", "/last", "/model", "/q"):
+        for v in ("/help", "/new", "/resume", "/clear", "/keep", "/last", "/model", "/q"):
             t.ok(v in out, "chat: /help lists %s" % v, out)
 
         # an unknown slash verb is refused on stderr, not sent to the model
@@ -1856,6 +1856,54 @@ def main():
         answers = [int(n) for n in re.findall(r"^\* (\d+)", out, re.M)]
         t.ok(rc == 0 and "\033[" not in out and len(answers) == 2 and answers[1] == answers[0] + 2,
              "chat: /clear piped prints no escapes and the thread goes on", repr(out))
+        spark("history", "clear")
+
+        # /keep: the chat's thread moves into kept/ beside threads/, where
+        # SPARK_HISTORY, a prune and history clear never reach it; with
+        # history off the chat goes on with it and its turns still land;
+        # /keep off moves it back to age like any other
+        rc, out, err = spark("chat", stdin="count\n/keep\n:q\n")
+        kdir = os.path.join(os.path.dirname(tdir()), "kept")
+        kept0 = sorted(os.listdir(kdir)) if os.path.isdir(kdir) else []
+        t.ok(rc == 0 and "kept: this thread stays past SPARK_HISTORY and /clear" in out and len(kept0) == 1
+             and not os.listdir(tdir()) and oct(os.stat(kdir).st_mode & 0o777) == "0o700"
+             and oct(os.stat(kdir + "/" + kept0[0]).st_mode & 0o777) == "0o600",
+             "chat: /keep moves the thread into kept/ (dir 0700, file 0600)", out + err)
+        rc, out, _ = spark("history")
+        t.ok(rc == 0 and "count  (kept)" in out and "  1 kept thread stays past SPARK_HISTORY and clear" in out,
+             "history marks the kept thread and counts it", out)
+        rc, out, _ = spark("user")
+        t.ok(rc == 0 and re.search(r"^  \S+ +1 thread \(1 kept\)  ", out, re.M), "spark user counts the kept one", out)
+        rc, out, _ = spark("history", "clear")
+        t.ok(rc == 0 and out.rstrip().endswith("; 1 kept thread stays") and sorted(os.listdir(kdir)) == kept0,
+             "history clear removes the rest and says the kept thread stays", out)
+        rc, out, _ = spark("chat", "count", extra={"SPARK_HISTORY": "off"})
+        rc2, out2, _ = spark("chat", "count", extra={"SPARK_HISTORY": "off"})
+        t.ok(rc == 0 and out.strip() == "* 4" and out2.strip() == "* 6" and sorted(os.listdir(kdir)) == kept0
+             and not os.listdir(tdir()),
+             "SPARK_HISTORY=off: chat goes on with the kept thread, its turns land, the prune leaves it", out + out2)
+        with open(kdir + "/zz-made-by-a-program.sealed", "w") as f:
+            f.write("spark-sealed-v1 thread zz-made-by-a-program\n")
+        os.chmod(kdir + "/zz-made-by-a-program.sealed", 0o600)
+        rc, out, _ = spark("line", stdin="?? count")
+        t.ok(rc == 0 and out.splitlines() == ["answer", "8"],
+             "?? goes on with the kept thread, past a newer file that is a header alone", out)
+        os.remove(kdir + "/zz-made-by-a-program.sealed")
+        rc, out, err = spark("chat", stdin="/keep off\n/keep off\n:q\n")
+        t.ok(rc == 0 and "let go: this thread lives SPARK_HISTORY days like any other" in out
+             and "this thread is not kept, so there is nothing to let go" in out
+             and not os.listdir(kdir) and len(os.listdir(tdir())) == 1,
+             "chat: /keep off moves it back to threads/, and says so when it is not kept", out + err)
+        rc, out, err = spark("chat", stdin="/new\n/keep\n/keep now\n:q\n")
+        t.ok(rc == 0 and "spark: this chat has no thread yet, and its first turn makes the one /keep keeps" in err
+             and "spark: /keep takes nothing, or off" in err and not os.listdir(kdir),
+             "chat: /keep after /new has no thread to keep, and /keep takes only off", out + err)
+        rc, out, err = spark("chat", stdin="/keep\n:q\n", extra={"SPARK_HISTORY": "off"})
+        t.ok(rc == 0 and "spark: history is off (SPARK_HISTORY) and nothing is kept, so this chat has no thread to keep" in err,
+             "chat: /keep with history off and nothing kept says so", out + err)
+        rc, out, _ = spark("chat", "-h")
+        t.ok(rc == 0 and "/keep keeps this one past that and past /clear, and" in out
+             and all(len(ln) <= 80 for ln in out.splitlines()), "chat -h names /keep, within 80 columns", out)
         spark("history", "clear")
 
         # wrap at 80 columns when piped: a long canned answer breaks into
@@ -2150,6 +2198,8 @@ def main():
              "edit ? --thread with history off: accepted, nothing kept, every turn alone", str(len(STATE["bodies"][-1]["messages"])))
         rc7, out7, _ = spark("edit", "?", "x", "--thread", "bad id!", stdin="A.\n")
         t.ok(rc7 == 2 and "--thread ID is" in out7, "edit ? --thread with a bad id is refused", out7)
+        rc7, out7, _ = spark("edit", "?", "x", "--thread", "a" * 65, stdin="A.\n")
+        t.ok(rc7 == 2 and "--thread ID is 1 to 64 of" in out7, "edit ? --thread with a 65-character id is refused", out7)
         # the ledger: a declined note is kept per file name and rides the next ?
         rc, out, _ = spark("edit", "--decline", stdin='2. "Some prose." reads flat -- cut it\n')
         t.ok(rc == 2 and "needs --name" in out, "edit --decline without a name is refused", out)
@@ -4560,9 +4610,12 @@ def main():
         rc, out, _ = spark("user", "remove", "ana", extra=_xdg5)
         t.ok(rc == 0 and "spark user: kept" in out and os.path.isdir(home + "/.local/state-users/spark/users/ana"),
              "user remove without a yes keeps the user", out)
+        os.makedirs(home + "/.local/state-users/spark/users/ana/kept", mode=0o700)
+        with open(home + "/.local/state-users/spark/users/ana/kept/ana-kept.sealed", "w") as f:
+            f.write("spark-sealed-v1 thread ana-kept\n")
         rc, out, _ = spark("user", "remove", "ana", extra=dict(_xdg5, SPARK_YES="1"))
         t.ok(rc == 0 and "ana removed" in out and not os.path.exists(home + "/.local/state-users/spark/users/ana"),
-             "SPARK_YES=1 answers the remove question", out)
+             "SPARK_YES=1 answers the remove question, and the store goes whole, kept/ too", out)
         # a client with no login answers and keeps nothing: the FORGE it
         # answers from is the account authority, nothing is minted here
         _xdg6 = {"XDG_STATE_HOME": home + "/.local/state-client", "SITE_AI_MODEL": "none", "SITE_PEER_AI_URL": url}

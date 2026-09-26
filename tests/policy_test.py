@@ -38,9 +38,13 @@ OPEN = "open"          # any status but 401 and 403
 # what stands in for `*` in a pattern: a name no store holds
 FILL = {"/static/*": "/static/spark.css", "/api/threads/*": "/api/threads/none",
         "/api/threads/*/append": "/api/threads/none/append", "/api/memory/*": "/api/memory/1"}
-# the one body a route needs to reach past its own parser without doing
-# anything: the model's face is proxied to the stub, so it says hello
-BODIES = {"/v1/chat/completions": {"messages": [{"role": "user", "content": "hi"}], "stream": False}}
+# the body a route needs to reach past its own parser: the model's face
+# is proxied to the stub, so it says hello; a kept thread is made for
+# real, in each caller's own store under this test's throwaway HOME (a
+# body is sent on POST alone, so the GET and DELETE rows of the same
+# pattern take none)
+BODIES = {"/v1/chat/completions": {"messages": [{"role": "user", "content": "hi"}], "stream": False},
+          "/api/threads": {"id": "policy-kept"}}
 
 
 def free_port():
@@ -183,6 +187,10 @@ def main():
                     ok(bare == 401 and as_user == 403 and kind == "role" and as_admin not in (401, 403),
                        "%s %s (admin): 401 bare, 403 role to a user, open to the admin" % (method, pattern),
                        (bare, as_user, kind, as_admin))
+            # POST /api/threads made its kept thread for real: once in the
+            # user's own store, once in the box account's, both under HOME
+            ok(all(os.path.isfile(os.path.join(state, "users", n, "kept", "policy-kept.sealed")) for n in ("upol", "owner")),
+               "POST /api/threads kept one thread in each caller's own store, under this test's HOME")
             # off the table: 404 with any credential, and no method borrows another's row
             for method, path in (("GET", "/api/nope"), ("POST", "/api/health"), ("GET", "/api/login"),
                                  ("DELETE", "/api/memory"), ("GET", "/static/a/b"), ("GET", "/api/threads/x/y"),

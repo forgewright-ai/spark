@@ -1383,8 +1383,8 @@ def row_sends(ctx):
 @row("NONFUNCTIONAL")
 def row_users(ctx):
     """The named users' sealed stores: every dir 0700, every key file
-    0600, every data file carrying the sealed magic, the local login
-    consistent. The promise is `eyes only to the owner`; a plaintext file
+    0600, every data file (threads/ and kept/ included) carrying the
+    sealed magic, the local login consistent. The promise is `eyes only to the owner`; a plaintext file
     inside a user's store is the drift this row exists to catch."""
     from . import ACCOUNT_FILE, ACCOUNT_KEY_FILE, USERS_DIR, users, vault
     names = users.list_users()
@@ -1407,10 +1407,11 @@ def row_users(ctx):
             elif os.stat(p).st_mode & 0o077:
                 problems.append("%s: %s not 0600" % (n, fn))
         data = []
-        try:
-            data = [os.path.join(d, "threads", f) for f in os.listdir(os.path.join(d, "threads"))]
-        except OSError:
-            pass
+        for sub in ("threads", "kept"):      # kept/: the threads SPARK_HISTORY never ages
+            try:
+                data += [os.path.join(d, sub, f) for f in os.listdir(os.path.join(d, sub))]
+            except OSError:
+                pass
         data += [os.path.join(d, f) for f in ("memory", "chat-history", "ledger")]
         for p in data:
             if os.path.isfile(p):
@@ -1914,6 +1915,11 @@ def make_fixture(root, good, stub_url="", real_spark=False):
         vault.append_sealed(os.path.join(udir, "threads", "2000-01-01-000001.sealed"), fdk,
                             "thread", "2000-01-01-000001",
                             json.dumps({"ts": "2000-01-01 00:00:01", "role": "user", "text": "sealed?"}).encode())
+        # a kept thread, sealed the same way: kept/ passes when it is
+        os.makedirs(os.path.join(udir, "kept"), mode=0o700)
+        vault.append_sealed(os.path.join(udir, "kept", "fixture-kept.sealed"), fdk,
+                            "thread", "fixture-kept",
+                            json.dumps({"ts": "2000-01-01 00:00:02", "role": "user", "text": "kept?"}).encode())
         vault.write_sealed(os.path.join(udir, "memory"), fdk, "memory", "fixture", b"a sealed fact\n")
         vault.write_sealed(os.path.join(udir, "ledger"), fdk, "ledger", "fixture",
                            json.dumps({"kind": "edit", "name": "a.md", "ts": "2000-01-01 00:00:00",
@@ -1927,6 +1933,11 @@ def make_fixture(root, good, stub_url="", real_spark=False):
         os.chmod(os.path.join(udir, "token.hash"), 0o644)
         with open(os.path.join(udir, "threads", "2000-01-01-000001.jsonl"), "w") as f:
             f.write(json.dumps({"ts": "2000-01-01 00:00:01", "role": "user", "text": "leaked?"}) + "\n")
+        # a kept thread in the clear, world-readable: kept/ is read too
+        os.makedirs(os.path.join(udir, "kept"), mode=0o700)
+        with open(os.path.join(udir, "kept", "fixture-kept.sealed"), "w") as f:
+            f.write(json.dumps({"ts": "2000-01-01 00:00:02", "role": "user", "text": "kept?"}) + "\n")
+        os.chmod(os.path.join(udir, "kept", "fixture-kept.sealed"), 0o644)
         # the ledger in the clear: the row that watches it must go red
         with open(os.path.join(udir, "ledger"), "w") as f:
             f.write(json.dumps({"kind": "ask", "name": "plan.md", "ts": "2000-01-01 00:00:00",

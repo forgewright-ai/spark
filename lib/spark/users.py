@@ -2,9 +2,10 @@
 #
 # Each user owns ~/.local/state/spark/users/<name>/ (0700): token.hash
 # (the lookup verifier), key (the data key, wrapped by the token --
-# vault.py), threads/, memory, chat-history. The box never stores a
-# token or a data key in the clear: only the user's token opens their
-# data, and a lost token is lost history, by design.
+# vault.py), threads/, kept/ (the threads SPARK_HISTORY never ages),
+# memory, chat-history. The box never stores a token or a data key in
+# the clear: only the user's token opens their data, and a lost token is
+# lost history, by design.
 #
 # The local login is two 0600 files beside it: `account` (name and
 # token: who this machine acts as) and `account-key` (the unwrapped
@@ -223,23 +224,25 @@ def _held_threads(d):
 
 
 def _thread_stats(name, dk=None):
-    """(count, newest mtime) of a user's threads, counted the way spark
-    status and spark history count them: the threads that hold a turn.
-    With the user's key the store itself lists them; without it (the
-    admin never holds another user's key) the plaintext headers decide."""
+    """(count, newest mtime, kept) of a user's threads, counted the way
+    spark status and spark history count them: the threads that hold a
+    turn, the kept ones among them (kept/ beside threads/). With the
+    user's key the store itself lists them; without it (the admin never
+    holds another user's key) the plaintext headers decide."""
     d = os.path.join(user_dir(name), "threads")
+    k = os.path.join(user_dir(name), "kept")
     if dk is not None:
         from . import forge
-        ids = [t["id"] for t in forge.store_for(name, dk).list_threads(10**6)]
+        ids = [(t["id"], t["kept"]) for t in forge.store_for(name, dk).list_threads(10**6)]
     else:
-        ids = _held_threads(d)
+        ids = [(t, False) for t in _held_threads(d)] + [(t, True) for t in _held_threads(k)]
     newest = 0.0
-    for tid in ids:
+    for tid, kept in ids:
         try:
-            newest = max(newest, os.path.getmtime(os.path.join(d, tid + ".sealed")))
+            newest = max(newest, os.path.getmtime(os.path.join(k if kept else d, tid + ".sealed")))
         except OSError:
             pass
-    return len(ids), newest
+    return len(ids), newest, sum(1 for _, kept in ids if kept)
 
 
 def _show():
@@ -255,10 +258,11 @@ def _show():
     say("users    %d" % len(names))
     dk = account_key() if me else None
     for n in names:
-        count, newest = _thread_stats(n, dk if n == me else None)
+        count, newest, kept = _thread_stats(n, dk if n == me else None)
         when = time.strftime("%Y-%m-%d %H:%M", time.localtime(newest)) if newest else "-"
         mark = " (you)" if n == me else ""
-        say("  %-20s %3d thread%s  %s%s" % (n, count, "" if count == 1 else "s", when, mark))
+        say("  %-20s %3d thread%s%s  %s%s" % (n, count, "" if count == 1 else "s",
+                                             " (%d kept)" % kept if kept else "", when, mark))
     return 0
 
 
