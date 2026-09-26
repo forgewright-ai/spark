@@ -12,8 +12,10 @@ its apps and spark's own verbs.
   and only inside the sandbox.
 - Before a command lands in your line, spark checks it against that
   index: the program must be here, and every option must be in its
-  manual. A command that fails is asked again once, with the manual's
-  own lines, and your line never shows the wrong one.
+  manual, and when its manual lists commands (`sv status`, `apt-get
+  install`, `git log`), the command word must be one of them. A command
+  that fails is asked again once, with the manual's own lines, and your
+  line never shows the wrong one.
 - spark's own verbs in the model's brief come from the tree, so a verb
   is never missing and a retired one never lingers.
 - The model's `!` is lowered only when spark's own read-only check
