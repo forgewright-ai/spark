@@ -288,6 +288,10 @@ def test_parsers():
     what = intake.page_what(MAN7)
     check("page_what: man(7) NAME after `name \\-`, fonts dropped", what == "print the alpha report", what)
     check("page_what: mdoc's .Nd", intake.page_what(MDOC) == "count the beta widgets", intake.page_what(MDOC))
+    t0 = time.time()
+    m = intake._SO.search("\n" * 60 + ".so man1/ls.1\n")
+    check("resolve's .so pattern: 60 blank lines first read in linear time",
+          m is not None and m.group(1) == "man1/ls.1" and time.time() - t0 < 0.5, time.time() - t0)
     o = intake.option_set("usage: x [-abc] [--long-one]\n  -name PATTERN\n  -v  verbose\n", "x [-abc] [--long-one]")
     check("option_set: long, short (a synopsis [-abc] gives each letter), words",
           "--long-one" in o.long and {"-a", "-b", "-c", "-v"} <= set(o.short) and "-name" in o.words, o)
@@ -518,6 +522,27 @@ def test_fingerprint():
     _c, _b, stale, _s = intake.status()
     check("fingerprint: a PATH dir that gains a file makes the store stale", stale and not intake.fresh())
     check("fingerprint: the stale store names the dir that moved", BIN in intake.changed(), intake.changed())
+    # once a build recorded its dirs, the asker's PATH and MANPATH (their
+    # order, an extra dir) never move the stamps: the login and the
+    # timer agree
+    keep = {k: os.environ.get(k) for k in ("SPARK_KNOWLEDGE_PATH", "SPARK_KNOWLEDGE_MANPATH", "PATH", "MANPATH")}
+    try:
+        for k in ("SPARK_KNOWLEDGE_PATH", "SPARK_KNOWLEDGE_MANPATH", "MANPATH"):
+            os.environ.pop(k, None)
+        os.environ["PATH"] = "/usr/bin:/bin"
+        one = intake.stamps({"path": [BIN]})
+        os.environ["PATH"] = "/bin:/usr/bin:" + os.path.dirname(BIN)
+        os.environ["MANPATH"] = os.path.dirname(BIN)
+        two = intake.stamps({"path": [BIN]})
+    finally:
+        for k, v in keep.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    check("fingerprint: the asker's PATH order, an extra dir and MANPATH leave a build's stamps alone",
+          one == two and intake.fingerprint(stamped=one) == intake.fingerprint(stamped=dict(reversed(list(one.items())))),
+          sorted(set(one) ^ set(two)))
     build()
     s = intake.LocalStore()
     check("the next refresh reads the new program", s.entry("newcomer") is not None and not intake.status()[2])

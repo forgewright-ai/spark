@@ -369,6 +369,7 @@ LINE_KNOW_ARMS = ("off", "judge", "full")
 ASK_AGAIN = "Answer again with a command that works on this machine."
 REPEATED = "that exact command was already tried and failed; propose a different one."
 NOTE_WORD = 24             # a flag or a head in a note: never the whole hint
+NOTE_ROOM = 24             # a hint cut shorter than this beside a note is dropped
 
 
 class _Stop(Exception):
@@ -531,12 +532,15 @@ def _noted(lead, hint, note, width=HINT_COLS):
     """lead + hint + note as one line within `width`. The cut eats the
     model's words, never the lead (a danger's facts) or the note. A note
     starting with a comma follows the words; any other is a clause of
-    its own after `; `."""
+    its own after `; `. The model's end mark goes before a note, and a
+    hint with less than NOTE_ROOM columns left is dropped whole rather
+    than cut to a fragment (one that fits whole stays)."""
     if not note:
         return _one_line(lead + hint, width)
+    hint = (hint or "").rstrip().rstrip(".").rstrip()
     tail = note if note.startswith(",") else "; " + note
     room = width - len(lead) - len(tail)
-    if not hint or room < 12:
+    if not hint or room < min(len(hint), NOTE_ROOM):
         return _one_line(lead + note.lstrip(", "), width)
     return _one_line(lead + _one_line(hint, room) + tail, width)
 

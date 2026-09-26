@@ -191,7 +191,8 @@ PROFILE = (
     ('(deny file-read* file-write* (literal "/dev/tty") (regex #"^/dev/ttys[0-9]+$"))',
      "no terminal: nothing typed into the caller's shell"),
     ("(deny appleevent-send)", "no scripting other apps"),
-    ("(deny signal (target others))", "no signal to a process outside the step's own (itself and its children)"),
+    ("(deny signal (target others))", "no signal to a process in another process group..."),
+    ("(allow signal (target same-sandbox))", "...but the step's own, a child in its own session included"),
     ("(deny lsopen)", "no opening apps or URLs"),
     ('(deny mach-lookup (global-name "com.apple.pasteboard.1") (global-name "com.apple.SecurityServer")'
      ' (global-name "com.apple.securityd.xpc"))', "no clipboard, no keychain"),

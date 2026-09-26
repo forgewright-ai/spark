@@ -66,8 +66,9 @@ CARD_COMMANDS = 160   # characters of the top hit's commands on its card (sv's s
 CONFIDENT = 1.3
 # the characters a manual's line loses before it rides: C0 and DEL (what
 # text.scrub drops), C1 and the bidi controls (what it keeps) -- the same
-# class the prompt line refuses in a model's command
-CONTROL = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f‎‏‪-‮⁦-⁩]")
+# class the prompt line refuses in a model's command, and the zero-width
+# ones (a marker split by one would pass the marker filter)
+CONTROL = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f\u200b-\u200f\u202a-\u202e\u2060\u2066-\u2069\ufeff]")
 _MARKERS = ("reference, from this machine", "end of reference")
 
 

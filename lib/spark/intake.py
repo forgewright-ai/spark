@@ -855,7 +855,7 @@ def _page_source(path):
     return data.decode("utf-8", "replace")
 
 
-_SO = re.compile(r"\A(?:(?:\.\\\"|'\\\"|\.\s*$)[^\n]*\n|\s*\n)*\.so\s+(\S+)", re.M)
+_SO = re.compile(r"\A(?:(?:\.\\\"|'\\\"|\.[ \t]*$)[^\n]*\n|[ \t]*\n)*\.so[ \t]+(\S+)", re.M)
 
 
 def resolve(path, root, hops=3):
@@ -887,16 +887,16 @@ def _tilde(p):
     return os.path.join(HOME, p[2:]) if p.startswith("~/") else p
 
 
-def program_dirs(remembered=()):
+def program_dirs(remembered=(), env=True):
     """The dirs programs are read from, in order: SPARK_KNOWLEDGE_PATH
-    alone when set (tests), else the absolute PATH, the standard dirs,
-    ~/.local/bin and the dirs an earlier build saw -- each once (by real
-    path), each a directory."""
+    alone when set (tests), else the absolute PATH (unless `env` is
+    False), the standard dirs, ~/.local/bin and the dirs an earlier
+    build saw -- each once (by real path), each a directory."""
     seam = os.environ.get("SPARK_KNOWLEDGE_PATH")
     if seam is not None:
         cands = seam.split(os.pathsep)
     else:
-        cands = abs_path().split(os.pathsep) + list(STANDARD_BIN) + [BIN_DIR] + list(remembered)
+        cands = (abs_path().split(os.pathsep) if env else []) + list(STANDARD_BIN) + [BIN_DIR] + list(remembered)
     out, seen = [], set()
     for d in cands:
         if not d or not os.path.isabs(d) or not os.path.isdir(d):
@@ -928,15 +928,16 @@ def _manpath_files():
     return out
 
 
-def man_dirs(prog_dirs):
+def man_dirs(prog_dirs, env=True):
     """The man roots, in order: SPARK_KNOWLEDGE_MANPATH alone when set
-    (tests), else $MANPATH, each program dir's ../share/man and ../man,
-    the files that list man dirs, and the standard ones."""
+    (tests), else $MANPATH (unless `env` is False), each program dir's
+    ../share/man and ../man, the files that list man dirs, and the
+    standard ones."""
     seam = os.environ.get("SPARK_KNOWLEDGE_MANPATH")
     if seam is not None:
         cands = seam.split(os.pathsep)
     else:
-        cands = [d for d in (os.environ.get("MANPATH") or "").split(os.pathsep)]
+        cands = (os.environ.get("MANPATH") or "").split(os.pathsep) if env else []
         for d in prog_dirs:
             cands += [os.path.join(os.path.dirname(d), "share", "man"), os.path.join(os.path.dirname(d), "man")]
         cands += _manpath_files() + list(STANDARD_MAN)
@@ -989,9 +990,9 @@ def tree_stamp():
     return h.hexdigest()[:24]
 
 
-def _places(meta):
-    progs = program_dirs(meta.get("path") or ())
-    mans = man_dirs(progs)
+def _places(meta, env=True):
+    progs = program_dirs(meta.get("path") or (), env)
+    mans = man_dirs(progs, env)
     return progs, mans, app_dirs()
 
 
@@ -999,8 +1000,11 @@ def stamps(meta=None):
     """What this machine has, path by path: the package databases, the
     program dirs, the man dirs (and their sections), the app dirs --
     each one's "mtime size" (or "-" when absent), and spark's tree. A
-    cheap stat each; fingerprint() hashes it, changed() compares it."""
-    progs, mans, apps = _places(meta or {})
+    cheap stat each; fingerprint() hashes it, changed() compares it.
+    Once a build recorded its dirs, those are the ones stamped, whatever
+    PATH and MANPATH the asker has: the login and the timer agree."""
+    meta = meta or {}
+    progs, mans, apps = _places(meta, env=not meta.get("path"))
     paths = list(progs) + list(apps) + _db_paths()
     for m in mans:
         paths.append(m)
@@ -1019,7 +1023,7 @@ def stamps(meta=None):
 def fingerprint(meta=None, stamped=None):
     """The machine's stamps() as one short hash."""
     h = hashlib.sha256()
-    for p, v in (stamped if stamped is not None else stamps(meta)).items():
+    for p, v in sorted((stamped if stamped is not None else stamps(meta)).items()):
         h.update(("%s %s\n" % (p, v)).encode())
     return h.hexdigest()[:32]
 
@@ -1105,7 +1109,7 @@ class Owners:
         k = (cellar, pkg)
         if k not in self._brew:
             src = _read_bytes(os.path.join(cellar, pkg, ver, ".brew", pkg + ".rb"), 256 * 1024)
-            m = re.search(r'^\s*desc\s+"((?:[^"\\]|\\.)*)"', (src or b"").decode("utf-8", "replace"), re.M)
+            m = re.search(r'^[ \t]*desc[ \t]+"((?:[^"\\]|\\.)*)"', (src or b"").decode("utf-8", "replace"), re.M)
             self._brew[k] = m.group(1) if m else ""
         return self._brew[k]
 

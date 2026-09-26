@@ -32,7 +32,7 @@ SENDS = (
              "matching manual or help lines, 600 characters at most -- on a client, from the "
              "client's own index, sent to the other machine"),
     ("line", "after a command spark found wrong, the lines of that command's manual about it, "
-             "600 characters at most, sent once more with the question"),
+             "600 characters at most, sent with the question and the first request's lines again"),
     ("chat", "the conversation: soul, remembered facts, earlier turns"),
     ("do", "each step's output, last 4 kB -- a span that looks like a secret is held back"),
     # a step refused for an option: spark reads that command's own man
@@ -755,10 +755,14 @@ PROOF_DENIED = (
 
 def _denied(opt, arg):
     """Does this argv word carry the denied option: the option itself,
-    `--long=value`, or a one-letter option inside a cluster (`-fn`)."""
+    `--long=value`, or a one-letter option inside a cluster, a value
+    glued on or not (`-fn`, `-fn1`, `-n1`, `+r1`)."""
     if arg == opt or (opt.startswith("--") and arg.startswith(opt + "=")):
         return True
-    return len(opt) == 2 and re.match(r"-[A-Za-z]+$", arg) is not None and opt[1] in arg[1:]
+    if len(opt) != 2 or opt[0] not in "-+":
+        return False
+    m = re.match(re.escape(opt[0]) + r"([A-Za-z]+)", arg)
+    return m is not None and not arg.startswith("--") and opt[1] in m.group(1)
 
 
 def proof_ok(command):

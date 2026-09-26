@@ -948,7 +948,7 @@ def knowledge_cases(t):
            "groups", "id -un", "uname -a", "dmesg", "dmesg | tail -n 20", "free -h", "uptime",
            "lsof -i :8080", "ps aux", "ps aux | head -n 10"]
     no = ["dmesg -C", "dmesg -c", "dmesg -w", "dmesg --follow", "dmesg -n 1", "lsof -r 2", "lsof +r 2",
-          "free -s 1", "ps -o pid", "sudo ps", "ps > f", "rm x", "sudo ls", "ls > f", "env ls", "nohup ls", "timeout 5 ls",
+          "free -s 1", "dmesg -n1", "lsof -r1", "lsof +r1", "free -s1", "tail -fn1", "ps -o pid", "sudo ps", "ps > f", "rm x", "sudo ls", "ls > f", "env ls", "nohup ls", "timeout 5 ls",
           "ls | xargs ls", "A=b ls", "ls 2>f", "ls | tee f", "(rm x)", "git branch -D x", "sort -o f f",
           "find . -delete", "grep 'a|b' f", "env GIT_EXTERNAL_DIFF=./x git diff", "LD_PRELOAD=x.so ls",
           "PAGER=x git log", "ls $(x)", "ls `x`", "ls |", "ls ‮", 'ls "a', "", "ls ; ", "tail -f log",
@@ -1080,8 +1080,9 @@ def line_knowledge_cases(t, spark, home):
          repr(lines) + repr(bodies[-1]["messages"][-1]["content"][-300:] if bodies else ""))
     rc, lines, took, bodies, err = ask("? knowsvstuck enable sshd at boot")
     t.ok(rc == 0 and len(bodies) == 2 and lines[0] == "cmd\tsv enable sshd" and len(lines[1]) <= 80
-         and lines[1].endswith("; the sv manual has no command enable -- check it before Enter"),
-         "line knowledge: a command word still unlisted after the re-ask lands, the note names the manual", repr(lines))
+         and lines[1] == "the sv manual has no command enable -- check it before Enter",
+         "line knowledge: a command word still unlisted after the re-ask lands, the note names the manual"
+         " (the hint it would cut to a fragment is dropped)", repr(lines))
     from spark import judge as _judge
     f = _judge.Finding("command", "sv", "enable")
     t.ok(_cli._gap(f) + ", so spark asks again" == "sv has no command enable, so spark asks again"
@@ -1111,6 +1112,13 @@ def line_knowledge_cases(t, spark, home):
          and um.rstrip().endswith(_gr.TAIL) and "Output:" not in um and _gr.HEAD not in bodies[0]["messages"][0]["content"],
          "line knowledge: arm full -- the Reference rides the user message under its own label; the answer names the manual",
          repr(lines) + repr(um[-300:]))
+
+    # a note follows the words without the model's end mark, and a hint
+    # the note leaves only a fragment of is dropped whole
+    t.ok(_cli._noted("", "Restarts sshd.", ", checked against the sv manual") == "Restarts sshd, checked against the sv manual"
+         and _cli._noted("", "Lists network connections listening on port 8080 with their process",
+                        "netstat is not on this machine -- check it before Enter") == "netstat is not on this machine -- check it before Enter",
+         "line knowledge: a note never follows an end mark or a fragment of the hint")
 
     # the arms: SPARK_KNOWLEDGE=off is arm off; the seam is read only in bench
     spark("line", stdin="? knowgood a", extra={"SPARK_KNOWLEDGE": "off"})
