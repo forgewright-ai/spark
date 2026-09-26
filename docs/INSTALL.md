@@ -447,7 +447,8 @@ Every program that calls spark, a script, an app or a CI job, gets its
 own user with `spark user add NAME` and its own token. The admin token
 is never shared. Any program with the OpenAI shape works. A request
 naming no `model` gets the chat model with the identity, and
-`model: spark` the bare prompt model:
+`model: spark` the bare prompt model. `"identity": false` asks for the
+chat model bare, for a program that brings its own system prompt:
 
 ```sh
 curl -sN http://<host>:8081/v1/chat/completions \

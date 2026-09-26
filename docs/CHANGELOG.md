@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.55
+
+A program with its own system prompt can have the chat model bare.
+
+- `/v1/chat/completions` takes `"identity": false` in the body. The
+  chat model then gets the program's messages exactly as sent, without
+  this machine's identity and remembered facts in front. No field or
+  `true` keeps the identity, and any other value is a 400.
+
 ## v1.54
 
 A program that talks to the page's server can keep threads that outlive

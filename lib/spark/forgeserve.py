@@ -911,15 +911,22 @@ class Handler(BaseHTTPRequestHandler):
         or the SSE bytes straight through. A missing model means ember;
         the identity (soul, memory) goes in only for an ember request --
         a spark request keeps the client's system message untouched, so
-        the prompt line stays cheap on every machine."""
+        the prompt line stays cheap on every machine. `"identity": false`
+        asks for the chat model bare: a program with its own system
+        prompt keeps it, without this machine's soul or the requester's
+        facts in front. It is no boundary (a spark request is bare too),
+        and the field never goes upstream."""
         from . import forge
         cfg = self.server.cfg
         msgs = body.get("messages")
         if not isinstance(msgs, list) or not all(isinstance(m, dict) for m in msgs):
             return self._error(400, "bad", "messages must be a list of {role, content}")
+        identity = body.pop("identity", True)
+        if not isinstance(identity, bool):
+            return self._error(400, "bad", "identity is true or false")
         model = body.get("model") or "ember"
         body["model"] = model
-        if model == "ember":
+        if model == "ember" and identity:
             mem = self._mstore()        # a user's own memory rides their request
             if msgs and msgs[0].get("role") == "system":
                 prefix = msgs[0].get("content")

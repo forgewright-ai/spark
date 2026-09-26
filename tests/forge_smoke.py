@@ -361,6 +361,33 @@ def main():
             c = SEEN.get("body", {}).get("messages", [{}])[0].get("content", "")
             ok(st == 200 and SEEN.get("body", {}).get("model") == "ember" and c.startswith("Call yourself Fixture."),
                "model ember explicit: the identity goes in", c[:200])
+            # "identity": false asks for the chat model bare
+            SEEN.clear()
+            st, _, raw = req(url, "POST", "/v1/chat/completions",
+                             {"model": "ember", "identity": False, "messages": [{"role": "system", "content": "OWN-PERSONA"}, {"role": "user", "content": "what"}], "stream": False}, headers=bearer)
+            sb = SEEN.get("body", {})
+            ok(st == 200 and sb.get("model") == "ember" and sb.get("messages") == [{"role": "system", "content": "OWN-PERSONA"}, {"role": "user", "content": "what"}]
+               and "Fixture" not in json.dumps(sb) and "identity" not in sb,
+               "identity false: ember keeps the client's messages exactly, no soul, no identity key upstream", json.dumps(sb)[:200])
+            SEEN.clear()
+            st, _, raw = req(url, "POST", "/v1/chat/completions",
+                             {"identity": False, "messages": [{"role": "user", "content": "what"}], "stream": False}, headers=bearer)
+            sb = SEEN.get("body", {})
+            ok(st == 200 and sb.get("model") == "ember" and sb.get("messages") == [{"role": "user", "content": "what"}] and "identity" not in sb,
+               "identity false, no model: ember, and no system message is inserted", json.dumps(sb)[:200])
+            SEEN.clear()
+            st, _, raw = req(url, "POST", "/v1/chat/completions",
+                             {"identity": True, "messages": [{"role": "system", "content": "PREFIX-MARK"}, {"role": "user", "content": "what"}], "stream": False}, headers=bearer)
+            sb = SEEN.get("body", {})
+            c = sb.get("messages", [{}])[0].get("content", "")
+            ok(st == 200 and c.startswith("Call yourself Fixture.") and c.endswith("PREFIX-MARK") and "identity" not in sb,
+               "identity true: the identity goes in, and the key stays here", c[:200])
+            for bad in ("no", 0, None, [False]):
+                SEEN.clear()
+                st, _, raw = req(url, "POST", "/v1/chat/completions",
+                                 {"identity": bad, "messages": [{"role": "user", "content": "what"}], "stream": False}, headers=bearer)
+                ok(st == 400 and json.loads(raw) == {"error": {"kind": "bad", "hint": "identity is true or false"}} and not SEEN,
+                   "identity %r -> 400, nothing upstream" % (bad,), raw[:200])
             st, h, raw = req(url, "POST", "/v1/chat/completions", {"messages": [{"role": "user", "content": "what"}], "stream": True}, headers=bearer)
             text = raw.decode()
             ok(st == 200 and h.get("Content-Type", "").startswith("text/event-stream") and text.count("data:") >= 5 and "[DONE]" in text,
@@ -748,6 +775,12 @@ def main():
             req(url, "POST", "/v1/chat/completions", {"messages": [{"role": "user", "content": "what"}], "stream": False}, headers=bearer)
             sys0 = SEEN.get("body", {}).get("messages", [{}])[0].get("content", "")
             ok("- the box is called forge" in sys0, "the fact rides in the identity", sys0[:300])
+            SEEN.clear()
+            req(url, "POST", "/v1/chat/completions",
+                {"identity": False, "messages": [{"role": "system", "content": "OWN-PERSONA"}, {"role": "user", "content": "what"}], "stream": False}, headers=bearer)
+            sb = json.dumps(SEEN.get("body", {}))
+            ok("OWN-PERSONA" in sb and "the box is called forge" not in sb and "Fixture" not in sb,
+               "identity false: neither the fact nor the soul rides", sb[:300])
             st, _, _ = req(url, "DELETE", "/api/memory/1", headers=bearer)
             ok(st == 403, "DELETE without X-Spark -> 403", st)
             st, _, _ = req(url, "DELETE", "/api/memory/9", headers=post)

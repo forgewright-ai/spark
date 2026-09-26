@@ -960,12 +960,17 @@ and may change freely.
    identity is injected into the system message only for an `ember`
    request. It is the soul, plus the requester's own remembered facts: a
    user's sealed memory, or the box account's for the admin. A `spark`
-   request passes through untouched. JSON or SSE bytes come back as they
-   are. Every `/api/*` answer is `Cache-Control: no-store`. The page and
-   its files are served with `Content-Security-Policy: default-src
-   'self'`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer` and
-   `X-Content-Type-Options: nosniff`, and depend on nothing else. Errors
-   are `{error: {kind, hint}}`.
+   request passes through untouched. A body with `"identity": false`
+   keeps an `ember` request untouched too, for a program that brings its
+   own system prompt. `true` or no field injects the identity, and any
+   other value is a 400. The field never goes upstream. The identity is
+   no security boundary, since a `spark` request is bare already. JSON
+   or SSE bytes come back as they are. Every `/api/*` answer is
+   `Cache-Control: no-store`. The page and its files are served with
+   `Content-Security-Policy: default-src 'self'`,
+   `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer` and
+   `X-Content-Type-Options: nosniff`, and depend on nothing else.
+   Errors are `{error: {kind, hint}}`.
 10. `spark edit` is the editor's protocol: the text on stdin. `--at N`
     prints what goes at byte offset N, a completion: 4 kB before the
     cursor and 2 kB after it are sent. `<words>` prints the whole text
