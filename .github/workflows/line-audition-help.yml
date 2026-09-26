@@ -1,9 +1,12 @@
 # line-audition-help -- the help snapshots the prompt-line audition
 # (tests/line_audition.py) grades against, gathered ON each OS: whether
-# every tool its cases name exists there, its --help or man synopsis, and
-# the options those name. Verification trusts outcomes, not the model:
-# an answer passes only when its head command exists on that OS and every
-# option it passes is in that OS's own help.
+# every tool its cases name exists there, its --help or man synopsis, the
+# options those name, and what a knowledge store indexes (the man NAME
+# line, up to 3 synopsis lines, up to 60 option lines with their first
+# sentence), so `line_audition.py recall` and a run can ground a question
+# in that OS's manuals from any machine. Verification trusts outcomes,
+# not the model: an answer passes only when its head command exists on
+# that OS and every option it passes is in that OS's own help.
 # Each job starts from the same image ci.yml proves spark on, installs
 # the tools the cases name (`line_audition.py packages`, one at a time, so
 # a renamed package is a line in the log and not a dead job), and uploads

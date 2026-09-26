@@ -28,7 +28,10 @@ not taste.
 
 A change to the prompt line's brief (`persona.MODE_LINE` or its schema)
 needs the same. Run `tests/line_audition.py run` for each OS and put the
-`report` table, before and after, in the pull request.
+`report` table, before and after, in the pull request. A change to what
+the line knows (the store, the search, the verdict) adds `recall` per
+OS and the 3 arms of `run --arm`. `AGENTS.md`, "The audition", holds
+the bar.
 
 ## Branch model
 

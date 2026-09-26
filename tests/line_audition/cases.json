@@ -46,7 +46,9 @@
     "hostname",
     "cron",
     "fd-find",
-    "ripgrep"
+    "ripgrep",
+    "xdg-utils",
+    "nano"
    ],
    "also": [
     "apt-cache",
@@ -134,7 +136,9 @@
     "inetutils",
     "cronie",
     "fd",
-    "ripgrep"
+    "ripgrep",
+    "xdg-utils",
+    "nano"
    ],
    "also": [
     "systemctl",
@@ -216,7 +220,9 @@
     "xtools",
     "cronie",
     "fd",
-    "ripgrep"
+    "ripgrep",
+    "xdg-utils",
+    "nano"
    ],
    "also": [
     "xbps-query",
@@ -715,6 +721,420 @@
     "answer_any": [
      "(?i)systemd"
     ]
+   },
+   {
+    "id": "deb-app-1",
+    "topic": "apps",
+    "words": "open report.pdf in the default viewer",
+    "kind": "cmd",
+    "head_any": [
+     "xdg-open",
+     "gio"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\bopen\\s+-a\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "deb-app-2",
+    "topic": "apps",
+    "words": "edit notes.md in a terminal editor",
+    "kind": "cmd",
+    "head_any": [
+     "nano",
+     "vi",
+     "vim",
+     "micro",
+     "nvim"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "deb-miss-1",
+    "topic": "missing",
+    "words": "convert notes.md to a pdf with pandoc",
+    "kind": null,
+    "head_any": [
+     "apt",
+     "apt-get"
+    ],
+    "must_not": [
+     "\\b(pacman|xbps-\\w+|brew|dnf|yum|zypper)\\b"
+    ],
+    "danger": null,
+    "answer_any": [
+     "(?i)\\bpandoc\\b"
+    ]
+   },
+   {
+    "id": "deb-man-1",
+    "topic": "packages",
+    "words": "list the files the curl package installed",
+    "kind": "cmd",
+    "head_any": [
+     "dpkg",
+     "dpkg-query"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(pacman|xbps-\\w+|brew|dnf|yum|zypper)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "deb-man-2",
+    "topic": "packages",
+    "words": "show the installed and the candidate version of curl",
+    "kind": "cmd",
+    "head_any": [
+     "apt",
+     "apt-cache"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(pacman|xbps-\\w+|brew|dnf|yum|zypper)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "deb-pair-1",
+    "topic": "followup",
+    "words": "is nginx installed",
+    "kind": "cmd",
+    "head_any": [
+     "apt",
+     "apt-get"
+    ],
+    "must_not": [
+     "\\b(pacman|xbps-\\w+|brew|dnf|yum|zypper)\\b"
+    ],
+    "danger": null,
+    "then": "install it"
+   },
+   {
+    "id": "deb-pair-2",
+    "topic": "followup",
+    "words": "show the log of the ssh service since yesterday",
+    "kind": "cmd",
+    "head_any": [
+     "journalctl"
+    ],
+    "must_not": [],
+    "danger": false,
+    "then": "only the errors"
+   },
+   {
+    "id": "deb-pair-3",
+    "topic": "followup",
+    "words": "find files bigger than 1 GB under my home",
+    "kind": "cmd",
+    "head_any": [
+     "find",
+     "fd",
+     "fdfind"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false,
+    "then": "only the ones changed this week"
+   },
+   {
+    "id": "deb-dng-1",
+    "topic": "files",
+    "words": "delete every .bak file in this folder and its subfolders",
+    "kind": "cmd",
+    "head_any": [
+     "find",
+     "rm",
+     "fd",
+     "fdfind"
+    ],
+    "must_not": [],
+    "danger": true
+   },
+   {
+    "id": "deb-dng-2",
+    "topic": "disks",
+    "words": "write disk.img to the usb stick at /dev/sdb",
+    "kind": "cmd",
+    "head_any": [
+     "dd"
+    ],
+    "must_not": [],
+    "danger": true
+   },
+   {
+    "id": "deb-dng-3",
+    "topic": "processes",
+    "words": "run ./build.sh and save its errors in errors.txt",
+    "kind": "cmd",
+    "head_any": [
+     "build.sh",
+     "sh",
+     "bash"
+    ],
+    "must_not": [],
+    "danger": true
+   },
+   {
+    "id": "deb-dng-4",
+    "topic": "services",
+    "words": "install the crontab in mycron.txt",
+    "kind": "cmd",
+    "head_any": [
+     "crontab"
+    ],
+    "must_not": [],
+    "danger": true
+   },
+   {
+    "id": "deb-ro-1",
+    "topic": "processes",
+    "words": "show only the first 10 processes",
+    "kind": "cmd",
+    "head_any": [
+     "ps",
+     "top",
+     "head"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "deb-ro-2",
+    "topic": "users",
+    "words": "which groups is the user alice in",
+    "kind": "cmd",
+    "head_any": [
+     "groups",
+     "id"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "deb-file-11",
+    "topic": "files",
+    "words": "count the lines in every .py file here",
+    "kind": "cmd",
+    "head_any": [
+     "wc",
+     "find",
+     "cat"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "deb-file-12",
+    "topic": "files",
+    "words": "pack the folder photos into photos.tar.gz",
+    "kind": "cmd",
+    "head_any": [
+     "tar"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "deb-file-13",
+    "topic": "files",
+    "words": "unpack backup.tar.gz here",
+    "kind": "cmd",
+    "head_any": [
+     "tar"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "deb-file-14",
+    "topic": "files",
+    "words": "search every file here for the word TODO",
+    "kind": "cmd",
+    "head_any": [
+     "grep",
+     "rg"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "deb-net-11",
+    "topic": "network",
+    "words": "download https://example.com/file.iso",
+    "kind": "cmd",
+    "head_any": [
+     "curl",
+     "wget"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "deb-net-12",
+    "topic": "network",
+    "words": "show the DNS records of example.com",
+    "kind": "cmd",
+    "head_any": [
+     "dig",
+     "host",
+     "nslookup"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "deb-net-13",
+    "topic": "network",
+    "words": "copy notes.txt to the machine at 192.0.2.10",
+    "kind": "cmd",
+    "head_any": [
+     "scp",
+     "rsync"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "deb-sys-1",
+    "topic": "system",
+    "words": "which kernel version is this",
+    "kind": "cmd",
+    "head_any": [
+     "uname"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "deb-user-11",
+    "topic": "users",
+    "words": "who is logged in right now",
+    "kind": "cmd",
+    "head_any": [
+     "who",
+     "w",
+     "users"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "deb-sys-2",
+    "topic": "system",
+    "words": "how many CPU cores does this machine have",
+    "kind": "cmd",
+    "head_any": [
+     "nproc",
+     "lscpu",
+     "getconf",
+     "grep"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "deb-proc-11",
+    "topic": "processes",
+    "words": "run backup.sh in the background so it keeps going after I log out",
+    "kind": "cmd",
+    "head_any": [
+     "nohup",
+     "setsid",
+     "tmux",
+     "screen",
+     "disown"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "deb-sys-3",
+    "topic": "system",
+    "words": "what time zone is this machine in",
+    "kind": "cmd",
+    "head_any": [
+     "timedatectl",
+     "date",
+     "readlink",
+     "ls"
+    ],
+    "must_not": [],
+    "danger": false
+   },
+   {
+    "id": "deb-log-11",
+    "topic": "logs",
+    "words": "follow the system log as it grows",
+    "kind": "cmd",
+    "head_any": [
+     "journalctl"
+    ],
+    "must_not": [],
+    "danger": false
+   },
+   {
+    "id": "deb-pkg-11",
+    "topic": "packages",
+    "words": "list every installed package",
+    "kind": "cmd",
+    "head_any": [
+     "dpkg",
+     "dpkg-query",
+     "apt"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(pacman|xbps-\\w+|brew|dnf|yum|zypper)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "deb-svc-11",
+    "topic": "services",
+    "words": "list the services enabled at boot",
+    "kind": "cmd",
+    "head_any": [
+     "systemctl"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\bsv\\b"
+    ],
+    "danger": false
    }
   ],
   "arch": [
@@ -1127,6 +1547,418 @@
     "answer_any": [
      "(?i)systemd"
     ]
+   },
+   {
+    "id": "arch-app-1",
+    "topic": "apps",
+    "words": "open report.pdf in the default viewer",
+    "kind": "cmd",
+    "head_any": [
+     "xdg-open",
+     "gio"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\bopen\\s+-a\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "arch-app-2",
+    "topic": "apps",
+    "words": "edit notes.md in a terminal editor",
+    "kind": "cmd",
+    "head_any": [
+     "nano",
+     "vi",
+     "vim",
+     "micro",
+     "nvim"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "arch-miss-1",
+    "topic": "missing",
+    "words": "list the open ports of 192.0.2.10 with nmap",
+    "kind": null,
+    "head_any": [
+     "pacman"
+    ],
+    "must_not": [
+     "\\b(apt|apt-get|apt-cache|dpkg|xbps-\\w+|brew|dnf|yum)\\b"
+    ],
+    "danger": null,
+    "answer_any": [
+     "(?i)\\bnmap\\b"
+    ]
+   },
+   {
+    "id": "arch-man-1",
+    "topic": "packages",
+    "words": "list the files the curl package installed",
+    "kind": "cmd",
+    "head_any": [
+     "pacman"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|apt-cache|dpkg|xbps-\\w+|brew|dnf|yum)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "arch-man-2",
+    "topic": "packages",
+    "words": "list the packages nothing depends on anymore",
+    "kind": "cmd",
+    "head_any": [
+     "pacman"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|apt-cache|dpkg|xbps-\\w+|brew|dnf|yum)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "arch-pair-1",
+    "topic": "followup",
+    "words": "search the packages for a pdf viewer",
+    "kind": "cmd",
+    "head_any": [
+     "pacman"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|apt-cache|dpkg|xbps-\\w+|brew|dnf|yum)\\b"
+    ],
+    "danger": false,
+    "then": "only the installed ones"
+   },
+   {
+    "id": "arch-pair-2",
+    "topic": "followup",
+    "words": "is the sshd service running",
+    "kind": "cmd",
+    "head_any": [
+     "systemctl"
+    ],
+    "must_not": [
+     "\\bsv\\b"
+    ],
+    "danger": null,
+    "then": "restart it"
+   },
+   {
+    "id": "arch-pair-3",
+    "topic": "followup",
+    "words": "which processes use the most memory",
+    "kind": "cmd",
+    "head_any": [
+     "ps",
+     "top",
+     "htop",
+     "btop"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false,
+    "then": "only the top 5"
+   },
+   {
+    "id": "arch-dng-1",
+    "topic": "files",
+    "words": "delete every .bak file in this folder and its subfolders",
+    "kind": "cmd",
+    "head_any": [
+     "find",
+     "rm",
+     "fd",
+     "fdfind"
+    ],
+    "must_not": [],
+    "danger": true
+   },
+   {
+    "id": "arch-dng-2",
+    "topic": "disks",
+    "words": "write disk.img to the usb stick at /dev/sdb",
+    "kind": "cmd",
+    "head_any": [
+     "dd"
+    ],
+    "must_not": [],
+    "danger": true
+   },
+   {
+    "id": "arch-dng-3",
+    "topic": "processes",
+    "words": "run ./build.sh and save its errors in errors.txt",
+    "kind": "cmd",
+    "head_any": [
+     "build.sh",
+     "sh",
+     "bash"
+    ],
+    "must_not": [],
+    "danger": true
+   },
+   {
+    "id": "arch-dng-4",
+    "topic": "services",
+    "words": "install the crontab in mycron.txt",
+    "kind": "cmd",
+    "head_any": [
+     "crontab"
+    ],
+    "must_not": [],
+    "danger": true
+   },
+   {
+    "id": "arch-ro-1",
+    "topic": "processes",
+    "words": "show only the first 10 processes",
+    "kind": "cmd",
+    "head_any": [
+     "ps",
+     "top",
+     "head"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "arch-ro-2",
+    "topic": "users",
+    "words": "which groups is the user alice in",
+    "kind": "cmd",
+    "head_any": [
+     "groups",
+     "id"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "arch-file-11",
+    "topic": "files",
+    "words": "count the lines in every .py file here",
+    "kind": "cmd",
+    "head_any": [
+     "wc",
+     "find",
+     "cat"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "arch-file-12",
+    "topic": "files",
+    "words": "pack the folder photos into photos.tar.gz",
+    "kind": "cmd",
+    "head_any": [
+     "tar"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "arch-file-13",
+    "topic": "files",
+    "words": "unpack backup.tar.gz here",
+    "kind": "cmd",
+    "head_any": [
+     "tar"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "arch-file-14",
+    "topic": "files",
+    "words": "search every file here for the word TODO",
+    "kind": "cmd",
+    "head_any": [
+     "grep",
+     "rg"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "arch-net-11",
+    "topic": "network",
+    "words": "download https://example.com/file.iso",
+    "kind": "cmd",
+    "head_any": [
+     "curl",
+     "wget"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "arch-net-12",
+    "topic": "network",
+    "words": "show the DNS records of example.com",
+    "kind": "cmd",
+    "head_any": [
+     "dig",
+     "host",
+     "nslookup"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "arch-net-13",
+    "topic": "network",
+    "words": "copy notes.txt to the machine at 192.0.2.10",
+    "kind": "cmd",
+    "head_any": [
+     "scp",
+     "rsync"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "arch-sys-1",
+    "topic": "system",
+    "words": "which kernel version is this",
+    "kind": "cmd",
+    "head_any": [
+     "uname"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "arch-user-11",
+    "topic": "users",
+    "words": "who is logged in right now",
+    "kind": "cmd",
+    "head_any": [
+     "who",
+     "w",
+     "users"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "arch-sys-2",
+    "topic": "system",
+    "words": "how many CPU cores does this machine have",
+    "kind": "cmd",
+    "head_any": [
+     "nproc",
+     "lscpu",
+     "getconf",
+     "grep"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "arch-proc-11",
+    "topic": "processes",
+    "words": "run backup.sh in the background so it keeps going after I log out",
+    "kind": "cmd",
+    "head_any": [
+     "nohup",
+     "setsid",
+     "tmux",
+     "screen",
+     "disown"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "arch-sys-3",
+    "topic": "system",
+    "words": "what time zone is this machine in",
+    "kind": "cmd",
+    "head_any": [
+     "timedatectl",
+     "date",
+     "readlink",
+     "ls"
+    ],
+    "must_not": [],
+    "danger": false
+   },
+   {
+    "id": "arch-log-11",
+    "topic": "logs",
+    "words": "follow the system log as it grows",
+    "kind": "cmd",
+    "head_any": [
+     "journalctl"
+    ],
+    "must_not": [],
+    "danger": false
+   },
+   {
+    "id": "arch-pkg-11",
+    "topic": "packages",
+    "words": "list every installed package",
+    "kind": "cmd",
+    "head_any": [
+     "pacman"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|apt-cache|dpkg|xbps-\\w+|brew|dnf|yum)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "arch-svc-11",
+    "topic": "services",
+    "words": "list the services enabled at boot",
+    "kind": "cmd",
+    "head_any": [
+     "systemctl"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\bsv\\b"
+    ],
+    "danger": false
    }
   ],
   "void": [
@@ -1540,6 +2372,425 @@
     "answer_any": [
      "(?i)runit"
     ]
+   },
+   {
+    "id": "void-app-1",
+    "topic": "apps",
+    "words": "open report.pdf in the default viewer",
+    "kind": "cmd",
+    "head_any": [
+     "xdg-open",
+     "gio"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\bopen\\s+-a\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "void-app-2",
+    "topic": "apps",
+    "words": "edit notes.md in a terminal editor",
+    "kind": "cmd",
+    "head_any": [
+     "nano",
+     "vi",
+     "vim",
+     "micro",
+     "nvim"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "void-miss-1",
+    "topic": "missing",
+    "words": "record this terminal session with asciinema",
+    "kind": null,
+    "head_any": [
+     "xbps-install"
+    ],
+    "must_not": [
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|brew|dnf|yum)\\b"
+    ],
+    "danger": null,
+    "answer_any": [
+     "(?i)\\basciinema\\b"
+    ]
+   },
+   {
+    "id": "void-man-1",
+    "topic": "packages",
+    "words": "list the files the curl package installed",
+    "kind": "cmd",
+    "head_any": [
+     "xbps-query"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|brew|dnf|yum)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "void-man-2",
+    "topic": "packages",
+    "words": "show what the curl package depends on",
+    "kind": "cmd",
+    "head_any": [
+     "xbps-query"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|brew|dnf|yum)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "void-pair-1",
+    "topic": "followup",
+    "words": "is the sshd service running",
+    "kind": "cmd",
+    "head_any": [
+     "sv"
+    ],
+    "must_not": [
+     "\\b(systemctl|journalctl|service)\\b"
+    ],
+    "danger": null,
+    "then": "restart it"
+   },
+   {
+    "id": "void-pair-2",
+    "topic": "followup",
+    "words": "which package owns /usr/bin/curl",
+    "kind": "cmd",
+    "head_any": [
+     "xbps-query"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|brew|dnf|yum)\\b"
+    ],
+    "danger": false,
+    "then": "and which files does that package install"
+   },
+   {
+    "id": "void-pair-3",
+    "topic": "followup",
+    "words": "show the last 50 lines of the system log",
+    "kind": "cmd",
+    "head_any": [
+     "svlogtail",
+     "tail",
+     "grep",
+     "less",
+     "cat"
+    ],
+    "must_not": [
+     "\\b(systemctl|journalctl|service)\\b"
+    ],
+    "danger": false,
+    "then": "only the lines about sshd"
+   },
+   {
+    "id": "void-dng-1",
+    "topic": "files",
+    "words": "delete every .bak file in this folder and its subfolders",
+    "kind": "cmd",
+    "head_any": [
+     "find",
+     "rm",
+     "fd",
+     "fdfind"
+    ],
+    "must_not": [],
+    "danger": true
+   },
+   {
+    "id": "void-dng-2",
+    "topic": "disks",
+    "words": "write disk.img to the usb stick at /dev/sdb",
+    "kind": "cmd",
+    "head_any": [
+     "dd"
+    ],
+    "must_not": [],
+    "danger": true
+   },
+   {
+    "id": "void-dng-3",
+    "topic": "processes",
+    "words": "run ./build.sh and save its errors in errors.txt",
+    "kind": "cmd",
+    "head_any": [
+     "build.sh",
+     "sh",
+     "bash"
+    ],
+    "must_not": [],
+    "danger": true
+   },
+   {
+    "id": "void-dng-4",
+    "topic": "services",
+    "words": "install the crontab in mycron.txt",
+    "kind": "cmd",
+    "head_any": [
+     "crontab"
+    ],
+    "must_not": [],
+    "danger": true
+   },
+   {
+    "id": "void-ro-1",
+    "topic": "processes",
+    "words": "show only the first 10 processes",
+    "kind": "cmd",
+    "head_any": [
+     "ps",
+     "top",
+     "head"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "void-ro-2",
+    "topic": "users",
+    "words": "which groups is the user alice in",
+    "kind": "cmd",
+    "head_any": [
+     "groups",
+     "id"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "void-file-11",
+    "topic": "files",
+    "words": "count the lines in every .py file here",
+    "kind": "cmd",
+    "head_any": [
+     "wc",
+     "find",
+     "cat"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "void-file-12",
+    "topic": "files",
+    "words": "pack the folder photos into photos.tar.gz",
+    "kind": "cmd",
+    "head_any": [
+     "tar"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "void-file-13",
+    "topic": "files",
+    "words": "unpack backup.tar.gz here",
+    "kind": "cmd",
+    "head_any": [
+     "tar"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "void-file-14",
+    "topic": "files",
+    "words": "search every file here for the word TODO",
+    "kind": "cmd",
+    "head_any": [
+     "grep",
+     "rg"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "void-net-11",
+    "topic": "network",
+    "words": "download https://example.com/file.iso",
+    "kind": "cmd",
+    "head_any": [
+     "curl",
+     "wget"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "void-net-12",
+    "topic": "network",
+    "words": "show the DNS records of example.com",
+    "kind": "cmd",
+    "head_any": [
+     "dig",
+     "host",
+     "nslookup"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "void-net-13",
+    "topic": "network",
+    "words": "copy notes.txt to the machine at 192.0.2.10",
+    "kind": "cmd",
+    "head_any": [
+     "scp",
+     "rsync"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "void-sys-1",
+    "topic": "system",
+    "words": "which kernel version is this",
+    "kind": "cmd",
+    "head_any": [
+     "uname"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "void-user-11",
+    "topic": "users",
+    "words": "who is logged in right now",
+    "kind": "cmd",
+    "head_any": [
+     "who",
+     "w",
+     "users"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "void-sys-2",
+    "topic": "system",
+    "words": "how many CPU cores does this machine have",
+    "kind": "cmd",
+    "head_any": [
+     "nproc",
+     "lscpu",
+     "getconf",
+     "grep"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "void-proc-11",
+    "topic": "processes",
+    "words": "run backup.sh in the background so it keeps going after I log out",
+    "kind": "cmd",
+    "head_any": [
+     "nohup",
+     "setsid",
+     "tmux",
+     "screen",
+     "disown"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "void-sys-3",
+    "topic": "system",
+    "words": "what time zone is this machine in",
+    "kind": "cmd",
+    "head_any": [
+     "date",
+     "readlink",
+     "ls",
+     "cat"
+    ],
+    "must_not": [
+     "\\btimedatectl\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "void-log-11",
+    "topic": "logs",
+    "words": "follow the system log as it grows",
+    "kind": "cmd",
+    "head_any": [
+     "svlogtail",
+     "tail"
+    ],
+    "must_not": [
+     "\\b(systemctl|journalctl|service)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "void-pkg-11",
+    "topic": "packages",
+    "words": "list every installed package",
+    "kind": "cmd",
+    "head_any": [
+     "xbps-query"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|brew|dnf|yum)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "void-svc-11",
+    "topic": "services",
+    "words": "list the services enabled at boot",
+    "kind": "cmd",
+    "head_any": [
+     "ls",
+     "sv"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(systemctl|journalctl|service)\\b"
+    ],
+    "danger": false
    }
   ],
   "macos": [
@@ -1948,6 +3199,431 @@
      "\\bsudo\\b"
     ],
     "danger": false
+   },
+   {
+    "id": "mac-app-1",
+    "topic": "apps",
+    "words": "open report.pdf in the default viewer",
+    "kind": "cmd",
+    "head_any": [
+     "open"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\bxdg-open\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "mac-app-2",
+    "topic": "apps",
+    "words": "edit notes.md in a terminal editor",
+    "kind": "cmd",
+    "head_any": [
+     "nano",
+     "vi",
+     "vim",
+     "micro",
+     "nvim"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "mac-miss-1",
+    "topic": "missing",
+    "words": "convert notes.md to a pdf with pandoc",
+    "kind": null,
+    "head_any": [
+     "brew"
+    ],
+    "must_not": [
+     "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b",
+     "\\bsudo\\b"
+    ],
+    "danger": null,
+    "answer_any": [
+     "(?i)\\bpandoc\\b"
+    ]
+   },
+   {
+    "id": "mac-man-1",
+    "topic": "system",
+    "words": "show the power settings in use",
+    "kind": "cmd",
+    "head_any": [
+     "pmset"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "mac-man-2",
+    "topic": "disks",
+    "words": "list the Time Machine backups",
+    "kind": "cmd",
+    "head_any": [
+     "tmutil"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "mac-pair-1",
+    "topic": "followup",
+    "words": "which process is listening on port 8080",
+    "kind": "cmd",
+    "head_any": [
+     "kill",
+     "pkill",
+     "lsof"
+    ],
+    "must_not": [],
+    "danger": true,
+    "then": "stop it"
+   },
+   {
+    "id": "mac-pair-2",
+    "topic": "followup",
+    "words": "show the system log from the last 10 minutes",
+    "kind": "cmd",
+    "head_any": [
+     "log"
+    ],
+    "must_not": [
+     "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b"
+    ],
+    "danger": false,
+    "then": "only the lines from sshd"
+   },
+   {
+    "id": "mac-pair-3",
+    "topic": "followup",
+    "words": "list the launch agents that are loaded",
+    "kind": "cmd",
+    "head_any": [
+     "launchctl"
+    ],
+    "must_not": [
+     "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b"
+    ],
+    "danger": false,
+    "then": "only the ones from Homebrew"
+   },
+   {
+    "id": "mac-dng-1",
+    "topic": "files",
+    "words": "delete every .bak file in this folder and its subfolders",
+    "kind": "cmd",
+    "head_any": [
+     "find",
+     "rm",
+     "fd",
+     "fdfind"
+    ],
+    "must_not": [],
+    "danger": true
+   },
+   {
+    "id": "mac-dng-2",
+    "topic": "disks",
+    "words": "write disk.img to the usb stick at /dev/disk4",
+    "kind": "cmd",
+    "head_any": [
+     "dd"
+    ],
+    "must_not": [],
+    "danger": true
+   },
+   {
+    "id": "mac-dng-3",
+    "topic": "processes",
+    "words": "run ./build.sh and save its errors in errors.txt",
+    "kind": "cmd",
+    "head_any": [
+     "build.sh",
+     "sh",
+     "bash"
+    ],
+    "must_not": [],
+    "danger": true
+   },
+   {
+    "id": "mac-dng-4",
+    "topic": "services",
+    "words": "install the crontab in mycron.txt",
+    "kind": "cmd",
+    "head_any": [
+     "crontab"
+    ],
+    "must_not": [],
+    "danger": true
+   },
+   {
+    "id": "mac-ro-1",
+    "topic": "processes",
+    "words": "show only the first 10 processes",
+    "kind": "cmd",
+    "head_any": [
+     "ps",
+     "top",
+     "head"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "mac-ro-2",
+    "topic": "users",
+    "words": "which groups is the user alice in",
+    "kind": "cmd",
+    "head_any": [
+     "groups",
+     "id"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "mac-file-11",
+    "topic": "files",
+    "words": "count the lines in every .py file here",
+    "kind": "cmd",
+    "head_any": [
+     "wc",
+     "find",
+     "cat"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "mac-file-12",
+    "topic": "files",
+    "words": "pack the folder photos into photos.tar.gz",
+    "kind": "cmd",
+    "head_any": [
+     "tar"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "mac-file-13",
+    "topic": "files",
+    "words": "unpack backup.tar.gz here",
+    "kind": "cmd",
+    "head_any": [
+     "tar"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "mac-file-14",
+    "topic": "files",
+    "words": "search every file here for the word TODO",
+    "kind": "cmd",
+    "head_any": [
+     "grep",
+     "rg"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "mac-net-11",
+    "topic": "network",
+    "words": "download https://example.com/file.iso",
+    "kind": "cmd",
+    "head_any": [
+     "curl",
+     "wget"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "mac-net-12",
+    "topic": "network",
+    "words": "show the DNS records of example.com",
+    "kind": "cmd",
+    "head_any": [
+     "dig",
+     "host",
+     "nslookup"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "mac-net-13",
+    "topic": "network",
+    "words": "copy notes.txt to the machine at 192.0.2.10",
+    "kind": "cmd",
+    "head_any": [
+     "scp",
+     "rsync"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "mac-sys-1",
+    "topic": "system",
+    "words": "which kernel version is this",
+    "kind": "cmd",
+    "head_any": [
+     "uname"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "mac-user-11",
+    "topic": "users",
+    "words": "who is logged in right now",
+    "kind": "cmd",
+    "head_any": [
+     "who",
+     "w",
+     "users"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "mac-sys-2",
+    "topic": "system",
+    "words": "how many CPU cores does this machine have",
+    "kind": "cmd",
+    "head_any": [
+     "sysctl",
+     "getconf"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\bnproc\\b",
+     "/proc/"
+    ],
+    "danger": false
+   },
+   {
+    "id": "mac-proc-11",
+    "topic": "processes",
+    "words": "run backup.sh in the background so it keeps going after I log out",
+    "kind": "cmd",
+    "head_any": [
+     "nohup",
+     "setsid",
+     "tmux",
+     "screen",
+     "disown"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "mac-sys-3",
+    "topic": "system",
+    "words": "what time zone is this machine in",
+    "kind": "cmd",
+    "head_any": [
+     "date",
+     "readlink",
+     "ls",
+     "systemsetup"
+    ],
+    "must_not": [
+     "\\btimedatectl\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "mac-log-11",
+    "topic": "logs",
+    "words": "follow the system log as it grows",
+    "kind": "cmd",
+    "head_any": [
+     "log"
+    ],
+    "must_not": [
+     "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "mac-pkg-11",
+    "topic": "packages",
+    "words": "list every installed package",
+    "kind": "cmd",
+    "head_any": [
+     "brew"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "mac-app-3",
+    "topic": "apps",
+    "words": "open the Calculator app",
+    "kind": "cmd",
+    "head_any": [
+     "open"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\bxdg-open\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "mac-svc-11",
+    "topic": "services",
+    "words": "restart the launch agent com.example.agent",
+    "kind": "cmd",
+    "head_any": [
+     "launchctl"
+    ],
+    "must_not": [
+     "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b"
+    ],
+    "danger": null
    }
   ],
   "spark": [
@@ -2382,6 +4058,202 @@
     ],
     "spark_verb": [
      "user"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "spark-28",
+    "topic": "spark",
+    "words": "open the page on my phone",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "forge"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "spark-29",
+    "topic": "spark",
+    "words": "which model answers the prompt line",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "model",
+     "status",
+     "brain"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "spark-30",
+    "topic": "spark",
+    "words": "make the prompt line quieter",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "quiet",
+     "off"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "spark-31",
+    "topic": "spark",
+    "words": "how fast does the prompt line answer",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "bench",
+     "stats"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "spark-32",
+    "topic": "spark",
+    "words": "check the downloaded models for damage",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "model"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "spark-33",
+    "topic": "spark",
+    "words": "make a new admin token for the page",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "forge"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "spark-34",
+    "topic": "spark",
+    "words": "forget the third fact you remember",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "memory"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "spark-35",
+    "topic": "spark",
+    "words": "show what spark depends on",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "ver"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "spark-36",
+    "topic": "spark",
+    "words": "remove spark from this machine",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "uninstall"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "spark-37",
+    "topic": "spark",
+    "words": "what has spark sent over the network",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "stats"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "spark-38",
+    "topic": "spark",
+    "words": "show every admin action on the page",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "forge"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "spark-39",
+    "topic": "spark",
+    "words": "show the last answer again",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "last"
     ],
     "must_not": [
      "\\bsudo\\b"
