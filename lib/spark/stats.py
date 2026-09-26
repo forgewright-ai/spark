@@ -13,7 +13,8 @@ WINDOWS = {"--today": 1, "--week": 7, "--all": 3650}
 USAGE = """%s stats -- throughput from the turns on disk
 
   spark stats                  today: tok/s, latency, cache hits by mode,
-                               and the baseline
+                               the baseline and the line pace (spark
+                               bench --line measures it)
   spark stats --week | --all   a wider window
   spark stats --sends          what left, in bytes: by destination and day,
                                the last 7 days (local = this machine)
@@ -175,6 +176,11 @@ def _report(argv):
         for mode, m in s["modes"]:
             say("mode_%s\tturns=%d cache_pct=%.0f ms_p50=%d first_p50=%d" % (mode, m["turns"], m["cache"], m["ms_p50"], m["first_p50"]))
         say("baseline_tg\t%s" % (base["tg"] if base else ""))
+        lp = bench.line_pace()
+        if lp:
+            say("line_ready_ms\t%s" % lp.get("ready_ms", ""))
+            say("line_total_ms\t%s" % lp.get("total_ms", ""))
+            say("line_warm\t%d/%d" % (lp.get("warm", 0), lp.get("known", 0)))
         g = engine.gpu_info()
         if g:
             say("gpu_busy\t%s" % g.get("busy", ""))
@@ -211,6 +217,11 @@ def _report(argv):
         from . import reveal
         for ln in reveal.pace_report(cfg, cfg.reveal)[:2]:
             say("  pace        %s" % ln)
+    # the prompt line's pace, as spark bench --line last measured it: the
+    # wait between Enter and a command in the buffer
+    lp = bench.line_pace()
+    if lp:
+        say("  pace        line: %s (spark bench --line, %s)" % (bench.line_words(lp), str(lp.get("ts", ""))[:10]))
     if base:
         line = "  baseline    %.1f tok/s generate, %.1f prompt (spark bench, %s)" % (base["tg"], base["pp"], base["ts"][:10])
         bstem = base.get("model", "")

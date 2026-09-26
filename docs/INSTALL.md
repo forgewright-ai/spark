@@ -368,6 +368,13 @@ prompt cache in RAM, `--cache-ram 0`, because llama-server would
 otherwise keep up to 8 GB of replaced prompts in host memory.
 `SPARK_EXTRA_ARGS=--cache-ram N` in `spark.env` sets a budget in MB.
 
+The prompt line has a pace of its own. `spark bench --line [N]` asks
+N everyday questions (5 by default) the way the prompt line does. It
+times the wait until the command is ready and until the whole answer.
+It counts the warm slots too: a warm slot reuses the prompt it has
+already read. `spark stats` shows the result as the line pace, and the
+`throughput` row names it. Nothing the questions propose is run.
+
 ## 5. Other machines and your phone
 
 spark serves the same model, with its soul, memory and threads, on one

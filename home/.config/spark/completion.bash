@@ -68,6 +68,7 @@ _spark_complete() {
         chat)    words="--thread" ;;
         do)      words="--sandbox --detach --porcelain --review --accept --discard" ;;
         soul)    words="show edit reset" ;;
+        bench)   words="--line" ;;
         history) words="clear" ;;
         font)    words="list none status" ;;
         client)  words="off status" ;;
