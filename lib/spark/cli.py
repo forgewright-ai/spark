@@ -4,12 +4,13 @@
 # called). Dispatch lives in bin/spark's VERBS table; main() here is the
 # fallback -- bare spark, or a question.
 
+import json
 import os
 import re
 import sys
 import time
 
-from . import CONFIG_DIR, MARK, OFF_FLAG, REPO, STATE_DIR, WIDGETS_DIR, config, die, glyph, paged, say, state_dir
+from . import CONFIG_DIR, MARK, OFF_FLAG, REPO, STATE_DIR, WIDGETS_DIR, config, die, glyph, paged, paint, say, state_dir
 from . import bar, engine, forge, ledger, persona, session, version, wire
 from . import text as textmod
 
@@ -195,6 +196,241 @@ def _paste_verdict(shell):
     return 0
 
 
+# A model's command reaches line 1 only without these: C0 but the three
+# whitespaces (a newline folds to a space, as it always has), DEL, C1 and
+# the bidi controls -- do.CONTROL's set. Escapes a terminal would act on,
+# and text that reads one way and runs another, refuse the reply whole.
+LINE_CONTROL = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f‎‏‪-‮⁦-⁩]")
+LINE_REFUSED = "the model's command carried control characters -- refused"
+LINE_TOKENS = 200          # what a line reply may write: five short fields
+
+
+def _line_ask(s, text, on_delta=None):
+    """One prompt-line request: streamed, the line's schema, the line's own
+    slot (wire.LINE_SLOT), every chunk to on_delta as it comes. Returns
+    (reply, ms). A reply that is not one JSON object is BrainError `bad`,
+    worded as chat_json words it."""
+    t0 = time.time()
+    raw, s.timings = s._retry_fresh(lambda: wire.chat_stream(
+        s.cfg, s.url, s._messages(text), on_delta or (lambda d: None), max_tokens=LINE_TOKENS,
+        temperature=0.2, forge=s.forge, model=s.role, schema=persona.LINE_SCHEMA, slot=wire.LINE_SLOT))
+    try:
+        reply = json.loads(raw)
+        if not isinstance(reply, dict):
+            raise ValueError
+    except ValueError:
+        raise wire.BrainError("bad", "the model did not return JSON: %s" % raw[:80].replace("\n", " "))
+    return reply, int((time.time() - t0) * 1000)
+
+
+def _reason(e):
+    """A failure as line 2 says it: the hint, without the tail a streamed
+    verb adds for an answer printed above it -- the line has none."""
+    return _one_line(e.hint.split(" -- the answer above is incomplete")[0])
+
+
+class _Fields:
+    """The line's JSON object as it streams. feed(delta) returns the
+    (key, value) pairs whose values closed in it, in order; `fields`
+    holds every pair so far. One flat object of strings (escapes and all),
+    booleans, numbers and null: the line's schema. Anything else stops it
+    (`bad`), and the whole reply, parsed at the end, decides. A key seen
+    twice keeps its first value: the one already printed."""
+
+    def __init__(self):
+        self.fields = {}
+        self.state = "start"        # start key? key colon value string atom next done bad
+        self.buf = ""
+        self.key = None
+        self.esc = False
+
+    def _close(self, value, out):
+        if self.key not in self.fields:
+            self.fields[self.key] = value
+            out.append((self.key, value))
+        self.state, self.buf = "next", ""
+
+    def _atom(self, out):
+        try:
+            self._close(json.loads(self.buf), out)
+        except ValueError:
+            self.state = "bad"
+
+    def feed(self, delta):
+        out = []
+        for ch in delta:
+            st = self.state
+            if st in ("done", "bad"):
+                break
+            if st in ("key", "string"):
+                if self.esc or ch == "\\":
+                    self.esc = not self.esc
+                    self.buf += ch
+                elif ch != '"':
+                    self.buf += ch
+                else:
+                    try:
+                        text = json.loads('"' + self.buf + '"')
+                    except ValueError:
+                        self.state = "bad"
+                        break
+                    if st == "key":
+                        self.key, self.state, self.buf = text, "colon", ""
+                    else:
+                        self._close(text, out)
+                continue
+            if st == "atom":
+                if ch in " \t\r\n,}":
+                    self._atom(out)
+                    if self.state == "bad" or ch in " \t\r\n":
+                        continue
+                    st = "next"
+                else:
+                    self.buf += ch
+                    continue
+            if ch in " \t\r\n":
+                continue
+            if st == "start":
+                self.state = "key?" if ch == "{" else "bad"
+            elif st == "key?":
+                self.state = "key" if ch == '"' else ("done" if ch == "}" and not self.fields else "bad")
+            elif st == "colon":
+                self.state = "value" if ch == ":" else "bad"
+            elif st == "value":
+                if ch == '"':
+                    self.state = "string"
+                elif ch in "tfn-0123456789":
+                    self.state, self.buf = "atom", ch
+                else:
+                    self.state = "bad"
+            elif st == "next":
+                self.state = "key?" if ch == "," else ("done" if ch == "}" else "bad")
+        return out
+
+
+class _Pulse(textmod.Busy):
+    """The line's pulse: text.Busy in the hint row until line 1 is out,
+    then the reply's own mark (`*`, or `!` whole in warn) until line 2 --
+    and stop() then leaves the row as it is, for the widget paints it
+    next: the mark never blinks out while the command sits in the line."""
+
+    warn = False
+    keep = False
+
+    def _frame(self, dots):
+        if not self.warn:
+            return super()._frame(dots)
+        body = paint(self.mark + " " + dots, "warn", self.stream)
+        return ("\x1b7\x1b[1A\r\x1b[2K" + body + "\x1b8") if self.above else ("\r\x1b[2K" + body)
+
+    def _clear(self):
+        return "" if self.keep else super()._clear()
+
+
+class _Early:
+    """Contract 4's lines, written the moment the stream makes each one
+    certain. Line 1 goes out only when nothing after it can change it: the
+    kind known; for a cmd, the command closed and cut to one line, free of
+    LINE_CONTROL, earning no guard (a head word nothing here answers to, a
+    `??` that repeats the failed command) and its danger known -- the
+    model's flag, or persona.is_dangerous here, which wins. Anything short
+    of that waits for the whole reply and the path it always took. Line 2
+    follows when its field closes, a danger's blast facts first; line 3
+    is left to the end, after persona.proof_ok."""
+
+    def __init__(self, cwd, more, history, busy):
+        self.cwd, self.more, self.history, self.busy = cwd, more, history, busy
+        self.parse = _Fields()
+        self.t0 = time.time()
+        self.head = None            # cmd | danger | answer, once line 1 is out
+        self.command = ""
+        self.hint = None            # line 2, once out
+        self.cmd_ms = None
+        self.off = False            # something the end must weigh: no early line
+
+    def feed(self, delta):
+        self.parse.feed(delta)
+        if not self.off:
+            self._advance()
+
+    def line1(self, head, command=""):
+        """Line 1, from whichever path gets there: the time is cmd_ms."""
+        self.head, self.command = head, command
+        self.cmd_ms = int((time.time() - self.t0) * 1000)
+        say(head + "\t" + command if command else head)
+
+    def line2(self, text):
+        self.busy.stop()
+        self.hint = text
+        say(text)
+
+    def _try_first(self, f):
+        """Line 1 when the fields so far make it certain: True once out."""
+        if "kind" not in f:
+            return False
+        if f["kind"] != "cmd":
+            return self._first("answer")
+        raw = f.get("command")
+        if raw is None:
+            return False
+        if not isinstance(raw, str) or LINE_CONTROL.search(raw):
+            self.off = True
+            return False
+        command = _one_line(raw, 1000)
+        if not command:
+            return self._first("answer")
+        if persona.missing_word(command) or (self.more and command == _last_proposed(self.history)):
+            self.off = True
+            return False
+        danger = persona.is_dangerous(command)
+        if not danger:
+            if "danger" not in f:
+                return False
+            danger = bool(f["danger"])
+        return self._first("danger" if danger else "cmd", command)
+
+    def _advance(self):
+        f = self.parse.fields
+        if (self.head is None and not self._try_first(f)) or self.hint is not None:
+            return
+        text = self.second(f)
+        if text is not None:
+            self.line2(text)
+
+    def second(self, f, final=False):
+        """Line 2 from the fields, or None while they cannot tell it yet
+        (never None when `final`: the reply is whole)."""
+        def s(k):
+            v = f.get(k)
+            return v if isinstance(v, str) else ""
+        hint = f.get("hint")
+        if self.head == "answer":
+            # an answer is the content, not a label: its budget is
+            # characters, and the widget trims to the terminal's own width
+            if not final and (hint is None or (not hint and "command" not in f)):
+                return None
+            return _one_line(s("hint") or s("command"), ANSWER_MAX)
+        if hint is None and not final:
+            return None
+        hint = _one_line(s("hint"))
+        return self.facts(hint) if self.head == "danger" else hint
+
+    def facts(self, hint):
+        """A danger's hint with persona.blast's facts first, so contract
+        4's 80-char cut eats the model's words before the numbers."""
+        facts = persona.blast(self.command, self.cwd)
+        return _one_line("<- " + facts + " -- " + hint) if facts else hint
+
+    def _first(self, head, command=""):
+        # the pulse turns to the reply's own mark before the line leaves,
+        # so the row never shows the old one beside the landed command
+        self.busy.mark = "!" if head == "danger" else "*"
+        self.busy.warn = head == "danger"
+        self.busy.keep = True
+        self.line1(head, command)
+        return True
+
+
 def _guards(s, reply, command, hint, text, cwd, more, history, ms):
     """The two re-asks a cmd reply may earn, then the danger verdict:
     (reply, command, hint, kind, ms) with kind `cmd` or `danger`."""
@@ -206,7 +442,7 @@ def _guards(s, reply, command, hint, text, cwd, more, history, ms):
         try:
             s.history.extend([{"role": "user", "content": persona.user_message(text, cwd)},
                               {"role": "assistant", "content": "`%s` -- %s" % (command, hint)}])
-            retry, ms2 = s.ask_json("%s is not installed on this machine; use only commands that exist here." % missing)
+            retry, ms2 = _line_ask(s, "%s is not installed on this machine; use only commands that exist here." % missing)
             ms += ms2
             c2 = _one_line(retry.get("command", ""), 1000)
             if retry.get("kind") == "cmd" and c2 and not persona.missing_word(c2):
@@ -222,7 +458,7 @@ def _guards(s, reply, command, hint, text, cwd, more, history, ms):
         try:
             s.history.extend([{"role": "user", "content": persona.user_message(text, cwd)},
                               {"role": "assistant", "content": "`%s` -- %s" % (command, hint)}])
-            retry, ms2 = s.ask_json("that exact command was already tried and failed; propose a different one.")
+            retry, ms2 = _line_ask(s, "that exact command was already tried and failed; propose a different one.")
             ms += ms2
             c3 = _one_line(retry.get("command", ""), 1000)
             if retry.get("kind") == "cmd" and c3 and c3 != command:
@@ -304,34 +540,58 @@ def cmd_line(args):
         thread, history = forge.pick(cfg, more)
     ask_text = (install_ctx + "\n\n" + text) if install_ctx else text
     # the pulse in the hint row (SPARK_HINT_ROW=1, the widgets' word) from
-    # the ask through its guards' re-asks; the reply prints after it
-    busy = textmod.Busy.hint_row().start()
+    # the ask to line 1 -- through the guards' re-asks when a reply earns
+    # one -- then in the reply's own mark until line 2
+    busy = _Pulse.hint_row().start()
+    early = _Early(cwd, more, history, busy)
+    s, extra = None, {}
     try:
-        try:
-            s = session.Session(cfg, "line", shell, cwd, history)
-            reply, ms = s.ask_json(ask_text)
-        except wire.BrainError as e:
-            busy.stop()
+        s = session.Session(cfg, "line", shell, cwd, history)
+        reply, ms = _line_ask(s, ask_text, early.feed)
+        reply = dict(reply, **early.parse.fields)     # a key's first value is the one printed
+    except wire.BrainError as e:
+        busy.stop()
+        if early.head is None:
             say("error")
-            say(_one_line(e.hint))
+            say(_reason(e))
             return 1
+        ms = int((time.time() - early.t0) * 1000)
+        if early.hint is None:
+            # line 1 is out: the reason is line 2, and the exit says so
+            early.line2(_reason(e))
+            s.record(kind=early.head, failed=e.kind, cmd_ms=early.cmd_ms, ms=ms, thread=thread)
+            return 1
+        # lines 1 and 2 are whole: the reply stands, without its proof
+        reply, extra = dict(early.parse.fields, proof=""), {"failed": e.kind}
+    if early.head is None:
+        # nothing went early: the whole reply, the guards, then the lines
         kind = reply.get("kind")
         command = _one_line(reply.get("command", ""), 1000)
         hint = _one_line(reply.get("hint", ""))
         is_cmd = kind == "cmd" and bool(command)
-        if is_cmd:
+        refused = is_cmd and LINE_CONTROL.search(str(reply.get("command")))
+        if is_cmd and not refused:
             reply, command, hint, kind, ms = _guards(s, reply, command, hint, text, cwd, more, history, ms)
-    finally:
+            refused = LINE_CONTROL.search(str(reply.get("command")))      # a re-ask's command too
         busy.stop()
+        if refused:
+            say("error")
+            say(LINE_REFUSED)
+            s.record(kind="refused", ms=ms, thread=thread)
+            return 1
+        if is_cmd:
+            early.line1(kind, command)
+            early.line2(early.facts(hint) if kind == "danger" else hint)
+        else:
+            early.line1("answer")
+            early.line2(early.second(reply, final=True))
+    else:
+        busy.stop()
+        kind, command, is_cmd = early.head, early.command, early.head != "answer"
+        if early.hint is None:
+            early.line2(early.second(reply, final=True))
+        hint = early.hint
     if is_cmd:
-        if kind == "danger":
-            facts = persona.blast(command, cwd)
-            if facts:
-                # the facts first, so contract 4's 80-char cut eats the
-                # model's words before it eats the numbers
-                hint = _one_line("<- " + facts + " -- " + hint)
-        say(kind + "\t" + command)
-        say(hint)
         # contract 4's optional third line: one read-only command that
         # shows the change happened. A proof that is not read-only
         # (persona.proof_ok's allowlist) is refused here, never printed.
@@ -341,15 +601,12 @@ def cmd_line(args):
         else:
             proof = ""
         shown = "`%s` -- %s" % (command, hint)
-        s.record(kind=kind, line=text, command=command, hint=hint, proof=proof, ms=ms, thread=thread)
+        s.record(kind=kind, line=text, command=command, hint=hint, proof=proof, ms=ms,
+                 cmd_ms=early.cmd_ms, thread=thread, **extra)
     else:
         kind = "answer"
-        # an answer is the content, not a label: its budget is characters,
-        # and the widget trims to the terminal's own width (contract 4)
-        shown = _one_line(reply.get("hint") or reply.get("command") or "", ANSWER_MAX)
-        say("answer")
-        say(shown)
-        s.record(kind=kind, line=text, answer=shown, ms=ms, thread=thread)
+        shown = hint
+        s.record(kind=kind, line=text, answer=shown, ms=ms, cmd_ms=early.cmd_ms, thread=thread, **extra)
     if remote:
         forge.peer_append(cfg, thread, "user", text, mode="line")
         forge.peer_append(cfg, thread, "assistant", shown, kind=kind)

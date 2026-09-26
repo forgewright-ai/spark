@@ -1,6 +1,7 @@
 # spark.wire -- HTTP to a llama-server: the token, /health, which server
-# answers (the brain), and the two chat shapes: JSON-constrained for the
-# prompt, streamed for the CLI. Nothing here spawns anything.
+# answers (the brain), and the two chat shapes: JSON-constrained in one
+# piece, and streamed (the CLI's, and the prompt line's JSON as it comes,
+# in its own slot). Nothing here spawns anything.
 
 import collections
 import json
@@ -503,18 +504,46 @@ def timings_of(d):
     return out
 
 
-def chat_stream(cfg, url, messages, on_delta, max_tokens=600, temperature=0.3, forge=False, model=None, timeout=None):
+# The prompt line's own slot on the llama-server (the request's `id_slot`):
+# every line request asks for it, so the line's prefix -- its system
+# message and a thread's earlier turns -- stays in that slot's cache and
+# the next line reads only its new tokens. Nothing else in spark names a
+# slot; chat, read, ask, drill, do and edit take whichever is free. A
+# FORGE passes the field through untouched; a router hands it to the
+# spark model's own server, whose slots are its own.
+LINE_SLOT = 0
+
+
+def chat_stream(cfg, url, messages, on_delta, max_tokens=600, temperature=0.3, forge=False, model=None, timeout=None,
+                schema=None, slot=None):
     """Stream the answer through on_delta(text); returns (text, timings).
     `model` as in chat_json: the role, or None for no model field;
     `timeout` as in chat_json (the socket timeout: the connect, then each
-    read -- a long answer that keeps streaming never trips it)."""
+    read -- a long answer that keeps streaming never trips it). `schema`
+    shapes the answer as chat_json's does, the text then that JSON as it
+    streams; `slot` asks for one llama-server slot (LINE_SLOT). A server
+    that refuses the request with the slot in it is asked once more
+    without it: the slot is a speed, never a reason to fail."""
     body = {"messages": messages, "max_tokens": max_tokens, "temperature": temperature,
             "stream": True, "cache_prompt": True}
     if model is not None:
         body["model"] = model
+    if schema is not None:
+        body["response_format"] = {"type": "json_schema", "json_schema": {"name": "spark_line", "schema": schema}}
+    if slot is not None:
+        body["id_slot"] = slot
     out, timings, done = [], {}, False
     data = _encode(body)
-    with _send(cfg, url, data, timeout or cfg.timeout, forge=forge) as r:
+    try:
+        r = _send(cfg, url, data, timeout or cfg.timeout, forge=forge)
+    except BrainError as e:
+        if slot is None or e.kind != "bad":
+            raise
+        debug("the server refused id_slot (%s): asked again without it" % e.hint[:80])
+        body.pop("id_slot")
+        data = _encode(body)
+        r = _send(cfg, url, data, timeout or cfg.timeout, forge=forge)
+    with r:
         try:
             for raw in r:
                 line = raw.decode("utf-8", errors="replace").strip()

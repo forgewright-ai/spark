@@ -125,6 +125,32 @@ class Stub(BaseHTTPRequestHandler):
             return self._send(200, {"choices": [{"message": {"content": json.dumps({"language": "Portuguese", "kind": "fiction"})}}], "timings": TIMINGS})
         if "turn it into practice questions" in system:   # spark drill (contract 13), a JSON reply
             return self._send(200, {"choices": [{"message": {"content": json.dumps(drill_items(user))}}], "timings": TIMINGS})
+        if body.get("stream") and body.get("response_format"):   # spark line (contract 4): its JSON, streamed
+            if STATE.get("no_slot") and "id_slot" in body:     # a server that refuses the slot field
+                return self._send(400, {"error": {"message": "unknown field id_slot"}})
+            doc = json.dumps(answer_json(messages))
+            pieces = tuple(doc[i:i + 5] for i in range(0, len(doc), 5))   # small chunks: the parser's work
+            if any(w in user for w in ("midcut", "slowhint", "slowdanger")):
+                # line 1's fields, then the wire dies (midcut) or the
+                # model thinks a while before the hint (slow...)
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.end_headers()
+                cut = doc.index('"hint"')
+
+                def chunk(t):
+                    self.wfile.write(("data: " + json.dumps({"choices": [{"delta": {"content": t}}]}) + "\n\n").encode())
+                    self.wfile.flush()
+                chunk(doc[:cut])
+                if "midcut" in user:
+                    self.close_connection = True
+                    return
+                time.sleep(1.5)
+                chunk(doc[cut:])
+                self.wfile.write(("data: " + json.dumps({"choices": [{"delta": {}, "finish_reason": "stop"}], "timings": TIMINGS}) + "\n\n").encode())
+                self.wfile.write(b"data: [DONE]\n\n")
+                return
+            return self._sse(pieces)
         if body.get("stream") and "you are not its editor" in system:   # spark edit ? --source
             if "[held]" in user:        # a source with spans held back: quote one of them
                 return self._sse(('The code is hidden: ', '"verification code is [held]"', '.\n'))
@@ -370,6 +396,22 @@ def answer_json(messages):
         if "rm-plain" in goal:                  # unflagged by the model; the regex must
             return {"kind": "cmd", "command": "rm -rf ./junk", "hint": "delete junk", "danger": False}
         return {"kind": "cmd", "command": "echo STEP-ONE", "hint": "say hello", "danger": False}
+    # the streamed line (v1.52): the schema's own order -- kind, danger,
+    # command, hint, proof -- so line 1 can go the moment the command closes
+    if "midcut" in user or "slowhint" in user:
+        return {"kind": "cmd", "danger": False, "command": "ls -la", "hint": "lists everything here",
+                "proof": "test -d ."}
+    if "slowdanger" in user:        # the model says safe; the command is not
+        return {"kind": "cmd", "danger": False, "command": "rm -rf build", "hint": "removes the build",
+                "proof": ""}
+    if "ctrlline" in user or "c1line" in user or "bidiline" in user:
+        # a terminal escape, a C1 CSI, a right-to-left override in the command
+        cmd = {"ctrlline": "echo \x1b[2K\x1b[1Ghi; rm -rf junk", "c1line": "echo \x9b2K hi",
+               "bidiline": "echo ‮ hi"}[next(k for k in ("ctrlline", "c1line", "bidiline") if k in user)]
+        return {"kind": "cmd", "danger": False, "command": cmd, "hint": "says hi", "proof": ""}
+    if "escquote" in user:          # escapes the parser must read whole
+        return {"kind": "cmd", "danger": False, "command": 'printf "%s\\n" "a\\"b" café',
+                "hint": "prints \"a\\\"b\" -- é", "proof": ""}
     if "count" in user:           # how many messages arrived: system + history + user
         return {"kind": "answer", "command": "", "hint": str(len(messages)), "danger": False}
     if "delete" in user:
@@ -601,6 +643,76 @@ def main():
         rc, out, _ = spark("line", stdin="badproof?")
         t.ok(rc == 0 and out.splitlines() == ["cmd\tmkdir -p pdir", "makes the dir"],
              "line: a proof that writes is refused, never printed", repr(out))
+
+        # v1.52: the line streams. The request: the schema in the order the
+        # model writes it (kind, danger, command, hint, proof), stream on,
+        # the line's own slot
+        _lb = STATE["bodies"][-1]
+        _sch = _lb.get("response_format", {}).get("json_schema", {}).get("schema", {})
+        t.ok(_lb.get("stream") is True and _lb.get("id_slot") == 0
+             and list(_sch.get("properties", {})) == ["kind", "danger", "command", "hint", "proof"]
+             and _sch.get("required") == ["kind", "danger", "command", "hint", "proof"],
+             "line: streamed, slot 0, the schema ordered kind, danger, command, hint, proof",
+             json.dumps({k: _lb.get(k) for k in ("stream", "id_slot")}) + json.dumps(_sch)[:200])
+
+        def _timed(words):
+            """spark line's lines, each with the seconds it took to arrive"""
+            p = subprocess.Popen([sys.executable, SPARK, "line"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                 stderr=subprocess.DEVNULL, text=True, env=env)
+            p.stdin.write(words)
+            p.stdin.close()
+            t0, got = time.time(), []
+            for l in p.stdout:
+                got.append((l.rstrip("\n"), time.time() - t0))
+            return p.wait(timeout=30), got
+        rc, got = _timed("slowhint?")
+        t.ok(rc == 0 and [g[0] for g in got] == ["cmd\tls -la", "lists everything here", "proof\ttest -d ."]
+             and got[1][1] - got[0][1] > 1.0,
+             "line: line 1 is out the moment the command closes, the hint after it", repr(got))
+        rc, got = _timed("slowdanger?")
+        t.ok(rc == 0 and got and got[0][0] == "danger\trm -rf build" and len(got) > 1 and got[1][1] - got[0][1] > 1.0,
+             "line: is_dangerous marks line 1 danger before it goes, whatever the model said", repr(got))
+        rc, out, _ = spark("line", stdin="midcut?")
+        _ml = out.splitlines()
+        t.ok(rc == 1 and len(_ml) == 2 and _ml[0] == "cmd\tls -la" and "mid-reply" in _ml[1]
+             and "answer above" not in _ml[1],
+             "line: a failure after line 1 is line 2's reason, exit 1", repr(out))
+        for _w in ("ctrlline", "c1line", "bidiline"):
+            rc, out, _ = spark("line", stdin="%s?" % _w)
+            t.ok(rc == 1 and out.splitlines() == ["error", "the model's command carried control characters -- refused"],
+                 "line: a control character in the command (%s) refuses the reply before line 1" % _w, repr(out))
+        rc, out, _ = spark("line", stdin="escquote?")
+        t.ok(rc == 0 and out.splitlines()[:2] == ['cmd\tprintf "%s\\n" "a\\"b" café', 'prints "a\\"b" -- é'],
+             "line: the streamed JSON's escapes and a non-ASCII letter come out whole", repr(out))
+        STATE["no_slot"] = True
+        rc, out, _ = spark("line", stdin="prooftest?")
+        STATE["no_slot"] = False
+        t.ok(rc == 0 and out.splitlines()[0] == "cmd\tmkdir -p pdir" and "id_slot" not in STATE["bodies"][-1],
+             "line: a server that refuses id_slot is asked again without it", repr(out))
+        _td = home + "/.local/state/spark/turns"
+        _last = [json.loads(l) for f in sorted(os.listdir(_td)) for l in open(os.path.join(_td, f)) if l.strip()][-1]
+        t.ok(isinstance(_last.get("cmd_ms"), int) and isinstance(_last.get("ms"), int) and _last["cmd_ms"] <= _last["ms"] + 50
+             and not any(k in _last for k in ("line", "command", "hint", "proof", "answer", "cwd")),
+             "line: the turn records cmd_ms (the wait to line 1) beside ms, and no words", json.dumps(_last)[:300])
+        # the incremental reader, alone: char by char it finds what json
+        # finds, escapes and all; a repeated key keeps its first value
+        from spark import cli as _cli
+        _doc = '{ "kind" : "cmd", "danger":false, "command":"echo \\"a\\\\b\\" \\u00e9 \\ud83d\\ude00", "n": -1.5e2, "x": null, "hint":"h" }'
+        _fp = _cli._Fields()
+        _seen = []
+        for _ch in _doc:
+            _seen += _fp.feed(_ch)
+        t.ok(_fp.fields == json.loads(_doc) and _fp.state == "done" and [k for k, _v in _seen] == list(json.loads(_doc)),
+             "line: _Fields reads the stream char by char as json does", repr(_fp.fields))
+        _fp = _cli._Fields()
+        _fp.feed('{"command":"ls","command":"rm -rf /"}')
+        _bad = _cli._Fields()
+        _bad.feed('prose, not JSON {"kind":"cmd"}')
+        t.ok(_fp.fields == {"command": "ls"} and _bad.state == "bad" and not _bad.fields,
+             "line: _Fields keeps a key's first value; prose stops it", repr((_fp.fields, _bad.state)))
+        from spark import persona as _sp
+        t.ok(_sp.SENDS[0] == ("line", "the line you typed, with the shell and OS name"),
+             "line: what the line sends is unchanged (persona.SENDS)", repr(_sp.SENDS[0]))
         # the user bus over a bare ssh: every systemctl --user call carries
         # XDG_RUNTIME_DIR and the bus address, and a start that fails says so
         from spark import engine as _eng
@@ -2124,8 +2236,8 @@ def main():
              and _wire.dest_of("http://192.0.2.7:8081") == "192.0.2.7:8081" and _wire.dest_of("http://box.local") == "box.local",
              "wire.dest_of: loopback is local, anything else host:port")
         spark("history", "clear")
-        spark("line", stdin="?biggest dir here")          # the JSON shape (chat_json)
-        spark("count?")                                   # the streamed shape (chat_stream)
+        spark("line", stdin="?biggest dir here")          # the streamed JSON (the line)
+        spark("count?")                                   # the streamed text (chat_stream)
         turns = [json.loads(l) for f in os.listdir(home + "/.local/state/spark/turns")
                  for l in open(home + "/.local/state/spark/turns/" + f) if l.strip()]
         t.ok(len(turns) >= 2 and all(isinstance(x.get("out_bytes"), int) and x["out_bytes"] > 100 and x.get("dest") == "local" for x in turns),

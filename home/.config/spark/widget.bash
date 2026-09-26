@@ -42,7 +42,7 @@ SPARK_DIR=${XDG_STATE_HOME:-$HOME/.local/state}/spark
 # shell's exit-code hook is armed; readers ignore fields they do not know
 mkdir -p "$SPARK_DIR/widgets" 2>/dev/null && chmod 700 "$SPARK_DIR" 2>/dev/null
 printf 'bash %d %d hook\n' "$$" "$(date +%s)" > "$SPARK_DIR/widgets/$$" 2>/dev/null
-_spark_gone() { rm -f "$SPARK_DIR/widgets/$$"; }
+_spark_gone() { rm -f "$SPARK_DIR/widgets/$$" "$SPARK_DIR/proof.$$"; }
 trap '_spark_gone' EXIT
 
 # --- is this line a question? ----------------------------------------------
@@ -88,34 +88,93 @@ _spark_say() {   # _spark_say TEXT  -- write into the row above, cursor untouche
     printf '\0337\033[1A\r\033[2K%s\0338' "$_spark_out"
 }
 
+# The line streams (contract 4): line 1 -- the command, its danger known --
+# arrives first. The layout: everything spark says lives in the row above
+# (the mark, the pulse, the facts, the hint, an answer); the prompt line
+# holds only the command to run, empty for an answer. The mark is painted
+# BEFORE the command lands, so a danger line is never in the line without
+# its !. A bind -x handler hands the line to readline only when it
+# returns, so the handler lands line 1 and returns; a reader in the
+# background (disowned, its output nowhere) draws line 2 into the row
+# above through /dev/tty -- save the cursor, up one, clear, draw, restore:
+# text.Busy's frame, never a byte on the prompt line -- and keeps line 3's
+# proof in _spark_pf, where the next prompt picks it up. The next Enter,
+# Esc s, Esc r or prompt stops a reader still waiting, and its spark line.
+# One row up is the row above only while the prompt and the command fit
+# one row with room to type; past that (or before bash 4.4) the handler
+# waits for the whole reply, as it always did.
+_spark_rd='' _spark_lp='' _spark_pw='' _spark_pf=$SPARK_DIR/proof.$$
+_SPARK_ROOM=16            # columns left free to type in before the row would wrap
+
+_spark_reap() {   # the reader of an earlier answer, and its spark line, stop
+    [[ -n $_spark_rd ]] || return 0
+    kill "$_spark_rd" "$_spark_lp" 2>/dev/null
+    _spark_rd='' _spark_lp=''
+}
+
+_spark_keep() {   # _spark_keep CMD LINE3  -- the reader's proof, for the next prompt
+    case $2 in proof$'\t'*) printf '%s\n%s\n' "$1" "${2#proof$'\t'}" > "$_spark_pf" ;; esac
+}
+
+_spark_rest() {   # _spark_rest FD MARK TAIL CMD  -- lines 2 and 3, in the background
+    local fd=$1 mark=$2 tail=$3 cmd=$4 hint='' l3=''
+    IFS= read -r hint <&"$fd"
+    # a proof already here is kept before the hint shows: an Enter on the
+    # hint then finds it
+    if read -t 0 -u "$fd"; then IFS= read -r l3 <&"$fd"; _spark_keep "$cmd" "$l3"; fi
+    _spark_say "$mark ${hint:-no hint came}$tail" > /dev/tty
+    trap '' TERM          # drawn: nothing left that could land on a later screen
+    [[ -z $l3 ]] && IFS= read -r l3 <&"$fd" && _spark_keep "$cmd" "$l3"
+}
+
+_spark_fits() {   # _spark_fits CMD  -- true when prompt + CMD leave room on one row
+    local p w=${COLUMNS:-80}
+    (( BASH_VERSINFO[0] > 4 || BASH_VERSINFO[1] >= 4 )) || return 1
+    p=${PS1@P}
+    p=${p##*$'\n'}
+    while [[ $p == *$'\001'*$'\002'* ]]; do p=${p%%$'\001'*}${p#*$'\002'}; done
+    (( ${#p} + ${#1} + _SPARK_ROOM <= w ))
+}
+
 _spark_ask() {   # _spark_ask LINE  -- ask, then edit READLINE_LINE
-    local line=$1 out kind cmd hint line3
+    local line=$1 fd kind cmd='' hint line3 mark=$_spark_h tail=''
+    _spark_reap
     _spark_say "$_spark_h $_spark_d"
+    _spark_proof='' _spark_proof_for='' _spark_pw=''
+    [[ -s $_spark_pf ]] && : > "$_spark_pf"
     # SPARK_HINT_ROW=1: spark line may pulse in that row (text.Busy) while
-    # the model answers; the child repaints the placeholder, nothing else
-    out=$(SPARK_HINT_ROW=1 "$SPARK_BIN" line --cwd "$PWD" --shell bash <<< "$line" 2>/dev/null)
-    kind=${out%%$'\n'*}
-    hint=${out#*$'\n'}
-    hint=${hint%%$'\n'*}
-    line3=$(printf '%s\n' "$out" | sed -n 3p)
-    _spark_proof='' _spark_proof_for=''
+    # the model answers -- then in the reply's own mark until the hint
+    exec {fd}< <(SPARK_HINT_ROW=1 exec "$SPARK_BIN" line --cwd "$PWD" --shell bash <<< "$line" 2>/dev/null)
+    _spark_lp=$!
+    IFS= read -r kind <&"$fd"
     case $kind in
-        cmd$'\t'*)
-            cmd=${kind#cmd$'\t'}
-            case $line3 in proof$'\t'*) _spark_proof=${line3#proof$'\t'} _spark_proof_for=$cmd ;; esac
-            _spark_say "$_spark_h $hint"
-            READLINE_LINE=$cmd; READLINE_POINT=${#cmd} ;;
-        danger$'\t'*)
-            cmd=${kind#danger$'\t'}
-            case $line3 in proof$'\t'*) _spark_proof=${line3#proof$'\t'} _spark_proof_for=$cmd ;; esac
-            _spark_say "$_spark_w $hint -- read it before Enter"
+        cmd$'\t'*|danger$'\t'*)
+            cmd=${kind#*$'\t'}
+            [[ $kind == danger$'\t'* ]] && mark=$_spark_w tail=' -- read it before Enter'
+            _spark_say "$mark $_spark_d$tail"
             READLINE_LINE=$cmd; READLINE_POINT=${#cmd} ;;
         answer)
-            _spark_say "$_spark_h $hint"
             READLINE_LINE=''; READLINE_POINT=0 ;;
         *)
-            _spark_say "$_spark_h ${hint:-no brain awake}" ;;
+            IFS= read -r hint <&"$fd"
+            exec {fd}<&-
+            [[ -n $kind && $kind != error ]] && hint=$kind    # not contract 4: say what came
+            _spark_say "$_spark_h ${hint:-no brain awake}"
+            return ;;
     esac
+    if _spark_fits "$cmd"; then
+        # the shell's own `[1] pid` notice goes to the group's stderr: nowhere
+        { _spark_rest "$fd" "$mark" "$tail" "$cmd" < /dev/null > /dev/null 2>&1 & } 2>/dev/null
+        _spark_rd=$! _spark_pw=1
+        disown "$_spark_rd" 2>/dev/null
+        exec {fd}<&-
+        return
+    fi
+    IFS= read -r hint <&"$fd"
+    IFS= read -r line3 <&"$fd"
+    exec {fd}<&-
+    case $line3 in proof$'\t'*) _spark_proof=${line3#proof$'\t'} _spark_proof_for=$cmd ;; esac
+    _spark_say "$mark ${hint:-no hint came}$tail"
 }
 
 # --- the failure moment ------------------------------------------------------
@@ -219,6 +278,14 @@ _spark_failed() {
     _spark_cmd=''
     unset SPARK_EXPLAIN_CMD SPARK_EXPLAIN_RC
     _spark_offer_fix=''
+    _spark_reap
+    if [[ -n $_spark_pw ]]; then          # the background reader's proof, if one came
+        _spark_pw=''
+        if [[ -s $_spark_pf ]]; then
+            { IFS= read -r _spark_proof_for; IFS= read -r _spark_proof; } < "$_spark_pf"
+            : > "$_spark_pf"
+        fi
+    fi
     # no capture: an empty Enter, Ctrl-C at the prompt, or a key spark
     # does not own. Nothing prints twice; a standing offer survives.
     [[ -n $cmd ]] || return $rc
@@ -298,6 +365,7 @@ unset _spark_pc_array
 
 # --- Enter ------------------------------------------------------------------
 _spark_enter() {
+    _spark_reap                           # a hint still on its way would land on the output
     if [[ -e $SPARK_DIR/off ]]; then
         bind '"\C-x\C-a": accept-line'
         _spark_cmd=''                     # off: nothing arms, nothing prints
@@ -323,6 +391,7 @@ bind '"\C-j": "\C-x\C-s\C-x\C-a"'
 # `spark memory add` line. Either way you press Enter.
 _spark_ask_line() {
     local fact
+    _spark_reap
     if [[ -n $READLINE_LINE ]]; then _spark_ask "$READLINE_LINE"; return; fi
     if [[ -n $_spark_fail && $_spark_fail_rc == 127 ]]; then
         # command not found: Esc s asks for the install line (known tools
@@ -384,6 +453,7 @@ _spark_recall_show() {
     _spark_say "$mark $(( _spark_recall_i + 1 ))/${#_spark_recall_cands[@]}$note -- Esc r: next"
 }
 _spark_recall() {
+    _spark_reap
     [[ -e $SPARK_DIR/off ]] && return
     if [[ -n $READLINE_LINE && $READLINE_LINE == "$_spark_recall_for" && ${#_spark_recall_cands[@]} -gt 0 ]]; then
         # a repeat with the landed candidate still in the line: cycle
@@ -418,6 +488,7 @@ bind -x '"\er": _spark_recall'
 # the inspection; the paste itself always lands.
 _spark_paste() {
     local before=$READLINE_LINE buf='' ch
+    _spark_reap
     while IFS= read -r -s -N1 -t 2 ch; do
         buf+=$ch
         [[ $buf == *$'\e[201~' ]] && { buf=${buf%$'\e[201~'}; break; }

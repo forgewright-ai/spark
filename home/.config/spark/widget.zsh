@@ -86,38 +86,47 @@ _spark_say() {
     print -n -- $'\e7\e[1A\r\e[2K'"$_spark_out"$'\e8'
 }
 
+# The line streams (contract 4): line 1 -- the command, its danger known --
+# arrives first and lands at once; the hint and the proof follow. The
+# layout: everything spark says lives in the row above (the mark, the
+# pulse, the facts, the hint, an answer); the prompt line holds only the
+# command to run, empty for an answer. The mark is painted BEFORE the
+# command lands, so a danger line is never in the buffer without its !.
+# While the hint is on its way the cursor waits at the line's start (one
+# row below the hint row, however long the command), and keys typed
+# meanwhile queue for when the widget returns.
 _spark_ask() {
-    local line=$1 out kind cmd hint line3
+    local line=$1 fd kind cmd hint line3 mark=$_spark_h tail=''
     # a long question wraps: empty the line first, so the cursor is back on
     # the prompt's row and the hint lands in the blank row above it
     BUFFER=''; CURSOR=0; zle -R
     _spark_say "$_spark_h $_spark_d"
-    # SPARK_HINT_ROW=1: spark line may pulse in that row (text.Busy) while
-    # the model answers; the child repaints the placeholder, nothing else
-    out=$(print -r -- "$line" | SPARK_HINT_ROW=1 "$SPARK_BIN" line --cwd "$PWD" --shell zsh 2>/dev/null)
-    kind=${out%%$'\n'*}
-    hint=${out#*$'\n'}
-    hint=${hint%%$'\n'*}
-    line3=$(print -r -- "$out" | sed -n 3p)
     _spark_proof='' _spark_proof_for=''
+    # SPARK_HINT_ROW=1: spark line may pulse in that row (text.Busy) while
+    # the model answers -- then in the reply's own mark until the hint
+    exec {fd}< <(print -r -- "$line" | SPARK_HINT_ROW=1 "$SPARK_BIN" line --cwd "$PWD" --shell zsh 2>/dev/null)
+    IFS= read -r -u $fd kind
     case $kind in
-        cmd$'\t'*)
-            cmd=${kind#cmd$'\t'}
+        cmd$'\t'*|danger$'\t'*)
+            cmd=${kind#*$'\t'}
+            [[ $kind == danger$'\t'* ]] && mark=$_spark_w tail=' -- read it before Enter'
+            _spark_say "$mark $_spark_d$tail"
+            BUFFER=$cmd; CURSOR=0; zle -R
+            IFS= read -r -u $fd hint
+            _spark_say "$mark ${hint:-no hint came}$tail"
+            IFS= read -r -u $fd line3
             case $line3 in proof$'\t'*) _spark_proof=${line3#proof$'\t'} _spark_proof_for=$cmd ;; esac
-            _spark_say "$_spark_h $hint"
-            BUFFER=$cmd; CURSOR=$#BUFFER ;;
-        danger$'\t'*)
-            cmd=${kind#danger$'\t'}
-            case $line3 in proof$'\t'*) _spark_proof=${line3#proof$'\t'} _spark_proof_for=$cmd ;; esac
-            _spark_say "$_spark_w $hint -- read it before Enter"
-            BUFFER=$cmd; CURSOR=$#BUFFER ;;
+            CURSOR=$#BUFFER ;;
         answer)
-            _spark_say "$_spark_h $hint"
-            BUFFER=''; CURSOR=0 ;;
+            IFS= read -r -u $fd hint
+            _spark_say "$_spark_h ${hint:-no answer came}" ;;
         *)
+            IFS= read -r -u $fd hint
+            [[ -n $kind && $kind != error ]] && hint=$kind    # not contract 4: say what came
             _spark_say "$_spark_h ${hint:-no brain awake}"
             BUFFER=$line; CURSOR=$#BUFFER ;;      # the question stays yours
     esac
+    exec {fd}<&-
     zle -R
 }
 

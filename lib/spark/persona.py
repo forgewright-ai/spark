@@ -268,25 +268,30 @@ def _tracked(paths, base):
         return 0
 
 
+# The order is the order the model writes them in: llama.cpp's grammar
+# follows the properties as listed. kind and danger first, then the
+# command -- so `spark line` can print line 1 the moment the command
+# closes, its danger already known -- then the hint, then the proof.
 LINE_SCHEMA = {
     "type": "object",
     "properties": {
         "kind": {"type": "string", "enum": ["cmd", "answer"]},
+        "danger": {"type": "boolean"},
         "command": {"type": "string"},
         "hint": {"type": "string"},
-        "danger": {"type": "boolean"},
         "proof": {"type": "string"},
     },
-    "required": ["kind", "command", "hint", "danger", "proof"],
+    "required": ["kind", "danger", "command", "hint", "proof"],
 }
 
 MODE_LINE = (
     "The user typed a question at the shell prompt. If it asks for something a shell command can do, "
-    "reply kind=cmd with ONE command line in `command` (no comments, no explanation inside it, no `sudo` "
-    "unless unavoidable) and a `hint` of at most 70 characters saying what it does. Set danger=true when "
-    "the command deletes, overwrites, kills, reboots, or changes permissions or history. If the question "
-    "is not something a command answers, reply kind=answer with the answer in `hint` (one line, a "
-    "sentence or two, at most 250 characters) and an empty `command`. For kind=cmd also fill `proof`: "
+    "reply kind=cmd. Set danger=true when the command deletes, overwrites, kills, reboots, or changes "
+    "permissions or history. Put ONE command line in `command` (no comments, no explanation inside it, "
+    "no `sudo` unless unavoidable) and a `hint` of at most 70 characters saying what it does. If the "
+    "question is not something a command answers, reply kind=answer, danger=false, an empty `command` "
+    "and the answer in `hint` (one line, a sentence or two, at most 250 characters). For kind=cmd also "
+    "fill `proof`: "
     "ONE read-only command that shows the change happened (test, ls, stat, grep, git status, "
     "systemctl is-active), or an empty string when nothing needs proving. A proof never writes, "
     "deletes, restarts or pipes."
