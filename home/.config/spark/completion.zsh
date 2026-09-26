@@ -63,6 +63,7 @@ _spark() {
             chat)    comp=(--thread) ;;
             do)      comp=(--sandbox --detach --porcelain --review --accept --discard) ;;
             soul)    comp=(show edit reset) ;;
+            bench)   comp=(--line) ;;
             history) comp=(clear) ;;
             font)    comp=(list none status) ;;
             client)  comp=(off status) ;;

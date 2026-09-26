@@ -7,16 +7,23 @@
 #                            --spark / --ember pick a role by hand)
 #   spark bench tune         a small matrix; the winner is kept for `spark bench tune apply`
 #   spark tune show|apply    see or take the winner (spark.env, then a restart)
+#   spark bench --line [N]   N prompt-line questions through the real `spark
+#                            line`, timed as the widget sees them: the line pace
 #
 # The server is paused while llama-bench runs: two processes fighting for
-# the GPU and the memory would measure nothing.
+# the GPU and the memory would measure nothing. --line is the opposite:
+# it measures the served model, so nothing is paused.
 
 import json
 import os
+import select
+import statistics
 import subprocess
+import sys
+import tempfile
 import time
 
-from . import IS_MAC, MARK, SPARK_ENV, STATE_DIR, config, glyph, say, state_dir
+from . import IS_MAC, MARK, REPO, SPARK_ENV, STATE_DIR, config, glyph, say, state_dir
 from . import engine, wire
 
 BENCH_LOG = os.path.join(STATE_DIR, "bench.jsonl")
@@ -152,6 +159,10 @@ USAGE = """%s bench -- how fast is this machine, with llama-bench
   spark bench --spark      measure the spark role (the prompt line's model)
   spark bench --ember      measure the chat model; an error when none is served
   spark bench --quick      smaller sizes, fewer repetitions
+  spark bench --line [N]   N prompt-line questions (5 by default) through
+                           spark line, against the served model: command
+                           ready, whole answer, warm slots; saved as the
+                           line pace that spark stats shows
   spark bench tune         try GPU/CPU, flash attention, KV types, thread counts
   spark bench tune show    the last tune's result against what runs now
   spark bench tune apply   write the winner to spark.env and restart the engine
@@ -180,6 +191,8 @@ def cmd_bench(args):
         say(USAGE.rstrip())
         return 0
     cfg = config.load()
+    if "--line" in args:
+        return cmd_line_bench(cfg, args)
     tune, porcelain = "--tune" in args, "--porcelain" in args
     size = "quick" if ("--quick" in args or tune) else "full"
     if not engine.bench_bin(cfg):
@@ -269,6 +282,190 @@ def cmd_bench(args):
                 say("the server is back" + ("" if wire.health(url) == "ok" else " (still loading)"))
             from . import check
             check.refresh()
+
+
+# -------------------------------------------------------------------- line
+# The prompt line's own pace: the wait a person feels between Enter and a
+# command in the buffer. llama-bench measures the engine; this measures
+# the whole path the widget takes -- a fresh `spark line` process, the
+# brain, the guards, the lines on stdout. Five everyday questions, each
+# one read-only, and nothing they propose is ever run here. Each is a
+# turn and a thread, like a question asked at the prompt line.
+LINE_QUESTIONS = (
+    "how much disk does this use",
+    "the biggest files here",
+    "which ports are listening",
+    "which groups am I in",
+    "which kernel is running",
+)
+LINE_MAX = 20           # a pace, not a soak test
+LINE_DEADLINE = 180     # seconds one question may take before it is killed
+WARM_READ = 64          # prompt tokens read below this: the slot kept the prefix
+
+
+def _line_count(args):
+    """N after --line (5 without one), or None when it is not 1..LINE_MAX."""
+    i = args.index("--line")
+    if i + 1 < len(args) and not args[i + 1].startswith("-"):
+        try:
+            n = int(args[i + 1])
+        except ValueError:
+            return None
+        return n if 1 <= n <= LINE_MAX else None
+    return len(LINE_QUESTIONS)
+
+
+def time_line(words, cwd, shell, deadline=LINE_DEADLINE):
+    """One `spark line` exactly as the widget calls it (the words on
+    stdin, --cwd, --shell) -> (ready, total, rc, first line). `ready` is
+    when line 1 reached the caller -- the command, ready to paint --
+    stamped on the first newline read, None when none came; `total` is
+    EOF. Seconds, the caller's clock."""
+    cmd = [sys.executable, os.path.join(REPO, "bin", "spark"), "line", "--cwd", cwd, "--shell", shell]
+    env = dict(os.environ)
+    env.pop("SPARK_HINT_ROW", None)     # the table owns this terminal: no pulse above it
+    t0 = time.monotonic()
+    p = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                         stderr=subprocess.DEVNULL, cwd=cwd, env=env)
+    try:
+        p.stdin.write(words.encode("utf-8"))
+        p.stdin.close()
+    except OSError:
+        pass
+    fd, buf, ready = p.stdout.fileno(), b"", None
+    while True:
+        left = t0 + deadline - time.monotonic()
+        if left <= 0:
+            p.kill()
+            break
+        if not select.select([fd], [], [], left)[0]:
+            continue
+        chunk = os.read(fd, 4096)
+        if not chunk:
+            break
+        buf += chunk
+        if ready is None and b"\n" in buf:
+            ready = time.monotonic() - t0
+    p.stdout.close()
+    rc = p.wait()
+    total = time.monotonic() - t0
+    return ready, total, rc, buf.decode("utf-8", "replace").split("\n", 1)[0]
+
+
+def _slot(t):
+    """"warm" when the turn read few prompt tokens (the slot held the
+    prefix), "cold" when it read the prefix again, None when unknown
+    (no turn record: SPARK_HISTORY=off, or a server that sends no
+    timings)."""
+    n = t.get("pp_n") if t else None
+    if not isinstance(n, (int, float)) or isinstance(n, bool):
+        return None
+    return "warm" if n < WARM_READ else "cold"
+
+
+def line_words(d):
+    """A line pace record in the words spark stats and the check print."""
+    return "command ready %.2f s, whole answer %.2f s, %s" % (
+        d.get("ready_ms", 0) / 1000.0, d.get("total_ms", 0) / 1000.0,
+        ("%d warm of %d" % (d.get("warm", 0), d["known"])) if d.get("known") else "slots not recorded")
+
+
+def line_pace():
+    """The newest `spark bench --line` record, or None."""
+    best = None
+    try:
+        with open(BENCH_LOG, encoding="utf-8") as f:
+            for line in f:
+                try:
+                    d = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(d, dict) and d.get("size") == "line":
+                    best = d
+    except OSError:
+        pass
+    return best
+
+
+def _median(xs):
+    return int(statistics.median(xs)) if xs else None
+
+
+def cmd_line_bench(cfg, args):
+    from . import session
+    porcelain = "--porcelain" in args
+    n = _line_count(args)
+    if n is None:
+        say("spark bench -- --line takes a count, 1 to %d (the questions to ask)" % LINE_MAX)
+        return 2
+    try:
+        _url, model, _forge = wire.resolve_brain(cfg)
+    except wire.BrainError as e:
+        say("spark bench -- nothing answers the prompt line: %s" % e.hint)
+        return 1
+    shell = os.path.basename(os.environ.get("SHELL") or "sh")
+    fmt = "  %2s  %-30s %7s %7s %6s %6s  %s"
+    if not porcelain:
+        sep = glyph("sep")
+        say("%s bench --line%s%s (the spark model)%s%d questions" % (MARK, sep, model, sep, n))
+        say("  each runs through spark line as the prompt line asks it; nothing runs")
+        say(fmt % ("", "question", "ready", "whole", "read", "wrote", "slot"))
+    rows = []
+    with tempfile.TemporaryDirectory(prefix="spark-bench-") as scratch:
+        for i in range(n):
+            q = LINE_QUESTIONS[i % len(LINE_QUESTIONS)]
+            before = session.last_turn()
+            ready, total, rc, first = time_line("? " + q, scratch, shell)
+            t = session.last_turn()
+            t = t if (t and t != before and t.get("mode") == "line") else None
+            ok = rc == 0 and ready is not None and first.split("\t")[0] in ("cmd", "danger", "answer")
+            pp = t.get("pp_n") if t else None
+            tg = t.get("tg_n") if t else None
+            rows.append({"ok": ok, "ready": ready, "total": total, "t": t, "slot": _slot(t)})
+            slot = (rows[-1]["slot"] or "-") if ok else "error"
+            if porcelain:
+                say("\t".join([str(i + 1), "%d" % (ready * 1000) if ok else "", "%d" % (total * 1000),
+                               "" if pp is None else str(pp), "" if tg is None else str(tg), slot]))
+            else:
+                say(fmt % (i + 1, q[:30], "%.2f s" % ready if ok else "-", "%.2f s" % total,
+                           "-" if pp is None else pp, "-" if tg is None else tg, slot))
+    good = [r for r in rows if r["ok"]]
+    if not good:
+        say("spark bench -- no question got an answer: spark line shows why (echo '? which kernel' | spark line)")
+        return 1
+    known = [r for r in good if r["slot"]]
+
+    def field(key):
+        return _median([r["t"][key] for r in good if r["t"] and isinstance(r["t"].get(key), (int, float))])
+    rec = {"ts": time.strftime("%Y-%m-%d %H:%M:%S"), "size": "line",
+           "model": next((r["t"]["model"] for r in good if r["t"] and r["t"].get("model")), model),
+           "n": len(rows), "answered": len(good),
+           "ready_ms": _median([r["ready"] * 1000 for r in good]),
+           "total_ms": _median([r["total"] * 1000 for r in good]),
+           "warm": sum(1 for r in known if r["slot"] == "warm"), "known": len(known)}
+    # cmd_ms: spark line's own clock to line 1, where its turn record
+    # keeps it; the caller's `ready` less this is the process start
+    for key, name in (("pp_n", "read"), ("tg_n", "wrote"), ("cmd_ms", "cmd_ms")):
+        v = field(key)
+        if v is not None:
+            rec[name] = v
+    state_dir()
+    fd = os.open(BENCH_LOG, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+    with os.fdopen(fd, "a", encoding="utf-8") as f:
+        f.write(json.dumps(rec) + "\n")
+    if porcelain:
+        say("\t".join(["median", str(rec["ready_ms"]), str(rec["total_ms"]), str(rec.get("read", "")),
+                       str(rec.get("wrote", "")), "%d/%d" % (rec["warm"], rec["known"])]))
+        return 0
+    say((fmt % ("", "median", "%.2f s" % (rec["ready_ms"] / 1000.0), "%.2f s" % (rec["total_ms"] / 1000.0),
+                rec.get("read", "-"), rec.get("wrote", "-"), "")).rstrip())
+    say("  the line pace: " + line_words(rec))
+    if "cmd_ms" in rec:
+        say("  inside spark line the command was ready at %.2f s, by its own clock" % (rec["cmd_ms"] / 1000.0))
+    if len(good) < len(rows):
+        say("  %d of %d questions got an error; the medians are of the rest" % (len(rows) - len(good), len(rows)))
+    say("  saved in %s -- spark stats shows it" % BENCH_LOG)
+    return 0
 
 
 # -------------------------------------------------------------------- tune

@@ -1046,11 +1046,15 @@ def row_throughput(ctx):
         stem = stem[:-5] if stem.endswith(".gguf") else stem
         if stem and stem not in live:
             live.append(stem)
+    # the prompt line's pace, when spark bench --line measured one: said
+    # beside the tok/s, never judged -- the status stays the tok/s one's
+    lp = bench.line_pace()
+    tail = ("; the line: %s (spark bench --line)" % bench.line_words(lp)) if lp else ""
     if not live:
-        return na("no model served here")
+        return na("no model served here" + tail)
     base = bench.baseline(ctx.cfg)
     if not base:
-        return na("no bench yet (spark bench)")
+        return na("no bench yet (spark bench)" + tail)
     # recent turns only for a live model -- a turn naming a model no
     # longer served says nothing about the throughput now, and is
     # dropped; a turn with no model field (an old record) counts toward
@@ -1075,9 +1079,9 @@ def row_throughput(ctx):
         if mean < 0.7 * b["tg"]:
             slow.append(stem)
     if slow:
-        return warn("%s -- below 70%% of the bench; on the CPU? (spark stats)" % "; ".join(parts),
+        return warn("%s -- below 70%% of the bench; on the CPU? (spark stats)%s" % ("; ".join(parts), tail),
                     "spark bench tune show; spark bench --tune")
-    return ok("; ".join(parts) + (" tok/s" if any("vs" in p for p in parts) else ""))
+    return ok("; ".join(parts) + (" tok/s" if any("vs" in p for p in parts) else "") + tail)
 
 
 @row("CAPABILITY")
@@ -1768,6 +1772,10 @@ def make_fixture(root, good, stub_url="", real_spark=False):
     with open(os.path.join(state, "bench.jsonl"), "w") as f:
         f.write(json.dumps({"ts": "2000-01-01 00:00:00", "model": "fixture.gguf", "engine": engine,
                             "settings": "ngl=999 fa=auto kv=f16 t=auto", "size": "full", "pp": 100.0, "tg": 12.0}) + "\n")
+        # a line pace (spark bench --line): said by the row, never judged,
+        # so both fixtures carry it and the row still flips on the tok/s
+        f.write(json.dumps({"ts": "2000-01-01 00:00:00", "size": "line", "model": "fixture", "n": 5, "answered": 5,
+                            "ready_ms": 400, "total_ms": 1200, "warm": 4, "known": 5}) + "\n")
     os.makedirs(os.path.join(state, "turns"), mode=0o700, exist_ok=True)
     with open(os.path.join(state, "turns", time.strftime("%Y-%m-%d") + ".jsonl"), "w") as f:
         for _ in range(3):

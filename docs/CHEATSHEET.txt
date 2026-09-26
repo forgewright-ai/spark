@@ -130,6 +130,7 @@ LESS OFTEN USED
   spark stats --sends             what left, in bytes: by destination and day
   spark bench [tune]              llama-bench. tune finds the best settings
   spark bench tune show | apply   the winner. apply writes spark.env, restarts
+  spark bench --line [N]          the prompt line's pace. spark stats shows it
 
 LINUX
   systemctl --user status spark-serve spark-forge spark-check.timer

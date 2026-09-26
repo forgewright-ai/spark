@@ -4415,6 +4415,41 @@ print("restart", engine.restart_line("serve"), "|", engine.restart_line("check")
              "/reveal 50, x, off, bare (the benchmark), auto inside chat", repr(out))
         rc, out, err = spark("stats")
         t.ok(rc == 0 and "  pace        the model writes" in out and "never waits on it" in out, "spark stats: the pace lines (what the model writes, the threshold)", repr(out))
+        # spark bench --line (v1.52): the real spark line path, timed as
+        # the widget sees it; the stub's timings read 40 prompt tokens, a
+        # warm slot. No turn record (history off): the slot is unknown.
+        rc, out, err = spark("bench", "--line", "2", extra={"SPARK_HISTORY": "off"})
+        t.ok(rc == 0 and "slots not recorded" in out and re.search(r"^   1  how much disk does this use .* -  -$", out, re.M),
+             "bench --line with history off: the times, no slot", repr(out + err))
+        n0 = len(STATE.get("bodies", []))
+        rc, out, err = spark("bench", "--line", "3")
+        table = [ln for ln in out.splitlines() if not ln.startswith("  saved in ")]
+        t.ok(rc == 0 and out.startswith("spark bench --line") and len(re.findall(r"^\s+\d  .* warm$", out, re.M)) == 3
+             and re.search(r"^      median\s+\d+\.\d\d s\s+\d+\.\d\d s\s+40\s+12$", out, re.M)
+             and "the line pace: command ready " in out and "3 warm of 3" in out
+             and all(len(ln) <= 80 for ln in table),
+             "bench --line 3: a row a question, the medians, 3 warm of 3, 80 columns", repr(out + err))
+        asked = [m["content"] for b in STATE.get("bodies", [])[n0:] for m in b["messages"] if m.get("role") == "user"]
+        t.ok(any("how much disk does this use" in a for a in asked) and any("which ports are listening" in a for a in asked),
+             "bench --line: the questions ride spark line to the model", repr(asked[-3:]))
+        last = json.loads([ln for ln in open(home + "/.local/state/spark/bench.jsonl") if ln.strip()][-1])
+        t.ok(last.get("size") == "line" and last.get("warm") == 3 and last.get("known") == 3 and last.get("read") == 40
+             and ("inside spark line the command was ready" in out) == ("cmd_ms" in last),
+             "bench --line: the medians saved as a line record; cmd_ms said only when the turns carry it", repr(last))
+        rc, out, err = spark("bench", "--line", "2", "--porcelain")
+        lines = out.splitlines()
+        t.ok(rc == 0 and len(lines) == 3 and lines[0].split("\t")[5] == "warm" and lines[2].startswith("median\t")
+             and lines[2].endswith("\t2/2"), "bench --line --porcelain: a line a question, then the medians", repr(out))
+        rc, out, err = spark("bench", "--line", "0")
+        rc2, out2, _ = spark("bench", "--line", "x")
+        t.ok(rc == 2 and rc2 == 2 and "1 to 20" in out and "1 to 20" in out2, "bench --line 0 | x: refused, the range named", repr(out + out2))
+        rc, out, err = spark("stats")
+        t.ok(rc == 0 and "  pace        line: command ready " in out and "2 warm of 2 (spark bench --line, " in out,
+             "spark stats: the line pace beside the others", repr(out))
+        rc, out, err = spark("stats", "--porcelain")
+        t.ok(rc == 0 and "line_warm\t2/2" in out and re.search(r"^line_ready_ms\t\d+$", out, re.M)
+             and re.search(r"^baseline_tg\t$", out, re.M),
+             "spark stats --porcelain: line_*, and a line record is never a llama-bench baseline", repr(out))
         rc, out, err = spark("what", "does", "this", "mean", extra=_col)
         t.ok(rc == 0 and "\033[" not in out + err and out.startswith("* "), "an answer piped with the vars set: no escape", repr(out + err))
         rc, out, err = spark("explain", stdin="ls: cannot access 'x': No such file\n", extra=_col)
