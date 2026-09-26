@@ -1,7 +1,7 @@
 # spark.memory -- the facts spark recalls on every answer: one per line,
 # sealed in the account's store (users/<name>/memory), written only by
-# the user. Config, not state: it survives `spark history clear` and the
-# pruning of turns. The pre-v1.4 plaintext ~/.config/spark/memory is
+# the user. Config, not state: it survives `spark clear --history` and
+# the pruning of turns. The pre-v1.4 plaintext ~/.config/spark/memory is
 # read as the fallback until the first write seals and removes it.
 #
 #   spark memory add <words>   keep a fact

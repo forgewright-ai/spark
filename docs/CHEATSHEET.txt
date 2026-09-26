@@ -37,7 +37,8 @@ SPARK
   ... | spark reveal [N]          the answer letter by letter at that pace
   spark chat --reveal [N|auto|off]  the pace for one chat. /reveal in chat too
   spark edit --watch FILE         comment on a draft as you save it
-  spark history [clear]           the threads here. clear leaves the kept ones
+  spark history                   the threads on this machine
+  spark clear --history           remove turns and threads, kept ones stay
   ~/.local/bin/spark ...          the full path a script, cron or ssh uses
   try:
   ? words   or   words?   Enter   the command lands in your line, hint above

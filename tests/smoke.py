@@ -967,12 +967,14 @@ def knowledge_cases(t):
             "pacman -Rns x", "pacman -R x", "brew uninstall jq", "dnf remove x", "zypper rm x", "apk del x",
             # permissions and owners, and spark's own destroying verbs
             "chmod +x deploy.sh", "chmod 644 f", "chown bob f", "chgrp staff f",
-            "spark uninstall", "spark history clear", "spark memory forget 3", "spark memory clear",
+            "spark uninstall", "spark clear --history", "spark history clear", "spark memory forget 3",
+            "spark memory clear",
             "spark user remove ana", "spark model rm qwen3-4b", "spark soul reset", "spark forge token --new",
             "spark user token --new"]
     safe = ["apt-get install x", "apt-cache search x", "dpkg -l", "dpkg -L curl", "pacman -Qi x",
             "pacman -Syu", "brew list", "brew info jq", "apk add x",
-            "spark history", "spark memory", "spark memory add x", "spark user list", "spark model list",
+            "spark history", "spark clear", "spark memory", "spark memory add x", "spark user list",
+            "spark model list",
             "spark forge", "ls -l deploy.sh", "stat -f %p f",
             "find . -exec ls {} \\;", "find . -name x -print", "dd if=/dev/zero bs=1 count=1", "cmd 2>/dev/null",
             "cmd 2>&1", "cmd 2>>err.log", "cmd >/dev/null 2>&1", "crontab -l", "crontab -e",
@@ -1529,8 +1531,8 @@ def main():
         turns = os.listdir(home + "/.local/state/spark/turns")
         t.ok(len(turns) == 1 and oct(os.stat(home + "/.local/state/spark/turns/" + turns[0]).st_mode & 0o777) == "0o600", "turns are 0600")
         t.ok(oct(os.stat(home + "/.local/state/spark").st_mode & 0o777) == "0o700", "state dir is 0700")
-        rc, out, _ = spark("history", "clear")
-        t.ok(rc == 0 and not os.listdir(home + "/.local/state/spark/turns"), "history clear", out)
+        rc, out, _ = spark("clear", "--history")
+        t.ok(rc == 0 and not os.listdir(home + "/.local/state/spark/turns"), "spark clear --history empties the turns", out)
         rc, out, _ = spark("line", stdin="anything?", extra={"SPARK_HISTORY": "off"})
         t.ok(rc == 0 and not os.listdir(home + "/.local/state/spark/turns"), "SPARK_HISTORY=off writes nothing")
         rc, out, _ = spark("status")
@@ -1687,6 +1689,10 @@ def main():
         t.ok(rc == 2 and "try: spark quiet" in out, "a misspelled verb with arguments is a typo, not a question", out)
         rc, out, _ = spark("quiett")
         t.ok(rc == 2 and "try: spark quiet" in out, "a misspelled verb alone points at the right spelling", out)
+        rc, out, _ = spark("clean", "up", "my", "downloads")
+        t.ok(rc == 0 and out.startswith("* "), "a question that starts with clean is not a slip of clear", out)
+        rc, out, _ = spark("claer", "--history")
+        t.ok(rc == 2 and "try: spark clear" in out, "a misspelled clear with its flag is a typo", out)
         # a verb that is gone, or a word people reach for, is refused whatever
         # follows -- `spark shell on` never becomes a question for the model
         for gone in (("shell", "on"), ("remember", "a", "fact"), ("stop",), ("talk", "to", "me")):
@@ -1734,8 +1740,8 @@ def main():
         t.ok(rc == 0 and "2 turns  a" in out and "1 turn  count" in out, "history lists the threads with their turns and title", out)
         rc, out, _ = spark("last")
         t.ok(rc == 0 and "thread " + names[-1][:-7] in out, "last names the thread of the turn", out)
-        rc, out, _ = spark("history", "clear")
-        t.ok(rc == 0 and "2 threads" in out and not os.listdir(threads), "history clear empties the threads too", out)
+        rc, out, _ = spark("clear", "--history")
+        t.ok(rc == 0 and "2 threads" in out and not os.listdir(threads), "spark clear --history empties the threads too", out)
         rc, out, _ = spark("line", stdin="?? count", extra={"SPARK_HISTORY": "off"})
         t.ok(rc == 0 and out.splitlines() == ["answer", "2"] and not os.listdir(threads), "SPARK_HISTORY=off: ?? is ?, and no thread is written", out)
         rc, out, _ = spark("what", "does", "count", "mean")
@@ -1859,24 +1865,39 @@ def main():
         spark("history", "clear")
 
         # /keep: the chat's thread moves into kept/ beside threads/, where
-        # SPARK_HISTORY, a prune and history clear never reach it; with
+        # SPARK_HISTORY, a prune and spark clear --history never reach it; with
         # history off the chat goes on with it and its turns still land;
         # /keep off moves it back to age like any other
         rc, out, err = spark("chat", stdin="count\n/keep\n:q\n")
         kdir = os.path.join(os.path.dirname(tdir()), "kept")
         kept0 = sorted(os.listdir(kdir)) if os.path.isdir(kdir) else []
-        t.ok(rc == 0 and "kept: this thread stays past SPARK_HISTORY and /clear" in out and len(kept0) == 1
+        t.ok(rc == 0 and "kept: this thread stays past SPARK_HISTORY and spark clear --history" in out and len(kept0) == 1
              and not os.listdir(tdir()) and oct(os.stat(kdir).st_mode & 0o777) == "0o700"
              and oct(os.stat(kdir + "/" + kept0[0]).st_mode & 0o777) == "0o600",
              "chat: /keep moves the thread into kept/ (dir 0700, file 0600)", out + err)
         rc, out, _ = spark("history")
-        t.ok(rc == 0 and "count  (kept)" in out and "  1 kept thread stays past SPARK_HISTORY and clear" in out,
+        t.ok(rc == 0 and "count  (kept)" in out and "  1 kept thread stays past SPARK_HISTORY and spark clear --history" in out,
              "history marks the kept thread and counts it", out)
         rc, out, _ = spark("user")
         t.ok(rc == 0 and re.search(r"^  \S+ +1 thread \(1 kept\)  ", out, re.M), "spark user counts the kept one", out)
-        rc, out, _ = spark("history", "clear")
+        rc, out, _ = spark("clear", "--history")
         t.ok(rc == 0 and out.rstrip().endswith("; 1 kept thread stays") and sorted(os.listdir(kdir)) == kept0,
-             "history clear removes the rest and says the kept thread stays", out)
+             "spark clear --history removes the rest and says the kept thread stays", out)
+        rc, out, _ = spark("history", "clear")
+        t.ok(rc == 0 and out.startswith("spark history: removed ") and out.rstrip().endswith("; 1 kept thread stays"),
+             "spark history clear still works, the older spelling of spark clear --history", out)
+        rc, out, _ = spark("clear")
+        rc2, out2, _ = spark("clear", "--everything")
+        rc3, out3, _ = spark("clear", "-h")
+        t.ok(rc == 2 and rc2 == 2 and rc3 == 0 and out == out2 == out3
+             and out.splitlines()[0] == "spark clear -- remove the history this machine keeps"
+             and "spark clear --history" in out and sorted(os.listdir(kdir)) == kept0,
+             "spark clear bare or with an unknown flag: its usage, exit 2, nothing removed; -h signs, exit 0", out + out2)
+        rc, out, _ = spark("history", "-h")
+        rc2, out2, _ = spark("help")
+        t.ok("history clear" not in out and "spark clear --history" in out
+             and "history [clear]" not in out2 and "clear --history" in out2,
+             "help names spark clear --history, never the older spelling", out + out2)
         rc, out, _ = spark("chat", "count", extra={"SPARK_HISTORY": "off"})
         rc2, out2, _ = spark("chat", "count", extra={"SPARK_HISTORY": "off"})
         t.ok(rc == 0 and out.strip() == "* 4" and out2.strip() == "* 6" and sorted(os.listdir(kdir)) == kept0
@@ -1902,7 +1923,7 @@ def main():
         t.ok(rc == 0 and "spark: history is off (SPARK_HISTORY) and nothing is kept, so this chat has no thread to keep" in err,
              "chat: /keep with history off and nothing kept says so", out + err)
         rc, out, _ = spark("chat", "-h")
-        t.ok(rc == 0 and "/keep keeps this one past that and past /clear, and" in out
+        t.ok(rc == 0 and "spark clear --history, and /keep off lets it go." in out
              and all(len(ln) <= 80 for ln in out.splitlines()), "chat -h names /keep, within 80 columns", out)
         spark("history", "clear")
 

@@ -10,9 +10,11 @@ the history.
   it names every new thread. Given the id of a regular thread, it moves
   that thread to kept, and every message in it still opens.
 - A kept thread lives in `kept/` beside the regular threads.
-  `SPARK_HISTORY`, the prune and `spark history clear` never touch it,
-  and it takes new messages when history is off. It leaves with `/keep
-  off` or with `spark user remove`.
+  `SPARK_HISTORY`, the prune and `spark clear --history` never touch
+  it, and it takes new messages when history is off. It leaves with
+  `/keep off` or with `spark user remove`.
+- `spark clear --history` clears the history: every turn and every
+  thread go, and the kept threads stay.
 - An append to a thread says what happened. It answers the characters
   it stored and whether the text was cut at the history cap. It answers
   409 when history is off and the thread is not kept, and 500 when the

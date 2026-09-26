@@ -96,8 +96,9 @@ USAGE_INTERFACE = """the interface
 """
 
 USAGE_TAIL = """less often used
- spark                        last, history [clear], stats [--week|--sends],
-                              brain, bench [--line|tune] -- each has -h
+ spark                        last, history, clear --history, brain,
+                              stats [--week|--sends], bench [--line|tune]
+                              -- each has -h
 
 docs/
  docs/INSTALL.md              every step and every key; docs/CHEATSHEET.txt
@@ -172,6 +173,7 @@ VERBS = {"setup": ("setup", "main", False), "check": ("check", "main", False),
          "status": ("cli", "cmd_status", False), "brain": ("cli", "cmd_brain", False),
          "explain": ("cli", "cmd_explain", False), "off": ("cli", "cmd_off", False),
          "on": ("cli", "cmd_on", False), "history": ("cli", "cmd_history", False),
+         "clear": ("cli", "cmd_clear", False),
          "soul": ("cli", "cmd_soul", False), "memory": ("cli", "cmd_memory", False),
          "chat": ("cli", "cmd_chat", False), "do": ("cli", "cmd_do", False),
          "recall": ("cli", "cmd_recall", False), "lua": ("cli", "cmd_lua", False),
@@ -184,8 +186,17 @@ VERBS = {"setup": ("setup", "main", False), "check": ("check", "main", False),
 KNOWN_GONE = ("shell", "stop", "remember", "talk")
 
 
+# Ordinary words one letter from a verb that a question starts with:
+# never a slip, a named line each, so it can be argued with.
+NOT_A_SLIP = (
+    "clean",     # `spark clean up my downloads` asks; it is not `spark clear`
+)
+
+
 def near_verb(word):
     import difflib
+    if word in NOT_A_SLIP:
+        return None
     hits = difflib.get_close_matches(word, ("help",) + tuple(VERBS), n=1, cutoff=0.8)
     return hits[0] if hits else None
 

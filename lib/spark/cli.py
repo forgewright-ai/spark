@@ -71,8 +71,14 @@ HISTORY_USAGE = """spark history -- the threads kept on this machine
 
   spark history               where they live, the newest five, and the
                               fixes the failure line remembers
-  spark history clear         remove every turn and thread but the kept
+  spark clear --history       remove every turn and thread but the kept
                               ones (/keep in spark chat)
+"""
+CLEAR_USAGE = """spark clear -- remove the history this machine keeps
+
+  spark clear --history       remove every turn and every thread but the
+                              kept ones (/keep in spark chat), and say how
+                              many kept threads stay
 """
 VER_USAGE = """spark ver -- logo, version, credits
 
@@ -1339,20 +1345,36 @@ def cmd_history(args):
         # the pending failure lands in the ledger and the fails index
         return ledger.fail_fix(" ".join(args[1:]), config.load())
     if args[:1] == ["clear"]:
-        n = session.clear()
-        m = forge.clear()
-        k = forge.kept_count()
-        say("%s history: removed %d day file%s and %d thread%s%s" % (
-            MARK, n, "" if n == 1 else "s", m, "" if m == 1 else "s",
-            "" if not k else "; %d kept thread%s stay%s" % (k, "" if k == 1 else "s", "s" if k == 1 else "")))
-        return 0
+        return _clear_history()      # the older spelling of spark clear --history, kept working
     return paged(_history_show)
+
+
+def cmd_clear(args):
+    """spark clear --history: every turn day file and every regular thread
+    go, the kept threads stay and are counted. One flag, nothing bare: a
+    clear names what it removes."""
+    if _help(args, CLEAR_USAGE):
+        return 0
+    if args != ["--history"]:
+        say(CLEAR_USAGE.rstrip())
+        return 2
+    return _clear_history()
+
+
+def _clear_history():
+    n = session.clear()
+    m = forge.clear()
+    k = forge.kept_count()
+    say("%s history: removed %d day file%s and %d thread%s%s" % (
+        MARK, n, "" if n == 1 else "s", m, "" if m == 1 else "s",
+        "" if not k else "; %d kept thread%s stay%s" % (k, "" if k == 1 else "s", "s" if k == 1 else "")))
+    return 0
 
 
 def _history_show():
     cfg = config.load()
     say("%s history: %s" % (MARK, "off" if cfg.history <= 0 else "%d days under %s" % (cfg.history, _short(STATE_DIR))))
-    say("  spark history clear   removes every turn and thread but the kept ones")
+    say("  spark clear --history  removes every turn and thread but the kept ones")
     held = forge.list_threads(10**6)       # the count status and spark user say
     threads = held[:5]
     if threads:
@@ -1363,7 +1385,7 @@ def _history_show():
                                          "  (kept)" if th.get("kept") else ""))
     k = forge.kept_count()
     if k:
-        say("  %d kept thread%s past SPARK_HISTORY and clear (/keep off lets one go)"
+        say("  %d kept thread%s past SPARK_HISTORY and spark clear --history"
             % (k, " stays" if k == 1 else "s stay"))
     fixes = [e for e in ledger.entries(kind=ledger.KIND_FAIL)
              if not ledger._retired(e, "path", None)]

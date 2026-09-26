@@ -470,7 +470,7 @@ def _clauses(src, cverbs):
             order.append(verb)
         clauses.append(Clause(verb, tuple(slots)))
 
-    item = r"[a-z]+(?: \[[^\]]*\])?"
+    item = r"[a-z]+(?: \[[^\]]*\]| --[a-z]+)?"     # `stats [--week|--sends]`, `clear --history`
     for left, desc in _usage_lines(src):
         toks = _slots(left)
         if toks[:1] != ["spark"]:
@@ -483,7 +483,7 @@ def _clauses(src, cverbs):
         rest = toks[1:]
         listed = desc.split(" -- ")[0]
         if not rest and re.match(r"^%s(?:, %s)*$" % (item, item), listed):
-            # a bare `spark` listing verbs: `last, history [clear], ...`
+            # a bare `spark` listing verbs: `last, history, clear --history, ...`
             for it in listed.split(", "):
                 s = _slots(it)
                 if s[0] in cverbs:
@@ -544,9 +544,14 @@ def _map_parts(tree):
     parts, bare = [], []
     for v in tree.order:
         out, merged = [], []
-        for s in (list(c.slots) for c in tree.clauses if c.verb == v):
-            s = [x for x in s if not x.startswith("[-")]
+        forms = [[x for x in c.slots if not x.startswith("[-")] for c in tree.clauses if c.verb == v]
+        # a verb whose every form is an option (`spark clear --history`)
+        # names it: the option is the verb's one way to run
+        only_opts = bool(forms) and all(s and s[0].startswith("-") for s in forms)
+        for s in forms:
             if s and s[0].startswith("-"):
+                if only_opts:
+                    out.append("spark %s %s" % (v, " ".join(s)))
                 continue
             if s and s[0].startswith("="):
                 out.append(s[0][1:])

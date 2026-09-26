@@ -225,7 +225,7 @@ not on `PATH`.
 verbs. `/q` or `Ctrl-D` ends, and `Ctrl-C` cancels a reply. `spark chat
 --thread N` continues an older thread from the `spark history` list.
 A thread lives `SPARK_HISTORY` days. `/keep` keeps this one past that
-and past `spark history clear`, and `/keep off` lets it go. With
+and past `spark clear --history`, and `/keep off` lets it go. With
 `SPARK_HISTORY=off`, `spark chat` goes on with the newest kept thread.
 
 `spark <words>` streams one answer. `spark @FILE words` sends a text

@@ -1013,8 +1013,8 @@ CHAT_USAGE = """%s chat -- a conversation
   /resume, /clear, /keep, /last, /model, /reveal); /q (or /quit, /exit, :q,
   quit, exit, bye, Ctrl-D) ends, silently; Ctrl-C cancels a reply in progress
   without ending the chat. Every turn is kept as a thread (spark history) for
-  SPARK_HISTORY days; /keep keeps this one past that and past /clear, and
-  /keep off lets it go.
+  SPARK_HISTORY days; /keep keeps this one past that and past
+  spark clear --history, and /keep off lets it go.
 """
 
 # Any of these alone ends the conversation, silently. Generous on purpose:
@@ -1116,7 +1116,7 @@ def _slash_keep(cfg, thread, args):
     except KeepError as e:
         print("spark: " + e.hint, file=sys.stderr, flush=True)
         return thread
-    say("kept: this thread stays past SPARK_HISTORY and /clear")
+    say("kept: this thread stays past SPARK_HISTORY and spark clear --history")
     return thread
 
 

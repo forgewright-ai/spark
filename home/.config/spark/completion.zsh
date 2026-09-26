@@ -45,7 +45,7 @@ _spark() {
     local -a comp
     if (( CURRENT == 2 )); then
         comp=(chat do recall serve check update headless share client setup
-              ver last status brain history stats bench model ember
+              ver last status brain history stats clear bench model ember
               forge soul memory quiet theme font bar off
               on user explain edit ask read drill watch reveal help uninstall)
     elif (( CURRENT == 3 )); then
@@ -66,7 +66,7 @@ _spark() {
             do)      comp=(--sandbox --detach --porcelain --review --accept --discard) ;;
             soul)    comp=(show edit reset) ;;
             bench)   comp=(--line) ;;
-            history) comp=(clear) ;;
+            clear)   comp=(--history) ;;
             font)    comp=(list none status) ;;
             client)  comp=(off status) ;;
             user)    comp=(list add remove login logout token claim status) ;;

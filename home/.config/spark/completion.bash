@@ -46,7 +46,7 @@ _spark_complete() {
     COMPREPLY=()
     if [ "$COMP_CWORD" -eq 1 ]; then
         words="chat do recall serve check update headless share client setup
-               ver last status brain history stats bench model ember
+               ver last status brain history stats clear bench model ember
                forge soul memory quiet theme font bar off
                on user explain edit ask read drill watch reveal help uninstall"
         COMPREPLY=($(compgen -W "$words" -- "$cur"))
@@ -70,7 +70,7 @@ _spark_complete() {
         do)      words="--sandbox --detach --porcelain --review --accept --discard" ;;
         soul)    words="show edit reset" ;;
         bench)   words="--line" ;;
-        history) words="clear" ;;
+        clear)   words="--history" ;;
         font)    words="list none status" ;;
         client)  words="off status" ;;
         user)    words="list add remove login logout token claim status" ;;

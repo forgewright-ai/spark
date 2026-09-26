@@ -1389,19 +1389,20 @@ One grammar for every verb. A verb that breaks a rule is a bug.
   writes it 0600, and the page writes it through the same code. It is
   capped (`SOUL_MAX`), sent to the model on every request, and reported
   by its own check row (mode, size, cap). It is config, not state:
-  pruning and `history clear` never touch it. The memory follows the
-  same rules but lives sealed in the account's store since v1.4
+  pruning and `spark clear --history` never touch it. The memory
+  follows the same rules but lives sealed in the account's store since
+  v1.4
   (`users/<name>/memory`, `FACT_MAX`, `FACTS_MAX`, `TOTAL_MAX`). The
   pre-v1.4 plaintext file is read as a fallback until the first write or
   `spark user claim` seals it away. Turns are the opposite pattern:
   telemetry, numbers only. `session.record` strips every free-text field
   (`session.TEXT_FIELDS`), and the words live only in the sealed
   threads. A thread lives `SPARK_HISTORY` days, unless it is kept: a
-  kept thread sits in `kept/` beside `threads/`, and pruning and
-  `history clear` never touch it (`/keep` in `spark chat`, `POST
+  kept thread sits in `kept/` beside `threads/`, and pruning and `spark
+  clear --history` never touch it (`/keep` in `spark chat`, `POST
   /api/threads` for a program, contract 9). What a request weighed and
-  where it went do ride the record:
-  `out_bytes` and `dest` (`host:port`, or `local` for loopback),
+  where it went do ride the record: `out_bytes` and `dest`
+  (`host:port`, or `local` for loopback),
   `wire._sent`'s pair on every chat shape's timings. So the `sends` row
   and `spark stats --sends` count what left by destination and day
   without a word of it. The `hardening` row asks contract 9's gates of
