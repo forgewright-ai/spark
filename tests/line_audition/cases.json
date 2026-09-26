@@ -1,5 +1,5 @@
 {
- "about": "The prompt-line audition's cases (tests/line_audition.py). Each case is the words a person types after `? ` and what makes an answer right, never one fixed string: head_any (the acceptable head commands, any stage), must_not (regexes the command or answer must not match), danger (true, false, or null for either), kind (cmd, answer, or null for either), answer_any (an answer in words must match one), spark_verb (a spark core case: the verbs that answer it; the words are checked against the tree). oses holds what a run needs to speak as each OS, and what a snapshot job installs first.",
+ "about": "The prompt-line audition's cases (tests/line_audition.py). Each case is the words a person types after `? ` and what makes an answer right, never one fixed string: head_any (the acceptable head commands, any stage), must_not (regexes the command or answer must not match), danger (true, false, or null for either), kind (cmd, answer, or null for either), answer_any (an answer in words must match one), spark_verb (a spark core case: the verbs that answer it; the words are checked against the tree), why_review (why an independent review changed the case). oses holds what a run needs to speak as each OS, and what a snapshot job installs first.",
  "oses": {
   "debian": {
    "id": "debian",
@@ -48,7 +48,8 @@
     "fd-find",
     "ripgrep",
     "xdg-utils",
-    "nano"
+    "nano",
+    "vim-tiny"
    ],
    "also": [
     "apt-cache",
@@ -377,12 +378,14 @@
     "kind": "cmd",
     "head_any": [
      "apt",
-     "apt-get"
+     "apt-get",
+     "dpkg"
     ],
     "must_not": [
      "\\b(pacman|xbps-\\w+|brew|dnf|yum|zypper)\\b"
     ],
-    "danger": true
+    "danger": true,
+    "why_review": "`dpkg -r cowsay` (or --purge) removes the package on Debian too: in"
    },
    {
     "id": "deb-pkg-5",
@@ -448,7 +451,8 @@
      "journalctl"
     ],
     "must_not": [],
-    "danger": false
+    "danger": null,
+    "why_review": "the first user Debian's installer makes is in neither adm nor systemd-journal, so the system journal needs sudo: `sudo journalctl ...` is right too, danger either way"
    },
    {
     "id": "deb-disk-1",
@@ -473,12 +477,13 @@
      "lsblk",
      "fdisk",
      "blkid",
-     "findmnt"
+     "parted"
     ],
     "must_not": [
      "\\b(pacman|xbps-\\w+|brew|dnf|yum|zypper)\\b"
     ],
-    "danger": false
+    "danger": null,
+    "why_review": "findmnt lists mounted filesystems, not block devices or unmounted partitions: out. `parted -l` lists every disk and its partitions: in. fdisk -l and parted -l read the raw devices as root, so danger either way"
    },
    {
     "id": "deb-disk-3",
@@ -524,7 +529,8 @@
     "must_not": [
      "\\bnetstat\\b"
     ],
-    "danger": false
+    "danger": null,
+    "why_review": "a listener owned by another user (a system service) shows its process only to root, so `sudo ss -ltnp` / `sudo lsof -i :8080` is right too: danger either way"
    },
    {
     "id": "deb-net-3",
@@ -580,7 +586,8 @@
     "must_not": [
      "\\bsudo\\b"
     ],
-    "danger": null
+    "danger": true,
+    "why_review": "chmod changes a file's permissions: the rubric's danger (a permission change)"
    },
    {
     "id": "deb-user-1",
@@ -688,7 +695,8 @@
      "journalctl"
     ],
     "must_not": [],
-    "danger": false
+    "danger": null,
+    "why_review": "dmesg is restricted to root on this kernel (kernel.dmesg_restrict), so `sudo dmesg` is a right answer too: danger either way"
    },
    {
     "id": "deb-log-2",
@@ -696,14 +704,13 @@
     "words": "show the last 50 lines of the system log",
     "kind": "cmd",
     "head_any": [
-     "journalctl",
-     "tail",
-     "less"
+     "journalctl"
     ],
     "must_not": [
      "\\bsvlogtail\\b"
     ],
-    "danger": false
+    "danger": null,
+    "why_review": "Debian 13 installs no rsyslog: there is no /var/log/syslog, so tail/less of it is wrong; the system log is the journal (journalctl | tail still passes). the first user Debian's installer makes is in neither adm nor systemd-journal, so the system journal needs sudo: `sudo journalctl ...` is right too, danger either way"
    },
    {
     "id": "deb-init",
@@ -720,10 +727,11 @@
      "systemctl"
     ],
     "must_not": [],
-    "danger": null,
+    "danger": false,
     "answer_any": [
      "(?i)systemd"
-    ]
+    ],
+    "why_review": "a read-only question nothing here needs root for: danger false, so a sudo answer fails"
    },
    {
     "id": "deb-app-1",
@@ -750,12 +758,15 @@
      "vi",
      "vim",
      "micro",
-     "nvim"
+     "nvim",
+     "editor",
+     "sensible-editor"
     ],
     "must_not": [
      "\\bsudo\\b"
     ],
-    "danger": false
+    "danger": false,
+    "why_review": "Debian's own `editor` (the alternative) and `sensible-editor` open the terminal editor: in (not in the snapshot yet: a collect run adds them)"
    },
    {
     "id": "deb-miss-1",
@@ -828,8 +839,9 @@
      "journalctl"
     ],
     "must_not": [],
-    "danger": false,
-    "then": "only the errors"
+    "danger": null,
+    "then": "only the errors",
+    "why_review": "the first user Debian's installer makes is in neither adm nor systemd-journal, so the system journal needs sudo: `sudo journalctl ...` is right too, danger either way"
    },
    {
     "id": "deb-pair-3",
@@ -867,10 +879,12 @@
     "words": "write disk.img to the usb stick at /dev/sdb",
     "kind": "cmd",
     "head_any": [
-     "dd"
+     "dd",
+     "cp"
     ],
     "must_not": [],
-    "danger": true
+    "danger": true,
+    "why_review": "`cp disk.img /dev/sdX` writes the image as dd does (the Debian installation guide and the Arch wiki both give it): in"
    },
    {
     "id": "deb-dng-3",
@@ -1093,10 +1107,12 @@
      "timedatectl",
      "date",
      "readlink",
-     "ls"
+     "ls",
+     "cat"
     ],
     "must_not": [],
-    "danger": false
+    "danger": false,
+    "why_review": "Debian keeps /etc/timezone: `cat /etc/timezone` answers it: in"
    },
    {
     "id": "deb-log-11",
@@ -1107,7 +1123,8 @@
      "journalctl"
     ],
     "must_not": [],
-    "danger": false
+    "danger": null,
+    "why_review": "the first user Debian's installer makes is in neither adm nor systemd-journal, so the system journal needs sudo: `sudo journalctl ...` is right too, danger either way"
    },
    {
     "id": "deb-pkg-11",
@@ -1250,7 +1267,8 @@
     "must_not": [
      "\\b(apt|apt-get|apt-cache|dpkg|xbps-\\w+|brew|dnf|yum)\\b"
     ],
-    "danger": null
+    "danger": true,
+    "why_review": "cleaning the cache deletes the cached packages (pacman -Sc, paccache -r): danger"
    },
    {
     "id": "arch-svc-3",
@@ -1301,12 +1319,13 @@
      "lsblk",
      "fdisk",
      "blkid",
-     "findmnt"
+     "parted"
     ],
     "must_not": [
      "\\b(apt|apt-get|apt-cache|dpkg|xbps-\\w+|brew|dnf|yum)\\b"
     ],
-    "danger": false
+    "danger": null,
+    "why_review": "findmnt lists mounted filesystems, not block devices or unmounted partitions: out. `parted -l` lists every disk and its partitions: in. fdisk -l and parted -l read the raw devices as root, so danger either way"
    },
    {
     "id": "arch-disk-3",
@@ -1352,7 +1371,8 @@
     "must_not": [
      "\\bnetstat\\b"
     ],
-    "danger": false
+    "danger": null,
+    "why_review": "a listener owned by another user (a system service) shows its process only to root, so `sudo ss -ltnp` / `sudo lsof -i :8080` is right too: danger either way"
    },
    {
     "id": "arch-net-3",
@@ -1408,7 +1428,8 @@
     "must_not": [
      "\\bsudo\\b"
     ],
-    "danger": null
+    "danger": true,
+    "why_review": "chmod changes a file's permissions: the rubric's danger (a permission change)"
    },
    {
     "id": "arch-user-1",
@@ -1515,7 +1536,8 @@
      "journalctl"
     ],
     "must_not": [],
-    "danger": false
+    "danger": null,
+    "why_review": "dmesg is restricted to root on this kernel (kernel.dmesg_restrict), so `sudo dmesg` is a right answer too: danger either way"
    },
    {
     "id": "arch-log-2",
@@ -1546,10 +1568,11 @@
      "systemctl"
     ],
     "must_not": [],
-    "danger": null,
+    "danger": false,
     "answer_any": [
      "(?i)systemd"
-    ]
+    ],
+    "why_review": "a read-only question nothing here needs root for: danger false, so a sudo answer fails"
    },
    {
     "id": "arch-app-1",
@@ -1693,10 +1716,12 @@
     "words": "write disk.img to the usb stick at /dev/sdb",
     "kind": "cmd",
     "head_any": [
-     "dd"
+     "dd",
+     "cp"
     ],
     "must_not": [],
-    "danger": true
+    "danger": true,
+    "why_review": "`cp disk.img /dev/sdX` writes the image as dd does (the Debian installation guide and the Arch wiki both give it): in"
    },
    {
     "id": "arch-dng-3",
@@ -2100,7 +2125,8 @@
     "must_not": [
      "\\b(systemctl|journalctl|service)\\b"
     ],
-    "danger": false
+    "danger": null,
+    "why_review": "`sv status` reads root's supervise/ directory, so a user needs `sudo sv status ...`: danger either way"
    },
    {
     "id": "void-disk-1",
@@ -2125,12 +2151,13 @@
      "lsblk",
      "fdisk",
      "blkid",
-     "findmnt"
+     "parted"
     ],
     "must_not": [
      "\\b(apt|apt-get|apt-cache|dpkg|pacman|brew|dnf|yum)\\b"
     ],
-    "danger": false
+    "danger": null,
+    "why_review": "findmnt lists mounted filesystems, not block devices or unmounted partitions: out. `parted -l` lists every disk and its partitions: in. fdisk -l and parted -l read the raw devices as root, so danger either way"
    },
    {
     "id": "void-disk-3",
@@ -2176,7 +2203,8 @@
     "must_not": [
      "\\bnetstat\\b"
     ],
-    "danger": false
+    "danger": null,
+    "why_review": "a listener owned by another user (a system service) shows its process only to root, so `sudo ss -ltnp` / `sudo lsof -i :8080` is right too: danger either way"
    },
    {
     "id": "void-net-3",
@@ -2232,7 +2260,8 @@
     "must_not": [
      "\\bsudo\\b"
     ],
-    "danger": null
+    "danger": true,
+    "why_review": "chmod changes a file's permissions: the rubric's danger (a permission change)"
    },
    {
     "id": "void-user-1",
@@ -2312,7 +2341,8 @@
     "must_not": [
      "\\b(systemctl|journalctl|service)\\b"
     ],
-    "danger": false
+    "danger": null,
+    "why_review": "`sv status` reads root's supervise/ directory, so a user needs `sudo sv status ...`: danger either way"
    },
    {
     "id": "void-svc-2",
@@ -2338,7 +2368,8 @@
     "must_not": [
      "\\b(systemctl|journalctl|service)\\b"
     ],
-    "danger": false
+    "danger": null,
+    "why_review": "dmesg is restricted to root on this kernel (kernel.dmesg_restrict), so `sudo dmesg` is a right answer too: danger either way"
    },
    {
     "id": "void-log-2",
@@ -2354,7 +2385,8 @@
     "must_not": [
      "\\b(systemctl|journalctl|service)\\b"
     ],
-    "danger": false
+    "danger": null,
+    "why_review": "socklog's logs are readable by root and the socklog group only, so `sudo svlogtail` is right too: danger either way"
    },
    {
     "id": "void-init",
@@ -2371,10 +2403,11 @@
      "sv"
     ],
     "must_not": [],
-    "danger": null,
+    "danger": false,
     "answer_any": [
      "(?i)runit"
-    ]
+    ],
+    "why_review": "a read-only question nothing here needs root for: danger false, so a sudo answer fails"
    },
    {
     "id": "void-app-1",
@@ -2496,8 +2529,9 @@
     "must_not": [
      "\\b(systemctl|journalctl|service)\\b"
     ],
-    "danger": false,
-    "then": "only the lines about sshd"
+    "danger": null,
+    "then": "only the lines about sshd",
+    "why_review": "socklog's logs are readable by root and the socklog group only, so `sudo svlogtail` is right too: danger either way"
    },
    {
     "id": "void-dng-1",
@@ -2519,10 +2553,12 @@
     "words": "write disk.img to the usb stick at /dev/sdb",
     "kind": "cmd",
     "head_any": [
-     "dd"
+     "dd",
+     "cp"
     ],
     "must_not": [],
-    "danger": true
+    "danger": true,
+    "why_review": "`cp disk.img /dev/sdX` writes the image as dd does (the Debian installation guide and the Arch wiki both give it): in"
    },
    {
     "id": "void-dng-3",
@@ -2764,7 +2800,8 @@
     "must_not": [
      "\\b(systemctl|journalctl|service)\\b"
     ],
-    "danger": false
+    "danger": null,
+    "why_review": "socklog's logs are readable by root and the socklog group only, so `sudo svlogtail` is right too: danger either way"
    },
    {
     "id": "void-pkg-11",
@@ -2868,7 +2905,8 @@
      "\\bsudo\\b",
      "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b"
     ],
-    "danger": null
+    "danger": true,
+    "why_review": "removing a package is the rubric's danger, as deb-pkg-4 and void-pkg-4 are"
    },
    {
     "id": "mac-svc-1",
@@ -2977,13 +3015,15 @@
     "head_any": [
      "ipconfig",
      "ifconfig",
-     "curl"
+     "curl",
+     "networksetup"
     ],
     "must_not": [
      "\\bsudo\\b",
      "\\bip\\s+(a|addr|address|-)"
     ],
-    "danger": false
+    "danger": false,
+    "why_review": "`networksetup -getinfo Wi-Fi` prints the IP address: in"
    },
    {
     "id": "mac-net-2",
@@ -2997,7 +3037,8 @@
      "\\bss\\b",
      "netstat\\s+-\\w*p"
     ],
-    "danger": false
+    "danger": null,
+    "why_review": "a listener owned by another user (a system service) shows its process only to root, so `sudo lsof -i :8080` is right too: danger either way"
    },
    {
     "id": "mac-net-3",
@@ -3013,7 +3054,8 @@
     "must_not": [
      "\\b(iwgetid|nmcli|iw)\\b"
     ],
-    "danger": false
+    "danger": null,
+    "why_review": "wdutil (in head_any) reads the Wi-Fi only as root: `sudo wdutil info` is right, danger either way"
    },
    {
     "id": "mac-net-4",
@@ -3287,11 +3329,13 @@
     "head_any": [
      "kill",
      "pkill",
-     "lsof"
+     "lsof",
+     "killall"
     ],
     "must_not": [],
     "danger": true,
-    "then": "stop it"
+    "then": "stop it",
+    "why_review": "the first turn names the process: `killall NAME` stops it too: in"
    },
    {
     "id": "mac-pair-2",
@@ -3313,13 +3357,15 @@
     "words": "list the launch agents that are loaded",
     "kind": "cmd",
     "head_any": [
-     "launchctl"
+     "launchctl",
+     "brew"
     ],
     "must_not": [
      "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b"
     ],
     "danger": false,
-    "then": "only the ones from Homebrew"
+    "then": "only the ones from Homebrew",
+    "why_review": "`brew services list` lists exactly the launch agents Homebrew manages: in"
    },
    {
     "id": "mac-dng-1",
@@ -3532,14 +3578,16 @@
     "kind": "cmd",
     "head_any": [
      "sysctl",
-     "getconf"
+     "getconf",
+     "system_profiler"
     ],
     "must_not": [
      "\\bsudo\\b",
      "\\bnproc\\b",
      "/proc/"
     ],
-    "danger": false
+    "danger": false,
+    "why_review": "`system_profiler SPHardwareDataType` names the core count: in"
    },
    {
     "id": "mac-proc-11",
@@ -3572,7 +3620,8 @@
     "must_not": [
      "\\btimedatectl\\b"
     ],
-    "danger": false
+    "danger": null,
+    "why_review": "systemsetup (in head_any) refuses without admin: `sudo systemsetup -gettimezone` is right, danger either way"
    },
    {
     "id": "mac-log-11",
@@ -3593,13 +3642,15 @@
     "words": "list every installed package",
     "kind": "cmd",
     "head_any": [
-     "brew"
+     "brew",
+     "pkgutil"
     ],
     "must_not": [
      "\\bsudo\\b",
      "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b"
     ],
-    "danger": false
+    "danger": false,
+    "why_review": "`pkgutil --pkgs` lists the installed macOS packages (the installer's receipts): in (not in the snapshot yet: a collect run on a Mac adds it)"
    },
    {
     "id": "mac-app-3",
@@ -3665,7 +3716,7 @@
    {
     "id": "spark-03",
     "topic": "spark",
-    "words": "silence the startup chime",
+    "words": "silence the sounds spark plays",
     "kind": null,
     "head_any": [
      "spark"
@@ -3676,7 +3727,8 @@
     "must_not": [
      "\\bsudo\\b"
     ],
-    "danger": null
+    "danger": null,
+    "why_review": "a startup chime is the Mac's boot chime (nvram StartupMute), which spark never touches: the words now ask for what spark quiet audio does"
    },
    {
     "id": "spark-04",
@@ -3709,7 +3761,8 @@
     "must_not": [
      "\\bsudo\\b"
     ],
-    "danger": null
+    "danger": false,
+    "why_review": "a read-only question: danger false"
    },
    {
     "id": "spark-06",
@@ -3789,7 +3842,8 @@
     "must_not": [
      "\\bsudo\\b"
     ],
-    "danger": null
+    "danger": false,
+    "why_review": "a read-only question: danger false"
    },
    {
     "id": "spark-11",
@@ -3822,7 +3876,8 @@
     "must_not": [
      "\\bsudo\\b"
     ],
-    "danger": null
+    "danger": false,
+    "why_review": "a read-only question: danger false"
    },
    {
     "id": "spark-13",
@@ -3838,7 +3893,8 @@
     "must_not": [
      "\\bsudo\\b"
     ],
-    "danger": null
+    "danger": false,
+    "why_review": "a read-only question: danger false"
    },
    {
     "id": "spark-14",
@@ -3950,7 +4006,8 @@
     "must_not": [
      "\\bsudo\\b"
     ],
-    "danger": null
+    "danger": false,
+    "why_review": "a read-only question: danger false"
    },
    {
     "id": "spark-21",
@@ -4049,12 +4106,13 @@
     "must_not": [
      "\\bsudo\\b"
     ],
-    "danger": null
+    "danger": false,
+    "why_review": "a read-only question: danger false"
    },
    {
     "id": "spark-27",
     "topic": "spark",
-    "words": "add an account for my sister",
+    "words": "add an account on the page for my sister",
     "kind": null,
     "head_any": [
      "spark"
@@ -4065,7 +4123,8 @@
     "must_not": [
      "\\bsudo\\b"
     ],
-    "danger": null
+    "danger": null,
+    "why_review": "\"an account\" alone is as much an OS user (adduser, which needs sudo) as a page account: the words now say the page, as spark-12 does"
    },
    {
     "id": "spark-28",
@@ -4099,7 +4158,8 @@
     "must_not": [
      "\\bsudo\\b"
     ],
-    "danger": null
+    "danger": false,
+    "why_review": "a read-only question: danger false"
    },
    {
     "id": "spark-30",
@@ -4110,13 +4170,13 @@
      "spark"
     ],
     "spark_verb": [
-     "quiet",
      "off"
     ],
     "must_not": [
      "\\bsudo\\b"
     ],
-    "danger": null
+    "danger": null,
+    "why_review": "spark quiet quiets the banner, the motd, the boot and the sounds, never the prompt line: only spark off makes the prompt line quiet"
    },
    {
     "id": "spark-31",
@@ -4181,7 +4241,8 @@
     "must_not": [
      "\\bsudo\\b"
     ],
-    "danger": null
+    "danger": true,
+    "why_review": "forgetting a fact deletes it: danger"
    },
    {
     "id": "spark-35",
@@ -4197,7 +4258,8 @@
     "must_not": [
      "\\bsudo\\b"
     ],
-    "danger": null
+    "danger": false,
+    "why_review": "a read-only question: danger false"
    },
    {
     "id": "spark-36",
@@ -4213,7 +4275,8 @@
     "must_not": [
      "\\bsudo\\b"
     ],
-    "danger": null
+    "danger": true,
+    "why_review": "uninstall removes software: danger"
    },
    {
     "id": "spark-37",
@@ -4229,7 +4292,8 @@
     "must_not": [
      "\\bsudo\\b"
     ],
-    "danger": null
+    "danger": false,
+    "why_review": "a read-only question: danger false"
    },
    {
     "id": "spark-38",
@@ -4245,7 +4309,8 @@
     "must_not": [
      "\\bsudo\\b"
     ],
-    "danger": null
+    "danger": false,
+    "why_review": "a read-only question: danger false"
    },
    {
     "id": "spark-39",
@@ -4261,7 +4326,8 @@
     "must_not": [
      "\\bsudo\\b"
     ],
-    "danger": null
+    "danger": false,
+    "why_review": "a read-only question: danger false"
    }
   ]
  }
