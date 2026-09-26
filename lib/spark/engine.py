@@ -323,7 +323,7 @@ def live_args(cfg):
     serve's), from ps on both OSes; None when none runs or ps fails."""
     want = engine_bin(cfg)
     try:
-        out = subprocess.run(["ps", "-axo", "args="], capture_output=True, text=True, timeout=5).stdout
+        out = subprocess.run(["ps", "-axo", "args="], capture_output=True, text=True, errors="replace", timeout=5).stdout
     except (OSError, subprocess.SubprocessError):
         return None
     for line in out.splitlines():

@@ -289,9 +289,11 @@ def debug(msg):
 
 def run(cmd, timeout=5, env=None, stdin=None):
     """(rc, stdout) of a command; never raises. rc is -1 on timeout or when
-    the program does not exist."""
+    the program does not exist. A byte that is not UTF-8 reads as U+FFFD:
+    `ps` prints every process's argv, and one file name in Latin-1 on the
+    machine used to crash `spark serve` with a UnicodeDecodeError."""
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout,
+        p = subprocess.run(cmd, capture_output=True, text=True, errors="replace", timeout=timeout,
                            env=env, input=stdin)
         return p.returncode, p.stdout
     except (OSError, subprocess.TimeoutExpired):

@@ -135,9 +135,18 @@ def main():
 
         print("serve_smoke: port %d, HOME %s" % (port, home))
 
+        # a process whose argv is not UTF-8 (a Latin-1 file name) runs for
+        # the whole suite: spark serve reads `ps`, and that byte used to end
+        # it in a UnicodeDecodeError (the gate's "pidfile race": smoke.py's
+        # `spark read --name t\xe9tulo.txt` ran beside this suite). It
+        # leaves when this suite's process does.
+        latin = subprocess.Popen([sys.executable, "-c", "import os, sys, time\nwhile os.getppid() == int(sys.argv[1]): time.sleep(0.5)",
+                                  str(os.getpid()), "t\udce9tulo.txt"])
+
         # serve: token, serve-url, pidfile, argv
         rc, out, err = spark("serve", "on")
         ok(rc == 0 and "ready (pid" in out, "spark serve starts and waits for /health", out + err)
+        ok("Traceback" not in out + err, "a Latin-1 argv in ps: spark serve reads it, no traceback", err[-300:])
         ok(get(url + "/health") == 200, "the stub answers /health")
         tok = state + "/api-token"
         ok(os.path.isfile(tok) and oct(os.stat(tok).st_mode & 0o777) == "0o600", "token file 0600")
@@ -306,6 +315,8 @@ def main():
             ok(False, "foreground server ignored SIGTERM")
         rc, out, err = spark("serve", "--foreground", extra={"SPARK_MODELS_DIR": tmp + "/nope"})
         ok(rc == 78, "--foreground misconfigured: exit 78 (SuccessExitStatus, no restart loop)", err)
+        latin.kill()
+        latin.wait()
 
     print("serve_smoke: %s" % ("all ok" if not fails else "%d FAILED" % fails))
     return 1 if fails else 0

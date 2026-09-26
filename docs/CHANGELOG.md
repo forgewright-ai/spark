@@ -38,6 +38,12 @@ its apps and spark's own verbs.
   keep nothing. Piped, it is the filter it always was.
 - spark do's manual excerpt works on Void: `man -P cat` fails on the
   mandoc man, and the manual is now read with `MANPAGER=cat`.
+- `spark serve` no longer stops with a Python error when another program
+  on this machine runs with a name that is not UTF-8, such as a Latin-1
+  file name. spark reads such a byte as a replacement character.
+- forge_smoke's QR checks at a pty no longer flake on a busy Mac. The
+  test turns off the pty's output processing, which wrote one carriage
+  return twice when its queue was full, and reads until spark exits.
 
 ## v1.52
 
