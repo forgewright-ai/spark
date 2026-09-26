@@ -1862,6 +1862,15 @@ class _Build:
         _write(os.path.join(self.root, META_FILE), meta)
 
 
+def _newest(path, n=3):
+    """ -- its newest entries, for a dir: what moved it."""
+    try:
+        names = sorted(os.listdir(path), key=lambda e: -os.lstat(os.path.join(path, e)).st_mtime)[:n]
+    except OSError:
+        return ""
+    return (" -- newest: " + ", ".join(names)) if names else ""
+
+
 # ------------------------------------------------------------ bootstrap
 def _main(argv):
     """`python3 -m spark.intake fresh` exits 0 when the store is fresh;
@@ -1871,7 +1880,7 @@ def _main(argv):
         if fresh():
             return 0
         for p in changed()[:20]:
-            print("changed since the build: %s" % p, file=sys.stderr)
+            print("changed since the build: %s%s" % (p, _newest(p)), file=sys.stderr)
         return 1
     if argv[:1] == ["build"]:
         refresh(wait=True)
