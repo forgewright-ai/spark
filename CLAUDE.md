@@ -482,7 +482,12 @@ and may change freely.
    one line, cut at a word to a character budget. A hint or a reason is
    80 at most, an answer `cli.ANSWER_MAX`. Line 1 is written the moment
    the command is complete, and lines 2 and 3 follow; after line 1, a
-   failure makes line 2 its reason and exits 1. The request asks the
+   failure makes line 2 its reason and exits 1. The verdict
+   (`judge.verdict`) runs before line 1 is written. A command it finds
+   wrong is asked again once, with the tool's own manual lines as a
+   Reference block in the user message, and line 1 is never repainted;
+   still wrong, it lands and the hint names what to check.
+   `SPARK_KNOWLEDGE=off` is the line without it. The request asks the
    engine for slot 0 (`id_slot`), so the line's prefix stays warm; a
    server that refuses the field is asked again without it.
    `SPARK_LINE_BENCH=1` (`spark bench --line`, the audition) keeps the

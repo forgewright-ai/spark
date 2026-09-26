@@ -53,6 +53,41 @@ class Stub(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def _hung_up(self):
+        """Has the client closed its end: a peek that reads end-of-file."""
+        import socket
+        self.connection.setblocking(False)
+        try:
+            return self.connection.recv(1, socket.MSG_PEEK) == b""
+        except BlockingIOError:
+            return False
+        except OSError:
+            return True
+        finally:
+            self.connection.setblocking(True)
+
+    def _sse_held(self, doc, pause):
+        """A line reply up to its hint, then `pause` seconds, then the
+        rest: a client may hang up in between (the judge's stop)."""
+        cut = doc.index('"hint"')
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.end_headers()
+        try:
+            for part in (doc[:cut], None, doc[cut:]):
+                if part is None:
+                    time.sleep(pause)
+                    if self._hung_up():
+                        STATE["know_hung_up"] = STATE.get("know_hung_up", 0) + 1
+                        return
+                    continue
+                self.wfile.write(("data: " + json.dumps({"choices": [{"delta": {"content": part}}]}) + "\n\n").encode())
+                self.wfile.flush()
+            self.wfile.write(("data: " + json.dumps({"choices": [{"delta": {}, "finish_reason": "stop"}], "timings": TIMINGS}) + "\n\n").encode())
+            self.wfile.write(b"data: [DONE]\n\n")
+        except (BrokenPipeError, ConnectionResetError):
+            STATE["know_hung_up"] = STATE.get("know_hung_up", 0) + 1
+
     def _sse(self, pieces, finish="stop"):
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
@@ -130,6 +165,14 @@ class Stub(BaseHTTPRequestHandler):
                 return self._send(400, {"error": {"message": "unknown field id_slot"}})
             doc = json.dumps(answer_json(messages))
             pieces = tuple(doc[i:i + 5] for i in range(0, len(doc), 5))   # small chunks: the parser's work
+            asked = " ".join(m.get("content", "") for m in messages if m.get("role") == "user")
+            again = KNOW_AGAIN in user
+            if "knowcut" in asked and not again:
+                # the judged line's first reply: its hint 3 s after the
+                # command -- a client that stops at the command never waits
+                return self._sse_held(doc, 3)
+            if "knowslow" in asked and again:
+                time.sleep(1.5)             # the re-ask thinks a while: the pulse says why
             if any(w in user for w in ("midcut", "slowhint", "slowdanger")):
                 # line 1's fields, then the wire dies (midcut) or the
                 # model thinks a while before the hint (slow...)
@@ -396,6 +439,12 @@ def answer_json(messages):
         if "rm-plain" in goal:                  # unflagged by the model; the regex must
             return {"kind": "cmd", "command": "rm -rf ./junk", "hint": "delete junk", "danger": False}
         return {"kind": "cmd", "command": "echo STEP-ONE", "hint": "say hello", "danger": False}
+    # the judged line (v1.53): the first reply, and the re-ask's
+    asked = " ".join(m.get("content", "") for m in messages if m.get("role") == "user")
+    if "know" in asked:
+        got = know_answer(asked, KNOW_AGAIN in user)
+        if got:
+            return got
     # the streamed line (v1.52): the schema's own order -- kind, danger,
     # command, hint, proof -- so line 1 can go the moment the command closes
     if "midcut" in user or "slowhint" in user:
@@ -438,6 +487,86 @@ def answer_json(messages):
     if "misscmd" in user:
         return {"kind": "cmd", "command": "frobnicate -h", "hint": "run frobnicate", "danger": False}
     return {"kind": "cmd", "command": "find . -type f -size +1G -mtime -7", "hint": "Files over 1G changed this week", "danger": False}
+
+
+KNOW_AGAIN = "Answer again with a command"      # cli.ASK_AGAIN's opening: the judge's one re-ask
+KNOW_PS = "every process, the biggest memory first"
+
+
+def know_answer(asked, again):
+    """The judged line's replies (v1.53), by the question's word: the
+    first reply, and -- `again` -- the re-ask's, whose user message says
+    what the judge found. None: not one of these."""
+    def cmd(command, hint, danger=False):
+        return {"kind": "cmd", "danger": danger, "command": command, "hint": hint, "proof": ""}
+    if "knowgood" in asked:
+        return cmd("ps aux -m", KNOW_PS)
+    if any(w in asked for w in ("knowps", "knowcut", "knowslow")):
+        return cmd("ps aux -m", KNOW_PS) if again else cmd("ps aux --sort=-%mem", "every process by memory")
+    if "knowrisk" in asked:         # the re-ask's command destroys, and the model says it does not
+        return cmd("rm -rf build", "removes the build") if again else cmd("ps aux --sort=-%mem", "every process by memory")
+    if "knowstuck" in asked:        # the re-ask keeps the GNU flag: it lands, the hint says so
+        return cmd("ps -eo pid,%mem --sort=-%mem" if again else "ps aux --sort=-%mem",
+                   "shows every process on this machine sorted by the memory each one uses right now, biggest first")
+    if "knowmicro" in asked:        # a placeholder the model keeps
+        return cmd("micro <file>", "opens the editor")
+    if "knowverb" in asked:         # a spark verb the tree does not have
+        return cmd("spark off" if again else "spark engine stop", "stops the engine")
+    if "knowdanger" in asked:       # the model's ! on a command the read-only proof holds
+        return cmd("ls -la", "lists everything here", danger=True)
+    if "knowrm" in asked:           # the model's ! on a command that writes: it stays
+        return cmd("rm x", "removes x", danger=True)
+    if "knowopaque" in asked:       # an effect the line cannot show
+        return cmd("ls $(echo .)", "lists the directory")
+    if "knowanswer" in asked:
+        return {"kind": "answer", "danger": False, "command": "", "hint": "sv down stops a service", "proof": ""}
+    return None
+
+
+def know_store(path):
+    """A tiny snapshot store for the judged line (the measuring seam
+    SPARK_KNOWLEDGE_SNAPSHOT, read under SPARK_LINE_BENCH=1 alone): ps
+    with BSD options, tar, micro, sv, ls -- the index built the store's
+    way (name x3, what x2, synopsis and option lines x1) through
+    grounding's own tokenizer. Returns the path."""
+    from spark import grounding
+    entries = {
+        "ps": {"kind": "program", "source": "man", "what": "process status",
+               "synopsis": "ps [-AaCcEefhjlMmrSTvwXx] [-O fmt | -o fmt] [-p pid]",
+               "options": {"long": [], "short": "AaCcEefhjlMmOoprSTuvwXx", "words": []},
+               "lines": [["-m", "Sort by memory usage, instead of the process ID"],
+                         ["-r", "Sort by current CPU usage"],
+                         ["-o fmt", "Display information associated with the keywords"]]},
+        "tar": {"kind": "program", "source": "man", "what": "manipulate tape archives",
+                "synopsis": "tar [-cxtzf] [--exclude pattern] file",
+                "options": {"long": ["--exclude"], "short": "ctxzf", "words": []},
+                "lines": [["--exclude pattern", "do not process files or directories that match"]]},
+        "micro": {"kind": "app", "source": "desktop", "what": "a modern and intuitive terminal-based text editor",
+                  "synopsis": "micro [file]", "options": {"long": [], "short": "", "words": []}, "lines": []},
+        "sv": {"kind": "program", "source": "man", "what": "control and manage services monitored by runsv",
+               "synopsis": "sv [-v] [-w sec] command services",
+               "options": {"long": [], "short": "vw", "words": []},
+               "lines": [["down", "stop the service if it is running: send it the TERM signal"]]},
+        "ls": {"kind": "program", "source": "man", "what": "list directory contents",
+               "synopsis": "ls [-ABCFGHLOPRSTUWabcdefghiklmnopqrstuvwxy1%,] [file ...]",
+               "options": {"long": [], "short": "ABCFGHLOPRSTUWabcdefghiklmnopqrstuvwxy1", "words": []},
+               "lines": [["-a", "Include directory entries whose names begin with a dot"]]},
+    }
+    names, lens, post = list(entries), [], {}
+    for i, name in enumerate(names):
+        e, tf = entries[name], {}
+        body = e["synopsis"] + " " + " ".join("  ".join(x) for x in e["lines"])
+        for text, w in ((name, 3), (e["what"], 2), (body, 1)):
+            for word in grounding.words(text):
+                tf[word] = tf.get(word, 0) + w
+        lens.append(sum(tf.values()))
+        for word, n in tf.items():
+            post.setdefault(word, []).append("%d:%d" % (i, n))
+    index = {"v": 1, "names": names, "len": lens, "avg": sum(lens) / float(len(lens)),
+             "post": {w: " ".join(p) for w, p in post.items()}}
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump({"line_audition_store": 1, "entries": entries, "index": index}, f)
+    return path
 
 
 def start_stub():
@@ -775,6 +904,144 @@ def knowledge_cases(t):
          "-exec ls, 2>/dev/null, 2>&1, crontab -l and plain rm stay plain", str(bad))
 
 
+def line_knowledge_cases(t, spark, home):
+    """v1.53, the judged line against the stub: the verdict before line 1,
+    the one re-ask with the found head's manual lines, the notes, the
+    danger rule, the arms, where the evidence rides and the numbers the
+    turn keeps. The store is know_store's snapshot through the measuring
+    seam (SPARK_LINE_BENCH=1 + SPARK_KNOWLEDGE_SNAPSHOT), so every case
+    here is a bench turn: numbers kept, no thread."""
+    from spark import cli as _cli, grounding as _gr
+    snap = know_store(os.path.join(home, "know-store.json"))
+    bench = {"SPARK_LINE_BENCH": "1", "SPARK_KNOWLEDGE_SNAPSHOT": snap}
+    tdir = os.path.join(home, ".local", "state", "spark", "turns")
+
+    def last_turn():
+        rows = [json.loads(l) for f in sorted(os.listdir(tdir)) for l in open(os.path.join(tdir, f)) if l.strip()]
+        return rows[-1] if rows else {}
+
+    def ask(words, **env):
+        n0 = len(STATE.setdefault("bodies", []))
+        t0 = time.time()
+        rc, out, err = spark("line", stdin=words, extra=dict(bench, **env))
+        return rc, out.splitlines(), time.time() - t0, STATE["bodies"][n0:], err
+
+    t.ok(_cli.ASK_AGAIN.startswith(KNOW_AGAIN) and _cli.LINE_KNOW_DEFAULT in _cli.LINE_KNOW_ARMS,
+         "line knowledge: the stub knows the re-ask by its words; the shipped arm is one of the three")
+
+    # a failing verdict stops the stream at the command and re-asks once:
+    # line 1 never shows the first command; the re-ask carries the found
+    # head's manual lines; the hint says what it was checked against
+    hung = STATE.get("know_hung_up", 0)
+    rc, lines, took, bodies, err = ask("? knowcut show processes by memory")
+    t.ok(rc == 0 and lines == ["cmd\tps aux -m", KNOW_PS + ", checked against the ps manual"],
+         "line knowledge: a flag the manual lacks is asked again once; the passing command lands, checked", repr(lines))
+    # the stub serves one request at a time, so the re-ask waits out the
+    # first reply's pause there; what proves the stop is the hang-up the
+    # stub met writing the rest of that reply
+    t.ok(len(bodies) == 2 and not any("--sort" in l for l in lines) and STATE.get("know_hung_up", 0) == hung + 1,
+         "line knowledge: the first stream stops at the command (spark hung up before its hint), line 1 never shows it",
+         "%d requests, hung up %d, %r" % (len(bodies), STATE.get("know_hung_up", 0) - hung, lines))
+    if len(bodies) == 2:
+        first, second = bodies[0]["messages"], bodies[1]["messages"]
+        t.ok(_gr.HEAD not in first[-1]["content"] and "--sort is not in ps's manual here." in second[-1]["content"]
+             and ("\n\n" + _gr.HEAD + "\n| ps -- process status") in second[-1]["content"]
+             and "Output:" not in second[-1]["content"]
+             and second[-2] == {"role": "assistant", "content": "`ps aux --sort=-%mem`"}
+             and second[-3]["content"] == first[-1]["content"]
+             and all(_gr.HEAD not in m[0]["content"] for m in (first, second)),
+             "line knowledge: the re-ask names the finding in a sentence and carries the ps manual as a Reference "
+             "in the user message (never the system message); the history is the question and the stopped command",
+             repr(second[-3:])[:400])
+    rec = last_turn()
+    t.ok(rec.get("bench") == 1 and rec.get("arm") == _cli.LINE_KNOW_DEFAULT and rec.get("reasked") == 1
+         and rec.get("findings") == 1 and isinstance(rec.get("know_ms"), int) and rec.get("evidence_chars", 0) > 0
+         and not any(k in rec for k in ("line", "command", "hint", "context")),
+         "line knowledge: the turn keeps arm, know_ms, evidence_chars, reasked and findings -- numbers, no words",
+         json.dumps(rec)[:300])
+    hung = STATE.get("know_hung_up", 0)
+    rc, lines_off, _t, bodies_off, _e = ask("? knowcut show processes by memory", SPARK_LINE_KNOW="off")
+    t.ok(lines_off[:1] == ["cmd\tps aux --sort=-%mem"] and len(bodies_off) == 1 and STATE.get("know_hung_up", 0) == hung,
+         "line knowledge: the control -- arm off reads the same reply whole and lands it as v1.52 did", repr(lines_off))
+
+    # a passing verdict: no note, no re-ask
+    rc, lines, took, bodies, err = ask("? knowgood show processes by memory")
+    rec = last_turn()
+    t.ok(rc == 0 and lines == ["cmd\tps aux -m", KNOW_PS] and len(bodies) == 1
+         and rec.get("reasked") == 0 and rec.get("findings") == 0 and rec.get("evidence_chars") == 0,
+         "line knowledge: a command the manual holds lands as it came -- no note, no re-ask, no evidence",
+         repr(lines) + json.dumps(rec)[:200])
+
+    # still wrong after the re-ask: it lands, never blocked; the note says
+    # it whole and survives the 80-column cut
+    rc, lines, took, bodies, err = ask("? knowstuck show processes by memory")
+    note = "; the ps manual has no --sort -- check it before Enter"
+    t.ok(rc == 0 and len(bodies) == 2 and lines[0] == "cmd\tps -eo pid,%mem --sort=-%mem"
+         and lines[1].endswith(note) and len(lines[1]) <= 80 and lines[1].startswith("shows every"),
+         "line knowledge: still wrong after the one re-ask, the command lands and the note survives the 80-column cut",
+         repr(lines))
+    rc, lines, took, bodies, err = ask("? knowmicro open a file")
+    t.ok(rc == 0 and len(bodies) == 2 and lines[:2] == ["cmd\tmicro <file>", "opens the editor; type the file name before Enter"],
+         "line knowledge: a placeholder the re-ask kept stays visible, the hint asks for the file name", repr(lines))
+    rc, lines, took, bodies, err = ask("? knowverb stop the engine")
+    t.ok(rc == 0 and len(bodies) == 2 and lines[:2] == ["cmd\tspark off", "stops the engine, checked against spark's own help"]
+         and "spark has no engine command." in bodies[-1]["messages"][-1]["content"],
+         "line knowledge: a spark verb the tree lacks is asked again; the passing verb lands, checked", repr(lines))
+
+    # the danger rule: is_dangerous always wins; the model's ! is lowered
+    # when the read-only proof holds; opaque + evidence is marked
+    rc, lines, _t, _b, _e = ask("? knowdanger list everything")
+    rc2, lines2, _t, _b, _e = ask("? knowdanger list everything", SPARK_LINE_KNOW="off")
+    rc3, lines3, _t, _b, _e = ask("? knowrm remove x")
+    t.ok(lines[:1] == ["cmd\tls -la"] and lines2[:1] == ["danger\tls -la"] and lines3[:1] == ["danger\trm x"],
+         "line knowledge: the model's ! on ls -la is lowered (arm off keeps it); on rm x it stays",
+         repr((lines, lines2, lines3)))
+    rc, lines, _t, bodies, _e = ask("? knowopaque list the directory contents", SPARK_LINE_KNOW="full")
+    rc2, lines2, _t, _b, _e = ask("? knowopaque list the directory contents")
+    t.ok(lines[:1] == ["danger\tls $(echo .)"] and _gr.HEAD in bodies[0]["messages"][-1]["content"]
+         and lines2[:1] == ["cmd\tls $(echo .)"],
+         "line knowledge: a command the line cannot read is marked when evidence rode its request", repr((lines, lines2)))
+
+    # arm full: the Reference rides the first user message, labelled as
+    # itself; an answer from it names the manual
+    rc, lines, _t, bodies, _e = ask("? knowanswer stop a service", SPARK_LINE_KNOW="full")
+    um = bodies[0]["messages"][-1]["content"] if bodies else ""
+    t.ok(rc == 0 and lines == ["answer", "sv down stops a service, says the sv manual"]
+         and "stop a service\n\n" + _gr.HEAD + "\n| sv -- control and manage services" in um
+         and um.rstrip().endswith(_gr.TAIL) and "Output:" not in um and _gr.HEAD not in bodies[0]["messages"][0]["content"],
+         "line knowledge: arm full -- the Reference rides the user message under its own label; the answer names the manual",
+         repr(lines) + repr(um[-300:]))
+
+    # the arms: SPARK_KNOWLEDGE=off is arm off; the seam is read only in bench
+    spark("line", stdin="? knowgood a", extra={"SPARK_KNOWLEDGE": "off"})
+    r_off = last_turn()
+    spark("line", stdin="? knowgood a", extra={"SPARK_LINE_KNOW": "off"})
+    r_seam = last_turn()
+    t.ok(r_off.get("arm") == "off" and "know_ms" not in r_off and r_seam.get("arm") == _cli.LINE_KNOW_DEFAULT,
+         "line knowledge: SPARK_KNOWLEDGE=off is arm off; SPARK_LINE_KNOW is ignored outside a bench turn",
+         json.dumps([r_off, r_seam])[:300])
+    same = []
+    for words in ("? files bigger than 1G this week", "delete the tmp files?", "rm-plain?", "what is the capital of France?",
+                  "prooftest?", "badproof?", "escquote?", "titletest?", "? sameagain-stub please"):
+        a = spark("line", stdin=words, extra={"SPARK_KNOWLEDGE": "off"})
+        b = spark("line", stdin=words)
+        if a[:2] != b[:2]:
+            same.append((words, a[1], b[1]))
+    t.ok(not same, "line knowledge: on v1.52's cases the judge finds nothing in, arm off and the judge arm print the same bytes",
+         repr(same)[:400])
+
+    # the audition's ?? seam: a bench turn's history rides the file
+    hist = os.path.join(home, "bench-history.json")
+    with open(hist, "w") as f:
+        json.dump([{"role": "user", "content": "show processes"}, {"role": "assistant", "content": "`ps aux -m` -- x"},
+                   {"role": "tool", "content": "dropped"}], f)
+    rc, lines, _t, _b, _e = ask("?? count", SPARK_LINE_BENCH_HISTORY=hist)
+    rc2, lines2, _t, _b, _e = ask("?? count")
+    t.ok(lines == ["answer", "4"] and lines2 == ["answer", "2"],
+         "line knowledge: SPARK_LINE_BENCH_HISTORY rides a bench ?? turn as its history (user and assistant only)",
+         repr((lines, lines2)))
+
+
 def main():
     srv, url = start_stub()
     t = T()
@@ -1100,8 +1367,13 @@ def main():
         t.ok(rc == 0 and out.splitlines()[0] == "cmd\techo ok", "guard: a missing binary is re-asked once; the retry lands", out)
         rc, out, _ = spark("line", stdin="? misscmd2 please")
         lines = out.splitlines()
+        t.ok(rc == 0 and lines[:2] == ["cmd\tfrobnicate -h", "run frobnicate; frobnicate is not on this machine -- check it before Enter"],
+             "guard: a stubborn retry lands, its hint saying what to check (the judge arm)", out)
+        rc, out, _ = spark("line", stdin="? misscmd2 please", extra={"SPARK_KNOWLEDGE": "off"})
+        lines = out.splitlines()
         t.ok(rc == 0 and lines[0] == "cmd\tfrobnicate -h" and lines[1].startswith("frobnicate: not on this machine -- "),
-             "guard: a stubborn retry shows the original with the label", out)
+             "guard: SPARK_KNOWLEDGE=off -- a stubborn retry shows the original with v1.52's label", out)
+        line_knowledge_cases(t, spark, home)
 
         # ask / explain / the explain symlink
         rc, out, _ = spark("what", "does", "this", "mean")
@@ -5030,8 +5302,10 @@ print("restart", engine.restart_line("serve"), "|", engine.restart_line("check")
              "bench --line: the medians saved as a line record; cmd_ms said only when the turns carry it", repr(last))
         rc, out, err = spark("bench", "--line", "2", "--porcelain")
         lines = out.splitlines()
-        t.ok(rc == 0 and len(lines) == 3 and lines[0].split("\t")[5] == "warm" and lines[2].startswith("median\t")
-             and lines[2].endswith("\t2/2"), "bench --line --porcelain: a line a question, then the medians", repr(out))
+        t.ok(rc == 0 and len(lines) == 4 and lines[0].split("\t")[5] == "warm" and lines[2].startswith("median\t")
+             and lines[2].endswith("\t2/2") and re.match(r"^knowledge\t\d+\t0\t0/2$", lines[3]),
+             "bench --line --porcelain: a line a question, the medians, then the knowledge (the judge arm, no re-ask)",
+             repr(out))
         rc, out, err = spark("bench", "--line", "0")
         rc2, out2, _ = spark("bench", "--line", "x")
         t.ok(rc == 2 and rc2 == 2 and "1 to 20" in out and "1 to 20" in out2, "bench --line 0 | x: refused, the range named", repr(out + out2))
