@@ -175,7 +175,16 @@ def cmd_read(args):
         if want < 1:
             say("%s read -- --part N is a part number, 1 up" % MARK)
             return 2
-    data = "" if sys.stdin.isatty() else textmod.stdin_text()
+    piped = not sys.stdin.isatty()
+    data = textmod.stdin_text() if piped else ""
+    if piped and not data:
+        # a pipe that brought nothing: the command before it wrote to
+        # stderr (a usage line, an error) or wrote nothing at all -- say
+        # that, not the whole usage (ssh -h | spark read ... read as a
+        # misuse of spark read, and explain blamed spark read)
+        say("%s read -- the pipe brought no text: the command before it wrote nothing "
+            "to stdout. If it wrote to stderr, put 2>&1 before the |." % MARK)
+        return 2
     if not data:
         # at a terminal with nothing piped in, this is almost always a
         # question meant for the prompt: say where it goes, do not guess

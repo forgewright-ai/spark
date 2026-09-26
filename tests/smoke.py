@@ -1514,6 +1514,11 @@ def main():
         # spark read: the reader's protocol (contract 11)
         rc, out, _ = spark("read", "-h")
         t.ok(rc == 0 and out.startswith("spark read -- "), "read -h is signed", out[:40])
+        # an empty pipe (ssh -h writes its usage to stderr) is one line
+        # naming 2>&1, never the whole usage
+        rc, out, _ = spark("read", "how", "I", "use", "ssh", stdin="")
+        t.ok(rc == 2 and out.count("\n") == 1 and "the pipe brought no text" in out and "2>&1" in out,
+             "read from an empty pipe says so in one line and names 2>&1, exit 2", out)
         rc, out, err = spark("read", "when", "does", "it", "open", stdin=READ_TEXT)
         t.ok(rc == 0 and out == ('It opens "at nine" and closes "at noon".\n'
                                  'Children go "free for children".\n'),
@@ -1621,8 +1626,8 @@ def main():
         t.ok(rc == 0 and "dropped 1 question for page.txt" in out,
              "read --ledger clear --name drops one source's", out)
         rc, out, err = spark("read", stdin="")
-        t.ok(rc == 2 and out.startswith("spark read -- ") and "spark <words>" in out,
-             "read: no source is the usage and where a question goes, exit 2", out[:80] + err)
+        t.ok(rc == 2 and out.startswith("spark read -- the pipe brought no text") and out.count("\n") == 1,
+             "read: an empty pipe with no words is the same one line, exit 2", out[:80] + err)
         # a name that arrived as a lone surrogate (a byte that was not UTF-8
         # in argv under surrogateescape: a w3m page title on the box) is
         # kept as strict UTF-8 -- the store's encode never crashes after
@@ -1945,6 +1950,22 @@ def main():
              "chat: one machine line + identity + the chat mode", csys[:200])
         t.ok("Preferred when installed" not in csys and "Flags that exist" not in csys and "Package manager" not in csys
              and "System tools" not in csys, "chat sheds the shell costume", csys[:200])
+        # a Linux session with no display is told so (a Void console once got
+        # Alacritty's config for a console font); a display, or macOS, is not
+        import platform as _platform
+        _pers_env = dict(os.environ)
+        try:
+            for k in ("DISPLAY", "WAYLAND_DISPLAY"):
+                os.environ.pop(k, None)
+            _plain = _persona.machine_line(_config.load())
+            os.environ["DISPLAY"] = ":0"
+            _shown = _persona.machine_line(_config.load())
+        finally:
+            os.environ.clear()
+            os.environ.update(_pers_env)
+        _linux = _platform.system() == "Linux"
+        t.ok(("no graphical display" in _plain) == _linux and "no graphical display" not in _shown,
+             "machine line: a Linux session with no display says so, a display does not", _plain)
         t.ok("no markdown marks" in csys, "chat rules out markdown for the terminal", csys[-200:])
         t.ok("spark's own commands" in csys and "The look: spark theme NAME" in csys,
              "chat knows spark's own commands, grouped with meanings", csys[:200])

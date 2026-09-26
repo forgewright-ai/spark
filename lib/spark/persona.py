@@ -623,8 +623,13 @@ def prefix(cfg, shell):
 
 def machine_line(cfg):
     """The one machine fact a conversation needs. The full prefix is for
-    the shell modes (line/ask/explain/do); chat sheds the costume."""
-    return "You are on %s's machine %s: %s, %s." % (cfg.user, cfg.name, os_pretty(), platform.machine())
+    the shell modes (line/ask/explain/do); chat sheds the costume. On a
+    Linux with no display the model is told so: a small model on a Void
+    console answered a font question with Alacritty's config."""
+    line = "You are on %s's machine %s: %s, %s." % (cfg.user, cfg.name, os_pretty(), platform.machine())
+    if platform.system() == "Linux" and not (os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")):
+        line += " This session has no graphical display: a text console or an ssh login."
+    return line
 
 
 def mode_prefix(cfg, mode, shell):

@@ -23,6 +23,12 @@ Void on a real machine. What the first install found.
 - `spark quiet boot on` works on Void with GRUB: 3 marked lines at the
   end of `/etc/default/grub`, then `update-grub`. `off` deletes them.
 - `spark quiet` says why a piece is n/a on a line of its own.
+- `spark read` from an empty pipe says so in one line and names
+  `2>&1`. A command like `ssh -h` writes its usage to stderr, and the
+  whole usage of `spark read` came back instead.
+- A conversation on a Linux with no display is told so: a text console
+  or an ssh login. A small model once answered a console font question
+  with a graphical terminal's config.
 
 ## v1.50
 
