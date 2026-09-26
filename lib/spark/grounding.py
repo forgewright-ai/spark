@@ -1,7 +1,7 @@
 # spark.grounding -- the Grounding context: which entries go with one
-# question. The index ranks entries by the machine's own words (BM25 over
-# each entry's name, one-line description, synopsis and option lines); no
-# synonym, genre, OS or app table. Evidence is a short labelled block that
+# question. The index ranks entries by the machine's own words (BM25F over
+# each entry's name, one-line description, synopsis, option tags and
+# option lines: intake.index_of); no synonym, genre, OS or app table. Evidence is a short labelled block that
 # rides the USER message, never the prefix, so the warm slot keeps its
 # cache. shell_map() is spark's own verbs, generated from the tree for the
 # prefix: byte-stable for a release, complete by construction.
@@ -29,7 +29,11 @@ Hit = namedtuple("Hit", "name score")
 Evidence = namedtuple("Evidence", "text names chars")
 
 BUDGET = 600          # characters of evidence per question (the audition sweeps it)
-K1, B = 1.2, 0.75     # BM25's two constants, the textbook values
+# BM25's saturation: a term frequency tf (the index's, already weighted by
+# field and normalized by length at build time -- intake.FIELD_W/FIELD_B)
+# scores tf * (K1 + 1) / (tf + K1). 2.0, not the textbook 1.2: fitted
+# with the field weights on the audition's recall cases
+K1 = 2.0
 SHARE = 0.6           # a hit rides along when it scores this share of the top
 # The floor: a hit goes in the block only when it shares at least
 # FLOOR_WORDS distinct words with the question, or the question (or the
@@ -131,13 +135,11 @@ class _SnapshotFile(intake.Store):
 
 
 class _Index(object):
-    """index.json, parsed once: names, lengths, the average, and the
-    postings strings, each split only when a query first asks for it."""
+    """index.json, parsed once: names and the postings strings, each split
+    only when a query first asks for it."""
 
     def __init__(self, raw):
         self.names = list(raw.get("names") or ())
-        self.len = list(raw.get("len") or ())
-        self.avg = float(raw.get("avg") or 0) or 1.0
         self.raw = raw.get("post") or {}
         self.post = {}
         self.parents = None
@@ -166,7 +168,9 @@ def _index(store):
         raw = store.index()
     except (OSError, ValueError, TypeError):
         raw = None
-    idx = _Index(raw) if isinstance(raw, dict) and raw.get("names") else None
+    # an index of another shape (an older store before its refresh) is none
+    ok = isinstance(raw, dict) and raw.get("names") and raw.get("v") == intake.INDEX_V
+    idx = _Index(raw) if ok else None
     _LOADED[id(store)] = (store, idx)
     return idx
 
@@ -181,7 +185,7 @@ def _terms(query):
 
 
 def _ranked(idx, terms):
-    """[(entry index, BM25 score)] best first, and {entry index: how many
+    """[(entry index, BM25F score)] best first, and {entry index: how many
     distinct query words it holds}."""
     n = len(idx.names)
     scores, shared = {}, {}
@@ -193,8 +197,7 @@ def _ranked(idx, terms):
         for i, tf in post:
             if i >= n:
                 continue
-            dl = idx.len[i] if i < len(idx.len) else idx.avg
-            scores[i] = scores.get(i, 0.0) + idf * tf * (K1 + 1) / (tf + K1 * (1 - B + B * dl / idx.avg))
+            scores[i] = scores.get(i, 0.0) + idf * tf * (K1 + 1) / (tf + K1)
             shared[i] = shared.get(i, 0) + 1
     return sorted(scores.items(), key=lambda kv: (-kv[1], idx.names[kv[0]])), shared
 

@@ -296,9 +296,13 @@ def test_build():
         check("store: an entry file is sha256(name)[:32].json",
               os.path.exists(os.path.join(STORE, "entries", hashlib.sha256(b"alpha").hexdigest()[:32] + ".json")))
         idx = s.index()
-        check("index: v 1, names, len, avg, post as `i:tf` strings",
-              idx and idx["v"] == 1 and len(idx["names"]) == len(idx["len"]) and idx["avg"] > 0
-              and all(re.match(r"^(\d+:\d+ ?)+$", v) for v in idx["post"].values()), idx and list(idx))
+        check("index: v %d, names, post as `i:tf` strings (tf the BM25F weight, two decimals)" % intake.INDEX_V,
+              idx and idx["v"] == intake.INDEX_V and idx["names"] == sorted(idx["names"])
+              and all(re.match(r"^(\d+:\d+(\.\d{1,2})? ?)+$", v) for v in idx["post"].values()), idx and list(idx))
+        docs = json.load(open(os.path.join(STORE, "docs.json"), encoding="utf-8"))
+        check("docs: each entry's words counted per field (%s)" % ", ".join(intake.FIELDS),
+              all(isinstance(c, list) and len(c) == len(intake.FIELDS)
+                  for d in docs.values() for c in d["tf"].values()))
         check("LocalStore.names: every entry", sorted(s.names()) == sorted(idx["names"]))
         if not renderer():
             SKIPPED.append("no mandoc and no man here: the page contents are not checked")
@@ -365,6 +369,20 @@ def test_fingerprint():
     build()
     s = intake.LocalStore()
     check("the next refresh reads the new program", s.entry("newcomer") is not None and not intake.status()[2])
+    # a store an older spark wrote (index v1, flat term counts) is stale,
+    # answers no index, and the next refresh reads everything again
+    for f in ("meta.json", "index.json"):
+        p = os.path.join(STORE, f)
+        d = json.load(open(p, encoding="utf-8"))
+        d["v"] = 1
+        with open(p, "w", encoding="utf-8") as fh:
+            json.dump(d, fh)
+    check("an older index shape: stale, not fresh, no index read",
+          intake.status()[2] and not intake.fresh() and intake.LocalStore().index() is None)
+    build()
+    idx = intake.LocalStore().index()
+    check("the next refresh rebuilds it in this shape",
+          idx is not None and idx["v"] == intake.INDEX_V and not intake.status()[2] and intake.fresh())
 
 
 def test_help_contained():
@@ -431,6 +449,10 @@ def test_spark_and_row():
     check("spark model: its -h first line, the USAGE slot, its words (list, auto, none) from completion.bash",
           m and m.kind == "spark" and m.what == "which model this machine serves"
           and "spark model [NAME|auto|none]" in m.synopsis and {"list", "auto", "none"} <= set(m.options.words), m)
+    names = intake.tree_names()["_spark_model_names"]
+    check("spark model: the models completion fills from models.env ride in its words too",
+          m and names and set(names) <= set(m.options.words) and not any(n.endswith("-license") for n in names),
+          m and m.options.words)
     top = s.entry("spark")
     check("spark: the help itself is an entry", top and top.what.startswith("your own AI"), top)
     raw = "".join(open(os.path.join(T, "store-spark", "entries", f), encoding="utf-8").read()

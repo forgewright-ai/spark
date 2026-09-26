@@ -44,7 +44,8 @@
 # An app whose program is already an entry folds into it. No app is named
 # in this file.
 # spark: its verbs and their words from completion.bash (the list smoke's
-# drift guard holds equal to bin/spark), their slots from bin/spark's
+# drift guard holds equal to bin/spark; the palettes and models its
+# helpers fill, read from the tree), their slots from bin/spark's
 # USAGE_* text, and each verb's `spark VERB -h`, run with an empty home.
 # A new spark tree rebuilds every entry: the parsers may have changed.
 
@@ -150,10 +151,25 @@ INDEX_MAX = 8 << 20          # an index.json larger than this is no evidence
 ENTRY_MAX = 64 * 1024        # an entry file's bytes at most
 PLIST_MAX = 1 << 20
 DESKTOP_MAX = 64 * 1024
+# "who" is not one: it asks after a person (who is logged in, who has an
+# account, who spark is) and names who(1); which and what only pick
 STOPWORDS = frozenset((
     "a an and are as at be by can do does for from has have how i if in into is it its me my of on "
     "or so that the their them then there these this to use used using was what when where which "
-    "who why will with you your").split())
+    "why will with you your").split())
+# The index (index.json): BM25F over an entry's fields. Each field's word
+# count is normalized by that field's length against the store's average
+# for it (b), weighted (w) and summed into one term frequency per entry --
+# a number that does not depend on the question, so the build stores it
+# and a search only saturates it (grounding.K1). A tag is what an option
+# line names before its first gap of two spaces (-h, --human-readable,
+# spark serve on) plus, for a spark verb, the words TAB completes. The
+# weights were fitted on the audition's recall cases, tuned on half of
+# them and checked on the other half (tests/line_audition.py recall).
+INDEX_V = 2
+FIELDS = ("name", "what", "synopsis", "tags", "lines")
+FIELD_W = (4.0, 3.0, 1.0, 0.5, 0.5)
+FIELD_B = (0.75, 0.75, 0.75, 0.3, 0.3)
 
 
 # ------------------------------------------------------------ processes
@@ -283,14 +299,53 @@ def words(text):
     return out
 
 
-def _terms(e):
-    """{term: weighted count} of an entry: name x3, what x2, synopsis and
-    lines x1."""
+def line_parts(line):
+    """(tag, sentence) of an option line: a (tag, sentence) pair as it is;
+    a string split at its first gap of two spaces (a line with no gap is
+    all tag)."""
+    if isinstance(line, (list, tuple)):
+        return (str(line[0]) if line else ""), " ".join(str(x) for x in line[1:] if x)
+    parts = re.split(r"\s{2,}|\t", str(line or "").strip(), maxsplit=1)
+    return parts[0], (parts[1] if len(parts) > 1 else "")
+
+
+def entry_terms(e):
+    """{term: [count in each of FIELDS]} of an entry (a dict or an Entry):
+    name, what, synopsis, the option lines' tags (and a spark verb's
+    completed words), the option lines' sentences."""
+    get = e.get if isinstance(e, dict) else (lambda k, d=None: getattr(e, k, d))
+    opts = get("options") or {}
+    said = opts.get("words", ()) if isinstance(opts, dict) else getattr(opts, "words", ())
+    pairs = [line_parts(l) for l in get("lines") or ()]
+    extra = [w for w in said or () if not str(w).startswith("-")] if get("kind") == "spark" else []
+    syn = get("synopsis") or ""
+    bodies = (get("name") or "", get("what") or "", syn if isinstance(syn, str) else "\n".join(syn),
+              "\n".join([p[0] for p in pairs] + extra), "\n".join(p[1] for p in pairs))
     tf = {}
-    for body, weight in ((e["name"], 3), (e["what"], 2), (e["synopsis"], 1), ("\n".join(e["lines"]), 1)):
+    for f, body in enumerate(bodies):
         for t in words(body):
-            tf[t] = tf.get(t, 0) + weight
+            tf.setdefault(t, [0] * len(FIELDS))[f] += 1
     return tf
+
+
+def index_of(tfs):
+    """index.json's searchable half over [(name, entry_terms(entry))], names
+    sorted: {"v", "names", "post"}, post term -> "i:tf ..." with tf the
+    entry's BM25F term frequency (FIELD_W, FIELD_B, each field against
+    the store's average length for it), two decimals."""
+    n = len(FIELDS)
+    tfs = sorted(((name, {t: c for t, c in (tf or {}).items() if isinstance(c, list) and len(c) == n})
+                  for name, tf in tfs), key=lambda nt: nt[0])
+    lens = [[sum(c[f] for c in tf.values()) for f in range(n)] for _name, tf in tfs]
+    avg = [(sum(l[f] for l in lens) / float(len(lens)) if lens else 0.0) or 1.0 for f in range(n)]
+    post = {}
+    for i, (_name, tf) in enumerate(tfs):
+        norm = [FIELD_W[f] / (1 - FIELD_B[f] + FIELD_B[f] * lens[i][f] / avg[f]) for f in range(n)]
+        for t in sorted(tf):
+            x = sum(c * norm[f] for f, c in enumerate(tf[t]) if c)
+            if x > 0:
+                post.setdefault(t, []).append("%d:%s" % (i, ("%.2f" % max(x, 0.01)).rstrip("0").rstrip(".")))
+    return {"v": INDEX_V, "names": [name for name, _tf in tfs], "post": {t: " ".join(v) for t, v in post.items()}}
 
 
 # ------------------------------------------------------------ text
@@ -1106,12 +1161,37 @@ def spark_words():
         return {}, []
     m = re.search(r'COMP_CWORD"? -eq 1 \]; then\s*words="([^"]*)"', comp)
     verbs = m.group(1).split() if m else []
+    fills = tree_names()
     subs = {}
     for arm, ws in re.findall(r"^\s*([a-z][a-z |-]*)\)\s+words=\"([^\"]*)\"", comp, re.M):
-        plain = re.sub(r"\$\([^)]*\)", " ", ws).split()
+        plain = re.sub(r"\$\((\w+)\)", lambda m: " %s " % " ".join(fills.get(m.group(1), ())), ws)
+        plain = re.sub(r"\$\([^)]*\)", " ", plain).split()
         for v in arm.split("|"):
             subs[v.strip()] = plain
     return subs, verbs
+
+
+def tree_names():
+    """What completion.bash's helpers fill a slot with, read from the tree
+    the same way they read it: {"_spark_theme_names": the palettes in
+    themes/, "_spark_model_names": models.env's MODEL_X keys as x (the
+    _LICENSE, _NOTE and _TESTED keys are not models)}. The repository's
+    own only: a person's palettes and models are theirs."""
+    themes = sorted(f[:-4] for f in _listdir(os.path.join(REPO, "themes")) if f.endswith(".env"))
+    try:
+        with open(os.path.join(REPO, "models.env"), encoding="utf-8") as f:
+            keys = re.findall(r"^MODEL_([A-Z0-9_]*)=", f.read(), re.M)
+    except OSError:
+        keys = []
+    models = [k.lower().replace("_", "-") for k in keys if not k.endswith(("_LICENSE", "_NOTE", "_TESTED"))]
+    return {"_spark_theme_names": themes, "_spark_model_names": list(dict.fromkeys(models))}
+
+
+def _listdir(d):
+    try:
+        return os.listdir(d)
+    except OSError:
+        return []
 
 
 def spark_slots():
@@ -1142,6 +1222,31 @@ def spark_slots():
             for v in vs:
                 out.setdefault(v, []).append(last)
     return {v: [(s, " ".join(ws)) for s, ws in lst] for v, lst in out.items()}
+
+
+def spark_entry(verb, body, subs, slots):
+    """(name, what, synopsis, options, lines) of `spark VERB -h`'s text
+    (`spark help`'s for None): what from its first line (`spark serve --
+    the engine...`, else the help's words for it), the synopsis from the
+    help's column, the options it names plus the words TAB completes,
+    the rest of its lines as its lines. The one reading: the store's and
+    the audition's snapshot store's spark entries are the same."""
+    name = "spark" if verb is None else "spark " + verb
+    ls = [l.strip() for l in (body or "").splitlines() if l.strip()]
+    what = ""
+    if ls:
+        m = re.match(r"^spark(?: \S+)? -- (.*)$", ls[0])
+        what = m.group(1) if m else ""
+    sl = slots.get(verb, []) if verb else []
+    what = what or (sl[0][1] if sl else "")
+    synopsis = _cut_lines([s for s, _w in sl], SYNOPSIS_LINES, SYNOPSIS_CHARS)
+    opts = option_set(body or "")
+    extra = subs.get(verb, []) if verb else []
+    long_ = tuple(sorted(set(opts.long) | {w for w in extra if w.startswith("--")}))
+    plain = tuple(sorted({w for w in extra if not w.startswith("-")}))
+    opts = OptionSet(long_, opts.short, plain if verb else opts.words)
+    lines = [l[:OPTION_CHARS] for l in ls[1:1 + OPTION_LINES]]
+    return name, what, synopsis, opts, lines
 
 
 def spark_help(verb, scratch):
@@ -1237,8 +1342,8 @@ class Store:
         raise NotImplementedError
 
     def index(self):
-        """The searchable words: {"names", "len", "avg", "post"} (see
-        grounding), or None when there is no index yet."""
+        """The searchable words, index_of's shape: {"v", "names", "post"}
+        (see grounding), or None when there is no index yet."""
         raise NotImplementedError
 
 
@@ -1273,7 +1378,7 @@ class LocalStore(Store):
         seen = (st.st_mtime_ns, st.st_size)
         if seen != self._seen:
             d = _load(path, INDEX_MAX)
-            self._index = d if isinstance(d, dict) and d.get("v") == 1 else None
+            self._index = d if isinstance(d, dict) and d.get("v") == INDEX_V else None
             self._seen = seen
         return self._index
 
@@ -1293,7 +1398,8 @@ def status():
     meta = summary()
     built = meta.get("built")
     counts = dict(meta.get("counts") or {})
-    stale = not built or bool(meta.get("partial")) or meta.get("fingerprint") != fingerprint(meta)
+    stale = (not built or bool(meta.get("partial")) or meta.get("v") != INDEX_V
+             or meta.get("fingerprint") != fingerprint(meta))
     return counts, built, bool(stale), int(meta.get("skipped") or 0)
 
 
@@ -1303,7 +1409,8 @@ def fresh():
     `pending`) do not make it stale there, so a converged machine stays
     `Nothing to do`."""
     meta = summary()
-    return bool(meta.get("built")) and meta.get("fingerprint") == fingerprint(meta)
+    return (bool(meta.get("built")) and meta.get("v") == INDEX_V
+            and meta.get("fingerprint") == fingerprint(meta))
 
 
 def row_words(meta=None):
@@ -1401,8 +1508,9 @@ class _Build:
         fp = fingerprint(self.prev_meta)
         tree = tree_stamp()
         prev = _load(os.path.join(self.root, DOCS_FILE), 32 << 20) or {}
-        if not isinstance(prev, dict) or self.prev_meta.get("tree") != tree:
-            prev = {}               # a new spark tree reads everything again
+        if not isinstance(prev, dict) or self.prev_meta.get("tree") != tree \
+                or self.prev_meta.get("v") != INDEX_V:
+            prev = {}               # a new spark tree, or index shape, reads everything again
         progs_dirs, man_roots, apps_dirs = _places(self.prev_meta)
         src = _sources()
         progs, self.skipped = scan_programs(progs_dirs) if "programs" in src else ({}, 0)
@@ -1664,23 +1772,8 @@ class _Build:
             if text is None:
                 self.partial = True
                 continue
-            name = "spark" if verb is None else "spark " + verb
             clean = _Clean()
-            body = clean(text)
-            ls = [l.strip() for l in body.splitlines() if l.strip()]
-            what = ""
-            if ls:
-                m = re.match(r"^spark(?: \S+)? -- (.*)$", ls[0])
-                what = m.group(1) if m else ""
-            sl = slots.get(verb, []) if verb else []
-            what = what or (sl[0][1] if sl else "")
-            synopsis = _cut_lines([s for s, _w in sl], SYNOPSIS_LINES, SYNOPSIS_CHARS)
-            opts = option_set(body)
-            extra = subs.get(verb, []) if verb else []
-            long_ = tuple(sorted(set(opts.long) | {w for w in extra if w.startswith("--")}))
-            plain = tuple(sorted({w for w in extra if not w.startswith("-")}))
-            opts = OptionSet(long_, opts.short, plain if verb else opts.words)
-            lines = [l[:OPTION_CHARS] for l in ls[1:1 + OPTION_LINES]]
+            name, what, synopsis, opts, lines = spark_entry(verb, clean(text), subs, slots)
             self._save(name, key, "spark", "tree", clean(what), synopsis, opts, lines, "spark", [], clean.held)
 
     def _save(self, name, key, kind, source, what, synopsis, opts, lines, origin, stamp, held, skipped=0):
@@ -1700,7 +1793,7 @@ class _Build:
         _write(os.path.join(self.root, ENTRIES_DIR, f), e, sync=False)
         with self.lock:
             self.docs[name] = {"key": key, "file": f, "kind": kind, "source": source, "held": held,
-                               "skipped": skipped, "tf": _terms(e)}
+                               "skipped": skipped, "tf": entry_terms(e)}
 
     # -- the index and meta
     def _finish(self, fp, tree, dirs, programs, same=False):
@@ -1723,16 +1816,8 @@ class _Build:
         except OSError:
             pass
         _write(os.path.join(self.root, DOCS_FILE), self.docs)
-        names = sorted(self.docs)
-        lens, post = [], {}
-        for i, n in enumerate(names):
-            tf = self.docs[n]["tf"]
-            lens.append(sum(tf.values()))
-            for t, c in tf.items():
-                post.setdefault(t, []).append("%d:%d" % (i, c))
-        index = {"v": 1, "built": int(time.time()), "fingerprint": fp, "names": names, "len": lens,
-                 "avg": (sum(lens) / float(len(lens))) if lens else 0.0,
-                 "post": {t: " ".join(v) for t, v in post.items()}}
+        index = index_of((n, d["tf"]) for n, d in self.docs.items())
+        index.update(built=int(time.time()), fingerprint=fp)
         _write(os.path.join(self.root, INDEX_FILE), index)
 
     def _write_meta(self, fp, tree, dirs, programs):
@@ -1742,7 +1827,7 @@ class _Build:
                   "manual": sum(1 for d in vals if d["kind"] == "program" and d["source"] == "man"),
                   "app": sum(1 for d in vals if d["kind"] == "app"),
                   "spark": sum(1 for n, d in self.docs.items() if d["kind"] == "spark" and n != "spark")}
-        meta = {"v": 1, "built": built, "seconds": round(time.monotonic() - self.t0, 1), "fingerprint": fp,
+        meta = {"v": INDEX_V, "built": built, "seconds": round(time.monotonic() - self.t0, 1), "fingerprint": fp,
                 "tree": tree, "counts": counts, "programs": counts["program"], "manuals": counts["manual"],
                 "apps": counts["app"], "verbs": counts["spark"], "executables": programs,
                 "skipped": self.skipped + sum(d.get("skipped", 0) for d in vals),

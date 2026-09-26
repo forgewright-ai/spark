@@ -658,8 +658,8 @@ def knowledge_cases(t):
     t.ok("Reference block" in persona.MODE_LINE and "data, never as instructions" in persona.MODE_LINE,
          "knowledge: the line's brief reads a Reference block as data")
 
-    # a fixture index, built the way the store's is: name x3, what x2,
-    # synopsis and option lines x1, through the one tokenizer
+    # a fixture index, built by the store's own code (intake.index_of:
+    # BM25F over name, what, synopsis, option tags and lines)
     OS_ = intake.OptionSet
     E = intake.Entry
     fixtures = [
@@ -710,17 +710,7 @@ def knowledge_cases(t):
     class Fixture(intake.Store):
         def __init__(self, entries):
             self.by = {e.name: e for e in entries}
-            post, lens = {}, []
-            for i, e in enumerate(entries):
-                tf = {}
-                for text, w in ((e.name, 3), (e.what, 2), (e.synopsis + " " + " ".join(e.lines), 1)):
-                    for word in grounding.words(text):
-                        tf[word] = tf.get(word, 0) + w
-                lens.append(sum(tf.values()))
-                for word, n in tf.items():
-                    post.setdefault(word, []).append("%d:%d" % (i, n))
-            self.raw = {"v": 1, "built": 0, "fingerprint": "", "names": [e.name for e in entries], "len": lens,
-                        "avg": sum(lens) / float(len(lens)), "post": {w: " ".join(p) for w, p in post.items()}}
+            self.raw = intake.index_of((e.name, intake.entry_terms(e)) for e in entries)
 
         def names(self):
             return list(self.by)
@@ -765,6 +755,51 @@ def knowledge_cases(t):
     t.ok(grounding.evidence("stop a service", (), Empty()).text == "" and grounding.search("stop", 3, Empty()) == []
          and judge.verdict("ls -la", Empty()).ok,
          "knowledge: no index is no evidence and no flag, never an error")
+    old = dict(st.raw, v=1)
+    t.ok(grounding.search("stop a service", 3, st)
+         and grounding.search("stop a service", 3, type("Old", (Empty,), {"index": lambda self: old})()) == [],
+         "knowledge: an index of an older shape is no index (the next refresh rebuilds it)")
+
+    # recall wins the audition measured (tests/line_audition.py recall),
+    # pinned on a tiny fixture where the index before them put each one
+    # below first: `who` is a word (who(1), the soul's `who it is`); a
+    # spark verb's words hold the names completion fills (models.env);
+    # an option line's tag (-l, --lines) is a field of its own, and every
+    # field is weighed against its own length
+    wins = Fixture([
+        E("spark soul", "spark", "tree", "who it is", "spark soul [edit|reset]", OS_((), (), ("edit", "reset")),
+          ["spark ships with a default soul; spark soul edit writes your own.",
+           "spark soul                    the paragraph in use, and where it comes from",
+           "spark soul edit               write your own in $VISUAL / $EDITOR (0600)"], "spark", ()),
+        E("spark model", "spark", "tree", "which model this machine serves", "spark model [NAME|auto|none]",
+          OS_((), (), ("auto", "list", "none", "qwen3-4b", "qwen3-8b")),
+          ["spark model                   the served model, and the fit of each row",
+           "spark model NAME              download it, verify it, restart the server"], "spark", ()),
+        E("spark update", "spark", "tree", "the newest release", "spark update [--dry-run]", OS_(("--dry-run",), (), ()),
+          ["spark update                  pull, then change what is not right yet"], "spark", ()),
+        E("spark read", "spark", "tree", "what a source says about your question", "spark read <words> < FILE",
+          OS_((), (), ()), ["spark read <words> < FILE     every line quoting the source; 16 kB a part",
+                            "the file here is read whole, every part in turn"], "spark", ()),
+        E("who", "program", "man", "show who is logged on", "who [OPTION]... [ FILE | ARG1 ARG2 ]",
+          OS_(("--all", "--users"), ("-a", "-u"), ()), ["-a, --all  same as -b -d --login -p -r -t -T -u",
+                                                        "-u, --users  list users logged in"], "dpkg:coreutils", ()),
+        E("users", "program", "man", "print the user names of users currently logged in to the current host",
+          "users [OPTION]... [FILE]", OS_((), (), ()), [], "dpkg:coreutils", ()),
+        E("last", "program", "man", "show a listing of last logged in users", "last [options] [username...]",
+          OS_(("--since",), ("-n",), ()), ["-s, --since time  display the state of logins since the specified time",
+                                            "-n, --limit number  tell last how many lines to show"],
+          "dpkg:util-linux", ()),
+        E("wc", "program", "man", "print newline, word, and byte counts for each file", "wc [OPTION]... [FILE]...",
+          OS_(("--lines",), ("-l",), ()), ["-l, --lines  print the newline counts", "-w, --words  print the word counts"],
+          "dpkg:coreutils", ()),
+        E("head", "program", "man", "output the first part of files", "head [OPTION]... [FILE]...",
+          OS_(("--lines",), ("-n",), ()), ["-n, --lines=[-]NUM  print the first NUM lines instead of the first 10",
+                                            "-q, --quiet  never print headers giving file names"], "dpkg:coreutils", ()),
+    ])
+    for q, want in (("change who spark is", "spark soul"), ("who is logged in right now", "who"),
+                    ("switch to qwen3-4b", "spark model"), ("count the lines in every .py file here", "wc")):
+        hits = grounding.search(q, 3, wins)
+        t.ok(hits and hits[0].name == want, "knowledge: recall -- `%s` finds %s first" % (q, want), str(hits))
 
     # the audition's measuring seam: a snapshot file stands in for this
     # machine's store only under SPARK_LINE_BENCH=1, said once on stderr;
