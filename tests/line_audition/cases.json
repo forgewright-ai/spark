@@ -4164,7 +4164,7 @@
    {
     "id": "spark-30",
     "topic": "spark",
-    "words": "make the prompt line quieter",
+    "words": "turn the prompt line off",
     "kind": null,
     "head_any": [
      "spark"
@@ -4176,7 +4176,7 @@
      "\\bsudo\\b"
     ],
     "danger": null,
-    "why_review": "spark quiet quiets the banner, the motd, the boot and the sounds, never the prompt line: only spark off makes the prompt line quiet"
+    "why_review": "spark quiet quiets the banner, the motd, the boot and the sounds, never the prompt line: only spark off makes the prompt line quiet Reworded to its one right reading: no verb quiets the prompt line short of turning it off."
    },
    {
     "id": "spark-31",
