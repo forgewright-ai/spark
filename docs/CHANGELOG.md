@@ -17,9 +17,13 @@ its apps and spark's own verbs.
 - spark's own verbs in the model's brief come from the tree, so a verb
   is never missing and a retired one never lingers.
 - The model's `!` is lowered only when spark's own read-only check
-  proves every part of the command only reads. spark's own danger check
-  always wins, and it now also catches `find -exec rm`, `dd of=` to any
-  file, `2>` and `&>` to a file, and `crontab FILE`.
+  proves every part of the command only reads. That check now knows
+  `ps`, `groups`, `id`, `uname`, `dmesg`, `free`, `uptime` and `lsof`,
+  and refuses their options that write or never return. spark's own
+  danger check always wins. It now also catches `find -exec rm`, `dd
+  of=` to any file, `2>` and `&>` to a file, `crontab FILE`, and a
+  package removed on every family: `apt remove`, `dpkg -r`, `pacman -R`,
+  `brew uninstall`, `dnf remove` and `apk del`.
 - The `knowledge` row of `spark check` says what the index holds and
   how old it is. `SPARK_KNOWLEDGE=off` in `spark.env` returns the prompt
   line to v1.52's.

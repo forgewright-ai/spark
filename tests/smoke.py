@@ -903,11 +903,15 @@ def knowledge_cases(t):
             judge._WHICH.clear()
             judge._ENTRIES.clear()
 
-    # read_only: each stage whole through persona.proof_ok, its lists as
-    # they are -- groups, dmesg and ps are not proof heads, so they stay
-    # marked; nothing unwraps a wrapper or drops a redirection
-    yes = ["ls -la | head -5", "grep -c x f | wc -l", "df -h", "git status && git log", "du -sh d"]
-    no = ["groups", "dmesg", "ps aux | head", "rm x", "sudo ls", "ls > f", "env ls", "nohup ls", "timeout 5 ls",
+    # read_only: each stage whole through persona.proof_ok; nothing
+    # unwraps a wrapper or drops a redirection. v1.53 (the maintainer's
+    # word): ps, groups, id, uname, dmesg, free, uptime and lsof are proof
+    # heads, their writers and followers denied
+    yes = ["ls -la | head -5", "grep -c x f | wc -l", "df -h", "git status && git log", "du -sh d",
+           "groups", "id -un", "uname -a", "dmesg", "dmesg | tail -n 20", "free -h", "uptime",
+           "lsof -i :8080", "ps aux", "ps aux | head -n 10"]
+    no = ["dmesg -C", "dmesg -c", "dmesg -w", "dmesg --follow", "dmesg -n 1", "lsof -r 2", "lsof +r 2",
+          "free -s 1", "ps -o pid", "sudo ps", "ps > f", "rm x", "sudo ls", "ls > f", "env ls", "nohup ls", "timeout 5 ls",
           "ls | xargs ls", "A=b ls", "ls 2>f", "ls | tee f", "(rm x)", "git branch -D x", "sort -o f f",
           "find . -delete", "grep 'a|b' f", "env GIT_EXTERNAL_DIFF=./x git diff", "LD_PRELOAD=x.so ls",
           "PAGER=x git log", "ls $(x)", "ls `x`", "ls |", "ls ‮", 'ls "a', "", "ls ; ", "tail -f log",
@@ -920,13 +924,19 @@ def knowledge_cases(t):
     dang = ["find . -name x -exec rm {} \\;", "find . -execdir shred -u {} +", "find . -ok mv {} /tmp \\;",
             "find . -exec /bin/rm -f {} +", "dd if=a of=b", "dd if=/dev/zero of=disk.img bs=1m",
             "ls 2>err.log", "cmd &>out.log", "cmd 2> err.txt", "crontab mycron", "echo x | crontab -",
-            "crontab -u bob file"]
-    safe = ["find . -exec ls {} \\;", "find . -name x -print", "dd if=/dev/zero bs=1 count=1", "cmd 2>/dev/null",
+            "crontab -u bob file",
+            # a package removed, on every family (the audition's one miss)
+            "apt-get remove cowsay", "sudo apt purge x", "apt autoremove", "dpkg -r x", "dpkg -P x",
+            "pacman -Rns x", "pacman -R x", "brew uninstall jq", "dnf remove x", "zypper rm x", "apk del x"]
+    safe = ["apt-get install x", "apt-cache search x", "dpkg -l", "dpkg -L curl", "pacman -Qi x",
+            "pacman -Syu", "brew list", "brew info jq", "apk add x",
+            "find . -exec ls {} \\;", "find . -name x -print", "dd if=/dev/zero bs=1 count=1", "cmd 2>/dev/null",
             "cmd 2>&1", "cmd 2>>err.log", "cmd >/dev/null 2>&1", "crontab -l", "crontab -e",
             "rm build.log"]
     bad = [c for c in dang if not persona.is_dangerous(c)] + ["!" + c for c in safe if persona.is_dangerous(c)]
-    t.ok(not bad, "knowledge: danger -- find -exec rm/shred/mv, dd of= anything, 2>FILE and &>FILE, crontab FILE; "
-         "-exec ls, 2>/dev/null, 2>&1, crontab -l and plain rm stay plain", str(bad))
+    t.ok(not bad, "knowledge: danger -- find -exec rm/shred/mv, dd of= anything, 2>FILE and &>FILE, crontab FILE, "
+         "a package removed on every family; -exec ls, 2>/dev/null, 2>&1, crontab -l, installs, queries and "
+         "plain rm stay plain", str(bad))
 
 
 def line_knowledge_cases(t, spark, home):

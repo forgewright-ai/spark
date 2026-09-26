@@ -92,6 +92,14 @@ _DANGER = [
     r"\bdd\b.*\bof=",                              # dd of=ANY: overwrites its target, not only a disk
     r"(?<![>&])[0-9&]>(?![>&])\s*(?!/dev/null(?:\s|$))\S",   # 2>FILE, &>FILE: truncation too
     r"\bcrontab\s+(?:-u\s+\S+\s+)?(?:-(?=\s|$)|[^-\s])",   # crontab FILE (or -): replaces the table
+    # v1.53: a package removed, on every family -- the audition's one
+    # danger miss was `apt-get remove cowsay`, unmarked
+    r"\b(?:apt|apt-get|aptitude)\s+(?:\S+\s+)*?(?:remove|purge|autoremove)\b",   # apt remove/purge
+    r"\bdpkg\s+(?:\S+\s+)*?(?:-[a-zA-Z]*[rP][a-zA-Z]*(?=\s|$)|--remove\b|--purge\b)",   # dpkg -r / -P
+    r"\bpacman\s+(?:\S+\s+)*?(?:-R[a-zA-Z]*(?=\s|$)|--remove\b)",   # pacman -R, -Rns
+    r"\bbrew\s+(?:uninstall|remove|rm)\b",      # brew uninstall
+    r"\b(?:dnf|yum|zypper)\s+(?:\S+\s+)*?(?:remove|erase|rm)\b",   # dnf/yum/zypper remove
+    r"\bapk\s+del\b",                            # apk del
 ]
 # rm with a recursive (or force) flag, short or long -- ONE pattern pair,
 # shared by is_dangerous and blast, so the danger mark and the blast count
@@ -691,7 +699,11 @@ SH_BUILTINS = frozenset((
 # optional third line may start with -- a named list, one look, so it
 # can be argued with. git/systemctl/sv/launchctl only with their read subs.
 PROOF_HEADS = ("test", "[", "ls", "stat", "grep", "wc", "file", "du", "df",
-               "head", "tail", "pgrep", "which", "diff", "cmp", "readlink")
+               "head", "tail", "pgrep", "which", "diff", "cmp", "readlink",
+               # v1.53 (the maintainer's word): heads that only read, so a
+               # model's `!` on them can be lowered -- their writing and
+               # never-returning options are denied below
+               "ps", "groups", "id", "uname", "dmesg", "free", "uptime", "lsof")
 PROOF_PAIRS = (("git", ("status", "log", "diff", "show", "ls-files")),
                ("systemctl", ("is-active", "is-enabled", "status")),
                ("sv", ("status", "check")),
@@ -715,6 +727,25 @@ PROOF_DENIED = (
     ("-exec", ()),              # find -exec
     ("-execdir", ()),           # find -execdir
     ("-delete", ()),            # find -delete
+    # v1.53: the read-only heads' own writers and followers
+    ("-C", ("dmesg",)),         # dmesg -C: clears the kernel ring buffer
+    ("--clear", ("dmesg",)),
+    ("-c", ("dmesg",)),         # dmesg -c: reads, then clears
+    ("--read-clear", ("dmesg",)),
+    ("-n", ("dmesg",)),         # dmesg -n LEVEL: sets the console level
+    ("--console-level", ("dmesg",)),
+    ("-D", ("dmesg",)),         # dmesg -D / -E: console logging off / on
+    ("--console-off", ("dmesg",)),
+    ("-E", ("dmesg",)),
+    ("--console-on", ("dmesg",)),
+    ("-w", ("dmesg",)),         # dmesg -w / -W: never returns
+    ("--follow", ("dmesg",)),
+    ("-W", ("dmesg",)),
+    ("--follow-new", ("dmesg",)),
+    ("-r", ("lsof",)),          # lsof -r / +r: repeats forever
+    ("+r", ("lsof",)),
+    ("-s", ("free",)),          # free -s N: repeats forever
+    ("--seconds", ("free",)),
 )
 
 
