@@ -3438,6 +3438,99 @@ def main():
         finally:
             _pkgmod.manager, _pkgmod.pending, _pkgmod.security = _saved
 
+        # the knowledge row (v1.53): intake's status() and refresh() stubbed,
+        # so each answer is pinned. A missing index is never built here and
+        # never refreshed; an index that exists is refreshed in a 5-second
+        # slice; off in spark.env is na before intake is asked at all
+        from spark import intake as _intake
+
+        class _KCfg:
+            knowledge = True
+
+        class _KCtx:
+            cfg = _KCfg()
+            unattended = True
+        _ksaved = (_intake.status, _intake.refresh)
+        _kcalls = []
+        try:
+            _now = time.time()
+            _kstate = {"s": ({}, None, False, 0)}
+            _intake.status = lambda: _kstate["s"]
+
+            def _krefresh(deadline=None):
+                _kcalls.append(deadline)
+                return _kstate["s"]
+            _intake.refresh = _krefresh
+            r = _chk.row_knowledge(_KCtx())
+            t.ok((r.status, r.value, r.remedy) == ("warn", "no index yet, so the prompt line answers from the model alone",
+                                                   "./bootstrap.sh   (row knowledge)") and _kcalls == [],
+                 "knowledge row: no index is a warn naming bootstrap, and the row builds nothing", str((r.status, r.value, _kcalls)))
+            _kstate["s"] = ({"program": 412, "manual": 380, "app": 12, "spark": 45}, _now - 180, False, 0)
+            r = _chk.row_knowledge(_KCtx())
+            t.ok((r.status, r.value) == ("ok", "412 programs, 380 manuals, 12 apps and 45 spark verbs, read 3 minutes ago")
+                 and _kcalls == [5], "knowledge row: the counts in words and the age, after a 5-second refresh", str((r.value, _kcalls)))
+            _kstate["s"] = ({"program": 1, "manual": 1, "app": 1, "spark": 1}, _now - 3 * 86400, False, 1)
+            r = _chk.row_knowledge(_KCtx())
+            t.ok((r.status, r.value) == ("ok", "1 program, 1 manual, 1 app and 1 spark verb, read 3 days ago, and 1 program "
+                                               "was left out because spark could not read it safely"),
+                 "knowledge row: one of each is singular, and the skipped programs are said", r.value)
+            _kstate["s"] = ({"program": 9}, _now - 2 * 3600 - 59, True, 7)
+            r = _chk.row_knowledge(_KCtx())
+            t.ok((r.status, r.value, r.remedy) == ("warn", "read 2 hours ago, and the newest programs are not in it yet",
+                                                   "./bootstrap.sh   (row knowledge)"),
+                 "knowledge row: a stale index warns, in whole hours, and names bootstrap", str((r.status, r.value)))
+            _kstate["s"] = ({}, _now - 5, False, 3)
+            r = _chk.row_knowledge(_KCtx())
+            t.ok((r.status, r.value) == ("ok", "an empty index, read just now, and 3 programs were left out because spark "
+                                               "could not read them safely"),
+                 "knowledge row: an empty index is said, never a blank", r.value)
+            # G0 M7: a check a person typed only reports, never refreshes
+            _KCtx.unattended = False
+            _kcalls[:] = []
+            _kstate["s"] = ({"program": 9}, _now - 600, False, 0)
+            r = _chk.row_knowledge(_KCtx())
+            t.ok((r.status, r.value) == ("ok", "9 programs, read 10 minutes ago") and _kcalls == [],
+                 "knowledge row: a check a person typed reports and never refreshes", str((r.value, _kcalls)))
+            _KCfg.knowledge = False
+            r = _chk.row_knowledge(_KCtx())
+            t.ok((r.status, r.value) == ("na", "switched off in spark.env (SPARK_KNOWLEDGE=off)") and _kcalls == [],
+                 "knowledge row: SPARK_KNOWLEDGE=off is na, and intake is not asked", str((r.status, r.value)))
+        finally:
+            _intake.status, _intake.refresh = _ksaved
+        class _Tty:
+            def __init__(self, tty):
+                self.tty = tty
+
+            def isatty(self):
+                return self.tty
+        t.ok(_chk.unattended(True, False, 0, _Tty(False)) and not _chk.unattended(True, False, 0, _Tty(True))
+             and not _chk.unattended(False, False, 0, _Tty(False)) and not _chk.unattended(True, True, 0, _Tty(False))
+             and not _chk.unattended(True, False, 5, _Tty(False)) and _chk.unattended(True, False, 0, None),
+             "check: only the timer's run is unattended (--porcelain, no --fresh, no --watch, no terminal on stdin)")
+        t.ok("knowledge" not in _chk.CLIENT_ROWS, "knowledge row: a client keeps its own index, so the row is not a client row")
+        rc, out, err = spark("check", "knowledge", "--porcelain", extra={"SPARK_KNOWLEDGE": "maybe"})
+        t.ok(rc == 2 and "SPARK_KNOWLEDGE must be on or off" in out + err, "SPARK_KNOWLEDGE=maybe is refused by name", repr(out + err))
+        rc, out, err = spark("check", "knowledge", "--porcelain", extra={"SPARK_KNOWLEDGE": "off"})
+        t.ok(out.strip("\n") == "CAPABILITY\tna\tknowledge\tswitched off in spark.env (SPARK_KNOWLEDGE=off)\t",
+             "spark check knowledge with SPARK_KNOWLEDGE=off: the row is na", repr(out + err))
+        rc, out, err = spark("check", "knowledge", "--porcelain")
+        t.ok(out.startswith("CAPABILITY\t") and "\tknowledge\t" in out and "\tfail\t" not in out,
+             "spark check knowledge: a CAPABILITY row, on by default, never a fail", repr(out + err))
+        # spark bench --line's knowledge lines (v1.53): said only when the
+        # turn records carry know_ms, evidence_chars or reasked
+        from spark import bench as _bench
+        t.ok(_bench.knowledge_fields([{"ms": 900}, None]) == {} and _bench.knowledge_words({}) == [],
+             "bench --line: turns without the knowledge fields add nothing and say nothing")
+        _kf = _bench.knowledge_fields([{"know_ms": 12, "evidence_chars": 400, "reasked": False},
+                                       {"know_ms": 20, "evidence_chars": 600, "reasked": True},
+                                       {"know_ms": 14, "evidence_chars": 480, "reasked": 0}])
+        t.ok(_kf == {"know_ms": 14, "evidence": 480, "reasked": 1, "reask_of": 3}
+             and _bench.knowledge_words(_kf) == ["spark searched the index in 14 ms and sent 480 characters of evidence (medians)",
+                                                 "spark asked the model again on 1 of 3 questions"],
+             "bench --line: the medians of retrieval and evidence, and the re-asks counted", repr(_kf))
+        t.ok(_bench.knowledge_words({"know_ms": 9}) == ["spark searched the index in 9 ms (the median)"],
+             "bench --line: one field alone is one median", repr(_bench.knowledge_words({"know_ms": 9})))
+
         # spark check --report: statuses only, and the privacy word lists
         # run over the report's own output -- the fixture's listed user
         # name and hostname never appear, and a listed word blanks

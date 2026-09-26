@@ -40,7 +40,7 @@ do it as well? If yes, it is not a prompt feature.
 
 ## An answer from the machine's own numbers
 
-`spark check` answers 40 questions with yes or no, and `spark stats`
+`spark check` answers 41 questions with yes or no, and `spark stats`
 has the numbers. Let a model read `check.json` and `bench.jsonl` and
 answer the question the rows cannot:
 

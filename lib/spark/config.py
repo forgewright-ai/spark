@@ -23,7 +23,7 @@ SITE_KEYS = ("SITE_NAME", "SITE_USER", "SITE_SET_HOSTNAME",
 SPARK_KEYS = ("SPARK_PORT", "SPARK_BASE_URL", "SPARK_PREFER_URL", "SPARK_SERVE_HOST", "SPARK_ENGINE_DIR",
               "SPARK_MODELS_DIR", "SPARK_MODEL", "SPARK_NGL", "SPARK_CTX", "SPARK_FLASH_ATTN", "SPARK_KV",
               "SPARK_THREADS", "SPARK_EXTRA_ARGS", "SPARK_MEM_NEEDED_GB", "SPARK_API_KEY_FILE",
-              "SPARK_TIMEOUT", "SPARK_MAX_TOKENS", "SPARK_REVEAL", "SPARK_HISTORY", "SPARK_MEMORY", "SPARK_PERSONA_EXTRA", "SPARK_SERVICE",
+              "SPARK_TIMEOUT", "SPARK_MAX_TOKENS", "SPARK_REVEAL", "SPARK_HISTORY", "SPARK_MEMORY", "SPARK_KNOWLEDGE", "SPARK_PERSONA_EXTRA", "SPARK_SERVICE",
               "SPARK_FORGE", "SPARK_FORGE_HOST", "SPARK_FORGE_PORT", "SPARK_FORGE_TOKEN_FILE")
 KEYS = SITE_KEYS + SPARK_KEYS
 
@@ -351,6 +351,15 @@ class Config:
         v = self.get("SPARK_MEMORY", "on")
         if v not in ("on", "off"):
             die("SPARK_MEMORY must be on or off", 2)
+        return v == "on"
+
+    @property
+    def knowledge(self):
+        """whether the prompt line reads this machine's own manuals, apps
+        and spark verbs (the index the check timer keeps fresh)."""
+        v = self.get("SPARK_KNOWLEDGE", "on")
+        if v not in ("on", "off"):
+            die("SPARK_KNOWLEDGE must be on or off", 2)
         return v == "on"
 
     @property

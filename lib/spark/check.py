@@ -86,6 +86,12 @@ class Ctx:
         self.fresh = fresh
         self.fetch = fetch
         self.home = HOME
+        # the timer's run, not a person's: the systemd unit, the runit loop
+        # and the launchd agent all run `spark check --porcelain` with no
+        # terminal on stdin and no --fresh (the background refresh() after
+        # a person's verb, the selftest and CI all pass --fresh). Only that
+        # run may refresh the knowledge index (G0 M7)
+        self.unattended = False
 
     def sh(self, cmd, timeout=10, env=None):
         return run(cmd, timeout=timeout, env=env)
@@ -1203,6 +1209,52 @@ def row_ledger(ctx):
                                          total, ledger.TOTAL_MAX))
 
 
+def _read_ago(seconds):
+    """read 5 minutes ago / read 3 hours ago / read 2 days ago -- an age in
+    whole units, as a person says it (the knowledge row)."""
+    m = max(0, int(seconds)) // 60
+    if m < 1:
+        return "read just now"
+    for n, one in ((m // 1440, "day"), (m // 60, "hour"), (m, "minute")):
+        if n >= 1:
+            return "read %d %s%s ago" % (n, one, "" if n == 1 else "s")
+
+
+# the kinds intake counts, in the words the row says them
+KNOWLEDGE_KINDS = (("program", "program"), ("manual", "manual"), ("app", "app"), ("spark", "spark verb"))
+
+
+@row("CAPABILITY", fixture=False,
+     reason="the store is intake's (WP1 of v1.53): the good fixture builds it through intake.refresh(), flipped at the merge")
+def row_knowledge(ctx):
+    """The index the prompt line checks its answers against: this machine's
+    programs, their manuals, its apps and spark's own verbs, read by
+    intake. The timer's unattended check keeps it fresh (every 5 minutes):
+    an index that exists is refreshed within a 5-second slice, and a lock
+    held by another refresh only reports. A check a person typed only
+    reports (G0 M7: no manual is read and no --help runs on a person's own
+    command), and a missing index is never built here -- bootstrap builds
+    it -- so --porcelain stays fast."""
+    if not ctx.cfg.knowledge:
+        return na("switched off in spark.env (SPARK_KNOWLEDGE=off)")
+    from . import intake
+    fix = "./bootstrap.sh   (row knowledge)"
+    counts, built, stale, skipped = intake.status()
+    if built is not None and ctx.unattended:
+        counts, built, stale, skipped = intake.refresh(deadline=5)
+    if built is None:
+        return warn("no index yet, so the prompt line answers from the model alone", fix)
+    ago = _read_ago(time.time() - built)
+    if stale:
+        return warn("%s, and the newest programs are not in it yet" % ago, fix)
+    parts = ["%d %s%s" % (counts[k], word, "" if counts[k] == 1 else "s")
+             for k, word in KNOWLEDGE_KINDS if isinstance(counts.get(k), int)]
+    said = (", ".join(parts[:-1]) + " and " + parts[-1]) if len(parts) > 1 else (parts[0] if parts else "an empty index")
+    tail = (", and %d program%s left out because spark could not read %s safely"
+            % (skipped, " was" if skipped == 1 else "s were", "it" if skipped == 1 else "them")) if skipped else ""
+    return ok("%s, %s%s" % (said, ago, tail))
+
+
 @row("CAPABILITY", fixture=False, reason="reads the live battery")
 def row_battery(ctx):
     from . import bar
@@ -1998,6 +2050,20 @@ def make_fixture(root, good, stub_url="", real_spark=False):
             "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8"}
 
 
+def knowledge_fixture(env):
+    """The knowledge row's store for the good fixture: built by intake
+    itself, through its public refresh(), in the very environment the
+    check then runs in -- the same PATH and the same STATE_DIR, so the
+    fingerprint matches and the index is fresh. The bad fixture builds
+    none: its row says there is no index yet."""
+    code = "from spark import intake; intake.refresh()"
+    run_env = dict(env, PYTHONPATH=os.path.join(REPO, "lib"))
+    try:
+        subprocess.run([sys.executable, "-c", code], env=run_env, capture_output=True, timeout=180)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
+
 def _stub_server():
     """A fake llama-server on loopback for the good fixture: /health 200,
     /v1/models with a bearer; and a fake FORGE at /api/health."""
@@ -2047,6 +2113,8 @@ def selftest():
             os.makedirs(root)
             env = dict(base)
             env.update(make_fixture(root, tag == "good", stub_url))
+            if tag == "good":
+                knowledge_fixture(env)
             p = subprocess.run([sys.executable, os.path.join(REPO, "bin", "spark"), "check", "--porcelain", "--fresh"],
                                env=env, capture_output=True, text=True, timeout=180)
             got = {}
@@ -2213,6 +2281,16 @@ def refresh():
 
 
 # --------------------------------------------------------------------- main
+def unattended(porcelain_out, fresh, watch, stdin):
+    """The timer's run (see Ctx.unattended): --porcelain, no --fresh, no
+    --watch, and no terminal on stdin."""
+    try:
+        tty = stdin is not None and stdin.isatty()
+    except (OSError, ValueError):
+        tty = False
+    return bool(porcelain_out and not fresh and not watch and not tty)
+
+
 USAGE = """%s check -- this machine against what its repository says
 
   spark check              every row; exit 0 when no row failed
@@ -2258,6 +2336,7 @@ def main(argv):
         else:
             names.append(a)
     ctx = Ctx(fresh=fresh, fetch=fetch)
+    ctx.unattended = unattended(porcelain_out, fresh, watch, sys.stdin)
     color = sys.stdout.isatty() and not porcelain_out
     while True:
         rows = run_rows(ctx, names or None)

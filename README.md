@@ -100,7 +100,7 @@ Four files sit at the root: this one, `CREDITS.md`, `CLAUDE.md` and
 
 Four are kept true as things change, outside a release:
 
-- `docs/TOUR.md`: a first hour, 12 small things to try.
+- `docs/TOUR.md`: a first hour, 13 small things to try.
 - `docs/APPS.md`: editors and tools that speak to spark.
 - `docs/IDEAS.md`: the field the roadmap is picked from.
 - `docs/TROUBLESHOOTING.md`: a machine that will not join the Wi-Fi.

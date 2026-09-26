@@ -371,6 +371,41 @@ def line_words(d):
         ("%d warm of %d" % (d.get("warm", 0), d["known"])) if d.get("known") else "slots not recorded")
 
 
+def knowledge_fields(turns):
+    """What the knowledge index did on these line turns, from the fields
+    the prompt line records when it looks: `know_ms` (the retrieval),
+    `evidence_chars` (what rode the request) and `reasked` (the one
+    re-ask after a check). Medians and a count; a field no turn carries
+    is left out, so a spark without the index says nothing."""
+    turns = [t for t in turns if t]
+    rec = {}
+    for key, name in (("know_ms", "know_ms"), ("evidence_chars", "evidence")):
+        v = _median([t[key] for t in turns if isinstance(t.get(key), (int, float)) and not isinstance(t.get(key), bool)])
+        if v is not None:
+            rec[name] = v
+    asked = [t for t in turns if "reasked" in t]
+    if asked:
+        rec["reasked"] = sum(1 for t in asked if t["reasked"])
+        rec["reask_of"] = len(asked)
+    return rec
+
+
+def knowledge_words(d):
+    """The knowledge lines of a line record, in the words the report prints;
+    [] when the record holds none."""
+    parts = []
+    if "know_ms" in d:
+        parts.append("searched the index in %d ms" % d["know_ms"])
+    if "evidence" in d:
+        parts.append("sent %d characters of evidence" % d["evidence"])
+    out = []
+    if parts:
+        out.append("spark %s (%s)" % (" and ".join(parts), "medians" if len(parts) > 1 else "the median"))
+    if "reasked" in d:
+        out.append("spark asked the model again on %d of %d questions" % (d["reasked"], d["reask_of"]))
+    return out
+
+
 def line_pace():
     """The newest `spark bench --line` record, or None."""
     best = None
@@ -450,6 +485,7 @@ def cmd_line_bench(cfg, args):
         v = field(key)
         if v is not None:
             rec[name] = v
+    rec.update(knowledge_fields([r["t"] for r in good]))
     state_dir()
     fd = os.open(BENCH_LOG, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
     with os.fdopen(fd, "a", encoding="utf-8") as f:
@@ -457,12 +493,17 @@ def cmd_line_bench(cfg, args):
     if porcelain:
         say("\t".join(["median", str(rec["ready_ms"]), str(rec["total_ms"]), str(rec.get("read", "")),
                        str(rec.get("wrote", "")), "%d/%d" % (rec["warm"], rec["known"])]))
+        if any(k in rec for k in ("know_ms", "evidence", "reasked")):
+            say("\t".join(["knowledge", str(rec.get("know_ms", "")), str(rec.get("evidence", "")),
+                           "%d/%d" % (rec["reasked"], rec["reask_of"]) if "reasked" in rec else ""]))
         return 0
     say((fmt % ("", "median", "%.2f s" % (rec["ready_ms"] / 1000.0), "%.2f s" % (rec["total_ms"] / 1000.0),
                 rec.get("read", "-"), rec.get("wrote", "-"), "")).rstrip())
     say("  the line pace: " + line_words(rec))
     if "cmd_ms" in rec:
         say("  inside spark line the command was ready at %.2f s, by its own clock" % (rec["cmd_ms"] / 1000.0))
+    for words in knowledge_words(rec):
+        say("  " + words)
     if len(good) < len(rows):
         say("  %d of %d questions got an error; the medians are of the rest" % (len(rows) - len(good), len(rows)))
     say("  saved in %s -- spark stats shows it" % BENCH_LOG)

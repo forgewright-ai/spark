@@ -189,7 +189,9 @@ fills the row above it. `Enter` again runs it. Everything spark or the
 model says sits in that row, and your line holds only the command. A
 command that deletes comes back marked `!`, and a recursive `rm` says
 how many files and bytes it clears. The `!` is there before the
-command is. `?? words` follows up on
+command is. Before the command lands, spark checks it against the
+manuals on this machine. When a flag is not in the manual, spark asks
+the model once more, and the hint says so. `?? words` follows up on
 the last answer. `Esc s` asks about the line you are on. `spark off`
 gives `Enter` back, and `spark on` restores it. `TAB` completes the
 verbs and their words, offline. While the model answers, the mark
@@ -382,6 +384,15 @@ times the wait until the command is ready and until the whole answer.
 It counts the warm slots too: a warm slot reuses the prompt it has
 already read. `spark stats` shows the result as the line pace, and the
 `throughput` row names it. Nothing the questions propose is run.
+
+The prompt line reads this machine first. spark keeps an index of its
+programs, their manuals, its apps and its own verbs in
+`~/.local/state/spark/knowledge/`. `./bootstrap.sh` builds it, and the
+check timer refreshes it every 5 minutes. A program with no manual is
+read from its `--help`, and only inside the sandbox. The `knowledge`
+row of `spark check` says what the index holds and how old it is.
+`SPARK_KNOWLEDGE=off` in `spark.env` turns it off, and the prompt line
+answers from the model alone.
 
 ## 5. Other machines and your phone
 
@@ -771,7 +782,7 @@ do, and never calls `sudo`:
 is yours to decide: `echo 'you ALL=(ALL) NOPASSWD:ALL' | sudo tee
 /etc/sudoers.d/you` is fine for a test bench.
 
-The check. `spark check` has 40 rows, one per promise this machine
+The check. `spark check` has 41 rows, one per promise this machine
 makes, and exits 0 when no row fails. `--watch N` redraws every N
 seconds. `--porcelain` prints one tab-separated row per line, for a
 program. `--fresh` ignores cached answers, and `--fetch` asks origin
@@ -875,7 +886,7 @@ get -> spark setup -> bootstrap.sh (apply) -> install.sh (links, renders)
                       the engine, the model, the token, the units, one rc
                       line; a spark app is its own repository (spark-<app>)
 
-spark check   40 rows: every promise the machine makes, fixture-tested
+spark check   41 rows: every promise the machine makes, fixture-tested
 spark update  the newest signed tag, or main on a developer clone; converge
 
 what leaves the machine: pinned downloads in, your questions to the
