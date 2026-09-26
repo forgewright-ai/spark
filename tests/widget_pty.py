@@ -8,7 +8,9 @@
 # intact), then offers the fix as a fact -- and the suppression table
 # (_spark_offer_kind) answers the same in both shells; a hostile answer
 # -- prose, nothing, a dead spark line, 40 kB -- runs nothing and leaves
-# a working prompt. Then, in a
+# a working prompt; the streamed line lands its command before the hint,
+# a danger's ! before its command, an answer in the row above an empty
+# prompt, a failure's reason beside the command it kept. Then, in a
 # 40-column tmux pane (skipped without tmux): a question that wraps still
 # gets its hint in the row above an intact prompt.
 #
@@ -27,6 +29,7 @@
 import fcntl
 import os
 import pty
+import re
 import select
 import shlex
 import shutil
@@ -74,6 +77,13 @@ case $line in
   # assertion below could never fail, whatever the widget did
   *hostile-huge*) printf 'cmd\techo '; awk 'BEGIN{while(i++<40000)printf "z"}'; printf ' EXECUTED-MARK\n'; awk 'BEGIN{while(i++<40000)printf "y"}'; printf '\n' ;;
   *hostile-dead*) exit 1 ;;
+  # the streamed line (v1.52): line 1 at once, the rest after a pause --
+  # as spark line writes them when the command closes before the hint
+  *stream-early*) printf 'cmd\techo STREAMED-CMD\n'; sleep 1.5; printf 'streamed hint text\n' ;;
+  *stream-cmd*) printf 'cmd\techo STREAMED-CMD\n'; sleep 1.5; printf 'streamed hint text\nproof\ttest -d .\n' ;;
+  *stream-danger*) printf 'danger\techo DANGER-CMD\n'; sleep 1.5; printf 'removes things\n' ;;
+  *stream-answer*) printf 'answer\n'; sleep 1.5; printf 'The answer in words\n' ;;
+  *stream-fail*) printf 'cmd\techo FAILED-CMD\n'; sleep 1.5; printf 'the server stopped mid-reply\n'; exit 1 ;;
   *fix\ it*) printf 'cmd\techo FIXED-COMMAND\nthe corrected command\n' ;;
   *proof-me*) printf 'cmd\ttrue\nruns true\nproof\ttest -d .\n' ;;
   *) if [ "${SPARK_EXPLAIN_RC:-}" = 127 ]; then
@@ -407,6 +417,71 @@ def main(shell, widget):
             ok(sh.expect("STILL-HERE-%s\r\n" % what) or sh.expect("STILL-HERE-%s\n" % what),
                "%s: the prompt still works after it" % why, since2()[-300:])
             sh.expect(prompt)
+
+        # 3c. the streamed line (v1.52): line 1 lands the moment it comes,
+        # the hint follows into the row above; the mark is on screen
+        # before the command; an answer leaves the prompt empty; a failure
+        # after line 1 keeps the command and shows the reason
+        def seen_then(want, then, timeout=8):
+            """(text when `want` first shows, text once `then` shows too)"""
+            end = time.time() + timeout
+            while time.time() < end and want.encode() not in sh.buf[sh.pos:]:
+                sh.read(0.05)
+            first = sh.buf[sh.pos:].decode("utf-8", "replace")
+            sh.expect(then, timeout)
+            return first, sh.buf[sh.pos:].decode("utf-8", "replace")
+
+        since = sh.mark()
+        sh.send("stream-cmd?\r")
+        first, full = seen_then("STREAMED-CMD", "streamed hint text")
+        ok("STREAMED-CMD" in first and "streamed hint text" not in first and "streamed hint text" in full,
+           "streamed: the command lands before its hint", full[-400:])
+        ok(not re.search(r"\[\d+\]\s+\d+|\bDone\b", full), "streamed: no job-control notice on the screen", full[-400:])
+        sh.send("\x15")
+        sh.settle()
+
+        since = sh.mark()
+        sh.send("? stream-danger\r")
+        first, full = seen_then("DANGER-CMD", "! removes things -- read it before Enter")
+        at_mark = first.find("-- read it before Enter")
+        ok(0 <= at_mark < first.find("DANGER-CMD"),
+           "streamed: a danger command never shows before its ! mark", first[-400:])
+        ok("! removes things -- read it before Enter" in full, "streamed: the danger hint follows, still marked", full[-400:])
+        sh.send("\x15")
+        sh.settle()
+
+        since = sh.mark()
+        sh.send("stream-answer?\r")
+        ok(sh.expect("* The answer in words"), "streamed: an answer lands in the row above", since()[-400:])
+        since = sh.mark()
+        sh.send("echo AFTER-ANSWER\r")
+        ok(sh.expect("AFTER-ANSWER\r\n") or sh.expect("AFTER-ANSWER\n"),
+           "streamed: an answer leaves the prompt line empty", since()[-400:])
+        sh.expect(prompt)
+
+        since = sh.mark()
+        sh.send("stream-fail?\r")
+        ok(sh.expect("the server stopped mid-reply"), "streamed: a failure after line 1 shows the reason", since()[-400:])
+        sh.settle()
+        since = sh.mark()
+        sh.send("\r")
+        ok(sh.expect("FAILED-CMD\r\n") or sh.expect("FAILED-CMD\n"),
+           "streamed: a failure after line 1 leaves the command in the line", since()[-400:])
+        sh.expect(prompt)
+
+        # Enter on a landed command while its hint is still on the way: the
+        # hint is never drawn over what the command printed
+        since = sh.mark()
+        sh.send("stream-early?\r")
+        sh.expect("STREAMED-CMD")
+        sh.send("\r")
+        time.sleep(2.5)
+        sh.settle()
+        out = since()
+        ran = out.rfind("STREAMED-CMD\r\n")       # the command's own output, the last of the two
+        ok(ran >= 0 and "streamed hint text" not in out[ran:],
+           "streamed: Enter before the hint -- nothing drawn after the command ran", out[-400:])
+        sh.expect(prompt)
 
         # 4. a plain line runs at once, unasked
         n = asked()

@@ -470,7 +470,9 @@ and may change freely.
    prints two lines. Line 1 is `cmd<TAB>command`, `danger<TAB>command`,
    `answer` or `error`. Line 2 is the hint, the answer or the reason:
    one line, cut at a word to a character budget. A hint or a reason is
-   80 at most, an answer `cli.ANSWER_MAX`. A `danger` line's hint may
+   80 at most, an answer `cli.ANSWER_MAX`. Line 1 is written the moment
+   the command is complete, and lines 2 and 3 follow; after line 1, a
+   failure makes line 2 its reason and exits 1. A `danger` line's hint may
    open with `<- <facts> -- `: `persona.blast`'s count for a recursive
    `rm`, the files, bytes and git-tracked, read from the command with
    nothing run. The facts lead, so the cut eats the model's words first.
