@@ -981,7 +981,10 @@ def cmd_chat(args):
             readline.set_history_length(500)
             for ln in _chat_history_lines():
                 readline.add_history(ln)
-    say("chat -- /help, Ctrl-D or /q ends")
+    if tty:
+        # piped, stdout carries the replies alone: no banner, no prompt
+        say("chat -- /help, Ctrl-D or /q ends")
+    prompt = (paint("chat>", "accent", sys.stdout, readline=True) + " ") if tty else ""
     try:
         while True:
             try:
@@ -993,7 +996,7 @@ def cmd_chat(args):
                         pass    # scrolled-in escape codes must not become input
                 # the prompt in the accent at a tty (readline-bracketed
                 # escapes; the plain text stays exactly `chat> `)
-                text = input(paint("chat>", "accent", sys.stdout, readline=True) + " ")
+                text = input(prompt)
             except EOFError:
                 if tty:
                     say()

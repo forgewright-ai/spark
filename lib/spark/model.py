@@ -175,30 +175,62 @@ def model_rows(cfg, serving=None):
     return out
 
 
-def model_line(r, marks=None, width=13):
+def license_word(license_, width=10):
+    """The license's first word within `width` columns: whole parts
+    between hyphens (`Llama-3.2`, never `Llama-3.2-`), a hard cut only
+    when the first part alone is wider."""
+    word = ((license_ or "").split() or [""])[0]
+    if len(word) <= width:
+        return word
+    parts = word.split("-")
+    out = parts[0]
+    for p in parts[1:]:
+        if len(out) + 1 + len(p) > width:
+            break
+        out += "-" + p
+    return out[:width]
+
+
+# the table's columns besides the name and the license: the marks, the
+# file size, the RAM, the proof, the state and the speed, with the
+# spaces between them
+_FIXED_COLS = 48
+
+
+def table_widths(rows):
+    """(name, license) column widths for these rows: the name as wide as
+    the widest name (13 at least), the license as wide as the widest
+    first word within what 80 columns leave (10 at least, Apache-2.0)."""
+    width = max([13] + [len(r["name"]) for r in rows])
+    widest = max([10] + [len(((r["license"] or "").split() or [""])[0]) for r in rows])
+    return width, max(10, min(widest, 80 - _FIXED_COLS - width))
+
+
+def model_line(r, marks=None, width=13, lic_width=10):
     """One table row: the pick mark (spark *, ember +), the source mark
     (blank the list, `u` yours), the name, the file size, the RAM verdict,
     the license's first word, the proof column (`line` for the line proof,
     or the grounding audition's kept/run score when the row carries
     MODEL_<NAME>_GROUND), downloaded / serving, and the speed --
     `~N tok/s` an estimate, `N tok/s` measured; nothing for a row that
-    does not fit. `width` pads the name column (the caller widens it past
-    13 for a longer name). Every row stays within 80 columns."""
+    does not fit. `width` pads the name column and `lic_width` the
+    license's (table_widths sizes both from the rows). Every row stays
+    within 80 columns."""
     marks = marks or {"spark": "*", "ember": "+"}
     state = "serving" if r["serving"] else ("downloaded" if r["downloaded"] else "")
     if r["fits"] is None:
         speed = ""                       # a client: the peer's business
     else:
         speed = ("%s%d tok/s" % ("~" if r["speed_kind"] == "estimate" else "", r["speed"])) if r["fits"] else "too big"
-    lic = ((r["license"] or "").split() or [""])[0][:10]
+    lic = license_word(r["license"], lic_width)
     # the proof column: the ground score (kept/run of the grounding
     # audition) when the row has one, else `line` for the line proof
     proof = (r.get("ground") or "").split()[0] if r.get("ground") else ("line" if r["tested"] else "")
     # padded columns, right-aligned numbers: the eye reads a table, not a
-    # sentence; 58 + width columns, so a 22-char name still fits 80
-    return ("  %s%s %-*s %5.1f GB %2.0f GB %-10s %-5s %-10s %9s"
+    # sentence; _FIXED_COLS + width + lic_width columns in all
+    return ("  %s%s %-*s %5.1f GB %2.0f GB %-*s %-5s %-10s %9s"
             % (marks.get(r["role"], " "), r["mark"], width, r["name"], r["gb"], r["ram_gb"],
-               lic, proof, state, speed)).rstrip()
+               lic_width, lic, proof, state, speed)).rstrip()
 
 
 def print_model_table(cfg):
@@ -236,10 +268,10 @@ def print_model_table(cfg):
         if note:
             say("  " + note)
         rows = model_rows(cfg)
-    width = max([13] + [len(r["name"]) for r in rows])
-    say("     %-*s %8s %5s %-10s %-4s %-10s %9s" % (width, "model", "file", "RAM", "license", "line", "", "fits"))
+    width, lic_width = table_widths(rows)
+    say("     %-*s %8s %5s %-*s %-5s %-10s %9s" % (width, "model", "file", "RAM", lic_width, "license", "line", "", "fits"))
     for r in rows:
-        say(model_line(r, width=width))
+        say(model_line(r, width=width, lic_width=lic_width))
         if r["note"]:
             say("      " + r["note"])
     known = {row[1] for row in config.model_tables()}

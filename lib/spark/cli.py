@@ -487,9 +487,21 @@ def cmd_explain(words):
 
 
 # ------------------------------------------------------------ last/status
-def _fmt_turn(t):
+def _first_line(text, width=70):
+    """The first line of a reply that is neither blank nor a code fence,
+    cut at a word to about `width` characters (status's one line)."""
+    line = next((l.strip() for l in text.splitlines()
+                 if l.strip() and not textmod.Fence._is_fence(l)), "")
+    if len(line) <= width:
+        return line
+    cut = line[:width - 3].rsplit(" ", 1)[0].rstrip()
+    return (cut or line[:width - 3]) + "..."
+
+
+def _fmt_turn(t, short=False):
     # a turn is numbers only (session.TEXT_FIELDS); the words come from
-    # the sealed thread it names, when this machine can open it
+    # the sealed thread it names, when this machine can open it. short:
+    # status's form, the reply's first line of words only
     if not t:
         return "(no turns yet)"
     line = body = ""
@@ -499,6 +511,8 @@ def _fmt_turn(t):
         replied = [m for m in msgs if m.get("role") == "assistant"]
         line = asked[-1]["text"] if asked else ""
         body = replied[-1]["text"] if replied else ""
+        if short:
+            body = _first_line(body) or body.strip()[:70]
     head = "%s  %s  %s" % (t.get("ts", "?"), t.get("kind", "?"), line)
     mark = glyph("warn") if t.get("kind") == "danger" else glyph("hammer")
     body = "  %s %s" % (mark, body) if body else "  (the thread is gone -- numbers only)"
@@ -693,7 +707,7 @@ def cmd_status(args, _bare=False):
     n = len(forge.list_threads(10**6))
     say("  history  %s" % ("off" if cfg.history <= 0 else "%d days, %s, %d thread%s"
                            % (cfg.history, _short(os.path.join(STATE_DIR, "turns")), n, "" if n == 1 else "s")))
-    say("  last     " + _fmt_turn(session.last_turn()).replace("\n", "\n           "))
+    say("  last     " + _fmt_turn(session.last_turn(), short=True).replace("\n", "\n           "))
     runs = bar.waiting()
     if runs:
         say("  runs     %s (spark do --review)" % runs)
@@ -752,9 +766,11 @@ def _history_show():
     cfg = config.load()
     say("%s history: %s" % (MARK, "off" if cfg.history <= 0 else "%d days under %s" % (cfg.history, _short(STATE_DIR))))
     say("  spark history clear   removes every turn and thread kept so far")
-    threads = forge.list_threads(5)
+    held = forge.list_threads(10**6)       # the count status and spark user say
+    threads = held[:5]
     if threads:
-        say("  threads (?? words goes on with the newest):")
+        say("  threads%s (?? words goes on with the newest):"
+            % (", newest 5 of %d" % len(held) if len(held) > 5 else ""))
         for th in threads:
             say("  %s  %d turn%s  %s" % (th["id"], th["turns"], "" if th["turns"] == 1 else "s", th["title"]))
     fixes = [e for e in ledger.entries(kind=ledger.KIND_FAIL)

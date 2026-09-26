@@ -196,19 +196,50 @@ def logout():
 
 
 # ------------------------------------------------------------ the verb
-def _thread_stats(name):
-    """(count, newest mtime) of a user's threads."""
-    d = os.path.join(user_dir(name), "threads")
-    count, newest = 0, 0.0
+def _held_threads(d):
+    """The thread ids in `d` that hold a turn, read without a key: the
+    plaintext header must name the file's own thread (the store refuses
+    a renamed file), and a record must follow it (a header alone is a
+    first turn that failed)."""
+    from . import forge
+    out = []
     try:
-        for f in os.listdir(d):
-            p = os.path.join(d, f)
-            if os.path.isfile(p):
-                count += 1
-                newest = max(newest, os.path.getmtime(p))
+        names = os.listdir(d)
     except OSError:
-        pass
-    return count, newest
+        return out
+    for f in names:
+        tid = f[:-7]
+        if not f.endswith(".sealed") or not forge.valid_id(tid):
+            continue
+        try:
+            with open(os.path.join(d, f), encoding="utf-8", errors="replace") as fh:
+                if fh.readline().strip() != vault.header("thread", tid):
+                    continue
+                if any(line.strip() for line in fh):
+                    out.append(tid)
+        except OSError:
+            pass
+    return out
+
+
+def _thread_stats(name, dk=None):
+    """(count, newest mtime) of a user's threads, counted the way spark
+    status and spark history count them: the threads that hold a turn.
+    With the user's key the store itself lists them; without it (the
+    admin never holds another user's key) the plaintext headers decide."""
+    d = os.path.join(user_dir(name), "threads")
+    if dk is not None:
+        from . import forge
+        ids = [t["id"] for t in forge.store_for(name, dk).list_threads(10**6)]
+    else:
+        ids = _held_threads(d)
+    newest = 0.0
+    for tid in ids:
+        try:
+            newest = max(newest, os.path.getmtime(os.path.join(d, tid + ".sealed")))
+        except OSError:
+            pass
+    return len(ids), newest
 
 
 def _show():
@@ -222,8 +253,9 @@ def _show():
         say("users    none yet -- spark user add NAME")
         return 0
     say("users    %d" % len(names))
+    dk = account_key() if me else None
     for n in names:
-        count, newest = _thread_stats(n)
+        count, newest = _thread_stats(n, dk if n == me else None)
         when = time.strftime("%Y-%m-%d %H:%M", time.localtime(newest)) if newest else "-"
         mark = " (you)" if n == me else ""
         say("  %-20s %3d thread%s  %s%s" % (n, count, "" if count == 1 else "s", when, mark))

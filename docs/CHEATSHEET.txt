@@ -38,6 +38,7 @@ SPARK
                                   comes). /reveal in chat shows the numbers
   spark edit --watch FILE         comment on a draft as you save it
   spark history [clear]           the threads kept here. clear removes them
+  ~/.local/bin/spark ...          the full path a script, cron or ssh uses
   try:
   ? words   or   words?   Enter   the command lands in your line, hint above
   Enter again                     runs it (! = read it first. A recursive

@@ -211,6 +211,11 @@ shell's own history. `Ctrl-R` stays the shell's.
 
 Every verb below has a `-h` with the rest.
 
+A script, a cron job and `ssh HOST 'spark ...'` name
+`~/.local/bin/spark` in full. A stock `~/.bashrc` returns before
+spark's hook in a shell that is not interactive, so `~/.local/bin` is
+not on `PATH`.
+
 `spark chat` is a conversation at a `chat> ` prompt. `/help` lists its
 verbs. `/q` or `Ctrl-D` ends, and `Ctrl-C` cancels a reply. `spark chat
 --thread N` continues an older thread from the `spark history` list.
