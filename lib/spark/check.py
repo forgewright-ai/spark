@@ -1224,8 +1224,7 @@ def _read_ago(seconds):
 KNOWLEDGE_KINDS = (("program", "program"), ("manual", "manual"), ("app", "app"), ("spark", "spark verb"))
 
 
-@row("CAPABILITY", fixture=False,
-     reason="the store is intake's (WP1 of v1.53): the good fixture builds it through intake.refresh(), flipped at the merge")
+@row("CAPABILITY")
 def row_knowledge(ctx):
     """The index the prompt line checks its answers against: this machine's
     programs, their manuals, its apps and spark's own verbs, read by
@@ -2056,6 +2055,22 @@ def knowledge_fixture(env):
     check then runs in -- the same PATH and the same STATE_DIR, so the
     fingerprint matches and the index is fresh. The bad fixture builds
     none: its row says there is no index yet."""
+    # a tiny machine of its own (intake's seams): one program with its
+    # manual, no apps, no --help runs, no spark -h runs -- so the build
+    # takes a blink, never walks the real /usr, and nothing is pending
+    root = os.path.join(env.get("HOME") or env.get("XDG_STATE_HOME") or "/tmp", "knowledge-fixture")
+    for d in ("bin", "man/man1", "apps"):
+        os.makedirs(os.path.join(root, d), exist_ok=True)
+    tool = os.path.join(root, "bin", "fixturetool")
+    with open(tool, "w") as f:
+        f.write("#!/bin/sh\nexit 0\n")
+    os.chmod(tool, 0o755)
+    with open(os.path.join(root, "man", "man1", "fixturetool.1"), "w") as f:
+        f.write(".TH FIXTURETOOL 1\n.SH NAME\nfixturetool \\- a fixture's one program\n"
+                ".SH SYNOPSIS\nfixturetool [-v]\n.SH OPTIONS\n.TP\n.B \\-v\nsay more\n")
+    env.update(SPARK_KNOWLEDGE_PATH=os.path.join(root, "bin"), SPARK_KNOWLEDGE_MANPATH=os.path.join(root, "man"),
+               SPARK_KNOWLEDGE_APPS=os.path.join(root, "apps"), SPARK_KNOWLEDGE_SOURCES="programs,apps",
+               SPARK_KNOWLEDGE_SANDBOX="none")
     code = "from spark import intake; intake.refresh()"
     run_env = dict(env, PYTHONPATH=os.path.join(REPO, "lib"))
     try:

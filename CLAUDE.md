@@ -542,11 +542,12 @@ and may change freely.
    b2sum, and shasum), a line of the checksum shape whose digest length
    is in `DIGEST_LENGTHS` keeps its digest. The same line from any other
    command is held. A step that exits non-zero with an option refused
-   (`do.BAD_OPTION`) brings back `do.man_excerpt`. That runs `man -P cat
-   HEAD` as argv, with `HEAD` a plain name. Both it and `man` must be
-   found on `$PATH` with its empty and relative entries dropped
-   (`do._abs_path`): a `man` planted in the step's directory is not the
-   machine's. man runs from `/` with the pager variables dropped and
+   (`do.BAD_OPTION`) brings back `do.man_excerpt`. That runs `man HEAD`
+   as argv through `intake.man_page`, with `HEAD` a plain name. Both it
+   and `man` must be found on `$PATH` with its empty and relative entries
+   dropped (`intake.abs_path`): a `man` planted in the step's directory is
+   not the machine's. man runs from `/` in one clean environment
+   (`MANPAGER=cat`: `man -P cat` fails on the mandoc man Void ships) and
    `MANWIDTH=80`, on `MAN_TIMEOUT` 5 seconds with the process group
    killed. Overstrikes are stripped, and at most `MAN_MAX` 1500 bytes
    around the refused flag go back. The tool itself never runs for it,

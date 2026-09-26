@@ -55,42 +55,12 @@ _MARKERS = ("reference, from this machine", "end of reference")
 
 # ------------------------------------------------------------ the words
 # The one tokenizer is intake.words: the index was built with it, so the
-# question must go through the same one. Until intake lands it (the day-0
-# stub has none), _words below is the same function; the lead points
-# grounding at intake's at merge (and this fallback goes).
-_STOP = frozenset((
-    "a", "an", "the", "and", "or", "of", "to", "in", "on", "for", "with", "by", "at",
-    "from", "as", "is", "are", "be", "it", "its", "this", "that", "these", "those",
-    "my", "me", "i", "you", "your", "we", "our", "what", "which", "who", "how", "do",
-    "does", "can", "could", "would", "should", "will", "all", "every", "any", "some",
-    "into", "out", "up", "if", "not", "no", "than", "then", "there", "here", "via"))
-
-
-def _words(s):
-    """lowercase, split on non-alphanumerics, stopwords out, crude
-    suffixes off: the same shape as intake.words."""
-    out = []
-    for w in re.split(r"[^a-z0-9]+", (s or "").lower()):
-        if not w or w in _STOP:
-            continue
-        if len(w) > 5 and w.endswith("ing"):
-            w = w[:-3]
-        elif len(w) > 4 and w.endswith("ies"):
-            w = w[:-3] + "y"
-        elif len(w) > 4 and w.endswith("es") and w[-3] in "sxz":
-            w = w[:-2]
-        elif len(w) > 3 and w.endswith("s") and not w.endswith("ss"):
-            w = w[:-1]
-        elif len(w) > 4 and w.endswith("ed"):
-            w = w[:-2]
-        out.append(w)
-    return out
+# question goes through the same one.
 
 
 def words(s):
     """The query's terms, through the index's own tokenizer."""
-    fn = getattr(intake, "words", None) or _words
-    return fn(s)
+    return intake.words(s)
 
 
 # ------------------------------------------------------------ the index
