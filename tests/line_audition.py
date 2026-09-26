@@ -891,19 +891,19 @@ def cmd_serve_candidate(args):
     engine.write_router = lambda _cfg: None
     argv = engine.render_wrap(engine.server_cmd(cfg, host))
     url = "http://%s:%s" % (host, port)
+    # a server already on the port would answer for this candidate: a run
+    # would then measure the wrong model (a 1.7B left on :8090 answered a
+    # whole 4B run once)
+    from spark import wire
+    if wire.health(url) != "down":
+        die("serve-candidate: %s already answers -- stop that server first" % url)
     print("serving %s at %s (Ctrl-C stops it)" % (os.path.basename(path), url))
     print("then: python3 tests/line_audition.py run --os OS --model %s --url %s"
           % (engine.model_stem(path), url))
-    p = subprocess.Popen(argv, env=engine.server_env(cfg), stdin=subprocess.DEVNULL)
-    try:
-        return p.wait()
-    except KeyboardInterrupt:
-        p.terminate()
-        try:
-            p.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            p.kill()
-        return 0
+    sys.stdout.flush()
+    # become the server: its pid is this one, so a kill or Ctrl-C stops the
+    # server itself and leaves nothing holding the port
+    os.execvpe(argv[0], argv, engine.server_env(cfg))
 
 
 # ------------------------------------------------------------ selftest

@@ -173,7 +173,9 @@ def wrapped(shell, widget, tmp, env, prompt, ok):
     env = dict(env, TERM="screen-256color")
     t = ["tmux", "-S", os.path.join(tmp, "tmux.sock"), "-f", "/dev/null"]
     argv = "bash --norc --noprofile -i" if shell == "bash" else "zsh -f -i"
-    cmd = "env -i " + " ".join(shlex.quote("%s=%s" % kv) for kv in env.items()) + " " + argv
+    # no history file: a shell hung up by kill-server writes ~/.bash_history
+    # as it exits, into the home the test is already removing
+    cmd = "env -i HISTFILE=/dev/null " + " ".join(shlex.quote("%s=%s" % kv) for kv in env.items()) + " " + argv
     subprocess.run(t + ["new-session", "-d", "-x", "40", "-y", "12", "-c", os.path.join(tmp, "work"), cmd], check=True)
 
     def screen():
@@ -744,6 +746,17 @@ def main(shell, widget):
 
         # 9. the rendered screen: a wrapped question, hint above, prompt intact
         wrapped(shell, widget, tmp, env, prompt, ok)
+
+        # 10. nothing the widget started outlives its shell: a streamed
+        #     answer's reader and its spark line stop with it
+        left = ""
+        end = time.time() + 3
+        while time.time() < end:
+            left = subprocess.run(["pgrep", "-af", tmp], capture_output=True, text=True).stdout.strip()
+            if not left:
+                break
+            time.sleep(0.2)
+        ok(not left, "no process the widget started outlives its shell", left)
 
     print("widget_pty %s: %s" % (shell, "all ok" if not fails else "%d FAILED" % fails))
     return 1 if fails else 0
