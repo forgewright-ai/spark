@@ -73,7 +73,7 @@ LINES_MAX = 60           # option lines an entry keeps, each its first sentence
 SENTENCE_MAX = 100       # characters of one what, synopsis or option sentence
 SYNOPSIS_MAX = 3         # synopsis lines an entry keeps
 CASE_KEYS = {"id", "words", "kind", "head_any", "must_not", "danger", "spark_verb", "answer_any",
-             "topic", "then"}
+             "topic", "then", "why_review"}
 
 # Tools a pipeline stage reaches for whatever the question: each OS's
 # snapshot holds them, so `du -sh * | sort -h` is judged stage by stage.
