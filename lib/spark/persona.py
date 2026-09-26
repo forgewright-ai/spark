@@ -782,14 +782,16 @@ def system(cfg, mode, shell):
 def user_message(text, cwd, context=""):
     """What is sent about the request: the directory path, the line, and
     (explain / piped input) the tail of the output, or the text of the
-    @FILEs named (forge.file_context labels those itself). Nothing else."""
+    @FILEs named (forge.file_context labels those itself), or the prompt
+    line's Reference block (the knowledge's evidence). Nothing else."""
     head = "[cwd %s]\n" % cwd if cwd else ""
     if context:
-        # an @FILE block, the editor's and the questioner's blocks, and the
-        # widget's failure block (Command:/Exit:/Output:) carry their own label
+        # an @FILE block, the editor's and the questioner's blocks, the
+        # widget's failure block (Command:/Exit:/Output:) and the prompt
+        # line's Reference block carry their own label
         labelled = context.startswith(("File ", "Text", "Selected ", "Plan ", "Source",
                                        "The author says", "You read this as",
-                                       "Declined before", "Answered before", "Command: "))
+                                       "Declined before", "Answered before", "Command: ", "Reference"))
         label = "" if labelled else "Output:\n"
         return head + (text + "\n\n" if text else "") + label + context
     return head + text

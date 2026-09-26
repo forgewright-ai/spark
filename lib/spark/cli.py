@@ -122,6 +122,18 @@ def _last_proposed(history):
     return None
 
 
+def _bench_history(path):
+    """SPARK_LINE_BENCH_HISTORY's file: a JSON list of {role, content},
+    user and assistant turns only; anything else is no history."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            got = json.load(f)
+    except (OSError, ValueError):
+        return []
+    return [{"role": m["role"], "content": m["content"]} for m in (got if isinstance(got, list) else [])
+            if isinstance(m, dict) and m.get("role") in ("user", "assistant") and isinstance(m.get("content"), str)]
+
+
 def _failed_cmd():
     """The failing command and its exit code the widget exports for a
     failure turn (SPARK_EXPLAIN_CMD / _RC), or ('', None). The same two
@@ -205,14 +217,15 @@ LINE_REFUSED = "the model's command carried control characters -- refused"
 LINE_TOKENS = 200          # what a line reply may write: five short fields
 
 
-def _line_ask(s, text, on_delta=None):
+def _line_ask(s, text, on_delta=None, context=""):
     """One prompt-line request: streamed, the line's schema, the line's own
     slot (wire.LINE_SLOT), every chunk to on_delta as it comes. Returns
     (reply, ms). A reply that is not one JSON object is BrainError `bad`,
-    worded as chat_json words it."""
+    worded as chat_json words it. `context` is a Reference block (the
+    knowledge's evidence): it rides the user message, never the prefix."""
     t0 = time.time()
     raw, s.timings = s._retry_fresh(lambda: wire.chat_stream(
-        s.cfg, s.url, s._messages(text), on_delta or (lambda d: None), max_tokens=LINE_TOKENS,
+        s.cfg, s.url, s._messages(text, context), on_delta or (lambda d: None), max_tokens=LINE_TOKENS,
         temperature=0.2, forge=s.forge, model=s.role, schema=persona.LINE_SCHEMA, slot=wire.LINE_SLOT))
     try:
         reply = json.loads(raw)
@@ -316,37 +329,239 @@ class _Pulse(textmod.Busy):
 
     warn = False
     keep = False
+    words = ""          # what the row says while a re-ask runs (tell)
+
+    def tell(self, words):
+        """A whole sentence in the row, the dots after it, until line 1:
+        cut to the terminal, so the saved cursor never wraps away."""
+        try:
+            cols = os.get_terminal_size(self.stream.fileno()).columns
+        except (AttributeError, OSError, ValueError):
+            cols = HINT_COLS
+        self.words = _one_line(words, max(20, min(HINT_COLS, cols - 6))) if words else ""
 
     def _frame(self, dots):
-        if not self.warn:
+        if not self.warn and not self.words:
             return super()._frame(dots)
-        body = paint(self.mark + " " + dots, "warn", self.stream)
+        if self.warn:
+            body = paint(self.mark + " " + dots, "warn", self.stream)
+        else:
+            body = paint(self.mark, "accent", self.stream) + " " + self.words + paint(dots, "muted", self.stream)
         return ("\x1b7\x1b[1A\r\x1b[2K" + body + "\x1b8") if self.above else ("\r\x1b[2K" + body)
 
     def _clear(self):
         return "" if self.keep else super()._clear()
 
 
+# ------------------------------------------------------ the line's knowledge
+# The judge arms (v1.53): the verdict runs before line 1 is written; a
+# command it finds wrong is asked again ONCE with the tool's own manual
+# lines, and line 1 is never repainted. SPARK_KNOWLEDGE=off is the v1.52
+# line exactly (arm off). The measuring seam SPARK_LINE_KNOW (under
+# SPARK_LINE_BENCH=1 alone) picks an arm for the audition's A/B: judge =
+# the verdict and the one re-ask; full = judge plus evidence up front.
+# The shipped arm is one constant: full ships only when the A/B shows it
+# earns its prefill (>= 5 points for <= 0.3 s median on the 4B).
+LINE_KNOW_DEFAULT = "judge"
+LINE_KNOW_ARMS = ("off", "judge", "full")
+ASK_AGAIN = "Answer again with a command that works on this machine."
+REPEATED = "that exact command was already tried and failed; propose a different one."
+NOTE_WORD = 24             # a flag or a head in a note: never the whole hint
+
+
+class _Stop(Exception):
+    """The judge found the first command wrong before line 1: raised from
+    the stream's own delta callback, so the response closes there (the
+    server drops the task) and line 1 is never painted with it."""
+
+
+def _line_arm(cfg, bench):
+    """off | judge | full: SPARK_KNOWLEDGE (on = LINE_KNOW_DEFAULT), or the
+    measuring seam SPARK_LINE_KNOW under SPARK_LINE_BENCH=1 alone."""
+    if bench and os.environ.get("SPARK_LINE_KNOW") in LINE_KNOW_ARMS:
+        return os.environ["SPARK_LINE_KNOW"]
+    return LINE_KNOW_DEFAULT if cfg.knowledge else "off"
+
+
+def _head(command):
+    """A command's program: the first word past sudo, env, nohup and any
+    assignment -- the head a `??` asks the index about."""
+    words = (command or "").split()
+    while words and (words[0] in ("sudo", "env", "nohup") or "=" in words[0]):
+        words = words[1:]
+    return words[0] if words else ""
+
+
+class _Know:
+    """One turn's knowledge: the arm, a verdict per command (kept, so the
+    stream and the end never judge twice), the evidence, and the numbers
+    the turn records -- know_ms (the index read and every verdict),
+    evidence_chars, reasked, findings. Numbers alone: no word of it."""
+
+    def __init__(self, arm):
+        self.arm = arm
+        self.ms = 0.0
+        self.chars = 0
+        self.reasked = 0
+        self.findings = 0
+        self.says = ""              # an answer's note: the manual the evidence named
+        self._seen = {}
+
+    def _timed(self, fn, *args):
+        t0 = time.time()
+        try:
+            return fn(*args)
+        finally:
+            self.ms += (time.time() - t0) * 1000
+
+    def verdict(self, command):
+        """The findings on `command`: () when the judge finds nothing."""
+        if command not in self._seen:
+            from . import judge
+            self._seen[command] = tuple(self._timed(judge.verdict, command).findings)
+        return self._seen[command]
+
+    def evidence(self, question, heads=()):
+        from . import grounding
+        ev = self._timed(grounding.evidence, question, tuple(h for h in heads if h))
+        self.chars += ev.chars
+        return ev
+
+    def upfront(self, question, previous):
+        """Arm full: the Reference block the first request carries (the
+        question, and on ?? the head last proposed); '' in the others."""
+        if self.arm != "full":
+            return ""
+        ev = self.evidence(question, [_head(previous)] if previous else ())
+        if ev.names:
+            from . import grounding
+            try:
+                e = grounding.default_store().entry(ev.names[0])
+            except (OSError, ValueError, TypeError, AttributeError):
+                e = None
+            if e is not None and getattr(e, "source", "") == "man":
+                self.says = ", says the %s manual" % _one_line(ev.names[0], NOTE_WORD)
+        return ev.text
+
+    def flagged(self, command, model_danger, rode):
+        """The `!`: persona.is_dangerous always wins. In the judge arms
+        the model's own flag is lowered when spark's read-only argv proof
+        (judge.read_only, the proof lists unchanged) holds for every
+        stage, and a command whose effect the line cannot show
+        (persona.opaque) is marked whenever evidence rode the request
+        that produced it. Arm off: v1.52's rule."""
+        if persona.is_dangerous(command):
+            return True
+        if self.arm == "off":
+            return bool(model_danger)
+        if rode and persona.opaque(command):
+            return True
+        from . import judge
+        return bool(model_danger) and not judge.read_only(command)
+
+    def numbers(self):
+        out = {"arm": self.arm, "reasked": self.reasked}
+        if self.arm != "off":
+            out.update(know_ms=int(round(self.ms)), evidence_chars=self.chars, findings=self.findings)
+        return out
+
+
+def _nw(s):
+    return _one_line(s, NOTE_WORD)
+
+
+def _said(f):
+    """A finding as the re-ask tells the model: one whole sentence."""
+    if f.kind == "missing":
+        return "%s is not installed on this machine." % f.head
+    if f.kind == "flag":
+        return "%s is not in %s's manual here." % (f.word, f.head)
+    if f.kind == "verb":
+        if f.head == "spark":
+            return "spark has no %s command." % f.word
+        return "%s is not a word %s takes." % (f.word, f.head)
+    return "%s is a placeholder; write the real name, or leave it out." % f.word
+
+
+def _gap(f):
+    """A finding as the hint row says it: lowercase, no end mark."""
+    if f.kind == "missing":
+        return "%s is not on this machine" % _nw(f.head)
+    if f.kind == "flag":
+        return "the %s manual has no %s" % (_nw(f.head), _nw(f.word))
+    if f.kind == "verb":
+        if f.head == "spark":
+            return "spark has no %s command" % _nw(f.word)
+        return "%s takes no %s" % (_nw(f.head), _nw(f.word))
+    return "the command still holds %s" % _nw(f.word)
+
+
+def _left(f):
+    """The note on a command that still has a finding after the re-ask:
+    it lands (never blocked) and the hint says what to check."""
+    if f.kind == "placeholder":
+        name = " ".join(f.word.strip("<>[]").replace("_", " ").replace("-", " ").split())
+        return "type the %s before Enter" % ("file name" if name in ("file", "filename") else _nw(name))
+    return _gap(f) + " -- check it before Enter"
+
+
+def _checked(found):
+    """The note on a re-ask's command that passed: what it was checked
+    against. Quiet otherwise -- a first answer that passes has none."""
+    f = found[0] if found else None
+    if f is None or f.kind == "placeholder":
+        return ""
+    if f.kind == "flag":
+        return ", checked against the %s manual" % _nw(f.head)
+    if f.kind == "verb":
+        return ", checked against spark's own help"
+    return ", checked against this machine's programs"
+
+
+def _noted(lead, hint, note, width=HINT_COLS):
+    """lead + hint + note as one line within `width`. The cut eats the
+    model's words, never the lead (a danger's facts) or the note. A note
+    starting with a comma follows the words; any other is a clause of
+    its own after `; `."""
+    if not note:
+        return _one_line(lead + hint, width)
+    tail = note if note.startswith(",") else "; " + note
+    room = width - len(lead) - len(tail)
+    if not hint or room < 12:
+        return _one_line(lead + note.lstrip(", "), width)
+    return _one_line(lead + _one_line(hint, room) + tail, width)
+
+
 class _Early:
     """Contract 4's lines, written the moment the stream makes each one
     certain. Line 1 goes out only when nothing after it can change it: the
     kind known; for a cmd, the command closed and cut to one line, free of
-    LINE_CONTROL, earning no guard (a head word nothing here answers to, a
-    `??` that repeats the failed command) and its danger known -- the
-    model's flag, or persona.is_dangerous here, which wins. Anything short
-    of that waits for the whole reply and the path it always took. Line 2
-    follows when its field closes, a danger's blast facts first; line 3
-    is left to the end, after persona.proof_ok."""
+    LINE_CONTROL, earning no guard (a `??` that repeats the failed command;
+    in the judge arms a verdict with a finding, which stops the stream --
+    in arm off a head word nothing here answers to) and its danger known
+    (_Know.flagged). Anything short of that waits for the whole reply and
+    the path it always took. Line 2 follows when its field closes, a
+    danger's blast facts first, a note last; line 3 is left to the end,
+    after persona.proof_ok. A re-ask's stream (retry) lands only a
+    command early, and never stops."""
 
-    def __init__(self, cwd, more, history, busy):
+    def __init__(self, cwd, more, history, busy, know=None, rode=False, retry=False, note="", t0=None):
         self.cwd, self.more, self.history, self.busy = cwd, more, history, busy
+        self.know = know or _Know("off")
+        self.rode = rode            # evidence rode the request this reply answers
+        self.retry = retry
+        self.note = note            # line 2's last words on a command (_noted)
+        self.says = ""              # line 2's last words on an answer
         self.parse = _Fields()
-        self.t0 = time.time()
+        self.t0 = time.time() if t0 is None else t0
         self.head = None            # cmd | danger | answer, once line 1 is out
         self.command = ""
         self.hint = None            # line 2, once out
         self.cmd_ms = None
         self.off = False            # something the end must weigh: no early line
+
+    def ms(self):
+        return int((time.time() - self.t0) * 1000)
 
     def feed(self, delta):
         self.parse.feed(delta)
@@ -368,25 +583,37 @@ class _Early:
         """Line 1 when the fields so far make it certain: True once out."""
         if "kind" not in f:
             return False
-        if f["kind"] != "cmd":
-            return self._first("answer")
         raw = f.get("command")
-        if raw is None:
-            return False
-        if not isinstance(raw, str) or LINE_CONTROL.search(raw):
-            self.off = True
-            return False
-        command = _one_line(raw, 1000)
-        if not command:
-            return self._first("answer")
-        if persona.missing_word(command) or (self.more and command == _last_proposed(self.history)):
-            self.off = True
-            return False
-        danger = persona.is_dangerous(command)
-        if not danger:
-            if "danger" not in f:
+        if f["kind"] == "cmd":
+            if raw is None:
                 return False
-            danger = bool(f["danger"])
+            if not isinstance(raw, str) or LINE_CONTROL.search(raw):
+                self.off = True
+                return False
+        command = _one_line(raw, 1000) if f["kind"] == "cmd" else ""
+        if not command:
+            if self.retry:
+                self.off = True             # a re-ask lands a command early, or waits for the end
+                return False
+            return self._first("answer")
+        if self.more and command == _last_proposed(self.history):
+            self.off = True
+            return False
+        if self.know.arm == "off":
+            if persona.missing_word(command):
+                self.off = True
+                return False
+        elif self.know.verdict(command):
+            # the judge found it wrong: line 1 never shows it. The first
+            # stream stops here; a re-ask's runs on, for the end weighs
+            # it whole against the first
+            self.off = True
+            if not self.retry:
+                raise _Stop()
+            return False
+        if not persona.is_dangerous(command) and "danger" not in f:
+            return False
+        danger = self.know.flagged(command, f.get("danger"), self.rode)
         return self._first("danger" if danger else "cmd", command)
 
     def _advance(self):
@@ -409,21 +636,22 @@ class _Early:
             # characters, and the widget trims to the terminal's own width
             if not final and (hint is None or (not hint and "command" not in f)):
                 return None
-            return _one_line(s("hint") or s("command"), ANSWER_MAX)
+            return _noted("", s("hint") or s("command"), self.says, ANSWER_MAX)
         if hint is None and not final:
             return None
-        hint = _one_line(s("hint"))
-        return self.facts(hint) if self.head == "danger" else hint
+        return self.label(_one_line(s("hint")))
 
-    def facts(self, hint):
-        """A danger's hint with persona.blast's facts first, so contract
-        4's 80-char cut eats the model's words before the numbers."""
-        facts = persona.blast(self.command, self.cwd)
-        return _one_line("<- " + facts + " -- " + hint) if facts else hint
+    def label(self, hint):
+        """A command's line 2: a danger's persona.blast facts first, the
+        model's words, then the note -- so contract 4's 80-char cut eats
+        the model's words before the numbers or the note."""
+        facts = persona.blast(self.command, self.cwd) if self.head == "danger" else ""
+        return _noted("<- " + facts + " -- " if facts else "", hint, self.note)
 
     def _first(self, head, command=""):
         # the pulse turns to the reply's own mark before the line leaves,
         # so the row never shows the old one beside the landed command
+        self.busy.words = ""
         self.busy.mark = "!" if head == "danger" else "*"
         self.busy.warn = head == "danger"
         self.busy.keep = True
@@ -470,6 +698,67 @@ def _guards(s, reply, command, hint, text, cwd, more, history, ms):
             hint = _one_line("already tried above -- %s" % hint)
     flagged = bool(reply.get("danger")) or persona.is_dangerous(command)
     return reply, command, hint, "danger" if flagged else "cmd", ms
+
+
+def _line_stream(s, text, early, context=""):
+    """One streamed ask through `early`: (reply, ms, error). A _Stop ends
+    the stream at the command the judge found wrong -- the reply is the
+    fields so far. A BrainError comes back third, never raised."""
+    try:
+        reply, ms = _line_ask(s, text, early.feed, context)
+        return dict(reply, **early.parse.fields), ms, None     # a key's first value is the one printed
+    except _Stop:
+        return dict(early.parse.fields), early.ms(), None
+    except wire.BrainError as e:
+        return None, early.ms(), e
+
+
+def _judged(s, reply, command, hint, text, asked, ms, know, early):
+    """The judge arms' guard, one re-ask per turn at most. The verdict on
+    the command and a `??` that repeats the failed one fold into ONE
+    re-ask: a whole sentence per finding, the found heads' evidence as
+    its Reference, the pulse saying why. The re-ask streams through a
+    fresh _Early sharing the pulse, which paints the moment its command
+    passes, the hint then saying what it was checked against. Else the
+    reply with fewer findings lands (the re-ask on a tie: the first was
+    stopped before its hint), never blocked, its hint naming what is
+    left. Returns (reply, command, hint, kind, ms, early, error):
+    `early` is the one that painted, or that paints at the end."""
+    found = know.verdict(command)
+    know.findings = len(found)
+    repeat = early.more and command == _last_proposed(early.history)
+    rode = early.rode
+    if found or repeat:
+        said = [_said(f) for f in found] + ([REPEATED] if repeat else [])
+        ev = know.evidence(text, [f.head for f in found if f.kind != "missing"])
+        if found:
+            early.busy.tell(_gap(found[0]) + ", so spark asks again")
+        s.history.extend([{"role": "user", "content": asked},
+                          {"role": "assistant", "content": "`%s`" % command}])
+        again = _Early(early.cwd, early.more, early.history, early.busy, know, rode=bool(ev.text),
+                       retry=True, note=_checked(found), t0=early.t0)
+        retry, ms2, err = _line_stream(s, " ".join(said) + " " + ASK_AGAIN, again, ev.text)
+        know.reasked, ms = 1, ms + ms2
+        if again.head is not None:
+            return retry or dict(again.parse.fields), again.command, again.hint or "", again.head, ms, again, err
+        early.busy.tell("")
+        raw = (retry or {}).get("command")
+        c2 = _one_line(raw, 1000) if isinstance(raw, str) and not LINE_CONTROL.search(raw) else ""
+        if retry and retry.get("kind") == "cmd" and c2:
+            left = know.verdict(c2)
+            rep2 = early.more and c2 == _last_proposed(early.history)
+            if len(left) + rep2 <= len(found) + repeat:
+                if not left and not rep2:
+                    early.note = again.note     # it passed, only too late to go early
+                reply, command, rode, repeat = retry, c2, bool(ev.text), rep2
+                hint = _one_line(retry.get("hint", ""))
+                found = left
+        if found:
+            early.note = _left(found[0])
+        if repeat:
+            hint = _one_line("already tried above -- %s" % hint)
+    kind = "danger" if know.flagged(command, reply.get("danger"), rode) else "cmd"
+    return reply, command, hint, kind, ms, early, None
 
 
 def cmd_line(args):
@@ -542,32 +831,29 @@ def cmd_line(args):
             remote = True
     if not remote and not bench:
         thread, history = forge.pick(cfg, more)
+    elif bench and more and os.environ.get("SPARK_LINE_BENCH_HISTORY"):
+        # the audition's `??` pair: a bench turn keeps no thread, so the
+        # first turn rides this file (a measuring seam; nothing written)
+        history = _bench_history(os.environ["SPARK_LINE_BENCH_HISTORY"])
     ask_text = (install_ctx + "\n\n" + text) if install_ctx else text
+    # the knowledge's arm; in arm full the question's evidence rides the
+    # first request's user message (the prefix never changes)
+    know = _Know(_line_arm(cfg, bench))
+    context = know.upfront(text, _last_proposed(history) if more else None)
     # the pulse in the hint row (SPARK_HINT_ROW=1, the widgets' word) from
     # the ask to line 1 -- through the guards' re-asks when a reply earns
     # one -- then in the reply's own mark until line 2
     busy = _Pulse.hint_row().start()
-    early = _Early(cwd, more, history, busy)
-    s, extra = None, ({"bench": 1} if bench else {})
+    early = _Early(cwd, more, history, busy, know, rode=bool(context))
+    early.says = know.says
+    s, extra, err = None, ({"bench": 1} if bench else {}), None
     try:
         s = session.Session(cfg, "line", shell, cwd, history)
-        reply, ms = _line_ask(s, ask_text, early.feed)
-        reply = dict(reply, **early.parse.fields)     # a key's first value is the one printed
     except wire.BrainError as e:
-        busy.stop()
-        if early.head is None:
-            say("error")
-            say(_reason(e))
-            return 1
-        ms = int((time.time() - early.t0) * 1000)
-        if early.hint is None:
-            # line 1 is out: the reason is line 2, and the exit says so
-            early.line2(_reason(e))
-            s.record(kind=early.head, failed=e.kind, cmd_ms=early.cmd_ms, ms=ms, thread=thread)
-            return 1
-        # lines 1 and 2 are whole: the reply stands, without its proof
-        reply, extra = dict(early.parse.fields, proof=""), dict(extra, failed=e.kind)
-    if early.head is None:
+        err = e
+    if s is not None:
+        reply, ms, err = _line_stream(s, ask_text, early, context)
+    if err is None and early.head is None:
         # nothing went early: the whole reply, the guards, then the lines
         kind = reply.get("kind")
         command = _one_line(reply.get("command", ""), 1000)
@@ -575,17 +861,40 @@ def cmd_line(args):
         is_cmd = kind == "cmd" and bool(command)
         refused = is_cmd and LINE_CONTROL.search(str(reply.get("command")))
         if is_cmd and not refused:
-            reply, command, hint, kind, ms = _guards(s, reply, command, hint, text, cwd, more, history, ms)
+            if know.arm == "off":
+                n = len(s.history)
+                reply, command, hint, kind, ms = _guards(s, reply, command, hint, text, cwd, more, history, ms)
+                know.reasked = int(len(s.history) > n)
+            else:
+                asked = persona.user_message(ask_text, cwd, context)
+                reply, command, hint, kind, ms, early, err = _judged(s, reply, command, hint, text, asked,
+                                                                     ms, know, early)
             refused = LINE_CONTROL.search(str(reply.get("command")))      # a re-ask's command too
+    extra = dict(extra, **know.numbers())
+    if err is not None:
+        busy.stop()
+        if early.head is None:
+            say("error")
+            say(_reason(err))
+            return 1
+        ms = early.ms()
+        if early.hint is None:
+            # line 1 is out: the reason is line 2, and the exit says so
+            early.line2(_reason(err))
+            s.record(kind=early.head, failed=err.kind, cmd_ms=early.cmd_ms, ms=ms, thread=thread, **extra)
+            return 1
+        # lines 1 and 2 are whole: the reply stands, without its proof
+        reply, extra = dict(early.parse.fields, proof=""), dict(extra, failed=err.kind)
+    if early.head is None:
         busy.stop()
         if refused:
             say("error")
             say(LINE_REFUSED)
-            s.record(kind="refused", ms=ms, thread=thread)
+            s.record(kind="refused", ms=ms, thread=thread, **extra)
             return 1
         if is_cmd:
             early.line1(kind, command)
-            early.line2(early.facts(hint) if kind == "danger" else hint)
+            early.line2(early.label(hint))
         else:
             early.line1("answer")
             early.line2(early.second(reply, final=True))

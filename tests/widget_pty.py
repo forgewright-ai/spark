@@ -66,6 +66,11 @@ fi
 line=$(cat)
 printf '%s\n' "$line" >> "$STUB_LOG"
 case $line in
+  # the judged line (v1.53): the real spark line, against smoke's stub
+  # server, grounded in smoke's tiny snapshot store (a bench turn)
+  *know*) printf '%s\n' "$line" | SPARK_LINE_BENCH=1 SPARK_KNOWLEDGE_SNAPSHOT="$KNOW_SNAP" \
+            SPARK_BASE_URL="$KNOW_URL" SPARK_API_KEY="$KNOW_KEY" SPARK_NO_REFRESH=1 \
+            "$KNOW_PY" "$KNOW_SPARK" "$@"; exit $? ;;
   *delete*) printf 'danger\techo EXECUTED-MARK\nDeletes things -- careful\n' ;;
   *answer-me*) printf 'answer\nForty-two\n' ;;
   # the hostile three: contract 4 broken three ways. The widget must run
@@ -332,6 +337,14 @@ def main(shell, widget):
                "EXPLAIN_LOG": elog, "STUB_ENV": envlog,
                "PATH": os.path.join(home, "bin") + ":" + os.environ.get("PATH", ""),
                "TERM": "xterm-256color", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "ZDOTDIR": home}
+        # the judged line's cases run the real spark line behind the stub
+        # script: smoke's stub server and its snapshot store
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import smoke
+        _srv, know_url = smoke.start_stub()
+        env.update(KNOW_URL=know_url, KNOW_KEY=smoke.TOKEN, KNOW_PY=sys.executable,
+                   KNOW_SPARK=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "bin", "spark"),
+                   KNOW_SNAP=smoke.know_store(os.path.join(tmp, "know-store.json")))
         prompt = "SPARKPROMPT> "
         if shell == "bash":
             sh = Shell(["bash", "--norc", "--noprofile", "-i"], env, os.path.join(tmp, "work"))
@@ -484,6 +497,28 @@ def main(shell, widget):
         ok(ran >= 0 and "streamed hint text" not in out[ran:],
            "streamed: Enter before the hint -- nothing drawn after the command ran", out[-400:])
         sh.expect(prompt)
+
+        # 3d. the judged line (v1.53), the real spark line: a command the
+        # judge finds wrong is asked again while the pulse row says why;
+        # line 1 is never painted with it, and never repainted; a re-ask's
+        # command that destroys lands with its ! before it shows
+        since = sh.mark()
+        sh.send("? knowslow show processes by memory\r")
+        first, full = seen_then("ps aux -m", "checked against the ps manual", 15)
+        ok("the ps manual has no --sort, so spark asks again" in first,
+           "judged: the pulse row says why spark asks again", first[-400:])
+        ok("--sort=" not in full and "ps aux -m" in full and "checked against the ps manual" in full,
+           "judged: the wrong command never reaches the line; the re-ask's lands, checked", full[-400:])
+        sh.send("\x15")
+        sh.settle()
+        since = sh.mark()
+        sh.send("? knowrisk show processes by memory\r")
+        first, full = seen_then("rm -rf build", "checked against the ps manual -- read it before Enter", 15)
+        at_mark = first.find("-- read it before Enter")
+        ok("--sort=" not in full and 0 <= at_mark < first.find("rm -rf build"),
+           "judged: a re-ask's command that destroys never shows before its ! mark", first[-400:])
+        sh.send("\x15")
+        sh.settle()
 
         # 4. a plain line runs at once, unasked
         n = asked()
