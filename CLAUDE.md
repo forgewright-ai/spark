@@ -214,6 +214,11 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 ROUTES is the one table of every route and its role)
                 do (spark do: the one loop, a face per driver -- the terminal,
                 --porcelain (contract 15) -- the budget, the hold, the man excerpt)
+                intake grounding judge (the prompt line's knowledge, three
+                contexts: intake reads what this machine can run -- its
+                manuals, its apps, spark's own verbs -- into the store outside
+                the hot path; grounding picks the entries that go with one
+                question; judge checks a proposed command against them)
                 sandbox (spark do --sandbox: the probe, the copy the kernel keeps
                 the steps inside, the review, the apply bound to it, a run's
                 life and its lock; every list that decides is a named line)
