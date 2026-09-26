@@ -3921,8 +3921,10 @@ print("restart", engine.restart_line("serve"), "|", engine.restart_line("check")
             t.ok(rc == 0 and "SITE_HEADLESS=yes" in open(home + "/.config/spark/site.env").read(),
                  "Void: spark headless on is allowed (a Void box can be a brain): the key is set", "%d %s" % (rc, out))
             rc, out, _ = spark("headless", extra=void)
+            # the fact LABELS (the header says "never asleep": a word test
+            # on the whole output would read sleep in it)
             t.ok(rc == 0 and "supervisor from boot" in out and "runit is not running here (a container)" in out
-                 and "linger" not in out and "sleep" not in out and "lid" not in out,
+                 and not any(label in out for label in ("  linger ", " sleep masked ", " lid ignored ")),
                  "Void: spark headless status reads the supervisor fact; no linger, sleep or lid fact on runit", out)
             rc, out, _ = spark("headless", "off", extra=void)
             t.ok(rc == 0 and "SITE_HEADLESS=no" in open(home + "/.config/spark/site.env").read(), "Void: spark headless off sets the key back", "%d %s" % (rc, out))
