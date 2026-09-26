@@ -1,0 +1,3 @@
+#!/bin/sh
+# rendered by spark install.sh -- the service's log, rotated by svlogd
+exec svlogd -tt @HOME@/.local/state/spark/log/spark-serve

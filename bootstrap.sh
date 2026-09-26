@@ -1,10 +1,10 @@
 #!/bin/sh
-# spark bootstrap.sh -- a fresh Debian-family Linux or macOS to a spark
-# workstation, idempotently. Run it again after any change to site.env. An
-# apply run prints what it CHANGED and what needs you, and nothing else:
-# a converged machine says only "Nothing to do".
+# spark bootstrap.sh -- a fresh Debian-family, Arch or Void Linux, or macOS,
+# to a spark workstation, idempotently. Run it again after any change to
+# site.env. An apply run prints what it CHANGED and what needs you, and
+# nothing else: a converged machine says only "Nothing to do".
 #
-#   ./bootstrap.sh                 apply (sudo only for apt/pacman and the headless rows)
+#   ./bootstrap.sh                 apply (sudo only for the packages, runit's root service and the headless rows)
 #   ./bootstrap.sh --dry-run       print what would change; never sudo
 #   ./bootstrap.sh --verbose       every row, not only what changed
 #   ./bootstrap.sh --list-packages one package per line, as this site wants them
@@ -274,13 +274,19 @@ section identity
 if [ "$client" = 1 ] && [ "$SITE_SET_HOSTNAME" = yes ]; then
     skip hostname "a client: the name is left as it is (the machine that serves owns its own)"
 elif [ "$SITE_SET_HOSTNAME" = yes ]; then
-    if [ "$(hostname -s 2>/dev/null || hostname)" = "$SITE_NAME" ]; then
+    # read and set by what is present, never by family: hostname is not in
+    # every base (uname -n is POSIX), hostnamectl is systemd's -- without it
+    # the name is /etc/hostname's at boot and the kernel's now
+    if [ "$(hostname -s 2>/dev/null || hostname 2>/dev/null || uname -n)" = "$SITE_NAME" ]; then
         ok hostname "$SITE_NAME"
     elif need hostname "set to $SITE_NAME (sudo)"; then
         if [ "$OS" = Darwin ]; then
             for k in LocalHostName ComputerName HostName; do as_root scutil --set $k "$SITE_NAME"; done
-        else
+        elif command -v hostnamectl >/dev/null 2>&1; then
             as_root hostnamectl set-hostname "$SITE_NAME"
+        else
+            printf '%s\n' "$SITE_NAME" | as_root tee /etc/hostname >/dev/null
+            as_root sysctl -qw kernel.hostname="$SITE_NAME" 2>/dev/null || true
         fi
         ok hostname "$SITE_NAME"
     fi
@@ -296,6 +302,7 @@ pkg_installed() {
     case $PM in
         apt) dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q 'install ok installed' ;;
         pacman) pacman -Qq "$1" >/dev/null 2>&1 ;;
+        xbps) xbps-query -p pkgver "$1" >/dev/null 2>&1 ;;
         *) return 1 ;;
     esac
 }
@@ -303,6 +310,7 @@ pkg_available() {
     case $PM in
         apt) apt-cache policy "$1" 2>/dev/null | grep -q 'Candidate: [^(]' ;;
         pacman) pacman -Sp "$1" >/dev/null 2>&1 ;;
+        xbps) xbps-query -R -p pkgver "$1" >/dev/null 2>&1 ;;
         *) return 1 ;;
     esac
 }
@@ -310,6 +318,7 @@ pkg_install() {   # pkg_install NAME... -- as root, the manager's own way
     case $PM in
         apt) as_root apt-get update -qq && as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "$@" ;;
         pacman) as_root pacman -S --needed --noconfirm "$@" ;;      # never -Sy alone: a rolling distro forbids the partial upgrade
+        xbps) as_root xbps-install -Sy "$@" ;;                     # -S syncs the index; a stale xbps refuses (the todo below)
         *) return 1 ;;
     esac
 }
@@ -319,7 +328,7 @@ if [ "$client" = 1 ]; then
 elif [ "$OS" = Darwin ]; then
     ok packages "nothing required"
 elif [ -z "$PM" ]; then
-    row todo packages "no package list for this Linux ($(sed -n 's/^PRETTY_NAME=//p' "${SPARK_OS_RELEASE:-/etc/os-release}" 2>/dev/null | tr -d '"')): distro/*.env know debian and arch -- install git curl python3 and libgomp by hand"
+    row todo packages "no package list for this Linux ($(sed -n 's/^PRETTY_NAME=//p' "${SPARK_OS_RELEASE:-/etc/os-release}" 2>/dev/null | tr -d '"')): distro/*.env know debian, arch and void -- install git curl python3 and libgomp by hand"
 else
     missing=''; absent=''
     for p in $(list_packages); do
@@ -337,6 +346,10 @@ else
             # the sync database is stale, most often: the fix is the full
             # upgrade, the user's to run (spark never -Sy's alone)
             row todo packages "pacman could not install:$missing -- sudo pacman -Syu (a rolling distro: spark never refreshes the database without upgrading), then run again"
+        elif [ "$PM" = xbps ]; then
+            # xbps itself is behind, most often (a rolling distro refuses
+            # every install until it is current): the full upgrade is the fix
+            row todo packages "xbps could not install:$missing -- sudo xbps-install -Su (a rolling distro: xbps itself must be current), then run again"
         else
             tail -20 "$TMP/pkg.log"; echo "bootstrap: $PM install failed" >&2; exit 1
         fi
@@ -635,92 +648,197 @@ elif [ "$OS" = Darwin ]; then
         as_root pmset -a $pm_set; ok sleep "never sleeps, wake on LAN (pmset)"
     fi
 else
-    # the user bus, as lib/spark/engine.py user_bus_env gives it to every
-    # systemctl --user: a plain ssh brings neither, and the manager runs on
-    XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"; export XDG_RUNTIME_DIR
-    DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}"
-    export DBUS_SESSION_BUS_ADDRESS
-    if ! systemctl --user show-environment >/dev/null 2>&1; then
-        skip systemd "no user systemd session (headless or container)"
+    # the render group is core on a vulkan build too, and on either init: an
+    # ssh login has no seat, so no ACL, and llama-server would fall back to
+    # the CPU; headless, the group is durable where a logind seat ACL
+    # vanishes with the console session. A workstation on a cpu build sets
+    # nothing here.
+    if [ -e /dev/dri/renderD128 ] && getent group render >/dev/null 2>&1 && { [ "$headless" = 1 ] || [ "$AI_BUILD" = vulkan ]; }; then
+        if id -nG | tr " " "\n" | grep -qx render; then ok render "in the render group"
+        elif need render "usermod -aG render $(id -un) (sudo; then log in again)"; then
+            as_root usermod -aG render "$(id -un)"; made render; ok render "added -- the units see the GPU once you log out of every session and in again"; fi
+    fi
+    if [ "$INIT" = runit ]; then
+        # runit (Void): no user manager and no timer, so the user's services
+        # are one root service, /etc/sv/runsvdir-USER, whose run script drops
+        # to the user (chpst) and runs runsvdir over ~/.config/spark/sv -- the
+        # three dirs install.sh rendered (spark-check loops in place of a
+        # timer). Linked into /var/service it runs from boot, login or not;
+        # a `down` file in a service dir is the disable. A runsvdir-USER of
+        # your own (no spark marker in its run) is kept: spark links its dirs
+        # into the directory that one supervises. Seamed for the tests
+        # (SPARK_ETC_SV here; RUNIT_LIVE and VAR_SERVICE come from facts).
+        me=$(id -un); svdir="$SPARK_CONFIG_DIR/sv"; logs="$SPARK_STATE_DIR/log"
+        etc_sv=${SPARK_ETC_SV:-/etc/sv}; root_sv="$etc_sv/runsvdir-$me"; root_run="$root_sv/run"
+        sv_link="$VAR_SERVICE/runsvdir-$me"; sv_mark='rendered by spark bootstrap.sh'
+        sv_units="spark-check spark-serve spark-forge"
+        sv_show() { printf '~%s' "${1#"$HOME"}"; }
+        sv_first() { sv status "$1" 2>/dev/null | awk '{ print $1; exit }'; }
+        skip linger "runit: the supervisor runs from boot, login or not"
+        if [ "$RUNIT_LIVE" != 1 ]; then
+            skip runit "runit is not running here (a container): the services wait for a machine that boots"
+        else
+            # the svlogd dirs first: a log service starts with its runsv,
+            # `down` file or not, and dies without its directory
+            if [ "$MODE" != dry ]; then for s in $sv_units; do mkdir -p "$logs/$s"; chmod 0700 "$logs/$s"; done; fi
+            if [ -f "$root_run" ] && ! grep -qsF "$sv_mark" "$root_run"; then
+                # yours: the directory its runsvdir line names -- the last
+                # word, quotes off, $HOME spelled out; a space or a quote
+                # left in it is not a path spark will guess at
+                your_svdir=$(grep runsvdir "$root_run" 2>/dev/null | tail -1 | awk '{ print $NF }' | tr -d "\"'" | sed "s|\$HOME|$HOME|g")
+                linked=1
+                for s in $sv_units; do [ "$(readlink "$your_svdir/$s" 2>/dev/null)" = "$svdir/$s" ] || linked=0; done
+                case $your_svdir in
+                    ''|*[" \"'"]*) row todo supervisor "your runsvdir-$me's directory could not be read: link ~/.config/spark/sv/spark-* into it by hand" ;;
+                    *)  if [ "$linked" = 1 ]; then ok supervisor "your runsvdir-$me supervises $your_svdir; spark's services are linked there"
+                        elif [ ! -d "$your_svdir" ]; then row todo supervisor "your runsvdir-$me's directory could not be read: link ~/.config/spark/sv/spark-* into it by hand"
+                        elif need supervisor "link spark-check, spark-serve, spark-forge into $your_svdir (your runsvdir-$me)"; then
+                            for s in $sv_units; do ln -sfn "$svdir/$s" "$your_svdir/$s"; done
+                            # runsvdir scans every 5 s: give runsv time to take spark-check
+                            i=0; while [ "$i" -lt 10 ] && [ ! -e "$svdir/spark-check/supervise/ok" ]; do sleep 1; i=$((i + 1)); done
+                            ok supervisor "your runsvdir-$me supervises $your_svdir; spark's services are linked there"
+                        fi ;;
+                esac
+            else
+                # spark's root service, one fixed shape (lib/spark/uninstall.py
+                # knows it by the marker); the two values baked in are validated
+                # first, since they land in a root-owned script: a plain user
+                # name, and a HOME contract 3 takes with no space or quote in it
+                root_want=$(cat <<EOF
+#!/bin/sh
+# rendered by spark bootstrap.sh -- $me's services from boot (spark uninstall removes it)
+export USER="$me"
+export HOME="$HOME"
+groups="\$(id -Gn "\$USER" | tr ' ' ':')"
+exec chpst -u "\$USER:\$groups" runsvdir "\$HOME/.config/spark/sv"
+EOF
+)
+                sv_inputs_ok() {
+                    printf '%s' "$me" | grep -qE '^[a-z_][a-z0-9_-]*$' || return 1
+                    case $HOME in *[';`$()|&<>"'"'"' ']*) return 1 ;; esac
+                }
+                if [ "$(cat "$root_run" 2>/dev/null)" = "$root_want" ] && [ "$(readlink "$sv_link" 2>/dev/null)" = "$root_sv" ]; then
+                    ok supervisor "runsvdir-$me supervises ~/.config/spark/sv from boot"
+                elif ! sv_inputs_ok; then
+                    row todo supervisor "$root_run: the user name $me or the home $HOME cannot ride in a root script -- write it by hand: exec chpst -u $me runsvdir ~/.config/spark/sv"
+                elif need supervisor "write $root_sv, link it into $VAR_SERVICE (sudo)"; then
+                    as_root mkdir -p "$root_sv"
+                    printf '%s\n' "$root_want" | as_root tee "$root_run" >/dev/null
+                    as_root chmod 0755 "$root_run"
+                    as_root ln -sfn "$root_sv" "$sv_link"
+                    made runsvdir
+                    # runsvdir scans every 5 s: give runsv time to take spark-check
+                    i=0; while [ "$i" -lt 10 ] && [ ! -e "$svdir/spark-check/supervise/ok" ]; do sleep 1; i=$((i + 1)); done
+                    ok supervisor "runsvdir-$me supervises ~/.config/spark/sv from boot"
+                fi
+            fi
+            # sv_row NAME WANTED WHY IDLE: ok when supervised and running;
+            # else up (the `down` file goes), or disable (it comes back);
+            # IDLE is the skip word when it is down on purpose
+            sv_row() {
+                d="$svdir/$1"
+                if [ "$2" = 1 ]; then
+                    if [ ! -f "$d/down" ] && [ "$(sv_first "$d")" = run: ]; then ok "$1" "supervised (run)"
+                    elif need "$1" "sv up $(sv_show "$d")"; then
+                        rm -f "$d/down"; sv up "$d" >/dev/null 2>&1 || true
+                        i=0; while [ "$i" -lt 5 ] && [ "$(sv_first "$d")" != run: ]; do sleep 1; i=$((i + 1)); done
+                        if [ "$(sv_first "$d")" = run: ]; then ok "$1" "supervised (run)"
+                        else row todo "$1" "sv up $(sv_show "$d"): no runsv answers for it yet (runsvdir scans every 5 s) -- run again in a minute"; fi
+                    fi
+                elif [ ! -f "$d/down" ]; then
+                    if need "$1" "disable ($3)"; then touch "$d/down"; sv down "$d" >/dev/null 2>&1 || true; ok "$1" "disabled"; fi
+                else skip "$1" "$4 ($3)"; fi
+            }
+            sv_row spark-check 1 "" ""
+            sv_row spark-serve "$serve_ready" "$serve_why" "on demand"
+            sv_row spark-forge "$forge_ready" "$forge_why" off
+        fi
     else
-        [ "$MODE" = dry ] || systemctl --user daemon-reload
-        # first, before a unit starts a server: linger and the render group.
-        # headless: nobody logs in, so the login session's two gifts are
-        # replaced -- linger (the user's units run from boot, not from
-        # login) and the render group (llama-server reads /dev/dri/render*
-        # for the GPU; the group is durable where a logind seat ACL
-        # vanishes with the console session). A workstation keeps linger
-        # from its login session; SITE_HEADLESS=no sets nothing there.
-        if [ "$headless" = 0 ]; then
-            skip linger "a workstation (SITE_HEADLESS=no): units run from login"
-        elif [ "$(loginctl show-user "$(id -un)" -p Linger --value 2>/dev/null)" = yes ]; then ok linger "units run from boot"
-        elif need linger "loginctl enable-linger $(id -un) (sudo)"; then
-            as_root loginctl enable-linger "$(id -un)"; made linger; ok linger "units run from boot"; fi
-        # the render group is core on a vulkan build too: an ssh login has
-        # no seat, so no ACL, and llama-server would fall back to the CPU
-        if [ -e /dev/dri/renderD128 ] && getent group render >/dev/null 2>&1 && { [ "$headless" = 1 ] || [ "$AI_BUILD" = vulkan ]; }; then
-            if id -nG | tr " " "\n" | grep -qx render; then ok render "in the render group"
-            elif need render "usermod -aG render $(id -un) (sudo; then log in again)"; then
-                as_root usermod -aG render "$(id -un)"; made render; ok render "added -- the units see the GPU once you log out of every session and in again"; fi
-        fi
-        if [ "$(systemctl --user is-enabled spark-check.timer 2>/dev/null)" = enabled ]; then ok spark-check "timer enabled"
-        elif need spark-check "systemctl --user enable --now spark-check.timer"; then
-            systemctl --user enable --now spark-check.timer; ok spark-check "timer enabled"; fi
-        en=$(systemctl --user is-enabled spark-serve.service 2>/dev/null || true)
-        if [ "$serve_ready" = 1 ]; then
-            if [ "$en" = enabled ]; then ok spark-serve "enabled ($(systemctl --user is-active spark-serve.service 2>/dev/null))"
-            elif need spark-serve "systemctl --user enable --now spark-serve.service"; then
-                systemctl --user enable --now spark-serve.service; ok spark-serve "enabled"; fi
+        # the user bus, as lib/spark/engine.py user_bus_env gives it to every
+        # systemctl --user: a plain ssh brings neither, and the manager runs on
+        XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"; export XDG_RUNTIME_DIR
+        DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}"
+        export DBUS_SESSION_BUS_ADDRESS
+        if ! systemctl --user show-environment >/dev/null 2>&1; then
+            skip systemd "no user systemd session (headless or container)"
         else
-            if [ "$en" = enabled ] && need spark-serve "disable ($serve_why)"; then
-                systemctl --user disable --now spark-serve.service; ok spark-serve "disabled"
-            elif [ "$en" != enabled ]; then skip spark-serve "on demand ($serve_why)"; fi
-        fi
-        en=$(systemctl --user is-enabled spark-forge.service 2>/dev/null || true)
-        if [ "$forge_ready" = 1 ]; then
-            if [ "$en" = enabled ]; then ok spark-forge "enabled ($(systemctl --user is-active spark-forge.service 2>/dev/null))"
-            elif need spark-forge "systemctl --user enable --now spark-forge.service"; then
-                systemctl --user enable --now spark-forge.service; ok spark-forge "enabled"; fi
-        else
-            if [ "$en" = enabled ] && need spark-forge "disable ($forge_why)"; then
-                systemctl --user disable --now spark-forge.service; ok spark-forge "disabled"
-            elif [ "$en" != enabled ]; then skip spark-forge "off ($forge_why)"; fi
+            [ "$MODE" = dry ] || systemctl --user daemon-reload
+            # first, before a unit starts a server: linger. headless: nobody
+            # logs in, so the login session's gift is replaced by linger (the
+            # user's units run from boot, not from login). A workstation keeps
+            # linger from its login session; SITE_HEADLESS=no sets nothing there.
+            if [ "$headless" = 0 ]; then
+                skip linger "a workstation (SITE_HEADLESS=no): units run from login"
+            elif [ "$(loginctl show-user "$(id -un)" -p Linger --value 2>/dev/null)" = yes ]; then ok linger "units run from boot"
+            elif need linger "loginctl enable-linger $(id -un) (sudo)"; then
+                as_root loginctl enable-linger "$(id -un)"; made linger; ok linger "units run from boot"; fi
+            if [ "$(systemctl --user is-enabled spark-check.timer 2>/dev/null)" = enabled ]; then ok spark-check "timer enabled"
+            elif need spark-check "systemctl --user enable --now spark-check.timer"; then
+                systemctl --user enable --now spark-check.timer; ok spark-check "timer enabled"; fi
+            en=$(systemctl --user is-enabled spark-serve.service 2>/dev/null || true)
+            if [ "$serve_ready" = 1 ]; then
+                if [ "$en" = enabled ]; then ok spark-serve "enabled ($(systemctl --user is-active spark-serve.service 2>/dev/null))"
+                elif need spark-serve "systemctl --user enable --now spark-serve.service"; then
+                    systemctl --user enable --now spark-serve.service; ok spark-serve "enabled"; fi
+            else
+                if [ "$en" = enabled ] && need spark-serve "disable ($serve_why)"; then
+                    systemctl --user disable --now spark-serve.service; ok spark-serve "disabled"
+                elif [ "$en" != enabled ]; then skip spark-serve "on demand ($serve_why)"; fi
+            fi
+            en=$(systemctl --user is-enabled spark-forge.service 2>/dev/null || true)
+            if [ "$forge_ready" = 1 ]; then
+                if [ "$en" = enabled ]; then ok spark-forge "enabled ($(systemctl --user is-active spark-forge.service 2>/dev/null))"
+                elif need spark-forge "systemctl --user enable --now spark-forge.service"; then
+                    systemctl --user enable --now spark-forge.service; ok spark-forge "enabled"; fi
+            else
+                if [ "$en" = enabled ] && need spark-forge "disable ($forge_why)"; then
+                    systemctl --user disable --now spark-forge.service; ok spark-forge "disabled"
+                elif [ "$en" != enabled ]; then skip spark-forge "off ($forge_why)"; fi
+            fi
         fi
     fi
-    # sleep: a brain never sleeps (the four sleep targets masked) and a laptop
-    # as the box keeps running with its lid shut (a logind drop-in, HUP to
-    # logind). `spark headless off` undoes both (SPARK_HEADLESS_UNDO=1): a
-    # plain run with SITE_HEADLESS=no never touches another user's brain.
-    targets="sleep.target suspend.target hibernate.target hybrid-sleep.target"
-    nmasked=0
-    for t in $targets; do [ "$(systemctl is-enabled "$t" 2>/dev/null || true)" = masked ] && nmasked=$((nmasked + 1)); done
-    dropin=/etc/systemd/logind.conf.d/spark.conf
-    lid=$(printf '[Login]\nHandleLidSwitch=ignore\nHandleLidSwitchExternalPower=ignore\n')
-    # WSL 2 stops with its last window: a hand-set SITE_HEADLESS=yes there is a
-    # todo, never a systemctl mask (spark headless on refuses it first)
-    if [ "$headless" = 1 ] && is_wsl; then row todo headless "WSL 2 stops with its last window: not a brain (a Linux box is)"; headless=0; fi
-    if [ "$headless" = 1 ]; then
-        if [ "$nmasked" = 4 ]; then ok sleep "sleep, suspend, hibernate masked"
-        elif need sleep "systemctl mask $targets (sudo)"; then
-            # shellcheck disable=SC2086
-            as_root systemctl mask $targets >/dev/null 2>&1; ok sleep "sleep, suspend, hibernate masked"; fi
-        if [ "$(cat "$dropin" 2>/dev/null)" = "$lid" ]; then ok lid "ignored ($dropin)"
-        elif need lid "write $dropin: HandleLidSwitch=ignore; HUP systemd-logind (sudo)"; then
-            as_root mkdir -p "$(dirname "$dropin")"
-            printf '%s\n' "$lid" | as_root tee "$dropin" >/dev/null
-            as_root systemctl kill -s HUP systemd-logind.service 2>/dev/null || true
-            ok lid "ignored ($dropin)"; fi
-    elif [ "$nmasked" = 0 ] && [ ! -f "$dropin" ]; then
-        skip sleep "a workstation (SITE_HEADLESS=no)"
-    elif [ "${SPARK_HEADLESS_UNDO:-}" != 1 ]; then
-        skip sleep "masked by a brain on this machine (spark headless off undoes it)"
+    if [ "$INIT" = runit ]; then
+        # no sleep targets and no logind on runit: a Void box that is a brain
+        # needs no mask, and its lid is elogind's or acpid's; a hand-set
+        # SITE_HEADLESS=yes stands (the services run from boot by construction)
+        skip sleep "runit: no sleep targets here; nothing puts this machine to sleep on its own"
+        skip lid "runit: the lid is elogind's or acpid's here; left alone"
     else
-        if [ "$nmasked" != 0 ] && need sleep "systemctl unmask $targets (SITE_HEADLESS=no) (sudo)"; then
-            # shellcheck disable=SC2086
-            as_root systemctl unmask $targets >/dev/null 2>&1; ok sleep "unmasked: the box may sleep again"; fi
-        if [ -f "$dropin" ] && need lid "remove $dropin; HUP systemd-logind (SITE_HEADLESS=no) (sudo)"; then
-            as_root rm -f "$dropin"; as_root systemctl kill -s HUP systemd-logind.service 2>/dev/null || true
-            ok lid "the lid closes the laptop again"; fi
+        # sleep: a brain never sleeps (the four sleep targets masked) and a laptop
+        # as the box keeps running with its lid shut (a logind drop-in, HUP to
+        # logind). `spark headless off` undoes both (SPARK_HEADLESS_UNDO=1): a
+        # plain run with SITE_HEADLESS=no never touches another user's brain.
+        targets="sleep.target suspend.target hibernate.target hybrid-sleep.target"
+        nmasked=0
+        for t in $targets; do [ "$(systemctl is-enabled "$t" 2>/dev/null || true)" = masked ] && nmasked=$((nmasked + 1)); done
+        dropin=/etc/systemd/logind.conf.d/spark.conf
+        lid=$(printf '[Login]\nHandleLidSwitch=ignore\nHandleLidSwitchExternalPower=ignore\n')
+        # WSL 2 stops with its last window: a hand-set SITE_HEADLESS=yes there is a
+        # todo, never a systemctl mask (spark headless on refuses it first)
+        if [ "$headless" = 1 ] && is_wsl; then row todo headless "WSL 2 stops with its last window: not a brain (a Linux box is)"; headless=0; fi
+        if [ "$headless" = 1 ]; then
+            if [ "$nmasked" = 4 ]; then ok sleep "sleep, suspend, hibernate masked"
+            elif need sleep "systemctl mask $targets (sudo)"; then
+                # shellcheck disable=SC2086
+                as_root systemctl mask $targets >/dev/null 2>&1; ok sleep "sleep, suspend, hibernate masked"; fi
+            if [ "$(cat "$dropin" 2>/dev/null)" = "$lid" ]; then ok lid "ignored ($dropin)"
+            elif need lid "write $dropin: HandleLidSwitch=ignore; HUP systemd-logind (sudo)"; then
+                as_root mkdir -p "$(dirname "$dropin")"
+                printf '%s\n' "$lid" | as_root tee "$dropin" >/dev/null
+                as_root systemctl kill -s HUP systemd-logind.service 2>/dev/null || true
+                ok lid "ignored ($dropin)"; fi
+        elif [ "$nmasked" = 0 ] && [ ! -f "$dropin" ]; then
+            skip sleep "a workstation (SITE_HEADLESS=no)"
+        elif [ "${SPARK_HEADLESS_UNDO:-}" != 1 ]; then
+            skip sleep "masked by a brain on this machine (spark headless off undoes it)"
+        else
+            if [ "$nmasked" != 0 ] && need sleep "systemctl unmask $targets (SITE_HEADLESS=no) (sudo)"; then
+                # shellcheck disable=SC2086
+                as_root systemctl unmask $targets >/dev/null 2>&1; ok sleep "unmasked: the box may sleep again"; fi
+            if [ -f "$dropin" ] && need lid "remove $dropin; HUP systemd-logind (SITE_HEADLESS=no) (sudo)"; then
+                as_root rm -f "$dropin"; as_root systemctl kill -s HUP systemd-logind.service 2>/dev/null || true
+                ok lid "the lid closes the laptop again"; fi
+        fi
     fi
 fi
 
@@ -803,9 +921,12 @@ fi
 # and never by family (site.console_shape is the twin): console-setup's
 # FONTFACE + FONTSIZE where /etc/default/console-setup is (Debian), else
 # vconsole.conf's FONT= where /etc/vconsole.conf is (Arch and every
-# systemd distro); seamed for the tests (SPARK_ETC_*)
+# systemd distro), else rc.conf's FONT= beside /etc/runit (Void: runit's
+# stage 1 reads it at boot, setfont draws it now); seamed for the tests
+# (SPARK_ETC_*)
 console_setup=${SPARK_ETC_CONSOLE_SETUP:-/etc/default/console-setup}
 vconsole=${SPARK_ETC_VCONSOLE:-/etc/vconsole.conf}
+rcconf=${SPARK_ETC_RCCONF:-/etc/rc.conf}
 if [ "$client" = 1 ]; then
     skip console "a client: the console keeps its font"
 elif [ "$OS" = Darwin ]; then
@@ -814,8 +935,8 @@ elif is_wsl; then
     skip console "WSL 2: no console -- the font is Windows Terminal's"
 elif [ -z "$SITE_FONT_FACE" ]; then
     skip console "SITE_FONT_FACE unset: the console keeps its font"
-elif [ ! -f "$console_setup" ] && [ ! -f "$vconsole" ]; then
-    skip console "no console-setup and no vconsole.conf: the console keeps its font"
+elif [ ! -f "$console_setup" ] && [ ! -f "$vconsole" ] && ! { [ -f "$rcconf" ] && [ "$INIT" = runit ]; }; then
+    skip console "no console-setup, vconsole.conf or rc.conf: the console keeps its font"
 else
     size=${SITE_FONT_SIZE:-16x32}
     # both values are interpolated into a root sed below: only the shapes
@@ -835,18 +956,24 @@ else
             ok console "$SITE_FONT_FACE $size ($console_setup)"
         fi
     else
-        cur=$(sed -n 's/^FONT="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' "$vconsole" 2>/dev/null | head -1)
-        if [ "$cur" = "$SITE_FONT_FACE" ]; then ok console "$SITE_FONT_FACE $size ($vconsole)"
-        elif need console "FONT=$SITE_FONT_FACE in $vconsole; systemd-vconsole-setup restarted (sudo)"; then
-            as_root cp -n "$vconsole" "$vconsole.spark-orig" 2>/dev/null || true
-            if grep -q '^FONT=' "$vconsole"; then
-                as_root sed -i "s/^FONT=.*/FONT=$SITE_FONT_FACE/" "$vconsole"
+        # the two FONT= shapes: vconsole.conf, redrawn by systemd-vconsole-setup,
+        # or rc.conf (the value quoted, as Void ships it), redrawn by setfont;
+        # a commented #FONT= line is the one the sed takes over
+        if [ -f "$vconsole" ]; then fontfile=$vconsole; fontline="FONT=$SITE_FONT_FACE"; redraw="systemd-vconsole-setup restarted"
+        else fontfile=$rcconf; fontline="FONT=\"$SITE_FONT_FACE\""; redraw=setfont; fi
+        cur=$(sed -n 's/^FONT="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' "$fontfile" 2>/dev/null | head -1)
+        if [ "$cur" = "$SITE_FONT_FACE" ]; then ok console "$SITE_FONT_FACE $size ($fontfile)"
+        elif need console "FONT=$SITE_FONT_FACE in $fontfile; $redraw (sudo)"; then
+            as_root cp -n "$fontfile" "$fontfile.spark-orig" 2>/dev/null || true
+            if grep -q '^#\{0,1\}FONT=' "$fontfile"; then
+                as_root sed -i "s/^#\{0,1\}FONT=.*/$fontline/" "$fontfile"
             else
-                printf 'FONT=%s\n' "$SITE_FONT_FACE" | as_root tee -a "$vconsole" >/dev/null
+                printf '%s\n' "$fontline" | as_root tee -a "$fontfile" >/dev/null
             fi
             made console-font
-            as_root systemctl restart systemd-vconsole-setup 2>/dev/null || true
-            ok console "$SITE_FONT_FACE $size ($vconsole)"
+            if [ "$fontfile" = "$vconsole" ]; then as_root systemctl restart systemd-vconsole-setup 2>/dev/null || true
+            else as_root setfont "$SITE_FONT_FACE" 2>/dev/null || true; fi
+            ok console "$SITE_FONT_FACE $size ($fontfile)"
         fi
     fi
 fi
@@ -867,6 +994,8 @@ elif [ ! -f "$vt_file" ]; then
     skip vt-palette "no palette painted yet (spark theme NAME)"
 elif ! command -v setvtrgb >/dev/null 2>&1; then
     row todo vt-palette "setvtrgb is missing: $PM_INSTALL kbd"
+elif [ "$INIT" = runit ]; then
+    skip vt-palette "runit: the palette at boot is /etc/rc.local's; left alone (spark theme paints this console now)"
 elif [ ! -d /run/systemd/system ]; then
     skip vt-palette "no booted systemd here (a container): the unit waits for a machine that boots"
 else
@@ -1034,6 +1163,10 @@ GRUB_CMDLINE_LINUX_DEFAULT=\"\$GRUB_CMDLINE_LINUX_DEFAULT $QUIET_WORDS\""
         fi
     elif [ "$DISTRO" = arch ]; then
         skip quiet-boot "Arch without a UKI: the kernel line is the boot loader's -- left alone"
+    elif [ "$DISTRO" = void ]; then
+        # Void's update-grub sources no grub.d drop-in: the kernel line is
+        # the user's file, left alone (site.VOID_NO_BOOT is the twin)
+        skip quiet-boot "Void: GRUB reads no drop-in here; the kernel line is /etc/default/grub's, left alone"
     elif [ ! -f /etc/default/grub ]; then
         skip quiet-boot "no /etc/default/grub here"
     elif ! have_update_grub; then

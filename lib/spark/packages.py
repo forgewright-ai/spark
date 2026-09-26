@@ -48,6 +48,13 @@ def installed(pkgs):
         if rc == -1:
             return None
         return set(out.split())
+    if pm == "xbps":
+        # -l lists every installed package (`ii name-ver desc`): the names,
+        # cut to the ones asked about
+        rc, out = run(["xbps-query", "-l"], timeout=30)
+        if rc == -1:
+            return None
+        return parse_xbps_list(out) & set(pkgs)
     return None
 
 
@@ -71,12 +78,37 @@ def pending():
             return len(out.splitlines())
         rc, out = run(["pacman", "-Qu"], timeout=60)
         return -1 if rc == -1 else len(out.splitlines())
+    if pm == "xbps":
+        # -un: what a full upgrade would do, dry (`name-ver update ...`)
+        rc, out = run(["xbps-install", "-un"], timeout=120)
+        return -1 if rc != 0 else parse_xbps_pending(out)
     return -1
 
 
 def upgrade_line():
     """The one line a human runs to take the pending updates."""
-    return {"brew": "brew upgrade", "apt": "sudo apt upgrade", "pacman": "sudo pacman -Syu"}.get(manager(), "")
+    return {"brew": "brew upgrade", "apt": "sudo apt upgrade", "pacman": "sudo pacman -Syu",
+            "xbps": "sudo xbps-install -Su"}.get(manager(), "")
+
+
+def parse_xbps_list(out):
+    """The names an `xbps-query -l` transcript says are installed: the
+    `ii name-ver desc` lines (ii = installed; uu and hr are not), the name
+    being pkgver without its -version_revision tail. Pure, so a pasted
+    transcript proves it."""
+    names = set()
+    for line in out.splitlines():
+        f = line.split()
+        if len(f) >= 2 and f[0] == "ii":
+            names.add(f[1].rsplit("-", 1)[0])
+    return names
+
+
+def parse_xbps_pending(out):
+    """How many lines of an `xbps-install -un` transcript are updates:
+    `name-ver update arch repo size` (an `install` line is a new
+    dependency, not an update; a `configure` line neither). Pure."""
+    return sum(1 for line in out.splitlines() if len(line.split()) >= 2 and line.split()[1] == "update")
 
 
 # the pending row's words for an Arch box with no arch-audit: the
@@ -141,25 +173,25 @@ def install_line(pkgs):
 # batcat). Anything not here is left to the model to name -- this map
 # only spares a model call for tools spark already knows.
 _TOOL_PKG = {
-    "fd": {"apt": "fd-find", "pacman": "fd", "brew": "fd"},
-    "fdfind": {"apt": "fd-find", "pacman": "fd", "brew": "fd"},
-    "rg": {"apt": "ripgrep", "pacman": "ripgrep", "brew": "ripgrep"},
-    "bat": {"apt": "bat", "pacman": "bat", "brew": "bat"},
-    "batcat": {"apt": "bat", "pacman": "bat", "brew": "bat"},
-    "eza": {"apt": "eza", "pacman": "eza", "brew": "eza"},
-    "fzf": {"apt": "fzf", "pacman": "fzf", "brew": "fzf"},
-    "zoxide": {"apt": "zoxide", "pacman": "zoxide", "brew": "zoxide"},
-    "btop": {"apt": "btop", "pacman": "btop", "brew": "btop"},
-    "jq": {"apt": "jq", "pacman": "jq", "brew": "jq"},
-    "tmux": {"apt": "tmux", "pacman": "tmux", "brew": "tmux"},
-    "starship": {"apt": "starship", "pacman": "starship", "brew": "starship"},
+    "fd": {"apt": "fd-find", "pacman": "fd", "xbps": "fd", "brew": "fd"},
+    "fdfind": {"apt": "fd-find", "pacman": "fd", "xbps": "fd", "brew": "fd"},
+    "rg": {"apt": "ripgrep", "pacman": "ripgrep", "xbps": "ripgrep", "brew": "ripgrep"},
+    "bat": {"apt": "bat", "pacman": "bat", "xbps": "bat", "brew": "bat"},
+    "batcat": {"apt": "bat", "pacman": "bat", "xbps": "bat", "brew": "bat"},
+    "eza": {"apt": "eza", "pacman": "eza", "xbps": "eza", "brew": "eza"},
+    "fzf": {"apt": "fzf", "pacman": "fzf", "xbps": "fzf", "brew": "fzf"},
+    "zoxide": {"apt": "zoxide", "pacman": "zoxide", "xbps": "zoxide", "brew": "zoxide"},
+    "btop": {"apt": "btop", "pacman": "btop", "xbps": "btop", "brew": "btop"},
+    "jq": {"apt": "jq", "pacman": "jq", "xbps": "jq", "brew": "jq"},
+    "tmux": {"apt": "tmux", "pacman": "tmux", "xbps": "tmux", "brew": "tmux"},
+    "starship": {"apt": "starship", "pacman": "starship", "xbps": "starship", "brew": "starship"},
 }
 
 
 def package_for(binary):
     """The package that provides `binary` on this machine, when spark knows
     it (`_TOOL_PKG`), else '' -- the caller then asks the model. The family
-    is this machine's: fd is fd-find on Debian, fd on Arch and macOS."""
+    is this machine's: fd is fd-find on Debian, fd on Arch, Void and macOS."""
     row = _TOOL_PKG.get(binary)
     if not row:
         return ""
@@ -172,7 +204,8 @@ def remove_argv(pkgs):
     apt-get remove leaves them)."""
     if IS_MAC:
         return ["brew", "uninstall"] + list(pkgs)
-    return {"apt": ["apt-get", "remove", "-y"], "pacman": ["pacman", "-R", "--noconfirm"]}.get(manager(), []) + list(pkgs)
+    return {"apt": ["apt-get", "remove", "-y"], "pacman": ["pacman", "-R", "--noconfirm"],
+            "xbps": ["xbps-remove", "-y"]}.get(manager(), []) + list(pkgs)
 
 
 def remove_line(pkgs):
@@ -192,6 +225,14 @@ def parse_pacman_removal(out):
                       if l.strip() and not l.startswith(("error", "warning", ":"))))
 
 
+def parse_xbps_removal(out):
+    """The names an `xbps-remove -ny` transcript says would go: the lines
+    whose second field is `remove` (`name-ver remove arch repo size`), the
+    name as parse_xbps_list cuts it. Pure; sorted, each once."""
+    return sorted(set(line.split()[0].rsplit("-", 1)[0] for line in out.splitlines()
+                      if len(line.split()) >= 2 and line.split()[1] == "remove"))
+
+
 def remove_would(pkgs):
     """What the manager would REALLY remove for `pkgs`: apt takes the
     reverse dependencies with it (libvulkan1 -> libgl1-mesa-dri -> ... ->
@@ -204,13 +245,16 @@ def remove_would(pkgs):
     if pm == "pacman":
         rc, out = run(["pacman", "-Rp", "--print-format", "%n"] + list(pkgs), timeout=180)
         return parse_pacman_removal(out) if rc == 0 else None
+    if pm == "xbps":
+        rc, out = run(["xbps-remove", "-ny"] + list(pkgs), timeout=180)
+        return parse_xbps_removal(out) if rc == 0 else None
     return None
 
 
 def essential(pkg):
     """A package the manager refuses to remove (apt: dpkg's Essential flag,
-    ncurses-bin is one; pacman: one another package requires): it never
-    appears in a removal list."""
+    ncurses-bin is one; pacman and xbps: one another package requires): it
+    never appears in a removal list."""
     pm = manager()
     if pm == "apt":
         rc, out = run(["dpkg-query", "-W", "-f=${Essential}", pkg], timeout=10)
@@ -221,6 +265,10 @@ def essential(pkg):
         rc, out = run(["pacman", "-Qi", pkg], timeout=10)
         m = re.search(r"^Required By\s*:\s*(.*)$", out, re.M)
         return rc == 0 and bool(m) and m.group(1).strip() != "None"
+    if pm == "xbps":
+        # -X lists the reverse dependencies; any means xbps-remove refuses
+        rc, out = run(["xbps-query", "-X", pkg], timeout=10)
+        return rc == 0 and bool(out.strip())
     return False
 
 

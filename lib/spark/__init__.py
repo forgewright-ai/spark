@@ -318,7 +318,7 @@ def is_wsl():
 
 
 OS_RELEASE = os.environ.get("SPARK_OS_RELEASE", "/etc/os-release")
-DISTROS = ("debian", "arch")      # the package families distro/<id>.env know
+DISTROS = ("debian", "arch", "void")      # the package families distro/<id>.env know
 
 
 def _os_release():
@@ -336,9 +336,9 @@ def _os_release():
 
 
 def distro():
-    """The package family this Linux belongs to: "debian", "arch" or "" --
-    ID first, then each ID_LIKE word in order, the first one a distro/
-    file knows wins (ubuntu -> debian, manjaro -> arch). Unknown is "",
+    """The package family this Linux belongs to: "debian", "arch", "void"
+    or "" -- ID first, then each ID_LIKE word in order, the first one a
+    distro/ file knows wins (ubuntu -> debian, manjaro -> arch). Unknown is "",
     never a guess. Never on macOS unless SPARK_OS_RELEASE points at a
     file (tests, the way SPARK_PROC_VERSION does). bootstrap.sh eval's this
     through lib/spark/facts.py."""
@@ -355,8 +355,47 @@ def os_pretty():
     return name + (" on " + WSL if is_wsl() else "")
 
 
+# the init: systemd is what every Linux got before there was a second
+# one; runit (Void) is that second one, told by its directory. Both paths
+# are seamed for the tests (SPARK_ETC_RUNIT, SPARK_VAR_SERVICE), the way
+# SPARK_OS_RELEASE pins the family; bootstrap.sh eval's them through
+# lib/spark/facts.py
+RUNIT_DIR = os.environ.get("SPARK_ETC_RUNIT", "/etc/runit")
+VAR_SERVICE = os.environ.get("SPARK_VAR_SERVICE", "/var/service")
+
+
+def init_shape():
+    """The service manager this machine boots with: "launchd" on macOS,
+    "runit" when /etc/runit is a directory (Void), else "systemd" -- the
+    assumption every Linux had before there was a second init. Never on
+    macOS unless SPARK_ETC_RUNIT points at a directory (tests, the way
+    SPARK_OS_RELEASE does)."""
+    if IS_MAC and "SPARK_ETC_RUNIT" not in os.environ:
+        return "launchd"
+    return "runit" if os.path.isdir(RUNIT_DIR) else "systemd"
+
+
+def runit_live():
+    """A booted runit: /var/service resolves to the running runsvdir's
+    directory. A container has /etc/runit and no /var/service, so the
+    services there wait for a machine that boots."""
+    return os.path.isdir(VAR_SERVICE)
+
+
+LD_MUSL = os.environ.get("SPARK_LD_MUSL", "/lib/ld-musl-*.so.1")
+
+
+def is_musl():
+    """A musl libc (Void's second flavour): its loader is /lib/ld-musl-*.so.1.
+    The pinned llama.cpp tarballs are glibc builds, so nothing is pinned
+    there and `get` refuses in one line. SPARK_LD_MUSL pins the pattern
+    in tests."""
+    import glob
+    return bool(glob.glob(LD_MUSL))
+
+
 def package_manager():
-    for pm in ("apt-get", "dnf", "pacman", "zypper", "apk", "brew"):
+    for pm in ("apt-get", "dnf", "pacman", "xbps-install", "zypper", "apk", "brew"):
         if shutil.which(pm):
             return pm
     return ""

@@ -1,0 +1,8 @@
+#!/bin/sh
+# rendered by spark install.sh -- the always-on local model server (runit).
+# Enabled by bootstrap.sh (no `down` file) only when engine, model and
+# token all exist and SPARK_SERVICE=auto; `spark serve off --force
+# --noreload` puts the `down` file back. 78 = EX_CONFIG: not a crash.
+export HOME=@HOME@ USER=@USER@ PATH=@HOME@/.local/bin:/usr/local/bin:/usr/bin:/bin
+exec 2>&1
+exec @HOME@/.local/bin/spark serve --foreground

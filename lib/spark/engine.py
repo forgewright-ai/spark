@@ -1,6 +1,6 @@
 # spark.engine -- the model server on this machine: where the engine and
 # the model are, how to start llama-server and find it again, and what the
-# service manager (systemd or launchd) thinks of it.
+# service manager (systemd, runit or launchd) thinks of it.
 
 import fcntl
 import os
@@ -9,8 +9,8 @@ import signal
 import subprocess
 import time
 
-from . import (IS_MAC, LOCK_FILE, PID_FILE, REPO, SERVE_LOG, SERVE_URL_FILE, STATE_DIR, config, run,
-               state_dir)
+from . import (CONFIG_DIR, HOME, IS_MAC, LOCK_FILE, PID_FILE, REPO, SERVE_LOG, SERVE_URL_FILE, STATE_DIR, config,
+               init_shape, is_musl, run, state_dir)
 
 EX_CONFIG = 78          # sysexits: a missing engine, model or token -- not a crash
 
@@ -66,7 +66,11 @@ FLAVOURS = {
 
 def flavour(sysname, machine, build):
     """(asset name, sha) for this OS/arch/build, ('', '') when there is
-    no pin -- the engine step then leverages a build the machine has."""
+    no pin -- the engine step then leverages a build the machine has. A
+    musl libc (Void's second flavour) has no pin either: the tarballs are
+    glibc builds, and `get` says so before anything is cloned."""
+    if is_musl():
+        return "", ""
     name, key = FLAVOURS.get((sysname, machine, build), ("", ""))
     return name, (config.engine_pins().get(key, "") if key else "")
 
@@ -609,16 +613,79 @@ def log_tail(n=8):
 
 
 # ------------------------------------------------------- service managers
+# systemd user units, launchd agents or daemons, or runit service dirs
+# (Void: ~/.config/spark/sv/spark-<unit>, supervised from boot by the
+# user's runsvdir; a `down` file in a dir is the disable). init_shape()
+# says which, and every verb below switches on it once.
+def _runit():
+    return not IS_MAC and init_shape() == "runit"
+
+
+def _tilde(path):
+    return "~" + path[len(HOME):] if path.startswith(HOME + "/") else path
+
+
 def unit_name(unit="serve"):
-    """The service manager's name for a spark unit: launchd label or
-    systemd unit (serve -> spark.serve / spark-serve.service)."""
-    return "spark." + unit if IS_MAC else "spark-" + unit + ".service"
+    """The service manager's name for a spark unit: launchd label, runit
+    service dir or systemd unit (serve -> spark.serve / spark-serve /
+    spark-serve.service)."""
+    if IS_MAC:
+        return "spark." + unit
+    return "spark-" + unit if _runit() else "spark-" + unit + ".service"
+
+
+def service_dir(unit="serve"):
+    """The runit service directory of a spark unit (install.sh renders
+    it; bootstrap.sh takes its `down` file away)."""
+    return os.path.join(CONFIG_DIR, "sv", "spark-" + unit)
+
+
+def parse_sv_status(out):
+    """"run" | "down" | "absent" from an `sv status DIR` transcript: the
+    first word (`run:`, `down:`; `fail:` means no runsv watches the dir).
+    Pure, so a pasted transcript proves it."""
+    word = (out.split() or [""])[0].rstrip(":")
+    return word if word in ("run", "down") else "absent"
+
+
+def svctl(args, timeout=20):
+    """(rc, stdout, stderr) of `sv ARGS`; never raises (rc -1 when sv is
+    missing or hangs)."""
+    try:
+        p = subprocess.run(["sv"] + list(args), capture_output=True, text=True, timeout=timeout)
+        return p.returncode, p.stdout, p.stderr
+    except (OSError, subprocess.SubprocessError):
+        return -1, "", ""
+
+
+def sv_status(unit="serve"):
+    """(state, detail) of a runit service: state as parse_sv_status says
+    it (a missing dir is absent), detail the transcript's first line."""
+    d = service_dir(unit)
+    if not os.path.isdir(d):
+        return "absent", ""
+    _rc, out, _err = svctl(["status", d], timeout=10)
+    return parse_sv_status(out), (out.strip().splitlines() or [""])[0]
+
+
+def restart_line(unit="serve"):
+    """The line a human runs to bounce a spark unit and read why it fell,
+    per init: `systemctl --user restart` and the journal, `sv restart` and
+    the svlogd tail, `launchctl kickstart -k`. The services row's
+    remedies, the no-brain hint and the serve and forge verbs all say it."""
+    if IS_MAC:
+        return "launchctl kickstart -k " + service_target(None, unit)
+    if _runit():
+        return "sv restart %s; tail %s" % (_tilde(service_dir(unit)),
+                                          _tilde(os.path.join(STATE_DIR, "log", "spark-" + unit, "current")))
+    return "systemctl --user restart spark-%s; journalctl --user -u spark-%s" % (unit, unit)
 
 
 def service_domain(cfg, unit="serve"):
     """Where the service manager keeps a spark unit: "system" (a LaunchDaemon
     -- SITE_HEADLESS=yes on macOS, root's domain, runs as the user from boot),
-    "gui" (a LaunchAgent under this login) or "user" (systemd --user)."""
+    "gui" (a LaunchAgent under this login) or "user" (systemd --user, or the
+    user's runsvdir on runit)."""
     if not IS_MAC:
         return "user"
     rc, _ = run(["launchctl", "print", "system/" + unit_name(unit)])
@@ -689,6 +756,12 @@ def service_state(cfg, unit="serve"):
             return "disabled"
         rc, _ = run(["launchctl", "print", dom + "/" + name])
         return "loaded" if rc == 0 else "absent"
+    if _runit():
+        # the dir is the unit (install.sh rendered it), its `down` file the disable
+        d = service_dir(unit)
+        if not os.path.isdir(d):
+            return "absent"
+        return "disabled" if os.path.exists(os.path.join(d, "down")) else "loaded"
     rc, out, _err = sysctl(["is-enabled", name], timeout=5)
     st = out.strip()
     if st == "enabled":
@@ -714,6 +787,17 @@ def service_stop(noreload, unit="serve"):
             run(["launchctl", "disable", target], timeout=20)
         run(["launchctl", "bootout", target], timeout=20)
         return undo if noreload else "launchctl kickstart -k " + target
+    if _runit():
+        d = service_dir(unit)
+        undo = "rm %s/down; sv up %s" % (_tilde(d), _tilde(d))
+        if noreload:
+            try:
+                with open(os.path.join(d, "down"), "a"):
+                    pass
+            except OSError:
+                pass
+        svctl(["down", d], timeout=20)
+        return undo if noreload else "sv up " + _tilde(d)
     short = name[:-8]
     undo = "systemctl --user enable --now " + short
     if noreload:
@@ -735,6 +819,15 @@ def kickstart(cfg, unit="serve", restart=False):
     if IS_MAC:
         subprocess.run(["launchctl", "kickstart", "-k", service_target(cfg, unit)], capture_output=True)
         return True
+    if _runit():
+        verb = "restart" if restart else "up"
+        rc, out, err = svctl([verb, service_dir(unit)], timeout=30)
+        if rc == 0:
+            return True
+        from . import say
+        why = ((err or out).strip().splitlines() or ["sv exited %d" % rc])[0]
+        say("todo   %-12s sv %s %s failed: %s" % (unit, verb, unit_name(unit), why))
+        return False
     verb = "restart" if restart else "start"
     rc, out, err = sysctl([verb, unit_name(unit)], timeout=30)
     if rc == 0:

@@ -1,5 +1,51 @@
 # Changelog
 
+## v1.50
+
+A third Linux family, Void, and a second Linux init, runit. One spark,
+one oracle for each, the package names as data.
+
+- `distro()` answers `void` too. The package names live in
+  `distro/void.env`, the same 6 keys, and `get` accepts `xbps-install`
+  beside `apt-get` and `pacman`. The glibc flavour runs spark. The musl
+  flavour is refused at `get` in one line: the pinned engine is a
+  glibc build.
+- xbps: packages come through `xbps-install -Sy`. When xbps refuses an
+  install, the `packages` row is a todo naming `sudo xbps-install
+  -Su`, because xbps itself must be current on a rolling distro.
+  `libgomp` is its own package there. Where `hostname` is missing,
+  spark writes `/etc/hostname` and sets the kernel's name.
+- runit: `init_shape()` sits beside `distro()` and answers launchd,
+  runit when `/etc/runit` is a directory, else systemd. On runit the 3
+  services are directories under `~/.config/spark/sv/`, rendered by
+  `install.sh`. `bootstrap.sh` writes `/etc/sv/runsvdir-USER` once,
+  with sudo, and links it into `/var/service`, so the services run
+  from boot, logged in or not. `spark check` runs every 5 minutes as a
+  supervised loop, `spark serve off` puts a `down` file in the
+  service's directory, and each log is
+  `~/.local/state/spark/log/NAME/current`. A `runsvdir-USER` of your
+  own is used as it is. `spark headless on` works there, and the
+  `runit` and `supervisor` rows are core.
+- The console font has a third shape: `/etc/rc.conf`'s `FONT=` line
+  beside `/etc/runit`. `spark font` writes it and `setfont` redraws
+  this console. A Linux with none of the three answers `spark font --
+  no console-setup, vconsole.conf or rc.conf here: the console font is
+  not spark's to set`.
+- What Void lacks refuses in one signed line: `spark quiet boot -- no
+  drop-in on Void's GRUB: the kernel line is /etc/default/grub's
+  (GRUB_CMDLINE_LINUX_DEFAULT, GRUB_TIMEOUT=0, then update-grub)`,
+  exit 2. The `quiet` row says so, never fails (`check.VOID_ROWS`).
+  The palette at boot is `/etc/rc.local`'s, and sleep and the lid are
+  the machine's own. `spark quiet login on` works.
+- CI runs the one-liner as a new user in a `void` container too, with
+  a runsvdir started for the job. It proves what the Debian and Arch
+  jobs cannot: `spark-check` runs supervised. `--selftest` runs a
+  sixth pass, under `ID=void`. The engine, the GPU and the console on
+  Void are not yet proven on a machine.
+- The docs: a Void block in `docs/INSTALL.md` sections 1, 2 and 6, the
+  keys and the root actions in section 7, the cheatsheet's Linux block
+  and the Void package names in `CREDITS.md`.
+
 ## v1.49
 
 - Every document, help text and usage text speaks with one voice:

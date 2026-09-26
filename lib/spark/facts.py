@@ -9,9 +9,9 @@
 #   python3 lib/spark/facts.py        the facts, sh-quoted, one per line
 #
 # The test overrides bootstrap honoured (SPARK_OS_RELEASE,
-# SPARK_PROC_VERSION, SPARK_SYSFS_DRM, SPARK_MEM_TOTAL_GB, SITE_* in the
-# environment) are honoured here too: config and engine read the same
-# variables.
+# SPARK_PROC_VERSION, SPARK_ETC_RUNIT, SPARK_VAR_SERVICE, SPARK_SYSFS_DRM,
+# SPARK_MEM_TOTAL_GB, SITE_* in the environment) are honoured here too:
+# config and engine read the same variables.
 
 import os
 import shlex
@@ -22,7 +22,7 @@ if __name__ == "__main__":
     if _LIB not in sys.path:
         sys.path.insert(0, _LIB)
 
-from spark import config, distro, is_wsl, mem_total_gb
+from spark import VAR_SERVICE, config, distro, init_shape, is_wsl, mem_total_gb, runit_live
 from spark import engine
 
 
@@ -49,6 +49,11 @@ def facts():
         ("DISTRO", distro()),
         ("AI_BUILD", build),
         ("IS_WSL", "1" if is_wsl() else "0"),
+        # the init (systemd, runit, launchd), whether runit is booted here
+        # (/var/service resolves) and where that tree is
+        ("INIT", init_shape()),
+        ("RUNIT_LIVE", "1" if runit_live() else "0"),
+        ("VAR_SERVICE", VAR_SERVICE),
         ("MEM_GB", int(mem_total_gb())),
         ("LLAMA_VERSION", config.engine_pins().get("LLAMA_VERSION", "")),
         ("ENGINE_PIN_NAME", config.pinned_engine_name()),

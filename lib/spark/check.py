@@ -21,7 +21,7 @@ import sys
 import tempfile
 import time
 
-from . import distro, is_wsl  # noqa: E402  (the OS facts, beside os_pretty)
+from . import distro, init_shape, is_wsl, runit_live  # noqa: E402  (the OS facts, beside os_pretty)
 from . import (BIN_DIR, CACHE_DIR, CHECK_JSON, HOME, IS_MAC, MARK, OS, REPO,
                STATE_DIR, config, glyph, log_exc, packages, page, run, say, state_dir, version)
 
@@ -133,7 +133,7 @@ def row_packages(ctx):
         return ok("nothing required")
     have = packages.installed(pkgs)
     if have is None:
-        return fail("no package manager spark knows here (%s)" % (packages.manager() or "distro/*.env know debian and arch"), "./bootstrap.sh")
+        return fail("no package manager spark knows here (%s)" % (packages.manager() or "distro/*.env know debian, arch and void"), "./bootstrap.sh")
     missing = [p for p in pkgs if p not in have]
     if missing:
         return fail("%d/%d missing: %s" % (len(missing), len(pkgs), " ".join(missing[:6])), "./bootstrap.sh")
@@ -218,8 +218,9 @@ def row_engine(ctx):
 
 def _console_font_row(ctx):
     """The Linux half of the font row, by console shape: ok/fail against
-    SITE_FONT_FACE (console-setup's FONTFACE + FONTSIZE, or vconsole.conf's
-    FONT=), None when nothing is chosen there."""
+    SITE_FONT_FACE (console-setup's FONTFACE + FONTSIZE, or the FONT= of
+    vconsole.conf or rc.conf -- quotes stripped, a #FONT= line unset),
+    None when nothing is chosen there."""
     from . import site
     if IS_MAC or not ctx.cfg.font_face:
         return None
@@ -435,6 +436,29 @@ def _systemd_user(ctx, unit):
     return en.strip() or "not-found", ac.strip() or "inactive"
 
 
+# runit without a booted /var/service (a container): bootstrap's `skip
+# runit` row says the same words
+RUNIT_NOT_LIVE = "runit is not running here (a container): the services wait for a machine that boots"
+
+
+def _runit_user(ctx, unit):
+    """(enabled, active) for a runit service dir, in the systemd row's
+    vocabulary: enabled = no `down` file and a runsv watching it, disabled
+    = a `down` file, not-found = no dir (or nobody supervising it); active
+    = `sv status` says run."""
+    from . import engine
+    d = engine.service_dir(unit)
+    if not os.path.isdir(d):
+        return "not-found", "inactive"
+    rc, out = ctx.sh(["sv", "status", d], 10)
+    st = engine.parse_sv_status(out)
+    if os.path.exists(os.path.join(d, "down")):
+        en = "disabled"
+    else:
+        en = "enabled" if st != "absent" else "not-found"
+    return en, "active" if st == "run" else "inactive"
+
+
 @row("SOFTWARE")
 def row_services(ctx):
     if IS_MAC:
@@ -470,24 +494,35 @@ def row_services(ctx):
             worst = FAIL
         remedy = "./bootstrap.sh" if worst == FAIL else ""
         return Row(worst, SEP.join(parts), remedy)
-    en, ac = _systemd_user(ctx, "spark-check.timer")
-    if not en:
-        if is_wsl():
-            return na("no user systemd session (WSL 2)", "[boot] systemd=true in /etc/wsl.conf; wsl --shutdown from Windows; ./bootstrap.sh")
-        return na("no user systemd session (headless or container)")
-    parts, worst, remedies = ["check timer %s, %s" % (en, ac)], OK, []
+    from . import engine
+    runit = init_shape() == "runit"
+    if runit:
+        # runit: the three service dirs under the user's runsvdir; without
+        # a booted /var/service (a container) there is nobody to ask
+        if not runit_live():
+            return na(RUNIT_NOT_LIVE)
+        en, ac = _runit_user(ctx, "check")
+        parts = ["check service %s, %s" % (en, ac)]
+    else:
+        en, ac = _systemd_user(ctx, "spark-check.timer")
+        if not en:
+            if is_wsl():
+                return na("no user systemd session (WSL 2)", "[boot] systemd=true in /etc/wsl.conf; wsl --shutdown from Windows; ./bootstrap.sh")
+            return na("no user systemd session (headless or container)")
+        parts = ["check timer %s, %s" % (en, ac)]
+    worst, remedies = OK, []
     if en != "enabled" or ac != "active":
         worst = FAIL
-    sen, sac = _systemd_user(ctx, "spark-serve.service")
+    sen, sac = _runit_user(ctx, "serve") if runit else _systemd_user(ctx, "spark-serve.service")
     if sen == "enabled":
         if sac != "active":
-            from . import engine
             if engine.server_pids(ctx.cfg.port):
                 parts.append("serve unit inactive; a hand-started server answers")
-                remedies.append("spark serve off; systemctl --user start spark-serve   (to hand it back to the unit)")
+                remedies.append("spark serve off; %s   (to hand it back to the unit)"
+                                % ("sv up " + ctx.short(engine.service_dir("serve")) if runit else "systemctl --user start spark-serve"))
             else:
                 parts.append("serve %s" % sac)
-                remedies.append("systemctl --user restart spark-serve; journalctl --user -u spark-serve")
+                remedies.append(engine.restart_line("serve"))
             worst = WARN if worst == OK else worst
         else:
             parts.append("serve active")
@@ -496,11 +531,11 @@ def row_services(ctx):
     else:
         parts.append("serve on demand")
     # the FORGE: enabled and running, enabled but down (warn), or off
-    fen, fac = _systemd_user(ctx, "spark-forge.service")
+    fen, fac = _runit_user(ctx, "forge") if runit else _systemd_user(ctx, "spark-forge.service")
     if fen == "enabled":
         parts.append("forge %s" % ("active" if fac == "active" else fac))
         if fac != "active":
-            remedies.append("systemctl --user restart spark-forge; journalctl --user -u spark-forge")
+            remedies.append(engine.restart_line("forge"))
             worst = WARN if worst == OK else worst
     else:
         parts.append("forge off")
@@ -1403,7 +1438,11 @@ def row_headless(ctx):
     missing = [piece for piece, good, _ in site.headless_facts(ctx.cfg) if not good]
     if missing:
         return warn("missing: " + ", ".join(missing), "./bootstrap.sh   (sudo)")
-    return ok("daemons loaded, never sleeps, wake on LAN" if IS_MAC else "linger, sleep masked, lid ignored")
+    if IS_MAC:
+        return ok("daemons loaded, never sleeps, wake on LAN")
+    if init_shape() == "runit":
+        return ok("the supervisor runs from boot; nothing here sleeps on its own")
+    return ok("linger, sleep masked, lid ignored")
 
 
 @row("CAPABILITY", fixture=False, reason="reads the real spark group and the shared token; the group needs root to create")
@@ -1472,6 +1511,12 @@ WSL_ROWS = ("font", "quiet", "gpu")
 # fifth pass, on Linux, proves each says so, that the font row is real
 # through vconsole.conf and that the packages row answers through pacman
 ARCH_ROWS = ("quiet",)
+# the rows Void answers differently (na or a Void note on the half it
+# lacks -- a GRUB that reads no drop-in -- never a fault): the selftest's
+# sixth pass, on Linux, proves each says so, that the font row is real
+# through rc.conf, that the packages row answers through xbps and the
+# services row through sv
+VOID_ROWS = ("quiet",)
 # a client's rows: nothing runs here (SITE_AI_MODEL=none + SITE_PEER_AI_URL),
 # so the engine, the units, their snapshot, the local AI, its two servers and
 # a second model of its own are na before they look; the peer row is where a
@@ -1751,12 +1796,20 @@ def make_fixture(root, good, stub_url="", real_spark=False):
     with open(os.path.join(cfgd, "console-colors.rgb"), "w") as f:
         f.write(("16," * 15 + "16\n") * 3)
     # the console font files, pinned: console-setup's (the good machine's
-    # face and size, the bad one's another) and vconsole.conf's for the
-    # Arch pass (the same face, FONT= alone); the shape is which exists
+    # face and size, the bad one's another), vconsole.conf's for the Arch
+    # pass (the same face, FONT= alone) and rc.conf's for the Void pass
+    # (FONT= quoted, as Void ships it, under a commented KEYMAP); the shape
+    # is which exists. The runit dirs beside them: runit/ says the init,
+    # service/ says it is booted -- every pass but the sixth points
+    # SPARK_ETC_RUNIT at a dir that is not there and stays systemd
     with open(os.path.join(root, "console-setup"), "w") as f:
         f.write('CHARMAP="UTF-8"\nFONTFACE="%s"\nFONTSIZE="16x32"\n' % ("Terminus" if good else "VGA"))
     with open(os.path.join(root, "vconsole.conf"), "w") as f:
         f.write("KEYMAP=us\nFONT=%s\n" % ("Terminus" if good else "default8x16"))
+    with open(os.path.join(root, "rc.conf"), "w") as f:
+        f.write('#KEYMAP="us"\nFONT="%s"\n' % ("Terminus" if good else "default8x16"))
+    os.makedirs(os.path.join(root, "runit"))
+    os.makedirs(os.path.join(root, "service"))
     # the live kernel palette the theme row compares with (sysfs, pinned)
     os.makedirs(os.path.join(root, "vt"))
     for ch in ("red", "grn", "blu"):
@@ -1890,6 +1943,20 @@ def make_fixture(root, good, stub_url="", real_spark=False):
           "#!/bin/sh\n" + ("shift 3; for p; do echo \"$p install ok installed\"; done\n" if good else "exit 1\n"))
     _stub(os.path.join(bin_, "pacman"),
           "#!/bin/sh\n" + ("case $1 in -Qq) shift; printf '%s\\n' \"$@\" ;; -Sp) exit 0 ;; *) exit 1 ;; esac\n" if good else "exit 1\n"))
+    # xbps for the Void pass: -l lists every name distro/void.env holds
+    # (the packages row cuts it to --list-packages, which the stub bootstrap
+    # answers with bash and git: both listed too); -p pkgver and -R say
+    # installed and in a repo; xbps-install -un says nothing is pending
+    void = config.parse_env(os.path.join(REPO, "distro", "void.env"))
+    void_names = sorted({"bash", "git"} | set(" ".join(void.get(g, "") for g in packages.GROUPS).split()))
+    _stub(os.path.join(bin_, "xbps-query"),
+          "#!/bin/sh\n" + ("case $1 in -l) for p in %s; do echo \"ii $p-1.0_1 fixture\"; done ;; -p|-R) exit 0 ;; *) exit 1 ;; esac\n"
+                            % " ".join(void_names) if good else "exit 1\n"))
+    _stub(os.path.join(bin_, "xbps-install"), "#!/bin/sh\n" + ("exit 0\n" if good else "exit 1\n"))
+    # sv for the Void pass: the dir asked about is supervised and running
+    # (good), or no runsv watches it (bad)
+    _stub(os.path.join(bin_, "sv"),
+          "#!/bin/sh\n" + ("echo \"run: $2: (pid 1) 1s\"\n" if good else "echo \"fail: $2: runsv not running\"; exit 1\n"))
     _stub(os.path.join(bin_, "checkupdates"), "#!/bin/sh\n" + ("exit 2\n" if good else "exit 1\n"))
     _stub(os.path.join(bin_, "systemctl"),
           "#!/bin/sh\n[ \"$2\" = show-environment ] && exit 0\ncase $3 in spark-check.timer) "
@@ -1913,6 +1980,8 @@ def make_fixture(root, good, stub_url="", real_spark=False):
             "SPARK_PROC_VERSION": os.path.join(root, "version"), "SPARK_SYSFS_VT": os.path.join(root, "vt"),
             "SPARK_OS_RELEASE": os.path.join(root, "os-release"),
             "SPARK_ETC_CONSOLE_SETUP": os.path.join(root, "console-setup"), "SPARK_ETC_VCONSOLE": os.path.join(root, "vconsole.conf"),
+            "SPARK_ETC_RCCONF": os.path.join(root, "rc.conf"), "SPARK_ETC_RUNIT": os.path.join(root, "no-runit"),
+            "SPARK_VAR_SERVICE": os.path.join(root, "service"),
             "SPARK_MAC_FONTS": "Menlo-Regular" if good else "",     # macOS: the font row's installed faces, pinned
             "SPARK_MEM_TOTAL_GB": "16" if good else "8", "SHELL": "/bin/zsh" if IS_MAC else "/bin/bash",
             "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8"}
@@ -1954,7 +2023,9 @@ def selftest():
     row must be ok in the good one and not ok in the bad one. A third
     pass, the good fixture as a client of the stub, must make every
     client row na; a fourth, on Linux, the good fixture under WSL 2:
-    every WSL row says so; a fifth under ID=arch likewise."""
+    every WSL row says so; a fifth under ID=arch likewise; a sixth under
+    ID=void, where the services row answers through sv and the font row
+    through rc.conf."""
     base = {k: v for k, v in os.environ.items()
             if not k.startswith(("GIT_", "SPARK_", "XDG_", "SITE_"))}
     results = {}
@@ -2030,6 +2101,32 @@ def selftest():
                 parts = line.split("\t")
                 if len(parts) == 5:
                     results["arch"][parts[2]] = (parts[1], parts[3])
+        # the sixth pass, Linux only: the good fixture as Void (ID="void" in
+        # os-release, xbps and sv stubs, /etc/runit and /var/service dirs,
+        # rc.conf with neither console-setup nor vconsole.conf, spark-check's
+        # service dir present without a `down` file) -- quiet says so on the
+        # half Void lacks, never fails; the font row is ok through rc.conf;
+        # the packages row answers through xbps and the services row through sv
+        results["void"] = {}
+        if not IS_MAC:
+            root = os.path.join(tmp, "void")
+            os.makedirs(root)
+            env = dict(base)
+            env.update(make_fixture(root, True, stub_url))
+            with open(os.path.join(root, "os-release"), "w") as f:
+                f.write('ID="void"\nPRETTY_NAME="Void Linux"\n')
+            env["SITE_QUIET_BOOT"] = "yes"                          # the boot half Void lacks (GRUB reads no drop-in)
+            env["SPARK_ETC_CONSOLE_SETUP"] = os.path.join(root, "none")
+            env["SPARK_ETC_VCONSOLE"] = os.path.join(root, "none")    # the rcconf shape: FONT= in rc.conf beside /etc/runit
+            env["SPARK_ETC_RUNIT"] = os.path.join(root, "runit")
+            env["SPARK_VAR_SERVICE"] = os.path.join(root, "service")
+            os.makedirs(os.path.join(root, "home", ".config", "spark", "sv", "spark-check"))   # supervised, no `down`
+            p = subprocess.run([sys.executable, os.path.join(REPO, "bin", "spark"), "check", "--porcelain", "--fresh"],
+                               env=env, capture_output=True, text=True, timeout=180)
+            for line in p.stdout.splitlines():
+                parts = line.split("\t")
+                if len(parts) == 5:
+                    results["void"][parts[2]] = (parts[1], parts[3])
     srv.shutdown()
     bad = 0
     say("%s check --selftest" % MARK)
@@ -2072,6 +2169,19 @@ def selftest():
             % (GLYPH[OK] if not off and pk == OK and font_ok else GLYPH[FAIL], len(ARCH_ROWS) - len(off), pk, font[0],
                "" if not off else "   not so: " + " ".join(off)))
         bad += bool(off) or pk != OK or not font_ok
+    if IS_MAC:
+        say("  %s void: skipped on macOS (a Linux gate proves it)" % GLYPH[NA])
+    else:
+        off = [n for n in VOID_ROWS
+               if results["void"].get(n, ("missing", ""))[0] not in (NA, OK) or "Void" not in results["void"].get(n, ("", ""))[1]]
+        pk = results["void"].get("packages", ("missing", ""))[0]
+        font = results["void"].get("font", ("missing", ""))
+        font_ok = font[0] == OK and "rc.conf" in font[1]
+        svc = results["void"].get("services", ("missing", ""))[0]
+        say("  %s void: %d rows say Void, packages %s via xbps, font %s via rc.conf, services %s via sv%s"
+            % (GLYPH[OK] if not off and pk == OK and font_ok and svc == OK else GLYPH[FAIL], len(VOID_ROWS) - len(off), pk, font[0], svc,
+               "" if not off else "   not so: " + " ".join(off)))
+        bad += bool(off) or pk != OK or not font_ok or svc != OK
     say("  %d row%s failed to flip" % (bad, "" if bad == 1 else "s") if bad else "  every fixture-testable row flips")
     return 1 if bad else 0
 

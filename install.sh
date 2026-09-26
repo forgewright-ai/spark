@@ -13,8 +13,9 @@
 # an earlier back-up already holds that name).
 #
 # One layer: the AI -- the widgets, the hooks, the banner,
-# spark.env.example, the service units. The rc files are yours (bootstrap's
-# rc row adds one line); an editor's plugin is its own repository's
+# spark.env.example, the service units (systemd's links, launchd's plists,
+# runit's service dirs). The rc files are yours (bootstrap's rc row adds
+# one line); an editor's plugin is its own repository's
 # (github.com/forgewright-ai/spark-micro). spark installs neither.
 #
 #   install.sh --dry-run    print what would change, touch nothing
@@ -78,8 +79,9 @@ link_one() {   # link_one SRC DST
 esc() { printf '%s' "$1" | sed -e 's/[\\&|]/\\&/g'; }
 
 render_expr() {
-    # what the remaining templates (the launchd plists) actually use
+    # what the templates (the launchd plists, the runit run scripts) use
     e="s|@HOME@|$(esc "$HOME")|g"
+    e="$e;s|@USER@|$(esc "$(id -un)")|g"
     e="$e;s|@BREW_PREFIX@|$(esc "${HOMEBREW_PREFIX:-$(command -v brew >/dev/null 2>&1 && brew --prefix || echo /usr/local)}")|g"
     printf '%s' "$e"
 }
@@ -102,7 +104,8 @@ render_one() {   # render_one SRC DST
     mkdir -p "$(dirname "$2")"
     rm -f "$2"                      # a stale symlink from an older layout
     cp "$TMP" "$2"
-    chmod 0644 "$2"
+    # a template tracked executable (a runit run script) renders executable
+    if [ -x "$1" ]; then chmod 0755 "$2"; else chmod 0644 "$2"; fi
     row render "$2"
 }
 
@@ -120,14 +123,26 @@ for tree in "$REPO/home" "$REPO/$OSDIR/home"; do
 done
 
 # --- 2. templates ---------------------------------------------------------
+# the runit service dirs (templates/.config/spark/sv) land only where runit
+# is the init: /etc/runit is a directory (SPARK_ETC_RUNIT pins it in the
+# tests -- the same presence test lib/spark's init_shape makes), and never
+# for a client. A service whose run script is new here gets a `down` file
+# beside it: nothing starts before bootstrap.sh decides.
+runit=0; [ ! -d "${SPARK_ETC_RUNIT:-/etc/runit}" ] || runit=1
 for src in $(find "$REPO/templates" -type f | sort); do
     rel=${src#"$REPO"/templates/}
+    fresh=0
     case $rel in
         .config/spark/launchd/*)
             [ "$OS" = Darwin ] || continue
             [ "$client" = 0 ] || continue ;;
+        .config/spark/sv/*)
+            [ "$runit" = 1 ] || continue
+            [ "$client" = 0 ] || continue
+            case $rel in */log/run) ;; */run) [ -e "$HOME/$rel" ] || fresh=1 ;; esac ;;
     esac
     render_one "$src" "$HOME/$rel"
+    if [ "$fresh" = 1 ] && [ "$DRY" -eq 0 ]; then : > "$HOME/${rel%/run}/down"; fi
 done
 
 if [ "$changes" -eq 0 ]; then echo "Nothing to do"; else echo "$changes to do"; fi

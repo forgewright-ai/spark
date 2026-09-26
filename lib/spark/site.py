@@ -14,18 +14,22 @@ import subprocess
 import sys
 from urllib.parse import urlsplit
 
-from . import (CONFIG_DIR, HOME, IS_MAC, MARK, REPO, SHARE_TOKEN, SHARE_URL, SITE_ENV, SPARK_ENV, TOKEN_FILE,
-               config, distro, glyph, is_wsl, say)
+from . import (CONFIG_DIR, HOME, IS_MAC, MARK, REPO, RUNIT_DIR, SHARE_TOKEN, SHARE_URL, SITE_ENV, SPARK_ENV,
+               TOKEN_FILE, VAR_SERVICE, config, distro, glyph, init_shape, is_wsl, runit_live, say)
 
 # WSL 2: Linux, minus what the VT console and GRUB own (contract 8 lines)
 WSL_NO_FONT = "no console on WSL 2: the font lives in Windows Terminal's settings"
 WSL_NO_BOOT = "no GRUB on WSL 2: Windows boots it"
 WSL_NO_BRAIN = "WSL 2 stops with its last window: it cannot stay on and answer (a Linux machine can)"
-# a Linux with neither console mechanism (contract 8 line); Arch keeps
-# only the kernel-line refusal, and only without a Unified Kernel Image
-NO_CONSOLE_FONT = "no console-setup and no vconsole.conf here: the console font is not spark's to set"
+# a Linux with none of the three console mechanisms (contract 8 line);
+# Arch keeps only the kernel-line refusal, and only without a Unified
+# Kernel Image; Void's GRUB reads no drop-in, so its kernel line stays
+# the user's
+NO_CONSOLE_FONT = "no console-setup, vconsole.conf or rc.conf here: the console font is not spark's to set"
 ARCH_NO_BOOT = ("no UKI on this Arch: the kernel line is the boot loader's "
                 "(a loader entry's options line, or GRUB_CMDLINE_LINUX_DEFAULT then grub-mkconfig)")
+VOID_NO_BOOT = ("no drop-in on Void's GRUB: the kernel line is /etc/default/grub's "
+                "(GRUB_CMDLINE_LINUX_DEFAULT, GRUB_TIMEOUT=0, then update-grub)")
 # the quiet kernel line, the same seven words on every shape (bootstrap.sh
 # QUIET_WORDS is the sh twin): quiet+loglevel=3 silence the kernel, splash
 # hands Plymouth the boot when it is installed (inert otherwise),
@@ -83,9 +87,10 @@ def splash_live():
     return False
 
 
-# the two files a Linux sets its console font in, seamed for the tests
+# the three files a Linux sets its console font in, seamed for the tests
 CONSOLE_SETUP = os.environ.get("SPARK_ETC_CONSOLE_SETUP", "/etc/default/console-setup")
 VCONSOLE = os.environ.get("SPARK_ETC_VCONSOLE", "/etc/vconsole.conf")
+RCCONF = os.environ.get("SPARK_ETC_RCCONF", "/etc/rc.conf")
 
 
 def console_shape():
@@ -93,21 +98,25 @@ def console_shape():
     never by family: `setup` when console-setup's file is here (Debian:
     FONTFACE and FONTSIZE, composed from /usr/share/consolefonts),
     `vconsole` when /etc/vconsole.conf is (Arch, and every systemd distro
-    without console-setup: FONT= names one of the kbd font files), ''
-    when neither. bootstrap's console row is the sh twin."""
+    without console-setup: FONT= names one of the kbd font files),
+    `rcconf` when /etc/rc.conf sits beside /etc/runit (Void: the same
+    FONT=, read by runit's stage 1 at boot), '' when none. bootstrap's
+    console row is the sh twin."""
     if IS_MAC or is_wsl():
         return ""
     if os.path.isfile(CONSOLE_SETUP):
         return "setup"
     if os.path.isfile(VCONSOLE):
         return "vconsole"
+    if os.path.isfile(RCCONF) and os.path.isdir(RUNIT_DIR):
+        return "rcconf"
     return ""
 
 
 def no_console_font():
     """The one line that says why this Linux's console font is not spark's
-    to set ('' when it is): WSL 2 has no console; a Linux with neither
-    console-setup nor vconsole.conf has no file to write."""
+    to set ('' when it is): WSL 2 has no console; a Linux with none of
+    console-setup, vconsole.conf and rc.conf has no file to write."""
     if IS_MAC:
         return ""
     if is_wsl():
@@ -120,13 +129,16 @@ def no_console_font():
 def no_grub():
     """The one line that says why quiet boot is not spark's to set here
     ('' when it is): WSL 2 has no GRUB; Arch has no update-grub, so only
-    a Unified Kernel Image (a cmdline.d drop-in) is spark's there."""
+    a Unified Kernel Image (a cmdline.d drop-in) is spark's there; Void's
+    GRUB sources no grub.d drop-in, so its kernel line is the user's."""
     if IS_MAC:
         return ""
     if is_wsl():
         return WSL_NO_BOOT
     if distro() == "arch" and boot_shape() != "uki":
         return ARCH_NO_BOOT
+    if distro() == "void":
+        return VOID_NO_BOOT
     return ""
 
 
@@ -284,9 +296,10 @@ def console_fonts():
     """{face: set of sizes}, every size the way spark font takes it (WxH).
     On the console-setup shape a face is what console-setup composes,
     parsed from the file names (<codeset>-<Face><Size>, the sizes there
-    HxW -- size_as_taken flips them); on the vconsole shape a face is a
-    font file's stem and its size comes from the file's own header. {} when
-    the directory is unreadable (then nothing can be validated)."""
+    HxW -- size_as_taken flips them); on the vconsole and rcconf shapes a
+    face is a kbd font file's stem and its size comes from the file's own
+    header. {} when the directory is unreadable (then nothing can be
+    validated)."""
     d = consolefonts_dir()
     try:
         names = os.listdir(d) if d else []
@@ -312,8 +325,9 @@ def _size_key(size):
 
 
 def font_file():
-    """The file a chosen console font is written into on this Linux."""
-    return CONSOLE_SETUP if console_shape() == "setup" else VCONSOLE
+    """The file a chosen console font is written into on this Linux, per
+    console shape (vconsole.conf when there is none to name)."""
+    return {"setup": CONSOLE_SETUP, "rcconf": RCCONF}.get(console_shape(), VCONSOLE)
 
 
 def font_list():
@@ -500,7 +514,7 @@ HEADLESS_USAGE = """%s headless -- the machine that stays on and answers
                                 wake on LAN
   spark headless off            under your login again (macOS: pmset untouched)
 """ % MARK
-HEADLESS_ROWS = ["headless", "linger", "render", "sleep", "lid", "daemons", r"spark\.(serve|forge|check)"]
+HEADLESS_ROWS = ["headless", "linger", "render", "sleep", "lid", "daemons", "runit", "supervisor", r"spark\.(serve|forge|check)"]
 SLEEP_TARGETS = ("sleep.target", "suspend.target", "hibernate.target", "hybrid-sleep.target")
 LOGIND_DROPIN = "/etc/systemd/logind.conf.d/spark.conf"
 PMSET_WANT = (("sleep", "0"), ("disksleep", "0"), ("womp", "1"), ("autorestart", "1"))
@@ -529,12 +543,29 @@ def headless_facts(cfg):
                            "autorestart": "restarts after power loss"}[key], good,
                           "pmset %s %s" % (key, cur if cur is not None else "(not on this hardware)")))
         return facts
-    rc, out = run(["loginctl", "show-user", os.environ.get("USER") or cfg.user, "-p", "Linger", "--value"], timeout=10)
-    facts.append(("linger", out.strip() == "yes", "units run from boot" if out.strip() == "yes" else "units stop at logout"))
+    render = []
     if os.path.exists("/dev/dri/renderD128"):
         rc, out = run(["id", "-nG"], timeout=10)
         member = "render" in out.split()
-        facts.append(("render group", member, "the units see the GPU from boot" if member else "the GPU needs a login session"))
+        render.append(("render group", member, "the units see the GPU from boot" if member else "the GPU needs a login session"))
+    user = os.environ.get("USER") or cfg.user
+    if init_shape() == "runit":
+        # runit: the user's runsvdir is a root service linked into
+        # /var/service, so the services run from boot, login or not; there
+        # are no sleep targets and no logind, so nothing here sleeps on its
+        # own and the lid is elogind's or acpid's -- two facts, not four
+        link = os.path.join(VAR_SERVICE, "runsvdir-" + user)
+        linked = runit_live() and os.path.lexists(link)
+        if linked:
+            detail = "runsvdir-%s linked in %s" % (user, VAR_SERVICE)
+        elif runit_live():
+            detail = "no runsvdir-%s in %s (./bootstrap.sh)" % (user, VAR_SERVICE)
+        else:
+            detail = "runit is not running here (a container)"
+        return [("supervisor from boot", linked, detail)] + render
+    rc, out = run(["loginctl", "show-user", user, "-p", "Linger", "--value"], timeout=10)
+    facts.append(("linger", out.strip() == "yes", "units run from boot" if out.strip() == "yes" else "units stop at logout"))
+    facts += render
     masked = []
     for t in SLEEP_TARGETS:
         rc, out = run(["systemctl", "is-enabled", t], timeout=10)
@@ -768,6 +799,11 @@ def cmd_client(args):
                 stopped = True
             if os.path.exists(plist):
                 os.remove(plist)
+        elif init_shape() == "runit":
+            # the service dir stays rendered; its `down` file keeps the engine off
+            if engine.service_state(cfg) == "loaded":
+                engine.service_stop(True)
+                stopped = True
         else:
             link = os.path.join(HOME, ".config", "systemd", "user", name)
             if engine.service_state(cfg) == "loaded" or os.path.lexists(link):

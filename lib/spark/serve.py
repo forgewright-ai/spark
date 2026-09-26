@@ -212,7 +212,8 @@ def cmd_stop(args):
         if IS_MAC and engine.service_domain(cfg) == "system":
             return _die("the server is a LaunchDaemon (spark headless on) -- sudo launchctl bootout %s stops it; spark headless off puts it back under your login" % engine.service_target(cfg))
         if not force:
-            mgr = "launchd" if IS_MAC else "systemd"
+            from . import init_shape
+            mgr = init_shape()
             return _die("%s would bring the server straight back -- spark serve off --force stops it; --noreload keeps it down" % mgr)
         undo = engine.service_stop(noreload)
         left = engine.wait_gone(engine.server_pids(cfg.port), 20)

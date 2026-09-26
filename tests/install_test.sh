@@ -362,7 +362,7 @@ if [ "$(uname -s)" != Darwin ]; then
     out=$(SPARK_OS_RELEASE="$T/os-release-arch" SPARK_ETC_MKINITCPIO_D="$T/no-mkinitcpio.d" SPARK_ETC_CONSOLE_SETUP="$T/no-console-setup" SPARK_ETC_VCONSOLE="$T/vconsole.conf" PATH="$T/arch:$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Arch, font set) failed: $out"
     printf '%s\n' "$out" | grep -qE '^ok +console +Terminus 16x32 \(.*vconsole.conf\)' && ok "Arch: vconsole.conf already naming the face is ok" || bad "Arch console ok row: $(printf '%s\n' "$out" | grep -E ' console ' | head -1)"
     out=$(SPARK_OS_RELEASE="$T/os-release-arch" SPARK_ETC_MKINITCPIO_D="$T/no-mkinitcpio.d" SPARK_ETC_CONSOLE_SETUP="$T/no-console-setup" SPARK_ETC_VCONSOLE="$T/no-vconsole" PATH="$T/arch:$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (no console file) failed: $out"
-    printf '%s\n' "$out" | grep -qE '^skip +console +no console-setup and no vconsole.conf' && ok "no console file: the console row skips, naming both" || bad "bare console row: $(printf '%s\n' "$out" | grep -E ' console ' | head -1)"
+    printf '%s\n' "$out" | grep -qE '^skip +console +no console-setup, vconsole.conf or rc.conf' && ok "no console file: the console row skips, naming both" || bad "bare console row: $(printf '%s\n' "$out" | grep -E ' console ' | head -1)"
     # 10a. Arch with a Unified Kernel Image (a preset's `default_uki=`, the
     #     splash on its `default_options`): the quiet-boot row is REAL --
     #     a would row naming the cmdline.d drop-in, never sudo in a dry

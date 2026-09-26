@@ -42,7 +42,7 @@ DEFAULT_THEME = "none"
 # (the filter apply() uses when its output is captured; at a terminal the
 # whole bootstrap shows, progress bars included)
 CORE_ROWS = ["site", r"spark\.env", "name", "hostname", "model", "ember", "packages", "engine", "token", "dir",
-             "configs", "rc", "spark", "explain", "PATH", "hooks", "linger", "render", "systemd", "launchd",
+             "configs", "rc", "spark", "explain", "PATH", "hooks", "linger", "render", "systemd", "runit", "supervisor", "launchd",
              r"spark[-.]serve", r"spark[-.]forge", r"spark[-.]check"]
 QUESTION = "how big is this dir"
 VALUE = re.compile(r"^[^;`$()|&<>]*$")     # what a KEY=value line may hold (contract 3)

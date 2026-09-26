@@ -7,6 +7,9 @@
 # from the tree under test, the AI layer only; converges the same way.
 # arch: the second family, the same new user in an Arch container --
 # packages through pacman (Arch's base already holds the AI's library).
+# void: the third family, the same new user in a Void container -- packages
+# through xbps, the services under runit: a runsvdir started by root stands
+# in for the booted machine's, so spark-check runs supervised there.
 # macos: syntax, the selftest and the zsh pty test under Apple's python
 # 3.9; then (not on a pull request) the real core bootstrap.
 # workflows: zizmor, a pinned version in a venv, over these workflows
@@ -177,6 +180,59 @@ jobs:
           sudo -u newuser -H sh -c '~/.local/bin/spark check --porcelain --fresh' > /tmp/porcelain.txt
           awk -F'\t' '$1=="SOFTWARE" && $2=="fail" && $3!="services" { bad=1; print } END { exit bad }' /tmp/porcelain.txt
           awk -F'\t' '$3=="services" { print; found=1; if ($2!="na") bad=1 } END { exit bad || !found }' /tmp/porcelain.txt
+          sudo -u newuser -H sh -c 'grep -q "config/spark/hook\." ~/.bashrc'
+  void:
+    # the third family: xbps for the packages and runit for the services.
+    # A runsvdir started by root in the container stands in for the booted
+    # machine's, so this job proves what debian and arch cannot: bootstrap
+    # writes the user's runsvdir service, and spark-check runs supervised.
+    runs-on: ubuntu-latest
+    container: ghcr.io/void-linux/void-glibc-full:latest   # zizmor: ignore[unpinned-images] a rolling distro: latest is the only Void there is, and -Su moves it to today anyway
+    timeout-minutes: 20
+    steps:
+      # git first, as in the debian job; xbps itself first (a rolling
+      # distro refuses every install while xbps is behind); bash for the
+      # new user's shell and libstdc++ for the runner's node
+      - run: xbps-install -Syu xbps >/dev/null 2>&1 || true; xbps-install -Syu >/dev/null; xbps-install -Sy git ca-certificates bash libstdc++ >/dev/null
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: a new user with sudo
+        run: |
+          xbps-install -Sy sudo curl python3 >/dev/null
+          useradd -m -s /bin/bash newuser
+          echo 'newuser ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/newuser && chmod 440 /etc/sudoers.d/newuser
+          git config --system safe.directory '*'
+          git -C "$GITHUB_WORKSPACE" symbolic-ref -q HEAD >/dev/null || git -C "$GITHUB_WORKSPACE" checkout -q -B ci
+      - name: runit, as a booted Void has it
+        run: |
+          # stage 2's layout: /var/service resolves to the default runsvdir,
+          # and one runsvdir supervises it (setsid: it outlives this step)
+          mkdir -p /etc/sv /etc/runit/runsvdir/default /run/runit/runsvdir
+          ln -sfn /etc/runit/runsvdir/default /run/runit/runsvdir/current
+          [ -d /var/service ] || { rm -f /var/service; ln -s /run/runit/runsvdir/current /var/service; }
+          setsid -f runsvdir -P /var/service >/dev/null 2>&1 </dev/null
+          sleep 1; pgrep -x runsvdir >/dev/null
+      - name: the one-liner, pipe form, from the tree under test
+        run: |
+          ref=$(git -C "$GITHUB_WORKSPACE" symbolic-ref -q --short HEAD || echo ci)
+          sudo -u newuser -H env SITE_AI_MODEL=none SPARK_URL="file://$GITHUB_WORKSPACE" SPARK_REF="$ref" \
+            sh -c 'cat "$1" | sh' _ "$GITHUB_WORKSPACE/get"
+      - name: converged, checked, supervised, hooked
+        run: |
+          sudo -u newuser -H sh -c '~/.spark/bootstrap.sh --dry-run' | tee /tmp/dry.txt
+          grep -q '^Nothing to do$' /tmp/dry.txt
+          grep -qE '^ok +packages ' /tmp/dry.txt
+          # runit is live here: the user's runsvdir service is written and spark-check runs under it
+          grep -qE '^ok +supervisor ' /tmp/dry.txt
+          grep -qE '^ok +spark-check +supervised' /tmp/dry.txt
+          sudo -u newuser -H sh -c 'sv status ~/.config/spark/sv/spark-check' | grep '^run:'
+          sudo -u newuser -H sh -c '~/.local/bin/spark check --fresh' || true
+          sudo -u newuser -H sh -c '~/.local/bin/spark check --porcelain --fresh' > /tmp/porcelain.txt
+          awk -F'\t' '$1=="SOFTWARE" && $2=="fail" { bad=1; print } END { exit bad }' /tmp/porcelain.txt
+          # the services row is REAL here (runit live), never na
+          awk -F'\t' '$3=="services" { print; found=1; if ($2!="ok") bad=1 } END { exit bad || !found }' /tmp/porcelain.txt
           sudo -u newuser -H sh -c 'grep -q "config/spark/hook\." ~/.bashrc'
   macos:
     runs-on: macos-latest

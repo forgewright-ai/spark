@@ -5,8 +5,8 @@ the full reference. It describes how things are, not how they came to
 be.
 
 spark is a local AI at the shell prompt that never leaves your LAN. It
-runs on a fresh Debian-family or Arch Linux, on macOS, and on Ubuntu
-under WSL 2. Its spine is 3 lines. Choose your OS, run one line,
+runs on a fresh Debian-family, Arch or Void Linux, on macOS, and on
+Ubuntu under WSL 2. Its spine is 3 lines. Choose your OS, run one line,
 spark is live. A tool becomes a spark app as a client of `spark edit`
 (contract 10), in its own `spark-<app>` repository. When apps ask for
 it, another contract is defined and apps connect the same way. Inside,
@@ -97,20 +97,29 @@ prompt line, the page and any program.
   surrogateescape keeps one for a byte that was not UTF-8 in argv or the
   environment under the C locale. A w3m page title on the box was one.
 - **Symmetric.** Every feature exists on both OSes, through each OS's
-  native mechanism: apt or pacman, systemd or launchd, bash or zsh.
+  native mechanism: apt, pacman or xbps for the packages, systemd,
+  launchd or runit for the services, bash or zsh for the shell.
   Nothing OS-only ships. A Linux package family is one oracle beside
   `is_wsl()`: `distro()` reads `ID`, then `ID_LIKE`, from os-release,
   and `SPARK_OS_RELEASE` pins it. Its names are one data file,
   `distro/<id>.env`. The verbs that ask a package manager switch once on
-  `PM`: bootstrap's `pkg_*` and `lib/spark/packages.py`. What a family
-  lacks refuses in one signed line, and its rows say so, never fail
-  (`check.ARCH_ROWS`, the fifth selftest pass). Windows is reached
-  through WSL 2. Ubuntu there is Linux to spark, minus what the VT
-  console and the boot loader own. `is_wsl()` sits beside `os_pretty`,
-  the verbs that own those refuse in one signed line, and their rows say
-  so, never fail. CI has no WSL runner: `check.WSL_ROWS` and the fourth
-  selftest pass pin the branch by fixture. A real run there is the
-  maintainer's, by hand.
+  `PM`: bootstrap's `pkg_*` and `lib/spark/packages.py`. The init is
+  one oracle too, `init_shape()` beside `distro()`: launchd on macOS,
+  runit when `/etc/runit` is a directory, else systemd. On runit the 3
+  services are directories under `~/.config/spark/sv/`, rendered by
+  `install.sh`. A root `runsvdir-USER` service, written once by
+  bootstrap and linked into `/var/service`, supervises them from boot.
+  The engine pin is a glibc build, so Void's musl flavour refuses at
+  `get`: `musl libc: the pinned engine is a glibc build -- Void's glibc
+  flavour runs spark`. What a family lacks refuses in one signed line,
+  and its rows say so, never fail (`check.ARCH_ROWS` and
+  `check.VOID_ROWS`, the fifth and sixth selftest passes). Windows is
+  reached through WSL 2. Ubuntu there is Linux to spark, minus what the
+  VT console and the boot loader own. `is_wsl()` sits beside
+  `os_pretty`, the verbs that own those refuse in one signed line, and
+  their rows say so, never fail. CI has no WSL runner: `check.WSL_ROWS`
+  and the fourth selftest pass pin the branch by fixture. A real run
+  there is the maintainer's, by hand.
 - **The OS is the harness.** An agent's harness is its tools, its
   permissions, its context, its triggers and its memory. spark brings
   only the last. The tools are the programs on PATH and their man pages:
@@ -159,8 +168,9 @@ allowed-signers the release keys, ssh allowed-signers form -- one line per key,
 bootstrap.sh    POSIX sh, both OSes. --dry-run --list-packages --list-tools --list-models
 install.sh      POSIX sh, both OSes. Links home/ + <os>/home/ into $HOME; renders templates/
 lib/env.sh      the KEY=value reader for the two scripts (config.py is the python twin)
-distro/         one KEY=value file per Linux package family (debian.env, arch.env):
-                the manager, its install line, the doc's name, the 3 package groups
+distro/         one KEY=value file per Linux package family (debian.env, arch.env,
+                void.env): the manager, its install line, the doc's name, the 3
+                package groups
 site.env.example, models.env, engine.env, themes/*.env       KEY=value data
                 (engine.env is the llama.cpp pin: version + one sha per flavour)
 bin/spark, bin/explain -> spark                  the one command
@@ -239,7 +249,9 @@ home/           the shared $HOME mirror, linked. .config/spark/ holds the two
 linux/home/     the systemd user units (.config/systemd/user: spark-serve spark-forge
                 spark-check.service + spark-check.timer)
 templates/      rendered, not linked: .config/spark/launchd/spark.{serve,forge,check}.plist
-                (the 3 launchd agents)
+                (the 3 launchd agents); .config/spark/sv/spark-{serve,forge,check}/
+                (the 3 runit service directories: run, finish, log/run; rendered
+                only where /etc/runit is a directory)
 tests/          smoke.py serve_smoke.py forge_smoke.py bench_smoke.py
                 policy_test.py (every row of forgeserve.ROUTES with 3
                 callers: nobody, a user, the admin)
@@ -267,8 +279,10 @@ tests/          smoke.py serve_smoke.py forge_smoke.py bench_smoke.py
                 pre-push (the install, get, update and uninstall tests, the
                 selftest, chaos)
 .github/        workflows/ci.yml: linux and macos run the hermetic tests, then
-                a real bootstrap; debian and arch containers run the one-liner
-                as a new user; workflows runs zizmor over the workflows
+                a real bootstrap; debian, arch and void containers run the
+                one-liner as a new user (void under a runsvdir started for the
+                job: the supervised spark-check is proven there); workflows
+                runs zizmor over the workflows
                 workflows/release.yml: the GitHub Release from the CHANGELOG
                 section, on a signed v* tag
                 workflows/codeql.yml: GitHub's static analysis over the python
@@ -435,11 +449,13 @@ and may change freely.
      budget at the same RAM, and among equals the earlier row of the
      list. A name in both files is refused, naming both.
    - `distro/<id>.env`, one per Linux package family the oracle
-     `distro()` knows: `PM PM_INSTALL PM_TARGET PKG_CORE PKG_ENGINE
-     PKG_AI`, the same 6 keys in every file (`packages.KEYS`, and
-     `tests/docs_test.py` asserts it). `distro()` lives in
-     `lib/spark/__init__.py` beside `is_wsl()`, bootstrap.sh evals it
-     from `lib/spark/facts.py`, and `SPARK_OS_RELEASE` pins it.
+     `distro()` knows (`debian`, `arch`, `void`): `PM PM_INSTALL
+     PM_TARGET PKG_CORE PKG_ENGINE PKG_AI`, the same 6 keys in every
+     file (`packages.KEYS`, and `tests/docs_test.py` asserts it).
+     `distro()` lives in `lib/spark/__init__.py` beside `is_wsl()`,
+     bootstrap.sh evals it from `lib/spark/facts.py`, and
+     `SPARK_OS_RELEASE` pins it. `init_shape()` sits beside it, and
+     `SPARK_ETC_RUNIT` and `SPARK_VAR_SERVICE` pin the runit answer.
    - `themes/<name>.env`: `THEME_BG THEME_FG THEME_ACCENT THEME_MUTED
      THEME_ANSI_0..15`, the same 20 keys in `config.theme_palette` and
      the `theme` row's `check.THEME_KEYS`.
@@ -692,11 +708,15 @@ and may change freely.
    `/etc/cmdline.d` drop-in. Otherwise it answers `spark quiet boot --
    no UKI on this Arch: the kernel line is the boot loader's (a loader
    entry's options line, or GRUB_CMDLINE_LINUX_DEFAULT then
-   grub-mkconfig)`, exit 2. The console font goes by mechanism, never by
-   family (`site.console_shape()`: console-setup's file, else
-   vconsole.conf, else none). A Linux with neither answers `spark font
-   -- no console-setup and no vconsole.conf here: the console font is
-   not spark's to set` (show 0, set 2).
+   grub-mkconfig)`, exit 2. On Void it answers `spark quiet boot -- no
+   drop-in on Void's GRUB: the kernel line is /etc/default/grub's
+   (GRUB_CMDLINE_LINUX_DEFAULT, GRUB_TIMEOUT=0, then update-grub)`,
+   exit 2 (`site.VOID_NO_BOOT`). The console font goes by mechanism,
+   never by family (`site.console_shape()`: console-setup's file, else
+   vconsole.conf, else rc.conf beside `/etc/runit`, else none). A Linux
+   with none answers `spark font -- no console-setup, vconsole.conf or
+   rc.conf here: the console font is not spark's to set` (show 0, set
+   2).
 9. The `FORGE` HTTP API. `lib/spark/forgeserve.py` serves it on
    `SPARK_FORGE_HOST:SPARK_FORGE_PORT`: one LAN address, never the
    unspecified address in any spelling. `bind_check` in
@@ -1496,14 +1516,17 @@ sh tests/update_test.sh         # spark update: pull, move to a signed tag, unsi
 
 `spark check` has 40 rows today, by category `11 SOFTWARE, 20
 CAPABILITY, 9 NONFUNCTIONAL` (`grep -c '^@row' lib/spark/check.py`
-counts them). `--selftest` runs 5 passes. The first two prove every
+counts them). `--selftest` runs 6 passes. The first two prove every
 fixture-testable row flips between a good and a bad fixture. The third
 is the client shape: the 7 rows in `check.CLIENT_ROWS` answer `na`. On
 Linux the fourth runs under a WSL 2 kernel line, where the 3 rows in
 `check.WSL_ROWS` say so and never fail. The fifth runs under `ID=arch`,
 where the 1 row in `check.ARCH_ROWS` says so, the font row is ok
 through vconsole.conf and the packages row answers through a pacman
-stub.
+stub. The sixth runs under `ID=void`, where the 1 row in
+`check.VOID_ROWS` says so, the font row is ok through rc.conf, the
+packages row answers through an xbps stub and the services row through
+an sv stub.
 
 ## Releasing
 

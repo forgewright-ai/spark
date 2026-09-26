@@ -342,7 +342,7 @@ def main():
     src = read(os.path.join("lib", "spark", "check.py"))
     claude = read("CLAUDE.md")
     named = {}
-    for const in ("WSL_ROWS", "ARCH_ROWS", "CLIENT_ROWS"):
+    for const in ("WSL_ROWS", "ARCH_ROWS", "VOID_ROWS", "CLIENT_ROWS"):
         m = re.search(r"^%s = \(([^)]*)\)" % const, src, re.M)
         named[const] = re.findall(r'"([a-z]+)"', m.group(1)) if m else []
         check(bool(named[const]), "check.py defines %s" % const)
@@ -416,6 +416,10 @@ def main():
         check("docs/" + name in readme, "README.md points to docs/%s" % name)
     for name in DOCS_DIR:
         check(name in layout, "CLAUDE.md's Layout names docs/%s" % name)
+    # every package family's data file is named on the Layout's distro/ line
+    for f in sorted(os.listdir(os.path.join(ROOT, "distro"))):
+        if f.endswith(".env"):
+            check(f in layout, "CLAUDE.md's Layout names distro/%s" % f)
     # every docs/X a doc or the help names exists (the successor of the
     # page-source check; the CHANGELOG is history and may name what moved),
     # and README and the CHEATSHEET send a new user to the same set

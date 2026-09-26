@@ -3681,7 +3681,7 @@ def main():
             # neither file: not spark's to set, one signed line (contract 8)
             bare = dict(arch, SPARK_ETC_VCONSOLE=home + "/no-vconsole")
             rc, out, _ = spark("font", extra=bare)
-            t.ok(rc == 0 and out.strip() == "spark font -- no console-setup and no vconsole.conf here: the console font is not spark's to set",
+            t.ok(rc == 0 and out.strip() == "spark font -- no console-setup, vconsole.conf or rc.conf here: the console font is not spark's to set",
                  "no console file: spark font shows the one line (contract 8), exit 0", out)
             before = open(home + "/.config/spark/site.env").read()
             rc, out, _ = spark("font", "fixture16", "8x16", extra=bare)

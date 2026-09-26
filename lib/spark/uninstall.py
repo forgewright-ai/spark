@@ -18,12 +18,13 @@
 
 import glob
 import os
+import re
 import shutil
 import subprocess
 import sys
 
 from . import (BIN_DIR, CONFIG_DIR, DATA_DIR, FORGE_PID, FORGE_URL_FILE, HOME, IS_MAC, MARK, REPO, STATE_DIR,
-               config, is_wsl, run, say)
+               VAR_SERVICE, config, init_shape, is_wsl, run, say)
 from . import packages as pkg
 
 USAGE = """%s uninstall -- remove spark from this machine: shows first, then asks yes
@@ -46,6 +47,10 @@ KEEP_CONFIG = ("soul", "memory", "models.env", "themes", "privacy-terms")
 KEEP_STATE = ("users", "account", "account-key")
 SPARK_CONFIG = ("site.env", "spark.env", "theme.env", "console-colors", "console-colors.rgb", "check.log")
 UNITS_LINUX = ("spark-serve.service", "spark-forge.service", "spark-check.timer", "spark-check.service")
+SV_UNITS = ("forge", "serve", "check")            # runit: ~/.config/spark/sv/spark-<unit>, the same three
+ETC_SV = os.environ.get("SPARK_ETC_SV", "/etc/sv")    # runit's service definitions (bootstrap's seam too)
+SV_USER = re.compile(r"^[a-z_][a-z0-9_-]*$")      # a user name that may ride in a root path (bootstrap's rule)
+SV_MARK = "rendered by spark bootstrap.sh"        # what marks /etc/sv/runsvdir-USER/run as spark's
 CONSOLE_UNIT = "/etc/systemd/system/spark-console.service"
 RC_CANDIDATES = (".bashrc", ".zshrc", ".bash_profile", ".zprofile")
 
@@ -176,6 +181,21 @@ def step_services(ctx):
                 ctx.remove(unit, plist, "%s booted out, %s removed" % (name, _tilde(plist)))
             elif not ctx.dry:
                 ctx.row("ok", unit, "%s not loaded" % name)
+    elif init_shape() == "runit":
+        # runit: `sv down` ends each service, `sv exit` its runsv; the three
+        # dirs go, then the links in a runsvdir of your own or the root
+        # service spark wrote (state/made says which)
+        svdir = os.path.join(CONFIG_DIR, "sv")
+        for unit in SV_UNITS:
+            d = engine.service_dir(unit)
+            if not ctx.dry and os.path.isdir(d):
+                run(["sv", "down", d], timeout=20)
+                run(["sv", "exit", d], timeout=20)
+            if os.path.lexists(d):
+                ctx.remove("units", d, "%s stopped, %s removed" % (engine.unit_name(unit), _tilde(d)))
+        if not ctx.dry:
+            _rmdir_empty(svdir)
+        _runit_root(ctx)
     else:
         for name in UNITS_LINUX:
             if not ctx.dry:
@@ -213,6 +233,47 @@ def step_services(ctx):
         ctx.row("ok", "processes", "the page's server and the engine are down")
     launchd = os.path.join(CONFIG_DIR, "launchd")
     ctx.remove("launchd", launchd)
+
+
+def foreign_svdir(text):
+    """The directory a runsvdir-USER of your own supervises: the last word
+    of its `runsvdir` line, quotes off, `$HOME` spelled out (bootstrap
+    reads it the same way). '' when it cannot be read (a space or a quote
+    left in it). Pure."""
+    line = next((l for l in reversed(text.splitlines()) if "runsvdir" in l), "")
+    word = (line.split() or [""])[-1].strip("\"'").replace("$HOME", HOME)
+    return word if word and not re.search(r"[\s\"']", word) else ""
+
+
+def _runit_root(ctx):
+    """The user's runsvdir service (/etc/sv/runsvdir-USER, linked into
+    /var/service): spark's to remove when bootstrap recorded writing it
+    (state/made), else a todo naming both paths. A runsvdir-USER of your
+    own keeps running; only spark's three links in its directory go."""
+    user = os.environ.get("USER") or os.path.basename(HOME)
+    if not SV_USER.match(user):
+        return
+    root_sv = os.path.join(ETC_SV, "runsvdir-" + user)
+    link = os.path.join(VAR_SERVICE, "runsvdir-" + user)
+    try:
+        with open(os.path.join(root_sv, "run"), encoding="utf-8") as f:
+            text = f.read()
+    except OSError:
+        return
+    if SV_MARK not in text:
+        d = foreign_svdir(text)
+        for unit in SV_UNITS:
+            p = os.path.join(d, "spark-" + unit) if d else ""
+            if p and os.path.islink(p):
+                ctx.remove("units", p, "%s unlinked from your runsvdir-%s" % (_tilde(p), user))
+        return
+    if "runsvdir" in _made():
+        ctx.root("supervisor", ["sh", "-c", "sv down %s 2>/dev/null; rm -f %s; rm -rf %s" % (link, link, root_sv)],
+                 "runsvdir-%s stopped and removed (%s, %s)" % (user, link, root_sv),
+                 "sudo rm -f %s; sudo rm -rf %s" % (link, root_sv))
+    else:
+        ctx.row("todo", "supervisor", "%s is spark's and spark did not record writing it -- yours to decide: sudo rm -f %s; sudo rm -rf %s"
+                % (root_sv, link, root_sv))
 
 
 def step_look(ctx):
@@ -300,7 +361,9 @@ def step_console(ctx):
     from . import site
     shape = site.console_shape()
     path, orig = site.font_file(), site.font_file() + ".spark-orig"
-    redraw = "setupcon --force" if shape == "setup" else "systemctl restart systemd-vconsole-setup"
+    # the redraw per shape: console-setup's own, systemd-vconsole-setup's
+    # unit, or a bare setfont (the kernel's default face) on rc.conf
+    redraw = {"setup": "setupcon --force", "rcconf": "setfont"}.get(shape, "systemctl restart systemd-vconsole-setup")
     if shape and os.path.exists(orig):
         ctx.root("console", ["sh", "-c", "cp %s %s && rm -f %s && (%s 2>/dev/null || true)" % (orig, path, orig, redraw)],
                  "the console font is back as it was (%s)" % orig,
@@ -329,12 +392,14 @@ def step_headless_leftovers(ctx):
     made = _made()
     user = os.environ.get("USER") or os.path.basename(HOME)
     if not IS_MAC and not is_wsl():
-        rc, out = run(["loginctl", "show-user", user, "-p", "Linger"], timeout=5)
-        if rc == 0 and "Linger=yes" in out:
-            if "linger" in made:
-                ctx.root("linger", ["loginctl", "disable-linger", user], "linger off: the units end with the login")
-            else:
-                ctx.row("todo", "linger", "linger is on and spark did not record enabling it -- yours to decide: loginctl disable-linger %s" % user)
+        # runit has no logind and no linger: the supervisor went with step_services
+        if init_shape() != "runit":
+            rc, out = run(["loginctl", "show-user", user, "-p", "Linger"], timeout=5)
+            if rc == 0 and "Linger=yes" in out:
+                if "linger" in made:
+                    ctx.root("linger", ["loginctl", "disable-linger", user], "linger off: the units end with the login")
+                else:
+                    ctx.row("todo", "linger", "linger is on and spark did not record enabling it -- yours to decide: loginctl disable-linger %s" % user)
         rc, out = run(["id", "-nG", user], timeout=5)
         if rc == 0 and "render" in out.split():
             if "render" in made:
@@ -344,8 +409,10 @@ def step_headless_leftovers(ctx):
     elif IS_MAC and cfg.headless:
         ctx.row("todo", "pmset", "spark set sleep 0, disksleep 0, womp 1, autorestart 1: sudo pmset -a sleep 1 disksleep 10 womp 0 autorestart 0 puts Apple's defaults back")
     if cfg.get("SITE_SET_HOSTNAME", "no") == "yes":
+        # by presence, as bootstrap set it: hostnamectl where there is one, else the file and the kernel
         line = ("sudo scutil --set LocalHostName NAME (ComputerName, HostName likewise)" if IS_MAC
-                else "sudo hostnamectl set-hostname NAME")
+                else "sudo hostnamectl set-hostname NAME" if shutil.which("hostnamectl")
+                else "echo NAME | sudo tee /etc/hostname; sudo sysctl -qw kernel.hostname=NAME")
         ctx.row("todo", "hostname", "spark set it to %s; the name before is not recorded: %s" % (cfg.name, line))
 
 
@@ -451,7 +518,7 @@ def step_state_config(ctx):
             known = name in SPARK_CONFIG or (ctx.purge and name in KEEP_CONFIG)
             if _spark_link(p) or (os.path.islink(p) and not os.path.exists(p)) or known:
                 ctx.remove("config", p)
-            elif name == "launchd" or name.startswith("spark-") and name.endswith(".terminal"):
+            elif name in ("launchd", "sv") or name.startswith("spark-") and name.endswith(".terminal"):
                 ctx.remove("config", p)
             else:
                 ctx.kept.append(p)          # not ours to judge: named at the end

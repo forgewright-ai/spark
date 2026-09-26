@@ -1,13 +1,13 @@
 # spark -- for agents and contributors
 
-spark is a local AI at the shell prompt, for Linux (the Debian and Arch
-families), macOS and Windows through WSL 2. Nothing leaves the machine
-except pinned downloads and your own words to a model you run. One
-line installs it, and spark is live. A tool becomes a spark app as a
-client of `spark edit`, in its own `spark-<app>` repository, and no
-shell code lives in this tree. `CLAUDE.md` is the full reference: the
-principles, the layout, the 15 contracts, the grammar and the
-release steps. This file is the short brief.
+spark is a local AI at the shell prompt, for Linux (the Debian, Arch
+and Void families), macOS and Windows through WSL 2. Nothing leaves
+the machine except pinned downloads and your own words to a model you
+run. One line installs it, and spark is live. A tool becomes a spark
+app as a client of `spark edit`, in its own `spark-<app>` repository,
+and no shell code lives in this tree. `CLAUDE.md` is the full
+reference: the principles, the layout, the 15 contracts, the grammar
+and the release steps. This file is the short brief.
 
 ## The landing rule
 
@@ -89,14 +89,16 @@ a user's package, and the hook skips it with a notice when absent.
 
 CI is the second net, `.github/workflows/`. In `ci.yml` the `linux` and
 `macos` jobs run the hermetic tests, then a real bootstrap on the
-runner. The `debian` and `arch` jobs run the one-liner as a new user in
-a container. The `workflows` job runs zizmor over the workflows, medium
-and above failing. `codeql.yml` is GitHub's static analysis over the
-python and the javascript. `advisories.yml` opens one issue when
-llama.cpp publishes a security advisory after the engine pin's date.
-`dependabot.yml` keeps every action's sha pin current.
-`tests/forge_probe.py URL` is not in the gate: it asks a live `FORGE`'s
-gates from the wire, one line per gate, exit 1 when any does not hold.
+runner. The `debian`, `arch` and `void` jobs run the one-liner as a new
+user in a container. The `void` job starts a runsvdir first, so it
+proves `spark-check` running supervised. The `workflows` job runs
+zizmor over the workflows, medium and above failing. `codeql.yml` is
+GitHub's static analysis over the python and the javascript.
+`advisories.yml` opens one issue when llama.cpp publishes a security
+advisory after the engine pin's date. `dependabot.yml` keeps every
+action's sha pin current. `tests/forge_probe.py URL` is not in the
+gate: it asks a live `FORGE`'s gates from the wire, one line per gate,
+exit 1 when any does not hold.
 
 `--selftest` proves every fixture-testable row can flip. `--chaos`
 proves the sentence a row prints under a real failure is true, and that

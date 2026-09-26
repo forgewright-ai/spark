@@ -59,6 +59,8 @@ _DANGER = [
     r"\b(shutdown|reboot|halt|poweroff)\b", r"\bkill\s+-9\s+-1\b", r"\bkillall\b", r"\bpkill\s+-9\b",
     r"\bcrontab\s+-r\b", r"\btruncate\s+-s\s*0\b", r"\b(curl|wget)\b.*\|\s*(sudo\s+)?(ba|z)?sh\b",
     r"\bsystemctl\s+(disable|mask|stop)\b", r"\blaunchctl\s+(bootout|unload|disable)\b",
+    r"\bsv\s+(down|exit|force-shutdown|force-stop|kill)\b",   # sv down/exit/kill: a runit service stopped, or its runsv gone
+    r"\bxbps-remove\b",                                       # xbps-remove: a package gone (apt remove and pacman -R ride under sudo)
     # the ways to delete or destroy that hid from the list before v1.30 --
     # a named line each, so any one can be argued with
     r"\bfind\b.*\s-delete\b",                      # find ... -delete
@@ -593,8 +595,10 @@ def prefix(cfg, shell):
     if pm:
         lines.append("Package manager: %s." % pm)
     mac = platform.system() == "Darwin"
-    lines.append("System tools: " + ("launchctl, pbcopy, pbpaste, open, mdfind, diskutil."
-                                     if mac else "systemctl --user, journalctl, ip."))
+    from . import init_shape
+    runit = not mac and init_shape() == "runit"       # Void: sv in place of systemctl, svlogd in place of the journal
+    lines.append("System tools: " + ("launchctl, pbcopy, pbpaste, open, mdfind, diskutil." if mac
+                                     else "sv, svlogd, ip." if runit else "systemctl --user, journalctl, ip."))
     # a command pasted from a page is written for someone else's machine.
     # These are this OS's side of the pairs a paste crosses most; the model
     # is told to rewrite the other side and say so. This OS's half only, so
@@ -604,10 +608,10 @@ def prefix(cfg, shell):
                      "launchctl, xdg-open is open, ls --color is ls -G, sed -i is sed -i ''. "
                      "A command written for Linux: rewrite it for macOS and say so in the hint.")
     else:
-        lines.append("On this machine vm_stat is free, brew is %s, launchctl is systemctl, "
+        lines.append("On this machine vm_stat is free, brew is %s, launchctl is %s, "
                      "open is xdg-open, ls -G is ls --color, sed -i '' is sed -i. "
                      "A command written for macOS: rewrite it for this machine and say so in "
-                     "the hint." % (pm or "the package manager"))
+                     "the hint." % (pm or "the package manager", "sv" if runit else "systemctl"))
     t = _tools_line()
     if t:
         lines.append(t)
@@ -647,11 +651,12 @@ SH_BUILTINS = frozenset((
 
 # a proof is read-only or it is not a proof: the head words contract 4's
 # optional third line may start with -- a named list, one look, so it
-# can be argued with. git/systemctl/launchctl only with their read subs.
+# can be argued with. git/systemctl/sv/launchctl only with their read subs.
 PROOF_HEADS = ("test", "[", "ls", "stat", "grep", "wc", "file", "du", "df",
                "head", "tail", "pgrep", "which", "diff", "cmp", "readlink")
 PROOF_PAIRS = (("git", ("status", "log", "diff", "show", "ls-files")),
                ("systemctl", ("is-active", "is-enabled", "status")),
+               ("sv", ("status", "check")),
                ("launchctl", ("print", "list")))
 # the options that turn a read-only head into a writer or a runner: a
 # proof carrying one anywhere in its argv is refused. A named line each,

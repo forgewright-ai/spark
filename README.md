@@ -25,6 +25,8 @@ command itself and runs nothing.
    sudo apt-get update && sudo apt-get install -y git curl python3 openssh-client
    # Arch Linux
    sudo pacman -S --needed git curl python openssh
+   # Void Linux
+   sudo xbps-install -Sy git curl python3 openssh
    # macOS
    xcode-select --install
    ```

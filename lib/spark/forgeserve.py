@@ -1739,7 +1739,8 @@ def cmd_stop(args):
         if IS_MAC and engine.service_domain(cfg, "forge") == "system":
             return _die("the page's server is a LaunchDaemon (spark headless on) -- sudo launchctl bootout %s stops it; spark headless off puts it back under your login" % engine.service_target(cfg, "forge"))
         if not force:
-            mgr = "launchd" if IS_MAC else "systemd"
+            from . import init_shape
+            mgr = init_shape()
             return _die("%s would bring the page's server straight back -- spark forge stop --force stops it; spark forge off keeps it down" % mgr)
         undo = engine.service_stop(False, "forge")
         pid = _pid()

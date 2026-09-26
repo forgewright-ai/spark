@@ -347,7 +347,7 @@ def no_brain_hint(cfg):
         if IS_MAC:
             dom = engine.service_domain(cfg)
             return "no engine awake -- %slaunchctl kickstart -k %s" % ("sudo " if dom == "system" else "", engine.service_target(cfg))
-        return "no engine awake -- systemctl --user restart spark-serve"
+        return "no engine awake -- " + engine.restart_line("serve")
     if st == "disabled":
         return "no engine awake -- the service is disabled on purpose; `spark serve` starts one by hand"
     m = engine.model_file(cfg)

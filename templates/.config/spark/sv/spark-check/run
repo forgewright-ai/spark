@@ -1,0 +1,11 @@
+#!/bin/sh
+# rendered by spark install.sh -- spark check every five minutes (runit
+# has no timer), so the status line always has a fresh verdict
+export HOME=@HOME@ USER=@USER@ PATH=@HOME@/.local/bin:/usr/local/bin:/usr/bin:/bin
+exec 2>&1
+trap 'kill $! 2>/dev/null; exit 0' TERM INT
+sleep 120 & wait $!
+while :; do
+    @HOME@/.local/bin/spark check --porcelain >/dev/null 2>&1
+    sleep 300 & wait $!
+done
