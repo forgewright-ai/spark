@@ -26,6 +26,10 @@ more. Run `tests/audition.py` against a live model and put its before
 and after totals in the pull request. The briefs are judged by lints,
 not taste.
 
+A change to the prompt line's brief (`persona.MODE_LINE` or its schema)
+needs the same. Run `tests/line_audition.py run` for each OS and put the
+`report` table, before and after, in the pull request.
+
 ## Branch model
 
 `main` is development. A git tag signed by a release key, a line in

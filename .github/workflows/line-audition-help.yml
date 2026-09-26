@@ -1,0 +1,107 @@
+# line-audition-help -- the help snapshots the prompt-line audition
+# (tests/line_audition.py) grades against, gathered ON each OS: whether
+# every tool its cases name exists there, its --help or man synopsis, and
+# the options those name. Verification trusts outcomes, not the model:
+# an answer passes only when its head command exists on that OS and every
+# option it passes is in that OS's own help.
+# Each job starts from the same image ci.yml proves spark on, installs
+# the tools the cases name (`line_audition.py packages`, one at a time, so
+# a renamed package is a line in the log and not a dead job), and uploads
+# help-<os>.json. The files are then committed to tests/line_audition/ by
+# hand. Nothing in a snapshot is ever run. workflow_dispatch only: no
+# push or schedule refreshes it.
+name: line-audition-help
+on: workflow_dispatch
+permissions:
+  contents: read
+jobs:
+  debian:
+    runs-on: ubuntu-latest
+    container: debian:13
+    timeout-minutes: 20
+    env:
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      - run: apt-get update -qq && apt-get install -y -qq git ca-certificates python3 >/dev/null
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+        with:
+          persist-credentials: false
+      - name: the tools the cases name, with their man pages
+        run: |
+          # a slim image drops the man pages: the snapshot wants them
+          rm -f /etc/dpkg/dpkg.cfg.d/docker /etc/dpkg/dpkg.cfg.d/excludes
+          for p in $(python3 tests/line_audition.py packages --os debian); do
+            apt-get install -y -qq "$p" >/dev/null 2>&1 || echo "not installed: $p"
+          done
+      - name: collect
+        run: python3 tests/line_audition.py collect --os debian --out help-debian.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a   # v7.0.1
+        with:
+          name: help-debian
+          path: help-debian.json
+          if-no-files-found: error
+  arch:
+    runs-on: ubuntu-latest
+    container: archlinux:latest   # zizmor: ignore[unpinned-images] a rolling distro: latest is the only Arch there is, and -Syu moves it to today anyway
+    timeout-minutes: 20
+    steps:
+      - run: pacman -Syu --noconfirm --needed git ca-certificates python >/dev/null
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+        with:
+          persist-credentials: false
+      - name: the tools the cases name, with their man pages
+        run: |
+          # the image's pacman.conf extracts no man page: drop that line,
+          # then install (or reinstall, without --needed) so the pages land
+          sed -i '/^NoExtract/d' /etc/pacman.conf
+          for p in $(python3 tests/line_audition.py packages --os arch); do
+            pacman -S --noconfirm "$p" >/dev/null 2>&1 || echo "not installed: $p"
+          done
+      - name: collect
+        run: python3 tests/line_audition.py collect --os arch --out help-arch.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a   # v7.0.1
+        with:
+          name: help-arch
+          path: help-arch.json
+          if-no-files-found: error
+  void:
+    runs-on: ubuntu-latest
+    container: ghcr.io/void-linux/void-glibc-full:latest   # zizmor: ignore[unpinned-images] a rolling distro: latest is the only Void there is, and -Su moves it to today anyway
+    timeout-minutes: 20
+    steps:
+      # xbps itself first (a rolling distro refuses every install while
+      # xbps is behind); libstdc++ for the runner's node, as in ci.yml
+      - run: xbps-install -Syu xbps >/dev/null 2>&1 || true; xbps-install -Syu >/dev/null; xbps-install -Sy git ca-certificates bash libstdc++ python3 >/dev/null
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+        with:
+          persist-credentials: false
+      - name: the tools the cases name, with their man pages
+        run: |
+          # a noextract line would drop the man pages: none may stay
+          for f in /etc/xbps.d/*.conf; do [ -f "$f" ] && sed -i '/^noextract/d' "$f"; done
+          for p in $(python3 tests/line_audition.py packages --os void); do
+            xbps-install -y "$p" >/dev/null 2>&1 || echo "not installed: $p"
+          done
+      - name: collect
+        run: python3 tests/line_audition.py collect --os void --out help-void.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a   # v7.0.1
+        with:
+          name: help-void
+          path: help-void.json
+          if-no-files-found: error
+  macos:
+    # a stock runner, nothing installed: the system's own tools first on
+    # the PATH collect uses, Homebrew's after
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262   # v4.4.0
+        with:
+          persist-credentials: false
+      - name: collect
+        run: /usr/bin/python3 tests/line_audition.py collect --os macos --out help-macos.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a   # v7.0.1
+        with:
+          name: help-macos
+          path: help-macos.json
+          if-no-files-found: error

@@ -1,0 +1,2393 @@
+{
+ "about": "The prompt-line audition's cases (tests/line_audition.py). Each case is the words a person types after `? ` and what makes an answer right, never one fixed string: head_any (the acceptable head commands, any stage), must_not (regexes the command or answer must not match), danger (true, false, or null for either), kind (cmd, answer, or null for either), answer_any (an answer in words must match one), spark_verb (a spark core case: the verbs that answer it; the words are checked against the tree). oses holds what a run needs to speak as each OS, and what a snapshot job installs first.",
+ "oses": {
+  "debian": {
+   "id": "debian",
+   "pretty": "Debian GNU/Linux 13 (trixie)",
+   "pm": "apt-get",
+   "init": "systemd",
+   "install": [
+    "man-db",
+    "manpages",
+    "sudo",
+    "curl",
+    "wget",
+    "iproute2",
+    "iputils-ping",
+    "traceroute",
+    "procps",
+    "psmisc",
+    "lsof",
+    "util-linux",
+    "fdisk",
+    "parted",
+    "e2fsprogs",
+    "systemd",
+    "adduser",
+    "passwd",
+    "bind9-dnsutils",
+    "openssh-client",
+    "rsync",
+    "tar",
+    "gzip",
+    "zip",
+    "unzip",
+    "findutils",
+    "grep",
+    "sed",
+    "mawk",
+    "less",
+    "file",
+    "tree",
+    "htop",
+    "ncdu",
+    "git",
+    "bsdextrautils",
+    "hostname",
+    "cron",
+    "fd-find",
+    "ripgrep"
+   ],
+   "also": [
+    "apt-cache",
+    "dpkg-query",
+    "service",
+    "systemctl",
+    "journalctl",
+    "ss",
+    "ip",
+    "lsblk",
+    "blkid",
+    "fdisk",
+    "findmnt",
+    "fuser",
+    "adduser",
+    "useradd",
+    "usermod",
+    "userdel",
+    "ifconfig",
+    "netstat",
+    "dig",
+    "host",
+    "nslookup",
+    "traceroute",
+    "tracepath",
+    "nmcli",
+    "vmstat",
+    "mount",
+    "parted",
+    "crontab",
+    "update-rc.d",
+    "svlogtail",
+    "sv",
+    "pacman",
+    "xbps-install"
+   ],
+   "man": {
+    "git": [
+     "git-log",
+     "git-status",
+     "git-diff"
+    ]
+   }
+  },
+  "arch": {
+   "id": "arch",
+   "pretty": "Arch Linux",
+   "pm": "pacman",
+   "init": "systemd",
+   "install": [
+    "man-db",
+    "man-pages",
+    "sudo",
+    "curl",
+    "wget",
+    "iproute2",
+    "iputils",
+    "traceroute",
+    "procps-ng",
+    "psmisc",
+    "lsof",
+    "util-linux",
+    "parted",
+    "e2fsprogs",
+    "systemd",
+    "shadow",
+    "bind",
+    "openssh",
+    "rsync",
+    "tar",
+    "gzip",
+    "zip",
+    "unzip",
+    "findutils",
+    "grep",
+    "sed",
+    "gawk",
+    "less",
+    "file",
+    "tree",
+    "htop",
+    "ncdu",
+    "git",
+    "pacman-contrib",
+    "inetutils",
+    "cronie",
+    "fd",
+    "ripgrep"
+   ],
+   "also": [
+    "systemctl",
+    "journalctl",
+    "ss",
+    "ip",
+    "lsblk",
+    "blkid",
+    "fdisk",
+    "findmnt",
+    "fuser",
+    "useradd",
+    "usermod",
+    "userdel",
+    "adduser",
+    "dig",
+    "host",
+    "nslookup",
+    "traceroute",
+    "nmcli",
+    "vmstat",
+    "mount",
+    "parted",
+    "crontab",
+    "paccache",
+    "checkupdates",
+    "yay",
+    "apt",
+    "apt-get",
+    "sv"
+   ],
+   "man": {
+    "git": [
+     "git-log",
+     "git-status",
+     "git-diff"
+    ]
+   }
+  },
+  "void": {
+   "id": "void",
+   "pretty": "Void Linux",
+   "pm": "xbps-install",
+   "init": "runit",
+   "install": [
+    "mandoc",
+    "sudo",
+    "curl",
+    "wget",
+    "iproute2",
+    "iputils",
+    "traceroute",
+    "procps-ng",
+    "psmisc",
+    "lsof",
+    "util-linux",
+    "parted",
+    "e2fsprogs",
+    "runit",
+    "socklog-void",
+    "shadow",
+    "bind-utils",
+    "openssh",
+    "rsync",
+    "tar",
+    "gzip",
+    "zip",
+    "unzip",
+    "findutils",
+    "grep",
+    "sed",
+    "gawk",
+    "less",
+    "file",
+    "tree",
+    "htop",
+    "ncdu",
+    "git",
+    "xtools",
+    "cronie",
+    "fd",
+    "ripgrep"
+   ],
+   "also": [
+    "xbps-query",
+    "xbps-remove",
+    "xlocate",
+    "sv",
+    "svlogd",
+    "svlogtail",
+    "ss",
+    "ip",
+    "lsblk",
+    "blkid",
+    "fdisk",
+    "findmnt",
+    "fuser",
+    "useradd",
+    "usermod",
+    "userdel",
+    "dig",
+    "host",
+    "nslookup",
+    "traceroute",
+    "vmstat",
+    "mount",
+    "parted",
+    "crontab",
+    "unlink",
+    "systemctl",
+    "journalctl",
+    "apt",
+    "pacman"
+   ],
+   "man": {
+    "git": [
+     "git-log",
+     "git-status",
+     "git-diff"
+    ]
+   }
+  },
+  "macos": {
+   "id": "macos",
+   "pretty": "macOS",
+   "pm": "brew",
+   "init": "launchd",
+   "install": [],
+   "also": [
+    "launchctl",
+    "diskutil",
+    "networksetup",
+    "ipconfig",
+    "ifconfig",
+    "system_profiler",
+    "wdutil",
+    "dscacheutil",
+    "dscl",
+    "mdfind",
+    "open",
+    "pbcopy",
+    "pbpaste",
+    "vm_stat",
+    "memory_pressure",
+    "sysctl",
+    "caffeinate",
+    "pmset",
+    "ioreg",
+    "softwareupdate",
+    "log",
+    "sw_vers",
+    "scutil",
+    "netstat",
+    "route",
+    "arp",
+    "dig",
+    "host",
+    "nslookup",
+    "traceroute",
+    "perl",
+    "tmutil",
+    "defaults",
+    "csrutil",
+    "brew",
+    "lsblk",
+    "systemctl",
+    "ip",
+    "ss"
+   ],
+   "man": {
+    "git": [
+     "git-log",
+     "git-status",
+     "git-diff"
+    ]
+   }
+  }
+ },
+ "cases": {
+  "debian": [
+   {
+    "id": "deb-pkg-1",
+    "topic": "packages",
+    "words": "install htop",
+    "kind": "cmd",
+    "head_any": [
+     "apt",
+     "apt-get"
+    ],
+    "must_not": [
+     "\\b(pacman|xbps-\\w+|brew|dnf|yum|zypper)\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "deb-pkg-2",
+    "topic": "packages",
+    "words": "is nginx installed",
+    "kind": "cmd",
+    "head_any": [
+     "dpkg",
+     "dpkg-query",
+     "apt",
+     "apt-cache"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(pacman|xbps-\\w+|brew|dnf|yum|zypper)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "deb-pkg-3",
+    "topic": "packages",
+    "words": "search the packages for a pdf viewer",
+    "kind": "cmd",
+    "head_any": [
+     "apt",
+     "apt-cache"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(pacman|xbps-\\w+|brew|dnf|yum|zypper)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "deb-pkg-4",
+    "topic": "packages",
+    "words": "remove the package cowsay",
+    "kind": "cmd",
+    "head_any": [
+     "apt",
+     "apt-get"
+    ],
+    "must_not": [
+     "\\b(pacman|xbps-\\w+|brew|dnf|yum|zypper)\\b"
+    ],
+    "danger": true
+   },
+   {
+    "id": "deb-pkg-5",
+    "topic": "packages",
+    "words": "upgrade every package",
+    "kind": "cmd",
+    "head_any": [
+     "apt",
+     "apt-get"
+    ],
+    "must_not": [
+     "\\b(pacman|xbps-\\w+|brew|dnf|yum|zypper)\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "deb-pkg-6",
+    "topic": "packages",
+    "words": "which package owns /usr/bin/curl",
+    "kind": "cmd",
+    "head_any": [
+     "dpkg",
+     "dpkg-query"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "deb-svc-3",
+    "topic": "services",
+    "words": "list the services that failed",
+    "kind": "cmd",
+    "head_any": [
+     "systemctl"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "deb-svc-4",
+    "topic": "services",
+    "words": "start nginx at every boot",
+    "kind": "cmd",
+    "head_any": [
+     "systemctl"
+    ],
+    "must_not": [
+     "\\bsv\\b",
+     "update-rc\\.d"
+    ],
+    "danger": null
+   },
+   {
+    "id": "deb-log-3",
+    "topic": "logs",
+    "words": "show the log of the ssh service since yesterday",
+    "kind": "cmd",
+    "head_any": [
+     "journalctl"
+    ],
+    "must_not": [],
+    "danger": false
+   },
+   {
+    "id": "deb-disk-1",
+    "topic": "disks",
+    "words": "how much space is left on each disk",
+    "kind": "cmd",
+    "head_any": [
+     "df"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(pacman|xbps-\\w+|brew|dnf|yum|zypper)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "deb-disk-2",
+    "topic": "disks",
+    "words": "list the block devices and their partitions",
+    "kind": "cmd",
+    "head_any": [
+     "lsblk",
+     "fdisk",
+     "blkid",
+     "findmnt"
+    ],
+    "must_not": [
+     "\\b(pacman|xbps-\\w+|brew|dnf|yum|zypper)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "deb-disk-3",
+    "topic": "disks",
+    "words": "which folders here use the most space",
+    "kind": "cmd",
+    "head_any": [
+     "du",
+     "dust",
+     "ncdu"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "deb-net-1",
+    "topic": "network",
+    "words": "what is my ip address",
+    "kind": "cmd",
+    "head_any": [
+     "ip",
+     "hostname",
+     "curl"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\bifconfig\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "deb-net-2",
+    "topic": "network",
+    "words": "which process is listening on port 8080",
+    "kind": "cmd",
+    "head_any": [
+     "ss",
+     "lsof",
+     "fuser"
+    ],
+    "must_not": [
+     "\\bnetstat\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "deb-net-3",
+    "topic": "network",
+    "words": "can I reach example.com",
+    "kind": "cmd",
+    "head_any": [
+     "ping",
+     "curl"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "deb-file-1",
+    "topic": "files",
+    "words": "find files bigger than 1 GB under my home",
+    "kind": "cmd",
+    "head_any": [
+     "find",
+     "fd",
+     "fdfind"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "deb-file-2",
+    "topic": "files",
+    "words": "delete every .tmp file in this folder",
+    "kind": "cmd",
+    "head_any": [
+     "rm",
+     "find",
+     "fd",
+     "fdfind"
+    ],
+    "must_not": [],
+    "danger": true
+   },
+   {
+    "id": "deb-file-3",
+    "topic": "files",
+    "words": "make deploy.sh executable",
+    "kind": "cmd",
+    "head_any": [
+     "chmod"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "deb-user-1",
+    "topic": "users",
+    "words": "which groups am I in",
+    "kind": "cmd",
+    "head_any": [
+     "groups",
+     "id"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "deb-user-2",
+    "topic": "users",
+    "words": "add a user named alice with a home directory",
+    "kind": "cmd",
+    "head_any": [
+     "adduser",
+     "useradd"
+    ],
+    "must_not": [],
+    "danger": null
+   },
+   {
+    "id": "deb-proc-1",
+    "topic": "processes",
+    "words": "kill the process named firefox",
+    "kind": "cmd",
+    "head_any": [
+     "pkill",
+     "killall",
+     "kill"
+    ],
+    "must_not": [],
+    "danger": true
+   },
+   {
+    "id": "deb-proc-2",
+    "topic": "processes",
+    "words": "which processes use the most memory",
+    "kind": "cmd",
+    "head_any": [
+     "ps",
+     "top",
+     "htop",
+     "btop"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "deb-proc-3",
+    "topic": "processes",
+    "words": "how long has this machine been up",
+    "kind": "cmd",
+    "head_any": [
+     "uptime"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "deb-svc-1",
+    "topic": "services",
+    "words": "is the ssh service running",
+    "kind": "cmd",
+    "head_any": [
+     "systemctl",
+     "service"
+    ],
+    "must_not": [
+     "\\bsv\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "deb-svc-2",
+    "topic": "services",
+    "words": "restart the ssh service",
+    "kind": "cmd",
+    "head_any": [
+     "systemctl",
+     "service"
+    ],
+    "must_not": [
+     "\\bsv\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "deb-log-1",
+    "topic": "logs",
+    "words": "show the kernel messages since boot",
+    "kind": "cmd",
+    "head_any": [
+     "dmesg",
+     "journalctl"
+    ],
+    "must_not": [],
+    "danger": false
+   },
+   {
+    "id": "deb-log-2",
+    "topic": "logs",
+    "words": "show the last 50 lines of the system log",
+    "kind": "cmd",
+    "head_any": [
+     "journalctl",
+     "tail",
+     "less"
+    ],
+    "must_not": [
+     "\\bsvlogtail\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "deb-init",
+    "topic": "services",
+    "words": "which init system does this machine use",
+    "kind": null,
+    "head_any": [
+     "ps",
+     "readlink",
+     "ls",
+     "stat",
+     "cat",
+     "file",
+     "systemctl"
+    ],
+    "must_not": [],
+    "danger": null,
+    "answer_any": [
+     "(?i)systemd"
+    ]
+   }
+  ],
+  "arch": [
+   {
+    "id": "arch-pkg-1",
+    "topic": "packages",
+    "words": "install htop",
+    "kind": "cmd",
+    "head_any": [
+     "pacman"
+    ],
+    "must_not": [
+     "\\b(apt|apt-get|apt-cache|dpkg|xbps-\\w+|brew|dnf|yum)\\b",
+     "\\bpacman\\s+-Sy(?![a-zA-Z]*u)"
+    ],
+    "danger": null
+   },
+   {
+    "id": "arch-pkg-2",
+    "topic": "packages",
+    "words": "is nginx installed",
+    "kind": "cmd",
+    "head_any": [
+     "pacman"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|apt-cache|dpkg|xbps-\\w+|brew|dnf|yum)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "arch-pkg-3",
+    "topic": "packages",
+    "words": "search the packages for a pdf viewer",
+    "kind": "cmd",
+    "head_any": [
+     "pacman"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|apt-cache|dpkg|xbps-\\w+|brew|dnf|yum)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "arch-pkg-4",
+    "topic": "packages",
+    "words": "remove the package cowsay and what it pulled in",
+    "kind": "cmd",
+    "head_any": [
+     "pacman"
+    ],
+    "must_not": [
+     "\\b(apt|apt-get|apt-cache|dpkg|xbps-\\w+|brew|dnf|yum)\\b"
+    ],
+    "danger": true
+   },
+   {
+    "id": "arch-pkg-5",
+    "topic": "packages",
+    "words": "upgrade every package",
+    "kind": "cmd",
+    "head_any": [
+     "pacman"
+    ],
+    "must_not": [
+     "\\b(apt|apt-get|apt-cache|dpkg|xbps-\\w+|brew|dnf|yum)\\b",
+     "\\bpacman\\s+-Sy(?![a-zA-Z]*u)"
+    ],
+    "danger": null
+   },
+   {
+    "id": "arch-pkg-6",
+    "topic": "packages",
+    "words": "which package owns /usr/bin/curl",
+    "kind": "cmd",
+    "head_any": [
+     "pacman"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|apt-cache|dpkg|xbps-\\w+|brew|dnf|yum)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "arch-pkg-7",
+    "topic": "packages",
+    "words": "list the packages I installed explicitly",
+    "kind": "cmd",
+    "head_any": [
+     "pacman"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|apt-cache|dpkg|xbps-\\w+|brew|dnf|yum)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "arch-pkg-8",
+    "topic": "packages",
+    "words": "clean the package cache",
+    "kind": "cmd",
+    "head_any": [
+     "paccache",
+     "pacman"
+    ],
+    "must_not": [
+     "\\b(apt|apt-get|apt-cache|dpkg|xbps-\\w+|brew|dnf|yum)\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "arch-svc-3",
+    "topic": "services",
+    "words": "list the services that failed",
+    "kind": "cmd",
+    "head_any": [
+     "systemctl"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "arch-svc-4",
+    "topic": "services",
+    "words": "start sshd at every boot",
+    "kind": "cmd",
+    "head_any": [
+     "systemctl"
+    ],
+    "must_not": [
+     "\\bsv\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "arch-disk-1",
+    "topic": "disks",
+    "words": "how much space is left on each disk",
+    "kind": "cmd",
+    "head_any": [
+     "df"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|apt-cache|dpkg|xbps-\\w+|brew|dnf|yum)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "arch-disk-2",
+    "topic": "disks",
+    "words": "list the block devices and their partitions",
+    "kind": "cmd",
+    "head_any": [
+     "lsblk",
+     "fdisk",
+     "blkid",
+     "findmnt"
+    ],
+    "must_not": [
+     "\\b(apt|apt-get|apt-cache|dpkg|xbps-\\w+|brew|dnf|yum)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "arch-disk-3",
+    "topic": "disks",
+    "words": "which folders here use the most space",
+    "kind": "cmd",
+    "head_any": [
+     "du",
+     "dust",
+     "ncdu"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "arch-net-1",
+    "topic": "network",
+    "words": "what is my ip address",
+    "kind": "cmd",
+    "head_any": [
+     "ip",
+     "hostname",
+     "curl"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\bifconfig\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "arch-net-2",
+    "topic": "network",
+    "words": "which process is listening on port 8080",
+    "kind": "cmd",
+    "head_any": [
+     "ss",
+     "lsof",
+     "fuser"
+    ],
+    "must_not": [
+     "\\bnetstat\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "arch-net-3",
+    "topic": "network",
+    "words": "can I reach example.com",
+    "kind": "cmd",
+    "head_any": [
+     "ping",
+     "curl"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "arch-file-1",
+    "topic": "files",
+    "words": "find files bigger than 1 GB under my home",
+    "kind": "cmd",
+    "head_any": [
+     "find",
+     "fd",
+     "fdfind"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "arch-file-2",
+    "topic": "files",
+    "words": "delete every .tmp file in this folder",
+    "kind": "cmd",
+    "head_any": [
+     "rm",
+     "find",
+     "fd",
+     "fdfind"
+    ],
+    "must_not": [],
+    "danger": true
+   },
+   {
+    "id": "arch-file-3",
+    "topic": "files",
+    "words": "make deploy.sh executable",
+    "kind": "cmd",
+    "head_any": [
+     "chmod"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "arch-user-1",
+    "topic": "users",
+    "words": "which groups am I in",
+    "kind": "cmd",
+    "head_any": [
+     "groups",
+     "id"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "arch-user-2",
+    "topic": "users",
+    "words": "add a user named alice with a home directory",
+    "kind": "cmd",
+    "head_any": [
+     "useradd"
+    ],
+    "must_not": [],
+    "danger": null
+   },
+   {
+    "id": "arch-proc-1",
+    "topic": "processes",
+    "words": "kill the process named firefox",
+    "kind": "cmd",
+    "head_any": [
+     "pkill",
+     "killall",
+     "kill"
+    ],
+    "must_not": [],
+    "danger": true
+   },
+   {
+    "id": "arch-proc-2",
+    "topic": "processes",
+    "words": "which processes use the most memory",
+    "kind": "cmd",
+    "head_any": [
+     "ps",
+     "top",
+     "htop",
+     "btop"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "arch-proc-3",
+    "topic": "processes",
+    "words": "how long has this machine been up",
+    "kind": "cmd",
+    "head_any": [
+     "uptime"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "arch-svc-1",
+    "topic": "services",
+    "words": "is the sshd service running",
+    "kind": "cmd",
+    "head_any": [
+     "systemctl"
+    ],
+    "must_not": [
+     "\\bsv\\b",
+     "\\bservice\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "arch-svc-2",
+    "topic": "services",
+    "words": "restart the sshd service",
+    "kind": "cmd",
+    "head_any": [
+     "systemctl"
+    ],
+    "must_not": [
+     "\\bsv\\b",
+     "\\bservice\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "arch-log-1",
+    "topic": "logs",
+    "words": "show the kernel messages since boot",
+    "kind": "cmd",
+    "head_any": [
+     "dmesg",
+     "journalctl"
+    ],
+    "must_not": [],
+    "danger": false
+   },
+   {
+    "id": "arch-log-2",
+    "topic": "logs",
+    "words": "show the last 50 lines of the system log",
+    "kind": "cmd",
+    "head_any": [
+     "journalctl"
+    ],
+    "must_not": [
+     "\\bsvlogtail\\b",
+     "/var/log/syslog"
+    ],
+    "danger": false
+   },
+   {
+    "id": "arch-init",
+    "topic": "services",
+    "words": "which init system does this machine use",
+    "kind": null,
+    "head_any": [
+     "ps",
+     "readlink",
+     "ls",
+     "stat",
+     "cat",
+     "file",
+     "systemctl"
+    ],
+    "must_not": [],
+    "danger": null,
+    "answer_any": [
+     "(?i)systemd"
+    ]
+   }
+  ],
+  "void": [
+   {
+    "id": "void-pkg-1",
+    "topic": "packages",
+    "words": "install htop",
+    "kind": "cmd",
+    "head_any": [
+     "xbps-install"
+    ],
+    "must_not": [
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|brew|dnf|yum)\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "void-pkg-2",
+    "topic": "packages",
+    "words": "is nginx installed",
+    "kind": "cmd",
+    "head_any": [
+     "xbps-query"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|brew|dnf|yum)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "void-pkg-3",
+    "topic": "packages",
+    "words": "search the packages for a pdf viewer",
+    "kind": "cmd",
+    "head_any": [
+     "xbps-query"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|brew|dnf|yum)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "void-pkg-4",
+    "topic": "packages",
+    "words": "remove the package cowsay",
+    "kind": "cmd",
+    "head_any": [
+     "xbps-remove"
+    ],
+    "must_not": [
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|brew|dnf|yum)\\b"
+    ],
+    "danger": true
+   },
+   {
+    "id": "void-pkg-5",
+    "topic": "packages",
+    "words": "upgrade every package",
+    "kind": "cmd",
+    "head_any": [
+     "xbps-install"
+    ],
+    "must_not": [
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|brew|dnf|yum)\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "void-pkg-6",
+    "topic": "packages",
+    "words": "which package owns /usr/bin/curl",
+    "kind": "cmd",
+    "head_any": [
+     "xbps-query",
+     "xlocate"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|brew|dnf|yum)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "void-pkg-7",
+    "topic": "packages",
+    "words": "remove the packages nothing needs anymore",
+    "kind": "cmd",
+    "head_any": [
+     "xbps-remove"
+    ],
+    "must_not": [
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|brew|dnf|yum)\\b"
+    ],
+    "danger": true
+   },
+   {
+    "id": "void-svc-3",
+    "topic": "services",
+    "words": "start sshd at every boot",
+    "kind": "cmd",
+    "head_any": [
+     "ln"
+    ],
+    "must_not": [
+     "\\b(systemctl|journalctl|service)\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "void-svc-4",
+    "topic": "services",
+    "words": "stop nginx from starting at boot",
+    "kind": "cmd",
+    "head_any": [
+     "rm",
+     "unlink",
+     "touch"
+    ],
+    "must_not": [
+     "\\b(systemctl|journalctl|service)\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "void-svc-5",
+    "topic": "services",
+    "words": "list the services that are running",
+    "kind": "cmd",
+    "head_any": [
+     "sv",
+     "ls"
+    ],
+    "must_not": [
+     "\\b(systemctl|journalctl|service)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "void-disk-1",
+    "topic": "disks",
+    "words": "how much space is left on each disk",
+    "kind": "cmd",
+    "head_any": [
+     "df"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|brew|dnf|yum)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "void-disk-2",
+    "topic": "disks",
+    "words": "list the block devices and their partitions",
+    "kind": "cmd",
+    "head_any": [
+     "lsblk",
+     "fdisk",
+     "blkid",
+     "findmnt"
+    ],
+    "must_not": [
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|brew|dnf|yum)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "void-disk-3",
+    "topic": "disks",
+    "words": "which folders here use the most space",
+    "kind": "cmd",
+    "head_any": [
+     "du",
+     "dust",
+     "ncdu"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "void-net-1",
+    "topic": "network",
+    "words": "what is my ip address",
+    "kind": "cmd",
+    "head_any": [
+     "ip",
+     "hostname",
+     "curl"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\bifconfig\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "void-net-2",
+    "topic": "network",
+    "words": "which process is listening on port 8080",
+    "kind": "cmd",
+    "head_any": [
+     "ss",
+     "lsof",
+     "fuser"
+    ],
+    "must_not": [
+     "\\bnetstat\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "void-net-3",
+    "topic": "network",
+    "words": "can I reach example.com",
+    "kind": "cmd",
+    "head_any": [
+     "ping",
+     "curl"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "void-file-1",
+    "topic": "files",
+    "words": "find files bigger than 1 GB under my home",
+    "kind": "cmd",
+    "head_any": [
+     "find",
+     "fd",
+     "fdfind"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "void-file-2",
+    "topic": "files",
+    "words": "delete every .tmp file in this folder",
+    "kind": "cmd",
+    "head_any": [
+     "rm",
+     "find",
+     "fd",
+     "fdfind"
+    ],
+    "must_not": [],
+    "danger": true
+   },
+   {
+    "id": "void-file-3",
+    "topic": "files",
+    "words": "make deploy.sh executable",
+    "kind": "cmd",
+    "head_any": [
+     "chmod"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "void-user-1",
+    "topic": "users",
+    "words": "which groups am I in",
+    "kind": "cmd",
+    "head_any": [
+     "groups",
+     "id"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "void-user-2",
+    "topic": "users",
+    "words": "add a user named alice with a home directory",
+    "kind": "cmd",
+    "head_any": [
+     "useradd"
+    ],
+    "must_not": [],
+    "danger": null
+   },
+   {
+    "id": "void-proc-1",
+    "topic": "processes",
+    "words": "kill the process named firefox",
+    "kind": "cmd",
+    "head_any": [
+     "pkill",
+     "killall",
+     "kill"
+    ],
+    "must_not": [],
+    "danger": true
+   },
+   {
+    "id": "void-proc-2",
+    "topic": "processes",
+    "words": "which processes use the most memory",
+    "kind": "cmd",
+    "head_any": [
+     "ps",
+     "top",
+     "htop",
+     "btop"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "void-proc-3",
+    "topic": "processes",
+    "words": "how long has this machine been up",
+    "kind": "cmd",
+    "head_any": [
+     "uptime"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "void-svc-1",
+    "topic": "services",
+    "words": "is the sshd service running",
+    "kind": "cmd",
+    "head_any": [
+     "sv"
+    ],
+    "must_not": [
+     "\\b(systemctl|journalctl|service)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "void-svc-2",
+    "topic": "services",
+    "words": "restart the sshd service",
+    "kind": "cmd",
+    "head_any": [
+     "sv"
+    ],
+    "must_not": [
+     "\\b(systemctl|journalctl|service)\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "void-log-1",
+    "topic": "logs",
+    "words": "show the kernel messages since boot",
+    "kind": "cmd",
+    "head_any": [
+     "dmesg"
+    ],
+    "must_not": [
+     "\\b(systemctl|journalctl|service)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "void-log-2",
+    "topic": "logs",
+    "words": "show the last 50 lines of the system log",
+    "kind": "cmd",
+    "head_any": [
+     "svlogtail",
+     "tail",
+     "less",
+     "cat"
+    ],
+    "must_not": [
+     "\\b(systemctl|journalctl|service)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "void-init",
+    "topic": "services",
+    "words": "which init system does this machine use",
+    "kind": null,
+    "head_any": [
+     "ps",
+     "readlink",
+     "ls",
+     "stat",
+     "cat",
+     "file",
+     "sv"
+    ],
+    "must_not": [],
+    "danger": null,
+    "answer_any": [
+     "(?i)runit"
+    ]
+   }
+  ],
+  "macos": [
+   {
+    "id": "mac-pkg-1",
+    "topic": "packages",
+    "words": "install htop",
+    "kind": "cmd",
+    "head_any": [
+     "brew"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "mac-pkg-2",
+    "topic": "packages",
+    "words": "is wget installed",
+    "kind": "cmd",
+    "head_any": [
+     "brew",
+     "which",
+     "command",
+     "type"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "mac-pkg-3",
+    "topic": "packages",
+    "words": "upgrade everything brew installed",
+    "kind": "cmd",
+    "head_any": [
+     "brew"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "mac-pkg-4",
+    "topic": "packages",
+    "words": "list the macOS software updates",
+    "kind": "cmd",
+    "head_any": [
+     "softwareupdate"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "mac-pkg-5",
+    "topic": "packages",
+    "words": "remove the brew package cowsay",
+    "kind": "cmd",
+    "head_any": [
+     "brew"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "mac-svc-1",
+    "topic": "services",
+    "words": "list the brew services",
+    "kind": "cmd",
+    "head_any": [
+     "brew"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "mac-svc-2",
+    "topic": "services",
+    "words": "restart the postgresql brew service",
+    "kind": "cmd",
+    "head_any": [
+     "brew"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "mac-svc-3",
+    "topic": "services",
+    "words": "list the launch agents that are loaded",
+    "kind": "cmd",
+    "head_any": [
+     "launchctl"
+    ],
+    "must_not": [
+     "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "mac-log-1",
+    "topic": "logs",
+    "words": "show the system log from the last 10 minutes",
+    "kind": "cmd",
+    "head_any": [
+     "log"
+    ],
+    "must_not": [
+     "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b",
+     "/var/log/syslog"
+    ],
+    "danger": false
+   },
+   {
+    "id": "mac-disk-1",
+    "topic": "disks",
+    "words": "how much space is left on each disk",
+    "kind": "cmd",
+    "head_any": [
+     "df"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "--output"
+    ],
+    "danger": false
+   },
+   {
+    "id": "mac-disk-2",
+    "topic": "disks",
+    "words": "list the disks and their partitions",
+    "kind": "cmd",
+    "head_any": [
+     "diskutil"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(lsblk|fdisk|blkid)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "mac-disk-3",
+    "topic": "disks",
+    "words": "which folders here use the most space",
+    "kind": "cmd",
+    "head_any": [
+     "du",
+     "dust",
+     "ncdu"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "--max-depth"
+    ],
+    "danger": false
+   },
+   {
+    "id": "mac-net-1",
+    "topic": "network",
+    "words": "what is my ip address",
+    "kind": "cmd",
+    "head_any": [
+     "ipconfig",
+     "ifconfig",
+     "curl"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\bip\\s+(a|addr|address|-)"
+    ],
+    "danger": false
+   },
+   {
+    "id": "mac-net-2",
+    "topic": "network",
+    "words": "which process is listening on port 8080",
+    "kind": "cmd",
+    "head_any": [
+     "lsof"
+    ],
+    "must_not": [
+     "\\bss\\b",
+     "netstat\\s+-\\w*p"
+    ],
+    "danger": false
+   },
+   {
+    "id": "mac-net-3",
+    "topic": "network",
+    "words": "which Wi-Fi network am I on",
+    "kind": "cmd",
+    "head_any": [
+     "networksetup",
+     "ipconfig",
+     "system_profiler",
+     "wdutil"
+    ],
+    "must_not": [
+     "\\b(iwgetid|nmcli|iw)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "mac-net-4",
+    "topic": "network",
+    "words": "flush the DNS cache",
+    "kind": "cmd",
+    "head_any": [
+     "dscacheutil",
+     "killall"
+    ],
+    "must_not": [
+     "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b",
+     "resolvectl"
+    ],
+    "danger": null
+   },
+   {
+    "id": "mac-file-1",
+    "topic": "files",
+    "words": "find files bigger than 1 GB under my home",
+    "kind": "cmd",
+    "head_any": [
+     "find",
+     "fd",
+     "mdfind"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "-printf"
+    ],
+    "danger": false
+   },
+   {
+    "id": "mac-file-2",
+    "topic": "files",
+    "words": "delete every .tmp file in this folder",
+    "kind": "cmd",
+    "head_any": [
+     "rm",
+     "find",
+     "fd"
+    ],
+    "must_not": [],
+    "danger": true
+   },
+   {
+    "id": "mac-file-3",
+    "topic": "files",
+    "words": "replace foo with bar in notes.txt",
+    "kind": "cmd",
+    "head_any": [
+     "sed",
+     "perl"
+    ],
+    "must_not": [
+     "\\bsed\\s+(-\\w+\\s+)*-i(?!\\s*''|\\s*\\\"\\\"|\\.\\w)",
+     "--in-place"
+    ],
+    "danger": null
+   },
+   {
+    "id": "mac-file-4",
+    "topic": "files",
+    "words": "copy the current directory's path to the clipboard",
+    "kind": "cmd",
+    "head_any": [
+     "pbcopy"
+    ],
+    "must_not": [
+     "\\bxclip\\b",
+     "\\bxsel\\b",
+     "wl-copy"
+    ],
+    "danger": false
+   },
+   {
+    "id": "mac-file-5",
+    "topic": "files",
+    "words": "open this folder in Finder",
+    "kind": "cmd",
+    "head_any": [
+     "open"
+    ],
+    "must_not": [
+     "xdg-open"
+    ],
+    "danger": false
+   },
+   {
+    "id": "mac-user-1",
+    "topic": "users",
+    "words": "which groups am I in",
+    "kind": "cmd",
+    "head_any": [
+     "groups",
+     "id"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "mac-user-2",
+    "topic": "users",
+    "words": "list the user accounts on this Mac",
+    "kind": "cmd",
+    "head_any": [
+     "dscl",
+     "dscacheutil",
+     "ls"
+    ],
+    "must_not": [
+     "/etc/passwd",
+     "\\bgetent\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "mac-proc-1",
+    "topic": "processes",
+    "words": "kill the process named firefox",
+    "kind": "cmd",
+    "head_any": [
+     "pkill",
+     "killall",
+     "kill"
+    ],
+    "must_not": [],
+    "danger": true
+   },
+   {
+    "id": "mac-proc-2",
+    "topic": "processes",
+    "words": "which processes use the most memory",
+    "kind": "cmd",
+    "head_any": [
+     "ps",
+     "top"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "--sort"
+    ],
+    "danger": false
+   },
+   {
+    "id": "mac-proc-3",
+    "topic": "processes",
+    "words": "how much memory is free",
+    "kind": "cmd",
+    "head_any": [
+     "vm_stat",
+     "top",
+     "memory_pressure",
+     "sysctl"
+    ],
+    "must_not": [
+     "\\bfree\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "mac-proc-4",
+    "topic": "processes",
+    "words": "keep this Mac awake for an hour",
+    "kind": "cmd",
+    "head_any": [
+     "caffeinate",
+     "pmset"
+    ],
+    "must_not": [],
+    "danger": null
+   },
+   {
+    "id": "mac-proc-5",
+    "topic": "processes",
+    "words": "how much battery is left",
+    "kind": "cmd",
+    "head_any": [
+     "pmset",
+     "ioreg",
+     "system_profiler"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   }
+  ],
+  "spark": [
+   {
+    "id": "spark-01",
+    "topic": "spark",
+    "words": "make the boot quiet",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "quiet"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "spark-02",
+    "topic": "spark",
+    "words": "hide the messages at login",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "quiet"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "spark-03",
+    "topic": "spark",
+    "words": "silence the startup chime",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "quiet"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "spark-04",
+    "topic": "spark",
+    "words": "use a bigger model for chat",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "ember"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "spark-05",
+    "topic": "spark",
+    "words": "which models can I use",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "model",
+     "ember"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "spark-06",
+    "topic": "spark",
+    "words": "switch the prompt line to the qwen3-4b model",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "model"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "spark-07",
+    "topic": "spark",
+    "words": "update spark",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "update"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "spark-08",
+    "topic": "spark",
+    "words": "run this machine as a headless box that is always on",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "headless"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "spark-09",
+    "topic": "spark",
+    "words": "switch to the dracula palette",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "theme"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "spark-10",
+    "topic": "spark",
+    "words": "list the palettes",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "theme"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "spark-11",
+    "topic": "spark",
+    "words": "change the console font",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "font"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "spark-12",
+    "topic": "spark",
+    "words": "who has an account on the page",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "user",
+     "forge"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "spark-13",
+    "topic": "spark",
+    "words": "is everything ok with spark",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "check"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "spark-14",
+    "topic": "spark",
+    "words": "share the engine with the other users of this machine",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "share"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "spark-15",
+    "topic": "spark",
+    "words": "stop the engine",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "serve"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "spark-16",
+    "topic": "spark",
+    "words": "start the engine",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "serve"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "spark-17",
+    "topic": "spark",
+    "words": "turn the page's server on",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "forge"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "spark-18",
+    "topic": "spark",
+    "words": "use the model on my other machine",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "client"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "spark-19",
+    "topic": "spark",
+    "words": "stop using the other machine's model",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "client"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "spark-20",
+    "topic": "spark",
+    "words": "show my past conversations",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "history"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "spark-21",
+    "topic": "spark",
+    "words": "how fast is my model",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "stats",
+     "bench"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "spark-22",
+    "topic": "spark",
+    "words": "remember that my editor is micro",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "memory"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "spark-23",
+    "topic": "spark",
+    "words": "change who spark is",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "soul"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "spark-24",
+    "topic": "spark",
+    "words": "start a conversation with spark",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "chat"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "spark-25",
+    "topic": "spark",
+    "words": "turn spark off in this shell",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "off"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "spark-26",
+    "topic": "spark",
+    "words": "what version of spark is this",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "ver",
+     "version",
+     "--version"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "spark-27",
+    "topic": "spark",
+    "words": "add an account for my sister",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "user"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   }
+  ]
+ }
+}
