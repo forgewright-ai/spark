@@ -1081,7 +1081,7 @@ def shown_of(stdout):
 
 def cmd_run(args):
     os_name, model, url, out, subject, only, verbose, snap_path = "", "", "", "", None, set(), False, None
-    arm = ""
+    arm, store = "", "snapshot"
     it = iter(args)
     for a in it:
         if a == "--os":
@@ -1100,17 +1100,22 @@ def cmd_run(args):
             only.add(next(it, ""))
         elif a == "--snapshot":
             snap_path = next(it, "")
+        elif a == "--store":
+            store = next(it, "")
         elif a == "-v":
             verbose = True
         else:
             die("run takes --os OS --model NAME [--url URL] [--arm off|judge|full] [--out FILE] "
-                "[--subject tools|spark] [--case ID] [-v]")
+                "[--subject tools|spark] [--case ID] [--store snapshot|local] [-v]")
     if os_name not in OSES or not model:
         die("run: say --os (one of %s) and --model NAME (the label the report groups by)" % ", ".join(OSES))
     if subject and subject not in SUBJECTS:
         die("run: --subject is tools or spark")
     if arm and arm not in ARMS:
         die("run: --arm is off, judge or full")
+    if store not in ("snapshot", "local"):
+        die("run: --store is snapshot (the OS's snapshot, the default) or local (this machine's own index, "
+            "for the OS it runs on)")
     here_mac = sys.platform == "darwin"
     if (os_name == "macos") != here_mac:
         # persona.prefix reads platform.system() for macOS, with no seam
@@ -1125,9 +1130,11 @@ def cmd_run(args):
         env = persona_env(os_name, snap, data, scratch, url)
         if arm:
             env["SPARK_LINE_KNOW"] = arm
-        if snap:
+        if snap and store == "snapshot":
             # the store the line grounds and judges in: this OS's, built
-            # once here so no turn pays for the build
+            # once here so no turn pays for the build (--store local: the
+            # machine's own index instead, the OS it runs on; the grade
+            # still reads the snapshot, the independent referee)
             env["SPARK_KNOWLEDGE_SNAPSHOT"] = SnapshotStore(snap=snap).save(
                 os.path.join(scratch, "store-%s.json" % os_name))
         ok, prefix, why = check_prefix(os_name, data, env)
