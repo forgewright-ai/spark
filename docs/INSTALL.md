@@ -621,10 +621,10 @@ Void:
   VT gets it at the next boot.
 - `spark quiet login on` works. `spark quiet boot` refuses: Void's GRUB
   reads no drop-in. By hand, put `quiet splash loglevel=3
-  systemd.show_status=false udev.log_level=3 vt.global_cursor_default=0
-  fbcon=nodefer` in `GRUB_CMDLINE_LINUX_DEFAULT` in
-  `/etc/default/grub`, with `GRUB_TIMEOUT=0` and
-  `GRUB_TIMEOUT_STYLE=hidden`, then `sudo update-grub`.
+  udev.log_level=3 vt.global_cursor_default=0 fbcon=nodefer` in
+  `GRUB_CMDLINE_LINUX_DEFAULT` in `/etc/default/grub`, with
+  `GRUB_TIMEOUT=0` and `GRUB_TIMEOUT_STYLE=hidden`, then `sudo
+  update-grub`. The systemd word of the Arch line means nothing here.
 - The palette at boot is yours. `spark theme` paints this console now.
   One `setvtrgb` line in `/etc/rc.local`, naming your
   `~/.config/spark/console-colors.rgb` by its full path, paints it at
