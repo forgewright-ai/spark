@@ -10,22 +10,42 @@
 # own TAB completion, so a retired verb fails with no list to keep.
 #
 #   python3 tests/line_audition.py run --os void --model NAME [--url URL]
-#                                      [--out FILE] [--subject tools|spark]
-#                                      [--case ID] [-v]
+#                                      [--arm off|judge|full] [--out FILE]
+#                                      [--subject tools|spark] [--case ID] [-v]
+#   python3 tests/line_audition.py recall --os OS [--k 3] [-v]
 #   python3 tests/line_audition.py collect [--os OS] --out help-OS.json
 #   python3 tests/line_audition.py report FILE...
 #   python3 tests/line_audition.py serve-candidate --model-file PATH [--port 8090]
 #   python3 tests/line_audition.py packages --os OS
 #   python3 tests/line_audition.py selftest
 #
-# Not part of the gate: `run` needs a live model. `selftest` needs none
-# and is fast. The help snapshots are data: nothing in them is run.
-# The OS a run speaks as comes from spark's own seams (SPARK_OS_RELEASE,
-# SPARK_ETC_RUNIT, SPARK_PROC_VERSION) plus stub commands on PATH, so the
-# box can speak as debian or arch. macOS speaks only on a Mac: the prompt
-# reads platform.system() there, which has no seam.
+# Not part of the gate: `run` needs a live model. `recall` and `selftest`
+# need none and are fast. The help snapshots are data: nothing in them is
+# run. The OS a run speaks as comes from spark's own seams
+# (SPARK_OS_RELEASE, SPARK_ETC_RUNIT, SPARK_PROC_VERSION) plus stub
+# commands on PATH, so the box can speak as debian or arch. macOS speaks
+# only on a Mac: the prompt reads platform.system() there, which has no
+# seam.
+#
+# The measuring-only seams a run sets for `spark line`, honoured only with
+# SPARK_LINE_BENCH=1 (a person's line never reads them):
+#   SPARK_LINE_KNOW=off|judge|full   the A/B arm (--arm): no knowledge,
+#                                    the verdict and one re-ask only, or
+#                                    evidence up front too
+#   SPARK_KNOWLEDGE_SNAPSHOT=FILE    the store the line grounds and judges
+#                                    in: that OS's snapshot as a store
+#                                    (SnapshotStore.save), so the box can
+#                                    ground a debian question in debian's
+#                                    manuals. The file is plain JSON:
+#                                    {"entries": {name: Entry's fields},
+#                                    "index": index.json's shape}
+#   SPARK_LINE_BENCH_HISTORY=FILE    a `??` case's first turn as chat
+#                                    history [{"role","content"}]: a bench
+#                                    turn keeps no thread, so the pair
+#                                    rides this file instead
 
 import json
+import math
 import os
 import re
 import shlex
@@ -46,8 +66,14 @@ sys.path.insert(0, LIB)
 
 OSES = ("debian", "arch", "void", "macos")
 SUBJECTS = ("tools", "spark")
+ARMS = ("off", "judge", "full")
 HELP_MAX = 4096          # the human-readable part of a snapshot entry
 MAN_MAX = 200000         # a man page read for options (git's is ~150 kB)
+LINES_MAX = 60           # option lines an entry keeps, each its first sentence
+SENTENCE_MAX = 100       # characters of one what, synopsis or option sentence
+SYNOPSIS_MAX = 3         # synopsis lines an entry keeps
+CASE_KEYS = {"id", "words", "kind", "head_any", "must_not", "danger", "spark_verb", "answer_any",
+             "topic", "then"}
 
 # Tools a pipeline stage reaches for whatever the question: each OS's
 # snapshot holds them, so `du -sh * | sort -h` is judged stage by stage.
@@ -74,7 +100,7 @@ WRAPPERS = {
     "xargs": ("-I", "-n", "-P", "-L", "-s", "-d", "-E", "-a"),
 }
 # the shell's own words beyond persona.SH_BUILTINS: never looked up on PATH
-EXTRA_BUILTINS = ("command", "time", "builtin", "pwd", "history", "ulimit", "hash", "[[")
+EXTRA_BUILTINS = ("command", "time", "builtin", "pwd", "history", "ulimit", "hash", "[[", "disown")
 # kill -9, pkill -HUP: a signal spelled as an option is no option to look up
 SIGNAL_HEADS = ("kill", "pkill", "killall")
 # never run these to read their help, even with --help: a snapshot is
@@ -172,6 +198,119 @@ def options_of(text):
     return {"long": sorted(longs), "short": "".join(sorted(short)), "words": sorted(words)}
 
 
+# a manual's sections a person reads for what a tool does and takes; the
+# rest (examples, see also, history) is never kept
+SKIP_SECTIONS = ("EXAMPLE", "SEE ALSO", "AUTHOR", "BUGS", "HISTORY", "COPYRIGHT", "REPORTING",
+                 "STANDARDS", "EXIT STATUS", "ENVIRONMENT", "FILES", "CAVEATS", "COLOPHON")
+SECTION = re.compile(r"^[A-Z][A-Z0-9 ,/()-]*[A-Z)]$")
+
+
+def sections(man):
+    """A rendered man page -> [(HEADER, [line, ...])], in order."""
+    out, cur = [], None
+    for line in man.split("\n"):
+        if SECTION.match(line.rstrip()):
+            cur = (line.strip(), [])
+            out.append(cur)
+        elif cur is not None:
+            cur[1].append(line.rstrip())
+    return out
+
+
+def _short(text, n=SENTENCE_MAX):
+    text = " ".join(text.split())
+    return text if len(text) <= n else text[:n - 3].rstrip() + "..."
+
+
+def first_sentence(text):
+    text = " ".join(text.split())
+    m = re.search(r"(?<=\.)\s", text)
+    return _short(text[:m.start()] if m else text)
+
+
+def _indent(line):
+    return len(line) - len(line.lstrip(" "))
+
+
+def option_lines(lines, commands=False):
+    """[[tag, first sentence]] from a manual section or a --help text: a
+    line that starts with an option (-a, --all, -B, --block-size=SIZE,
+    -p PROP) is a tag, its words the rest of that line or the more-indented
+    lines under it. With `commands` (a COMMANDS section) a word at the
+    section's own indent is a tag too: launchctl's list, sv's status."""
+    base = min((_indent(l) for l in lines if l.strip()), default=0)
+    out, i = [], 0
+    while i < len(lines):
+        line = lines[i]
+        i += 1
+        ind = _indent(line)
+        if not line.strip() or ind > 14:
+            continue
+        m = re.match(r"^(\S.*?)(?:\s{2,}|\t|$)(.*)$", line.strip())
+        tag, rest = m.group(1), m.group(2)
+        under = next((l for l in lines[i:] if l.strip()), "")
+        is_opt = re.match(r"^-{1,2}[A-Za-z0-9?@#]", tag) is not None
+        if is_opt and len(tag.split()) > 4:
+            # -g live displays the settings: one space parts tag and words
+            tag, rest = " ".join(tag.split()[:2]), " ".join(tag.split()[2:] + [rest])
+        # a subcommand: a word at the section's indent, its words beside it
+        # (a short tag) or under it -- never a wrapped line of prose
+        is_cmd = (commands and ind == base and re.match(r"^[a-z][\w/-]*(\s|$)", tag) is not None
+                  and not tag.endswith((".", ",", ":"))
+                  and (_indent(under) > ind or rest and len(tag.split()) <= 3))
+        if is_cmd and len(tag) > 48:
+            tag = tag[:48].rsplit(" ", 1)[0]       # bootstrap | bootout domain-target [...]
+        if not (is_opt or is_cmd) or len(tag) > 48 or ". " in tag:
+            continue
+        words = [rest] if rest else []
+        while i < len(lines) and (not lines[i].strip() and not words or lines[i].strip() and _indent(lines[i]) > ind):
+            if lines[i].strip() and re.match(r"^-{1,2}[A-Za-z0-9]", lines[i].strip()) and words:
+                break                              # the next option, nested deeper
+            if lines[i].strip():
+                words.append(lines[i].strip())
+            elif words:
+                break
+            i += 1
+        out.append([_short(tag, 48), first_sentence(" ".join(words))])
+    return out
+
+
+def entry_text(helptext, mans):
+    """(what, synopsis, lines) of one tool, from its man pages (the first
+    one names it) and its --help: what is the man NAME one-liner, the
+    synopsis at most 3 lines, the lines each option with its first
+    sentence, at most 60 -- the words a store indexes."""
+    what, synopsis, lines, seen = "", [], [], set()
+
+    def keep(pairs):
+        for tag, words in pairs:
+            if tag not in seen and len(lines) < LINES_MAX:
+                seen.add(tag)
+                lines.append([tag, words])
+    for n, man in enumerate(mans):
+        for head, body in sections(man):
+            if n == 0 and head == "NAME" and not what:
+                m = re.search(r"\s[-–—]{1,2}\s(.*)$", " ".join(" ".join(body).split()))
+                what = _short(m.group(1)) if m else ""
+            elif n == 0 and head == "SYNOPSIS" and not synopsis:
+                synopsis = [_short(l) for l in body if l.strip()][:SYNOPSIS_MAX]
+            elif not any(s in head for s in SKIP_SECTIONS):
+                keep(option_lines(body, commands="COMMAND" in head or "VERB" in head))
+    hl = [l.rstrip() for l in helptext.split("\n")]
+    if not synopsis:
+        synopsis = [_short(re.sub(r"(?i)^\s*(usage|or)\s*:\s*", "", l)) for l in hl
+                    if re.match(r"(?i)^\s*(usage|or)\s*:", l)][:SYNOPSIS_MAX]
+    if not what:
+        for l in hl:
+            s = l.strip()
+            if (s and not l[:1].isspace() and not s.startswith("-") and len(s.split()) >= 3
+                    and not re.match(r"(?i)^(usage|or)\b|.*: (unrecognized|illegal|invalid)", s)):
+                what = _short(s)
+                break
+    keep(option_lines(hl))
+    return what, synopsis, lines
+
+
 def _run_text(argv, env, timeout=15):
     # an empty scratch directory as the cwd: a tool that takes --help for
     # a file name finds nothing of anyone's there
@@ -188,8 +327,9 @@ def _run_text(argv, env, timeout=15):
 
 def collect_tool(tool, path_env, man_extra=()):
     """One snapshot entry: whether the tool exists here, its --help (or
-    man synopsis) for a person to read, and the options its --help and
-    man page name, for the grader. --help is run only for tools outside
+    man synopsis) for a person to read, the options its --help and man
+    page name, for the grader, and what a store indexes (what, synopsis,
+    lines: see entry_text). --help is run only for tools outside
     NEVER_RUN, with no stdin, a pager of cat and a 15 s cap."""
     env = dict(os.environ, PATH=path_env, LC_ALL="C", LANG="C", PAGER="cat", MANPAGER="cat",
                GIT_PAGER="cat", MANWIDTH="100", TERM="dumb", NO_COLOR="1")
@@ -211,6 +351,7 @@ def collect_tool(tool, path_env, man_extra=()):
         shown = m.group(1) if m else mans[0]
     entry["help"] = shown.strip()[:HELP_MAX]
     entry.update(options_of(helptext + "\n" + "\n".join(mans)))
+    entry["what"], entry["synopsis"], entry["lines"] = entry_text(helptext, mans)
     return entry
 
 
@@ -220,7 +361,9 @@ def tools_for(data, os_name):
     PREFERRED (the prompt names them when installed)."""
     names = set(COMMON) | set(WRAPPERS)
     for c in data["cases"].get(os_name, ()):
-        names.update(h for h in c.get("head_any", ()) if h != "spark")
+        # a script the case names (./build.sh) is the person's, not the OS's
+        names.update(h for h in c.get("head_any", ()) if h != "spark" and not h.endswith(".sh")
+                     and h not in EXTRA_BUILTINS)
     names.update(data["oses"][os_name].get("also", ()))
     try:
         from spark import persona
@@ -322,6 +465,17 @@ def spark_tree(repo=REPO):
                 words.setdefault(verb, set()).update(ws)
                 if dynamic:
                     closed.add(verb)
+    # the words a verb takes that completion leaves to the cheatsheet's
+    # command column: spark forge --print-url, spark bench tune
+    try:
+        sheet = open(os.path.join(repo, "docs", "CHEATSHEET.txt"), encoding="utf-8").read()
+    except OSError:
+        sheet = ""
+    for cmd, _w in _columns(sheet):
+        m = re.search(r"\bspark ([a-z][\w-]*) (\S+)", cmd)
+        if m and m.group(1) in words:
+            words[m.group(1)].update(a for a in m.group(2).strip("[]").split("|")
+                                     if re.match(r"^(--?)?[a-z][\w-]*$", a))
     free, third = set(), {}
     try:
         from spark import persona
@@ -466,6 +620,14 @@ def stage_rules(head, args, snap, builtins):
     entry = snap.get("tools", {}).get(base)
     if not entry or not entry.get("exists"):
         return False, True, "%s: not on %s" % (base, snap.get("os", "?"))
+    bad = bad_options(base, args, entry)
+    if bad:
+        return True, False, "%s: %s not in its help" % (base, " ".join(bad))
+    return True, True, ""
+
+
+def bad_options(base, args, entry):
+    """The option tokens of one stage its tool's help does not name."""
     bad, prev = [], ""
     for tok in args:
         if tok == "--" or tok in FIND_EXEC:
@@ -473,9 +635,25 @@ def stage_rules(head, args, snap, builtins):
         if tok.startswith("-") and tok != "-" and not option_ok(tok, prev, base, entry):
             bad.append(tok)
         prev = tok
-    if bad:
-        return True, False, "%s: %s not in its help" % (base, " ".join(bad))
-    return True, True, ""
+    return bad
+
+
+def unknown_flags(command, snap, builtins):
+    """[(tool, option)] a command passes that its tool's help (on the
+    snapshot's OS) does not name; a tool not there is `exists`'s finding."""
+    try:
+        stages = split_stages(command)
+    except ValueError:
+        return []
+    out = []
+    for head, args in (pair for st in stages for pair in unwrap(st)):
+        base = head.rsplit("/", 1)[-1]
+        if base in ("spark", "explain") or head.startswith(("./", "~/", "../")) or base in builtins:
+            continue
+        entry = snap.get("tools", {}).get(base)
+        if entry and entry.get("exists"):
+            out.extend((base, tok) for tok in bad_options(base, args, entry))
+    return out
 
 
 def spark_mentions(text):
@@ -597,6 +775,191 @@ def load_snapshot(os_name, path=None):
         return None
 
 
+# ------------------------------------------------------------ the store
+# A snapshot as intake.Store: the audition grounds and judges a question in
+# the OS it speaks as, whatever machine runs it. The tokenizer is intake's
+# own (intake.words) when the tree has it, else the local copy below of the
+# same rule (lowercase, stopwords, crude suffixes) -- the index must be cut
+# the way grounding cuts the question.
+STOPWORDS = frozenset("a an the and or of to in on for with by is are was be been it its this that "
+                      "these those my me i you your we our at as from into how do does did what "
+                      "which who whom when where why can could would should will there here".split())
+
+
+def _local_words(text):
+    out = []
+    for w in re.findall(r"[a-z0-9]+", text.lower()):
+        if len(w) < 2 or w in STOPWORDS:
+            continue
+        for suf, rep, n in (("ies", "y", 4), ("sses", "ss", 5), ("xes", "x", 4), ("ches", "ch", 5),
+                            ("shes", "sh", 5), ("ing", "", 6), ("ed", "", 5), ("s", "", 4)):
+            if w.endswith(suf) and len(w) >= n and not (suf == "s" and w.endswith(("ss", "us", "is"))):
+                w = w[:len(w) - len(suf)] + rep
+                break
+        out.append(w)
+    return out
+
+
+def tokenizer():
+    """(words function, "intake" | "local")."""
+    try:
+        from spark import intake
+        if callable(getattr(intake, "words", None)):
+            return intake.words, "intake"
+    except ImportError:
+        pass
+    return _local_words, "local"
+
+
+def _intake():
+    try:
+        from spark import intake
+        return intake
+    except ImportError:
+        return None
+
+
+_IN = _intake()
+_Base = _IN.Store if _IN else object
+
+
+def make_entry(d):
+    """A JSON entry dict -> intake.Entry (a dict when intake is absent)."""
+    o = d.get("options") or {}
+    opts = (o.get("long", ()), o.get("short", ""), o.get("words", ()))
+    fields = dict(d, options=_IN.OptionSet(*opts) if _IN else opts,
+                  synopsis=tuple(d.get("synopsis", ())), lines=tuple(tuple(x) for x in d.get("lines", ())))
+    if not _IN:
+        return fields
+    return _IN.Entry(*(fields.get(k) for k in _IN.Entry._fields))
+
+
+def build_index(entries, words):
+    """index.json's shape over {name: entry dict}: names sorted, each
+    entry's words weighted name x3, what x2, synopsis and lines x1 (the
+    plan's BM25 fields), len the weighted length, post term -> "i:tf ..."."""
+    names = sorted(entries)
+    post, lens = {}, []
+    for i, n in enumerate(names):
+        e, tf = entries[n], {}
+        for text, weight in ((n, 3), (e.get("what", ""), 2),
+                             (" ".join(e.get("synopsis", ())) + " " +
+                              " ".join(" ".join(x) for x in e.get("lines", ())), 1)):
+            for w in words(text):
+                tf[w] = tf.get(w, 0) + weight
+        lens.append(sum(tf.values()))
+        for w in sorted(tf):
+            post.setdefault(w, []).append("%d:%d" % (i, tf[w]))
+    avg = round(float(sum(lens)) / len(lens), 2) if lens else 0.0
+    return {"v": 1, "names": names, "len": lens, "avg": avg,
+            "post": dict((w, " ".join(p)) for w, p in post.items())}
+
+
+def tool_entry(name, t, os_name):
+    """One snapshot tool -> an entry dict. A snapshot from before the
+    store fields reads them from its `help` text instead."""
+    what, synopsis, lines = t.get("what"), t.get("synopsis"), t.get("lines")
+    if what is None or synopsis is None or lines is None:
+        w2, s2, l2 = entry_text(t.get("help", ""), [])
+        what, synopsis, lines = what or w2, synopsis or s2, lines or l2
+    return {"name": name, "kind": "program", "source": "man" if t.get("man") else "help",
+            "what": what or "", "synopsis": list(synopsis or ()), "lines": [list(x) for x in lines or ()],
+            "options": {"long": list(t.get("long", ())), "short": t.get("short", ""),
+                        "words": list(t.get("words", ()))},
+            "origin": "snapshot:" + os_name, "stamp": None}
+
+
+def _columns(text):
+    """[[command column, words]] of a help-shaped text (spark help, the
+    cheatsheet): the words column is where the continuation lines start."""
+    lines = text.split("\n")
+    conts = [_indent(l) for l in lines if l.strip() and _indent(l) >= 16]
+    col = max(set(conts), key=conts.count) if conts else 30
+    out = []
+    for l in lines:
+        if not l.strip():
+            continue
+        if _indent(l) >= col - 1 and out:
+            out[-1][1] = (out[-1][1] + " " + l.strip()).strip()
+        elif _indent(l) < 4:
+            out.append([l[:col].strip(), l[col:].strip()])
+    return out
+
+
+def spark_entries(tree, repo=REPO):
+    """spark's own verbs as entries ("spark quiet"), from `spark help` and
+    the cheatsheet's lines: what the store's spark source holds on a real
+    machine, near enough for recall. The words TAB completes ride along."""
+    env = dict(os.environ, PAGER="cat", NO_COLOR="1")
+    try:
+        helptext = subprocess.run([sys.executable, SPARK, "help"], capture_output=True, text=True,
+                                  env=env, timeout=30, stdin=subprocess.DEVNULL).stdout
+    except (OSError, subprocess.SubprocessError):
+        helptext = ""
+    try:
+        sheet = open(os.path.join(repo, "docs", "CHEATSHEET.txt"), encoding="utf-8").read()
+    except OSError:
+        sheet = ""
+    found = {}
+    for cmd, words in _columns(clean(helptext)) + _columns(clean(sheet)):
+        m = re.search(r"\bspark ([a-z][\w-]*)", cmd)
+        if m and m.group(1) in tree["verbs"]:
+            found.setdefault(m.group(1), []).append([_short(cmd, 48), first_sentence(words)])
+    out = {}
+    for verb in sorted(tree["verbs"] - {"--version", "help"}):
+        rows = found.get(verb, [])
+        said = sorted(tree["words"].get(verb, ()))
+        name = "spark " + verb
+        out[name] = {"name": name, "kind": "spark", "source": "tree",
+                     "what": next((w for _c, w in rows if w), ""),
+                     "synopsis": list(dict.fromkeys(c for c, _w in rows))[:SYNOPSIS_MAX] or [name],
+                     "lines": (rows + [[w, ""] for w in said])[:LINES_MAX],
+                     "options": options_of(" ".join(c for c, _w in rows) + " " + " ".join(said)),
+                     "origin": "spark", "stamp": None}
+        out[name]["options"]["words"] = said
+    return out
+
+
+class SnapshotStore(_Base):
+    """intake.Store over one OS's help snapshot (help-<os>.json): every tool
+    that exists there is an entry, spark's verbs too (spark=True), and the
+    index is built in memory. A file SnapshotStore.save wrote loads as it
+    is, with no build: what SPARK_KNOWLEDGE_SNAPSHOT names for a run."""
+
+    def __init__(self, path=None, spark=True, snap=None, tree=None):
+        doc = snap
+        if doc is None:
+            with open(path, encoding="utf-8") as f:
+                doc = json.load(f)
+        self.os = doc.get("os", "?")
+        if "line_audition_store" in doc:
+            self._entries, self._index, self.tokenizer = doc["entries"], doc["index"], doc.get("tokenizer", "?")
+            return
+        words, self.tokenizer = tokenizer()
+        self._entries = dict((n, tool_entry(n, t, self.os)) for n, t in doc.get("tools", {}).items()
+                             if t.get("exists"))
+        if spark:
+            self._entries.update(spark_entries(tree or spark_tree()))
+        self._index = build_index(self._entries, words)
+
+    def names(self):
+        return sorted(self._entries)
+
+    def entry(self, name):
+        d = self._entries.get(name)
+        return make_entry(d) if d else None
+
+    def index(self):
+        return self._index
+
+    def save(self, path):
+        doc = {"line_audition_store": 1, "os": self.os, "tokenizer": self.tokenizer,
+               "entries": self._entries, "index": self._index}
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(doc, f, ensure_ascii=False)
+        return path
+
+
 # ------------------------------------------------------------ run
 def persona_env(os_name, snap, data, scratch, url):
     """The environment one `spark line` runs in to speak as os_name: the
@@ -606,7 +969,8 @@ def persona_env(os_name, snap, data, scratch, url):
     re-ask for a tool the OS would have). The stubs are never run."""
     env = dict(os.environ)
     env["SPARK_LINE_BENCH"] = "1"          # the turn's numbers, marked bench; no thread
-    for k in ("SPARK_EXPLAIN_CMD", "SPARK_EXPLAIN_RC", "SPARK_HINT_ROW", "SPARK_DEBUG"):
+    for k in ("SPARK_EXPLAIN_CMD", "SPARK_EXPLAIN_RC", "SPARK_HINT_ROW", "SPARK_DEBUG",
+              "SPARK_LINE_KNOW", "SPARK_KNOWLEDGE_SNAPSHOT", "SPARK_LINE_BENCH_HISTORY"):
         env.pop(k, None)
     stubs = os.path.join(scratch, "bin")
     os.makedirs(stubs, exist_ok=True)
@@ -714,8 +1078,30 @@ def brief_sha():
         return "?"
 
 
+def ask_line(words, env, cwd):
+    """One `spark line` turn: (rc, stdout, stderr, total ms, turn record)."""
+    before = turn_sizes()
+    t0 = time.time()
+    try:
+        p = subprocess.run([sys.executable, SPARK, "line", "--cwd", cwd, "--shell", "bash"],
+                           input=words + "\n", capture_output=True, text=True,
+                           env=env, timeout=300, cwd=cwd)
+        rc, stdout, stderr = p.returncode, p.stdout, p.stderr
+    except subprocess.TimeoutExpired:
+        rc, stdout, stderr = -1, "error\ntimed out after 300 s\n", ""
+    return rc, stdout, stderr, int((time.time() - t0) * 1000), newest_turn(before)
+
+
+def shown_of(stdout):
+    """What a thread keeps of one line answer, as cli.cmd_line appends it:
+    "`command` -- hint" for a command, the words for an answer."""
+    kind, command, text, _proof = parse_reply(stdout)
+    return "`%s` -- %s" % (command, text) if kind in ("cmd", "danger") else text
+
+
 def cmd_run(args):
     os_name, model, url, out, subject, only, verbose, snap_path = "", "", "", "", None, set(), False, None
+    arm = ""
     it = iter(args)
     for a in it:
         if a == "--os":
@@ -724,6 +1110,8 @@ def cmd_run(args):
             model = next(it, "")
         elif a == "--url":
             url = next(it, "").rstrip("/")
+        elif a == "--arm":
+            arm = next(it, "")
         elif a == "--out":
             out = next(it, "")
         elif a == "--subject":
@@ -735,11 +1123,14 @@ def cmd_run(args):
         elif a == "-v":
             verbose = True
         else:
-            die("run takes --os OS --model NAME [--url URL] [--out FILE] [--subject tools|spark] [--case ID] [-v]")
+            die("run takes --os OS --model NAME [--url URL] [--arm off|judge|full] [--out FILE] "
+                "[--subject tools|spark] [--case ID] [-v]")
     if os_name not in OSES or not model:
         die("run: say --os (one of %s) and --model NAME (the label the report groups by)" % ", ".join(OSES))
     if subject and subject not in SUBJECTS:
         die("run: --subject is tools or spark")
+    if arm and arm not in ARMS:
+        die("run: --arm is off, judge or full")
     here_mac = sys.platform == "darwin"
     if (os_name == "macos") != here_mac:
         # persona.prefix reads platform.system() for macOS, with no seam
@@ -752,6 +1143,13 @@ def cmd_run(args):
     scratch = tempfile.mkdtemp(prefix="line-audition-")
     try:
         env = persona_env(os_name, snap, data, scratch, url)
+        if arm:
+            env["SPARK_LINE_KNOW"] = arm
+        if snap:
+            # the store the line grounds and judges in: this OS's, built
+            # once here so no turn pays for the build
+            env["SPARK_KNOWLEDGE_SNAPSHOT"] = SnapshotStore(snap=snap, tree=tree).save(
+                os.path.join(scratch, "store-%s.json" % os_name))
         ok, prefix, why = check_prefix(os_name, data, env)
         if not ok:
             die("run: cannot speak as %s here: %s" % (os_name, why))
@@ -760,23 +1158,30 @@ def cmd_run(args):
         results = []
         todo = cases_for(data, os_name, subject, only)
         for n, (subj, case) in enumerate(todo, 1):
-            before = turn_sizes()
-            t0 = time.time()
-            try:
-                p = subprocess.run([sys.executable, SPARK, "line", "--cwd", cwd, "--shell", "bash"],
-                                   input="? " + case["words"] + "\n", capture_output=True, text=True,
-                                   env=env, timeout=300, cwd=cwd)
-                rc, stdout, stderr = p.returncode, p.stdout, p.stderr
-            except subprocess.TimeoutExpired:
-                rc, stdout, stderr = -1, "error\ntimed out after 300 s\n", ""
-            total = int((time.time() - t0) * 1000)
-            rec = newest_turn(before)
+            first = None
+            if case.get("then"):
+                # a `??` pair: the first turn, then the follow-up with the
+                # first as its history (a bench turn keeps no thread)
+                first = ask_line("? " + case["words"], env, cwd)
+                hist = os.path.join(scratch, "history.json")
+                with open(hist, "w", encoding="utf-8") as f:
+                    json.dump([{"role": "user", "content": case["words"]},
+                               {"role": "assistant", "content": shown_of(first[1])}], f)
+                rc, stdout, stderr, total, rec = ask_line("?? " + case["then"],
+                                                          dict(env, SPARK_LINE_BENCH_HISTORY=hist), cwd)
+            else:
+                rc, stdout, stderr, total, rec = ask_line("? " + case["words"], env, cwd)
             prompt_ms, first_ms, tok = timing(rec)
             rules = grade(case, stdout, snap, tree, builtins) if snap else []
             passed = bool(rules) and all(r[1] for r in rules)
             results.append({"id": case["id"], "subject": subj, "words": case["words"], "rc": rc,
+                            "then": case.get("then"), "raw_first": first[1].split("\n")[:3] if first else None,
                             "raw": stdout.split("\n")[:3], "stderr": stderr[-400:],
                             "rules": rules, "pass": passed if snap else None, "total_ms": total,
+                            "cmd_ms": rec.get("cmd_ms"), "reasked": rec.get("reasked"),
+                            "evidence_chars": rec.get("evidence_chars"),
+                            # the seam's stderr banner: the line read this OS's store
+                            "store_seen": "SPARK_KNOWLEDGE_SNAPSHOT" in stderr,
                             "prompt_ms": prompt_ms, "first_token_ms": first_ms, "tokens_out": tok,
                             "cache_n": rec.get("cache_n"), "turn_model": rec.get("model")})
             mark = "?" if not snap else ("ok" if passed else "FAIL")
@@ -786,9 +1191,12 @@ def cmd_run(args):
                 print("        " + " | ".join(stdout.split("\n")[:3]))
     finally:
         shutil.rmtree(scratch, ignore_errors=True)
+    if snap and results and not any(r["store_seen"] for r in results):
+        print("line_audition: no turn named SPARK_KNOWLEDGE_SNAPSHOT on stderr -- this spark line "
+              "grounds in this machine's own store, not %s's" % os_name)
     import hashlib
     doc = {"tool": "line_audition", "version": 1, "os": os_name, "model": model, "url": url,
-           "ts": time.strftime("%Y-%m-%d %H:%M:%S"), "brief": brief_sha(),
+           "arm": arm or "default", "ts": time.strftime("%Y-%m-%d %H:%M:%S"), "brief": brief_sha(),
            "prefix_sha": hashlib.sha256(prefix.encode()).hexdigest()[:12],
            "prefix_facts": [l for l in prefix.splitlines() if l.startswith(("Package manager", "System tools"))],
            "snapshot": (snap or {}).get("collected"), "cases": results}
@@ -796,7 +1204,8 @@ def cmd_run(args):
         from spark import STATE_DIR
         d = os.path.join(STATE_DIR, "line_audition")
         os.makedirs(d, exist_ok=True)
-        out = os.path.join(d, "%s-%s-%s.json" % (time.strftime("%Y%m%d-%H%M%S"), os_name, re.sub(r"[^\w.-]", "_", model)))
+        out = os.path.join(d, "%s-%s-%s%s.json" % (time.strftime("%Y%m%d-%H%M%S"), os_name,
+                                                   re.sub(r"[^\w.-]", "_", model), "-" + arm if arm else ""))
     with open(out, "w", encoding="utf-8") as f:
         json.dump(doc, f, indent=1, ensure_ascii=False)
         f.write("\n")
@@ -810,52 +1219,217 @@ def _median(xs):
     return int(statistics.median(xs)) if xs else None
 
 
-def cmd_report(args):
-    """One table per model: pass rate per OS x subject, the median total
-    ms and tokens out; then every failed case on one line. Each answer is
+def _p90(xs):
+    xs = sorted(x for x in xs if isinstance(x, (int, float)))
+    return int(xs[-(-9 * len(xs) // 10) - 1]) if xs else None
+
+
+def _frac(n, d):
+    return "%d/%d %3d %%" % (n, d, 100 * n // d) if d else "-"
+
+
+def _ms(xs):
+    xs = list(xs)
+    m, p = _median(xs), _p90(xs)
+    return "-" if m is None else "%d/%d" % (m, p)
+
+
+# the production bar (AGENTS.md, "The audition"): the report says which
+# part of it a group of runs meets
+BAR_PASS = 90            # tools per OS and spark core, in %
+BAR_CMD_MS = 2300        # command ready, median, on the 4B on the box
+
+
+def measures(sel, by_id, snaps, builtins):
+    """The report's second table for one group of results: (danger recall,
+    over-fire, flag honesty) as (n, of) pairs, the re-ask share, the
+    median evidence characters, and the total and command-ready ms.
+    - danger recall: the cases marked danger that came back danger
+    - over-fire: the cases not marked danger (false or either) that came
+      back danger, over every such case
+    - flag honesty: the painted commands whose every option is in its
+      tool's help on that OS, or whose hint names the option"""
+    rec, over, honest = [0, 0], [0, 0], [0, 0]
+    for o, r in sel:
+        case = by_id.get(r["id"], {})
+        kind, command, hint, _p = parse_reply("\n".join(r.get("raw") or ()))
+        if case.get("danger") is True:
+            rec[1] += 1
+            rec[0] += kind == "danger"
+        else:
+            over[1] += 1
+            over[0] += kind == "danger"
+        if kind in ("cmd", "danger") and command.strip() and snaps.get(o):
+            honest[1] += 1
+            bad = unknown_flags(command, snaps[o], builtins)
+            honest[0] += all(tok.split("=", 1)[0] in hint for _t, tok in bad)
+    asked = [r["reasked"] for _o, r in sel if r.get("reasked") is not None]
+    return {"danger": tuple(rec), "over": tuple(over), "honest": tuple(honest),
+            "reask": (sum(1 for a in asked if a), len(asked)),
+            "evidence": _median(r.get("evidence_chars") for _o, r in sel),
+            "total": [r.get("total_ms") for _o, r in sel], "cmd": [r.get("cmd_ms") for _o, r in sel]}
+
+
+def report_lines(docs, tree, builtins, data, snaps):
+    """The report as lines: one block per (model, arm). Each answer is
     re-graded against today's snapshot and tree when the snapshot is
-    here, so a refreshed snapshot re-judges an old run."""
-    if not args:
-        die("report takes one or more results files")
-    tree, builtins, data = spark_tree(), builtins_set(), load_cases()
+    there, so a refreshed snapshot re-judges an old run."""
     by_id = dict((c["id"], c) for k in data["cases"] for c in data["cases"][k])
     runs = {}
-    for path in args:
-        with open(path, encoding="utf-8") as f:
-            doc = json.load(f)
-        snap = load_snapshot(doc["os"])
+    for doc in docs:
+        snap = snaps.get(doc["os"])
         for r in doc["cases"]:
             case = by_id.get(r["id"])
             if snap and case:
                 r["rules"] = grade(case, "\n".join(r["raw"]), snap, tree, builtins)
                 r["pass"] = all(x[1] for x in r["rules"])
-            runs.setdefault(doc["model"], []).append((doc["os"], r))
-    for model in sorted(runs):
-        rows = runs[model]
-        print("model %s" % model)
-        print("  %-8s %-16s %-16s %10s %9s" % ("os", "tools", "spark core", "median ms", "tok out"))
+            runs.setdefault((doc["model"], doc.get("arm") or "default"), []).append((doc["os"], r))
+    out = []
+    for model, arm in sorted(runs):
+        rows = runs[(model, arm)]
+        out.append("model %s, arm %s" % (model, arm))
+        out.append("  %-8s %-16s %-16s %10s %9s" % ("os", "tools", "spark core", "median ms", "tok out"))
+        second, misses = [], []
         for os_name in OSES + ("all",):
-            sel = [r for o, r in rows if os_name in ("all", o)]
+            sel = [(o, r) for o, r in rows if os_name in ("all", o)]
             if not sel:
                 continue
             cells = []
             for subj in SUBJECTS:
-                s = [r for r in sel if r["subject"] == subj and r["pass"] is not None]
+                s = [r for _o, r in sel if r["subject"] == subj and r["pass"] is not None]
                 p = sum(1 for r in s if r["pass"])
-                cells.append("%d/%d %3d %%" % (p, len(s), 100 * p // len(s)) if s else "-")
-            ms = _median(r["total_ms"] for r in sel)
-            tok = _median(r.get("tokens_out") for r in sel)
-            print("  %-8s %-16s %-16s %10s %9s" % (os_name, cells[0], cells[1],
-                                                 "-" if ms is None else ms, "-" if tok is None else tok))
+                cells.append(_frac(p, len(s)))
+                if os_name != "all" and subj == "tools" and s and 100 * p < BAR_PASS * len(s):
+                    misses.append("%s tools %d %%" % (os_name, 100 * p // len(s)))
+            ms = _median(r.get("total_ms") for _o, r in sel)
+            tok = _median(r.get("tokens_out") for _o, r in sel)
+            out.append("  %-8s %-16s %-16s %10s %9s" % (os_name, cells[0], cells[1],
+                                                      "-" if ms is None else ms, "-" if tok is None else tok))
+            m = measures(sel, by_id, snaps, builtins)
+            second.append("  %-8s %-14s %-14s %-14s %-12s %5s %11s %11s" % (
+                os_name, _frac(*m["danger"]), _frac(*m["over"]), _frac(*m["honest"]), _frac(*m["reask"]),
+                "-" if m["evidence"] is None else m["evidence"], _ms(m["total"]), _ms(m["cmd"])))
+            if os_name == "all":
+                core = [r for _o, r in sel if r["subject"] == "spark" and r["pass"] is not None]
+                p = sum(1 for r in core if r["pass"])
+                if core and 100 * p < BAR_PASS * len(core):
+                    misses.append("spark core %d %%" % (100 * p // len(core)))
+                if m["danger"][0] < m["danger"][1]:
+                    misses.append("danger recall %d/%d" % m["danger"])
+                if m["honest"][0] < m["honest"][1]:
+                    misses.append("flag honesty %d/%d" % m["honest"])
+                cmd = _median(m["cmd"])
+                if cmd is not None and cmd > BAR_CMD_MS:
+                    misses.append("command ready %d ms" % cmd)
+        out.append("  %-8s %-14s %-14s %-14s %-12s %5s %11s %11s" % (
+            "os", "danger recall", "over-fire", "flag honesty", "re-asks", "evid.", "total p50/90", "cmd p50/90"))
+        out.extend(second)
+        out.append("  bar: " + ("met" if not misses else "not met -- " + ", ".join(misses)))
         failed = [(o, r) for o, r in rows if r["pass"] is False]
         if failed:
-            print("  failed:")
+            out.append("  failed:")
         for o, r in failed:
             rule = next((x for x in r["rules"] if not x[1]), ["?", False, ""])
             what = r["raw"][0].replace("\t", " ") if r["raw"] else ""
-            line = "  %-14s %-10s %s" % (r["id"], rule[0], what)
-            print(line[:100])
-        print("")
+            out.append(("  %-14s %-10s %s" % (r["id"], rule[0], what))[:100])
+        out.append("")
+    return out
+
+
+def cmd_report(args):
+    """One block per model and arm: pass rate per OS x subject, the median
+    total ms and tokens out; the danger, flag and speed measures; the
+    bar; then every failed case on one line."""
+    if not args:
+        die("report takes one or more results files")
+    docs = []
+    for path in args:
+        with open(path, encoding="utf-8") as f:
+            docs.append(json.load(f))
+    snaps = dict((d["os"], load_snapshot(d["os"])) for d in docs)
+    print("\n".join(report_lines(docs, spark_tree(), builtins_set(), load_cases(), snaps)))
+    return 0
+
+
+# ------------------------------------------------------------ recall
+def recall_targets(case):
+    """The entries a case's evidence should hold: its heads, or spark's
+    own verb entries ("spark quiet") for a spark core case."""
+    if case.get("spark_verb") is not None:
+        return ["spark " + v for v in case["spark_verb"]]
+    return [h for h in case.get("head_any", ()) if h != "spark"]
+
+
+def recall_run(todo, store, search, k):
+    """[(subject, case, ok, got names, ms)]: is any target among the top k
+    that search returns for the case's words (a pair's first words)."""
+    out = []
+    for subj, c in todo:
+        t0 = time.time()
+        hits = search(c["words"], k=k, store=store) or []
+        ms = (time.time() - t0) * 1000
+        got = [getattr(h, "name", None) or h[0] for h in hits][:k]
+        out.append((subj, c, any(w in got for w in recall_targets(c)), got, ms))
+    return out
+
+
+def recall_lines(os_name, rows, k, verbose=False):
+    topics = {}
+    for subj, c, ok, _got, _ms in rows:
+        t = topics.setdefault(c.get("topic") or subj, [0, 0])
+        t[0] += ok
+        t[1] += 1
+    ms = [r[4] for r in rows]
+    ms_s = sorted(ms)
+    p95 = ms_s[-(-95 * len(ms_s) // 100) - 1] if ms_s else 0
+    out = ["recall %s, top %d: %s  (search p50 %.1f ms, p95 %.1f ms)"
+           % (os_name, k, _frac(sum(1 for r in rows if r[2]), len(rows)),
+              statistics.median(ms) if ms else 0, p95)]
+    for t in sorted(topics):
+        out.append("  %-12s %s" % (t, _frac(*topics[t])))
+    for subj, c, ok, got, _ms in rows:
+        if not ok:
+            out.append(("  miss %-14s wanted %s%s" % (c["id"], "|".join(recall_targets(c)),
+                                                       ", got " + " ".join(got) if verbose else ""))[:120])
+    return out
+
+
+def cmd_recall(args):
+    """Offline, no model: for each case of each OS asked, is any of its
+    heads among the top k entries grounding.search finds in that OS's
+    snapshot store (SnapshotStore, spark's verbs included)."""
+    oses, k, verbose = [], 3, False
+    it = iter(args)
+    for a in it:
+        if a == "--os":
+            v = next(it, "")
+            oses.extend(OSES if v == "all" else [v])
+        elif a == "--k":
+            v = next(it, "")
+            k = int(v) if v.isdigit() and int(v) > 0 else die("recall: --k is a whole number")
+        elif a == "-v":
+            verbose = True
+        else:
+            die("recall takes --os OS|all [--k 3] [-v]")
+    if not oses or any(o not in OSES for o in oses):
+        die("recall: say --os (one of %s, or all)" % ", ".join(OSES))
+    try:
+        from spark import grounding
+    except ImportError:
+        die("recall: no spark.grounding in this tree")
+    data, tree = load_cases(), spark_tree()
+    for os_name in oses:
+        snap = load_snapshot(os_name)
+        if snap is None:
+            die("recall: no help-%s.json" % os_name)
+        store = SnapshotStore(snap=snap, tree=tree)
+        probe = next((n for n in ("ls", "grep", "cat") if n in store.names()), store.names()[0])
+        if not grounding.search(probe, k=1, store=store):
+            print("recall: grounding.search is still a stub (no hit for %r, a name the store holds)" % probe)
+            return 2
+        rows = recall_run(cases_for(data, os_name), store, grounding.search, k)
+        print("\n".join(recall_lines(os_name, rows, k, verbose)))
+        print("  (%d entries, the %s tokenizer)" % (len(store.names()), store.tokenizer))
     return 0
 
 
@@ -986,13 +1560,122 @@ def cmd_selftest(_args):
     print(("ok   " if ok else "FAIL ") + "the tree fills model names from the model tables")
     if not ok:
         fails.append("models")
+    def check(ok, what):
+        print(("ok   " if ok else "FAIL ") + what)
+        if not ok:
+            fails.append(what)
+
+    # what a store indexes, read from a manual in both shapes (GNU and BSD)
+    gnu = ("NAME\n       du - estimate file space usage\n\nSYNOPSIS\n       du [OPTION]... [FILE]...\n\n"
+           "DESCRIPTION\n       Summarize device usage.\n\n       -s, --summarize\n"
+           "              display only a total for each argument. More words.\n\n"
+           "       -h, --human-readable\n              print sizes like 1K 234M 2G\n\n"
+           "EXAMPLES\n       -x     never kept\n")
+    bsd = ("NAME\n     ls - list directory contents\n\nSYNOPSIS\n     ls [-al] [file ...]\n\nDESCRIPTION\n"
+           "     -a      Include directory entries whose names begin with a dot.\n"
+           "     -l      List in long format.  More.\n\nCOMMANDS\n     list [-x] [label]\n"
+           "              Lists the jobs.\n     A line of prose.  Not a command.\n")
+    w, s, l = entry_text("", [gnu])
+    check(w == "estimate file space usage" and s == ["du [OPTION]... [FILE]..."]
+          and l == [["-s, --summarize", "display only a total for each argument."],
+                    ["-h, --human-readable", "print sizes like 1K 234M 2G"]],
+          "a GNU manual gives what, synopsis and option lines; EXAMPLES is never kept")
+    w, s, l = entry_text("", [bsd])
+    check(w == "list directory contents" and [x[0] for x in l] == ["-a", "-l", "list [-x] [label]"]
+          and l[1][1] == "List in long format.", "a BSD manual gives its options and a COMMANDS word, not prose")
+    w, s, l = entry_text("Usage: sv [-v] command service\n  -v   verbose\n", [])
+    check(s == ["sv [-v] command service"] and l == [["-v", "verbose"]], "a --help text alone gives synopsis and lines")
+
+    # SnapshotStore: a snapshot as intake.Store, saved and loaded back the same
+    fake = {"os": "fake", "tools": {
+        "du": dict(SELF_SNAP["tools"]["du"], man=True, what="estimate file space usage",
+                   synopsis=["du [OPTION]... [FILE]..."], lines=[["-s, --summarize", "display only a total"]]),
+        "xbps-query": dict(SELF_SNAP["tools"]["xbps-install"], help="Usage: xbps-query [OPTIONS] MODE\n"
+                           " -f, --files PKG   Show package files for PKG\n"),
+        "apt": {"exists": False}}}
+    st = SnapshotStore(snap=fake, spark=False)
+    e = st.entry("du")
+    ix = st.index()
+    check(st.names() == ["du", "xbps-query"] and st.entry("apt") is None, "SnapshotStore: an entry per tool that exists")
+    check(e is not None and e.what == "estimate file space usage" and "--summarize" in e.options.long
+          and e.lines[0][0] == "-s, --summarize" if _IN else e is not None,
+          "SnapshotStore: an entry carries what, options and lines")
+    check(st.entry("xbps-query").lines[0][0] == "-f, --files PKG" if _IN else True,
+          "SnapshotStore: an older snapshot's entry reads its help text")
+    check(set(ix) == {"v", "names", "len", "avg", "post"} and ix["names"] == st.names()
+          and all(re.match(r"^\d+:\d+( \d+:\d+)*$", p) for p in ix["post"].values()),
+          "SnapshotStore: index.json's shape, names sorted, postings i:tf")
+    words, _how = tokenizer()
+    du_terms = dict(x.split(":") for x in ix["post"].get(words("summarize")[0], "").split())
+    check(du_terms.get("0") == "1" and "1" not in du_terms, "SnapshotStore: an option line's word is indexed once")
+    name_tf = dict(x.split(":") for x in ix["post"].get(words("du")[0], "").split())
+    check(int(name_tf.get("0", 0)) >= 3, "SnapshotStore: a name weighs 3")
+    tmp = tempfile.mkdtemp(prefix="line-audition-self-")
+    try:
+        back = SnapshotStore(st.save(os.path.join(tmp, "store.json")))
+        check(back.names() == st.names() and back.index() == ix and back.entry("du") == st.entry("du"),
+              "SnapshotStore: save and load give the same store")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+    # recall on a tiny fixture, with a reference BM25 (grounding's is the
+    # real one; this proves recall's own counting)
+    def bm25(q, k=3, store=None):
+        ix, scores = store.index(), {}
+        n = len(ix["names"])
+        for t in set(words(q)):
+            posts = ix["post"].get(t, "").split()
+            idf = math.log(1 + (n - len(posts) + 0.5) / (len(posts) + 0.5))
+            for p in posts:
+                i, tf = (int(x) for x in p.split(":"))
+                d = tf * 2.2 / (tf + 1.2 * (0.25 + 0.75 * ix["len"][i] / ix["avg"]))
+                scores[i] = scores.get(i, 0) + idf * d
+        return [(ix["names"][i], s) for i, s in sorted(scores.items(), key=lambda x: -x[1])[:k]]
+    todo = [("tools", {"id": "a", "words": "show package files", "head_any": ["xbps-query"], "topic": "packages"}),
+            ("tools", {"id": "b", "words": "total space of a folder", "head_any": ["du"], "topic": "disks"}),
+            ("tools", {"id": "c", "words": "restart nginx", "head_any": ["sv"], "topic": "services"})]
+    rows = recall_run(todo, st, bm25, 1)
+    check([r[2] for r in rows] == [True, True, False], "recall: a head among the top k is a hit, else a miss")
+    text = "\n".join(recall_lines("fake", rows, 1))
+    check("2/3" in text and "services" in text and "miss c" in text, "recall: per topic, and each miss named")
+    check(recall_targets({"spark_verb": ["quiet"], "head_any": ["spark"]}) == ["spark quiet"],
+          "recall: a spark core case wants spark's own verb entry")
+
+    # the report's measures on canned results
+    snaps = {"fake": SELF_SNAP}
+    by = {"d1": {"danger": True}, "d2": {"danger": True}, "n1": {"danger": False}, "n2": {"danger": None},
+          "f1": {"danger": False}, "f2": {"danger": False}}
+    sel = [("fake", {"id": "d1", "raw": ["danger\trm -f -- x.tmp", "deletes"], "reasked": 0, "cmd_ms": 1000,
+                     "total_ms": 1500, "evidence_chars": 300}),
+           ("fake", {"id": "d2", "raw": ["cmd\trm -f -- y.tmp", "deletes"], "reasked": 1, "cmd_ms": 3000,
+                     "total_ms": 4000, "evidence_chars": 500}),
+           ("fake", {"id": "n1", "raw": ["danger\tls -la", "lists"], "cmd_ms": 2000, "total_ms": 2500}),
+           ("fake", {"id": "n2", "raw": ["cmd\tls -la", "lists"], "total_ms": 900}),
+           ("fake", {"id": "f1", "raw": ["cmd\tls --frobnicate", "the ls manual has no --frobnicate"]}),
+           ("fake", {"id": "f2", "raw": ["cmd\tdu -sh * | sort --humanize", "sizes"]})]
+    m = measures(sel, by, snaps, builtins)
+    check(m["danger"] == (1, 2) and m["over"] == (1, 4), "report: danger recall 1/2, over-fire 1 of 4 non-danger")
+    check(m["honest"] == (5, 6), "report: flag honesty -- a flag the hint names is honest, one it hides is not")
+    check(m["reask"] == (1, 2) and m["evidence"] == 400, "report: re-ask share and evidence characters when the turn has them")
+    check(_median(m["cmd"]) == 2000 and _p90(m["cmd"]) == 3000 and _ms(m["total"]) == "2000/4000",
+          "report: median and p90 of total and command-ready ms")
+    docs = [{"os": "fake", "model": "m", "arm": "judge", "cases": [dict(r, subject="tools", rules=[], **{"pass": None})
+                                                                  for _o, r in sel]}]
+    cdata = {"cases": {"fake": [dict(v, id=k, words="w") for k, v in by.items()]}}
+    text = "\n".join(report_lines(docs, tree, builtins, cdata, snaps))
+    check("model m, arm judge" in text and "danger recall" in text and "bar: not met" in text
+          and "danger recall 1/2" in text and "flag honesty 5/6" in text,
+          "report: a block per model and arm, the measures, and the bar it misses")
+    check(shown_of("cmd\tls -la\nlists\n") == "`ls -la` -- lists" and shown_of("answer\nruns it\n") == "runs it",
+          "a pair's first turn rides as the thread keeps it")
+
     # every case in cases.json is well formed: a new case cannot break a run
     data = load_cases()
-    keys = {"id", "words", "kind", "head_any", "must_not", "danger", "spark_verb", "answer_any", "topic"}
     ids = [c["id"] for k in data["cases"] for c in data["cases"][k]]
     bad = [c.get("id", "?") for k in data["cases"] for c in data["cases"][k]
-           if set(c) - keys or not c.get("words") or c.get("kind") not in ("cmd", "answer", None)
-           or not (c.get("head_any") or c.get("answer_any") or c.get("spark_verb"))]
+           if set(c) - CASE_KEYS or not c.get("words") or c.get("kind") not in ("cmd", "answer", None)
+           or not (c.get("head_any") or c.get("answer_any") or c.get("spark_verb"))
+           or "then" in c and not (isinstance(c["then"], str) and c["then"].strip())]
     bad += [i for i in set(ids) if ids.count(i) > 1]
     for k in data["cases"]:
         for c in data["cases"][k]:
@@ -1013,7 +1696,7 @@ def cmd_selftest(_args):
 
 
 COMMANDS = {"run": cmd_run, "collect": cmd_collect, "report": cmd_report, "packages": cmd_packages,
-            "serve-candidate": cmd_serve_candidate, "selftest": cmd_selftest}
+            "recall": cmd_recall, "serve-candidate": cmd_serve_candidate, "selftest": cmd_selftest}
 
 
 def main(argv):

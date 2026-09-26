@@ -121,19 +121,56 @@ totals to `STATE_DIR/audition.jsonl`, so two briefs are compared by
 number, never by taste.
 
 `tests/line_audition.py` is the prompt line's audition, not in the
-gate either. `tests/line_audition/cases.json` holds about 25 questions
-per OS (debian, arch, void, macos) and 27 about spark itself. A case
+gate either. `tests/line_audition/cases.json` holds about 58 questions
+per OS (debian, arch, void, macos) and 39 about spark itself. A case
 names what makes an answer right: the head commands, the must-nots, the
-danger flag. `run --os OS --model NAME` sends each case through the
-real `spark line`. The OS comes from spark's own seams, so one Linux
-speaks as another family too. macOS runs on a Mac. The grader trusts
-outcomes. The head command must exist in that OS's help snapshot,
-`help-<os>.json`, and every option must appear in its help. A spark
-verb must appear in the TAB completion files. `collect` writes a
-snapshot on the OS it describes, and `line-audition-help.yml` runs it
-in the CI images. `report FILE...` prints one table per model.
-`serve-candidate` starts a second engine for a model on trial.
-`selftest` needs no model: `python3 tests/line_audition.py selftest`.
+danger flag. A case with `then` is a `??` pair: the follow-up must keep
+the tool. `run --os OS --model NAME` sends each case through the real
+`spark line`. The OS comes from spark's own seams, so one Linux speaks
+as another family too. macOS runs on a Mac. The grader trusts outcomes
+and shares no code with the line's own judge. The head command must
+exist in that OS's help snapshot, `help-<os>.json`, and every option
+must appear in its help. A spark verb must appear in the TAB completion
+files or the cheatsheet's command column. `collect` writes a snapshot
+on the OS it describes, and `line-audition-help.yml` runs it in the CI
+images. A snapshot also keeps what a store indexes: each tool's one
+line, its synopsis and its option lines. `serve-candidate` starts a
+second engine for a model on trial. `selftest` needs no model:
+`python3 tests/line_audition.py selftest`.
+
+`recall --os OS|all [--k 3]` needs no model either. It builds that OS's
+snapshot into a store (`SnapshotStore`, spark's own verbs included). It
+asks `grounding.search` for each case's words and counts a case whose
+head is in the top 3. It prints the share per topic and the search's
+p50 and p95. A stub search exits 2.
+
+The A/B runs each OS three times, once per arm: `run --arm off`, `run
+--arm judge` and `run --arm full`. The arm is `SPARK_LINE_KNOW` for
+`spark line`: no knowledge, the verdict with one re-ask, or evidence up
+front too. `report FILE...` prints one block per model and arm. Its
+second table holds danger recall, danger over-fire, flag honesty, the
+re-ask share, the evidence characters, and total and command-ready ms
+at p50 and p90. Its last line says whether the bar is met.
+
+The production bar, before a release tag that changes the line:
+
+- tools at 90 % or more on each OS, and spark core at 90 % or more
+- danger recall 100 %: one dangerous case without its mark blocks the
+  tag
+- danger over-fire reported, 10 % or less the target
+- flag honesty 100 %: every painted option is in its manual, or the
+  hint names it
+- command ready at 2.3 seconds or less, median, on qwen3-4b on the
+  maintainer's test machine
+
+A run sets 3 seams, honoured only with `SPARK_LINE_BENCH=1` and never
+on a person's line. `SPARK_LINE_KNOW` is the arm.
+`SPARK_KNOWLEDGE_SNAPSHOT=FILE` is the store the line grounds and judges
+in: that OS's snapshot, so a Void machine grounds a debian question in
+debian's manuals. When it is set, `spark line` prints one line on
+stderr naming it, so it never passes silently. `run` warns when no turn
+did. `SPARK_LINE_BENCH_HISTORY=FILE` is a `??` pair's first turn, as the
+history a bench turn otherwise lacks. All 3 are for measuring only.
 
 ## Contracts
 
