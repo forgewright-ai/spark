@@ -407,10 +407,10 @@ class _Know:
         self.says = ""              # an answer's note: the manual the evidence named
         self._seen = {}
 
-    def _timed(self, fn, *args):
+    def _timed(self, fn, *args, **kw):
         t0 = time.time()
         try:
-            return fn(*args)
+            return fn(*args, **kw)
         finally:
             self.ms += (time.time() - t0) * 1000
 
@@ -421,18 +421,19 @@ class _Know:
             self._seen[command] = tuple(self._timed(judge.verdict, command).findings)
         return self._seen[command]
 
-    def evidence(self, question, heads=()):
+    def evidence(self, question, heads=(), confident=False):
         from . import grounding
-        ev = self._timed(grounding.evidence, question, tuple(h for h in heads if h))
+        ev = self._timed(grounding.evidence, question, tuple(h for h in heads if h), confident=confident)
         self.chars += ev.chars
         return ev
 
     def upfront(self, question, previous):
         """Arm full: the Reference block the first request carries (the
-        question, and on ?? the head last proposed); '' in the others."""
+        question, and on ?? the head last proposed) when grounding is
+        confident of it; '' in the others."""
         if self.arm != "full":
             return ""
-        ev = self.evidence(question, [_head(previous)] if previous else ())
+        ev = self.evidence(question, [_head(previous)] if previous else (), confident=True)
         if ev.names:
             from . import grounding
             try:
@@ -476,6 +477,8 @@ def _said(f):
         return "%s is not installed on this machine." % f.head
     if f.kind == "flag":
         return "%s is not in %s's manual here." % (f.word, f.head)
+    if f.kind == "command":
+        return "%s is not a command in %s's manual here." % (f.word, f.head)
     if f.kind == "verb":
         if f.head == "spark":
             return "spark has no %s command." % f.word
@@ -489,6 +492,8 @@ def _gap(f):
         return "%s is not on this machine" % _nw(f.head)
     if f.kind == "flag":
         return "the %s manual has no %s" % (_nw(f.head), _nw(f.word))
+    if f.kind == "command":
+        return "%s has no command %s" % (_nw(f.head), _nw(f.word))
     if f.kind == "verb":
         if f.head == "spark":
             return "spark has no %s command" % _nw(f.word)
@@ -502,6 +507,8 @@ def _left(f):
     if f.kind == "placeholder":
         name = " ".join(f.word.strip("<>[]").replace("_", " ").replace("-", " ").split())
         return "type the %s before Enter" % ("file name" if name in ("file", "filename") else _nw(name))
+    if f.kind == "command":
+        return "the %s manual has no command %s -- check it before Enter" % (_nw(f.head), _nw(f.word))
     return _gap(f) + " -- check it before Enter"
 
 
@@ -511,7 +518,7 @@ def _checked(found):
     f = found[0] if found else None
     if f is None or f.kind == "placeholder":
         return ""
-    if f.kind == "flag":
+    if f.kind in ("flag", "command"):
         return ", checked against the %s manual" % _nw(f.head)
     if f.kind == "verb":
         return ", checked against spark's own help"

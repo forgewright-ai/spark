@@ -520,6 +520,9 @@ def know_answer(asked, again):
         return cmd("ls $(echo .)", "lists the directory")
     if "knowanswer" in asked:
         return {"kind": "answer", "danger": False, "command": "", "hint": "sv down stops a service", "proof": ""}
+    if "knowsv" in asked:           # a command word sv's manual does not list (knowsvstuck: kept)
+        return cmd("ln -s /etc/sv/sshd /var/service/" if again and "knowsvstuck" not in asked else "sv enable sshd",
+                   "enables sshd at boot")
     return None
 
 
@@ -544,7 +547,9 @@ def know_store(path):
         "sv": {"kind": "program", "source": "man", "what": "control and manage services monitored by runsv",
                "synopsis": "sv [-v] [-w sec] command services",
                "options": {"long": [], "short": "vw", "words": []},
-               "lines": [["down", "stop the service if it is running: send it the TERM signal"]]},
+               "lines": [["down", "stop the service if it is running: send it the TERM signal"]],
+               "commands": {"words": ["status", "up", "down", "once", "exit", "start", "stop", "restart"],
+                            "prefix": False}},
         "ls": {"kind": "program", "source": "man", "what": "list directory contents",
                "synopsis": "ls [-ABCFGHLOPRSTUWabcdefghiklmnopqrstuvwxy1%,] [file ...]",
                "options": {"long": [], "short": "ABCFGHLOPRSTUWabcdefghiklmnopqrstuvwxy1", "words": []},
@@ -657,7 +662,10 @@ def knowledge_cases(t):
           "sv [-v] [-w sec] command services", OS_((), "vw", ()),
           ["down  stop the service if it is running: send it the TERM signal",
            "-v  wait up to 7 seconds for the command to take effect",
-           "-w sec  override the default timeout of 7 seconds"], "xbps:runit", (0, 0)),
+           "-w sec  override the default timeout of 7 seconds"], "xbps:runit", (0, 0),
+          intake.CommandSet(tuple("status up down once pause cont hup alarm interrupt quit 1 2 term kill exit "
+                                  "start stop reload restart shutdown force-stop force-reload force-restart "
+                                  "force-shutdown try-restart check".split()), False)),
         E("runsv", "program", "man", "starts and monitors a service and optionally an appendant log service",
           "runsv service", OS_((), "", ()), [], "xbps:runit", (0, 0)),
         E("ps", "program", "man", "process status",
@@ -676,13 +684,15 @@ def knowledge_cases(t):
           OS_(("--exclude",), "ctxzf", ()), ["--exclude pattern  do not process files or directories that match"],
           "macos", (0, 0)),
         E("apt-get", "program", "man", "APT package handling utility -- command-line interface",
-          "apt-get [-y] {install | remove} pkg", OS_(("--yes",), "y", ()),
-          ["-y, --yes  automatic yes to prompts"], "dpkg:apt", (0, 0)),
+          "apt-get [-y] [-t release] {install | remove} pkg", OS_(("--yes",), "yt", ()),
+          ["-y, --yes  automatic yes to prompts"], "dpkg:apt", (0, 0),
+          intake.CommandSet(("update", "upgrade", "install", "remove", "purge", "source"), False)),
         E("find", "program", "man", "walk a file hierarchy", "find [-H | -L] path ... [expression]",
           OS_((), "HL", ("-name", "-type", "-exec", "-delete", "-print")),
           ["-name pattern  True if the last component of the pathname matches"], "macos", (0, 0)),
         E("git", "program", "man", "the stupid content tracker", "git [--version] [-C <path>] <command> [<args>]",
-          OS_(("--version",), "C", ()), ["-C <path>  Run as if git was started in <path>"], "brew:git", (0, 0)),
+          OS_(("--version",), "C", ()), ["-C <path>  Run as if git was started in <path>"], "brew:git", (0, 0),
+          intake.CommandSet(("add", "commit", "log", "status", "push"), False)),
         E("git log", "program", "man", "Show commit logs", "git log [<options>]",
           OS_(("--oneline", "--stat"), "n", ()), ["--oneline  a shorthand for --pretty=oneline"], "brew:git", (0, 0)),
         E("ssh", "program", "man", "OpenSSH remote login client", "ssh [-p port] destination [command [argument ...]]",
@@ -726,6 +736,26 @@ def knowledge_cases(t):
          "knowledge: evidence -- the Reference block, every line `| `, within the budget", ev.text)
     ev = grounding.evidence("stop a service", (), st, budget=120)
     t.ok(ev.chars <= 120, "knowledge: evidence fits a small budget too", "%d: %r" % (ev.chars, ev.text))
+    ev = grounding.evidence("sv enable", ("sv",), st)
+    t.ok("| commands: status up down once" in ev.text and len(grounding._commands_line(st.entry("sv")))
+         <= grounding.CARD_COMMANDS, "knowledge: the card names the commands its manual lists", ev.text)
+    # evidence up front only when retrieval is confident: the top hit
+    # clears the floor itself and leads the second by CONFIDENT
+    ranked = grounding._ranked(grounding._index(st), grounding.words("stop a service"))[0]
+    lead = ranked[0][1] / ranked[1][1] if len(ranked) > 1 else float("inf")
+    saved = grounding.CONFIDENT
+    try:
+        grounding.CONFIDENT = lead * 0.99
+        sure = grounding.evidence("stop a service", (), st, confident=True)
+        grounding.CONFIDENT = lead * 1.01
+        unsure = grounding.evidence("stop a service", (), st, confident=True)
+        plain = grounding.evidence("stop a service", (), st)
+    finally:
+        grounding.CONFIDENT = saved
+    t.ok(sure.names[:1] == ("sv",) and unsure.text == "" and plain.names[:1] == ("sv",)
+         and grounding.evidence("banana pancakes with syrup", (), st, confident=True).text == "",
+         "knowledge: confident evidence rides only past the margin; a re-ask's evidence does whatever it",
+         "%.2f %r %r" % (lead, sure.names, unsure.names))
     t.ok(grounding.evidence("banana pancakes with syrup", (), st).text == ""
          and grounding.evidence("monitor the weather", (), st).text == "",
          "knowledge: evidence is empty below the floor (no word, or one word in common by chance)")
@@ -847,7 +877,7 @@ def knowledge_cases(t):
 
     # the judge: a PATH of stub programs, the fixture entries
     with tempfile.TemporaryDirectory(prefix="spark-judge-") as bindir:
-        for n in ("ps", "du", "sort", "tar", "sudo", "nohup", "apt-get", "find", "git", "ssh", "grep", "micro", "rm",
+        for n in ("ps", "du", "sort", "tar", "sudo", "nohup", "apt-get", "find", "git", "ssh", "grep", "micro", "rm", "sv",
                   "ls", "head", "wc", "evil"):
             p = os.path.join(bindir, n)
             open(p, "w").write("#!/bin/sh\n")
@@ -863,6 +893,13 @@ def knowledge_cases(t):
                 ("du -sh * | sort -h", []),
                 ("sudo -u x apt-get install y", []),
                 ("sudo -u x apt-get install --frobnicate y", [("flag", "apt-get", "--frobnicate")]),
+                ("sv enable sshd", [("command", "sv", "enable")]), ("sv status sshd", []),
+                ("sudo sv -w 30 restart sshd", []), ("sv enable", [("command", "sv", "enable")]),
+                ("apt-get search x", [("command", "apt-get", "search")]),
+                ("apt-get -y search x", [("command", "apt-get", "search")]),
+                ("apt-get -t bookworm-backports install x", []), ("apt-get install ./x.deb", []),
+                ("git lgo", [("command", "git", "lgo")]), ("git status -s", []), ("ps aux", []),
+                ("tar -czf a.tgz d", []),
                 ("spark engine stop", [("verb", "spark", "engine")]),
                 ("spark serve stop", [("verb", "spark serve", "stop")]),
                 ("spark quiet boot maybe", [("verb", "spark quiet boot", "maybe")]),
@@ -893,8 +930,8 @@ def knowledge_cases(t):
                 if got != want:
                     bad.append("%s -> %s (want %s)" % (cmd, got, want))
             per = (time.time() - t0) * 1000 / len(cases)
-            t.ok(not bad, "knowledge: verdicts -- flag, missing, verb, placeholder; wrappers, -exec, a subcommand's "
-                 "own entry, a program that runs a command, unknown is not wrong", "; ".join(bad))
+            t.ok(not bad, "knowledge: verdicts -- flag, missing, command, verb, placeholder; wrappers, -exec, a "
+                 "subcommand's own entry, a program that runs a command, unknown is not wrong", "; ".join(bad))
             t.ok(per < 5, "knowledge: a verdict takes under 5 ms (%.2f ms)" % per)
             t.ok(judge.verdict("./local-script --x", st).ok and not judge._on_path("relative"),
                  "knowledge: a relative PATH entry and ./script are not the machine's programs")
@@ -1029,6 +1066,25 @@ def line_knowledge_cases(t, spark, home):
     t.ok(rc == 0 and len(bodies) == 2 and lines[:2] == ["cmd\tspark off", "stops the engine, checked against spark's own help"]
          and "spark has no engine command." in bodies[-1]["messages"][-1]["content"],
          "line knowledge: a spark verb the tree lacks is asked again; the passing verb lands, checked", repr(lines))
+
+    # a command word the manual does not list: asked again with the sv
+    # manual's commands on its card; kept, the note names the manual
+    rc, lines, took, bodies, err = ask("? knowsv enable sshd at boot")
+    t.ok(rc == 0 and len(bodies) == 2 and lines[:2] == ["cmd\tln -s /etc/sv/sshd /var/service/",
+                                                          "enables sshd at boot, checked against the sv manual"]
+         and "enable is not a command in sv's manual here." in bodies[-1]["messages"][-1]["content"]
+         and "| commands: status up down once exit start stop restart" in bodies[-1]["messages"][-1]["content"],
+         "line knowledge: a command word sv's manual does not list is asked again, its commands on the card",
+         repr(lines) + repr(bodies[-1]["messages"][-1]["content"][-300:] if bodies else ""))
+    rc, lines, took, bodies, err = ask("? knowsvstuck enable sshd at boot")
+    t.ok(rc == 0 and len(bodies) == 2 and lines[0] == "cmd\tsv enable sshd" and len(lines[1]) <= 80
+         and lines[1].endswith("; the sv manual has no command enable -- check it before Enter"),
+         "line knowledge: a command word still unlisted after the re-ask lands, the note names the manual", repr(lines))
+    from spark import judge as _judge
+    f = _judge.Finding("command", "sv", "enable")
+    t.ok(_cli._gap(f) + ", so spark asks again" == "sv has no command enable, so spark asks again"
+         and _cli._said(f) == "enable is not a command in sv's manual here.",
+         "line knowledge: the pulse during a re-ask says the command the manual lacks, in a whole sentence")
 
     # the danger rule: is_dangerous always wins; the model's ! is lowered
     # when the read-only proof holds; opaque + evidence is marked
