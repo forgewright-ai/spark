@@ -1452,6 +1452,8 @@ def row_share(ctx):
     reads a 0640 copy of the api-token (SITE_SHARE=yes; spark share on).
     Never fails -- sharing is opt-in; a stale or mis-permissioned token warns."""
     from . import site
+    if site.no_share():                                # macOS, WSL 2: not this machine's to share
+        return na(site.no_share())
     if not ctx.cfg.share:
         return na("not shared; spark share on lets this machine's OS users in")
     facts = site.share_facts(ctx.cfg)

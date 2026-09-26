@@ -289,6 +289,10 @@ def cmd_show():
     if cfg.base_url:
         say("%s serve -- a client of %s (SPARK_BASE_URL): nothing serves here" % (MARK, cfg.base_url))
         return 0
+    if cfg.client:                                     # the check rows say the same
+        from .check import client_of
+        say("%s serve -- %s" % (MARK, client_of(cfg)))
+        return 0
     url = wire.serve_url() or "http://%s:%d" % (cfg.serve_host or lan_ip() or "<lan-ip>", cfg.port)
     st = wire.health(url)
     if st == "loading":

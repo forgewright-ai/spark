@@ -30,6 +30,16 @@ Void on a real machine. What the first install found.
 - A conversation on a Linux with no display is told so: a text console
   or an ssh login. A small model once answered a console font question
   with a graphical terminal's config.
+- A man page reads on Void and macOS: `man scp | spark read ...`.
+  Their man keeps bold and underline in a pipe, as a letter, a
+  backspace and the letter again. `read`, `ask`, `drill` and the
+  context of `explain` now keep the letter once. `spark edit` keeps
+  its bytes.
+- On a client, `spark serve` and `spark forge` say it is a client of
+  the other machine, as the check rows do. On macOS the `share` row
+  says a shared engine is Linux's.
+- `spark drill` looks for the terminal to answer at before it asks the
+  model.
 
 ## v1.50
 

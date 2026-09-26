@@ -369,7 +369,7 @@ def _prune(cfg):
 def _stdin_context():
     if sys.stdin.isatty():
         return ""
-    data = textmod.stdin_text()
+    data = textmod.stdin_text(source=True)
     if len(data) > STDIN_TAIL:
         data = "[... %d chars cut ...]\n" % (len(data) - STDIN_TAIL) + data[-STDIN_TAIL:]
     return data

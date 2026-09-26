@@ -560,7 +560,7 @@ def _man_page(head):
         return ""
     if p.returncode != 0:
         return ""
-    return textmod.scrub(re.sub(".\x08", "", out.decode("utf-8", errors="replace")))
+    return textmod.scrub(out.decode("utf-8", errors="replace"))   # scrub drops the overstrikes too
 
 
 def man_excerpt(command, rc, tail):

@@ -456,10 +456,23 @@ _OSC = re.compile(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)?")
 _ESC_OTHER = re.compile(r"\x1b.?")
 
 
+# man's bold (X\bX) and underline (_\bX) as a pager sees them: mandoc
+# (Void) and macOS's man keep them in a pipe, man-db (Debian, Arch) does
+# not. Dropping the backspace alone left "NNAAMMEE" for the model
+_OVERSTRIKE = re.compile(".\x08")
+
+
+def unstrike(s):
+    """`s` with man's overstrikes gone, the letters kept."""
+    return _OVERSTRIKE.sub("", s)
+
+
 def scrub(s, keep="\t\n"):
-    """`s` without terminal escape sequences (CSI, OSC and the rest) and
-    without control characters (\\x00-\\x1f, \\x7f) -- tabs and newlines
-    excepted where they belong (`keep`)."""
+    """`s` without terminal escape sequences (CSI, OSC and the rest),
+    without man's overstrikes (the letter stays), and without control
+    characters (\\x00-\\x1f, \\x7f) -- tabs and newlines excepted where
+    they belong (`keep`)."""
+    s = unstrike(s)
     s = _CSI.sub("", s)
     s = _OSC.sub("", s)
     s = _ESC_OTHER.sub("", s)
@@ -493,16 +506,19 @@ def clean(o):
     return o
 
 
-def stdin_text():
+def stdin_text(source=False):
     """stdin as text on every locale: the raw bytes decoded as UTF-8
     with the replacement mark -- never a crash on a strict locale, never
     a lone surrogate from a surrogateescape one (C.UTF-8 turns Python's
     UTF-8 mode on, and a page piped in with one Latin-1 byte poisoned
-    every request built from it)."""
+    every request built from it). A `source` to read (read, ask, drill,
+    a context) loses man's overstrikes; a text to edit keeps its bytes."""
     buf = getattr(sys.stdin, "buffer", None)
     if buf is None:                       # a test's StringIO stand-in
-        return utf8(sys.stdin.read())
-    return buf.read().decode("utf-8", "replace")
+        s = utf8(sys.stdin.read())
+    else:
+        s = buf.read().decode("utf-8", "replace")
+    return unstrike(s) if source else s
 
 
 # ------------------------------------------------------------ held back

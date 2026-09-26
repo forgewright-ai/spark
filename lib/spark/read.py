@@ -176,7 +176,7 @@ def cmd_read(args):
             say("%s read -- --part N is a part number, 1 up" % MARK)
             return 2
     piped = not sys.stdin.isatty()
-    data = textmod.stdin_text() if piped else ""
+    data = textmod.stdin_text(source=True) if piped else ""
     if piped and not data:
         # a pipe that brought nothing: the command before it wrote to
         # stderr (a usage line, an error) or wrote nothing at all -- say

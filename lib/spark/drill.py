@@ -156,7 +156,7 @@ def cmd_drill(args):
             for line in ledger.drill_listing(name or None):
                 say(line)
         return 0
-    source = "" if sys.stdin.isatty() else textmod.stdin_text()
+    source = "" if sys.stdin.isatty() else textmod.stdin_text(source=True)
     if not source.strip():
         # a terminal with nothing piped: almost always a question for the
         # prompt -- say where it goes, do not guess
@@ -164,6 +164,17 @@ def cmd_drill(args):
         say("\n  a question for spark itself is: spark %s" % (" ".join(words) or "<words>"))
         return 2
     source = source[:DRILL_MAX]
+    # the source came on stdin, so the answers come from the terminal --
+    # looked for before the model is asked (a script without one paid ~19 s
+    # of model time for this refusal)
+    ans_path = os.environ.get(ANSWER_TTY) or "/dev/tty"
+    try:
+        tty = open(ans_path)
+    except OSError:
+        # contract 13: a missing terminal is the invocation's fault -- a
+        # signed refusal on stdout, exit 2, like every other gate refusal
+        say("%s drill -- no terminal to answer at: run it at a tty" % MARK)
+        return 2
     cfg = config.load()
     shell = os.path.basename(os.environ.get("SHELL") or "sh")
     try:
@@ -184,15 +195,6 @@ def cmd_drill(args):
         items = items[:ITEMS_MAX]
     if not items:
         die('too little here to drill -- it opens: "%s"' % opening(source))
-    # the source came on stdin, so the answers come from the terminal
-    ans_path = os.environ.get(ANSWER_TTY) or "/dev/tty"
-    try:
-        tty = open(ans_path)
-    except OSError:
-        # contract 13: a missing terminal is the invocation's fault -- a
-        # signed refusal on stdout, exit 2, like every other gate refusal
-        say("%s drill -- no terminal to answer at: run it at a tty" % MARK)
-        return 2
 
     def prompt(msg):
         sys.stderr.write(msg)

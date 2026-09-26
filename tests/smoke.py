@@ -1514,6 +1514,15 @@ def main():
         # spark read: the reader's protocol (contract 11)
         rc, out, _ = spark("read", "-h")
         t.ok(rc == 0 and out.startswith("spark read -- "), "read -h is signed", out[:40])
+        # man's overstrikes (mandoc on Void, macOS's man keep them in a pipe):
+        # the source the model sees has the letters once, so the quotes check
+        _bold = "".join(c + "\b" + c if c.isalpha() else c for c in READ_TEXT)
+        rc, out, err = spark("read", "when", "does", "it", "open", stdin=_bold)
+        rc0, out0, _ = spark("read", "when", "does", "it", "open", stdin=READ_TEXT)
+        t.ok(rc == rc0 == 0 and out == out0, "read: a man page's bold (X\\bX) reads as the plain text", out + err)
+        from spark import text as _txt
+        t.ok(_txt.unstrike("N\bNA\bAM\bME\bE _\bs_\bc_\bp") == "NAME scp" and _txt.scrub("B\bBold") == "Bold",
+             "unstrike and scrub keep the letter of a bold or an underline", _txt.unstrike("N\bN"))
         # an empty pipe (ssh -h writes its usage to stderr) is one line
         # naming 2>&1, never the whole usage
         rc, out, _ = spark("read", "how", "I", "use", "ssh", stdin="")
@@ -1700,7 +1709,7 @@ def main():
         t.ok(rc == 2 and out.startswith("spark drill -- ") and "spark <words>" in out,
              "drill: no source is the usage and where a question goes, exit 2", out[:60] + err)
         STATE["drill_thin"] = True
-        rc, out, err = spark("drill", stdin=DRILL_TEXT)
+        rc, out, err = spark("drill", stdin=DRILL_TEXT, extra={"SPARK_DRILL_TTY": os.devnull})
         STATE["drill_thin"] = False
         t.ok(rc == 1 and out == "" and "too little" in err,
              "drill: too little to drill is one line, exit 1, never padded", err)
@@ -1719,8 +1728,14 @@ def main():
         rc, out, err = spark("drill", stdin=DRILL_TEXT, extra={"SPARK_DRILL_TTY": home + "/no-such-tty"})
         t.ok(rc == 2 and out.startswith("spark drill -- no terminal to answer at") and "Traceback" not in err,
              "drill: no tty is a signed refusal, exit 2", out[:80] + err[:80])
+        # the terminal is looked for before the model is asked: no tty and no
+        # engine is the tty refusal (2), never the engine's error (1)
+        rc, out, err = spark("drill", stdin=DRILL_TEXT, extra={"SPARK_DRILL_TTY": home + "/no-such-tty",
+                                                              "SPARK_BASE_URL": "http://127.0.0.1:9"})
+        t.ok(rc == 2 and out.startswith("spark drill -- no terminal to answer at"),
+             "drill: no tty refuses before the model is asked", out[:80] + err[:80])
         # no brain is the world's fault: one line, exit 1, never a traceback
-        rc, out, err = spark("drill", stdin=DRILL_TEXT, extra={"SPARK_BASE_URL": "http://127.0.0.1:9"})
+        rc, out, err = spark("drill", stdin=DRILL_TEXT, extra={"SPARK_BASE_URL": "http://127.0.0.1:9", "SPARK_DRILL_TTY": os.devnull})
         t.ok(rc == 1 and out == "" and err.strip() and "Traceback" not in err,
              "drill: no brain is one line on stderr, exit 1", err[:120])
 

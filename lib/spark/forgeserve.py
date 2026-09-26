@@ -1772,6 +1772,10 @@ def cmd_status(args):
     cfg = config.load()
     url = forge_url()
     fh = wire.forge_health(url) if url else "down"
+    if not url and cfg.client:                         # the check rows say the same
+        from .check import client_of
+        say("%s forge -- %s" % (MARK, client_of(cfg)))
+        return 0                                       # no unit, no admin token here to show
     if not url:
         say("%s forge -- not running%s" % (MARK, "" if cfg.forge != "off" else " (SPARK_FORGE=off)"))
         say("  spark forge start     (or spark forge on, to keep it running)")
