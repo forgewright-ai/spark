@@ -479,6 +479,17 @@ def main():
              "danger: > file, sudo, sed -i, tee, shred, xargs rm, mv/cp -f, history -c, git stash drop; "
              ">>, 2>, >&, /dev/null, tee -a stay plain",
              str([c for c in _dang if not _pers.is_dangerous(c)] + [c for c in _safe if _pers.is_dangerous(c)]))
+        # v1.50: runit's stops and xbps's removals, a named line each (a
+        # service down or its runsv gone, a package gone); the read forms
+        # and `sv up` stay plain
+        _dang = ["sv down ~/.config/spark/sv/spark-serve", "sv exit /var/service/spark-check", "sv force-stop x",
+                 "sv force-shutdown x", "sv kill x", "xbps-remove -y libgomp", "xbps-remove -Ro"]
+        _safe = ["sv status ~/.config/spark/sv/spark-serve", "sv check x", "sv up x", "sv restart x",
+                 "xbps-query -l", "xbps-install -un", "svlogd -tt d"]
+        t.ok(all(_pers.is_dangerous(c) for c in _dang) and not any(_pers.is_dangerous(c) for c in _safe),
+             "danger: sv down/exit/force-stop/force-shutdown/kill and xbps-remove; "
+             "sv status/check/up/restart, xbps-query and xbps-install -un stay plain",
+             str([c for c in _dang if not _pers.is_dangerous(c)] + [c for c in _safe if _pers.is_dangerous(c)]))
         # blast: only the rm segment is counted, a leading cd moves the
         # base, and ~ expands -- `cd X && rm -rf build` counts X/build
         f_cd = _pers.blast("cd %s && rm -rf build" % btree)
@@ -634,6 +645,12 @@ def main():
              and not _pp.proof_ok("test -f \x1bx") and not _pp.proof_ok('ls "unterminated'),
              "proof_ok: argv-based -- --output, tail -f (in a cluster too), git -c, --textconv, "
              "a control character and a bad quote are refused; head a b and test -f pass")
+        # v1.50: sv joins the pairs -- status and check prove a runit
+        # service; down, up, a bare sv and xbps-remove never do
+        t.ok(_pp.proof_ok("sv status ~/.config/spark/sv/spark-serve") and _pp.proof_ok("sv check /var/service/runsvdir-ana")
+             and not _pp.proof_ok("sv down ~/.config/spark/sv/spark-serve") and not _pp.proof_ok("sv up x")
+             and not _pp.proof_ok("sv") and not _pp.proof_ok("xbps-remove -ny x"),
+             "proof_ok: sv status and sv check are proofs; sv down, sv up, a bare sv and xbps-remove are not")
         rc, out, _ = spark("line", stdin="titletest?")
         t.ok(rc == 0 and out.splitlines() == ["answer", "Paris"] and "\x1b" not in out,
              "line: escape sequences in an answer are scrubbed (title-set, colour)", repr(out))
@@ -3120,6 +3137,35 @@ def main():
         t.ok(_pkgmod.parse_pacman_removal("vulkan-radeon\nvulkan-icd-loader\n")
              == ["vulkan-icd-loader", "vulkan-radeon"],
              "packages: the pacman -Rp parser reads the printed names")
+        # v1.50, xbps's three transcripts, pure: `xbps-query -l` (ii is
+        # installed; uu unpacked and hr half-removed are not; the name is
+        # pkgver without its -version_revision tail), `xbps-install -un`
+        # (the update lines alone: an install is a new dependency, a
+        # configure neither), `xbps-remove -ny` (the remove lines, each
+        # name once, sorted)
+        _xl = ("ii base-system-0.114_1        Void Linux base system meta package\n"
+               "ii libgomp-14.2.1_1           GCC OpenMP (GOMP) support library\n"
+               "uu python3-3.13.7_1           Python programming language (3.x series)\n"
+               "ii kbd-2.7.1_1                Linux keyboard utilities\n"
+               "hr shellcheck-0.10.0_2        Static analysis tool for shell scripts\n"
+               "ii mesa-vulkan-radeon-25.1.7_1 Mesa Vulkan driver for AMD\n")
+        t.ok(_pkgmod.parse_xbps_list(_xl) == {"base-system", "libgomp", "kbd", "mesa-vulkan-radeon"}
+             and _pkgmod.parse_xbps_list("") == set(),
+             "packages: the xbps-query -l parser reads the ii names, cut at the version", str(sorted(_pkgmod.parse_xbps_list(_xl))))
+        _xp = ("xbps-0.59.2_5 update x86_64 https://repo-default.voidlinux.org/current 466416\n"
+               "libgomp-14.2.1_2 update x86_64 https://repo-default.voidlinux.org/current 120000\n"
+               "libxbps-0.59.2_5 install x86_64 https://repo-default.voidlinux.org/current 300000\n"
+               "kbd-2.7.1_1 configure x86_64 https://repo-default.voidlinux.org/current 0\n")
+        t.ok(_pkgmod.parse_xbps_pending(_xp) == 2 and _pkgmod.parse_xbps_pending("") == 0,
+             "packages: the xbps-install -un parser counts the update lines alone", str(_pkgmod.parse_xbps_pending(_xp)))
+        _xr = ("vulkan-loader-1.4.313_1 remove x86_64 https://repo-default.voidlinux.org/current 0\n"
+               "mesa-vulkan-radeon-25.1.7_1 remove x86_64 https://repo-default.voidlinux.org/current 0\n"
+               "libgomp-14.2.1_1 remove x86_64 https://repo-default.voidlinux.org/current 0\n"
+               "libgomp-14.2.1_1 remove x86_64 https://repo-default.voidlinux.org/current 0\n"
+               "kbd-2.7.1_1 configure x86_64 https://repo-default.voidlinux.org/current 0\n")
+        t.ok(_pkgmod.parse_xbps_removal(_xr) == ["libgomp", "mesa-vulkan-radeon", "vulkan-loader"]
+             and _pkgmod.parse_xbps_removal("") == [],
+             "packages: the xbps-remove -ny parser reads the remove names, each once, sorted", str(_pkgmod.parse_xbps_removal(_xr)))
         # the pending row's security count (v1.36), pure parsers over
         # pasted transcripts, no manager asked: apt's -security sources
         # (a comma-joined suite list counts once), arch-audit -q's names
@@ -3619,6 +3665,141 @@ def main():
             got = re.search(r"^DISTRO='?([^'\n]*?)'?$", p.stdout, re.M)
             t.ok(got is not None and got.group(1) == want,
                  "facts.py DISTRO: %s -> %r (what bootstrap eval's)" % (name, want), p.stdout + p.stderr)
+        # Void (v1.50), the third family: ID="void" is quoted in Void's
+        # os-release; the init is told by /etc/runit (SPARK_ETC_RUNIT), a
+        # booted runit by /var/service (SPARK_VAR_SERVICE), musl by its
+        # loader (SPARK_LD_MUSL). In-process twins on both OSes: SPARK_OS=
+        # Linux pins the OS the way bootstrap hands facts.py its uname view
+        with open(home + "/os-release-void", "w") as f:
+            f.write('ID="void"\nPRETTY_NAME="Void Linux"\n')
+        os.makedirs(home + "/runit", exist_ok=True)
+        os.makedirs(home + "/void-service", exist_ok=True)
+        with open(home + "/ld-musl-x86_64.so.1", "w") as f:
+            f.write("")
+        void_env = dict(env, SPARK_OS="Linux", SPARK_OS_RELEASE=home + "/os-release-void", SPARK_PROC_VERSION=home + "/version-plain",
+                        SPARK_REPO=REPO, SPARK_ETC_RUNIT=home + "/runit", SPARK_VAR_SERVICE=home + "/no-service",
+                        SPARK_LD_MUSL=home + "/no-ld-musl-*.so.1")
+
+        def twin(code, **more):
+            p = subprocess.run([sys.executable, "-c", "import sys; sys.path.insert(0, %r)\n%s" % (os.path.join(REPO, "lib"), code)],
+                               capture_output=True, text=True, env=dict(void_env, **more), timeout=60)
+            return p.stdout.strip() if p.returncode == 0 else "rc %d: %s%s" % (p.returncode, p.stdout, p.stderr)
+        _fact = "import spark; print(repr(spark.distro()), spark.os_pretty(), spark.init_shape(), spark.runit_live(), spark.is_musl())"
+        t.ok(twin(_fact) == "'void' Void Linux runit False False",
+             "void: ID=\"void\" (quoted) is void, os_pretty says Void Linux, /etc/runit says runit, no /var/service is not live, no musl loader", twin(_fact))
+        t.ok(twin(_fact, SPARK_VAR_SERVICE=home + "/void-service") == "'void' Void Linux runit True False",
+             "void: a /var/service dir says runit is live", twin(_fact, SPARK_VAR_SERVICE=home + "/void-service"))
+        t.ok(twin(_fact, SPARK_ETC_RUNIT=home + "/no-runit") == "'void' Void Linux systemd False False",
+             "void: without /etc/runit the init is systemd (the assumption every other Linux had)", twin(_fact, SPARK_ETC_RUNIT=home + "/no-runit"))
+        t.ok(twin(_fact, SPARK_LD_MUSL=home + "/ld-musl-*.so.1") == "'void' Void Linux runit False True",
+             "void: a loader at the musl pattern is musl", twin(_fact, SPARK_LD_MUSL=home + "/ld-musl-*.so.1"))
+        t.ok(twin("from spark import engine; print(repr(engine.flavour('Linux', 'x86_64', 'cpu')))", SPARK_LD_MUSL=home + "/ld-musl-*.so.1") == "('', '')"
+             and twin("from spark import engine; print(engine.flavour('Linux', 'x86_64', 'cpu')[0])") == "ubuntu-x64",
+             "void: on musl the engine pins nothing (the tarballs are glibc builds); glibc keeps its pin")
+        from spark import init_shape as _init_shape
+        t.ok(_init_shape() == ("launchd" if sys.platform == "darwin" else ("runit" if os.path.isdir("/etc/runit") else "systemd")),
+             "init_shape unseamed: launchd on this Mac; on Linux runit only where /etc/runit is a dir, else systemd", _init_shape())
+        # bootstrap's view of the same, through facts.py: INIT, RUNIT_LIVE
+        # and VAR_SERVICE beside DISTRO
+        p = subprocess.run([sys.executable, os.path.join(REPO, "lib", "spark", "facts.py")], capture_output=True, text=True, timeout=30,
+                           env=dict(os.environ, SPARK_OS_RELEASE=home + "/os-release-void", SPARK_ETC_RUNIT=home + "/runit",
+                                    SPARK_VAR_SERVICE=home + "/no-service", HOME=home, SPARK_MEM_TOTAL_GB="16"))
+        t.ok(re.search(r"^DISTRO=void$", p.stdout, re.M) and re.search(r"^INIT=runit$", p.stdout, re.M)
+             and re.search(r"^RUNIT_LIVE=0$", p.stdout, re.M) and re.search(r"^VAR_SERVICE='?%s'?$" % re.escape(home + "/no-service"), p.stdout, re.M),
+             "facts.py under void: DISTRO=void, INIT=runit, RUNIT_LIVE=0 and VAR_SERVICE (what bootstrap eval's)", p.stdout + p.stderr)
+        # the package family's verbs under void: xbps, its install, upgrade
+        # and removal lines, and the tools' xbps column (fdfind is fd there,
+        # batcat is bat; a tool spark does not know is '')
+        _pk = ("from spark import packages as p; print(p.manager(), '|', p.install_line(['fd']), '|', p.upgrade_line(), '|', "
+               "' '.join(p.remove_argv(['fd'])), '|', p.remove_line(['fd']), '|', p.package_for('fd'), p.package_for('fdfind'), "
+               "p.package_for('batcat'), repr(p.package_for('nosuch')))")
+        t.ok(twin(_pk) == "xbps | sudo xbps-install -Sy fd | sudo xbps-install -Su | xbps-remove -y fd | sudo xbps-remove -y fd | fd fd bat ''",
+             "void: manager xbps, install through xbps-install -Sy, upgrade -Su, removal xbps-remove -y, the tools' xbps column", twin(_pk))
+        # the console's third shape: rc.conf beside /etc/runit is rcconf and
+        # the font file; rc.conf without runit is no shape (by mechanism, not
+        # by file); quiet boot on void is the Void line either way
+        with open(home + "/rc.conf", "w") as f:
+            f.write('#KEYMAP="us"\nFONT="Terminus"\n')
+        rcconf = dict(SPARK_ETC_CONSOLE_SETUP=home + "/no-console-setup", SPARK_ETC_VCONSOLE=home + "/no-vconsole", SPARK_ETC_RCCONF=home + "/rc.conf")
+        _shape = "from spark import site; print(site.console_shape() or '-', site.font_file(), site.no_console_font() or '-', '|', site.no_grub())"
+        _void_no_boot = ("no drop-in on Void's GRUB: the kernel line is /etc/default/grub's "
+                         "(GRUB_CMDLINE_LINUX_DEFAULT, GRUB_TIMEOUT=0, then update-grub)")
+        t.ok(twin(_shape, **rcconf) == "rcconf %s/rc.conf - | %s" % (home, _void_no_boot),
+             "void: rc.conf beside /etc/runit is the rcconf shape, the font file is rc.conf, quiet boot is refused with the Void line", twin(_shape, **rcconf))
+        t.ok(twin(_shape, SPARK_ETC_RUNIT=home + "/no-runit", **rcconf)
+             == "- %s/no-vconsole no console-setup, vconsole.conf or rc.conf here: the console font is not spark's to set | %s" % (home, _void_no_boot),
+             "rc.conf without /etc/runit is no shape: the font is not spark's to set there", twin(_shape, SPARK_ETC_RUNIT=home + "/no-runit", **rcconf))
+        # the service manager's verbs on runit, against an sv stub that logs
+        # its argv and answers status from the dir the way runsv leaves it
+        # (a supervise/ dir and no down file is run:, a down file is down:,
+        # no supervise/ is fail:); the dir is the unit, its down file the
+        # disable, a missing dir absent
+        os.makedirs(home + "/svbin", exist_ok=True)
+        with open(home + "/svbin/sv", "w") as f:
+            f.write('#!/bin/sh\necho "sv $*" >> "${SV_LOG:-/dev/null}"\ncase $1 in\n'
+                    '    status) if [ ! -d "$2/supervise" ]; then echo "fail: $2: runsv not running"; exit 1\n'
+                    '            elif [ -f "$2/down" ]; then echo "down: $2: 1s, normally up"\n'
+                    '            else echo "run: $2: (pid 1) 1s"; fi ;;\n'
+                    '    *) [ -z "${SV_FAIL:-}" ] || { echo "fail: $2: runsv not running"; exit 1; } ;;\n'
+                    'esac\nexit 0\n')
+        os.chmod(home + "/svbin/sv", 0o755)
+        vhome = home + "/void-home"
+        vd = vhome + "/.config/spark/sv/spark-serve"
+        _eng = r'''
+import os
+from spark import engine
+d = engine.service_dir("serve")
+print("dir", d)
+print("name", engine.unit_name("serve"), engine.unit_name("check"))
+print("parse", engine.parse_sv_status("run: /x: (pid 1) 1s"), engine.parse_sv_status("down: /x: 1s, normally up"),
+      engine.parse_sv_status("fail: /x: runsv not running"), engine.parse_sv_status(""))
+print("absent", engine.service_state(None, "serve"), engine.sv_status("serve"))
+os.makedirs(d)
+print("loaded", engine.service_state(None, "serve"))
+open(os.path.join(d, "down"), "w").close()
+print("disabled", engine.service_state(None, "serve"))
+os.remove(os.path.join(d, "down"))
+print("stop", engine.service_stop(False, "serve"), "|", os.path.exists(os.path.join(d, "down")))
+print("stopnr", engine.service_stop(True, "serve"), "|", os.path.exists(os.path.join(d, "down")))
+os.makedirs(os.path.join(d, "supervise"))
+print("status", engine.sv_status("serve"))
+os.remove(os.path.join(d, "down"))
+print("status", engine.sv_status("serve"))
+print("kick", engine.kickstart(None, "serve"), engine.kickstart(None, "serve", restart=True))
+os.environ["SV_FAIL"] = "1"
+print("kickfail", engine.kickstart(None, "serve"))
+print("restart", engine.restart_line("serve"), "|", engine.restart_line("check"))
+'''
+        _svlog = home + "/sv-twin.log"
+        got = twin(_eng, HOME=vhome, XDG_CONFIG_HOME=vhome + "/.config", XDG_STATE_HOME=vhome + "/.local/state",
+                   PATH=home + "/svbin:" + env["PATH"], SV_LOG=_svlog)
+        want = "\n".join([
+            "dir " + vd,
+            "name spark-serve spark-check",
+            "parse run down absent absent",
+            "absent absent ('absent', '')",
+            "loaded loaded",
+            "disabled disabled",
+            "stop sv up ~/.config/spark/sv/spark-serve | False",
+            "stopnr rm ~/.config/spark/sv/spark-serve/down; sv up ~/.config/spark/sv/spark-serve | True",
+            "status ('down', 'down: %s: 1s, normally up')" % vd,
+            "status ('run', 'run: %s: (pid 1) 1s')" % vd,
+            "kick True True",
+            "todo   serve        sv up spark-serve failed: fail: %s: runsv not running" % vd,
+            "kickfail False",
+            "restart sv restart ~/.config/spark/sv/spark-serve; tail ~/.local/state/spark/log/spark-serve/current | "
+            "sv restart ~/.config/spark/sv/spark-check; tail ~/.local/state/spark/log/spark-check/current",
+        ])
+        t.ok(got == want, "engine on runit: the dir is the unit, down is the disable, sv status's three words, the undo lines, "
+             "sv up/restart through kickstart and its todo, restart_line per unit",
+             "\n".join(l for l in got.splitlines() if l not in want.splitlines()) or got)
+        try:
+            with open(_svlog) as f:
+                _svcalls = f.read().splitlines()
+        except OSError:
+            _svcalls = []
+        t.ok(_svcalls == ["sv down " + vd, "sv down " + vd, "sv status " + vd, "sv status " + vd, "sv up " + vd, "sv restart " + vd, "sv up " + vd],
+             "engine on runit: sv is asked by the dir's path -- down twice (a stop, a stop with the down file), status, up, restart, up", str(_svcalls))
         if sys.platform != "darwin":
             wsl = dict(SPARK_PROC_VERSION=home + "/version-wsl", SPARK_NO_APPLY="1")
             rc, out, _ = spark("font", extra=wsl)
@@ -3713,6 +3894,51 @@ def main():
             t.ok(rc == 0 and "SITE_QUIET_LOGIN=yes" in open(home + "/.config/spark/site.env").read(),
                  "Arch: spark quiet login on still sets the key (the motd is real there)", "%d %s" % (rc, out))
             rc, out, _ = spark("quiet", "login", "off", extra=arch)
+            # Void (ID="void" in os-release, /etc/runit a dir, not booted):
+            # quiet boot refuses in one signed line (GRUB reads no drop-in
+            # there) and the status says n/a; quiet login is real; headless
+            # is allowed (a Void box can be a brain) and its status reads
+            # the supervisor fact, no linger or sleep; the console font is
+            # rc.conf's FONT=, named on every line
+            void = dict(SPARK_OS_RELEASE=home + "/os-release-void", SPARK_PROC_VERSION=home + "/version-plain", SPARK_NO_APPLY="1",
+                        SPARK_ETC_CONSOLE_SETUP=home + "/no-console-setup", SPARK_ETC_VCONSOLE=home + "/no-vconsole",
+                        SPARK_ETC_RCCONF=home + "/rc.conf", SPARK_ETC_RUNIT=home + "/runit", SPARK_VAR_SERVICE=home + "/no-service",
+                        SPARK_CONSOLEFONTS_DIR=home + "/consolefonts")
+            rc, out, _ = spark("quiet", "boot", "on", extra=void)
+            t.ok(rc == 2 and out.strip() == "spark quiet boot -- " + _void_no_boot
+                 and "SITE_QUIET_BOOT=yes" not in open(home + "/.config/spark/site.env").read(),
+                 "Void: spark quiet boot on refuses with the Void line, exit 2, the key not set", "%d %s" % (rc, out))
+            rc, out, _ = spark("quiet", "boot", extra=void)
+            t.ok(rc == 0 and out.strip() == "spark quiet boot -- " + _void_no_boot,
+                 "Void: bare spark quiet boot shows the same line, exit 0", out)
+            rc, out, _ = spark("quiet", extra=void)
+            t.ok(rc == 0 and "boot n/a (no drop-in on Void's GRUB" in out, "Void: spark quiet's status says boot is n/a and why", out)
+            rc, out, _ = spark("quiet", "login", "on", extra=void)
+            t.ok(rc == 0 and "SITE_QUIET_LOGIN=yes" in open(home + "/.config/spark/site.env").read(),
+                 "Void: spark quiet login on still sets the key (the motd is real there)", "%d %s" % (rc, out))
+            rc, out, _ = spark("quiet", "login", "off", extra=void)
+            rc, out, _ = spark("headless", "on", extra=void)
+            t.ok(rc == 0 and "SITE_HEADLESS=yes" in open(home + "/.config/spark/site.env").read(),
+                 "Void: spark headless on is allowed (a Void box can be a brain): the key is set", "%d %s" % (rc, out))
+            rc, out, _ = spark("headless", extra=void)
+            t.ok(rc == 0 and "supervisor from boot" in out and "runit is not running here (a container)" in out
+                 and "linger" not in out and "sleep" not in out and "lid" not in out,
+                 "Void: spark headless status reads the supervisor fact; no linger, sleep or lid fact on runit", out)
+            rc, out, _ = spark("headless", "off", extra=void)
+            t.ok(rc == 0 and "SITE_HEADLESS=no" in open(home + "/.config/spark/site.env").read(), "Void: spark headless off sets the key back", "%d %s" % (rc, out))
+            rc, out, _ = spark("font", "list", extra=void)
+            t.ok(rc == 0 and "  fixture16                8x16" in out and "it lands in %s/rc.conf" % home in out,
+                 "Void: spark font list prints the kbd fonts and names rc.conf as where a choice lands", out)
+            rc, out, _ = spark("font", "fixture16", "8x16", extra=void)
+            t.ok(rc == 0 and "SITE_FONT_FACE=fixture16\n" in open(home + "/.config/spark/site.env").read(),
+                 "Void: spark font FACE SIZE sets the keys on the rcconf shape", "%d %s" % (rc, out))
+            rc, out, _ = spark("font", extra=void)
+            t.ok(rc == 0 and out.strip() == "spark font -- console: fixture16 8x16 (%s/rc.conf)" % home,
+                 "Void: spark font shows the choice and rc.conf as its file", out)
+            rc, out, _ = spark("font", "none", extra=void)
+            rc, out, _ = spark("font", extra=void)
+            t.ok(rc == 0 and out.strip() == "spark font -- console: not managed (SITE_FONT_FACE unset; %s/rc.conf keeps its font)" % home,
+                 "Void: spark font none, then bare spark font names rc.conf as the file that keeps its font", out)
 
         # the egg (lib/spark/lua.py): the forest, headless through --sim, then a pty
         rc, out, _ = spark("lua", "--sim", "1", "auto")

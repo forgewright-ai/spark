@@ -92,6 +92,27 @@ if [ "$(uname -s)" != Darwin ]; then
     rm -f "$XDG_STATE_HOME/spark/made"
 fi
 
+# 1c. runit (Linux: init_shape reads the seam): the service dirs install.sh
+# renders where /etc/runit is a dir are the units -- the plan names each
+# stopped and removed; a dry run asks sv nothing, calls no sudo, and a
+# root service spark never wrote is not its to name
+if [ "$(uname -s)" != Darwin ]; then
+    mkdir -p "$T/root" "$T/runit"
+    printf '#!/bin/sh\necho "sv $*" >> "%s"\nexit 0\n' "$T/sv.log" > "$T/root/sv"; chmod +x "$T/root/sv"
+    SPARK_ETC_RUNIT="$T/runit" sh "$HOME/.spark/install.sh" >/dev/null
+    [ -x "$HOME/.config/spark/sv/spark-forge/run" ] && ok "runit: install.sh rendered the service dirs (the seam)" || bad "runit: no service dir rendered"
+    out=$(SPARK_ETC_RUNIT="$T/runit" SPARK_VAR_SERVICE="$T/no-service" SPARK_ETC_SV="$T/no-sv" PATH="$T/root:$PATH" spark uninstall --dry-run 2>&1) \
+        || bad "uninstall --dry-run (runit) failed: $out"
+    for u in forge serve check; do
+        printf '%s\n' "$out" | grep -qE "^would +units +spark-$u stopped, ~/.config/spark/sv/spark-$u removed$" \
+            && ok "runit: the plan names spark-$u stopped and its dir removed" || bad "runit units row for $u: $(printf '%s\n' "$out" | grep -E " units .*spark-$u" | head -1)"
+    done
+    printf '%s\n' "$out" | grep -qE '^(would|todo) +supervisor ' && bad "runit: a supervisor row with no root service written: $(printf '%s\n' "$out" | grep -E ' supervisor ' | head -1)" || ok "runit: no root service of spark's, no supervisor row"
+    [ ! -e "$T/sv.log" ] && ok "runit dry run: sv never asked" || bad "runit dry run called sv: $(tr '\n' ' ' < "$T/sv.log")"
+    printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "runit dry run called sudo" || ok "runit dry run: no sudo"
+    rm -rf "$HOME/.config/spark/sv"
+fi
+
 # 2. a non-terminal without --yes: the plan, one line, exit 2
 rc2=0; out=$(spark uninstall </dev/null 2>&1) || rc2=$?
 [ "$rc2" = 2 ] && printf '%s\n' "$out" | grep -q -- '--yes runs it' && ok "not a terminal: refused with the --yes line, exit 2" || bad "non-tty: rc=$rc2 $out"

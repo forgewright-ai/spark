@@ -137,13 +137,39 @@ out=$(SPARK_HOME="$T/piped" sh -s -- --clone-only < "$REPO/get" 2>&1) && ok "pip
 
 # 7. no git on PATH: a PATH of only the other tools get needs
 mkdir "$T/nogit"
-for t in sh uname ls python3 apt-get pacman xcode-select; do
+for t in sh uname ls python3 apt-get pacman xbps-install xcode-select; do
     p=$(command -v "$t" 2>/dev/null || true); [ -z "$p" ] || ln -s "$p" "$T/nogit/$t"
 done
 if out=$(PATH="$T/nogit" SPARK_HOME="$T/nogit-home" /bin/sh "$REPO/get" --clone-only 2>&1); then bad "no git: not refused"; else ok "no git: refused"; fi
 note "$out"
 printf '%s\n' "$out" | grep -q 'missing: git' && ok "no git: the refusal names git" || bad "no git: $out"
 [ ! -e "$T/nogit-home" ] && ok "no git: nothing cloned" || bad "no git: a clone appeared"
+
+# 7b. the family probe (get's Linux arm; a uname stub says Linux, so both
+#     OSes prove it): a PATH with none of apt-get, pacman or xbps-install is
+#     refused naming the three, before any clone; an xbps-install alone
+#     passes it (Void) and the clone lands; a musl loader where SPARK_LD_MUSL
+#     points refuses in one line (the pinned engine is a glibc build)
+tools() {   # tools DIR -- what get runs after the probe, and a uname that says Linux x86_64
+    mkdir -p "$1"
+    for t in sh ls python3 git ssh-keygen head rm find cut; do p=$(command -v "$t" 2>/dev/null || true); [ -z "$p" ] || ln -s "$p" "$1/$t"; done
+    printf '#!/bin/sh\ncase ${1:-} in -s) echo Linux ;; -m) echo x86_64 ;; *) exec /usr/bin/uname "$@" ;; esac\n' > "$1/uname"; chmod +x "$1/uname"
+}
+tools "$T/nopm"
+rc=0; out=$(PATH="$T/nopm" SPARK_HOME="$T/nopm-home" /bin/sh "$REPO/get" --clone-only 2>&1) || rc=$?; note "$out"
+[ "$rc" -eq 1 ] && ok "no apt-get, pacman or xbps-install: refused, exit 1" || bad "no package manager: rc $rc: $out"
+printf '%s\n' "$out" | grep -qF 'spark get: no apt-get, pacman or xbps-install -- a Debian-family, Arch or Void Linux in this version' \
+    && ok "the refusal names the three managers and the three families" || bad "no package manager: $out"
+[ ! -e "$T/nopm-home" ] && ok "no package manager: nothing cloned" || bad "no package manager: a clone appeared"
+tools "$T/xbps"; printf '#!/bin/sh\nexit 0\n' > "$T/xbps/xbps-install"; chmod +x "$T/xbps/xbps-install"
+out=$(PATH="$T/xbps" SPARK_LD_MUSL="$T/no-ld-musl-*.so.1" SPARK_HOME="$T/xbps-home" /bin/sh "$REPO/get" --clone-only 2>&1) \
+    && ok "xbps-install alone: the probe passes (Void), get runs on" || bad "xbps-install alone: $out"; note "$out"
+[ -x "$T/xbps-home/bin/spark" ] && ok "xbps-install alone: the clone landed" || bad "xbps-install alone: no clone"
+: > "$T/ld-musl-x86_64.so.1"
+rc=0; out=$(PATH="$T/xbps" SPARK_LD_MUSL="$T/ld-musl-x86_64.so.1" SPARK_HOME="$T/musl-home" /bin/sh "$REPO/get" --clone-only 2>&1) || rc=$?; note "$out"
+[ "$rc" -eq 1 ] && printf '%s\n' "$out" | grep -qF "spark get: musl libc: the pinned engine is a glibc build -- Void's glibc flavour runs spark" \
+    && ok "a musl loader: refused in one line, exit 1" || bad "musl: rc $rc: $out"
+[ ! -e "$T/musl-home" ] && ok "a musl loader: nothing cloned" || bad "musl: a clone appeared"
 
 # 8. an old python3: the version check fails
 mkdir "$T/oldpy"; printf '#!/bin/sh\nexit 1\n' > "$T/oldpy/python3"; chmod +x "$T/oldpy/python3"

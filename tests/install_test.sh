@@ -402,4 +402,143 @@ if [ "$(uname -s)" != Darwin ]; then
     printf 'SITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
 fi
 
+# 11. Void (the third family): ID="void" in os-release -- quoted, as Void
+#     ships it -- pinned by SPARK_OS_RELEASE. xbps answers for the packages
+#     (a stub in the fixture's shape: -l lists every name distro/void.env
+#     holds as installed, -p pkgver and -R say installed and in a repo),
+#     runit is the init (SPARK_ETC_RUNIT names a dir; SPARK_VAR_SERVICE says
+#     whether it is booted) and rc.conf beside it is the console's file. The
+#     names come from distro/void.env (both OSes, the uname stub); the dry
+#     runs and the apply are Linux's (the rows are). The sudo stub shouts: a
+#     dry run never reaches it, and the links into a runsvdir of your own
+#     need no root.
+printf 'ID="void"\nPRETTY_NAME="Void Linux"\n' > "$T/os-release-void"
+out=$(lp "$T/os-release-void")
+printf '%s\n' "$out" | grep -qx libgomp && printf '%s\n' "$out" | grep -qx kbd && printf '%s\n' "$out" | grep -qx python3 \
+    && ! printf '%s\n' "$out" | grep -qxE 'gcc-libs|libgomp1|python|fd-find|tmux' \
+    && ok "Void: --list-packages speaks xbps's names (libgomp, kbd, python3)" || bad "Void --list-packages: $(printf '%s' "$out" | tr '\n' ' ')"
+if [ "$(uname -s)" != Darwin ]; then
+    V=$T/void; mkdir -p "$V/bin" "$V/runit" "$V/service" "$V/sv-etc" "$T/etc"
+    names=$(sed -n 's/^PKG_[A-Z]*=//p' "$REPO/distro/void.env" | tr '\n' ' ')
+    printf '#!/bin/sh\ncase $1 in -l) for p in %s; do echo "ii $p-1.0_1 x"; done ;; -p|-R) exit 0 ;; *) exit 1 ;; esac\n' "$names" > "$V/bin/xbps-query"
+    printf '#!/bin/sh\ncase $1 in -un) exit 0 ;; *) exit 1 ;; esac\n' > "$V/bin/xbps-install"
+    # sv logs its argv (SV_LOG); status reads the dir the way runsv would
+    # leave it: run: with a supervise/ dir and no down file, down: with one,
+    # fail: when nobody supervises it (engine.parse_sv_status's three words);
+    # up, down and the rest just succeed
+    cat > "$V/bin/sv" <<'SH'
+#!/bin/sh
+echo "sv $*" >> "${SV_LOG:-/dev/null}"
+case $1 in
+    status) if [ ! -d "$2/supervise" ]; then echo "fail: $2: runsv not running"; exit 1
+            elif [ -f "$2/down" ]; then echo "down: $2: 1s, normally up"
+            else echo "run: $2: (pid 1) 1s"; fi ;;
+esac
+exit 0
+SH
+    chmod +x "$V/bin/xbps-query" "$V/bin/xbps-install" "$V/bin/sv"
+    # vrun [VAR=VALUE...] COMMAND...: the Void fixture's seams (a later
+    # VAR=VALUE overrides), the stubs first on PATH, the sudo that shouts;
+    # every file a row reads is pinned, so the machine underneath says nothing
+    vrun() {
+        env SPARK_OS_RELEASE="$T/os-release-void" SPARK_SYSFS_DRM="$T/nodrm" SPARK_ETC_RUNIT="$V/runit" SPARK_VAR_SERVICE="$V/no-service" \
+            SPARK_ETC_SV="$V/sv-etc" SPARK_ETC_CONSOLE_SETUP="$V/no-console-setup" SPARK_ETC_VCONSOLE="$V/no-vconsole" SPARK_ETC_RCCONF="$V/rc.conf" \
+            SPARK_ETC_MKINITCPIO_D="$T/no-mkinitcpio.d" SPARK_ETC_CMDLINE_DROPIN="$T/no-cmdline.conf" \
+            SPARK_ETC_MOTD="$T/etc/motd" SPARK_ETC_ISSUE="$T/etc/issue" SPARK_ETC_UNAME_MOTD="$T/etc/10-uname" \
+            SPARK_SHARE_TOKEN="$V/no-share-token" SPARK_SHARE_URL="$V/no-share-url" \
+            SV_LOG="$V/sv.log" PATH="$V/bin:$T/bin:$PATH" "$@"
+    }
+    # 11a. a container (no /var/service): the packages row answers through
+    #      xbps, the services wait, quiet boot is Void's own, linger, sleep
+    #      and the lid are runit's skips, and the console row writes rc.conf's
+    #      FONT= (a commented #FONT= line is the one it takes over) with
+    #      setfont to redraw; never sudo
+    printf 'SITE_FONT_FACE=Terminus\nSITE_FONT_SIZE=16x32\nSITE_QUIET_BOOT=yes\nSITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
+    printf '# /etc/rc.conf - system configuration for void\n#KEYMAP="us"\n#FONT="lat9w-16"\n' > "$V/rc.conf"
+    out=$(vrun sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Void) failed: $out"
+    printf '%s\n' "$out" | grep -qE '^skip +runit +runit is not running here' && ok "Void, a container: the runit row skips (the services wait for a machine that boots)" || bad "Void runit row: $(printf '%s\n' "$out" | grep -E ' runit ' | head -1)"
+    printf '%s\n' "$out" | grep -qE '^ok +packages ' && ok "Void: the packages row answers through xbps (everything installed)" || bad "Void packages row: $(printf '%s\n' "$out" | grep -E ' packages ' | head -1)"
+    printf '%s\n' "$out" | grep -qE '^skip +quiet-boot +Void' && ok "Void: the quiet-boot row skips (GRUB reads no drop-in)" || bad "Void quiet-boot row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
+    printf '%s\n' "$out" | grep -qE '^skip +linger +runit' && ok "Void: linger skips (the supervisor runs from boot, login or not)" || bad "Void linger row: $(printf '%s\n' "$out" | grep -E ' linger ' | head -1)"
+    printf '%s\n' "$out" | grep -qE '^skip +sleep +runit' && printf '%s\n' "$out" | grep -qE '^skip +lid +runit' && ok "Void: sleep and lid skip (no sleep targets, no logind)" || bad "Void sleep/lid rows: $(printf '%s\n' "$out" | grep -E ' (sleep|lid) ' | head -2 | tr '\n' ' ')"
+    printf '%s\n' "$out" | grep -qE '^would +console +FONT=Terminus in .*rc.conf; setfont' && ok "Void: the console row would write FONT= into rc.conf and setfont (the rcconf shape, by mechanism)" || bad "Void console row: $(printf '%s\n' "$out" | grep -E ' console ' | head -1)"
+    printf '%s\n' "$out" | grep -qE '^(ok|would|skip|todo) +spark-(check|serve|forge) ' && bad "a container: a service row spoke: $(printf '%s\n' "$out" | grep -E '^(ok|would|skip|todo) +spark-' | head -1)" || ok "a container: no service row (they wait with runit)"
+    printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "Void dry-run called sudo" || ok "Void dry-run: no sudo"
+    printf '# /etc/rc.conf\n#KEYMAP="us"\nFONT="Terminus"\n' > "$V/rc.conf"
+    out=$(vrun sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Void, font set) failed: $out"
+    printf '%s\n' "$out" | grep -qE '^ok +console +Terminus 16x32 \(.*rc.conf\)' && ok "Void: rc.conf already naming the face (quoted, as Void writes it) is ok" || bad "Void console ok row: $(printf '%s\n' "$out" | grep -E ' console ' | head -1)"
+    out=$(vrun SPARK_ETC_RCCONF="$V/no-rc.conf" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Void, no console file) failed: $out"
+    printf '%s\n' "$out" | grep -qE '^skip +console +no console-setup, vconsole.conf or rc.conf' && ok "Void without rc.conf: the console row skips, naming the three files" || bad "Void bare console row: $(printf '%s\n' "$out" | grep -E ' console ' | head -1)"
+    # 11b. runit LIVE (/var/service is a dir), no runsvdir-USER yet: the
+    #      supervisor row would write the root service and link it (sudo),
+    #      spark-check would come up; a dry run says so and changes nothing
+    #      through sv
+    out=$(vrun SPARK_VAR_SERVICE="$V/service" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Void, runit live) failed: $out"
+    printf '%s\n' "$out" | grep -qE '^would +supervisor +write .*runsvdir-.*, link it into .*/service \(sudo\)$' && ok "runit live, no root service: the supervisor row would write runsvdir-USER and link it (sudo)" || bad "supervisor row: $(printf '%s\n' "$out" | grep -E ' supervisor ' | head -1)"
+    printf '%s\n' "$out" | grep -qE '^would +spark-check +sv up ~/\.config/spark/sv/spark-check$' && ok "runit live: spark-check would come up (sv up, the dir spelled with ~)" || bad "spark-check row: $(printf '%s\n' "$out" | grep -E ' spark-check ' | head -1)"
+    printf '%s\n' "$out" | grep -qE '^(ok|would|skip|todo) +runit ' && bad "runit live: the runit skip row survives" || ok "runit live: no runit skip row"
+    printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "runit live dry-run called sudo" || ok "runit live dry-run: no sudo"
+    grep -qE '^sv (up|down|restart|exit) ' "$V/sv.log" 2>/dev/null && bad "a dry run changed a service: $(grep -E '^sv (up|down|restart|exit) ' "$V/sv.log" | head -1)" || ok "a dry run asks sv status and nothing more"
+    # 11c. a runsvdir-USER of your own (no spark marker in its run): spark
+    #      reads the directory its runsvdir line names -- the last word,
+    #      quotes off, $HOME spelled out -- and would link its three service
+    #      dirs there
+    me=$(id -un); mkdir -p "$V/sv-etc/runsvdir-$me" "$HOME/service"
+    printf '#!/bin/sh\n# my services, the handbook way\nexport USER=%s HOME=%s\nexec chpst -u %s runsvdir "$HOME/service"\n' "$me" "$HOME" "$me" > "$V/sv-etc/runsvdir-$me/run"
+    out=$(vrun SPARK_VAR_SERVICE="$V/service" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Void, your runsvdir) failed: $out"
+    printf '%s\n' "$out" | grep -qE "^would +supervisor +link spark-check, spark-serve, spark-forge into .*/service \(your runsvdir-$me\)$" && ok "your runsvdir-USER: the supervisor row would link spark's dirs into its directory (\$HOME read from its run)" || bad "your runsvdir row: $(printf '%s\n' "$out" | grep -E ' supervisor ' | head -1)"
+    printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "your runsvdir dry-run called sudo" || ok "your runsvdir dry-run: no sudo"
+    # 11d. install.sh renders the service dirs only where /etc/runit is a
+    #      dir (the seam): run scripts executable, @USER@ and @HOME@ filled,
+    #      a `down` file beside a run that is new here (nothing starts before
+    #      bootstrap decides); the second run has nothing to do and leaves
+    #      the down file where it is
+    out=$(SPARK_ETC_RUNIT="$V/runit" sh "$REPO/install.sh" 2>&1) || bad "install.sh (runit) failed: $out"
+    svd="$HOME/.config/spark/sv"
+    [ -x "$svd/spark-serve/run" ] && [ -x "$svd/spark-forge/run" ] && [ -x "$svd/spark-check/run" ] && ok "runit: install.sh renders the three run scripts, executable" || bad "runit: run scripts: $(ls -l "$svd"/*/run 2>&1 | head -3 | tr '\n' ' ')"
+    [ -x "$svd/spark-serve/finish" ] && [ -x "$svd/spark-forge/finish" ] && [ -x "$svd/spark-check/log/run" ] && ok "runit: finish and log/run beside them, executable" || bad "runit: finish/log: $(ls -lR "$svd/spark-serve" 2>&1 | tr '\n' ' ')"
+    [ -f "$svd/spark-serve/down" ] && [ -f "$svd/spark-forge/down" ] && [ -f "$svd/spark-check/down" ] && ok "runit: a run that is new here comes with a down file" || bad "runit: down files: $(ls "$svd"/*/down 2>&1 | tr '\n' ' ')"
+    grep -qF "USER=$me " "$svd/spark-serve/run" && grep -qF "HOME=$HOME " "$svd/spark-serve/run" && ! grep -q '@[A-Z_]*@' "$svd/spark-serve/run" && ok "runit: @HOME@ and @USER@ rendered, no placeholder left" || bad "runit: spark-serve/run: $(grep -n 'export' "$svd/spark-serve/run")"
+    grep -q 'rendered by spark install.sh' "$svd/spark-check/log/run" && grep -q 'rendered by spark install.sh' "$svd/spark-forge/finish" && ok "runit: every rendered file carries the mark" || bad "runit: a rendered file lacks the mark"
+    out=$(SPARK_ETC_RUNIT="$V/runit" sh "$REPO/install.sh" 2>&1)
+    [ "$(printf '%s\n' "$out" | tail -1)" = "Nothing to do" ] && [ -f "$svd/spark-serve/down" ] && ok "runit: the second run is Nothing to do, the down file stays" || bad "runit: second run: $(printf '%s\n' "$out" | grep -v '^ok' | head -3 | tr '\n' ' ')"
+    # 11e. the APPLY with your runsvdir-USER: the links land (yours, no
+    #      root), spark-check comes up (its down file goes, sv up), the
+    #      serve and forge dirs keep theirs (on demand: no model here), and
+    #      the sudo stub never speaks. runsv is played by the stub: a
+    #      supervise/ dir in each service dir is what a runsvdir leaves
+    for s in spark-check spark-serve spark-forge; do mkdir -p "$svd/$s/supervise"; : > "$svd/$s/supervise/ok"; done
+    printf 'SITE_QUIET_BOOT=yes\nSITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
+    rm -f "$V/sv.log"
+    out=$(vrun SPARK_VAR_SERVICE="$V/service" sh "$REPO/bootstrap.sh" </dev/null 2>&1) || bad "bootstrap apply (Void, your runsvdir) failed: $(printf '%s\n' "$out" | tail -5 | tr '\n' ' ')"
+    printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "the apply called as_root: $(printf '%s\n' "$out" | grep 'SUDO CALLED' | head -1)" || ok "your runsvdir apply: no as_root call (the links are yours)"
+    printf '%s\n' "$out" | grep -qE "^ok +supervisor +your runsvdir-$me supervises .*/service; spark's services are linked there$" && ok "your runsvdir apply: the supervisor row says yours, linked" || bad "supervisor row: $(printf '%s\n' "$out" | grep -E ' supervisor ' | head -1)"
+    linked=1
+    for s in spark-check spark-serve spark-forge; do [ "$(readlink "$HOME/service/$s" 2>/dev/null)" = "$svd/$s" ] || linked=0; done
+    [ "$linked" = 1 ] && ok "your runsvdir apply: the three symlinks point into ~/.config/spark/sv/" || bad "links: $(ls -l "$HOME/service" 2>&1 | tr '\n' ' ')"
+    printf '%s\n' "$out" | grep -qE '^ok +spark-check +supervised \(run\)$' && ok "your runsvdir apply: spark-check is supervised (run)" || bad "spark-check row: $(printf '%s\n' "$out" | grep -E ' spark-check ' | head -1)"
+    [ ! -e "$svd/spark-check/down" ] && [ -f "$svd/spark-serve/down" ] && [ -f "$svd/spark-forge/down" ] && ok "your runsvdir apply: spark-check's down file went; serve and forge keep theirs (no model here)" || bad "down files: $(ls "$svd"/*/down 2>&1 | tr '\n' ' ')"
+    grep -qxF "sv up $svd/spark-check" "$V/sv.log" && ! grep -qE '^sv (up|down|restart|exit) .*spark-(serve|forge)$' "$V/sv.log" && ok "your runsvdir apply: sv up spark-check, nothing else moved through sv" || bad "sv log: $(grep -vE '^sv status' "$V/sv.log" 2>/dev/null | tr '\n' ' ')"
+    out=$(vrun SPARK_VAR_SERVICE="$V/service" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Void, converged) failed: $out"
+    printf '%s\n' "$out" | grep -qE "^ok +supervisor +your runsvdir-$me " && printf '%s\n' "$out" | grep -qE '^ok +spark-check +supervised \(run\)$' \
+        && printf '%s\n' "$out" | grep -qE '^skip +spark-serve +on demand \(' && printf '%s\n' "$out" | grep -qE '^skip +spark-forge +off \(' \
+        && ok "converged: supervisor and spark-check ok, serve on demand, forge off" || bad "converged rows: $(printf '%s\n' "$out" | grep -E ' (supervisor|spark-check|spark-serve|spark-forge) ' | tr '\n' ' ')"
+    # 11f. an xbps that knows nothing installed: the row would install, as
+    #      root, in xbps's names
+    printf '#!/bin/sh\ncase $1 in -R) exit 0 ;; *) exit 1 ;; esac\n' > "$V/bin/xbps-query"
+    out=$(vrun sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Void, bare) failed: $out"
+    printf '%s\n' "$out" | grep -qE '^would +packages +install:.*\(sudo\)$' && ok "Void, nothing installed: the packages row would install (sudo)" || bad "Void bare packages row: $(printf '%s\n' "$out" | grep -E ' packages ' | head -1)"
+    printf '%s\n' "$out" | grep -qE '^would +packages +install:.* libgomp \(sudo\)$' && ! printf '%s\n' "$out" | grep -qE '^would +packages +.*(gcc-libs|libgomp1)' && ok "the install line speaks xbps's names (libgomp)" || bad "Void bare install line: $(printf '%s\n' "$out" | grep -E ' packages ' | head -1)"
+    printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "Void bare dry-run called sudo" || ok "Void bare dry-run: no sudo"
+    # 11g. no /etc/runit (the seam names a dir that is not there): install.sh
+    #      renders no service dir -- 2a's list is the whole of a systemd
+    #      Linux's $HOME; a client under runit gets none either
+    P=$T/plain; mkdir -p "$P/.config/spark"; : > "$P/.config/spark/site.env"
+    HOME=$P XDG_CONFIG_HOME=$P/.config SPARK_ETC_RUNIT="$V/no-runit" sh "$REPO/install.sh" >/dev/null
+    [ ! -e "$P/.config/spark/sv" ] && [ -L "$P/.config/systemd/user/spark-serve.service" ] && ok "no /etc/runit: install.sh renders no service dir; the systemd unit is linked as before" || bad "no runit: $(find "$P/.config" -maxdepth 3 | tr '\n' ' ')"
+    out=$(HOME=$C XDG_CONFIG_HOME=$C/.config SPARK_ETC_RUNIT="$V/runit" sh "$REPO/install.sh" --dry-run 2>&1)
+    printf '%s\n' "$out" | grep -q 'sv/spark-' && bad "a client under runit: a service dir announced: $(printf '%s\n' "$out" | grep 'sv/spark-' | head -1)" || ok "a client under runit: no service dir (a client runs no unit)"
+    printf 'SITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
+fi
+
 [ "$fail" -eq 0 ] && echo "install_test: all ok" || { echo "install_test: FAILED"; exit 1; }
