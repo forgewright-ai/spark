@@ -54,7 +54,7 @@ import time
 
 from . import (ACCOUNT_KEY_FILE, EMBER_TOKEN_FILE, MARK, SHARE_TOKEN, TOKEN_FILE, config, die, glyph, page,
                paint, say)
-from . import forge, persona, reveal, sandbox, session, users, wire
+from . import forge, intake, persona, reveal, sandbox, session, users, wire
 from . import text as textmod
 from .cli import _one_line, _short
 
@@ -126,12 +126,11 @@ REFUSED_CONTROL = "the model's command carried control characters -- refused"
 # git and Go ("unknown option", "unknown flag"), argparse
 # ("unrecognized arguments"):
 BAD_OPTION = re.compile(r"(?:unrecognized|invalid|unknown) (?:option|flag|argument)|illegal option", re.I)
-MAN_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._+-]*$")   # a plain command name: no path, no option
+MAN_NAME = intake.NAME_SHAPE          # a plain command name: no path, no option
 MAN_MAX = 1500              # bytes of the page that go back at most
-MAN_TIMEOUT = 5             # seconds man may take; then nothing is added
-MAN_WIDTH = 80              # the page's columns (MANWIDTH)
+MAN_TIMEOUT = intake.MAN_TIMEOUT      # seconds man may take; then nothing is added
+MAN_WIDTH = intake.MAN_WIDTH          # the page's columns (MANWIDTH)
 MAN_BEFORE = 2              # lines kept above the one that names the flag
-MAN_ENV_DROP = ("MANPAGER", "PAGER", "MANOPT")   # no pager or option of the user's own runs
 MAN_HEADER = "From man %s:"
 # the refused flag in the error line: getopt's `option -- x` first, then
 # a flag as typed (-x, --long), then a quoted bare word (git's `frob')
@@ -351,12 +350,7 @@ def land(cfg, thread, history, text, cwd):
     forge.append(cfg, thread, "user", text, mode="do", cwd=cwd)
 
 
-def _killpg(p):
-    """SIGKILL to a leashed step's whole process group (its own session)."""
-    try:
-        os.killpg(p.pid, signal.SIGKILL)
-    except OSError:
-        pass
+_killpg = intake.killpg      # SIGKILL to a leashed step's whole process group (its own session)
 
 
 def run(command, shell, cwd="", echo=True, timeout=None, box=None):
@@ -524,43 +518,14 @@ def _refused_flag(line):
     return ""
 
 
-def _abs_path():
-    """$PATH with its empty and relative entries dropped: an entry like
-    `.` or `bin` resolves against the step's directory, which the model
-    chose -- a `man` or a HEAD planted there is not the machine's."""
-    return os.pathsep.join(d for d in (os.environ.get("PATH") or "").split(os.pathsep) if os.path.isabs(d))
-
-
-def _man_page(head):
-    """`man -P cat HEAD` as argv -- man found on _abs_path, run from / --
-    stdout only, overstrikes and escapes dropped; '' when man is missing,
-    fails, or outlives MAN_TIMEOUT (its whole process group is killed:
-    groff must not linger)."""
-    man = shutil.which("man", path=_abs_path())
-    if not man:
-        return ""
-    env = dict(os.environ)
-    for k in MAN_ENV_DROP:
-        env.pop(k, None)
-    env["MANWIDTH"] = str(MAN_WIDTH)
-    env["PATH"] = _abs_path()
-    try:
-        p = subprocess.Popen([man, "-P", "cat", head], cwd="/", stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                             stderr=subprocess.DEVNULL, env=env, start_new_session=True)
-    except OSError:
-        return ""
-    try:
-        out, _err = p.communicate(timeout=MAN_TIMEOUT)
-    except subprocess.TimeoutExpired:
-        _killpg(p)
-        try:
-            p.communicate(timeout=1)     # a child that left the group may still hold the pipe
-        except subprocess.TimeoutExpired:
-            pass
-        return ""
-    if p.returncode != 0:
-        return ""
-    return textmod.scrub(out.decode("utf-8", errors="replace"))   # scrub drops the overstrikes too
+# the manual reader is intake's (the Intake context reads every page the
+# same way): $PATH with its empty and relative entries dropped -- an entry
+# like `.` or `bin` resolves against the step's directory, which the model
+# chose -- and `man HEAD` as argv, from /, in one clean environment
+# (MANPAGER=cat, MANWIDTH=80, the user's MANOPT and pager never), on
+# MAN_TIMEOUT with its process group killed, overstrikes and escapes dropped
+_abs_path = intake.abs_path
+_man_page = intake.man_page
 
 
 def man_excerpt(command, rc, tail):
