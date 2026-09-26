@@ -157,6 +157,9 @@ class Stub(BaseHTTPRequestHandler):
                 return
             elif "wraptest" in user:
                 pieces = tuple("word%02d " % i for i in range(1, 41))
+            elif "fencetest" in user:
+                # a reply in a code fence, its first line of words long
+                pieces = ("\n```sh\n", "du -sh " + "word " * 20 + "\n", "```\n")
             elif "capped" in user:
                 # the server's cap ended the reply: finish_reason length
                 STATE["last_max_tokens"] = body.get("max_tokens")
@@ -933,16 +936,37 @@ def main():
         t.ok(rc == 0 and len(os.listdir(threads)) == 1, "spark <words> starts a thread of its own", out)
         spark("history", "clear")
 
+        # one count: spark user, status and history count the threads that
+        # hold a turn -- a header-only file (a failed first turn) and a
+        # renamed file (the store refuses it) are neither
+        for _q in ("one", "two", "three", "four", "five", "six"):
+            spark("line", stdin="? " + _q)
+        _held = sorted(os.listdir(threads))
+        with open(threads + "/failedfirst01.sealed", "w") as f:
+            f.write("spark-sealed-v1 thread failedfirst01\n")
+        import shutil as _shutil
+        _shutil.copyfile(threads + "/" + _held[0], threads + "/renamed01.sealed")
+        rc, out, _ = spark("user")
+        t.ok(rc == 0 and re.search(r"^  \S+ +6 threads  ", out, re.M), "spark user counts the threads that hold a turn (6 of 8 files)", out)
+        rc, out, _ = spark("status")
+        t.ok(rc == 0 and ", 6 threads" in out, "status counts the same 6", out)
+        rc, out, _ = spark("history")
+        t.ok(rc == 0 and "  threads, newest 5 of 6 (" in out and len(re.findall(r"^  \S+  1 turn  ", out, re.M)) == 5,
+             "history lists 5 and says newest 5 of 6", out)
+        spark("history", "clear")
+
         # chat: one turn goes on with the newest thread; the REPL reads stdin
         spark("line", stdin="? a")
         rc, out, _ = spark("chat", "count")
         t.ok(rc == 0 and out.strip() == "* 4", "spark chat <words> continues the newest thread, marked (system + 2 + line)", out)
         t.ok(STATE.get("model") == "ember", "chat: the request names the ember role", str(STATE.get("model")))
         rc, out, _ = spark("chat", stdin="count\n\n/new\ncount\n")
-        answers = re.findall(r"chat> \* (\d+)", out)
+        answers = re.findall(r"^\* (\d+)", out, re.M)
         t.ok(rc == 0 and answers == ["6", "2"], "spark chat REPL: continues (6), /new starts afresh (2), blank ignored", out)
-        t.ok(out.count("chat> ") == 5 and "fresh thread" in out, "the REPL prompts, says so on /new, ends on EOF", out)
-        t.ok(out.count("chat -- /help, Ctrl-D or /q ends") == 1, "the intro line prints once", out)
+        t.ok("chat>" not in out and "fresh thread" in out, "the REPL piped: no prompt text, says so on /new, ends on EOF", out)
+        t.ok("Ctrl-D or /q ends" not in out, "the intro line is for a tty: piped, stdout is the replies alone", out)
+        rc, out, err = spark("chat", stdin="count\n")
+        t.ok(rc == 0 and re.fullmatch(r"\* \d+", out.strip()) and err == "", "piped chat: stdout is the answer alone, no banner, no `chat> `", repr(out))
         t.ok("* " in out, "chat replies print marked answers", out)
         t.ok(len(os.listdir(threads)) == 2, "the REPL left one thread continued and one new")
         rc, out, _ = spark("chat", "-h")
@@ -953,12 +977,12 @@ def main():
         # the quit grammar: all silent, rc 0, nothing sent to the model
         hits0 = STATE["hits"]
         rc, out, err = spark("chat", stdin=":q\n")
-        t.ok(rc == 0 and out == "chat -- /help, Ctrl-D or /q ends\nchat> " and err == "" and STATE["hits"] == hits0,
+        t.ok(rc == 0 and out == "" and err == "" and STATE["hits"] == hits0,
              "chat: :q quits silently, no model call (the role-played-Exited trap)", repr(out))
         rc, out, err = spark("chat", stdin="exit\n")
-        t.ok(rc == 0 and out.endswith("chat> ") and err == "" and STATE["hits"] == hits0, "chat: exit quits silently too", repr(out))
+        t.ok(rc == 0 and out == "" and err == "" and STATE["hits"] == hits0, "chat: exit quits silently too", repr(out))
         rc, out, err = spark("chat", stdin="\n\n:q\n")
-        t.ok(rc == 0 and out.count("chat> ") == 3 and STATE["hits"] == hits0, "chat: blank lines ignored, no model call", repr(out))
+        t.ok(rc == 0 and out == "" and STATE["hits"] == hits0, "chat: blank lines ignored, no model call", repr(out))
         rc, out, _ = spark("chat", "count", extra={"SPARK_HISTORY": "off"})
         t.ok(rc == 0 and out.strip() == "* 2", "SPARK_HISTORY=off: chat has nothing to go on with", out)
         spark("history", "clear")
@@ -1008,7 +1032,7 @@ def main():
         t.ok(rc == 0 and STATE["hits"] == hits0 and "no thread 9 -- /resume lists them" in err,
              "chat: /resume with an unknown N is refused on stderr", out + err)
         rc, out, err = spark("chat", stdin="/resume 2\ncount\n")
-        t.ok(rc == 0 and "* resuming: older (2 turns)" in out and re.findall(r"chat> \* (\d+)", out) == ["6"],
+        t.ok(rc == 0 and "* resuming: older (2 turns)" in out and re.findall(r"^\* (\d+)", out, re.M) == ["6"],
              "chat: /resume 2 goes on with the older thread (system + 4 + line)", out + err)
         rc, out, err = spark("chat", stdin="/resume\n:q\n", extra={"SPARK_HISTORY": "off"})
         t.ok(rc == 0 and "spark: history is off" in err, "chat: /resume with history off says so", out + err)
@@ -1023,18 +1047,27 @@ def main():
 
         # /clear piped: a silent no-op -- no escapes on stdout, the thread lives
         rc, out, err = spark("chat", stdin="count\n/clear\ncount\n")
-        answers = [int(n) for n in re.findall(r"chat> \* (\d+)", out)]
+        answers = [int(n) for n in re.findall(r"^\* (\d+)", out, re.M)]
         t.ok(rc == 0 and "\033[" not in out and len(answers) == 2 and answers[1] == answers[0] + 2,
              "chat: /clear piped prints no escapes and the thread goes on", repr(out))
         spark("history", "clear")
 
         # wrap at 80 columns when piped: a long canned answer breaks into
-        # short lines (the leading `chat> ` of the first one is not part of
-        # the wrap and is stripped before measuring)
+        # short lines
         rc, out, _ = spark("chat", stdin="wraptest\n:q\n")
-        lines = [l[len("chat> "):] if l.startswith("chat> ") else l for l in out.splitlines()]
+        lines = out.splitlines()
         t.ok(rc == 0 and all(len(l) <= 79 for l in lines), "chat: wraps at 80 columns when piped", out)
         t.ok(len([l for l in lines if l.strip()]) > 2, "chat: the long answer actually wrapped onto several lines", out)
+        spark("history", "clear")
+
+        # status's last: the reply's first line of words, never a fence,
+        # cut at a word near 70 characters
+        spark("chat", "fencetest")
+        rc, out, _ = spark("status")
+        _body = [l.strip() for l in out.splitlines() if "du -sh" in l]
+        t.ok(rc == 0 and "```" not in out and len(_body) == 1 and _body[0].endswith(" word...")
+             and len(_body[0].split(" ", 1)[1]) <= 70,
+             "status: last is the reply's first line of words, no fence, cut at a word", out)
         spark("history", "clear")
 
         # SPARK_HISTORY=off: no chat-history file (piped stdin is never a
@@ -1068,7 +1101,7 @@ def main():
         t.ok(rc == 1 and "not a text file" in err, "a NUL byte -> not a text file", err)
         spark("history", "clear")
         rc, out, err = spark("chat", stdin="@nope.txt x\ncount\n", cwd=work)
-        t.ok(rc == 0 and "no such file" in err and re.findall(r"chat> \* (\d+)", out) == ["2"], "the REPL refuses a bad @FILE and goes on", out + err)
+        t.ok(rc == 0 and "no such file" in err and re.findall(r"^\* (\d+)", out, re.M) == ["2"], "the REPL refuses a bad @FILE and goes on", out + err)
         spark("history", "clear")
 
         # soul: built-in until edited; the editor's file is private
@@ -1225,6 +1258,19 @@ def main():
         an.write("1. \"said 'hum' and\" is dry\n2. \"HE SAID\" shouts\n3. \"and left\" runs on\n4. \"He sad\" typo\n5. \"was\" -> \"is\" tense\n")
         an.close()
         t.ok((an.quoted, an.missed) == (5, 2), "anchors: quote marks, case and line breaks fold; a typo and a misquote do not; a proposal is skipped", str((an.quoted, an.missed)))
+        # a keeping gate (ask, read, watch) writes lines for a reader or a
+        # pipe: the model's trailing spaces (a Markdown hard break) go;
+        # Anchors keeps the editor's bytes
+        _gs = io.StringIO()
+        _g = textmod.Gate(_gs, "one two\n", keep=lambda line, verdict, misses: True)
+        _g.write("first line  \nsecond\t \nlast  ")
+        _g.close()
+        _as = io.StringIO()
+        _a = textmod.Anchors(_as, "one two\n")
+        _a.write("first line  \n")
+        _a.close()
+        t.ok(_gs.getvalue() == "first line\nsecond\nlast\n" and _as.getvalue() == "first line  \n",
+             "Gate: a kept line ends without trailing spaces; Anchors keeps its bytes", repr((_gs.getvalue(), _as.getvalue())))
         # the floor: a span counts as grounding evidence only when it is
         # substantial -- two words or twelve chars after fold, not all stop
         # words. Quoting "the" against any English text proves nothing.
@@ -2874,8 +2920,11 @@ def main():
         rc, out, _ = spark("model", "list", extra=marks)
         t.ok(rc == 0 and re.search(r"^  \*\s+qwen3-1-7b ", out, re.M) and re.search(r"^  \+\s+qwen3-4b ", out, re.M),
              "spark model list marks the spark pick * and the ember pick +", out)
-        t.ok(re.search(r"^     gemma3-12b .* Gemma-Term", out, re.M), "spark model list shows a row's license, first word", out)
-        t.ok(re.search(r"^  \*\s+qwen3-1-7b .* Apache-2.0 line ", out, re.M), "a tested row says line", out)
+        t.ok(re.search(r"^     gemma3-12b .* Gemma-Terms ", out, re.M) and re.search(r"^     llama3-2-1b .* Llama-3\.2 ", out, re.M)
+             and "Llama-3.2- " not in out and "Gemma-Term " not in out,
+             "spark model list: a license's first word in whole parts, never cut mid-part", out)
+        t.ok(all(len(ln) <= 80 for ln in out.splitlines()[1:]), "spark model list: the sized license column keeps 80 columns", out)
+        t.ok(re.search(r"^  \*\s+qwen3-1-7b .* Apache-2\.0 +line ", out, re.M), "a tested row says line", out)
         t.ok(re.search(r"^     qwen2-5-coder-7b .* Apache-2.0      ", out, re.M), "an untested row has no line mark", out)
         t.ok("u = yours" in out and "auto picks among the rows tested on the line" in out, "the legend names the mark and the auto rule", out)
         t.ok("community" not in out and "embers" not in out and "curated" not in out, "one list: no list words", out)
@@ -4331,7 +4380,7 @@ print("restart", engine.restart_line("serve"), "|", engine.restart_line("check")
         _w = _wrap("with **a long bold phrase that must wrap** cleanly at forty\n", True, width=40)
         t.ok(_w == "with \x1b[1ma long bold phrase that must wrap\x1b[22m\ncleanly at forty\n\n", "Wrap at a tty: the width counts glyphs, never escapes (38 visible fit in 40)", repr(_w))
         # every piped path is byte-identical with the vars set: no escape
-        # reaches a pipe, the chat prompt stays `chat> `, do's marks stay
+        # reaches a pipe, piped chat prints no prompt, do's marks stay
         # bare; SPARK_HINT_ROW=1 with no controlling terminal (a new
         # session) still answers, silently
         _col = {"SPARK_ACCENT_SGR": "1;94", "SPARK_MUTED_SGR": "90", "SPARK_WARN_SGR": "1;31"}
@@ -4339,8 +4388,8 @@ print("restart", engine.restart_line("serve"), "|", engine.restart_line("check")
         rc, out, err = spark("line", stdin="? files bigger than 1G", extra=_col)
         t.ok(rc == 0 and out == _plain and "\033[" not in out + err, "line piped with the vars set: byte-identical", repr(out + err))
         rc, out, err = spark("chat", stdin="count\n:q\n", extra=_col)
-        t.ok(rc == 0 and "\033[" not in out + err and "\001" not in out and "\nchat> * " in out,
-             "chat piped with the vars set: `chat> ` and the mark stay plain", repr(out + err))
+        t.ok(rc == 0 and "\033[" not in out + err and "\001" not in out and out.startswith("* "),
+             "chat piped with the vars set: no prompt, and the mark stays plain", repr(out + err))
         # a reply the cap ended says so on the screen, not on the thread
         rc, out, err = spark("chat", "capped")
         t.ok(rc == 0 and out.startswith("* Half an answer\n! cut at the reply's length -- say: go on\n") and STATE.get("last_max_tokens") == 1200,

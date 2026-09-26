@@ -816,7 +816,11 @@ class Gate:
         if line.strip():
             self.spoke = True
         if self.keep is not None:
-            if not line.strip():
+            # a line for a reader or a pipe (ask, read, watch): the
+            # model's trailing spaces (a Markdown hard break) go; Anchors
+            # (keep=None) keeps the editor's bytes
+            line = line.rstrip()
+            if not line:
                 return                      # a blank line is not a unit
             verdict, misses = self.ground.verdict(line)
             if not self.keep(line, verdict, misses):

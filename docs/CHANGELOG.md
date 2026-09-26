@@ -1,5 +1,27 @@
 # Changelog
 
+## v1.52
+
+Six small things the v1.51 tour found, each fixed.
+
+- A script, a cron job and `ssh HOST 'spark ...'` name
+  `~/.local/bin/spark` in full. A stock `~/.bashrc` returns before
+  spark's hook in a shell that is not interactive. INSTALL section 3
+  and the cheatsheet say so.
+- `spark chat` from a pipe prints the replies alone. The intro line
+  and the `chat> ` prompt are for a terminal.
+- A line from `spark ask`, `spark read` or `spark watch` no longer
+  ends in spaces. A model's Markdown line break stays out of a pipe.
+- The `last` row of `spark status` is the reply's first line of
+  words, cut at a word near 70 characters. A code fence never shows
+  there. `spark last` keeps the whole reply.
+- The license column of `spark model list` is as wide as the table
+  allows within 80 columns. A long license keeps whole parts, such as
+  `Llama-3.2` and `Gemma-Terms`.
+- `spark user`, `spark status` and `spark history` count the same
+  threads: the ones that hold a turn. A file from a failed first turn
+  no longer counts. `spark history` says `newest 5 of N` past 5.
+
 ## v1.51
 
 Void on a real machine. What the first install found.
