@@ -115,6 +115,13 @@ another machine of yours (`spark client URL`). What each verb sends:
 
 - `line` (the prompt line): the line you typed, with the shell and OS
   name, and the directory's path. Never the directory's contents.
+- `line`, with the question: the programs and apps on this machine that
+  match it, with the lines of their manual or help that match, 600
+  characters at most. When this machine is a client, they come from its
+  own manuals and go to the other machine.
+- `line`, after a command spark found wrong: the lines of that
+  command's manual about it, 600 characters at most, sent once more with
+  the question.
 - `chat`: your soul, your remembered facts and the thread's earlier
   turns. A conversation sends no path.
 - `do`: each step's output, the last 4 kB, and the directory's path.
