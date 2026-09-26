@@ -1,7 +1,7 @@
 # The tour
 
 spark is installed, `spark check` says every row is ok, and the prompt
-line answers. This is the fun part: 12 small things to try, in 4 acts.
+line answers. This is the fun part: 13 small things to try, in 4 acts.
 Each one is a habit worth keeping.
 
 This document is not tied to a spark release. It is kept true as
@@ -20,6 +20,16 @@ Ask the shell itself. Type:
 The command lands in your line, with a hint above it. `Enter` runs it.
 A `!` in the hint means read it first. A recursive `rm` says how many
 files and bytes it clears, before you commit to it, not after.
+
+Ask about this machine. On Linux, ask for a service. On a Mac, ask for
+an app:
+
+    ? restart the ssh service
+    ? open report.pdf
+
+The answer is checked against this machine's own manuals and apps, so
+the command is one this machine has. When a flag is not in its manual,
+the hint says so before you press `Enter`.
 
 Break something on purpose. Run a command with a typo, `sl` or `git
 pushh`, then press `Esc s` on the empty line. The failed command is

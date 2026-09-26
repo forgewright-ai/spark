@@ -440,8 +440,8 @@ and may change freely.
      SPARK_NGL SPARK_CTX SPARK_FLASH_ATTN SPARK_KV SPARK_THREADS
      SPARK_EXTRA_ARGS SPARK_MEM_NEEDED_GB SPARK_API_KEY_FILE
      SPARK_TIMEOUT SPARK_MAX_TOKENS SPARK_REVEAL SPARK_HISTORY
-     SPARK_MEMORY SPARK_SERVICE SPARK_FORGE SPARK_FORGE_HOST
-     SPARK_FORGE_PORT SPARK_FORGE_TOKEN_FILE`. `SPARK_REVEAL_CPS` is
+     SPARK_MEMORY SPARK_KNOWLEDGE SPARK_SERVICE SPARK_FORGE
+     SPARK_FORGE_HOST SPARK_FORGE_PORT SPARK_FORGE_TOKEN_FILE`. `SPARK_REVEAL_CPS` is
      optional: the reveal pace in characters a second (`spark reveal`).
      `SPARK_PERSONA_EXTRA` is still read as the soul's fallback, and the
      `soul` row warns while it is set.
@@ -1533,7 +1533,7 @@ sh tests/get_test.sh            # the one-liner: clone, pull, refusals, the hand
 sh tests/update_test.sh         # spark update: pull, move to a signed tag, unsigned and dirty refused, --dry-run
 ```
 
-`spark check` has 40 rows today, by category `11 SOFTWARE, 20
+`spark check` has 41 rows today, by category `11 SOFTWARE, 21
 CAPABILITY, 9 NONFUNCTIONAL` (`grep -c '^@row' lib/spark/check.py`
 counts them). `--selftest` runs 6 passes. The first two prove every
 fixture-testable row flips between a good and a bad fixture. The third
