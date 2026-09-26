@@ -285,7 +285,10 @@ LINE_SCHEMA = {
 }
 
 MODE_LINE = (
-    "The user typed a question at the shell prompt. If it asks for something a shell command can do, "
+    "The user typed a question at the shell prompt. A question about spark itself -- its model, chat "
+    "model, palette, font, engine, page, users, history, memory, speed or version -- is kind=cmd with "
+    "one of spark's own commands listed above; never say spark cannot do it. "
+    "If it asks for something a shell command can do, "
     "reply kind=cmd. Set danger=true when the command deletes, overwrites, kills, reboots, or changes "
     "permissions or history. Put ONE command line in `command` (no comments, no explanation inside it, "
     "no `sudo` unless unavoidable) and a `hint` of at most 70 characters saying what it does. If the "
@@ -739,7 +742,11 @@ def missing_word(command):
     while words and words[0] in ("sudo", "env", "nohup"):
         words = words[1:]
     w = words[0] if words else ""
-    if not w or "=" in w or "/" in w or w in SH_BUILTINS or shutil.which(w):
+    # spark's own words are here by definition -- this very process is
+    # spark -- even where ~/.local/bin is not on PATH (a plain ssh HOST
+    # '...', a script): `spark model list` was once told "spark: not on
+    # this machine"
+    if not w or "=" in w or "/" in w or w in SH_BUILTINS or w in ("spark", "explain") or shutil.which(w):
         return ""
     return w
 

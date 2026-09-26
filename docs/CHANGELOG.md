@@ -2,8 +2,10 @@
 
 ## v1.52
 
-The prompt line is faster: the command lands first. Also a way to
-measure it, and six small things the v1.51 tour found.
+The prompt line is faster: the command lands first. On the box's
+qwen3-8b the command is ready in 3.4 s, where the whole answer took 6.2
+s before. Also a way to measure it, and six small things the v1.51
+tour found.
 
 - The prompt line streams. The command lands in your line the moment
   it is complete, and the hint fills the row above it. A command that
@@ -15,6 +17,11 @@ measure it, and six small things the v1.51 tour found.
   push its prompt out. A second question starts warm.
 - A command from the model that carries a control character is refused
   whole. Before, only some were cleaned out.
+- The prompt line's brief says a question about spark itself gets one
+  of spark's own commands. On the box's audition, spark-core answers
+  went from 40 to 51 in 100 on qwen3-8b and from 29 to 51 on qwen3-4b.
+- `spark` and `explain` are never "not on this machine" to the prompt
+  line, even where `~/.local/bin` is not on PATH.
 - `tests/line_audition.py` grades the prompt line per OS and on spark's
   own verbs against a live model: 141 cases for Debian, Arch, Void,
   macOS and spark itself. Each OS's `--help` output and spark's tree

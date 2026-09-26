@@ -1681,6 +1681,16 @@ def main():
         from spark import text as _txt
         t.ok(_txt.unstrike("N\bNA\bAM\bME\bE _\bs_\bc_\bp") == "NAME scp" and _txt.scrub("B\bBold") == "Bold",
              "unstrike and scrub keep the letter of a bold or an underline", _txt.unstrike("N\bN"))
+        # spark's own words are never "not on this machine", PATH or not
+        from spark import persona as _pmw
+        _path = os.environ.get("PATH", "")
+        try:
+            os.environ["PATH"] = "/nonexistent"
+            t.ok(_pmw.missing_word("spark model list") == "" and _pmw.missing_word("explain") == ""
+                 and _pmw.missing_word("frobnicate --x") == "frobnicate",
+                 "missing_word: spark and explain are always here; an unknown head is named", "")
+        finally:
+            os.environ["PATH"] = _path
         # the prompt-line audition's grader (tests/line_audition.py) holds its
         # own rules against canned answers and the tree; no model needed
         _la = subprocess.run([sys.executable, os.path.join(REPO, "tests", "line_audition.py"), "selftest"],
