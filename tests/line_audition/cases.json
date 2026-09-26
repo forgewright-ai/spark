@@ -101,6 +101,9 @@
    "install": [
     "man-db",
     "man-pages",
+    "pacman",
+    "coreutils",
+    "bash",
     "sudo",
     "curl",
     "wget",

@@ -834,27 +834,6 @@ def make_entry(d):
     return _IN.Entry(*(fields.get(k) for k in _IN.Entry._fields))
 
 
-def build_index(entries, words):
-    """index.json's shape over {name: entry dict}: names sorted, each
-    entry's words weighted name x3, what x2, synopsis and lines x1 (the
-    plan's BM25 fields), len the weighted length, post term -> "i:tf ..."."""
-    names = sorted(entries)
-    post, lens = {}, []
-    for i, n in enumerate(names):
-        e, tf = entries[n], {}
-        for text, weight in ((n, 3), (e.get("what", ""), 2),
-                             (" ".join(e.get("synopsis", ())) + " " +
-                              " ".join(" ".join(x) for x in e.get("lines", ())), 1)):
-            for w in words(text):
-                tf[w] = tf.get(w, 0) + weight
-        lens.append(sum(tf.values()))
-        for w in sorted(tf):
-            post.setdefault(w, []).append("%d:%d" % (i, tf[w]))
-    avg = round(float(sum(lens)) / len(lens), 2) if lens else 0.0
-    return {"v": 1, "names": names, "len": lens, "avg": avg,
-            "post": dict((w, " ".join(p)) for w, p in post.items())}
-
-
 def tool_entry(name, t, os_name):
     """One snapshot tool -> an entry dict. A snapshot from before the
     store fields reads them from its `help` text instead."""
@@ -886,38 +865,38 @@ def _columns(text):
     return out
 
 
-def spark_entries(tree, repo=REPO):
-    """spark's own verbs as entries ("spark quiet"), from `spark help` and
-    the cheatsheet's lines: what the store's spark source holds on a real
-    machine, near enough for recall. The words TAB completes ride along."""
-    env = dict(os.environ, PAGER="cat", NO_COLOR="1")
+_SPARK = {}
+
+
+def spark_entries():
+    """spark's own verbs as a machine's store holds them: every verb
+    completion lists (but help), each read from its own `spark VERB -h`
+    run the way intake runs it (intake.spark_help: an empty home, 5
+    seconds) and parsed by the same intake.spark_entry -- so recall
+    measures the entries that ship. Once per process; {} without intake."""
+    if _SPARK or not _IN or not hasattr(_IN, "spark_entry"):
+        return dict(_SPARK)
+    from concurrent.futures import ThreadPoolExecutor
+    subs, verbs = _IN.spark_words()
+    slots = _IN.spark_slots()
+    todo = [None] + [v for v in verbs if _IN.NAME_SHAPE.match(v) and v != "help"]
+    scratch = tempfile.mkdtemp(prefix="line-audition-spark-")
     try:
-        helptext = subprocess.run([sys.executable, SPARK, "help"], capture_output=True, text=True,
-                                  env=env, timeout=30, stdin=subprocess.DEVNULL).stdout
-    except (OSError, subprocess.SubprocessError):
-        helptext = ""
-    try:
-        sheet = open(os.path.join(repo, "docs", "CHEATSHEET.txt"), encoding="utf-8").read()
-    except OSError:
-        sheet = ""
-    found = {}
-    for cmd, words in _columns(clean(helptext)) + _columns(clean(sheet)):
-        m = re.search(r"\bspark ([a-z][\w-]*)", cmd)
-        if m and m.group(1) in tree["verbs"]:
-            found.setdefault(m.group(1), []).append([_short(cmd, 48), first_sentence(words)])
-    out = {}
-    for verb in sorted(tree["verbs"] - {"--version", "help"}):
-        rows = found.get(verb, [])
-        said = sorted(tree["words"].get(verb, ()))
-        name = "spark " + verb
-        out[name] = {"name": name, "kind": "spark", "source": "tree",
-                     "what": next((w for _c, w in rows if w), ""),
-                     "synopsis": list(dict.fromkeys(c for c, _w in rows))[:SYNOPSIS_MAX] or [name],
-                     "lines": (rows + [[w, ""] for w in said])[:LINES_MAX],
-                     "options": options_of(" ".join(c for c, _w in rows) + " " + " ".join(said)),
-                     "origin": "spark", "stamp": None}
-        out[name]["options"]["words"] = said
-    return out
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            texts = list(pool.map(lambda v: _IN.spark_help(v, scratch), todo))
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+    for verb, text in zip(todo, texts):
+        if not text:
+            continue
+        name, what, synopsis, opts, lines = _IN.spark_entry(verb, clean(text), subs, slots)
+        _SPARK[name] = {"name": name, "kind": "spark", "source": "tree", "what": what,
+                        "synopsis": [l for l in synopsis.split("\n") if l],
+                        "lines": list(lines),
+                        "options": {"long": list(opts.long), "short": "".join(x.lstrip("-") for x in opts.short),
+                                    "words": list(opts.words)},
+                        "origin": "spark", "stamp": None}
+    return dict(_SPARK)
 
 
 class SnapshotStore(_Base):
@@ -926,7 +905,7 @@ class SnapshotStore(_Base):
     index is built in memory. A file SnapshotStore.save wrote loads as it
     is, with no build: what SPARK_KNOWLEDGE_SNAPSHOT names for a run."""
 
-    def __init__(self, path=None, spark=True, snap=None, tree=None):
+    def __init__(self, path=None, spark=True, snap=None):
         doc = snap
         if doc is None:
             with open(path, encoding="utf-8") as f:
@@ -935,12 +914,13 @@ class SnapshotStore(_Base):
         if "line_audition_store" in doc:
             self._entries, self._index, self.tokenizer = doc["entries"], doc["index"], doc.get("tokenizer", "?")
             return
-        words, self.tokenizer = tokenizer()
+        _words, self.tokenizer = tokenizer()
         self._entries = dict((n, tool_entry(n, t, self.os)) for n, t in doc.get("tools", {}).items()
                              if t.get("exists"))
         if spark:
-            self._entries.update(spark_entries(tree or spark_tree()))
-        self._index = build_index(self._entries, words)
+            self._entries.update(spark_entries())
+        # the store's own index, built by the same code a machine's is
+        self._index = _IN.index_of((n, _IN.entry_terms(e)) for n, e in self._entries.items()) if _IN else None
 
     def names(self):
         return sorted(self._entries)
@@ -1148,7 +1128,7 @@ def cmd_run(args):
         if snap:
             # the store the line grounds and judges in: this OS's, built
             # once here so no turn pays for the build
-            env["SPARK_KNOWLEDGE_SNAPSHOT"] = SnapshotStore(snap=snap, tree=tree).save(
+            env["SPARK_KNOWLEDGE_SNAPSHOT"] = SnapshotStore(snap=snap).save(
                 os.path.join(scratch, "store-%s.json" % os_name))
         ok, prefix, why = check_prefix(os_name, data, env)
         if not ok:
@@ -1417,12 +1397,12 @@ def cmd_recall(args):
         from spark import grounding
     except ImportError:
         die("recall: no spark.grounding in this tree")
-    data, tree = load_cases(), spark_tree()
+    data = load_cases()
     for os_name in oses:
         snap = load_snapshot(os_name)
         if snap is None:
             die("recall: no help-%s.json" % os_name)
-        store = SnapshotStore(snap=snap, tree=tree)
+        store = SnapshotStore(snap=snap)
         probe = next((n for n in ("ls", "grep", "cat") if n in store.names()), store.names()[0])
         if not grounding.search(probe, k=1, store=store):
             print("recall: grounding.search is still a stub (no hit for %r, a name the store holds)" % probe)
@@ -1602,14 +1582,15 @@ def cmd_selftest(_args):
           "SnapshotStore: an entry carries what, options and lines")
     check(st.entry("xbps-query").lines[0][0] == "-f, --files PKG" if _IN else True,
           "SnapshotStore: an older snapshot's entry reads its help text")
-    check(set(ix) == {"v", "names", "len", "avg", "post"} and ix["names"] == st.names()
-          and all(re.match(r"^\d+:\d+( \d+:\d+)*$", p) for p in ix["post"].values()),
-          "SnapshotStore: index.json's shape, names sorted, postings i:tf")
+    check(set(ix) == {"v", "names", "post"} and ix["v"] == _IN.INDEX_V and ix["names"] == st.names()
+          and all(re.match(r"^\d+:\d+(\.\d+)?( \d+:\d+(\.\d+)?)*$", p) for p in ix["post"].values()),
+          "SnapshotStore: intake.index_of's shape, names sorted, postings i:tf")
     words, _how = tokenizer()
     du_terms = dict(x.split(":") for x in ix["post"].get(words("summarize")[0], "").split())
-    check(du_terms.get("0") == "1" and "1" not in du_terms, "SnapshotStore: an option line's word is indexed once")
+    check("0" in du_terms and "1" not in du_terms, "SnapshotStore: an option line's word is du's alone")
     name_tf = dict(x.split(":") for x in ix["post"].get(words("du")[0], "").split())
-    check(int(name_tf.get("0", 0)) >= 3, "SnapshotStore: a name weighs 3")
+    check(float(name_tf.get("0", 0)) > float(du_terms.get("0", 0)) > 0,
+          "SnapshotStore: a name weighs more than an option line's word")
     tmp = tempfile.mkdtemp(prefix="line-audition-self-")
     try:
         back = SnapshotStore(st.save(os.path.join(tmp, "store.json")))
@@ -1627,9 +1608,8 @@ def cmd_selftest(_args):
             posts = ix["post"].get(t, "").split()
             idf = math.log(1 + (n - len(posts) + 0.5) / (len(posts) + 0.5))
             for p in posts:
-                i, tf = (int(x) for x in p.split(":"))
-                d = tf * 2.2 / (tf + 1.2 * (0.25 + 0.75 * ix["len"][i] / ix["avg"]))
-                scores[i] = scores.get(i, 0) + idf * d
+                i, tf = int(p.split(":")[0]), float(p.split(":")[1])
+                scores[i] = scores.get(i, 0) + idf * tf * 3.0 / (tf + 2.0)
         return [(ix["names"][i], s) for i, s in sorted(scores.items(), key=lambda x: -x[1])[:k]]
     todo = [("tools", {"id": "a", "words": "show package files", "head_any": ["xbps-query"], "topic": "packages"}),
             ("tools", {"id": "b", "words": "total space of a folder", "head_any": ["du"], "topic": "disks"}),
