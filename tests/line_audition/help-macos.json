@@ -441,335 +441,8 @@
    ]
   },
   "bat": {
-   "exists": true,
-   "help": "A cat(1) clone with syntax highlighting and Git integration.\n\nUsage: bat [OPTIONS] [FILE]...\n       bat <COMMAND>\n\nArguments:\n  [FILE]...\n          File(s) to print / concatenate. Use a dash ('-') or no argument at all to read from\n          standard input.\n\nOptions:\n  -A, --show-all\n          Show non-printable characters like space, tab or newline. This option can also be used to\n          print binary files. Use '--tabs' to control the width of the tab-placeholders.\n\n      --nonprintable-notation <notation>\n          Set notation for non-printable characters.\n          \n          Possible values:\n            * unicode (\u2407, \u240a, \u2400, ..)\n            * caret   (^G, ^J, ^@, ..)\n\n      --binary <behavior>\n          How to treat binary content. (default: no-printing)\n          \n          Possible values:\n            * no-printing: do not print any binary content\n            * as-text: treat binary content as normal text\n\n  -p, --plain...\n          Only show plain style, no decorations. This is an alias for '--style=plain'. When '-p' is\n          used twice ('-pp'), it also disables automatic paging (alias for '--style=plain\n          --paging=never').\n\n  -l, --language <language>\n          Explicitly set the language for syntax highlighting. The language can be specified as a\n          name (like 'C++' or 'LaTeX') or possible file extension (like 'cpp', 'hpp' or 'md'). Use\n          '--list-languages' to show all supported language names and file extensions.\n\n  -H, --highlight-line <N:M>\n          Highlight the specified line ranges with a different background color For example:\n            '--highlight-line 40' highlights line 40\n            '--highlight-line 30:40' highlights lines 30 to 40\n            '--highlight-line :40' highlights lines 1 to 40\n            '--highlight-line 40:' highlights lines 40 to the end of the file\n            '--highlight-line 30:+10' highlights lines 30 to 40\n\n      --file-name <name>\n          Specify the name to display for a file. Useful when piping data to bat from STDIN when bat\n          does not otherwise know the filename. Note that the provided file name is also used for\n          syntax detection.\n\n  -d, --diff\n          Only show lines that have been added/removed/modified with respect to the Git index. Use\n          --diff-context=N to control how much context you want to see.\n\n      --diff-context <N>\n          Include N lines of context around added/removed/modified lines when using '--diff'.\n\n      --tabs <T>\n          Set the tab width to T spaces. Use a width of 0 to pass tabs through directly\n\n      --wrap <mode>\n          Specify the text-wrapping mode (*auto*, never, character). The '--terminal-width' option\n          can be used in addition to control the output width.\n\n  -S, --chop-long-lines\n          Truncate all lines longer than screen width. Alias for '--wrap=never'.\n\n      --terminal-width <width>\n          Explicitly set the width of the terminal instead of determining it automatically. If\n          prefixed with '+' or '-', the value will be treated as an offset to the actual terminal\n          width. See also: '--wrap'.\n\n  -n, --number\n          Only show line numbers, no other decorations. This is an alias for '--style=numbers'\n\n      --color <when>\n          Specify when to use colored output. The automatic mode only enables colors if an\n          interactive terminal is detected - colors are automatically disabled if the output goes to\n          a pipe.\n          Possible values: *auto*, never, always.\n\n      --italic-text <when>\n          Specify when to use ANSI sequences for italic text in the output. Possible values: always,\n          *never*.\n\n      --decorations <when>\n          Specify when to use the decorations that have been specified via '--style'. The automatic\n          mode only enables decorations if an interactive terminal is detected. The always mode will\n          show decorations even when piping output. Possible values: *auto*, never, always.\n\n  -f, --force-colorization\n          Alias for '--decorations=always --color=always'. This is useful ",
-   "lines": [
-    [
-     "-A, --show-all",
-     "Show non-printable characters like space, tab or newline."
-    ],
-    [
-     "--nonprintable-notation <notation>",
-     "Specify how to display non-printable characters when using --show-all."
-    ],
-    [
-     "--binary <behavior>",
-     "How to treat binary content."
-    ],
-    [
-     "--completion <SHELL>",
-     "Show shell completion for a certain shell."
-    ],
-    [
-     "-p, --plain",
-     "Only show plain style, no decorations."
-    ],
-    [
-     "--paging=never').",
-     ""
-    ],
-    [
-     "-l, --language <language>",
-     "Explicitly set the language for syntax highlighting."
-    ],
-    [
-     "-H, --highlight-line <N:M>...",
-     "Highlight the specified line ranges with a different background color."
-    ],
-    [
-     "--highlight-line 40",
-     "highlights line 40"
-    ],
-    [
-     "--highlight-line 30:40",
-     "highlights lines 30 to 40"
-    ],
-    [
-     "--highlight-line :40",
-     "highlights lines 1 to 40"
-    ],
-    [
-     "--highlight-line 40:",
-     "highlights lines 40 to the end of the file"
-    ],
-    [
-     "--highlight-line 30:+10",
-     "highlights lines 30 to 40"
-    ],
-    [
-     "--file-name <name>...",
-     "Specify the name to display for a file."
-    ],
-    [
-     "-d, --diff",
-     "Only show lines that have been added/removed/modified with respect to the Git index."
-    ],
-    [
-     "--diff-context <N>...",
-     "Include N lines of context around added/removed/modified lines when using '--diff'."
-    ],
-    [
-     "--tabs <T>",
-     "Set the tab width to T spaces."
-    ],
-    [
-     "--wrap <mode>",
-     "Specify the text-wrapping mode (*auto*, never, character)."
-    ],
-    [
-     "-S, --chop-long-lines",
-     "Truncate all lines longer than screen width."
-    ],
-    [
-     "--terminal-width <width>",
-     "Explicitly set the width of the terminal instead of determining it automatically."
-    ],
-    [
-     "-n, --number",
-     "Only show line numbers, no other decorations."
-    ],
-    [
-     "--color <when>",
-     "Specify when to use colored output."
-    ],
-    [
-     "--italic-text <when>",
-     "Specify when to use ANSI sequences for italic text in the output."
-    ],
-    [
-     "--decorations <when>",
-     "Specify when to use the decorations that have been specified via '--style'."
-    ],
-    [
-     "-f, --force-colorization",
-     "Alias for '--decorations=always --color=always'."
-    ],
-    [
-     "--paging <when>",
-     "Specify when to use the pager."
-    ],
-    [
-     "--pager <command>",
-     "Determine which pager is used."
-    ],
-    [
-     "-m, --map-syntax <glob-pattern:syntax-name>...",
-     "Map a glob pattern to an existing syntax name."
-    ],
-    [
-     "--ignored-suffix <ignored-suffix>",
-     "Ignore extension."
-    ],
-    [
-     "--theme <theme>",
-     "Set the theme for syntax highlighting."
-    ],
-    [
-     "--theme-dark <theme>",
-     "Sets the theme name for syntax highlighting used when the terminal uses a dark background."
-    ],
-    [
-     "--theme-light <theme>",
-     "Sets the theme name for syntax highlighting used when the terminal uses a light background."
-    ],
-    [
-     "--list-themes",
-     "Display a list of supported themes for syntax highlighting."
-    ],
-    [
-     "-s, --squeeze-blank",
-     "Squeeze consecutive empty lines into a single empty line."
-    ],
-    [
-     "--squeeze-limit <squeeze-limit>",
-     "Set the maximum number of consecutive empty lines to be printed."
-    ],
-    [
-     "--strip-ansi <when>",
-     "Specify when to strip ANSI escape sequences from the input."
-    ],
-    [
-     "--style <style-components>",
-     "Configure which elements (line numbers, file headers, grid borders, Git modifications, ..) to dis..."
-    ],
-    [
-     "-r, --line-range <N:M>...",
-     "Only print the specified range of lines for each file."
-    ],
-    [
-     "--line-range 30:40",
-     "prints lines 30 to 40"
-    ],
-    [
-     "--line-range :40",
-     "prints lines 1 to 40"
-    ],
-    [
-     "--line-range 40:",
-     "prints lines 40 to the end of the file"
-    ],
-    [
-     "--line-range 30:+10",
-     "prints lines 30 to 40"
-    ],
-    [
-     "-L, --list-languages",
-     "Display a list of supported languages for syntax highlighting."
-    ],
-    [
-     "-u, --unbuffered",
-     "This option exists for POSIX-compliance reasons ('u' is for 'unbuffered')."
-    ],
-    [
-     "--no-custom-assets",
-     "Do not load custom assets."
-    ],
-    [
-     "--config-dir",
-     "Show bat's configuration directory."
-    ],
-    [
-     "--cache-dir",
-     "Show bat's cache directory."
-    ],
-    [
-     "--diagnostic",
-     "Show diagnostic information for bug reports."
-    ],
-    [
-     "--acknowledgements",
-     "Show acknowledgements."
-    ],
-    [
-     "--set-terminal-title",
-     "Sets terminal title to filenames when using a pager."
-    ],
-    [
-     "-h, --help",
-     "Print this help message."
-    ],
-    [
-     "-V, --version",
-     "Show version information."
-    ],
-    [
-     "--clear`.",
-     ""
-    ],
-    [
-     "--build`.",
-     ""
-    ],
-    [
-     "--lessopen",
-     "Enable the $LESSOPEN preprocessor."
-    ],
-    [
-     "--no-lessopen",
-     "Disable the $LESSOPEN preprocessor if enabled (overrides --lessopen)"
-    ],
-    [
-     "-p, --plain...",
-     "Only show plain style, no decorations."
-    ],
-    [
-     "-H, --highlight-line <N:M>",
-     "Highlight the specified line ranges with a different background color For example: '--highlight-l..."
-    ],
-    [
-     "--file-name <name>",
-     "Specify the name to display for a file."
-    ],
-    [
-     "--diff-context=N to",
-     "control how much context you want to see."
-    ]
-   ],
-   "long": [
-    "--RAW-CONTROL-CHARS",
-    "--acknowledgements",
-    "--binary",
-    "--build",
-    "--cache-dir",
-    "--chop-long-lines",
-    "--clear",
-    "--color",
-    "--completion",
-    "--config-dir",
-    "--config-file",
-    "--decorations",
-    "--diagnostic",
-    "--diff",
-    "--diff-context",
-    "--file-name",
-    "--force-colorization",
-    "--generate-config-file",
-    "--help",
-    "--highlight-line",
-    "--ignored-suffix",
-    "--italic-text",
-    "--language",
-    "--lessopen",
-    "--line-range",
-    "--list-languages",
-    "--list-themes",
-    "--map-syntax",
-    "--no-config",
-    "--no-custom-assets",
-    "--no-init",
-    "--no-lessopen",
-    "--nonprintable-notation",
-    "--number",
-    "--pager",
-    "--paging",
-    "--plain",
-    "--quit-if-one-screen",
-    "--set-terminal-title",
-    "--show-all",
-    "--squeeze-blank",
-    "--squeeze-limit",
-    "--strip-ansi",
-    "--style",
-    "--tabs",
-    "--terminal-width",
-    "--theme",
-    "--theme-dark",
-    "--theme-light",
-    "--unbuffered",
-    "--version",
-    "--wrap"
-   ],
-   "man": true,
-   "path": "/opt/homebrew/bin/bat",
-   "short": "AFHLPRSVXdfhlmnprsu",
-   "synopsis": [
-    "bat [OPTIONS] [FILE]..."
-   ],
-   "what": "a cat(1) clone with syntax highlighting and Git integration.",
-   "words": [
-    "-A",
-    "-F",
-    "-H",
-    "-L",
-    "-P",
-    "-R",
-    "-RF",
-    "-S",
-    "-V",
-    "-X",
-    "-d",
-    "-f",
-    "-h",
-    "-l",
-    "-lvalue",
-    "-m",
-    "-n",
-    "-p",
-    "-pp",
-    "-r",
-    "-s",
-    "-u"
-   ]
+   "exists": false,
+   "path": ""
   },
   "batcat": {
    "exists": false,
@@ -1429,6 +1102,7 @@
     "-j",
     "-l",
     "-m",
+    "-march",
     "-n",
     "-p",
     "-q",
@@ -1441,96 +1115,8 @@
    ]
   },
   "btop": {
-   "exists": true,
-   "help": "btop [-c file] [-d] [-f filter] [-l] [-p id] [-t] [-u ms] [--force-utf] [--themes-dir dir]\n\n       btop [--default-config | {-h | --help} | {-V | --version}]",
-   "lines": [
-    [
-     "-c, --config file",
-     "Path to a config file."
-    ],
-    [
-     "-d, --debug",
-     "Start in debug mode with additional logs and metrics."
-    ],
-    [
-     "-f, --filter filter",
-     "Set an initial process filter."
-    ],
-    [
-     "--force-utf",
-     "Force start even if no UTF-8 locale was detected."
-    ],
-    [
-     "-l, --low-color",
-     "Disable true color, 256 colors only."
-    ],
-    [
-     "-p, --preset id",
-     "Start with a preset (0-9)."
-    ],
-    [
-     "-t, --tty",
-     "Force tty mode with ANSI graph symbols and 16 colors only."
-    ],
-    [
-     "--no-tty",
-     "Force disable tty mode."
-    ],
-    [
-     "--themes-dir dir",
-     "Path to a custom themes directory."
-    ],
-    [
-     "-u, --update ms",
-     "Set an initial update rate in milliseconds."
-    ],
-    [
-     "--default-config",
-     "Print default config to standard output."
-    ],
-    [
-     "-h, --help",
-     "Show summary of options."
-    ],
-    [
-     "-V, --version",
-     "Show version of program."
-    ]
-   ],
-   "long": [
-    "--config",
-    "--debug",
-    "--default-config",
-    "--filter",
-    "--force-utf",
-    "--help",
-    "--low-color",
-    "--no-tty",
-    "--preset",
-    "--themes-dir",
-    "--tty",
-    "--update",
-    "--version"
-   ],
-   "man": true,
-   "path": "/opt/homebrew/bin/btop",
-   "short": "Vcdfhlptu",
-   "synopsis": [
-    "btop [-c file] [-d] [-f filter] [-l] [-p id] [-t] [-u ms] [--force-utf] [--themes-dir dir]",
-    "btop [--default-config | {-h | --help} | {-V | --version}]"
-   ],
-   "what": "Resource monitor that shows usage and stats for processor, memory, disks, network, and processes.",
-   "words": [
-    "-V",
-    "-c",
-    "-d",
-    "-f",
-    "-h",
-    "-l",
-    "-p",
-    "-t",
-    "-u"
-   ]
+   "exists": false,
+   "path": ""
   },
   "caffeinate": {
    "exists": true,
@@ -2876,11 +2462,11 @@
    "long": [],
    "man": true,
    "path": "/usr/bin/defaults",
-   "short": "Habceginorstuv",
+   "short": "Hcegnorstu",
    "synopsis": [
-    "defaults [-currentHost | -host hostname] [-container container-identifier] [-verbose] read",
-    "[domain [key]]",
-    "defaults [-currentHost | -host hostname] [-container container-identifier] [-verbose] read-type"
+    "defaults [-currentHost | -host hostname] read [domain [key]]",
+    "defaults [-currentHost | -host hostname] read-type domain key",
+    "defaults [-currentHost | -host hostname] write domain { 'plist' | key 'value' }"
    ],
    "what": "access the macOS user defaults system",
    "words": [
@@ -2891,7 +2477,6 @@
     "-boole",
     "-boolea",
     "-boolean",
-    "-container",
     "-currentHost",
     "-data",
     "-date",
@@ -2906,8 +2491,7 @@
     "-integ",
     "-intege",
     "-integer",
-    "-string",
-    "-verbose"
+    "-string"
    ]
   },
   "df": {
@@ -3882,10 +3466,6 @@
    "help": "du: unrecognized option `--help'\nusage: du [-Aclnx] [-H | -L | -P] [-g | -h | -k | -m] [-a | -s | -d depth] [-B blocksize] [-I mask] [-t threshold] [file ...]",
    "lines": [
     [
-     "--libxo",
-     "Generate output via libxo(3) in a selection of different human and machine readable formats."
-    ],
-    [
      "-A",
      "Display the apparent size instead of the disk usage."
     ],
@@ -3972,20 +3552,18 @@
    ],
    "long": [
     "--help",
-    "--libxo",
     "--si"
    ],
    "man": true,
    "path": "/usr/bin/du",
    "short": "ABHILPacdghklmnrstx",
    "synopsis": [
-    "du [--libxo] [-Aclnx] [-H | -L | -P] [-g | -h | -k | -m] [-a | -s | -d depth] [-B blocksize]",
-    "[-I mask] [-t threshold] [file ...]"
+    "du [-Aclnx] [-H | -L | -P] [-g | -h | -k | -m] [-a | -s | -d depth] [-B blocksize] [-I mask]",
+    "[-t threshold] [file ...]"
    ],
    "what": "display disk usage statistics",
    "words": [
     "-A",
-    "-ABIPcdghlmnt",
     "-Aclnx",
     "-B",
     "-H",
@@ -3995,6 +3573,7 @@
     "-a",
     "-ah",
     "-c",
+    "-cdhP",
     "-ch",
     "-d",
     "-g",
@@ -4071,725 +3650,12 @@
    ]
   },
   "eza": {
-   "exists": true,
-   "help": "A modern replacement for ls\n\nUsage: eza [OPTIONS] [FILE]...\n\nMETA OPTIONS:\n      --stdin    read file names from stdin\n  -?, --help     Print help\n  -v, --version  Print help\n\nLAYOUT OPTIONS:\n  -1, --oneline          display one entry per line\n  -l, --long             display extended file metadata as a table\n  -G, --grid             display entries as a grid (default)\n  -x, --across           sort the grid across, rather than downwards\n  -R, --recurse          recurse into directories\n  -T, --tree             recurse into directories as a tree\n  -L, --level <DEPTH>    limit the depth of recursion\n      --code[=<MODE>]    summarise lines of code by language, recursing the tree or git repo\n      --follow-symlinks  drill down into symbolic links that point to directories\n  -w, --width <COLS>     set screen width in columns\n\nDISPLAY OPTIONS:\n  -F, --classify [<WHEN>]          display type indicator by file names [possible values: always, auto, never]\n  -X, --dereference                dereference symbolic links when displaying information\n      --absolute [<absolute>]      display entries with their absolute path [possible values: on, off, follow]\n      --color [<WHEN>]             When to use colours. [default: auto] [possible values: always, auto, never]\n      --color-scale [<FIELDS>...]  highlight value of FIELDS distinctly [possible values: all, age, size]\n      --color-scale-mode <MODE>    mode for --color-scale [default: gradient] [possible values: fixed, gradient]\n      --icons [<WHEN>]             when to display icons [possible values: always, auto, never]\n      --hyperlink [<WHEN>]         when to display entries as hyperlinks [possible values: always, auto, never]\n      --no-quotes                  don't quote file names with spaces\n      --short-nix                  abbreviate Nix store hashes in file names and paths\n\nFILTERING OPTIONS:\n  -a, --all...               show hidden files. Use this twice to also show the '.' and '..' directories\n  -A, --almost-all           equivalent to --all; included for compatibility with `ls -A`\n  -d, --treat-dirs-as-files  treat directories as files; don't list their contents\n  -D, --only-dirs            list only directories\n  -f, --only-files           list only files\n      --show-symlinks        explicitly show symbolic links (with --only-dirs and --only-files)\n      --no-symlinks          do not show symbolic links\n  -I, --ignore-glob <GLOBS>  glob patterns (pipe-separated) of files to ignore\n      --git-ignore           ignore files mentioned in '.gitignore'\n\nSORTING OPTIONS:\n      --group-directories-first  list directories before other files\n      --group-directories-last   list directories after other files\n  -s, --sort <FIELD>             which field to sort by [default: name] [possible values:\n                                   name, Name, .name, .Name, ext, ext, created,\n                                   date, age, accessed, changed,\n                                   size, inode, type, none]\n  -r, --reverse                  reverse the sort order\n\nLONG VIEW OPTIONS:\n  -h, --header               add a header row to each column\n  -i, --inode                list each file's inode number\n      --loc[=<MODE>]         add lines-of-code and language columns [modes: lines, percent, both]\n  -o, --octal-permissions    list each file's permission in octal format\n  -H, --links                list each file's number of hard links\n  -b, --binary               show file sizes with binary prefixes\n  -B, --bytes                show file sizes in bytes, without any prefixes\n      --total-size           show the size of a directory as the one of its content (unix only)\n  -S, --blocksize            list size of allocated file system blocks\n  -g, --group                list each file's group\n      --smart-group          only show group if it has a different name from owner\n  -n, --numeric              show user and group as their numeric IDs\n  -t, --time <FIELD>         which timestamp field to show [possible values:\n                               mod|modified, acc|accessed, ch|changed,",
-   "lines": [
-    [
-     "--help Show",
-     "list of command-line options."
-    ],
-    [
-     "-v, --version",
-     "Show version of eza."
-    ],
-    [
-     "-1, --oneline",
-     "Display one entry per line."
-    ],
-    [
-     "--absolute=WHEN",
-     "Display entries with their absolute path."
-    ],
-    [
-     "-F, --classify=WHEN",
-     "Display file kind indicators next to file names."
-    ],
-    [
-     "-G, --grid",
-     "Display entries as a grid (default)."
-    ],
-    [
-     "-l, --long",
-     "Display extended file metadata as a table."
-    ],
-    [
-     "-R, --recurse",
-     "Recurse into directories."
-    ],
-    [
-     "-T, --tree",
-     "Recurse into directories as a tree."
-    ],
-    [
-     "--code[=MODE]",
-     "Print a lines-of-code summary by language instead of listing files, in the spirit of tools like t..."
-    ],
-    [
-     "--follow-symlinks",
-     "Drill down into symbolic links that point to directories."
-    ],
-    [
-     "-X, --dereference",
-     "Dereference symbolic links when displaying information."
-    ],
-    [
-     "-x, --across",
-     "Sort the grid across, rather than downwards."
-    ],
-    [
-     "--color=WHEN, --colour=WHEN",
-     "When to use terminal colours (using ANSI escape code to colorize the output)."
-    ],
-    [
-     "--color-scale, --colour-scale",
-     "highlight levels of field distinctly."
-    ],
-    [
-     "--icons=WHEN",
-     "Display icons next to file names."
-    ],
-    [
-     "--no-quotes",
-     "Don't quote file names with spaces."
-    ],
-    [
-     "--short-nix",
-     "Abbreviate Nix store hashes in file names and paths."
-    ],
-    [
-     "--hyperlink=WHEN",
-     "Display entries as hyperlinks"
-    ],
-    [
-     "-w, --width=COLS",
-     "Set screen width in columns."
-    ],
-    [
-     "-a, --all",
-     "Show hidden and \"dot\" files."
-    ],
-    [
-     "-A, --almost-all",
-     "Equivalent to -all; included for compatibility with ls -A."
-    ],
-    [
-     "-d, --treat-dirs-as-files",
-     "This flag, inherited from ls, changes how eza handles directory arguments."
-    ],
-    [
-     "-L, --level=DEPTH",
-     "Limit the depth of recursion."
-    ],
-    [
-     "-r, --reverse",
-     "Reverse the sort order."
-    ],
-    [
-     "-s, --sort=SORT_FIELD",
-     "Which field to sort by."
-    ],
-    [
-     "-I, --ignore-glob=GLOBS",
-     "Glob patterns, pipe-separated, of files to ignore."
-    ],
-    [
-     "--git-ignore [if",
-     "eza was built with git support] Do not list files that are ignored by Git."
-    ],
-    [
-     "--group-directories-first",
-     "List directories before other files."
-    ],
-    [
-     "--group-directories-last",
-     "List directories after other files."
-    ],
-    [
-     "-D, --only-dirs",
-     "List only directories, not files."
-    ],
-    [
-     "-f, --only-files",
-     "List only files, not directories."
-    ],
-    [
-     "--show-symlinks",
-     "Explicitly show symbolic links (when used with --only-files | --only-dirs)"
-    ],
-    [
-     "--no-symlinks",
-     "Do not show symbolic links"
-    ],
-    [
-     "-b, --binary",
-     "List file sizes with binary prefixes."
-    ],
-    [
-     "-B, --bytes",
-     "List file sizes in bytes, without any prefixes."
-    ],
-    [
-     "--changed",
-     "Use the changed timestamp field."
-    ],
-    [
-     "-g, --group",
-     "List each file's group."
-    ],
-    [
-     "--smart-group",
-     "Only show group if it has a different name from owner"
-    ],
-    [
-     "-h, --header",
-     "Add a header row to each column."
-    ],
-    [
-     "-H, --links",
-     "List each file's number of hard links."
-    ],
-    [
-     "-i, --inode",
-     "List each file's inode number."
-    ],
-    [
-     "--loc[=MODE]",
-     "Add a language column and a lines-of-code column to the long view."
-    ],
-    [
-     "-m, --modified",
-     "Use the modified timestamp field."
-    ],
-    [
-     "-M, --mounts",
-     "Show mount details (Linux and Mac only)"
-    ],
-    [
-     "-n, --numeric",
-     "List numeric user and group IDs."
-    ],
-    [
-     "-O, --flags",
-     "List file flags on Mac and BSD systems and file attributes on Windows systems."
-    ],
-    [
-     "-S, --blocksize",
-     "List each file's size of allocated file system blocks."
-    ],
-    [
-     "-t, --time=WORD",
-     "Which timestamp field to list."
-    ],
-    [
-     "--time-style=STYLE",
-     "How to format timestamps."
-    ],
-    [
-     "--total-size",
-     "Show recursive directory size (unix only)."
-    ],
-    [
-     "-u, --accessed",
-     "Use the accessed timestamp field."
-    ],
-    [
-     "-U, --created",
-     "Use the created timestamp field."
-    ],
-    [
-     "--no-permissions",
-     "Suppress the permissions field."
-    ],
-    [
-     "-o, --octal-permissions",
-     "List each file's permissions in octal format."
-    ],
-    [
-     "--no-filesize",
-     "Suppress the file size field."
-    ],
-    [
-     "--no-user",
-     "Suppress the user field."
-    ],
-    [
-     "--no-time",
-     "Suppress the time field."
-    ],
-    [
-     "--stdin",
-     "When you wish to pipe directories to eza/read from stdin."
-    ],
-    [
-     "-@, --extended",
-     "List each file's extended attributes and sizes."
-    ]
-   ],
-   "long": [
-    "--09-30",
-    "--absolute",
-    "--accessed",
-    "--across",
-    "--all",
-    "--almost-all",
-    "--binary",
-    "--blocksize",
-    "--bytes",
-    "--changed",
-    "--classify",
-    "--code",
-    "--color",
-    "--color-scale",
-    "--color-scale-mode",
-    "--colour",
-    "--colour-scale",
-    "--colour-scale-mode",
-    "--context",
-    "--created",
-    "--dereference",
-    "--extended",
-    "--flags",
-    "--follow-symlinks",
-    "--git",
-    "--git-ignore",
-    "--git-repos",
-    "--git-repos-no-status",
-    "--grid",
-    "--group",
-    "--group-directories-first",
-    "--group-directories-last",
-    "--header",
-    "--help",
-    "--hyperlink",
-    "--icons",
-    "--ignore-glob",
-    "--inode",
-    "--level",
-    "--links",
-    "--loc",
-    "--long",
-    "--modified",
-    "--mounts",
-    "--no-filesize",
-    "--no-git",
-    "--no-permissions",
-    "--no-quotes",
-    "--no-symlinks",
-    "--no-time",
-    "--no-user",
-    "--numeric",
-    "--octal-permissions",
-    "--oneline",
-    "--only-dirs",
-    "--only-files",
-    "--recurse",
-    "--reverse",
-    "--short-nix",
-    "--show-symlinks",
-    "--smart-group",
-    "--sort",
-    "--stdin",
-    "--time",
-    "--time-style",
-    "--total-size",
-    "--treat-dirs-as-files",
-    "--tree",
-    "--version",
-    "--width"
-   ],
-   "man": true,
-   "path": "/opt/homebrew/bin/eza",
-   "short": "1?@ABDFGHILMORSTUXZabdfghilmnorstuvwx",
-   "synopsis": [
-    "eza [options] [files...]",
-    "eza is a modern replacement for ls. It uses colours for information by default, helping you",
-    "distinguish between many types of files, such as whether you are the owner, or in the owning"
-   ],
-   "what": "a modern replacement for ls",
-   "words": [
-    "-A",
-    "-B",
-    "-D",
-    "-F",
-    "-G",
-    "-H",
-    "-I",
-    "-L",
-    "-M",
-    "-O",
-    "-R",
-    "-S",
-    "-T",
-    "-U",
-    "-X",
-    "-Z",
-    "-a",
-    "-all",
-    "-b",
-    "-d",
-    "-f",
-    "-g",
-    "-h",
-    "-i",
-    "-l",
-    "-m",
-    "-n",
-    "-o",
-    "-r",
-    "-s",
-    "-source",
-    "-t",
-    "-u",
-    "-v",
-    "-w",
-    "-x"
-   ]
+   "exists": false,
+   "path": ""
   },
   "fd": {
-   "exists": true,
-   "help": "A program to find entries in your filesystem with regex and glob based matching. By default, fd\nrespects gitignore rules, ignores hidden directories, and is case insensitive.\n\nUsage: fd [OPTIONS] [pattern] [path]...\n\nArguments:\n  [pattern]\n          the search pattern which is either a regular expression (default) or a glob pattern (if\n          --glob is used). If no pattern has been specified, every entry is considered a match. If\n          your pattern starts with a dash (-), make sure to pass '--' first, or it will be\n          considered as a flag (fd -- '-foo').\n\n  [path]...\n          The directory where the filesystem search is rooted (optional). If omitted, search the\n          current working directory.\n\nOptions:\n  -H, --hidden\n          Include hidden directories and files in the search results (default: hidden files and\n          directories are skipped). Files and directories are considered to be hidden if their\n          name starts with a `.` sign (dot). Any files or directories that are ignored due to the\n          rules described by --no-ignore are still ignored unless otherwise specified. The flag\n          can be overridden with --no-hidden.\n\n  -I, --no-ignore\n          Show search results from files and directories that would otherwise be ignored by\n          '.gitignore', '.ignore', '.fdignore', or the global ignore file, The flag can be\n          overridden with --ignore.\n\n      --no-ignore-vcs\n          Show search results from files and directories that would otherwise be ignored by\n          '.gitignore' files. The flag can be overridden with --ignore-vcs.\n\n      --no-require-git\n          Do not require a git repository to respect gitignores. By default, fd will only respect\n          global gitignore rules, .gitignore rules, and local exclude rules if fd detects that you\n          are searching inside a git repository. This flag allows you to relax this restriction\n          such that fd will respect all git related ignore rules regardless of whether you're\n          searching in a git repository or not.\n          \n          This flag can be disabled with --require-git.\n\n      --no-ignore-parent\n          Show search results from files and directories that would otherwise be ignored by\n          '.gitignore', '.ignore', or '.fdignore' files in parent directories. The flag can be\n          overridden with --ignore-parent.\n\n  -u, --unrestricted...\n          Perform an unrestricted search, including ignored and hidden files. This is an alias for\n          '--no-ignore --hidden'.\n\n  -s, --case-sensitive\n          Perform a case-sensitive search. By default, fd uses case-insensitive searches, unless\n          the pattern contains an uppercase character (smart case).\n\n  -i, --ignore-case\n          Perform a case-insensitive search. By default, fd uses case-insensitive searches, unless\n          the pattern contains an uppercase character (smart case).\n\n  -g, --glob\n          Perform a glob-based search instead of a regular expression search.\n\n      --regex\n          Perform a regular-expression based search (default). This can be used to override\n          --glob.\n\n  -F, --fixed-strings\n          Treat the pattern as a literal string instead of a regular expression. Note that this\n          also performs substring comparison. If you want to match on an exact filename, consider\n          using '--glob' or '--exact' instead.\n\n      --exact\n          Perform an exact match. This is equivalent to '--fixed-strings' but requires the pattern\n          to match the entire filename (or path if '--full-path' is used), rather than a\n          substring. Special regex characters in the pattern are treated as literal characters.\n\n      --and <pattern>\n          Add additional required search patterns, all of which must be matched. Multiple\n          additional patterns can be specified. The patterns are regular expressions, unless\n          '--glob' or '--fixed-strings' is used.\n\n  -a, --absolute-path\n          Shows the full path starting from the root as opposed to relative paths. The flag can be\n          overr",
-   "lines": [
-    [
-     "-H, --hidden",
-     "Include hidden files and directories in the search results (default: hidden files and directories..."
-    ],
-    [
-     "-I, --no-ignore",
-     "Show search results from files and directories that would otherwise be ignored by"
-    ],
-    [
-     "-u, --unrestricted",
-     "Perform an unrestricted search, including ignored and hidden files."
-    ],
-    [
-     "--no-ignore-vcs",
-     "Show search results from files and directories that would otherwise be ignored by gitignore files..."
-    ],
-    [
-     "--no-require-git",
-     "Do not require a git repository to respect gitignores."
-    ],
-    [
-     "--no-ignore-parent",
-     "Show search results from files and directories that would otherwise be ignored by gitignore files..."
-    ],
-    [
-     "-s, --case-sensitive",
-     "Perform a case-sensitive search."
-    ],
-    [
-     "-i, --ignore-case",
-     "Perform a case-insensitive search."
-    ],
-    [
-     "-g, --glob",
-     "Perform a glob-based search instead of a regular expression search."
-    ],
-    [
-     "--regex",
-     "Perform a regular-expression based search (default)."
-    ],
-    [
-     "--glob.",
-     ""
-    ],
-    [
-     "-F, --fixed-strings",
-     "Treat the pattern as a literal string instead of a regular expression."
-    ],
-    [
-     "--exact",
-     "Perform an exact match."
-    ],
-    [
-     "--and pattern",
-     "Add additional required search patterns, all of which must be matched."
-    ],
-    [
-     "-a, --absolute-path",
-     "Shows the full path starting from the root as opposed to relative paths."
-    ],
-    [
-     "-l, --list-details",
-     "Use a detailed listing format like 'ls -l'."
-    ],
-    [
-     "-L, --follow",
-     "By default, fd does not descend into symlinked directories."
-    ],
-    [
-     "-p, --full-path",
-     "By default, the search pattern is only matched against the filename (or directory name)."
-    ],
-    [
-     "-0, --print0",
-     "Separate search results by the null character (instead of newlines)."
-    ],
-    [
-     "--max-results count",
-     "Limit the number of search results to 'count' and quit immediately."
-    ],
-    [
-     "-1",
-     "Limit the search to a single result and quit immediately."
-    ],
-    [
-     "-q, --quiet",
-     "When the flag is present, the program does not print anything and will instead exit with a code o..."
-    ],
-    [
-     "--show-errors",
-     "Enable the display of filesystem errors for situations such as insufficient permissions or dead s..."
-    ],
-    [
-     "--strip-cwd-prefix [when]",
-     "By default, relative paths are prefixed with './' when -x/--exec, -X/--exec-batch, or"
-    ],
-    [
-     "-0/--print0 are",
-     "given, to reduce the risk of a path starting with '-' being treated as"
-    ],
-    [
-     "--one-file-system, --mount, --xdev",
-     "By default, fd will traverse the file system tree as far as other options dictate."
-    ],
-    [
-     "-h, --help",
-     "Print help information."
-    ],
-    [
-     "-V, --version",
-     "Print version information."
-    ],
-    [
-     "-d, --max-depth d",
-     "Limit directory traversal to at most d levels of depth."
-    ],
-    [
-     "--min-depth d",
-     "Only show search results starting at the given depth."
-    ],
-    [
-     "--exact-depth d",
-     "Only show search results at the exact given depth."
-    ],
-    [
-     "--prune",
-     "Do not traverse into matching directories."
-    ],
-    [
-     "-t, --type filetype",
-     "Filter search by type:"
-    ],
-    [
-     "-e, --extension ext",
-     "Filter search results by extension ext."
-    ],
-    [
-     "-E, --exclude glob",
-     "Exclude files/directories that match the given glob pattern."
-    ],
-    [
-     "--ignore-contain name",
-     "Exclude directories that (directly) contain the given name."
-    ],
-    [
-     "--ignore-file path",
-     "Add a custom ignore-file in '.gitignore' format."
-    ],
-    [
-     "-c, --color when",
-     "Declare when to colorize search results:"
-    ],
-    [
-     "--hyperlink",
-     "Specify whether the output should use terminal escape codes to indicate a hyperlink to a file url..."
-    ],
-    [
-     "-j, --threads num",
-     "Set number of threads to use for searching & executing (default: number of available CPU cores)."
-    ],
-    [
-     "-S, --size size",
-     "Limit results based on the size of files using the format <+-><NUM><UNIT>"
-    ],
-    [
-     "--changed-within date|duration",
-     "Filter results based on the file modification time."
-    ],
-    [
-     "--changed-before date|duration",
-     "Filter results based on the file modification time."
-    ],
-    [
-     "-o, --owner [user][:group]",
-     "Filter files by their user and/or group."
-    ],
-    [
-     "-C, --base-directory path",
-     "Change the current working directory of fd to the provided path."
-    ],
-    [
-     "--path-separator separator",
-     "Set the path separator to use when printing file paths."
-    ],
-    [
-     "--search-path search-path",
-     "Provide paths to search as an alternative to the positional path argument."
-    ],
-    [
-     "--format fmt",
-     "Specify a template string that is used for printing a line for each file found."
-    ],
-    [
-     "-x, --exec command",
-     "Execute command for each search result in parallel (use --threads=1 for sequential command execut..."
-    ],
-    [
-     "-X, --exec-batch command",
-     "Execute command once, with all search results as arguments."
-    ],
-    [
-     "--batch-size size",
-     "Maximum number of arguments to pass to the command given with -X."
-    ],
-    [
-     "--glob is",
-     "used)."
-    ],
-    [
-     "-u, --unrestricted...",
-     "Perform an unrestricted search, including ignored and hidden files."
-    ],
-    [
-     "--and <pattern>",
-     "Add additional required search patterns, all of which must be matched."
-    ],
-    [
-     "-d, --max-depth <depth>",
-     "Limit the directory traversal to a given depth."
-    ],
-    [
-     "--min-depth <depth>",
-     "Only show search results starting at the given depth."
-    ],
-    [
-     "--exact-depth <depth>",
-     "Only show search results at the exact given depth."
-    ],
-    [
-     "-E, --exclude <glob>",
-     "Exclude files/directories that match the given glob pattern."
-    ],
-    [
-     "--exclude '*.pyc'",
-     ""
-    ],
-    [
-     "--exclude node_modules",
-     ""
-    ]
-   ],
-   "long": [
-    "--absolute-path",
-    "--and",
-    "--base-directory",
-    "--batch-size",
-    "--case-sensitive",
-    "--change-newer-than",
-    "--change-older-than",
-    "--changed-after",
-    "--changed-before",
-    "--changed-within",
-    "--color",
-    "--exact",
-    "--exact-depth",
-    "--exclude",
-    "--exec",
-    "--exec-batch",
-    "--extension",
-    "--fixed-strings",
-    "--follow",
-    "--format",
-    "--full-path",
-    "--glob",
-    "--has-results",
-    "--help",
-    "--hidden",
-    "--hyperlink",
-    "--ignore",
-    "--ignore-case",
-    "--ignore-contain",
-    "--ignore-file",
-    "--ignore-parent",
-    "--ignore-vcs",
-    "--list-details",
-    "--max",
-    "--max-depth",
-    "--max-results",
-    "--min-depth",
-    "--mount",
-    "--newer",
-    "--no-follow",
-    "--no-hidden",
-    "--no-ignore",
-    "--no-ignore-parent",
-    "--no-ignore-vcs",
-    "--no-require-git",
-    "--older",
-    "--one-file-system",
-    "--owner",
-    "--path-separator",
-    "--print0",
-    "--prune",
-    "--quiet",
-    "--regex",
-    "--relative-path",
-    "--require-git",
-    "--search-path",
-    "--show-errors",
-    "--size",
-    "--strip-cwd-prefix",
-    "--threads",
-    "--type",
-    "--unrestricted",
-    "--version",
-    "--xdev"
-   ],
-   "man": true,
-   "path": "/opt/homebrew/bin/fd",
-   "short": "01CEFHILSVXacdeghijlopqstux",
-   "synopsis": [
-    "fd [-HIEsiaLp0hV] [-d depth] [-t filetype] [-e ext] [-E exclude] [-c when] [-j num] [-x cmd]",
-    "[pattern [path...]]"
-   ],
-   "what": "find entries in the filesystem",
-   "words": [
-    "-C",
-    "-E",
-    "-F",
-    "-H",
-    "-HIEsiaLp0hV",
-    "-I",
-    "-L",
-    "-S",
-    "-V",
-    "-X",
-    "-a",
-    "-c",
-    "-d",
-    "-e",
-    "-foo",
-    "-g",
-    "-h",
-    "-i",
-    "-j",
-    "-l",
-    "-mount",
-    "-o",
-    "-p",
-    "-q",
-    "-s",
-    "-t",
-    "-td",
-    "-te",
-    "-tf",
-    "-tl",
-    "-tx",
-    "-u",
-    "-x",
-    "-xdev"
-   ]
+   "exists": false,
+   "path": ""
   },
   "fdfind": {
    "exists": false,
@@ -5389,422 +4255,8 @@
    "path": ""
   },
   "fzf": {
-   "exists": true,
-   "help": "fzf is an interactive filter program for any kind of list.\n\nIt implements a \"fuzzy\" matching algorithm, so you can quickly type in patterns\nwith omitted characters and still get the results you want.\n\nProject URL: https://github.com/junegunn/fzf\nAuthor: Junegunn Choi <<e-mail>>\n\n* See man page for more information: fzf --man\n\nUsage: fzf [options]\n\n  SEARCH\n    -e, --exact              Enable exact-match\n    +x, --no-extended        Disable extended-search mode\n    -i, --ignore-case        Case-insensitive match\n    +i, --no-ignore-case     Case-sensitive match\n        --smart-case         Smart-case match (default)\n    --scheme=SCHEME          Scoring scheme [default|path|history]\n    -n, --nth=N[,..]         Comma-separated list of field index expressions\n                             for limiting search scope. Each can be a non-zero\n                             integer or a range expression ([BEGIN]..[END]).\n    --with-nth=N[,..]        Transform the presentation of each line using\n                             field index expressions\n    --accept-nth=N[,..]      Define which fields to print on accept\n    -d, --delimiter=STR      Field delimiter regex (default: AWK-style)\n    +s, --no-sort            Do not sort the result\n    --literal                Do not normalize latin script letters\n    --tail=NUM               Maximum number of items to keep in memory\n    --disabled               Do not perform search\n    --tiebreak=CRI[,..]      Comma-separated list of sort criteria to apply\n                             when the scores are tied\n                             [length|chunk|pathname|begin|end|index] (default: length)\n\n  INPUT/OUTPUT\n    --read0                  Read input delimited by ASCII NUL characters\n    --print0                 Print output delimited by ASCII NUL characters\n    --ansi                   Enable processing of ANSI color codes\n    --sync                   Synchronous search for multi-staged filtering\n\n  GLOBAL STYLE\n    --style=PRESET           Apply a style preset [default|minimal|full[:BORDER_STYLE]\n    --color=COLSPEC          Base scheme (dark|light|base16|bw) and/or custom colors\n    --no-color               Disable colors\n    --no-bold                Do not use bold text\n\n  DISPLAY MODE\n    --height=[~][-]HEIGHT[%] Display fzf window below the cursor with the given\n                             height instead of using fullscreen.\n                             A negative value is calculated as the terminal height\n                             minus the given value.\n                             If prefixed with '~', fzf will determine the height\n                             according to the input size.\n    --min-height=HEIGHT[+]   Minimum height when --height is given as a percentage.\n                             Add '+' to automatically increase the value\n                             according to the other layout options (default: 10+).\n    --popup[=OPTS]           Start fzf in a floating pane (requires tmux 3.3+ or Zellij 0.44+)\n                             [center|top|bottom|left|right][,SIZE[%]][,SIZE[%]]\n                             [,border-native] (default: center,50%)\n    --tmux[=OPTS]            Alias for --popup\n\n  LAYOUT\n    --layout=LAYOUT          Choose layout: [default|reverse|reverse-list]\n    --margin=MARGIN          Screen margin (TRBL | TB,RL | T,RL,B | T,R,B,L)\n    --padding=PADDING        Padding inside border (TRBL | TB,RL | T,RL,B | T,R,B,L)\n    --border[=STYLE]         Draw border around the finder\n                             [rounded|sharp|bold|block|thinblock|double|dashed|horizontal|vertical|\n                              top|bottom|left|right|line|none] (default: rounded)\n    --border-label=LABEL     Label to print on the border\n    --border-label-pos=COL   Position of the border label\n                             [POSITIVE_INTEGER: columns from left|\n                              NEGATIVE_INTEGER: columns from right][:bottom]\n                             (default: 0 or center)\n\n  LIST SECTION\n    -m, --multi[=MAX]        Enable multi-select with tab/shift-tab\n    --hi",
-   "lines": [
-    [
-     "-x, --extended",
-     "Extended-search mode."
-    ],
-    [
-     "-e, --exact",
-     "Enable exact-match"
-    ],
-    [
-     "-i, --ignore-case",
-     "Case-insensitive match (default: smart-case match)"
-    ],
-    [
-     "--smart-case",
-     "Smart-case match (default)."
-    ],
-    [
-     "--literal",
-     "Do not normalize latin script letters for matching."
-    ],
-    [
-     "--scheme=SCHEME",
-     "Choose scoring scheme tailored for different types of input."
-    ],
-    [
-     "--algo=TYPE",
-     "Fuzzy matching algorithm (default: v2)"
-    ],
-    [
-     "-n, --nth=N[,..]",
-     "Comma-separated list of field index expressions for limiting search scope."
-    ],
-    [
-     "--with-nth=N[,..] or TEMPLATE",
-     "Transform the presentation of each line using the field index expressions."
-    ],
-    [
-     "--accept-nth=N[,..] or TEMPLATE",
-     "Define which fields to print on accept."
-    ],
-    [
-     "-d, --delimiter=STR",
-     "Field delimiter regex for --nth, --with-nth, and field index expressions (default: AWK-style)"
-    ],
-    [
-     "--tail=NUM",
-     "Maximum number of items to keep in memory."
-    ],
-    [
-     "--disabled",
-     "Do not perform search."
-    ],
-    [
-     "--tiebreak=CRI[,..]",
-     "Comma-separated list of sort criteria to apply when the scores are tied."
-    ],
-    [
-     "--read0",
-     "Read input delimited by ASCII NUL characters instead of newline characters"
-    ],
-    [
-     "--print0",
-     "Print output delimited by ASCII NUL characters instead of newline characters"
-    ],
-    [
-     "--ansi Enable",
-     "processing of ANSI color codes"
-    ],
-    [
-     "--sync Synchronous",
-     "search for multi-staged filtering."
-    ],
-    [
-     "--no-tty-default",
-     "Make fzf search for the current TTY device via standard error instead of defaulting to /dev/tty."
-    ],
-    [
-     "--style=PRESET",
-     "Apply a style preset [default|minimal|full[:BORDER_STYLE]]"
-    ],
-    [
-     "--no-color",
-     "Disable colors"
-    ],
-    [
-     "--no-bold",
-     "Do not use bold text"
-    ],
-    [
-     "--black",
-     "Use black background"
-    ],
-    [
-     "--height=[~][-]HEIGHT[%]",
-     "Display fzf window below the cursor with the given height instead of using the full screen."
-    ],
-    [
-     "--min-height=HEIGHT[+]",
-     "Minimum height when --height is given as a percentage."
-    ],
-    [
-     "--border, so",
-     "that it is the only border shown."
-    ],
-    [
-     "--layout=LAYOUT",
-     "Choose the layout (default: default)"
-    ],
-    [
-     "--reverse",
-     "A synonym for --layout=reverse"
-    ],
-    [
-     "--margin=MARGIN",
-     "Comma-separated expression for margins around the finder."
-    ],
-    [
-     "--padding=PADDING",
-     "Comma-separated expression for padding inside the border."
-    ],
-    [
-     "--border[=STYLE]",
-     "Draw border around the finder"
-    ],
-    [
-     "--border-label[=LABEL]",
-     "Label to print on the horizontal border line."
-    ],
-    [
-     "--border options.",
-     ""
-    ],
-    [
-     "--color=label:italic:black",
-     "# Right-aligned (negative integer) on the bottom line (:bottom) fzf --height=10 --border --border..."
-    ],
-    [
-     "--border-label-pos[=N[:top|bottom]]",
-     "Position of the border label on the border line."
-    ],
-    [
-     "-m, --multi[=MAX]",
-     "Enable multi-select with tab/shift-tab."
-    ],
-    [
-     "--highlight-line",
-     "Highlight the whole current line"
-    ],
-    [
-     "--cycle",
-     "Enable cyclic scroll"
-    ],
-    [
-     "--wrap[=MODE]",
-     "Enable line wrap."
-    ],
-    [
-     "--wrap-sign=INDICATOR",
-     "Indicator for wrapped lines."
-    ],
-    [
-     "--no-multi-line",
-     "Disable multi-line display of items when using --read0"
-    ],
-    [
-     "--raw",
-     "Enable raw mode where non-matching items are also displayed in a dimmed color."
-    ],
-    [
-     "--track",
-     "Make fzf track the current selection when the result list is updated."
-    ],
-    [
-     "--id-nth for details.",
-     ""
-    ],
-    [
-     "--id-nth=N[,..]",
-     "Define item identity fields for cross-reload operations."
-    ],
-    [
-     "--tac",
-     "Reverse the order of the input"
-    ],
-    [
-     "--gap[=N]",
-     "Render empty lines between each item"
-    ],
-    [
-     "--gap-line[=STR]",
-     "The given string will be repeated to draw a horizontal line on each gap (default: '<?>' or '-' de..."
-    ],
-    [
-     "--freeze-left=N",
-     "Number of fields to freeze on the left."
-    ],
-    [
-     "--freeze-right=N",
-     "Number of fields to freeze on the right."
-    ],
-    [
-     "--keep-right",
-     "Keep the right end of the line visible when it's too long."
-    ],
-    [
-     "--scroll-off=LINES",
-     "Number of screen lines to keep above or below when scrolling to the top or to the bottom (default..."
-    ],
-    [
-     "--no-hscroll",
-     "Disable horizontal scroll"
-    ],
-    [
-     "--hscroll-off=COLS",
-     "Number of screen columns to keep to the right of the highlighted substring (default: 10)."
-    ],
-    [
-     "--jump-labels=CHARS",
-     "Label characters for jump mode."
-    ],
-    [
-     "--gutter=CHAR",
-     "Character used for the gutter column (default: '<?>' unless --no-unicode is given)"
-    ],
-    [
-     "--gutter-raw=CHAR",
-     "Character used for the gutter column in raw mode (default: '<?>' unless --no-unicode is given)"
-    ],
-    [
-     "--pointer=STR",
-     "Pointer to the current line (default: '<?>' or '>' depending on --no-unicode)"
-    ],
-    [
-     "--marker=STR",
-     "Multi-select marker (default: '<?>' or '>' depending on --no-unicode)"
-    ],
-    [
-     "--marker-multi-line=STR",
-     "Multi-select marker for multi-line entries."
-    ]
-   ],
-   "long": [
-    "--accept-nth",
-    "--algo",
-    "--ambidouble",
-    "--ansi",
-    "--bash",
-    "--bench",
-    "--bind",
-    "--black",
-    "--border",
-    "--border-label",
-    "--border-label-pos",
-    "--brief",
-    "--color",
-    "--column",
-    "--cycle",
-    "--delimiter",
-    "--disabled",
-    "--ellipsis",
-    "--exact",
-    "--exit-0",
-    "--expect",
-    "--extended",
-    "--filepath-word",
-    "--filter",
-    "--fish",
-    "--footer",
-    "--footer-border",
-    "--footer-label",
-    "--footer-label-pos",
-    "--freeze-left",
-    "--freeze-right",
-    "--gap",
-    "--gap-line",
-    "--ghost",
-    "--graph",
-    "--gutter",
-    "--gutter-raw",
-    "--header",
-    "--header-border",
-    "--header-first",
-    "--header-label",
-    "--header-label-pos",
-    "--header-lines",
-    "--header-lines-border",
-    "--height",
-    "--help",
-    "--highlight-line",
-    "--history",
-    "--history-size",
-    "--hscroll-off",
-    "--id-nth",
-    "--ignore-case",
-    "--info",
-    "--info-command",
-    "--input-border",
-    "--input-label",
-    "--input-label-pos",
-    "--jump-labels",
-    "--keep-right",
-    "--layout",
-    "--line-number",
-    "--list-border",
-    "--list-label",
-    "--list-label-pos",
-    "--listen",
-    "--listen-unsafe",
-    "--literal",
-    "--man",
-    "--margin",
-    "--marker",
-    "--marker-multi-line",
-    "--min-height",
-    "--multi",
-    "--no",
-    "--no-bold",
-    "--no-clear",
-    "--no-color",
-    "--no-expect",
-    "--no-extended",
-    "--no-header-lines-border",
-    "--no-heading",
-    "--no-hscroll",
-    "--no-ignore-case",
-    "--no-info",
-    "--no-input",
-    "--no-list-border",
-    "--no-mouse",
-    "--no-multi",
-    "--no-multi-line",
-    "--no-scrollbar",
-    "--no-separator",
-    "--no-sort",
-    "--no-tty-default",
-    "--no-unicode",
-    "--nth",
-    "--nushell",
-    "--oneline",
-    "--padding",
-    "--pointer",
-    "--popup",
-    "--preview",
-    "--preview-border",
-    "--preview-label",
-    "--preview-label-pos",
-    "--preview-window",
-    "--preview-wrap-sign",
-    "--print-query",
-    "--print0",
-    "--prompt",
-    "--query",
-    "--raw",
-    "--read0",
-    "--reverse",
-    "--scheme",
-    "--scroll-off",
-    "--scrollbar",
-    "--select-1",
-    "--separator",
-    "--smart-case",
-    "--style",
-    "--sync",
-    "--tabstop",
-    "--tac",
-    "--tail",
-    "--threads",
-    "--tiebreak",
-    "--tmux",
-    "--track",
-    "--tty",
-    "--unix-socket",
-    "--version",
-    "--walker",
-    "--walker-root",
-    "--walker-skip",
-    "--with-nth",
-    "--with-shell",
-    "--wrap",
-    "--wrap-sign",
-    "--wrap-word",
-    "--zsh"
-   ],
-   "man": true,
-   "path": "/opt/homebrew/bin/fzf",
-   "short": "012345Hcdefghilmnoqrstwxz",
-   "synopsis": [
-    "fzf [options]"
-   ],
-   "what": "a command-line fuzzy finder",
-   "words": [
-    "-H",
-    "-INTEGER",
-    "-XPOST",
-    "-c",
-    "-d",
-    "-e",
-    "-ef",
-    "-f",
-    "-i",
-    "-l",
-    "-lt",
-    "-m",
-    "-n",
-    "-prefix",
-    "-q",
-    "-r",
-    "-right",
-    "-s",
-    "-word",
-    "-x",
-    "-z"
-   ]
+   "exists": false,
+   "path": ""
   },
   "getconf": {
    "exists": true,
@@ -5827,7 +4279,7 @@
   },
   "git": {
    "exists": true,
-   "help": "usage: git [-v | --version] [-h | --help] [-C <path>] [-c <name>=<value>]\n           [--exec-path[=<path>]] [--html-path] [--man-path] [--info-path]\n           [-p | --paginate | -P | --no-pager] [--no-replace-objects] [--no-lazy-fetch]\n           [--no-optional-locks] [--no-advice] [--bare] [--git-dir=<path>]\n           [--work-tree=<path>] [--namespace=<name>] [--config-env=<name>=<envvar>]\n           <command> [<args>]\n\nThese are common Git commands used in various situations:\n\nstart a working area (see also: git help tutorial)\n   clone      Clone a repository into a new directory\n   init       Create an empty Git repository or reinitialize an existing one\n\nwork on the current change (see also: git help everyday)\n   add        Add file contents to the index\n   mv         Move or rename a file, a directory, or a symlink\n   restore    Restore working tree files\n   rm         Remove files from the working tree and from the index\n\nexamine the history and state (see also: git help revisions)\n   bisect     Use binary search to find the commit that introduced a bug\n   diff       Show changes between commits, commit and working tree, etc\n   grep       Print lines matching a pattern\n   log        Show commit logs\n   show       Show various types of objects\n   status     Show the working tree status\n\ngrow, mark and tweak your common history\n   backfill   Download missing objects in a partial clone\n   branch     List, create, or delete branches\n   commit     Record changes to the repository\n   history    EXPERIMENTAL: Rewrite history\n   merge      Join two or more development histories together\n   rebase     Reapply commits on top of another base tip\n   reset      Set `HEAD` or the index to a known state\n   switch     Switch branches\n   tag        Create, list, delete or verify tags\n\ncollaborate (see also: git help workflows)\n   fetch      Download objects and refs from another repository\n   pull       Fetch from and integrate with another repository or a local branch\n   push       Update remote refs along with associated objects\n\n'git help -a' and 'git help -g' list available subcommands and some\nconcept guides. See 'git help <command>' or 'git help <concept>'\nto read about a specific subcommand or concept.\nSee 'git help git' for an overview of the system.",
+   "help": "usage: git [-v | --version] [-h | --help] [-C <path>] [-c <name>=<value>]\n           [--exec-path[=<path>]] [--html-path] [--man-path] [--info-path]\n           [-p | --paginate | -P | --no-pager] [--no-replace-objects] [--no-lazy-fetch]\n           [--no-optional-locks] [--no-advice] [--bare] [--git-dir=<path>]\n           [--work-tree=<path>] [--namespace=<name>] [--config-env=<name>=<envvar>]\n           <command> [<args>]\n\nThese are common Git commands used in various situations:\n\nstart a working area (see also: git help tutorial)\n   clone      Clone a repository into a new directory\n   init       Create an empty Git repository or reinitialize an existing one\n\nwork on the current change (see also: git help everyday)\n   add        Add file contents to the index\n   mv         Move or rename a file, a directory, or a symlink\n   restore    Restore working tree files\n   rm         Remove files from the working tree and from the index\n\nexamine the history and state (see also: git help revisions)\n   bisect     Use binary search to find the commit that introduced a bug\n   diff       Show changes between commits, commit and working tree, etc\n   grep       Print lines matching a pattern\n   log        Show commit logs\n   show       Show various types of objects\n   status     Show the working tree status\n\ngrow, mark and tweak your common history\n   backfill   Download missing objects in a partial clone\n   branch     List, create, or delete branches\n   commit     Record changes to the repository\n   merge      Join two or more development histories together\n   rebase     Reapply commits on top of another base tip\n   reset      Reset current HEAD to the specified state\n   switch     Switch branches\n   tag        Create, list, delete or verify a tag object signed with GPG\n\ncollaborate (see also: git help workflows)\n   fetch      Download objects and refs from another repository\n   pull       Fetch from and integrate with another repository or a local branch\n   push       Update remote refs along with associated objects\n\n'git help -a' and 'git help -g' list available subcommands and some\nconcept guides. See 'git help <command>' or 'git help <concept>'\nto read about a specific subcommand or concept.\nSee 'git help git' for an overview of the system.",
    "lines": [
     [
      "-v, --version",
@@ -6066,8 +4518,8 @@
      "When finding commits to exclude (with a ^), follow only the first parent commit upon seeing a mer..."
     ],
     [
-     "--maximal-only",
-     "Restrict the output commits to be those that are not reachable from any other commits in the revi..."
+     "--not",
+     "Reverses the meaning of the ^ prefix (or lack thereof) for all following revision specifiers, up..."
     ]
    ],
    "long": [
@@ -6108,7 +4560,6 @@
     "--column",
     "--combined",
     "--combined-all-paths",
-    "--commit-list-format",
     "--committer",
     "--compact-summary",
     "--config-env",
@@ -6188,9 +4639,7 @@
     "--mailmap",
     "--man-path",
     "--max-count",
-    "--max-depth",
     "--max-parents",
-    "--maximal-only",
     "--merge",
     "--merge-base",
     "--merges",
@@ -8029,7 +6478,7 @@
     ],
     [
      "-f file",
-     "Read the file file instead of the default, /var/run/utmpx."
+     "Read the file file instead of the default, /var/log/utx.log."
     ],
     [
      "-h host",
@@ -8872,10 +7321,6 @@
    "help": "usage:\n    log <command>\n\nglobal options:\n    -?, --help\n    -q, --quiet\n    -v, --verbose\n\ncommands:\n    collect         gather system logs into a log archive\n    config          view/change logging system settings\n    diagnose        diagnose an archive for a variety of issues\n    erase           delete system logging data\n    repack          repack a log archive using a predicate\n    show            view/search system logs\n    stream          watch live system logs\n    stats           show system logging statistics\n    emit            emit a log message into the log store\n\nfurther help:\n    log help <command>\n    log help predicates\n    log help shorthand",
    "lines": [
     [
-     "-h, --help",
-     "Print a brief help message and exit with EX_USAGE (64)."
-    ],
-    [
      "-?, --help",
      ""
     ],
@@ -8891,7 +7336,6 @@
    "long": [
     "--all",
     "--archive",
-    "--backtrace",
     "--category",
     "--color",
     "--count",
@@ -8905,20 +7349,14 @@
     "--fatal-warnings",
     "--file",
     "--help",
-    "--highlight-predicate",
-    "--ignore-dropped",
     "--info",
     "--json",
     "--last",
-    "--last24",
     "--level",
     "--logd-starts",
     "--loss",
-    "--mach-continuous-time",
-    "--metric",
     "--mode",
     "--mutate",
-    "--no-backtrace",
     "--no-debug",
     "--no-info",
     "--no-loss",
@@ -8928,7 +7366,6 @@
     "--output",
     "--overview",
     "--pager",
-    "--payload",
     "--per-book",
     "--per-file",
     "--predicate",
@@ -8951,65 +7388,22 @@
     "--time",
     "--timeout",
     "--timezone",
-    "--today",
     "--ttl",
     "--type",
-    "--unreliable",
-    "--user",
-    "--uuidtext",
-    "--verbose",
-    "--yesterday"
+    "--verbose"
    ],
    "man": true,
    "path": "/usr/bin/log",
-   "short": "?ABDEFHLOPSTYZabcdefhijlmnopqrstuvwz",
+   "short": "?qv",
    "synopsis": [
     "log [command [options]]",
     "log help [command]",
-    "log collect [--output path] [--start date/time] [--size num [k|m]] [--last num[s|m|h|d]]"
+    "log collect [--output path] [--start date/time] [--size num [k|m]] [--last num [m|h|d]]"
    ],
-   "what": "access system wide log messages created by os_log, os_trace, and other logging systems",
+   "what": "Access system wide log messages created by os_log, os_trace and other logging systems.",
    "words": [
-    "-A",
-    "-B",
-    "-D",
-    "-E",
-    "-F",
-    "-H",
-    "-L",
-    "-O",
-    "-P",
-    "-S",
-    "-T",
-    "-Y",
-    "-Z",
-    "-a",
-    "-all",
-    "-b",
-    "-backtrace",
-    "-c",
-    "-d",
-    "-debug",
-    "-e",
-    "-f",
-    "-h",
-    "-i",
-    "-info",
-    "-j",
-    "-l",
-    "-m",
-    "-n",
-    "-o",
-    "-p",
     "-q",
-    "-r",
-    "-s",
-    "-signpost",
-    "-t",
-    "-u",
-    "-v",
-    "-w",
-    "-z"
+    "-v"
    ]
   },
   "ls": {
@@ -9646,77 +8040,8 @@
    ]
   },
   "micro": {
-   "exists": true,
-   "help": "micro [OPTION]... [FILE]... [+LINE[:COL]] [+/REGEX]\n       micro [OPTION]... [FILE[:LINE[:COL]]]...  (only if the `parsecursor` option is enabled)",
-   "lines": [
-    [
-     "-clean",
-     "Clean the configuration directory and exit"
-    ],
-    [
-     "-config-dir dir",
-     "Specify a custom location for the configuration directory"
-    ],
-    [
-     "-options",
-     "Show all options help and exit"
-    ],
-    [
-     "-debug",
-     "Enable debug mode (enables logging to ./log.txt)"
-    ],
-    [
-     "-profile",
-     "Enable CPU profiling (writes profile info to ./micro.prof so it can be analyzed later with \"go to..."
-    ],
-    [
-     "-version",
-     "Show the version number and information and exit"
-    ],
-    [
-     "-plugin install [PLUGIN]...",
-     "Install plugin(s)"
-    ],
-    [
-     "-plugin remove [PLUGIN]...",
-     "Remove plugin(s)"
-    ],
-    [
-     "-plugin update [PLUGIN]...",
-     "Update plugin(s) (if no argument is given, updates all plugins)"
-    ],
-    [
-     "-plugin search [PLUGIN]...",
-     "Search for a plugin"
-    ],
-    [
-     "-plugin list",
-     "List installed plugins"
-    ],
-    [
-     "-plugin available",
-     "List available plugins"
-    ]
-   ],
-   "long": [],
-   "man": true,
-   "path": "/opt/homebrew/bin/micro",
-   "short": "",
-   "synopsis": [
-    "micro [OPTION]... [FILE]... [+LINE[:COL]] [+/REGEX]",
-    "micro [OPTION]... [FILE[:LINE[:COL]]]... (only if the `parsecursor` option is enabled)"
-   ],
-   "what": "A modern and intuitive terminal-based text editor",
-   "words": [
-    "-clean",
-    "-config-dir",
-    "-debug",
-    "-options",
-    "-plugin",
-    "-profile",
-    "-syntax",
-    "-version"
-   ]
+   "exists": false,
+   "path": ""
   },
   "mkdir": {
    "exists": true,
@@ -10477,263 +8802,8 @@
    ]
   },
   "nvim": {
-   "exists": true,
-   "help": "Usage:\n  nvim [options] [file ...]\n\nOptions:\n  --cmd <cmd>           Execute <cmd> before any config\n  +<cmd>, -c <cmd>      Execute <cmd> after config and first file\n  -l <script> [args...] Execute Lua <script> (with optional args)\n  -S <session>          Source <session> after loading the first file\n  -s <scriptin>         Read Normal mode commands from <scriptin>\n  -u <config>           Use this config file\n\n  -d                    Diff mode\n  -es, -Es              Silent (batch) mode\n  -h, --help            Print this help message\n  -i <shada>            Use this shada file\n  -n                    No swap file, use memory only\n  -o[N]                 Open N windows (default: one per file)\n  -O[N]                 Open N vertical windows (default: one per file)\n  -p[N]                 Open N tab pages (default: one per file)\n  -R                    Read-only (view) mode\n  -v, --version         Print version information\n  -V[N][file]           Verbose [level][file]\n\n  --                    Only file names after this\n  --api-info            Write msgpack-encoded API metadata to stdout\n  --clean               \"Factory defaults\" (skip user config and plugins, shada)\n  --embed               Use stdin/stdout as a msgpack-rpc channel\n  --headless            Don't start a user interface\n  --listen <address>    Serve RPC API from this address\n  --remote[-subcommand] Execute commands remotely on a server\n  --server <address>    Connect to this Nvim server\n  --startuptime <file>  Write startup timing messages to <file>\n\nSee \":help startup-options\" for all options.",
-   "lines": [
-    [
-     "-t tag",
-     "Finds tag in the tags file, the associated file becomes the current file and the associated comma..."
-    ],
-    [
-     "-q [errorfile]",
-     "QuickFix mode."
-    ],
-    [
-     "-e",
-     "Ex mode, reading stdin as Ex commands."
-    ],
-    [
-     "-E",
-     "Ex mode, reading stdin as text."
-    ],
-    [
-     "-es",
-     "Silent (non-interactive) Ex mode, reading stdin as Ex commands."
-    ],
-    [
-     "-Es",
-     "Silent (non-interactive) Ex mode, reading stdin as text."
-    ],
-    [
-     "-d",
-     "Diff mode."
-    ],
-    [
-     "-R",
-     "Read-only mode."
-    ],
-    [
-     "-m",
-     "Resets the 'write' option, to disable file modifications."
-    ],
-    [
-     "-M",
-     "Resets the 'write' and 'modifiable' options, to disable file and buffer modifications."
-    ],
-    [
-     "-b",
-     "Binary mode."
-    ],
-    [
-     "-A",
-     "Arabic mode."
-    ],
-    [
-     "-H",
-     "Hebrew mode."
-    ],
-    [
-     "-V[N][file]",
-     "Verbose mode."
-    ],
-    [
-     "-D",
-     "Vimscript debug mode."
-    ],
-    [
-     "-n",
-     "Disable the use of swap files."
-    ],
-    [
-     "-r [file]",
-     "Recovery mode."
-    ],
-    [
-     "-L [file]",
-     "Alias for -r."
-    ],
-    [
-     "-u vimrc",
-     "Use vimrc instead of the default ~/.config/nvim/init.vim."
-    ],
-    [
-     "-i shada",
-     "Use shada instead of the default ~/.local/state/nvim/shada/main.shada."
-    ],
-    [
-     "--noplugin",
-     "Skip loading plugins (by setting the 'noloadplugins' option)."
-    ],
-    [
-     "--clean",
-     "Start Nvim with \"factory defaults\" (only builtin plugins, no user config/plugins, no shada)."
-    ],
-    [
-     "-o[N]",
-     "Open N windows stacked horizontally."
-    ],
-    [
-     "-O[N]",
-     "Like -o, but tile windows vertically."
-    ],
-    [
-     "-p[N]",
-     "Like -o, but for tab pages."
-    ],
-    [
-     "--cmd command",
-     "Like -c, but execute command before processing any vimrc."
-    ],
-    [
-     "-l script [args]",
-     "Execute Lua script with optional [args] after processing any preceding Nvim startup arguments."
-    ],
-    [
-     "-S [session]",
-     "Execute session after the first file argument has been read."
-    ],
-    [
-     "-s scriptin",
-     "Read normal mode commands from scriptin."
-    ],
-    [
-     "-w scriptout",
-     "Append all typed characters to scriptout."
-    ],
-    [
-     "-W scriptout",
-     "Like -w, but truncate scriptout."
-    ],
-    [
-     "--startuptime file",
-     "During startup, append timing messages to file."
-    ],
-    [
-     "--api-info",
-     "Dump API metadata serialized to msgpack and exit."
-    ],
-    [
-     "--embed",
-     "Use standard input and standard output as a msgpack-rpc channel."
-    ],
-    [
-     "--headless",
-     "Do not start a UI."
-    ],
-    [
-     "--listen address",
-     "Start RPC server on this pipe or TCP socket."
-    ],
-    [
-     "-h, --help",
-     "Print usage information and exit."
-    ],
-    [
-     "-v, --version",
-     "Print version information and exit."
-    ],
-    [
-     "--cmd <cmd>",
-     "Execute <cmd> before any config"
-    ],
-    [
-     "-l <script>",
-     "[args...] Execute Lua <script> (with optional args)"
-    ],
-    [
-     "-S <session>",
-     "Source <session> after loading the first file"
-    ],
-    [
-     "-s <scriptin>",
-     "Read Normal mode commands from <scriptin>"
-    ],
-    [
-     "-u <config>",
-     "Use this config file"
-    ],
-    [
-     "-es, -Es",
-     "Silent (batch) mode"
-    ],
-    [
-     "-i <shada>",
-     "Use this shada file"
-    ],
-    [
-     "--listen <address>",
-     "Serve RPC API from this address"
-    ],
-    [
-     "--remote[-subcommand] Execute",
-     "commands remotely on a server"
-    ],
-    [
-     "--server <address>",
-     "Connect to this Nvim server"
-    ],
-    [
-     "--startuptime <file>",
-     "Write startup timing messages to <file>"
-    ]
-   ],
-   "long": [
-    "--api-info",
-    "--clean",
-    "--cmd",
-    "--embed",
-    "--headless",
-    "--help",
-    "--listen",
-    "--noplugin",
-    "--remote",
-    "--server",
-    "--startuptime",
-    "--version"
-   ],
-   "man": true,
-   "path": "/opt/homebrew/bin/nvim",
-   "short": "ADEHLMORSVWabcdehilmnopqrstuvw",
-   "synopsis": [
-    "nvim [options] [file ...]",
-    "nvim [options] -",
-    "nvim [options] -t tag"
-   ],
-   "what": "edit text",
-   "words": [
-    "-A",
-    "-D",
-    "-E",
-    "-Es",
-    "-H",
-    "-L",
-    "-M",
-    "-O",
-    "-R",
-    "-S",
-    "-V",
-    "-W",
-    "-b",
-    "-c",
-    "-d",
-    "-e",
-    "-es",
-    "-h",
-    "-i",
-    "-l",
-    "-m",
-    "-n",
-    "-o",
-    "-p",
-    "-q",
-    "-r",
-    "-s",
-    "-subcommand",
-    "-t",
-    "-u",
-    "-v",
-    "-w"
-   ]
+   "exists": false,
+   "path": ""
   },
   "open": {
    "exists": true,
@@ -12031,464 +10101,8 @@
    ]
   },
   "rg": {
-   "exists": true,
-   "help": "ripgrep 15.2.0\nAndrew Gallant <<e-mail>>\n\nripgrep (rg) recursively searches the current directory for lines matching\na regex pattern. By default, ripgrep will respect gitignore rules and\nautomatically skip hidden files/directories and binary files.\n\nUse -h for short descriptions and --help for more details.\n\nProject home page: https://github.com/BurntSushi/ripgrep\n\nUSAGE:\n    rg [OPTIONS] PATTERN [PATH ...]\n    rg [OPTIONS] -e PATTERN ... [PATH ...]\n    rg [OPTIONS] -f PATTERNFILE ... [PATH ...]\n    rg [OPTIONS] --files [PATH ...]\n    rg [OPTIONS] --type-list\n    command | rg [OPTIONS] PATTERN\n    rg [OPTIONS] --help\n    rg [OPTIONS] --version\n\nPOSITIONAL ARGUMENTS:\n    <PATTERN>\n        A regular expression used for searching. To match a pattern beginning\n        with a dash, use the -e/--regexp flag.\n\n        For example, to search for the literal '-foo', you can use this flag:\n\n            rg -e -foo\n\n        You can also use the special '--' delimiter to indicate that no more\n        flags will be provided. Namely, the following is equivalent to the\n        above:\n\n            rg -- -foo\n\n    <PATH>...\n        A file or directory to search. Directories are searched recursively.\n        File paths specified on the command line override glob and ignore\n        rules.\n\nINPUT OPTIONS:\n    -e PATTERN, --regexp=PATTERN\n        A pattern to search for. This option can be provided multiple times,\n        where all patterns given are searched, in addition to any patterns\n        provided by -f/--file. Lines matching at least one of the provided\n        patterns are printed. This flag can also be used when searching for\n        patterns that start with a dash.\n\n        For example, to search for the literal -foo:\n\n            rg -e -foo\n\n        You can also use the special -- delimiter to indicate that no more\n        flags will be provided. Namely, the following is equivalent to the\n        above:\n\n            rg -- -foo\n\n        When -f/--file or -e/--regexp is used, then ripgrep treats all\n        positional arguments as files or directories to search.\n\n    -f PATTERNFILE, --file=PATTERNFILE\n        Search for patterns from the given file, with one pattern per line.\n        When this flag is used multiple times or in combination with the\n        -e/--regexp flag, then all patterns provided are searched. Empty\n        pattern lines will match all input lines, and the newline is not\n        counted as part of the pattern.\n\n        A line is printed if and only if it matches at least one of the\n        patterns.\n\n        When PATTERNFILE is -, then stdin will be read for the patterns.\n\n        When -f/--file or -e/--regexp is used, then ripgrep treats all\n        positional arguments as files or directories to search.\n\n    --pre=COMMAND\n        For each input PATH, this flag causes ripgrep to search the standard\n        output of COMMAND PATH instead of the contents of PATH. This option\n        expects the COMMAND program to either be a path or to be available in\n        your PATH. Either an empty string COMMAND or the --no-pre flag will\n        disable this behavior.\n\n        WARNING: When this flag is set, ripgrep will unconditionally spawn a\n        process for every file that is searched. Therefore, this can incur an\n        unnecessarily large performance penalty if you don't otherwise need the\n        flexibility offered by this flag. One possible mitigation to this is to\n        use the --pre-glob flag to limit which files a preprocessor is run\n        with.\n\n        A preprocessor is not run when ripgrep is searching stdin.\n\n        When searching over sets of files that may require one of several\n        preprocessors, COMMAND should be a wrapper program which first\n        classifies PATH based on magic numbers/content or based on the PATH\n        name and then dispatches to an appropriate preprocessor. Each COMMAND\n        also has its standard input connected to PATH for convenience.\n\n        For example, a shell script for COMMAND might look like:\n\n            case \"$1\" in\n            *.pdf)\n                exec ",
-   "lines": [
-    [
-     "-e PATTERN, --regexp=PATTERN",
-     "A pattern to search for."
-    ],
-    [
-     "-f PATTERNFILE, --file=PATTERNFILE",
-     "Search for patterns from the given file, with one pattern per line."
-    ],
-    [
-     "--pre=COMMAND",
-     "For each input PATH, this flag causes ripgrep to search the standard output of COMMAND PATH inste..."
-    ],
-    [
-     "--pre-glob=GLOB",
-     "This flag works in conjunction with the --pre flag."
-    ],
-    [
-     "-z, --search-zip",
-     "This flag instructs ripgrep to search in compressed files."
-    ],
-    [
-     "-s, --case-sensitive",
-     "Execute the search case sensitively."
-    ],
-    [
-     "--crlf",
-     "When enabled, ripgrep will treat CRLF (\\r\\n) as a line terminator instead of just \\n."
-    ],
-    [
-     "--dfa-size-limit=NUM+SUFFIX?",
-     "The upper size limit of the regex DFA."
-    ],
-    [
-     "-E ENCODING, --encoding=ENCODING",
-     "Specify the text encoding that ripgrep will use on all files searched."
-    ],
-    [
-     "--no-encoding flag.",
-     ""
-    ],
-    [
-     "--engine=ENGINE",
-     "Specify which regular expression engine to use."
-    ],
-    [
-     "-F, --fixed-strings",
-     "Treat all patterns as literals instead of as regular expressions."
-    ],
-    [
-     "-i, --ignore-case",
-     "When this flag is provided, all patterns will be searched case insensitively."
-    ],
-    [
-     "-v, --invert-match",
-     "This flag inverts matching."
-    ],
-    [
-     "-l/--files-with-matches will",
-     "emit files that contain any lines that do not match the"
-    ],
-    [
-     "-x, --line-regexp",
-     "When enabled, ripgrep will only show matches surrounded by line boundaries."
-    ],
-    [
-     "-m NUM, --max-count=NUM",
-     "Limit the number of matching lines per file searched to NUM."
-    ],
-    [
-     "--mmap",
-     "When enabled, ripgrep will search using memory maps when possible."
-    ],
-    [
-     "-U, --multiline",
-     "This flag enables searching across multiple lines."
-    ],
-    [
-     "--multiline-dotall flag",
-     "may be passed to make the \"dot all\" behavior the default."
-    ],
-    [
-     "--multiline-dotall",
-     "This flag enables \"dot all\" mode in all regex patterns."
-    ],
-    [
-     "--no-unicode",
-     "This flag disables Unicode mode for all patterns given to ripgrep."
-    ],
-    [
-     "--null-data",
-     "Enabling this flag causes ripgrep to use NUL as a line terminator instead of the default of \\n."
-    ],
-    [
-     "-P, --pcre2",
-     "When this flag is present, ripgrep will use the PCRE2 regex engine instead of its default regex e..."
-    ],
-    [
-     "--engine=auto to",
-     "ask ripgrep to automatically select the right regex engine based on the"
-    ],
-    [
-     "--regex-size-limit=NUM+SUFFIX?",
-     "The size limit of the compiled regex, where the compiled regex generally corresponds to a single..."
-    ],
-    [
-     "-S, --smart-case",
-     "This flag instructs ripgrep to searches case insensitively if the pattern is all lowercase."
-    ],
-    [
-     "--stop-on-nonmatch",
-     "Enabling this option will cause ripgrep to stop reading a file once it encounters a non- matching..."
-    ],
-    [
-     "-a, --text",
-     "This flag instructs ripgrep to search binary files as if they were text."
-    ],
-    [
-     "-j NUM, --threads=NUM",
-     "This flag sets the approximate number of threads to use."
-    ],
-    [
-     "-w, --word-regexp",
-     "When enabled, ripgrep will only show matches surrounded by word boundaries."
-    ],
-    [
-     "--auto-hybrid-regex",
-     "DEPRECATED."
-    ],
-    [
-     "--no-pcre2-unicode",
-     "DEPRECATED."
-    ],
-    [
-     "--binary",
-     "Enabling this flag will cause ripgrep to search binary files."
-    ],
-    [
-     "-L, --follow",
-     "This flag instructs ripgrep to follow symbolic links while traversing directories."
-    ],
-    [
-     "-g GLOB, --glob=GLOB",
-     "Include or exclude files and directories for searching that match the given glob."
-    ],
-    [
-     "--glob-case-insensitive",
-     "Process all glob patterns given with the -g/--glob flag case insensitively."
-    ],
-    [
-     "--iglob=GLOB",
-     "Include or exclude files and directories for searching that match the given glob."
-    ],
-    [
-     "--ignore-file=PATH",
-     "Specifies a path to one or more gitignore formatted rules files."
-    ],
-    [
-     "--ignore-file-case-insensitive",
-     "Process ignore files (.gitignore, .ignore, etc.) case insensitively."
-    ],
-    [
-     "-d NUM, --max-depth=NUM",
-     "This flag limits the depth of directory traversal to NUM levels beyond the paths given."
-    ],
-    [
-     "--max-depth 1",
-     "dir/ will search only the direct children of dir."
-    ],
-    [
-     "--max-filesize=NUM+SUFFIX?",
-     "Ignore files larger than NUM in size."
-    ],
-    [
-     "--no-ignore",
-     "When set, ignore files such as .gitignore, .ignore and .rgignore will not be respected."
-    ],
-    [
-     "--no-ignore-dot",
-     "Don't respect filter rules from .ignore or .rgignore files."
-    ],
-    [
-     "--no-ignore-exclude",
-     "Don't respect filter rules from files that are manually configured for the repository."
-    ],
-    [
-     "--no-ignore-files",
-     "When set, any --ignore-file flags, even ones that come after this flag, are ignored."
-    ],
-    [
-     "--no-ignore-global",
-     "Don't respect filter rules from ignore files that come from \"global\" sources such as git's core.e..."
-    ],
-    [
-     "--no-ignore-parent",
-     "When this flag is set, filter rules from ignore files found in parent directories are not respected."
-    ],
-    [
-     "--no-ignore-vcs",
-     "When given, filter rules from source control ignore files (e.g., .gitignore) are not respected."
-    ],
-    [
-     "--no-require-git",
-     "When this flag is given, source control ignore files such as .gitignore are respected even if no..."
-    ],
-    [
-     "--one-file-system",
-     "When enabled, ripgrep will not cross file system boundaries relative to where the search started..."
-    ],
-    [
-     "-t TYPE, --type=TYPE",
-     "This flag limits ripgrep to searching files matching TYPE."
-    ],
-    [
-     "-T TYPE, --type-not=TYPE",
-     "Do not search files matching TYPE."
-    ],
-    [
-     "--type-list flag",
-     "to list all available types."
-    ],
-    [
-     "--type-add=TYPESPEC",
-     "This flag adds a new glob for a particular file type."
-    ],
-    [
-     "--type-clear=TYPE",
-     "Clear the file type globs previously defined for TYPE."
-    ],
-    [
-     "-u, --unrestricted",
-     "This flag reduces the level of \"smart\" filtering."
-    ],
-    [
-     "--no-ignore -./--hidden --binary.",
-     ""
-    ],
-    [
-     "-L/--follow flag,",
-     "and binary files can be treated as text files via the -a/--text flag."
-    ]
-   ],
-   "long": [
-    "--after-context",
-    "--auto-hybrid-regex",
-    "--before-context",
-    "--binary",
-    "--block-buffered",
-    "--byte-offset",
-    "--case-sensitive",
-    "--color",
-    "--colors",
-    "--column",
-    "--context",
-    "--context-separator",
-    "--count",
-    "--count-matches",
-    "--crlf",
-    "--debug",
-    "--dfa-size-limit",
-    "--encoding",
-    "--engine",
-    "--field-context-separator",
-    "--field-match-separator",
-    "--file",
-    "--files",
-    "--files-with-matches",
-    "--files-without-match",
-    "--fixed-strings",
-    "--follow",
-    "--generate",
-    "--glob",
-    "--glob-case-insensitive",
-    "--heading",
-    "--help",
-    "--hidden",
-    "--hostname-bin",
-    "--hyperlink-format",
-    "--iglob",
-    "--ignore",
-    "--ignore-case",
-    "--ignore-dot",
-    "--ignore-exclude",
-    "--ignore-file",
-    "--ignore-file-case-insensitive",
-    "--ignore-files",
-    "--ignore-global",
-    "--ignore-messages",
-    "--ignore-parent",
-    "--ignore-vcs",
-    "--include-zero",
-    "--invert-match",
-    "--json",
-    "--line-buffered",
-    "--line-number",
-    "--line-regexp",
-    "--max-columns",
-    "--max-columns-preview",
-    "--max-count",
-    "--max-depth",
-    "--max-filesize",
-    "--maxdepth",
-    "--messages",
-    "--mmap",
-    "--multiline",
-    "--multiline-dotall",
-    "--no-auto-hybrid-regex",
-    "--no-binary",
-    "--no-block-buffered",
-    "--no-byte-offset",
-    "--no-column",
-    "--no-config",
-    "--no-context-separator",
-    "--no-crlf",
-    "--no-encoding",
-    "--no-filename",
-    "--no-fixed-strings",
-    "--no-follow",
-    "--no-glob-case-insensitive",
-    "--no-heading",
-    "--no-hidden",
-    "--no-ignore",
-    "--no-ignore-dot",
-    "--no-ignore-exclude",
-    "--no-ignore-file-case-insensitive",
-    "--no-ignore-files",
-    "--no-ignore-global",
-    "--no-ignore-messages",
-    "--no-ignore-parent",
-    "--no-ignore-vcs",
-    "--no-include-zero",
-    "--no-invert-match",
-    "--no-json",
-    "--no-line-buffered",
-    "--no-line-number",
-    "--no-max-columns-preview",
-    "--no-messages",
-    "--no-mmap",
-    "--no-multiline",
-    "--no-multiline-dotall",
-    "--no-one-file-system",
-    "--no-pcre2",
-    "--no-pcre2-unicode",
-    "--no-pre",
-    "--no-require-git",
-    "--no-search-zip",
-    "--no-sort-files",
-    "--no-stats",
-    "--no-text",
-    "--no-trim",
-    "--no-unicode",
-    "--null",
-    "--null-data",
-    "--one-file-system",
-    "--only-matching",
-    "--passthrough",
-    "--passthru",
-    "--path-separator",
-    "--pcre2",
-    "--pcre2-unicode",
-    "--pcre2-version",
-    "--pre",
-    "--pre-glob",
-    "--pretty",
-    "--print0",
-    "--quiet",
-    "--regex-size-limit",
-    "--regexp",
-    "--replace",
-    "--require-git",
-    "--search-zip",
-    "--smart-case",
-    "--sort",
-    "--sort-files",
-    "--sortr",
-    "--stats",
-    "--stop-on-nonmatch",
-    "--text",
-    "--threads",
-    "--trace",
-    "--trim",
-    "--type",
-    "--type-add",
-    "--type-clear",
-    "--type-list",
-    "--type-not",
-    "--unicode",
-    "--unrestricted",
-    "--version",
-    "--vimgrep",
-    "--with-filename",
-    "--word-regexp"
-   ],
-   "man": true,
-   "path": "/opt/homebrew/bin/rg",
-   "short": "0ABCEFHILMNPRSTUVabcdefghijlmnopqrstuvwxz",
-   "synopsis": [
-    "rg [OPTIONS] PATTERN [PATH...]",
-    "rg [OPTIONS] -e PATTERN... [PATH...]",
-    "rg [OPTIONS] -f PATTERNFILE... [PATH...]"
-   ],
-   "what": "recursively search the current directory for lines matching a pattern",
-   "words": [
-    "-A",
-    "-A2",
-    "-B",
-    "-B1",
-    "-C",
-    "-C1",
-    "-E",
-    "-F",
-    "-H",
-    "-I",
-    "-L",
-    "-M",
-    "-N",
-    "-P",
-    "-R",
-    "-S",
-    "-T",
-    "-U",
-    "-V",
-    "-a",
-    "-b",
-    "-c",
-    "-cdq",
-    "-d",
-    "-e",
-    "-f",
-    "-foo",
-    "-g",
-    "-h",
-    "-i",
-    "-j",
-    "-j1",
-    "-j4",
-    "-l",
-    "-m",
-    "-mount",
-    "-n",
-    "-o",
-    "-p",
-    "-q",
-    "-r",
-    "-s",
-    "-t",
-    "-tfoo",
-    "-u",
-    "-uu",
-    "-uuu",
-    "-v",
-    "-w",
-    "-x",
-    "-xdev",
-    "-z"
-   ]
+   "exists": false,
+   "path": ""
   },
   "rm": {
    "exists": true,
@@ -13079,7 +10693,6 @@
     "-F",
     "-H",
     "-I",
-    "-K",
     "-L",
     "-O",
     "-P",
@@ -15741,382 +13354,8 @@
    ]
   },
   "tmux": {
-   "exists": true,
-   "help": "tmux [-2CDhlNuVv] [-c shell-command] [-f file] [-L socket-name] [-S socket-path] [-T features]\n          [command [flags]]",
-   "lines": [
-    [
-     "-2",
-     "Force tmux to assume the terminal supports 256 colours."
-    ],
-    [
-     "-C",
-     "Start in control mode (see the CONTROL MODE section)."
-    ],
-    [
-     "-c shell-command",
-     "Execute shell-command using the default shell."
-    ],
-    [
-     "-D",
-     "Do not start the tmux server as a daemon."
-    ],
-    [
-     "-f file",
-     "Specify an alternative configuration file."
-    ],
-    [
-     "-h",
-     "Print usage information and exit."
-    ],
-    [
-     "-L socket-name",
-     "tmux stores the server socket in a directory under TMUX_TMPDIR or /tmp if it is unset."
-    ],
-    [
-     "-l",
-     "Behave as a login shell."
-    ],
-    [
-     "-N",
-     "Do not start the server even if the command would normally do so (for example new-session or star..."
-    ],
-    [
-     "-S socket-path",
-     "Specify a full alternative path to the server socket."
-    ],
-    [
-     "-T features",
-     "Set terminal features for the client."
-    ],
-    [
-     "-u",
-     "Write UTF-8 output to the terminal even if the first environment variable of LC_ALL, LC_CTYPE, or..."
-    ],
-    [
-     "-V",
-     "Report the tmux version."
-    ],
-    [
-     "-v",
-     "Request verbose logging."
-    ],
-    [
-     "-f read-only,ignore-size.",
-     "When a client is read-only, only keys bound to the"
-    ],
-    [
-     "-c will",
-     "set the session working directory (used for new windows) to working-directory."
-    ],
-    [
-     "-O specifies",
-     "the sort order: one of `name', `size', `creation' (time), or `activity'"
-    ],
-    [
-     "-x or",
-     "-y is given, the default-size option is set for the session."
-    ],
-    [
-     "-n and",
-     "shell-command are invalid if -t is used."
-    ],
-    [
-     "-t.",
-     "If -S is specified, only update the client's status line."
-    ],
-    [
-     "-C sets",
-     "the width and height of a control mode client or of a window for a control mode"
-    ],
-    [
-     "-B sets",
-     "a subscription to a format for a control mode client."
-    ],
-    [
-     "-f sets",
-     "a comma-separated list of client flags, see attach-session."
-    ],
-    [
-     "-l requests",
-     "the clipboard from the client using the xterm(1) escape sequence and stores"
-    ],
-    [
-     "-L, -R,",
-     "-U and -D move the visible portion of the window left, right, up or down by"
-    ],
-    [
-     "-a and",
-     "-d are used to give or revoke access for the specified user."
-    ],
-    [
-     "-r and",
-     "-w change the permissions for user: -r makes their clients read-only and -w"
-    ],
-    [
-     "-T sets",
-     "the client's key table; the next key will be looked up using key-table."
-    ],
-    [
-     "-i flag",
-     "to the command-prompt command."
-    ],
-    [
-     "-u enters",
-     "copy mode and scrolls one page up and -d one page down."
-    ],
-    [
-     "-M begins",
-     "a mouse drag (only valid if bound to a mouse key binding, see MOUSE SUPPORT)."
-    ],
-    [
-     "-S enters",
-     "copy-mode and scrolls when bound to a mouse drag event; See scroll-to-mouse."
-    ],
-    [
-     "-s copies",
-     "from src-pane instead of target-pane."
-    ],
-    [
-     "-e specifies",
-     "that scrolling to the bottom of the history (to the visible screen) should"
-    ],
-    [
-     "-S and",
-     "-E specify the starting and ending line numbers, zero is the first line of the"
-    ],
-    [
-     "-r reverses",
-     "the sort order."
-    ],
-    [
-     "-G includes",
-     "all sessions in any session groups in the tree rather than only the first."
-    ],
-    [
-     "-f specifies",
-     "an initial filter: the filter is a format - if it evaluates to zero, the"
-    ],
-    [
-     "-b, other",
-     "commands are not blocked from running until the indicator is closed."
-    ],
-    [
-     "-T matches",
-     "only the window title."
-    ],
-    [
-     "-CNT.",
-     "-Z zooms the pane."
-    ],
-    [
-     "-e takes",
-     "the form `VARIABLE=value' and sets an environment variable for the newly"
-    ],
-    [
-     "-e option.",
-     ""
-    ],
-    [
-     "-S sets",
-     "the border style when the pane is active and -R sets the border style when the"
-    ],
-    [
-     "-h does",
-     "a horizontal split and -v a vertical split; if neither is specified, -v is"
-    ],
-    [
-     "-v), instead",
-     "of splitting the active pane."
-    ],
-    [
-     "-k keeps",
-     "the pane open after the optional shell-command exits and waits for a key to be"
-    ],
-    [
-     "-E, or",
-     "an empty shell-command, ('') will create an empty pane with no command running"
-    ],
-    [
-     "-I and",
-     "-O specify which of the shell-command output streams are connected to the pane:"
-    ],
-    [
-     "-T trims",
-     "all lines below the current cursor position and moves lines out of the history"
-    ],
-    [
-     "-m and",
-     "-M are used to set and clear the marked pane."
-    ],
-    [
-     "-M passes",
-     "through a mouse event (only valid if bound to a mouse key binding, see MOUSE"
-    ],
-    [
-     "-X is",
-     "used to send a command into copy mode - see the WINDOWS AND PANES section."
-    ],
-    [
-     "-F expands",
-     "formats in the option value."
-    ],
-    [
-     "-A includes",
-     "options inherited from a parent set of options, such options are marked"
-    ],
-    [
-     "-1 makes",
-     "the prompt only accept one key press, in this case the resulting input is a"
-    ],
-    [
-     "-T tells",
-     "tmux the prompt type."
-    ],
-    [
-     "-b sets",
-     "the type of characters used for drawing menu borders."
-    ],
-    [
-     "-H sets",
-     "the style for the selected menu item (see STYLES)."
-    ],
-    [
-     "-s sets",
-     "the style for the menu and -S sets the style for the menu border (see STYLES)."
-    ]
-   ],
-   "long": [],
-   "man": true,
-   "path": "/opt/homebrew/bin/tmux",
-   "short": "125ABCDEFGHIJKLMNOPRSTUVXZabcdefghiklmnopqrstuvwxy",
-   "synopsis": [
-    "tmux [-2CDhlNuVv] [-c shell-command] [-f file] [-L socket-name] [-S socket-path] [-T features]",
-    "[command [flags]]"
-   ],
-   "what": "terminal multiplexer",
-   "words": [
-    "-A",
-    "-AdDEPX",
-    "-AgHpqsvw",
-    "-B",
-    "-BCEkN",
-    "-C",
-    "-CC",
-    "-CNT",
-    "-CP",
-    "-D",
-    "-DLMRTUZ",
-    "-DUZ",
-    "-DdeLlMmRUZ",
-    "-E",
-    "-EE",
-    "-ElnprZ",
-    "-Enop",
-    "-F",
-    "-FHKlMRX",
-    "-Fhgru",
-    "-Fnqv",
-    "-G",
-    "-GNrswyZ",
-    "-H",
-    "-I",
-    "-IOo",
-    "-J",
-    "-JT",
-    "-K",
-    "-L",
-    "-M",
-    "-N",
-    "-NZ",
-    "-NryZ",
-    "-O",
-    "-OM",
-    "-P",
-    "-R",
-    "-S",
-    "-T",
-    "-Troot",
-    "-Ttable1",
-    "-Ttable2",
-    "-U",
-    "-V",
-    "-X",
-    "-Z",
-    "-a",
-    "-aADLRU",
-    "-aCIlNpv",
-    "-aCg",
-    "-aFgopqsuUw",
-    "-aP",
-    "-abdP",
-    "-abdk",
-    "-abdkPS",
-    "-abrdk",
-    "-adlrw",
-    "-aeFHLpPqCJMN",
-    "-ag",
-    "-agpRuw",
-    "-and-cancel",
-    "-anq",
-    "-ar",
-    "-ars",
-    "-aw",
-    "-b",
-    "-bCE",
-    "-bF",
-    "-bN",
-    "-bar",
-    "-bdefhIkPvZ",
-    "-bdfhv",
-    "-by",
-    "-c",
-    "-cDlLRSU",
-    "-d",
-    "-dDUZ",
-    "-dErx",
-    "-dI",
-    "-deHMqSu",
-    "-deZ",
-    "-dprS",
-    "-e",
-    "-ed",
-    "-eu",
-    "-expanded",
-    "-f",
-    "-g",
-    "-gpw",
-    "-h",
-    "-hgs",
-    "-i",
-    "-iCNrTZ",
-    "-incremental",
-    "-k",
-    "-l",
-    "-lnpT",
-    "-m",
-    "-n",
-    "-no-clear",
-    "-np",
-    "-nr",
-    "-o",
-    "-p",
-    "-pt",
-    "-q",
-    "-r",
-    "-s",
-    "-t",
-    "-text",
-    "-tfirst",
-    "-u",
-    "-v",
-    "-w",
-    "-wg",
-    "-wq",
-    "-wt",
-    "-wv",
-    "-x",
-    "-y"
-   ]
+   "exists": false,
+   "path": ""
   },
   "top": {
    "exists": true,
@@ -17741,8 +14980,487 @@
    ]
   },
   "wget": {
-   "exists": false,
-   "path": ""
+   "exists": true,
+   "help": "GNU Wget 1.25.0, a non-interactive network retriever.\nUsage: wget [OPTION]... [URL]...\n\nMandatory arguments to long options are mandatory for short options too.\n\nStartup:\n  -V,  --version                   display the version of Wget and exit\n  -h,  --help                      print this help\n  -b,  --background                go to background after startup\n  -e,  --execute=COMMAND           execute a `.wgetrc'-style command\n\nLogging and input file:\n  -o,  --output-file=FILE          log messages to FILE\n  -a,  --append-output=FILE        append messages to FILE\n  -d,  --debug                     print lots of debugging information\n  -q,  --quiet                     quiet (no output)\n  -v,  --verbose                   be verbose (this is the default)\n  -nv, --no-verbose                turn off verboseness, without being quiet\n       --report-speed=TYPE         output bandwidth as TYPE.  TYPE can be bits\n  -i,  --input-file=FILE           download URLs found in local or external FILE\n  -F,  --force-html                treat input file as HTML\n  -B,  --base=URL                  resolves HTML input-file links (-i -F)\n                                     relative to URL\n       --config=FILE               specify config file to use\n       --no-config                 do not read any config file\n       --rejected-log=FILE         log reasons for URL rejection to FILE\n\nDownload:\n  -t,  --tries=NUMBER              set number of retries to NUMBER (0 unlimits)\n       --retry-connrefused         retry even if connection is refused\n       --retry-on-host-error       consider host errors as non-fatal, transient errors\n       --retry-on-http-error=ERRORS    comma-separated list of HTTP errors to retry\n  -O,  --output-document=FILE      write documents to FILE\n  -nc, --no-clobber                skip downloads that would download to\n                                     existing files (overwriting them)\n       --no-netrc                  don't try to obtain credentials from .netrc\n  -c,  --continue                  resume getting a partially-downloaded file\n       --start-pos=OFFSET          start downloading from zero-based position OFFSET\n       --progress=TYPE             select progress gauge type\n       --show-progress             display the progress bar in any verbosity mode\n  -N,  --timestamping              don't re-retrieve files unless newer than\n                                     local\n       --no-if-modified-since      don't use conditional if-modified-since get\n                                     requests in timestamping mode\n       --no-use-server-timestamps  don't set the local file's timestamp by\n                                     the one on the server\n  -S,  --server-response           print server response\n       --spider                    don't download anything\n  -T,  --timeout=SECONDS           set all timeout values to SECONDS\n       --dns-timeout=SECS          set the DNS lookup timeout to SECS\n       --connect-timeout=SECS      set the connect timeout to SECS\n       --read-timeout=SECS         set the read timeout to SECS\n  -w,  --wait=SECONDS              wait SECONDS between retrievals\n                                     (applies if more then 1 URL is to be retrieved)\n       --waitretry=SECONDS         wait 1..SECONDS between retries of a retrieval\n                                     (applies if more then 1 URL is to be retrieved)\n       --random-wait               wait from 0.5*WAIT...1.5*WAIT secs between retrievals\n                                     (applies if more then 1 URL is to be retrieved)\n       --no-proxy                  explicitly turn off proxy\n  -Q,  --quota=NUMBER              set retrieval quota to NUMBER\n       --bind-address=ADDRESS      bind to ADDRESS (hostname or IP) on local host\n       --limit-rate=RATE           limit download rate to RATE\n       --no-dns-cache              disable caching DNS lookups\n       --restrict-file-names=OS    restrict chars in file names to ones OS allows\n       --ignore-case               ignore case when matching files/directories\n  -4,  --inet4-on",
+   "lines": [
+    [
+     "--no-follow-ftp is",
+     "the only way to restore the factory default from the command line."
+    ],
+    [
+     "-V",
+     ""
+    ],
+    [
+     "--version",
+     "Display the version of Wget."
+    ],
+    [
+     "-h",
+     ""
+    ],
+    [
+     "--help",
+     "Print a help message describing all of Wget's command-line options."
+    ],
+    [
+     "-b",
+     ""
+    ],
+    [
+     "--background",
+     "Go to background immediately after startup."
+    ],
+    [
+     "-e command",
+     ""
+    ],
+    [
+     "--execute command",
+     "Execute command as if it were a part of .wgetrc."
+    ],
+    [
+     "-o logfile",
+     ""
+    ],
+    [
+     "--output-file=logfile",
+     "Log all messages to logfile."
+    ],
+    [
+     "-a logfile",
+     ""
+    ],
+    [
+     "--append-output=logfile",
+     "Append to logfile."
+    ],
+    [
+     "-d",
+     ""
+    ],
+    [
+     "--debug",
+     "Turn on debug output, meaning various information important to the developers of Wget if it does..."
+    ],
+    [
+     "-q",
+     ""
+    ],
+    [
+     "--quiet",
+     "Turn off Wget's output."
+    ],
+    [
+     "-v",
+     ""
+    ],
+    [
+     "--verbose",
+     "Turn on verbose output, with all the available data."
+    ],
+    [
+     "-nv",
+     ""
+    ],
+    [
+     "--no-verbose",
+     "Turn off verbose without being completely quiet (use -q for that), which means that error message..."
+    ],
+    [
+     "--report-speed=type",
+     "Output bandwidth as type."
+    ],
+    [
+     "-i file",
+     ""
+    ],
+    [
+     "--input-file=file",
+     "Read URLs from a local or external file."
+    ],
+    [
+     "--input-metalink=file",
+     "Downloads files covered in local Metalink file."
+    ],
+    [
+     "--keep-badhash",
+     "Keeps downloaded Metalink's files with a bad hash."
+    ],
+    [
+     "--metalink-over-http",
+     "Issues HTTP HEAD request instead of GET and extracts Metalink metadata from response headers."
+    ],
+    [
+     "--metalink-index=number",
+     "Set the Metalink application/metalink4+xml metaurl ordinal NUMBER."
+    ],
+    [
+     "--preferred-location",
+     "Set preferred location for Metalink resources."
+    ],
+    [
+     "--xattr",
+     "Enable use of file system's extended attributes to save the original URL and the Referer HTTP hea..."
+    ],
+    [
+     "-F",
+     ""
+    ],
+    [
+     "--force-html",
+     "When input is read from a file, force it to be treated as an HTML file."
+    ],
+    [
+     "-B URL",
+     ""
+    ],
+    [
+     "--base=URL",
+     "Resolves relative links using URL as the point of reference, when reading links from an HTML file..."
+    ],
+    [
+     "--config=FILE",
+     "Specify the location of a startup file you wish to use instead of the default one(s)."
+    ],
+    [
+     "--no-config to",
+     "disable reading of config files."
+    ],
+    [
+     "--rejected-log=logfile",
+     "Logs all URL rejections to logfile as comma separated values."
+    ],
+    [
+     "--bind-address=ADDRESS",
+     "When making client TCP/IP connections, bind to ADDRESS on the local machine."
+    ],
+    [
+     "--bind-dns-address=ADDRESS",
+     "[libcares only] This address overrides the route for DNS requests."
+    ],
+    [
+     "--dns-servers is your friend.",
+     "ADDRESS must be specified either as IPv4 or IPv6 address."
+    ],
+    [
+     "--dns-servers=ADDRESSES",
+     "[libcares only] The given address(es) override the standard nameserver addresses, e.g."
+    ],
+    [
+     "-t number",
+     ""
+    ],
+    [
+     "--tries=number",
+     "Set number of tries to number."
+    ],
+    [
+     "-O file",
+     ""
+    ],
+    [
+     "--output-document=file",
+     "The documents will not be written to the appropriate files, but all will be concatenated together..."
+    ],
+    [
+     "-nc",
+     ""
+    ],
+    [
+     "--no-clobber",
+     "If a file is downloaded more than once in the same directory, Wget's behavior depends on a few op..."
+    ],
+    [
+     "--backups=backups",
+     "Before (over)writing a file, back up an existing file by adding a .1 suffix (_1 on VMS) to the fi..."
+    ],
+    [
+     "--no-netrc",
+     "Do not try to obtain credentials from .netrc file."
+    ],
+    [
+     "-c",
+     ""
+    ],
+    [
+     "--continue",
+     "Continue getting a partially-downloaded file."
+    ],
+    [
+     "--start-pos=OFFSET",
+     "Start downloading at zero-based position OFFSET."
+    ],
+    [
+     "--start-pos has",
+     "higher precedence over --continue."
+    ],
+    [
+     "--progress=type",
+     "Select the type of the progress indicator you wish to use."
+    ],
+    [
+     "--progress=bar was",
+     "passed to Wget during invocation."
+    ],
+    [
+     "--show-progress",
+     "Force wget to display the progress bar in any verbosity."
+    ],
+    [
+     "-N",
+     ""
+    ],
+    [
+     "--timestamping",
+     "Turn on time-stamping."
+    ],
+    [
+     "--no-if-modified-since",
+     "Do not send If-Modified-Since header in -N mode."
+    ],
+    [
+     "--no-use-server-timestamps",
+     "Don't set the local file's timestamp by the one on the server."
+    ]
+   ],
+   "long": [
+    "--1--2",
+    "--accept",
+    "--accept-regex",
+    "--adjust-extension",
+    "--append-output",
+    "--ask-password",
+    "--auth-no-challenge",
+    "--background",
+    "--backup-converted",
+    "--backups",
+    "--base",
+    "--bind-address",
+    "--bind-dns-address",
+    "--body-data",
+    "--body-file",
+    "--ca-certificate",
+    "--ca-directory",
+    "--certificate",
+    "--certificate-type",
+    "--check-certificate",
+    "--ciphers",
+    "--compression",
+    "--config",
+    "--connect-timeout",
+    "--content-disposition",
+    "--content-on-error",
+    "--continue",
+    "--convert-file-only",
+    "--convert-links",
+    "--crl-file",
+    "--cut-dirs",
+    "--debug",
+    "--default-page",
+    "--delete-after",
+    "--directory-prefix",
+    "--dns-servers",
+    "--dns-timeout",
+    "--domains",
+    "--egd-file",
+    "--exclude-directories",
+    "--exclude-domains",
+    "--execute",
+    "--follow-ftp",
+    "--follow-tags",
+    "--foo",
+    "--force-directories",
+    "--force-html",
+    "--ftp-password",
+    "--ftp-user",
+    "--ftps-clear-data-connection",
+    "--ftps-fallback-to-ftp",
+    "--ftps-implicit",
+    "--ftps-resume-ssl",
+    "--header",
+    "--help",
+    "--hsts-file",
+    "--html-extension",
+    "--http-password",
+    "--http-user",
+    "--https-only",
+    "--ignore-case",
+    "--ignore-length",
+    "--ignore-tags",
+    "--include-directories",
+    "--inet4-only",
+    "--inet6-only",
+    "--input-file",
+    "--input-metalink",
+    "--iri",
+    "--keep-badhash",
+    "--keep-session-cookies",
+    "--level",
+    "--limit-rate",
+    "--load-cookies",
+    "--load-cookies---simply",
+    "--local-encoding",
+    "--max-redirect",
+    "--metalink-index",
+    "--metalink-over-http",
+    "--method",
+    "--mirror",
+    "--no",
+    "--no-cache",
+    "--no-check-certificate",
+    "--no-clobber",
+    "--no-config",
+    "--no-cookies",
+    "--no-directories",
+    "--no-dns-cache",
+    "--no-follow-ftp",
+    "--no-ftps-resume-ssl",
+    "--no-glob",
+    "--no-host-directories",
+    "--no-hsts",
+    "--no-http-keep-alive",
+    "--no-if-modified-since",
+    "--no-iri",
+    "--no-netrc",
+    "--no-parent",
+    "--no-passive-ftp",
+    "--no-proxy",
+    "--no-remove-listing",
+    "--no-use-server-timestamps",
+    "--no-verbose",
+    "--no-warc-compression",
+    "--no-warc-digests",
+    "--no-warc-keep-log",
+    "--one",
+    "--output-document",
+    "--output-file",
+    "--page-requisites",
+    "--password",
+    "--pinnedpubkey",
+    "--post-data",
+    "--post-file",
+    "--prefer-family",
+    "--preferred-location",
+    "--preserve-permissions",
+    "--private-key",
+    "--private-key-type",
+    "--progress",
+    "--protocol-directories",
+    "--proxy-password",
+    "--proxy-user",
+    "--quiet",
+    "--quota",
+    "--random-file",
+    "--random-wait",
+    "--read-timeout",
+    "--recursive",
+    "--referer",
+    "--regex-type",
+    "--reject",
+    "--reject-regex",
+    "--rejected-log",
+    "--relative",
+    "--remote-encoding",
+    "--report-speed",
+    "--restrict-file-names",
+    "--retr-symlinks",
+    "--retry-connrefused",
+    "--retry-on-host-error",
+    "--retry-on-http-error",
+    "--save-cookies",
+    "--save-headers",
+    "--secure-protocol",
+    "--server-response",
+    "--show-progress",
+    "--span-hosts",
+    "--spider",
+    "--start-pos",
+    "--strict-comments",
+    "--timeout",
+    "--timestamping",
+    "--tries",
+    "--trust-server-names",
+    "--two",
+    "--unlink",
+    "--use-askpass",
+    "--user",
+    "--user-agent",
+    "--verbose",
+    "--version",
+    "--wait",
+    "--waitretry",
+    "--warc-cdx",
+    "--warc-dedup",
+    "--warc-file",
+    "--warc-header",
+    "--warc-max-size",
+    "--warc-tempdir",
+    "--xattr"
+   ],
+   "man": true,
+   "path": "/opt/homebrew/bin/wget",
+   "short": "46ABDEFHIKLNOPQRSTUVXabcdehiklmopqrtvwx",
+   "synopsis": [
+    "wget [option]... [URL]..."
+   ],
+   "what": "The non-interactive network downloader.",
+   "words": [
+    "-A",
+    "-B",
+    "-D",
+    "-E",
+    "-F",
+    "-H",
+    "-I",
+    "-K",
+    "-L",
+    "-N",
+    "-O",
+    "-P",
+    "-Q",
+    "-Q10k",
+    "-Q2m",
+    "-R",
+    "-S",
+    "-T",
+    "-U",
+    "-V",
+    "-X",
+    "-a",
+    "-b",
+    "-c",
+    "-d",
+    "-drc",
+    "-e",
+    "-h",
+    "-i",
+    "-k",
+    "-kKE",
+    "-l",
+    "-like",
+    "-m",
+    "-nH",
+    "-nc",
+    "-nd",
+    "-nd---create",
+    "-np",
+    "-nv",
+    "-o",
+    "-olog",
+    "-p",
+    "-q",
+    "-r",
+    "-rl0",
+    "-style",
+    "-supplied",
+    "-t",
+    "-t5",
+    "-v",
+    "-w",
+    "-wget",
+    "-x"
+   ]
   },
   "which": {
    "exists": true,
@@ -18414,33 +16132,8 @@
    ]
   },
   "zoxide": {
-   "exists": true,
-   "help": "zoxide 0.10.0\nAjeet D'Souza <<e-mail>>\nhttps://github.com/ajeetdsouza/zoxide\n\nA smarter cd command for your terminal\n\nUsage:\n  zoxide <COMMAND>\n\nCommands:\n  add     Add a new directory or increment its rank\n  edit    Edit the database\n  import  Import entries from another application\n  init    Generate shell configuration\n  query   Search for a directory in the database\n  remove  Remove a directory from the database\n\nOptions:\n  -h, --help     Print help\n  -V, --version  Print version\n\nEnvironment variables:\n  _ZO_DATA_DIR          Path for zoxide data files\n  _ZO_ECHO              Print the matched directory before navigating to it when set to 1\n  _ZO_EXCLUDE_DIRS      List of directory globs to be excluded\n  _ZO_FZF_OPTS          Custom flags to pass to fzf\n  _ZO_MAXAGE            Maximum total age after which entries start getting deleted\n  _ZO_RESOLVE_SYMLINKS  Resolve symlinks when storing paths",
-   "lines": [
-    [
-     "-h, --help",
-     "Print help information."
-    ],
-    [
-     "-V, --version",
-     "Print version information."
-    ]
-   ],
-   "long": [
-    "--help",
-    "--version"
-   ],
-   "man": true,
-   "path": "/opt/homebrew/bin/zoxide",
-   "short": "Vh",
-   "synopsis": [
-    "zoxide SUBCOMMAND [OPTIONS]"
-   ],
-   "what": "a smarter cd command",
-   "words": [
-    "-V",
-    "-h"
-   ]
+   "exists": false,
+   "path": ""
   }
  }
 }
