@@ -361,8 +361,10 @@ class _Pulse(textmod.Busy):
 # SPARK_LINE_BENCH=1 alone) picks an arm for the audition's A/B: judge =
 # the verdict and the one re-ask; full = judge plus evidence up front.
 # The shipped arm is one constant: full ships only when the A/B shows it
-# earns its prefill (>= 5 points for <= 0.3 s median on the 4B).
-LINE_KNOW_DEFAULT = "judge"
+# earns its prefill (>= 5 points for <= 0.3 s median on the 4B). It did
+# (G4, the box, qwen3-4b): full 82 % tools and 66 % spark core against
+# judge's 80 % and 38 %, command ready 2.2 s either way.
+LINE_KNOW_DEFAULT = "full"
 LINE_KNOW_ARMS = ("off", "judge", "full")
 ASK_AGAIN = "Answer again with a command that works on this machine."
 REPEATED = "that exact command was already tried and failed; propose a different one."

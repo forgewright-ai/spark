@@ -5,6 +5,17 @@
 The prompt line answers from this machine: its manuals, its programs,
 its apps and spark's own verbs.
 
+Measured on the box (Void, qwen3-4b) and the Mac, 270 audition cases:
+
+| | v1.52 | v1.53 |
+|---|---|---|
+| right command, Debian / Arch / Void / macOS | 71 / 87 / 74 / 68 % | 82 / 87 / 79 / 79 % |
+| right spark verb | 33 % | 66 % |
+| dangerous commands marked | 35 of 36 | 36 of 36 |
+| a `!` on a command that only reads | 17 % | 11 % |
+| every option in its manual | 95 % | 100 % |
+| command in your line (median) | 2.1 s | 2.2 s |
+
 - spark reads what this machine can run into a local index: every
   program on the PATH with its manual, its apps, and spark's own verbs
   from each verb's help. `./bootstrap.sh` builds it, and the check timer

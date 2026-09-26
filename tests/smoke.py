@@ -992,7 +992,9 @@ def line_knowledge_cases(t, spark, home):
     here is a bench turn: numbers kept, no thread."""
     from spark import cli as _cli, grounding as _gr
     snap = know_store(os.path.join(home, "know-store.json"))
-    bench = {"SPARK_LINE_BENCH": "1", "SPARK_KNOWLEDGE_SNAPSHOT": snap}
+    # the judge's cases name their arm (the shipped default is full, which
+    # also sends evidence up front); a case about full says so itself
+    bench = {"SPARK_LINE_BENCH": "1", "SPARK_KNOWLEDGE_SNAPSHOT": snap, "SPARK_LINE_KNOW": "judge"}
     tdir = os.path.join(home, ".local", "state", "spark", "turns")
 
     def last_turn():
@@ -1033,7 +1035,7 @@ def line_knowledge_cases(t, spark, home):
              "in the user message (never the system message); the history is the question and the stopped command",
              repr(second[-3:])[:400])
     rec = last_turn()
-    t.ok(rec.get("bench") == 1 and rec.get("arm") == _cli.LINE_KNOW_DEFAULT and rec.get("reasked") == 1
+    t.ok(rec.get("bench") == 1 and rec.get("arm") == "judge" and rec.get("reasked") == 1
          and rec.get("findings") == 1 and isinstance(rec.get("know_ms"), int) and rec.get("evidence_chars", 0) > 0
          and not any(k in rec for k in ("line", "command", "hint", "context")),
          "line knowledge: the turn keeps arm, know_ms, evidence_chars, reasked and findings -- numbers, no words",
