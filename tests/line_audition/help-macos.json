@@ -449,6 +449,129 @@
    "path": ""
   },
   "brew": {
+   "commands": {
+    "prefix": false,
+    "words": [
+     "install",
+     "uninstall",
+     "list",
+     "search",
+     "alias",
+     "analytics",
+     "as-console-user",
+     "autoremove",
+     "bundle",
+     "casks",
+     "cleanup",
+     "command",
+     "command-not-found-init",
+     "commands",
+     "completions",
+     "config",
+     "deps",
+     "desc",
+     "developer",
+     "docs",
+     "doctor",
+     "dr",
+     "fetch",
+     "formulae",
+     "gist-logs",
+     "help",
+     "home",
+     "homepage",
+     "info",
+     "abv",
+     "leaves",
+     "link",
+     "ln",
+     "ls",
+     "log",
+     "mcp-server",
+     "migrate",
+     "missing",
+     "nodenv-sync",
+     "options",
+     "outdated",
+     "pin",
+     "postinstall",
+     "post_install",
+     "pyenv-sync",
+     "rbenv-sync",
+     "readall",
+     "reinstall",
+     "sandbox-exec",
+     "services",
+     "setup-ruby",
+     "shellenv",
+     "source",
+     "tab",
+     "tap",
+     "tap-info",
+     "trust",
+     "unalias",
+     "remove",
+     "rm",
+     "unlink",
+     "unpin",
+     "untap",
+     "untrust",
+     "update",
+     "up",
+     "update-if-needed",
+     "update-reset",
+     "upgrade",
+     "uses",
+     "version-install",
+     "vulns",
+     "which-formula",
+     "audit",
+     "benchmark",
+     "bottle",
+     "bump",
+     "bump-cask-pr",
+     "bump-compatibility-version",
+     "bump-formula-pr",
+     "bump-revision",
+     "bump-unversioned-casks",
+     "cat",
+     "create",
+     "debugger",
+     "edit",
+     "extract",
+     "find-appcast",
+     "formula",
+     "generate-cask-token",
+     "generate-man-completions",
+     "generate-zap",
+     "install-bundler-gems",
+     "irb",
+     "lgtm",
+     "linkage",
+     "livecheck",
+     "lc",
+     "prof",
+     "rubocop",
+     "ruby",
+     "rubydoc",
+     "sh",
+     "style",
+     "tap-new",
+     "test",
+     "test-bot",
+     "tests",
+     "typecheck",
+     "tc",
+     "unbottled",
+     "unpack",
+     "update-perl-resources",
+     "update-python-resources",
+     "update-test",
+     "vendor-gems",
+     "verify",
+     "which-update"
+    ]
+   },
    "exists": true,
    "help": "Example usage:\n  brew search TEXT|/REGEX/\n  brew info [FORMULA|CASK...]\n  brew install FORMULA|CASK...\n  brew update\n  brew upgrade [FORMULA|CASK...]\n  brew uninstall FORMULA|CASK...\n  brew list [FORMULA|CASK...]\n\nTroubleshooting:\n  brew config\n  brew doctor\n  brew install --verbose --debug FORMULA|CASK\n\nContributing:\n  brew create URL [--no-fetch]\n  brew edit [FORMULA|CASK...]\n\nFurther help:\n  brew commands\n  brew help [COMMAND]\n  man brew\n  https://docs.brew.sh",
    "lines": [
@@ -4278,6 +4401,163 @@
    ]
   },
   "git": {
+   "commands": {
+    "prefix": false,
+    "words": [
+     "add",
+     "am",
+     "archive",
+     "backfill",
+     "bisect",
+     "branch",
+     "bundle",
+     "checkout",
+     "cherry-pick",
+     "citool",
+     "clean",
+     "clone",
+     "commit",
+     "describe",
+     "diff",
+     "fetch",
+     "format-patch",
+     "gc",
+     "grep",
+     "gui",
+     "init",
+     "log",
+     "maintenance",
+     "merge",
+     "mv",
+     "notes",
+     "pull",
+     "push",
+     "range-diff",
+     "rebase",
+     "reset",
+     "restore",
+     "revert",
+     "rm",
+     "shortlog",
+     "show",
+     "sparse-checkout",
+     "stash",
+     "status",
+     "submodule",
+     "switch",
+     "tag",
+     "worktree",
+     "config",
+     "fast-export",
+     "fast-import",
+     "filter-branch",
+     "mergetool",
+     "pack-refs",
+     "prune",
+     "reflog",
+     "refs",
+     "remote",
+     "repack",
+     "replace",
+     "annotate",
+     "blame",
+     "bugreport",
+     "count-objects",
+     "diagnose",
+     "difftool",
+     "fsck",
+     "help",
+     "instaweb",
+     "merge-tree",
+     "rerere",
+     "show-branch",
+     "verify-commit",
+     "verify-tag",
+     "version",
+     "whatchanged",
+     "archimport",
+     "cvsexportcommit",
+     "cvsimport",
+     "cvsserver",
+     "imap-send",
+     "p4",
+     "quiltimport",
+     "request-pull",
+     "send-email",
+     "svn",
+     "apply",
+     "checkout-index",
+     "commit-graph",
+     "commit-tree",
+     "hash-object",
+     "index-pack",
+     "merge-file",
+     "merge-index",
+     "mktag",
+     "mktree",
+     "multi-pack-index",
+     "pack-objects",
+     "prune-packed",
+     "read-tree",
+     "replay",
+     "symbolic-ref",
+     "unpack-objects",
+     "update-index",
+     "update-ref",
+     "write-tree",
+     "cat-file",
+     "cherry",
+     "diff-files",
+     "diff-index",
+     "diff-pairs",
+     "diff-tree",
+     "for-each-ref",
+     "for-each-repo",
+     "get-tar-commit-id",
+     "ls-files",
+     "ls-remote",
+     "ls-tree",
+     "merge-base",
+     "name-rev",
+     "pack-redundant",
+     "rev-list",
+     "rev-parse",
+     "show-index",
+     "show-ref",
+     "unpack-file",
+     "var",
+     "verify-pack",
+     "daemon",
+     "fetch-pack",
+     "http-backend",
+     "send-pack",
+     "update-server-info",
+     "http-fetch",
+     "http-push",
+     "receive-pack",
+     "shell",
+     "upload-archive",
+     "upload-pack",
+     "check-attr",
+     "check-ignore",
+     "check-mailmap",
+     "check-ref-format",
+     "column",
+     "credential",
+     "credential-cache",
+     "credential-store",
+     "fmt-merge-msg",
+     "hook",
+     "interpret-trailers",
+     "mailinfo",
+     "mailsplit",
+     "merge-one-file",
+     "patch-id",
+     "sh-i18n",
+     "sh-setup",
+     "stripspace"
+    ]
+   },
    "exists": true,
    "help": "usage: git [-v | --version] [-h | --help] [-C <path>] [-c <name>=<value>]\n           [--exec-path[=<path>]] [--html-path] [--man-path] [--info-path]\n           [-p | --paginate | -P | --no-pager] [--no-replace-objects] [--no-lazy-fetch]\n           [--no-optional-locks] [--no-advice] [--bare] [--git-dir=<path>]\n           [--work-tree=<path>] [--namespace=<name>] [--config-env=<name>=<envvar>]\n           <command> [<args>]\n\nThese are common Git commands used in various situations:\n\nstart a working area (see also: git help tutorial)\n   clone      Clone a repository into a new directory\n   init       Create an empty Git repository or reinitialize an existing one\n\nwork on the current change (see also: git help everyday)\n   add        Add file contents to the index\n   mv         Move or rename a file, a directory, or a symlink\n   restore    Restore working tree files\n   rm         Remove files from the working tree and from the index\n\nexamine the history and state (see also: git help revisions)\n   bisect     Use binary search to find the commit that introduced a bug\n   diff       Show changes between commits, commit and working tree, etc\n   grep       Print lines matching a pattern\n   log        Show commit logs\n   show       Show various types of objects\n   status     Show the working tree status\n\ngrow, mark and tweak your common history\n   backfill   Download missing objects in a partial clone\n   branch     List, create, or delete branches\n   commit     Record changes to the repository\n   merge      Join two or more development histories together\n   rebase     Reapply commits on top of another base tip\n   reset      Reset current HEAD to the specified state\n   switch     Switch branches\n   tag        Create, list, delete or verify a tag object signed with GPG\n\ncollaborate (see also: git help workflows)\n   fetch      Download objects and refs from another repository\n   pull       Fetch from and integrate with another repository or a local branch\n   push       Update remote refs along with associated objects\n\n'git help -a' and 'git help -g' list available subcommands and some\nconcept guides. See 'git help <command>' or 'git help <concept>'\nto read about a specific subcommand or concept.\nSee 'git help git' for an overview of the system.",
    "lines": [
@@ -6530,6 +6810,49 @@
    ]
   },
   "launchctl": {
+   "commands": {
+    "prefix": false,
+    "words": [
+     "enable",
+     "disable",
+     "kickstart",
+     "attach",
+     "kill",
+     "blame",
+     "print",
+     "print-cache",
+     "print-disabled",
+     "plist",
+     "procinfo",
+     "hostinfo",
+     "resolveport",
+     "examine",
+     "config",
+     "reboot",
+     "error",
+     "variant",
+     "version",
+     "remove",
+     "start",
+     "stop",
+     "list",
+     "setenv",
+     "unsetenv",
+     "getenv",
+     "export",
+     "getrusage",
+     "shutdown",
+     "umask",
+     "bslist",
+     "bsexec",
+     "asuser",
+     "bstree",
+     "managerpid",
+     "manageruid",
+     "managername",
+     "help"
+    ]
+   },
    "exists": true,
    "help": "Usage: launchctl <subcommand> ... | help [subcommand]\nMany subcommands take a target specifier that refers to a domain or service\nwithin that domain. The available specifier forms are:\n\nsystem/[service-name]\nTargets the system-wide domain or service within. Root privileges are required\nto make modifications.\n\nuser/<uid>/[service-name]\nTargets the user domain or service within. A process running as the target user\nmay make modifications. Root may modify any user's domain. User domains do not\nexist on iOS.\n\ngui/<uid>/[service-name]\nTargets the GUI domain or service within. Each GUI domain is associated with a\nuser domain, and a process running as the owner of that user domain may make\nmodifications. Root may modify any GUI domain. GUI domains do not exist on iOS.\n\nsession/<asid>/[service-name]\nTargets a session domain or service within. A process running within the target\nsecurity audit session may make modifications. Root may modify any session\ndomain.\n\npid/<pid>/[service-name]\nTargets a process domain or service within. Only the process which owns the\ndomain may modify it. Even root may not do so.\n\nWhen using a legacy subcommand which manipulates a domain, the target domain is\ninferred from the current execution context. When run as root (whether it is\nvia a root shell or sudo(1)), the target domain is assumed to be the\nsystem-wide domain. When run from a normal user's shell, the target is assumed\nto be the per-user domain for that current user.\n\nSubcommands:\n\tbootstrap       Bootstraps a domain or a service into a domain.\n\tbootout         Tears down a domain or removes a service from a domain.\n\tenable          Enables an existing service.\n\tdisable         Disables an existing service.\n\tkickstart       Forces an existing service to start.\n\tattach          Attach the system's debugger to a service.\n\tdebug           Configures the next invocation of a service for debugging.\n\tkill            Sends a signal to the service instance.\n\tblame           Prints the reason a service is running.\n\tprint           Prints a description of a domain or service.\n\tprint-cache     Prints information about the service cache.\n\tprint-disabled  Prints which services are disabled.\n\tprint-token     Prints service identifier given an xpc event token.\n\tplist           Prints a property list embedded in a binary (targets the Info.plist by default).\n\tprocinfo        Prints port information about a process.\n\thostinfo        Prints port information about the host.\n\tresolveport     Resolves a port name from a process to an endpoint in launchd.\n\tlimit           Reads or modifies launchd's resource limits.\n\texamine         Runs the specified analysis tool against launchd in a non-reentrant manner.\n\tconfig          Modifies persistent configuration parameters for launchd domains.\n\tdumpstate       Dumps launchd state to stdout.\n\tdump-xsc        Dumps launchd XPC string caches to stdout.\n\tdumpjpcategory  Dumps the jetsam properties category for all services.\n\treboot          Initiates a system reboot of the specified type.\n\tbootshell       Brings the system up from single-user mode with a console shell.\n\tload            Recommended alternatives: bootstrap | enable. Bootstraps a service or directory of services.\n\tunload          Recommended alternatives: bootout | disable. Unloads a service or directory of services.\n\tremove          Unloads the specified service name.\n\tlist            Lists information about services.\n\tstart           Starts the specified service.\n\tstop            Stops the specified service if it is running.\n\tsetenv          Sets the specified environment variables for all services within the domain.\n\tunsetenv        Unsets the specified environment variables for all services within the domain.\n\tgetenv          Gets the value of an environment variable from within launchd.\n\tbsexec          Execute a program in another process' bootstrap context.\n\tasuser          Execute a program in the bootstrap context of a given user.\n\treload-atf      Reloads the active trial factors.\n\tsubmit          Submit a basic job from the command line.\n\tmanagerpid ",
    "lines": [
@@ -9580,6 +9903,248 @@
     "-t",
     "-v",
     "-z"
+   ]
+  },
+  "pkgutil": {
+   "exists": true,
+   "help": "Usage: pkgutil [OPTIONS] [COMMANDS] ...\n\nOptions:\n  --help                 Show this usage guide\n  --verbose, -v          Show contextual information and format for easy reading\n  --force, -f            Perform all operations without asking for confirmation\n  --volume PATH          Perform all operations on the specified volume\n  --edit-pkg PKGID       Adjust properties of package PKGID using --learn PATH\n  --only-files           List only files (not directories) in --files listing\n  --only-dirs            List only directories (not files) in --files listing\n  --regexp               Try all PKGID arguments as regular expressions\n\nReceipt Database Commands:\n  --pkgs, --packages     List all currently installed package IDs on --volume\n  --pkgs-plist           List all package IDs on --volume in plist format\n  --pkgs=REGEXP          List package IDs on --volume that match REGEXP\n  --groups               List all GROUPIDs on --volume\n  --groups-plist         List all GROUPIDs on --volume in plist format\n  --group-pkgs GROUPID   List all PKGIDs in GROUPID\n  --files PKGID          List files installed by the specified package\n  --lsbom PKGID          List files in the same format as 'lsbom -s'\n  --pkg-groups PKGID     List all GROUPIDs that PKGID is a member of\n  --export-plist PKGID   Print all info about PKGID in plist format\n  --pkg-info PKGID       Show metadata about PKGID\n  --pkg-info-plist PKGID Show metadata about PKGID in plist format\n  --file-info PATH       Show metadata known about PATH\n  --file-info-plist PATH Show metadata known about PATH in plist format\n  --forget PKGID         Discard receipt data for the specified package\n  --learn PATH           Update --edit-pkg PKGID with actual metadata from PATH\n\nFile Commands:\n  --expand PKG DIR       Expand the flat package PKG to DIR\n  --flatten DIR PKG      Flatten the files at DIR as PKG\n  --bom PATH             Extract any Bom files from the pkg at PATH into /tmp\n  --payload-files PATH   List the paths archived within the (m)pkg at PATH\n  --check-signature PATH Validate the signature of the pkg at PATH and print certificate information",
+   "lines": [
+    [
+     "--help, -h",
+     "A brief summary of commands and usage."
+    ],
+    [
+     "--force, -f",
+     "Don't ask for confirmation before performing a potentially destructive or ambiguous operation."
+    ],
+    [
+     "--verbose, -v",
+     "Output in a \"human-readable\" format with extra headers, footers, indentation, and other contextua..."
+    ],
+    [
+     "--volume path",
+     "Perform all operations on the specified volume or home directory."
+    ],
+    [
+     "--edit-pkg package-id",
+     "Specifies an existing receipt to be modified in-place by --learn."
+    ],
+    [
+     "--only-files",
+     "List only files (not directories) in --files listing."
+    ],
+    [
+     "--only-dirs",
+     "List only directories (not files) in --files listing."
+    ],
+    [
+     "--regexp",
+     "Try to match package-id arguments as a regular expression if an exact match isn't found."
+    ],
+    [
+     "--packages, --pkgs",
+     "List all installed package IDs on the specified --volume."
+    ],
+    [
+     "--pkgs-plist",
+     "List all installed package IDs on the specified --volume in Mac OS X plist(5) format."
+    ],
+    [
+     "--pkgs=REGEXP",
+     "List all installed package IDs matching REGEXP on the specified --volume."
+    ],
+    [
+     "--files package-id",
+     "List all of the files installed under the package-id."
+    ],
+    [
+     "--export-plist package-id",
+     "Print all receipt information about the specified package-id in the standard Mac OS X plist(5) fo..."
+    ],
+    [
+     "--pkg-info package-id",
+     "Print extended information about the specified package-id."
+    ],
+    [
+     "--pkg-info-plist package-id",
+     "Print extended information about the specified package-id in Mac OS X plist(5) format."
+    ],
+    [
+     "--forget package-id",
+     "Discard all receipt data about package-id, but do not touch the installed files."
+    ],
+    [
+     "--learn path",
+     "Update the ACLs of the given path in the receipt identified by --edit-pkg."
+    ],
+    [
+     "--pkg-groups package-id",
+     "List all of the package groups this package-id is a member of."
+    ],
+    [
+     "--groups",
+     "List all of the package groups on the specified --volume."
+    ],
+    [
+     "--groups-plist",
+     "List all of the package groups on the specified --volume in Mac OS X plist(5) format."
+    ],
+    [
+     "--group-pkgs group-id",
+     "List all of the packages that are members of this group-id."
+    ],
+    [
+     "--file-info path",
+     "Show the metadata known about path."
+    ],
+    [
+     "--file-info-plist path",
+     "Show the metadata known about path in Mac OS X plist(5) format."
+    ],
+    [
+     "--expand pkg-path dir-path",
+     "Expand the flat package at pkg-path into a new directory specified by dir-path."
+    ],
+    [
+     "--flatten dir-path pkg-path",
+     "Flatten the dir-path into a new flat package created at pkg-path."
+    ],
+    [
+     "--bom path",
+     "Extract any BOM files from the flat pkg at path into /tmp and return the filename(s)."
+    ],
+    [
+     "--payload-files path",
+     "List the files archived within the payload of the uninstalled flat package(s) contained at path."
+    ],
+    [
+     "--check-signature pkg-path",
+     "Check the validity and trust of the signature on the package at pkg-path."
+    ],
+    [
+     "--help",
+     "Show this usage guide"
+    ],
+    [
+     "--volume PATH",
+     "Perform all operations on the specified volume"
+    ],
+    [
+     "--edit-pkg PKGID",
+     "Adjust properties of package PKGID using --learn PATH"
+    ],
+    [
+     "--pkgs, --packages",
+     "List all currently installed package IDs on --volume"
+    ],
+    [
+     "--group-pkgs GROUPID",
+     "List all PKGIDs in GROUPID"
+    ],
+    [
+     "--files PKGID",
+     "List files installed by the specified package"
+    ],
+    [
+     "--lsbom PKGID",
+     "List files in the same format as 'lsbom -s'"
+    ],
+    [
+     "--pkg-groups PKGID",
+     "List all GROUPIDs that PKGID is a member of"
+    ],
+    [
+     "--export-plist PKGID",
+     "Print all info about PKGID in plist format"
+    ],
+    [
+     "--pkg-info PKGID",
+     "Show metadata about PKGID"
+    ],
+    [
+     "--pkg-info-plist PKGID",
+     "Show metadata about PKGID in plist format"
+    ],
+    [
+     "--file-info PATH",
+     "Show metadata known about PATH"
+    ],
+    [
+     "--file-info-plist PATH",
+     "Show metadata known about PATH in plist format"
+    ],
+    [
+     "--forget PKGID",
+     "Discard receipt data for the specified package"
+    ],
+    [
+     "--learn PATH",
+     "Update --edit-pkg PKGID with actual metadata from PATH"
+    ],
+    [
+     "--expand PKG DIR",
+     "Expand the flat package PKG to DIR"
+    ],
+    [
+     "--flatten DIR PKG",
+     "Flatten the files at DIR as PKG"
+    ],
+    [
+     "--bom PATH",
+     "Extract any Bom files from the pkg at PATH into /tmp"
+    ],
+    [
+     "--payload-files PATH",
+     "List the paths archived within the (m)pkg at PATH"
+    ],
+    [
+     "--check-signature PATH",
+     "Validate the signature of the pkg at PATH and print certificate information"
+    ]
+   ],
+   "long": [
+    "--bom",
+    "--check-signature",
+    "--edit-pkg",
+    "--expand",
+    "--export-plist",
+    "--file-info",
+    "--file-info-plist",
+    "--files",
+    "--flatten",
+    "--force",
+    "--forget",
+    "--group-pkgs",
+    "--groups",
+    "--groups-plist",
+    "--help",
+    "--learn",
+    "--lsbom",
+    "--only-dirs",
+    "--only-files",
+    "--packages",
+    "--payload-files",
+    "--pkg-groups",
+    "--pkg-info",
+    "--pkg-info-plist",
+    "--pkgs",
+    "--pkgs-plist",
+    "--regexp",
+    "--verbose",
+    "--volume"
+   ],
+   "man": true,
+   "path": "/usr/sbin/pkgutil",
+   "short": "fhsv",
+   "synopsis": [
+    "pkgutil [options] [commands]"
+   ],
+   "what": "Query and manipulate macOS Installer packages and receipts.",
+   "words": [
+    "-f",
+    "-h",
+    "-s",
+    "-v"
    ]
   },
   "pkill": {
@@ -13223,6 +13788,31 @@
    "path": ""
   },
   "tmutil": {
+   "commands": {
+    "prefix": false,
+    "words": [
+     "setdestination",
+     "destinationinfo",
+     "setquota",
+     "removedestination",
+     "enable",
+     "disable",
+     "stopbackup",
+     "delete",
+     "deleteinprogress",
+     "latestbackup",
+     "listbackups",
+     "machinedirectory",
+     "calculatedrift",
+     "inheritbackup",
+     "associatedisk",
+     "localsnapshot",
+     "listlocalsnapshots",
+     "listlocalsnapshotdates",
+     "deletelocalsnapshots",
+     "thinlocalsnapshots"
+    ]
+   },
    "exists": true,
    "help": "Usage: tmutil addexclusion [-p|-v] item ...\n\nUsage: tmutil associatedisk [-a] mount_point volume_backup_directory\n\nUsage: tmutil calculatedrift machine_directory\n\nUsage: tmutil compare [-@acdefghlmnstuEX] [-D depth] [-I name]\n       tmutil compare [-@acdefghlmnstuEX] [-D depth] [-I name] snapshot_path\n       tmutil compare [-@acdefghlmnstuEUX] [-D depth] [-I name] path1 path2\n\nUsage: tmutil delete [-d backup_mount_point -t timestamp] [-p path]\n\nUsage: tmutil deleteinprogress machine_directory \n\nUsage: tmutil deletelocalsnapshots [<mount_point> | <snapshot_date>]\n\nUsage: tmutil destinationinfo [-X]\n\nUsage: tmutil disable\n\nUsage: tmutil enable\n\nUsage: tmutil help verb\n\nUsage: tmutil inheritbackup machine_directory\n       tmutil inheritbackup sparse_bundle\n\nUsage: tmutil isexcluded item ...\n\nUsage: tmutil latestbackup [-m] [-t] [-d mount_point]\n\nUsage: tmutil listbackups [-m] [-t] [-d mount_point]\n\nUsage: tmutil listlocalsnapshotdates [<mount_point>]\n\nUsage: tmutil listlocalsnapshots <mount_point>\n\nUsage: tmutil localsnapshot\n\nUsage: tmutil machinedirectory\n\nUsage: tmutil removedestination destination_id\n\nUsage: tmutil removeexclusion [-p|-v] item ...\n\nUsage: tmutil restore [-v] src ... dst\n\nUsage: tmutil setdestination [-a]  mount_point\n       tmutil setdestination [-ap] afp://user[:pass]@host/share\n\nUsage: tmutil setquota destination_id quota_in_gigabytes\n\nUsage: tmutil startbackup [-a | --auto] [-b | --block] [-r | --rotation] [-d | --destination dest_id]\n\nUsage: tmutil stopbackup\n\nUsage: tmutil thinlocalsnapshots <mount_point> [purgeamount] [urgency]\n\nUsage: tmutil uniquesize path ...\n\nUsage: tmutil verifychecksums path ...\n\nUsage: tmutil version",
    "lines": [
@@ -14941,6 +15531,15 @@
    ]
   },
   "wdutil": {
+   "commands": {
+    "prefix": false,
+    "words": [
+     "diagnose",
+     "info",
+     "log",
+     "dump"
+    ]
+   },
    "exists": true,
    "help": "usage: sudo wdutil diagnose [-q] [-f outputDirectoryPath]\n            -q may be specified to suppress legal prompt and Finder window\n       sudo wdutil info\n       sudo wdutil log [{+|-} {system|wifi}]+\n       sudo wdutil dump\n       sudo wdutil clean\n       sudo wdutil privateMAC={0/1}",
    "lines": [

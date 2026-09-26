@@ -196,6 +196,20 @@
    ]
   },
   "apt": {
+   "commands": {
+    "prefix": false,
+    "words": [
+     "list",
+     "search",
+     "show",
+     "update",
+     "install",
+     "remove",
+     "upgrade",
+     "full-upgrade",
+     "edit-sources"
+    ]
+   },
    "exists": true,
    "help": "apt 3.0.3 (amd64)\nUsage: apt [options] command\n\napt is a commandline package manager and provides commands for\nsearching and managing as well as querying information about packages.\nIt provides the same functionality as the specialized APT tools,\nlike apt-get and apt-cache, but enables options more suitable for\ninteractive use by default.\n\nMost used commands:\n  list - list packages based on package names\n  search - search in package descriptions\n  show - show package details\n  install - install packages\n  reinstall - reinstall packages\n  remove - remove packages\n  autoremove - automatically remove all unused packages\n  update - update list of available packages\n  upgrade - upgrade the system by installing/upgrading packages\n  full-upgrade - upgrade the system by removing/installing/upgrading packages\n  edit-sources - edit the source information file\n  modernize-sources - modernize .list files to .sources files\n  satisfy - satisfy dependency strings\n\nSee apt(8) for more information about the available commands.\nConfiguration options and syntax is detailed in apt.conf(5).\nInformation about how to configure sources can be found in sources.list(5).\nPackage and version choices can be expressed via apt_preferences(5).\nSecurity details are available in apt-secure(8).\n                                        This APT has Super Cow Powers.",
    "lines": [],
@@ -226,6 +240,27 @@
    ]
   },
   "apt-cache": {
+   "commands": {
+    "prefix": false,
+    "words": [
+     "gencaches",
+     "showpkg",
+     "showsrc",
+     "stats",
+     "dump",
+     "dumpavail",
+     "unmet",
+     "search",
+     "show",
+     "depends",
+     "rdepends",
+     "pkgnames",
+     "dotty",
+     "xvcg",
+     "policy",
+     "madison"
+    ]
+   },
    "exists": true,
    "help": "apt 3.0.3 (amd64)\nUsage: apt-cache [options] command\n       apt-cache [options] show pkg1 [pkg2 ...]\n\napt-cache queries and displays available information about installed\nand installable packages. It works exclusively on the data acquired\ninto the local cache via the 'update' command of e.g. apt-get. The\ndisplayed information may therefore be outdated if the last update was\ntoo long ago, but in exchange apt-cache works independently of the\navailability of the configured sources (e.g. offline).\n\nMost used commands:\n  showsrc - Show source records\n  search - Search the package list for a regex pattern\n  depends - Show raw dependency information for a package\n  rdepends - Show reverse dependency information for a package\n  show - Show a readable record for the package\n  pkgnames - List the names of all packages in the system\n  policy - Show policy settings\n\nSee apt-cache(8) for more information about the available commands.\nConfiguration options and syntax is detailed in apt.conf(5).\nInformation about how to configure sources can be found in sources.list(5).\nPackage and version choices can be expressed via apt_preferences(5).\nSecurity details are available in apt-secure(8).",
    "lines": [
@@ -375,6 +410,25 @@
    ]
   },
   "apt-get": {
+   "commands": {
+    "prefix": false,
+    "words": [
+     "update",
+     "upgrade",
+     "dselect-upgrade",
+     "dist-upgrade",
+     "install",
+     "remove",
+     "purge",
+     "source",
+     "build-dep",
+     "download",
+     "check",
+     "clean",
+     "autoclean",
+     "autoremove"
+    ]
+   },
    "exists": true,
    "help": "apt 3.0.3 (amd64)\nUsage: apt-get [options] command\n       apt-get [options] install|remove pkg1 [pkg2 ...]\n       apt-get [options] source pkg1 [pkg2 ...]\n\napt-get is a command line interface for retrieval of packages\nand information about them from authenticated sources and\nfor installation, upgrade and removal of packages together\nwith their dependencies.\n\nMost used commands:\n  update - Retrieve new lists of packages\n  upgrade - Perform an upgrade\n  install - Install new packages (pkg is libc6 not libc6.deb)\n  reinstall - Reinstall packages (pkg is libc6 not libc6.deb)\n  remove - Remove packages\n  purge - Remove packages and config files\n  autoremove - Remove automatically all unused packages\n  dist-upgrade - Distribution upgrade, see apt-get(8)\n  dselect-upgrade - Follow dselect selections\n  build-dep - Configure build-dependencies for source packages\n  satisfy - Satisfy dependency strings\n  clean - Erase downloaded archive files\n  autoclean - Erase old downloaded archive files\n  check - Verify that there are no broken dependencies\n  source - Download source archives\n  download - Download the binary package into the current directory\n  changelog - Download and display the changelog for the given package\n\nSee apt-get(8) for more information about the available commands.\nConfiguration options and syntax is detailed in apt.conf(5).\nInformation about how to configure sources can be found in sources.list(5).\nPackage and version choices can be expressed via apt_preferences(5).\nSecurity details are available in apt-secure(8).\n                                        This APT has Super Cow Powers.",
    "lines": [
@@ -4609,6 +4663,374 @@
    "exists": false,
    "path": ""
   },
+  "editor": {
+   "exists": true,
+   "help": "Usage: nano [OPTIONS] [[+LINE[,COLUMN]] FILE]...\n\nTo place the cursor on a specific line of a file, put the line number with\na '+' before the filename.  The column number can be added after a comma.\nWhen a filename is '-', nano reads data from standard input.\n\n Option         Long option             Meaning\n -A             --smarthome             Enable smart home key\n -B             --backup                Save backups of existing files\n -C <dir>       --backupdir=<dir>       Directory for saving unique backup files\n -D             --boldtext              Use bold instead of reverse video text\n -E             --tabstospaces          Convert typed tabs to spaces\n -F             --multibuffer           Read a file into a new buffer by default\n -G             --locking               Use (vim-style) lock files\n -H             --historylog            Save & reload old search/replace strings\n -I             --ignorercfiles         Don't look at nanorc files\n -J <number>    --guidestripe=<number>  Show a guiding bar at this column\n -K             --rawsequences          Fix numeric keypad key confusion problem\n -L             --nonewlines            Don't add an automatic newline\n -M             --trimblanks            Trim tail spaces when hard-wrapping\n -N             --noconvert             Don't convert files from DOS/Mac format\n -O             --bookstyle             Leading whitespace means new paragraph\n -P             --positionlog           Save & restore position of the cursor\n -Q <regex>     --quotestr=<regex>      Regular expression to match quoting\n -R             --restricted            Restrict access to the filesystem\n -S             --softwrap              Display overlong lines on multiple rows\n -T <number>    --tabsize=<number>      Make a tab this number of columns wide\n -U             --quickblank            Wipe status bar upon next keystroke\n -V             --version               Print version information and exit\n -W             --wordbounds            Detect word boundaries more accurately\n -X <string>    --wordchars=<string>    Which other characters are word parts\n -Y <name>      --syntax=<name>         Syntax definition to use for coloring\n -Z             --zap                   Let Bsp and Del erase a marked region\n -a             --atblanks              When soft-wrapping, do it at whitespace\n -b             --breaklonglines        Automatically hard-wrap overlong lines\n -c             --constantshow          Constantly show cursor position\n -d             --rebinddelete          Fix Backspace/Delete confusion problem\n -e             --emptyline             Keep the line below the title bar empty\n -f <file>      --rcfile=<file>         Use only this file for configuring nano\n -g             --showcursor            Show cursor in file browser & help text\n -h             --help                  Show this help text and exit\n -i             --autoindent            Automatically indent new lines\n -j             --jumpyscrolling        Scroll per half-screen, not per line\n -k             --cutfromcursor         Cut from cursor to end of line\n -l             --linenumbers           Show line numbers in front of the text\n -m             --mouse                 Enable the use of the mouse\n -n             --noread                Do not read the file (only write it)\n -o <dir>       --operatingdir=<dir>    Set operating directory\n -p             --preserve              Preserve XON (^Q) and XOFF (^S) keys\n -q             --indicator             Show a position+portion indicator\n -r <number>    --fill=<number>         Set width for hard-wrap and justify\n -s <program>   --speller=<program>     Use this alternative spell checker\n -t             --saveonexit            Save changes on exit, don't prompt\n -u             --unix                  Save a file by default in Unix format\n -v             --view                  View mode (read-only)\n -w             --nowrap                Don't hard-wrap long lines [default]\n -x             --nohelp                Don't show the two help lines\n -y             --afterends",
+   "lines": [
+    [
+     "-A, --smarthome",
+     "Make the Home key smarter."
+    ],
+    [
+     "-B, --backup",
+     "When saving a file, back up the previous version of it, using the current filename suffixed with..."
+    ],
+    [
+     "-C directory, --backupdir=directory",
+     "Make and keep not just one backup file, but make and keep a uniquely numbered one every time a fi..."
+    ],
+    [
+     "-D, --boldtext",
+     "For the interface, use bold instead of reverse video."
+    ],
+    [
+     "-E, --tabstospaces",
+     "Convert each typed tab to spaces -- to the number of spaces that a tab at that posi- tion would t..."
+    ],
+    [
+     "-F, --multibuffer",
+     "Read a file into a new buffer by default."
+    ],
+    [
+     "-G, --locking",
+     "Use vim-style file locking when editing files."
+    ],
+    [
+     "-H, --historylog",
+     "Save the last hundred search strings and replacement strings and executed commands, so they can b..."
+    ],
+    [
+     "-I, --ignorercfiles",
+     "Don't look at the system's nanorc nor at the user's nanorc."
+    ],
+    [
+     "-J number, --guidestripe=number",
+     "Draw a vertical stripe at the given column, to help judge the width of the text."
+    ],
+    [
+     "-K, --rawsequences",
+     "Interpret escape sequences directly, instead of asking ncurses to translate them."
+    ],
+    [
+     "-L, --nonewlines",
+     "Don't automatically add a newline when a text does not end with one."
+    ],
+    [
+     "-M, --trimblanks",
+     "Snip trailing whitespace from the wrapped line when automatic hard-wrapping occurs or when text i..."
+    ],
+    [
+     "-N, --noconvert",
+     "Disable automatic conversion of files from DOS/Mac format."
+    ],
+    [
+     "-O, --bookstyle",
+     "When justifying, treat any line that starts with whitespace as the beginning of a paragraph (unle..."
+    ],
+    [
+     "-P, --positionlog",
+     "For the 200 most recent files, log the last position of the cursor, and place it at that position..."
+    ],
+    [
+     "-Q \"regex\", --quotestr=\"regex\"",
+     "Set the regular expression for matching the quoting part of a line."
+    ],
+    [
+     "-R, --restricted",
+     "Restricted mode: don't read or write to any file not specified on the command line."
+    ],
+    [
+     "-S, --softwrap",
+     "Display over multiple screen rows lines that exceed the screen's width."
+    ],
+    [
+     "-T number, --tabsize=number",
+     "Set the size (width) of a tab to number columns."
+    ],
+    [
+     "-U, --quickblank",
+     "Make status-bar messages disappear after 1 keystroke instead of after 20."
+    ],
+    [
+     "-V, --version",
+     "Show the current version number and exit."
+    ],
+    [
+     "-W, --wordbounds",
+     "Detect word boundaries differently by treating punctuation characters as part of a word."
+    ],
+    [
+     "-X \"characters\", --wordchars=\"characters\"",
+     "Specify which other characters (besides the normal alphanumeric ones) should be con- sidered as p..."
+    ],
+    [
+     "-Y name, --syntax=name",
+     "Specify the name of the syntax highlighting to use from among the ones defined in the nanorc files."
+    ],
+    [
+     "-Z, --zap",
+     "Let an unmodified Backspace or Delete erase the marked region (instead of a single character, and..."
+    ],
+    [
+     "-a, --atblanks",
+     "When doing soft line wrapping, wrap lines at whitespace instead of always at the edge of the screen."
+    ],
+    [
+     "-b, --breaklonglines",
+     "Automatically hard-wrap the current line when it becomes overlong."
+    ],
+    [
+     "-c, --constantshow",
+     "Constantly report the cursor position on the status bar."
+    ],
+    [
+     "-d, --rebinddelete",
+     "Interpret the Delete and Backspace keys differently so that both Backspace and Delete work properly."
+    ],
+    [
+     "-e, --emptyline",
+     "Do not use the line below the title bar, leaving it entirely blank."
+    ],
+    [
+     "-f file, --rcfile=file",
+     "Read only this file for setting nano's options, instead of reading both the system- wide and the..."
+    ],
+    [
+     "-g, --showcursor",
+     "Make the cursor visible in the file browser (putting it on the highlighted item) and in the help..."
+    ],
+    [
+     "-h, --help",
+     "Show a summary of the available command-line options and exit."
+    ],
+    [
+     "-i, --autoindent",
+     "Automatically indent a newly created line to the same number of tabs and/or spaces as the previou..."
+    ],
+    [
+     "-j, --jumpyscrolling",
+     "Scroll the buffer contents per half-screen instead of per line."
+    ],
+    [
+     "-k, --cutfromcursor",
+     "Make the 'Cut Text' command (normally ^K) cut from the current cursor position to the end of the..."
+    ],
+    [
+     "-l, --linenumbers",
+     "Display line numbers to the left of the text area."
+    ],
+    [
+     "-m, --mouse",
+     "Enable mouse support, if available for your system."
+    ],
+    [
+     "-n, --noread",
+     "Treat any name given on the command line as a new file."
+    ],
+    [
+     "-o directory, --operatingdir=directory",
+     "Set the operating directory."
+    ],
+    [
+     "-p, --preserve",
+     "Preserve the XOFF and XON sequences (^S and ^Q) so that they are caught by the termi- nal (stoppi..."
+    ],
+    [
+     "-q, --indicator",
+     "Display a \"scrollbar\" on the righthand side of the edit window."
+    ],
+    [
+     "-r number, --fill=number",
+     "Set the target width for justifying and automatic hard-wrapping at this number of columns."
+    ],
+    [
+     "-s \"program",
+     "[argument ...]\", --speller=\"program [argument ...]\" Use this command to perform spell checking an..."
+    ],
+    [
+     "-t, --saveonexit",
+     "Save a changed buffer without prompting (when exiting with ^X)."
+    ],
+    [
+     "-u, --unix",
+     "Save a file by default in Unix format."
+    ],
+    [
+     "-v, --view",
+     "Just view the file and disallow editing: read-only mode."
+    ],
+    [
+     "-w, --nowrap",
+     "Do not automatically hard-wrap the current line when it becomes overlong."
+    ],
+    [
+     "-x, --nohelp",
+     "Don't show the two help lines at the bottom of the screen."
+    ],
+    [
+     "-y, --afterends",
+     "Make Ctrl+Right and Ctrl+Delete stop at word ends instead of beginnings."
+    ],
+    [
+     "-z, --listsyntaxes",
+     "List the names of the available syntaxes and exit."
+    ],
+    [
+     "-@, --colonparsing",
+     "When a filename given on the command line ends in a colon plus digits and this file- name does no..."
+    ],
+    [
+     "--stateflags,",
+     "and a percentage that expresses how far the cursor is into the file"
+    ],
+    [
+     "-0, --zero",
+     "Hide all elements of the interface (title bar, status bar, and help lines) and use all rows of th..."
+    ],
+    [
+     "-A",
+     "--smarthome Enable smart home key"
+    ],
+    [
+     "-B",
+     "--backup Save backups of existing files"
+    ],
+    [
+     "-C <dir>",
+     "--backupdir=<dir> Directory for saving unique backup files"
+    ],
+    [
+     "-D",
+     "--boldtext Use bold instead of reverse video text"
+    ],
+    [
+     "-E",
+     "--tabstospaces Convert typed tabs to spaces"
+    ]
+   ],
+   "long": [
+    "--afterends",
+    "--atblanks",
+    "--autoindent",
+    "--backup",
+    "--backupdir",
+    "--boldtext",
+    "--bookstyle",
+    "--breaklonglines",
+    "--colonparsing",
+    "--constantshow",
+    "--cutfromcursor",
+    "--emptyline",
+    "--fill",
+    "--guidestripe",
+    "--help",
+    "--historylog",
+    "--ignorercfiles",
+    "--indicator",
+    "--jumpyscrolling",
+    "--linenumbers",
+    "--listsyntaxes",
+    "--locking",
+    "--magic",
+    "--minibar",
+    "--modernbindings",
+    "--mouse",
+    "--multibuffer",
+    "--noconvert",
+    "--nohelp",
+    "--nonewlines",
+    "--noread",
+    "--nowrap",
+    "--operatingdir",
+    "--positionlog",
+    "--preserve",
+    "--quickblank",
+    "--quotestr",
+    "--rawsequences",
+    "--rcfile",
+    "--rebinddelete",
+    "--restricted",
+    "--saveonexit",
+    "--showcursor",
+    "--smarthome",
+    "--softwrap",
+    "--speller",
+    "--stateflags",
+    "--syntax",
+    "--tabsize",
+    "--tabstospaces",
+    "--trimblanks",
+    "--unix",
+    "--version",
+    "--view",
+    "--wordbounds",
+    "--wordchars",
+    "--zap",
+    "--zero"
+   ],
+   "man": true,
+   "path": "/usr/bin/editor",
+   "short": "%08@ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
+   "synopsis": [
+    "nano [options] [[+line[,column]] file]...",
+    "nano [options] [[+[crCR]{/|?}string] file]..."
+   ],
+   "what": "Nano's ANOther text editor, inspired by Pico",
+   "words": [
+    "-A",
+    "-B",
+    "-C",
+    "-D",
+    "-E",
+    "-F",
+    "-G",
+    "-H",
+    "-I",
+    "-J",
+    "-K",
+    "-L",
+    "-M",
+    "-N",
+    "-O",
+    "-P",
+    "-Q",
+    "-R",
+    "-S",
+    "-T",
+    "-U",
+    "-V",
+    "-W",
+    "-X",
+    "-Y",
+    "-Z",
+    "-a",
+    "-b",
+    "-c",
+    "-d",
+    "-e",
+    "-f",
+    "-g",
+    "-h",
+    "-i",
+    "-j",
+    "-k",
+    "-l",
+    "-m",
+    "-n",
+    "-o",
+    "-p",
+    "-q",
+    "-r",
+    "-s",
+    "-t",
+    "-u",
+    "-v",
+    "-w",
+    "-x",
+    "-y",
+    "-z"
+   ]
+  },
   "env": {
    "exists": true,
    "help": "env [OPTION]... [-] [NAME=VALUE]... [COMMAND [ARG]...]",
@@ -6578,6 +7000,161 @@
    "path": ""
   },
   "git": {
+   "commands": {
+    "prefix": false,
+    "words": [
+     "add",
+     "am",
+     "archive",
+     "bisect",
+     "branch",
+     "bundle",
+     "checkout",
+     "cherry-pick",
+     "citool",
+     "clean",
+     "clone",
+     "commit",
+     "describe",
+     "diff",
+     "fetch",
+     "format-patch",
+     "gc",
+     "grep",
+     "gui",
+     "init",
+     "log",
+     "maintenance",
+     "merge",
+     "mv",
+     "notes",
+     "pull",
+     "push",
+     "range-diff",
+     "rebase",
+     "reset",
+     "restore",
+     "revert",
+     "rm",
+     "shortlog",
+     "show",
+     "sparse-checkout",
+     "stash",
+     "status",
+     "submodule",
+     "switch",
+     "tag",
+     "worktree",
+     "config",
+     "fast-export",
+     "fast-import",
+     "filter-branch",
+     "mergetool",
+     "pack-refs",
+     "prune",
+     "reflog",
+     "refs",
+     "remote",
+     "repack",
+     "replace",
+     "annotate",
+     "blame",
+     "bugreport",
+     "count-objects",
+     "diagnose",
+     "difftool",
+     "fsck",
+     "help",
+     "instaweb",
+     "merge-tree",
+     "rerere",
+     "show-branch",
+     "verify-commit",
+     "verify-tag",
+     "version",
+     "whatchanged",
+     "archimport",
+     "cvsexportcommit",
+     "cvsimport",
+     "cvsserver",
+     "imap-send",
+     "p4",
+     "quiltimport",
+     "request-pull",
+     "send-email",
+     "svn",
+     "apply",
+     "checkout-index",
+     "commit-graph",
+     "commit-tree",
+     "hash-object",
+     "index-pack",
+     "merge-file",
+     "merge-index",
+     "mktag",
+     "mktree",
+     "multi-pack-index",
+     "pack-objects",
+     "prune-packed",
+     "read-tree",
+     "replay",
+     "symbolic-ref",
+     "unpack-objects",
+     "update-index",
+     "update-ref",
+     "write-tree",
+     "cat-file",
+     "cherry",
+     "diff-files",
+     "diff-index",
+     "diff-tree",
+     "for-each-ref",
+     "for-each-repo",
+     "get-tar-commit-id",
+     "ls-files",
+     "ls-remote",
+     "ls-tree",
+     "merge-base",
+     "name-rev",
+     "pack-redundant",
+     "rev-list",
+     "rev-parse",
+     "show-index",
+     "show-ref",
+     "unpack-file",
+     "var",
+     "verify-pack",
+     "daemon",
+     "fetch-pack",
+     "http-backend",
+     "send-pack",
+     "update-server-info",
+     "http-fetch",
+     "http-push",
+     "receive-pack",
+     "shell",
+     "upload-archive",
+     "upload-pack",
+     "check-attr",
+     "check-ignore",
+     "check-mailmap",
+     "check-ref-format",
+     "column",
+     "credential",
+     "credential-cache",
+     "credential-store",
+     "fmt-merge-msg",
+     "hook",
+     "interpret-trailers",
+     "mailinfo",
+     "mailsplit",
+     "merge-one-file",
+     "patch-id",
+     "sh-i18n",
+     "sh-setup",
+     "stripspace"
+    ]
+   },
    "exists": true,
    "help": "usage: git [-v | --version] [-h | --help] [-C <path>] [-c <name>=<value>]\n           [--exec-path[=<path>]] [--html-path] [--man-path] [--info-path]\n           [-p | --paginate | -P | --no-pager] [--no-replace-objects] [--no-lazy-fetch]\n           [--no-optional-locks] [--no-advice] [--bare] [--git-dir=<path>]\n           [--work-tree=<path>] [--namespace=<name>] [--config-env=<name>=<envvar>]\n           <command> [<args>]\n\nThese are common Git commands used in various situations:\n\nstart a working area (see also: git help tutorial)\n   clone     Clone a repository into a new directory\n   init      Create an empty Git repository or reinitialize an existing one\n\nwork on the current change (see also: git help everyday)\n   add       Add file contents to the index\n   mv        Move or rename a file, a directory, or a symlink\n   restore   Restore working tree files\n   rm        Remove files from the working tree and from the index\n\nexamine the history and state (see also: git help revisions)\n   bisect    Use binary search to find the commit that introduced a bug\n   diff      Show changes between commits, commit and working tree, etc\n   grep      Print lines matching a pattern\n   log       Show commit logs\n   show      Show various types of objects\n   status    Show the working tree status\n\ngrow, mark and tweak your common history\n   branch    List, create, or delete branches\n   commit    Record changes to the repository\n   merge     Join two or more development histories together\n   rebase    Reapply commits on top of another base tip\n   reset     Reset current HEAD to the specified state\n   switch    Switch branches\n   tag       Create, list, delete or verify a tag object signed with GPG\n\ncollaborate (see also: git help workflows)\n   fetch     Download objects and refs from another repository\n   pull      Fetch from and integrate with another repository or a local branch\n   push      Update remote refs along with associated objects\n\n'git help -a' and 'git help -g' list available subcommands and some\nconcept guides. See 'git help <command>' or 'git help <concept>'\nto read about a specific subcommand or concept.\nSee 'git help git' for an overview of the system.",
    "lines": [
@@ -8267,6 +8844,42 @@
    "path": ""
   },
   "ip": {
+   "commands": {
+    "prefix": true,
+    "words": [
+     "address",
+     "addrlabel",
+     "fou",
+     "help",
+     "ila",
+     "ioam",
+     "l2tp",
+     "link",
+     "macsec",
+     "maddress",
+     "monitor",
+     "mptcp",
+     "mroute",
+     "mrule",
+     "neighbor",
+     "neighbour",
+     "netconf",
+     "netns",
+     "nex-",
+     "ntable",
+     "ntbl",
+     "route",
+     "rule",
+     "sr",
+     "tap",
+     "tcpmetrics",
+     "token",
+     "tunnel",
+     "tun-",
+     "vrf",
+     "xfrm"
+    ]
+   },
    "exists": true,
    "help": "Usage: ip [ OPTIONS ] OBJECT { COMMAND | help }\n       ip [ -force ] -batch filename\nwhere  OBJECT := { address | addrlabel | fou | help | ila | ioam | l2tp | link |\n                   macsec | maddress | monitor | mptcp | mroute | mrule |\n                   neighbor | neighbour | netconf | netns | nexthop | ntable |\n                   ntbl | route | rule | sr | stats | tap | tcpmetrics |\n                   token | tunnel | tuntap | vrf | xfrm }\n       OPTIONS := { -V[ersion] | -s[tatistics] | -d[etails] | -r[esolve] |\n                    -h[uman-readable] | -iec | -j[son] | -p[retty] |\n                    -f[amily] { inet | inet6 | mpls | bridge | link } |\n                    -4 | -6 | -M | -B | -0 |\n                    -l[oops] { maximum-addr-flush-attempts } | -echo | -br[ief] |\n                    -o[neline] | -t[imestamp] | -ts[hort] | -b[atch] [filename] |\n                    -rc[vbuf] [size] | -n[etns] name | -N[umeric] | -a[ll] |\n                    -c[olor]}",
    "lines": [
@@ -14723,6 +15336,349 @@
     "-z"
    ]
   },
+  "sensible-editor": {
+   "exists": true,
+   "help": "Usage: nano [OPTIONS] [[+LINE[,COLUMN]] FILE]...\n\nTo place the cursor on a specific line of a file, put the line number with\na '+' before the filename.  The column number can be added after a comma.\nWhen a filename is '-', nano reads data from standard input.\n\n Option         Long option             Meaning\n -A             --smarthome             Enable smart home key\n -B             --backup                Save backups of existing files\n -C <dir>       --backupdir=<dir>       Directory for saving unique backup files\n -D             --boldtext              Use bold instead of reverse video text\n -E             --tabstospaces          Convert typed tabs to spaces\n -F             --multibuffer           Read a file into a new buffer by default\n -G             --locking               Use (vim-style) lock files\n -H             --historylog            Save & reload old search/replace strings\n -I             --ignorercfiles         Don't look at nanorc files\n -J <number>    --guidestripe=<number>  Show a guiding bar at this column\n -K             --rawsequences          Fix numeric keypad key confusion problem\n -L             --nonewlines            Don't add an automatic newline\n -M             --trimblanks            Trim tail spaces when hard-wrapping\n -N             --noconvert             Don't convert files from DOS/Mac format\n -O             --bookstyle             Leading whitespace means new paragraph\n -P             --positionlog           Save & restore position of the cursor\n -Q <regex>     --quotestr=<regex>      Regular expression to match quoting\n -R             --restricted            Restrict access to the filesystem\n -S             --softwrap              Display overlong lines on multiple rows\n -T <number>    --tabsize=<number>      Make a tab this number of columns wide\n -U             --quickblank            Wipe status bar upon next keystroke\n -V             --version               Print version information and exit\n -W             --wordbounds            Detect word boundaries more accurately\n -X <string>    --wordchars=<string>    Which other characters are word parts\n -Y <name>      --syntax=<name>         Syntax definition to use for coloring\n -Z             --zap                   Let Bsp and Del erase a marked region\n -a             --atblanks              When soft-wrapping, do it at whitespace\n -b             --breaklonglines        Automatically hard-wrap overlong lines\n -c             --constantshow          Constantly show cursor position\n -d             --rebinddelete          Fix Backspace/Delete confusion problem\n -e             --emptyline             Keep the line below the title bar empty\n -f <file>      --rcfile=<file>         Use only this file for configuring nano\n -g             --showcursor            Show cursor in file browser & help text\n -h             --help                  Show this help text and exit\n -i             --autoindent            Automatically indent new lines\n -j             --jumpyscrolling        Scroll per half-screen, not per line\n -k             --cutfromcursor         Cut from cursor to end of line\n -l             --linenumbers           Show line numbers in front of the text\n -m             --mouse                 Enable the use of the mouse\n -n             --noread                Do not read the file (only write it)\n -o <dir>       --operatingdir=<dir>    Set operating directory\n -p             --preserve              Preserve XON (^Q) and XOFF (^S) keys\n -q             --indicator             Show a position+portion indicator\n -r <number>    --fill=<number>         Set width for hard-wrap and justify\n -s <program>   --speller=<program>     Use this alternative spell checker\n -t             --saveonexit            Save changes on exit, don't prompt\n -u             --unix                  Save a file by default in Unix format\n -v             --view                  View mode (read-only)\n -w             --nowrap                Don't hard-wrap long lines [default]\n -x             --nohelp                Don't show the two help lines\n -y             --afterends",
+   "lines": [
+    [
+     "-A",
+     "--smarthome Enable smart home key"
+    ],
+    [
+     "-B",
+     "--backup Save backups of existing files"
+    ],
+    [
+     "-C <dir>",
+     "--backupdir=<dir> Directory for saving unique backup files"
+    ],
+    [
+     "-D",
+     "--boldtext Use bold instead of reverse video text"
+    ],
+    [
+     "-E",
+     "--tabstospaces Convert typed tabs to spaces"
+    ],
+    [
+     "-F",
+     "--multibuffer Read a file into a new buffer by default"
+    ],
+    [
+     "-G",
+     "--locking Use (vim-style) lock files"
+    ],
+    [
+     "-H",
+     "--historylog Save & reload old search/replace strings"
+    ],
+    [
+     "-I",
+     "--ignorercfiles Don't look at nanorc files"
+    ],
+    [
+     "-J <number>",
+     "--guidestripe=<number> Show a guiding bar at this column"
+    ],
+    [
+     "-K",
+     "--rawsequences Fix numeric keypad key confusion problem"
+    ],
+    [
+     "-L",
+     "--nonewlines Don't add an automatic newline"
+    ],
+    [
+     "-M",
+     "--trimblanks Trim tail spaces when hard-wrapping"
+    ],
+    [
+     "-N",
+     "--noconvert Don't convert files from DOS/Mac format"
+    ],
+    [
+     "-O",
+     "--bookstyle Leading whitespace means new paragraph"
+    ],
+    [
+     "-P",
+     "--positionlog Save & restore position of the cursor"
+    ],
+    [
+     "-Q <regex>",
+     "--quotestr=<regex> Regular expression to match quoting"
+    ],
+    [
+     "-R",
+     "--restricted Restrict access to the filesystem"
+    ],
+    [
+     "-S",
+     "--softwrap Display overlong lines on multiple rows"
+    ],
+    [
+     "-T <number>",
+     "--tabsize=<number> Make a tab this number of columns wide"
+    ],
+    [
+     "-U",
+     "--quickblank Wipe status bar upon next keystroke"
+    ],
+    [
+     "-V",
+     "--version Print version information and exit"
+    ],
+    [
+     "-W",
+     "--wordbounds Detect word boundaries more accurately"
+    ],
+    [
+     "-X <string>",
+     "--wordchars=<string> Which other characters are word parts"
+    ],
+    [
+     "-Y <name>",
+     "--syntax=<name> Syntax definition to use for coloring"
+    ],
+    [
+     "-Z",
+     "--zap Let Bsp and Del erase a marked region"
+    ],
+    [
+     "-a",
+     "--atblanks When soft-wrapping, do it at whitespace"
+    ],
+    [
+     "-b",
+     "--breaklonglines Automatically hard-wrap overlong lines"
+    ],
+    [
+     "-c",
+     "--constantshow Constantly show cursor position"
+    ],
+    [
+     "-d",
+     "--rebinddelete Fix Backspace/Delete confusion problem"
+    ],
+    [
+     "-e",
+     "--emptyline Keep the line below the title bar empty"
+    ],
+    [
+     "-f <file>",
+     "--rcfile=<file> Use only this file for configuring nano"
+    ],
+    [
+     "-g",
+     "--showcursor Show cursor in file browser & help text"
+    ],
+    [
+     "-h",
+     "--help Show this help text and exit"
+    ],
+    [
+     "-i",
+     "--autoindent Automatically indent new lines"
+    ],
+    [
+     "-j",
+     "--jumpyscrolling Scroll per half-screen, not per line"
+    ],
+    [
+     "-k",
+     "--cutfromcursor Cut from cursor to end of line"
+    ],
+    [
+     "-l",
+     "--linenumbers Show line numbers in front of the text"
+    ],
+    [
+     "-m",
+     "--mouse Enable the use of the mouse"
+    ],
+    [
+     "-n",
+     "--noread Do not read the file (only write it)"
+    ],
+    [
+     "-o <dir>",
+     "--operatingdir=<dir> Set operating directory"
+    ],
+    [
+     "-p",
+     "--preserve Preserve XON (^Q) and XOFF (^S) keys"
+    ],
+    [
+     "-q",
+     "--indicator Show a position+portion indicator"
+    ],
+    [
+     "-r <number>",
+     "--fill=<number> Set width for hard-wrap and justify"
+    ],
+    [
+     "-s <program>",
+     "--speller=<program> Use this alternative spell checker"
+    ],
+    [
+     "-t",
+     "--saveonexit Save changes on exit, don't prompt"
+    ],
+    [
+     "-u",
+     "--unix Save a file by default in Unix format"
+    ],
+    [
+     "-v",
+     "--view View mode (read-only)"
+    ],
+    [
+     "-w",
+     "--nowrap Don't hard-wrap long lines [default]"
+    ],
+    [
+     "-x",
+     "--nohelp Don't show the two help lines"
+    ],
+    [
+     "-y",
+     "--afterends Make Ctrl+Right stop at word ends"
+    ],
+    [
+     "-z",
+     "--listsyntaxes List the names of available syntaxes"
+    ],
+    [
+     "-@",
+     "--colonparsing Accept 'filename:linenumber' notation"
+    ],
+    [
+     "-0",
+     "--zero Hide all bars, use whole terminal"
+    ]
+   ],
+   "long": [
+    "--afterends",
+    "--atblanks",
+    "--autoindent",
+    "--backup",
+    "--backupdir",
+    "--boldtext",
+    "--bookstyle",
+    "--breaklonglines",
+    "--colonparsing",
+    "--constantshow",
+    "--cutfromcursor",
+    "--emptyline",
+    "--fill",
+    "--guidestripe",
+    "--help",
+    "--historylog",
+    "--ignorercfiles",
+    "--indicator",
+    "--jumpyscrolling",
+    "--linenumbers",
+    "--listsyntaxes",
+    "--locking",
+    "--minibar",
+    "--modernbindings",
+    "--mouse",
+    "--multibuffer",
+    "--noconvert",
+    "--nohelp",
+    "--nonewlines",
+    "--noread",
+    "--nowrap",
+    "--operatingdir",
+    "--positionlog",
+    "--preserve",
+    "--quickblank",
+    "--quotestr",
+    "--rawsequences",
+    "--rcfile",
+    "--rebinddelete",
+    "--restricted",
+    "--saveonexit",
+    "--showcursor",
+    "--smarthome",
+    "--softwrap",
+    "--speller",
+    "--stateflags",
+    "--syntax",
+    "--tabsize",
+    "--tabstospaces",
+    "--trimblanks",
+    "--unix",
+    "--verbose",
+    "--version",
+    "--view",
+    "--wordbounds",
+    "--wordchars",
+    "--zap",
+    "--zero"
+   ],
+   "man": true,
+   "path": "/usr/bin/sensible-editor",
+   "short": "%0@ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz",
+   "synopsis": [
+    "sensible-editor [OPTIONS...]"
+   ],
+   "what": "launch sensibly chosen text editor",
+   "words": [
+    "-A",
+    "-B",
+    "-C",
+    "-D",
+    "-E",
+    "-F",
+    "-G",
+    "-H",
+    "-I",
+    "-J",
+    "-K",
+    "-L",
+    "-M",
+    "-N",
+    "-O",
+    "-P",
+    "-Q",
+    "-R",
+    "-S",
+    "-T",
+    "-U",
+    "-V",
+    "-W",
+    "-X",
+    "-Y",
+    "-Z",
+    "-a",
+    "-b",
+    "-c",
+    "-d",
+    "-e",
+    "-f",
+    "-g",
+    "-h",
+    "-i",
+    "-j",
+    "-k",
+    "-l",
+    "-m",
+    "-n",
+    "-o",
+    "-p",
+    "-q",
+    "-r",
+    "-s",
+    "-t",
+    "-u",
+    "-v",
+    "-w",
+    "-x",
+    "-y",
+    "-z"
+   ]
+  },
   "service": {
    "exists": true,
    "help": "Usage: service < option > | --status-all | [ service_name [ command | --full-restart ] ]",
@@ -16163,6 +17119,59 @@
    "path": ""
   },
   "systemctl": {
+   "commands": {
+    "prefix": false,
+    "words": [
+     "list-units",
+     "list-automounts",
+     "list-paths",
+     "list-sockets",
+     "list-timers",
+     "is-failed",
+     "status",
+     "show",
+     "list-dependencies",
+     "isolate",
+     "bind",
+     "mount-image",
+     "service-log-level",
+     "service-log-target",
+     "reset-failed",
+     "whoami",
+     "list-unit-files",
+     "preset-all",
+     "get-default",
+     "set-default",
+     "list-machines",
+     "list-jobs",
+     "cancel",
+     "show-environment",
+     "daemon-reload",
+     "daemon-reexec",
+     "log-level",
+     "log-target",
+     "service-watchdogs",
+     "is-system-running",
+     "default",
+     "rescue",
+     "emergency",
+     "halt",
+     "poweroff",
+     "reboot",
+     "kexec",
+     "soft-reboot",
+     "exit",
+     "switch-root",
+     "sleep",
+     "suspend",
+     "hibernate",
+     "hybrid-sleep",
+     "suspend-then-hibernate",
+     "and",
+     "are",
+     "or"
+    ]
+   },
    "exists": true,
    "help": "systemctl [OPTIONS...] COMMAND ...\n\nQuery or send control commands to the system manager.\n\nUnit Commands:\n  list-units [PATTERN...]             List units currently in memory\n  list-automounts [PATTERN...]        List automount units currently in memory,\n                                      ordered by path\n  list-paths [PATTERN...]             List path units currently in memory,\n                                      ordered by path\n  list-sockets [PATTERN...]           List socket units currently in memory,\n                                      ordered by address\n  list-timers [PATTERN...]            List timer units currently in memory,\n                                      ordered by next elapse\n  is-active PATTERN...                Check whether units are active\n  is-failed [PATTERN...]              Check whether units are failed or\n                                      system is in degraded state\n  status [PATTERN...|PID...]          Show runtime status of one or more units\n  show [PATTERN...|JOB...]            Show properties of one or more\n                                      units/jobs or the manager\n  cat PATTERN...                      Show files and drop-ins of specified units\n  help PATTERN...|PID...              Show manual for one or more units\n  list-dependencies [UNIT...]         Recursively show units which are required\n                                      or wanted by the units or by which those\n                                      units are required or wanted\n  start UNIT...                       Start (activate) one or more units\n  stop UNIT...                        Stop (deactivate) one or more units\n  reload UNIT...                      Reload one or more units\n  restart UNIT...                     Start or restart one or more units\n  try-restart UNIT...                 Restart one or more units if active\n  reload-or-restart UNIT...           Reload one or more units if possible,\n                                      otherwise start or restart\n  try-reload-or-restart UNIT...       If active, reload one or more units,\n                                      if supported, otherwise restart\n  isolate UNIT                        Start one unit and stop all others\n  kill UNIT...                        Send signal to processes of a unit\n  clean UNIT...                       Clean runtime, cache, state, logs or\n                                      configuration of unit\n  freeze PATTERN...                   Freeze execution of unit processes\n  thaw PATTERN...                     Resume execution of a frozen unit\n  set-property UNIT PROPERTY=VALUE... Sets one or more properties of a unit\n  bind UNIT PATH [PATH]               Bind-mount a path from the host into a\n                                      unit's namespace\n  mount-image UNIT PATH [PATH [OPTS]] Mount an image from the host into a\n                                      unit's namespace\n  service-log-level SERVICE [LEVEL]   Get/set logging threshold for service\n  service-log-target SERVICE [TARGET] Get/set logging target for service\n  reset-failed [PATTERN...]           Reset failed state for all, one, or more\n                                      units\n  whoami [PID...]                     Return unit caller or specified PIDs are\n                                      part of\n\nUnit File Commands:\n  list-unit-files [PATTERN...]        List installed unit files\n  enable [UNIT...|PATH...]            Enable one or more unit files\n  disable UNIT...                     Disable one or more unit files\n  reenable UNIT...                    Reenable one or more unit files\n  preset UNIT...                      Enable/disable one or more unit files\n                                      based on preset configuration\n  preset-all                          Enable/disable all unit files based on\n                                      preset configuration\n  is-enabled UNIT...                  Check whether unit files are enabled\n  mask UNIT...                        Mask one or more units\n  unmask UNIT...                      Unmask one or more units\n  link PATH... ",
    "lines": [
@@ -19202,8 +20211,329 @@
    "words": []
   },
   "vi": {
-   "exists": false,
-   "path": ""
+   "exists": true,
+   "help": "vim [options] [file ..]\n       vim [options] -\n       vim [options] -t tag\n       vim [options] -q [errorfile]\n\n       ex\n       view\n       gvim gview evim eview\n       rvim rview rgvim rgview",
+   "lines": [
+    [
+     "-t {tag}",
+     "The file to edit and the initial cursor position depends on a \"tag\", a sort of goto label."
+    ],
+    [
+     "-q [errorfile]",
+     "Start in quickFix mode."
+    ],
+    [
+     "-c {command}",
+     "{command} will be executed after the first file has been read."
+    ],
+    [
+     "-A",
+     "If Vim has been compiled with ARABIC support for editing right-to-left oriented files and Arabic..."
+    ],
+    [
+     "-b",
+     "Binary mode."
+    ],
+    [
+     "-C",
+     "Compatible."
+    ],
+    [
+     "-d",
+     "Start in diff mode."
+    ],
+    [
+     "-d {device}, -dev {device}",
+     "Open {device} for use as a terminal."
+    ],
+    [
+     "-D",
+     "Debugging."
+    ],
+    [
+     "-e",
+     "Start Vim in Ex mode, just like the executable was called \"ex\"."
+    ],
+    [
+     "-E",
+     "Start Vim in improved Ex mode, just like the executable was called \"exim\"."
+    ],
+    [
+     "-f",
+     "Foreground."
+    ],
+    [
+     "-F",
+     "If Vim has been compiled with FKMAP support for editing right-to-left oriented files and Farsi ke..."
+    ],
+    [
+     "-g",
+     "If Vim has been compiled with GUI support, this option enables the GUI."
+    ],
+    [
+     "-H",
+     "If Vim has been compiled with RIGHTLEFT support for editing right-to-left ori- ented files and He..."
+    ],
+    [
+     "-i {viminfo}",
+     "Specifies the filename to use when reading or writing the viminfo file, instead of the default \"~..."
+    ],
+    [
+     "-l",
+     "Lisp mode."
+    ],
+    [
+     "-L",
+     "Same as -r."
+    ],
+    [
+     "-m",
+     "Modifying files is disabled."
+    ],
+    [
+     "-M",
+     "Modifications not allowed."
+    ],
+    [
+     "-n",
+     "No swap file will be used."
+    ],
+    [
+     "-N",
+     "No-compatible mode."
+    ],
+    [
+     "-nb",
+     "Become an editor server for NetBeans."
+    ],
+    [
+     "-o[N]",
+     "Open N windows stacked."
+    ],
+    [
+     "-O[N]",
+     "Open N windows side by side."
+    ],
+    [
+     "-p[N]",
+     "Open N tab pages."
+    ],
+    [
+     "-P {parent-title}",
+     "Win32 GUI only: Specify the title of the parent application."
+    ],
+    [
+     "-r",
+     "List swap files, with information about using them for recovery."
+    ],
+    [
+     "-r {file}",
+     "Recovery mode."
+    ],
+    [
+     "-R",
+     "Read-only mode."
+    ],
+    [
+     "-s",
+     "Silent mode."
+    ],
+    [
+     "-s {scriptin}",
+     "The script file {scriptin} is read."
+    ],
+    [
+     "-S {file}",
+     "{file} will be sourced after the first file has been read."
+    ],
+    [
+     "-T {terminal}",
+     "Tells Vim the name of the terminal you are using."
+    ],
+    [
+     "-u {vimrc}",
+     "Use the commands in the file {vimrc} for initializations."
+    ],
+    [
+     "-U {gvimrc} Use",
+     "the commands in the file {gvimrc} for GUI initializations."
+    ],
+    [
+     "-v",
+     "Start Vim in Vi mode, just like the executable was called \"vi\"."
+    ],
+    [
+     "-V[N]",
+     "Verbose."
+    ],
+    [
+     "-V[N]{filename}",
+     "Like -V and set 'verbosefile' to {filename}."
+    ],
+    [
+     "-w{number}",
+     "Set the 'window' option to {number}."
+    ],
+    [
+     "-w {scriptout}",
+     "All the characters that you type are recorded in the file {scriptout}, until you exit Vim."
+    ],
+    [
+     "-W {scriptout}",
+     "Like -w, but an existing file is overwritten."
+    ],
+    [
+     "-x",
+     "If Vim has been compiled with encryption support, use encryption when writing files."
+    ],
+    [
+     "-X",
+     "Don't connect to the X server."
+    ],
+    [
+     "-y",
+     "Start Vim in easy mode, just like the executable was called \"evim\" or \"eview\"."
+    ],
+    [
+     "-Z",
+     "Restricted mode."
+    ],
+    [
+     "--clean",
+     "Do not use any personal configuration (vimrc, plugins, etc.)."
+    ],
+    [
+     "--cmd {command}",
+     "Like using \"-c\", but the command is executed just before processing any vimrc file."
+    ],
+    [
+     "--echo-wid",
+     "GTK GUI only: Echo the Window ID on stdout."
+    ],
+    [
+     "--gui-dialog-file {name}",
+     "When using the GUI, instead of showing a dialog, write the title and message of the dialog to fil..."
+    ],
+    [
+     "--help, -h, -?",
+     "Give a bit of help about the command line arguments and options."
+    ],
+    [
+     "--literal",
+     "Take file name arguments literally, do not expand wildcards."
+    ],
+    [
+     "--log {filename}",
+     "If Vim has been compiled with eval and channel feature, start logging and write entries to {filen..."
+    ],
+    [
+     "--nofork",
+     "Foreground."
+    ],
+    [
+     "--noplugin",
+     "Skip loading plugins."
+    ],
+    [
+     "--not-a-term",
+     "Tells Vim that the user knows that the input and/or output is not connected to a terminal."
+    ],
+    [
+     "--remote",
+     "Connect to a Vim server and make it edit the files given in the rest of the ar- guments."
+    ],
+    [
+     "--remote-expr {expr}",
+     "Connect to a Vim server, evaluate {expr} in it and print the result on stdout."
+    ],
+    [
+     "--remote-send {keys}",
+     "Connect to a Vim server and send {keys} to it."
+    ],
+    [
+     "--remote-silent",
+     "As --remote, but without the warning when no server is found."
+    ]
+   ],
+   "long": [
+    "--clean",
+    "--cmd",
+    "--echo-wid",
+    "--gui-dialog-file",
+    "--help",
+    "--literal",
+    "--log",
+    "--nofork",
+    "--noplugin",
+    "--not-a-term",
+    "--remote",
+    "--remote-expr",
+    "--remote-send",
+    "--remote-silent",
+    "--remote-wait",
+    "--remote-wait-silent",
+    "--serverlist",
+    "--servername",
+    "--socketid",
+    "--startuptime",
+    "--ttyfail",
+    "--version",
+    "--windowid"
+   ],
+   "man": true,
+   "path": "/usr/bin/vi",
+   "short": "?ACDEFHLMNOPRSTUVWXZbcdefghilmnopqrstuvwxy",
+   "synopsis": [
+    "vim [options] [file ..]",
+    "vim [options] -",
+    "vim [options] -t tag"
+   ],
+   "what": "Vi IMproved, a programmer's text editor",
+   "words": [
+    "-A",
+    "-C",
+    "-D",
+    "-E",
+    "-F",
+    "-H",
+    "-L",
+    "-M",
+    "-N",
+    "-O",
+    "-P",
+    "-R",
+    "-S",
+    "-T",
+    "-U",
+    "-V",
+    "-W",
+    "-X",
+    "-Z",
+    "-b",
+    "-c",
+    "-d",
+    "-dev",
+    "-e",
+    "-f",
+    "-g",
+    "-h",
+    "-i",
+    "-l",
+    "-m",
+    "-n",
+    "-nb",
+    "-o",
+    "-p",
+    "-q",
+    "-r",
+    "-s",
+    "-t",
+    "-u",
+    "-v",
+    "-w",
+    "-x",
+    "-y"
+   ]
   },
   "vim": {
    "exists": false,
