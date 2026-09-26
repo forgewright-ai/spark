@@ -927,16 +927,23 @@ def knowledge_cases(t):
             "crontab -u bob file",
             # a package removed, on every family (the audition's one miss)
             "apt-get remove cowsay", "sudo apt purge x", "apt autoremove", "dpkg -r x", "dpkg -P x",
-            "pacman -Rns x", "pacman -R x", "brew uninstall jq", "dnf remove x", "zypper rm x", "apk del x"]
+            "pacman -Rns x", "pacman -R x", "brew uninstall jq", "dnf remove x", "zypper rm x", "apk del x",
+            # permissions and owners, and spark's own destroying verbs
+            "chmod +x deploy.sh", "chmod 644 f", "chown bob f", "chgrp staff f",
+            "spark uninstall", "spark history clear", "spark memory forget 3", "spark memory clear",
+            "spark user remove ana", "spark model rm qwen3-4b", "spark soul reset", "spark forge token --new",
+            "spark user token --new"]
     safe = ["apt-get install x", "apt-cache search x", "dpkg -l", "dpkg -L curl", "pacman -Qi x",
             "pacman -Syu", "brew list", "brew info jq", "apk add x",
+            "spark history", "spark memory", "spark memory add x", "spark user list", "spark model list",
+            "spark forge", "ls -l deploy.sh", "stat -f %p f",
             "find . -exec ls {} \\;", "find . -name x -print", "dd if=/dev/zero bs=1 count=1", "cmd 2>/dev/null",
             "cmd 2>&1", "cmd 2>>err.log", "cmd >/dev/null 2>&1", "crontab -l", "crontab -e",
             "rm build.log"]
     bad = [c for c in dang if not persona.is_dangerous(c)] + ["!" + c for c in safe if persona.is_dangerous(c)]
     t.ok(not bad, "knowledge: danger -- find -exec rm/shred/mv, dd of= anything, 2>FILE and &>FILE, crontab FILE, "
-         "a package removed on every family; -exec ls, 2>/dev/null, 2>&1, crontab -l, installs, queries and "
-         "plain rm stay plain", str(bad))
+         "a package removed on every family, any chmod/chown/chgrp, spark's own destroying verbs; -exec ls, "
+         "2>/dev/null, 2>&1, crontab -l, installs, queries, spark's reading verbs and plain rm stay plain", str(bad))
 
 
 def line_knowledge_cases(t, spark, home):

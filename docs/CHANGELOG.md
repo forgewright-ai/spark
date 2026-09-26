@@ -23,7 +23,10 @@ its apps and spark's own verbs.
   danger check always wins. It now also catches `find -exec rm`, `dd
   of=` to any file, `2>` and `&>` to a file, `crontab FILE`, and a
   package removed on every family: `apt remove`, `dpkg -r`, `pacman -R`,
-  `brew uninstall`, `dnf remove` and `apk del`.
+  `brew uninstall`, `dnf remove` and `apk del`. Any `chmod`, `chown` or
+  `chgrp` is marked, as the model's brief already asked, and so are
+  spark's own verbs that destroy or end logins: `spark uninstall`,
+  `spark history clear`, `spark memory forget`, `spark user remove`.
 - The `knowledge` row of `spark check` says what the index holds and
   how old it is. `SPARK_KNOWLEDGE=off` in `spark.env` returns the prompt
   line to v1.52's.

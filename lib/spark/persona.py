@@ -100,6 +100,10 @@ _DANGER = [
     r"\bbrew\s+(?:uninstall|remove|rm)\b",      # brew uninstall
     r"\b(?:dnf|yum|zypper)\s+(?:\S+\s+)*?(?:remove|erase|rm)\b",   # dnf/yum/zypper remove
     r"\bapk\s+del\b",                            # apk del
+    # v1.53: what the reviewed audition still found unmarked
+    r"\b(?:chmod|chown|chgrp)\b",                 # any permission or owner change (the brief's own rule)
+    r"\bspark\s+(?:uninstall|history\s+clear|memory\s+(?:forget|clear)|user\s+remove|model\s+rm"
+    r"|soul\s+reset|(?:forge|user)\s+token\s+--new)\b",   # spark's own verbs that destroy or end logins
 ]
 # rm with a recursive (or force) flag, short or long -- ONE pattern pair,
 # shared by is_dangerous and blast, so the danger mark and the blast count
