@@ -28,8 +28,7 @@ WSL_NO_BRAIN = "WSL 2 stops with its last window: it cannot stay on and answer (
 NO_CONSOLE_FONT = "no console-setup, vconsole.conf or rc.conf here: the console font is not spark's to set"
 ARCH_NO_BOOT = ("no UKI on this Arch: the kernel line is the boot loader's "
                 "(a loader entry's options line, or GRUB_CMDLINE_LINUX_DEFAULT then grub-mkconfig)")
-VOID_NO_BOOT = ("no drop-in on Void's GRUB: the kernel line is /etc/default/grub's "
-                "(GRUB_CMDLINE_LINUX_DEFAULT, GRUB_TIMEOUT=0, then update-grub)")
+VOID_NO_BOOT = "no GRUB on this Void: its boot loader is left alone"
 # the quiet kernel line, the same seven words on every shape (bootstrap.sh
 # QUIET_WORDS is the sh twin): quiet+loglevel=3 silence the kernel, splash
 # hands Plymouth the boot when it is installed (inert otherwise),
@@ -41,6 +40,31 @@ QUIET_WORDS = "quiet splash loglevel=3 systemd.show_status=false udev.log_level=
 # /etc/cmdline.d/*.conf after /etc/kernel/cmdline (zz- sorts it last)
 CMDLINE_DROPIN = os.environ.get("SPARK_ETC_CMDLINE_DROPIN", "/etc/cmdline.d/zz-spark-quiet.conf")
 SPLASH_MARK = "#spark-quiet# "
+# Void: grub-mkconfig sources /etc/default/grub alone, so spark appends
+# the drop-in's lines to its end, each marked (bootstrap.sh grub_want and
+# grub_mark are the twins); the last assignment wins, the user's stay
+GRUB_MARK = "#spark-quiet#"
+GRUB_WANT = ["GRUB_TIMEOUT=0", "GRUB_TIMEOUT_STYLE=hidden",
+             'GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT %s"' % QUIET_WORDS]
+
+
+def default_grub():
+    return os.environ.get("SPARK_ETC_DEFAULT_GRUB", "/etc/default/grub")
+
+
+def grub_marked():
+    """The lines spark appended to /etc/default/grub, marker off."""
+    tail = " " + GRUB_MARK
+    try:
+        with open(default_grub(), encoding="utf-8", errors="replace") as f:
+            return [ln.rstrip("\n")[:-len(tail)] for ln in f if ln.rstrip("\n").endswith(tail)]
+    except OSError:
+        return []
+
+
+def has_update_grub():
+    import shutil
+    return bool(shutil.which("update-grub")) or os.access("/usr/sbin/update-grub", os.X_OK)
 
 
 def mkinitcpio_d():
@@ -129,15 +153,15 @@ def no_console_font():
 def no_grub():
     """The one line that says why quiet boot is not spark's to set here
     ('' when it is): WSL 2 has no GRUB; Arch has no update-grub, so only
-    a Unified Kernel Image (a cmdline.d drop-in) is spark's there; Void's
-    GRUB sources no grub.d drop-in, so its kernel line is the user's."""
+    a Unified Kernel Image (a cmdline.d drop-in) is spark's there; a
+    Void without GRUB has nothing spark sets."""
     if IS_MAC:
         return ""
     if is_wsl():
         return WSL_NO_BOOT
     if distro() == "arch" and boot_shape() != "uki":
         return ARCH_NO_BOOT
-    if distro() == "void":
+    if distro() == "void" and not (os.path.isfile(default_grub()) and has_update_grub()):
         return VOID_NO_BOOT
     return ""
 
@@ -463,7 +487,9 @@ def cmd_quiet(args):
             say("%s quiet -- start %s, audio %s (login, boot: macOS has no motd, no GRUB)" % (MARK, start, audio))
         else:
             say("%s quiet -- start %s, login %s, boot %s, audio %s" % (
-                MARK, start, _quiet_state(cfg, "login"), "n/a (%s)" % no_grub() if no_grub() else _quiet_state(cfg, "boot"), audio))
+                MARK, start, _quiet_state(cfg, "login"), "n/a" if no_grub() else _quiet_state(cfg, "boot"), audio))
+            if no_grub():
+                say("boot is n/a: %s" % no_grub())
         return 0
     sub = args[0]
     if sub not in QUIET_KEYS or len(args) > 2 or (len(args) == 2 and args[1] not in ("on", "off")):
@@ -520,6 +546,27 @@ LOGIND_DROPIN = "/etc/systemd/logind.conf.d/spark.conf"
 PMSET_WANT = (("sleep", "0"), ("disksleep", "0"), ("womp", "1"), ("autorestart", "1"))
 
 
+def render_fact(node):
+    """(label, good, detail): does a server with no seat open the GPU?
+    The node says so itself: open to every user (Void's eudev leaves
+    renderD128 0666, owned by `video`), or owned by a group that lists
+    this user. No distro is assumed to have a `render` group."""
+    import grp
+    from . import run
+    st = os.stat(node)
+    name = os.path.basename(node)
+    if st.st_mode & 0o006 == 0o006:
+        return ("render node", True, "%s is open to every user: the units see the GPU from boot" % name)
+    try:
+        group = grp.getgrgid(st.st_gid).gr_name
+    except KeyError:
+        group = str(st.st_gid)
+    rc, out = run(["id", "-nG"], timeout=10)
+    member = group in out.split()
+    return ("%s group" % group, member,
+            "the units see the GPU from boot" if member else "the GPU needs a login session")
+
+
 def headless_facts(cfg):
     """What is in effect on this machine, read-only: [(piece, good, detail)].
     The check row and `spark headless` read it; bootstrap.sh changes it."""
@@ -545,9 +592,7 @@ def headless_facts(cfg):
         return facts
     render = []
     if os.path.exists("/dev/dri/renderD128"):
-        rc, out = run(["id", "-nG"], timeout=10)
-        member = "render" in out.split()
-        render.append(("render group", member, "the units see the GPU from boot" if member else "the GPU needs a login session"))
+        render.append(render_fact("/dev/dri/renderD128"))
     user = os.environ.get("USER") or cfg.user
     if init_shape() == "runit":
         # runit: the user's runsvdir is a root service linked into

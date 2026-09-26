@@ -1,5 +1,29 @@
 # Changelog
 
+## v1.51
+
+Void on a real machine. What the first install found.
+
+- Void's install line is `sudo xbps-install -Sy git curl python3`.
+  The base system already brings OpenSSH, so `ssh-keygen` is there.
+- The `headless` row reads the GPU's node itself: open to every user,
+  or owned by a group that lists you. Void has no `render` group, and
+  its node is open to all, so the row no longer warns there.
+- A client of a reinstalled machine logs in with the new token and
+  keeps its own sealed threads. The login locks them under the new
+  token, once the machine that serves accepts it.
+- Void: a stop or a shutdown ends each service cleanly. The root
+  service gets a `control/t`: it stops the 3 services, then the
+  supervisor. Before, the supervisor quit first, and the shutdown
+  signalled the engine twice, so it skipped its clean exit.
+- A service stopped on purpose no longer waits 15 seconds in its
+  `finish`. The wait stays for a crash.
+- The helper that warms the model after a start no longer lingers as
+  a dead process beside the engine. On every Linux.
+- `spark quiet boot on` works on Void with GRUB: 3 marked lines at the
+  end of `/etc/default/grub`, then `update-grub`. `off` deletes them.
+- `spark quiet` says why a piece is n/a on a line of its own.
+
 ## v1.50
 
 A third Linux family, Void, and a second Linux init, runit. One spark,

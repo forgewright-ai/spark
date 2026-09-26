@@ -2,4 +2,7 @@
 # rendered by spark install.sh -- 78 (EX_CONFIG) is not a crash: stop
 # instead of a restart loop; anything else waits 15 s like the systemd unit
 [ "$1" = 78 ] && exec sv down "$(pwd)"
+# a stop you asked for (sv down, shutdown) is not a crash: no wait,
+# or the next runsv finds this one still holding the lock
+case $(sv status "$(pwd)" 2>/dev/null) in *"want down"*) exit 0 ;; esac
 sleep 15

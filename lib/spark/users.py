@@ -132,11 +132,12 @@ def unlock(name, token):
     return vault.unwrap_key(os.path.join(user_dir(name), "key"), token, name)
 
 
-def rewrap(name, dk):
-    """A new token wrapping an existing data key (the FORGE holds the key
-    from the session); the old token dies with its hash."""
+def rewrap(name, dk, new=None):
+    """A token wrapping an existing data key (the FORGE holds the key
+    from the session): a fresh one, or `new` when a client re-locks its
+    store to a box's token. The old token dies with its hash."""
     import secrets
-    new = secrets.token_urlsafe(32)
+    new = new or secrets.token_urlsafe(32)
     d = user_dir(name)
     vault.write_private(os.path.join(d, "token.hash"),
                         (vault.token_hash(new) + "\n").encode())
@@ -378,6 +379,49 @@ def cmd_remove(args):
     return 0
 
 
+def _box_user(url, token):
+    """The name the box's page server gives this token (GET /api/me), or
+    '' when it refuses, is down, or is no page server at all."""
+    import json
+    import urllib.request
+    req = urllib.request.Request(url.rstrip("/") + "/api/me",
+                                 headers={"Authorization": "Bearer " + token})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as r:
+            me = json.loads(r.read().decode("utf-8"))
+    except (OSError, ValueError):
+        return ""
+    return me.get("user", "") if isinstance(me, dict) else ""
+
+
+def _relock(name, token):
+    """A client whose box was reinstalled: the box minted NAME a new
+    token, and this machine's sealed store is still locked by the old
+    one. The current login opens it, so the data key is wrapped under
+    the new token and the threads stay. A client only: on the machine
+    that serves, a token is minted there, never pasted in."""
+    from . import config
+    cfg = config.load()
+    if not cfg.client:
+        return False
+    cur, old = account()
+    if cur != name:
+        return False
+    if _box_user(cfg.peer_ai_url, token) != name:
+        say("spark user: %s did not accept that token as %s -- the store stays as it is"
+            % (cfg.peer_ai_url, name))
+        return False
+    dk = account_key()
+    if dk is None:
+        try:
+            dk = unlock(name, old)
+        except vault.SealError:
+            return False
+    rewrap(name, dk, token)
+    say("ok     store        %s's sealed threads now open with the new token" % name)
+    return True
+
+
 def cmd_login(args):
     name = args[0] if args else ""
     if name and not valid_name(name):
@@ -401,6 +445,8 @@ def cmd_login(args):
     if name and found and name != found:
         say("spark user: that token belongs to %s, not %s" % (found, name))
         return 1
+    if not found and name and exists(name) and _relock(name, token):
+        found = name
     name = name or found
     if not name or not exists(name):
         say("spark user: no user here matches that token -- this machine's store is %s's; "

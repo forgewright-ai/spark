@@ -708,10 +708,13 @@ and may change freely.
    `/etc/cmdline.d` drop-in. Otherwise it answers `spark quiet boot --
    no UKI on this Arch: the kernel line is the boot loader's (a loader
    entry's options line, or GRUB_CMDLINE_LINUX_DEFAULT then
-   grub-mkconfig)`, exit 2. On Void it answers `spark quiet boot -- no
-   drop-in on Void's GRUB: the kernel line is /etc/default/grub's
-   (GRUB_CMDLINE_LINUX_DEFAULT, GRUB_TIMEOUT=0, then update-grub)`,
-   exit 2 (`site.VOID_NO_BOOT`). The console font goes by mechanism,
+   grub-mkconfig)`, exit 2. On Void the verb is real where
+   `/etc/default/grub` and `update-grub` are: Void's grub-mkconfig reads
+   no drop-in, so `site.GRUB_WANT` lands as 3 lines at the file's end,
+   each ending ` #spark-quiet#` (`site.GRUB_MARK`, bootstrap's twin);
+   off deletes them. A Void without GRUB answers `spark quiet boot --
+   no GRUB on this Void: its boot loader is left alone`, exit 2
+   (`site.VOID_NO_BOOT`). The console font goes by mechanism,
    never by family (`site.console_shape()`: console-setup's file, else
    vconsole.conf, else rc.conf beside `/etc/runit`, else none). A Linux
    with none answers `spark font -- no console-setup, vconsole.conf or

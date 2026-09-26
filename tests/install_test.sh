@@ -445,6 +445,7 @@ SH
             SPARK_ETC_SV="$V/sv-etc" SPARK_ETC_CONSOLE_SETUP="$V/no-console-setup" SPARK_ETC_VCONSOLE="$V/no-vconsole" SPARK_ETC_RCCONF="$V/rc.conf" \
             SPARK_ETC_MKINITCPIO_D="$T/no-mkinitcpio.d" SPARK_ETC_CMDLINE_DROPIN="$T/no-cmdline.conf" \
             SPARK_ETC_MOTD="$T/etc/motd" SPARK_ETC_ISSUE="$T/etc/issue" SPARK_ETC_UNAME_MOTD="$T/etc/10-uname" \
+            SPARK_ETC_DEFAULT_GRUB="$V/no-default-grub" \
             SPARK_SHARE_TOKEN="$V/no-share-token" SPARK_SHARE_URL="$V/no-share-url" \
             SV_LOG="$V/sv.log" PATH="$V/bin:$T/bin:$PATH" "$@"
     }
@@ -458,12 +459,30 @@ SH
     out=$(vrun sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Void) failed: $out"
     printf '%s\n' "$out" | grep -qE '^skip +runit +runit is not running here' && ok "Void, a container: the runit row skips (the services wait for a machine that boots)" || bad "Void runit row: $(printf '%s\n' "$out" | grep -E ' runit ' | head -1)"
     printf '%s\n' "$out" | grep -qE '^ok +packages ' && ok "Void: the packages row answers through xbps (everything installed)" || bad "Void packages row: $(printf '%s\n' "$out" | grep -E ' packages ' | head -1)"
-    printf '%s\n' "$out" | grep -qE '^skip +quiet-boot +Void' && ok "Void: the quiet-boot row skips (GRUB reads no drop-in)" || bad "Void quiet-boot row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
+    printf '%s\n' "$out" | grep -qE '^skip +quiet-boot +no GRUB on this Void' && ok "Void without GRUB: the quiet-boot row skips" || bad "Void quiet-boot row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
     printf '%s\n' "$out" | grep -qE '^skip +linger +runit' && ok "Void: linger skips (the supervisor runs from boot, login or not)" || bad "Void linger row: $(printf '%s\n' "$out" | grep -E ' linger ' | head -1)"
     printf '%s\n' "$out" | grep -qE '^skip +sleep +runit' && printf '%s\n' "$out" | grep -qE '^skip +lid +runit' && ok "Void: sleep and lid skip (no sleep targets, no logind)" || bad "Void sleep/lid rows: $(printf '%s\n' "$out" | grep -E ' (sleep|lid) ' | head -2 | tr '\n' ' ')"
     printf '%s\n' "$out" | grep -qE '^would +console +FONT=Terminus in .*rc.conf; setfont' && ok "Void: the console row would write FONT= into rc.conf and setfont (the rcconf shape, by mechanism)" || bad "Void console row: $(printf '%s\n' "$out" | grep -E ' console ' | head -1)"
     printf '%s\n' "$out" | grep -qE '^(ok|would|skip|todo) +spark-(check|serve|forge) ' && bad "a container: a service row spoke: $(printf '%s\n' "$out" | grep -E '^(ok|would|skip|todo) +spark-' | head -1)" || ok "a container: no service row (they wait with runit)"
     printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "Void dry-run called sudo" || ok "Void dry-run: no sudo"
+    # 11a'. Void with GRUB: grub-mkconfig reads /etc/default/grub alone, so
+    #       the row would append 3 marked lines to its end; the lines
+    #       site.GRUB_WANT writes (the Python twin) are ok as they stand;
+    #       with the key off they would go. A dry run never calls sudo
+    printf '#!/bin/sh\nexit 0\n' > "$V/bin/update-grub"; chmod +x "$V/bin/update-grub"
+    printf 'GRUB_TIMEOUT=5\nGRUB_CMDLINE_LINUX_DEFAULT="loglevel=4"\n' > "$V/default-grub"
+    out=$(vrun SPARK_ETC_DEFAULT_GRUB="$V/default-grub" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Void, GRUB) failed: $out"
+    printf '%s\n' "$out" | grep -qE '^would +quiet-boot +3 marked lines at the end of .*default-grub; update-grub \(sudo\)$' && ok "Void with GRUB: the quiet-boot row would append 3 marked lines, then update-grub" || bad "Void GRUB quiet-boot row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
+    PYTHONPATH="$REPO/lib" python3 -c 'from spark import site; print("\n".join(l + " " + site.GRUB_MARK for l in site.GRUB_WANT))' >> "$V/default-grub"
+    out=$(vrun SPARK_ETC_DEFAULT_GRUB="$V/default-grub" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Void, GRUB marked) failed: $out"
+    printf '%s\n' "$out" | grep -qE '^ok +quiet-boot +silent' && ok "Void with GRUB: the marked lines site.GRUB_WANT writes are bootstrap's (the twins agree)" || bad "Void GRUB ok row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
+    grep -q '^GRUB_TIMEOUT=5$' "$V/default-grub" && grep -q '^GRUB_CMDLINE_LINUX_DEFAULT="loglevel=4"$' "$V/default-grub" && ok "Void with GRUB: your own lines stay as they are" || bad "Void default grub: $(cat "$V/default-grub")"
+    printf 'SITE_QUIET_BOOT=no\nSITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
+    out=$(vrun SPARK_ETC_DEFAULT_GRUB="$V/default-grub" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Void, GRUB, off) failed: $out"
+    printf '%s\n' "$out" | grep -qE "^would +quiet-boot +remove spark's marked lines from .*default-grub; update-grub \(sudo\)$" && ok "Void with GRUB, key off: the marked lines would go" || bad "Void GRUB off row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
+    printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "Void GRUB dry-run called sudo" || ok "Void GRUB dry-run: no sudo"
+    rm -f "$V/bin/update-grub"
+    printf 'SITE_FONT_FACE=Terminus\nSITE_FONT_SIZE=16x32\nSITE_QUIET_BOOT=yes\nSITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
     printf '# /etc/rc.conf\n#KEYMAP="us"\nFONT="Terminus"\n' > "$V/rc.conf"
     out=$(vrun sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Void, font set) failed: $out"
     printf '%s\n' "$out" | grep -qE '^ok +console +Terminus 16x32 \(.*rc.conf\)' && ok "Void: rc.conf already naming the face (quoted, as Void writes it) is ok" || bad "Void console ok row: $(printf '%s\n' "$out" | grep -E ' console ' | head -1)"

@@ -713,11 +713,26 @@ groups="\$(id -Gn "\$USER" | tr ' ' ':')"
 exec chpst -u "\$USER:\$groups" runsvdir "\$HOME/.config/spark/sv"
 EOF
 )
+                # control/t: runsv's TERM makes runsvdir exit at once and leave
+                # the services running, so Void's shutdown signalled each one
+                # twice (runsv and pkill) and llama-server skipped its clean
+                # exit. Stop them first, one TERM each (KILL after 15 s), then
+                # HUP ends runsvdir; exit 0 = runsv sends no TERM of its own
+                root_t="$root_sv/control/t"
+                t_want=$(cat <<EOF
+#!/bin/sh
+# rendered by spark bootstrap.sh -- stop $me's services cleanly, then runsvdir
+sv -w 15 force-stop "$svdir"/* >/dev/null 2>&1
+kill -HUP "\$(cat supervise/pid)" 2>/dev/null
+exit 0
+EOF
+)
                 sv_inputs_ok() {
                     printf '%s' "$me" | grep -qE '^[a-z_][a-z0-9_-]*$' || return 1
                     case $HOME in *[';`$()|&<>"'"'"' ']*) return 1 ;; esac
                 }
-                if [ "$(cat "$root_run" 2>/dev/null)" = "$root_want" ] && [ "$(readlink "$sv_link" 2>/dev/null)" = "$root_sv" ]; then
+                if [ "$(cat "$root_run" 2>/dev/null)" = "$root_want" ] && [ "$(cat "$root_t" 2>/dev/null)" = "$t_want" ] \
+                    && [ "$(readlink "$sv_link" 2>/dev/null)" = "$root_sv" ]; then
                     ok supervisor "runsvdir-$me supervises ~/.config/spark/sv from boot"
                 elif ! sv_inputs_ok; then
                     row todo supervisor "$root_run: the user name $me or the home $HOME cannot ride in a root script -- write it by hand: exec chpst -u $me runsvdir ~/.config/spark/sv"
@@ -725,6 +740,9 @@ EOF
                     as_root mkdir -p "$root_sv"
                     printf '%s\n' "$root_want" | as_root tee "$root_run" >/dev/null
                     as_root chmod 0755 "$root_run"
+                    as_root mkdir -p "${root_t%/*}"
+                    printf '%s\n' "$t_want" | as_root tee "$root_t" >/dev/null
+                    as_root chmod 0755 "$root_t"
                     as_root ln -sfn "$root_sv" "$sv_link"
                     made runsvdir
                     # runsvdir scans every 5 s: give runsv time to take spark-check
@@ -1079,6 +1097,13 @@ else
     # The same seven words on every shape (site.QUIET_WORDS is the twin)
     QUIET_WORDS='quiet splash loglevel=3 systemd.show_status=false udev.log_level=3 vt.global_cursor_default=0 fbcon=nodefer'
     grub_dropin=/etc/default/grub.d/zz-spark-quiet.cfg
+    # Void's grub-mkconfig sources /etc/default/grub alone (no grub.d):
+    # there spark appends the same lines to the file's END, each marked --
+    # a sourced file, so the last assignment wins and the user's own lines
+    # stay as they are; off deletes the marked lines (site.GRUB_MARK twin)
+    default_grub=${SPARK_ETC_DEFAULT_GRUB:-/etc/default/grub}
+    grub_mark='#spark-quiet#'
+    grub_marked() { grep -s " $grub_mark\$" "$default_grub" | sed "s/ $grub_mark\$//"; }
     # the $GRUB_CMDLINE reference below is grub's to expand, not ours
     grub_want="GRUB_TIMEOUT=0
 GRUB_TIMEOUT_STYLE=hidden
@@ -1132,6 +1157,15 @@ GRUB_CMDLINE_LINUX_DEFAULT=\"\$GRUB_CMDLINE_LINUX_DEFAULT $QUIET_WORDS\""
                     row todo quiet-boot "mkinitcpio -P failed -- run: sudo mkinitcpio -P"
                 fi
             fi
+        elif grep -qs " $grub_mark\$" "$default_grub"; then
+            if need quiet-boot "remove spark's marked lines from $default_grub; update-grub (sudo)"; then
+                as_root sed -i "/ $grub_mark\$/d" "$default_grub"
+                if as_root update-grub >/dev/null 2>&1; then
+                    ok quiet-boot "loud: GRUB's menu and the kernel messages as your $default_grub says"
+                else
+                    row todo quiet-boot "update-grub failed -- run: sudo update-grub"
+                fi
+            fi
         elif [ -f "$grub_dropin" ] || grep -q '^GRUB_TIMEOUT=0$' /etc/default/grub 2>/dev/null; then
             if need quiet-boot "show GRUB's menu again, 5 s; kernel messages back (sudo)"; then
                 as_root rm -f "$grub_dropin"
@@ -1164,9 +1198,20 @@ GRUB_CMDLINE_LINUX_DEFAULT=\"\$GRUB_CMDLINE_LINUX_DEFAULT $QUIET_WORDS\""
     elif [ "$DISTRO" = arch ]; then
         skip quiet-boot "Arch without a UKI: the kernel line is the boot loader's -- left alone"
     elif [ "$DISTRO" = void ]; then
-        # Void's update-grub sources no grub.d drop-in: the kernel line is
-        # the user's file, left alone (site.VOID_NO_BOOT is the twin)
-        skip quiet-boot "Void: GRUB reads no drop-in here; the kernel line is /etc/default/grub's, left alone"
+        if [ ! -f "$default_grub" ] || ! have_update_grub; then
+            skip quiet-boot "no GRUB on this Void -- its boot loader is left alone"
+        elif [ "$(grub_marked)" = "$grub_want" ] && grub_user_ok; then
+            ok quiet-boot "silent: menu hidden, kernel line quiet (the marked lines in $default_grub)"
+        elif need quiet-boot "3 marked lines at the end of $default_grub; update-grub (sudo)"; then
+            as_root sed -i "/ $grub_mark\$/d" "$default_grub"
+            printf '%s\n' "$grub_want" | sed "s/\$/ $grub_mark/" | as_root tee -a "$default_grub" >/dev/null
+            made grub
+            if as_root update-grub >/dev/null 2>&1 && grub_live_quiet; then
+                ok quiet-boot "silent: menu hidden, kernel line quiet (hold Shift at boot for the menu)"
+            else
+                row todo quiet-boot "grub.cfg does not carry the quiet line -- run: sudo update-grub, then spark check"
+            fi
+        fi
     elif [ ! -f /etc/default/grub ]; then
         skip quiet-boot "no /etc/default/grub here"
     elif ! have_update_grub; then

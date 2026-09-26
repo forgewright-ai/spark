@@ -74,6 +74,11 @@ class Stub(BaseHTTPRequestHandler):
             data = [{"id": "stub-7b-q4.gguf", "aliases": ["spark"], "status": {"value": "loaded"}},
                     {"id": "stub-ember-q4.gguf", "aliases": ["ember"], "status": {"value": "loaded"}}]
             return self._send(200, {"data": data[:1] if STATE.get("single_model") else data})
+        if self.path == "/api/me":
+            # a reinstalled box's page server: one user, one token
+            if self.headers.get("Authorization") != "Bearer the-new-boxs-token":
+                return self._send(401, {"error": "unauthorized"})
+            return self._send(200, {"role": "user", "user": "ana"})
         self._send(404, {})
 
     def do_HEAD(self):
@@ -3560,6 +3565,44 @@ def main():
         t.ok(rc == 0 and out.strip() and not os.path.exists(home + "/.local/state-client/spark/users")
              and not os.path.exists(home + "/.local/state-client/spark/account"),
              "a client with no login answers and mints nothing (a client never mints)", out + err)
+        # the headless render fact reads the node itself: open to every user
+        # (Void: 0666, group video, no render group) is the GPU from boot;
+        # a node closed to others needs its owning group
+        from spark import site as _site
+        _node = os.path.join(home, "renderD128")
+        open(_node, "w").close()
+        os.chmod(_node, 0o666)
+        _f = _site.render_fact(_node)
+        t.ok(_f[0] == "render node" and _f[1] is True and "open to every user" in _f[2],
+             "headless: a render node open to every user needs no group (Void)", repr(_f))
+        os.chmod(_node, 0o600)
+        _f = _site.render_fact(_node)
+        t.ok(_f[0].endswith(" group") and _f[0] != "render node",
+             "headless: a closed render node names the group that owns it", repr(_f))
+        # a client whose box was reinstalled: the box minted a new token,
+        # and the login re-locks this machine's sealed store under it,
+        # threads kept; the machine that serves still refuses a pasted one
+        _xdg7 = {"XDG_STATE_HOME": home + "/.local/state-relock"}
+        rc, out, _ = spark("user", "add", "ana", "--show-token", "--no-qr", extra=_xdg7)
+        old = out.split("shown once, never stored; it is the only key:\n", 1)[-1].split()[0]
+        rc, out, _ = spark("user", "login", "ana", stdin=old + "\n", extra=_xdg7)
+        t.ok(rc == 0 and "this machine is ana" in out, "the old token logs ana in", out)
+        rc, out, _ = spark("user", "login", "ana", stdin="the-new-boxs-token\n", extra=_xdg7)
+        t.ok(rc == 1 and "sealed threads now open" not in out,
+             "the machine that serves refuses a pasted token it never minted", out)
+        _cl7 = dict(_xdg7, SITE_AI_MODEL="none", SITE_PEER_AI_URL=url)
+        rc, out, _ = spark("user", "login", "ana", stdin="a-typo\n", extra=_cl7)
+        t.ok(rc == 1 and "did not accept that token as ana -- the store stays as it is" in out,
+             "a client re-locks nothing the box does not accept", out)
+        rc, out, _ = spark("user", "login", "ana", stdin="the-new-boxs-token\n", extra=_cl7)
+        t.ok(rc == 0 and "ana's sealed threads now open with the new token" in out
+             and "this machine is ana" in out,
+             "a client re-locks its store to the reinstalled box's token", out)
+        rc, out, _ = spark("user", "login", "ana", stdin=old + "\n", extra=_cl7)
+        t.ok(rc == 1, "after the re-lock the old token opens nothing", out)
+        rc, out, _ = spark("user", "login", "ana", stdin="the-new-boxs-token\n", extra=_cl7)
+        t.ok(rc == 0 and "sealed threads now open" not in out and "this machine is ana" in out,
+             "the new token opens the store as its own", out)
         rc, out, _ = spark("setup", "--yes", "--no-serve", "--model", "nosuch", extra=off)
         t.ok(rc == 2 and "no model named nosuch" in out and "auto none qwen3" in out,
              "setup --model nosuch exits 2 naming the table", out)
@@ -3717,13 +3760,13 @@ def main():
              "void: manager xbps, install through xbps-install -Sy, upgrade -Su, removal xbps-remove -y, the tools' xbps column", twin(_pk))
         # the console's third shape: rc.conf beside /etc/runit is rcconf and
         # the font file; rc.conf without runit is no shape (by mechanism, not
-        # by file); quiet boot on void is the Void line either way
+        # by file); quiet boot on a void without GRUB is the Void line either way
         with open(home + "/rc.conf", "w") as f:
             f.write('#KEYMAP="us"\nFONT="Terminus"\n')
-        rcconf = dict(SPARK_ETC_CONSOLE_SETUP=home + "/no-console-setup", SPARK_ETC_VCONSOLE=home + "/no-vconsole", SPARK_ETC_RCCONF=home + "/rc.conf")
+        rcconf = dict(SPARK_ETC_CONSOLE_SETUP=home + "/no-console-setup", SPARK_ETC_VCONSOLE=home + "/no-vconsole", SPARK_ETC_RCCONF=home + "/rc.conf",
+                      SPARK_ETC_DEFAULT_GRUB=home + "/no-default-grub")
         _shape = "from spark import site; print(site.console_shape() or '-', site.font_file(), site.no_console_font() or '-', '|', site.no_grub())"
-        _void_no_boot = ("no drop-in on Void's GRUB: the kernel line is /etc/default/grub's "
-                         "(GRUB_CMDLINE_LINUX_DEFAULT, GRUB_TIMEOUT=0, then update-grub)")
+        _void_no_boot = "no GRUB on this Void: its boot loader is left alone"
         t.ok(twin(_shape, **rcconf) == "rcconf %s/rc.conf - | %s" % (home, _void_no_boot),
              "void: rc.conf beside /etc/runit is the rcconf shape, the font file is rc.conf, quiet boot is refused with the Void line", twin(_shape, **rcconf))
         t.ok(twin(_shape, SPARK_ETC_RUNIT=home + "/no-runit", **rcconf)

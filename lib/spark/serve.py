@@ -49,34 +49,52 @@ def _warm(cfg, url):
     say("warm   " + (", ".join(warmed) if warmed else "nothing answered (the first request loads the model)"))
 
 
-def _warm_when_up(cfg):
+def _warm_when_up(cfg, server):
     """`spark serve --warm-when-up`, private: the unit's helper. Wait for
     the server that `--foreground` is about to become, then warm it, so the
     first question after boot does not pay for the model load. Creates
     nothing (no token, no serve-url, no pidfile); gives up quietly when the
     server is gone or never answers -- the unit restarts it anyway."""
     url = wire.serve_url() or "http://%s:%d" % (cfg.serve_host or lan_ip() or "127.0.0.1", cfg.port)
-    parent = os.getppid()
     end = time.time() + 180
     while time.time() < end:
         if wire.health(url) == "ok":
             _warm(cfg, url)
             return 0
-        if os.getppid() != parent:           # the server this waits for has exited
+        try:
+            os.kill(server, 0)
+        except ProcessLookupError:           # the server this waits for has exited
             return 1
+        except OSError:
+            pass
         time.sleep(1)
     return 1
 
 
 def _spawn_warmer():
-    """Before becoming the server: a detached `spark serve --warm-when-up`
-    whose lines land in the unit's log (stdout/stderr inherited). The
-    unit's pid stays the server's; the child never spawns another."""
+    """Before becoming the server: a detached `spark serve --warm-when-up
+    PID` whose lines land in the unit's log (stdout/stderr inherited). The
+    unit's pid stays the server's; the child never spawns another. A
+    double fork: llama-server reaps no child, so a direct one lingered as
+    a zombie for the server's whole life -- init adopts this one."""
+    me = os.getpid()
+    argv = [sys.executable, os.path.join(REPO, "bin", "spark"), "serve", "--warm-when-up", str(me)]
     try:
-        subprocess.Popen([sys.executable, os.path.join(REPO, "bin", "spark"), "serve", "--warm-when-up"],
-                         stdin=subprocess.DEVNULL, start_new_session=True)
+        child = os.fork()
     except OSError as e:
         say("warm   not started (%s) -- the first request loads the model" % e)
+        return
+    if child == 0:
+        try:
+            os.setsid()
+            if os.fork() == 0:
+                null = os.open(os.devnull, os.O_RDONLY)
+                os.dup2(null, 0)
+                os.execv(sys.executable, argv)
+        except OSError:
+            pass
+        os._exit(0)
+    os.waitpid(child, 0)
 
 
 def _wait_lan_ip(foreground):
@@ -102,7 +120,11 @@ def cmd_serve(args):
         say("\n".join(client_lines(cfg, url)))
         return 0
     if "--warm-when-up" in args:
-        return _warm_when_up(cfg)
+        # the server's pid follows the flag; an older unit's helper had
+        # none and watched its parent -- that parent is the server too
+        rest = args[args.index("--warm-when-up") + 1:]
+        server = int(rest[0]) if rest and rest[0].isdigit() else os.getppid()
+        return _warm_when_up(cfg, server)
     if cfg.base_url:
         return _die("this machine is a client of %s (SPARK_BASE_URL) -- unset it to serve here" % cfg.base_url, engine.EX_CONFIG)
     host = host or cfg.serve_host or _wait_lan_ip(fg)
