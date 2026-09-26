@@ -3938,15 +3938,15 @@ print("restart", engine.restart_line("serve"), "|", engine.restart_line("check")
                  "Arch: spark quiet login on still sets the key (the motd is real there)", "%d %s" % (rc, out))
             rc, out, _ = spark("quiet", "login", "off", extra=arch)
             # Void (ID="void" in os-release, /etc/runit a dir, not booted):
-            # quiet boot refuses in one signed line (GRUB reads no drop-in
-            # there) and the status says n/a; quiet login is real; headless
+            # without GRUB quiet boot refuses in one signed line and the
+            # status says n/a and why; with GRUB it is real; quiet login is real; headless
             # is allowed (a Void box can be a brain) and its status reads
             # the supervisor fact, no linger or sleep; the console font is
             # rc.conf's FONT=, named on every line
             void = dict(SPARK_OS_RELEASE=home + "/os-release-void", SPARK_PROC_VERSION=home + "/version-plain", SPARK_NO_APPLY="1",
                         SPARK_ETC_CONSOLE_SETUP=home + "/no-console-setup", SPARK_ETC_VCONSOLE=home + "/no-vconsole",
                         SPARK_ETC_RCCONF=home + "/rc.conf", SPARK_ETC_RUNIT=home + "/runit", SPARK_VAR_SERVICE=home + "/no-service",
-                        SPARK_CONSOLEFONTS_DIR=home + "/consolefonts")
+                        SPARK_CONSOLEFONTS_DIR=home + "/consolefonts", SPARK_ETC_DEFAULT_GRUB=home + "/no-default-grub")
             rc, out, _ = spark("quiet", "boot", "on", extra=void)
             t.ok(rc == 2 and out.strip() == "spark quiet boot -- " + _void_no_boot
                  and "SITE_QUIET_BOOT=yes" not in open(home + "/.config/spark/site.env").read(),
@@ -3955,7 +3955,22 @@ print("restart", engine.restart_line("serve"), "|", engine.restart_line("check")
             t.ok(rc == 0 and out.strip() == "spark quiet boot -- " + _void_no_boot,
                  "Void: bare spark quiet boot shows the same line, exit 0", out)
             rc, out, _ = spark("quiet", extra=void)
-            t.ok(rc == 0 and "boot n/a (no drop-in on Void's GRUB" in out, "Void: spark quiet's status says boot is n/a and why", out)
+            t.ok(rc == 0 and "boot n/a," in out and "boot is n/a: " + _void_no_boot in out,
+                 "Void: spark quiet's status says boot is n/a, and why on a line of its own", out)
+            # with /etc/default/grub and update-grub the verb is real: the key
+            # is set (bootstrap appends the marked lines), then set back
+            os.makedirs(home + "/grub-bin", exist_ok=True)
+            with open(home + "/grub-bin/update-grub", "w") as f:
+                f.write("#!/bin/sh\nexit 0\n")
+            os.chmod(home + "/grub-bin/update-grub", 0o755)
+            with open(home + "/default-grub", "w") as f:
+                f.write('GRUB_TIMEOUT=5\n')
+            vgrub = dict(void, SPARK_ETC_DEFAULT_GRUB=home + "/default-grub",
+                         PATH=home + "/grub-bin:" + os.environ.get("PATH", ""))
+            rc, out, _ = spark("quiet", "boot", "on", extra=vgrub)
+            t.ok(rc == 0 and "SITE_QUIET_BOOT=yes" in open(home + "/.config/spark/site.env").read(),
+                 "Void with GRUB: spark quiet boot on sets the key", "%d %s" % (rc, out))
+            rc, out, _ = spark("quiet", "boot", "off", extra=vgrub)
             rc, out, _ = spark("quiet", "login", "on", extra=void)
             t.ok(rc == 0 and "SITE_QUIET_LOGIN=yes" in open(home + "/.config/spark/site.env").read(),
                  "Void: spark quiet login on still sets the key (the motd is real there)", "%d %s" % (rc, out))
