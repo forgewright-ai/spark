@@ -94,9 +94,9 @@ jobs:
           done
           ls /usr/share/man/man1 | wc -l
       - name: the man reader, with its own output
-        # mandoc is Void's man: without it no page is read. Its install
+        # mandoc (package mdocml) is Void's man: without it no page is read. Its install
         # is its own step, loud, so a failure says why
-        run: xbps-install -Sy mandoc && command -v man && man -w ls
+        run: xbps-install -Sy mdocml && command -v mandoc && command -v man && man -w ls
       - name: collect
         run: python3 tests/line_audition.py collect --os void --out help-void.json
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a   # v7.0.1

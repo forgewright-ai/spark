@@ -284,7 +284,15 @@ jobs:
           printf 'SITE_AI_MODEL=none\n' > ~/.config/spark/site.env
           time ./bootstrap.sh
           ./bootstrap.sh --dry-run | tee /tmp/dry.txt
-          [ "$(tail -1 /tmp/dry.txt)" = 'Nothing to do' ] || { PYTHONPATH=lib python3 -m spark.intake fresh; false; }
+          if [ "$(tail -1 /tmp/dry.txt)" != 'Nothing to do' ]; then
+            # the runner's own Homebrew may upgrade itself under the build
+            # (brew, wheel3 moved in /opt/homebrew/bin): say what moved, and
+            # one more pass must converge
+            PYTHONPATH=lib python3 -m spark.intake fresh || true
+            ./bootstrap.sh >/dev/null
+            ./bootstrap.sh --dry-run | tee /tmp/dry.txt
+            [ "$(tail -1 /tmp/dry.txt)" = 'Nothing to do' ] || { PYTHONPATH=lib python3 -m spark.intake fresh; false; }
+          fi
           grep -q 'config/spark/hook\.' ~/.zshrc
           ~/.local/bin/spark check --fresh || true
           # a runner may have no gui launchd domain: the launchd rows skip and services may fail; nothing else may

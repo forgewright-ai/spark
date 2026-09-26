@@ -187,7 +187,7 @@
    "pm": "xbps-install",
    "init": "runit",
    "install": [
-    "mandoc",
+    "mdocml",
     "sudo",
     "curl",
     "wget",
