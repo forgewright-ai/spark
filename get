@@ -49,7 +49,7 @@ main() {
             # the family by its package manager: the fix line below names it
             if command -v apt-get >/dev/null 2>&1; then fix="sudo apt-get install -y git openssh-client python3 curl"
             elif command -v pacman >/dev/null 2>&1; then fix="sudo pacman -S --needed git openssh python curl"
-            elif command -v xbps-install >/dev/null 2>&1; then fix="sudo xbps-install -Sy git openssh python3 curl"
+            elif command -v xbps-install >/dev/null 2>&1; then fix="sudo xbps-install -Sy git python3 curl"
             else refuse "no apt-get, pacman or xbps-install -- a Debian-family, Arch or Void Linux in this version"; fi
             # the pinned engine is a glibc build: a musl libc (Void's second
             # flavour, its loader at /lib/ld-musl-*.so.1) has nothing to run

@@ -53,7 +53,7 @@ Void:
 3. Reboot, log in, run `sudo xbps-install -Su` once, then:
 
    ```sh
-   sudo xbps-install -Sy git curl python3 openssh
+   sudo xbps-install -Sy git curl python3
    ```
 
 4. Continue at section 2.
@@ -91,9 +91,10 @@ Open Ubuntu, then do Debian's step 3.
      git curl python openssh`. Run `sudo pacman -Syu` first when a
      package cannot be found. `pacman -Sy` alone breaks a rolling
      distro.
-   - Void Linux: `sudo xbps-install -Sy git curl python3 openssh`. When
-     xbps refuses, `sudo xbps-install -Su` first: xbps itself must be
-     current.
+   - Void Linux: `sudo xbps-install -Sy git curl python3`. When xbps
+     refuses, `sudo xbps-install -Su` first: xbps itself must be
+     current. `ssh-keygen` is already there: Void's base system
+     brings OpenSSH.
    - macOS: `xcode-select --install`.
    - Your login shell must be bash 4 or newer, or zsh. The prompt line
      lives in one of them. macOS ships zsh, and its bash is 3.2.

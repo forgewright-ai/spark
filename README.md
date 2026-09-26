@@ -26,7 +26,7 @@ command itself and runs nothing.
    # Arch Linux
    sudo pacman -S --needed git curl python openssh
    # Void Linux
-   sudo xbps-install -Sy git curl python3 openssh
+   sudo xbps-install -Sy git curl python3
    # macOS
    xcode-select --install
    ```
