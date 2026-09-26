@@ -42,7 +42,9 @@ SPARK_DIR=${XDG_STATE_HOME:-$HOME/.local/state}/spark
 # shell's exit-code hook is armed; readers ignore fields they do not know
 mkdir -p "$SPARK_DIR/widgets" 2>/dev/null && chmod 700 "$SPARK_DIR" 2>/dev/null
 printf 'bash %d %d hook\n' "$$" "$(date +%s)" > "$SPARK_DIR/widgets/$$" 2>/dev/null
-_spark_gone() { rm -f "$SPARK_DIR/widgets/$$" "$SPARK_DIR/proof.$$"; }
+# a reader still drawing an answer's hint stops with the shell, before its
+# proof file goes: it must not write after the shell is gone
+_spark_gone() { _spark_reap; rm -f "$SPARK_DIR/widgets/$$" "$SPARK_DIR/proof.$$"; }
 trap '_spark_gone' EXIT
 
 # --- is this line a question? ----------------------------------------------
