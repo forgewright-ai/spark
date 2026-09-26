@@ -2865,10 +2865,11 @@ def main():
              and "\x08" not in umsg and umsg.index("From man") > umsg.index("unrecognized option")
              and "From man fakeflag: 3 lines go back with the output" in out,
              "spark do: a step refused for an option -- the next request carries its man page's lines about it", repr(umsg[-300:]) + out)
-        t.ok(open(home + "/man-argv").read() == "-P cat fakeflag\n"
-             and open(home + "/man-env").read() == "MANWIDTH=80 MANPAGER=unset PAGER=unset MANOPT=unset\n"
+        t.ok(open(home + "/man-argv").read() == "fakeflag\n"
+             and open(home + "/man-env").read() == "MANWIDTH=80 MANPAGER=cat PAGER=cat MANOPT=unset\n"
              and open(home + "/fakeflag-ran").read() == "x\n",
-             "spark do: man runs as argv (-P cat HEAD), pager variables dropped, MANWIDTH=80; the tool ran once, as the step",
+             "spark do: man runs as argv (man HEAD) in one clean environment -- MANPAGER=cat PAGER=cat (no -P: "
+             "Void's mandoc man refuses it), no MANOPT, MANWIDTH=80; the tool ran once, as the step",
              open(home + "/man-env").read() if os.path.exists(home + "/man-env") else "no man-env")
         os.remove(home + "/man-argv")
         rc, out, err = spark("do", "goodflag", stdin="\n", extra=menv, cwd=work)

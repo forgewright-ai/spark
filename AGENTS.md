@@ -58,6 +58,7 @@ python3 tests/forge_smoke.py
 python3 tests/bench_smoke.py
 python3 tests/vault_test.py
 python3 tests/sandbox_test.py
+python3 tests/knowledge_test.py
 python3 tests/qr_test.py
 python3 tests/docs_test.py
 python3 tests/policy_test.py

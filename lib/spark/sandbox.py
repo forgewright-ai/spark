@@ -50,7 +50,9 @@ import json
 import os
 import re
 import secrets
+import select
 import shutil
+import signal
 import stat
 import subprocess
 import tempfile
@@ -189,6 +191,7 @@ PROFILE = (
     ('(deny file-read* file-write* (literal "/dev/tty") (regex #"^/dev/ttys[0-9]+$"))',
      "no terminal: nothing typed into the caller's shell"),
     ("(deny appleevent-send)", "no scripting other apps"),
+    ("(deny signal (target others))", "no signal to a process outside the step's own (itself and its children)"),
     ("(deny lsopen)", "no opening apps or URLs"),
     ('(deny mach-lookup (global-name "com.apple.pasteboard.1") (global-name "com.apple.SecurityServer")'
      ' (global-name "com.apple.securityd.xpc"))', "no clipboard, no keychain"),
@@ -768,6 +771,16 @@ def _uvar():
 def _mac_step(run, shell, cmd):
     d = run["dir"]
     clone, rhome, tmp = (os.path.realpath(os.path.join(d, s)) for s in ("clone", "home", "tmp"))
+    argv = _mac_profile(clone, rhome, tmp, os.path.join(d, "profile.sb")) + [shell, "-c", cmd]
+    return argv, clone, _step_env(rhome, tmp)
+
+
+def _mac_profile(clone, rhome, tmp, profile, git=True, extra=()):
+    """sandbox-exec's argv up to the program: PROFILE rendered into the
+    file `profile` (0600), the paths as -D parameters -- `clone` the one
+    place a step reads and writes, `rhome` and `tmp` its own home and
+    temp. `git` False reads no git config file; `extra` is more (line,
+    why) pairs, appended (later rules win: contained() tightens with it)."""
     params = [("HOME", os.path.realpath(HOME)), ("STATE", os.path.realpath(STATE_DIR)),
               ("CONFIG", os.path.realpath(CONFIG_DIR)), ("UVAR", _uvar()),
               ("CLONE", clone), ("RHOME", rhome), ("TMP", tmp),
@@ -776,11 +789,12 @@ def _mac_step(run, shell, cmd):
     while p and p != "/":
         anc.append(p)
         p = os.path.dirname(p)
-    git = [os.path.realpath(os.path.join(HOME, g)) for g in GIT_FILES if os.path.isfile(os.path.join(HOME, g))]
+    git = [os.path.realpath(os.path.join(HOME, g)) for g in GIT_FILES
+           if git and os.path.isfile(os.path.join(HOME, g))]
     params += [("ANC_%d" % i, a) for i, a in enumerate(anc)]
     params += [("GIT_%d" % i, g) for i, g in enumerate(git)]
     lines = []
-    for line, why in PROFILE:
+    for line, why in PROFILE + tuple(extra):
         if line == "@ANC":
             if not anc:        # an empty filter would allow every path
                 continue
@@ -788,13 +802,11 @@ def _mac_step(run, shell, cmd):
                                                             for i in range(len(anc)))
         line = line.replace("@GIT", "".join(' (literal (param "GIT_%d"))' % i for i in range(len(git))))
         lines.append(line + ("   ; " + why if why else ""))
-    profile = os.path.join(d, "profile.sb")
     _write_private(profile, ("\n".join(lines) + "\n").encode())
     argv = [SANDBOX_EXEC]
     for k, v in params:
         argv += ["-D", "%s=%s" % (k, v)]
-    argv += ["-f", profile, shell, "-c", cmd]
-    return argv, clone, _step_env(rhome, tmp)
+    return argv + ["-f", profile]
 
 
 def preexec():
@@ -891,6 +903,136 @@ def probe(fresh=False, platform=None):
     except OSError:
         pass
     return good, detail
+
+
+# ------------------------------------------------------------------ contained
+# One program, run only to read what it prints about itself (knowledge
+# intake: `NAME --help` for a program with no manual). step()'s parts
+# without the overlay: nothing of the machine writable, the homes, /run,
+# /tmp and spark's token hidden, no network, its own pid namespace and
+# session, a clean environment, rlimits, CONTAINED_SECONDS and
+# CONTAINED_CAP, then its whole process group killed. Never as root, and
+# never where probe() says this machine has no sandbox: None, nothing runs.
+CONTAINED_SECONDS = 3
+CONTAINED_CAP = 65536
+CONTAINED_HOME = "/tmp/h"          # Linux: inside the empty /tmp tmpfs
+# the environment a contained program gets, besides PATH and HOME -- nothing
+# else of the caller's crosses
+CONTAINED_ENV = (
+    ("LC_ALL", "C"),        # plain ASCII messages, the C locale's
+    ("NO_COLOR", "1"),      # the programs that honour it print no escapes
+    ("TERM", "dumb"),       # no colour, no cursor games, no pager
+)
+# macOS: PROFILE (CLONE, RHOME and TMP one scratch dir), then these
+CONTAINED_PROFILE = (
+    ("(deny process-fork)", "one program, no child: nothing outlives it or runs beside it"),
+    ("(deny mach-lookup (global-name \"com.apple.windowserver.active\")"
+     " (global-name \"com.apple.dt.CommandLineTools.installondemand\"))",
+     "no window on the screen, no offer to install the developer tools"),
+)
+# the rlimits a contained program runs under: set by /bin/sh's ulimit inside
+# the containment, then exec -- no preexec_fn, so contained() may run from
+# several threads at once. Inside bwrap's user namespace the process count
+# is the sandbox's own (Linux 5.14 and later), so NPROC bounds a fork bomb
+# without refusing bwrap's own clone outside.
+CONTAINED_LIMITS = (
+    ("-c", 0),           # no core file
+    ("-t", 3),           # seconds of CPU
+    ("-f", 2048),        # no file it writes past 1 MB (512-byte blocks; 2 MB where sh counts kB)
+    ("-u", 64),          # 64 processes
+)
+
+
+def _limited(argv):
+    """`argv` behind /bin/sh's ulimit (CONTAINED_LIMITS), then exec'd: the
+    program keeps its own argv[0] and arguments."""
+    sets = "".join("ulimit %s %d 2>/dev/null; " % (flag, n) for flag, n in CONTAINED_LIMITS)
+    return ["/bin/sh", "-c", sets + 'exec "$0" "$@"'] + list(argv)
+
+
+def _contained_argv(argv, scratch, plat, bind=()):
+    """(full argv, cwd, env) for `argv` contained on `plat`; `bind` is the
+    files (Linux) mounted back read-only at their own path, one by one --
+    the program itself when it lives under a hidden home."""
+    argv = _limited(argv)
+    if plat == "macos":
+        cwd = os.path.join(scratch, "c")
+        os.mkdir(cwd, 0o700)
+        prefix = _mac_profile(cwd, cwd, cwd, os.path.join(scratch, "profile.sb"), git=False,
+                              extra=CONTAINED_PROFILE)
+        env = {"PATH": _abs_path(), "HOME": cwd}
+        env.update(CONTAINED_ENV)
+        return prefix + list(argv), cwd, env
+    full = [shutil.which("bwrap", path=_abs_path()) or "bwrap", "--ro-bind", "/", "/"]
+    for h in _hidden(os.path.realpath(HOME)):
+        full += ["--tmpfs", h]
+    for b in bind:
+        full += ["--ro-bind", b, b]
+    full += ["--dev", "/dev", "--proc", "/proc", "--dir", CONTAINED_HOME, "--chdir", "/tmp"]
+    full += list(BWRAP_FLAGS)
+    full.append("--clearenv")
+    env = dict(CONTAINED_ENV, PATH=_abs_path(), HOME=CONTAINED_HOME)
+    for k, v in sorted(env.items()):
+        full += ["--setenv", k, v]
+    return full + list(argv), "/", {"PATH": _abs_path()}
+
+
+def _abs_path():
+    return os.pathsep.join(d for d in (os.environ.get("PATH") or "/usr/bin:/bin").split(os.pathsep)
+                           if os.path.isabs(d))
+
+
+def contained(argv, seconds=CONTAINED_SECONDS, cap=CONTAINED_CAP, platform=None, bind=()):
+    """(rc, text) of `argv` run contained -- bwrap on Linux, sandbox-exec
+    on macOS -- stdout and stderr folded, `cap` bytes at most, `seconds`
+    at most (then rc 124), its whole process group killed either way.
+    None when nothing may run: as root, or where probe() says this machine
+    has no sandbox. Safe from several threads (no preexec_fn)."""
+    if os.geteuid() == 0:
+        return None
+    plat = platform or OS
+    good, _detail = probe(platform=plat)
+    if not good:
+        return None
+    scratch = tempfile.mkdtemp(prefix="spark-contained.", dir=os.path.realpath(tempfile.gettempdir()))
+    try:
+        full, cwd, env = _contained_argv(argv, scratch, plat, bind)
+        try:
+            p = subprocess.Popen(full, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                 stderr=subprocess.STDOUT, start_new_session=True)
+        except OSError as e:
+            return 127, "%s: %s" % (argv[0] if argv else "", e.strerror or e)
+        buf, fd, end, timed = b"", p.stdout.fileno(), time.monotonic() + seconds, False
+        try:
+            while len(buf) < cap:
+                left = end - time.monotonic()
+                if left <= 0:
+                    timed = True
+                    break
+                if not select.select([fd], [], [], min(left, 0.1))[0]:
+                    continue
+                chunk = os.read(fd, 65536)
+                if not chunk:
+                    break
+                buf += chunk
+            if not timed and len(buf) < cap:      # at the cap it is killed, never waited for
+                try:
+                    p.wait(timeout=max(0.05, end - time.monotonic()))
+                except subprocess.TimeoutExpired:
+                    timed = True
+        finally:
+            try:
+                os.killpg(p.pid, signal.SIGKILL)     # whatever it left running goes too
+            except OSError:
+                pass
+            p.stdout.close()
+            try:
+                p.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                pass
+        return (124 if timed else p.returncode), buf[:cap].decode("utf-8", "replace")
+    finally:
+        _rmtree(scratch)
 
 
 def _first_line(s, default):

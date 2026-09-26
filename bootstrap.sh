@@ -1236,6 +1236,20 @@ GRUB_CMDLINE_LINUX_DEFAULT=\"\$GRUB_CMDLINE_LINUX_DEFAULT $QUIET_WORDS\""
     fi
 fi
 
+# =========================================================== 13. knowledge
+# What this machine can run -- its programs' manuals, its apps, spark's own
+# verbs -- read into the store the prompt line's knowledge comes from
+# (lib/spark/intake.py, STATE/knowledge/). Last, so every package above is
+# in it. Rebuilt only when the machine's fingerprint moved (a package, a
+# PATH or man dir, spark's tree); the check timer keeps it fresh after.
+section knowledge
+knowledge() { PYTHONPATH="$REPO/lib" python3 -m spark.intake "$@"; }
+if knowledge fresh 2>/dev/null; then
+    skip knowledge "fresh"
+elif need knowledge "read the programs, manuals and apps on this machine"; then
+    ok knowledge "$(knowledge build 2>/dev/null || true)"
+fi
+
 # =============================================================== report
 printf '\n'
 if [ "$todo" -eq 0 ]; then echo "Nothing to do"; else echo "$todo to do"; fi
