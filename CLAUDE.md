@@ -269,6 +269,9 @@ tests/          smoke.py serve_smoke.py forge_smoke.py bench_smoke.py
                 model, lints as the judge; audition/ground/ holds the grounded
                 contracts' set of 10 cases, scored the same blind way, the
                 score written by hand as MODEL_<NAME>_GROUND; not in the gate)
+                line_audition.py + line_audition/ (the prompt line per OS and on
+                spark's own verbs against a live model; answers graded by each
+                OS's --help snapshot and spark's tree; its selftest in smoke)
                 forge_probe.py URL (the page's server's gates asked from the wire --
                 wire.probe_gates, the hardening row's probes -- one line per
                 gate, exit 1 when any does not hold; against a real server)
@@ -289,6 +292,8 @@ tests/          smoke.py serve_smoke.py forge_smoke.py bench_smoke.py
                 and the javascript, on a push to main, a pull request and weekly
                 workflows/advisories.yml: weekly, one issue when llama.cpp
                 published a security advisory after the engine pin's date
+                workflows/line-audition-help.yml: by hand, each OS's --help for
+                the commands the prompt-line audition names, as artifacts
                 dependabot.yml: the workflows' action sha pins, kept current weekly
                 PULL_REQUEST_TEMPLATE.md, ISSUE_TEMPLATE/bug.md and model-row.md
 LICENSE         MIT, verbatim, ASCII (the hook checks it with the docs)

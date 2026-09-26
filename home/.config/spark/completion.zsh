@@ -54,7 +54,8 @@ _spark() {
             theme)   comp=(list show none status ${(f)"$(_spark_theme_names)"}) ;;
             model)   comp=(list verify budget rm add auto none status ${(f)"$(_spark_model_names)"}) ;;
             ember)   comp=(list auto none status ${(f)"$(_spark_model_names)"}) ;;
-            headless | share | memory) comp=(on off status) ;;
+            headless | share) comp=(on off status) ;;
+            memory)  comp=(add forget clear on off) ;;
             forge) comp=(on off status audit token) ;;
             bar)     comp=(line) ;;
             check)   comp=(--watch --porcelain --report --fresh --fetch --selftest --chaos) ;;

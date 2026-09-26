@@ -21,6 +21,10 @@ Six small things the v1.51 tour found, each fixed.
 - `spark user`, `spark status` and `spark history` count the same
   threads: the ones that hold a turn. A file from a failed first turn
   no longer counts. `spark history` says `newest 5 of N` past 5.
+- `spark bench --line [N]` times N everyday prompt-line questions
+  through `spark line`: command ready, whole answer and warm slots.
+  `spark stats` shows the result as the line pace, and the
+  `throughput` row names it.
 
 ## v1.51
 

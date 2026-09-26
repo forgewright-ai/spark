@@ -1569,6 +1569,12 @@ def main():
         from spark import text as _txt
         t.ok(_txt.unstrike("N\bNA\bAM\bME\bE _\bs_\bc_\bp") == "NAME scp" and _txt.scrub("B\bBold") == "Bold",
              "unstrike and scrub keep the letter of a bold or an underline", _txt.unstrike("N\bN"))
+        # the prompt-line audition's grader (tests/line_audition.py) holds its
+        # own rules against canned answers and the tree; no model needed
+        _la = subprocess.run([sys.executable, os.path.join(REPO, "tests", "line_audition.py"), "selftest"],
+                             capture_output=True, text=True, timeout=60)
+        t.ok(_la.returncode == 0 and "selftest: all ok" in _la.stdout,
+             "line_audition selftest: the grader's rules hold", (_la.stdout + _la.stderr)[-300:])
         # an empty pipe (ssh -h writes its usage to stderr) is one line
         # naming 2>&1, never the whole usage
         rc, out, _ = spark("read", "how", "I", "use", "ssh", stdin="")

@@ -61,7 +61,7 @@ _spark_complete() {
         headless | share) words="on off status" ;;
         forge)   words="on off status audit token" ;;
         bar)     words="line" ;;
-        memory)  words="add forget clear on off status" ;;
+        memory)  words="add forget clear on off" ;;
         check)   words="--watch --porcelain --report --fresh --fetch --selftest --chaos" ;;
         uninstall) words="--dry-run --yes --purge --packages --keep-packages" ;;
         serve)   words="on off status --foreground --host --print-client" ;;
