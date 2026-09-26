@@ -6,8 +6,9 @@
 # proof lower a model's `!` -- persona.is_dangerous always wins.
 #
 # Unknown is not wrong: a program with no entry, or an entry whose manual
-# named no options, earns no flag finding; a line this parser cannot read
-# earns none at all. The parser is this module's own -- the audition's
+# named no options, earns no flag finding; one whose manual lists no
+# commands earns no command finding; a line this parser cannot read earns
+# none at all. The parser is this module's own -- the audition's
 # grader (tests/line_audition.py) is independent code on purpose, the
 # referee never sharing the player's parser.
 #
@@ -21,11 +22,12 @@ import shutil
 import signal
 from collections import namedtuple
 
-from . import CONFIG_DIR, REPO, grounding, persona
+from . import CONFIG_DIR, REPO, grounding, intake, persona
 
-# kind: missing (no such program here) | flag (not in its entry) | verb
-# (not a spark verb or word) | placeholder (a <word> the shell would read
-# as a redirect)
+# kind: missing (no such program here) | flag (not in its entry) | command
+# (a program whose manual lists its commands, given a word it does not
+# list: sv enable) | verb (not a spark verb or word) | placeholder (a
+# <word> the shell would read as a redirect)
 Finding = namedtuple("Finding", "kind head word")
 
 
@@ -284,6 +286,45 @@ def _valued(entry):
 
 
 # ------------------------------------------------------------ findings
+_WORDISH = re.compile(r"^[A-Za-z0-9][\w.:+-]*$")
+
+
+def _command(head, args, entry, valued):
+    """A command finding: the entry lists its program's commands and the
+    command word -- the first positional word past the options -- is none
+    of them (a prefix of one, when the manual says they may be
+    abbreviated). A word right after an option may be that option's
+    value, so a later word that is a command clears it. A word that is
+    not word-shaped (a path, a $VAR, a glob) is unknown, never wrong."""
+    cs = intake.commands_of(getattr(entry, "commands", None))
+    if not cs:
+        return []
+    names = frozenset(cs.words)
+
+    def known(w):
+        return w in names or (cs.prefix and any(c.startswith(w) for c in names))
+    maybe, after_opt, skip = None, False, False
+    for a in args:
+        if skip:
+            skip = False
+            continue
+        if a == "--":
+            break
+        if a.startswith("-") and a != "-":
+            skip = a in valued and "=" not in a
+            after_opt = not skip and "=" not in a
+            continue
+        if known(a) or not _WORDISH.match(a):
+            return []
+        if maybe is None:
+            maybe = a
+            if after_opt:
+                after_opt = False
+                continue                            # perhaps the option's value: the next word decides
+        break
+    return [Finding("command", head, maybe)] if maybe else []
+
+
 _SIGNALS = frozenset(
     ("HUP INT QUIT ILL TRAP ABRT IOT BUS EMT FPE KILL USR1 SEGV USR2 PIPE ALRM TERM STKFLT "
      "CHLD CLD CONT STOP TSTP TTIN TTOU URG XCPU XFSZ VTALRM PROF WINCH IO POLL PWR SYS "
@@ -489,6 +530,7 @@ def _stage(words, store):
         # after its words (ssh HOST ls -la, python3 x.py --port) has its
         # own options checked up to that word and no further.
         valued = _valued(entry)
+        out.extend(_command(head, args, entry, valued))
         i = 0
         while i < len(args) and args[i] != "--" and args[i].startswith("-"):
             i += 2 if (args[i] in valued and "=" not in args[i]) else 1

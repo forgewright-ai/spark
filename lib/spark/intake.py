@@ -85,8 +85,16 @@ OptionSet = namedtuple("OptionSet", "long short words")
 # most; lines: its option lines, each with its first sentence (a spark
 # verb's: its -h lines); origin: who installed it (dpkg:coreutils,
 # xbps:runit, brew:jq, macos, flatpak, local); stamp: (mtime, size) of
-# what it was read from
-Entry = namedtuple("Entry", "name kind source what synopsis options lines origin stamp")
+# what it was read from; commands: a CommandSet, or () when its manual
+# lists none
+Entry = namedtuple("Entry", "name kind source what synopsis options lines origin stamp commands",
+                   defaults=((),))
+# the words a program takes as its first positional word, as its manual
+# lists them (sv status, systemctl restart, apt-get install), in the
+# manual's order; prefix: the manual says a command may be abbreviated
+# (ip a). The judge says nothing about the positional words of an entry
+# with none: unknown is not wrong.
+CommandSet = namedtuple("CommandSet", "words prefix")
 
 KNOW_DIR = os.path.join(STATE_DIR, "knowledge")
 INDEX_FILE = "index.json"
@@ -166,7 +174,7 @@ STOPWORDS = frozenset((
 # spark serve on) plus, for a spark verb, the words TAB completes. The
 # weights were fitted on the audition's recall cases, tuned on half of
 # them and checked on the other half (tests/line_audition.py recall).
-INDEX_V = 2
+INDEX_V = 3             # 3: an entry carries its commands, so every store rebuilds
 FIELDS = ("name", "what", "synopsis", "tags", "lines")
 FIELD_W = (4.0, 3.0, 1.0, 0.5, 0.5)
 FIELD_B = (0.75, 0.75, 0.75, 0.3, 0.3)
@@ -513,6 +521,226 @@ def read_help(text):
     return what[:OPTION_CHARS], _cut_lines(usage, SYNOPSIS_LINES, SYNOPSIS_CHARS), option_lines(ls), opts
 
 
+# ------------------------------------------------------------ commands
+# A program's commands are the words its own manual presents for its first
+# positional word. The synopsis says whether it takes one. Its first word
+# past the options is a slot the manual calls a command (`sv [-v] command
+# services`, `git ... <command>`, `launchctl subcommand`), a list in braces
+# (`apt-get [-y] {update | install pkg...}`), or a slot the synopsis
+# defines (`ip [ OPTIONS ] OBJECT ...` and `OBJECT := { address | ... }`).
+# The words are then the braces' or the definition's alternatives, the
+# item tags of every section headed COMMANDS, SUBCOMMANDS, OPERATIONS or
+# VERBS (sv's status, launchctl's `bootstrap | bootout`, git's
+# git-add(1)), and the words `extra` brings (the program's "H S" pages and
+# H-S programs: git log, git-lfs). A synopsis that takes a file or a host
+# first, in any of its forms, gives none, whatever its sections say: the
+# plain text cannot tell `defaults read` from `dnctl pathname`, and unknown
+# is not wrong.
+CMD_SLOT = re.compile(r"(?i)^<?(?:sub)?(?:command|cmd|operation|verb)s?>?\W*$")
+CMD_OPTIONS = re.compile(r"(?i)^(?:global[-_ ])?(?:options?|flags?|opts?)\W*$")
+CMD_SECTION = re.compile(r"\b(?:SUB)?COMMANDS?\b|\bOPERATIONS?\b|\bVERBS?\b")
+CMD_WORD = re.compile(r"^[a-z0-9][a-z0-9._-]{0,39}$")
+# a manual that says its commands may be shortened (ip: "may be written
+# in full or abbreviated form"), read in the synopsis and the command
+# sections alone
+CMD_ABBREV = re.compile(r"(?i)\babbreviated form|\b(?:may|can) be (?:\w+ ){0,3}abbreviated"
+                        r"|\bunambiguous (?:prefix|abbreviation)")
+COMMANDS_MIN = 2             # fewer words than this is no list
+COMMANDS_MAX = 400
+
+
+def _forms(body):
+    """A SYNOPSIS section's forms: a line at the section's own indent
+    starts one, unless the form before it has a group still open or the
+    line opens with an option or a group; any other line continues it."""
+    ind = lambda l: len(l) - len(l.lstrip())       # noqa: E731
+    lines = [l for l in body if l.strip()]
+    base = min((ind(l) for l in lines), default=0)
+    forms = []
+    for l in lines:
+        s = l.strip()
+        open_ = forms and sum(forms[-1].count(c) for c in "[{") > sum(forms[-1].count(c) for c in "]}")
+        if not forms or (ind(l) <= base and not open_ and s[0] not in "[{-<|"):
+            forms.append(s)
+        else:
+            forms[-1] += " " + s
+    return forms
+
+
+def _items(s):
+    """A synopsis form as items: ("[", inner) an optional group, ("{",
+    inner) a brace group, ("w", word), ("cut", rest) a group left open (a
+    synopsis cut short)."""
+    out, i, n = [], 0, len(s)
+    while i < n:
+        ch = s[i]
+        if ch.isspace():
+            i += 1
+        elif ch in "[{":
+            close, depth, j = "]" if ch == "[" else "}", 1, i + 1
+            while j < n and depth:
+                depth += (s[j] == ch) - (s[j] == close)
+                j += 1
+            if depth:
+                out.append(("cut", s[i + 1:]))
+                break
+            out.append((ch, s[i + 1:j - 1].strip()))
+            i = j
+            while i < n and not s[i].isspace() and s[i] not in "[{":
+                i += 1                             # a group's `...`
+        else:
+            j = i
+            while j < n and not s[j].isspace() and s[j] not in "[{":
+                j += 1
+            out.append(("w", s[i:j]))
+            i = j
+    return out
+
+
+def _alternatives(inner):
+    """The first word of each `|` alternative at the group's own depth,
+    the command-shaped ones: `update | install pkg... | {-v | --version}`
+    gives update and install."""
+    parts, cur, depth = [], [], 0
+    for ch in inner:
+        depth += (ch in "[{(") - (ch in "]})")
+        if ch == "|" and depth == 0:
+            parts.append("".join(cur))
+            cur = []
+        else:
+            cur.append(ch)
+    parts.append("".join(cur))
+    return [p.split()[0] for p in parts if p.split() and CMD_WORD.match(p.split()[0])]
+
+
+def _first_positional(items):
+    """What a form takes first past its optional options: ("list", words)
+    for a brace group of commands, ("slot", word) for a word, (None,
+    None) -- also for a form a bare option opens (`scutil -r {nodename |
+    address}`: the words are that option's)."""
+    for kind, val in items:
+        if kind == "cut":
+            return None, None                       # a list cut short is no list
+        first = val.split()[0] if val.split() else ""
+        if kind == "w":
+            if val.startswith("-"):
+                return None, None
+            if val in ("|", "..."):
+                continue
+            return "slot", val
+        if kind == "[":
+            if not first or first.startswith("-") or CMD_OPTIONS.match(first):
+                continue
+            return "slot", first.split("|")[0]
+        if first.startswith("-"):
+            return None, None                       # {-c | -x}: an option the form requires
+        alts = _alternatives(val)
+        if len(alts) >= COMMANDS_MIN:
+            return "list", alts
+        if first:
+            return "slot", first
+    return None, None
+
+
+def _tag_words(tag, name):
+    """The commands one item tag names: `status`, `bootstrap | bootout
+    domain-target`, `list, ls [options]`, `git-add(1)`."""
+    toks = tag.replace(",", " , ").replace("|", " | ").split()
+    out, i = [], 0
+    while i < len(toks):
+        w = toks[i]
+        m = re.match(r"^%s-([a-z0-9][\w.-]*)\(\d\w*\)$" % re.escape(name), w)
+        w = m.group(1) if m else w
+        if not CMD_WORD.match(w):
+            break
+        out.append(w)
+        if i + 1 < len(toks) and toks[i + 1] in ("|", ","):
+            i += 2
+            continue
+        break
+    return out
+
+
+def section_commands(body, name):
+    """The commands a command section's item tags name. A tag is a line
+    whose words follow on the more indented lines under it, or past a gap
+    on the same line as a sentence or an argument list (never a line of
+    justified prose); a line opening with a capital is a title or prose.
+    Only the tags at the least indent any tag has count -- deeper ones are
+    a command's own words (brew analytics on). A section whose tags there
+    are mostly not words (gpg's --sign, pacman's -S, a /let) names no
+    commands."""
+    ind = lambda l: len(l) - len(l.lstrip())       # noqa: E731
+    # the column the items' words start at, where a tag leaves room for
+    # them on its own line (`up     If the service ...`): a tag one short
+    # of it keeps a single space (`status Report ...`)
+    cols = [m.end() for m in (re.search(r"^\s*\S+\s{2,}", l) for l in body) if m]
+    col = max(set(cols), key=cols.count) if cols and cols.count(max(set(cols), key=cols.count)) > 1 else 0
+    found = []
+    for i, line in enumerate(body):
+        s = line.strip()
+        if not s or not re.match(r"^[a-z0-9/+:@.-]", s):
+            continue
+        parts = re.split(r"\s{2,}|\t", s, maxsplit=1)
+        if len(parts) == 1 and col and line[col - 1:col] == " " and re.match(r"[A-Z\"'`(]", line[col:col + 1]) \
+                and line[:col].strip() and " " not in line[:col].strip():
+            parts = [line[:col].strip(), line[col:].strip()]
+        tag, rest = parts[0], (parts[1] if len(parts) > 1 else "")
+        below = next((l for l in body[i + 1:] if l.strip()), "")
+        deeper = bool(below) and ind(below) > ind(line)
+        if rest and not re.match(r"^(?:[A-Z\"'`(]|- )", rest) and not (deeper and re.match(r"^[-\[<{|]", rest)):
+            continue                                # a justified line of prose, not a tag and its words
+        if not rest and not deeper:
+            continue
+        if not tag or len(tag) > 72 or tag[-1] in ".:;," or ". " in tag:
+            continue
+        found.append((ind(line), [] if tag[0] in "/+:@.-" else _tag_words(tag, name)))
+    base = min((n for n, _w in found), default=0)
+    top = [ws for n, ws in found if n == base]
+    if sum(1 for ws in top if ws) * 2 < len(top):
+        return []
+    return [w for ws in top for w in ws]
+
+
+def command_set(text, name, extra=()):
+    """The CommandSet a rendered page gives the program `name` (see
+    above), or () when its manual lists none."""
+    secs = sections(text)
+    syn = next((b for h, b in secs if h == "SYNOPSIS"), [])
+    defs, slots, words = {}, [], []
+    for form in _forms(syn):
+        m = re.match(r"^([A-Za-z_][\w-]*)\s*::?=\s*(.*)$", form)
+        if m:
+            defs[m.group(1)] = m.group(2)
+            continue
+        items = _items(form)
+        if items[:1] != [("w", name)]:
+            continue
+        kind, val = _first_positional(items[1:])
+        if kind == "list":
+            words.extend(val)
+        elif kind == "slot":
+            slots.append(val)
+    listed = [b for h, b in secs if CMD_SECTION.search(h)]
+    other = []                  # a form that takes some other word first (dnctl pathname)
+    for slot in slots:
+        got = _items(defs.get(slot, ""))
+        if got[:1] and got[0][0] == "{":
+            words.extend(_alternatives(got[0][1]))
+        elif CMD_SLOT.match(slot):
+            for body in listed:
+                words.extend(section_commands(body, name))
+        else:
+            other.append(slot)
+    if words:
+        words.extend(w for w in extra if CMD_WORD.match(w))
+    words = list(dict.fromkeys(words))[:COMMANDS_MAX]
+    if len(words) < COMMANDS_MIN or any(s not in words for s in other):
+        return ()
+    said = "\n".join([" ".join(syn)] + [" ".join(b) for b in listed])
+    return CommandSet(tuple(words), CMD_ABBREV.search(said) is not None)
+
+
 class _Clean:
     """Every harvested text: scrubbed, the home as ~, secrets held; the
     spans held counted."""
@@ -549,6 +777,19 @@ class _Clean:
             return tuple(keep)
         return (self(what), self(synopsis), [self(l) for l in lines],
                 OptionSet(flags(opts.long), flags(opts.short), flags(opts.words)))
+
+    def words(self, cmds):
+        """A CommandSet with every word that looks like a secret dropped
+        and counted; () stays ()."""
+        if not cmds:
+            return ()
+        keep = []
+        for w in cmds.words:
+            if textmod.held_spans(w)[0]:
+                self.held += 1
+            else:
+                keep.append(w)
+        return CommandSet(tuple(keep), cmds.prefix) if keep else ()
 
 
 def _visible_name(s, n=80):
@@ -1335,13 +1576,29 @@ def _write(path, obj, sync=True):
         raise
 
 
+def commands_of(d):
+    """A CommandSet from an entry's stored `commands` ({words, prefix},
+    or a plain list of words), () when there is none."""
+    if isinstance(d, CommandSet):
+        return d
+    if isinstance(d, dict):
+        words, prefix = d.get("words") or (), bool(d.get("prefix"))
+    elif isinstance(d, (list, tuple)) and all(isinstance(w, str) for w in d):
+        words, prefix = d, False
+    else:
+        return ()
+    words = tuple(str(w) for w in words)
+    return CommandSet(words, prefix) if words else ()
+
+
 def _entry_from(d):
     try:
         o = d.get("options") or {}
         return Entry(str(d["name"]), str(d["kind"]), str(d["source"]), str(d.get("what", "")),
                      str(d.get("synopsis", "")),
                      OptionSet(tuple(o.get("long", ())), tuple(o.get("short", ())), tuple(o.get("words", ()))),
-                     tuple(d.get("lines", ())), str(d.get("origin", "")), tuple(d.get("stamp", ())))
+                     tuple(d.get("lines", ())), str(d.get("origin", "")), tuple(d.get("stamp", ())),
+                     commands_of(d.get("commands")))
     except (KeyError, TypeError, AttributeError):
         return None
 
@@ -1518,6 +1775,7 @@ class _Build:
         self.skipped = 0
         self.partial = False
         self.stamped = {}
+        self.extras = {}            # {H: [S]}: the H-S pages and programs (_extras)
         self.lock = threading.Lock()
 
     def late(self):
@@ -1544,6 +1802,7 @@ class _Build:
         jobs = []                   # (name, key, kind, reader)
         # apps first: a program an app runs folds the app into its entry
         apps = scan_apps(apps_dirs, progs, lambda p: "local") if "apps" in src else {}
+        self.extras = self._extras(set(idx) | set(progs), progs)
         for name, prog in progs.items():
             app = apps.get(name)
             akey = [app.file] + _key_st(app.st) if app else []
@@ -1555,7 +1814,9 @@ class _Build:
                 except OSError:
                     pst = None
                 if pst is not None and _trusted(pst):
-                    key = ["man", page] + _key_st(pst) + _key_st(prog.st) + akey
+                    # the H-S words ride the key: a new git-* page reads git again
+                    subs = hashlib.sha256(" ".join(self.extras.get(name, ())).encode()).hexdigest()[:12]
+                    key = ["man", page] + _key_st(pst) + _key_st(prog.st) + akey + [subs]
                     jobs.append((name, key, "man", (prog, root, page, app)))
                     continue
             state = self._help_state(prog)
@@ -1633,17 +1894,34 @@ class _Build:
         return self._xc
 
     @staticmethod
-    def _subcommand(name, progs):
-        """"H S" for a page H-S whose H is a program and which is not a
-        program itself (the longest H wins), else ''."""
-        if "-" not in name or name in progs:
-            return ""
+    def _split(name, progs):
+        """(H, S) for a name H-S whose H is a program (the longest H
+        wins), else None."""
         parts = name.split("-")
         for k in range(len(parts) - 1, 0, -1):
             head, sub = "-".join(parts[:k]), "-".join(parts[k:])
             if head in progs and NAME_SHAPE.match(head) and NAME_SHAPE.match(sub):
-                return head + " " + sub
-        return ""
+                return head, sub
+        return None
+
+    @classmethod
+    def _subcommand(cls, name, progs):
+        """"H S" for a page H-S whose H is a program and which is not a
+        program itself, else ''."""
+        got = None if name in progs else cls._split(name, progs)
+        return "%s %s" % got if got else ""
+
+    @classmethod
+    def _extras(cls, names, progs):
+        """{H: sorted S}: every page and program H-S whose H is a program
+        -- what command_set adds to H's commands when its manual says it
+        takes one (git log, git-lfs)."""
+        out = {}
+        for n in names:
+            got = cls._split(n, progs) if "-" in n else None
+            if got:
+                out.setdefault(got[0], set()).add(got[1])
+        return {h: sorted(s) for h, s in out.items()}
 
     # -- reading
     def _read(self, todo):
@@ -1734,7 +2012,13 @@ class _Build:
             stamp = _stamp(st)
         except OSError:
             stamp = []
-        self._save(name, key, kind, source, what, synopsis, opts, lines, origin, stamp, clean.held)
+        try:
+            cmds = clean.words(() if " " in name else command_set(_scrub(text), name, self.extras.get(name, ())))
+        except Exception:                       # a page the reader cannot follow: no commands, never no entry
+            log_exc("intake.command_set")
+            cmds = ()
+        self._save(name, key, kind, source, what, synopsis, opts, lines, origin, stamp, clean.held,
+                   commands=cmds)
 
     def _bare(self, name, key, prog, origin, summ, app, skipped=0):
         clean = _Clean()
@@ -1799,11 +2083,14 @@ class _Build:
             name, what, synopsis, opts, lines = spark_entry(verb, clean(text), subs, slots)
             self._save(name, key, "spark", "tree", clean(what), synopsis, opts, lines, "spark", [], clean.held)
 
-    def _save(self, name, key, kind, source, what, synopsis, opts, lines, origin, stamp, held, skipped=0):
+    def _save(self, name, key, kind, source, what, synopsis, opts, lines, origin, stamp, held, skipped=0,
+              commands=()):
         e = {"name": name, "kind": kind, "source": source, "what": " ".join((what or "").split())[:200],
              "synopsis": synopsis or "", "options": {"long": list(opts.long), "short": list(opts.short),
                                                      "words": list(opts.words)},
              "lines": list(lines), "origin": origin, "stamp": list(stamp), "held": held}
+        if commands:
+            e["commands"] = {"words": list(commands.words), "prefix": bool(commands.prefix)}
         data = json.dumps(e)
         while len(data.encode("utf-8")) > ENTRY_MAX and (e["lines"] or e["options"]["words"]):
             if e["lines"]:

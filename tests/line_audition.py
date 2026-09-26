@@ -352,7 +352,20 @@ def collect_tool(tool, path_env, man_extra=()):
     entry["help"] = shown.strip()[:HELP_MAX]
     entry.update(options_of(helptext + "\n" + "\n".join(mans)))
     entry["what"], entry["synopsis"], entry["lines"] = entry_text(helptext, mans)
+    cmds = commands_text(tool, mans)
+    if cmds:
+        entry["commands"] = cmds
     return entry
+
+
+def commands_text(tool, mans):
+    """{words, prefix}: the commands the tool's manual lists (sv status,
+    apt-get install), read by intake's own command_set -- the same words
+    a machine's store keeps -- or None."""
+    if not mans or not (_IN and hasattr(_IN, "command_set")):
+        return None
+    cs = _IN.command_set(mans[0], tool)
+    return {"words": list(cs.words), "prefix": bool(cs.prefix)} if cs else None
 
 
 def tools_for(data, os_name):
@@ -841,11 +854,17 @@ def tool_entry(name, t, os_name):
     if what is None or synopsis is None or lines is None:
         w2, s2, l2 = entry_text(t.get("help", ""), [])
         what, synopsis, lines = what or w2, synopsis or s2, lines or l2
-    return {"name": name, "kind": "program", "source": "man" if t.get("man") else "help",
-            "what": what or "", "synopsis": list(synopsis or ()), "lines": [list(x) for x in lines or ()],
-            "options": {"long": list(t.get("long", ())), "short": t.get("short", ""),
-                        "words": list(t.get("words", ()))},
-            "origin": "snapshot:" + os_name, "stamp": None}
+    d = {"name": name, "kind": "program", "source": "man" if t.get("man") else "help",
+         "what": what or "", "synopsis": list(synopsis or ()), "lines": [list(x) for x in lines or ()],
+         "options": {"long": list(t.get("long", ())), "short": t.get("short", ""),
+                     "words": list(t.get("words", ()))},
+         "origin": "snapshot:" + os_name, "stamp": None}
+    # a snapshot collected before commands were kept has none: its 3
+    # synopsis lines and 60 option lines are a list cut short, never a
+    # list (the workflow collects them again)
+    if isinstance(t.get("commands"), dict) and t["commands"].get("words"):
+        d["commands"] = {"words": list(t["commands"]["words"]), "prefix": bool(t["commands"].get("prefix"))}
+    return d
 
 
 def _columns(text):
@@ -1381,11 +1400,56 @@ def recall_lines(os_name, rows, k, verbose=False):
     return out
 
 
+# the margins `recall --margins` sweeps for grounding.CONFIDENT: 0 is
+# evidence up front whatever the margin (the top hit need not clear the
+# floor itself), 1.0 the floor on the top hit alone
+MARGINS = (0, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.75, 2.0, 2.5, 3.0)
+
+
+def margin_run(todo, store, grounding):
+    """{margin: {subject: [rides, right]}}: at each margin, how many cases'
+    first request would carry evidence up front (grounding.evidence with
+    confident=True), and how many of those carry one of the case's
+    targets as the top entry -- recall@1 of what rides."""
+    out = {}
+    saved = grounding.CONFIDENT
+    try:
+        for m in MARGINS:
+            grounding.CONFIDENT = m
+            row = out.setdefault(m, {})
+            for subj, c in todo:
+                ev = grounding.evidence(c["words"], (), store, confident=bool(m))
+                cell = row.setdefault(subj, [0, 0, 0])
+                cell[2] += 1
+                if ev.names:
+                    cell[0] += 1
+                    cell[1] += ev.names[0] in recall_targets(c)
+    finally:
+        grounding.CONFIDENT = saved
+    return out
+
+
+def margin_lines(title, runs):
+    """The tradeoff table: per margin and subject, the cases evidence
+    rides up front, how many of those lead with a right entry, and the
+    wrong ones (misleading evidence)."""
+    out = ["%s: evidence up front by margin (rides/cases, right first, wrong first)" % title,
+           "  margin   " + "".join("%-29s" % ("spark core" if x == "spark" else x) for x in SUBJECTS).rstrip()]
+    for m in MARGINS:
+        cells = []
+        for subj in SUBJECTS:
+            rides, right, n = [sum(r[m].get(subj, [0, 0, 0])[i] for r in runs) for i in range(3)]
+            cells.append("%3d/%-3d right %3d  wrong %3d" % (rides, n, right, rides - right))
+        out.append("  %-6s   %s   %s" % ("off" if m == 0 else "%.2f" % m, cells[0], cells[1]))
+    return out
+
+
 def cmd_recall(args):
     """Offline, no model: for each case of each OS asked, is any of its
     heads among the top k entries grounding.search finds in that OS's
-    snapshot store (SnapshotStore, spark's verbs included)."""
-    oses, k, verbose = [], 3, False
+    snapshot store (SnapshotStore, spark's verbs included). --margins:
+    the tradeoff table grounding.CONFIDENT is chosen from."""
+    oses, k, verbose, margins = [], 3, False, False
     it = iter(args)
     for a in it:
         if a == "--os":
@@ -1396,8 +1460,10 @@ def cmd_recall(args):
             k = int(v) if v.isdigit() and int(v) > 0 else die("recall: --k is a whole number")
         elif a == "-v":
             verbose = True
+        elif a == "--margins":
+            margins = True
         else:
-            die("recall takes --os OS|all [--k 3] [-v]")
+            die("recall takes --os OS|all [--k 3] [-v] [--margins]")
     if not oses or any(o not in OSES for o in oses):
         die("recall: say --os (one of %s, or all)" % ", ".join(OSES))
     try:
@@ -1405,6 +1471,7 @@ def cmd_recall(args):
     except ImportError:
         die("recall: no spark.grounding in this tree")
     data = load_cases()
+    runs = []
     for os_name in oses:
         snap = load_snapshot(os_name)
         if snap is None:
@@ -1414,9 +1481,16 @@ def cmd_recall(args):
         if not grounding.search(probe, k=1, store=store):
             print("recall: grounding.search is still a stub (no hit for %r, a name the store holds)" % probe)
             return 2
+        if margins:
+            runs.append(margin_run(cases_for(data, os_name), store, grounding))
+            print("\n".join(margin_lines(os_name, runs[-1:])))
+            continue
         rows = recall_run(cases_for(data, os_name), store, grounding.search, k)
         print("\n".join(recall_lines(os_name, rows, k, verbose)))
         print("  (%d entries, the %s tokenizer)" % (len(store.names()), store.tokenizer))
+    if margins and len(runs) > 1:
+        print("\n".join(margin_lines("all", runs)))
+        print("  (grounding.CONFIDENT is %s)" % grounding.CONFIDENT)
     return 0
 
 
@@ -1598,6 +1672,19 @@ def cmd_selftest(_args):
     name_tf = dict(x.split(":") for x in ix["post"].get(words("du")[0], "").split())
     check(float(name_tf.get("0", 0)) > float(du_terms.get("0", 0)) > 0,
           "SnapshotStore: a name weighs more than an option line's word")
+    # commands: collect keeps what the manual lists (intake's own reader),
+    # the store's entry carries them; an older snapshot's entry has none
+    sv_man = ("NAME\n       sv - control services\n\nSYNOPSIS\n       sv [-v] [-w sec] command services\n\n"
+              "COMMANDS\n       status Report the status.\n\n       up     Start it.\n\n       down   Stop it.\n")
+    got = commands_text("sv", [sv_man])
+    check(got == {"words": ["status", "up", "down"], "prefix": False} if _IN else got is None,
+          "collect: a manual's command list is kept, read by intake's own command_set")
+    cs = SnapshotStore(snap={"os": "fake", "tools": {
+        "sv": {"exists": True, "man": True, "what": "x", "synopsis": ["sv command"], "lines": [], "commands": got},
+        "du": dict(fake["tools"]["du"])}}, spark=False)
+    check(_IN is None or (cs.entry("sv").commands == {"words": ["status", "up", "down"], "prefix": False}
+                          and not cs.entry("du").commands),
+          "SnapshotStore: an entry carries the commands its snapshot kept, none when it kept none")
     tmp = tempfile.mkdtemp(prefix="line-audition-self-")
     try:
         back = SnapshotStore(st.save(os.path.join(tmp, "store.json")))

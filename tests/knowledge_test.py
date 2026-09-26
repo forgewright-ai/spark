@@ -17,8 +17,11 @@ runs again, the store's modes (dir 0700, files 0600) and shapes (index,
 entries named by sha256), a second refresh incremental and fast, a held
 lock returning at once, the fingerprint moving when a PATH dir gains a
 file, the package databases' parsers, spark's own verbs from the tree,
-the bootstrap row's words, and -- where probe() says this machine has a
-sandbox -- the real containment of a --help run.
+the bootstrap row's words, a program's commands read from its manual
+(sv's COMMANDS section, apt-get's synopsis braces, ip's OBJECT :=, none
+for a program whose synopsis takes a file first) and the judge's command
+finding on them, and -- where probe() says this machine has a sandbox --
+the real containment of a --help run.
 """
 import fcntl
 import gzip
@@ -147,6 +150,76 @@ tool-sub \\- the sub command of tool
 .B \\-\\-deep
 Go deep.
 """
+SV = """.TH SV 8
+.SH NAME
+sv \\- control and manage services monitored by runsv
+.SH SYNOPSIS
+.B sv
+[\\-v] [\\-w
+.I sec\\fR]
+.I command
+.I services
+.P
+.BI /etc/init.d/ service
+[\\-w
+.I sec\\fR]
+.I command
+.SH DESCRIPTION
+The
+.B sv
+program can be used to control and manage services.
+.SH COMMANDS
+.TP
+.B status
+Report the current status of the service.
+.TP
+.B up
+If the service is not running, start it.
+.TP
+.B down
+If the service is running, send it the TERM signal.
+.TP
+.B 1
+Send the service the USR1 signal.
+.TP
+.B exit
+Do not restart the service.
+.P
+sv actually looks only at the first character of these
+.I command
+arguments.
+.SS Commands compatible to LSB init script actions
+.TP
+.B start
+Same as up, but wait up to 7 seconds.
+.TP
+.B force\\-stop
+Same as down, but wait, then kill.
+.SH OPTIONS
+.TP
+.B \\-v
+Wait up to 7 seconds for the command to take effect.
+.TP
+.BI \\-w " sec"
+Override the default timeout.
+"""
+APT_GET = """.TH APT-GET 8
+.SH NAME
+apt-get \\- APT package handling utility
+.SH SYNOPSIS
+.B apt-get
+[\\-sqdyfmubV] [\\-o=\\fIconfig_string\\fR] [\\-t=\\fItarget_release\\fR]
+{update | upgrade | install \\fIpkg\\fR... | remove \\fIpkg\\fR... |
+purge \\fIpkg\\fR... | source \\fIpkg\\fR... | {\\-v | \\-\\-version} | {\\-h | \\-\\-help}}
+.SH DESCRIPTION
+.TP
+.B update
+update is used to resynchronize the package index files.
+.SH OPTIONS
+.TP
+.B \\-y, \\-\\-yes
+Automatic yes to prompts.
+"""
 SECRET = """.TH SECRETIVE 1
 .SH NAME
 secretive \\- keeps a token in its manual
@@ -166,6 +239,8 @@ def fixture():
     prog(os.path.join(BIN, "evil"))
     prog(os.path.join(BIN, "nomanual"))
     prog(os.path.join(BIN, "secretive"))
+    prog(os.path.join(BIN, "sv"))
+    prog(os.path.join(BIN, "apt-get"))
     prog(os.path.join(BIN, "-rf"))                   # not a name spark stores
     write(os.path.join(BIN, "notexec"), "plain\n")    # not a program
     write(os.path.join(FX, "share", "man", "man1", "alpha.1"), MAN7)          # tied to the binary
@@ -175,6 +250,8 @@ def fixture():
     write(os.path.join(MAN, "man1", "delta.1"), ".\\\" a comment\n.so man1/beta.1\n")   # .so inside the root
     write(os.path.join(MAN, "man1", "evil.1"), ".so ../../../../../etc/passwd\n")         # .so out of it
     write(os.path.join(MAN, "man1", "secretive.1"), SECRET)
+    write(os.path.join(MAN, "man8", "sv.8"), SV)
+    write(os.path.join(MAN, "man8", "apt-get.8"), APT_GET)
     os.makedirs(os.path.join(WW, "bin"))
     prog(os.path.join(WW, "bin", "wwprog"))
     os.chmod(os.path.join(WW, "bin"), 0o777)
@@ -236,6 +313,55 @@ def test_parsers():
     check("_exec_name: the program's basename only, never its arguments; env and field codes skipped",
           intake._exec_name("env FOO=1 /usr/bin/app --flag %U") == "app" and intake._exec_name("sh -c 'x'") == "sh"
           and intake._exec_name("%U") == "")
+
+
+IP = """NAME
+       ip - show / manipulate routing, network devices and tunnels
+
+SYNOPSIS
+       ip [ OPTIONS ] OBJECT { COMMAND | help }
+
+       ip [ -force ] -batch filename
+
+       OBJECT := { address | link | neighbor |
+               route | rule }
+
+IP - COMMAND SYNTAX
+   OBJECT
+       address
+              - protocol (IP or IPv6) address on a device.
+
+       The names of all objects may be written in full or abbreviated form,
+       for example address can be abbreviated as addr or just a.
+"""
+
+
+def test_commands():
+    cs = intake.command_set(IP, "ip")
+    check("command_set: a slot the synopsis defines (OBJECT := {...}); `abbreviated form` allows a prefix",
+          cs == intake.CommandSet(("address", "link", "neighbor", "route", "rule"), True), cs)
+    none = (
+        ("a bare option opens the form: the words are the option's",
+         "SYNOPSIS\n     scutil -r [-W] { nodename | address | local-address }\n     scutil --get pref\n"),
+        ("a form that takes a file first",
+         "SYNOPSIS\n     dnctl [-s] {pipe | queue} {list | show}\n     dnctl [-nq] pathname\n"),
+        ("a list cut short",
+         "SYNOPSIS\n     apt [-h] {list | search | show | update |\n"),
+        ("commands that are options (gpg's --sign)",
+         "SYNOPSIS\n       gpg [--homedir dir] [options] command [args]\n\nCOMMANDS\n"
+         "       --sign\n              Sign a message.\n\n       --verify\n              Assume a signature.\n"),
+        ("a synopsis that takes a file first",
+         "SYNOPSIS\n     cat [-belnstuv] [file ...]\n\nCOMMANDS\n     up\n          Not a command of cat.\n"),
+    )
+    for why, text in none:
+        name = text.split()[1]
+        got = intake.command_set(text, name)
+        check("command_set: none for %s" % why, got == (), got)
+    got = intake.command_set("SYNOPSIS\n     tool subcommand [args]\n\nSUBCOMMANDS\n     tool-log(1)\n"
+                             "          Show logs.\n\n     enable | disable target\n          Switch it.\n",
+                             "tool", ["sub"])
+    check("command_set: item tags (H-S(1), a | chain) and the H-S pages", got and got.words == (
+        "log", "enable", "disable", "sub"), got)
 
 
 def test_owners():
@@ -349,6 +475,31 @@ def test_build():
               fk and fk.kind == "app" and fk.synopsis == "open -a Fake" and fk.what.startswith("Fake"), fk)
         n = s.entry("nomanual")
         check("nomanual: no manual, no sandbox -- an entry all the same, source pkg", n and n.source == "pkg", n)
+        sv = s.entry("sv")
+        check("sv: its commands from its COMMANDS section, the subsection's too, the manual's order",
+              sv and sv.commands and sv.commands.words == ("status", "up", "down", "1", "exit", "start", "force-stop")
+              and not sv.commands.prefix, sv and sv.commands)
+        ag = s.entry("apt-get")
+        check("apt-get: its commands from its synopsis braces, never an option alternative",
+              ag and ag.commands and ag.commands.words == ("update", "upgrade", "install", "remove", "purge", "source"),
+              ag and ag.commands)
+        check("alpha: a synopsis that takes a file first has no commands", a and a.commands == (), a and a.commands)
+        from spark import judge
+        saved_path = os.environ.get("PATH", "")
+        os.environ["PATH"] = BIN
+        judge._WHICH.clear()
+        judge._ENTRIES.clear()
+        try:
+            got = {c: [tuple(f) for f in judge.verdict(c, s).findings]
+                   for c in ("sv enable x", "sv status x", "apt-get -y search x", "apt-get install x", "alpha foo")}
+        finally:
+            os.environ["PATH"] = saved_path
+            judge._WHICH.clear()
+            judge._ENTRIES.clear()
+        check("judge: a command its manual does not list is a command finding; a program with no list, none",
+              got == {"sv enable x": [("command", "sv", "enable")], "sv status x": [],
+                      "apt-get -y search x": [("command", "apt-get", "search")], "apt-get install x": [],
+                      "alpha foo": []}, got)
         # the second refresh: nothing re-read
         calls["render"] = 0
         (counts2, built2, stale2, skipped2), t2 = build()
@@ -499,7 +650,7 @@ def test_real_contained():
 
 def main():
     fixture()
-    for t in (test_words, test_parsers, test_owners, test_build, test_fingerprint, test_help_contained, test_lock,
+    for t in (test_words, test_parsers, test_commands, test_owners, test_build, test_fingerprint, test_help_contained, test_lock,
               test_missing_store, test_spark_and_row, test_real_contained):
         try:
             t()
