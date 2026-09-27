@@ -1112,13 +1112,14 @@ else
     grub_want="GRUB_TIMEOUT=0
 GRUB_TIMEOUT_STYLE=hidden
 GRUB_CMDLINE_LINUX_DEFAULT=\"\$GRUB_CMDLINE_LINUX_DEFAULT $QUIET_WORDS\""
-    # Void's runit prints its own lines at boot and shutdown, which the
-    # kernel's `quiet` never reaches. Two sets of marked lines, the same
-    # mark as GRUB's. /etc/rc.conf (a conf file xbps keeps) is sourced by
-    # runit's stages 1 and 3 after /etc/runit/functions and before their
-    # scripts: inside those two stages msg (the `=>` lines) says nothing,
-    # and a clean fsck, sysctl's values, the module list, seedrng and
-    # sv's `ok:` lines stay off the screen. A warning, an error, stderr
+    # Void's runit prints its own lines at boot, which the kernel's
+    # `quiet` never reaches. Two sets of marked lines, the same mark as
+    # GRUB's. /etc/rc.conf (a conf file xbps keeps) is sourced by runit's
+    # stage 1 after /etc/runit/functions and before its scripts: there msg
+    # (the `=>` lines) says nothing, and a clean fsck, sysctl's values,
+    # the module list and seedrng's lines stay off the screen. Stage 3
+    # sources it too and is left as Void prints it: the shutdown's lines
+    # explain its pause. A warning, an error, stderr
     # and a fsck that finds something still print, and each of the three
     # leaves a mark in /run (msg_warn and msg_error are Void's own, the
     # mark added). What no file reaches -- runit's own `- runit:` lines,
@@ -1133,14 +1134,13 @@ GRUB_CMDLINE_LINUX_DEFAULT=\"\$GRUB_CMDLINE_LINUX_DEFAULT $QUIET_WORDS\""
     rc_want_lines() {
         cat <<'EOF'
 # spark quiet boot on wrote these lines, spark quiet boot off removes them
-case $0 in */runit/[13])
+case $0 in */runit/1)
 msg() { :; }
 msg_warn() { { : >"${SPARK_BOOT_LOUD:-/run/spark-boot-loud}"; } 2>/dev/null; printf "\033[1m\033[33mWARNING: $@\033[m\n"; }
 msg_error() { { : >"${SPARK_BOOT_LOUD:-/run/spark-boot-loud}"; } 2>/dev/null; printf "\033[1m\033[31mERROR: $@\033[m\n"; }
 fsck() { _spark_out=$(command fsck "$@" 2>&1); _spark_rc=$?; [ "$_spark_rc" = 0 ] || { printf '%s\n' "$_spark_out"; { : >"${SPARK_BOOT_LOUD:-/run/spark-boot-loud}"; } 2>/dev/null; }; return "$_spark_rc"; }
 sysctl() { if [ "$1" = -p ]; then command sysctl "$@" >/dev/null; else command sysctl "$@"; fi; }
 seedrng() { command seedrng "$@" >/dev/null; }
-sv() { command sv "$@" | grep -v '^ok: '; }
 alias modules-load='modules-load >/dev/null'
 esac
 EOF
@@ -1257,7 +1257,7 @@ EOF
             skip quiet-boot "no GRUB on this Void -- its boot loader is left alone"
         elif [ "$(grub_marked)" = "$grub_want" ] && [ "$(rc_marked)" = "$rc_want" ] && [ "$(getty_marked)" = "$getty_want" ] && grub_user_ok; then
             ok quiet-boot "silent: menu hidden, kernel line quiet, runit's lines off, a clean boot cleared (the marked lines in $default_grub, $rcconf and $getty_conf)"
-        elif need quiet-boot "marked lines at the end of $default_grub (3), $rcconf (11) and $getty_conf (2); update-grub (sudo)"; then
+        elif need quiet-boot "marked lines at the end of $default_grub (3), $rcconf (10) and $getty_conf (2); update-grub (sudo)"; then
             marked_append "$default_grub" "$grub_want"
             marked_append "$rcconf" "$rc_want"
             marked_append "$getty_conf" "$getty_want"

@@ -48,19 +48,19 @@ GRUB_WANT = ["GRUB_TIMEOUT=0", "GRUB_TIMEOUT_STYLE=hidden",
              'GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT %s"' % QUIET_WORDS]
 
 
-# Void's runit prints its own lines at boot and shutdown, which the
-# kernel's `quiet` never reaches (bootstrap.sh rc_want and getty_want are
-# the twins, the mark GRUB's). /etc/rc.conf is sourced by runit's stages
-# 1 and 3 before their scripts: there msg says nothing, and a clean fsck,
-# sysctl's values, the module list, seedrng and sv's `ok:` lines stay off
-# the screen. A warning, an error and a fsck that finds something print
+# Void's runit prints its own lines at boot, which the kernel's `quiet`
+# never reaches (bootstrap.sh rc_want and getty_want are the twins, the
+# mark GRUB's). /etc/rc.conf is sourced by runit's stage 1 before its
+# scripts: there msg says nothing, and a clean fsck, sysctl's values,
+# the module list and seedrng's lines stay off the screen. Stage 3 reads
+# it too and is left as Void prints it: its lines explain its pause. A warning, an error and a fsck that finds something print
 # and leave a mark in /run. The getty's conf (every getty sources tty1's)
 # drops tty1's --noclear after a clean boot: no mark, no critical kernel
 # line. A boot that marked keeps its whole screen.
 BOOT_LOUD = '"${SPARK_BOOT_LOUD:-/run/spark-boot-loud}"'
 RC_WANT = [
     "# spark quiet boot on wrote these lines, spark quiet boot off removes them",
-    "case $0 in */runit/[13])",
+    "case $0 in */runit/1)",
     "msg() { :; }",
     r'msg_warn() { { : >%s; } 2>/dev/null; printf "\033[1m\033[33mWARNING: $@\033[m\n"; }' % BOOT_LOUD,
     r'msg_error() { { : >%s; } 2>/dev/null; printf "\033[1m\033[31mERROR: $@\033[m\n"; }' % BOOT_LOUD,
@@ -68,7 +68,6 @@ RC_WANT = [
     r"""|| { printf '%%s\n' "$_spark_out"; { : >%s; } 2>/dev/null; }; return "$_spark_rc"; }""" % BOOT_LOUD,
     """sysctl() { if [ "$1" = -p ]; then command sysctl "$@" >/dev/null; else command sysctl "$@"; fi; }""",
     """seedrng() { command seedrng "$@" >/dev/null; }""",
-    """sv() { command sv "$@" | grep -v '^ok: '; }""",
     "alias modules-load='modules-load >/dev/null'",
     "esac",
 ]

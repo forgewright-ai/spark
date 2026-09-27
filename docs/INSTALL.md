@@ -681,12 +681,13 @@ Void:
   `/etc/default/grub`, each marked `#spark-quiet#`, then runs `sudo
   update-grub`. The last line wins, and your own lines stay as they
   are.
-- runit prints its own lines at boot and shutdown, and the kernel's
-  `quiet` does not reach them. So spark also appends 11 marked lines to
-  `/etc/rc.conf`, which runit reads before its scripts. They hide
+- runit prints its own lines at boot, and the kernel's `quiet` does
+  not reach them. So spark also appends 10 marked lines to
+  `/etc/rc.conf`, which runit reads before its boot scripts. They hide
   runit's `=>` lines. They also hide what a clean boot prints: the fsck
-  summary, the sysctl values, the module list, seedrng's lines and the
-  `ok:` lines at shutdown.
+  summary, the sysctl values, the module list and seedrng's lines.
+- A shutdown prints as Void prints it. Its lines explain the pause
+  while the services stop.
 - A few lines come from runit itself and no file reaches them. So 2
   marked lines in `/etc/sv/agetty-tty1/conf` let the login prompt clear
   the screen after a clean boot.

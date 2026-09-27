@@ -473,7 +473,7 @@ SH
     printf 'GRUB_TIMEOUT=5\nGRUB_CMDLINE_LINUX_DEFAULT="loglevel=4"\n' > "$V/default-grub"
     printf 'if [ -x /sbin/agetty -o -x /bin/agetty ]; then\n\tif [ "${tty}" = "tty1" ]; then\n\t\tGETTY_ARGS="--noclear"\n\tfi\nfi\n' > "$V/getty-conf"
     out=$(vrun SPARK_ETC_DEFAULT_GRUB="$V/default-grub" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Void, GRUB) failed: $out"
-    printf '%s\n' "$out" | grep -qE '^would +quiet-boot +marked lines at the end of .*default-grub \(3\), .*rc.conf \(11\) and .*getty-conf \(2\); update-grub \(sudo\)$' && ok "Void with GRUB: the quiet-boot row would append marked lines to GRUB's file, rc.conf and the getty's conf, then update-grub" || bad "Void GRUB quiet-boot row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
+    printf '%s\n' "$out" | grep -qE '^would +quiet-boot +marked lines at the end of .*default-grub \(3\), .*rc.conf \(10\) and .*getty-conf \(2\); update-grub \(sudo\)$' && ok "Void with GRUB: the quiet-boot row would append marked lines to GRUB's file, rc.conf and the getty's conf, then update-grub" || bad "Void GRUB quiet-boot row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
     PYTHONPATH="$REPO/lib" python3 -c 'from spark import site; print("\n".join(l + " " + site.GRUB_MARK for l in site.GRUB_WANT))' >> "$V/default-grub"
     out=$(vrun SPARK_ETC_DEFAULT_GRUB="$V/default-grub" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Void, GRUB marked) failed: $out"
     printf '%s\n' "$out" | grep -qE '^would +quiet-boot ' && ok "Void with GRUB marked, rc.conf not: the row still would write (both halves or none)" || bad "Void GRUB half row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
@@ -570,10 +570,10 @@ fi
 # 12. Void's quiet boot at work, on both OSes (plain sh): a stand-in
 #     for runit's stage (its msg, the welcome, rc.conf sourced, then a
 #     core service) over stubs that print what the real tools print. A
-#     clean stage shows only stderr, a value asked for and sv's timeout,
-#     and leaves no mark; a warning or a fsck that found something prints
-#     and leaves the mark; the same file outside a runit stage changes
-#     nothing. Then the getty's conf: tty1 loses --noclear only after a
+#     clean stage 1 shows only stderr and a value asked for, and leaves
+#     no mark; a warning or a fsck that found something prints and leaves
+#     the mark; stage 3 (the shutdown) and a file outside runit print as
+#     Void prints. Then the getty's conf: tty1 loses --noclear only after a
 #     clean boot (no mark, no critical kernel line). sh here, dash too
 #     when it is on PATH (Void's /bin/sh)
 S=$T/void-stage; mkdir -p "$S/runit" "$S/other" "$S/bin" "$S/crit"
@@ -603,7 +603,17 @@ echo "fsck said $?"
 sysctl -p /fixture.conf
 sysctl -n kernel.dmesg_restrict
 seedrng
+SH
+cat > "$S/shutdown.sh" <<'SH'
+msg "Waiting for services to stop..."
 sv force-stop /fixture
+seedrng
+msg "Sending KILL signal to processes..."
+SH
+cat > "$S/runit/3" <<SH
+msg() { printf '=> %s\n' "\$*"; }
+. "$S/rc.conf"
+. "$S/shutdown.sh"
 SH
 for stage in runit other; do
     cat > "$S/$stage/1" <<SH
@@ -629,8 +639,11 @@ for shell in sh dash; do
     command -v "$shell" >/dev/null 2>&1 || continue
     rm -f "$S/loud"
     out=$(SPARK_BOOT_LOUD="$S/loud" PATH="$S/bin:$PATH" "$shell" "$S/runit/1" 2>&1)
-    want=$(printf '%s\n' "=> Welcome to Void!" "fsck said 0" "sysctl: fixture error" "1" "timeout: slow: 7s")
-    [ "$out" = "$want" ] && [ ! -e "$S/loud" ] && ok "Void quiet boot ($shell): a clean runit stage prints only stderr, a value asked for and sv's timeout, and leaves no mark" || bad "Void quiet stage ($shell): $out"
+    want=$(printf '%s\n' "=> Welcome to Void!" "fsck said 0" "sysctl: fixture error" "1")
+    [ "$out" = "$want" ] && [ ! -e "$S/loud" ] && ok "Void quiet boot ($shell): a clean stage 1 prints only stderr and a value asked for, and leaves no mark" || bad "Void quiet stage ($shell): $out"
+    out=$(SPARK_BOOT_LOUD="$S/loud" PATH="$S/bin:$PATH" "$shell" "$S/runit/3" 2>&1)
+    want=$(printf '%s\n' "=> Waiting for services to stop..." "ok: down: fixture: 0s" "timeout: slow: 7s" "Seeding 256 bits and crediting" "=> Sending KILL signal to processes...")
+    [ "$out" = "$want" ] && ok "Void quiet boot ($shell): stage 3, the shutdown, prints as Void prints it" || bad "Void quiet shutdown ($shell): $out"
     out=$(WARN=1 SPARK_BOOT_LOUD="$S/loud" PATH="$S/bin:$PATH" "$shell" "$S/runit/1" 2>&1)
     printf '%s\n' "$out" | grep -qxF "$warn" && [ -e "$S/loud" ] && ok "Void quiet boot ($shell): a warning prints as Void prints it and leaves the mark" || bad "Void quiet warn ($shell): $out"
     rm -f "$S/loud"
@@ -638,7 +651,7 @@ for shell in sh dash; do
     printf '%s\n' "$out" | grep -q '^/dev/fixture: clean' && printf '%s\n' "$out" | grep -q '^fsck said 1$' && [ -e "$S/loud" ] && ok "Void quiet boot ($shell): a fsck that found something prints what it said, its code stands, and it leaves the mark" || bad "Void quiet fsck ($shell): $out"
     rm -f "$S/loud"
     out=$(SPARK_BOOT_LOUD="$S/loud" PATH="$S/bin:$PATH" "$shell" "$S/other/1" 2>&1)
-    printf '%s\n' "$out" | grep -q '^=> Mounting' && printf '%s\n' "$out" | grep -q '^ok: down' && printf '%s\n' "$out" | grep -q '^Seeding' && ok "Void quiet boot ($shell): outside a runit stage the lines change nothing" || bad "Void quiet outside ($shell): $out"
+    printf '%s\n' "$out" | grep -q '^=> Mounting' && printf '%s\n' "$out" | grep -q '^kernel.fixture' && printf '%s\n' "$out" | grep -q '^Seeding' && ok "Void quiet boot ($shell): outside a runit stage the lines change nothing" || bad "Void quiet outside ($shell): $out"
     a=$(FAKE_AGETTY=1 SPARK_BOOT_LOUD="$S/loud" PATH="$S/bin:$PATH" "$shell" "$S/getty" tty1)
     b=$(FAKE_AGETTY=1 SPARK_BOOT_LOUD="$S/loud" PATH="$S/crit:$PATH" "$shell" "$S/getty" tty1)
     : > "$S/loud"

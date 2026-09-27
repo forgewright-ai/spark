@@ -12,7 +12,9 @@ network no longer leaves the model and the page off.
   critical kernel line. Any of those leaves a mark in `/run`, and that
   boot keeps its whole screen.
 - The welcome line is no longer erased by hand: the clear takes it.
-  `/etc/rc.conf` holds 11 marked lines now.
+  `/etc/rc.conf` holds 10 marked lines now.
+- A shutdown prints as Void prints it again. Silent, its pause looked
+  like a hang before the reboot.
 - `spark quiet boot off` removes the marked lines from the 3 files.
 - A machine whose network comes up late no longer loses its model and
   its page. They waited 5 minutes for a LAN address, then stopped for

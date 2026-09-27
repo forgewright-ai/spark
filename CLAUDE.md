@@ -740,11 +740,12 @@ and may change freely.
    no drop-in, so `site.GRUB_WANT` lands as 3 lines at the file's end,
    each ending ` #spark-quiet#` (`site.GRUB_MARK`, bootstrap's twin);
    off deletes them. runit's own lines take a second set:
-   `site.RC_WANT` lands as 11 lines at the end of `/etc/rc.conf`,
+   `site.RC_WANT` lands as 10 lines at the end of `/etc/rc.conf`,
    marked the same way (bootstrap's `rc_want` is the twin). runit's
-   stages 1 and 3 source that file before their scripts. Inside those
-   two stages only, `msg` says nothing. fsck, `sysctl -p`, seedrng, sv
-   and modules-load keep a clean run's output off the screen. A
+   stage 1 sources that file before its scripts. Inside stage 1 only,
+   `msg` says nothing. fsck, `sysctl -p`, seedrng and modules-load keep
+   a clean run's output off the screen. Stage 3 reads the file too and
+   prints as Void prints it: the shutdown's lines explain its pause. A
    warning, an error, stderr and a fsck that finds something still
    print. The warning, the error and the fsck leave a mark in /run
    (`msg_warn` and `msg_error` are Void's own, the mark added). A third
