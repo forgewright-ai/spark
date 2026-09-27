@@ -1112,6 +1112,40 @@ else
     grub_want="GRUB_TIMEOUT=0
 GRUB_TIMEOUT_STYLE=hidden
 GRUB_CMDLINE_LINUX_DEFAULT=\"\$GRUB_CMDLINE_LINUX_DEFAULT $QUIET_WORDS\""
+    # Void's runit prints its own lines at boot and shutdown, which the
+    # kernel's `quiet` never reaches. runit's stages 1 and 3 source
+    # /etc/rc.conf (a conf file xbps keeps) after /etc/runit/functions and
+    # before their scripts, so spark appends these lines there, marked the
+    # same way, inert outside the two stages: msg (the `=>` lines) says
+    # nothing, the welcome printed just before is erased, a clean fsck,
+    # sysctl's values, the module list, seedrng and sv's `ok:` lines stay
+    # off the screen. A warning, an error, anything on stderr and a fsck
+    # that finds something still print: quiet never hides a problem.
+    # site.RC_WANT is the twin
+    rc_marked() { grep -s " $grub_mark\$" "$rcconf" | sed "s/ $grub_mark\$//"; }
+    rc_want_lines() {
+        cat <<'EOF'
+# spark quiet boot on wrote these lines, spark quiet boot off removes them
+case $0 in */runit/[13])
+msg() { :; }
+[ "${0##*/}" = 1 ] && [ -t 1 ] && printf '\033[1A\033[2K'
+fsck() { _spark_out=$(command fsck "$@" 2>&1); _spark_rc=$?; [ "$_spark_rc" = 0 ] || printf '%s\n' "$_spark_out"; return "$_spark_rc"; }
+sysctl() { if [ "$1" = -p ]; then command sysctl "$@" >/dev/null; else command sysctl "$@"; fi; }
+seedrng() { command seedrng "$@" >/dev/null; }
+sv() { command sv "$@" | grep -v '^ok: '; }
+alias modules-load='modules-load >/dev/null'
+esac
+EOF
+    }
+    rc_want=$(rc_want_lines)
+    # marked_append FILE LINES -- spark's marked lines out, LINES in at the
+    # end, each marked (a file with no final newline would glue the first
+    # line onto its last)
+    marked_append() {
+        [ -f "$1" ] && as_root sed -i "/ $grub_mark\$/d" "$1"
+        [ ! -s "$1" ] || [ -z "$(tail -c1 "$1")" ] || printf '\n' | as_root tee -a "$1" >/dev/null
+        printf '%s\n' "$2" | sed "s/\$/ $grub_mark/" | as_root tee -a "$1" >/dev/null
+    }
     # Arch with a Unified Kernel Image (an uncommented `<preset>_uki=` in a
     # mkinitcpio preset): no GRUB, no loader entry -- mkinitcpio embeds the
     # kernel line from /etc/kernel/cmdline plus every /etc/cmdline.d/*.conf,
@@ -1161,11 +1195,13 @@ GRUB_CMDLINE_LINUX_DEFAULT=\"\$GRUB_CMDLINE_LINUX_DEFAULT $QUIET_WORDS\""
                     row todo quiet-boot "mkinitcpio -P failed -- run: sudo mkinitcpio -P"
                 fi
             fi
-        elif grep -qs " $grub_mark\$" "$default_grub"; then
-            if need quiet-boot "remove spark's marked lines from $default_grub; update-grub (sudo)"; then
-                as_root sed -i "/ $grub_mark\$/d" "$default_grub"
+        elif grep -qs " $grub_mark\$" "$default_grub" || grep -qs " $grub_mark\$" "$rcconf"; then
+            if need quiet-boot "remove spark's marked lines from $default_grub and $rcconf; update-grub (sudo)"; then
+                for f in "$default_grub" "$rcconf"; do
+                    [ -f "$f" ] && as_root sed -i "/ $grub_mark\$/d" "$f"
+                done
                 if as_root update-grub >/dev/null 2>&1; then
-                    ok quiet-boot "loud: GRUB's menu and the kernel messages as your $default_grub says"
+                    ok quiet-boot "loud: GRUB's menu, the kernel messages and runit's lines as your files say"
                 else
                     row todo quiet-boot "update-grub failed -- run: sudo update-grub"
                 fi
@@ -1204,16 +1240,14 @@ GRUB_CMDLINE_LINUX_DEFAULT=\"\$GRUB_CMDLINE_LINUX_DEFAULT $QUIET_WORDS\""
     elif [ "$DISTRO" = void ]; then
         if [ ! -f "$default_grub" ] || ! have_update_grub; then
             skip quiet-boot "no GRUB on this Void -- its boot loader is left alone"
-        elif [ "$(grub_marked)" = "$grub_want" ] && grub_user_ok; then
-            ok quiet-boot "silent: menu hidden, kernel line quiet (the marked lines in $default_grub)"
-        elif need quiet-boot "3 marked lines at the end of $default_grub; update-grub (sudo)"; then
-            as_root sed -i "/ $grub_mark\$/d" "$default_grub"
-            # a file with no final newline would glue the first line onto its last
-            [ -z "$(tail -c1 "$default_grub")" ] || printf '\n' | as_root tee -a "$default_grub" >/dev/null
-            printf '%s\n' "$grub_want" | sed "s/\$/ $grub_mark/" | as_root tee -a "$default_grub" >/dev/null
+        elif [ "$(grub_marked)" = "$grub_want" ] && [ "$(rc_marked)" = "$rc_want" ] && grub_user_ok; then
+            ok quiet-boot "silent: menu hidden, kernel line quiet, runit's lines off (the marked lines in $default_grub and $rcconf)"
+        elif need quiet-boot "3 marked lines at the end of $default_grub and 10 at the end of $rcconf; update-grub (sudo)"; then
+            marked_append "$default_grub" "$grub_want"
+            marked_append "$rcconf" "$rc_want"
             made grub
             if as_root update-grub >/dev/null 2>&1 && grub_live_quiet; then
-                ok quiet-boot "silent: menu hidden, kernel line quiet (hold Shift at boot for the menu)"
+                ok quiet-boot "silent after a reboot: menu hidden, kernel line quiet, runit's lines off (hold Shift at boot for the menu)"
             else
                 row todo quiet-boot "grub.cfg does not carry the quiet line -- run: sudo update-grub, then spark check"
             fi

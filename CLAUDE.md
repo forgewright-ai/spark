@@ -739,8 +739,17 @@ and may change freely.
    `/etc/default/grub` and `update-grub` are: Void's grub-mkconfig reads
    no drop-in, so `site.GRUB_WANT` lands as 3 lines at the file's end,
    each ending ` #spark-quiet#` (`site.GRUB_MARK`, bootstrap's twin);
-   off deletes them. A Void without GRUB answers `spark quiet boot --
-   no GRUB on this Void: its boot loader is left alone`, exit 2
+   off deletes them. runit's own lines take a second set:
+   `site.RC_WANT` lands as 10 lines at the end of `/etc/rc.conf`,
+   marked the same way (bootstrap's `rc_want` is the twin). runit's
+   stages 1 and 3 source that file before their scripts. Inside those
+   two stages only, `msg` says nothing and the welcome is erased. fsck,
+   `sysctl -p`, seedrng, sv and modules-load keep a clean run's output
+   off the screen. A warning, an error, stderr and a fsck that finds
+   something still print. The `quiet` row is ok only when both sets are
+   whole, and off deletes both. A Void without GRUB answers `spark
+   quiet boot -- no GRUB on this Void: its boot loader is left alone`,
+   exit 2
    (`site.VOID_NO_BOOT`). The console font goes by mechanism,
    never by family (`site.console_shape()`: console-setup's file, else
    vconsole.conf, else rc.conf beside `/etc/runit`, else none). A Linux

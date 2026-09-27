@@ -472,14 +472,17 @@ SH
     printf '#!/bin/sh\nexit 0\n' > "$V/bin/update-grub"; chmod +x "$V/bin/update-grub"
     printf 'GRUB_TIMEOUT=5\nGRUB_CMDLINE_LINUX_DEFAULT="loglevel=4"\n' > "$V/default-grub"
     out=$(vrun SPARK_ETC_DEFAULT_GRUB="$V/default-grub" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Void, GRUB) failed: $out"
-    printf '%s\n' "$out" | grep -qE '^would +quiet-boot +3 marked lines at the end of .*default-grub; update-grub \(sudo\)$' && ok "Void with GRUB: the quiet-boot row would append 3 marked lines, then update-grub" || bad "Void GRUB quiet-boot row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
+    printf '%s\n' "$out" | grep -qE '^would +quiet-boot +3 marked lines at the end of .*default-grub and 10 at the end of .*rc.conf; update-grub \(sudo\)$' && ok "Void with GRUB: the quiet-boot row would append 3 marked lines to GRUB's file and 10 to rc.conf, then update-grub" || bad "Void GRUB quiet-boot row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
     PYTHONPATH="$REPO/lib" python3 -c 'from spark import site; print("\n".join(l + " " + site.GRUB_MARK for l in site.GRUB_WANT))' >> "$V/default-grub"
     out=$(vrun SPARK_ETC_DEFAULT_GRUB="$V/default-grub" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Void, GRUB marked) failed: $out"
-    printf '%s\n' "$out" | grep -qE '^ok +quiet-boot +silent' && ok "Void with GRUB: the marked lines site.GRUB_WANT writes are bootstrap's (the twins agree)" || bad "Void GRUB ok row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
+    printf '%s\n' "$out" | grep -qE '^would +quiet-boot ' && ok "Void with GRUB marked, rc.conf not: the row still would write (both halves or none)" || bad "Void GRUB half row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
+    PYTHONPATH="$REPO/lib" python3 -c 'from spark import site; print("\n".join(l + " " + site.GRUB_MARK for l in site.RC_WANT))' >> "$V/rc.conf"
+    out=$(vrun SPARK_ETC_DEFAULT_GRUB="$V/default-grub" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Void, GRUB and rc.conf marked) failed: $out"
+    printf '%s\n' "$out" | grep -qE '^ok +quiet-boot +silent' && ok "Void with GRUB: the marked lines site.GRUB_WANT and site.RC_WANT write are bootstrap's (the twins agree)" || bad "Void GRUB ok row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
     grep -q '^GRUB_TIMEOUT=5$' "$V/default-grub" && grep -q '^GRUB_CMDLINE_LINUX_DEFAULT="loglevel=4"$' "$V/default-grub" && ok "Void with GRUB: your own lines stay as they are" || bad "Void default grub: $(cat "$V/default-grub")"
     printf 'SITE_QUIET_BOOT=no\nSITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
     out=$(vrun SPARK_ETC_DEFAULT_GRUB="$V/default-grub" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Void, GRUB, off) failed: $out"
-    printf '%s\n' "$out" | grep -qE "^would +quiet-boot +remove spark's marked lines from .*default-grub; update-grub \(sudo\)$" && ok "Void with GRUB, key off: the marked lines would go" || bad "Void GRUB off row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
+    printf '%s\n' "$out" | grep -qE "^would +quiet-boot +remove spark's marked lines from .*default-grub and .*rc.conf; update-grub \(sudo\)$" && ok "Void with GRUB, key off: the marked lines would go from both files" || bad "Void GRUB off row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
     printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "Void GRUB dry-run called sudo" || ok "Void GRUB dry-run: no sudo"
     rm -f "$V/bin/update-grub"
     printf 'SITE_FONT_FACE=Terminus\nSITE_FONT_SIZE=16x32\nSITE_QUIET_BOOT=yes\nSITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
@@ -559,5 +562,58 @@ SH
     printf '%s\n' "$out" | grep -q 'sv/spark-' && bad "a client under runit: a service dir announced: $(printf '%s\n' "$out" | grep 'sv/spark-' | head -1)" || ok "a client under runit: no service dir (a client runs no unit)"
     printf 'SITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
 fi
+
+# 12. Void's quiet boot at work, on both OSes (plain sh): a stand-in
+#     for runit's stage (its msg and msg_warn, the welcome, rc.conf
+#     sourced, then a core service) over stubs that print what the real
+#     tools print. Only the warning, stderr, a value asked for, sv's
+#     timeout and a fsck that found something may reach the screen; the
+#     same file outside a runit stage changes nothing. sh here, dash too
+#     when it is on PATH (Void's /bin/sh)
+S=$T/void-stage; mkdir -p "$S/runit" "$S/other" "$S/bin"
+PYTHONPATH="$REPO/lib" python3 -c 'from spark import site; print("\n".join(l + " " + site.GRUB_MARK for l in site.RC_WANT))' > "$S/rc.conf"
+for tool in fsck sysctl seedrng sv modules-load; do
+    cat > "$S/bin/$tool" <<'SH'
+#!/bin/sh
+case ${0##*/} in
+fsck) echo "/dev/fixture: clean, 1/2 files"; exit "${FSCK_RC:-0}" ;;
+sysctl) if [ "$1" = -n ]; then echo 1; else echo "kernel.fixture = 1"; echo "sysctl: fixture error" >&2; fi ;;
+seedrng) echo "Seeding 256 bits and crediting" ;;
+sv) echo "ok: down: fixture: 0s"; echo "timeout: slow: 7s" ;;
+modules-load) echo "insmod /lib/modules/fixture.ko" ;;
+esac
+SH
+    chmod +x "$S/bin/$tool"
+done
+cat > "$S/core.sh" <<'SH'
+msg "Mounting pseudo-filesystems..."
+modules-load -v | tr '\n' ' '
+msg_warn "a warning stays"
+fsck -A -T -a
+echo "fsck said $?"
+sysctl -p /fixture.conf
+sysctl -n kernel.dmesg_restrict
+seedrng
+sv force-stop /fixture
+SH
+for stage in runit other; do
+    cat > "$S/$stage/1" <<SH
+msg() { printf '=> %s\n' "\$*"; }
+msg_warn() { printf 'WARNING: %s\n' "\$*"; }
+msg "Welcome to Void!"
+. "$S/rc.conf"
+. "$S/core.sh"
+SH
+done
+for shell in sh dash; do
+    command -v "$shell" >/dev/null 2>&1 || continue
+    out=$(PATH="$S/bin:$PATH" "$shell" "$S/runit/1" 2>&1)
+    want=$(printf '%s\n' "=> Welcome to Void!" "WARNING: a warning stays" "fsck said 0" "sysctl: fixture error" "1" "timeout: slow: 7s")
+    [ "$out" = "$want" ] && ok "Void quiet boot ($shell): a runit stage prints only the warning, stderr, a value asked for and sv's timeout" || bad "Void quiet stage ($shell): $out"
+    out=$(FSCK_RC=1 PATH="$S/bin:$PATH" "$shell" "$S/runit/1" 2>&1)
+    printf '%s\n' "$out" | grep -q '^/dev/fixture: clean' && printf '%s\n' "$out" | grep -q '^fsck said 1$' && ok "Void quiet boot ($shell): a fsck that found something prints what it said, and its code stands" || bad "Void quiet fsck ($shell): $out"
+    out=$(PATH="$S/bin:$PATH" "$shell" "$S/other/1" 2>&1)
+    printf '%s\n' "$out" | grep -q '^=> Mounting' && printf '%s\n' "$out" | grep -q '^ok: down' && printf '%s\n' "$out" | grep -q '^Seeding' && ok "Void quiet boot ($shell): outside a runit stage the lines change nothing" || bad "Void quiet outside ($shell): $out"
+done
 
 [ "$fail" -eq 0 ] && echo "install_test: all ok" || { echo "install_test: FAILED"; exit 1; }

@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.57
+
+A quiet boot on Void is quiet.
+
+- `spark quiet boot on` on Void now reaches runit too. The kernel's
+  `quiet` never did: runit's `=>` lines, the sysctl values, a module
+  list and the fsck summary stood above the login prompt.
+- spark appends 10 marked lines to `/etc/rc.conf`, beside the 3 in
+  `/etc/default/grub`. runit reads that file before its scripts, at
+  boot and at shutdown.
+- A warning, an error and a fsck that finds a problem still print.
+  Quiet never hides a problem.
+- `spark quiet boot off` removes the lines from both files. The `quiet`
+  row is ok only when both sets are whole.
+
 ## v1.56
 
 The prompt line knows more of this machine, and `spark do` works with a

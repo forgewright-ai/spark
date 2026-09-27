@@ -48,18 +48,49 @@ GRUB_WANT = ["GRUB_TIMEOUT=0", "GRUB_TIMEOUT_STYLE=hidden",
              'GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT %s"' % QUIET_WORDS]
 
 
+# Void's runit prints its own lines at boot and shutdown, which the
+# kernel's `quiet` never reaches: stages 1 and 3 source /etc/rc.conf after
+# /etc/runit/functions, so spark appends these there, marked the same way
+# (bootstrap.sh rc_want is the twin). Inert outside the two stages; msg
+# says nothing, the welcome is erased, a clean fsck, sysctl's values, the
+# module list, seedrng and sv's `ok:` lines stay off the screen. A
+# warning, an error, stderr and a fsck that finds something still print.
+RC_WANT = [
+    "# spark quiet boot on wrote these lines, spark quiet boot off removes them",
+    "case $0 in */runit/[13])",
+    "msg() { :; }",
+    "[ \"${0##*/}\" = 1 ] && [ -t 1 ] && printf '\\033[1A\\033[2K'",
+    "fsck() { _spark_out=$(command fsck \"$@\" 2>&1); _spark_rc=$?; "
+    "[ \"$_spark_rc\" = 0 ] || printf '%s\\n' \"$_spark_out\"; return \"$_spark_rc\"; }",
+    "sysctl() { if [ \"$1\" = -p ]; then command sysctl \"$@\" >/dev/null; else command sysctl \"$@\"; fi; }",
+    "seedrng() { command seedrng \"$@\" >/dev/null; }",
+    "sv() { command sv \"$@\" | grep -v '^ok: '; }",
+    "alias modules-load='modules-load >/dev/null'",
+    "esac",
+]
+
+
 def default_grub():
     return os.environ.get("SPARK_ETC_DEFAULT_GRUB", "/etc/default/grub")
 
 
-def grub_marked():
-    """The lines spark appended to /etc/default/grub, marker off."""
+def _marked(path):
     tail = " " + GRUB_MARK
     try:
-        with open(default_grub(), encoding="utf-8", errors="replace") as f:
+        with open(path, encoding="utf-8", errors="replace") as f:
             return [ln.rstrip("\n")[:-len(tail)] for ln in f if ln.rstrip("\n").endswith(tail)]
     except OSError:
         return []
+
+
+def grub_marked():
+    """The lines spark appended to /etc/default/grub, marker off."""
+    return _marked(default_grub())
+
+
+def rc_marked():
+    """The lines spark appended to /etc/rc.conf, marker off."""
+    return _marked(RCCONF)
 
 
 def has_update_grub():
