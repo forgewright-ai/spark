@@ -389,7 +389,7 @@ already read. `spark stats` shows the result as the line pace, and the
 `throughput` row names it. Nothing the questions propose is run.
 
 The prompt line reads this machine first. spark keeps an index of its
-programs, their manuals, its apps and its own verbs in
+programs, their manuals, its apps, its services and its own verbs in
 `~/.local/state/spark/knowledge/`. `./bootstrap.sh` builds it, and the
 check timer refreshes it every 5 minutes. A program with no manual is
 read from its `--help`, and only inside the sandbox. The `knowledge`

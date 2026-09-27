@@ -6,6 +6,9 @@ Description=spark check -- drift report snapshot
 [Service]
 # the user's tools (the engine, spark itself) live in ~/.local/bin
 Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+# the timer's own run (check.TIMER_ENV): only it refreshes the knowledge
+# index; a check typed by hand or over ssh only reports
+Environment=SPARK_CHECK_TIMER=1
 Type=oneshot
 ExecStart=%h/.local/bin/spark check --porcelain
 StandardOutput=null

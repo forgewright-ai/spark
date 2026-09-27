@@ -104,6 +104,17 @@ _DANGER = [
     r"\b(?:chmod|chown|chgrp)\b",                 # any permission or owner change (the brief's own rule)
     r"\bspark\s+(?:uninstall|clear\s+--history|history\s+clear|memory\s+(?:forget|clear)"
     r"|user\s+remove|model\s+rm|soul\s+reset|(?:forge|user)\s+token\s+--new)\b",   # spark's own verbs that destroy or end logins
+    # v1.56: what the lines above still let through -- a named line each.
+    # Linear by construction: the option runs are `-X` words split by
+    # whitespace, never an \S+ that can also eat a space-free neighbour
+    r"\bcrontab(?:\s+(?:-u\s+[^\s-]\S*|-[a-zA-Z]+))*?\s+-[a-zA-Z]*r[a-zA-Z]*(?=[\s;&|)]|$)",
+                                                  # crontab -u USER -r, -ir, -ri: the table removed
+    r"\bsnap\s+remove\b",                          # snap remove: a package gone
+    r"\bflatpak\s+(?:-\S+\s+)*(?:uninstall|remove)\b",   # flatpak uninstall (--user, --system too)
+    r"\bpip[0-9.]*\s+(?:-\S+\s+)*uninstall\b",    # pip/pip3 uninstall (python -m pip too)
+    r"\bnpm\s+(?:-\S+\s+)*(?:uninstall|remove|rm|un)\b",   # npm uninstall/remove/rm/un, -g or not
+    r"\bkill\s+(?:-9|-KILL|-SIGKILL|-s\s+(?:KILL|SIGKILL|9)|-n\s+9)(?:\s+--)?(?:\s+\d+)*?\s+-?1(?![\w.])",
+                                                  # kill -9 1 or -1 (-KILL, -s KILL, -n 9, --): init, or every process you own
 ]
 # rm with a recursive (or force) flag, short or long -- ONE pattern pair,
 # shared by is_dangerous and blast, so the danger mark and the blast count
@@ -750,6 +761,9 @@ PROOF_DENIED = (
     ("+r", ("lsof",)),
     ("-s", ("free",)),          # free -s N: repeats forever
     ("--seconds", ("free",)),
+    # v1.56 (the maintainer's word): file compiles a magic file into NAME.mgc
+    ("-C", ("file",)),          # file -C -m NAME: writes NAME.mgc
+    ("--compile", ("file",)),
 )
 
 

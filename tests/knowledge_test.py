@@ -20,8 +20,13 @@ file, the package databases' parsers, spark's own verbs from the tree,
 the bootstrap row's words, a program's commands read from its manual
 (sv's COMMANDS section, apt-get's synopsis braces, ip's OBJECT :=, none
 for a program whose synopsis takes a file first) and the judge's command
-finding on them, and -- where probe() says this machine has a sandbox --
-the real containment of a --help run.
+finding on them, every include a page holds (a .so mid-page, .nx, .cf,
+.trf, .mso, one hidden by .cc or .rn) kept inside its man root or the
+page dropped, xbps-query and xcode-select found on the absolute PATH and
+run in the clean environment, each SPARK_KNOWLEDGE_* seam said once on
+stderr, the services source (runit, systemd, launchd under the
+SPARK_KNOWLEDGE_SERVICES root) and its evidence, and -- where probe()
+says this machine has a sandbox -- the real containment of a --help run.
 """
 import fcntl
 import gzip
@@ -249,6 +254,9 @@ def fixture():
     write(os.path.join(MAN, "man1", "tool-sub.1"), SUB)                       # H-S: tool sub
     write(os.path.join(MAN, "man1", "delta.1"), ".\\\" a comment\n.so man1/beta.1\n")   # .so inside the root
     write(os.path.join(MAN, "man1", "evil.1"), ".so ../../../../../etc/passwd\n")         # .so out of it
+    prog(os.path.join(BIN, "midso"))
+    write(os.path.join(MAN, "man1", "midso.1"), MAN7.replace("alpha", "midso").replace(
+        ".SH OPTIONS\n", ".SH OPTIONS\n.so /etc/passwd\n"))                          # a .so mid-page, out of it
     write(os.path.join(MAN, "man1", "secretive.1"), SECRET)
     write(os.path.join(MAN, "man8", "sv.8"), SV)
     write(os.path.join(MAN, "man8", "apt-get.8"), APT_GET)
@@ -460,6 +468,9 @@ def test_build():
         check("delta: a .so inside its man root is followed", d and d.source == "man" and d.what == "count the beta widgets", d)
         e = s.entry("evil")
         check("evil: a .so that leaves its man root is never read", e and e.source != "man", e)
+        ms = s.entry("midso")
+        check("midso: a page whose .so mid-page leaves its man root is dropped whole, never rendered",
+              ms and ms.source != "man" and not any("root:" in l for l in ms.lines), ms)
         ts = s.entry("tool sub")
         check("tool-sub.1 with tool on the PATH is the entry `tool sub`", ts and ts.what == "the sub command of tool"
               and "--deep" in ts.options.long, ts)
@@ -617,7 +628,7 @@ def test_spark_and_row():
     p = subprocess.run([sys.executable, "-m", "spark.intake", "build"], env=env, capture_output=True, text=True,
                        timeout=120)
     check("`python3 -m spark.intake build`: the row's words",
-          p.returncode == 0 and re.match(r"^0 programs, 0 manuals, 0 apps, \d+ spark verbs \(\d+\.\d s\)$", p.stdout.strip()),
+          p.returncode == 0 and re.match(r"^0 programs, 0 manuals, 0 apps, 0 services, \d+ spark verbs \(\d+\.\d s\)$", p.stdout.strip()),
           p.stdout + p.stderr)
     p2 = subprocess.run([sys.executable, "-m", "spark.intake", "fresh"], env=env, capture_output=True, text=True)
     check("`python3 -m spark.intake fresh`: exit 0 once built", p2.returncode == 0, p2.stderr)
@@ -673,10 +684,228 @@ def test_real_contained():
               "BUS" not in out and tmp.split() == ["tmp:", "h"] and 1 < len(proc.split()) <= 6, out)
 
 
+def test_includes():
+    """resolve(): every include in the page it lands on -- a .so mid-page
+    (mandoc and groff follow it on their own), groff's .nx, .cf, .trf and
+    .mso, one hidden behind .cc or .rn -- stays inside the man root, or
+    the page is dropped whole."""
+    root = os.path.join(T, "man-inc")
+    write(os.path.join(root, "man1", "part.1"), ".SH OPTIONS\n.TP\n.B \\-q\nQuiet.\n")
+    write(os.path.join(root, "man1", "far.1"), ".SH MORE\n.so ../../../../etc/passwd\n")
+    write(os.path.join(root, "man1", "zipped.1.gz"), gzip.compress(b".SH MORE\nMore words.\n"))
+    head = ".TH X 1\n.SH NAME\nx \\- a page\n"
+    cases = (
+        ("a .so mid-page inside the root is kept", head + ".so man1/part.1\n", True),
+        ("a gzipped include named without its .gz is kept", head + ".so man1/zipped.1\n", True),
+        ("a .so mid-page to an absolute path drops the page", head + ".so /etc/passwd\n", False),
+        ("a .so mid-page out through .. drops the page", head + ".so ../../../../etc/passwd\n", False),
+        ("a .so whose file includes one out of the root drops the page", head + ".so man1/far.1\n", False),
+        ("a quoted .so target drops the page", head + '.so "/etc/passwd"\n', False),
+        ("an escape in a .so target drops the page", head + ".so \\*[f]\n", False),
+        ("'so (the other control character) is read too", head + "'so /etc/passwd\n", False),
+        (".nx to a file out of the root drops the page", head + ".nx /etc/passwd\n", False),
+        (".cf and .trf out of the root drop the page", head + ".cf /etc/passwd\n.trf /etc/hosts\n", False),
+        (".mso with a path drops the page", head + ".mso /tmp/evil.tmac\n", False),
+        (".mso with a plain macro name is kept", head + ".mso an-ext.tmac\n", True),
+        ("a new control character (.cc) drops the page", head + ".cc #\n#so /etc/passwd\n", False),
+        ("a renamed .so (.rn) drops the page", head + ".rn so xx\n.xx /etc/passwd\n", False),
+        ("a comment naming .so is not a request", head + ".\\\" .so /etc/passwd\n", True),
+        ("a .so split by a backslash-newline drops the page", head + ".s\\\no /etc/passwd\n", False),
+    )
+    for i, (why, body, kept) in enumerate(cases):
+        page = os.path.join(root, "man1", "case%d.1" % i)
+        write(page, body)
+        got = intake.resolve(page, root)
+        check("resolve: " + why, (got[0] is not None) == kept, got)
+    lead = os.path.join(root, "man1", "lead.1")
+    write(lead, ".so man1/case2.1\n")                   # a leading .so to a page with a bad one mid-page
+    check("resolve: a leading .so onto a page whose own .so leaves the root drops it",
+          intake.resolve(lead, root) == (None, None))
+
+
+def test_owners_clean():
+    """Owners._xbps and _Build._xcode find their program on the absolute
+    PATH (a relative entry is someone else's directory) and run it in the
+    one clean environment, never the caller's."""
+    good = os.path.join(T, "own-bin")
+    rel = os.path.join(T, "own-rel")
+    target = os.path.join(BIN, "nomanual")
+    # the machine's xbps-query answers only in the clean environment: a
+    # caller's variable reaching it answers nothing
+    prog(os.path.join(good, "xbps-query"),
+         "#!/bin/sh\n[ -n \"$SPARK_OWNERS_LEAK\" ] && exit 3\n"
+         "case \"$1\" in -l) echo 'ii fxpkg-1.0_1  The fixture package' ;;\n"
+         "-o) echo 'fxpkg-1.0_1: %s (regular file)' ;; esac\n" % target)
+    prog(os.path.join(good, "xcode-select"), "#!/bin/sh\n[ -n \"$SPARK_OWNERS_LEAK\" ] && exit 3\nexit 0\n")
+    prog(os.path.join(rel, "xbps-query"), "#!/bin/sh\necho 'ii planted-1_1  planted'\n"
+         "echo 'planted-1_1: %s (regular file)'\n" % target)
+    prog(os.path.join(rel, "xcode-select"), "#!/bin/sh\nexit 0\n")
+    saved = (intake.DPKG_INFO, intake.PACMAN_LOCAL, intake.XBPS_DB, os.environ.get("PATH", ""), os.getcwd())
+    intake.DPKG_INFO, intake.PACMAN_LOCAL, intake.XBPS_DB = (os.path.join(T, "no-dpkg"), os.path.join(T, "no-pacman"),
+                                                             os.path.join(T, "own-xbps"))
+    os.makedirs(intake.XBPS_DB, exist_ok=True)
+    try:
+        os.chdir(T)
+        os.environ["SPARK_OWNERS_LEAK"] = "1"
+        os.environ["PATH"] = "own-rel" + os.pathsep + good
+        got = intake.Owners({target}).of(target)
+        b = intake._Build(os.path.join(T, "store-own"), 5)
+        xc = b._xcode()
+        empty = os.path.join(T, "own-empty")
+        os.makedirs(empty, exist_ok=True)
+        os.environ["PATH"] = "own-rel" + os.pathsep + empty
+        got_rel = intake.Owners({target}).of(target)
+        xc_rel = intake._Build(os.path.join(T, "store-own"), 5)._xcode()
+    finally:
+        intake.DPKG_INFO, intake.PACMAN_LOCAL, intake.XBPS_DB = saved[:3]
+        os.environ["PATH"] = saved[3]
+        os.environ.pop("SPARK_OWNERS_LEAK", None)
+        os.chdir(saved[4])
+    check("Owners._xbps: xbps-query from the absolute PATH, in the clean environment (the caller's variable never "
+          "reaches it)", got == ("xbps:fxpkg", "The fixture package"), got)
+    check("Owners._xbps: an xbps-query on a relative PATH entry is never run", got_rel == ("local", ""), got_rel)
+    check("_Build._xcode: xcode-select from the absolute PATH, in the clean environment; a relative entry's is not run",
+          xc is True and xc_rel is False, (xc, xc_rel))
+
+
+def test_seam_banner():
+    """Every SPARK_KNOWLEDGE_* seam that is set says so once on stderr,
+    the way SPARK_KNOWLEDGE_SNAPSHOT does; none set, nothing is said."""
+    code = ("from spark import intake\n"
+            "intake.program_dirs(); intake.program_dirs(); intake.man_dirs([]); intake.app_dirs()\n"
+            "intake._know_dir(); intake._sources(); intake.service_dirs()\n")
+    base = {k: v for k, v in os.environ.items() if not k.startswith("SPARK_KNOWLEDGE_")}
+    base["PYTHONPATH"] = LIB
+    seams = {"SPARK_KNOWLEDGE_PATH": BIN, "SPARK_KNOWLEDGE_MANPATH": MAN, "SPARK_KNOWLEDGE_APPS": APPS,
+             "SPARK_KNOWLEDGE_DIR": STORE, "SPARK_KNOWLEDGE_SOURCES": "programs",
+             "SPARK_KNOWLEDGE_SERVICES": os.path.join(T, "svc")}
+    p = subprocess.run([sys.executable, "-c", code], env=dict(base, **seams), capture_output=True, text=True, timeout=60)
+    lines = p.stderr.splitlines()
+    check("seams: each one set is said once on stderr, named, as a test seam",
+          p.returncode == 0 and len(lines) == len(seams)
+          and all(sum(1 for l in lines if l.startswith("spark: %s=" % k)) == 1 for k in seams)
+          and all(l.endswith("-- a test seam: the knowledge index follows it instead of this machine") for l in lines),
+          p.stderr)
+    p = subprocess.run([sys.executable, "-c", code], env=base, capture_output=True, text=True, timeout=60)
+    check("seams: none set, nothing is said", p.returncode == 0 and "SPARK_KNOWLEDGE" not in p.stderr, p.stderr)
+    b = subprocess.run([sys.executable, "-c", "from spark import intake\n"
+                        "b = intake._Build(%r, 5); b._sandbox_state(); b._sandbox_state()\n" % os.path.join(T, "sb")],
+                       env=dict(base, SPARK_KNOWLEDGE_SANDBOX="none"), capture_output=True, text=True, timeout=60)
+    check("seams: SPARK_KNOWLEDGE_SANDBOX is said once too", b.stderr.count("SPARK_KNOWLEDGE_SANDBOX=none") == 1
+          or os.geteuid() == 0, b.stderr)
+
+
+def test_services():
+    """The services source: runit's /etc/sv and /var/service, systemd's
+    unit dirs (an alias, a mask, a template, the *.wants links) and
+    launchd's plists, read under SPARK_KNOWLEDGE_SERVICES's root -- one
+    entry "service NAME" each, the manager, the state and the program it
+    starts in its words, nothing asked of a daemon; a service enabled
+    later makes the store stale; the evidence names sshd when a question
+    about the ssh service asks on a machine that calls it sshd."""
+    svc = os.path.join(T, "svc")
+    j = os.path.join
+    write(j(svc, "etc", "sv", "sshd", "run"), "#!/bin/sh\nssh-keygen -A >/dev/null 2>&1\nexec /usr/bin/sshd -D $OPTS\n", 0o755)
+    write(j(svc, "etc", "sv", "dhcpcd", "run"), "#!/bin/sh\nexec 2>&1\nexec chpst -u fx dhcpcd -B\n", 0o755)
+    write(j(svc, "etc", "sv", "norun", "conf"), "OPTS=\n")               # no run script: not a service
+    os.makedirs(j(svc, "var", "service"))
+    os.symlink(j(svc, "etc", "sv", "sshd"), j(svc, "var", "service", "sshd"))
+    units = j(svc, "usr", "lib", "systemd", "system")
+    write(j(units, "ssh.service"), "[Unit]\nDescription=OpenBSD Secure Shell server\n\n[Service]\n"
+          "ExecStart=/usr/sbin/sshd -D $SSHD_OPTS\n")
+    write(j(units, "cron.service"), "[Unit]\nDescription=Regular background program processing daemon %s\n"
+          "[Service]\nExecStart=-/usr/sbin/cron -f\n" % GH)                   # spark:allow-secret
+    write(j(units, "getty@.service"), "[Service]\nExecStart=-/sbin/agetty %I\n")
+    write(j(units, "bluetooth.service"), "[Service]\nExecStart=/usr/libexec/bluetooth/bluetoothd\n")
+    etc = j(svc, "etc", "systemd", "system")
+    os.makedirs(j(etc, "multi-user.target.wants"))
+    os.symlink(j(units, "ssh.service"), j(etc, "sshd.service"))            # an alias
+    os.symlink("/dev/null", j(etc, "bluetooth.service"))                   # masked
+    os.symlink(j(units, "ssh.service"), j(etc, "multi-user.target.wants", "ssh.service"))
+    write(j(svc, "Library", "LaunchDaemons", "org.example.fixd.plist"),
+          plistlib.dumps({"Label": "org.example.fixd", "ProgramArguments": ["/usr/local/libexec/fixd", "--fg"],
+                          "Disabled": True}))
+    write(j(svc, "home", "Library", "LaunchAgents", "homebrew.mxcl.fixdb-14.plist"),
+          plistlib.dumps({"Label": "homebrew.mxcl.fixdb-14", "Program": "/opt/homebrew/opt/fixdb-14/bin/fixdb"}))
+    store = j(T, "store-svc")
+    keep = {k: os.environ.get(k) for k in ("SPARK_KNOWLEDGE_SOURCES", "SPARK_KNOWLEDGE_DIR", "SPARK_KNOWLEDGE_SERVICES")}
+    os.environ.update(SPARK_KNOWLEDGE_SOURCES="services", SPARK_KNOWLEDGE_DIR=store, SPARK_KNOWLEDGE_SERVICES=svc)
+    try:
+        t0 = time.monotonic()
+        (counts, built, stale, _sk), _t = build()
+        s = intake.LocalStore()
+        names = sorted(n for n in s.names())
+        check("services: one entry each, `service NAME`, a template and a dir with no run script left out",
+              names == ["service bluetooth", "service cron", "service dhcpcd", "service homebrew.mxcl.fixdb-14",
+                        "service org.example.fixd", "service ssh", "service sshd"]
+              and counts.get("service") == 7 and not stale, (names, counts))
+        what = {n[len("service "):]: (s.entry(n).what if s.entry(n) else "") for n in names}
+        check("services: runit -- enabled where /var/service links it, and the program it starts",
+              what["sshd"] == "a runit service, enabled at boot, which starts sshd"
+              and what["dhcpcd"] == "a runit service, not enabled, which starts dhcpcd",
+              (what["sshd"], what["dhcpcd"]))
+        check("services: systemd -- the unit's name, enabled by a *.wants link, its alias, its ExecStart, "
+              "its Description", what["ssh"] == "a systemd service (ssh.service), enabled at boot, "
+              "also named sshd, which starts sshd -- OpenBSD Secure Shell server", what["ssh"])
+        check("services: systemd -- a link to /dev/null is masked; ExecStart's - prefix is not the program",
+              what["bluetooth"] == "a systemd service (bluetooth.service), masked"
+              and "which starts cron" in what["cron"] and "not enabled at boot" in what["cron"],
+              (what["bluetooth"], what["cron"]))
+        check("services: a secret shape in a unit's Description is held, never stored",
+              GH not in what["cron"] and "[held]" in what["cron"], what["cron"])
+        check("services: launchd -- a daemon and an agent by their plist, Disabled said, the program it starts",
+              what["org.example.fixd"] == "a launchd daemon, disabled by default, which starts fixd"
+              and what["homebrew.mxcl.fixdb-14"] == "a launchd agent, which starts fixdb",
+              (what["org.example.fixd"], what["homebrew.mxcl.fixdb-14"]))
+        raw = "".join(open(j(store, "entries", f), encoding="utf-8").read() for f in os.listdir(j(store, "entries")))
+        check("services: no path of the machine's (the fixture root, the home) in an entry", svc not in raw
+              and T not in raw, raw[:200])
+        # the evidence: a question that names a service the way a habit
+        # does (dhcp) finds the name this machine's init knows (dhcpcd);
+        # "service" is what opens the bridge
+        from spark import grounding
+        ev = grounding.evidence("restart the dhcp service", (), s)
+        check("services: `restart the dhcp service` -- the Reference names dhcpcd, a runit service",
+              ev.names[:1] == ("service dhcpcd",) and "| dhcpcd -- a runit service, not enabled" in ev.text, ev.text)
+        ev = grounding.evidence("restart the ssh service", (), s)
+        check("services: `restart the ssh service` -- the unit named ssh, which says it is also sshd",
+              "| ssh -- a systemd service (ssh.service), enabled at boot, also named sshd" in ev.text,
+              ev.text)
+        idx = grounding._index(s)
+        check("services: the bridge opens only for a question that says service, a letter or two short of a name",
+              grounding._bridged(idx, grounding.words("restart the ssh service")) == ["sshd"]
+              and grounding._bridged(idx, grounding.words("restart ssh")) == []
+              and grounding._bridged(idx, grounding.words("restart the s service")) == [], idx and idx.names)
+        # enabling a service moves the stamp: the store is stale until the
+        # next refresh, which reads it enabled
+        check("services: fresh after the build", intake.fresh())
+        time.sleep(0.02)
+        os.symlink(j(svc, "etc", "sv", "dhcpcd"), j(svc, "var", "service", "dhcpcd"))
+        stale_after = not intake.fresh()
+        build()
+        d = intake.LocalStore().entry("service dhcpcd")
+        check("services: a service enabled later makes the store stale; the next refresh reads it enabled",
+              stale_after and d and "enabled at boot" in d.what, (stale_after, d))
+        check("services: the scan reads the dirs in a blink (%.2f s)" % (time.monotonic() - t0),
+              time.monotonic() - t0 < 5)
+    finally:
+        for k, v in keep.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    check("services: _started -- the service's own name first, else an absolute path, never an option or "
+          "an assignment", intake._started(["chpst", "-u", "x", "dhcpcd", "-B"], "dhcpcd") == "dhcpcd"
+          and intake._started(["-/usr/sbin/cron", "-f"], "cron") == "cron"
+          and intake._started(["FOO=1", "/usr/bin/tool", "--x"], "other") == "tool"
+          and intake._started(["2>&1"], "x") == "")
+
+
 def main():
     fixture()
     for t in (test_words, test_parsers, test_commands, test_owners, test_build, test_fingerprint, test_help_contained, test_lock,
-              test_missing_store, test_spark_and_row, test_real_contained):
+              test_missing_store, test_spark_and_row, test_real_contained, test_includes, test_owners_clean,
+              test_seam_banner, test_services):
         try:
             t()
         except Exception as e:

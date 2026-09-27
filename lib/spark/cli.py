@@ -114,6 +114,26 @@ def _one_line(s, width=HINT_COLS):
     return s + e
 
 
+# The model's own name as a word, lowercase as spark writes it: never a
+# piece of a path, a flag, a file name or a longer name.
+SPARK_WORD = re.compile(r"(?<![\w/.~$=-])(?<!Apache )Spark(?![\w/-]|\.\w)")
+
+
+def _tidy(s, hint=True):
+    """The model's words as the hint row paints them. `Spark` as a word
+    becomes `spark`, outside backticks (a command is never touched). A
+    hint, not an answer, loses its one trailing period, so every hint
+    ends the same way; an ellipsis and an abbreviation keep theirs."""
+    parts = (s or "").split("`")
+    parts[::2] = [SPARK_WORD.sub("spark", p) for p in parts[::2]]
+    s = "`".join(parts)
+    if hint:
+        s = s.rstrip()
+        if s.endswith(".") and not s.endswith(("..", "etc.", "e.g.", "i.e.")):
+            s = s[:-1].rstrip()
+    return s
+
+
 def _shell_default():
     return os.path.basename(os.environ.get("SHELL") or "sh")
 
@@ -207,7 +227,7 @@ def _paste_verdict(shell):
         say("error")
         say(_one_line(e.hint))
         return 1
-    summary = _one_line(str(reply.get("summary") or ""), ANSWER_MAX) or "a paste; nothing more to say"
+    summary = _one_line(_tidy(str(reply.get("summary") or ""), hint=False), ANSWER_MAX) or "a paste; nothing more to say"
     danger = bool(reply.get("danger")) or local_danger
     say("danger" if danger else "answer")
     say(summary)
@@ -656,17 +676,17 @@ class _Early:
             # characters, and the widget trims to the terminal's own width
             if not final and (hint is None or (not hint and "command" not in f)):
                 return None
-            return _noted("", s("hint") or s("command"), self.says, ANSWER_MAX)
+            return _noted("", _tidy(s("hint"), hint=False) or s("command"), self.says, ANSWER_MAX)
         if hint is None and not final:
             return None
         return self.label(_one_line(s("hint")))
 
     def label(self, hint):
         """A command's line 2: a danger's persona.blast facts first, the
-        model's words, then the note -- so contract 4's 80-char cut eats
-        the model's words before the numbers or the note."""
+        model's words (_tidy), then the note -- so contract 4's 80-char
+        cut eats the model's words before the numbers or the note."""
         facts = persona.blast(self.command, self.cwd) if self.head == "danger" else ""
-        return _noted("<- " + facts + " -- " if facts else "", hint, self.note)
+        return _noted("<- " + facts + " -- " if facts else "", _tidy(hint), self.note)
 
     def _first(self, head, command=""):
         # the pulse turns to the reply's own mark before the line leaves,
@@ -750,7 +770,14 @@ def _judged(s, reply, command, hint, text, asked, ms, know, early):
     rode = early.rode
     if found or repeat:
         said = [_said(f) for f in found] + ([REPEATED] if repeat else [])
-        ev = know.evidence(text, [f.head for f in found if f.kind != "missing"])
+        # a head that is not here: the installed programs that do its job
+        # are named, and their entries ride as the evidence
+        gone = [f.head for f in found if f.kind == "missing"]
+        from . import judge
+        alike = know._timed(judge.installed_alike, text, gone) if gone else []
+        if alike:
+            said.append("Installed here: %s." % ", ".join("%s (%s)" % (n, w) if w else n for n, w in alike))
+        ev = know.evidence(text, [f.head for f in found if f.kind != "missing"] + [n for n, _w in alike])
         if found:
             early.busy.tell(_gap(found[0]) + ", so spark asks again")
         s.history.extend([{"role": "user", "content": asked},
@@ -871,6 +898,12 @@ def cmd_line(args):
         s = session.Session(cfg, "line", shell, cwd, history)
     except wire.BrainError as e:
         err = e
+    if s is not None and bench and os.environ.get("SPARK_LINE_ROLE") in ("spark", "ember"):
+        # the measuring seam (the audition's --role, SPARK_LINE_BENCH=1
+        # alone): the line's own prompt, asked of that role
+        prefix = s._system()
+        s.role, s._system = os.environ["SPARK_LINE_ROLE"], (lambda: prefix)
+        sys.stderr.write("spark: SPARK_LINE_ROLE=%s -- a test seam: the line asks that role\n" % s.role)
     if s is not None:
         reply, ms, err = _line_stream(s, ask_text, early, context)
     if err is None and early.head is None:

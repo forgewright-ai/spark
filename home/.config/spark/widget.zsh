@@ -79,8 +79,10 @@ _spark_paint() {
 # One row up from the cursor, so the edit line must be a single row when this
 # runs (a wrapped question would make "the row above" the prompt itself), and
 # the text must fit the width (a wrapped hint would push the prompt down).
+typeset -g _spark_hinted=''   # spark drew in the row above since this prompt came
 _spark_say() {
     local t=$1
+    [[ -n $t ]] && _spark_hinted=1
     (( ${#t} > COLUMNS - 2 )) && t=${t[1,COLUMNS-3]}$_spark_d
     _spark_paint "$t"
     print -n -- $'\e7\e[1A\r\e[2K'"$_spark_out"$'\e8'
@@ -92,14 +94,15 @@ _spark_say() {
 # pulse, the facts, the hint, an answer); the prompt line holds only the
 # command to run, empty for an answer. The mark is painted BEFORE the
 # command lands, so a danger line is never in the buffer without its !.
-# While the hint is on its way the cursor waits at the line's start (one
-# row below the hint row, however long the command), and keys typed
-# meanwhile queue for when the widget returns.
+# While spark thinks, the question stays in the line as typed, and line 1
+# replaces it. Until the hint comes the cursor waits at the line's start
+# (one row below the hint row, however far the line wraps), and keys
+# typed meanwhile queue for when the widget returns.
 _spark_ask() {
     local line=$1 fd kind cmd hint line3 mark=$_spark_h tail=''
-    # a long question wraps: empty the line first, so the cursor is back on
-    # the prompt's row and the hint lands in the blank row above it
-    BUFFER=''; CURSOR=0; zle -R
+    # the cursor to the line's start: back on the prompt's row, so the
+    # hint lands in the blank row above it however far a question wraps
+    CURSOR=0; zle -R
     _spark_say "$_spark_h $_spark_d"
     _spark_proof='' _spark_proof_for=''
     # SPARK_HINT_ROW=1: spark line may pulse in that row (text.Busy) while
@@ -118,6 +121,7 @@ _spark_ask() {
             case $line3 in proof$'\t'*) _spark_proof=${line3#proof$'\t'} _spark_proof_for=$cmd ;; esac
             CURSOR=$#BUFFER ;;
         answer)
+            BUFFER=''; CURSOR=0; zle -R           # an answer leaves the line empty
             IFS= read -r -u $fd hint
             _spark_say "$_spark_h ${hint:-no answer came}" ;;
         *)
@@ -225,7 +229,7 @@ _spark_capture() {
 # prompt, starship) still sees the command's own status.
 _spark_failed() {
     local rc=$? cmd=$_spark_cmd
-    _spark_cmd=''
+    _spark_cmd='' _spark_hinted=''       # a new prompt: the row above is not spark's
     unset SPARK_EXPLAIN_CMD SPARK_EXPLAIN_RC
     _spark_offer_fix=''
     # no capture: an empty Enter, Ctrl-C at the prompt, or a key spark
@@ -308,6 +312,23 @@ spark-accept-line() {
 zle -N spark-accept-line
 bindkey '^M' spark-accept-line
 bindkey '^J' spark-accept-line
+
+# --- Ctrl-U: an emptied line takes its hint with it ------------------------
+# The hint labels the line; once the user empties the line, it labels
+# nothing. Ctrl-U keeps whatever it already was (kill-whole-line unless
+# the rc chose another), then clears the row above -- only when the line
+# is now empty and spark drew in that row since the prompt came: a row
+# spark never wrote is never touched.
+_spark_orig_kill=${${(z)"$(bindkey '^U' 2>/dev/null)"}[2]}
+[[ -z $_spark_orig_kill || $_spark_orig_kill == (undefined-key|spark-kill-line|\"*) ]] && _spark_orig_kill=kill-whole-line
+spark-kill-line() {
+    zle "$_spark_orig_kill"
+    [[ -z $BUFFER && -n $_spark_hinted ]] || return 0
+    _spark_say ''
+    _spark_hinted=''
+}
+zle -N spark-kill-line
+bindkey '^U' spark-kill-line
 
 # --- Esc s: ask about this line, no question mark needed --------------------
 # On an empty line it serves the failure moment first: a pending failure

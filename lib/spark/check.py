@@ -87,10 +87,11 @@ class Ctx:
         self.fetch = fetch
         self.home = HOME
         # the timer's run, not a person's: the systemd unit, the runit loop
-        # and the launchd agent all run `spark check --porcelain` with no
-        # terminal on stdin and no --fresh (the background refresh() after
-        # a person's verb, the selftest and CI all pass --fresh). Only that
-        # run may refresh the knowledge index (G0 M7)
+        # and the launchd agent all run `spark check --porcelain` with
+        # TIMER_ENV set, no terminal on stdin and no --fresh (the
+        # background refresh() after a person's verb, the selftest and CI
+        # all pass --fresh). Only that run may refresh the knowledge index
+        # (G0 M7) -- see unattended()
         self.unattended = False
 
     def sh(self, cmd, timeout=10, env=None):
@@ -1221,7 +1222,8 @@ def _read_ago(seconds):
 
 
 # the kinds intake counts, in the words the row says them
-KNOWLEDGE_KINDS = (("program", "program"), ("manual", "manual"), ("app", "app"), ("spark", "spark verb"))
+KNOWLEDGE_KINDS = (("program", "program"), ("manual", "manual"), ("app", "app"), ("service", "service"),
+                   ("spark", "spark verb"))
 
 
 @row("CAPABILITY")
@@ -2307,9 +2309,20 @@ def refresh():
 
 
 # --------------------------------------------------------------------- main
-def unattended(porcelain_out, fresh, watch, stdin):
-    """The timer's run (see Ctx.unattended): --porcelain, no --fresh, no
-    --watch, and no terminal on stdin."""
+# the units that run the check every 5 minutes (spark-check.service, the
+# runit loop, the launchd agent) set this to 1, and nothing else does:
+# `ssh HOST 'spark check --porcelain'` has no terminal either, and it is a
+# person's run -- it must not read manuals or run anyone's --help
+TIMER_ENV = "SPARK_CHECK_TIMER"
+
+
+def unattended(porcelain_out, fresh, watch, stdin, environ=None):
+    """The timer's run (see Ctx.unattended): the units' TIMER_ENV=1,
+    --porcelain, no --fresh, no --watch, and no terminal on stdin. A
+    missing flag is a person's run, whatever else holds."""
+    env = os.environ if environ is None else environ
+    if env.get(TIMER_ENV) != "1":
+        return False
     try:
         tty = stdin is not None and stdin.isatty()
     except (OSError, ValueError):

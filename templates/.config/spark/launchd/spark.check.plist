@@ -19,6 +19,10 @@
 		<string>@HOME@</string>
 		<key>PATH</key>
 		<string>@HOME@/.local/bin:@BREW_PREFIX@/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+		<!-- the timer's own run (check.TIMER_ENV): only it refreshes the
+		     knowledge index; a check typed by hand or over ssh only reports -->
+		<key>SPARK_CHECK_TIMER</key>
+		<string>1</string>
 	</dict>
 	<key>RunAtLoad</key>
 	<true/>

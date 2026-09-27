@@ -2,6 +2,9 @@
 # rendered by spark install.sh -- spark check every five minutes (runit
 # has no timer), so the status line always has a fresh verdict
 export HOME=@HOME@ USER=@USER@ PATH=@HOME@/.local/bin:/usr/local/bin:/usr/bin:/bin
+# the timer's own run (check.TIMER_ENV): only it refreshes the knowledge
+# index; a check typed by hand or over ssh only reports
+export SPARK_CHECK_TIMER=1
 exec 2>&1
 trap 'kill $! 2>/dev/null; exit 0' TERM INT
 sleep 120 & wait $!

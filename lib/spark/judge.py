@@ -22,7 +22,7 @@ import shutil
 import signal
 from collections import namedtuple
 
-from . import CONFIG_DIR, REPO, grounding, intake, persona
+from . import CONFIG_DIR, HOME, REPO, grounding, intake, persona
 
 # kind: missing (no such program here) | flag (not in its entry) | command
 # (a program whose manual lists its commands, given a word it does not
@@ -233,6 +233,74 @@ def _present(store, head):
     return _on_path(head)
 
 
+def installed_alike(question, missing, store=None):
+    """grounding.alike with this machine's answer to what is installed
+    (or the snapshot's, for the audition): [(name, what)]."""
+    store = grounding.default_store(store)
+    return grounding.alike(question, missing, store, present=lambda h: _present(store, h))
+
+
+# git's own aliases are commands too: `git co` where [alias] says co. They
+# are read from the config files git reads -- the global one (or the file
+# GIT_CONFIG_GLOBAL names) and the system's, beside the program's prefix
+# and in /etc -- as plain files, include-free, once a process.
+GIT_CONFIG_MAX = 256 * 1024
+_GIT_ALIASES = []
+
+
+def _git_config_files():
+    glob_file = os.environ.get("GIT_CONFIG_GLOBAL")
+    if glob_file:
+        files = [glob_file]
+    else:
+        xdg = os.environ.get("XDG_CONFIG_HOME") or os.path.join(HOME, ".config")
+        files = [os.path.join(xdg, "git", "config"), os.path.join(HOME, ".gitconfig")]
+    if not os.environ.get("GIT_CONFIG_NOSYSTEM"):
+        files.append("/etc/gitconfig")
+        prog = shutil.which("git", path=intake.abs_path())
+        if prog:
+            files.append(os.path.join(os.path.dirname(os.path.dirname(os.path.realpath(prog))), "etc", "gitconfig"))
+    return list(dict.fromkeys(files))
+
+
+def parse_git_aliases(text):
+    """The alias names an [alias] section of a git config file defines."""
+    names, inside = set(), False
+    for line in (text or "").splitlines():
+        line = line.strip()
+        m = re.match(r'^\[\s*([A-Za-z0-9.-]+)\s*("[^"]*")?\s*\](.*)$', line)
+        if m:
+            inside = m.group(1).lower() == "alias" and not m.group(2)
+            line = m.group(3).strip()
+        if not inside or not line or line[0] in "#;":
+            continue
+        k = re.match(r"^([A-Za-z][A-Za-z0-9-]*)\s*(?:=|$)", line)
+        if k:
+            names.add(k.group(1).lower())
+    return frozenset(names)
+
+
+def _git_aliases():
+    if not _GIT_ALIASES:
+        names = set()
+        for f in _git_config_files():
+            try:
+                if os.path.getsize(f) > GIT_CONFIG_MAX:
+                    continue
+                with open(f, encoding="utf-8", errors="replace") as fh:
+                    names |= parse_git_aliases(fh.read(GIT_CONFIG_MAX))
+            except OSError:
+                continue
+        _GIT_ALIASES.append(frozenset(names))
+    return _GIT_ALIASES[0]
+
+
+def _aliases(head):
+    """The words a program's own config adds to its commands: git's
+    aliases. No other program keeps such a list."""
+    return _git_aliases() if head == "git" else frozenset()
+
+
 def _entry(store, name):
     key = (id(store), name)
     if key not in _ENTRIES:
@@ -300,9 +368,10 @@ def _command(head, args, entry, valued):
     if not cs:
         return []
     names = frozenset(cs.words)
+    own = _aliases(head)
 
     def known(w):
-        return w in names or (cs.prefix and any(c.startswith(w) for c in names))
+        return w in names or w.lower() in own or (cs.prefix and any(c.startswith(w) for c in names))
     maybe, after_opt, skip = None, False, False
     for a in args:
         if skip:

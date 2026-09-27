@@ -83,8 +83,10 @@ _spark_paint() {
     esac
 }
 
+_spark_hinted=''          # spark drew in the row above since this prompt came
 _spark_say() {   # _spark_say TEXT  -- write into the row above, cursor untouched
     local t=$1 w=${COLUMNS:-80}
+    [[ -n $t ]] && _spark_hinted=1
     (( ${#t} > w - 2 )) && t=${t:0:w-3}$_spark_d
     _spark_paint "$t"
     printf '\0337\033[1A\r\033[2K%s\0338' "$_spark_out"
@@ -129,21 +131,67 @@ _spark_rest() {   # _spark_rest FD MARK TAIL CMD  -- lines 2 and 3, in the backg
     [[ -z $l3 ]] && IFS= read -r l3 <&"$fd" && _spark_keep "$cmd" "$l3"
 }
 
-_spark_fits() {   # _spark_fits CMD  -- true when prompt + CMD leave room on one row
-    local p w=${COLUMNS:-80}
+_spark_prow() {   # the prompt's last row: _spark_pp as drawn, _spark_pn its columns
+    local p v
+    _spark_pp='' _spark_pn=-1
     (( BASH_VERSINFO[0] > 4 || BASH_VERSINFO[1] >= 4 )) || return 1
     p=${PS1@P}
     p=${p##*$'\n'}
-    while [[ $p == *$'\001'*$'\002'* ]]; do p=${p%%$'\001'*}${p#*$'\002'}; done
-    (( ${#p} + ${#1} + _SPARK_ROOM <= w ))
+    v=$p
+    while [[ $v == *$'\001'*$'\002'* ]]; do v=${v%%$'\001'*}${v#*$'\002'}; done
+    p=${p//$'\001'/} p=${p//$'\002'/}
+    _spark_pp=$p _spark_pn=${#v}
+}
+
+_spark_fits() {   # _spark_fits CMD  -- true when prompt + CMD leave room on one row
+    (( _spark_pn >= 0 && _spark_pn + ${#1} + _SPARK_ROOM <= ${COLUMNS:-80} ))
+}
+
+# The words stay on screen while spark thinks. readline clears the
+# prompt's row before it runs a bind -x handler, and draws it again only
+# when the handler returns: through a think of seconds the row would
+# stand empty. _spark_hold writes the prompt's last row and the words
+# back as they were, then leaves the cursor where the words begin -- on
+# the prompt's own row, however far they wrap, so the row above is still
+# the hint row. _spark_drop clears them just before the handler returns:
+# readline then draws the new line (line 1, painted once) on a blank
+# row, for its redraw does not clear what a longer question left.
+_spark_held=''
+_spark_hold() {   # _spark_hold WORDS
+    local t=${1//[[:cntrl:]]/ } w=${COLUMNS:-80} up
+    _spark_prow || return 0
+    (( w > 0 )) || return 0
+    # ${#t} counts characters, not columns: a wide character would put
+    # the cursor a row off, so a question or prompt beyond ASCII is not held
+    [[ $t$_spark_pp == *[![:ascii:]]* ]] && return 0
+    up=$(( (_spark_pn + ${#t} - 1) / w ))
+    t=$'\r'$_spark_pp$t
+    (( up > 0 )) && t+=$'\033['$up'A'
+    t+=$'\r'
+    (( _spark_pn > 0 )) && t+=$'\033['$_spark_pn'C'
+    _spark_held=1
+    printf '%s' "$t"          # one write: a pulse frame never lands inside it
+}
+_spark_drop() {
+    [[ -n $_spark_held ]] || return 0
+    _spark_held=''
+    printf '\r\033[J'
 }
 
 _spark_ask() {   # _spark_ask LINE  -- ask, then edit READLINE_LINE
+    _spark_asked "$1"
+    _spark_drop
+}
+
+_spark_asked() {
     local line=$1 fd kind cmd='' hint line3 mark=$_spark_h tail=''
     _spark_reap
     _spark_say "$_spark_h $_spark_d"
     _spark_proof='' _spark_proof_for='' _spark_pw=''
     [[ -s $_spark_pf ]] && : > "$_spark_pf"
+    # the buffer as typed, before spark line starts: its pulse never
+    # draws while these words are on their way
+    _spark_hold "$READLINE_LINE"
     # SPARK_HINT_ROW=1: spark line may pulse in that row (text.Busy) while
     # the model answers -- then in the reply's own mark until the hint
     exec {fd}< <(SPARK_HINT_ROW=1 exec "$SPARK_BIN" line --cwd "$PWD" --shell bash <<< "$line" 2>/dev/null)
@@ -277,7 +325,7 @@ _spark_capture() {
 # it -- still sees the truth.
 _spark_failed() {
     local rc=$? cmd=$_spark_cmd
-    _spark_cmd=''
+    _spark_cmd='' _spark_hinted=''       # a new prompt: the row above is not spark's
     unset SPARK_EXPLAIN_CMD SPARK_EXPLAIN_RC
     _spark_offer_fix=''
     _spark_reap
@@ -386,6 +434,29 @@ bind '"\C-x\C-a": accept-line'
 bind '"\C-m": "\C-x\C-s\C-x\C-a"'
 bind '"\C-j": "\C-x\C-s\C-x\C-a"'
 
+# --- Ctrl-U: an emptied line takes its hint with it ------------------------
+# The hint labels the line; once the user empties the line, it labels
+# nothing. bash says nothing when the line changes, so Ctrl-U becomes a
+# two-key macro like Enter: unix-line-discard first (the kill ring keeps
+# the words for Ctrl-Y), then _spark_unhint. It clears the row above
+# only when the line is now empty and spark drew in that row since the
+# prompt came: a row spark never wrote is never touched. A hint still on
+# its way stops first, or it would land on the empty prompt.
+_spark_unhint() {
+    [[ -z $READLINE_LINE && -n $_spark_hinted ]] || return 0
+    _spark_reap
+    _spark_say ''
+    _spark_hinted=''
+}
+bind -x '"\C-x\C-o": _spark_unhint'
+# Ctrl-U keeps the function it had (an inputrc's kill-whole-line too);
+# a Ctrl-U that is a macro or a bind -x of the user's is left alone
+_spark_ctrlu=$(bind -p 2>/dev/null | sed -n 's/^"\\C-u": \([a-z-]*\)$/\1/p' | head -n 1)
+if [[ -n $_spark_ctrlu && $_spark_ctrlu != self-insert ]]; then
+    bind "\"\\C-x\\C-k\": $_spark_ctrlu"
+    bind '"\C-u": "\C-x\C-k\C-x\C-o"'
+fi
+
 # --- Esc s: ask about this line, no question mark needed --------------------
 # On an empty line it serves the failure moment first: a pending failure
 # becomes `cmd 2>&1 | explain` in your line (the command and its exit
@@ -470,7 +541,9 @@ _spark_recall() {
     fi
     _spark_say "$_spark_h $_spark_d"
     local out
+    _spark_hold "$READLINE_LINE"          # the words stay while the search runs
     out=$(fc -ln -400 2>/dev/null | "$SPARK_BIN" recall "$intent" 2>/dev/null)
+    _spark_drop
     if [[ -z $out ]]; then
         _spark_say "$_spark_h nothing in your history matches that"
         return

@@ -832,7 +832,18 @@ def main():
             ok(st == 400, "/api/do/run with no command -> 400", st)
             st, _, raw = req(url, "POST", "/api/do/run", {"command": "echo one\necho two"}, headers=post)
             ok(st == 400, "/api/do/run with a control character (a second line) -> 400", (st, raw[:80]))
-            gone = os.path.join(tmp, "gone")
+            # v1.56: the length is capped before any pattern reads the
+            # command -- a 100 kB line once pinned a thread in is_dangerous
+            from spark import forgeserve as _fsv_cap
+            t0 = time.time()
+            st, _, raw = req(url, "POST", "/api/do/run", {"command": "echo " + "-u " * 30000}, headers=post)
+            err = json.loads(raw).get("error", {}) if st == 400 else {}
+            ok(st == 400 and err.get("hint") == "a command is at most %d characters" % _fsv_cap.DO_COMMAND_MAX
+               and time.time() - t0 < 2,
+               "/api/do/run of a command over 4096 characters -> 400 at once, before any pattern", (st, raw[:120]))
+            st, _, raw = req(url, "POST", "/api/do/run", {"command": "echo " + "x" * (_fsv_cap.DO_COMMAND_MAX - 5)}, headers=post)
+            ok(st == 200 and json.loads(raw)["rc"] == 0, "/api/do/run of a command of exactly 4096 characters still runs", (st, raw[:80]))
+            gone =os.path.join(tmp, "gone")
             st, _, raw = req(url, "POST", "/api/do/run", {"command": "rm -rf " + gone}, headers=post)
             kind = json.loads(raw).get("error", {}).get("kind") if st == 400 else ""
             ok(st == 400 and kind == "confirm", "/api/do/run of a dangerous command without confirmed -> 400 confirm", (st, raw[:80]))
@@ -879,8 +890,9 @@ def main():
             hi = [r for r in runs if r.get("digest") == _hl.sha256(b"echo hi").hexdigest()[:12]]
             ok(len(hi) == 1 and set(hi[0]) == {"ts", "ip", "action", "digest", "rc"} and hi[0]["rc"] == 0
                and hi[0]["ip"] == "127.0.0.1", "do/run echo hi landed one audit record: {ts, ip, action, digest, rc}", hi)
-            ok(len(runs) == 5 and all(isinstance(r["rc"], int) and re.match(r"^[0-9a-f]{12}$", r["digest"]) for r in runs),
-               "every do/run that ran (5) has its record: rc a number, digest 12 hex", runs)
+            # 6: the 4096-character run counts, the refused 90 kB one does not
+            ok(len(runs) == 6 and all(isinstance(r["rc"], int) and re.match(r"^[0-9a-f]{12}$", r["digest"]) for r in runs),
+               "every do/run that ran (6) has its record: rc a number, digest 12 hex", runs)
             blob = json.dumps(arecs)
             ok("echo hi" not in blob and "rm -rf" not in blob and "pwd" not in blob and tmp not in blob,
                "no command text, no path in the trail", blob[:200])

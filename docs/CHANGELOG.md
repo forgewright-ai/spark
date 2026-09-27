@@ -1,5 +1,56 @@
 # Changelog
 
+## v1.56
+
+The prompt line knows more of this machine, and `spark do` works with a
+chat model that thinks.
+
+Measured on the box (Void, qwen3-4b, 97 audition cases), the prompt
+line answers as well as before:
+
+| | v1.55 | v1.56 |
+|---|---|---|
+| right command on Void | 82 % | 81 % |
+| right spark verb | 64 % | 61 % |
+| dangerous commands marked | 11 of 11 | 11 of 11 |
+| a `!` on a command that only reads | 9 % | 9 % |
+| command in your line (median) | 1.2 s | 1.2 s |
+
+qwen3-8b as the prompt line's model got 62 to 68 % of the commands
+right on Void, Debian and Arch, against 74 to 79 % for qwen3-4b, and
+took twice as long. It stays the chat model. Telling the model to add
+`sudo` cost 7 points and tripled the wrong `!`, so it is not in.
+
+- Your question stays on screen while spark thinks, in bash and zsh.
+  The command replaces it when it lands.
+- Ctrl-U clears the hint row above an emptied line. It still keeps the
+  deleted text for Ctrl-Y.
+- The index reads this machine's services too: runit's, systemd's and
+  launchd's, by their own directories. A question about a service sees
+  the names here, so `ssh` finds `sshd` on Void.
+- When the model proposes a program that is not here, spark asks again
+  and names the installed programs that do the same job (`ss` for
+  `netstat`).
+- Your git aliases count as git commands, so `git co` is not re-asked.
+- A manual that includes a file outside its own man directory is not
+  read. A knowledge test setting prints a line when it is set.
+- The hint row writes spark in lowercase and ends without a period.
+- `spark do`, `spark drill`, the paste check and the reading before
+  `spark edit ?` work when the chat model thinks (qwen3-8b). A request
+  that asks for JSON now asks the model not to think first. A model
+  that thinks until its answer runs out says so.
+- `spark model` and the page mark every model the engine holds as
+  serving, both roles on a machine with a chat model.
+- More commands carry `!`: `crontab -u USER -r` and `crontab -ir`,
+  `snap remove`, `flatpak uninstall`, `pip uninstall`, `npm uninstall`
+  and `kill -9 1` or `-1`.
+- `file -C` no longer counts as a command that only reads: it writes a
+  compiled magic file.
+- `/api/do/run` refuses a command over 4096 characters.
+- Only the check timer refreshes the knowledge index now. A `spark
+  check --porcelain` over ssh only reports. On Void, `spark update`
+  restarts the check service, so it runs the new tree.
+
 ## v1.55
 
 A program with its own system prompt can have the chat model bare.

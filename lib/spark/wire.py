@@ -460,21 +460,53 @@ def _send(cfg, url, data, timeout, forge=False):
         raise BrainError("down", "%s: %s" % (url, e))
 
 
+# A request shaped by a schema never thinks. A thinking model (qwen3-8b
+# as the ember: the router's [ember] preset keeps the model's default,
+# because a chat gains from it) otherwise spends the whole max_tokens in
+# reasoning_content and answers content "" -- every JSON ask came back
+# empty. This is the template's own switch, read by llama-server; a
+# template without one ignores it, and a FORGE passes the field through.
+# (reasoning_budget 0 in the request did not stop it; this did.) A
+# streamed chat or explain carries no schema and keeps the default.
+NO_THINKING = {"enable_thinking": False}
+THOUGHT_OUT = "the model spent its whole answer thinking and returned no JSON"
+
+
+def _json_body(body, schema):
+    """A request's JSON shape: the schema, and no thinking before it."""
+    body["response_format"] = {"type": "json_schema", "json_schema": {"name": "spark_line", "schema": schema}}
+    body["chat_template_kwargs"] = dict(NO_THINKING)
+    return body
+
+
+def _thought_out(text, finish, reasoning):
+    """Did the cap end a reply that went to thinking and left no JSON: the
+    content empty or not JSON, finish_reason length, and reasoning there."""
+    if finish != "length" or not reasoning:
+        return False
+    try:
+        json.loads(text)
+        return False
+    except (ValueError, TypeError):
+        return True
+
+
 def chat_json(cfg, url, messages, schema, max_tokens=200, temperature=0.2, forge=False, model=None, timeout=None):
     """One JSON object shaped by `schema`, parsed. `model` names the role
     the request is for (spark | ember); the caller decides, the wire
     only carries it. None sends no model field at all. `timeout` (seconds)
-    overrides SPARK_TIMEOUT for this one request."""
-    body = {"messages": messages, "max_tokens": max_tokens, "temperature": temperature,
-            "stream": False, "cache_prompt": True,
-            "response_format": {"type": "json_schema", "json_schema": {"name": "spark_line", "schema": schema}}}
+    overrides SPARK_TIMEOUT for this one request. The request asks for no
+    thinking (NO_THINKING)."""
+    body = _json_body({"messages": messages, "max_tokens": max_tokens, "temperature": temperature,
+                       "stream": False, "cache_prompt": True}, schema)
     if model is not None:
         body["model"] = model
     data = _encode(body)
     with _send(cfg, url, data, timeout or cfg.timeout, forge=forge) as r:
         try:
             d = json.load(r)
-            text = d["choices"][0]["message"]["content"]
+            choice = d["choices"][0]
+            text = choice["message"]["content"]
         except OSError as e:
             if "timed out" in str(e):
                 raise BrainError("timeout", "%s went quiet for %ss mid-reply" % (url, timeout or cfg.timeout))
@@ -483,8 +515,11 @@ def chat_json(cfg, url, messages, schema, max_tokens=200, temperature=0.2, forge
             raise BrainError("bad", "%s returned something that is not a chat completion" % url)
     try:
         return json.loads(text), dict(timings_of(d), **_sent(url, data))
-    except ValueError:
-        raise BrainError("bad", "the model did not return JSON: %s" % text[:80].replace("\n", " "))
+    except (ValueError, TypeError):
+        msg = choice.get("message") if isinstance(choice, dict) else None
+        if isinstance(msg, dict) and _thought_out(text, choice.get("finish_reason"), msg.get("reasoning_content")):
+            raise BrainError("bad", THOUGHT_OUT)
+        raise BrainError("bad", "the model did not return JSON: %s" % str(text or "")[:80].replace("\n", " "))
 
 
 def timings_of(d):
@@ -521,18 +556,19 @@ def chat_stream(cfg, url, messages, on_delta, max_tokens=600, temperature=0.3, f
     `timeout` as in chat_json (the socket timeout: the connect, then each
     read -- a long answer that keeps streaming never trips it). `schema`
     shapes the answer as chat_json's does, the text then that JSON as it
-    streams; `slot` asks for one llama-server slot (LINE_SLOT). A server
-    that refuses the request with the slot in it is asked once more
-    without it: the slot is a speed, never a reason to fail."""
+    streams, with no thinking before it (NO_THINKING); `slot` asks for one
+    llama-server slot (LINE_SLOT). A server that refuses the request with
+    the slot in it is asked once more without it: the slot is a speed,
+    never a reason to fail."""
     body = {"messages": messages, "max_tokens": max_tokens, "temperature": temperature,
             "stream": True, "cache_prompt": True}
     if model is not None:
         body["model"] = model
     if schema is not None:
-        body["response_format"] = {"type": "json_schema", "json_schema": {"name": "spark_line", "schema": schema}}
+        _json_body(body, schema)
     if slot is not None:
         body["id_slot"] = slot
-    out, timings, done = [], {}, False
+    out, timings, done, thought = [], {}, False, False
     data = _encode(body)
     try:
         r = _send(cfg, url, data, timeout or cfg.timeout, forge=forge)
@@ -566,8 +602,10 @@ def chat_stream(cfg, url, messages, on_delta, max_tokens=600, temperature=0.3, f
                 except (KeyError, IndexError, TypeError, AttributeError):
                     pass
                 try:
-                    delta = chunk["choices"][0]["delta"].get("content") or ""
-                except (KeyError, IndexError, TypeError):
+                    part = chunk["choices"][0]["delta"]
+                    delta = part.get("content") or ""
+                    thought = thought or bool(part.get("reasoning_content"))
+                except (KeyError, IndexError, TypeError, AttributeError):
                     continue
                 if delta:
                     out.append(delta)
@@ -587,4 +625,7 @@ def chat_stream(cfg, url, messages, on_delta, max_tokens=600, temperature=0.3, f
         # FORGE proxying its bytes) closes with [DONE]; its absence means
         # the reply was cut off, and the caller must say so.
         raise BrainError("cut", "%s stopped mid-reply -- the answer above is incomplete" % url)
-    return "".join(out), dict(timings, **_sent(url, data))
+    text = "".join(out)
+    if schema is not None and _thought_out(text, timings.get("finish"), thought):
+        raise BrainError("bad", THOUGHT_OUT)
+    return text, dict(timings, **_sent(url, data))

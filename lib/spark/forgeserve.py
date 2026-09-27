@@ -55,6 +55,8 @@ FAILS_PER_MIN = 10              # wrong logins from one address before 429
 TOKEN_MIN = 32                  # a SPARK_FORGE_TOKEN from the environment shorter than this is refused
 V1_MAX_TOKENS = 8192            # the most completion tokens a /v1 request may ask the model for
 BODY_MAX = 1_000_000            # a request body larger than this is 413
+DO_COMMAND_MAX = 4096           # /api/do/run: a longer command is 400 before any pattern reads it
+                                # (a 100 kB line pinned a thread for seconds in is_dangerous)
 LOG_MAX = 1_000_000             # forge.log rotates here, like serve.log
 STATIC = {"index.html": "text/html; charset=utf-8", "spark.css": "text/css; charset=utf-8",
           "spark.js": "text/javascript; charset=utf-8",
@@ -526,6 +528,14 @@ class ForgeServer(ThreadingHTTPServer):
     def models_status(self, url):
         """{role: loaded|unloaded} for /api/health."""
         return dict((a, "loaded" if l else "unloaded") for a, _s, l in self.models_list(url))
+
+    def serving(self, url, model, st):
+        """{stem} the upstream holds loaded -- the router both roles, a
+        single server its one model -- for the model table's serving
+        column; set() when the upstream is not ok."""
+        if st != "ok":
+            return set()
+        return set(stem for _a, stem, loaded in self.models_list(url) if loaded) or {model}
 
     def role_models(self, url):
         """{role: file stem} -- what the page's header and the chat's done
@@ -1051,7 +1061,7 @@ class Handler(BaseHTTPRequestHandler):
         total = mem_total_gb()
         self._json(200, {"name": cfg.name, "total_gb": total, "budget_gb": total * cfg.ai_budget / 100.0,
                          "budget_pct": cfg.ai_budget, "backend": engine.backend(cfg), "cap_note": engine.cap_note(cfg),
-                         "models": modeltab.model_rows(cfg, model if st == "ok" else "")})
+                         "models": modeltab.model_rows(cfg, self.server.serving(_url, model, st))})
 
     def api_config(self):
         from . import model as modeltab, theme
@@ -1062,7 +1072,7 @@ class Handler(BaseHTTPRequestHandler):
             return {k: v for k, v in d.items() if not SECRET_KEY.search(k)}
         self._json(200, {"site": clean(cfg.site_file), "spark": clean(cfg.spark_file),
                          "effective": clean({k: cfg.get(k, "") for k in config.KEYS}),
-                         "themes": theme.palettes(), "models": modeltab.model_rows(cfg, model if st == "ok" else ""),
+                         "themes": theme.palettes(), "models": modeltab.model_rows(cfg, self.server.serving(_url, model, st)),
                          "off": os.path.exists(OFF_FLAG), "service": engine.service_state(cfg),
                          "forge": {"url": self.server.url, "service": engine.forge_service_state(cfg), "mode": cfg.forge}})
 
@@ -1484,7 +1494,8 @@ class Handler(BaseHTTPRequestHandler):
         for a dangerous one; the server holds it to that: a command
         persona.is_dangerous flags runs only with confirmed: true, and a
         control character (a second line, an escape, do.CONTROL) is
-        refused, and a cwd that is not an absolute directory. Nobody
+        refused, a command over DO_COMMAND_MAX characters before any
+        pattern reads it, and a cwd that is not an absolute directory. Nobody
         watches it at a terminal: do.STEP_TIMEOUT is its leash (rc 124,
         the whole process group killed). The log carries a sha256 prefix
         and the truncated text, then the rc. `man` rides the answer when
@@ -1494,6 +1505,8 @@ class Handler(BaseHTTPRequestHandler):
         command, cwd = body.get("command"), body.get("cwd") or ""
         if not isinstance(command, str) or not command.strip():
             return self._error(400, "bad", "command is empty")
+        if len(command) > DO_COMMAND_MAX:
+            return self._error(400, "bad", "a command is at most %d characters" % DO_COMMAND_MAX)
         if do.CONTROL.search(command):
             return self._error(400, "bad", "a command is one line of printable text")
         if not isinstance(cwd, str):

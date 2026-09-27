@@ -98,6 +98,11 @@ def cmd_update(args):
                     if engine.service_state(cfg, unit) == "loaded":
                         if engine.kickstart(cfg, unit, restart=True):
                             say("%s update -- spark-%s restarted on the new tree" % (MARK, unit))
+                # runit has no timer: spark-check is a loop that holds the
+                # old tree and its environment until runsv restarts it
+                if engine.init_shape() == "runit" and engine.service_state(cfg, "check") == "loaded":
+                    if engine.kickstart(cfg, "check", restart=True):
+                        say("%s update -- spark-check restarted on the new tree" % MARK)
             return rc
         say("spark update: no option %s -- spark update -h" % a)
         return 2

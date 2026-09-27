@@ -64,6 +64,18 @@ CARD_COMMANDS = 160   # characters of the top hit's commands on its card (sv's s
 # drops 1 in 4 of the spark wins (54) for 3 fewer wrong ones -- 1.3 is
 # the knee.
 CONFIDENT = 1.3
+# A question about a service may name it the way a habit does (ssh) where
+# this machine's init knows it by another (sshd). When the question says
+# "service", a word of it that begins a service's name here and falls
+# short of it by at most BRIDGE letters counts as naming that service:
+# the machine's own names, never a table of them.
+BRIDGE = 2
+BRIDGED = 3           # names a question may reach that way at most
+# A re-ask for a program that is not here names the installed programs
+# that do the same job: the question's words and the missing name's own,
+# searched in the index, programs alone, each installed.
+ALIKE = 2             # programs named at most
+ALIKE_WHAT = 60       # characters of each one's description
 # the characters a manual's line loses before it rides: C0 and DEL (what
 # text.scrub drops), C1 and the bidi controls (what it keeps) -- the same
 # class the prompt line refuses in a model's command, and the zero-width
@@ -159,6 +171,7 @@ class _Index(object):
         self.raw = raw.get("post") or {}
         self.post = {}
         self.parents = None
+        self.services = None
 
     def postings(self, term):
         got = self.post.get(term)
@@ -246,6 +259,27 @@ def parents(store=None):
     return idx.parents
 
 
+def _bridged(idx, terms):
+    """The words of this machine's service names that a question's own
+    word begins (ssh -> sshd, BRIDGE letters short at most), when the
+    question says "service"; [] otherwise. BRIDGED at most."""
+    kind = words(intake.SERVICE_PREFIX)
+    if not kind or kind[0] not in terms:
+        return []
+    if idx.services is None:
+        idx.services = [words(n[len(intake.SERVICE_PREFIX):]) for n in idx.names
+                        if n.startswith(intake.SERVICE_PREFIX)]
+    out = []
+    for t in dict.fromkeys(terms):
+        if len(t) < 3 or t == kind[0]:
+            continue
+        for parts in idx.services:
+            for p in parts:
+                if p != t and p.startswith(t) and len(p) - len(t) <= BRIDGE and p not in terms and p not in out:
+                    out.append(p)
+    return out[:BRIDGED]
+
+
 def search(words, k=3, store=None):
     """The entries that best match `words` (a question, or a list of
     words), best first: [Hit]."""
@@ -292,8 +326,13 @@ def _card_lines(entry, qterms, qopts):
 
 
 def _what(e):
+    """`name -- what`; a service by the name its init knows it by (the
+    entry's what says it is a service)."""
+    name = e.name
+    if getattr(e, "kind", "") == "service" and name.startswith(intake.SERVICE_PREFIX):
+        name = name[len(intake.SERVICE_PREFIX):]
     what = _safe(e.what)
-    return "%s -- %s" % (_safe(e.name), what) if what else _safe(e.name)
+    return "%s -- %s" % (_safe(name), what) if what else _safe(name)
 
 
 def _block(lines):
@@ -336,8 +375,11 @@ def evidence(question, heads=(), store=None, budget=BUDGET, confident=False):
     terms += [h.lower() for h in heads if h.lower() not in terms]   # apt-get whole, too
     if idx is None or not terms:
         return empty
+    bridged = _bridged(idx, terms)
+    terms += bridged
     ranked, shared = _ranked(idx, terms)
     said = set(re.findall(r"[a-z0-9][\w.+-]*", (question or "").lower())) | {h.lower() for h in heads}
+    said |= set(bridged)
     if confident and not _sure(idx, ranked, shared, said):
         return empty
     entries = []
@@ -382,6 +424,45 @@ def evidence(question, heads=(), store=None, budget=BUDGET, confident=False):
                 return empty
     block = text.hold_secrets(block)[0]          # held again at send time, whole
     return Evidence(block, tuple(e.name for e in entries[:1 + len(others)]), len(block))
+
+
+def alike(question, missing, store=None, present=None, k=ALIKE):
+    """[(name, what)]: the installed programs that do the job the
+    `missing` heads would -- the index searched with the question's words
+    and the missing names, best first; programs alone (no app, no spark
+    verb, no service), none of the missing ones or their subcommands,
+    each sharing FLOOR_WORDS words with the search and scoring SHARE of
+    the first at least, each installed (`present(head)` when given). []
+    when none."""
+    store = default_store(store)
+    idx = _index(store)
+    missing = [m for m in (missing or ()) if m]
+    terms = _terms([question or ""] + missing)
+    if idx is None or not terms or not missing:
+        return []
+    ranked, shared = _ranked(idx, terms)
+    gone = {m.lower() for m in missing}
+    out, top = [], None
+    for i, score in ranked[:20]:
+        name = idx.names[i]
+        head = name.split(" ", 1)[0]
+        if head.lower() in gone or shared.get(i, 0) < FLOOR_WORDS:
+            continue
+        if top is not None and score < SHARE * top:
+            break                                   # far behind the first: a coincidence
+        try:
+            e = store.entry(name)
+        except (OSError, ValueError, TypeError):
+            e = None
+        if e is None or getattr(e, "kind", "") != "program":
+            continue
+        if present is not None and not present(head):
+            continue
+        out.append((_safe(name), _cut(_safe(e.what), ALIKE_WHAT).rstrip(".")))
+        top = score if top is None else top
+        if len(out) >= k:
+            break
+    return out
 
 
 # ------------------------------------------------------------ spark's tree

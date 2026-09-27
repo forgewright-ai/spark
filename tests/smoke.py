@@ -108,6 +108,8 @@ class Stub(BaseHTTPRequestHandler):
             # status; single_model plays a one-model machine (no ember)
             data = [{"id": "stub-7b-q4.gguf", "aliases": ["spark"], "status": {"value": "loaded"}},
                     {"id": "stub-ember-q4.gguf", "aliases": ["ember"], "status": {"value": "loaded"}}]
+            if STATE.get("models_data"):
+                data = STATE["models_data"]      # a router's own listing, set by a test
             return self._send(200, {"data": data[:1] if STATE.get("single_model") else data})
         if self.path == "/api/me":
             # a reinstalled box's page server: one user, one token
@@ -150,6 +152,20 @@ class Stub(BaseHTTPRequestHandler):
         STATE["last_user"] = user                     # the newest user message, for the failure checks
         STATE.setdefault("bodies", []).append(body)   # every request, for the editor's checks
         system = messages[0]["content"]
+        if STATE.get("think_out") and body.get("response_format"):
+            # a thinking model that ignores the switch: the whole cap
+            # spent in reasoning_content, content empty, finish length
+            if not body.get("stream"):
+                return self._send(200, {"choices": [{"message": {"content": "", "reasoning_content": "Let me think."},
+                                                     "finish_reason": "length"}], "timings": TIMINGS})
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.end_headers()
+            for part in ("Let me ", "think."):
+                self.wfile.write(("data: " + json.dumps({"choices": [{"delta": {"reasoning_content": part}}]}) + "\n\n").encode())
+            self.wfile.write(("data: " + json.dumps({"choices": [{"delta": {}, "finish_reason": "length"}], "timings": TIMINGS}) + "\n\n").encode())
+            self.wfile.write(b"data: [DONE]\n\n")
+            return
         if "pasted these lines" in system:           # spark line --paste (contract 4)
             reply = {"summary": "downloads and runs a script" if "curl" in user else "two harmless echo lines",
                      "danger": "curl" in user}
@@ -523,6 +539,12 @@ def know_answer(asked, again):
     if "knowsv" in asked:           # a command word sv's manual does not list (knowsvstuck: kept)
         return cmd("ln -s /etc/sv/sshd /var/service/" if again and "knowsvstuck" not in asked else "sv enable sshd",
                    "enables sshd at boot")
+    if "knowmissing" in asked:      # a head not on this machine; the re-ask names the installed one
+        return cmd("sockview -l" if again else "frobstat -tlnp", "lists the listening ports")
+    if "knowgit" in asked:          # git's own alias is a command (knowgitalias); a word that is none is not
+        if "knowgitno" in asked:
+            return cmd("git checkout main" if again else "git cx main", "switches to main")
+        return cmd("git co main", "switches to main")
     return None
 
 
@@ -550,6 +572,10 @@ def know_store(path):
                "lines": [["down", "stop the service if it is running: send it the TERM signal"]],
                "commands": {"words": ["status", "up", "down", "once", "exit", "start", "stop", "restart"],
                             "prefix": False}},
+        "git": {"kind": "program", "source": "man", "what": "the fast distributed version control system",
+                "synopsis": "git [-C path] <command> [<args>]",
+                "options": {"long": ["--version"], "short": "C", "words": []}, "lines": [],
+                "commands": {"words": ["add", "checkout", "commit", "log", "status", "switch"], "prefix": False}},
         "ls": {"kind": "program", "source": "man", "what": "list directory contents",
                "synopsis": "ls [-ABCFGHLOPRSTUWabcdefghiklmnopqrstuvwxy1%,] [file ...]",
                "options": {"long": [], "short": "ABCFGHLOPRSTUWabcdefghiklmnopqrstuvwxy1", "words": []},
@@ -956,6 +982,11 @@ def knowledge_cases(t):
     bad = [c for c in yes if not judge.read_only(c)] + ["!" + c for c in no if judge.read_only(c)]
     t.ok(not bad, "knowledge: read_only -- every stage a proof as written; wrappers, assignments, redirects, "
          "substitutions, tee, xargs, find, awk, sh -c and the unlisted heads stay marked", str(bad))
+    # v1.56 (the maintainer's word): file -C / --compile writes NAME.mgc
+    t.ok(not judge.read_only("file -C -m x") and not judge.read_only("file --compile -m x")
+         and not judge.read_only("file -bC -m x") and not persona.proof_ok("file -C -m x")
+         and judge.read_only("file x") and judge.read_only("file -b x") and persona.proof_ok("file x"),
+         "knowledge: read_only -- file -C and --compile (they write NAME.mgc) are denied; file x stays read-only")
 
     # the danger lines infosec named for v1.53 (G0, M1 b)
     dang = ["find . -name x -exec rm {} \\;", "find . -execdir shred -u {} +", "find . -ok mv {} /tmp \\;",
@@ -1085,7 +1116,63 @@ def line_knowledge_cases(t, spark, home):
          and lines[1] == "the sv manual has no command enable -- check it before Enter",
          "line knowledge: a command word still unlisted after the re-ask lands, the note names the manual"
          " (the hint it would cut to a fragment is dropped)", repr(lines))
+    # git's own aliases are commands: `git co` where the user's config says
+    # co; a word no alias and no manual names is still asked again
+    gdir = os.path.join(home, ".config", "git")
+    os.makedirs(gdir, exist_ok=True)
+    with open(os.path.join(gdir, "config"), "w") as f:
+        f.write("[user]\n\tname = fixture\n[alias]\n\tco = checkout\n\tst = status ; a comment\n")
+    rc, lines, took, bodies, err = ask("? knowgitalias switch to main")
+    rc2, lines2, _t, bodies2, _e = ask("? knowgitnoalias switch to main")
+    t.ok(rc == 0 and len(bodies) == 1 and lines[:2] == ["cmd\tgit co main", "switches to main"]
+         and len(bodies2) == 2 and lines2[0] == "cmd\tgit checkout main"
+         and "cx is not a command in git's manual here." in bodies2[-1]["messages"][-1]["content"],
+         "line knowledge: a git alias from the user's config is a command (no re-ask); a word nothing names "
+         "is asked again", repr((lines, lines2)))
     from spark import judge as _judge
+    t.ok(_judge.parse_git_aliases("[core]\n\tco = x\n[Alias]\nlg = log\n[alias \"sub\"]\nzz = x\n[alias] ci = commit\n")
+         == frozenset(("lg", "ci")),
+         "line knowledge: git aliases -- the [alias] section alone, any case, a key on the header line; "
+         "a subsection is not one")
+
+    # a head that is not on this machine: the one re-ask names the installed
+    # programs that do its job (the index searched with the question's words
+    # and the missing name, programs on PATH alone) and carries their entries
+    kstore = os.path.join(home, "know-local")
+    kbin = os.path.join(home, "know-bin")
+    os.makedirs(os.path.join(kstore, "entries"), exist_ok=True)
+    os.makedirs(kbin, exist_ok=True)
+    sock = os.path.join(kbin, "sockview")
+    with open(sock, "w") as f:
+        f.write("#!/bin/sh\nexit 0\n")
+    os.chmod(sock, 0o755)
+    from spark import intake as _in
+    local = {
+        "sockview": {"kind": "program", "source": "man", "what": "show the sockets and the ports they listen on",
+                     "synopsis": "sockview [-l]", "options": {"long": [], "short": ["-l"], "words": []},
+                     "lines": ["-l  show only the listening sockets"], "origin": "local", "stamp": []},
+        "ghostsock": {"kind": "program", "source": "man", "what": "show every socket and the port it listens on",
+                      "synopsis": "ghostsock", "options": {"long": [], "short": [], "words": []},
+                      "lines": [], "origin": "local", "stamp": []},
+    }
+    for name, e in local.items():
+        with open(os.path.join(kstore, "entries", _in.entry_file(name)), "w") as f:
+            json.dump(dict(e, name=name), f)
+    with open(os.path.join(kstore, "index.json"), "w") as f:
+        json.dump(_in.index_of([(n, _in.entry_terms(dict(e, name=n))) for n, e in local.items()]), f)
+    menv = {"SPARK_KNOWLEDGE_SNAPSHOT": "", "SPARK_KNOWLEDGE_DIR": kstore,
+            "PATH": kbin + os.pathsep + os.environ.get("PATH", "/usr/bin:/bin")}
+    rc, lines, took, bodies, err = ask("? knowmissing show the listening ports", **menv)
+    um = bodies[-1]["messages"][-1]["content"] if bodies else ""
+    t.ok(rc == 0 and len(bodies) == 2 and lines[:1] == ["cmd\tsockview -l"]
+         and "frobstat is not installed on this machine. Installed here: sockview (show the sockets and the ports "
+             "they listen on)." in um
+         and "\n| sockview -- show the sockets" in um and "ghostsock" not in um,
+         "line knowledge: a re-ask for a program not on this machine names the installed one that does its job, "
+         "its entry as the Reference; one in the index but not installed is never named", repr(lines) + repr(um[-400:]))
+    t.ok("spark: SPARK_KNOWLEDGE_DIR=%s -- a test seam" % kstore in err,
+         "line knowledge: the SPARK_KNOWLEDGE_DIR seam is said on stderr", repr(err[-300:]))
+
     f = _judge.Finding("command", "sv", "enable")
     t.ok(_cli._gap(f) + ", so spark asks again" == "sv has no command enable, so spark asks again"
          and _cli._said(f) == "enable is not a command in sv's manual here.",
@@ -1122,6 +1209,24 @@ def line_knowledge_cases(t, spark, home):
                         "netstat is not on this machine -- check it before Enter") == "netstat is not on this machine -- check it before Enter",
          "line knowledge: a note never follows an end mark or a fragment of the hint")
 
+    # the model's words, tidied before the hint row paints them (v1.56):
+    # its own name as a word is lowercase, never inside a command or a
+    # path; a hint ends without a period, an answer keeps its own
+    t.ok(_cli._tidy("Spark lists the files.") == "spark lists the files"
+         and _cli._tidy("run `Spark status` in ~/Spark or /opt/Spark.") == "run `Spark status` in ~/Spark or /opt/Spark"
+         and _cli._tidy("Spark.app and SPARK_HOME, then Spark's log") == "Spark.app and SPARK_HOME, then spark's log"
+         and _cli._tidy("it waits...") == "it waits..."
+         and _cli._tidy("lists logs, sockets, etc.") == "lists logs, sockets, etc."
+         and _cli._tidy("Spark answers here.", hint=False) == "spark answers here.",
+         "line: Spark as a word becomes spark, never in a command or a path; a hint drops its end period")
+    _te = _cli._Early("/", False, [], None)
+    _te.head = "cmd"
+    _hint = _te.label("Spark lists it.")
+    _te.head = "answer"
+    _ans = _te.second({"hint": "Spark is on this machine."}, final=True)
+    t.ok(_hint == "spark lists it" and _ans == "spark is on this machine.",
+         "line: line 2 is tidied on both paths, the hint and the answer", repr((_hint, _ans)))
+
     # the arms: SPARK_KNOWLEDGE=off is arm off; the seam is read only in bench
     spark("line", stdin="? knowgood a", extra={"SPARK_KNOWLEDGE": "off"})
     r_off = last_turn()
@@ -1150,6 +1255,99 @@ def line_knowledge_cases(t, spark, home):
     t.ok(lines == ["answer", "4"] and lines2 == ["answer", "2"],
          "line knowledge: SPARK_LINE_BENCH_HISTORY rides a bench ?? turn as its history (user and assistant only)",
          repr((lines, lines2)))
+
+
+def engine_wire_cases(t, spark, home, url):
+    """v1.56: a request shaped by a schema never thinks (the ember is a
+    thinking model); one that thought its whole cap away says so; spark
+    model marks every model the router holds; the line's role seam is
+    read in a bench turn alone."""
+    from spark import wire as _wire
+    no_think = {"enable_thinking": False}
+
+    n0 = len(STATE.setdefault("bodies", []))
+    rc, out, _ = spark("line", stdin="? files bigger than 1G this week")
+    line_bodies = STATE["bodies"][n0:]
+    t.ok(rc == 0 and line_bodies and all(b.get("chat_template_kwargs") == no_think and b.get("stream")
+                                          for b in line_bodies),
+         "thinking: the prompt line's streamed JSON asks for no thinking",
+         json.dumps([b.get("chat_template_kwargs") for b in line_bodies]))
+    n0 = len(STATE["bodies"])
+    rc, out, _ = spark("line", "--paste", stdin="echo a\necho b\n")
+    paste = STATE["bodies"][n0:]
+    t.ok(rc == 0 and len(paste) == 1 and not paste[0].get("stream") and paste[0].get("chat_template_kwargs") == no_think,
+         "thinking: a JSON ask in one piece (the paste check) asks for no thinking", json.dumps(paste)[:300])
+    n0 = len(STATE["bodies"])
+    rc, out, _ = spark("what", "does", "this", "mean")
+    plain = STATE["bodies"][n0:]
+    t.ok(rc == 0 and len(plain) == 1 and plain[0].get("stream") and "response_format" not in plain[0]
+         and "chat_template_kwargs" not in plain[0],
+         "thinking: a streamed answer with no schema keeps the model's default", json.dumps(plain)[:300])
+
+    # a model that ignores the switch: the cap spent thinking, no JSON
+    STATE["think_out"] = True
+    try:
+        rc, out, _ = spark("line", stdin="? files bigger than 1G this week")
+        saved = os.environ.get("SPARK_API_KEY")
+        os.environ["SPARK_API_KEY"] = TOKEN
+        try:
+            import types as _types
+            cfg = _types.SimpleNamespace(token_file=os.path.join(home, "no-token"), timeout=5)
+            _wire.chat_json(cfg, url, [{"role": "system", "content": "x"}, {"role": "user", "content": "y"}],
+                            {"type": "object"})
+            said = "no error"
+        except _wire.BrainError as e:
+            said = "%s: %s" % (e.kind, e.hint)
+        finally:
+            if saved is None:
+                os.environ.pop("SPARK_API_KEY", None)
+            else:
+                os.environ["SPARK_API_KEY"] = saved
+    finally:
+        STATE["think_out"] = False
+    t.ok(rc == 1 and out.splitlines() == ["error", _wire.THOUGHT_OUT],
+         "thinking: a streamed reply that thought its whole cap away says so in a sentence", repr(out))
+    t.ok(said == "bad: " + _wire.THOUGHT_OUT,
+         "thinking: a JSON reply in one piece that thought its whole cap away says so (kind bad)", said)
+
+    # spark model: every model the router holds loaded is serving
+    def router(ember_state):
+        def entry(alias, stem, state):
+            return {"id": alias, "aliases": [], "status": {"value": state,
+                    "args": ["llama-server", "--model", "/models/%s.gguf" % stem]}}
+        return [entry("spark", "Qwen_Qwen3-4B-Instruct-2507-Q4_K_M", "loaded"),
+                entry("ember", "Qwen_Qwen3-8B-Q4_K_M", ember_state)]
+
+    def row(out, name):
+        return next((ln for ln in out.splitlines() if re.search(r"\s%s\s" % re.escape(name), ln)), "")
+    env = {"SPARK_NO_APPLY": "1", "SPARK_MEM_TOTAL_GB": "64", "SITE_AI_MODEL": "qwen3-4b", "SITE_EMBER_MODEL": "qwen3-8b"}
+    try:
+        STATE["models_data"] = router("loaded")
+        rc, out, _ = spark("model", "list", extra=env)
+        both = (row(out, "qwen3-4b"), row(out, "qwen3-8b"))
+        STATE["models_data"] = router("unloaded")
+        rc2, out2, _ = spark("model", "list", extra=env)
+        one = (row(out2, "qwen3-4b"), row(out2, "qwen3-8b"))
+    finally:
+        STATE.pop("models_data", None)
+    t.ok(rc == 0 and all("serving" in r for r in both),
+         "spark model: with the router holding both, the spark and the ember rows say serving", repr(both))
+    t.ok(rc2 == 0 and "serving" in one[0] and "serving" not in one[1],
+         "spark model: a model the router lists unloaded is not marked serving", repr(one))
+    # the line's role seam: read in a bench turn alone
+    spark("line", stdin="? files bigger than 1G this week", extra={"SPARK_LINE_ROLE": "ember"})
+    plain_role = STATE.get("model")
+    n0 = len(STATE["bodies"])
+    spark("line", stdin="? files bigger than 1G this week", extra={"SPARK_LINE_BENCH": "1", "SPARK_LINE_ROLE": "ember"})
+    seam = STATE["bodies"][n0:]
+    spark("line", stdin="? files bigger than 1G this week", extra={"SPARK_LINE_BENCH": "1", "SPARK_LINE_ROLE": "nope"})
+    bad_role = STATE.get("model")
+    t.ok(plain_role == "spark" and seam and seam[-1].get("model") == "ember" and bad_role == "spark",
+         "line: SPARK_LINE_ROLE is read under SPARK_LINE_BENCH=1 alone, spark or ember only",
+         repr((plain_role, [b.get("model") for b in seam], bad_role)))
+    t.ok(seam and "pasted these lines" not in seam[-1]["messages"][0]["content"]
+         and seam[-1]["messages"][0]["content"] == line_bodies[-1]["messages"][0]["content"],
+         "line: the role seam keeps the line's own system message (no identity for the ember)")
 
 
 def main():
@@ -1231,6 +1429,45 @@ def main():
              "danger: sv down/exit/force-stop/force-shutdown/kill and xbps-remove; "
              "sv status/check/up/restart, xbps-query and xbps-install -un stay plain",
              str([c for c in _dang if not _pers.is_dangerous(c)] + [c for c in _safe if _pers.is_dangerous(c)]))
+        # v1.56: the named lines the old list missed -- crontab's other
+        # removals, a package gone through snap/flatpak/pip/npm, init
+        # killed. Each with a counterpart that stays plain
+        _v156 = (
+            ("crontab -u USER -r, -ir, -ri",
+             ["crontab -u bob -r", "crontab -ir", "crontab -ri", "crontab -i -r", "crontab -u bob -ir",
+              "crontab -e -u bob -r", "crontab -ir; ls"],
+             ["crontab -l", "crontab -e", "crontab -u bob -l", "crontab -u bob -e", "crontab -i"]),
+            ("snap remove", ["snap remove hello", "snap remove --purge hello"],
+             ["snap list", "snap install hello", "snap info hello"]),
+            ("flatpak uninstall|remove", ["flatpak uninstall org.x.App", "flatpak remove org.x.App",
+                                          "flatpak --user uninstall org.x.App"],
+             ["flatpak list", "flatpak install flathub org.x.App", "flatpak update"]),
+            ("pip|pip3 uninstall", ["pip uninstall requests", "pip3 uninstall -y requests",
+                                    "python3 -m pip uninstall requests", "pip3.11 uninstall x"],
+             ["pip install requests", "pip3 list", "pip show requests"]),
+            ("npm uninstall|remove|rm|un", ["npm uninstall left-pad", "npm remove left-pad", "npm rm left-pad",
+                                            "npm un left-pad", "npm uninstall -g left-pad", "npm -g rm left-pad"],
+             ["npm install", "npm run build", "npm update", "npm ls", "npm i -g left-pad"]),
+            ("kill -9 1, -KILL 1, -s KILL 1", ["kill -9 1", "kill -KILL 1", "kill -s KILL 1", "kill -SIGKILL 1",
+                                               "kill -9 4242 1", "kill -s 9 1", "kill -9 -1", "kill -KILL -1",
+                                               "kill -SIGKILL -1", "kill -s KILL -1", "kill -9 -- -1", "kill -9 -- 1",
+                                               "kill -n 9 1"],
+             ["kill -9 1234", "kill 1234", "kill -9 %1", "kill -9 12", "kill -9 -12", "kill -KILL 10", "kill -s KILL 4242"]),
+        )
+        for _name, _dang, _safe in _v156:
+            t.ok(all(_pers.is_dangerous(c) for c in _dang) and not any(_pers.is_dangerous(c) for c in _safe),
+                 "danger: %s is marked; its read and install forms stay plain" % _name,
+                 str([c for c in _dang if not _pers.is_dangerous(c)] + ["!" + c for c in _safe if _pers.is_dangerous(c)]))
+        # the new lines stay linear: 100 kB of their own worst shape reads in under 0.5 s
+        _worst = ["crontab " + "-u " * 34000, "crontab " + "-i " * 34000 + "x", "flatpak " + "-x " * 34000,
+                  "pip " + "-x " * 34000, "npm " + "-g " * 34000, "kill -9 " + "12 " * 34000]
+        _slow = []
+        for _w in _worst:
+            _t0 = time.time()
+            _pers.is_dangerous(_w[:100000])
+            if time.time() - _t0 >= 0.5:
+                _slow.append((_w[:12], round(time.time() - _t0, 2)))
+        t.ok(not _slow, "danger: the v1.56 lines read 100 kB of their worst shape in under 0.5 s", str(_slow))
         # blast: only the rm segment is counted, a leading cd moves the
         # base, and ~ expands -- `cd X && rm -rf build` counts X/build
         f_cd = _pers.blast("cd %s && rm -rf build" % btree)
@@ -1484,6 +1721,7 @@ def main():
         t.ok(rc == 0 and lines[0] == "cmd\tfrobnicate -h" and lines[1].startswith("frobnicate: not on this machine -- "),
              "guard: SPARK_KNOWLEDGE=off -- a stubborn retry shows the original with v1.52's label", out)
         line_knowledge_cases(t, spark, home)
+        engine_wire_cases(t, spark, home, url)
 
         # ask / explain / the explain symlink
         rc, out, _ = spark("what", "does", "this", "mean")
@@ -4271,10 +4509,25 @@ def main():
 
             def isatty(self):
                 return self.tty
-        t.ok(_chk.unattended(True, False, 0, _Tty(False)) and not _chk.unattended(True, False, 0, _Tty(True))
-             and not _chk.unattended(False, False, 0, _Tty(False)) and not _chk.unattended(True, True, 0, _Tty(False))
-             and not _chk.unattended(True, False, 5, _Tty(False)) and _chk.unattended(True, False, 0, None),
-             "check: only the timer's run is unattended (--porcelain, no --fresh, no --watch, no terminal on stdin)")
+        _tm = {_chk.TIMER_ENV: "1"}
+        t.ok(_chk.unattended(True, False, 0, _Tty(False), _tm) and not _chk.unattended(True, False, 0, _Tty(True), _tm)
+             and not _chk.unattended(False, False, 0, _Tty(False), _tm) and not _chk.unattended(True, True, 0, _Tty(False), _tm)
+             and not _chk.unattended(True, False, 5, _Tty(False), _tm) and _chk.unattended(True, False, 0, None, _tm),
+             "check: only the timer's run is unattended (the units' flag, --porcelain, no --fresh, no --watch, "
+             "no terminal on stdin)")
+        # v1.56: `ssh HOST 'spark check --porcelain'` has no terminal either,
+        # and it is a person's run -- without the units' flag it only reports
+        t.ok(not _chk.unattended(True, False, 0, _Tty(False), {}) and not _chk.unattended(True, False, 0, None, {})
+             and not _chk.unattended(True, False, 0, None, {_chk.TIMER_ENV: "yes"}),
+             "check: a porcelain run with no terminal but without SPARK_CHECK_TIMER=1 is not unattended")
+        _units = [os.path.join(REPO, "linux", "home", ".config", "systemd", "user", "spark-check.service"),
+                  os.path.join(REPO, "templates", ".config", "spark", "sv", "spark-check", "run"),
+                  os.path.join(REPO, "templates", ".config", "spark", "launchd", "spark.check.plist")]
+        _flag = {_units[0]: "Environment=SPARK_CHECK_TIMER=1", _units[1]: "export SPARK_CHECK_TIMER=1",
+                 _units[2]: "<key>SPARK_CHECK_TIMER</key>\n\t\t<string>1</string>"}
+        t.ok(all(_flag[u] in open(u).read() for u in _units) and _chk.TIMER_ENV == "SPARK_CHECK_TIMER",
+             "check: every unit that runs the check every 5 minutes sets SPARK_CHECK_TIMER=1 (systemd, runit, launchd)",
+             str([u for u in _units if _flag[u] not in open(u).read()]))
         t.ok("knowledge" not in _chk.CLIENT_ROWS, "knowledge row: a client keeps its own index, so the row is not a client row")
         rc, out, err = spark("check", "knowledge", "--porcelain", extra={"SPARK_KNOWLEDGE": "maybe"})
         t.ok(rc == 2 and "SPARK_KNOWLEDGE must be on or off" in out + err, "SPARK_KNOWLEDGE=maybe is refused by name", repr(out + err))
@@ -5692,6 +5945,8 @@ print("restart", engine.restart_line("serve"), "|", engine.restart_line("check")
              "%s carries the exit-code hook, the predicate and the marker field" % name)
         t.ok("_spark_offer_fix" in text and "SPARK_EXPLAIN_RC=127" in text and "install it" in text,
              "%s carries the two escalations (127 install, the second-Esc-s fix)" % name)
+        t.ok("_spark_hinted" in text and ("bindkey '^U'" in text or 'bind \'"\\C-u"' in text),
+             "%s clears the hint it drew when Ctrl-U empties the line" % name)
 
     knowledge_cases(t)
     srv.shutdown()

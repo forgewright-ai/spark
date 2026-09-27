@@ -10,9 +10,12 @@
 # -- prose, nothing, a dead spark line, 40 kB -- runs nothing and leaves
 # a working prompt; the streamed line lands its command before the hint,
 # a danger's ! before its command, an answer in the row above an empty
-# prompt, a failure's reason beside the command it kept. Then, in a
-# 40-column tmux pane (skipped without tmux): a question that wraps still
-# gets its hint in the row above an intact prompt.
+# prompt, a failure's reason beside the command it kept; the question
+# stays on the prompt row while spark thinks; Ctrl-U on an emptied line
+# clears the hint spark drew, and only that. Then, in a 40-column tmux
+# pane (skipped without tmux): a question that wraps still gets its hint
+# in the row above an intact prompt, and stays whole on screen while
+# spark thinks.
 #
 #   widget_pty.py bash home/.config/spark/widget.bash
 #   widget_pty.py zsh  home/.config/spark/widget.zsh
@@ -89,6 +92,8 @@ case $line in
   *stream-danger*) printf 'danger\techo DANGER-CMD\n'; sleep 1.5; printf 'removes things\n' ;;
   *stream-answer*) printf 'answer\n'; sleep 1.5; printf 'The answer in words\n' ;;
   *stream-fail*) printf 'cmd\techo FAILED-CMD\n'; sleep 1.5; printf 'the server stopped mid-reply\n'; exit 1 ;;
+  # a model that thinks before line 1 (v1.56): the question stays on screen
+  *slow-think*) sleep 2; printf 'cmd\techo SLOW-CMD\nslow hint\n' ;;
   *fix\ it*) printf 'cmd\techo FIXED-COMMAND\nthe corrected command\n' ;;
   *proof-me*) printf 'cmd\ttrue\nruns true\nproof\ttest -d .\n' ;;
   *) if [ "${SPARK_EXPLAIN_RC:-}" = 127 ]; then
@@ -213,6 +218,33 @@ def wrapped(shell, widget, tmp, env, prompt, ok):
         below = rows[at + 1] if 0 <= at < len(rows) - 1 else ""
         good = at >= 0 and below == prompt + "echo EXECUTED-MARK"
         ok(good, "wrapped question: the hint sits above an intact prompt")
+        if not good:
+            print("       screen:\n" + "\n".join("       |%s|" % r for r in rows))
+
+        # while spark thinks, the question stays on screen whole, wrapped
+        # or not; line 1 then replaces it, nothing of it left below
+        subprocess.run(t + ["send-keys", "C-u"], check=True)
+        until(lambda r: r == prompt.rstrip())
+        q = "? slow-think about every file bigger than a gigabyte"     # 13 + 52 columns: wraps
+        keys(q)
+
+        def thinking(scr):
+            rows = [r.rstrip() for r in scr.splitlines()]
+            at = next((i for i, r in enumerate(rows) if r.startswith(prompt + "? slow")), -1)
+            return (at > 0 and rows[at - 1].startswith("* ") and "SLOW-CMD" not in scr
+                    and "".join(rows[at:at + 2]).replace(" ", "") == (prompt + q).replace(" ", ""))
+        end, scr = time.time() + 1.5, ""
+        while time.time() < end and not thinking(scr):
+            scr = screen()
+            time.sleep(0.1)
+        ok(thinking(scr), "thinking: the wrapped question stays on screen, whole, below the pulse")
+        if not thinking(scr):
+            print("       screen:\n" + "\n".join("       |%s|" % r.rstrip() for r in scr.splitlines()))
+        rows = [r.rstrip() for r in until(lambda r: "slow hint" in r).splitlines()]
+        at = next((i for i, r in enumerate(rows) if "slow hint" in r), -1)
+        good = (0 <= at < len(rows) - 2 and rows[at + 1] == prompt + "echo SLOW-CMD"
+                and not rows[at + 2] and not any("gigabyte" in r for r in rows[at:]))
+        ok(good, "thinking: line 1 replaces the wrapped question, nothing of it left")
         if not good:
             print("       screen:\n" + "\n".join("       |%s|" % r for r in rows))
     finally:
@@ -482,6 +514,47 @@ def main(shell, widget):
         sh.send("\r")
         ok(sh.expect("FAILED-CMD\r\n") or sh.expect("FAILED-CMD\n"),
            "streamed: a failure after line 1 leaves the command in the line", since()[-400:])
+        sh.expect(prompt)
+
+        # 3c2. while spark thinks the question stays on the prompt row
+        # (v1.56). readline clears the row before a bind -x handler runs:
+        # bash writes the prompt and the words back after that clear. zsh
+        # never clears them; tmux proves both on a rendered screen below.
+        since = sh.mark()
+        sh.send("? slow-think here\r")
+        time.sleep(1.0)
+        sh.read(0.2)
+        early = since()
+        if shell == "bash":
+            after = early[early.rfind("\x1b[K"):] if "\x1b[K" in early else ""
+            ok("SLOW-CMD" not in early and prompt + "? slow-think here" in after,
+               "thinking: the prompt and the question are written back after readline clears the row",
+               early[-400:])
+        ok(sh.expect("slow hint", 5) and "SLOW-CMD" in since(), "thinking: line 1 lands after the slow think",
+           since()[-400:])
+        sh.settle()
+
+        # 3c3. Ctrl-U empties the line: the hint spark drew above it goes
+        # too; a row spark did not draw in since the prompt is never touched
+        clear_row = "\x1b7\x1b[1A\r\x1b[2K\x1b8"
+        since = sh.mark()
+        sh.send("\x15")
+        sh.settle()
+        ok(clear_row in since(), "Ctrl-U: an emptied line clears the hint above it", since()[-300:])
+        sh.send("echo UNHINTED\r")
+        sh.expect(prompt)
+        sh.settle()
+        since = sh.mark()
+        sh.send("abc")
+        time.sleep(0.2)
+        sh.send("\x15")
+        sh.settle()
+        ok(clear_row not in since() and "\x1b[1A" not in since(),
+           "Ctrl-U: no hint since the prompt, the row above is left alone", since()[-300:])
+        since = sh.mark()
+        sh.send("echo AFTER-CTRL-U\r")
+        ok(sh.expect("AFTER-CTRL-U\r\n") or sh.expect("AFTER-CTRL-U\n"),
+           "Ctrl-U: the line was emptied, the prompt still works", since()[-300:])
         sh.expect(prompt)
 
         # Enter on a landed command while its hint is still on the way: the

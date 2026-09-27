@@ -10,7 +10,8 @@
 # own TAB completion, so a retired verb fails with no list to keep.
 #
 #   python3 tests/line_audition.py run --os void --model NAME [--url URL]
-#                                      [--arm off|judge|full] [--out FILE]
+#                                      [--arm off|judge|full] [--role spark|ember]
+#                                      [--out FILE]
 #                                      [--subject tools|spark] [--case ID] [-v]
 #   python3 tests/line_audition.py recall --os OS [--k 3] [-v]
 #   python3 tests/line_audition.py collect [--os OS] --out help-OS.json
@@ -43,6 +44,10 @@
 #                                    history [{"role","content"}]: a bench
 #                                    turn keeps no thread, so the pair
 #                                    rides this file instead
+#   SPARK_LINE_ROLE=spark|ember      which role the line's request names
+#                                    (--role): the chat model measured on
+#                                    the line with the line's own prompt,
+#                                    the person's config unchanged
 
 import json
 import math
@@ -67,6 +72,7 @@ sys.path.insert(0, LIB)
 OSES = ("debian", "arch", "void", "macos")
 SUBJECTS = ("tools", "spark")
 ARMS = ("off", "judge", "full")
+ROLES = ("spark", "ember")         # --role: which model answers the line (SPARK_LINE_ROLE)
 HELP_MAX = 4096          # the human-readable part of a snapshot entry
 MAN_MAX = 200000         # a man page read for options (git's is ~150 kB)
 LINES_MAX = 60           # option lines an entry keeps, each its first sentence
@@ -969,7 +975,7 @@ def persona_env(os_name, snap, data, scratch, url):
     env = dict(os.environ)
     env["SPARK_LINE_BENCH"] = "1"          # the turn's numbers, marked bench; no thread
     for k in ("SPARK_EXPLAIN_CMD", "SPARK_EXPLAIN_RC", "SPARK_HINT_ROW", "SPARK_DEBUG",
-              "SPARK_LINE_KNOW", "SPARK_KNOWLEDGE_SNAPSHOT", "SPARK_LINE_BENCH_HISTORY"):
+              "SPARK_LINE_KNOW", "SPARK_KNOWLEDGE_SNAPSHOT", "SPARK_LINE_BENCH_HISTORY", "SPARK_LINE_ROLE"):
         env.pop(k, None)
     stubs = os.path.join(scratch, "bin")
     os.makedirs(stubs, exist_ok=True)
@@ -1100,7 +1106,7 @@ def shown_of(stdout):
 
 def cmd_run(args):
     os_name, model, url, out, subject, only, verbose, snap_path = "", "", "", "", None, set(), False, None
-    arm, store = "", "snapshot"
+    arm, store, role = "", "snapshot", ""
     it = iter(args)
     for a in it:
         if a == "--os":
@@ -1111,6 +1117,8 @@ def cmd_run(args):
             url = next(it, "").rstrip("/")
         elif a == "--arm":
             arm = next(it, "")
+        elif a == "--role":
+            role = next(it, "")
         elif a == "--out":
             out = next(it, "")
         elif a == "--subject":
@@ -1124,14 +1132,16 @@ def cmd_run(args):
         elif a == "-v":
             verbose = True
         else:
-            die("run takes --os OS --model NAME [--url URL] [--arm off|judge|full] [--out FILE] "
-                "[--subject tools|spark] [--case ID] [--store snapshot|local] [-v]")
+            die("run takes --os OS --model NAME [--url URL] [--arm off|judge|full] [--role spark|ember] "
+                "[--out FILE] [--subject tools|spark] [--case ID] [--store snapshot|local] [-v]")
     if os_name not in OSES or not model:
         die("run: say --os (one of %s) and --model NAME (the label the report groups by)" % ", ".join(OSES))
     if subject and subject not in SUBJECTS:
         die("run: --subject is tools or spark")
     if arm and arm not in ARMS:
         die("run: --arm is off, judge or full")
+    if role and role not in ROLES:
+        die("run: --role is spark or ember")
     if store not in ("snapshot", "local"):
         die("run: --store is snapshot (the OS's snapshot, the default) or local (this machine's own index, "
             "for the OS it runs on)")
@@ -1149,6 +1159,8 @@ def cmd_run(args):
         env = persona_env(os_name, snap, data, scratch, url)
         if arm:
             env["SPARK_LINE_KNOW"] = arm
+        if role:
+            env["SPARK_LINE_ROLE"] = role
         if snap and store == "snapshot":
             # the store the line grounds and judges in: this OS's, built
             # once here so no turn pays for the build (--store local: the
@@ -1202,7 +1214,7 @@ def cmd_run(args):
               "grounds in this machine's own store, not %s's" % os_name)
     import hashlib
     doc = {"tool": "line_audition", "version": 1, "os": os_name, "model": model, "url": url,
-           "arm": arm or "default", "ts": time.strftime("%Y-%m-%d %H:%M:%S"), "brief": brief_sha(),
+           "arm": arm or "default", "role": role or "spark", "ts": time.strftime("%Y-%m-%d %H:%M:%S"), "brief": brief_sha(),
            "prefix_sha": hashlib.sha256(prefix.encode()).hexdigest()[:12],
            "prefix_facts": [l for l in prefix.splitlines() if l.startswith(("Package manager", "System tools"))],
            "snapshot": (snap or {}).get("collected"), "cases": results}

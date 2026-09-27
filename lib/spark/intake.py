@@ -48,6 +48,9 @@
 # helpers fill, read from the tree), their slots from bin/spark's
 # USAGE_* text, and each verb's `spark VERB -h`, run with an empty home.
 # A new spark tree rebuilds every entry: the parsers may have changed.
+# Services: the init's own dirs (runit, systemd, launchd; see "services"
+# below), one entry "service NAME" each -- the name the init knows it by,
+# so the prompt line can say sshd where a habit says ssh.
 
 import glob
 import gzip
@@ -80,8 +83,8 @@ from . import text as textmod
 # verb, `words` holds the plain words it takes after it (on, off, list).
 OptionSet = namedtuple("OptionSet", "long short words")
 
-# kind: program | app | spark; source: man | help | pkg | desktop | app |
-# tree; what: one line, what it is; synopsis: how it is called, 3 lines at
+# kind: program | app | spark | service; source: man | help | pkg | desktop |
+# app | tree | runit | systemd | launchd; what: one line, what it is; synopsis: how it is called, 3 lines at
 # most; lines: its option lines, each with its first sentence (a spark
 # verb's: its -h lines); origin: who installed it (dpkg:coreutils,
 # xbps:runit, brew:jq, macos, flatpak, local); stamp: (mtime, size) of
@@ -178,6 +181,27 @@ INDEX_V = 3             # 3: an entry carries its commands, so every store rebui
 FIELDS = ("name", "what", "synopsis", "tags", "lines")
 FIELD_W = (4.0, 3.0, 1.0, 0.5, 0.5)
 FIELD_B = (0.75, 0.75, 0.75, 0.3, 0.3)
+
+
+# ------------------------------------------------------------ the seams
+# SPARK_KNOWLEDGE_DIR, _PATH, _MANPATH, _APPS, _SERVICES, _SOURCES and
+# _SANDBOX point a build at a fixture instead of this machine (the tests,
+# the check's selftest). Each one that is set is said once on stderr, the
+# way grounding says SPARK_KNOWLEDGE_SNAPSHOT: never silently.
+_SEAMS_SAID = set()
+
+
+def _seam(name):
+    """os.environ[name] or None; the first read of a set one says so."""
+    value = os.environ.get(name)
+    if value is not None and name not in _SEAMS_SAID:
+        _SEAMS_SAID.add(name)
+        try:
+            sys.stderr.write("spark: %s=%s -- a test seam: the knowledge index follows it "
+                             "instead of this machine\n" % (name, textmod.scrub(value)[:200]))
+        except (OSError, ValueError):
+            pass
+    return value
 
 
 # ------------------------------------------------------------ processes
@@ -856,12 +880,64 @@ def _page_source(path):
 
 
 _SO = re.compile(r"\A(?:(?:\.\\\"|'\\\"|\.[ \t]*$)[^\n]*\n|[ \t]*\n)*\.so[ \t]+(\S+)", re.M)
+# a request anywhere in a page that makes the renderer read another file:
+# .so (mandoc and groff follow it wherever it stands), and groff's .nx,
+# .cf and .trf (the file's text into the page) and .mso (a macro file,
+# looked up on groff's own macro path)
+_INCLUDE = re.compile(r"^[.'][ \t]*(so|nx|cf|trf|mso)(?![A-Za-z0-9])[ \t]*([^\n]*)$", re.M)
+# a request that could hide one of those from the pattern above: a new
+# control character (.cc, .c2), or one renamed or aliased (.rn, .als)
+_HIDES = re.compile(r"^[.'][ \t]*(?:cc|c2)(?![A-Za-z0-9])|^[.'][ \t]*(?:rn|als)[ \t][^\n]*\b(?:so|nx|cf|trf|mso)\b",
+                    re.M)
+_PLAIN_TARGET = re.compile(r"^[\w.+@,/-]+$")
+
+
+def _target(root, real_root, target):
+    """The file an include names inside the man root, or None when it
+    names none there: empty, not a plain path (a quote, an escape the
+    renderer would expand), absolute, out through `..`, or a real path
+    that leaves the root."""
+    if not _PLAIN_TARGET.match(target or "") or target.startswith("/") or ".." in target.split("/"):
+        return None
+    cand = os.path.join(root, target)
+    if not os.path.exists(cand) and os.path.exists(cand + ".gz"):
+        cand += ".gz"
+    return cand if _under(os.path.realpath(cand), real_root) else None
+
+
+def _inside(src, root, real_root, hops):
+    """Does every include in `src` -- and in each file it reads, `hops`
+    deep -- stay inside the man root? A macro file (.mso) names no path
+    of the root's, so it may only be a plain name. A request split over
+    lines by a backslash-newline (`.s` + backslash, then `o FILE`) is
+    joined first, as the renderer joins it."""
+    src = src.replace("\\\n", "")
+    if _HIDES.search(src):
+        return False
+    for m in _INCLUDE.finditer(src):
+        req, target = m.group(1), m.group(2).strip()
+        if req == "mso":
+            if not _PLAIN_TARGET.match(target) or "/" in target:
+                return False
+            continue
+        cand = _target(root, real_root, target)
+        if cand is None:
+            return False
+        if os.path.exists(cand):
+            sub = _page_source(cand)
+            if sub is not None and (_INCLUDE.search(sub) or _HIDES.search(sub)) \
+                    and (hops <= 0 or not _inside(sub, root, real_root, hops - 1)):
+                return False
+    return True
 
 
 def resolve(path, root, hops=3):
     """(page file, its source) after following `.so` lines inside the man
     root `root` -- never an absolute target, never out through `..`;
-    (None, None) when it leaves, loops or is missing."""
+    (None, None) when it leaves, loops or is missing. The page it lands
+    on is kept only when every include left in it (a `.so` mid-page,
+    which mandoc and groff follow on their own) stays inside the root
+    too: one that points out drops the page whole."""
     real_root = os.path.realpath(root)
     for _ in range(hops + 1):
         src = _page_source(path)
@@ -869,14 +945,9 @@ def resolve(path, root, hops=3):
             return None, None
         m = _SO.match(src)
         if not m:
-            return path, src
-        target = m.group(1)
-        if target.startswith("/") or ".." in target.split("/"):
-            return None, None
-        cand = os.path.join(root, target)
-        if not os.path.exists(cand) and os.path.exists(cand + ".gz"):
-            cand += ".gz"
-        if not _under(os.path.realpath(cand), real_root):
+            return (path, src) if _inside(src, root, real_root, hops) else (None, None)
+        cand = _target(root, real_root, m.group(1))
+        if cand is None:
             return None, None
         path = cand
     return None, None
@@ -892,7 +963,7 @@ def program_dirs(remembered=(), env=True):
     alone when set (tests), else the absolute PATH (unless `env` is
     False), the standard dirs, ~/.local/bin and the dirs an earlier
     build saw -- each once (by real path), each a directory."""
-    seam = os.environ.get("SPARK_KNOWLEDGE_PATH")
+    seam = _seam("SPARK_KNOWLEDGE_PATH")
     if seam is not None:
         cands = seam.split(os.pathsep)
     else:
@@ -933,7 +1004,7 @@ def man_dirs(prog_dirs, env=True):
     (tests), else $MANPATH (unless `env` is False), each program dir's
     ../share/man and ../man, the files that list man dirs, and the
     standard ones."""
-    seam = os.environ.get("SPARK_KNOWLEDGE_MANPATH")
+    seam = _seam("SPARK_KNOWLEDGE_MANPATH")
     if seam is not None:
         cands = seam.split(os.pathsep)
     else:
@@ -956,7 +1027,7 @@ def app_dirs():
     """Where .desktop files and .app bundles live: SPARK_KNOWLEDGE_APPS
     alone when set (tests), else the XDG data dirs' applications/, the
     flatpak exports and, on macOS, the Applications folders."""
-    seam = os.environ.get("SPARK_KNOWLEDGE_APPS")
+    seam = _seam("SPARK_KNOWLEDGE_APPS")
     if seam is not None:
         cands = seam.split(os.pathsep)
     else:
@@ -966,6 +1037,225 @@ def app_dirs():
         if IS_MAC:
             cands += [_tilde(d) for d in MAC_APP_DIRS]
     return [d for d in dict.fromkeys(cands) if d and os.path.isabs(d) and os.path.isdir(d)]
+
+
+# ------------------------------------------------------------ services
+# The services this machine's init knows, read from its own directories
+# -- a listdir and a stat each, the few small files a changed service
+# holds read once; no daemon is asked and no name is listed here. runit:
+# /etc/sv (a dir with a run script each) and /var/service (the enabled
+# ones). systemd: the unit dirs' NAME.service files, enabled when
+# linked from /etc/systemd/system/*.wants, an alias a link to another
+# unit, masked a link to /dev/null. launchd: the plists of the daemon
+# and agent dirs. Each is the entry "service NAME": its words say the
+# manager, the state, the program it starts and its unit's description.
+# SPARK_KNOWLEDGE_SERVICES is a fixture's root: every dir is read under
+# it, and ~ is ROOT/home.
+SERVICE_DIRS = (
+    ("runit", "/etc/sv", "available"),
+    ("runit", "/var/service", "enabled"),
+    ("systemd", "/etc/systemd/system", "admin"),
+    ("systemd", "/usr/local/lib/systemd/system", "unit"),
+    ("systemd", "/usr/lib/systemd/system", "unit"),
+    ("systemd", "/lib/systemd/system", "unit"),
+    ("launchd", "/Library/LaunchDaemons", "daemon"),
+    ("launchd", "/Library/LaunchAgents", "agent"),
+    ("launchd", "~/Library/LaunchAgents", "agent"),
+    ("launchd", "/System/Library/LaunchDaemons", "daemon"),
+)
+SERVICE_PREFIX = "service "          # a service's entry: "service sshd"
+SERVICE_SHAPE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._@+:-]{0,127}$")
+SERVICE_FILE_MAX = 64 * 1024         # a run script, a unit or a plist larger than this is not read
+Service = namedtuple("Service", "name manager role state aliases file st")
+
+
+def service_dirs():
+    """[(manager, dir, role)] of SERVICE_DIRS that are directories here
+    (under SPARK_KNOWLEDGE_SERVICES's root when set), each once by real
+    path, each owned by root or this user and not world-writable."""
+    root = _seam("SPARK_KNOWLEDGE_SERVICES")
+    out, seen = [], set()
+    for manager, d, role in SERVICE_DIRS:
+        if root is not None:
+            d = os.path.join(root, "home", d[2:]) if d.startswith("~/") else os.path.join(root, d.lstrip("/"))
+        else:
+            d = _tilde(d)
+        try:
+            st = os.stat(d)
+        except OSError:
+            continue
+        r = os.path.realpath(d)
+        if stat.S_ISDIR(st.st_mode) and r not in seen and _trusted(st, directory=True):
+            seen.add(r)
+            out.append((manager, d, role))
+    return out
+
+
+def _service_stamp_dirs(dirs):
+    """The dirs whose stamp moves when a service comes, goes or is
+    enabled: the service dirs and systemd's *.wants below the admin's."""
+    out = [d for _m, d, _r in dirs]
+    for manager, d, role in dirs:
+        if role == "admin":
+            out += sorted(glob.glob(os.path.join(d, "*.wants")))
+    return out
+
+
+def scan_services(dirs):
+    """{name: Service} from service_dirs(), the first of a name wins."""
+    out = {}
+    by = {}
+    for manager, d, role in dirs:
+        by.setdefault(manager, []).append((d, role))
+    _runit_services(by.get("runit", ()), out)
+    _systemd_services(by.get("systemd", ()), out)
+    _launchd_services(by.get("launchd", ()), out)
+    return out
+
+
+def _runit_services(places, out):
+    enabled = set()
+    for d, role in places:
+        if role == "enabled":
+            enabled.update(_listdir(d))
+    for d, _role in places:
+        for n in sorted(_listdir(d)):
+            if n in out or not SERVICE_SHAPE.match(n):
+                continue
+            run_file = os.path.join(d, n, "run")
+            try:
+                st = os.stat(run_file)
+            except OSError:
+                continue
+            if stat.S_ISREG(st.st_mode) and _trusted(st):
+                out[n] = Service(n, "runit", "service", "enabled" if n in enabled else "available", (),
+                                 run_file, st)
+
+
+def _systemd_services(places, out):
+    wants = set()
+    for d, role in places:
+        if role == "admin":
+            for w in glob.glob(os.path.join(d, "*.wants")):
+                wants.update(f[:-len(".service")] for f in _listdir(w) if f.endswith(".service"))
+    units, aliases = {}, {}
+    for d, _role in places:
+        for f in sorted(_listdir(d)):
+            stem = f[:-len(".service")] if f.endswith(".service") else ""
+            if not stem or stem.endswith("@") or not SERVICE_SHAPE.match(stem):
+                continue                            # not a unit, or a template with no instance
+            p = os.path.join(d, f)
+            try:
+                lst = os.lstat(p)
+                target = os.readlink(p) if stat.S_ISLNK(lst.st_mode) else ""
+            except OSError:
+                continue
+            if target == "/dev/null":
+                units.setdefault(stem, (p, "masked", lst))
+                continue
+            other = os.path.basename(target)
+            if other.endswith(".service") and other[:-len(".service")] != stem:
+                aliases.setdefault(other[:-len(".service")], []).append(stem)
+                continue
+            try:
+                st = os.stat(p)
+            except OSError:
+                continue
+            if stat.S_ISREG(st.st_mode) and _trusted(st):
+                units.setdefault(stem, (p, "", st))
+    for stem, (p, state, st) in units.items():
+        if stem in out:
+            continue
+        also = tuple(sorted(set(aliases.get(stem, ()))))
+        if not state:
+            state = "enabled" if stem in wants or wants & set(also) else "installed"
+        out[stem] = Service(stem, "systemd", "service", state, also, p, st)
+
+
+def _launchd_services(places, out):
+    for d, role in places:
+        for f in sorted(_listdir(d)):
+            name = f[:-len(".plist")] if f.endswith(".plist") else ""
+            if not name or name in out or not SERVICE_SHAPE.match(name):
+                continue
+            p = os.path.join(d, f)
+            try:
+                st = os.stat(p)
+            except OSError:
+                continue
+            if stat.S_ISREG(st.st_mode) and _trusted(st):
+                out[name] = Service(name, "launchd", role, "", (), p, st)
+
+
+def _started(argv, name):
+    """The program a run line or an ExecStart starts: the word that is
+    the service's own name, else the first absolute path's basename,
+    else the first plain word; '' when none. Options, assignments and
+    redirections are not programs."""
+    got = []
+    for i, w in enumerate(argv):
+        if i == 0 and w[:1] in ("-", "@", ":", "+", "!") and "/" in w:
+            w = w.lstrip("-@:+!")               # ExecStart's prefixes: -/usr/sbin/sshd
+        if not w or w.startswith("-") or "=" in w or "<" in w or ">" in w or "$" in w:
+            continue
+        b = os.path.basename(w)
+        if NAME_SHAPE.match(b):
+            got.append((b, w.startswith("/")))
+    for b, _abs in got:
+        if b == name:
+            return b
+    return next((b for b, a in got if a), got[0][0] if got else "")
+
+
+def read_service(svc):
+    """(what, started) of one Service: the sentence its entry says --
+    the manager, the state, the aliases, the program it starts and the
+    description its unit or plist gives -- and that program's name."""
+    data = b"" if svc.state == "masked" else (_read_bytes(svc.file, SERVICE_FILE_MAX) or b"")
+    started, desc, label, disabled = "", "", "", False
+    if svc.manager == "launchd":
+        try:
+            pl = plistlib.loads(data) if data else {}
+        except Exception:                       # a plist that does not parse: its name alone
+            pl = {}
+        pl = pl if isinstance(pl, dict) else {}
+        args = pl.get("ProgramArguments")
+        args = [a for a in args if isinstance(a, str)] if isinstance(args, list) else []
+        prog = pl.get("Program") if isinstance(pl.get("Program"), str) else ""
+        started = _started([prog] + args if prog else args, svc.name)
+        label = pl.get("Label") if isinstance(pl.get("Label"), str) else ""
+        disabled = pl.get("Disabled") is True
+    else:
+        text = data.decode("utf-8", "replace")
+        if svc.manager == "systemd":
+            m = re.search(r"^[ \t]*Description[ \t]*=[ \t]*(.+)$", text, re.M)
+            desc = m.group(1).strip() if m else ""
+            m = re.search(r"^[ \t]*ExecStart[ \t]*=[ \t]*(.+)$", text, re.M)
+            started = _started(m.group(1).split(), svc.name) if m else ""
+        else:
+            for m in reversed(list(re.finditer(r"^[ \t]*exec[ \t]+(.+)$", text, re.M))):
+                started = _started(m.group(1).split(), svc.name)
+                if started:
+                    break
+    kind = svc.role if svc.manager == "launchd" else "service"
+    # few words beyond the facts: each one is a word a question may share
+    parts = ["a %s %s" % (svc.manager, kind)]
+    if svc.manager == "systemd":
+        parts[0] += " (%s.service)" % svc.name
+    state = {"enabled": "enabled at boot", "available": "not enabled", "installed": "not enabled at boot",
+             "masked": "masked"}.get(svc.state, "")
+    if disabled:
+        state = "disabled by default"
+    if state:
+        parts.append(state)
+    if svc.aliases:
+        parts.append("also named " + ", ".join(svc.aliases))
+    if label and label != svc.name and SERVICE_SHAPE.match(label):
+        parts.append("labelled " + label)
+    if started:
+        parts.append("which starts " + started)
+    what = ", ".join(parts)
+    return (what + " -- " + " ".join(desc.split()) if desc else what), started
 
 
 def _db_paths():
@@ -1006,6 +1296,8 @@ def stamps(meta=None):
     meta = meta or {}
     progs, mans, apps = _places(meta, env=not meta.get("path"))
     paths = list(progs) + list(apps) + _db_paths()
+    if "services" in _sources():
+        paths += _service_stamp_dirs(service_dirs())
     for m in mans:
         paths.append(m)
         paths += [os.path.join(m, "man" + s) for s in SECTIONS]
@@ -1095,11 +1387,16 @@ class Owners:
                 pass
 
     def _xbps(self):
-        rc, out = run(["xbps-query", "-l"], timeout=30)
+        # found on the absolute PATH and run in the one clean environment,
+        # like every other program intake runs: never the caller's own
+        xq = shutil.which("xbps-query", path=abs_path())
+        if not xq:
+            return
+        rc, out = run([xq, "-l"], timeout=30, env=_man_env())
         if rc == 0:
             self.summary.update(parse_xbps_list(out))
         for d in sorted({os.path.dirname(p) for p in self.paths}):
-            rc, out = run(["xbps-query", "-o", os.path.join(d, "*")], timeout=30)
+            rc, out = run([xq, "-o", os.path.join(d, "*")], timeout=30, env=_man_env())
             if rc == 0:
                 for p, pkg in parse_xbps_owners(out).items():
                     if p in self.paths:
@@ -1527,16 +1824,16 @@ def spark_help(verb, scratch):
 def _know_dir(root=None):
     """The store: `root`, else SPARK_KNOWLEDGE_DIR (a fixture's), else
     STATE_DIR/knowledge."""
-    return root or os.environ.get("SPARK_KNOWLEDGE_DIR") or KNOW_DIR
+    return root or _seam("SPARK_KNOWLEDGE_DIR") or KNOW_DIR
 
 
-SOURCES = ("programs", "apps", "spark")
+SOURCES = ("programs", "apps", "spark", "services")
 
 
 def _sources():
     """The sources a build reads: SPARK_KNOWLEDGE_SOURCES (a comma list,
     a fixture's) or all of SOURCES."""
-    seam = os.environ.get("SPARK_KNOWLEDGE_SOURCES")
+    seam = _seam("SPARK_KNOWLEDGE_SOURCES")
     if seam is None:
         return SOURCES
     return tuple(s.strip() for s in seam.split(",") if s.strip() in SOURCES)
@@ -1693,11 +1990,12 @@ def fresh():
 
 
 def row_words(meta=None):
-    """The bootstrap row's words: `N programs, M manuals, A apps, S spark
-    verbs (T s)`."""
+    """The bootstrap row's words: `N programs, M manuals, A apps, V
+    services, S spark verbs (T s)`."""
     m = meta if meta is not None else summary()
-    return "%d programs, %d manuals, %d apps, %d spark verbs (%.1f s)" % (
-        m.get("programs", 0), m.get("manuals", 0), m.get("apps", 0), m.get("verbs", 0), m.get("seconds", 0.0))
+    return "%d programs, %d manuals, %d apps, %d services, %d spark verbs (%.1f s)" % (
+        m.get("programs", 0), m.get("manuals", 0), m.get("apps", 0),
+        (m.get("counts") or {}).get("service", 0), m.get("verbs", 0), m.get("seconds", 0.0))
 
 
 def _open_store(root):
@@ -1841,6 +2139,9 @@ class _Build:
                 jobs.append((key_name, [app.source, app.file] + _key_st(app.st), "app", app))
         if "spark" in src:
             jobs.append(("spark", ["tree", tree], "spark", None))
+        for sname, svc in (scan_services(service_dirs()) if "services" in src else {}).items():
+            jobs.append((SERVICE_PREFIX + sname, ["service", svc.manager, svc.role, svc.state, list(svc.aliases),
+                                                  svc.file] + _key_st(svc.st), "service", svc))
         jobs = jobs[:MAX_ENTRIES]
         todo = []
         for name, key, kind, arg in jobs:
@@ -1868,7 +2169,7 @@ class _Build:
         if not hasattr(self, "_sb"):
             if os.geteuid() == 0:
                 self._sb = "root"
-            elif os.environ.get("SPARK_KNOWLEDGE_SANDBOX") == "none":
+            elif _seam("SPARK_KNOWLEDGE_SANDBOX") == "none":
                 self._sb = "none"
             else:
                 try:
@@ -1893,7 +2194,8 @@ class _Build:
 
     def _xcode(self):
         if not hasattr(self, "_xc"):
-            rc, _out = run(["xcode-select", "-p"], timeout=5)
+            xs = shutil.which("xcode-select", path=abs_path())
+            rc, _out = run([xs, "-p"], timeout=5, env=_man_env()) if xs else (-1, "")
             self._xc = rc == 0
         return self._xc
 
@@ -1989,6 +2291,8 @@ class _Build:
                 self._put(name, key, "program", "man", got, arg[2], owners.of(arg[2])[0], None)
             elif kind == "app":
                 self._app(name, key, arg)
+            elif kind == "service":
+                self._service(name, key, arg)
         for name, key, kind, arg in todo:
             if kind == "spark":
                 self._spark(key, spark_out, verbs)
@@ -2075,6 +2379,16 @@ class _Build:
         self._save(name, key, "app", app.source, what, clean(app.run), OptionSet((), (), ()), [], app.origin,
                    _stamp(app.st), clean.held)
 
+    def _service(self, name, key, svc):
+        clean = _Clean()
+        try:
+            what, _started = read_service(svc)
+        except Exception:                       # a file the reader cannot follow: the name and manager alone
+            log_exc("intake.read_service")
+            what = "a %s service" % svc.manager
+        self._save(name, key, "service", svc.manager, clean(what), "", OptionSet((), (), ()), [], svc.manager,
+                   _stamp(svc.st), clean.held)
+
     def _spark(self, key, out, verbs):
         subs, _v = spark_words()
         slots = spark_slots()
@@ -2142,6 +2456,7 @@ class _Build:
         counts = {"program": sum(1 for d in vals if d["kind"] == "program"),
                   "manual": sum(1 for d in vals if d["kind"] == "program" and d["source"] == "man"),
                   "app": sum(1 for d in vals if d["kind"] == "app"),
+                  "service": sum(1 for d in vals if d["kind"] == "service"),
                   "spark": sum(1 for n, d in self.docs.items() if d["kind"] == "spark" and n != "spark")}
         meta = {"v": INDEX_V, "built": built, "seconds": round(time.monotonic() - self.t0, 1), "fingerprint": fp,
                 "tree": tree, "counts": counts, "programs": counts["program"], "manuals": counts["manual"],

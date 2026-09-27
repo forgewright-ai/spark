@@ -133,6 +133,24 @@ def _restart_server(cfg):
 SOURCE_MARKS = {"repo": " ", "user": "u"}
 
 
+def serving_stems(cfg):
+    """{file stem} of every model the answering server holds loaded: the
+    router lists both roles with a status, a single server its one model
+    (wire.models, the listing the FORGE's /api/health reads too). The
+    brain's own model when the listing says nothing; {} when nothing
+    answers."""
+    from . import wire
+    try:
+        b = wire.resolve_brain(cfg)
+    except wire.BrainError:
+        return set()
+    try:
+        held = {stem for _alias, stem, loaded in wire.models(cfg, b.url, forge=b.forge) if loaded and stem}
+    except wire.BrainError:
+        held = set()
+    return held or {b.model}
+
+
 def model_rows(cfg, serving=None):
     """The model table as data: [{name, gb, ram_gb, fits, downloaded,
     chosen, role, serving, speed, speed_kind, source, mark, tested,
@@ -141,8 +159,9 @@ def model_rows(cfg, serving=None):
     "repo" or "user"; `mark` is the second column's glyph (SOURCE_MARKS:
     blank, `u` yours); `tested` says the row was proven on the line and
     `open` that its license is one auto may take (config.is_open).
-    `serving` is the model name a brain answers with; None
-    asks the brain (the FORGE passes its own). `speed` is tok/s and
+    `serving` is the model name a brain answers with, or a set of them;
+    None asks the brain (the FORGE passes its own): every model the
+    server holds loaded (serving_stems). `speed` is tok/s and
     `speed_kind` "measured" or "estimate" (engine.speed_of)."""
     from . import engine, wire
     # a client serves nothing: its own RAM is no budget, so `fits` is None
@@ -155,11 +174,9 @@ def model_rows(cfg, serving=None):
         if r and r[1] not in role_of:
             role_of[r[1]] = role
     if serving is None:
-        serving = ""
-        try:
-            serving = wire.resolve_brain(cfg).model
-        except wire.BrainError:
-            pass
+        serving = serving_stems(cfg)
+    serving = {serving} if isinstance(serving, str) else set(serving)
+    serving.discard("")
     out = []
     for row in config.model_tables():
         name, fname, _url, nbytes, _sha, ram, source, tested, license_, note, ground = row
@@ -167,7 +184,7 @@ def model_rows(cfg, serving=None):
         out.append({"name": name, "gb": round(nbytes / 2**30, 1), "ram_gb": ram, "fits": (ram <= budget) if budget is not None else None,
                     "downloaded": os.path.isfile(os.path.join(cfg.models_dir, fname)),
                     "chosen": fname == chosen, "role": role_of.get(fname, ""),
-                    "serving": bool(serving) and fname.replace(".gguf", "") == serving,
+                    "serving": fname.replace(".gguf", "") in serving,
                     "speed": speed, "speed_kind": kind, "source": source,
                     "mark": SOURCE_MARKS.get(source, " "), "tested": tested,
                     "license": license_, "open": config.is_open(license_), "note": note,

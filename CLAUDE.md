@@ -217,8 +217,8 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 --porcelain (contract 15) -- the budget, the hold, the man excerpt)
                 intake grounding judge (the prompt line's knowledge, three
                 contexts: intake reads what this machine can run -- its
-                manuals, its apps, spark's own verbs -- into the store outside
-                the hot path; grounding picks the entries that go with one
+                manuals, its apps, its services, spark's own verbs -- into
+                the store outside the hot path; grounding picks the entries that go with one
                 question; judge checks a proposed command against them)
                 sandbox (spark do --sandbox: the probe, the copy the kernel keeps
                 the steps inside, the review, the apply bound to it, a run's
@@ -509,8 +509,8 @@ and may change freely.
    none of `persona.PROOF_DENIED` anywhere in argv. That list holds the
    options that make a read-only head write or run something:
    `--output`, `-o`, `--ext-diff`, `--textconv`, `tail -f`, `git -c`,
-   `-exec`, `-delete` and more. A one-letter option is caught inside a
-   cluster too. The widgets show the proof in the hint row after the
+   `-exec`, `-delete`, `file -C` and more. A one-letter option is
+   caught inside a cluster too, with a value glued on or not. The widgets show the proof in the hint row after the
    command runs and offer it on `Esc s`. `spark do` offers it after each
    confirmed step like a step of its own: Enter runs it,
    `do.PROOF_TIMEOUT` seconds at most. `e` edits it, and the edit runs
@@ -925,6 +925,8 @@ and may change freely.
    `do.man_excerpt`'s lines, and the page appends it to the feedback it
    proposes on, as the prompt line does. A control character in the
    command (`do.CONTROL`) is refused: 400, one line of printable text.
+   So is a command over `forgeserve.DO_COMMAND_MAX` (4096) characters,
+   before any pattern reads it.
    Both do routes take `cwd` as sent (`HOME` when empty) and refuse one
    with a control character or that is not the absolute path of a
    directory (400). A command `persona.is_dangerous` flags runs only
