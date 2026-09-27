@@ -530,6 +530,9 @@ Headless. On the machine that stays on, `spark headless on`:
   the verbs print the line. `off` puts the login agents back.
 - WSL 2 stops with its last window, so `spark headless on` refuses
   there.
+- A machine that starts before its network has no LAN address yet. The
+  model and the page then wait for one, as long as it takes, and start
+  when it comes. Their log says so.
 
 Then point every laptop at it with `spark client URL`, and every phone
 at the page: one address, one identity, the same answers everywhere.
@@ -679,15 +682,17 @@ Void:
   update-grub`. The last line wins, and your own lines stay as they
   are.
 - runit prints its own lines at boot and shutdown, and the kernel's
-  `quiet` does not reach them. So spark also appends 10 marked lines to
+  `quiet` does not reach them. So spark also appends 11 marked lines to
   `/etc/rc.conf`, which runit reads before its scripts. They hide
-  runit's `=>` lines and its welcome. They also hide what a clean boot
-  prints: the fsck summary, the sysctl values, the module list, the
-  seed lines and the `ok:` lines at shutdown.
-- A warning, an error and a fsck that finds a problem still print.
-  `spark quiet boot off` deletes the marked lines from both files.
-  GRUB still shows its 2 loading lines for a moment: Void's GRUB has
-  no switch for them.
+  runit's `=>` lines. They also hide what a clean boot prints: the fsck
+  summary, the sysctl values, the module list, seedrng's lines and the
+  `ok:` lines at shutdown.
+- A few lines come from runit itself and no file reaches them. So 2
+  marked lines in `/etc/sv/agetty-tty1/conf` let the login prompt clear
+  the screen after a clean boot.
+- A boot with a warning, an error, a fsck that finds a problem or a
+  critical kernel line keeps its whole screen. `spark quiet boot off`
+  deletes the marked lines from the 3 files.
 - The palette at boot is yours. `spark theme` paints this console now.
   One `setvtrgb` line in `/etc/rc.local`, naming your
   `~/.config/spark/console-colors.rgb` by its full path, paints it at
@@ -777,7 +782,7 @@ running `./bootstrap.sh` does the same.
 | `SITE_THEME` | `none`, or a palette from `themes/` or `~/.config/spark/themes/` -- `spark theme NAME` | `none` |
 | `SITE_FONT_FACE` / `SITE_FONT_SIZE` | Linux console: a face and size from `spark font list`, such as `Terminus` `16x32`. macOS: Terminal.app's font and points -- `spark font FACE SIZE`. The file is console-setup's on Debian, `/etc/vconsole.conf` on Arch and `/etc/rc.conf` on Void. Refused on WSL 2 | unset / `16x32` on Linux, `Menlo-Regular` / `13` on macOS |
 | `SITE_QUIET_LOGIN` | Linux: `yes` bares the login: the motd and `/etc/issue`, originals kept -- `spark quiet login on` | `no` |
-| `SITE_QUIET_BOOT` | Linux: `yes` makes the boot silent with one drop-in, GRUB's on Debian or `/etc/cmdline.d` on an Arch kernel image, or marked lines at the end of `/etc/default/grub` and `/etc/rc.conf` on Void -- `spark quiet boot on`. Refused on WSL 2, on an Arch without a UKI and on a Void without GRUB | `no` |
+| `SITE_QUIET_BOOT` | Linux: `yes` makes the boot silent with one drop-in, GRUB's on Debian or `/etc/cmdline.d` on an Arch kernel image, or marked lines at the end of `/etc/default/grub`, `/etc/rc.conf` and `/etc/sv/agetty-tty1/conf` on Void -- `spark quiet boot on`. Refused on WSL 2, on an Arch without a UKI and on a Void without GRUB | `no` |
 | `SITE_QUIET_START` | `yes`: no banner, and one-line `serve`, `forge` and bare `spark` -- `spark quiet start on` | `no` |
 | `SITE_QUIET_AUDIO` | `yes`: no sound from spark -- `spark quiet audio on` | `no` |
 

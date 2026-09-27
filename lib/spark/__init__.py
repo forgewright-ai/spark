@@ -443,6 +443,26 @@ def lan_ip():
         return ""
 
 
+
+LAN_WAIT_SECONDS = 5
+
+
+def wait_lan_ip(foreground, name):
+    """The LAN address a server binds. A person gets '' at once, and the
+    caller says so. A service waits for as long as it takes: a machine
+    whose link comes up late, or never at boot, must not end with its
+    servers off for good (an exit 78 is never restarted). It says so
+    once, then again when the address comes."""
+    ip = lan_ip()
+    if ip or not foreground:
+        return ip
+    say("%s %s -- no LAN address yet: waiting for one (SPARK_%s_HOST names one)" % (MARK, name, name.upper()))
+    while not ip:
+        time.sleep(LAN_WAIT_SECONDS)
+        ip = lan_ip()
+    say("%s %s -- the LAN address is %s" % (MARK, name, ip))
+    return ip
+
 def bind_check(host):
     """What binding `host` would mean: ("refuse", why) for the unspecified
     address in any spelling, ("warn", why) for an address neither private

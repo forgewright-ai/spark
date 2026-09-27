@@ -40,7 +40,8 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from . import (BAR_CACHE, CHECK_JSON, CONFIG_DIR, EMBER_TOKEN_FILE, FORGE_LOCK, FORGE_LOG, FORGE_PID,
                FORGE_URL_FILE, HOME, IS_MAC, MARK, OFF_FLAG, REPO, SERVE_URL_FILE, SPARK_ENV,
-               bind_check, config, forge_url, lan_ip, log_exc, own_hostnames, say, state_dir, wait_ready)
+               bind_check, config, forge_url, lan_ip, log_exc, own_hostnames, say, state_dir, wait_lan_ip,
+               wait_ready)
 from . import engine, mem_total_gb, qr, wire
 from . import version as _version
 
@@ -1598,17 +1599,6 @@ def _bind_refused(host):
     return ""
 
 
-def _wait_lan_ip(foreground):
-    """At login the network may not be up yet; a unit waits, a person does not."""
-    ip = lan_ip()
-    tries = 60 if foreground else 1
-    while not ip and tries > 1:
-        time.sleep(5)
-        tries -= 1
-        ip = lan_ip()
-    return ip
-
-
 def _host_port(cfg, args, foreground):
     host = port = ""
     if "--host" in args:
@@ -1617,7 +1607,7 @@ def _host_port(cfg, args, foreground):
     if "--port" in args:
         i = args.index("--port")
         port = args[i + 1] if i + 1 < len(args) else ""
-    host = host or cfg.forge_host or _wait_lan_ip(foreground)
+    host = host or cfg.forge_host or wait_lan_ip(foreground, "forge")
     try:
         port = int(port) if port else cfg.forge_port
     except ValueError:

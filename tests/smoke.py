@@ -611,6 +611,48 @@ class T:
         print("  skip %s   (%s)" % (what, why))
 
 
+def lan_wait_cases(t):
+    """v1.58: a server's LAN address. A person gets '' at once (the verb
+    says so, exit 78); a service waits for as long as it takes and says
+    so twice, because an exit 78 is never restarted and a box whose link
+    came up late kept its servers off for good."""
+    import contextlib
+    import io
+    import spark
+    answers = [""] * 71 + ["192.0.2.7"]    # past the old 60 looks (5 minutes) that ended in an exit 78
+    naps = []
+    real_lan, real_sleep = spark.lan_ip, spark.time.sleep
+    spark.lan_ip = lambda: answers.pop(0) if answers else "192.0.2.7"
+    spark.time.sleep = naps.append
+    try:
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            got = spark.wait_lan_ip(True, "serve")
+        t.ok(got == "192.0.2.7" and len(naps) == 71 and set(naps) == {spark.LAN_WAIT_SECONDS},
+             "a service waits for the LAN address as long as it takes, %d s a look" % spark.LAN_WAIT_SECONDS,
+             "%r %r" % (got, naps))
+        said = out.getvalue().splitlines()
+        t.ok(said == ["spark serve -- no LAN address yet: waiting for one (SPARK_SERVE_HOST names one)",
+                      "spark serve -- the LAN address is 192.0.2.7"],
+             "the wait says so once, then the address when it comes", said)
+        answers[:] = [""]
+        naps[:] = []
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            got = spark.wait_lan_ip(False, "forge")
+        t.ok(got == "" and not naps and not out.getvalue(),
+             "a person gets no address at once, with no wait and no line (the verb says why)", "%r %r" % (got, naps))
+        answers[:] = ["192.0.2.8"]
+        got = spark.wait_lan_ip(True, "forge")
+        t.ok(got == "192.0.2.8" and not naps, "an address already there is taken with no wait", "%r %r" % (got, naps))
+    finally:
+        spark.lan_ip, spark.time.sleep = real_lan, real_sleep
+    for mod in ("serve", "forgeserve"):
+        src = open(os.path.join(REPO, "lib", "spark", mod + ".py")).read()
+        t.ok("_wait_lan_ip" not in src and "wait_lan_ip(" in src,
+             "%s waits through spark.wait_lan_ip, the one wait" % mod)
+
+
 def knowledge_cases(t):
     """v1.53, the prompt line's knowledge: the contexts' import rules,
     shell_map from the tree, BM25 and the evidence block on a fixture
@@ -5949,6 +5991,7 @@ print("restart", engine.restart_line("serve"), "|", engine.restart_line("check")
              "%s clears the hint it drew when Ctrl-U empties the line" % name)
 
     knowledge_cases(t)
+    lan_wait_cases(t)
     srv.shutdown()
     print("smoke: %s" % ("all ok" if not t.fail else "%d FAILED" % t.fail))
     return 1 if t.fail else 0

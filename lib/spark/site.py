@@ -49,24 +49,34 @@ GRUB_WANT = ["GRUB_TIMEOUT=0", "GRUB_TIMEOUT_STYLE=hidden",
 
 
 # Void's runit prints its own lines at boot and shutdown, which the
-# kernel's `quiet` never reaches: stages 1 and 3 source /etc/rc.conf after
-# /etc/runit/functions, so spark appends these there, marked the same way
-# (bootstrap.sh rc_want is the twin). Inert outside the two stages; msg
-# says nothing, the welcome is erased, a clean fsck, sysctl's values, the
-# module list, seedrng and sv's `ok:` lines stay off the screen. A
-# warning, an error, stderr and a fsck that finds something still print.
+# kernel's `quiet` never reaches (bootstrap.sh rc_want and getty_want are
+# the twins, the mark GRUB's). /etc/rc.conf is sourced by runit's stages
+# 1 and 3 before their scripts: there msg says nothing, and a clean fsck,
+# sysctl's values, the module list, seedrng and sv's `ok:` lines stay off
+# the screen. A warning, an error and a fsck that finds something print
+# and leave a mark in /run. The getty's conf (every getty sources tty1's)
+# drops tty1's --noclear after a clean boot: no mark, no critical kernel
+# line. A boot that marked keeps its whole screen.
+BOOT_LOUD = '"${SPARK_BOOT_LOUD:-/run/spark-boot-loud}"'
 RC_WANT = [
     "# spark quiet boot on wrote these lines, spark quiet boot off removes them",
     "case $0 in */runit/[13])",
     "msg() { :; }",
-    "[ \"${0##*/}\" = 1 ] && [ -t 1 ] && printf '\\033[1A\\033[2K'",
-    "fsck() { _spark_out=$(command fsck \"$@\" 2>&1); _spark_rc=$?; "
-    "[ \"$_spark_rc\" = 0 ] || printf '%s\\n' \"$_spark_out\"; return \"$_spark_rc\"; }",
-    "sysctl() { if [ \"$1\" = -p ]; then command sysctl \"$@\" >/dev/null; else command sysctl \"$@\"; fi; }",
-    "seedrng() { command seedrng \"$@\" >/dev/null; }",
-    "sv() { command sv \"$@\" | grep -v '^ok: '; }",
+    r'msg_warn() { { : >%s; } 2>/dev/null; printf "\033[1m\033[33mWARNING: $@\033[m\n"; }' % BOOT_LOUD,
+    r'msg_error() { { : >%s; } 2>/dev/null; printf "\033[1m\033[31mERROR: $@\033[m\n"; }' % BOOT_LOUD,
+    r"""fsck() { _spark_out=$(command fsck "$@" 2>&1); _spark_rc=$?; [ "$_spark_rc" = 0 ] """
+    r"""|| { printf '%%s\n' "$_spark_out"; { : >%s; } 2>/dev/null; }; return "$_spark_rc"; }""" % BOOT_LOUD,
+    """sysctl() { if [ "$1" = -p ]; then command sysctl "$@" >/dev/null; else command sysctl "$@"; fi; }""",
+    """seedrng() { command seedrng "$@" >/dev/null; }""",
+    """sv() { command sv "$@" | grep -v '^ok: '; }""",
     "alias modules-load='modules-load >/dev/null'",
     "esac",
+]
+GETTY_CONF = os.environ.get("SPARK_ETC_GETTY_CONF", "/etc/sv/agetty-tty1/conf")
+GETTY_WANT = [
+    "# spark quiet boot on wrote these lines, spark quiet boot off removes them",
+    """[ -e %s ] || [ -n "$(dmesg -l emerg,alert,crit 2>/dev/null)" ] """
+    """|| GETTY_ARGS=$(printf '%%s' "$GETTY_ARGS" | sed 's/--noclear//')""" % BOOT_LOUD,
 ]
 
 
@@ -91,6 +101,11 @@ def grub_marked():
 def rc_marked():
     """The lines spark appended to /etc/rc.conf, marker off."""
     return _marked(RCCONF)
+
+
+def getty_marked():
+    """The lines spark appended to the getty's conf, marker off."""
+    return _marked(GETTY_CONF)
 
 
 def has_update_grub():

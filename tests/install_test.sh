@@ -445,7 +445,7 @@ SH
             SPARK_ETC_SV="$V/sv-etc" SPARK_ETC_CONSOLE_SETUP="$V/no-console-setup" SPARK_ETC_VCONSOLE="$V/no-vconsole" SPARK_ETC_RCCONF="$V/rc.conf" \
             SPARK_ETC_MKINITCPIO_D="$T/no-mkinitcpio.d" SPARK_ETC_CMDLINE_DROPIN="$T/no-cmdline.conf" \
             SPARK_ETC_MOTD="$T/etc/motd" SPARK_ETC_ISSUE="$T/etc/issue" SPARK_ETC_UNAME_MOTD="$T/etc/10-uname" \
-            SPARK_ETC_DEFAULT_GRUB="$V/no-default-grub" \
+            SPARK_ETC_DEFAULT_GRUB="$V/no-default-grub" SPARK_ETC_GETTY_CONF="$V/getty-conf" \
             SPARK_SHARE_TOKEN="$V/no-share-token" SPARK_SHARE_URL="$V/no-share-url" \
             SV_LOG="$V/sv.log" PATH="$V/bin:$T/bin:$PATH" "$@"
     }
@@ -471,18 +471,22 @@ SH
     #       with the key off they would go. A dry run never calls sudo
     printf '#!/bin/sh\nexit 0\n' > "$V/bin/update-grub"; chmod +x "$V/bin/update-grub"
     printf 'GRUB_TIMEOUT=5\nGRUB_CMDLINE_LINUX_DEFAULT="loglevel=4"\n' > "$V/default-grub"
+    printf 'if [ -x /sbin/agetty -o -x /bin/agetty ]; then\n\tif [ "${tty}" = "tty1" ]; then\n\t\tGETTY_ARGS="--noclear"\n\tfi\nfi\n' > "$V/getty-conf"
     out=$(vrun SPARK_ETC_DEFAULT_GRUB="$V/default-grub" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Void, GRUB) failed: $out"
-    printf '%s\n' "$out" | grep -qE '^would +quiet-boot +3 marked lines at the end of .*default-grub and 10 at the end of .*rc.conf; update-grub \(sudo\)$' && ok "Void with GRUB: the quiet-boot row would append 3 marked lines to GRUB's file and 10 to rc.conf, then update-grub" || bad "Void GRUB quiet-boot row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
+    printf '%s\n' "$out" | grep -qE '^would +quiet-boot +marked lines at the end of .*default-grub \(3\), .*rc.conf \(11\) and .*getty-conf \(2\); update-grub \(sudo\)$' && ok "Void with GRUB: the quiet-boot row would append marked lines to GRUB's file, rc.conf and the getty's conf, then update-grub" || bad "Void GRUB quiet-boot row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
     PYTHONPATH="$REPO/lib" python3 -c 'from spark import site; print("\n".join(l + " " + site.GRUB_MARK for l in site.GRUB_WANT))' >> "$V/default-grub"
     out=$(vrun SPARK_ETC_DEFAULT_GRUB="$V/default-grub" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Void, GRUB marked) failed: $out"
     printf '%s\n' "$out" | grep -qE '^would +quiet-boot ' && ok "Void with GRUB marked, rc.conf not: the row still would write (both halves or none)" || bad "Void GRUB half row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
     PYTHONPATH="$REPO/lib" python3 -c 'from spark import site; print("\n".join(l + " " + site.GRUB_MARK for l in site.RC_WANT))' >> "$V/rc.conf"
     out=$(vrun SPARK_ETC_DEFAULT_GRUB="$V/default-grub" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Void, GRUB and rc.conf marked) failed: $out"
-    printf '%s\n' "$out" | grep -qE '^ok +quiet-boot +silent' && ok "Void with GRUB: the marked lines site.GRUB_WANT and site.RC_WANT write are bootstrap's (the twins agree)" || bad "Void GRUB ok row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
+    printf '%s\n' "$out" | grep -qE '^would +quiet-boot ' && ok "Void with GRUB and rc.conf marked, the getty not: the row still would write" || bad "Void getty half row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
+    PYTHONPATH="$REPO/lib" python3 -c 'from spark import site; print("\n".join(l + " " + site.GRUB_MARK for l in site.GETTY_WANT))' >> "$V/getty-conf"
+    out=$(vrun SPARK_ETC_DEFAULT_GRUB="$V/default-grub" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Void, all three marked) failed: $out"
+    printf '%s\n' "$out" | grep -qE '^ok +quiet-boot +silent' && ok "Void with GRUB: the marked lines site.GRUB_WANT, RC_WANT and GETTY_WANT write are bootstrap's (the twins agree)" || bad "Void GRUB ok row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
     grep -q '^GRUB_TIMEOUT=5$' "$V/default-grub" && grep -q '^GRUB_CMDLINE_LINUX_DEFAULT="loglevel=4"$' "$V/default-grub" && ok "Void with GRUB: your own lines stay as they are" || bad "Void default grub: $(cat "$V/default-grub")"
     printf 'SITE_QUIET_BOOT=no\nSITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
     out=$(vrun SPARK_ETC_DEFAULT_GRUB="$V/default-grub" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Void, GRUB, off) failed: $out"
-    printf '%s\n' "$out" | grep -qE "^would +quiet-boot +remove spark's marked lines from .*default-grub and .*rc.conf; update-grub \(sudo\)$" && ok "Void with GRUB, key off: the marked lines would go from both files" || bad "Void GRUB off row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
+    printf '%s\n' "$out" | grep -qE "^would +quiet-boot +remove spark's marked lines from .*default-grub, .*rc.conf and .*getty-conf; update-grub \(sudo\)$" && ok "Void with GRUB, key off: the marked lines would go from the three files" || bad "Void GRUB off row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
     printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "Void GRUB dry-run called sudo" || ok "Void GRUB dry-run: no sudo"
     rm -f "$V/bin/update-grub"
     printf 'SITE_FONT_FACE=Terminus\nSITE_FONT_SIZE=16x32\nSITE_QUIET_BOOT=yes\nSITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
@@ -564,13 +568,15 @@ SH
 fi
 
 # 12. Void's quiet boot at work, on both OSes (plain sh): a stand-in
-#     for runit's stage (its msg and msg_warn, the welcome, rc.conf
-#     sourced, then a core service) over stubs that print what the real
-#     tools print. Only the warning, stderr, a value asked for, sv's
-#     timeout and a fsck that found something may reach the screen; the
-#     same file outside a runit stage changes nothing. sh here, dash too
+#     for runit's stage (its msg, the welcome, rc.conf sourced, then a
+#     core service) over stubs that print what the real tools print. A
+#     clean stage shows only stderr, a value asked for and sv's timeout,
+#     and leaves no mark; a warning or a fsck that found something prints
+#     and leaves the mark; the same file outside a runit stage changes
+#     nothing. Then the getty's conf: tty1 loses --noclear only after a
+#     clean boot (no mark, no critical kernel line). sh here, dash too
 #     when it is on PATH (Void's /bin/sh)
-S=$T/void-stage; mkdir -p "$S/runit" "$S/other" "$S/bin"
+S=$T/void-stage; mkdir -p "$S/runit" "$S/other" "$S/bin" "$S/crit"
 PYTHONPATH="$REPO/lib" python3 -c 'from spark import site; print("\n".join(l + " " + site.GRUB_MARK for l in site.RC_WANT))' > "$S/rc.conf"
 for tool in fsck sysctl seedrng sv modules-load; do
     cat > "$S/bin/$tool" <<'SH'
@@ -585,10 +591,13 @@ esac
 SH
     chmod +x "$S/bin/$tool"
 done
+printf '#!/bin/sh\n' > "$S/bin/dmesg"
+printf '#!/bin/sh\necho "kernel: a critical line"\n' > "$S/crit/dmesg"
+chmod +x "$S/bin/dmesg" "$S/crit/dmesg"
 cat > "$S/core.sh" <<'SH'
 msg "Mounting pseudo-filesystems..."
 modules-load -v | tr '\n' ' '
-msg_warn "a warning stays"
+[ -n "$WARN" ] && msg_warn "a warning stays"
 fsck -A -T -a
 echo "fsck said $?"
 sysctl -p /fixture.conf
@@ -605,15 +614,38 @@ msg "Welcome to Void!"
 . "$S/core.sh"
 SH
 done
+printf '#!/bin/sh\ntty=$1; GETTY_ARGS=\n' > "$S/getty"
+cat >> "$S/getty" <<'SH'
+if [ -x /sbin/agetty -o -x /bin/agetty -o -n "$FAKE_AGETTY" ]; then
+	if [ "${tty}" = "tty1" ]; then
+		GETTY_ARGS="--noclear"
+	fi
+fi
+SH
+PYTHONPATH="$REPO/lib" python3 -c 'from spark import site; print("\n".join(l + " " + site.GRUB_MARK for l in site.GETTY_WANT))' >> "$S/getty"
+printf 'echo "args=$GETTY_ARGS"\n' >> "$S/getty"
+warn=$(printf '\033[1m\033[33mWARNING: a warning stays\033[m')
 for shell in sh dash; do
     command -v "$shell" >/dev/null 2>&1 || continue
-    out=$(PATH="$S/bin:$PATH" "$shell" "$S/runit/1" 2>&1)
-    want=$(printf '%s\n' "=> Welcome to Void!" "WARNING: a warning stays" "fsck said 0" "sysctl: fixture error" "1" "timeout: slow: 7s")
-    [ "$out" = "$want" ] && ok "Void quiet boot ($shell): a runit stage prints only the warning, stderr, a value asked for and sv's timeout" || bad "Void quiet stage ($shell): $out"
-    out=$(FSCK_RC=1 PATH="$S/bin:$PATH" "$shell" "$S/runit/1" 2>&1)
-    printf '%s\n' "$out" | grep -q '^/dev/fixture: clean' && printf '%s\n' "$out" | grep -q '^fsck said 1$' && ok "Void quiet boot ($shell): a fsck that found something prints what it said, and its code stands" || bad "Void quiet fsck ($shell): $out"
-    out=$(PATH="$S/bin:$PATH" "$shell" "$S/other/1" 2>&1)
+    rm -f "$S/loud"
+    out=$(SPARK_BOOT_LOUD="$S/loud" PATH="$S/bin:$PATH" "$shell" "$S/runit/1" 2>&1)
+    want=$(printf '%s\n' "=> Welcome to Void!" "fsck said 0" "sysctl: fixture error" "1" "timeout: slow: 7s")
+    [ "$out" = "$want" ] && [ ! -e "$S/loud" ] && ok "Void quiet boot ($shell): a clean runit stage prints only stderr, a value asked for and sv's timeout, and leaves no mark" || bad "Void quiet stage ($shell): $out"
+    out=$(WARN=1 SPARK_BOOT_LOUD="$S/loud" PATH="$S/bin:$PATH" "$shell" "$S/runit/1" 2>&1)
+    printf '%s\n' "$out" | grep -qxF "$warn" && [ -e "$S/loud" ] && ok "Void quiet boot ($shell): a warning prints as Void prints it and leaves the mark" || bad "Void quiet warn ($shell): $out"
+    rm -f "$S/loud"
+    out=$(FSCK_RC=1 SPARK_BOOT_LOUD="$S/loud" PATH="$S/bin:$PATH" "$shell" "$S/runit/1" 2>&1)
+    printf '%s\n' "$out" | grep -q '^/dev/fixture: clean' && printf '%s\n' "$out" | grep -q '^fsck said 1$' && [ -e "$S/loud" ] && ok "Void quiet boot ($shell): a fsck that found something prints what it said, its code stands, and it leaves the mark" || bad "Void quiet fsck ($shell): $out"
+    rm -f "$S/loud"
+    out=$(SPARK_BOOT_LOUD="$S/loud" PATH="$S/bin:$PATH" "$shell" "$S/other/1" 2>&1)
     printf '%s\n' "$out" | grep -q '^=> Mounting' && printf '%s\n' "$out" | grep -q '^ok: down' && printf '%s\n' "$out" | grep -q '^Seeding' && ok "Void quiet boot ($shell): outside a runit stage the lines change nothing" || bad "Void quiet outside ($shell): $out"
+    a=$(FAKE_AGETTY=1 SPARK_BOOT_LOUD="$S/loud" PATH="$S/bin:$PATH" "$shell" "$S/getty" tty1)
+    b=$(FAKE_AGETTY=1 SPARK_BOOT_LOUD="$S/loud" PATH="$S/crit:$PATH" "$shell" "$S/getty" tty1)
+    : > "$S/loud"
+    c=$(FAKE_AGETTY=1 SPARK_BOOT_LOUD="$S/loud" PATH="$S/bin:$PATH" "$shell" "$S/getty" tty1)
+    d=$(FAKE_AGETTY=1 SPARK_BOOT_LOUD="$S/loud" PATH="$S/bin:$PATH" "$shell" "$S/getty" tty2)
+    rm -f "$S/loud"
+    [ "$a" = "args=" ] && [ "$b" = "args=--noclear" ] && [ "$c" = "args=--noclear" ] && [ "$d" = "args=" ] && ok "Void quiet boot ($shell): the getty clears tty1 after a clean boot, keeps it after a mark or a critical kernel line" || bad "Void quiet getty ($shell): clean=[$a] crit=[$b] marked=[$c] tty2=[$d]"
 done
 
 [ "$fail" -eq 0 ] && echo "install_test: all ok" || { echo "install_test: FAILED"; exit 1; }

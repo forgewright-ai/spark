@@ -7,7 +7,7 @@ import subprocess
 import sys
 import time
 
-from . import IS_MAC, MARK, REPO, bind_check, config, glyph, lan_ip, own_hostnames, say, wait_ready
+from . import IS_MAC, MARK, REPO, bind_check, config, glyph, lan_ip, own_hostnames, say, wait_lan_ip, wait_ready
 from . import engine, wire
 
 USAGE = """%s serve -- the engine, served on this LAN
@@ -97,17 +97,6 @@ def _spawn_warmer():
     os.waitpid(child, 0)
 
 
-def _wait_lan_ip(foreground):
-    """At login the network may not be up yet; a unit waits, a person does not."""
-    ip = lan_ip()
-    tries = 60 if foreground else 1
-    while not ip and tries > 1:
-        time.sleep(5)
-        tries -= 1
-        ip = lan_ip()
-    return ip
-
-
 def cmd_serve(args):
     cfg = config.load()
     fg = "--foreground" in args
@@ -127,7 +116,7 @@ def cmd_serve(args):
         return _warm_when_up(cfg, server)
     if cfg.base_url:
         return _die("this machine is a client of %s (SPARK_BASE_URL) -- unset it to serve here" % cfg.base_url, engine.EX_CONFIG)
-    host = host or cfg.serve_host or _wait_lan_ip(fg)
+    host = host or cfg.serve_host or wait_lan_ip(fg, "serve")
     if not host:
         return _die("no LAN address to bind -- set SPARK_SERVE_HOST", engine.EX_CONFIG)
     verdict, why = bind_check(host)

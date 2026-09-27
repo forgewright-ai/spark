@@ -1,5 +1,24 @@
 # Changelog
 
+## v1.58
+
+A clean boot on Void ends on the login prompt alone, and a late
+network no longer leaves the model and the page off.
+
+- runit itself prints a few lines no file reaches, and so do stage 2
+  and the RAID and btrfs scans. After a clean boot the login prompt
+  clears them: 2 marked lines in `/etc/sv/agetty-tty1/conf`.
+- A clean boot is one with no warning, no error, no fsck finding and no
+  critical kernel line. Any of those leaves a mark in `/run`, and that
+  boot keeps its whole screen.
+- The welcome line is no longer erased by hand: the clear takes it.
+  `/etc/rc.conf` holds 11 marked lines now.
+- `spark quiet boot off` removes the marked lines from the 3 files.
+- A machine whose network comes up late no longer loses its model and
+  its page. They waited 5 minutes for a LAN address, then stopped for
+  good, and nothing started them again. Now they wait as long as it
+  takes, on every Linux and on macOS.
+
 ## v1.57
 
 A quiet boot on Void is quiet.

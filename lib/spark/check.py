@@ -1017,7 +1017,8 @@ def row_quiet(ctx):
         # action path verifies as root at write time)
         quiet = (os.path.isfile("/etc/default/grub.d/zz-spark-quiet.cfg")
                  or (site.distro() == "void" and site.grub_marked() == site.GRUB_WANT
-                     and site.rc_marked() == site.RC_WANT))
+                     and site.rc_marked() == site.RC_WANT
+                     and site.getty_marked() == site.GETTY_WANT))
         cfg_path = "/boot/grub/grub.cfg"
         if quiet and os.access(cfg_path, os.R_OK):
             try:

@@ -1113,23 +1113,31 @@ else
 GRUB_TIMEOUT_STYLE=hidden
 GRUB_CMDLINE_LINUX_DEFAULT=\"\$GRUB_CMDLINE_LINUX_DEFAULT $QUIET_WORDS\""
     # Void's runit prints its own lines at boot and shutdown, which the
-    # kernel's `quiet` never reaches. runit's stages 1 and 3 source
-    # /etc/rc.conf (a conf file xbps keeps) after /etc/runit/functions and
-    # before their scripts, so spark appends these lines there, marked the
-    # same way, inert outside the two stages: msg (the `=>` lines) says
-    # nothing, the welcome printed just before is erased, a clean fsck,
-    # sysctl's values, the module list, seedrng and sv's `ok:` lines stay
-    # off the screen. A warning, an error, anything on stderr and a fsck
-    # that finds something still print: quiet never hides a problem.
-    # site.RC_WANT is the twin
+    # kernel's `quiet` never reaches. Two sets of marked lines, the same
+    # mark as GRUB's. /etc/rc.conf (a conf file xbps keeps) is sourced by
+    # runit's stages 1 and 3 after /etc/runit/functions and before their
+    # scripts: inside those two stages msg (the `=>` lines) says nothing,
+    # and a clean fsck, sysctl's values, the module list, seedrng and
+    # sv's `ok:` lines stay off the screen. A warning, an error, stderr
+    # and a fsck that finds something still print, and each of the three
+    # leaves a mark in /run (msg_warn and msg_error are Void's own, the
+    # mark added). What no file reaches -- runit's own `- runit:` lines,
+    # stage 2's runsvchdir, a tool's stray line -- the getty clears:
+    # /etc/sv/agetty-tty1/conf (every getty sources it) drops tty1's
+    # --noclear after a clean boot, one with no mark and no critical
+    # kernel line. A boot that marked keeps its whole screen: quiet never
+    # hides a problem. site.RC_WANT and site.GETTY_WANT are the twins
+    getty_conf=${SPARK_ETC_GETTY_CONF:-/etc/sv/agetty-tty1/conf}
     rc_marked() { grep -s " $grub_mark\$" "$rcconf" | sed "s/ $grub_mark\$//"; }
+    getty_marked() { grep -s " $grub_mark\$" "$getty_conf" | sed "s/ $grub_mark\$//"; }
     rc_want_lines() {
         cat <<'EOF'
 # spark quiet boot on wrote these lines, spark quiet boot off removes them
 case $0 in */runit/[13])
 msg() { :; }
-[ "${0##*/}" = 1 ] && [ -t 1 ] && printf '\033[1A\033[2K'
-fsck() { _spark_out=$(command fsck "$@" 2>&1); _spark_rc=$?; [ "$_spark_rc" = 0 ] || printf '%s\n' "$_spark_out"; return "$_spark_rc"; }
+msg_warn() { { : >"${SPARK_BOOT_LOUD:-/run/spark-boot-loud}"; } 2>/dev/null; printf "\033[1m\033[33mWARNING: $@\033[m\n"; }
+msg_error() { { : >"${SPARK_BOOT_LOUD:-/run/spark-boot-loud}"; } 2>/dev/null; printf "\033[1m\033[31mERROR: $@\033[m\n"; }
+fsck() { _spark_out=$(command fsck "$@" 2>&1); _spark_rc=$?; [ "$_spark_rc" = 0 ] || { printf '%s\n' "$_spark_out"; { : >"${SPARK_BOOT_LOUD:-/run/spark-boot-loud}"; } 2>/dev/null; }; return "$_spark_rc"; }
 sysctl() { if [ "$1" = -p ]; then command sysctl "$@" >/dev/null; else command sysctl "$@"; fi; }
 seedrng() { command seedrng "$@" >/dev/null; }
 sv() { command sv "$@" | grep -v '^ok: '; }
@@ -1137,7 +1145,14 @@ alias modules-load='modules-load >/dev/null'
 esac
 EOF
     }
+    getty_want_lines() {
+        cat <<'EOF'
+# spark quiet boot on wrote these lines, spark quiet boot off removes them
+[ -e "${SPARK_BOOT_LOUD:-/run/spark-boot-loud}" ] || [ -n "$(dmesg -l emerg,alert,crit 2>/dev/null)" ] || GETTY_ARGS=$(printf '%s' "$GETTY_ARGS" | sed 's/--noclear//')
+EOF
+    }
     rc_want=$(rc_want_lines)
+    getty_want=$(getty_want_lines)
     # marked_append FILE LINES -- spark's marked lines out, LINES in at the
     # end, each marked (a file with no final newline would glue the first
     # line onto its last)
@@ -1195,13 +1210,13 @@ EOF
                     row todo quiet-boot "mkinitcpio -P failed -- run: sudo mkinitcpio -P"
                 fi
             fi
-        elif grep -qs " $grub_mark\$" "$default_grub" || grep -qs " $grub_mark\$" "$rcconf"; then
-            if need quiet-boot "remove spark's marked lines from $default_grub and $rcconf; update-grub (sudo)"; then
-                for f in "$default_grub" "$rcconf"; do
+        elif grep -qs " $grub_mark\$" "$default_grub" "$rcconf" "$getty_conf"; then
+            if need quiet-boot "remove spark's marked lines from $default_grub, $rcconf and $getty_conf; update-grub (sudo)"; then
+                for f in "$default_grub" "$rcconf" "$getty_conf"; do
                     [ -f "$f" ] && as_root sed -i "/ $grub_mark\$/d" "$f"
                 done
                 if as_root update-grub >/dev/null 2>&1; then
-                    ok quiet-boot "loud: GRUB's menu, the kernel messages and runit's lines as your files say"
+                    ok quiet-boot "loud: GRUB's menu, the kernel messages, runit's lines and the getty as your files say"
                 else
                     row todo quiet-boot "update-grub failed -- run: sudo update-grub"
                 fi
@@ -1240,14 +1255,15 @@ EOF
     elif [ "$DISTRO" = void ]; then
         if [ ! -f "$default_grub" ] || ! have_update_grub; then
             skip quiet-boot "no GRUB on this Void -- its boot loader is left alone"
-        elif [ "$(grub_marked)" = "$grub_want" ] && [ "$(rc_marked)" = "$rc_want" ] && grub_user_ok; then
-            ok quiet-boot "silent: menu hidden, kernel line quiet, runit's lines off (the marked lines in $default_grub and $rcconf)"
-        elif need quiet-boot "3 marked lines at the end of $default_grub and 10 at the end of $rcconf; update-grub (sudo)"; then
+        elif [ "$(grub_marked)" = "$grub_want" ] && [ "$(rc_marked)" = "$rc_want" ] && [ "$(getty_marked)" = "$getty_want" ] && grub_user_ok; then
+            ok quiet-boot "silent: menu hidden, kernel line quiet, runit's lines off, a clean boot cleared (the marked lines in $default_grub, $rcconf and $getty_conf)"
+        elif need quiet-boot "marked lines at the end of $default_grub (3), $rcconf (11) and $getty_conf (2); update-grub (sudo)"; then
             marked_append "$default_grub" "$grub_want"
             marked_append "$rcconf" "$rc_want"
+            marked_append "$getty_conf" "$getty_want"
             made grub
             if as_root update-grub >/dev/null 2>&1 && grub_live_quiet; then
-                ok quiet-boot "silent after a reboot: menu hidden, kernel line quiet, runit's lines off (hold Shift at boot for the menu)"
+                ok quiet-boot "silent after a reboot: menu hidden, kernel line quiet, runit's lines off, a clean boot cleared (hold Shift at boot for the menu)"
             else
                 row todo quiet-boot "grub.cfg does not carry the quiet line -- run: sudo update-grub, then spark check"
             fi
