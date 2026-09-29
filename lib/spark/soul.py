@@ -140,12 +140,12 @@ def _show(cfg):
     t, source = read(cfg)
     if source == "personality":
         p = personality()
-        say("%s  %s  %s  %d chars" % ("soul", "builtin core + personality", PERSONALITY_FILE, len(t)))
+        say("%s  %s  %s  %d characters" % ("soul", "built-in core + personality", PERSONALITY_FILE, len(t)))
         say(DEFAULT)
         say("")
         say(p)
         return 0
-    say("%s  %s  %s  %d chars" % ("soul", source, SOUL_FILE, len(t)))
+    say("%s  %s  %s  %d characters" % ("soul", source, SOUL_FILE, len(t)))
     say(t)
     if source == "file" and has_personality():
         say("")
@@ -175,11 +175,11 @@ def _edit_personality():
         raw = ""
     n = len(raw)
     if n > PERSONALITY_MAX:
-        say("ok     personality  %d chars, over the cap, cut at %d" % (n, PERSONALITY_MAX))
+        say("ok     personality  %d characters, over the cap, cut at %d" % (n, PERSONALITY_MAX))
     elif n == 0:
         say("ok     personality  empty -- the built-in core alone applies")
     else:
-        say("ok     personality  %d chars, after the built-in core" % n)
+        say("ok     personality  %d characters, after the built-in core" % n)
     say("The core stays. spark soul edit --core replaces the whole soul.")
     from . import check
     check.refresh()
@@ -214,11 +214,11 @@ def _edit(cfg, core=False):
         raw = ""
     n = len(raw)
     if n > SOUL_MAX:
-        say("ok     soul         %d chars, over the cap, cut at %d" % (n, SOUL_MAX))
+        say("ok     soul         %d characters, over the cap, cut at %d" % (n, SOUL_MAX))
     elif n == 0:
         say("ok     soul         empty -- the built-in paragraph applies")
     else:
-        say("ok     soul         %d chars, yours" % n)
+        say("ok     soul         %d characters, yours" % n)
     from . import check
     check.refresh()
     return 0

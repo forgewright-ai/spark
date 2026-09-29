@@ -40,18 +40,18 @@ def _announce_downloads(pend):
 # ------------------------------------------------------------------ model
 MODEL_USAGE = """%s model -- which model this machine serves
 
-  spark model                   the table: size, RAM, license, the proof
+  spark model                   the table: size, RAM, licence, the proof
                                 column (line, or the grounding audition's
                                 kept/run score), downloaded, serving,
                                 tok/s; the spark pick marked *, the chat
                                 model +, your own rows u
   spark model list --porcelain  the same as data: one row per line, tab
-                                separated (name, source, GB, RAM, license,
+                                separated (name, source, GB, RAM, licence,
                                 line, grounded, state)
   spark model NAME              choose it: site.env, download, engine restart
                                 (a row not under Apache-2.0 or MIT prints
-                                its license and asks first)
-  spark model auto | none       auto: the largest tested open-license row
+                                its licence and asks first)
+  spark model auto | none       auto: the largest tested open-licence row
                                 that fits (smallest beside a chat model);
                                 none: no model here
   spark model budget [N]        percent of RAM+GPU auto may use (10-95)
@@ -311,7 +311,7 @@ def print_model_table(cfg):
     for f in others:
         say("    %-13s %5.1f GB file   (not in models.env; SPARK_MODEL=%s serves it)" % (
             "-", os.path.getsize(os.path.join(cfg.models_dir, f)) / 2**30, f))
-    say("  * = spark (the prompt line), + = ember (conversations), u = yours")
+    say("  * = spark (the prompt line), + = the chat model (conversations), u = yours")
     say("  auto picks among the rows tested on the line (line) under %s" % " or ".join(config.OPEN_LICENSES))
     return 0
 
@@ -446,7 +446,7 @@ def _model_add(args):
         return 2
     name = _model_name(fname)
     if not name:
-        say("spark model add: %s has no name once the quantization is stripped" % fname)
+        say("spark model add: %s has no name once the quantisation is stripped" % fname)
         return 2
     existing = {r[0]: r[6] for r in config.model_tables()}
     if name in existing:
@@ -486,7 +486,7 @@ def cmd_model(args):
                 say("%-7s%-*s sha256 ok (%.1f GB)" % ("ok", width, r["name"], r["bytes"] / 2**30))
             else:
                 bad = True
-                say("%-7s%-*s sha256 MISMATCH -- spark model rm %s; spark model %s" % (
+                say("%-7s%-*s sha256 mismatch -- spark model rm %s; spark model %s" % (
                     "bad", width, r["name"], r["name"], r["name"]))
         return 1 if bad else 0
     rows = config.model_tables()

@@ -221,7 +221,7 @@ def cmd_ask(args):
             die("the ledger could not be written: %s" % e)
         return 0
     if len(data) > ASK_MAX:
-        die("the text is %d chars; ask takes at most %d -- select less" % (len(data), ASK_MAX))
+        die("the text is %d characters; ask takes at most %d -- select less" % (len(data), ASK_MAX))
     tid = opts["thread"].strip()
     if tid and not forge.valid_id(tid):
         say("%s ask -- --thread ID is 1 to 64 of [A-Za-z0-9_-]" % MARK)

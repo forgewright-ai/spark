@@ -85,7 +85,7 @@ VER_USAGE = """spark ver -- logo, version, credits
   spark ver                   the banner, the version (from git), the credits
   spark ver --sbom            what the tree depends on, as CycloneDX 1.5 JSON:
                               the engine per flavour, every model with its
-                              sha256 and license, the distro packages, the
+                              sha256 and licence, the distro packages, the
                               python floor, the pinned actions -- the JSON
                               alone, so it pipes (the release's sbom.cdx.json)
 """
@@ -219,7 +219,7 @@ def _paste_verdict(shell):
         return 1
     if len(data) > PASTE_MAX:
         say("answer")
-        say("a %d-char paste -- too big to inspect; nothing was sent" % len(data))
+        say("a %d-character paste -- too big to inspect; nothing was sent" % len(data))
         return 0
     cfg = config.load()
     what = secret_shape(data)
@@ -1352,7 +1352,7 @@ def cmd_status(args, _bare=False):
     from . import SOUL_FILE, memory, soul
     _, source = soul.read(cfg)
     if source == "file":
-        say("  soul     yours, %d chars (%s)" % (len(soul.text(cfg)), _short(SOUL_FILE)))
+        say("  soul     yours, %d characters (%s)" % (len(soul.text(cfg)), _short(SOUL_FILE)))
     elif source == "env":
         say("  soul     from SPARK_PERSONA_EXTRA (spark soul edit)")
     else:

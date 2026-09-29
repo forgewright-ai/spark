@@ -565,7 +565,7 @@ def row_ai(ctx):
     m = engine.model_file(ctx.cfg)
     e = engine.model_file(ctx.cfg, "ember")
     if m and e:
-        parts.append("spark %s %.1f GB, ember %s %.1f GB" % (
+        parts.append("spark %s %.1f GB, chat model %s %.1f GB" % (
             engine.model_stem(m), os.path.getsize(m) / 2**30, engine.model_stem(e), os.path.getsize(e) / 2**30))
     elif m:
         parts.append("model %s (%.1f GB)" % (engine.model_stem(m), os.path.getsize(m) / 2**30))
@@ -828,7 +828,7 @@ def row_ember(ctx):
     need = er[5] + (pair["spark"][5] if pair.get("spark") else 0.0)
     stem = er[1].replace(".gguf", "")
     if need > budget:
-        return warn("spark+ember %.0f GB > budget %.0f GB" % (need, budget),
+        return warn("spark and the chat model %.0f GB > budget %.0f GB" % (need, budget),
                     "spark ember list   (a pair that fits)")
     if not engine.model_file(ctx.cfg, "ember"):
         return warn("%s not downloaded" % stem, "./bootstrap.sh   (downloads it)")
@@ -1114,7 +1114,7 @@ def row_gpu(ctx):
     size = sum(os.path.getsize(f) for f in files)
     vram, gtt = g.get("vram_total", 0), g.get("gtt_total", 0)
     if size and vram and size > vram:
-        word = "spark+ember" if len(files) > 1 else "model"
+        word = "both models" if len(files) > 1 else "model"
         return warn("%s %.1f GB > VRAM %.1f GB: it spills to GTT (%.1f GB) -- raise the BIOS UMA frame buffer" % (word, size / 2**30, vram / 2**30, gtt / 2**30),
                     "docs/INSTALL.md, per-OS notes; then spark bench")
     chosen = " (SITE_AI_BUILD=%s)" % ctx.cfg.ai_build if ctx.cfg.ai_build in ("cpu", "vulkan") else ""
@@ -1142,12 +1142,12 @@ def row_soul(ctx):
         except OSError:
             n = 0
         if n > soul.SOUL_MAX:
-            problems.append("%d chars, cut at %d" % (n, soul.SOUL_MAX))
+            problems.append("%d characters, cut at %d" % (n, soul.SOUL_MAX))
     if ctx.cfg.persona_extra.strip():
         problems.append("SPARK_PERSONA_EXTRA still set")
     if problems:
         return warn("; ".join(problems), "chmod 600 %s; spark soul edit" % ctx.short(SOUL_FILE))
-    return ok("yours, %d chars" % n)
+    return ok("yours, %d characters" % n)
 
 
 @row("CAPABILITY")
@@ -1196,9 +1196,9 @@ def row_memory(ctx):
     if len(facts) > memory.FACTS_MAX:
         problems.append("%d facts, %d are sent" % (len(facts), memory.FACTS_MAX))
     if any(len(f) > memory.FACT_MAX for f in facts):
-        problems.append("a fact over %d chars is cut" % memory.FACT_MAX)
+        problems.append("a fact over %d characters is cut" % memory.FACT_MAX)
     if sum(len(f) for f in facts) > memory.TOTAL_MAX:
-        problems.append("%d chars, %d are sent" % (sum(len(f) for f in facts), memory.TOTAL_MAX))
+        problems.append("%d characters, %d are sent" % (sum(len(f) for f in facts), memory.TOTAL_MAX))
     if problems:
         return warn("; ".join(problems), "chmod 600 %s; spark memory forget N" % ctx.short(MEMORY_FILE))
     return ok("%d fact%s%s" % (len(facts), "" if len(facts) == 1 else "s", ", sealed" if sealed else ""))

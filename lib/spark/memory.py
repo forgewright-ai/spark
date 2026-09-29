@@ -178,7 +178,7 @@ def remember(text, st=None):
     if not fact:
         raise Refused("empty", "nothing to keep -- say it in words")
     if len(fact) > FACT_MAX:
-        raise Refused("long", "%d chars -- a fact is at most %d" % (len(fact), FACT_MAX))
+        raise Refused("long", "%d characters -- a fact is at most %d" % (len(fact), FACT_MAX))
     if fact.startswith("#"):
         raise Refused("comment", "a fact cannot start with # -- that is a comment")
     have = _all_facts(st, strict=True)

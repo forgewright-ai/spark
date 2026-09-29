@@ -1816,7 +1816,7 @@ def living_awaken_cases(t):
              and "SPARK_REVEAL" not in senv and "AWAKE=yes" in read(std + "/look"),
              "awaken: the three parts on auto, the pace untouched with no model, the look file awake", senv)
         rc, out, _ = run(env, "soul")
-        t.ok(rc == 0 and out.startswith("soul  builtin core + personality") and _soul.DEFAULT in out
+        t.ok(rc == 0 and out.startswith("soul  built-in core + personality") and _soul.DEFAULT in out
              and warm["personality.1"] in out,
              "spark soul: the fixed core kept, the personality after it", out)
         rc, out, _ = run(env, "soul", "edit", extra={"EDITOR": "true"})
@@ -3977,7 +3977,7 @@ def main():
         e2 = {k: v for k, v in env.items() if k != "SPARK_BASE_URL"}
         e2["SITE_PEER_AI_URL"] = "http://127.0.0.1:9"
         p2 = subprocess.run([sys.executable, SPARK, "status"], capture_output=True, text=True, env=e2, timeout=30)
-        t.ok("stray-model" not in p2.stdout and "no answer from the peer http://127.0.0.1:9" in p2.stdout,
+        t.ok("stray-model" not in p2.stdout and "no answer from the other machine at http://127.0.0.1:9" in p2.stdout,
              "model none + dead peer: the hint names the peer, not the stray file", p2.stdout)
         os.remove(stray + "/stray-model.gguf")
         rc, out, _ = spark("bar")       # a status bar runs it without a tty
@@ -5046,7 +5046,7 @@ def main():
         with open(model_path, "wb") as f:
             f.write(b"X" * len(content))
         rc, outv2, _ = spark("model", "verify")
-        t.ok(rc == 1 and "bad" in outv2 and "sha256 MISMATCH" in outv2
+        t.ok(rc == 1 and "bad" in outv2 and "sha256 mismatch" in outv2
              and "spark model rm tiny-model; spark model tiny-model" in outv2,
              "spark model verify: a corrupted file is bad, with the remedy, exit 1", outv2)
 

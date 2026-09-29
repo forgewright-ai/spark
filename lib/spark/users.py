@@ -294,7 +294,7 @@ def cmd_add(args):
         return 2
     name = names[0]
     if not valid_name(name):
-        say("spark user: a name is a-z, 0-9 and -, starting with a letter, at most 32 chars")
+        say("spark user: a name is a-z, 0-9 and -, starting with a letter, at most 32 characters")
         return 2
     if exists(name):
         say("spark user: %s already exists" % name)
@@ -398,7 +398,7 @@ def cmd_remove(args):
         return 2
     name = args[0]
     if not valid_name(name):
-        say("spark user: a name is a-z, 0-9 and -, starting with a letter, at most 32 chars")
+        say("spark user: a name is a-z, 0-9 and -, starting with a letter, at most 32 characters")
         return 2
     if not exists(name):
         say("spark user: no user named %s" % name)
@@ -459,7 +459,7 @@ def _relock(name, token):
 def cmd_login(args):
     name = args[0] if args else ""
     if name and not valid_name(name):
-        say("spark user: a name is a-z, 0-9 and -, starting with a letter, at most 32 chars")
+        say("spark user: a name is a-z, 0-9 and -, starting with a letter, at most 32 characters")
         return 2
     token = _ask_token()
     if not token:

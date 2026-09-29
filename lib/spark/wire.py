@@ -341,7 +341,7 @@ def no_brain_hint(cfg):
     if cfg.base_url:
         return "no answer from SPARK_BASE_URL %s" % cfg.base_url
     if cfg.prefer_url:
-        return "no answer from the peer %s -- is it up? (spark serve starts a local engine)" % cfg.prefer_url
+        return "no answer from the other machine at %s -- is it up? (spark serve starts a local engine)" % cfg.prefer_url
     from . import engine
     st = engine.service_state(cfg)
     if st == "loaded":

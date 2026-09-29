@@ -351,7 +351,7 @@ def cmd_edit(args):
     else:
         kind, role = "rewrite", "ember"
         if len(data) > EDIT_MAX:
-            die("the text is %d chars; a rewrite takes at most %d -- select less" % (len(data), EDIT_MAX))
+            die("the text is %d characters; a rewrite takes at most %d -- select less" % (len(data), EDIT_MAX))
         max_tokens = min(6000, len(data) // 2 + 200) if data else 1500
         text = " ".join(words).strip()
         context = head + label + "\n" + (data or "(no text yet: write it, as the instruction asks)")

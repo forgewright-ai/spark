@@ -794,7 +794,7 @@ def cmd_share(args):
         return 0
     if not args or args[0] == "status":
         say("%s share -- SITE_SHARE=%s: %s" % (MARK, "yes" if cfg.share else "no",
-            "this box's engine is shared with its other OS users" if cfg.share
+            "this machine's engine is shared with its other OS users" if cfg.share
             else "not shared (spark share on lets the spark group in)"))
         for piece, good, detail in share_facts(cfg):
             say("  %s %-14s %s" % (glyph("ok") if good else ("!" if cfg.share else glyph("na")), piece, detail))

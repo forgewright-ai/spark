@@ -99,7 +99,7 @@ list_models() {
         # a client: never this machine's RAM as a budget; the rows alone
         # (spark model asks the peer's FORGE for its table)
         printf 'this machine is %s\n' "$CLIENT_OF"
-        echo "nothing is served here; what fits is the peer's business (spark model there)"
+        echo "nothing is served here; what fits is the other machine's (spark model there)"
         model_rows_all | while read -r name file _url _bytes _sha ram src; do
             [ "$src" = - ] && src=' '
             printf ' %s %-20s %6s GB  %s\n' "$src" "$name" "$ram" "$file"
@@ -122,7 +122,7 @@ list_models() {
     printf 'spark: %s\n' "${spick:-none}"
     printf 'ember: %s\n' "${epick:-none}"
     if [ -n "$spick" ]; then
-        echo "* = spark (the prompt line), + = ember (conversations)"
+        echo "* = spark (the prompt line), + = the chat model (conversations)"
     else
         echo "no model chosen (none, or nothing fits)"
     fi
@@ -263,7 +263,7 @@ case $SITE_AI_MODEL in
     *) [ -n "$pick" ] && ok model "$SITE_AI_MODEL -> $pick" || row todo model "SITE_AI_MODEL=$SITE_AI_MODEL: nothing fits $MEM_GB GB / not in models.env or yours" ;;
 esac
 epick=$(model_pick ember | awk '{ print $1 " (" $6 " GB)" }')
-if [ -z "$pick" ] && [ "$SITE_EMBER_MODEL" != none ]; then ok ember "no spark model here: nothing is served, no ember"
+if [ -z "$pick" ] && [ "$SITE_EMBER_MODEL" != none ]; then ok ember "no spark model here: nothing is served, no chat model"
 else case $SITE_EMBER_MODEL in
     none) ok ember "none: the spark model answers everything" ;;
     auto) [ -n "$epick" ] && ok ember "auto -> $epick" || ok ember "auto: nothing fits beside the spark model" ;;
@@ -430,7 +430,7 @@ for role in spark ember; do
     if [ "$choice" = none ]; then
         [ "$role" = spark ] && skip model "SITE_AI_MODEL=none" || skip ember "SITE_EMBER_MODEL=none"
     elif [ "$role" = ember ] && [ -z "$(model_pick spark)" ]; then
-        skip ember "no spark model here: nothing is served, no ember"
+        skip ember "no spark model here: nothing is served, no chat model"
     elif [ $# -lt 6 ]; then
         skip "$rname" "nothing chosen"
     elif [ -f "$MODELS_DIR/$2" ]; then
@@ -839,7 +839,7 @@ EOF
         lid=$(printf '[Login]\nHandleLidSwitch=ignore\nHandleLidSwitchExternalPower=ignore\n')
         # WSL 2 stops with its last window: a hand-set SITE_HEADLESS=yes there is a
         # todo, never a systemctl mask (spark headless on refuses it first)
-        if [ "$headless" = 1 ] && is_wsl; then row todo headless "WSL 2 stops with its last window: not a brain (a Linux box is)"; headless=0; fi
+        if [ "$headless" = 1 ] && is_wsl; then row todo headless "WSL 2 stops with its last window: not a brain (a Linux machine is)"; headless=0; fi
         if [ "$headless" = 1 ]; then
             if [ "$nmasked" = 4 ]; then ok sleep "sleep, suspend, hibernate masked"
             elif need sleep "systemctl mask $targets (sudo)"; then
@@ -858,7 +858,7 @@ EOF
         else
             if [ "$nmasked" != 0 ] && need sleep "systemctl unmask $targets (SITE_HEADLESS=no) (sudo)"; then
                 # shellcheck disable=SC2086
-                as_root systemctl unmask $targets >/dev/null 2>&1; ok sleep "unmasked: the box may sleep again"; fi
+                as_root systemctl unmask $targets >/dev/null 2>&1; ok sleep "unmasked: this machine may sleep again"; fi
             if [ -f "$dropin" ] && need lid "remove $dropin; HUP systemd-logind (SITE_HEADLESS=no) (sudo)"; then
                 as_root rm -f "$dropin"; as_root systemctl kill -s HUP systemd-logind.service 2>/dev/null || true
                 ok lid "the lid closes the laptop again"; fi
@@ -882,8 +882,8 @@ if [ "$client" = 1 ]; then
     # no sudo). This is what lets a second OS user set up in userspace.
     skip share "$CLIENT_OF"
 elif [ "$OS" = Darwin ] || is_wsl; then
-    if [ "$SITE_SHARE" = yes ]; then row todo share "one user per box here (macOS/WSL): a shared engine is a Linux box story"
-    else skip share "not shared (one user per box on macOS/WSL)"; fi
+    if [ "$SITE_SHARE" = yes ]; then row todo share "one user per machine here (macOS/WSL): a shared engine is for a Linux machine"
+    else skip share "not shared (one user per machine on macOS/WSL)"; fi
 elif [ "$SITE_SHARE" != yes ]; then
     if { [ -f "$share_tok" ] || [ -f "$share_url" ]; } && need share "remove $share_tok, $share_url (SITE_SHARE=no) (sudo)"; then
         as_root rm -f "$share_tok" "$share_url"; ok share "not shared"

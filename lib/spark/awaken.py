@@ -306,13 +306,13 @@ def run(cfg, ask):
     s, hint = _wake(cfg)
     reply = {}
     if s is None:
-        say("The model is not answering, so I use the shipped lines.")
+        say("The model is not answering, so the shipped lines are used.")
         if hint:
             say("  " + hint)
     else:
         reply = ask_birth(s, temper, k)
         if not reply:
-            say("The model gave no lines I could use, so I use the shipped ones.")
+            say("The model gave no usable lines, so the shipped lines are used.")
     lines, personality, fs, refused = birth_lines(reply, temper, k, _seed(cfg))
     if reply and refused:
         say("%d of its lines did not pass the check. The shipped line stands in for each."
@@ -331,7 +331,7 @@ def run(cfg, ask):
     say("")
     pace_word = None
     if s is None:
-        say("No model to show the pace with; spark reveal sets it later.")
+        say("No model can show the pace now, so spark reveal sets it later.")
     else:
         pace_word = pace(s, cfg, temper, ask)
     # the end: every file at once, each atomically
@@ -355,7 +355,7 @@ def main(args):
         say(USAGE.rstrip())
         return 0
     if args:
-        say("%s awaken -- it takes no words; spark awaken -h says what it does" % MARK)
+        say("%s awaken -- it takes no words -- spark awaken -h says what it does" % MARK)
         return 2
     if not os.environ.get("SPARK_AWAKEN_TTY") and not (sys.stdin.isatty() and sys.stdout.isatty()):
         say("%s awaken -- it asks you questions, so it needs a terminal" % MARK)

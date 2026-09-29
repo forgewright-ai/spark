@@ -200,7 +200,7 @@ def cmd_read(args):
         data = textmod.hold_spans(data, spans)
     total = parts_of(len(data))
     if total > 1 and want is None:
-        die("the source is %d chars, %d parts of %d -- read one: --part N"
+        die("the source is %d characters, %d parts of %d -- read one: --part N"
             % (len(data), total, READ_MAX))
     if want is not None and want > total:
         say("%s read -- the source is %d part%s; there is no part %d"
