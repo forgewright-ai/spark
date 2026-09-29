@@ -2510,9 +2510,11 @@ def main(argv):
     counter = Counter(sys.stderr) if (not porcelain_out and not report_out
                                       and look.active("motion", sys.stderr)) else None
     while True:
-        rows = run_rows(ctx, names or None, counter)
-        if counter is not None:
-            counter.clear()
+        try:
+            rows = run_rows(ctx, names or None, counter)
+        finally:            # Ctrl-C too: `checking N/M` never stays on the line
+            if counter is not None:
+                counter.clear()
         write_snapshot(ctx, rows)
         if report_out:
             page(report(ctx, rows))

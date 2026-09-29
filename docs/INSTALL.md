@@ -362,9 +362,10 @@ the prompt line with the greeting and the news. Then `spark quiet start
 on`, which keeps the greeting and the news away. Then a part set `off`,
 then `on`, then `auto`.
 
-Your own colours win over the built-in ones. `SPARK_OK_SGR`,
-`SPARK_TROUBLE_SGR` and `SPARK_YOU_SGR` join the 3 exports above, the
-same SGR codes. `spark check` paints its rows with them when awake.
+Your own colours win over the built-in ones. `SPARK_OK_SGR` and
+`SPARK_TROUBLE_SGR` join the 3 exports above, the same SGR codes.
+`spark check` paints its rows with them when awake. `SPARK_YOU_SGR` is
+reserved: nothing paints with it yet.
 
 `spark words` shows the lines by id and the faces. `spark words edit`
 changes the lines in your editor: one `ID<TAB>line` a line, ASCII, at
@@ -402,12 +403,12 @@ and `too big` means the row does not fit. The tested rows:
 | `granite-4-2-8b` | 5.0 GB | 7 GB |
 
 The other 20 rows are yours by name: more Qwen, Mistral, Phi-4,
-DeepSeek-R1, SmolLM2, gpt-oss, Llama and Gemma. A row under a license
-that is not Apache-2.0 or MIT prints its license and asks `download
+DeepSeek-R1, SmolLM2, gpt-oss, Llama and Gemma. A row under a licence
+that is not Apache-2.0 or MIT prints its licence and asks `download
 it? yes/NO:` first. The project site lists them all at
 spark.forgewright.ai/models/.
 
-How `auto` picks. It takes every tested open-license row whose RAM fits
+How `auto` picks. It takes every tested open-licence row whose RAM fits
 the budget. Of those, it takes the largest whose file is under this
 build's speed cap: 3 GB on `cpu`, 6 GB on `vulkan`, 20 GB on `metal`.
 Those sizes keep about 8 tok/s. When the cap held a bigger row back,
@@ -438,7 +439,7 @@ that fits.
    required. The row lands in `~/.config/spark/models.env`, then it is
    downloaded and served like any row.
 6. `spark model verify` hashes every downloaded file again. It prints
-   `ok` per file, or `sha256 MISMATCH -- spark model rm NAME; spark
+   `ok` per file, or `sha256 mismatch -- spark model rm NAME; spark
    model NAME`, and exits 1 on a mismatch. Nothing is deleted for you.
    The `models` row of `spark check` is the daily, cached version.
 

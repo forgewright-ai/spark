@@ -100,6 +100,11 @@ class Config:
             return v
         return default
 
+    def own(self, key, default=""):
+        """The files' value alone, the environment ignored: what a
+        rendered file may bake in (look.content)."""
+        return self._file.get(key) or default
+
     def has(self, key):
         return bool(os.environ.get(key) or self._file.get(key))
 

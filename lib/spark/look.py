@@ -22,12 +22,12 @@
 
 import os
 import sys
+from contextlib import contextmanager
 
 from . import CONFIG_DIR, SPARK_ENV, STATE_DIR
 
 LOOK_FILE = os.path.join(STATE_DIR, "look")
 NEWS_FILE = os.path.join(STATE_DIR, "news")
-NEWS_SEEN = os.path.join(STATE_DIR, "news-seen")
 LOADS_FILE = os.path.join(STATE_DIR, "loads.json")
 WORDS_FILE = os.path.join(CONFIG_DIR, "words")
 FACES_FILE = os.path.join(CONFIG_DIR, "faces")
@@ -59,6 +59,7 @@ DEFAULT_FACES = {"asleep": "(-.-)z", "waking": "(-o-)", "idle": "(o.o)", "thinki
 FACE_SETTINGS = ("RATE", "TEMPER")
 
 _state = None
+_assume = False         # inside `spark awaken` (assume_awake)
 
 
 def _read_kv(path):
@@ -89,7 +90,20 @@ def forget():
 
 
 def awake():
-    return state().get("AWAKE") == "yes"
+    return _assume or state().get("AWAKE") == "yes"
+
+
+@contextmanager
+def assume_awake():
+    """Inside `spark awaken`: this process acts awake, motion, colour and
+    words on auto (what awaken writes at its end), so its own waits and
+    its pace look as they will after. Nothing is written early."""
+    global _assume
+    _assume = True
+    try:
+        yield
+    finally:
+        _assume = False
 
 
 def _cfg(cfg):
@@ -99,11 +113,22 @@ def _cfg(cfg):
     return cfg
 
 
-def stored(name, cfg=None):
+def _get(cfg, key, default, own):
+    """A key's value; `own` reads spark.env's own, the environment
+    ignored: the look file bakes in the file, and each shell applies its
+    own exports (a SPARK_HEIGHT export must not reach every shell). A
+    plain dict (the check's fixture) holds file values only."""
+    cfg = _cfg(cfg)
+    if own and hasattr(cfg, "own"):
+        return cfg.own(key, default) or default
+    return cfg.get(key, default) or default
+
+
+def stored(name, cfg=None, own=False):
     """What spark.env holds for a part (auto, on or off), awake or not."""
     if name == "reveal":
-        return (_cfg(cfg).get("SPARK_REVEAL", "off").strip() or "off")
-    v = (_cfg(cfg).get(KEY_OF[name], "off") or "off").strip()
+        return _get(cfg, "SPARK_REVEAL", "off", own).strip() or "off"
+    v = _get(cfg, KEY_OF[name], "off", own).strip()
     return v if v in VALUES else "off"
 
 
@@ -112,6 +137,8 @@ def part(name, cfg=None):
     reveal answers from SPARK_REVEAL as it always did."""
     if name == "reveal":
         return stored(name, cfg)
+    if _assume:
+        return "auto"
     if not awake():
         return "off"
     return stored(name, cfg)
@@ -175,6 +202,17 @@ def clean(line):
     return line
 
 
+def valid_id(key):
+    """One rule for an id (a words line's, a news line's): ASCII letters,
+    digits, `.`, `_` and `-`, nothing else."""
+    return bool(key) and key.isascii() and all(c.isalnum() or c in "._-" for c in key)
+
+
+def face_ok(frame):
+    """A face fit to draw: clean() and at most FACE_MAX characters."""
+    return clean(frame) is not None and len(frame.strip()) <= FACE_MAX
+
+
 def faces(path=None):
     """The machine's faces: the faces file over the shipped kit, each
     cleaned. RATE= and TEMPER= are settings, not faces."""
@@ -183,7 +221,7 @@ def faces(path=None):
         if mood.upper() in FACE_SETTINGS:
             continue
         m = mood.lower()
-        if m in out and clean(frame) and len(frame.strip()) <= FACE_MAX:
+        if m in out and face_ok(frame):
             out[m] = frame.strip()
     return out
 
@@ -227,21 +265,21 @@ def refused(words=None, faces_path=None):
                 continue
             if shape == "words":
                 _id, tab, text = line.partition("\t")
-                good = bool(tab) and _id.strip() and clean(text) is not None and clean(_id) is not None
+                good = bool(tab) and valid_id(_id.strip()) and clean(text) is not None
             else:
                 key, eq, frame = line.partition("=")
                 if eq and key.strip().upper() in FACE_SETTINGS:
                     good = clean(frame) is not None
                 else:
-                    good = bool(eq) and clean(key) is not None and clean(frame) is not None
+                    good = bool(eq) and clean(key) is not None and face_ok(frame)
             if not good:
                 out.append((os.path.basename(path), n))
     return out
 
 
-def height(cfg=None):
+def height(cfg=None, own=False):
     try:
-        n = int(_cfg(cfg).get("SPARK_HEIGHT", "1"))
+        n = int(_get(cfg, "SPARK_HEIGHT", "1", own))
     except ValueError:
         return 1
     return n if HEIGHT_MIN <= n <= HEIGHT_MAX else 1
@@ -252,12 +290,12 @@ def content(cfg, on, faces_path=None):
     writes, and what the check's look row compares the file with."""
     lines = ["AWAKE=%s" % ("yes" if on else "no")]
     for p in ("motion", "colour", "words"):
-        v = stored(p, cfg)
+        v = stored(p, cfg, own=True)
         lines.append("%s=%s" % (p.upper(), v if on else "off"))
-    lines.append("HEIGHT=%d" % height(cfg))
+    lines.append("HEIGHT=%d" % height(cfg, own=True))
     # the built-in palette only: a shell's own SPARK_*_SGR exports win
     # there, and auto (tty, NO_COLOR) is decided per shell by the hook
-    colour = on and stored("colour", cfg) != "off"
+    colour = on and stored("colour", cfg, own=True) != "off"
     for role in ROLES:
         lines.append("SGR_%s=%s" % (role.upper(), DEFAULT_SGR[role] if colour else ""))
     for mood, frame in sorted(faces(faces_path).items()):
@@ -282,7 +320,7 @@ def render(cfg=None, awake_now=None):
     if cfg is None:
         from . import config
         cfg = config.load()
-    on = awake() if awake_now is None else awake_now
+    on = state().get("AWAKE") == "yes" if awake_now is None else awake_now
     _atomic(LOOK_FILE, content(cfg, on))
     forget()
 
@@ -293,7 +331,7 @@ def news(nid, line):
     clean() refuses, or an id that is not one plain word, writes nothing."""
     line = clean(line)
     nid = (nid or "").strip()
-    if line is None or not nid or not all(c.isalnum() or c in "-_." for c in nid):
+    if line is None or not valid_id(nid):
         return False
     try:
         _atomic(NEWS_FILE, "%s\t%s\n" % (nid, line))
@@ -351,7 +389,7 @@ def fresh(cfg=None):
     an awakened machine (a hand edit of either); True when it was. The
     file is derived state, like check.json: the bare verb shows the
     settings, and the file the hooks read follows them."""
-    if not awake():
+    if state().get("AWAKE") != "yes":
         return False
     cfg = _cfg(cfg)
     try:
@@ -408,6 +446,10 @@ def cmd_look(args):
     if word == "color":
         word = "colour"
     if word not in KEY_OF:
+        if len(args) > 1 or args[0].endswith("?"):
+            # `spark look for big files in downloads` is a question
+            from . import cli
+            return cli.main(["look"] + list(args))
         say("spark look -- no part named %s: motion, colour, reveal or words" % args[0])
         return 2
     if len(args) == 1:
@@ -441,6 +483,10 @@ def cmd_height(args):
         n = int(args[0])
     except ValueError:
         n = 0
+        if len(args) > 1 or args[0].endswith("?"):
+            # `spark height of a mountain?` is a question
+            from . import cli
+            return cli.main(["height"] + list(args))
     if len(args) > 1 or not HEIGHT_MIN <= n <= HEIGHT_MAX:
         say("spark height -- the height is a number, %d..%d" % (HEIGHT_MIN, HEIGHT_MAX))
         return 2

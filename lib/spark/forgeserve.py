@@ -1396,15 +1396,19 @@ class Handler(BaseHTTPRequestHandler):
 
     def api_soul_write(self, body):
         from . import check, soul
-        text = body.get("text")
-        if not isinstance(text, str):
-            return self._error(400, "bad", "text must be a string")
+        text, core = body.get("text"), body.get("core", False)
+        if not isinstance(text, str) or not isinstance(core, bool):
+            return self._error(400, "bad", "text must be a string, core true or false")
         # what `spark soul edit` would write: the personality paragraph
-        # after an unchanged core once awaken gave one, else the soul file
-        soul.write_edit(self.server.cfg, text)
+        # after an unchanged core once awaken gave one, else the soul file;
+        # a changed core only with core: true (spark soul edit --core)
+        part = soul.write_edit(self.server.cfg, text, core=core)
+        if part is None:
+            return self._error(409, "core", "the text changes the fixed core -- send core: true to replace "
+                                            "the whole soul, or keep the core and change the personality after it")
         n = len(text.strip())
         check.refresh()
-        return self._json(200, {"chars": min(n, soul.SOUL_MAX), "cut": n > soul.SOUL_MAX})
+        return self._json(200, {"chars": min(n, soul.SOUL_MAX), "cut": n > soul.SOUL_MAX, "part": part})
 
     def api_memory(self):
         from . import memory

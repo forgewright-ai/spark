@@ -47,7 +47,6 @@ TEMPER_DESC = {
     "playful": "light, with a little humour that never hides the answer",
     "terse": "as few words as possible",
 }
-BIRTH_IDS = ("greet.1", "greet.2", "greet.3", "awake", "asleep", "runs", "done")
 PERSONALITY_CAP = 480          # the birth's paragraph; soul.PERSONALITY_MAX is the file's cap
 BIRTH_TOKENS = 700
 BIRTH_TIMEOUT = 180
@@ -137,11 +136,8 @@ def _wake(cfg):
         if e.kind != "loading":
             return None, e.hint
     expected = engine.last_load(engine.model_file(cfg, "ember") or engine.model_file(cfg))
-    est = getattr(textmod, "Estimate", None)
-    bar = est("waking", expected) if (est and expected) else textmod.Busy(sys.stderr)
-    starter = getattr(bar, "start", None)
-    if starter:
-        starter()
+    bar = textmod.Estimate("waking", expected) if expected else textmod.Busy(sys.stderr)
+    bar.start()
     t0 = time.time()
     try:
         while time.time() - t0 < max(WAKE_MAX, 2 * (expected or 0)):
@@ -153,24 +149,27 @@ def _wake(cfg):
                     return None, e.hint
         return None, "the model is still loading"
     finally:
-        stop = getattr(bar, "stop", None)
-        if stop:
-            stop()
+        bar.stop()
 
 
 def ask_birth(s, temper, k):
-    """The model's one JSON object for this temperament, or {} on any failure."""
+    """The model's one JSON object for this temperament, or {} on any
+    failure. The request goes bare (identity false): no soul and no
+    remembered fact rides it, so none can be echoed into the plain words
+    file. It is a turn record, as every request is."""
     msgs = [{"role": "system", "content": _brief(temper, k)},
             {"role": "user", "content": "Write the lines for the %s temperament." % temper}]
     busy = textmod.Busy(sys.stderr).start()
+    t0 = time.time()
     try:
-        reply, _ = s._retry_fresh(lambda: wire.chat_json(
+        reply, s.timings = s._retry_fresh(lambda: wire.chat_json(
             s.cfg, s.url, msgs, _schema(k), max_tokens=BIRTH_TOKENS, temperature=0.7,
-            forge=s.forge, model="ember", timeout=BIRTH_TIMEOUT))
+            forge=s.forge, model="ember", timeout=BIRTH_TIMEOUT, identity=False))
     except wire.BrainError:
         return {}
     finally:
         busy.stop()
+    s.record(kind="awaken", ms=int((time.time() - t0) * 1000))
     return reply if isinstance(reply, dict) else {}
 
 
@@ -239,7 +238,8 @@ def pace(s, cfg, temper, ask):
     chunks = []
     busy = textmod.Busy(sys.stderr).start()
     try:
-        s.ask_stream(PACE_ASK % TEMPER_DESC[temper], "", chunks.append, max_tokens=PACE_TOKENS, timeout=60)
+        _, ms = s.ask_stream(PACE_ASK % TEMPER_DESC[temper], "", chunks.append, max_tokens=PACE_TOKENS, timeout=60)
+        s.record(kind="awaken", ms=ms)
     except wire.BrainError:
         busy.stop()
         say("The model did not answer, so the pace stays as it is.")
@@ -361,7 +361,8 @@ def main(args):
         say("%s awaken -- it asks you questions, so it needs a terminal" % MARK)
         return 2
     try:
-        return run(config.load(), _Ask())
+        with look.assume_awake():
+            return run(config.load(), _Ask())
     except KeyboardInterrupt:
         say("")
         return 130

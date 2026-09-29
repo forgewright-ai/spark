@@ -23,8 +23,9 @@ a personality and a look. Until you run it, spark works as it did.
 - Awake, colour comes from a built-in palette of bold, dim, red, bold
   red and green, where you export no colour of your own. Dim is only
   for decoration.
-- `SPARK_OK_SGR`, `SPARK_TROUBLE_SGR` and `SPARK_YOU_SGR` join the 3
-  colour exports. `spark check` paints its rows with them when awake.
+- `SPARK_OK_SGR` and `SPARK_TROUBLE_SGR` join the 3 colour exports.
+  `spark check` paints its rows with them when awake. `SPARK_YOU_SGR`
+  is reserved, and nothing paints with it yet.
 - A reply revealed at a pace breathes at the punctuation when awake.
   The pace you chose is the average with the pauses in it.
 - Awake, a reply's `inline code` is bold and its list lines hang under

@@ -67,10 +67,11 @@ prompt line, the page and any program.
   semicolon waits `reveal.BREATH_COMMA` steps more, and a sentence's end
   or a blank line `reveal.BREATH_STOP`. The pace chosen
   is the average with the pauses in it: the base step shrinks by
-  `reveal.BREATH_SCALE`. A breath is a later due, never a sleep, so a
-  model stall swallows it and is never repaid. Unawakened, the pace is
-  even. Where you type commands (the widget's line, `spark do`'s
-  steps) nothing is paced. Piped, nothing is paced anywhere.
+  `reveal.BREATH_SCALE`. A code line has no breath, so it keeps the
+  chosen pace itself, never faster. A breath is a later due, never a
+  sleep, so a model stall swallows it and is never repaid. Unawakened,
+  the pace is even. Where you type commands (the widget's line, `spark
+  do`'s steps) nothing is paced. Piped, nothing is paced anywhere.
 - **Text-first.** Plain text that pipes, `--porcelain` for programs, no
   curses, keyboard only. Long output pages at a terminal (`$PAGER`, else
   `less`) and is plain when piped: `page()` and `paged()` in
@@ -86,7 +87,8 @@ prompt line, the page and any program.
   `SPARK_OK_SGR`, `SPARK_TROUBLE_SGR` and `SPARK_YOU_SGR`. An awakened
   machine whose colour part is active fills a role left unset from a
   built-in palette (`look.DEFAULT_SGR`). Accent is bold, muted dim, warn
-  red, trouble bold red, ok green, and you plain. No hue reads on every
+  red, trouble bold red, ok green, and you plain (you is reserved:
+  nothing paints with it yet). No hue reads on every
   background, so the accent is bold in the terminal's own foreground.
   Dim is decoration only: the dots, the scanner's brackets, the arrow,
   never text a person has to read. `sgr()` and `paint()` in
@@ -458,7 +460,8 @@ and may change freely.
    with `Nothing to do` or `N to do`. A `todo` needs the user, such as a
    placeholder in site.env. `--dry-run` never calls sudo. An apply run
    prints only what it changed and what needs the user, and ends with
-   `Nothing to do` or `N changed`. Its `ok` and
+   `Nothing to do`, `N changed`, `M need you` (`1 needs you` for one) or
+   `N changed -- M need you`. Its `ok` and
    `skip` rows and its section headers are silent unless `--verbose`,
    because a converged machine has nothing to report. `--dry-run` stays
    the full report: `spark check`'s configs row and
@@ -937,6 +940,10 @@ and may change freely.
    POST    /api/soul                  admin
    ```
 
+   `POST /api/soul` takes `{text, core?}` and answers `{chars, cut,
+   part}`, `part` the one written: `personality` after an unchanged
+   core once awaken gave one, else `soul`, and a changed core there is
+   409 `{error: {kind: core}}` unless `core` is true.
    `GET /api/me` answers `{role, user, name, version}`: how the page
    decides which console to draw and whom to greet. `GET /api/models`
    answers this machine's model table `{name, total_gb, budget_gb,
@@ -1353,7 +1360,9 @@ One grammar for every verb. A verb that breaks a rule is a bug.
 1. A bare verb shows. It never mutates. The one carve-out: `spark bar`
    with stdout not a tty still prints the bar line itself. A status bar
    runs `spark bar` piped and must always get the line, never a state
-   change.
+   change. Derived state is no mutation: bare `spark check` writes
+   `check.json`, and bare `spark look` renders a stale look file again
+   (`look.fresh`), as a hand edit of `spark.env` asks.
 2. `on|off` is the only switch vocabulary at the CLI: headless, serve,
    forge, quiet, memory. The two servers hold the same kind of state and
    answer the same way. There is no `start`/`stop` pair beside it, and

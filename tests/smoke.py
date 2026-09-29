@@ -7,12 +7,14 @@
 # Every case runs bin/spark as a subprocess with a throwaway HOME and a
 # scrubbed environment, exactly as a shell would.
 
+import atexit
 import glob
 import hashlib
 import json
 import os
 import re
 import select
+import shutil
 import signal
 import subprocess
 import sys
@@ -23,6 +25,16 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SPARK = os.path.join(REPO, "bin", "spark")
+# Isolation, before any spark import: this process and every case that
+# inherits its environment see a throwaway HOME and XDG dirs, so the
+# developer's own look file, spark.env or exports (an awakened machine)
+# can never change a result.
+_ISOLATED = tempfile.mkdtemp(prefix="spark-smoke-home-")
+atexit.register(shutil.rmtree, _ISOLATED, True)
+os.environ.update({"HOME": _ISOLATED, "XDG_CONFIG_HOME": _ISOLATED + "/.config",
+                   "XDG_STATE_HOME": _ISOLATED + "/.local/state", "XDG_DATA_HOME": _ISOLATED + "/.local/share"})
+for _k in [k for k in os.environ if k.startswith("SPARK_LOOK_") or k in ("SPARK_HEIGHT", "SPARK_REVEAL")]:
+    del os.environ[_k]
 sys.path.insert(0, os.path.join(REPO, "lib"))
 from spark import vault  # noqa: E402  -- to open sealed threads in assertions
 
@@ -1467,10 +1479,19 @@ def living_core_cases(t):
         # --- awakened: the parts through the environment, the file rendered
         for k in ("SPARK_LOOK_MOTION", "SPARK_LOOK_COLOUR", "SPARK_LOOK_WORDS"):
             os.environ[k] = "on"
+        os.makedirs(os.path.dirname(_sp.SPARK_ENV), exist_ok=True)
+        with open(_sp.SPARK_ENV, "w") as f:      # smoke's own throwaway spark.env
+            f.write("SPARK_LOOK_MOTION=on\nSPARK_LOOK_COLOUR=on\nSPARK_LOOK_WORDS=on\n")
         look.render(_cf.load(), awake_now=True)
         got = open(look.LOOK_FILE).read()
         t.ok(look.awake() and "AWAKE=yes\nMOTION=on\n" in got and "FACE_THINKING=(o.O)" in got and "BLINK=14" in got
              and "SGR_ACCENT=1" in got, "living: render writes the look file the hooks read", got)
+        os.environ.update(SPARK_HEIGHT="3", SPARK_LOOK_WORDS="off")
+        baked = look.content(_cf.load(), True)
+        os.environ.update(SPARK_LOOK_WORDS="on")
+        del os.environ["SPARK_HEIGHT"]
+        t.ok("HEIGHT=1\n" in baked and "WORDS=on\n" in baked,
+             "living: the look file bakes in spark.env's own values, never this shell's exports", baked[:80])
         b = _tx.Busy(Tty())
         f0, f14, f42 = b._frame(0), b._frame(14), b._frame(42)
         t.ok(b.scan and b.step == 0.12 and "(o.O)" in f0 and "[" in f0 and "]" in f0 and "=" in f0
@@ -1531,6 +1552,16 @@ def living_core_cases(t):
              "living: the reveal breathes at a comma and a sentence's end, its average the chosen pace")
         typical = 80.0 / 40 * _rv.BREATH_SCALE + (_rv.BREATH_COMMA + _rv.BREATH_STOP) * _rv.BREATH_SCALE / 40
         t.ok(abs(typical - 80.0 / 40) < 1e-9, "living: a typical sentence takes the time the pace says, breath included")
+        w = _tx.Wrap(Tty(), mark=False, cps=40)
+        steps = []
+        w._tick = lambda ch, step: steps.append((ch, step))
+        w.feed("Hush.\n    code_line\n")
+        w.close()
+        code = sorted(set(round(st, 9) for ch, st in steps if ch in "code_line"))
+        prose = sorted(set(round(st, 9) for ch, st in steps if ch in "Hush"))
+        t.ok(code == [round(1.0 / 40, 9)] and prose == [round(_rv.BREATH_SCALE / 40, 9)],
+             "living: a code line keeps the chosen pace, never faster; prose averages it with its breath",
+             repr((code, prose)))
 
         # --- pipes: never a frame or an escape, awakened or not
         pw = _tx.Wrap(io.StringIO(), mark=True)
@@ -1598,6 +1629,8 @@ def living_core_cases(t):
             os.environ.pop("TMUX", None)
         t.ok(not bare and under and _bar.for_tmux(""), "living: bare spark bar at a terminal is plain; tmux and a pipe get the markup")
     finally:
+        if os.path.exists(_sp.SPARK_ENV):
+            os.remove(_sp.SPARK_ENV)
         for n, v in paths.items():
             setattr(look, n, v)
         for k, v in saved.items():
@@ -1616,7 +1649,8 @@ def living_core_cases(t):
                 "XDG_DATA_HOME": home + "/.local/share", "SPARK_NO_REFRESH": "1", "TERM": "xterm", "LANG": "C.UTF-8"})
 
     def sp(*args):
-        p = subprocess.run([sys.executable, SPARK] + list(args), capture_output=True, text=True, env=env, timeout=30)
+        p = subprocess.run([sys.executable, SPARK] + list(args), capture_output=True, text=True, env=env, timeout=30,
+                           stdin=subprocess.DEVNULL)
         return p.returncode, p.stdout
     rc0, bare = sp("look")
     rc1, said = sp("look", "motion", "auto")
@@ -1643,6 +1677,14 @@ def living_core_cases(t):
          and "SPARK_REVEAL" not in senv, "living: spark look off turns three parts off and leaves the reveal", senv)
     rcg, greet = sp("words", "greet")
     t.ok(rcg == 0 and greet == "", "living: the greeting is silent on an unawakened machine")
+    env["SPARK_BASE_URL"] = "http://127.0.0.1:9"     # a question here reaches no model
+    rcq, q1 = sp("look", "for", "big", "files", "in", "downloads")
+    rcq2, q2 = sp("height", "of", "the", "row?")
+    rcq3, q3 = sp("look", "sideways")
+    t.ok(rcq != 2 and "no part named" not in q1 and rcq2 != 2 and "is a number" not in q2
+         and rcq3 == 2 and "no part named sideways" in q3,
+         "living: look and height hand ordinary words to the question, as before them; one odd word is refused",
+         repr((rcq, q1[:80], rcq2, q2[:80], q3[:80])))
 
     # --- chat: Ctrl-C at the prompt clears the line; /q ends it
     pid, fd = pty.fork()
@@ -1722,6 +1764,48 @@ def living_awaken_cases(t):
         got, bad = _words.parse(path)
         t.ok(not bad and set(_words.IDS) <= set(got) and "{name}" in got["hello"] and open(path).read().isascii(),
              "words.d/%s: every shipped line passes the check, every id there" % temper, str(bad))
+    # inside awaken the process acts awake, the parts on auto; nothing written
+    before = (_look.awake(), _look.part("motion"))
+    with _look.assume_awake():
+        inside = (_look.awake(), _look.part("motion"), _look.part("colour"))
+    t.ok(inside == (True, "auto", "auto") and (_look.awake(), _look.part("motion")) == before,
+         "awaken: its own waits and pace see an awake machine, the parts on auto, and only while it runs",
+         repr((before, inside)))
+    # one rule for an id, and a face over FACE_MAX is refused where it is drawn and where it is checked
+    with tempfile.TemporaryDirectory(prefix="spark-ids-") as d:
+        with open(d + "/words", "w", encoding="utf-8") as f:
+            f.write("greet.1\tHello.\nbad id\tHello.\ncaf\u00e9\tHello.\n")
+        with open(d + "/faces", "w") as f:
+            f.write("IDLE=(o.o)\nPLEASED=(^......^)\n")
+        got_w = _look.refused(words=d + "/words", faces_path=d + "/faces")
+        parsed, bad = _words.parse(d + "/words")
+        t.ok(got_w == [("words", 2), ("words", 3), ("faces", 2)] and list(parsed) == ["greet.1"]
+             and [n for n, _k, _w in bad] == [2, 3] and _look.faces(d + "/faces")["pleased"] == "(^.^)",
+             "look.refused and words.parse agree on an id; a face over FACE_MAX is reported and never drawn",
+             repr((got_w, bad)))
+    # the birth asks a FORGE for the chat model bare: identity false
+    import io
+    from spark import config as _cfgm, wire as _wire
+    sent = []
+
+    class _Reply:
+        def __enter__(self):
+            return io.BytesIO(json.dumps({"choices": [{"message": {"content": "{}"}}]}).encode())
+
+        def __exit__(self, *a):
+            return False
+    real_send = _wire._send
+    _wire._send = lambda cfg, url, data, timeout, forge=False: sent.append(json.loads(data)) or _Reply()
+    try:
+        for forge in (True, False):
+            _wire.chat_json(_cfgm.load(), "http://127.0.0.1:9", [], {"type": "object"}, forge=forge, model="ember",
+                            identity=False)
+        _wire.chat_json(_cfgm.load(), "http://127.0.0.1:9", [], {"type": "object"}, forge=True, model="ember")
+    finally:
+        _wire._send = real_send
+    t.ok([b.get("identity", "none") for b in sent] == [False, "none", "none"],
+         "wire.chat_json: identity false reaches a FORGE only when asked, the default sends no field",
+         str([b.get("identity", "none") for b in sent]))
     # one_fact never raises: a config that is not one, memory off
     t.ok(_mem.one_fact("not a config") is None and _mem.one_fact(type("Off", (), {"memory": False})()) is None,
          "memory.one_fact: None on anything it cannot read, never an exception")
@@ -1734,11 +1818,14 @@ def living_awaken_cases(t):
 
         def _send(self, code, body):
             data = json.dumps(body).encode()
-            self.send_response(code)
-            self.send_header("Content-Type", "application/json")
-            self.send_header("Content-Length", str(len(data)))
-            self.end_headers()
-            self.wfile.write(data)
+            try:
+                self.send_response(code)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+            except BrokenPipeError:     # the Ctrl-C case hangs up first
+                pass
 
         def do_GET(self):
             if self.path == "/health":
@@ -1762,6 +1849,7 @@ def living_awaken_cases(t):
             self._send(200, {"choices": [{"message": {"content": json.dumps(garbage)}, "finish_reason": "stop"}]})
 
     bsrv = HTTPServer(("127.0.0.1", 0), Birth)
+    bsrv.handle_error = lambda *a: None     # a client gone mid-reply is the test, not a traceback
     threading.Thread(target=bsrv.serve_forever, daemon=True).start()
     burl = "http://127.0.0.1:%d" % bsrv.server_address[1]
 
@@ -1829,6 +1917,20 @@ def living_awaken_cases(t):
         t.ok(p.stdout.split() == ["personality", "personality"] and "lighthouse" in read(pf)
              and not os.path.exists(cfgd + "/soul"),
              "the page's soul editor: an unchanged core writes the personality alone", p.stdout + p.stderr)
+        pyw = ("import os, sys; sys.path.insert(0, %r); from spark import soul, config; c = config.load(); "
+               "print(soul.write_edit(c, 'You are someone else.')); print(os.path.exists(soul.SOUL_FILE)); "
+               "print(soul.write_edit(c, 'You are someone else.', core=True)); os.remove(soul.SOUL_FILE); "
+               "soul.write_personality('Calm' + chr(27) + '[2J and ' + chr(7) + 'kind.'); "
+               "print(repr(open(soul.PERSONALITY_FILE).read()))" % os.path.join(REPO, "lib"))
+        p = subprocess.run([sys.executable, "-c", pyw], capture_output=True, text=True, env=env, timeout=30)
+        t.ok(p.stdout.split("\n")[:4] == ["None", "False", "soul", repr("Calm[2J and kind.\n")],
+             "the page's soul editor: a changed core writes nothing without core, the soul with it; "
+             "a personality keeps no control character", p.stdout + p.stderr)
+        with open(pf, "w") as f:
+            f.write("You speak like a lighthouse keeper." + esc + "[31m\n")
+        rc, out, _ = run(env, "soul")
+        t.ok(rc == 0 and esc not in out and "lighthouse keeper.[31m" in out,
+             "spark soul: a control character in the personality file is never shown", repr(out))
         rc, out, _ = run(env, "words", "greet")
         idle = read(ff).split("IDLE=", 1)[-1].split("\n", 1)[0]
         t.ok(rc == 0 and len(out.splitlines()) == 1 and idle and out.rstrip() in
@@ -1867,6 +1969,12 @@ def living_awaken_cases(t):
              "awaken, a garbage birth: the words file holds the good line and the shipped ones, nothing refused", body)
         t.ok("SPARK_REVEAL=38" in read(cfgd + "/spark.env") and "TEMPER=playful" in read(cfgd + "/faces"),
              "awaken: faster is a quarter up (30 -> 38), yes keeps it in spark.env", read(cfgd + "/spark.env"))
+        tdir = home + "/.local/state/spark/turns"
+        recs = [json.loads(ln) for n in (os.listdir(tdir) if os.path.isdir(tdir) else [])
+                for ln in read(tdir + "/" + n).splitlines()]
+        mine = [r for r in recs if r.get("kind") == "awaken"]
+        t.ok(len(mine) == 2 and all(isinstance(r.get("out_bytes"), int) and r.get("dest") for r in mine),
+             "awaken: the birth and the hello are 2 turn records, so spark stats --sends counts them", str(recs))
         rc, out, err = run(env, "awaken", answers="terse\n\n")
         t.ok(rc == 0 and "TEMPER=terse" in read(cfgd + "/faces") and "SPARK_REVEAL=38" in read(cfgd + "/spark.env"),
              "awaken again: the birth runs again, Enter at the pace keeps the one kept", out + err)

@@ -48,12 +48,19 @@ SOUL_USAGE = """%s soul -- who it is
 """ % (MARK, SOUL_MAX)
 
 
+def _paragraph(t):
+    """One paragraph: whitespace folded, every control character out (an
+    escape in the file must never reach a terminal or a request), capped."""
+    t = " ".join((t or "").split())
+    return "".join(c for c in t if c >= " " and not ("\x7f" <= c <= "\x9f"))[:PERSONALITY_MAX]
+
+
 def personality():
     """The personality paragraph (spark awaken, or spark soul edit after
-    it), whitespace folded and capped; '' when there is none."""
+    it), cleaned by _paragraph; '' when there is none."""
     try:
         with open(PERSONALITY_FILE, encoding="utf-8", errors="replace") as f:
-            return " ".join(f.read().split())[:PERSONALITY_MAX]
+            return _paragraph(f.read())
     except OSError:
         return ""
 
@@ -105,24 +112,28 @@ def write_personality(t):
     tmp = PERSONALITY_FILE + ".tmp"
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
-        f.write(" ".join((t or "").split())[:PERSONALITY_MAX] + "\n")
+        f.write(_paragraph(t) + "\n")
     os.chmod(tmp, 0o600)
     os.replace(tmp, PERSONALITY_FILE)
 
 
-def write_edit(cfg, t):
+def write_edit(cfg, t, core=False):
     """What `spark soul edit` would write, for the page's editor, which
     shows the whole soul and sends it back whole. No personality, or a
     soul file of your own: the soul file, as always. A personality and no
-    soul file: the text after the unchanged core is the personality; a
-    changed core is a whole replacement, the soul file. Returns the part
-    written: file or personality."""
+    soul file: the text after the unchanged core is the personality. A
+    changed core replaces the whole soul only with `core` (the explicit
+    word `spark soul edit --core` is); without it nothing is written.
+    Returns the part written, personality or soul, or None."""
     t = (t or "").strip()
-    if has_personality() and not os.path.isfile(SOUL_FILE) and t.startswith(DEFAULT):
-        write_personality(t[len(DEFAULT):])
-        return "personality"
+    if has_personality() and not os.path.isfile(SOUL_FILE):
+        if t.startswith(DEFAULT):
+            write_personality(t[len(DEFAULT):])
+            return "personality"
+        if not core:
+            return None
     write(cfg, t)
-    return "file"
+    return "soul"
 
 
 def _editor():

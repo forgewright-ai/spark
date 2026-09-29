@@ -49,6 +49,8 @@ SENDS = (
     ("recall", "the last 400 lines of this shell's history"),
     ("paste", "a multi-line paste at the prompt, 8 kB at most -- and nothing at all when it "
               "looks like a secret (a private key, a token, a credential line)"),
+    ("awaken", "at spark awaken only: the temperament and its brief, once, without the soul or facts -- "
+               "then one hello turn with the soul and remembered facts, as chat sends them"),
 )
 
 _DANGER = [

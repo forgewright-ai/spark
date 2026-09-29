@@ -75,7 +75,7 @@ def parse(path):
             continue
         key, sep, body = text.partition("\t")
         key = key.strip()
-        if not sep or not key or not all(c.isalnum() or c in "._-" for c in key):
+        if not sep or not look.valid_id(key):
             refused.append((n, key[:20] or "?", "not ID<TAB>line"))
             continue
         c = look.clean(body)

@@ -301,7 +301,7 @@ def living(shell, widget, tmp, env, ok):
     if shell == "bash":
         sh = Shell(["bash", "--norc", "--noprofile", "-i"], env, os.path.join(tmp, "work"))
         # an EXIT trap the rc set first, a quote inside: it must still run
-        sh.send("trap 'echo \"it'\\''s the old trap\" > \"$TRAPLOG\"' EXIT; "
+        sh.send("trap 'echo \"it'\\''s the old trap $?\" > \"$TRAPLOG\"' EXIT; "
                 "PS1='\\nINFO-LINE\\n%s'; source %s; echo SOURCED\n" % (prompt, widget))
     else:
         sh = Shell(["zsh", "-f", "-i"], env, os.path.join(tmp, "work"))
@@ -393,7 +393,17 @@ def living(shell, widget, tmp, env, ok):
     sh.expect(prompt)
     sh.settle()
     ok("Three runs wait" not in since(), "news: SITE_QUIET_START=yes holds it back", since()[-300:])
+    ok(lines(os.path.join(sd, "news-seen")) == ["n2"], "news: under quiet the id counts as seen",
+       lines(os.path.join(sd, "news-seen")))
     os.remove(os.path.join(cfg, "site.env"))
+    since = sh.mark()
+    sh.send("\r")
+    sh.expect(prompt)
+    sh.settle()
+    ok("Three runs wait" not in since(), "news: held back by quiet, it never plays later", since()[-300:])
+    with open(os.path.join(sd, "news"), "w") as f:
+        f.write("n3\tThree runs wait for review.\n")
+    os.utime(os.path.join(sd, "news"), (time.time() + 6, time.time() + 6))
     open(os.path.join(sd, "off"), "w").close()
     since = sh.mark()
     sh.send("\r")
@@ -454,13 +464,14 @@ def living(shell, widget, tmp, env, ok):
     sh.settle()
     ok("no brain awake" not in sh.buf.decode("utf-8", "replace"), "fallback: the old text is gone")
 
-    sh.send("exit\r")
+    sh.send("exit 7\r")
     sh.read(1.0)
     sh.close()
     time.sleep(0.3)
     ok(not os.listdir(os.path.join(sd, "widgets")), "living: marker removed on exit")
     if shell == "bash":
-        ok(lines(tlog) == ["it's the old trap"], "bash: the EXIT trap the rc set first still runs", lines(tlog))
+        ok(lines(tlog) == ["it's the old trap 7"], "bash: the EXIT trap the rc set first still runs, and sees the exit status",
+           lines(tlog))
     rendered_height(shell, widget, tmp, env, ok)
 
 

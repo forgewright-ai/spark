@@ -106,7 +106,7 @@ USAGE_TAIL = """less often used
 
 docs/
  docs/INSTALL.md              every step and every key; docs/CHEATSHEET.txt
- docs/TOUR.md                 a first hour: 12 small things to try
+ docs/TOUR.md                 a first hour: 13 small things to try
  docs/APPS.md                 editors and tools that speak to spark
 
 version %s

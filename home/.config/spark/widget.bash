@@ -54,13 +54,14 @@ printf 'bash %d %d hook\n' "$$" "$_spark_born" > "$SPARK_DIR/widgets/$$" 2>/dev/
 # a reader still drawing an answer's hint stops with the shell, before its
 # proof file goes: it must not write after the shell is gone
 _spark_gone() { _spark_reap; rm -f "$SPARK_DIR/widgets/$$" "$SPARK_DIR/proof.$$"; }
-# an EXIT trap the rc set before this one still runs, after spark's:
-# `trap -p` quotes it as trap -- '...' EXIT, with each ' written '\''
+# an EXIT trap the rc set before this one still runs, after spark's, and
+# sees the exit status as it was: `trap -p` quotes it as trap -- '...'
+# EXIT, with each ' written '\''
 _spark_exit=$(trap -p EXIT)
 _spark_exit=${_spark_exit#trap -- \'}
 _spark_exit=${_spark_exit%\' EXIT}
 _spark_exit=${_spark_exit//\'\\\'\'/\'}
-trap -- "_spark_gone${_spark_exit:+; $_spark_exit}" EXIT
+trap -- "_spark_rc=\$?; _spark_gone${_spark_exit:+; (exit \$_spark_rc); $_spark_exit}" EXIT
 unset _spark_exit
 
 # --- the look: read line by line, never sourced -----------------------------
@@ -428,13 +429,15 @@ _spark_living() {
         done <<< "$out"
     fi
     [[ -r $nf ]] && [[ ! -e $ns || $nf -nt $ns ]] || return 0
-    _spark_quiet && return 0
     line='' seen=''
     IFS= read -r line < "$nf"
     [[ -r $ns ]] && IFS= read -r seen < "$ns"
     id=${line%%$'\t'*}
     [[ $line == *$'\t'* ]] || id=''
     printf '%s\n' "$id" > "$ns" 2>/dev/null
+    # quiet: the news counts as seen, so it never plays later, and the
+    # next prompt costs a stat again
+    _spark_quiet && return 0
     [[ -n $id && $id != "$seen" ]] || return 0
     line=${line#*$'\t'}
     [[ -n $line && $line != *[[:cntrl:]]* ]] || return 0

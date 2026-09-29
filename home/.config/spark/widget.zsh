@@ -326,13 +326,15 @@ _spark_living() {
         done
     fi
     [[ -r $nf ]] && [[ ! -e $ns || $nf -nt $ns ]] || return 0
-    _spark_quiet && return 0
     line='' seen=''
     IFS= read -r line < "$nf"
     [[ -r $ns ]] && IFS= read -r seen < "$ns"
     id=${line%%$'\t'*}
     [[ $line == *$'\t'* ]] || id=''
     print -r -- "$id" > "$ns" 2>/dev/null
+    # quiet: the news counts as seen, so it never plays later, and the
+    # next prompt costs a stat again
+    _spark_quiet && return 0
     [[ -n $id && $id != "$seen" ]] || return 0
     line=${line#*$'\t'}
     [[ -n $line && $line != *[[:cntrl:]]* ]] || return 0

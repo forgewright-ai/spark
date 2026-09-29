@@ -491,16 +491,20 @@ def _thought_out(text, finish, reasoning):
         return True
 
 
-def chat_json(cfg, url, messages, schema, max_tokens=200, temperature=0.2, forge=False, model=None, timeout=None):
+def chat_json(cfg, url, messages, schema, max_tokens=200, temperature=0.2, forge=False, model=None, timeout=None,
+              identity=True):
     """One JSON object shaped by `schema`, parsed. `model` names the role
     the request is for (spark | ember); the caller decides, the wire
     only carries it. None sends no model field at all. `timeout` (seconds)
     overrides SPARK_TIMEOUT for this one request. The request asks for no
-    thinking (NO_THINKING)."""
+    thinking (NO_THINKING). `identity` False asks a FORGE for the chat
+    model bare (contract 9): no soul and no remembered facts in front."""
     body = _json_body({"messages": messages, "max_tokens": max_tokens, "temperature": temperature,
                        "stream": False, "cache_prompt": True}, schema)
     if model is not None:
         body["model"] = model
+    if forge and not identity:
+        body["identity"] = False
     data = _encode(body)
     with _send(cfg, url, data, timeout or cfg.timeout, forge=forge) as r:
         try:

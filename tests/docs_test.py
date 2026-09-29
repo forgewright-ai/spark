@@ -202,6 +202,10 @@ def living():
     m = re.search(r"(?m)^the interface\n(.*?)(?:\n\n|\Z)", out, re.S)
     verbs = sorted(set(re.findall(r"(?m)^ spark ([a-z]+)", m.group(1)))) if m else []
     check(bool(verbs), "spark help has an interface block with verbs")
+    tour = re.search(r"(\d+) small things", read("docs/TOUR.md"))
+    said = re.search(r"TOUR\.md .*?(\d+) small things", out)
+    check(tour is not None and said is not None and said.group(1) == tour.group(1),
+          "spark help counts the tour's small things as docs/TOUR.md does")
     cheat, inst = read("docs/CHEATSHEET.txt"), read("docs/INSTALL.md")
     for v in verbs + ["Esc k"]:
         word = v if v == "Esc k" else "spark " + v

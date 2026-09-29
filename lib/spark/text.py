@@ -70,10 +70,14 @@ class Wrap:
                 self.living = False
         self.code = False         # inside `...`
         self.hang = 0             # a bullet's hanging indent
-        self.step = 0.0
+        self.step = self.base = 0.0
         if self.cps:
             from . import reveal
-            self.step = (1.0 / self.cps) * (reveal.BREATH_SCALE if self.living else 1.0)
+            # prose runs faster between its breaths (BREATH_SCALE), so its
+            # average is the chosen pace; a code line has no breath, so it
+            # keeps the chosen pace itself (base), never faster
+            self.base = 1.0 / self.cps
+            self.step = self.base * (reveal.BREATH_SCALE if self.living else 1.0)
 
     def _emit(self, s, pause=0):
         """Every write goes through here: unpaced, one write; paced (cps),
@@ -82,7 +86,7 @@ class Wrap:
         if not self.cps or not s:
             self.stream.write(s)
             return
-        step = self.step
+        step = self.base if self.verbatim else self.step
         pos = 0
         for m in SGR_RE.finditer(s):
             for ch in s[pos:m.start()]:
@@ -541,6 +545,21 @@ class Busy:
     def __exit__(self, *exc):
         self.stop()
         return False
+
+
+def pulse(stream=None):
+    """Awakened, at a terminal: a Busy on `stream` (stderr) around a silent
+    step. Anywhere else a context that draws nothing, so an unawakened
+    machine and a log keep today's bytes."""
+    import contextlib
+    stream = sys.stderr if stream is None else stream
+    try:
+        from . import look
+        if look.active("motion", stream):
+            return Busy(stream)
+    except Exception:       # noqa: BLE001 -- the pulse is never a reason to fail
+        pass
+    return contextlib.nullcontext()
 
 
 class Estimate(Busy):

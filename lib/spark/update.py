@@ -18,6 +18,7 @@ import subprocess
 import sys
 
 from . import MARK, REPO, STATE_DIR, run, say, state_dir
+from .text import pulse as _pulse   # the fetch, the pull, the move
 
 UPDATE_LOCK = os.path.join(STATE_DIR, "update.lock")
 SIGNERS = "allowed-signers"     # at the repo root: `spark-release namespaces="git" <keytype> <base64>`
@@ -59,21 +60,6 @@ def verified(tag, repo=None):
     if m and (int(m.group(1)), int(m.group(2))) < (2, 34):
         return "", "unverifiable by git %s.%s: an ssh signature needs git >= 2.34" % m.groups()
     return "", "not signed by a known key"
-
-
-def _pulse():
-    """Awakened, at a terminal: text.Busy on stderr around a silent step
-    (the fetch, the pull, the move). Anywhere else a context that draws
-    nothing, so an unawakened machine and a log keep today's bytes."""
-    import contextlib
-    try:
-        from . import look
-        if look.active("motion", sys.stderr):
-            from . import text
-            return text.Busy(sys.stderr)
-    except Exception:       # noqa: BLE001 -- the pulse is never a reason to fail
-        pass
-    return contextlib.nullcontext()
 
 
 def _door():

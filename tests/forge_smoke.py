@@ -746,7 +746,7 @@ def main():
             ok(st == 200 and d == {"text": "Call yourself Fixture.", "source": "file"}, "/api/soul: the fixture soul", raw[:100])
             st, _, raw = req(url, "POST", "/api/soul", {"text": "New soul."}, headers=post)
             soulf = home + "/.config/spark/soul"
-            ok(st == 200 and json.loads(raw) == {"chars": 9, "cut": False} and open(soulf).read() == "New soul.\n"
+            ok(st == 200 and json.loads(raw) == {"chars": 9, "cut": False, "part": "soul"} and open(soulf).read() == "New soul.\n"
                and oct(os.stat(soulf).st_mode & 0o777) == "0o600", "POST /api/soul writes the file 0600", raw[:100])
             st, _, raw = req(url, "GET", "/api/soul", headers=bearer)
             ok(json.loads(raw)["text"] == "New soul.", "GET /api/soul reflects it", raw[:100])

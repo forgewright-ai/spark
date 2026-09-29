@@ -15,6 +15,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
 from . import CONFIG_DIR, HOME, IS_MAC, MARK, REPO, config, confirm, glyph, mem_total_gb, paged, say
 from .site import apply, set_keys
+from .text import pulse as _pulse   # each file's hash in spark model verify
 
 
 def _downloads_pending(cfg):
@@ -89,21 +90,6 @@ def peer_models(cfg):
         return d if isinstance(d, dict) and isinstance(d.get("models"), list) else None
     except (HTTPError, URLError, OSError, ValueError):
         return None
-
-
-def _pulse():
-    """Awakened, at a terminal: text.Busy on stderr while a silent step
-    runs (each file's hash in `spark model verify`). Anywhere else a
-    context that draws nothing: today's bytes."""
-    import contextlib
-    try:
-        from . import look
-        if look.active("motion", sys.stderr):
-            from . import text
-            return text.Busy(sys.stderr)
-    except Exception:       # noqa: BLE001 -- the pulse is never a reason to fail
-        pass
-    return contextlib.nullcontext()
 
 
 def _restart_server(cfg):
