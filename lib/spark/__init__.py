@@ -110,15 +110,21 @@ def say(s=""):
 # bold, dim, their resets and the sixteen colours (30-37, 90-97) -- a
 # `38;5;n` or 24-bit value is dropped whole, never drawn -- and only at
 # a tty: a pipe never sees an escape.
-_SGR_VARS = {"accent": "SPARK_ACCENT_SGR", "muted": "SPARK_MUTED_SGR", "warn": "SPARK_WARN_SGR"}
+_SGR_VARS = {"accent": "SPARK_ACCENT_SGR", "muted": "SPARK_MUTED_SGR", "warn": "SPARK_WARN_SGR",
+             "ok": "SPARK_OK_SGR", "trouble": "SPARK_TROUBLE_SGR", "you": "SPARK_YOU_SGR"}
 _SGR_OK = frozenset([0, 1, 2, 22] + list(range(30, 38)) + list(range(90, 98)))
 
 
-def sgr(role):
-    """The SGR parameters for `role` (accent, muted, warn), or '' when
-    the variable is unset, empty, or names anything outside the
-    console-safe set."""
+def sgr(role, fallback=True):
+    """The SGR parameters for `role` (accent, muted, warn, ok, trouble,
+    you), or '' when the variable is unset, empty, or names anything
+    outside the console-safe set. Unset, an awakened machine whose colour
+    part is active falls back to the built-in palette (look.DEFAULT_SGR);
+    an unawakened one stays plain, as it always was."""
     v = os.environ.get(_SGR_VARS.get(role, ""), "")
+    if not v and fallback:
+        from . import look
+        v = look.default_sgr(role)
     if not v or not all(c in "0123456789;" for c in v):
         return ""
     parts = v.split(";")

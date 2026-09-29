@@ -382,6 +382,46 @@ def warm(cfg, url):
     return done
 
 
+def _loads_path():
+    from . import look
+    return look.LOADS_FILE
+
+
+def record_load(model_file, seconds):
+    """Keep how long `model_file` took to load (a basename -> seconds
+    map in loads.json), so the next wait for it can show an estimate.
+    Recorded on every machine, awake or not: a state write, no output."""
+    import json
+    path = _loads_path()
+    try:
+        with open(path, encoding="utf-8") as f:
+            loads = json.load(f)
+        if not isinstance(loads, dict):
+            loads = {}
+    except (OSError, ValueError):
+        loads = {}
+    loads[os.path.basename(model_file)] = round(float(seconds), 1)
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(loads, f, sort_keys=True)
+        os.replace(tmp, path)
+    except OSError:
+        pass
+
+
+def last_load(model_file):
+    """Seconds the last load of `model_file` took, or None when never measured."""
+    import json
+    try:
+        with open(_loads_path(), encoding="utf-8") as f:
+            v = json.load(f).get(os.path.basename(model_file or ""))
+        return float(v) if v and float(v) > 0 else None
+    except (OSError, ValueError, TypeError, AttributeError):
+        return None
+
+
 SYSFS_DRM = os.environ.get("SPARK_SYSFS_DRM", "/sys/class/drm")
 
 
