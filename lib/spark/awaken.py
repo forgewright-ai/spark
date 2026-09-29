@@ -77,8 +77,8 @@ def _schema(k):
 def _brief(temper, k):
     return (
         "You are writing the few lines a local assistant called spark says at a person's shell "
-        "prompt, in one temperament: %s (%s). Write plain English, ASCII only, short whole "
-        "sentences, each line under 60 characters. No emoji, no quotation marks, no commands, and "
+        "prompt, in one temperament: %s (%s). Write plain English, ASCII only. Each line is one "
+        "or two whole sentences of 4 to 10 words, with a subject and a verb, under 60 characters. No emoji, no quotation marks, no commands, and "
         "no claim about privacy or where anything is sent. Reply with one JSON object. `why` comes "
         "first: one sentence on how the temperament shapes the lines. Then `greet`: 3 different "
         "greetings for a person coming back to the terminal. `awake`: the model answers again. "
