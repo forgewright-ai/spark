@@ -61,6 +61,41 @@ def verified(tag, repo=None):
     return "", "not signed by a known key"
 
 
+def _pulse():
+    """Awakened, at a terminal: text.Busy on stderr around a silent step
+    (the fetch, the pull, the move). Anywhere else a context that draws
+    nothing, so an unawakened machine and a log keep today's bytes."""
+    import contextlib
+    try:
+        from . import look
+        if look.active("motion", sys.stderr):
+            from . import text
+            return text.Busy(sys.stderr)
+    except Exception:       # noqa: BLE001 -- the pulse is never a reason to fail
+        pass
+    return contextlib.nullcontext()
+
+
+def _door():
+    """The suggestion to awaken, once ever (setup.door marks it offered)."""
+    try:
+        from . import setup
+        setup.door(once=True)
+    except Exception:       # noqa: BLE001 -- a suggestion is never a reason to fail
+        pass
+
+
+def _converge():
+    """bootstrap.sh over the tree. At a terminal it owns the screen (a
+    sudo prompt, curl's bar), so no pulse draws over it; captured, it is
+    silent, and the pulse shows the wait."""
+    from . import site
+    if sys.stdout.isatty():
+        return site.apply((), stream=True)
+    with _pulse():
+        return site.apply((), stream=True)
+
+
 def _lock():
     """Take the update lock, or None when another update holds it. The
     lock covers the half that cannot be run twice -- the fetch and the
@@ -87,8 +122,8 @@ def cmd_update(args):
             continue
         if a == "--converge":
             # internal: the post-move half, running in the new tree
-            from . import config, engine, site
-            rc = site.apply((), stream=True)
+            from . import config, engine
+            rc = _converge()
             if rc == 0:
                 # the tree moved under the running units: without a
                 # restart the API keeps serving the OLD code with every
@@ -103,6 +138,13 @@ def cmd_update(args):
                 if engine.init_shape() == "runit" and engine.service_state(cfg, "check") == "loaded":
                     if engine.kickstart(cfg, "check", restart=True):
                         say("%s update -- spark-check restarted on the new tree" % MARK)
+                # the look file follows the new tree (an awakened machine only)
+                try:
+                    from . import look
+                    look.fresh(cfg)
+                except Exception:       # noqa: BLE001 -- derived state, rebuilt at the next look
+                    pass
+                _door()
             return rc
         say("spark update: no option %s -- spark update -h" % a)
         return 2
@@ -121,7 +163,8 @@ def cmd_update(args):
         say("spark update: the tree is dirty -- commit or stash first (git -C %s status)" % REPO)
         return 1
 
-    rc, _ = _git(["fetch", "-q", "--tags", "origin"], timeout=30)
+    with _pulse():
+        rc, _ = _git(["fetch", "-q", "--tags", "origin"], timeout=30)
     if rc != 0:
         say("spark update: git fetch --tags origin failed")
         return 1
@@ -149,7 +192,8 @@ def cmd_update(args):
         elif dry:
             say("%s update -- would pull %s: %d new commit%s" % (MARK, branch, n, "" if n == 1 else "s"))
         else:
-            rc, _ = _git(["pull", "-q", "--ff-only"])
+            with _pulse():
+                rc, _ = _git(["pull", "-q", "--ff-only"])
             if rc != 0:
                 say("spark update: git pull --ff-only failed -- git -C %s status says why" % REPO)
                 return 1
@@ -176,7 +220,8 @@ def cmd_update(args):
                 say("%s update -- would move to %s (signed by %s; was %s)"
                     % (MARK, newest, who, cur or "an untagged commit"))
             else:
-                rc, _ = _git(["checkout", "-q", "--detach", newest])
+                with _pulse():
+                    rc, _ = _git(["checkout", "-q", "--detach", newest])
                 if rc != 0:
                     say("spark update: git checkout --detach %s failed" % newest)
                     return 1
@@ -191,5 +236,7 @@ def cmd_update(args):
     if moved:
         os.execv(sys.executable, [sys.executable, os.path.join(REPO, "bin", "spark"),
                                   "update", "--converge"])
-    from . import site
-    return site.apply((), stream=True)
+    rc = _converge()
+    if rc == 0:
+        _door()
+    return rc

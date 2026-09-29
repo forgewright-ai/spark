@@ -366,6 +366,7 @@ def warm(cfg, url):
     import urllib.request
     from . import wire
     listed = models_status(cfg, url)
+    files = roles(cfg)
     done = []
     for role in ROLES:
         if role not in listed:
@@ -373,12 +374,17 @@ def warm(cfg, url):
         body = json.dumps({"model": role, "messages": [{"role": "user", "content": "hi"}],
                            "max_tokens": 1, "stream": False}).encode()
         req = urllib.request.Request(url + "/v1/chat/completions", data=body, headers=wire.request_headers(cfg))
+        t0 = time.monotonic()
         try:
             with urllib.request.urlopen(req, timeout=WARM_TIMEOUT) as r:
                 r.read()
             done.append(role)
         except (OSError, ValueError):
-            pass
+            continue
+        # the router loads a model on its first request: that request's
+        # time is the load (a model already loaded measures nothing)
+        if listed[role] != "loaded" and files.get(role):
+            record_load(files[role], time.monotonic() - t0)
     return done
 
 
@@ -420,6 +426,67 @@ def last_load(model_file):
         return float(v) if v and float(v) > 0 else None
     except (OSError, ValueError, TypeError, AttributeError):
         return None
+
+
+def measured_file(cfg):
+    """The model file a wait for /health measures, or "": a single server
+    answers only once its model is loaded; the router answers at once and
+    loads each model on its first request (warm measures those)."""
+    files = roles(cfg)
+    return files["spark"] if files["spark"] and not files["ember"] else ""
+
+
+def waking_bar(expected):
+    """The waking bar (text.Estimate) where the living layer draws it:
+    awakened, the motion part active on stderr, and stdout a terminal
+    too (wait_ready's dots go there, and a unit's log keeps them). None
+    anywhere else, so every other wait prints today's bytes."""
+    import sys
+    try:
+        from . import look
+        if not (look.active("motion", sys.stderr) and sys.stdout.isatty()):
+            return None
+        from . import text
+        return text.Estimate("waking", expected, sys.stderr)
+    except Exception:       # noqa: BLE001 -- the bar is never a reason to fail
+        return None
+
+
+def wait_load(cfg, label, probe, timeout, interval=1.0):
+    """wait_ready for the engine coming up (grammar rule 6), measured: the
+    seconds to ready go to record_load for the model a single server
+    loads (only when it had to wait: an engine already up measures
+    nothing). Awakened at a terminal the waking bar replaces the dots,
+    and `label` follows it so the caller's ` ready` tail still reads;
+    everywhere else it is wait_ready, byte for byte."""
+    import sys
+    from . import wait_ready
+    model = measured_file(cfg)
+    waited = []
+
+    def counted():
+        v = probe()
+        if not v:
+            waited.append(1)
+        return v
+
+    t0 = time.monotonic()
+    bar = waking_bar(last_load(model) if model else None)
+    if bar is None:
+        up = wait_ready(label, counted, timeout, interval)
+    else:
+        up = None
+        bar.start()
+        try:
+            up = wait_ready("", counted, timeout, interval)
+        finally:
+            bar.stop()
+            if label:
+                sys.stdout.write(label if up else label + "\n")
+                sys.stdout.flush()
+    if up and model and waited:
+        record_load(model, time.monotonic() - t0)
+    return up
 
 
 SYSFS_DRM = os.environ.get("SPARK_SYSFS_DRM", "/sys/class/drm")

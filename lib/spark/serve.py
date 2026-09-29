@@ -7,7 +7,7 @@ import subprocess
 import sys
 import time
 
-from . import IS_MAC, MARK, REPO, bind_check, config, glyph, lan_ip, own_hostnames, say, wait_lan_ip, wait_ready
+from . import IS_MAC, MARK, REPO, bind_check, config, glyph, lan_ip, own_hostnames, say, wait_lan_ip
 from . import engine, wire
 
 USAGE = """%s serve -- the engine, served on this LAN
@@ -41,11 +41,34 @@ def _refuse(msg):
     return 2
 
 
+def _warming(cfg, url):
+    """engine.warm, and awakened at a terminal a pulse while it runs: the
+    waking bar when the router loads its models now (the estimate their
+    last loads add up to), else the scanner. Today's silence anywhere
+    else -- a unit's log never sees a frame."""
+    try:
+        from . import look
+        live = look.active("motion", sys.stderr)
+    except Exception:       # noqa: BLE001 -- the pulse is never a reason to fail
+        live = False
+    if not live:
+        return engine.warm(cfg, url)
+    from . import text
+    files = engine.roles(cfg)
+    if files["ember"]:
+        loads = [engine.last_load(files[r]) for r in engine.ROLES]
+        pulse = text.Estimate("waking", sum(loads) if all(loads) else None, sys.stderr)
+    else:
+        pulse = text.Busy(sys.stderr)
+    with pulse:
+        return engine.warm(cfg, url)
+
+
 def _warm(cfg, url):
     """Load every served role now (the router loads on first use) and say
     which answered: `warm   spark, ember`."""
     say("warm   loading the served models now (up to ~30 s each) ...")
-    warmed = engine.warm(cfg, url)
+    warmed = _warming(cfg, url)
     say("warm   " + (", ".join(warmed) if warmed else "nothing answered (the first request loads the model)"))
 
 
@@ -56,9 +79,16 @@ def _warm_when_up(cfg, server):
     nothing (no token, no serve-url, no pidfile); gives up quietly when the
     server is gone or never answers -- the unit restarts it anyway."""
     url = wire.serve_url() or "http://%s:%d" % (cfg.serve_host or lan_ip() or "127.0.0.1", cfg.port)
+    t0 = time.monotonic()
     end = time.time() + 180
     while time.time() < end:
         if wire.health(url) == "ok":
+            # the unit's load, measured as spark serve's own wait is (a
+            # single server answers once its model is in; warm measures
+            # the router's)
+            model = engine.measured_file(cfg)
+            if model and time.monotonic() - t0 >= 1:
+                engine.record_load(model, time.monotonic() - t0)
             _warm(cfg, url)
             return 0
         try:
@@ -144,7 +174,7 @@ def cmd_serve(args):
     if st == "ok":
         engine.write_serve_url(url)
         if quiet:
-            engine.warm(cfg, url)
+            _warming(cfg, url)
             say("%s serve -- already serving at %s" % (MARK, url))
             return 0
         say("%s serve -- already serving at %s" % (MARK, url))
@@ -197,7 +227,7 @@ def cmd_serve(args):
         return False
 
     try:
-        up = wait_ready("" if quiet else "loading", probe, 180, 1)
+        up = engine.wait_load(cfg, "" if quiet else "loading", probe, 180, 1)
     except Exited:
         engine.forget()
         return _die("llama-server exited while loading:\n" + engine.log_tail())
@@ -207,7 +237,7 @@ def cmd_serve(args):
         return _die("no answer from llama-server in 180 s -- stopped; the log tail:\n" + engine.log_tail())
     if quiet:
         say("%s serve -- ready (pid %d) at %s" % (MARK, pid, url))
-        engine.warm(cfg, url)
+        _warming(cfg, url)
     else:
         sys.stdout.write(" ready (pid %d)\n" % pid)
         _warm(cfg, url)
