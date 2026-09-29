@@ -7,7 +7,8 @@
 # docs state is the count in check.py; the model count they state is the
 # count in models.env; every docs/X a doc names exists, every document in
 # docs/ is pointed to and the root holds four; no doc names the lists that
-# are gone;
+# are gone; the living prompt's verbs, keys and temperaments are in the
+# cheatsheet and INSTALL, and nothing calls awaken minting;
 # the docs a new user reads speak two nouns (spark, spark apps) and no
 # doc names what is private; the voice's mechanical half (docs/CONTRIBUTING.md
 # "## Voice") holds over every doc, and the two nouns hold in `spark help`
@@ -52,8 +53,8 @@ CAPS_OK = {
     "HEAD", "POST",
     # what the code prints: the gate's marker, the three row categories
     "NOTICE", "SOFTWARE", "CAPABILITY", "NONFUNCTIONAL",
-    # the help's placeholders (spark font FACE SIZE)
-    "FACE", "SIZE",
+    # the help's placeholders (spark font FACE SIZE, spark look PART)
+    "FACE", "SIZE", "PART",
 }
 # a contraction, any case: the n't family and the pronoun+verb pairs
 CONTRACTION = re.compile(
@@ -186,6 +187,50 @@ def help_voice():
                 m = TWO_NOUNS.search(text)
                 check(m is None, "lib/spark/%s %s: two nouns, spark and spark apps%s"
                       % (f, attr, " (found '%s')" % m.group(0) if m else ""))
+
+
+def living():
+    """The living prompt (v1.59) as the tree holds it: every verb of `spark
+    help`'s interface block, and `Esc k`, in the cheatsheet and INSTALL;
+    every SPARK_LOOK_* key and SPARK_HEIGHT (config.SPARK_KEYS) a row of
+    INSTALL's key table; every shipped temperament (words.d/) named in
+    INSTALL; no doc calls awaken minting; and no shipped line claims
+    where data goes -- README.md says what leaves."""
+    import subprocess
+    out = subprocess.run([sys.executable, os.path.join(ROOT, "bin", "spark"), "help"],
+                         capture_output=True, text=True).stdout
+    m = re.search(r"(?m)^the interface\n(.*?)(?:\n\n|\Z)", out, re.S)
+    verbs = sorted(set(re.findall(r"(?m)^ spark ([a-z]+)", m.group(1)))) if m else []
+    check(bool(verbs), "spark help has an interface block with verbs")
+    cheat, inst = read("docs/CHEATSHEET.txt"), read("docs/INSTALL.md")
+    for v in verbs + ["Esc k"]:
+        word = v if v == "Esc k" else "spark " + v
+        for name, text in (("docs/CHEATSHEET.txt", cheat), ("docs/INSTALL.md", inst)):
+            check(re.search(r"\b%s\b" % re.escape(word), text) is not None,
+                  "%s names %s (spark help, the interface)" % (name, word))
+    table = set(re.findall(r"(?m)^\| `([A-Z_]+)`", inst))
+    keys = [k for k in config.SPARK_KEYS if k.startswith("SPARK_LOOK_") or k == "SPARK_HEIGHT"]
+    check(len(keys) == 4, "config.SPARK_KEYS holds the 3 SPARK_LOOK_* keys and SPARK_HEIGHT")
+    for k in keys:
+        check(k in table, "docs/INSTALL.md's key table has a row for %s" % k)
+    shipped = os.path.join(ROOT, "home", ".config", "spark", "words.d")
+    tempers = sorted(f for f in os.listdir(shipped) if not f.startswith("."))
+    check(bool(tempers), "home/.config/spark/words.d ships a temperament")
+    for t in tempers:
+        check(re.search(r"\b%s\b" % re.escape(t), inst) is not None,
+              "docs/INSTALL.md names the temperament %s (words.d/%s)" % (t, t))
+    minted = re.compile(r"\bmint\w*\b[^.\n]{0,60}\bawak|\bawak\w*\b[^.\n]{0,60}\bmint", re.I)
+    for doc in ALL_DOCS:
+        if doc == "docs/CHANGELOG.md":
+            continue
+        m = minted.search(" ".join(read(doc).split()))
+        check(m is None, "%s: awaken never mints%s" % (doc, " (found '%s')" % m.group(0) if m else ""))
+    claim = re.compile(r"\b(leaves?|privacy|private|cloud|sends?|sent|offline)\b", re.I)
+    for t in tempers:
+        text = "\n".join(l.split("\t", 1)[-1] for l in read(os.path.join(shipped, t)).split("\n")
+                         if l and not l.startswith("#"))
+        m = claim.search(text)
+        check(m is None, "words.d/%s: no line claims where data goes%s" % (t, " (found '%s')" % m.group(0) if m else ""))
 
 
 def main():
@@ -487,6 +532,8 @@ def main():
     off = sorted(k for k in set(doc_routes) | set(forgeserve.ROUTES) if doc_routes.get(k) != forgeserve.ROUTES.get(k))
     check(not off, "CLAUDE.md's route table is forgeserve.ROUTES, entry for entry%s"
           % ("" if not off else " (differs at %s)" % ", ".join("%s %s" % k for k in off[:3])))
+    # the living prompt: its verbs, keys and temperaments in the docs
+    living()
     # the voice's mechanical half, and the two nouns in what spark prints
     voice()
     help_voice()

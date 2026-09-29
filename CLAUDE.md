@@ -28,8 +28,9 @@ prompt line, the page and any program.
   `explain`, `$EDITOR`) and the `FORGE` API (contract 9). Its plugin
   lives in its own repository, named `spark-<app>`, installed the app's
   way. micro came first: forgewright-ai/spark-micro. spark ships no app,
-  no app package, no app check row and no per-app verb. The look and the
-  daily tools of a machine are not spark's business. spark's side is
+  no app package, no app check row and no per-app verb. A machine's
+  desktop, its prompt and its daily tools are not spark's business:
+  `spark look` dresses spark's own lines alone. spark's side is
   generic: `~/.config/spark/theme.env` is a palette any renderer may
   read, and no shell code lives in this tree. The bar line and `spark
   quiet` are core, beside `spark headless`: the behaviour of an AI
@@ -61,9 +62,15 @@ prompt line, the page and any program.
   measured pace, a reader's 40 a second at most. `spark stats` and a
   bare `/reveal` show the numbers. The choice is the reader's, never
   imposed: `--reveal N|auto|off`, `/reveal`, `SPARK_REVEAL`. Off is the
-  default, the chunks as they come. Where you type commands (the
-  widget's line, `spark do`'s steps) nothing is paced. Piped, nothing is
-  paced anywhere.
+  default, the chunks as they come. On an awakened machine the reveal
+  breathes at the punctuation (`text.Wrap._breath`). A comma or a
+  semicolon waits `reveal.BREATH_COMMA` steps more, and a sentence's end
+  or a blank line `reveal.BREATH_STOP`. The pace chosen
+  is the average with the pauses in it: the base step shrinks by
+  `reveal.BREATH_SCALE`. A breath is a later due, never a sleep, so a
+  model stall swallows it and is never repaid. Unawakened, the pace is
+  even. Where you type commands (the widget's line, `spark do`'s
+  steps) nothing is paced. Piped, nothing is paced anywhere.
 - **Text-first.** Plain text that pipes, `--porcelain` for programs, no
   curses, keyboard only. Long output pages at a terminal (`$PAGER`, else
   `less`) and is plain when piped: `page()` and `paged()` in
@@ -73,29 +80,55 @@ prompt line, the page and any program.
   tmux running on it, or with `SPARK_ASCII=1`, the report and bar glyphs
   fall back to `+ x - | v ^ ->`. The docs are ASCII too, and the hook
   refuses anything else: they are read on that console as well. Colour
-  is never spark's own. It comes at a terminal only, from 3 optional
-  environment variables an rc may export: `SPARK_ACCENT_SGR`,
-  `SPARK_MUTED_SGR` and `SPARK_WARN_SGR`, SGR parameter strings. `sgr()`
-  and `paint()` in `lib/spark/__init__.py` keep to 30-37 and 90-97 plus
-  bold and dim. A `38;5` or 24-bit value is dropped whole. A pipe never
-  sees an escape. Unset, every output is byte for byte what it was. An
+  comes at a terminal only, first from 6 optional environment variables
+  an rc may export, SGR parameter strings, one per role:
+  `SPARK_ACCENT_SGR`, `SPARK_MUTED_SGR`, `SPARK_WARN_SGR`,
+  `SPARK_OK_SGR`, `SPARK_TROUBLE_SGR` and `SPARK_YOU_SGR`. An awakened
+  machine whose colour part is active fills a role left unset from a
+  built-in palette (`look.DEFAULT_SGR`). Accent is bold, muted dim, warn
+  red, trouble bold red, ok green, and you plain. No hue reads on every
+  background, so the accent is bold in the terminal's own foreground.
+  Dim is decoration only: the dots, the scanner's brackets, the arrow,
+  never text a person has to read. `sgr()` and `paint()` in
+  `lib/spark/__init__.py` keep to 30-37 and 90-97 plus bold and dim. A
+  `38;5` or 24-bit value is dropped whole. A pipe never sees an escape.
+  Unset and unawakened, every output is byte for byte what it was. An
   input() prompt (`chat> `) is painted only under GNU readline,
   bracketed in `\001` and `\002`. libedit counts the escape bytes as
   columns, so there it stays plain. Every animation frame is ASCII:
-  `text.Busy`, the pulse while a reply is on its way. A reply's Markdown
+  `text.Busy`, the pulse while a reply is on its way, its scanner, the
+  waking bar (`text.Estimate`) and the faces (`faces.kit`). A reply's
+  Markdown
   is drawn at a terminal, never stripped blind. `text.Wrap` renders
   `**bold**` as bold and a `# heading` line as bold. It drops the `*`
   marks of an emphasis only when they flank a word: a letter after an
   opening mark and none before it, the reverse to close. So `*.txt`,
   `**/`, `2*3*4` and `_names_` pass through. A ``` fence opens a block
-  that passes through whole until the closing fence. Piped, the bytes
-  are the model's. Text in is strict UTF-8 as well. stdin is decoded
-  with the replacement mark (`text.stdin_text`). Every string bound for
-  the wire or a store goes through `text.clean` first: a thread, the
-  ledger, a turn record. A lone surrogate is an HTTP 500 from the
-  engine's JSON parser and a crash at a store's strict encode.
-  surrogateescape keeps one for a byte that was not UTF-8 in argv or the
-  environment under the C locale. A w3m page title on the box was one.
+  that passes through whole until the closing fence. Awakened, it also
+  draws `inline code` in the accent, its backticks dropped, and a `- `,
+  `* ` or `N. ` line as a bullet whose wrapped lines hang under its
+  first word. Piped, the bytes are the model's. Text in is strict UTF-8
+  as well. stdin is decoded with the replacement mark
+  (`text.stdin_text`). Every string bound for the wire or a store goes
+  through `text.clean` first: a thread, the ledger, a turn record. A
+  lone surrogate is an HTTP 500 from the engine's JSON parser and a
+  crash at a store's strict encode. surrogateescape keeps one for a byte
+  that was not UTF-8 in argv or the environment under the C locale. A
+  w3m page title on the box was one.
+- **Awake by choice.** After the install spark works as it did. `spark
+  awaken` gives the machine a personality and a look. Until it runs
+  nothing living happens: `look.part` answers `off` for every part, so
+  every caller keeps its old bytes. Awaken is the one place spark asks
+  the model for its own lines, never unasked. It sets motion, colour and
+  words to `auto` and writes the look file with `AWAKE=yes`. Four fixes
+  reach every machine: setup's one suggestion line, the height (`spark
+  height N`, `Esc k`), one text for every line, and the bugs.
+  Precedence, strongest first: a pipe, `spark off`, `spark quiet start
+  on`, a part `off`, a part `on`, then `auto`. A pipe never sees a frame
+  or an escape. `quiet start` drops the greeting and the news. `on` wins
+  over `NO_COLOR`. `auto` needs a tty, not `TERM=dumb`, and for colour
+  `NO_COLOR` unset. The machine's own lines never claim where data goes:
+  awaken's brief forbids it, and `README.md` says what leaves.
 - **Symmetric.** Every feature exists on both OSes, through each OS's
   native mechanism: apt, pacman or xbps for the packages, systemd,
   launchd or runit for the services, bash or zsh for the shell.
@@ -243,6 +276,14 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 to the caller's header first, so a foreign file takes no record)
                 users (the named users, their store under state/users/, and
                 this machine's login: spark user)
+                look (the living prompt's state: the parts, the height, the
+                six colour roles, look.clean for every line spark says, the
+                look file the widgets read, the news; spark look, spark height)
+                awaken (spark awaken: the temperament, the birth -- one JSON
+                object, `why` first, each line through look.clean -- the
+                personality paragraph, the pace)
+                words (spark words: the lines by id, the faces, the greeting
+                the widgets ask for)
 lib/spark/forge/  index.html spark.css spark.js manifest.webmanifest favicon.svg
                   mark.svg -- the page, ASCII, no inline script
 home/           the shared $HOME mirror, linked. .config/spark/ holds the two
@@ -250,8 +291,11 @@ home/           the shared $HOME mirror, linked. .config/spark/ holds the two
                 hook.zsh: PATH, the widget, the blank row, completion, the VT
                 palette -- TERM=linux only), the two completion files
                 (completion.bash completion.zsh: TAB completes the verbs and
-                their names, offline), the banner, spark.env.example and tale
-                (a text of the maintainer's own, credited in CREDITS.md)
+                their names, offline), the banner, spark.env.example, tale
+                (a text of the maintainer's own, credited in CREDITS.md),
+                words.d/ (the shipped lines, one file per temperament: plain,
+                warm, playful, terse) and faces.kit (the parts a face is made
+                of: eyes, mouth, body)
 linux/home/     the systemd user units (.config/systemd/user: spark-serve spark-forge
                 spark-check.service + spark-check.timer)
 templates/      rendered, not linked: .config/spark/launchd/spark.{serve,forge,check}.plist
@@ -318,7 +362,7 @@ docs/           every document but the 4 at the root. With a release (the
                 CONTRIBUTING.md (how a change lands, and the voice). Beside the
                 core -- outside the landing rule, kept true continuously, not
                 tied to a release, each saying so in its first lines: TOUR.md
-                (a first hour: 12 small things to try), APPS.md (the apps
+                (a first hour: 13 small things to try), APPS.md (the apps
                 and how each one connects), IDEAS.md (the field ROADMAP.md is
                 picked from), TROUBLESHOOTING.md (a machine that will not join
                 the Wi-Fi: one Wi-Fi daemon per card, then the logs)
@@ -326,8 +370,13 @@ docs/           every document but the 4 at the root. With a release (the
 
 Runtime paths. Config is `~/.config/spark/`: `site.env`, `spark.env`,
 `theme.env`, `models.env` (yours), `themes/<name>.env` (yours),
-`privacy-terms`, `console-colors`, `console-colors.rgb`, `soul` and
-`memory` (the pre-v1.4 facts file, read until the first write).
+`privacy-terms`, `console-colors`, `console-colors.rgb`, `soul`,
+`personality`, `words`, `faces` and `memory` (the pre-v1.4 facts file,
+read until the first write). `personality` (0600) is the paragraph
+`spark awaken` writes after the soul's fixed core. `words` (0600) is
+`ID<TAB>line` per line, and `faces` (0600) is `MOOD=frame` per line
+plus `RATE=` and `TEMPER=`. Awaken writes both, and every line passes
+`look.clean` when it is stored and again when it is printed.
 `console-colors` is the precomputed Linux VT palette: one
 `\033]P<n><rrggbb>` per ansi colour, the 16 VGA values after
 `none`, never `\033]R`, because the kernel's defaults may be a theme.
@@ -353,6 +402,12 @@ State is `~/.local/state/spark/`, 0700:
   models dir, written by `spark serve`.
 - `off`, `widgets/`, `turns/`, `chat-history` 0600, `brain`,
   `check.json`, `bar`, `bench.jsonl`, `tune.json`.
+- `look`: the living prompt's state for the widgets (contract 6),
+  written by `look.render` alone. `news` is one `ID<TAB>line` the check
+  writes on an awakened machine, and `news-seen` the id a shell last
+  showed. `last-seen` is the epoch of a prompt in any shell, for the
+  greeting. `loads.json` maps a model file to its last load in seconds
+  (`engine.record_load`), for the waking bar's estimate.
 - `threads/`: pre-v1.4 plaintext threads only. `spark user claim` seals
   them away.
 - `runs/<id>/` 0700: a sandboxed run. `meta.json` 0600 holds numbers and
@@ -376,7 +431,8 @@ State is `~/.local/state/spark/`, 0700:
 
 Data is `~/.local/share/spark/{engine,models}`. Tools are linked into
 `~/.local/bin`. `spark uninstall` (`lib/spark/uninstall.py`) removes
-all of it but the sealed stores, the account keys and your prose.
+all of it but the sealed stores, the account keys and your prose: the
+soul and its personality stay, and the words and faces files go.
 `--purge` takes those too. It runs bootstrap once first, with headless
 and quiet undone through their rows, and never `site.apply` or
 `check.refresh` after: each would put things back. Root steps become
@@ -401,7 +457,8 @@ and may change freely.
    `--dry-run` prints rows `ok|would|skip|todo <what>  <why>` and ends
    with `Nothing to do` or `N to do`. A `todo` needs the user, such as a
    placeholder in site.env. `--dry-run` never calls sudo. An apply run
-   prints only what it changed and what needs the user. Its `ok` and
+   prints only what it changed and what needs the user, and ends with
+   `Nothing to do` or `N changed`. Its `ok` and
    `skip` rows and its section headers are silent unless `--verbose`,
    because a converged machine has nothing to report. `--dry-run` stays
    the full report: `spark check`'s configs row and
@@ -442,10 +499,15 @@ and may change freely.
      SPARK_SERVE_HOST SPARK_ENGINE_DIR SPARK_MODELS_DIR SPARK_MODEL
      SPARK_NGL SPARK_CTX SPARK_FLASH_ATTN SPARK_KV SPARK_THREADS
      SPARK_EXTRA_ARGS SPARK_MEM_NEEDED_GB SPARK_API_KEY_FILE
-     SPARK_TIMEOUT SPARK_MAX_TOKENS SPARK_REVEAL SPARK_HISTORY
+     SPARK_TIMEOUT SPARK_MAX_TOKENS SPARK_REVEAL SPARK_LOOK_MOTION
+     SPARK_LOOK_COLOUR SPARK_LOOK_WORDS SPARK_HEIGHT SPARK_HISTORY
      SPARK_MEMORY SPARK_KNOWLEDGE SPARK_SERVICE SPARK_FORGE
      SPARK_FORGE_HOST SPARK_FORGE_PORT SPARK_FORGE_TOKEN_FILE`. `SPARK_REVEAL_CPS` is
      optional: the reveal pace in characters a second (`spark reveal`).
+     The 3 `SPARK_LOOK_*` keys are `auto`, `on` or `off`, `off` until
+     `spark awaken` sets `auto` (`spark look PART`). `SPARK_HEIGHT` is 1
+     to 5, default 1 (`spark height N`). The 6 `SPARK_*_SGR` variables
+     are environment only, never read from a file.
      `SPARK_PERSONA_EXTRA` is still read as the soul's fallback, and the
      `soul` row warns while it is set.
    - `models.env`, and `~/.config/spark/models.env` for your own rows:
@@ -697,13 +759,14 @@ and may change freely.
    `FORGE`, `??` continues the newest thread on the `FORGE`
    (`forge.peer_newest`, the requester's own store over contract 9) and
    the turn lands there. Any trouble falls back to the local store.
-   `SPARK_HINT_ROW=1` in the environment (the widgets set it on their
-   two calls) lets `spark line` draw the pulse (`text.Busy.hint_row`) in
-   the row above the cursor on `/dev/tty` while the model answers. Each
-   frame saves the cursor, goes up one row, clears it, draws the mark
-   and the dots, and restores. A hand-run `spark line` never touches
-   that row, and stdout stays the two lines either way. The shell
-   widgets depend on nothing else.
+   `SPARK_HINT_ROW=N` in the environment, a digit 1 to 5 (the widgets
+   set it on their two calls, N the height), lets `spark line` draw the
+   pulse (`text.Busy.hint_row`) N rows above the cursor on `/dev/tty`
+   while the model answers. Each frame saves the cursor, goes up N rows,
+   clears that row, draws the mark and the dots, and restores. The
+   widgets' own lines (`_spark_say`) go to the same row. A hand-run
+   `spark line` never touches that row, and stdout stays the two lines
+   either way. The shell widgets depend on nothing else.
 5. `spark brain --porcelain` prints `<url><TAB><model><TAB>forge|model`
    and exits 0, or exits 1. `<model>` is the spark role's model, the
    file stem. `forge` means `/api/health` there says `forge: true`. This
@@ -712,7 +775,15 @@ and may change freely.
    `<shell> <pid> <epoch> [hook]` and removes it on shell exit. The
    fourth field, the literal word `hook`, says that shell's exit-code
    hook is armed: the failure moment. Readers ignore fields they do not
-   know, so old markers and old readers both survive.
+   know, so old markers and old readers both survive. The marker is
+   also the widget's stamp for `~/.local/state/spark/look`. A shell
+   reads that file again only when it is newer than its marker. It reads
+   it line by line, never sourced or eval'd, and drops a value with a
+   control character. Its keys are `AWAKE`, `MOTION`, `COLOUR`, `WORDS`, `HEIGHT`,
+   `SGR_<ROLE>` for the 6 roles, `FACE_<MOOD>`, `BLINK` and `TEMPER`
+   (`look.content`). `SPARK_HEIGHT` in the environment wins over
+   `HEIGHT`. The `look` row compares the file with what `spark.env` and
+   the faces file say now.
 7. `spark check` exits 0 when no row is `fail`, else 1. A `CAPABILITY`
    row never fails. `--porcelain` prints
    `category<TAB>status<TAB>name<TAB>value<TAB>remedy`. Every run writes
@@ -1290,9 +1361,9 @@ One grammar for every verb. A verb that breaks a rule is a bug.
    not interface: `SITE_HEADLESS` and the `SITE_QUIET_*` keys stay
    `yes|no` in `site.env`, and the verb translates. Choices keep their
    value grammars (`theme NAME|none`, `model NAME|auto|none`, `client
-   URL|off`). The one carve-out is bare `spark off` / `spark on`, which
-   silences and restores the whole prompt: it is the global mute, and
-   reads better without a noun in front of it.
+   URL|off`, `look PART auto|on|off`). The one carve-out is bare `spark
+   off` / `spark on`, which silences and restores the whole prompt: it
+   is the global mute, and reads better without a noun in front of it.
 3. `status` is an alias of bare for every stateful verb. `list` is the
    table word (theme, model, ember, font). A noun keeps its own verbs as
    sub-words rather than taking top-level ones: `spark soul edit|reset`,
@@ -1309,7 +1380,18 @@ One grammar for every verb. A verb that breaks a rule is a bug.
    timeout, interval)` in `lib/spark/__init__.py`, plain dots that
    survive in a log. One pulse for every wait on a reply: `text.Busy`,
    the mark and `.` `..` `...` redrawn in place, a tty only (the hint
-   row, chat, explain, an answer, `spark do`).
+   row, chat, explain, an answer, `spark do`). Awakened, with motion
+   active, the dots become the scanner, `* (o.O) [  =     ]`: 8 cells,
+   a frame every 0.12 seconds, the face while words is active too. auto
+   keeps the dots over ssh and on the console (`look.slow_terminal`),
+   and motion `on` forces the scanner there. The wait escalates, never
+   louder: from 2 seconds the elapsed seconds, from 15 seconds (or three
+   quarters of the verb's timeout) one sentence. A model loading shows
+   `text.Estimate`: a bar filled by the time over that model file's last
+   load (`engine.last_load`), never past 95 %. Past the estimate it says
+   `longer than last time (N s) -- spark check says why`. With no measure it is the
+   scanner and the seconds. Awakened, `spark check` counts its rows on
+   stderr while they run.
 7. Exit codes: 0 ok or show, 1 the world failed (stderr, via `die()`), 2
    the invocation (usage, an unknown name, a gate refusal: stdout,
    signed), 78 misconfiguration (`EX_CONFIG`), 130 `SIGINT`.
@@ -1408,30 +1490,32 @@ One grammar for every verb. A verb that breaks a rule is a bug.
   scenario judges. Before trusting a new one, take the fix away and
   watch it go red.
 - **A prose data file.** The soul is the pattern. It is user-owned text
-  under `~/.config/spark/`, never linked from `home/`. A `spark` verb
-  writes it 0600, and the page writes it through the same code. It is
-  capped (`SOUL_MAX`), sent to the model on every request, and reported
-  by its own check row (mode, size, cap). It is config, not state:
-  pruning and `spark clear --history` never touch it. The memory
+  under `~/.config/spark/`, never linked from `home/`. After `spark
+  awaken` it has two parts: the fixed core (`soul.DEFAULT`) and the
+  personality paragraph in `personality`, sent after it. A bare `spark
+  soul edit` then edits the paragraph, and `--core` the whole soul. A
+  soul file of your own replaces both, whole, and awaken keeps it. A
+  `spark` verb writes it 0600, and the page writes it through the same
+  code. It is capped (`SOUL_MAX`), sent to the model on every request,
+  and reported by its own check row (mode, size, cap). It is config, not
+  state: pruning and `spark clear --history` never touch it. The memory
   follows the same rules but lives sealed in the account's store since
-  v1.4
-  (`users/<name>/memory`, `FACT_MAX`, `FACTS_MAX`, `TOTAL_MAX`). The
-  pre-v1.4 plaintext file is read as a fallback until the first write or
-  `spark user claim` seals it away. Turns are the opposite pattern:
-  telemetry, numbers only. `session.record` strips every free-text field
-  (`session.TEXT_FIELDS`), and the words live only in the sealed
-  threads. A thread lives `SPARK_HISTORY` days, unless it is kept: a
-  kept thread sits in `kept/` beside `threads/`, and pruning and `spark
-  clear --history` never touch it (`/keep` in `spark chat`, `POST
+  v1.4 (`users/<name>/memory`, `FACT_MAX`, `FACTS_MAX`, `TOTAL_MAX`).
+  The pre-v1.4 plaintext file is read as a fallback until the first
+  write or `spark user claim` seals it away. Turns are the opposite
+  pattern: telemetry, numbers only. `session.record` strips every
+  free-text field (`session.TEXT_FIELDS`), and the words live only in
+  the sealed threads. A thread lives `SPARK_HISTORY` days, unless it is
+  kept: a kept thread sits in `kept/` beside `threads/`, and pruning and
+  `spark clear --history` never touch it (`/keep` in `spark chat`, `POST
   /api/threads` for a program, contract 9). What a request weighed and
-  where it went do ride the record: `out_bytes` and `dest`
-  (`host:port`, or `local` for loopback),
-  `wire._sent`'s pair on every chat shape's timings. So the `sends` row
-  and `spark stats --sends` count what left by destination and day
-  without a word of it. The `hardening` row asks contract 9's gates of
-  the served `FORGE` (the other machine's, on a client) from the wire:
-  `wire.probe_gates`, the probes `tests/forge_probe.py` runs against a
-  real server.
+  where it went do ride the record: `out_bytes` and `dest` (`host:port`,
+  or `local` for loopback), `wire._sent`'s pair on every chat shape's
+  timings. So the `sends` row and `spark stats --sends` count what left
+  by destination and day without a word of it. The `hardening` row asks
+  contract 9's gates of the served `FORGE` (the other machine's, on a
+  client) from the wire: `wire.probe_gates`, the probes
+  `tests/forge_probe.py` runs against a real server.
 - **A route.** In `forgeserve.py`: one row in `ROUTES` (`(method,
   pattern): none|user|admin`, plus the POST rules) and its handler in
   the matching branch of `_route`. Answer through `_json` or `_sse` so
@@ -1444,16 +1528,17 @@ One grammar for every verb. A verb that breaks a rule is a bug.
   lands only when it is the client side of a contract change. No new
   page features in this release or the next.
 - **A shell thing.** The look and the tools of a machine are not spark's
-  business. spark's side of any renderer is 3 things. `theme.env` is
-  the palette `spark theme` writes, a `KEY=value` file any renderer or
-  terminal may read. The three `SPARK_*_SGR` variables are what an rc
-  may export: colour at the prompt's marks, plain when unset. The bar
-  line (`spark bar line`) is for any status bar to run. `spark theme`,
-  `spark font`, `spark quiet` and the bar line are core: the page reads
-  `theme.env`, the console palette and font are the machine's own, the
-  status line is the machine's own report. Nothing in this tree names a
-  renderer as a dependency. A coexistence check for a prompt program
-  (the hooks' `STARSHIP_SHELL` test) is not a coupling.
+  business. `spark look` dresses spark's own lines, never the prompt.
+  spark's side of any renderer is 3 things. `theme.env` is the palette
+  `spark theme` writes, a `KEY=value` file any renderer or terminal may
+  read. The three `SPARK_*_SGR` variables are what an rc may export:
+  colour at the prompt's marks, plain when unset. The bar line (`spark
+  bar line`) is for any status bar to run. `spark theme`, `spark font`,
+  `spark quiet` and the bar line are core: the page reads `theme.env`,
+  the console palette and font are the machine's own, the status line is
+  the machine's own report. Nothing in this tree names a renderer as a
+  dependency. A coexistence check for a prompt program (the hooks'
+  `STARSHIP_SHELL` test) is not a coupling.
 - **A grounded contract.** One law, 5 contracts (10, 11, 12, 13, 14):
   what a model says about a text is checked against that text before the
   reader sees it. The judge is `lib/spark/text.py`. `anchor()` works at

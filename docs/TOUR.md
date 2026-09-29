@@ -98,6 +98,12 @@ the log, so "a failure appeared" cannot fire when none did.
 
 Give it a voice of its own:
 
+    spark awaken
+
+Pick a temperament. The model writes the lines spark says and picks its
+face, and your next prompt is awake. `spark look off` puts the quiet
+back. To say more yourself:
+
     spark soul edit
 
 Two sentences are plenty. Then teach it one fact:

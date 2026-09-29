@@ -118,6 +118,12 @@ THE MACHINE
   long output (help, check, lists) pages via $PAGER (less). Piped stays plain
 
 THE INTERFACE
+  spark awaken                    give this machine a personality and a look
+  spark look [PART auto|on|off]   motion, colour, words. Bare: the parts
+  spark look off                  motion, colour and words off at once
+  spark words [edit]              the lines it says, and its faces
+  spark height [N]                the row spark writes in: 1..5 above your line
+  Esc k                           at the prompt: move spark's row (1, 2, 3)
   spark theme NAME | list | show  one palette: the console (Terminal.app on
                                   macOS). none = off
   spark theme profile             macOS: the Terminal.app profile, imported

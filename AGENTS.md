@@ -37,7 +37,11 @@ row, explain it in every doc. Otherwise it is not done.
 - A confirm is `<question>? yes/NO: ` (`confirm()`).
 - A wait is one dot-spinner (`wait_ready()`) for a server coming up,
   one pulse (`text.Busy`, a tty only) for a reply, and curl's bar for a
-  download.
+  download. On an awakened machine the pulse is a scanner, and a model
+  loading shows a bar with an estimate (`text.Estimate`).
+- Nothing living happens before `spark awaken`: an unawakened machine
+  prints what it printed before, and a pipe never sees a frame or a
+  colour.
 - Exit codes: 0 ok or show, 1 the world (stderr), 2 the invocation
   (stdout, signed), 78 config, 130 `SIGINT`.
 
@@ -204,12 +208,16 @@ whole of it.
   proof: `spark line` answers valid JSON for it.
 - Call `git` on `spark line`'s path. The widgets depend on nothing but
   the line contract, and it must never block.
-- Fork, call a model or write a file in the widgets' prompt hook, the
-  failure line. It runs before every prompt: a `$?` test, a few variable
-  writes and at most one `printf`. The one read it may do is
-  `state/fails`, the plain hash-to-fix index the ledger writes, opened
-  with shell builtins. Its other state is per pane and in memory: never
-  exported, never on disk.
+- Call a model in the widgets' prompt hook, or fork there beyond the
+  one greeting. It runs before every prompt: a `$?` test, a few
+  variable writes and at most a few `printf`s. Its reads, with shell
+  builtins: `state/fails`, the plain hash-to-fix index the ledger
+  writes, and on a failure only. The look file, again only when it is
+  newer than the shell's marker, line by line and never sourced. On an
+  awakened machine, one stat of `state/news`, and `state/last-seen`
+  read and written at most every 5 minutes. The one fork is `spark
+  words greet`, at the first prompt after 4 hours away. Its other state
+  is per pane and in memory: never exported.
 - Write non-ASCII into a doc. The pre-commit hook refuses it, because
   the docs are read on the Linux console too.
 - Name a private repository or tool in any doc. What is not public is

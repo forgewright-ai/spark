@@ -125,6 +125,10 @@ One word per thing:
   console" is the Linux text console and "the terminal" an emulator.
 - Installing is "install". The command is "the one-liner", and `spark
   setup` is a verb.
+- `spark awaken` gives this machine "a personality and a look", and
+  then the machine is "awake". The 4 parts are motion, colour, reveal
+  and words.
+- "Mint" is for an account alone: `spark user add NAME` mints one.
 
 Form:
 
@@ -139,6 +143,11 @@ Form:
 - Parentheses hold a short aside: a command, a key or one clarifying
   phrase.
 - Capitals only for acronyms. No contractions and no "we".
+- On screen, dim is decoration only: the dots, the brackets, an arrow.
+  Text a person reads stays in the normal colour.
+- A line an awakened machine says (`spark words`) makes no claim about
+  where data goes. `README.md` says what leaves the machine.
+- A hint is a whole sentence: spark adds the capital and the full stop.
 - A number the tests derive (the row count, the model count, the palette
   keys) is stated once, in the file that owns it.
 
