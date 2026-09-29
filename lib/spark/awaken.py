@@ -22,6 +22,7 @@
 # a file of answers instead, one a line (the tests' seam).
 
 import os
+import re
 import socket
 import sys
 import time
@@ -186,6 +187,15 @@ def _paragraph(t):
     return t
 
 
+def _sentences(t):
+    """A model's line as whole sentences: each one's first letter a
+    capital, a lone `i` a capital I, a full stop at the end when it has
+    no end mark. A small model writes lowercase under a terse brief."""
+    t = re.sub(r"(^|[.!?] +)([a-z])", lambda m: m.group(1) + m.group(2).upper(), t)
+    t = re.sub(r"\bi\b(?=[ '])", "I", t)
+    return t if t.endswith((".", "?", "!")) else t + "."
+
+
 def birth_lines(reply, temper, k, seed):
     """(lines, personality, faces, refused) from the model's reply: every
     line through look.clean(), a refused or missing one the shipped line;
@@ -203,12 +213,14 @@ def birth_lines(reply, temper, k, seed):
         if key in reply:
             got[key] = reply.get(key)
     for key, val in got.items():
-        c = look.clean(val) if isinstance(val, str) else None
+        c = look.clean(_sentences(val.strip())) if isinstance(val, str) and val.strip() else None
         if c:
             lines[key] = c
         else:
             refused += 1
     p = _paragraph(reply.get("personality"))
+    if p is not None:
+        p = _sentences(p)
     if p is None:
         if "personality" in reply:
             refused += 1

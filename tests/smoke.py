@@ -1733,6 +1733,10 @@ def living_awaken_cases(t):
     unawakened and when quiet; the fact it may say is written nowhere."""
     from spark import look as _look
     from spark import memory as _mem
+    from spark import awaken as _aw
+    t.ok(_aw._sentences("i speak directly. i avoid fluff") == "I speak directly. I avoid fluff."
+         and _aw._sentences("Hello again.") == "Hello again.",
+         "awaken: a model's lowercase line becomes whole sentences", _aw._sentences("i speak directly. i avoid fluff"))
     from spark import soul as _soul
     from spark import words as _words
     from spark import awaken as _awk
