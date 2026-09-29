@@ -7,7 +7,7 @@ One line installs it. Then ask at the prompt line:
 
 ```
 ~ > files bigger than 1G modified this week?          <- type it, press Enter
-* Finds files >1G modified in last 7 days               <- the hint, above the prompt
+* Finds files >1G modified in last 7 days.              <- the hint, above the prompt
 ~ > find . -type f -size +1G -mtime -7                  <- the command, in your line
 ```
 
@@ -84,6 +84,11 @@ hour in `docs/TOUR.md`:
 - `spark forge --print-url`: the same model, soul and memory in a
   browser on the LAN, and on a phone that scans the QR. `spark client
   URL` lets another machine of yours use this one's model.
+- `spark awaken`: give this machine a personality and a look. Until
+  you run it, spark stays as it is. `spark look` shows the parts, and
+  `spark look off` turns motion, colour and words off.
+- `Esc k` at the prompt: when spark's line sits on a prompt of two
+  lines, it moves spark's line up a row. `spark height N` keeps it.
 - `spark check`: every promise this machine makes, one row each. It
   exits 0 when no row fails. `spark uninstall` takes it all off.
 
@@ -146,6 +151,9 @@ another machine of yours (`spark client URL`). What each verb sends:
   with what you said the command did.
 - `paste`: a multi-line paste into an empty prompt, 8 kB at most. A
   bigger paste is not sent. A paste shaped like a secret is not sent.
+- `awaken`: the temperament you chose, once, for the lines spark says.
+  Then one short hello, with your soul and remembered facts, as a
+  question sends them.
 
 Before a source, a step's output or an editor's question about a source
 leaves, spark holds back every span that looks like a secret. It holds

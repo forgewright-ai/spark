@@ -1,5 +1,65 @@
 # Changelog
 
+## v1.59
+
+spark can come alive at the prompt. `spark awaken` gives this machine
+a personality and a look. Until you run it, spark works as it did.
+
+- `spark awaken` asks one question, the temperament: plain, warm,
+  playful or terse. The model writes the lines spark says and picks
+  its face. Every line is checked, and a shipped line stands in for
+  one it refuses.
+- Awake, a wait for a reply is a scanner with a face:
+  `* (o.O) [  =     ]`. From 2 seconds it shows the elapsed seconds,
+  and from 15 seconds one sentence. Over ssh and on the console the
+  dots stay.
+- Awake, a model that is loading shows a bar with an estimate, from
+  its last load. The bar stops short of full until the model answers.
+- Awake, the first prompt after 4 hours away greets you, and a change
+  shows once in any shell: the model asleep or awake again, runs
+  waiting for review.
+- Awake, a failed command that ran over 30 seconds says how long:
+  `* failed (1) after 4 min -- press Esc s to ask why`.
+- Awake, colour comes from a built-in palette of bold, dim, red, bold
+  red and green, where you export no colour of your own. Dim is only
+  for decoration.
+- `SPARK_OK_SGR`, `SPARK_TROUBLE_SGR` and `SPARK_YOU_SGR` join the 3
+  colour exports. `spark check` paints its rows with them when awake.
+- A reply revealed at a pace breathes at the punctuation when awake.
+  The pace you chose is the average with the pauses in it.
+- Awake, a reply's `inline code` is bold and its list lines hang under
+  their first word.
+- `spark look` shows the parts: motion, colour, reveal and words.
+  `spark look PART auto|on|off` sets one, and `spark look off` turns
+  motion, colour and words off at once. A pipe never sees a frame or a
+  colour.
+- `spark words` shows the lines and the faces, and `spark words edit`
+  changes the lines. A line with an escape, a character outside ASCII,
+  more than 72 characters or a secret's shape is never said.
+- The soul has two parts after awaken: spark's fixed core and the
+  personality paragraph awaken writes. `spark soul edit` changes the
+  paragraph, and `--core` the whole soul. A soul file of your own is
+  kept.
+- The `look` row in `spark check` says whether this machine is awake,
+  and warns when a line of the words or faces file can never print.
+- A two-line prompt, such as starship's default, no longer loses its
+  first line to the hint. `spark height N` moves spark's row up to 5
+  rows above the line you type on. `Esc k` at the prompt cycles it
+  through 1, 2 and 3.
+- A hint is a whole sentence: a capital first letter and a full stop.
+- `Ctrl-C` at `chat> ` clears the line, as a shell does. `Ctrl-D` and
+  `/q` end the chat.
+- `explain` honours `--reveal`.
+- `spark bar` typed outside tmux prints plain text, without tmux's
+  markup.
+- bash keeps an `EXIT` trap your rc set before spark's hook.
+- The bash and zsh prompt lines say the same words when no hint comes.
+- setup ends with one suggestion, and `spark update` prints it once:
+  `next: spark awaken -- give this machine a personality and a look`.
+- setup's first question shows its dots while the model answers.
+- setup and `spark model` spell licence the British way.
+- An apply run of `bootstrap.sh` ends with `N changed`, not `N to do`.
+
 ## v1.58
 
 A clean boot on Void ends on the login prompt alone, and a late
