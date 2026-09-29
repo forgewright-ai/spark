@@ -38,7 +38,7 @@ spark
  spark ver [--sbom]           about, version, credits; or what it depends on
  spark chat [words]           a conversation; /help lists its verbs, Ctrl-D ends
  spark [@FILE] <words>        ask about anything, or a file; a streamed answer
- spark do [--sandbox] <words> a task, one command at a time; you confirm each,
+ spark do [--sandbox] <words> a task, one command at a time, each one confirmed,
                               or, sandboxed, the changes once at the end
  spark do --review [ID]       sandboxed runs waiting: the diff, then yes
  spark edit [?] [words]       the text on stdin: words rewrite it, ? asks,
@@ -58,9 +58,9 @@ spark
  ? words or words? Enter      the command lands in your line, hint above
  ?? words Enter               follow up on the last answer (same thread)
  Esc s                        ask about the line you are on, no ? needed
- Esc s on an empty line       the failed command piped to explain; again
-                              proposes the fix; a 127 offers the install line
- Esc r                        describe a past command; it lands in your line
+ Esc s on an empty line       the failed command piped to explain, and again
+                              for the fix (a 127 offers the install line)
+ Esc r                        describe a past command, and it lands in your line
                               (Esc r again cycles); Ctrl-R stays the shell's
  cmd 2>&1 | explain           what went wrong, and the fix
  spark <TAB>                  the verbs, then each verb's words -- offline
@@ -77,7 +77,7 @@ the model and the page
  spark forge audit [N]        every admin action, sealed: runs, users, tokens
  spark headless [on|off]      the page's server up from boot, never asleep
  spark share [on|off]         one engine for every OS user here (a spark
-                              group); each keeps their own soul and memory
+                              group), each with their own soul and memory
  spark client [URL|off]       a client of another machine's server; none here
 """ % MARK
 
@@ -89,14 +89,18 @@ USAGE_MACHINE = """the machine
 """
 
 USAGE_INTERFACE = """the interface
- spark awaken                 give this machine a personality and a look
- spark look [PART on|off]     motion, colour, words: the living prompt (-h)
- spark words [edit]           the lines it says, and its faces
- spark height [N]             the row spark writes in, above your prompt
  spark theme [NAME|list|show] the palettes, and yours; show = its colours
  spark quiet [SUB on|off]     start (banner), login (motd), boot (menu), audio
  spark font [FACE SIZE|list]  the console font (Linux) / Terminal.app's
  spark bar [line]             the machine's one-line status
+"""
+
+USAGE_LIVING = """the living prompt
+ spark awaken                 give this machine a personality and a look
+ spark look [PART on|off]     motion, colour, words: auto, on or off (-h)
+ spark words [edit]           the lines it says, and its faces
+ spark height [N]             the row spark writes in, above your prompt
+ Esc k                        at the prompt: move that row (1, 2, 3)
 """
 
 USAGE_TAIL = """less often used
@@ -114,12 +118,14 @@ version %s
 
 
 def usage():
-    """The help: theme, quiet, font and the bar line are the interface.
+    """The help: theme, quiet, font and the bar line are the interface;
+    awaken, look, words and height the living prompt.
     The version is formatted here, not at import: nothing on the `spark
     line` path may call git, and version() does, on a cache miss."""
     from spark import version
     tail = USAGE_TAIL % version.version()
-    return USAGE_HEAD + "\n" + USAGE_MACHINE + "\n" + USAGE_INTERFACE + "\n" + tail
+    return (USAGE_HEAD + "\n" + USAGE_MACHINE + "\n" + USAGE_INTERFACE + "\n"
+            + USAGE_LIVING + "\n" + tail)
 
 
 def main(argv):

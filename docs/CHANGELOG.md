@@ -1,5 +1,21 @@
 # Changelog
 
+## v1.60
+
+- Any `rm` or `unlink` is marked `!` now, in `spark do` and at the
+  prompt line, and `spark do` asks for the typed `yes` before it runs
+  one. Before, only a recursive or forced `rm` was marked. `rmdir`,
+  `docker run --rm` and `rm` as a word inside another command are not.
+- The built-in soul no longer says that nothing you tell spark leaves
+  the machine. A client sends to the machine it uses, so the sentence
+  was not true everywhere.
+- `spark awaken` refuses a personality paragraph written in the first
+  person: the soul speaks to the model as "you", and the shipped
+  paragraph stands in.
+- `spark help` has a group of its own, the living prompt: awaken,
+  look, words, height and `Esc k`. Four help lines no longer join two
+  clauses with a semicolon.
+
 ## v1.59
 
 spark can come alive at the prompt. `spark awaken` gives this machine

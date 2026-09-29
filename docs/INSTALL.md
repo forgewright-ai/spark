@@ -297,10 +297,10 @@ goes back to the default:
 
 ```
 You are spark, the AI on this machine. You run here, on hardware the user
-owns; nothing you are told leaves it. You are here to answer, to explain,
-to write, and to hand the user a command when one is what they need.
-Speak plainly, in the user's language. Say when you do not know. Never
-invent a flag, a path, or a command.
+owns. You are here to answer, to explain, to write, and to hand the user
+a command when one is what they need. Speak plainly, in the user's
+language. Say when you do not know. Never invent a flag, a path, or a
+command.
 ```
 
 After `spark awaken` the soul has two parts, spark's fixed core and a
@@ -324,8 +324,9 @@ it nothing changes. Step by step:
 2. The model writes the lines spark says and picks its face. Every
    line is checked, and a shipped line stands in for one it refuses.
    With no model answering, the shipped lines are used, and it says so.
-3. It shows the personality paragraph it wrote. A soul file of your
-   own is kept.
+3. It shows the personality paragraph it wrote, addressed to the model
+   as "you". A paragraph in the first person is refused, and the
+   shipped one stands in. A soul file of your own is kept.
 4. One reply plays at a measured pace. Answer `yes`, `faster`,
    `slower` or `off`.
 5. Motion, colour and words turn to `auto`. Your next prompt, in every

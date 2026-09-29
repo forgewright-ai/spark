@@ -87,8 +87,9 @@ _DANGER = [
     r"\bhistory\s+-c\b",                           # history -c: the shell's own record
     r"\bgit\s+stash\s+(?:drop|clear)\b",           # git stash drop: unmerged work, gone
     # v1.53: what the line's danger mark must hold once a model's `!` can
-    # be lowered by judge.read_only -- a named line each. Plain rm and
-    # unlink are not here yet: the audition measures their over-fire first.
+    # be lowered by judge.read_only -- a named line each.
+    r"(?:^\s*|[;&|(`]\s*|\b(?:sudo|git|command|nice|nohup|time)\s+(?:-\S+\s+)*)(?:rm|unlink)\s+\S",
+                                                   # rm / unlink as the command: any delete, one file or many (v1.60)
     r"\bfind\b.*\s-(?:exec|execdir|ok|okdir)\s+(?:\S*/)?(?:rm|shred|unlink|truncate|mv)\b",
                                                    # find -exec rm: a delete per result
     r"\bdd\b.*\bof=",                              # dd of=ANY: overwrites its target, not only a disk

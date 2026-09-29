@@ -1063,11 +1063,11 @@ def knowledge_cases(t):
             "spark forge", "ls -l deploy.sh", "stat -f %p f",
             "find . -exec ls {} \\;", "find . -name x -print", "dd if=/dev/zero bs=1 count=1", "cmd 2>/dev/null",
             "cmd 2>&1", "cmd 2>>err.log", "cmd >/dev/null 2>&1", "crontab -l", "crontab -e",
-            "rm build.log"]
+            "rmdir build", "docker run --rm img", "grep rm notes.txt"]
     bad = [c for c in dang if not persona.is_dangerous(c)] + ["!" + c for c in safe if persona.is_dangerous(c)]
     t.ok(not bad, "knowledge: danger -- find -exec rm/shred/mv, dd of= anything, 2>FILE and &>FILE, crontab FILE, "
          "a package removed on every family, any chmod/chown/chgrp, spark's own destroying verbs; -exec ls, "
-         "2>/dev/null, 2>&1, crontab -l, installs, queries, spark's reading verbs and plain rm stay plain", str(bad))
+         "2>/dev/null, 2>&1, crontab -l, installs, queries, spark's reading verbs, rmdir and --rm stay plain", str(bad))
 
 
 def line_knowledge_cases(t, spark, home):
@@ -1737,6 +1737,17 @@ def living_awaken_cases(t):
     t.ok(_aw._sentences("i speak directly. i avoid fluff") == "I speak directly. I avoid fluff."
          and _aw._sentences("Hello again.") == "Hello again.",
          "awaken: a model's lowercase line becomes whole sentences", _aw._sentences("i speak directly. i avoid fluff"))
+    _k = {"EYES": ["o"], "MOUTH": ["."], "BODY": ["()"]}
+    _, _p1, _, _r1 = _aw.birth_lines({"personality": "i speak plainly. i avoid fluff."}, "plain", _k, "x")
+    _, _p2, _, _r2 = _aw.birth_lines({"personality": "You speak warmly and briefly."}, "plain", _k, "x")
+    t.ok(_r1 == 1 and _p1.startswith("You speak plainly") and _r2 == 0 and _p2 == "You speak warmly and briefly.",
+         "awaken: a personality in the first person is refused, the shipped one stands in", _p1 + " | " + _p2)
+    from spark import persona as _pe
+    _del = ["rm bigfiles.txt", "rm *.log", "unlink x", "git rm a.txt", "ls; rm x"]
+    _keep = ["docker run --rm img", "rmdir d", "ls -la", "grep rm notes.txt"]
+    t.ok(all(_pe.is_dangerous(c) for c in _del) and not any(_pe.is_dangerous(c) for c in _keep),
+         "danger: any rm or unlink is marked, --rm and rmdir are not",
+         str([c for c in _del if not _pe.is_dangerous(c)] + [c for c in _keep if _pe.is_dangerous(c)]))
     from spark import soul as _soul
     from spark import words as _words
     from spark import awaken as _awk
@@ -2309,7 +2320,7 @@ def main():
         _dang = ["rm --recursive build", "rm --force x", "find . -name '*.o' -delete",
                  "rsync -a --delete src/ dst/", "git branch -D topic", "chmod -R 700 d",
                  "> /var/log/syslog", "cd /tmp && > f", "cp x y && rm -rf x"]
-        _safe = ["cat a >> log", "rm build.log", "git branch -d topic"]
+        _safe = ["cat a >> log", "rmdir build", "git branch -d topic"]
         t.ok(all(_pers.is_dangerous(c) for c in _dang) and not any(_pers.is_dangerous(c) for c in _safe),
              "danger: --recursive/--force, find -delete, rsync --delete, git branch -D, chmod -R, bare > file",
              str([c for c in _dang if not _pers.is_dangerous(c)] + [c for c in _safe if _pers.is_dangerous(c)]))

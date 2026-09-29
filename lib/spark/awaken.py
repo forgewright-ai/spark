@@ -187,6 +187,9 @@ def _paragraph(t):
     return t
 
 
+FIRST_PERSON = re.compile(r"\b(?:I|I'm|me|my|myself)\b")
+
+
 def _sentences(t):
     """A model's line as whole sentences: each one's first letter a
     capital, a lone `i` a capital I, a full stop at the end when it has
@@ -221,6 +224,10 @@ def birth_lines(reply, temper, k, seed):
     p = _paragraph(reply.get("personality"))
     if p is not None:
         p = _sentences(p)
+        # the core speaks to the model as "you": a paragraph in the first
+        # person reads as a second speaker, so the shipped one stands in
+        if FIRST_PERSON.search(p):
+            p = None
     if p is None:
         if "personality" in reply:
             refused += 1

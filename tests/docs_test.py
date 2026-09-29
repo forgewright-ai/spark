@@ -199,9 +199,9 @@ def living():
     import subprocess
     out = subprocess.run([sys.executable, os.path.join(ROOT, "bin", "spark"), "help"],
                          capture_output=True, text=True).stdout
-    m = re.search(r"(?m)^the interface\n(.*?)(?:\n\n|\Z)", out, re.S)
+    m = re.search(r"(?m)^the living prompt\n(.*?)(?:\n\n|\Z)", out, re.S)
     verbs = sorted(set(re.findall(r"(?m)^ spark ([a-z]+)", m.group(1)))) if m else []
-    check(bool(verbs), "spark help has an interface block with verbs")
+    check(bool(verbs), "spark help has a living prompt block with verbs")
     tour = re.search(r"(\d+) small things", read("docs/TOUR.md"))
     said = re.search(r"TOUR\.md .*?(\d+) small things", out)
     check(tour is not None and said is not None and said.group(1) == tour.group(1),
@@ -211,7 +211,7 @@ def living():
         word = v if v == "Esc k" else "spark " + v
         for name, text in (("docs/CHEATSHEET.txt", cheat), ("docs/INSTALL.md", inst)):
             check(re.search(r"\b%s\b" % re.escape(word), text) is not None,
-                  "%s names %s (spark help, the interface)" % (name, word))
+                  "%s names %s (spark help, the living prompt)" % (name, word))
     table = set(re.findall(r"(?m)^\| `([A-Z_]+)`", inst))
     keys = [k for k in config.SPARK_KEYS if k.startswith("SPARK_LOOK_") or k == "SPARK_HEIGHT"]
     check(len(keys) == 4, "config.SPARK_KEYS holds the 3 SPARK_LOOK_* keys and SPARK_HEIGHT")
