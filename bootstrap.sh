@@ -135,9 +135,10 @@ case $MODE in
 esac
 
 # ------------------------------------------------------------------ rows
-todo=0
+todo=0          # a dry run: what would change; an apply run: what it changed
+needs=0         # the todo rows, what needs the user: an apply run counts them apart
 acting=0        # the row about to print is a change, not a state already true
-row() { printf '%-6s %-12s %s\n' "$1" "$2" "${3:-}"; }
+row() { [ "$1" != todo ] || needs=$((needs + 1)); printf '%-6s %-12s %s\n' "$1" "$2" "${3:-}"; }
 # An apply run says what it CHANGED. A machine already converged has
 # nothing to say, so it says nothing; --verbose (and --dry-run, which is
 # the report `spark check` and install_test.sh read) print every row.
@@ -469,7 +470,8 @@ done
 section configs
 if [ "$MODE" = dry ]; then out=$(sh "$REPO/install.sh" --dry-run); else out=$(sh "$REPO/install.sh"); fi
 printf '%s\n' "$out" | grep -v '^ok ' | grep -vE '^(Nothing to do|[0-9]+ to do)$' | sed 's/^/       /' || true
-n=$(printf '%s\n' "$out" | grep -c '^would' || true)
+if [ "$MODE" = dry ]; then n=$(printf '%s\n' "$out" | grep -c '^would' || true)
+else n=$(printf '%s\n' "$out" | grep -cE '^(link|render|back up) ' || true); fi
 todo=$((todo + n))
 ok configs "$(printf '%s\n' "$out" | tail -1)"
 # micro's plugin left this repository in v1.10 (github.com/forgewright-ai/
@@ -1302,4 +1304,15 @@ fi
 
 # =============================================================== report
 printf '\n'
-if [ "$todo" -eq 0 ]; then echo "Nothing to do"; else echo "$todo to do"; fi
+# --dry-run ends as contract 1 says. An apply run says what it changed,
+# and what needs you apart from that: a count read as "to do" after a
+# good run looked unfinished.
+if [ "$MODE" = dry ]; then
+    if [ "$todo" -eq 0 ]; then echo "Nothing to do"; else echo "$todo to do"; fi
+else
+    if [ "$needs" -eq 1 ]; then you="1 needs you"; else you="$needs need you"; fi
+    if [ "$todo" -eq 0 ] && [ "$needs" -eq 0 ]; then echo "Nothing to do"
+    elif [ "$needs" -eq 0 ]; then echo "$todo changed"
+    elif [ "$todo" -eq 0 ]; then echo "$you"
+    else echo "$todo changed -- $you"; fi
+fi

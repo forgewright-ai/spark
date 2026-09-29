@@ -1936,6 +1936,216 @@ def living_widget_cases(t):
          "widget.bash chains an EXIT trap it finds instead of replacing it")
 
 
+def living_waits_cases(t):
+    """v1.59, the waits and the door: every load is measured (a silent
+    state write, awake or not); unawakened, a wait prints today's dots
+    and a silent step stays silent; awakened at a terminal, the waking
+    bar; setup's first question shows today's dots; the suggestion to
+    awaken closes setup and comes once ever from update; licence spelt
+    the British way in the rows. The state paths point at a throwaway
+    dir: the real ones are never read or written."""
+    import contextlib
+    import io
+    import shutil as _shutil
+    from spark import config as _cf, engine as _en, look, model as _md, setup as _su, text as _tx, update as _up
+
+    class Tty(io.StringIO):
+        def isatty(self):
+            return True
+
+        def fileno(self):
+            raise OSError("no fd")
+
+    tmp = tempfile.mkdtemp(prefix="spark-waits-")
+    paths = {n: getattr(look, n) for n in ("LOOK_FILE", "LOADS_FILE", "FACES_FILE")}
+    offered = _su.OFFERED
+    keys = ("TERM", "SSH_CONNECTION", "SSH_TTY", "SPARK_ASCII", "SPARK_LOOK_MOTION", "SPARK_LOOK_WORDS", "SPARK_API_KEY")
+    saved = {k: os.environ.get(k) for k in keys}
+    real = {"measured_file": _en.measured_file, "roles": _en.roles}
+    out, err = sys.stdout, sys.stderr
+    for n in paths:
+        setattr(look, n, os.path.join(tmp, n.lower()))
+    _su.OFFERED = os.path.join(tmp, "awaken-offered")
+    for k in keys:
+        os.environ.pop(k, None)
+    os.environ["TERM"] = "xterm"
+    look.forget()
+    cfg = _cf.load()
+    model = os.path.join(tmp, "stub.gguf")
+
+    def probe_after(n):
+        box = [0]
+
+        def probe():
+            box[0] += 1
+            return box[0] > n
+        return probe
+
+    def waited(label, n, stdout=None, stderr=None):
+        sys.stdout, sys.stderr = stdout or io.StringIO(), stderr or io.StringIO()
+        try:
+            up = _en.wait_load(cfg, label, probe_after(n), 5, 0.2)
+        finally:
+            got, bar = sys.stdout.getvalue(), sys.stderr.getvalue()
+            sys.stdout, sys.stderr = out, err
+        return up, got, bar
+
+    try:
+        _en.measured_file = lambda c: model
+        # --- every machine: the load measured, the dots today's
+        up, got, bar = waited("loading", 1)
+        first = _en.last_load(model)
+        t.ok(up and got == "loading." and bar == "" and first and first >= 0.2,
+             "waits: a wait for the engine prints today's dots and records the load", repr((got, first)))
+        up, got, _ = waited("loading", 0)
+        t.ok(up and got == "loading" and _en.last_load(model) == first,
+             "waits: an engine already up measures nothing (the last load stays)", repr(got))
+        up, got, bar = waited("loading", 1, Tty(), Tty())
+        t.ok(up and got == "loading." and bar == "",
+             "waits: unawakened at a terminal, the same dots and no bar", repr((got, bar)))
+        up, got, _ = waited("", 1)
+        t.ok(up and got == "", "waits: a silent wait stays silent", repr(got))
+        _en.measured_file = lambda c: ""
+        with open(look.LOADS_FILE, "w") as f:
+            f.write('{"stub.gguf": 7.5}')
+        waited("", 1)
+        t.ok(_en.last_load(model) == 7.5, "waits: a router's /health is not a load (nothing recorded)")
+
+        # --- the router's load is measured where it happens: warm's first request
+        class Warm(BaseHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+            def _send(self, body):
+                data = json.dumps(body).encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+
+            def do_GET(self):
+                self._send({"data": [{"id": "spark", "status": {"value": "unloaded"}},
+                                     {"id": "ember", "status": {"value": "loaded"}}]})
+
+            def do_POST(self):
+                self.rfile.read(int(self.headers.get("Content-Length", 0)))
+                time.sleep(0.3)
+                self._send({"choices": [{"message": {"content": "hi"}}]})
+
+        wsrv = HTTPServer(("127.0.0.1", 0), Warm)
+        threading.Thread(target=wsrv.serve_forever, daemon=True).start()
+        os.environ["SPARK_API_KEY"] = "stub"
+        _en.roles = lambda c: {"spark": model, "ember": os.path.join(tmp, "big.gguf")}
+        done = _en.warm(cfg, "http://127.0.0.1:%d" % wsrv.server_address[1])
+        wsrv.shutdown()
+        t.ok(done == ["spark", "ember"] and 0.3 <= (_en.last_load(model) or 0) < 7.5
+             and _en.last_load(os.path.join(tmp, "big.gguf")) is None,
+             "waits: warm records the load of a model the router had to load, not of one loaded", repr(done))
+        _en.roles = real["roles"]
+
+        # --- the silent steps: no pulse unawakened, even at a terminal
+        sys.stderr = Tty()
+        try:
+            quiet = [isinstance(p(), contextlib.nullcontext) for p in (_md._pulse, _up._pulse)]
+        finally:
+            sys.stderr = err
+        t.ok(quiet == [True, True], "waits: unawakened, verify and update draw no pulse", repr(quiet))
+
+        # --- setup's first question: today's dots while the captured child runs
+        class Done:
+            returncode, stdout, stderr = 0, "answer\nIt is small.\n", ""
+
+        def child(*a, **k):
+            time.sleep(0.5)
+            return Done()
+        real_run, real_turn = _su.subprocess.run, _su.session.last_turn
+        _su.subprocess.run, _su.session.last_turn = child, lambda: {"tg_tps": 9.0}
+        sys.stdout, sys.stderr = io.StringIO(), Tty()
+        try:
+            _su._first_question(cfg)
+            got, dots = sys.stdout.getvalue(), sys.stderr.getvalue()
+        finally:
+            _su.subprocess.run, _su.session.last_turn = real_run, real_turn
+            sys.stdout, sys.stderr = out, err
+        t.ok("* It is small." in got and dots.startswith("\r\x1b[2K* .") and dots.endswith("\r\x1b[2K"),
+             "waits: setup's first question shows today's dots while it waits, then clears them", repr(dots))
+
+        # --- the door: setup's closing line, update's once ever
+        sys.stdout = io.StringIO()
+        try:
+            _su._closing()
+            closing = sys.stdout.getvalue()
+        finally:
+            sys.stdout = out
+        t.ok(closing.splitlines()[-1] == "next: spark awaken -- give this machine a personality and a look"
+             and os.path.exists(_su.OFFERED),
+             "door: setup ends with the one suggestion to awaken (and marks it offered)", closing)
+        os.remove(_su.OFFERED)
+
+        def door_once(stream):
+            sys.stdout = stream
+            try:
+                _up._door()
+                return stream.getvalue()
+            finally:
+                sys.stdout = out
+        piped, first_, again = door_once(io.StringIO()), door_once(Tty()), door_once(Tty())
+        t.ok(piped == "" and first_ == _su.DOOR + "\n" and again == "",
+             "door: update says it once ever, at a terminal only", repr((piped, first_, again)))
+
+        # --- awakened: the door is shut, the bar draws, the pulses show
+        os.remove(_su.OFFERED)
+        os.environ["SPARK_LOOK_MOTION"] = "on"
+        look.render(_cf.load(), awake_now=True)
+        sys.stdout = Tty()
+        try:
+            _su._closing()
+            _up._door()
+            shut = sys.stdout.getvalue()
+        finally:
+            sys.stdout = out
+        t.ok("spark awaken" not in shut and not os.path.exists(_su.OFFERED),
+             "door: an awakened machine is never told to awaken", shut)
+        _en.measured_file = lambda c: model
+        up, got, bar = waited("loading", 2, Tty(), Tty())
+        t.ok(up and got == "loading" and "waking [" in bar and "%" in bar and bar.endswith("\r\x1b[2K"),
+             "waits: awakened at a terminal, the waking bar replaces the dots and the label follows", repr((got, bar[:60])))
+        up, got, bar = waited("loading", 1, io.StringIO(), Tty())
+        t.ok(up and got == "loading." and bar == "", "waits: awakened, a log keeps its dots", repr((got, bar)))
+        sys.stderr = Tty()
+        try:
+            live = [isinstance(p(), _tx.Busy) for p in (_md._pulse, _up._pulse)]
+        finally:
+            sys.stderr = err
+        t.ok(live == [True, True], "waits: awakened at a terminal, verify and update pulse", repr(live))
+
+        # --- licence, the British way, in setup's and model's rows
+        row = ("fixture", "f.gguf", "", 0, "", 1, "", "", "Fixture-Terms https://example.org", "")
+        sys.stdout = io.StringIO()
+        try:
+            _su._announce_license([row], "fixture")
+            _md._license_ok(row, "model")
+            lic = sys.stdout.getvalue()
+        finally:
+            sys.stdout = out
+        t.ok(lic.count("fixture licence: Fixture-Terms") == 2 and "license" not in lic,
+             "licence: setup and model print it the British way", lic)
+    finally:
+        sys.stdout, sys.stderr = out, err
+        _en.measured_file, _en.roles = real["measured_file"], real["roles"]
+        for n, p in paths.items():
+            setattr(look, n, p)
+        _su.OFFERED = offered
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        look.forget()
+        _shutil.rmtree(tmp, ignore_errors=True)
+
+
 def main():
     srv, url = start_stub()
     t = T()
@@ -4763,12 +4973,12 @@ def main():
         # first, and -- stdin not a tty in this harness, which counts as
         # yes -- writes the key; an open-license row asks nothing
         rc, out7, err7 = spark("model", "gemma3-12b", extra={"SPARK_NO_APPLY": "1"})
-        t.ok(rc == 0 and "gemma3-12b license: Gemma-Terms-of-Use" in out7,
+        t.ok(rc == 0 and "gemma3-12b licence: Gemma-Terms-of-Use" in out7,
              "spark model NAME on a non-open row prints the license line", out7 + err7)
         t.ok("SITE_AI_MODEL=gemma3-12b" in open(home + "/.config/spark/site.env").read(),
              "stdin not a tty counts as yes: the key is written", out7)
         rc, out7b, _ = spark("model", "qwen2-5-coder-7b", extra={"SPARK_NO_APPLY": "1"})
-        t.ok(rc == 0 and "license:" not in out7b, "an untested Apache-2.0 row downloads without a question", out7b)
+        t.ok(rc == 0 and "licence:" not in out7b, "an untested Apache-2.0 row downloads without a question", out7b)
 
         # a name in two lists is refused, naming both files (config is
         # data; wrong data is refused) -- config.model_tables is the rule,
@@ -6538,6 +6748,7 @@ print("restart", engine.restart_line("serve"), "|", engine.restart_line("check")
     living_core_cases(t)
     living_awaken_cases(t)
     living_widget_cases(t)
+    living_waits_cases(t)
     lan_wait_cases(t)
     srv.shutdown()
     print("smoke: %s" % ("all ok" if not t.fail else "%d FAILED" % t.fail))

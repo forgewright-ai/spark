@@ -15,8 +15,9 @@ import sys
 import time
 
 from . import (HOME, IS_MAC, MARK, REPO, SHARE_TOKEN, SHARE_URL, SITE_ENV, SPARK_ENV, TOKEN_FILE,
-               config, mem_total_gb, say, wait_ready)
+               STATE_DIR, config, mem_total_gb, say)
 from . import engine, packages, session, site, wire
+from . import text as textmod
 from . import model as modeltab      # `model` is a local name here: the chosen row
 
 SIGN = "%s setup -- choose the model this machine can run" % MARK
@@ -132,7 +133,7 @@ def _table(cfg):
     if rest:
         # the table stays the proven few -- a first run is no place for
         # twenty rows -- but nobody should read it as the whole list
-        say("     %d more: spark model list (unproven, or a license that asks)" % rest)
+        say("     %d more: spark model list (unproven, or a licence that asks)" % rest)
     return default
 
 
@@ -143,7 +144,7 @@ def _announce_license(rows, name):
     question: naming it is the yes."""
     match = [r for r in rows if r[0] == name]
     if match and not config.is_open(match[0][8]):
-        say("%s license: %s" % (name, match[0][8] or "none on file"))
+        say("%s licence: %s" % (name, match[0][8] or "none on file"))
         if match[0][9]:
             say("  " + match[0][9])
 
@@ -241,8 +242,8 @@ def _serve(cfg):
     from . import serve
     if engine.service_state(cfg) != "loaded":
         return serve.cmd_serve([])
-    if wait_ready("ok     server       loading the model ...",
-                  lambda: wire.health(wire.serve_url() or cfg.loopback_url()) == "ok", 180, 5):
+    if engine.wait_load(cfg, "ok     server       loading the model ...",
+                        lambda: wire.health(wire.serve_url() or cfg.loopback_url()) == "ok", 180, 5):
         sys.stdout.write(" ready\n")
         return 0
     say("todo   server       not ready yet -- spark check --watch 5 follows it")
@@ -260,7 +261,11 @@ def _first_question(cfg):
         # 20 s budget is for the prompt, not for a demo on a cold server
         env = dict(os.environ)
         env.setdefault("SPARK_TIMEOUT", "120")
-        p = subprocess.run(cmd, input="? " + QUESTION, capture_output=True, text=True, timeout=300, env=env)
+        env.pop("SPARK_HINT_ROW", None)     # the child draws no pulse of its own
+        # its output is captured, so the wait shows here: today's dots
+        # (text.Busy on stderr, a terminal only), not a silent terminal
+        with textmod.Busy(sys.stderr):
+            p = subprocess.run(cmd, input="? " + QUESTION, capture_output=True, text=True, timeout=300, env=env)
     except subprocess.TimeoutExpired:
         say("spark: no answer in 300 s -- spark check says why")
         return
@@ -320,6 +325,35 @@ def _closing():
     say("  ? how big is this dir           a command in your line, a hint above it")
     say("  cmd 2>&1 | explain              what went wrong, and the fix")
     say("spark ember NAME adds a chat model: a bigger one, just for conversation")
+    door()
+
+
+DOOR = "next: spark awaken -- give this machine a personality and a look"
+OFFERED = os.path.join(STATE_DIR, "awaken-offered")
+
+
+def door(once=False):
+    """The one suggestion the living layer makes before it is asked for:
+    printed while this machine is not awakened. once=True (spark update)
+    prints it a single time ever, at a terminal, and marks it offered in
+    the state dir; setup prints it every run, and marks it offered too,
+    so an update after this setup does not say it again."""
+    try:
+        from . import look
+        if look.awake():
+            return False
+    except Exception:       # noqa: BLE001 -- a suggestion is never a reason to fail
+        return False
+    if once and (os.path.exists(OFFERED) or not sys.stdout.isatty()):
+        return False
+    say(DOOR)
+    try:
+        os.makedirs(os.path.dirname(OFFERED), mode=0o700, exist_ok=True)
+        with open(OFFERED, "a", encoding="utf-8"):
+            pass
+    except OSError:
+        pass
+    return True
 
 
 def _joining(yes):

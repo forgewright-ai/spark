@@ -13,7 +13,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
-from . import CONFIG_DIR, HOME, IS_MAC, MARK, REPO, config, confirm, glyph, mem_total_gb, paged, say, wait_ready
+from . import CONFIG_DIR, HOME, IS_MAC, MARK, REPO, config, confirm, glyph, mem_total_gb, paged, say
 from .site import apply, set_keys
 
 
@@ -91,6 +91,21 @@ def peer_models(cfg):
         return None
 
 
+def _pulse():
+    """Awakened, at a terminal: text.Busy on stderr while a silent step
+    runs (each file's hash in `spark model verify`). Anywhere else a
+    context that draws nothing: today's bytes."""
+    import contextlib
+    try:
+        from . import look
+        if look.active("motion", sys.stderr):
+            from . import text
+            return text.Busy(sys.stderr)
+    except Exception:       # noqa: BLE001 -- the pulse is never a reason to fail
+        pass
+    return contextlib.nullcontext()
+
+
 def _restart_server(cfg):
     from . import engine, wire
     st = engine.service_state(cfg)
@@ -116,7 +131,7 @@ def _restart_server(cfg):
         def _up():
             url = wire.serve_url() or "http://%s:%d" % (cfg.serve_host or lan_ip() or "127.0.0.1", cfg.port)
             return wire.health(url) == "ok"
-        if wait_ready("", _up, 180, 2):
+        if engine.wait_load(cfg, "", _up, 180, 2):
             say("ok     server       ready")
         else:
             say("todo   server       not ready yet -- spark check --watch 5 follows it")
@@ -286,7 +301,7 @@ def print_model_table(cfg):
             say("  " + note)
         rows = model_rows(cfg)
     width, lic_width = table_widths(rows)
-    say("     %-*s %8s %5s %-*s %-5s %-10s %9s" % (width, "model", "file", "RAM", lic_width, "license", "line", "", "fits"))
+    say("     %-*s %8s %5s %-*s %-5s %-10s %9s" % (width, "model", "file", "RAM", lic_width, "licence", "line", "", "fits"))
     for r in rows:
         say(model_line(r, width=width, lic_width=lic_width))
         if r["note"]:
@@ -310,7 +325,7 @@ def _license_ok(row, verb):
     name, license_, note = row[0], row[8], row[9]
     if config.is_open(license_):
         return True
-    say("%s license: %s" % (name, license_ or "none on file"))
+    say("%s licence: %s" % (name, license_ or "none on file"))
     if note:
         say("  " + note)
     if os.environ.get("SPARK_YES") == "1" or not sys.stdin.isatty():
@@ -413,13 +428,13 @@ def _model_add(args):
         say(MODEL_USAGE.rstrip())
         return 2
     if not license_:
-        say('spark model add: --license "NAME URL" is required -- your own row states its license too')
+        say('spark model add: --license "NAME URL" is required -- your own row states its licence too')
         return 2
     bad = re.search(r"[;`$()|&<>]", license_)
     if bad:
         # contract 3 refuses the whole file over one such character, and
         # then every verb dies with exit 2 -- refuse it before it lands
-        say("spark model add -- the license cannot hold %s (contract 3); use -- or , instead" % bad.group(0))
+        say("spark model add -- the licence cannot hold %s (contract 3); use -- or , instead" % bad.group(0))
         return 2
     nbytes, sha256, err = _probe_model_url(url, sha)
     if err:
@@ -459,7 +474,8 @@ def cmd_model(args):
         return _model_add(args[1:])
     if args[0:1] == ["verify"]:
         from . import verify
-        rows = verify.verify_all(cfg, force=True)
+        with _pulse():
+            rows = verify.verify_all(cfg, force=True)
         if not rows:
             say("spark model verify: no downloaded model")
             return 0
