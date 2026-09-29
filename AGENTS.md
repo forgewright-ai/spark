@@ -11,39 +11,15 @@ and the release steps. This file is the short brief.
 
 ## The landing rule
 
-A change is done only when it is in all of these. `CLAUDE.md`, "Adding
-things", has the reasons.
-
-- `spark help`: a line in `bin/spark`'s usage text.
-- A `spark <verb>` that sets and applies it, never a `site.env` key by
-  hand.
-- A `spark check` row, when it is a promise the machine makes.
-- Every doc: `README.md`, `docs/INSTALL.md`, `docs/CHEATSHEET.txt` and
-  `docs/CHANGELOG.md`.
-
-Apply it, reproduce it in `bootstrap.sh` or `install.sh`, detect it in a
-row, explain it in every doc. Otherwise it is not done.
+A change is done only when it is in `spark help`, a `spark` verb, a
+`spark check` row and every core doc: `CLAUDE.md`, "Adding things",
+"The landing rule", is the full text.
 
 ## The grammar
 
-`CLAUDE.md`, "The grammar", is the full text.
-
-- A bare verb shows and never mutates. `spark bar` piped still prints
-  the bar line: a status bar runs `spark bar` piped.
-- `on|off` is the only switch vocabulary at the CLI. Storage stays
-  `yes|no`.
-- `status` is bare, and `list` is the table.
-- `-h` answers first, signed `spark <sub> -- <one line>`.
-- A confirm is `<question>? yes/NO: ` (`confirm()`).
-- A wait is one dot-spinner (`wait_ready()`) for a server coming up,
-  one pulse (`text.Busy`, a tty only) for a reply, and curl's bar for a
-  download. On an awakened machine the pulse is a scanner, and a model
-  loading shows a bar with an estimate (`text.Estimate`).
-- Nothing living happens before `spark awaken`: an unawakened machine
-  prints what it printed before, and a pipe never sees a frame or a
-  colour.
-- Exit codes: 0 ok or show, 1 the world (stderr), 2 the invocation
-  (stdout, signed), 78 config, 130 `SIGINT`.
+Every verb follows one grammar, and nothing living happens before
+`spark awaken`: `CLAUDE.md`, "The grammar" and the principle "Awake by
+choice", is the full text.
 
 ## The gate
 
@@ -165,8 +141,6 @@ The production bar, before a release tag that changes the line:
 - danger over-fire reported, 10 % or less the target
 - flag honesty 100 %: every painted option is in its manual, or the
   hint names it
-- command ready at 2.3 seconds or less, median, on qwen3-4b on the
-  maintainer's test machine
 
 A run sets 3 seams, honoured only with `SPARK_LINE_BENCH=1` and never
 on a person's line. `SPARK_LINE_KNOW` is the arm.
@@ -200,9 +174,8 @@ whole of it.
   Use a throwaway `HOME` and the matching `XDG_*` dirs.
 - Change the banner (`home/.config/spark/banner`): it is spark's own
   artwork.
-- Put an app inside this repository: no plugin, no app package, no app
-  check row. An app is a client of one spark verb, in a repository of
-  its own. spark-micro is the shape.
+- Put an app inside this repository: `CLAUDE.md`, "A spark app", says
+  where one lives.
 - Add a model row without its size and sha256 from Hugging Face's file
   metadata and its license. Mark one `_TESTED="line"` only with the line
   proof: `spark line` answers valid JSON for it.
@@ -218,15 +191,11 @@ whole of it.
   read and written at most every 5 minutes. The one fork is `spark
   words greet`, at the first prompt after 4 hours away. Its other state
   is per pane and in memory: never exported.
-- Write non-ASCII into a doc. The pre-commit hook refuses it, because
-  the docs are read on the Linux console too.
-- Name a private repository or tool in any doc. What is not public is
-  not documented, and `tests/docs_test.py` refuses the word for that
-  tooling.
-- Bring the contracts' names into what a new user reads. `README.md`,
-  `docs/INSTALL.md`, `docs/CHEATSHEET.txt` and the site's front speak
-  two nouns, spark and spark apps. `docs_test.py` holds the word list,
-  and `CLAUDE.md` keeps the names.
+- Write non-ASCII into a doc: the pre-commit hook refuses it.
+- Name a private repository or tool in any doc: `tests/docs_test.py`
+  refuses it.
+- Bring the contracts' names into what a new user reads: `docs_test.py`
+  holds the word list.
 
 ## Voice
 

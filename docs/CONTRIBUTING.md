@@ -99,82 +99,34 @@ an issue away.
 
 Every document, help text and usage text speaks with one voice: simple
 and direct English. The rules below are the whole of it. A pull request
-that follows them lands faster.
+that follows them lands faster. The lines spark says once awakened are
+the machine's own voice, not this sheet's.
 
 One word per thing:
 
-- The machine: "this machine" for the reader's own, "another machine"
-  for any other. "the box" names the maintainer's test machine and
-  appears only in `CLAUDE.md` and `docs/ROADMAP.md`.
-- The AI: "the model" is the file that answers, and "the engine" is
-  the program that runs it (llama.cpp).
-- The server: "the page's server" is the HTTP server the page and the
-  API answer from. After the first mention, "the server".
-- The chat model is "the chat model". The verb stays `spark ember`.
-- The web UI is "the page", and the project site is spark.forgewright.ai
-  by name. The verb stays `spark forge`, and the server's code name
-  appears only in `CLAUDE.md` and `AGENTS.md`, in backticks.
-- The place you type a question is "the prompt line".
-- People: "you" in the customer docs. "The admin" is the machine's own
-  account, and "a user" is a named account.
-- "A new user" is a person meeting spark for the first time.
-- The check: `spark check`, "a row", "every row ok".
-- Another machine using this one's model is "a client". An editor or
-  tool that talks to spark is "an app" or "a spark app".
-- The colours are "the palette", and `spark theme` is the verb. "The
-  console" is the Linux text console and "the terminal" an emulator.
-- Installing is "install". The command is "the one-liner", and `spark
-  setup` is a verb.
-- `spark awaken` gives this machine "a personality and a look", and
-  then the machine is "awake". The 4 parts are motion, colour, reveal
-  and words.
-- "Mint" is for an account alone: `spark user add NAME` mints one.
+| word | means |
+|---|---|
+| "you" | the reader, in the customer docs |
+| "the admin" | the machine's own account |
+| "a user" | a named account |
+| "a new user" | a person meeting spark for the first time |
+| "mint" | make an account, `spark user add NAME`, and nothing else |
+| "a row" | one line of `spark check`, and "every row ok" when all pass |
+| "a client" | another machine using this one's model |
+| "a spark app" | an editor or tool that talks to spark |
+| "awake" | a machine `spark awaken` gave a personality and a look (motion, colour, reveal, words) |
 
 Form:
 
-- British spelling, as the code prints: colour, behaviour, flavour.
-  "Wi-Fi", "e-mail", "macOS", "GB", "kB", "characters".
-- Numerals for every count and time: 30 seconds, 5 minutes, 12 things.
-  A word only when a number starts a sentence.
-- Keys in backticks: `Esc s` at the shell, `Alt-s` in an app (say
-  "Option-s on a Mac" once per document), `Enter`, `Ctrl-C`.
-- ASCII only, and " -- " is the only dash. No semicolon joining two
-  clauses.
-- Parentheses hold a short aside: a command, a key or one clarifying
-  phrase.
+- ASCII only, and " -- " is the only dash.
 - Capitals only for acronyms. No contractions and no "we".
-- On screen, dim is decoration only: the dots, the brackets, an arrow.
-  Text a person reads stays in the normal colour.
-- A line an awakened machine says (`spark words`) makes no claim about
-  where data goes. `README.md` says what leaves the machine.
-- A hint is a whole sentence: spark adds the capital and the full stop.
-- A number the tests derive (the row count, the model count, the palette
-  keys) is stated once, in the file that owns it.
-
-Sentences:
-
-- Short sentences, present tense, active voice, the subject first. Under
-  18 words on average in the customer docs, under 22 in the contributor
-  docs, never over 30.
-- A bullet is one or two sentences. A heading is a noun phrase.
+- A line an awakened machine says makes no claim about where data goes.
+- Short sentences, never over 30 words.
 - Say what it does. A sentence about what it does not do stays only when
   a reader needs the promise, such as what leaves the machine.
 - One home per topic. The full explanation lives in one file, and every
   other mention is one sentence and a pointer to that file and section.
-- A command sits in a fenced `sh` block or in backticks. A row or a
-  message is quoted exactly as the code prints it.
-- Prose wraps at 72 columns. Tables and fences are exempt, and the
-  cheatsheet stays under 80.
-
-Structure:
-
-- Headings in sentence case, `spark` in lowercase, and the first heading
-  is the file's noun.
-- Numbered sections only in `docs/INSTALL.md` and `docs/ROADMAP.md`.
-- Bullets start with "-" and end with a period. One level of nesting.
-- A cross-reference is a `docs/` path in backticks. The only bare links
-  are spark.forgewright.ai and the upstream URLs in `CREDITS.md`.
-- A table of repositories may link them.
+- Prose wraps at 72 columns, and the cheatsheet stays under 80.
 
 `tests/docs_test.py` holds the mechanical half of these rules: the words
 that are out, the capitals, the contractions, the widths, the counts.

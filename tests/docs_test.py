@@ -117,8 +117,7 @@ def caps_allowed():
 def voice():
     """docs/CONTRIBUTING.md "## Voice", the mechanical half over every doc
     but the CHANGELOG (history): every backtick opens or closes a span,
-    Wi-Fi and characters spelled out, no contraction, capitals only for
-    acronyms -- a fence or a code span is not prose -- and a customer doc
+    no contraction, capitals only for acronyms -- a fence or a code span is not prose -- and a customer doc
     under 80 columns outside a fence or a table row. Each failure names
     the file and the words."""
     allowed = caps_allowed()
@@ -143,10 +142,6 @@ def voice():
             # the card's headers are its column-0 lines, in capitals by the
             # file's own shape (the DOCUMENTS block is pinned above)
             caps = "\n".join(line for line in text.split("\n") if line[:1] in ("", " "))
-        check(re.search(r"\bWiFi\b", text) is None, "%s: write Wi-Fi%s"
-              % (doc, "" if re.search(r"\bWiFi\b", text) is None else " (found 'WiFi')"))
-        check(re.search(r"\bchars\b", text) is None, "%s: write characters%s"
-              % (doc, "" if re.search(r"\bchars\b", text) is None else " (found 'chars')"))
         hits = sorted(set(m.group(0) for m in CONTRACTION.finditer(text)))
         check(not hits, "%s: no contraction%s" % (doc, "" if not hits else " (found %s)" % ", ".join("'%s'" % w for w in hits)))
         # a $VARIABLE is code; a NAME_LIKE_THIS is a constant

@@ -34,14 +34,8 @@ prompt line, the page and any program.
   generic: `~/.config/spark/theme.env` is a palette any renderer may
   read, and no shell code lives in this tree. The bar line and `spark
   quiet` are core, beside `spark headless`: the behaviour of an AI
-  appliance.
-- **The `FORGE`.** spark is the small model at the prompt line. The chat
-  model is the larger one for conversations. The `FORGE` serves both
-  with one identity per machine, `soul` and `memory`. Every client talks
-  to the same `FORGE`: the prompt line here, a laptop's `spark`, a
-  script, a phone. The prompt line is only the first line of
-  interaction. The `FORGE` is found, never assumed: `/api/health` says
-  `forge: true`.
+  appliance. Quiet hides noise, never a safety line: no watchdog, fsck,
+  log or check is switched off to silence what it prints.
 - **Privacy by design.** Nothing leaves the machine except the package
   managers, pinned sha256-verified downloads, and `spark` talking to a
   `FORGE` or a llama-server you run. Identity lives in
@@ -155,21 +149,16 @@ prompt line, the page and any program.
   their rows say so, never fail. CI has no WSL runner: `check.WSL_ROWS`
   and the fourth selftest pass pin the branch by fixture. A real run
   there is the maintainer's, by hand.
-- **The OS is the harness.** An agent's harness is its tools, its
-  permissions, its context, its triggers and its memory. spark brings
-  only the last. The tools are the programs on PATH and their man pages:
-  a step refused for an option brings back its own page's lines. The
-  permissions are the kernel's sandbox (bubblewrap's namespaces and
-  no_new_privs, `sandbox-exec` on macOS) and the user's Enter or `yes`.
-  The context is the shell: the directory, the exit code, the output.
-  The triggers are the OS's own timers starting `spark do --sandbox
-  --detach`: a systemd user timer, launchd, cron, a `spark watch` line.
-  The memory and the audit are the `FORGE`'s sealed threads. No tool
-  schema rides a request: a small model's context holds the task, not
-  the harness.
 - **The user chooses.** Theme, prompt, model, machine name, user: all
   `site.env` keys with defaults. Nothing aesthetic or sized to hardware
-  is baked in.
+  is baked in. A model is the user's own choice, never a spark change:
+  `spark model add URL --license "NAME URL"` and `spark ember NAME`
+  bring one in, and nothing credits it beyond its license. A new
+  behaviour is measured and offered, never imposed: today's behaviour
+  stays the default, and the measure names the choice. Nothing runs,
+  routes or switches without the user's own action: which engine
+  answers is a verb's choice (`spark client URL|off`, `spark model`),
+  and a detection only informs.
 
 ## The four obligations
 
@@ -591,11 +580,23 @@ and may change freely.
    controls U+200E/F, U+202A-E and U+2066-9. An edit carrying one is
    skipped. A `sudo` step is a danger step: the typed `yes`. A goal is
    at most `do.DO_GOAL_MAX` (8 kB), else one signed line, exit 2,
-   nothing sent. The budget keeps the goal whole, so it must fit. `spark
-   do` is bounded, measured and held. A proposal's messages fit the
-   served context (`do.budget`): `SPARK_CTX`, 8192 when unknown, at
-   `reveal.CHARS_PER_TOKEN`, a `CTX_SHARE` of 0.8, less the system
-   message and the reply's `DO_MAX_TOKENS`. `do.fit` keeps the goal and
+   nothing sent. The budget keeps the goal whole, so it must fit. The OS
+   is `spark do`'s harness. An agent's harness is its tools, its
+   permissions, its context, its triggers and its memory. spark brings
+   only the last. The tools are the programs on PATH and their man
+   pages: a step refused for an option brings back its own page's
+   lines. The permissions are the kernel's sandbox (bubblewrap's
+   namespaces and no_new_privs, `sandbox-exec` on macOS) and the user's
+   Enter or `yes`. The context is the shell: the directory, the exit
+   code, the output. The triggers are the OS's own timers starting
+   `spark do --sandbox --detach`: a systemd user timer, launchd, cron, a
+   `spark watch` line. The memory and the audit are the `FORGE`'s sealed
+   threads. No tool schema rides a request: a small model's context
+   holds the task, not the harness. `spark do` is bounded, measured and
+   held. A proposal's messages fit the served context (`do.budget`):
+   `SPARK_CTX`, 8192 when unknown, at `reveal.CHARS_PER_TOKEN`, a
+   `CTX_SHARE` of 0.8, less the system message and the reply's
+   `DO_MAX_TOKENS`. `do.fit` keeps the goal and
    the newest step, shortens the oldest outputs to `(output trimmed,
    exit N)` first, then drops the oldest exchanges. `forge.history`
    (mode `do`) cuts the same way and rebuilds each user message with its
@@ -1357,12 +1358,8 @@ and may change freely.
 
 One grammar for every verb. A verb that breaks a rule is a bug.
 
-1. A bare verb shows. It never mutates. The one carve-out: `spark bar`
-   with stdout not a tty still prints the bar line itself. A status bar
-   runs `spark bar` piped and must always get the line, never a state
-   change. Derived state is no mutation: bare `spark check` writes
-   `check.json`, and bare `spark look` renders a stale look file again
-   (`look.fresh`), as a hand edit of `spark.env` asks.
+1. A bare verb shows and never mutates, and `spark bar` piped still
+   prints the bar line.
 2. `on|off` is the only switch vocabulary at the CLI: headless, serve,
    forge, quiet, memory. The two servers hold the same kind of state and
    answer the same way. There is no `start`/`stop` pair beside it, and
@@ -1376,7 +1373,9 @@ One grammar for every verb. A verb that breaks a rule is a bug.
 3. `status` is an alias of bare for every stateful verb. `list` is the
    table word (theme, model, ember, font). A noun keeps its own verbs as
    sub-words rather than taking top-level ones: `spark soul edit|reset`,
-   `spark memory add|forget|clear`.
+   `spark memory add|forget|clear`. A command reads verb first, its
+   object a flag or a word after it: `spark clear --history`, with the
+   old `spark history clear` kept as an alias named nowhere.
 4. Every verb answers `-h|--help|help` first, before any gate or config
    read, signed per contract 8.
 5. One confirm shape: `<question>? yes/NO: `. Only `y` or `yes`
@@ -1401,9 +1400,8 @@ One grammar for every verb. A verb that breaks a rule is a bug.
    `longer than last time (N s) -- spark check says why`. With no measure it is the
    scanner and the seconds. Awakened, `spark check` counts its rows on
    stderr while they run.
-7. Exit codes: 0 ok or show, 1 the world failed (stderr, via `die()`), 2
-   the invocation (usage, an unknown name, a gate refusal: stdout,
-   signed), 78 misconfiguration (`EX_CONFIG`), 130 `SIGINT`.
+7. Exit codes: 0 ok or show, 1 the world (stderr), 2 the invocation
+   (stdout, signed), 78 misconfiguration, 130 `SIGINT`.
 
 ## Adding things
 
@@ -1450,17 +1448,16 @@ One grammar for every verb. A verb that breaks a rule is a bug.
   once from `templates/` as a rendered regular file, and note it in
   `docs/INSTALL.md`. Test by changing a setting in the app and running
   `ls -l` on the path: still a symlink, or now a regular file?
-- **A choice.** A `SITE_*` key with a default in `site.env.example`,
-  applied by `bootstrap.sh` or rendered by `install.sh`. And a `spark
-  <verb>` that sets and applies it: `spark theme`, `spark font`, `spark
-  quiet`. `lib/spark/site.py` has `set_keys` and `apply`. Editing
-  `site.env` by hand is the fallback, never the interface.
 - **The landing rule.** Nothing is done until it is in all of: `spark
   help` (`bin/spark`), a `spark` command, a `spark check` row when it is
   a promise the machine makes, contract 3 above if it is a key, and
   `README.md`, `docs/INSTALL.md`, `docs/CHEATSHEET.txt` and
   `docs/CHANGELOG.md`. A key without a command, or a command without a
-  row and a doc line, is half a feature. The rule binds the core
+  row and a doc line, is half a feature. A choice is a `SITE_*` key
+  with a default in `site.env.example`, applied by `bootstrap.sh` or
+  rendered by `install.sh`. Its `spark <verb>` sets and applies it
+  (`site.set_keys`, `site.apply`): editing `site.env` by hand is the
+  fallback, never the interface. The rule binds the core
   documentation, and core documentation moves with a release:
   `README.md`, `docs/INSTALL.md`, `docs/CHEATSHEET.txt`, `spark help`,
   this file and `docs/CHANGELOG.md` are updated as a version ships,
@@ -1713,14 +1710,15 @@ an sv stub.
 
 The git tag is the release: one control, not two. There is no `VERSION`
 constant. `spark ver` derives it from git (`lib/spark/version.py`,
-cached): `1.0` exactly at a tag, `1.0+3` 3 commits past it. A
-release tag is signed. `get`, `spark update` and `release.yml` verify
-its ssh signature against the tree's `allowed-signers` and move to no
-other tag. That file is one line per key, the principal the literal
-`spark-release`, never a real name. So a pushed tag alone runs
-nothing on anyone's install. A key in that file does. The `signed` row
-of `spark check` names the key's principal on a release clone. Update
-`CREDITS.md` when a pin or a model row changes.
+cached): `1.0` exactly at a tag, `1.0+3` 3 commits past it. A major
+is an architecture break only: a feature inside the standing shape is
+a minor, however large. A release tag is signed. `get`, `spark update`
+and `release.yml` verify its ssh signature against the tree's
+`allowed-signers` and move to no other tag. That file is one line per
+key, the principal the literal `spark-release`, never a real name. So a
+pushed tag alone runs nothing on anyone's install. A key in that file
+does. The `signed` row of `spark check` names the key's principal on a
+release clone. Update `CREDITS.md` when a pin or a model row changes.
 
 Signing, once per machine: `git config gpg.format ssh` and `git config
 user.signingkey ~/.ssh/id_ed25519.pub`, with the private half beside it
