@@ -89,6 +89,8 @@ USAGE_MACHINE = """the machine
 """
 
 USAGE_INTERFACE = """the interface
+ spark awaken                 give this machine a personality and a look
+ spark words [edit]           the lines it says, and its faces
  spark theme [NAME|list|show] the palettes, and yours; show = its colours
  spark quiet [SUB on|off]     start (banner), login (motd), boot (menu), audio
  spark font [FACE SIZE|list]  the console font (Linux) / Terminal.app's
@@ -159,6 +161,7 @@ VERBS = {"setup": ("setup", "main", False), "check": ("check", "main", False),
          "read": ("read", "cmd_read", False), "drill": ("drill", "cmd_drill", False),
          "watch": ("watch", "cmd_watch", False),
          "reveal": ("reveal", "cmd_reveal", False),
+         "awaken": ("awaken", "main", False), "words": ("words", "main", False),
          "update": ("update", "cmd_update", False), "bar": ("bar", "main", False),
          "theme": ("theme", "main", False), "bench": ("bench", "main", True),
          "stats": ("stats", "main", False),

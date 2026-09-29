@@ -47,7 +47,8 @@ _spark() {
         comp=(chat do recall serve check update headless share client setup
               ver last status brain history stats clear bench model ember
               forge soul memory quiet theme font bar off
-              on user explain edit ask read drill watch reveal help uninstall)
+              on user explain edit ask read drill watch reveal help uninstall
+              awaken words)
     elif (( CURRENT == 3 )); then
         case ${words[2]} in
             quiet)   comp=(start login boot audio on off status) ;;
@@ -65,6 +66,7 @@ _spark() {
             chat)    comp=(--thread) ;;
             do)      comp=(--sandbox --detach --porcelain --review --accept --discard) ;;
             soul)    comp=(show edit reset) ;;
+            words)   comp=(edit) ;;
             bench)   comp=(--line) ;;
             clear)   comp=(--history) ;;
             font)    comp=(list none status) ;;

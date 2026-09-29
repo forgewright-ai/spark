@@ -1399,7 +1399,9 @@ class Handler(BaseHTTPRequestHandler):
         text = body.get("text")
         if not isinstance(text, str):
             return self._error(400, "bad", "text must be a string")
-        soul.write(self.server.cfg, text)
+        # what `spark soul edit` would write: the personality paragraph
+        # after an unchanged core once awaken gave one, else the soul file
+        soul.write_edit(self.server.cfg, text)
         n = len(text.strip())
         check.refresh()
         return self._json(200, {"chars": min(n, soul.SOUL_MAX), "cut": n > soul.SOUL_MAX})
