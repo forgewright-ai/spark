@@ -1011,9 +1011,10 @@ CHAT_USAGE = """%s chat -- a conversation
 
   Inside it: @FILE words asks about a file; /help lists the verbs (/new,
   /resume, /clear, /keep, /last, /model, /reveal); /q (or /quit, /exit, :q,
-  quit, exit, bye, Ctrl-D) ends, silently; Ctrl-C cancels a reply in progress
-  without ending the chat. Every turn is kept as a thread (spark history) for
-  SPARK_HISTORY days; /keep keeps this one past that and past
+  quit, exit, bye, Ctrl-D) ends, silently; Ctrl-C clears the line at the
+  prompt and cancels a reply in progress, and neither ends the chat. Every
+  turn is kept as a thread (spark history) for SPARK_HISTORY days; /keep
+  keeps this one past that and past
   spark clear --history, and /keep off lets it go.
 """
 
@@ -1246,8 +1247,12 @@ def cmd_chat(args):
                     say()
                 break
             except KeyboardInterrupt:
+                # Ctrl-C at the prompt clears the line, as a shell does:
+                # a fresh `chat> `; Ctrl-D and /q end the chat. Piped,
+                # an interrupt still ends it (nobody is at a prompt)
                 if tty:
                     say()
+                    continue
                 break
             text = text.strip()
             if not text:

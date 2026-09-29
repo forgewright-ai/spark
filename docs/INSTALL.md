@@ -816,7 +816,7 @@ do, and never calls `sudo`:
 is yours to decide: `echo 'you ALL=(ALL) NOPASSWD:ALL' | sudo tee
 /etc/sudoers.d/you` is fine for a test bench.
 
-The check. `spark check` has 41 rows, one per promise this machine
+The check. `spark check` has 42 rows, one per promise this machine
 makes, and exits 0 when no row fails. `--watch N` redraws every N
 seconds. `--porcelain` prints one tab-separated row per line, for a
 program. `--fresh` ignores cached answers, and `--fetch` asks origin
@@ -920,7 +920,7 @@ get -> spark setup -> bootstrap.sh (apply) -> install.sh (links, renders)
                       the engine, the model, the token, the units, one rc
                       line; a spark app is its own repository (spark-<app>)
 
-spark check   41 rows: every promise the machine makes, fixture-tested
+spark check   42 rows: every promise the machine makes, fixture-tested
 spark update  the newest signed tag, or main on a developer clone; converge
 
 what leaves the machine: pinned downloads in, your questions to the

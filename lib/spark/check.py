@@ -1150,6 +1150,35 @@ def row_soul(ctx):
     return ok("yours, %d chars" % n)
 
 
+# the words and faces files' editor (awaken's verb beside it)
+WORDS_EDIT = "spark words edit"
+
+
+@row("CAPABILITY")
+def row_look(ctx):
+    """The living prompt: na until spark awaken; awake, the look file the
+    hooks read must be what spark.env and the faces file say now, and
+    every line of the words and faces files one spark would print."""
+    from . import look
+    if not look.awake():
+        return na("not awakened -- spark awaken gives this machine a personality and a look")
+    bad = look.refused()
+    if bad:
+        name, n = bad[0]
+        more = " and %d more" % (len(bad) - 1) if len(bad) > 1 else ""
+        return warn("line %d of the %s file%s will never print (an escape, a secret, or too long)" % (n, name, more),
+                    WORDS_EDIT)
+    try:
+        with open(look.LOOK_FILE, encoding="utf-8") as f:
+            have = f.read()
+    except OSError:
+        have = ""
+    if have != look.content(ctx.cfg, True):
+        return warn("the look file is older than spark.env or the faces file", "spark look")
+    return ok("awake: motion %s, colour %s, words %s, height %d" % (
+        look.stored("motion", ctx.cfg), look.stored("colour", ctx.cfg), look.stored("words", ctx.cfg), look.height(ctx.cfg)))
+
+
 @row("CAPABILITY")
 def row_memory(ctx):
     from . import MEMORY_FILE, memory
@@ -1591,12 +1620,15 @@ def client_of(cfg):
     return "a client of %s (spark client off serves here again)" % cfg.peer_ai_url.split("//")[-1]
 
 
-def run_rows(ctx, names=None):
+def run_rows(ctx, names=None, tick=None):
+    """Every row (or the named ones). tick(n, total), when given, is told
+    before each row runs: the counter an awakened terminal draws."""
     ctx.started = time.time()
     rows = []
-    for spec in SPECS:
-        if names and spec.name not in names:
-            continue
+    specs = [s for s in SPECS if not names or s.name in names]
+    for n, spec in enumerate(specs, 1):
+        if tick is not None:
+            tick(n, len(specs))
         try:
             if spec.name in CLIENT_ROWS and ctx.cfg.client:
                 r = na(client_of(ctx.cfg))
@@ -1618,23 +1650,80 @@ def counts(rows):
     return {s: sum(1 for r in rows if r.status == s) for s in (OK, FAIL, WARN, NA)}
 
 
+def _waiting():
+    """The sandboxed runs waiting for review now (bar.waiting's count)."""
+    try:
+        from . import sandbox
+        return sum(1 for r in sandbox.runs() if not r["running"])
+    except Exception:       # noqa: BLE001 -- a count for the news, never a reason to fail
+        return 0
+
+
+def news(prev, rows, waiting):
+    """An awakened machine's state changes, told once through look.news:
+    the ai row between ok and not ok since the last snapshot (`prev`, the
+    check.json before this run), and sandboxed runs starting to wait."""
+    from . import look
+    if not look.awake() or not isinstance(prev, dict):
+        return
+    stamp = time.strftime("%Y%m%d%H%M%S")
+    was = {r.get("name"): r.get("status") for r in prev.get("rows", []) if isinstance(r, dict)}
+    now = {r.name: r.status for r in rows}
+    if "ai" in was and "ai" in now and (was["ai"] == OK) != (now["ai"] == OK):
+        if now["ai"] == OK:
+            look.news("engine-up-" + stamp, "The model is awake again.")
+        else:
+            look.news("engine-down-" + stamp, "The model is not answering. spark check says why.")
+    try:
+        before = int(prev.get("waiting", 0))
+    except (TypeError, ValueError):
+        before = 0
+    if waiting and not before:
+        look.news("runs-waiting-" + stamp, "%d run%s wait%s for review. spark do --review shows them."
+                  % (waiting, "" if waiting == 1 else "s", "s" if waiting == 1 else ""))
+
+
 def write_snapshot(ctx, rows):
+    try:
+        with open(CHECK_JSON, encoding="utf-8") as f:
+            prev = json.load(f)
+    except (OSError, ValueError):
+        prev = None
+    snap = {"ts": int(time.time()), "name": ctx.cfg.name, "version": version.version(),
+            "counts": counts(rows),
+            "rows": [{"category": r.category, "status": r.status, "name": r.name,
+                      "value": r.value, "remedy": r.remedy} for r in rows]}
+    from . import look
+    if look.awake():
+        # the runs waiting, so the next run tells the change once (news)
+        snap["waiting"] = _waiting()
+        try:
+            news(prev, rows, snap["waiting"])
+        except Exception:   # noqa: BLE001 -- the news is never a reason to lose the snapshot
+            log_exc("check news")
     try:
         state_dir()
         with open(CHECK_JSON, "w", encoding="utf-8") as f:
-            json.dump({"ts": int(time.time()), "name": ctx.cfg.name, "version": version.version(),
-                       "counts": counts(rows),
-                       "rows": [{"category": r.category, "status": r.status, "name": r.name,
-                                 "value": r.value, "remedy": r.remedy} for r in rows]}, f)
+            json.dump(snap, f)
     except OSError:
         pass
 
 
-def render(ctx, rows, color):
+def render(ctx, rows, color, roles=False):
+    """The report. color paints it at a terminal: the fixed 32/33/31/2
+    unawakened; roles=True (awakened, the colour part active) through the
+    six roles instead -- ok, warn, trouble for a failed row, muted for na
+    and the remedy's arrow -- the remedy's words in the normal colour."""
     c = counts(rows)
 
     def paint(code, s):
-        return "\033[%sm%s\033[0m" % (code, s) if color else s
+        return "\033[%sm%s\033[0m" % (code, s) if color and code else s
+    code = dict(COLOR)
+    arrow = "2"
+    if roles:
+        from . import sgr
+        code = {OK: sgr("ok"), WARN: sgr("warn"), FAIL: sgr("trouble"), NA: sgr("muted")}
+        arrow = sgr("muted")
     where = ctx.cfg.name + (SEP + "WSL 2" if is_wsl() else "")
     out = ["%s check %s%son %s%s%s" % (paint("1", MARK), version.version(), SEP, where, SEP, time.strftime("%Y-%m-%d %H:%M"))]
     for cat in CATEGORIES:
@@ -1643,12 +1732,39 @@ def render(ctx, rows, color):
             continue
         out.append(paint("1", cat))
         for r in rs:
-            out.append("  %s %-11s %s" % (paint(COLOR[r.status], GLYPH[r.status]), r.name, r.value))
+            out.append("  %s %-11s %s" % (paint(code[r.status], GLYPH[r.status]), r.name, r.value))
             if r.remedy and r.status != OK:
-                out.append("    %s %s" % (paint("2", glyph("arrow")), r.remedy))
-    out.append("%s %d  %s %d  %s %d  %s %d" % (paint("32", GLYPH[OK]), c[OK], paint("31", GLYPH[FAIL]), c[FAIL],
-                                                paint("33", "!"), c[WARN], paint("2", GLYPH[NA]), c[NA]))
+                out.append("    %s %s" % (paint(arrow, glyph("arrow")), r.remedy))
+    out.append("%s %d  %s %d  %s %d  %s %d" % (paint(code[OK], GLYPH[OK]), c[OK], paint(code[FAIL], GLYPH[FAIL]), c[FAIL],
+                                                paint(code[WARN], "!"), c[WARN], paint(code[NA], GLYPH[NA]), c[NA]))
     return "\n".join(out)
+
+
+class Counter:
+    """`checking N/M` on stderr while the rows run, redrawn in place and
+    cleared before the report: an awakened terminal whose motion part is
+    active, never a pipe."""
+
+    def __init__(self, stream):
+        self.stream = stream
+        self.drawn = False
+
+    def __call__(self, n, total):
+        try:
+            self.stream.write("\r\033[2Kchecking %d/%d" % (n, total))
+            self.stream.flush()
+            self.drawn = True
+        except (OSError, ValueError):
+            pass
+
+    def clear(self):
+        if self.drawn:
+            try:
+                self.stream.write("\r\033[2K")
+                self.stream.flush()
+            except (OSError, ValueError):
+                pass
+            self.drawn = False
 
 
 def porcelain(rows):
@@ -1951,6 +2067,20 @@ def make_fixture(root, good, stub_url="", real_spark=False):
     if not good:
         with open(os.path.join(cfgd, "spark.env"), "w") as f:
             f.write("SPARK_PERSONA_EXTRA=old\n")
+    # the look row: an awakened machine whose look file is what spark.env
+    # and the faces file say (good); the bad one's faces file holds a line
+    # with an escape in it, one spark must never print
+    from . import look
+    look_env = {"SPARK_LOOK_MOTION": "auto", "SPARK_LOOK_COLOUR": "auto", "SPARK_LOOK_WORDS": "auto"}
+    fd_ = os.open(os.path.join(cfgd, "spark.env"), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    with os.fdopen(fd_, "w") as f:
+        f.write("".join("%s=%s\n" % kv for kv in sorted(look_env.items())))
+    faces_path = os.path.join(cfgd, "faces")
+    if not good:
+        with open(faces_path, "w") as f:
+            f.write("RATE=14\nIDLE=(o.o)\nPLEASED=(^\033[31m.^)\n")
+    with open(os.path.join(state, "look"), "w") as f:
+        f.write(look.content(look_env, True, faces_path))
     # gpu: a fake sysfs card whose VRAM does (good) or does not (bad) hold the model
     drm = os.path.join(root, "drm", "card0", "device")
     os.makedirs(drm)
@@ -2379,13 +2509,19 @@ def main(argv):
     ctx = Ctx(fresh=fresh, fetch=fetch)
     ctx.unattended = unattended(porcelain_out, fresh, watch, sys.stdin)
     color = sys.stdout.isatty() and not porcelain_out
+    from . import look
+    roles = color and look.active("colour", sys.stdout)
+    counter = Counter(sys.stderr) if (not porcelain_out and not report_out
+                                      and look.active("motion", sys.stderr)) else None
     while True:
-        rows = run_rows(ctx, names or None)
+        rows = run_rows(ctx, names or None, counter)
+        if counter is not None:
+            counter.clear()
         write_snapshot(ctx, rows)
         if report_out:
             page(report(ctx, rows))
             return 1 if any(r.status == FAIL for r in rows) else 0
-        text = porcelain(rows) if porcelain_out else render(ctx, rows, color)
+        text = porcelain(rows) if porcelain_out else render(ctx, rows, color, roles)
         if watch:
             sys.stdout.write("\033[2J\033[H" + text + "\n")
             sys.stdout.flush()

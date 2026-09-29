@@ -47,7 +47,7 @@ _spark_complete() {
     if [ "$COMP_CWORD" -eq 1 ]; then
         words="chat do recall serve check update headless share client setup
                ver last status brain history stats clear bench model ember
-               forge soul memory quiet theme font bar off
+               forge soul memory quiet theme font bar look height off
                on user explain edit ask read drill watch reveal help uninstall"
         COMPREPLY=($(compgen -W "$words" -- "$cur"))
         return 0
@@ -63,6 +63,8 @@ _spark_complete() {
         bar)     words="line" ;;
         memory)  words="add forget clear on off" ;;
         reveal)  words="auto off" ;;
+        look)    words="motion colour words reveal off status" ;;
+        height)  words="1 2 3 4 5" ;;
         check)   words="--watch --porcelain --report --fresh --fetch --selftest --chaos" ;;
         uninstall) words="--dry-run --yes --purge --packages --keep-packages" ;;
         serve)   words="on off status --foreground --host --print-client" ;;

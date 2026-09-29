@@ -1601,7 +1601,7 @@ sh tests/get_test.sh            # the one-liner: clone, pull, refusals, the hand
 sh tests/update_test.sh         # spark update: pull, move to a signed tag, unsigned and dirty refused, --dry-run
 ```
 
-`spark check` has 41 rows today, by category `11 SOFTWARE, 21
+`spark check` has 42 rows today, by category `11 SOFTWARE, 22
 CAPABILITY, 9 NONFUNCTIONAL` (`grep -c '^@row' lib/spark/check.py`
 counts them). `--selftest` runs 6 passes. The first two prove every
 fixture-testable row flips between a good and a bad fixture. The third

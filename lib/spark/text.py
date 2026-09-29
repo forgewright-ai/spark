@@ -14,6 +14,11 @@ import time
 from . import glyph, paint
 
 SGR_RE = re.compile(r"\x1b\[[0-9;]*m")
+# a list line (living only): up to 3 spaces, then `-`, `*` or a number
+# with `.` or `)`, then a space; BULLET_START is a head that may still
+# become one
+BULLET = re.compile(r"^( {0,3})([-*]|\d{1,3}[.)]) $")
+BULLET_START = re.compile(r"^ {0,3}(?:[-*]|\d{1,3}[.)]?)$")
 
 
 class Wrap:
@@ -51,14 +56,33 @@ class Wrap:
         self.bold = False
         self.em = False
         self.heading = False
+        # awakened (look.awake), at a tty: `inline code` bold in the
+        # accent, its backticks dropped; a `- `, `* ` or `N. ` line a
+        # bullet with a hanging indent; and the reveal breathes at the
+        # punctuation, its average pace the chosen one, pauses included.
+        # Unawakened, every byte is today's.
+        self.living = False
+        if self.render:
+            try:
+                from . import look
+                self.living = look.awake()
+            except Exception:       # noqa: BLE001 -- a look file is never a reason to fail
+                self.living = False
+        self.code = False         # inside `...`
+        self.hang = 0             # a bullet's hanging indent
+        self.step = 0.0
+        if self.cps:
+            from . import reveal
+            self.step = (1.0 / self.cps) * (reveal.BREATH_SCALE if self.living else 1.0)
 
-    def _emit(self, s):
+    def _emit(self, s, pause=0):
         """Every write goes through here: unpaced, one write; paced (cps),
-        a character at a time with an escape sequence written free."""
+        a character at a time with an escape sequence written free, then
+        `pause` more steps of breath after the last one (living only)."""
         if not self.cps or not s:
             self.stream.write(s)
             return
-        step = 1.0 / self.cps
+        step = self.step
         pos = 0
         for m in SGR_RE.finditer(s):
             for ch in s[pos:m.start()]:
@@ -67,6 +91,23 @@ class Wrap:
             pos = m.end()
         for ch in s[pos:]:
             self._tick(ch, step)
+        if pause and self.living:
+            # a breath is a later due, never a sleep: a stall that comes
+            # after it swallows it, and nothing is repaid
+            self.due += step * pause
+
+    def _breath(self, w):
+        """The steps of breath after the word `w`: a comma or a semicolon
+        a short one, a sentence's end a long one."""
+        if not (self.cps and self.living):
+            return 0
+        from . import reveal
+        tail = SGR_RE.sub("", w).rstrip(")\"']")
+        if tail.endswith((",", ";")):
+            return reveal.BREATH_COMMA
+        if tail.endswith((".", "?", "!")):
+            return reveal.BREATH_STOP
+        return 0
 
     def _tick(self, ch, step):
         now = time.monotonic()
@@ -96,10 +137,13 @@ class Wrap:
             if self.col + 1 + n > self.width - 1:
                 self._emit("\n")
                 self.col = 0
+                if self.hang:
+                    self._emit(" " * self.hang)
+                    self.col = self.hang
             else:
                 self._emit(" ")
                 self.col += 1
-        self._emit(w)
+        self._emit(w, self._breath(w))
         self.col += n
         self.need_space = True
         self.stream.flush()
@@ -129,11 +173,21 @@ class Wrap:
                 self.word += "*" * width
 
     def _reset_marks(self):
-        if self.render and (self.bold or self.heading):
+        if self.render and (self.bold or self.heading or self.code):
             self.stream.write("\033[0m")
-        self.bold = self.em = self.heading = False
+        self.bold = self.em = self.heading = self.code = False
         self.stars = ""
         self.prev = ""
+
+    def _code_mark(self):
+        """`inline code` (living only): its backticks go, and the span is
+        drawn in the accent (bold when the accent is unset)."""
+        self.code = not self.code
+        if self.code:
+            from . import sgr
+            self.word += "\033[%sm" % (sgr("accent", stream=self.stream) or "1")
+        else:
+            self.word += "\033[0m" + ("\033[1m" if self.bold or self.heading else "")
 
     def _char(self, ch):
         if self.verbatim:
@@ -142,7 +196,12 @@ class Wrap:
             self.col += 1
             self.stream.flush()
             return
-        if ch == "*" and self.render:
+        if ch == "`" and self.living:
+            if self.stars:
+                self._stars_out(ch)
+            self._code_mark()
+            return
+        if ch == "*" and self.render and not self.code:
             if not self.stars:
                 self.prev = self.word[-1:] if self.word else " "
             self.stars += ch
@@ -168,11 +227,14 @@ class Wrap:
         if self.word:
             self._word_out(self.word)
             self.word = ""
+        blank = self.col == 0 and not self.verbatim and not self.fenced
         self._start()
         self._reset_marks()
-        self._emit("\n")
+        # a blank line between paragraphs breathes like a sentence's end
+        self._emit("\n", self._breath(".") if blank else 0)
         self.stream.flush()
         self.col = 0
+        self.hang = 0
         self.need_space = False
         self.verbatim = False
         self.line_head = ""
@@ -209,6 +271,22 @@ class Wrap:
                 if fence and len(head) < 3:
                     continue
                 if self.render and hashes and not head.endswith(" ") and len(head) <= 3:
+                    continue
+                if self.living and not spaces and BULLET_START.match(head):
+                    continue            # `-`, `*`, `12.`: a bullet or not, the next char says
+                bullet = BULLET.match(head) if self.living else None
+                if bullet:
+                    # a bullet: `-` for `-` and `*`, a number kept; the
+                    # wrapped lines hang under its first word
+                    self.deciding = False
+                    self.line_head = ""
+                    mark = bullet.group(2)
+                    lead = bullet.group(1) + ("-" if mark in "-*" else mark) + " "
+                    self._start()
+                    self._emit(lead)
+                    self.col += len(lead)
+                    self.hang = self.col if self.col < self.width // 2 else 0
+                    self.need_space = False
                     continue
                 self.deciding = False
                 if self.render and hashes and head.endswith(" "):
@@ -258,50 +336,163 @@ class Busy:
     and only from the three env vars). Silent unless `stream` is a tty,
     so a pipe never sees a byte of it. above=True draws in the row above
     the cursor and comes back (the widgets' own hint-row frame: save the
-    cursor, up one, clear, draw, restore -- one write per frame); else it
-    draws on the cursor's own row. stop() ends the thread, then clears
-    once from the calling thread; idempotent; a context manager. Any
-    OSError or ValueError on the stream goes silent -- the pulse is never
-    a reason to fail."""
+    cursor, up `row` rows, clear, draw, restore -- one write per frame);
+    else it draws on the cursor's own row. stop() ends the thread, then
+    clears once from the calling thread; idempotent; a context manager.
+    Any OSError or ValueError on the stream goes silent -- the pulse is
+    never a reason to fail.
+
+    Awakened, with the motion part active on the stream (look.active),
+    the dots become the SCANNER on a fast terminal: `* FACE [  =     ]`,
+    8 cells, a frame every 0.12 s, the face blinking every look.blink()
+    frames and glancing every third blink (the face only while the words
+    part is active); over ssh and on the console auto keeps the dots.
+    Either way the wait escalates, never louder: from 2 seconds the
+    elapsed seconds, from TIER_LONG seconds (or three quarters of
+    `timeout`, whichever is sooner) one sentence saying what to do.
+    Unawakened, every byte is today's."""
 
     FRAMES = (".", "..", "...")
     STEP = 0.35
+    SCAN_STEP = 0.12
+    CELLS = 8
+    TIER_SECONDS = 2
+    TIER_LONG = 15
+    LONG = "A long one. Ctrl-C stops it."
 
-    def __init__(self, stream=sys.stderr, above=False, mark=None, close=False):
+    def __init__(self, stream=sys.stderr, above=False, mark=None, close=False, timeout=None, row=1):
         self.stream = stream
         self.above = above
+        self.row = row if isinstance(row, int) and 1 <= row <= 5 else 1
         self.mark = glyph("hammer") if mark is None else mark
         self.close = close                      # close the stream in stop() (hint_row's /dev/tty)
         self.on = False
         self._stop = threading.Event()
         self._thread = None
+        self.started = 0.0
         try:
             self.live = bool(stream) and stream.isatty()
         except (AttributeError, ValueError, OSError):
             self.live = False
+        # the living layer: off unless awakened and the part is active on
+        # this very stream; any trouble reading it is today's pulse
+        self.moving = self.scan = False
+        self.face = None
+        self.blink = 0
+        self.long_at = self.TIER_LONG
+        if timeout:
+            try:
+                self.long_at = min(self.TIER_LONG, 0.75 * float(timeout))
+            except (TypeError, ValueError):
+                pass
+        if self.live:
+            try:
+                from . import look
+                self.moving = look.active("motion", stream)
+                self.scan = self.moving and look.scanner(stream)
+                if self.moving and look.active("words", stream):
+                    self.face = look.faces()
+                    self.blink = look.blink()
+            except Exception:       # noqa: BLE001 -- the pulse is never a reason to fail
+                self.moving = self.scan = False
+                self.face = None
+        self.step = self.SCAN_STEP if self.scan else self.STEP
+        self.cols = 80
+        if self.moving:
+            try:
+                self.cols = os.get_terminal_size(stream.fileno()).columns
+            except (AttributeError, OSError, ValueError):
+                self.cols = 80
 
     @classmethod
     def hint_row(cls):
-        """The widgets' pulse: with SPARK_HINT_ROW=1 in the environment
-        (the widgets set it around `spark line`; a hand-run spark line
-        never touches the row above), a Busy drawing above the cursor on
-        /dev/tty; otherwise, or when /dev/tty will not open, a silent
-        one."""
-        if os.environ.get("SPARK_HINT_ROW") == "1":
+        """The widgets' pulse: with SPARK_HINT_ROW=N in the environment (a
+        digit 1..5, the height: the widgets set it around `spark line`; a
+        hand-run spark line never touches the rows above), a Busy drawing
+        N rows above the cursor on /dev/tty; otherwise, or when /dev/tty
+        will not open, a silent one."""
+        n = os.environ.get("SPARK_HINT_ROW", "")
+        if len(n) == 1 and n in "12345":
             try:
-                return cls(open("/dev/tty", "w"), above=True, close=True)
+                return cls(open("/dev/tty", "w"), above=True, close=True, row=int(n))
             except OSError:
                 pass
         return cls(None)
 
-    def _frame(self, dots):
-        body = paint(self.mark, "accent", self.stream) + " " + paint(dots, "muted", self.stream)
+    # --- one frame: the mark, the moving piece, the tier
+    def _dots(self, i):
+        """The dots for frame i: a new one every 0.35 s in either motion."""
+        per = 3 if self.scan else 1
+        return self.FRAMES[(i // per) % len(self.FRAMES)]
+
+    def _face(self, i, mood="thinking"):
+        """The face for frame i: a blink every `blink` frames, a glance
+        every third blink, else the mood's own. Deterministic."""
+        b = self.blink
+        if b and i:
+            if i % (3 * b) == 0:
+                return self.face["glance"]
+            if i % b == 0:
+                return self.face["blink"]
+        return self.face[mood]
+
+    def _scanner(self, i):
+        """The scanner for frame i, painted: the brackets muted, the light
+        in the accent, bouncing across CELLS cells."""
+        span = 2 * self.CELLS - 2
+        pos = i % span
+        pos = pos if pos < self.CELLS else span - pos
+        return (paint("[", "muted", self.stream) + " " * pos + paint("=", "accent", self.stream)
+                + " " * (self.CELLS - 1 - pos) + paint("]", "muted", self.stream))
+
+    def _piece(self, i):
+        """The moving piece, painted: the dots, or the face and the scanner."""
+        if not self.scan:
+            return paint(self._dots(i), "muted", self.stream)
+        if self.face is not None:
+            return paint(self._face(i), "accent", self.stream) + " " + self._scanner(i)
+        return self._scanner(i)
+
+    def _visible(self, i):
+        """The frame's width before the tier: mark, space, piece."""
+        n = len(self.mark) + 1
+        if self.scan:
+            n += self.CELLS + 2 + (len(self._face(i)) + 1 if self.face is not None else 0)
+        else:
+            n += len(self._dots(i))
+        return n
+
+    def _tier(self, i, used=None):
+        """The escalation after the piece: from 2 s the elapsed seconds,
+        from long_at one sentence -- normal colour, each dropped when the
+        row cannot hold it (a wrapped row loses the saved cursor)."""
+        if not self.moving or not self.started:
+            return ""
+        secs = int(time.monotonic() - self.started)
+        if secs < self.TIER_SECONDS:
+            return ""
+        used = self._visible(i) if used is None else used
+        out = " %d s" % secs
+        if secs >= self.long_at:
+            out += "  " + self.LONG
+        room = self.cols - 1 - used
+        if len(out) > room:
+            out = " %d s" % secs
+        return out if len(out) <= room else ""
+
+    def _body(self, i):
+        return paint(self.mark, "accent", self.stream) + " " + self._piece(i) + self._tier(i)
+
+    def _place(self, body):
         if self.above:
-            return "\x1b7\x1b[1A\r\x1b[2K" + body + "\x1b8"
+            return "\x1b7\x1b[%dA\r\x1b[2K" % self.row + body + "\x1b8"
         return "\r\x1b[2K" + body
 
+    def _frame(self, i):
+        return self._place(self._body(i))
+
     def _clear(self):
-        return "\x1b7\x1b[1A\r\x1b[2K\x1b8" if self.above else "\r\x1b[2K"
+        return ("\x1b7\x1b[%dA\r\x1b[2K\x1b8" % self.row) if self.above else "\r\x1b[2K"
 
     def _write(self, s):
         try:
@@ -313,14 +504,15 @@ class Busy:
     def _run(self):
         i = 0
         while not self._stop.is_set() and self.live:
-            self._write(self._frame(self.FRAMES[i % len(self.FRAMES)]))
+            self._write(self._frame(i))
             i += 1
-            self._stop.wait(self.STEP)
+            self._stop.wait(self.step)
 
     def start(self):
         if self.on or not self.live:
             return self
         self.on = True
+        self.started = time.monotonic()
         self._stop.clear()
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
@@ -349,6 +541,76 @@ class Busy:
     def __exit__(self, *exc):
         self.stop()
         return False
+
+
+class Estimate(Busy):
+    """The wait for a model to load, with an estimate: at a terminal whose
+    motion part is active, `* FACE waking [=========>          ] 45%`, 20
+    cells, the fill the elapsed time over `expected_s` (the last load of
+    that model file, engine.last_load) and never past 95 % of the cells,
+    so a gap always shows until the engine answers. Past the estimate the
+    percent gives way to `longer than last time (N s) -- spark check says
+    why`. The face opens its eyes once over the first third (blink,
+    waking, idle). No estimate (None or 0) is a Busy with the elapsed
+    seconds. Unawakened it is today's pulse; piped it draws nothing.
+    start(), stop() and the context manager are Busy's."""
+
+    WIDTH = 20
+    CAP = 0.95
+
+    def __init__(self, label, expected_s, stream=sys.stderr):
+        Busy.__init__(self, stream)
+        self.label = label or ""
+        try:
+            self.expected = max(0.0, float(expected_s or 0))
+        except (TypeError, ValueError):
+            self.expected = 0.0
+        self.bar = self.moving and self.expected > 0
+        if self.bar and not self.scan:
+            self.step = self.STEP           # ssh and the console: a calmer redraw
+
+    def _waking_face(self, t):
+        third = self.expected / 3.0
+        if t < third / 2:
+            return self.face["blink"]
+        if t < third:
+            return self.face["waking"]
+        return self.face["idle"]
+
+    def fill(self, t):
+        """(the bar's cells, the percent) at `t` seconds: never full."""
+        frac = min(t / self.expected, self.CAP)
+        n = int(frac * (self.WIDTH - 1))
+        return "=" * n + ">" + " " * (self.WIDTH - 1 - n), int(frac * 100)
+
+    def _body(self, i):
+        if not self.bar:
+            return Busy._body(self, i)
+        t = time.monotonic() - self.started if self.started else 0.0
+        cells, pct = self.fill(t)
+        head = paint(self.mark, "accent", self.stream) + " "
+        used = len(self.mark) + 1
+        if self.face is not None:
+            face = self._waking_face(t)
+            head += paint(face, "accent", self.stream) + " "
+            used += len(face) + 1
+        if self.label:
+            head += self.label + " "
+            used += len(self.label) + 1
+        bar = paint("[", "muted", self.stream) + paint(cells, "accent", self.stream) + paint("]", "muted", self.stream)
+        used += self.WIDTH + 2
+        room = self.cols - 1
+        if t <= self.expected:
+            tail = " %d%%" % pct
+            return head + bar + (tail if used + len(tail) <= room else "")
+        # past the estimate the sentence matters more than the bar: a row
+        # too narrow for both keeps the words
+        tail = "longer than last time (%d s) -- spark check says why" % round(self.expected)
+        if used + 1 + len(tail) <= room:
+            return head + bar + " " + tail
+        if used - self.WIDTH - 2 + len(tail) <= room:
+            return head + tail
+        return head + bar
 
 
 class Fence:

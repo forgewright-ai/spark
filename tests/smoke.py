@@ -707,9 +707,9 @@ def knowledge_cases(t):
          "missing: %s" % sorted(set(cverbs) - said))
     grounding._MAP.clear()
     grounding._TREE.clear()
-    t.ok(grounding.shell_map() == smap and len(smap) <= 950 and smap.isascii()
+    t.ok(grounding.shell_map() == smap and len(smap) <= 1000 and smap.isascii()
          and "spark quiet start|login|boot|audio on|off" in smap and "spark memory on|off" in smap,
-         "knowledge: shell_map is byte-stable, ASCII, <= 950 characters, SUB and on|off filled", "%d: %s" % (len(smap), smap))
+         "knowledge: shell_map is byte-stable, ASCII, <= 1000 characters, SUB and on|off filled", "%d: %s" % (len(smap), smap))
     example = open(os.path.join(REPO, "home", ".config", "spark", "spark.env.example")).read()
     keys = re.findall(r"SPARK_[A-Z_]+", grounding.SHELL_TAIL)
     t.ok(keys and all(re.search(r"^#? *%s=" % k, example, re.M) for k in keys),
@@ -1090,7 +1090,7 @@ def line_knowledge_cases(t, spark, home):
     # head's manual lines; the hint says what it was checked against
     hung = STATE.get("know_hung_up", 0)
     rc, lines, took, bodies, err = ask("? knowcut show processes by memory")
-    t.ok(rc == 0 and lines == ["cmd\tps aux -m", KNOW_PS + ", checked against the ps manual"],
+    t.ok(rc == 0 and lines == ["cmd\tps aux -m", KNOW_PS[:1].upper() + KNOW_PS[1:] + ", checked against the ps manual."],
          "line knowledge: a flag the manual lacks is asked again once; the passing command lands, checked", repr(lines))
     # the stub serves one request at a time, so the re-ask waits out the
     # first reply's pause there; what proves the stop is the hang-up the
@@ -1123,7 +1123,7 @@ def line_knowledge_cases(t, spark, home):
     # a passing verdict: no note, no re-ask
     rc, lines, took, bodies, err = ask("? knowgood show processes by memory")
     rec = last_turn()
-    t.ok(rc == 0 and lines == ["cmd\tps aux -m", KNOW_PS] and len(bodies) == 1
+    t.ok(rc == 0 and lines == ["cmd\tps aux -m", KNOW_PS[:1].upper() + KNOW_PS[1:] + "."] and len(bodies) == 1
          and rec.get("reasked") == 0 and rec.get("findings") == 0 and rec.get("evidence_chars") == 0,
          "line knowledge: a command the manual holds lands as it came -- no note, no re-ask, no evidence",
          repr(lines) + json.dumps(rec)[:200])
@@ -1131,16 +1131,16 @@ def line_knowledge_cases(t, spark, home):
     # still wrong after the re-ask: it lands, never blocked; the note says
     # it whole and survives the 80-column cut
     rc, lines, took, bodies, err = ask("? knowstuck show processes by memory")
-    note = "; the ps manual has no --sort -- check it before Enter"
+    note = "; the ps manual has no --sort -- check it before Enter."
     t.ok(rc == 0 and len(bodies) == 2 and lines[0] == "cmd\tps -eo pid,%mem --sort=-%mem"
-         and lines[1].endswith(note) and len(lines[1]) <= 80 and lines[1].startswith("shows every"),
+         and lines[1].endswith(note) and len(lines[1]) <= 80 and lines[1].startswith("Shows every"),
          "line knowledge: still wrong after the one re-ask, the command lands and the note survives the 80-column cut",
          repr(lines))
     rc, lines, took, bodies, err = ask("? knowmicro open a file")
-    t.ok(rc == 0 and len(bodies) == 2 and lines[:2] == ["cmd\tmicro <file>", "opens the editor; type the file name before Enter"],
+    t.ok(rc == 0 and len(bodies) == 2 and lines[:2] == ["cmd\tmicro <file>", "Opens the editor; type the file name before Enter."],
          "line knowledge: a placeholder the re-ask kept stays visible, the hint asks for the file name", repr(lines))
     rc, lines, took, bodies, err = ask("? knowverb stop the engine")
-    t.ok(rc == 0 and len(bodies) == 2 and lines[:2] == ["cmd\tspark off", "stops the engine, checked against spark's own help"]
+    t.ok(rc == 0 and len(bodies) == 2 and lines[:2] == ["cmd\tspark off", "Stops the engine, checked against spark's own help."]
          and "spark has no engine command." in bodies[-1]["messages"][-1]["content"],
          "line knowledge: a spark verb the tree lacks is asked again; the passing verb lands, checked", repr(lines))
 
@@ -1148,14 +1148,14 @@ def line_knowledge_cases(t, spark, home):
     # manual's commands on its card; kept, the note names the manual
     rc, lines, took, bodies, err = ask("? knowsv enable sshd at boot")
     t.ok(rc == 0 and len(bodies) == 2 and lines[:2] == ["cmd\tln -s /etc/sv/sshd /var/service/",
-                                                          "enables sshd at boot, checked against the sv manual"]
+                                                          "Enables sshd at boot, checked against the sv manual."]
          and "enable is not a command in sv's manual here." in bodies[-1]["messages"][-1]["content"]
          and "| commands: status up down once exit start stop restart" in bodies[-1]["messages"][-1]["content"],
          "line knowledge: a command word sv's manual does not list is asked again, its commands on the card",
          repr(lines) + repr(bodies[-1]["messages"][-1]["content"][-300:] if bodies else ""))
     rc, lines, took, bodies, err = ask("? knowsvstuck enable sshd at boot")
     t.ok(rc == 0 and len(bodies) == 2 and lines[0] == "cmd\tsv enable sshd" and len(lines[1]) <= 80
-         and lines[1] == "the sv manual has no command enable -- check it before Enter",
+         and lines[1] == "The sv manual has no command enable -- check it before Enter.",
          "line knowledge: a command word still unlisted after the re-ask lands, the note names the manual"
          " (the hint it would cut to a fragment is dropped)", repr(lines))
     # git's own aliases are commands: `git co` where the user's config says
@@ -1166,7 +1166,7 @@ def line_knowledge_cases(t, spark, home):
         f.write("[user]\n\tname = fixture\n[alias]\n\tco = checkout\n\tst = status ; a comment\n")
     rc, lines, took, bodies, err = ask("? knowgitalias switch to main")
     rc2, lines2, _t, bodies2, _e = ask("? knowgitnoalias switch to main")
-    t.ok(rc == 0 and len(bodies) == 1 and lines[:2] == ["cmd\tgit co main", "switches to main"]
+    t.ok(rc == 0 and len(bodies) == 1 and lines[:2] == ["cmd\tgit co main", "Switches to main."]
          and len(bodies2) == 2 and lines2[0] == "cmd\tgit checkout main"
          and "cx is not a command in git's manual here." in bodies2[-1]["messages"][-1]["content"],
          "line knowledge: a git alias from the user's config is a command (no re-ask); a word nothing names "
@@ -1254,19 +1254,19 @@ def line_knowledge_cases(t, spark, home):
     # the model's words, tidied before the hint row paints them (v1.56):
     # its own name as a word is lowercase, never inside a command or a
     # path; a hint ends without a period, an answer keeps its own
-    t.ok(_cli._tidy("Spark lists the files.") == "spark lists the files"
-         and _cli._tidy("run `Spark status` in ~/Spark or /opt/Spark.") == "run `Spark status` in ~/Spark or /opt/Spark"
-         and _cli._tidy("Spark.app and SPARK_HOME, then Spark's log") == "Spark.app and SPARK_HOME, then spark's log"
-         and _cli._tidy("it waits...") == "it waits..."
-         and _cli._tidy("lists logs, sockets, etc.") == "lists logs, sockets, etc."
+    t.ok(_cli._tidy("Spark lists the files.") == "spark lists the files."
+         and _cli._tidy("run `Spark status` in ~/Spark or /opt/Spark.") == "Run `Spark status` in ~/Spark or /opt/Spark."
+         and _cli._tidy("Spark.app and SPARK_HOME, then Spark's log") == "Spark.app and SPARK_HOME, then spark's log."
+         and _cli._tidy("it waits...") == "It waits..."
+         and _cli._tidy("lists logs, sockets, etc.") == "Lists logs, sockets, etc."
          and _cli._tidy("Spark answers here.", hint=False) == "spark answers here.",
-         "line: Spark as a word becomes spark, never in a command or a path; a hint drops its end period")
+         "line: Spark as a word becomes spark, never in a command or a path; a hint is a whole sentence")
     _te = _cli._Early("/", False, [], None)
     _te.head = "cmd"
     _hint = _te.label("Spark lists it.")
     _te.head = "answer"
     _ans = _te.second({"hint": "Spark is on this machine."}, final=True)
-    t.ok(_hint == "spark lists it" and _ans == "spark is on this machine.",
+    t.ok(_hint == "spark lists it." and _ans == "spark is on this machine.",
          "line: line 2 is tidied on both paths, the hint and the answer", repr((_hint, _ans)))
 
     # the arms: SPARK_KNOWLEDGE=off is arm off; the seam is read only in bench
@@ -1392,6 +1392,300 @@ def engine_wire_cases(t, spark, home, url):
          "line: the role seam keeps the line's own system message (no identity for the ember)")
 
 
+def living_core_cases(t):
+    """v1.59, the living prompt's core: an unawakened machine prints
+    today's bytes (the pulse, the wrap, the check's colours); awakened,
+    the scanner with its face, the waking bar that never fills, the
+    wrap's inline code and bullets and breath, the roles in the check;
+    pipes plain either way. The look state is pinned to a throwaway dir
+    (the module's paths, the parts through the environment): the real
+    one is never read or written."""
+    import inspect
+    import io
+    import pty
+    import shutil as _shutil
+    import spark as _sp
+    from spark import bar as _bar, check as _ck, cli as _cl, config as _cf, look, reveal as _rv, text as _tx
+
+    class Tty(io.StringIO):
+        def isatty(self):
+            return True
+
+        def fileno(self):
+            raise OSError("no fd")
+
+    tmp = tempfile.mkdtemp(prefix="spark-living-")
+    paths = {n: getattr(look, n) for n in ("LOOK_FILE", "NEWS_FILE", "WORDS_FILE", "FACES_FILE")}
+    keys = ("TERM", "NO_COLOR", "SSH_CONNECTION", "SSH_TTY", "TMUX", "SPARK_HINT_ROW", "SPARK_ASCII",
+            "SPARK_LOOK_MOTION", "SPARK_LOOK_COLOUR", "SPARK_LOOK_WORDS", "SPARK_HEIGHT") + tuple(_sp._SGR_VARS.values())
+    saved = {k: os.environ.get(k) for k in keys}
+    real_ascii = _sp.ASCII
+    for n in paths:
+        setattr(look, n, os.path.join(tmp, n.lower()))
+    for k in keys:
+        os.environ.pop(k, None)
+    os.environ["TERM"] = "xterm"
+    _sp.ASCII = False
+    look.forget()
+    try:
+        # --- unawakened: today's bytes, whatever the terminal
+        b = _tx.Busy(Tty(), above=True)
+        t.ok(not b.moving and not b.scan and b.step == 0.35 and b._frame(0) == "\x1b7\x1b[1A\r\x1b[2K* .\x1b8"
+             and b._frame(4) == "\x1b7\x1b[1A\r\x1b[2K* ..\x1b8" and b._clear() == "\x1b7\x1b[1A\r\x1b[2K\x1b8",
+             "living: unawakened, the pulse is today's dots, byte for byte", repr(b._frame(0)))
+        t.ok(_tx.Estimate("waking", 10, Tty())._frame(1) == "\r\x1b[2K* ..",
+             "living: unawakened, the waking estimate is today's pulse", repr(_tx.Estimate("waking", 10, Tty())._frame(1)))
+        src = "Hi `ls -la` here.\n* one\n1. two\n"
+        w = _tx.Wrap(Tty(), mark=True)
+        w.feed(src)
+        w.close()
+        t.ok(w.stream.getvalue() == "* Hi `ls -la` here.\n* one\n1. two\n\n" and not w.living,
+             "living: unawakened, the wrap is today's (backticks and bullets as sent)", repr(w.stream.getvalue()))
+        t.ok(_sp.sgr("accent") == "" and _sp.paint("x", "ok", Tty()) == "x" and not os.path.exists(look.LOOK_FILE),
+             "living: unawakened, no built-in colour and no look file")
+
+        class _Ctx:
+            cfg = _cf.load()
+        rows = [_ck.ok("fine"), _ck.warn("hm", "do x"), _ck.fail("bad", "do y"), _ck.na("none")]
+        for r, n in zip(rows, ("a", "b", "c", "d")):
+            r.name, r.category = n, "CAPABILITY"
+        plain = _ck.render(_Ctx, rows, True)
+        t.ok("\033[32m" in plain and "\033[33m!" in plain and "\033[31m" in plain and "\033[2m" in plain
+             and "\033[1;31m" not in plain and _ck.render(_Ctx, rows, True, roles=False) == plain,
+             "living: unawakened, the check keeps its fixed 32/33/31/2", repr(plain[-120:]))
+        t.ok(_ck.row_look(_Ctx).status == "na" and "spark awaken" in _ck.row_look(_Ctx).value,
+             "living: the look row is na until spark awaken", _ck.row_look(_Ctx).value)
+
+        # --- clean(): what a words or faces line may hold
+        t.ok(look.clean("  I am awake.  ") == "I am awake." and look.clean("a\x1b[31mred") is None
+             and look.clean("café") is None and look.clean("word " * 14 + "wor") is None
+             and look.clean("word " * 14 + "wo") == "word " * 14 + "wo"
+             and look.clean("token=abcdefgh12345678") is None and look.clean("") is None and look.clean(None) is None
+             and look.clean("tab\there") is None,
+             "living: clean() refuses an escape, non-ASCII, over 72 columns, a secret shape, a control character")
+
+        # --- awakened: the parts through the environment, the file rendered
+        for k in ("SPARK_LOOK_MOTION", "SPARK_LOOK_COLOUR", "SPARK_LOOK_WORDS"):
+            os.environ[k] = "on"
+        look.render(_cf.load(), awake_now=True)
+        got = open(look.LOOK_FILE).read()
+        t.ok(look.awake() and "AWAKE=yes\nMOTION=on\n" in got and "FACE_THINKING=(o.O)" in got and "BLINK=14" in got
+             and "SGR_ACCENT=1" in got, "living: render writes the look file the hooks read", got)
+        b = _tx.Busy(Tty())
+        f0, f14, f42 = b._frame(0), b._frame(14), b._frame(42)
+        t.ok(b.scan and b.step == 0.12 and "(o.O)" in f0 and "[" in f0 and "]" in f0 and "=" in f0
+             and "(-.-)" in f14 and "(.o.)" in f42 and f0.isascii(),
+             "living: awakened, the scanner with its face, a blink and a glance", repr((f0, f14)))
+        plain_f = _tx.SGR_RE.sub("", b._frame(3))
+        t.ok(plain_f == "\r\x1b[2K* (o.O) [   =    ]", "living: the scanner is 8 cells, ASCII", repr(plain_f))
+        b.started = time.monotonic() - 3
+        t.ok(_tx.SGR_RE.sub("", b._frame(0)).endswith("] 3 s"), "living: from 2 seconds the wait shows its seconds",
+             repr(b._frame(0)))
+        b = _tx.Busy(Tty(), timeout=8)
+        b.started = time.monotonic() - 7
+        t.ok(b.long_at == 6 and b._frame(0).endswith(" 7 s  A long one. Ctrl-C stops it."),
+             "living: from three quarters of the timeout, one sentence says what to do", repr(b._frame(0)))
+        os.environ["SSH_CONNECTION"] = "192.0.2.1 1 192.0.2.2 22"
+        os.environ["SPARK_LOOK_MOTION"] = "auto"
+        t.ok(not _tx.Busy(Tty()).scan and _tx.Busy(Tty()).moving, "living: auto keeps the dots over ssh")
+        os.environ["SPARK_LOOK_MOTION"] = "on"
+        t.ok(_tx.Busy(Tty()).scan, "living: motion on forces the scanner over ssh")
+        del os.environ["SSH_CONNECTION"]
+        e = _tx.Estimate("waking", 10, Tty())
+        cells, pct = e.fill(1000)
+        e.started = time.monotonic() - 4.5
+        mid = _tx.SGR_RE.sub("", e._frame(0))
+        e.started = time.monotonic() - 30
+        late = _tx.SGR_RE.sub("", e._frame(0))
+        t.ok(cells.endswith("> ") and len(cells) == 20 and pct == 95 and "[========>           ] 45%" in mid
+             and "longer than last time (10 s) -- spark check says why" in late and "waking" in mid,
+             "living: the waking bar holds a gap at 95 %, then says it is longer than last time", repr((mid, late)))
+        t.ok(_tx.Estimate("waking", None, Tty()).bar is False, "living: no estimate is the scanner and the seconds")
+        _tx.open = lambda path, mode="r": Tty()
+        try:
+            os.environ["SPARK_HINT_ROW"] = "2"
+            h2 = _tx.Busy.hint_row()
+            os.environ["SPARK_HINT_ROW"] = "7"
+            h7 = _tx.Busy.hint_row()
+        finally:
+            del _tx.open
+        t.ok(h2.live and h2.row == 2 and h2._frame(0).startswith("\x1b7\x1b[2A\r\x1b[2K")
+             and h2._clear() == "\x1b7\x1b[2A\r\x1b[2K\x1b8" and not h7.live,
+             "living: SPARK_HINT_ROW=2 draws two rows up; a value outside 1..5 draws nothing", repr(h2._frame(0)))
+        p = _cl._Pulse(Tty(), above=True)
+        p.warn, p.mark = True, "!"
+        t.ok("! ." in _tx.SGR_RE.sub("", p._frame(0)), "living: the line's pulse keeps its warn mark in the scanner's motion")
+
+        w = _tx.Wrap(Tty(), mark=False)
+        w.width = 30
+        w.feed("Run `ls -la` now.\n* one two three four five six seven eight\n12. twelve\n")
+        w.close()
+        out = w.stream.getvalue()
+        t.ok("\x1b[1mls -la\x1b[0m" in out and "`" not in out and "\n- one two three four five six\n  seven eight" in out
+             and "\n12. twelve" in out,
+             "living: inline code bold without its backticks, a bullet with a hanging indent", repr(out))
+        w = _tx.Wrap(Tty(), cps=40)
+        t.ok(w.living and abs(w.step - _rv.BREATH_SCALE / 40) < 1e-9 and w._breath("so,") == _rv.BREATH_COMMA
+             and w._breath("end.") == _rv.BREATH_STOP and w._breath("(done.)") == _rv.BREATH_STOP
+             and w._breath("file.txt") == 0 and _tx.Wrap(Tty())._breath("end.") == 0,
+             "living: the reveal breathes at a comma and a sentence's end, its average the chosen pace")
+        typical = 80.0 / 40 * _rv.BREATH_SCALE + (_rv.BREATH_COMMA + _rv.BREATH_STOP) * _rv.BREATH_SCALE / 40
+        t.ok(abs(typical - 80.0 / 40) < 1e-9, "living: a typical sentence takes the time the pace says, breath included")
+
+        # --- pipes: never a frame or an escape, awakened or not
+        pw = _tx.Wrap(io.StringIO(), mark=True)
+        pw.feed("Run `ls` now.\n* one\n")
+        pw.close()
+        t.ok(pw.stream.getvalue() == "* Run `ls` now.\n* one\n\n" and not _tx.Busy(io.StringIO()).live
+             and _sp.paint("x", "accent", io.StringIO()) == "x",
+             "living: a pipe gets the model's bytes, no frame, no colour, awakened too", repr(pw.stream.getvalue()))
+
+        # --- the check through the roles, the counter, the look row
+        real_out = sys.stdout
+        sys.stdout = Tty()          # the report's colours are for a terminal
+        try:
+            roles = _ck.render(_Ctx, rows, True, roles=True)
+        finally:
+            sys.stdout = real_out
+        t.ok("\033[32m" in roles and "\033[1;31m" in roles and "\033[31m!" in roles and "\033[2m" in roles
+             and "\033[33m" not in roles, "living: awakened, the check paints ok, warn, trouble and muted", repr(roles[-120:]))
+        cn = _ck.Counter(Tty())
+        cn(3, 42)
+        cn.clear()
+        t.ok(cn.stream.getvalue() == "\r\033[2Kchecking 3/42\r\033[2K", "living: the check's counter, cleared before the report")
+
+        class _Ctx2:
+            cfg = _cf.load()
+        r = _ck.row_look(_Ctx2)
+        t.ok(r.status == "ok" and r.value == "awake: motion on, colour on, words on, height 1", "living: the look row ok when rendered", r.value)
+        with open(look.FACES_FILE, "w") as f:
+            f.write("RATE=5\nIDLE=(o\x1b[31m.o)\n")
+        r = _ck.row_look(_Ctx2)
+        t.ok(r.status == "warn" and r.remedy == "spark words edit" and look.faces()["idle"] == "(o.o)",
+             "living: a faces line with an escape warns, and is never drawn", r.value)
+        with open(look.FACES_FILE, "w") as f:
+            f.write("RATE=5\nTEMPER=warm\n")
+        r = _ck.row_look(_Ctx2)
+        t.ok(r.status == "warn" and r.remedy == "spark look", "living: a look file older than the faces file warns", r.value)
+        look.render(_cf.load())
+        t.ok("BLINK=5\nTEMPER=warm\n" in open(look.LOOK_FILE).read() and "rate" not in look.faces()
+             and _ck.row_look(_Ctx2).status == "ok", "living: render takes RATE and TEMPER; faces() ignores them")
+        t.ok(look.news("engine-up-1", "The model is awake again.") and open(look.NEWS_FILE).read() == "engine-up-1\tThe model is awake again.\n"
+             and not look.news("x", "a\x1b[2Jb") and not look.news("bad id", "fine."),
+             "living: the news file is one id and one clean line")
+
+        # --- the hint as a sentence, for everyone
+        t.ok(_cl._tidy("lists the files") == "Lists the files." and _cl._tidy("ls lists them", head="ls") == "ls lists them."
+             and _cl._tidy("`ls` lists them") == "`ls` lists them." and _cl._tidy("spark does it.") == "spark does it."
+             and _cl._tidy("is it?") == "Is it?" and _cl._tidy("it waits...") == "It waits..."
+             and _cl._tidy("\"quoted\" first") == "\"quoted\" first." and _cl._tidy("x", hint=False) == "x",
+             "living: a hint is a whole sentence -- a capital, a full stop -- never touching a command or a quote")
+        t.ok(_cl._sentence(lambda w: "a" * w) == "a" * 79 + "." and _cl._sentence(lambda w: "ok") == "ok.",
+             "living: the full stop keeps the hint within 80 columns")
+        t.ok("cps=cps" in inspect.getsource(_cl.cmd_explain), "living: explain passes --reveal to the stream")
+
+        # --- the bar: tmux markup only for tmux
+        t.ok(_bar.MARKUP.sub("", "a #[fg=colour4,bold]ai 9t/s#[default] b") == "a ai 9t/s b"
+             and _bar.for_tmux("line"), "living: the bar line keeps its markup; a plain line loses it")
+        real_out = sys.stdout
+        sys.stdout = Tty()
+        try:
+            bare = _bar.for_tmux("")
+            os.environ["TMUX"] = "/tmp/tmux-0/default,1,0"
+            under = _bar.for_tmux("")
+        finally:
+            sys.stdout = real_out
+            os.environ.pop("TMUX", None)
+        t.ok(not bare and under and _bar.for_tmux(""), "living: bare spark bar at a terminal is plain; tmux and a pipe get the markup")
+    finally:
+        for n, v in paths.items():
+            setattr(look, n, v)
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        _sp.ASCII = real_ascii
+        look.forget()
+
+    # --- the verbs, in a throwaway home (a subprocess: spark.env is a module path)
+    home = os.path.join(tmp, "home")
+    os.makedirs(os.path.join(home, ".config", "spark"))
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("SPARK_", "XDG_", "SITE_", "GIT_"))}
+    env.update({"HOME": home, "XDG_CONFIG_HOME": home + "/.config", "XDG_STATE_HOME": home + "/.local/state",
+                "XDG_DATA_HOME": home + "/.local/share", "SPARK_NO_REFRESH": "1", "TERM": "xterm", "LANG": "C.UTF-8"})
+
+    def sp(*args):
+        p = subprocess.run([sys.executable, SPARK] + list(args), capture_output=True, text=True, env=env, timeout=30)
+        return p.returncode, p.stdout
+    rc0, bare = sp("look")
+    rc1, said = sp("look", "motion", "auto")
+    rc2, _ = sp("look", "color", "on")
+    rc3, bad = sp("look", "colour", "loud")
+    rc4, _ = sp("height", "3")
+    rc5, hi = sp("height")
+    rc6, bad2 = sp("height", "6")
+    rc7, helped = sp("look", "-h")
+    rc8, helped2 = sp("height", "help")
+    senv = open(os.path.join(home, ".config", "spark", "spark.env")).read()
+    lk = open(os.path.join(home, ".local", "state", "spark", "look")).read()
+    t.ok(rc0 == 0 and "not awakened" in bare and rc1 == 0 and "after spark awaken" in said and rc2 == 0
+         and "SPARK_LOOK_MOTION=auto" in senv and "SPARK_LOOK_COLOUR=on" in senv and "SPARK_HEIGHT=3" in senv
+         and "AWAKE=no" in lk and "MOTION=off" in lk and "HEIGHT=3" in lk,
+         "living: spark look PART and spark height write spark.env and render the look file", senv + lk)
+    t.ok(rc3 == 2 and bad.startswith("spark look -- ") and rc6 == 2 and bad2.startswith("spark height -- ")
+         and rc5 == 0 and hi.startswith("height 3") and rc7 == 0 and helped.startswith("spark look -- ")
+         and rc8 == 0 and helped2.startswith("spark height -- "),
+         "living: the verbs refuse signed, exit 2, and answer -h first", bad + bad2 + helped + helped2)
+    rc9, off = sp("look", "off")
+    senv = open(os.path.join(home, ".config", "spark", "spark.env")).read()
+    t.ok(rc9 == 0 and "reveal is untouched" in off and "SPARK_LOOK_MOTION=off" in senv and "SPARK_LOOK_WORDS=off" in senv
+         and "SPARK_REVEAL" not in senv, "living: spark look off turns three parts off and leaves the reveal", senv)
+    rcg, greet = sp("look", "greet")
+    t.ok(rcg == 0 and greet == "", "living: the greeting is silent on an unawakened machine")
+
+    # --- chat: Ctrl-C at the prompt clears the line; /q ends it
+    pid, fd = pty.fork()
+    if pid == 0:
+        os.execve(sys.executable, [sys.executable, SPARK, "chat"], env)
+    got = b""
+
+    def upto(n, secs=15):
+        nonlocal got
+        end = time.time() + secs
+        while got.count(b"chat>") < n and time.time() < end:
+            if select.select([fd], [], [], 0.2)[0]:
+                try:
+                    chunk = os.read(fd, 4096)
+                except OSError:
+                    break
+                if not chunk:
+                    break
+                got += chunk
+    upto(1)
+    os.write(fd, b"half a line\x03")
+    upto(2)
+    os.write(fd, b"/q\n")
+    end = time.time() + 10
+    status = None
+    while time.time() < end:
+        done, status = os.waitpid(pid, os.WNOHANG)
+        if done:
+            break
+        if select.select([fd], [], [], 0.2)[0]:
+            try:
+                got += os.read(fd, 4096)
+            except OSError:
+                pass
+    else:
+        os.kill(pid, signal.SIGKILL)
+        os.waitpid(pid, 0)
+    os.close(fd)
+    t.ok(got.count(b"chat>") >= 2 and status is not None and os.WIFEXITED(status) and os.WEXITSTATUS(status) == 0,
+         "living: Ctrl-C at chat> clears the line and gives a fresh prompt; /q ends the chat", repr(got[-200:]))
+    _shutil.rmtree(tmp, ignore_errors=True)
+
+
 def main():
     srv, url = start_stub()
     t = T()
@@ -1418,7 +1712,7 @@ def main():
         rc, out, _ = spark("line", "--cwd", "/tmp", "--shell", "bash", stdin="? files bigger than 1G this week")
         lines = out.splitlines()
         t.ok(rc == 0 and lines[0] == "cmd\tfind . -type f -size +1G -mtime -7", "line: cmd", out)
-        t.ok(len(lines) == 2 and lines[1] == "Files over 1G changed this week", "line: hint on line 2", out)
+        t.ok(len(lines) == 2 and lines[1] == "Files over 1G changed this week.", "line: hint on line 2", out)
         t.ok(STATE.get("model") == "spark", "line: the request names the spark role", str(STATE.get("model")))
         rc, out, _ = spark("line", stdin="delete the tmp files?")
         t.ok(rc == 0 and out.startswith("danger\t"), "line: model-flagged danger", out)
@@ -1608,10 +1902,10 @@ def main():
 
         # contract 4's proof line: printed when read-only, refused when not
         rc, out, _ = spark("line", stdin="prooftest?")
-        t.ok(rc == 0 and out.splitlines() == ["cmd\tmkdir -p pdir", "makes the dir", "proof\ttest -d pdir"],
+        t.ok(rc == 0 and out.splitlines() == ["cmd\tmkdir -p pdir", "Makes the dir.", "proof\ttest -d pdir"],
              "line: a read-only proof rides as the third line", repr(out))
         rc, out, _ = spark("line", stdin="badproof?")
-        t.ok(rc == 0 and out.splitlines() == ["cmd\tmkdir -p pdir", "makes the dir"],
+        t.ok(rc == 0 and out.splitlines() == ["cmd\tmkdir -p pdir", "Makes the dir."],
              "line: a proof that writes is refused, never printed", repr(out))
 
         # v1.52: the line streams. The request: the schema in the order the
@@ -1636,7 +1930,7 @@ def main():
                 got.append((l.rstrip("\n"), time.time() - t0))
             return p.wait(timeout=30), got
         rc, got = _timed("slowhint?")
-        t.ok(rc == 0 and [g[0] for g in got] == ["cmd\tls -la", "lists everything here", "proof\ttest -d ."]
+        t.ok(rc == 0 and [g[0] for g in got] == ["cmd\tls -la", "Lists everything here.", "proof\ttest -d ."]
              and got[1][1] - got[0][1] > 1.0,
              "line: line 1 is out the moment the command closes, the hint after it", repr(got))
         rc, got = _timed("slowdanger?")
@@ -1652,7 +1946,7 @@ def main():
             t.ok(rc == 1 and out.splitlines() == ["error", "the model's command carried control characters -- refused"],
                  "line: a control character in the command (%s) refuses the reply before line 1" % _w, repr(out))
         rc, out, _ = spark("line", stdin="escquote?")
-        t.ok(rc == 0 and out.splitlines()[:2] == ['cmd\tprintf "%s\\n" "a\\"b" café', 'prints "a\\"b" -- é'],
+        t.ok(rc == 0 and out.splitlines()[:2] == ['cmd\tprintf "%s\\n" "a\\"b" café', 'Prints "a\\"b" -- é.'],
              "line: the streamed JSON's escapes and a non-ASCII letter come out whole", repr(out))
         STATE["no_slot"] = True
         rc, out, _ = spark("line", stdin="prooftest?")
@@ -1756,7 +2050,7 @@ def main():
         t.ok(rc == 0 and out.splitlines()[0] == "cmd\techo ok", "guard: a missing binary is re-asked once; the retry lands", out)
         rc, out, _ = spark("line", stdin="? misscmd2 please")
         lines = out.splitlines()
-        t.ok(rc == 0 and lines[:2] == ["cmd\tfrobnicate -h", "run frobnicate; frobnicate is not on this machine -- check it before Enter"],
+        t.ok(rc == 0 and lines[:2] == ["cmd\tfrobnicate -h", "Run frobnicate; frobnicate is not on this machine -- check it before Enter."],
              "guard: a stubborn retry lands, its hint saying what to check (the judge arm)", out)
         rc, out, _ = spark("line", stdin="? misscmd2 please", extra={"SPARK_KNOWLEDGE": "off"})
         lines = out.splitlines()
@@ -3259,7 +3553,7 @@ def main():
         t.ok(rc == 0 and out.splitlines()[0] == "cmd\techo FIXED", "?? re-asks and a new command lands", out)
         rc, out, _ = spark("line", stdin="? sameagain-stub please")
         rc, out, _ = spark("line", stdin="?? still nothing")
-        t.ok(rc == 0 and "already tried above" in out, "a stubborn repeat is labeled, not re-served as new", out)
+        t.ok(rc == 0 and "Already tried above" in out, "a stubborn repeat is labeled, not re-served as new", out)
         rc, out, _ = spark("memory")
         t.ok("0 facts" in out, "no fact named -h was kept", out)
 
@@ -4987,7 +5281,7 @@ def main():
         # a model chosen: the first question goes to the brain (the stub) and
         # is shown as the widget shows it, with the speed the server reported
         rc, out, _ = spark("setup", "--yes", "--model", "qwen3-1-7b", extra=off)
-        t.ok(rc == 0 and "? how big is this dir\n* Files over 1G changed this week\n  find . -type f -size +1G -mtime -7\n" in out,
+        t.ok(rc == 0 and "? how big is this dir\n* Files over 1G changed this week.\n  find . -type f -size +1G -mtime -7\n" in out,
              "setup asks the first question and shows the hint above the command", out)
         t.ok("12.3 tok/s on your first question (spark bench for the full number)" in out,
              "setup prints the measured tok/s of that question", out)
@@ -5991,6 +6285,7 @@ print("restart", engine.restart_line("serve"), "|", engine.restart_line("check")
              "%s clears the hint it drew when Ctrl-U empties the line" % name)
 
     knowledge_cases(t)
+    living_core_cases(t)
     lan_wait_cases(t)
     srv.shutdown()
     print("smoke: %s" % ("all ok" if not t.fail else "%d FAILED" % t.fail))

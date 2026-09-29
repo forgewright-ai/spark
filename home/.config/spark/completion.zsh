@@ -46,7 +46,7 @@ _spark() {
     if (( CURRENT == 2 )); then
         comp=(chat do recall serve check update headless share client setup
               ver last status brain history stats clear bench model ember
-              forge soul memory quiet theme font bar off
+              forge soul memory quiet theme font bar look height off
               on user explain edit ask read drill watch reveal help uninstall)
     elif (( CURRENT == 3 )); then
         case ${words[2]} in
@@ -57,6 +57,8 @@ _spark() {
             headless | share) comp=(on off status) ;;
             memory)  comp=(add forget clear on off) ;;
             reveal)  comp=(auto off) ;;
+            look)    comp=(motion colour words reveal off status) ;;
+            height)  comp=(1 2 3 4 5) ;;
             forge) comp=(on off status audit token) ;;
             bar)     comp=(line) ;;
             check)   comp=(--watch --porcelain --report --fresh --fetch --selftest --chaos) ;;

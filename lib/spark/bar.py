@@ -8,7 +8,9 @@
 
 import json
 import os
+import re
 import shutil
+import sys
 import time
 
 from . import BAR_CACHE, BRAIN_CACHE, CHECK_JSON, IS_MAC, SERVE_URL_FILE, config, glyph, lan_ip, run, say, state_dir
@@ -222,7 +224,11 @@ def waiting(lead=""):
     return "%s%d run%s waiting" % (lead, n, "" if n == 1 else "s") if n else ""
 
 
-def line(cfg):
+def line(cfg, tmux=True):
+    """The one-line status. tmux=True (a status bar, `spark bar line`,
+    the page's tick) keeps the `#[...]` markup around the ai part; False
+    (a bare `spark bar` at a terminal outside tmux) is plain text. The
+    cache always keeps the tmux line, byte for byte."""
     now = time.time()
     prev = {}
     try:
@@ -249,7 +255,18 @@ def line(cfg):
             json.dump({"t": now, "net": net, "line": s}, f)
     except OSError:
         pass
-    return s
+    return s if tmux else MARKUP.sub("", s)
+
+
+# tmux's style markup, for a line that is not for tmux
+MARKUP = re.compile(r"#\[[^\]]*\]")
+
+
+def for_tmux(sub):
+    """The line is for tmux (its markup kept): `spark bar line`, anything
+    under tmux, or stdout not a terminal (a status bar runs `spark bar`
+    piped). A bare `spark bar` typed at a terminal outside tmux is not."""
+    return sub == "line" or bool(os.environ.get("TMUX")) or not sys.stdout.isatty()
 
 
 USAGE = """spark bar -- the machine's one-line status
@@ -266,7 +283,7 @@ def main(argv):
         return 0
     if sub in ("", "line", "status"):
         # bare = show (grammar rule 1): the line is the whole show
-        say(line(config.load()))
+        say(line(config.load(), tmux=for_tmux(sub)))
         return 0
     say(USAGE.rstrip())
     return 2

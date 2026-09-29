@@ -119,18 +119,32 @@ def _one_line(s, width=HINT_COLS):
 SPARK_WORD = re.compile(r"(?<![\w/.~$=-])(?<!Apache )Spark(?![\w/-]|\.\w)")
 
 
-def _tidy(s, hint=True):
+def _tidy(s, hint=True, head=""):
     """The model's words as the hint row paints them. `Spark` as a word
     becomes `spark`, outside backticks (a command is never touched). A
-    hint, not an answer, loses its one trailing period, so every hint
-    ends the same way; an ellipsis and an abbreviation keep theirs."""
+    hint, not an answer, is a whole sentence: its first letter a capital
+    and a full stop at its end (kept, or added after anything but `?`,
+    `!` and an ellipsis). The capital never touches a command or a
+    quoted span: not a first word in backticks or quotes, not spark's
+    own name, not a word holding anything but letters, not `head` (the
+    command's program)."""
     parts = (s or "").split("`")
     parts[::2] = [SPARK_WORD.sub("spark", p) for p in parts[::2]]
     s = "`".join(parts)
     if hint:
-        s = s.rstrip()
-        if s.endswith(".") and not s.endswith(("..", "etc.", "e.g.", "i.e.")):
-            s = s[:-1].rstrip()
+        s = _capital(s.strip(), head)
+        if s and not s.endswith((".", "?", "!", glyph("cut"))):
+            s += "."
+    return s
+
+
+def _capital(s, head=""):
+    """`s` with its first letter a capital when its first word is a plain
+    lowercase word: never a word in backticks or quotes, never spark's own
+    name, never one holding anything but letters, never `head`."""
+    first = s.split(" ", 1)[0].rstrip(",;:")
+    if first.isalpha() and first.isascii() and first.islower() and first not in ("spark", head):
+        return s[0].upper() + s[1:]
     return s
 
 
@@ -367,14 +381,15 @@ class _Pulse(textmod.Busy):
             cols = HINT_COLS
         self.words = _one_line(words, max(20, min(HINT_COLS, cols - 6))) if words else ""
 
-    def _frame(self, dots):
+    def _body(self, i):
+        # the mark and the words keep the dots in either motion: the row
+        # is the reply's own now, and a scanner there would read as a wait
         if not self.warn and not self.words:
-            return super()._frame(dots)
+            return super()._body(i)
+        dots = self._dots(i)
         if self.warn:
-            body = paint(self.mark + " " + dots, "warn", self.stream)
-        else:
-            body = paint(self.mark, "accent", self.stream) + " " + self.words + paint(dots, "muted", self.stream)
-        return ("\x1b7\x1b[1A\r\x1b[2K" + body + "\x1b8") if self.above else ("\r\x1b[2K" + body)
+            return paint(self.mark + " " + dots, "warn", self.stream)
+        return paint(self.mark, "accent", self.stream) + " " + self.words + paint(dots, "muted", self.stream)
 
     def _clear(self):
         return "" if self.keep else super()._clear()
@@ -572,6 +587,21 @@ def _noted(lead, hint, note, width=HINT_COLS):
     return _one_line(lead + _one_line(hint, room) + tail, width)
 
 
+def _sentence(build, width=HINT_COLS):
+    """A hint line as a whole sentence within `width`: build(width), and a
+    full stop at its end when it has none (a note's words, which _noted
+    places after the model's own end mark was taken) -- built again one
+    column narrower when the stop would not fit."""
+    line = build(width)
+    if not line or line.endswith((".", "?", "!", glyph("cut"))):
+        return line
+    if len(line) >= width:
+        line = build(width - 1)
+        if not line or line.endswith((".", "?", "!", glyph("cut"))):
+            return line
+    return line + "."
+
+
 class _Early:
     """Contract 4's lines, written the moment the stream makes each one
     certain. Line 1 goes out only when nothing after it can change it: the
@@ -686,7 +716,9 @@ class _Early:
         model's words (_tidy), then the note -- so contract 4's 80-char
         cut eats the model's words before the numbers or the note."""
         facts = persona.blast(self.command, self.cwd) if self.head == "danger" else ""
-        return _noted("<- " + facts + " -- " if facts else "", _tidy(hint), self.note)
+        lead = "<- " + facts + " -- " if facts else ""
+        head = _head(self.command)
+        return _capital(_sentence(lambda w: _noted(lead, _tidy(hint, head=head), self.note, w)), head)
 
     def _first(self, head, command=""):
         # the pulse turns to the reply's own mark before the line leaves,
@@ -1106,7 +1138,7 @@ def cmd_explain(words):
             first = next((l for l in ctx.splitlines() if l.strip()), "") if ctx else ""
             ledger.fail_pending(cmd, int(rc), first)
         ctx = "Command: %s\nExit: %s\nOutput:\n%s" % (cmd, rc or "unknown", ctx or "(none)\n")
-    return _stream("explain", " ".join(words).strip(), context=ctx, line="[explain] " + " ".join(words))
+    return _stream("explain", " ".join(words).strip(), context=ctx, line="[explain] " + " ".join(words), cps=cps)
 
 
 # ------------------------------------------------------------ last/status

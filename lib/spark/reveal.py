@@ -20,6 +20,17 @@ CPS_MIN, CPS_MAX = 5, 200
 READ_CPS = 40           # the ceiling of `auto`: a reader's pace, ~450 words a minute
 MODEL_SHARE = 0.85      # `auto` stays under the model's own pace, so the hand never waits
 CHARS_PER_TOKEN = 4.2   # the fallback when a turn recorded no length
+# The breath (an awakened machine, text.Wrap): a comma or a semicolon
+# waits BREATH_COMMA more steps, a sentence's end or a blank line
+# BREATH_STOP, a code line none. The pace chosen is the AVERAGE with the
+# pauses in it: the base step shrinks by BREATH_SCALE, so a typical
+# sentence (SENTENCE characters, one comma, one full stop) takes the
+# time it took without them. A stall is never repaid, and a breath is
+# never added on top of one.
+BREATH_COMMA = 3
+BREATH_STOP = 7
+SENTENCE = 80
+BREATH_SCALE = float(SENTENCE) / (SENTENCE + BREATH_COMMA + BREATH_STOP)
 
 
 def measured(turns):

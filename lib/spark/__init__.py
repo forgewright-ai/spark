@@ -115,16 +115,17 @@ _SGR_VARS = {"accent": "SPARK_ACCENT_SGR", "muted": "SPARK_MUTED_SGR", "warn": "
 _SGR_OK = frozenset([0, 1, 2, 22] + list(range(30, 38)) + list(range(90, 98)))
 
 
-def sgr(role, fallback=True):
+def sgr(role, fallback=True, stream=None):
     """The SGR parameters for `role` (accent, muted, warn, ok, trouble,
     you), or '' when the variable is unset, empty, or names anything
     outside the console-safe set. Unset, an awakened machine whose colour
-    part is active falls back to the built-in palette (look.DEFAULT_SGR);
-    an unawakened one stays plain, as it always was."""
+    part is active on `stream` (stdout by default) falls back to the
+    built-in palette (look.DEFAULT_SGR); an unawakened one stays plain,
+    as it always was."""
     v = os.environ.get(_SGR_VARS.get(role, ""), "")
     if not v and fallback:
         from . import look
-        v = look.default_sgr(role)
+        v = look.default_sgr(role, stream)
     if not v or not all(c in "0123456789;" for c in v):
         return ""
     parts = v.split(";")
@@ -155,7 +156,7 @@ def paint(s, role, stream=None, readline=False):
         tty = (stream or sys.stdout).isatty()
     except (AttributeError, ValueError):
         tty = False
-    p = sgr(role) if tty else ""
+    p = sgr(role, stream=stream) if tty else ""
     if not p or (readline and not _gnu_readline()):
         return s
     a, b = ("\001", "\002") if readline else ("", "")
