@@ -347,10 +347,10 @@ class Busy:
     never a reason to fail.
 
     Awakened, with the motion part active on the stream (look.active),
-    the dots become the SCANNER on a fast terminal: `* FACE [  =     ]`,
+    the dots become the SCANNER on every terminal: `* FACE [  =     ]`,
     8 cells, a frame every 0.12 s, the face blinking every look.blink()
     frames and glancing every third blink (the face only while the words
-    part is active); over ssh and on the console auto keeps the dots.
+    part is active), ssh and the console included: every frame is ASCII.
     Either way the wait escalates, never louder: from 2 seconds the
     elapsed seconds, from TIER_LONG seconds (or three quarters of
     `timeout`, whichever is sooner) one sentence saying what to do.

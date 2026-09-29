@@ -337,8 +337,8 @@ was. Run it again to start over. The 4 parts, which `spark look` shows:
 
 - Motion: while a reply comes, a scanner with a face,
   `* (o.O) [  =     ]`. While a model loads, a bar with an estimate
-  from its last load. From 2 seconds a wait shows its seconds. Over ssh
-  and on the console the dots stay.
+  from its last load. From 2 seconds a wait shows its seconds. It draws
+  on every terminal, ssh and the console too.
 - Colour: a built-in palette of bold, dim, red, bold red and green,
   where you export no colour of your own. Dim is only for decoration.
 - Reveal: the pace a reply appears at, as `spark reveal` sets it. On an

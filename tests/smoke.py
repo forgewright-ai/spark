@@ -1508,10 +1508,12 @@ def living_core_cases(t):
              "living: from three quarters of the timeout, one sentence says what to do", repr(b._frame(0)))
         os.environ["SSH_CONNECTION"] = "192.0.2.1 1 192.0.2.2 22"
         os.environ["SPARK_LOOK_MOTION"] = "auto"
-        t.ok(not _tx.Busy(Tty()).scan and _tx.Busy(Tty()).moving, "living: auto keeps the dots over ssh")
-        os.environ["SPARK_LOOK_MOTION"] = "on"
-        t.ok(_tx.Busy(Tty()).scan, "living: motion on forces the scanner over ssh")
+        t.ok(_tx.Busy(Tty()).scan and _tx.Busy(Tty()).face, "living: auto draws the scanner and the face over ssh too")
+        os.environ["SPARK_ASCII"] = "1"
+        t.ok(_tx.Busy(Tty()).scan, "living: and on the console")
+        del os.environ["SPARK_ASCII"]
         del os.environ["SSH_CONNECTION"]
+        del os.environ["SPARK_LOOK_MOTION"]
         e = _tx.Estimate("waking", 10, Tty())
         cells, pct = e.fill(1000)
         e.started = time.monotonic() - 4.5

@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.61
+
+- An awakened machine draws the scanner and its face on every
+  terminal, ssh and the console included. Before, auto kept the plain
+  dots there, so a box used from its own console or over ssh never
+  showed a face. `spark look motion off` keeps the dots.
+- The written rules are fewer: 94 in `CLAUDE.md`, `AGENTS.md` and the
+  voice sheet became 53, each in one place.
+
 ## v1.60
 
 - Any `rm` or `unlink` is marked `!` now, in `spark do` and at the

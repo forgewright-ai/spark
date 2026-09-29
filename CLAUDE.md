@@ -1389,17 +1389,17 @@ One grammar for every verb. A verb that breaks a rule is a bug.
    survive in a log. One pulse for every wait on a reply: `text.Busy`,
    the mark and `.` `..` `...` redrawn in place, a tty only (the hint
    row, chat, explain, an answer, `spark do`). Awakened, with motion
-   active, the dots become the scanner, `* (o.O) [  =     ]`: 8 cells,
-   a frame every 0.12 seconds, the face while words is active too. auto
-   keeps the dots over ssh and on the console (`look.slow_terminal`),
-   and motion `on` forces the scanner there. The wait escalates, never
-   louder: from 2 seconds the elapsed seconds, from 15 seconds (or three
-   quarters of the verb's timeout) one sentence. A model loading shows
-   `text.Estimate`: a bar filled by the time over that model file's last
-   load (`engine.last_load`), never past 95 %. Past the estimate it says
-   `longer than last time (N s) -- spark check says why`. With no measure it is the
-   scanner and the seconds. Awakened, `spark check` counts its rows on
-   stderr while they run.
+   active, the dots become the scanner, `* (o.O) [ = ]`: 8 cells, a
+   frame every 0.12 seconds, the face while words is active too, on
+   every terminal: ssh on a LAN and the console keep up with it, and
+   every frame is ASCII. Motion `off` keeps the dots. The wait
+   escalates, never louder: from 2 seconds the elapsed seconds, from 15
+   seconds (or three quarters of the verb's timeout) one sentence. A
+   model loading shows `text.Estimate`: a bar filled by the time over
+   that model file's last load (`engine.last_load`), never past 95 %.
+   Past the estimate it says `longer than last time (N s) -- spark check
+   says why`. With no measure it is the scanner and the seconds.
+   Awakened, `spark check` counts its rows on stderr while they run.
 7. Exit codes: 0 ok or show, 1 the world (stderr), 2 the invocation
    (stdout, signed), 78 misconfiguration, 130 `SIGINT`.
 

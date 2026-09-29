@@ -165,17 +165,10 @@ def active(name, stream=None, cfg=None):
     return True
 
 
-def slow_terminal():
-    """ssh, the Linux console, or a tmux shown on it: auto keeps today's
-    0.35 s dots there, where eight frames a second would smear."""
-    from . import ASCII
-    return bool(os.environ.get("SSH_CONNECTION") or os.environ.get("SSH_TTY") or ASCII)
-
-
 def scanner(stream):
-    """The scanner draws on `stream`: motion active, and on a fast
-    terminal unless motion is on (on forces it over ssh and the console)."""
-    return active("motion", stream) and (part("motion") == "on" or not slow_terminal())
+    """The scanner draws on `stream` wherever motion is active: every
+    frame is ASCII, and ssh on a LAN and the console keep up with it."""
+    return active("motion", stream)
 
 
 def default_sgr(role, stream=None):
@@ -349,7 +342,7 @@ USAGE = """spark look -- motion, colour, words: the living prompt
   spark look off                motion, colour and words off at once
 
   motion   the scanner while a reply comes, the waking bar, a face that
-           blinks; auto keeps the dots over ssh and on the console
+           blinks, on every terminal, ssh and the console too
   colour   the built-in palette, where you export no SPARK_*_SGR
   words    the greeting, the news and the faces
   auto     where the terminal carries it: a terminal, not TERM=dumb, and
