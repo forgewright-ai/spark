@@ -89,12 +89,14 @@ USAGE_MACHINE = """the machine
 """
 
 USAGE_INTERFACE = """the interface
+ spark awaken                 give this machine a personality and a look
+ spark look [PART on|off]     motion, colour, words: the living prompt (-h)
+ spark words [edit]           the lines it says, and its faces
+ spark height [N]             the row spark writes in, above your prompt
  spark theme [NAME|list|show] the palettes, and yours; show = its colours
  spark quiet [SUB on|off]     start (banner), login (motd), boot (menu), audio
  spark font [FACE SIZE|list]  the console font (Linux) / Terminal.app's
  spark bar [line]             the machine's one-line status
- spark look [PART on|off]     motion, colour, words: the living prompt (-h)
- spark height [N]             the row spark writes in, above your prompt
 """
 
 USAGE_TAIL = """less often used
@@ -162,6 +164,7 @@ VERBS = {"setup": ("setup", "main", False), "check": ("check", "main", False),
          "watch": ("watch", "cmd_watch", False),
          "reveal": ("reveal", "cmd_reveal", False),
          "look": ("look", "cmd_look", False), "height": ("look", "cmd_height", False),
+         "awaken": ("awaken", "main", False), "words": ("words", "main", False),
          "update": ("update", "cmd_update", False), "bar": ("bar", "main", False),
          "theme": ("theme", "main", False), "bench": ("bench", "main", True),
          "stats": ("stats", "main", False),

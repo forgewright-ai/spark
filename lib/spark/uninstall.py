@@ -2,11 +2,12 @@
 #
 # Everything spark made goes: the units, the console palette, the rc
 # line, the engine and the models, the state, the links, the clone.
-# What is yours stays -- the soul, the memory, the sealed users' stores
-# (and the account keys that open them), your models.env, your themes,
-# privacy-terms -- unless --purge. The packages spark installed are a
-# question. The plan prints first (bootstrap's row shape), then the typed
-# word `yes` (spark do's danger shape); --dry-run shows only.
+# What is yours stays -- the soul and its personality, the memory, the
+# sealed users' stores (and the account keys that open them), your
+# models.env, your themes, privacy-terms -- unless --purge. The packages
+# spark installed are a question. The plan prints first (bootstrap's row
+# shape), then the typed word `yes` (spark do's danger shape); --dry-run
+# shows only.
 #
 # Order matters (the traps): the one bootstrap pass -- headless and quiet
 # undone through their own rows first, so bootstrap
@@ -43,9 +44,12 @@ USAGE = """%s uninstall -- remove spark from this machine: shows first, then ask
   is the one `get` made (~/.spark, or SPARK_HOME) and clean.
 """ % MARK
 
-KEEP_CONFIG = ("soul", "memory", "models.env", "themes", "privacy-terms")
+KEEP_CONFIG = ("soul", "personality", "memory", "models.env", "themes", "privacy-terms")
 KEEP_STATE = ("users", "account", "account-key")
-SPARK_CONFIG = ("site.env", "spark.env", "theme.env", "console-colors", "console-colors.rgb", "check.log")
+# words and faces are spark awaken's (the state's look, news, news-seen and
+# loads.json go with the whole state dir); the personality is the soul's
+SPARK_CONFIG = ("site.env", "spark.env", "theme.env", "console-colors", "console-colors.rgb", "check.log",
+                "words", "faces")
 UNITS_LINUX = ("spark-serve.service", "spark-forge.service", "spark-check.timer", "spark-check.service")
 SV_UNITS = ("forge", "serve", "check")            # runit: ~/.config/spark/sv/spark-<unit>, the same three
 ETC_SV = os.environ.get("SPARK_ETC_SV", "/etc/sv")    # runit's service definitions (bootstrap's seam too)
@@ -518,7 +522,7 @@ def step_state_config(ctx):
             known = name in SPARK_CONFIG or (ctx.purge and name in KEEP_CONFIG)
             if _spark_link(p) or (os.path.islink(p) and not os.path.exists(p)) or known:
                 ctx.remove("config", p)
-            elif name in ("launchd", "sv") or name.startswith("spark-") and name.endswith(".terminal"):
+            elif name in ("launchd", "sv", "words.d") or name.startswith("spark-") and name.endswith(".terminal"):
                 ctx.remove("config", p)
             else:
                 ctx.kept.append(p)          # not ours to judge: named at the end

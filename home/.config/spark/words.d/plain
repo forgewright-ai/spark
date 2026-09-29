@@ -1,0 +1,13 @@
+# words.d/plain -- the lines spark says, shipped: ID<TAB>line, at most 72
+# columns, ASCII. spark awaken copies a temperament into ~/.config/spark/words
+# and lets the model rewrite them; a line it refuses keeps the one here.
+greet.1	Hello again.
+greet.2	Welcome back.
+greet.3	Good to see you.
+awake	I am awake, and ready when you are.
+asleep	The model is not answering right now.
+runs	Some runs are waiting for your review.
+done	That is everything for now.
+hello	I am awake. This machine is {name}.
+personality.1	You speak plainly and briefly. You answer the question first,
+personality.2	then stop. You use no jokes and no small talk.

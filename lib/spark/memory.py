@@ -102,6 +102,26 @@ def facts(cfg, st=None):
     return out
 
 
+def one_fact(cfg=None, day=None):
+    """One remembered fact for a greeting, from the caller's own store
+    (this machine's account, else the pre-v1.4 file): the facts taken in
+    turn by the day (`day`, days since the epoch, for a test). None when
+    memory is off, nothing is kept, or anything fails. Reads only: it
+    never raises and never writes."""
+    try:
+        if cfg is None:
+            cfg = config.load()
+        fs = facts(cfg)
+        if not fs:
+            return None
+        if day is None:
+            import time
+            day = int(time.time() // 86400)
+        return fs[int(day) % len(fs)]
+    except Exception:  # noqa: BLE001 -- a greeting never fails for a fact
+        return None
+
+
 def _write(lines, st=None):
     """Seal the memory into the named store (minting this machine's own
     account when none is named and none exists) and claim the plaintext

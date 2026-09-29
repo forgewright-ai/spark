@@ -398,8 +398,6 @@ def cmd_look(args):
     if not args or args[0] == "status":
         return show()
     word = args[0].lower()
-    if word == "greet":
-        return greet()
     if word == "reveal":
         from . import reveal
         return reveal.cmd_reveal(args[1:])
@@ -448,45 +446,4 @@ def cmd_height(args):
         return 2
     _set(SPARK_HEIGHT=str(n))
     say("height %d now -- spark writes %s above the line you type on" % (n, "the row just" if n == 1 else "%d rows" % n))
-    return 0
-
-
-# ---------------------------------------------------------------- greeting
-def word(wid, default=""):
-    """The words file's line for `wid` (`ID<TAB>line`), through clean();
-    `default` when it holds none or clean() refuses it."""
-    try:
-        with open(WORDS_FILE, encoding="utf-8", errors="replace") as f:
-            for line in f.read().split("\n"):
-                k, tab, text = line.partition("\t")
-                if tab and k.strip() == wid:
-                    got = clean(text)
-                    if got is not None:
-                        return got
-    except OSError:
-        pass
-    return default
-
-
-def greet():
-    """`spark look greet` (hidden: the hook calls it after an absence): at
-    most two lines -- the face and a greeting, then one remembered fact --
-    on an awakened machine whose words part is active at this terminal.
-    Silent, exit 0, otherwise: unawakened, quiet start, a pipe."""
-    from . import config, glyph, paint, say
-    cfg = config.load()
-    if not active("words", sys.stdout, cfg) or cfg.quiet_start:
-        return 0
-    face = faces()["idle"]
-    say("%s %s %s" % (paint(glyph("hammer"), "accent"), paint(face, "accent"), word("greet", "Welcome back.")))
-    try:
-        from . import memory
-        fact = getattr(memory, "one_fact", None)
-        fact = clean(fact()) if fact else None
-    except Exception:       # noqa: BLE001 -- a greeting is never a reason to fail
-        fact = None
-    if fact:
-        line = clean("You asked me to remember: %s" % fact)
-        if line:
-            say(line)
     return 0

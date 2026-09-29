@@ -1150,10 +1150,6 @@ def row_soul(ctx):
     return ok("yours, %d chars" % n)
 
 
-# the words and faces files' editor (awaken's verb beside it)
-WORDS_EDIT = "spark words edit"
-
-
 @row("CAPABILITY")
 def row_look(ctx):
     """The living prompt: na until spark awaken; awake, the look file the
@@ -1167,7 +1163,7 @@ def row_look(ctx):
         name, n = bad[0]
         more = " and %d more" % (len(bad) - 1) if len(bad) > 1 else ""
         return warn("line %d of the %s file%s will never print (an escape, a secret, or too long)" % (n, name, more),
-                    WORDS_EDIT)
+                    "spark words edit")
     try:
         with open(look.LOOK_FILE, encoding="utf-8") as f:
             have = f.read()
