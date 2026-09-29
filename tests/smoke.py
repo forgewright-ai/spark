@@ -1392,6 +1392,46 @@ def engine_wire_cases(t, spark, home, url):
          "line: the role seam keeps the line's own system message (no identity for the ember)")
 
 
+def living_widget_cases(t):
+    """v1.59, the living prompt in the two widgets, read as text: the row's
+    height reaches spark line, Esc k, one text per fallback and per
+    failure line in both shells, the look file never sourced, the prompt
+    hook's own path pure shell, bash's EXIT trap chained."""
+    wz = open(os.path.join(REPO, "home", ".config", "spark", "widget.zsh")).read()
+    wb = open(os.path.join(REPO, "home", ".config", "spark", "widget.bash")).read()
+
+    def body(text, name):
+        m = re.search(r"^%s\(\) \{[^\n]*\n(.*?)^\}" % re.escape(name), text, re.M | re.S)
+        return m.group(1) if m else ""
+    for name, text in (("widget.zsh", wz), ("widget.bash", wb)):
+        t.ok(text.count("SPARK_HINT_ROW=$_spark_height") == 2 and "SPARK_HINT_ROW=1" not in text,
+             "%s passes its height to both spark line calls (SPARK_HINT_ROW=N)" % name)
+        say = body(text, "_spark_say")
+        t.ok("_spark_height" in say and "[1A" not in say, "%s draws its row _spark_height rows up" % name, say)
+        t.ok("spark writes here. Esc k moves this line." in text
+             and ("bindkey '\\ek'" in text or "bind -x '\"\\ek\"" in text),
+             "%s binds Esc k and draws the test line" % name)
+        for fallback in ("no hint came", "no answer came", "no engine is awake"):
+            t.ok(fallback in text, "%s says %r" % (name, fallback))
+        t.ok("no brain awake" not in text, "%s no longer says 'no brain awake'" % name)
+        t.ok(not re.search(r"(^|[;&|\s])(source|\.|eval)\s[^\n]*look", text, re.M),
+             "%s never sources or evals the look file" % name)
+        t.ok("[[:cntrl:]]" in body(text, "_spark_look_read"),
+             "%s drops a look value holding a control character" % name)
+        t.ok("words greet" in text and "news-seen" in text and "last-seen" in text,
+             "%s carries the greeting, the news and the last-seen stamp" % name)
+        hot = "".join(body(text, f) for f in ("_spark_failed", "_spark_failure", "_spark_look_check", "_spark_look_read"))
+        t.ok(hot and "$SPARK_BIN" not in hot and not re.search(r"\$\((?!\()|`", hot),
+             "%s: the prompt hook's own path calls no spark and forks nothing" % name)
+    fails = [sorted(set(re.findall(r'"\$_spark_h (failed [^"]*)"', x))) for x in (wz, wb)]
+    t.ok(fails[0] and fails[0] == fails[1] and all("$took --" in f for f in fails[0]),
+         "the failure lines are one text in both widgets, each with room for the duration", fails)
+    for key in ("_SPARK_LONG=30", "_SPARK_ABSENT=14400", "_SPARK_SEEN_EVERY=300"):
+        t.ok(key in wz and key in wb, "%s in both widgets" % key)
+    t.ok("trap -p EXIT" in wb and "trap '_spark_gone' EXIT" not in wb,
+         "widget.bash chains an EXIT trap it finds instead of replacing it")
+
+
 def main():
     srv, url = start_stub()
     t = T()
@@ -5991,6 +6031,7 @@ print("restart", engine.restart_line("serve"), "|", engine.restart_line("check")
              "%s clears the hint it drew when Ctrl-U empties the line" % name)
 
     knowledge_cases(t)
+    living_widget_cases(t)
     lan_wait_cases(t)
     srv.shutdown()
     print("smoke: %s" % ("all ok" if not t.fail else "%d FAILED" % t.fail))
