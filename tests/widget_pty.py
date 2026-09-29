@@ -15,7 +15,11 @@
 # clears the hint spark drew, and only that. Then, in a 40-column tmux
 # pane (skipped without tmux): a question that wraps still gets its hint
 # in the row above an intact prompt, and stays whole on screen while
-# spark thinks.
+# spark thinks. Then the living prompt (v1.59): a two-line prompt at
+# height 2 gets its hint on the blank row, Esc k moves the row, an awake
+# look file brings the greeting and the news once, the built-in colour and
+# a long failure's duration; one text per fallback; bash chains an EXIT
+# trap it found.
 #
 #   widget_pty.py bash home/.config/spark/widget.bash
 #   widget_pty.py zsh  home/.config/spark/widget.zsh
@@ -58,6 +62,18 @@ if [ "$1" = line ] && [ "$2" = "--paste" ]; then
     printf 'answer\ntwo echo lines, harmless\n'
     exit 0
 fi
+# the row's height (v1.59): Esc k keeps its choice through `spark height N`
+if [ "$1" = height ]; then
+    printf '%s\n' "$2" >> "${STUB_HEIGHT:-/dev/null}"
+    exit 0
+fi
+# the greeting after an absence (v1.59): one line with an escape in it --
+# the widget prints it with the control characters stripped
+if [ "$1" = words ] && [ "$2" = greet ]; then
+    printf 'greet\n' >> "${STUB_GREET:-/dev/null}"
+    printf 'Good evening. \033[31mThe engine is warm.\n'
+    exit 0
+fi
 if [ "$1" = recall ]; then
     # history arrives on stdin; grounding is cli's job, not the stub's --
     # here we hand back two plain lines and one danger-marked line (the
@@ -76,6 +92,7 @@ case $line in
             "$KNOW_PY" "$KNOW_SPARK" "$@"; exit $? ;;
   *delete*) printf 'danger\techo EXECUTED-MARK\nDeletes things -- careful\n' ;;
   *answer-me*) printf 'answer\nForty-two\n' ;;
+  *answer-empty*) printf 'answer\n' ;;
   # the hostile three: contract 4 broken three ways. The widget must run
   # nothing and leave a prompt the shell can still be used at.
   *hostile-prose*) printf 'the model rambled instead of answering, at length\n' ;;
@@ -245,6 +262,249 @@ def wrapped(shell, widget, tmp, env, prompt, ok):
         good = (0 <= at < len(rows) - 2 and rows[at + 1] == prompt + "echo SLOW-CMD"
                 and not rows[at + 2] and not any("gigabyte" in r for r in rows[at:]))
         ok(good, "thinking: line 1 replaces the wrapped question, nothing of it left")
+        if not good:
+            print("       screen:\n" + "\n".join("       |%s|" % r for r in rows))
+    finally:
+        subprocess.run(t + ["kill-server"], stderr=subprocess.DEVNULL)
+
+
+LOOK_AWAKE = ("AWAKE=yes\nMOTION=auto\nCOLOUR=on\nWORDS=on\nHEIGHT=2\nSGR_ACCENT=1\nSGR_MUTED=2\n"
+              "SGR_WARN=31\nSGR_OK=32\nSGR_TROUBLE=1;31\nSGR_YOU=\nFACE_IDLE=(o.o)\n"
+              # a value with an escape in it is dropped whole: the face stays
+              "FACE_IDLE=\x1b[2J(x.x)\nFACE_ASLEEP=(-.-)z\n")
+
+
+def living(shell, widget, tmp, env, ok):
+    """v1.59, the living prompt: the row's height with a two-line prompt,
+    Esc k, then an awake look file -- the greeting once, the news once, the
+    built-in colour, a failed command's duration -- and the fallback texts,
+    the same in both shells; bash chains an EXIT trap it found."""
+    state = os.path.join(tmp, "living-state")
+    sd = os.path.join(state, "spark")
+    os.makedirs(sd)
+    look = os.path.join(sd, "look")
+    hlog, glog, elog, tlog = (os.path.join(tmp, n) for n in ("height.log", "greet.log", "living-env.log", "trap.log"))
+    env = dict(env, XDG_STATE_HOME=state, STUB_HEIGHT=hlog, STUB_GREET=glog, STUB_ENV=elog, TRAPLOG=tlog)
+    with open(look, "w") as f:
+        f.write("AWAKE=no\nMOTION=off\nCOLOUR=off\nWORDS=off\nHEIGHT=2\n")
+    with open(os.path.join(sd, "news"), "w") as f:
+        f.write("n0\tnot while asleep\n")
+
+    def lines(path):
+        try:
+            with open(path) as f:
+                return f.read().splitlines()
+        except OSError:
+            return []
+
+    prompt = "SPARKPROMPT> "
+    if shell == "bash":
+        sh = Shell(["bash", "--norc", "--noprofile", "-i"], env, os.path.join(tmp, "work"))
+        # an EXIT trap the rc set first, a quote inside: it must still run
+        sh.send("trap 'echo \"it'\\''s the old trap\" > \"$TRAPLOG\"' EXIT; "
+                "PS1='\\nINFO-LINE\\n%s'; source %s; echo SOURCED\n" % (prompt, widget))
+    else:
+        sh = Shell(["zsh", "-f", "-i"], env, os.path.join(tmp, "work"))
+        sh.send("PROMPT=$'\\nINFO-LINE\\n%s'; source %s; echo SOURCED\n" % (prompt, widget))
+    ok(sh.expect("SOURCED"), "living: widget sourced with a two-line prompt")
+    sh.expect(prompt)
+    sh.settle()
+
+    # the height: 2 from the look file, before any awaken -- the hint goes
+    # two rows up, onto the blank row, never over INFO-LINE
+    since = sh.mark()
+    sh.send("? list big files\r")
+    ok(sh.expect("\x1b7\x1b[2A\r\x1b[2K* A hint about it\x1b8"),
+       "height 2: the hint is drawn two rows up", since()[-300:])
+    ok("\x1b[1A" not in since(), "height 2: nothing is drawn one row up, on the prompt's first line", since()[-300:])
+    ok(lines(elog)[-1:] == ["SPARK_HINT_ROW=2"], "height 2: spark line hears SPARK_HINT_ROW=2", lines(elog))
+    sh.send("\x15")
+    sh.settle()
+
+    # Esc k: 2 -> 3 -> 1 -> 2, each through `spark height N`, a test line
+    # drawn at the new height
+    for n in (3, 1, 2):
+        since = sh.mark()
+        sh.send("\x1bk")
+        ok(sh.expect("\x1b7\x1b[%dA\r\x1b[2K* spark writes here. Esc k moves this line.\x1b8" % n),
+           "Esc k: the test line moves to height %d" % n, since()[-300:])
+        sh.settle()
+    ok(lines(hlog) == ["3", "1", "2"], "Esc k: spark height ran with 3, 1, 2", lines(hlog))
+
+    # asleep: no greeting, no news, no stamp, no duration
+    sh.send("_SPARK_LONG=1\r")
+    sh.expect(prompt)
+    since = sh.mark()
+    sh.send("sleep 2; sh -c 'exit 3'\r")
+    ok(sh.expect("failed (3) -- press Esc s to ask why", 10), "asleep: a failure line says no duration", since()[-300:])
+    sh.expect(prompt)
+    sh.settle()
+    ok(not lines(glog) and "not while asleep" not in since() and not os.path.exists(os.path.join(sd, "last-seen")),
+       "asleep: no greeting, no news, no last-seen stamp", since()[-300:])
+
+    # awake: the look file changes -- read at the next prompt, never sourced
+    with open(look, "w") as f:
+        f.write(LOOK_AWAKE)
+    with open(os.path.join(sd, "news"), "w") as f:
+        f.write("n1\tThe engine is asleep. Ask, and it wakes.\n")
+    with open(os.path.join(sd, "last-seen"), "w") as f:
+        f.write("1000\n")                      # an absence of decades
+    old = time.time() - 60
+    for m in os.listdir(os.path.join(sd, "widgets")):
+        os.utime(os.path.join(sd, "widgets", m), (old, old))
+    since = sh.mark()
+    sh.send("\r")
+    ok(sh.expect("Good evening. [31mThe engine is warm."), "awake: the greeting after an absence", since()[-300:])
+    ok(sh.expect("\x1b[1m*\x1b[0m (o.o) The engine is asleep. Ask, and it wakes."),
+       "awake: the news once, with the face and the built-in accent", since()[-300:])
+    sh.expect(prompt)
+    sh.settle()
+    seen = since()
+    ok("\x1b[31mThe engine" not in seen and "(x.x)" not in seen and "\x1b[2J" not in seen,
+       "awake: no escape from the greeting or the look file reaches the screen", seen[-300:])
+    ok(lines(glog) == ["greet"], "awake: spark words greet ran once", lines(glog))
+    ok(lines(os.path.join(sd, "news-seen")) == ["n1"], "awake: the news id is kept", lines(os.path.join(sd, "news-seen")))
+    since = sh.mark()
+    sh.send("\r")
+    sh.expect(prompt)
+    sh.settle()
+    ok("Good evening" not in since() and "The engine is asleep" not in since() and lines(glog) == ["greet"],
+       "awake: the next prompt says neither again", since()[-300:])
+
+    # news: the same id again is not news; a new one shows once
+    with open(os.path.join(sd, "news"), "w") as f:
+        f.write("n1\tThe engine is asleep. Ask, and it wakes.\n")
+    os.utime(os.path.join(sd, "news"), (time.time() + 2, time.time() + 2))
+    since = sh.mark()
+    sh.send("\r")
+    sh.expect(prompt)
+    sh.settle()
+    ok("The engine is asleep" not in since(), "news: the same id is shown once only", since()[-300:])
+    with open(os.path.join(sd, "news"), "w") as f:
+        f.write("n2\tThree runs wait for review.\n")
+    os.utime(os.path.join(sd, "news"), (time.time() + 4, time.time() + 4))
+    # quiet start holds it back; spark off too
+    cfg = os.path.join(env["HOME"], ".config", "spark")
+    os.makedirs(cfg, exist_ok=True)
+    with open(os.path.join(cfg, "site.env"), "w") as f:
+        f.write("SITE_QUIET_START=yes\n")
+    since = sh.mark()
+    sh.send("\r")
+    sh.expect(prompt)
+    sh.settle()
+    ok("Three runs wait" not in since(), "news: SITE_QUIET_START=yes holds it back", since()[-300:])
+    os.remove(os.path.join(cfg, "site.env"))
+    open(os.path.join(sd, "off"), "w").close()
+    since = sh.mark()
+    sh.send("\r")
+    sh.expect(prompt)
+    sh.settle()
+    ok("Three runs wait" not in since(), "news: spark off holds it back", since()[-300:])
+    os.remove(os.path.join(sd, "off"))
+    since = sh.mark()
+    sh.send("\r")
+    ok(sh.expect("(o.o) Three runs wait for review."), "news: a new id shows once, quiet and off gone", since()[-300:])
+    sh.expect(prompt)
+    sh.settle()
+
+    # awake: a failed command that ran long says how long; a quick one not
+    since = sh.mark()
+    sh.send("sleep 2; sh -c 'exit 3'\r")
+    ok(sh.expect("failed (3) after ", 10), "awake: a long failure says how long", since()[-300:])
+    ok(re.search(r"failed \(3\) after [23] s -- press Esc s to ask why", since()) is not None,
+       "awake: the duration reads N s", since()[-300:])
+    sh.expect(prompt)
+    sh.settle()
+    since = sh.mark()
+    sh.send("sh -c 'exit 4'\r")
+    ok(sh.expect("failed (4) -- press Esc s to ask why"), "awake: a quick failure says no duration", since()[-300:])
+    sh.expect(prompt)
+    sh.settle()
+
+    # the built-in accent paints the hint row; NO_COLOR under auto does not
+    since = sh.mark()
+    sh.send("answer-me?\r")
+    ok(sh.expect("\x1b7\x1b[2A\r\x1b[2K\x1b[1m*\x1b[0m Forty-two\x1b8"),
+       "awake: the built-in accent, at height 2", since()[-300:])
+    sh.send("\r")
+    sh.expect(prompt)
+    with open(look, "w") as f:
+        f.write(LOOK_AWAKE.replace("COLOUR=on", "COLOUR=auto"))
+    os.utime(look, (time.time() + 6, time.time() + 6))
+    sh.send("export NO_COLOR=1\r")
+    sh.expect(prompt)
+    sh.settle()
+    since = sh.mark()
+    sh.send("answer-me?\r")
+    ok(sh.expect("\x1b[2K* Forty-two") and "\x1b[1m*" not in since(), "awake: NO_COLOR under auto is plain",
+       since()[-300:])
+    sh.send("\r")
+    sh.expect(prompt)
+
+    # one text for each fallback, the same in both shells
+    since = sh.mark()
+    sh.send("answer-empty?\r")
+    ok(sh.expect("* no answer came"), "fallback: an empty answer says: no answer came", since()[-300:])
+    sh.send("\r")
+    sh.expect(prompt)
+    since = sh.mark()
+    sh.send("hostile-empty?\r")
+    ok(sh.expect("* no engine is awake"), "fallback: nothing at all says: no engine is awake", since()[-300:])
+    sh.send("\x15")
+    sh.settle()
+    ok("no brain awake" not in sh.buf.decode("utf-8", "replace"), "fallback: the old text is gone")
+
+    sh.send("exit\r")
+    sh.read(1.0)
+    sh.close()
+    time.sleep(0.3)
+    ok(not os.listdir(os.path.join(sd, "widgets")), "living: marker removed on exit")
+    if shell == "bash":
+        ok(lines(tlog) == ["it's the old trap"], "bash: the EXIT trap the rc set first still runs", lines(tlog))
+    rendered_height(shell, widget, tmp, env, ok)
+
+
+def rendered_height(shell, widget, tmp, env, ok):
+    """A real screen: tmux renders a two-line prompt at height 2 -- the
+    hint sits on the blank row above INFO-LINE, and INFO-LINE is intact."""
+    if not shutil.which("tmux"):
+        print("  skip rendered height: no tmux")
+        return
+    env = dict(env, TERM="screen-256color", SPARK_HEIGHT="2")
+    t = ["tmux", "-S", os.path.join(tmp, "tmux-h.sock"), "-f", "/dev/null"]
+    argv = "bash --norc --noprofile -i" if shell == "bash" else "zsh -f -i"
+    cmd = "env -i HISTFILE=/dev/null " + " ".join(shlex.quote("%s=%s" % kv) for kv in env.items()) + " " + argv
+    subprocess.run(t + ["new-session", "-d", "-x", "60", "-y", "14", "-c", os.path.join(tmp, "work"), cmd], check=True)
+
+    def screen():
+        return [r.rstrip() for r in subprocess.run(t + ["capture-pane", "-p"], capture_output=True, text=True).stdout.splitlines()]
+
+    def until(want, timeout=8):
+        end = time.time() + timeout
+        while time.time() < end:
+            s = screen()
+            if any(want(r) for r in s):
+                return s
+            time.sleep(0.2)
+        return screen()
+
+    def keys(s):
+        subprocess.run(t + ["send-keys", "-l", s], check=True)
+        subprocess.run(t + ["send-keys", "Enter"], check=True)
+
+    try:
+        if shell == "bash":
+            keys("PS1='\\nINFO-LINE\\nP> '; source %s; clear" % widget)
+        else:
+            keys("PROMPT=$'\\nINFO-LINE\\nP> '; source %s; clear" % widget)
+        until(lambda r: r == "INFO-LINE", 20)
+        time.sleep(0.5)
+        keys("? list big files")
+        rows = until(lambda r: "A hint about it" in r)
+        at = next((i for i, r in enumerate(rows) if "A hint about it" in r), -1)
+        good = (0 <= at < len(rows) - 2 and rows[at + 1] == "INFO-LINE"
+                and rows[at + 2] == "P> echo EXECUTED-MARK")
+        ok(good, "rendered: at height 2 the hint sits on the blank row, INFO-LINE intact below it")
         if not good:
             print("       screen:\n" + "\n".join("       |%s|" % r for r in rows))
     finally:
@@ -854,6 +1114,9 @@ def main(shell, widget):
 
         # 9. the rendered screen: a wrapped question, hint above, prompt intact
         wrapped(shell, widget, tmp, env, prompt, ok)
+
+        # 9b. the living prompt (v1.59): height, Esc k, awake, the fallbacks
+        living(shell, widget, tmp, env, ok)
 
         # 10. nothing the widget started outlives its shell: a streamed
         #     answer's reader and its spark line stop with it
