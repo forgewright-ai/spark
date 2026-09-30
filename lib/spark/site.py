@@ -234,6 +234,8 @@ def cmd_headless(args):
     if not args or args[0] == "status":
         say("%s headless -- SITE_HEADLESS=%s: %s" % (MARK, "yes" if cfg.headless else "no",
                                                     "stays on and answers (the page's server up from boot, never asleep)" if cfg.headless
+                                                    # runit: runsvdir-USER is a root service, from boot either way
+                                                    else "the services run from boot on runit, headless or not" if not IS_MAC and init_shape() == "runit"
                                                     else "under your login (spark headless on makes it stay on and answer)"))
         for piece, good, detail in headless_facts(cfg):
             say("  %s %-26s %s" % (glyph("ok") if good else ("!" if cfg.headless else glyph("na")), piece, detail))

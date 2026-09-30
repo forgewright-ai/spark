@@ -7,6 +7,7 @@
 import json
 import os
 import re
+import shutil
 import signal
 import socket
 import subprocess
@@ -315,6 +316,112 @@ def main():
             ok(False, "foreground server ignored SIGTERM")
         rc, out, err = spark("serve", "--foreground", extra={"SPARK_MODELS_DIR": tmp + "/nope"})
         ok(rc == 78, "--foreground misconfigured: exit 78 (SuccessExitStatus, no restart loop)", err)
+        # v1.64, services that hold -- runit played by an sv stub (SPARK_OS=
+        # Linux, SPARK_ETC_RUNIT a dir): `sv up` starts what runsv would,
+        # `spark serve --foreground`, and remembers its pid; status answers
+        # run/down from it and fail: without supervise/, as runsv would
+        svbins = os.path.join(tmp, "svbin")
+        os.makedirs(svbins)
+        os.makedirs(os.path.join(tmp, "runit"))
+        with open(os.path.join(svbins, "sv"), "w") as f:
+            f.write('#!/bin/sh\necho "sv $*" >> "$SV_LOG"\nd=$2; pf="$d/stub.pid"\n'
+                    'alive() { [ -f "$pf" ] && kill -0 "$(cat "$pf")" 2>/dev/null; }\n'
+                    'fg() { "$SPARK_PY" "$SPARK_BIN" serve --foreground >> "$d/fg.log" 2>&1 & echo $! > "$pf"; }\n'
+                    'case $1 in\n'
+                    '    status) [ -d "$d/supervise" ] || { echo "fail: $d: runsv not running"; exit 1; }\n'
+                    '            if alive; then echo "run: $d: (pid $(cat "$pf")) 1s"; else echo "down: $d: 1s, normally up"; fi ;;\n'
+                    '    up) alive || fg ;;\n'
+                    '    down) if alive; then kill "$(cat "$pf")"; fi ;;\n'
+                    '    restart) if alive; then kill "$(cat "$pf")"; sleep 1; fi; fg ;;\n'
+                    'esac\nexit 0\n')
+        os.chmod(os.path.join(svbins, "sv"), 0o755)
+        svlog = os.path.join(tmp, "sv.log")
+        svd = home + "/.config/spark/sv/spark-serve"
+        unit = {"SPARK_OS": "Linux", "SPARK_ETC_RUNIT": os.path.join(tmp, "runit"), "SV_LOG": svlog,
+                "PATH": svbins + ":" + env["PATH"], "SPARK_PY": sys.executable, "SPARK_BIN": SPARK}
+
+        def unit_pid():
+            try:
+                return int(open(svd + "/stub.pid").read())
+            except (OSError, ValueError):
+                return 0
+
+        def wait_down(pid, secs=10):
+            end = time.time() + secs
+            while time.time() < end:
+                try:
+                    os.kill(pid, 0)
+                except OSError:
+                    return True
+                time.sleep(0.2)
+            return False
+
+        # 1. a disabled unit (its down file): `serve on` starts it through
+        #    the manager (the down file goes, sv up) and waits on /health;
+        #    the server is the unit's, never a Popen beside it
+        os.makedirs(svd + "/supervise")
+        open(svd + "/down", "w").close()
+        rc, out, err = spark("serve", "on", extra=unit)
+        sv_calls = open(svlog).read() if os.path.exists(svlog) else ""
+        ok(rc == 0 and "ready" in out and ("sv up " + svd) in sv_calls and not os.path.exists(svd + "/down"),
+           "a disabled unit: serve on takes the down file away, sv up, waits for ready", out + err + sv_calls)
+        ok(get(url + "/health") == 200 and unit_pid() and int(open(state + "/serve.pid").read()) == unit_pid(),
+           "the server that answers is the unit's own pid (no Popen beside the unit)", "%s %s" % (unit_pid(), open(state + "/serve.pid").read()))
+        rc, out, err = spark("serve", "off", extra=unit)
+        ok(rc == 1 and "straight back" in err, "the unit's server running: serve off still asks for --force", out + err)
+        up = unit_pid()
+        rc, out, err = spark("serve", "off", "--force", extra=unit)
+        ok(rc == 0 and wait_down(up) and get(url + "/health") == 0, "serve off --force: sv down, the unit's server gone", out + err)
+
+        # 2. the unit down (it stood down) and spark's own server by hand
+        #    on the port: serve off stops that one -- the services row's
+        #    remedy is this verb, and it used to refuse
+        rc, out, err = spark("serve", "on")
+        hand = int(open(state + "/serve.pid").read())
+        ok(rc == 0 and get(url + "/health") == 200, "a server by hand (no unit in sight)", out + err)
+        rc, out, err = spark("serve", "off", extra=unit)
+        ok(rc == 0 and ("stopped pid %d" % hand) in out and wait_down(hand), "the unit down: serve off TERMs spark's own hand server", out + err)
+
+        # 3. the unit's --foreground finds spark's own hand server on the
+        #    port: it takes over (TERM, then exec), never a 78 that leaves
+        #    the unit down for good; a foreign one still gets the 78 (above)
+        rc, out, err = spark("serve", "on")
+        hand = int(open(state + "/serve.pid").read())
+        path = os.path.join(tmp, "takeover.out")
+        with open(path, "w") as log:
+            fgp = subprocess.Popen([sys.executable, SPARK, "serve", "--foreground"], env=env, stdout=log, stderr=subprocess.STDOUT)
+        deadline = time.time() + 20
+        while time.time() < deadline and not (get(url + "/health") == 200 and os.path.exists(state + "/serve.pid")
+                                              and open(state + "/serve.pid").read().strip() == str(fgp.pid)):
+            time.sleep(0.3)
+        seen = open(path).read()
+        ok(wait_down(hand, 1) and fgp.poll() is None and open(state + "/serve.pid").read().strip() == str(fgp.pid)
+           and "the unit takes over" in seen,
+           "--foreground over spark's own hand server: it takes over (the hand server TERMed, the unit's pid serves)", seen)
+        fgp.send_signal(signal.SIGTERM)
+        try:
+            fgp.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            fgp.kill()
+        time.sleep(0.5)
+
+        # 4. `spark model NAME`'s restart with a hand server beside a unit
+        #    that stood down: the leftover is TERMed after the unit stops,
+        #    the unit comes back, and "ready" is the unit's server -- never
+        #    the old one still answering
+        rc, out, err = spark("serve", "on")
+        hand = int(open(state + "/serve.pid").read())
+        p = subprocess.run([sys.executable, "-c", "import sys; sys.path.insert(0, %r)\nfrom spark import config, model\n"
+                            "model._restart_server(config.load())" % os.path.join(REPO, "lib")],
+                           capture_output=True, text=True, env=dict(env, **unit), timeout=120)
+        ok(p.returncode == 0 and "server       ready" in p.stdout and wait_down(hand, 1) and unit_pid()
+           and int(open(state + "/serve.pid").read()) == unit_pid(),
+           "a model restart: the hand server beside the unit is TERMed, ready is the unit's own server",
+           p.stdout + p.stderr + " hand %d unit %d" % (hand, unit_pid()))
+        up = unit_pid()
+        spark("serve", "off", "--force", extra=unit)
+        ok(wait_down(up), "the unit's server stopped again")
+        shutil.rmtree(home + "/.config/spark/sv")
         latin.kill()
         latin.wait()
 

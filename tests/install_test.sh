@@ -553,6 +553,7 @@ if [ "$(uname -s)" != Darwin ]; then
 echo "sv $*" >> "${SV_LOG:-/dev/null}"
 case $1 in
     status) if [ ! -d "$2/supervise" ]; then echo "fail: $2: runsv not running"; exit 1
+            elif [ -f "$2/finishing" ]; then echo "finish: $2: (pid 2) 1s, normally up"
             elif [ -f "$2/down" ]; then echo "down: $2: 1s, normally up"
             else echo "run: $2: (pid 1) 1s"; fi ;;
 esac
@@ -633,6 +634,15 @@ SH
     printf '%s\n' "$out" | grep -qE "^ok +supervisor +your runsvdir-$me " && printf '%s\n' "$out" | grep -qE '^ok +spark-check +supervised \(run\)$' \
         && printf '%s\n' "$out" | grep -qE '^skip +spark-serve +on demand \(' && printf '%s\n' "$out" | grep -qE '^skip +spark-forge +off \(' \
         && ok "converged: supervisor and spark-check ok, serve on demand, forge off" || bad "converged rows: $(printf '%s\n' "$out" | grep -E ' (supervisor|spark-check|spark-serve|spark-forge) ' | tr '\n' ' ')"
+    # 11e2. finish: (the run exited, runsv brings it back) is its own
+    #       state: enabled, not running -- the row says so and names the
+    #       log's tail, never "no runsv answers"
+    : > "$svd/spark-check/finishing"
+    out=$(vrun SPARK_VAR_SERVICE="$V/service" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || true
+    printf '%s\n' "$out" | grep -qE '^todo +spark-check +enabled, not running: its run exited and runsv restarts it -- tail .*/log/spark-check/current$' \
+        && ok "runit finish: the spark-check row says enabled, not running, and where its log is" \
+        || bad "finish row: $(printf '%s\n' "$out" | grep -E ' spark-check ' | head -1)"
+    rm -f "$svd/spark-check/finishing"
     # 11f. an xbps that knows nothing installed: the row would install, as
     #      root, in xbps's names
     printf '#!/bin/sh\ncase $1 in -R) exit 0 ;; *) exit 1 ;; esac\n' > "$V/bin/xbps-query"
@@ -650,5 +660,28 @@ SH
     printf '%s\n' "$out" | grep -q 'sv/spark-' && bad "a client under runit: a service dir announced: $(printf '%s\n' "$out" | grep 'sv/spark-' | head -1)" || ok "a client under runit: no service dir (a client runs no unit)"
     printf 'SITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
 fi
+
+# 12. runit: a service dir new here gets its `down` file BEFORE any file
+#     of it lands (runsvdir scans every 5 s and starts a dir it finds with
+#     a run and no down file): a cp that logs whether down was there when
+#     each file of the dir was copied, on both OSes (the seam names a dir)
+D=$T/downfirst; mkdir -p "$D/home/.config/spark" "$D/runit" "$D/bin"
+: > "$D/home/.config/spark/site.env"
+cat > "$D/bin/cp" <<'SH'
+#!/bin/sh
+for last; do :; done
+case $last in
+    */.config/spark/sv/*) svc=${last#*/.config/spark/sv/}; svc=${last%%/.config/spark/sv/*}/.config/spark/sv/${svc%%/*}
+                          [ -f "$svc/down" ] && echo "down-first $last" >> "$CP_LOG" || echo "down-late $last" >> "$CP_LOG" ;;
+esac
+exec /bin/cp "$@"
+SH
+chmod +x "$D/bin/cp"
+HOME="$D/home" XDG_CONFIG_HOME="$D/home/.config" SPARK_ETC_RUNIT="$D/runit" CP_LOG="$D/cp.log" PATH="$D/bin:$PATH" \
+    sh "$REPO/install.sh" >/dev/null 2>&1 || bad "install.sh (runit, down first) failed"
+n=$(grep -c '^down-first ' "$D/cp.log" 2>/dev/null || true)
+[ "${n:-0}" -ge 8 ] && ! grep -q '^down-late ' "$D/cp.log" \
+    && ok "runit: every file of a new service dir lands after its down file ($n files)" \
+    || bad "runit down-first: $(tr '\n' ' ' < "$D/cp.log" 2>/dev/null)"
 
 [ "$fail" -eq 0 ] && echo "install_test: all ok" || { echo "install_test: FAILED"; exit 1; }

@@ -9,6 +9,7 @@ import io
 import json
 import os
 import re
+import shutil
 import signal
 import socket
 import struct
@@ -1499,6 +1500,51 @@ def main():
             spark("forge", "off", "--force")
         rc, out, _ = spark("forge", "off")
         ok(rc == 0 and "not running" in out, "stopped for good", out)
+        # v1.64: a unit here (runit, played by an sv stub under SPARK_OS=
+        # Linux): `forge on` starts the page's server through it and waits
+        # on its health -- never a Popen beside the unit
+        svbins = os.path.join(tmp, "svbin")
+        os.makedirs(svbins)
+        os.makedirs(os.path.join(tmp, "runit"))
+        with open(os.path.join(svbins, "sv"), "w") as f:
+            f.write('#!/bin/sh\necho "sv $*" >> "$SV_LOG"\nd=$2; pf="$d/stub.pid"\n'
+                    'alive() { [ -f "$pf" ] && kill -0 "$(cat "$pf")" 2>/dev/null; }\n'
+                    'case $1 in\n'
+                    '    status) [ -d "$d/supervise" ] || { echo "fail: $d: runsv not running"; exit 1; }\n'
+                    '            if alive; then echo "run: $d: (pid $(cat "$pf")) 1s"; else echo "down: $d: 1s, normally up"; fi ;;\n'
+                    '    up) alive || { "$SPARK_PY" "$SPARK_BIN" forge --foreground >> "$d/fg.log" 2>&1 & echo $! > "$pf"; } ;;\n'
+                    '    down) if alive; then kill "$(cat "$pf")"; fi ;;\n'
+                    'esac\nexit 0\n')
+        os.chmod(os.path.join(svbins, "sv"), 0o755)
+        svlog = os.path.join(tmp, "sv.log")
+        fsvd = home + "/.config/spark/sv/spark-forge"
+        os.makedirs(fsvd + "/supervise")
+        open(fsvd + "/down", "w").close()
+        unit = {"SPARK_OS": "Linux", "SPARK_ETC_RUNIT": os.path.join(tmp, "runit"), "SV_LOG": svlog,
+                "PATH": svbins + ":" + env["PATH"], "SPARK_PY": sys.executable, "SPARK_BIN": SPARK}
+        rc, out, err = spark("forge", "on", extra=unit)
+        calls = open(svlog).read() if os.path.exists(svlog) else ""
+        try:
+            upid = int(open(fsvd + "/stub.pid").read())
+        except (OSError, ValueError):
+            upid = 0
+        fpid = open(state + "/forge.pid").read().strip() if os.path.exists(state + "/forge.pid") else ""
+        ok(rc == 0 and "ready" in out and ("sv up " + fsvd) in calls and not os.path.exists(fsvd + "/down")
+           and upid and fpid == str(upid),
+           "a unit here: forge on starts it through sv up and waits on health; the page's server is the unit's pid, no Popen",
+           out + err + calls + " unit %s forge.pid %s" % (upid, fpid))
+        ok(oct(os.stat(state + "/forge.pid").st_mode & 0o777) == "0o600", "forge.pid is 0600")
+        rc, out, err = spark("forge", "off", extra=unit)
+        gone = False
+        for _ in range(30):
+            try:
+                os.kill(upid, 0)
+            except OSError:
+                gone = True
+                break
+            time.sleep(0.2)
+        ok(rc == 0 and gone and ("sv down " + fsvd) in open(svlog).read(), "forge off: sv down, the unit's server gone", out + err)
+        shutil.rmtree(home + "/.config/spark/sv")
         os.remove(state + "/serve-url")
         rc, out, err = spark("forge", "--foreground")
         ok(rc == 78 and "no model" in err, "no serve-url, no engine, no model -> 78", err)

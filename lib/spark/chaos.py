@@ -87,6 +87,10 @@ class Machine:
         # of its own, bound by nothing, so every probe here answers no.
         self.env["SPARK_PORT"] = str(_free_port())
         self.env["SPARK_FORGE_PORT"] = str(_free_port())
+        # nor its service manager: `spark serve on` starts a unit it finds
+        # (loaded or disabled) through that manager, and the real machine's
+        # units are not the fixture's to start
+        self.env["SPARK_SERVICE_STATE"] = "absent"
         # make_fixture keeps its own git identity to itself; a scenario
         # that commits (the git row's) needs one of its own
         self.env.update({"GIT_AUTHOR_NAME": "chaos", "GIT_AUTHOR_EMAIL": "chaos@fixture",
@@ -510,7 +514,7 @@ def chaos_serve_while_unit_loads(m):
     with open(urlfile, "w") as f:
         f.write(m.brain.url + "\n")
     rc, out = m.spark("serve", "on")
-    del m.env["SPARK_SERVICE_STATE"]
+    m.env["SPARK_SERVICE_STATE"] = "absent"
     if rc != 2:
         return "serve on exited %d, not 2 (a refusal): %r" % (rc, out.strip()[-200:])
     if "loading" not in out:

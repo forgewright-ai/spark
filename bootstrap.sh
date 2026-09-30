@@ -656,9 +656,13 @@ else
     # vanishes with the console session. A workstation on a cpu build sets
     # nothing here.
     if [ -e /dev/dri/renderD128 ] && getent group render >/dev/null 2>&1 && { [ "$headless" = 1 ] || [ "$AI_BUILD" = vulkan ]; }; then
+        # runit: the services take their groups from runsvdir-USER when it
+        # starts, never from a login (until then the servers use sg render)
+        if [ "$INIT" = runit ]; then again="sudo sv restart runsvdir-$(id -un)"; seen="once runsvdir-$(id -un) restarts ($again, or a reboot); until then the servers use sg render"
+        else again="log in again"; seen="once you log out of every session and in again"; fi
         if id -nG | tr " " "\n" | grep -qx render; then ok render "in the render group"
-        elif need render "usermod -aG render $(id -un) (sudo; then log in again)"; then
-            as_root usermod -aG render "$(id -un)"; made render; ok render "added -- the units see the GPU once you log out of every session and in again"; fi
+        elif need render "usermod -aG render $(id -un) (sudo; then $again)"; then
+            as_root usermod -aG render "$(id -un)"; made render; ok render "added -- the units see the GPU $seen"; fi
     fi
     if [ "$INIT" = runit ]; then
         # runit (Void): no user manager and no timer, so the user's services
@@ -762,12 +766,20 @@ EOF
             sv_row() {
                 d="$svdir/$1"
                 if [ "$2" = 1 ]; then
-                    if [ ! -f "$d/down" ] && [ "$(sv_first "$d")" = run: ]; then ok "$1" "supervised (run)"
+                    first=$(sv_first "$d")
+                    if [ ! -f "$d/down" ] && [ "$first" = run: ]; then ok "$1" "supervised (run)"
+                    elif [ ! -f "$d/down" ] && [ "$first" = finish: ]; then
+                        row todo "$1" "enabled, not running: its run exited and runsv restarts it -- tail $(sv_show "$logs/$1/current")"
                     elif need "$1" "sv up $(sv_show "$d")"; then
                         rm -f "$d/down"; sv up "$d" >/dev/null 2>&1 || true
                         i=0; while [ "$i" -lt 5 ] && [ "$(sv_first "$d")" != run: ]; do sleep 1; i=$((i + 1)); done
-                        if [ "$(sv_first "$d")" = run: ]; then ok "$1" "supervised (run)"
-                        else row todo "$1" "sv up $(sv_show "$d"): no runsv answers for it yet (runsvdir scans every 5 s) -- run again in a minute"; fi
+                        case $(sv_first "$d") in
+                            run:) ok "$1" "supervised (run)" ;;
+                            # finish: its run exited and runsv brings it back --
+                            # enabled, not running; the svlogd tail says why
+                            finish:) row todo "$1" "enabled, not running: its run exited and runsv restarts it -- tail $(sv_show "$logs/$1/current")" ;;
+                            *) row todo "$1" "sv up $(sv_show "$d"): no runsv answers for it yet (runsvdir scans every 5 s) -- run again in a minute" ;;
+                        esac
                     fi
                 elif [ ! -f "$d/down" ]; then
                     if need "$1" "disable ($3)"; then touch "$d/down"; sv down "$d" >/dev/null 2>&1 || true; ok "$1" "disabled"; fi

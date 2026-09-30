@@ -42,6 +42,7 @@ python3 tests/knowledge_test.py
 python3 tests/qr_test.py
 python3 tests/docs_test.py
 python3 tests/policy_test.py
+sh tests/finish_test.sh
 python3 tests/widget_pty.py zsh home/.config/spark/widget.zsh          # bash on Linux
 python3 tests/widget_pty.py completion zsh home/.config/spark/completion.zsh
 python3 tests/widget_pty.py pager

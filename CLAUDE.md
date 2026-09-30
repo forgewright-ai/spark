@@ -307,6 +307,7 @@ tests/          smoke.py serve_smoke.py forge_smoke.py bench_smoke.py
                 widget_pty.py (the widgets, the pager and completion at a pty)
                 check_selftest.py (a standalone entry to spark check --selftest)
                 install_test.sh get_test.sh update_test.sh uninstall_test.sh
+                finish_test.sh (the runit finish scripts, sv and sleep stubbed)
                 audition.py + audition/ (the editor's briefs against a live
                 model, lints as the judge; audition/ground/ holds the grounded
                 contracts' set of 10 cases, scored the same blind way, the

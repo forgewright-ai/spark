@@ -5,8 +5,9 @@
 # branch, one new commit pulled and named, a dirty tree refused with
 # nothing changed, a detached clone moved to a newer SIGNED tag, an
 # unsigned tag and a tag signed by an unknown key refused with HEAD
-# unmoved, the signed row flipping with the tag, and --dry-run changing
-# nothing in every case.
+# unmoved, the signed row flipping with the tag, --dry-run changing
+# nothing in every case, and a run that moved nothing restarting the
+# units only when the page runs another version.
 set -eu
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 T=$(mktemp -d)
@@ -105,6 +106,53 @@ fi
 
 out=$("$SPARK" update 2>&1) && ok "second pull run: up to date" || bad "second pull run: rc $? $out"
 printf '%s\n' "$out" | grep -q 'up to date' || bad "second pull run did not settle: $out"
+
+# 3b. nothing moved, yet the units run another tree (a pull by hand, a
+#     restart that failed): the page's /api/health names its version,
+#     and one that is not this tree's is restarted like a move; the same
+#     version restarts nothing. runit played by an sv stub (SPARK_OS=Linux,
+#     SPARK_ETC_RUNIT a dir) on both OSes, so no real manager is asked
+mkdir -p "$T/svbin" "$T/runit"
+cat > "$T/svbin/sv" <<'SH'
+#!/bin/sh
+echo "sv $*" >> "$SV_LOG"
+case $1 in status) echo "run: $2: (pid 1) 1s" ;; esac
+exit 0
+SH
+chmod +x "$T/svbin/sv"
+for s in spark-serve spark-forge; do mkdir -p "$HOME/.config/spark/sv/$s/supervise"; done
+printf '0.0-old\n' > "$T/page-version"
+python3 - "$T/page-version" "$T/page-port" <<'PY' &
+import json, sys
+from http.server import BaseHTTPRequestHandler, HTTPServer
+class H(BaseHTTPRequestHandler):
+    def log_message(self, *a): pass
+    def do_GET(self):
+        body = json.dumps({"status": "ok", "forge": True, "version": open(sys.argv[1]).read().strip()}).encode()
+        self.send_response(200); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
+srv = HTTPServer(("127.0.0.1", 0), H)
+open(sys.argv[2], "w").write(str(srv.server_address[1]))
+srv.serve_forever()
+PY
+page=$!
+i=0; while [ ! -s "$T/page-port" ] && [ "$i" -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
+mkdir -p "$HOME/.local/state/spark"
+printf 'http://127.0.0.1:%s\n' "$(cat "$T/page-port")" > "$HOME/.local/state/spark/forge-url"
+urun() { env SPARK_OS=Linux SPARK_ETC_RUNIT="$T/runit" SV_LOG="$T/sv.log" PATH="$T/svbin:$PATH" "$SPARK" update 2>&1; }
+rm -f "$T/sv.log"
+out=$(urun) && ok "not moved, a stale page: exits 0" || bad "stale page: rc $? $out"
+printf '%s\n' "$out" | grep -q 'up to date' && grep -q "restart $HOME/.config/spark/sv/spark-serve" "$T/sv.log" 2>/dev/null \
+    && grep -q "restart $HOME/.config/spark/sv/spark-forge" "$T/sv.log" 2>/dev/null \
+    && printf '%s\n' "$out" | grep -q "spark-forge restarted on the new tree" \
+    && ok "not moved, the page says another version: the units restart on this tree" \
+    || bad "stale page, no restart: $out $(tr '\n' ' ' < "$T/sv.log" 2>/dev/null)"
+python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); from spark import version; print(version.version())' "$T/work/lib" > "$T/page-version"
+rm -f "$T/sv.log"
+out=$(urun) && ok "not moved, the page on this tree: exits 0" || bad "current page: rc $? $out"
+grep -q ' restart ' "$T/sv.log" 2>/dev/null && bad "the page on this tree, yet a restart: $(tr '\n' ' ' < "$T/sv.log")" \
+    || ok "not moved, the page on this very version: nothing restarts"
+{ kill "$page"; wait "$page"; } 2>/dev/null || true
+rm -rf "$HOME/.config/spark/sv" "$HOME/.local/state/spark/forge-url"
 
 # 4. a dirty tree is refused, --dry-run or not, nothing changes
 echo dirty >> "$T/work/docs/CHANGELOG.md"

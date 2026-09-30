@@ -1637,13 +1637,9 @@ def _write_url(url):
 
 
 def _pid():
-    try:
-        with open(FORGE_PID, encoding="utf-8") as f:
-            pid = int(f.read().strip())
-        os.kill(pid, 0)
-        return pid
-    except (OSError, ValueError):
-        return 0
+    """The page's server's pid from forge.pid, its command line checked:
+    a recycled pid is never signalled."""
+    return engine.pid_of(FORGE_PID, engine.FORGE_MARKS)
 
 
 def forget():
@@ -1684,9 +1680,7 @@ def cmd_foreground(args):
         forget()
         return _die("cannot bind %s: %s" % (url, e.strerror or e))
     _write_url(url)
-    state_dir()
-    with open(FORGE_PID, "w", encoding="utf-8") as f:
-        f.write("%d\n" % os.getpid())
+    engine.write_pid(FORGE_PID, os.getpid())
 
     def stop(signum, frame):
         raise SystemExit(0)
@@ -1723,6 +1717,13 @@ def cmd_start(args):
     if wire.forge_health(url) not in (None, "down"):
         say("%s forge -- already running at %s" % (MARK, url))
         return 0
+    if engine.forge_service_state(cfg) in ("loaded", "disabled"):
+        # a unit is here: its manager starts the page's server, never a
+        # Popen beside it (the second one lost the bind, or won it and
+        # left the unit restarting every 15 s)
+        rc = _through_unit(cfg, url)
+        if rc is not None:
+            return rc
     state_dir()
     lock = os.open(FORGE_LOCK, os.O_WRONLY | os.O_CREAT, 0o600)
     try:
@@ -1765,6 +1766,45 @@ def cmd_start(args):
         say("%s forge -- ready (pid %d) at %s" % (MARK, p.pid, url))
         return 0
     sys.stdout.write(" ready (pid %d)\n" % p.pid)
+    say("%s forge -- %s/login   (spark forge --print-url for the token)" % (MARK, url))
+    return 0
+
+
+def _through_unit(cfg, url):
+    """Start the page's server through its unit and wait on its health, as
+    `spark serve on` does for the engine. None when there is no unit to
+    start after all (the caller starts by hand)."""
+    started = engine.service_start(cfg, "forge")
+    if started is None:
+        return None
+    if not started:
+        return 1
+    quiet = cfg.quiet_start
+    t0 = time.monotonic()
+
+    class StoodDown(Exception):
+        pass
+
+    def probe():
+        if wire.forge_health(forge_url() or url) not in (None, "down"):
+            return True
+        if time.monotonic() - t0 > 5 and engine.unit_state(cfg, "forge")[0] == "down":
+            raise StoodDown()
+        return False
+
+    try:
+        up = wait_ready("" if quiet else "starting", probe, 30, 0.5)
+    except StoodDown:
+        return _die("the unit stood down -- to start it again and read why: %s" % engine.restart_line("forge"))
+    if not up:
+        return _die("no answer from the unit in 30 s -- %s" % engine.restart_line("forge"))
+    url = forge_url() or url
+    pid = _pid()
+    at = " (pid %d)" % pid if pid else ""
+    if quiet:
+        say("%s forge -- ready%s at %s" % (MARK, at, url))
+        return 0
+    sys.stdout.write(" ready%s\n" % at)
     say("%s forge -- %s/login   (spark forge --print-url for the token)" % (MARK, url))
     return 0
 

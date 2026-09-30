@@ -132,7 +132,9 @@ def pause_server(cfg):
             say(engine.daemon_note(cfg, verb="bootout"))
             return None
         engine.service_stop(noreload=False)
-        engine.wait_gone(engine.server_pids(cfg.port), 30)
+        # a server spark started by hand beside the unit goes too, or the
+        # resumed unit stands down (78) beside it and the old one serves on
+        engine.clear_port(cfg, 30)
 
         def resume():
             engine.kickstart(cfg)
@@ -145,7 +147,7 @@ def pause_server(cfg):
 
         def resume():
             from . import serve
-            serve.cmd_serve([])
+            serve.cmd_serve([], by_hand=True)
         return resume
     return None
 

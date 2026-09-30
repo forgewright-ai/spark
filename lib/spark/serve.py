@@ -127,7 +127,71 @@ def _spawn_warmer():
     os.waitpid(child, 0)
 
 
-def cmd_serve(args):
+def _take_over(cfg, url):
+    """`--foreground` finds spark's own server by hand on the port (its
+    pid in serve.pid, the command line checked): the unit takes over --
+    TERM, wait until it is gone. A 78 there stood the unit down for good
+    while a hand server nobody watches held the port."""
+    mine = engine.pidfile_pid()
+    if not mine or mine not in engine.server_pids(cfg.port):
+        return
+    say("%s serve -- pid %d, a server spark started by hand, holds %s: the unit takes over" % (MARK, mine, url))
+    engine.terminate([mine])
+    if engine.wait_gone([mine], 20):
+        engine.terminate([mine], force=True)
+        engine.wait_gone([mine], 5)
+    engine.forget()
+
+
+def _through_unit(cfg, url, quiet):
+    """`spark serve on` where a unit is (loaded or disabled): the manager
+    starts it -- never a second server beside it -- and this waits on
+    /health the way a spawn does. None when there is no unit after all
+    (the caller starts by hand)."""
+    started = engine.service_start(cfg)
+    if started is None:
+        return None
+    if not started:
+        return 1
+    t0 = time.monotonic()
+
+    class StoodDown(Exception):
+        pass
+
+    def probe():
+        if wire.health(wire.serve_url() or url) == "ok":
+            return True
+        # a unit that stands down (78: misconfigured, or a server spark did
+        # not start holds the port) stays down: say so now, not in 180 s
+        if time.monotonic() - t0 > 5 and engine.unit_state(cfg)[0] == "down":
+            raise StoodDown()
+        return False
+
+    try:
+        up = engine.wait_load(cfg, "" if quiet else "loading", probe, 180, 1)
+    except StoodDown:
+        return _die("the unit stood down -- to start it again and read why: %s" % engine.restart_line())
+    if not up:
+        return _die("no answer from the unit's server in 180 s -- %s" % engine.restart_line())
+    url = wire.serve_url() or url
+    pid = engine.pidfile_pid()
+    at = " (pid %d)" % pid if pid else ""
+    if quiet:
+        say("%s serve -- ready%s at %s" % (MARK, at, url))
+        _warming(cfg, url)
+    else:
+        sys.stdout.write(" ready%s\n" % at)
+        _warm(cfg, url)
+        say("\n".join(client_lines(cfg, url)))
+    from . import check
+    check.refresh()
+    return 0
+
+
+def cmd_serve(args, by_hand=False):
+    """`spark serve on`, and the unit's `--foreground`. by_hand: a restart
+    of a server spark started by hand stays by hand (model, bench) -- it
+    never enables a unit disabled on purpose."""
     cfg = config.load()
     fg = "--foreground" in args
     host = ""
@@ -163,12 +227,15 @@ def cmd_serve(args):
     url = "http://%s:%d" % (host, cfg.port)
 
     quiet = cfg.quiet_start
+    if fg:
+        _take_over(cfg, url)
     st = wire.health(url)
-    if st == "ok" and fg:
-        # the unit cannot be the server: another one answers on the port
-        # (a hand-started spark serve, another llama-server). 78 stands the
-        # unit down on both inits (finish runs sv down, systemd's
-        # SuccessExitStatus); a 0 made runsv restart it every second
+    if fg and (st == "ok" or engine.server_pids(cfg.port)):
+        # the unit cannot be the server: one spark did not start answers
+        # (or loads) on the port -- its own hand server was taken over just
+        # now. 78 stands the unit down on every init (finish runs sv down,
+        # systemd's SuccessExitStatus); a 0 made runsv restart it every
+        # second, a 1 every 15 s
         say("%s serve -- %s already answers, so this unit stands down" % (MARK, url))
         return engine.EX_CONFIG
     if st == "ok":
@@ -192,6 +259,7 @@ def cmd_serve(args):
     if others and mine not in others:
         return _die("port %d is held by llama-server pid %s that spark did not start -- `spark serve off --force` first"
                     % (cfg.port, ",".join(str(p) for p in others)))
+    unit = "" if fg or by_hand else engine.service_state(cfg)
 
     served = [f for f in (files["spark"], files["ember"]) if f]
     need = engine.mem_needed_gb(cfg, served)
@@ -203,6 +271,10 @@ def cmd_serve(args):
         what = sep.join("%s %s (%.1f GB)" % (role, os.path.basename(files[role]), os.path.getsize(files[role]) / 2**30)
                         for role in engine.ROLES if files[role])
         say("%s serve%sengine %s%s%s%s%s (token required)" % (MARK, sep, engine.engine_dir(cfg), sep, what, sep, url))
+    if unit in ("loaded", "disabled"):
+        rc = _through_unit(cfg, url, quiet)
+        if rc is not None:
+            return rc
     engine.write_serve_url(url)
     if fg:
         _spawn_warmer()
@@ -256,6 +328,16 @@ def cmd_stop(args):
         if host not in own_hostnames() and host not in (lan_ip(), "127.0.0.1", "localhost"):
             return _die("SPARK_BASE_URL points at %s -- nothing on this machine to stop" % host)
     st = engine.service_state(cfg)
+    mine = engine.pidfile_pid()
+    pids = engine.server_pids(cfg.port)
+    if st == "loaded" and not noreload and mine and mine in pids:
+        word, upid = engine.unit_state(cfg)
+        if word in ("down", "finish") or (word == "run" and upid and upid != mine):
+            # the unit is not the server (it stood down beside this one)
+            # and spark's own server by hand answers: that one is ours to
+            # stop, and nothing brings it back -- the services row's
+            # remedy says this verb
+            st = "hand"
     if st == "loaded":
         if IS_MAC and engine.service_domain(cfg) == "system":
             return _die("the server is a LaunchDaemon (spark headless on) -- sudo launchctl bootout %s stops it; spark headless off puts it back under your login" % engine.service_target(cfg))
@@ -272,8 +354,6 @@ def cmd_stop(args):
         return 0
     if noreload:
         return _die("nothing to disable -- no unit here (%s)" % ("disabled already" if st == "disabled" else "on demand"))
-    mine = engine.pidfile_pid()
-    pids = engine.server_pids(cfg.port)
     if mine and mine in pids:
         engine.terminate([mine])
         left = engine.wait_gone([mine], 20)

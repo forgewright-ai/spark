@@ -82,6 +82,26 @@ def _converge():
         return site.apply((), stream=True)
 
 
+def _restart_units(cfg):
+    """Restart every loaded unit on the tree at hand: the engine, the page,
+    and on runit spark-check too (runit has no timer: that loop holds the
+    old tree and its environment until runsv restarts it)."""
+    from . import engine
+    units = ["serve", "forge"] + (["check"] if engine.init_shape() == "runit" else [])
+    for unit in units:
+        if engine.service_state(cfg, unit) == "loaded" and engine.kickstart(cfg, unit, restart=True):
+            say("%s update -- spark-%s restarted on the new tree" % (MARK, unit))
+
+
+def _page_is_stale():
+    """True when the page's server here answers /api/health with a version
+    other than this tree's; False when it matches, or nothing answers."""
+    from . import forge_url, version, wire
+    url = forge_url()
+    h = wire.forge_health(url) if url else None
+    return isinstance(h, dict) and bool(h.get("version")) and h.get("version") != version.version()
+
+
 def _lock():
     """Take the update lock, or None when another update holds it. The
     lock covers the half that cannot be run twice -- the fetch and the
@@ -108,22 +128,14 @@ def cmd_update(args):
             continue
         if a == "--converge":
             # internal: the post-move half, running in the new tree
-            from . import config, engine
+            from . import config
             rc = _converge()
             if rc == 0:
                 # the tree moved under the running units: without a
                 # restart the API keeps serving the OLD code with every
                 # row green
                 cfg = config.load()
-                for unit in ("serve", "forge"):
-                    if engine.service_state(cfg, unit) == "loaded":
-                        if engine.kickstart(cfg, unit, restart=True):
-                            say("%s update -- spark-%s restarted on the new tree" % (MARK, unit))
-                # runit has no timer: spark-check is a loop that holds the
-                # old tree and its environment until runsv restarts it
-                if engine.init_shape() == "runit" and engine.service_state(cfg, "check") == "loaded":
-                    if engine.kickstart(cfg, "check", restart=True):
-                        say("%s update -- spark-check restarted on the new tree" % MARK)
+                _restart_units(cfg)
                 # the look file follows the new tree (an awakened machine only)
                 try:
                     from . import look
@@ -224,5 +236,11 @@ def cmd_update(args):
                                   "update", "--converge"])
     rc = _converge()
     if rc == 0:
+        # nothing moved, yet the units may run an older tree (a pull by
+        # hand, an update whose restart failed): the page says which
+        # version it runs, and a stale one is restarted like a move
+        from . import config
+        if _page_is_stale():
+            _restart_units(config.load())
         _door()
     return rc

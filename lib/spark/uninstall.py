@@ -154,11 +154,18 @@ def step_services(ctx):
     elif init_shape() == "runit":
         # runit: `sv down` ends each service, `sv exit` its runsv; the three
         # dirs go, then the links in a runsvdir of your own or the root
-        # service spark wrote (state/made says which)
+        # service spark wrote (state/made says which). The `down` file
+        # first: runsvdir rescans every 5 s, and a dir it finds again
+        # without one gets a new runsv that starts the service
         svdir = os.path.join(CONFIG_DIR, "sv")
         for unit in SV_UNITS:
             d = engine.service_dir(unit)
             if not ctx.dry and os.path.isdir(d):
+                try:
+                    with open(os.path.join(d, "down"), "a"):
+                        pass
+                except OSError:
+                    pass
                 run(["sv", "down", d], timeout=20)
                 run(["sv", "exit", d], timeout=20)
             if os.path.lexists(d):
@@ -176,13 +183,11 @@ def step_services(ctx):
         if not ctx.dry:
             run(["systemctl", "--user", "daemon-reload"], timeout=30)
             run(["systemctl", "--user", "reset-failed"], timeout=30)
-    # whatever still runs under a pidfile or the port, ours
+    # whatever still runs under a pidfile or the port, ours -- the pid
+    # file's pid only when its command line is the page's server (a pid
+    # long since reused by another program is not signalled)
     if not ctx.dry and not cfg.client:
-        try:
-            with open(FORGE_PID, encoding="utf-8") as f:
-                pid = int(f.read().strip() or 0)
-        except (OSError, ValueError):
-            pid = 0
+        pid = engine.pid_of(FORGE_PID, engine.FORGE_MARKS)
         if pid:
             engine.terminate([pid])
             left = engine.wait_gone([pid], 10)

@@ -127,7 +127,9 @@ done
 # is the init: /etc/runit is a directory (SPARK_ETC_RUNIT pins it in the
 # tests -- the same presence test lib/spark's init_shape makes), and never
 # for a client. A service whose run script is new here gets a `down` file
-# beside it: nothing starts before bootstrap.sh decides.
+# beside it: nothing starts before bootstrap.sh decides. The `down` file
+# lands FIRST, before any file of the dir: runsvdir scans every 5 s, and
+# a dir it finds with a run and no `down` starts at once.
 runit=0; [ ! -d "${SPARK_ETC_RUNIT:-/etc/runit}" ] || runit=1
 for src in $(find "$REPO/templates" -type f | sort); do
     rel=${src#"$REPO"/templates/}
@@ -139,10 +141,11 @@ for src in $(find "$REPO/templates" -type f | sort); do
         .config/spark/sv/*)
             [ "$runit" = 1 ] || continue
             [ "$client" = 0 ] || continue
-            case $rel in */log/run) ;; */run) [ -e "$HOME/$rel" ] || fresh=1 ;; esac ;;
+            svc=${rel#.config/spark/sv/}; svc="$HOME/.config/spark/sv/${svc%%/*}"
+            [ -e "$svc/run" ] || fresh=1 ;;
     esac
+    if [ "$fresh" = 1 ] && [ "$DRY" -eq 0 ]; then mkdir -p "$svc"; : > "$svc/down"; fi
     render_one "$src" "$HOME/$rel"
-    if [ "$fresh" = 1 ] && [ "$DRY" -eq 0 ]; then : > "$HOME/${rel%/run}/down"; fi
 done
 
 if [ "$changes" -eq 0 ]; then echo "Nothing to do"; else echo "$changes to do"; fi

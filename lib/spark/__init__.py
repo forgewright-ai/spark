@@ -437,17 +437,21 @@ def mem_total_gb():
 def lan_ip():
     """The address the default route leaves by, without sending a packet:
     a UDP socket 'connected' to a public address is only routed, never
-    used. Empty when there is no route."""
+    used. Empty when there is no route -- and while the only address is
+    a link-local one (169.254/16: dhcpcd's IPv4LL on Void, before the
+    lease): a server bound there is gone for good once the real address
+    comes, so the wait goes on instead."""
     import socket
     try:
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         try:
             s.connect(("9.9.9.9", 53))
-            return s.getsockname()[0]
+            ip = s.getsockname()[0]
         finally:
             s.close()
     except OSError:
         return ""
+    return "" if ip.startswith("169.254.") else ip
 
 
 

@@ -9,6 +9,8 @@ exec 2>&1
 trap 'kill $! 2>/dev/null; exit 0' TERM INT
 sleep 120 & wait $!
 while :; do
-    @HOME@/.local/bin/spark check --porcelain >/dev/null 2>&1
+    # the rows go nowhere (check.json keeps them); stderr stays on the
+    # log pipe, so a check that cannot run says why in svlogd's tail
+    @HOME@/.local/bin/spark check --porcelain >/dev/null
     sleep 300 & wait $!
 done

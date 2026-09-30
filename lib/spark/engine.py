@@ -591,20 +591,56 @@ def server_pids(port):
     return pids
 
 
-def pidfile_pid():
+def pid_cmdline(pid):
+    """The command line of a live pid, words joined by spaces, or '': Linux
+    reads /proc/PID/cmdline, macOS (no /proc) asks ps."""
     try:
-        with open(PID_FILE, encoding="utf-8") as f:
+        with open("/proc/%d/cmdline" % pid, "rb") as f:
+            return f.read().replace(b"\0", b" ").decode("utf-8", "replace").strip()
+    except OSError:
+        pass
+    rc, out = run(["ps", "-o", "command=", "-p", str(pid)])
+    return out.strip() if rc == 0 else ""
+
+
+# what spark's own processes look like: a pid file names one of these or
+# nothing -- a recycled pid (the server long gone, the number reused by
+# some other program) is never signalled
+SERVER_MARKS = ("llama-server", "serve --foreground")
+FORGE_MARKS = ("forge --foreground",)
+
+
+def pid_of(path, marks):
+    """The live pid a pid file names when its command line carries one of
+    `marks`, else 0."""
+    try:
+        with open(path, encoding="utf-8") as f:
             pid = int(f.read().strip())
         os.kill(pid, 0)
-        return pid
     except (OSError, ValueError):
         return 0
+    line = pid_cmdline(pid)
+    return pid if any(m in line for m in marks) else 0
+
+
+def pidfile_pid():
+    return pid_of(PID_FILE, SERVER_MARKS)
+
+
+def write_pid(path, pid):
+    """A pid file, 0600 like every other file of spark's state."""
+    state_dir()
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write("%d\n" % pid)
+    try:
+        os.chmod(path, 0o600)            # one an older spark wrote 0644
+    except OSError:
+        pass
 
 
 def write_pidfile(pid):
-    state_dir()
-    with open(PID_FILE, "w", encoding="utf-8") as f:
-        f.write("%d\n" % pid)
+    write_pid(PID_FILE, pid)
 
 
 def write_serve_url(url):
@@ -644,6 +680,22 @@ def terminate(pids, force=False):
             os.kill(pid, signal.SIGKILL if force else signal.SIGTERM)
         except OSError:
             pass
+
+
+def clear_port(cfg, timeout=30):
+    """With the unit stopped: TERM a server spark started by hand that
+    still holds the port (serve.pid, its command line checked), then wait
+    for the port's servers to go. Returns the pids still there -- a
+    server spark did not start. A unit restarted beside a leftover stood
+    down (78) and the old model answered "ready"."""
+    mine = pidfile_pid()
+    if mine and mine in server_pids(cfg.port):
+        terminate([mine])
+        if wait_gone([mine], 20):
+            terminate([mine], force=True)
+            wait_gone([mine], 5)
+        forget()
+    return wait_gone(server_pids(cfg.port), timeout)
 
 
 def _rotate_log():
@@ -748,11 +800,62 @@ def service_dir(unit="serve"):
 
 
 def parse_sv_status(out):
-    """"run" | "down" | "absent" from an `sv status DIR` transcript: the
-    first word (`run:`, `down:`; `fail:` means no runsv watches the dir).
-    Pure, so a pasted transcript proves it."""
+    """"run" | "finish" | "down" | "absent" from an `sv status DIR`
+    transcript: the first word (`run:`, `down:`; `finish:` means the run
+    script exited and runsv restarts it once finish is done -- enabled,
+    not running; `fail:` means no runsv watches the dir). Pure, so a
+    pasted transcript proves it."""
     word = (out.split() or [""])[0].rstrip(":")
-    return word if word in ("run", "down") else "absent"
+    return word if word in ("run", "finish", "down") else "absent"
+
+
+def parse_unit_state(kind, out):
+    """(word, pid) from the service manager's own transcript. word: "run"
+    (the unit's process is up), "finish" (it exited and the manager brings
+    it back), "down" (stopped, and it stays stopped), "" (nobody answers
+    for it). pid: the unit's main process when it runs, else 0. kind is
+    "runit" (`sv status DIR`), "systemd" (`systemctl --user show -p
+    ActiveState,SubState,MainPID`) or "launchd" (`launchctl print
+    TARGET`, "" when it is not loaded). Pure."""
+    pid = 0
+    if kind == "runit":
+        word = parse_sv_status(out)
+        word = "" if word == "absent" else word
+        m = re.match(r"run: [^\n]*?\(pid (\d+)\)", out)
+        pid = int(m.group(1)) if m and word == "run" else 0
+        return word, pid
+    if kind == "systemd":
+        kv = dict(line.split("=", 1) for line in out.splitlines() if "=" in line)
+        state = kv.get("ActiveState", "")
+        word = {"active": "run", "reloading": "run", "deactivating": "run", "activating": "finish",
+                "inactive": "down", "failed": "down"}.get(state, "")
+        try:
+            pid = int(kv.get("MainPID", "0"))
+        except ValueError:
+            pid = 0
+        return word, (pid if word == "run" else 0)
+    if not out.strip():
+        return "down", 0                 # booted out: launchd holds nothing to restart
+    m = re.search(r"^\s*pid = (\d+)", out, re.M)
+    running = re.search(r"^\s*state = running\b", out, re.M)
+    return ("run" if running else "finish"), (int(m.group(1)) if m and running else 0)
+
+
+def unit_state(cfg, unit="serve"):
+    """(word, pid) for a spark unit, as parse_unit_state reads it from
+    this machine's manager."""
+    name = unit_name(unit)
+    if IS_MAC:
+        rc, out = run(["launchctl", "print", service_target(cfg, unit)], timeout=10)
+        return parse_unit_state("launchd", out if rc == 0 else "")
+    if _runit():
+        d = service_dir(unit)
+        if not os.path.isdir(d):
+            return "", 0
+        _rc, out, _err = svctl(["status", d], timeout=10)
+        return parse_unit_state("runit", out)
+    rc, out, _err = sysctl(["show", "-p", "ActiveState,SubState,MainPID", name], timeout=10)
+    return parse_unit_state("systemd", out) if rc == 0 else ("", 0)
 
 
 def svctl(args, timeout=20):
@@ -864,9 +967,12 @@ def service_state(cfg, unit="serve"):
         rc, _ = run(["launchctl", "print", dom + "/" + name])
         return "loaded" if rc == 0 else "absent"
     if _runit():
-        # the dir is the unit (install.sh rendered it), its `down` file the disable
+        # the dir is the unit (install.sh rendered it), its `down` file the
+        # disable -- and only while a runsv answers for it: a dir nobody
+        # supervises (a container, a runsvdir not linked yet) is no unit,
+        # and `spark serve on` there starts the server by hand
         d = service_dir(unit)
-        if not os.path.isdir(d):
+        if not os.path.isdir(d) or sv_status(unit)[0] == "absent":
             return "absent"
         return "disabled" if os.path.exists(os.path.join(d, "down")) else "loaded"
     rc, out, _err = sysctl(["is-enabled", name], timeout=5)
@@ -913,6 +1019,64 @@ def service_stop(noreload, unit="serve"):
     return undo if noreload else "systemctl --user start " + short
 
 
+def _launchd_plist(unit):
+    return os.path.join(HOME, "Library", "LaunchAgents", unit_name(unit) + ".plist")
+
+
+def _launchd_load(unit):
+    """A login agent booted out (service_stop's bootout) is bootstrapped
+    again from its plist before a kickstart: a kickstart of a label
+    launchd no longer holds does nothing. False when there is no plist."""
+    target = "gui/%d/%s" % (os.getuid(), unit_name(unit))
+    if run(["launchctl", "print", target], timeout=10)[0] == 0:
+        return True
+    plist = _launchd_plist(unit)
+    if not os.path.isfile(plist):
+        return False
+    run(["launchctl", "bootstrap", "gui/%d" % os.getuid(), plist], timeout=20)
+    return run(["launchctl", "print", target], timeout=10)[0] == 0
+
+
+def service_start(cfg, unit="serve"):
+    """Enable a unit and start it through its manager: what `spark serve
+    on` does whenever a unit is there, loaded or disabled, so a server is
+    never started beside one. runit: the `down` file goes, sv up; systemd:
+    enable --now; launchd: enable, bootstrap when booted out, kickstart.
+    True when the manager took it, False when it refused (a todo line
+    said why), None when there is no unit to start after all (a launchd
+    label disabled whose plist is gone: the caller starts by hand)."""
+    from . import say
+    if IS_MAC and service_domain(cfg, unit) == "system":
+        say(daemon_note(cfg, unit))
+        return False
+    name = unit_name(unit)
+    if IS_MAC:
+        target = "gui/%d/%s" % (os.getuid(), name)
+        run(["launchctl", "enable", target], timeout=20)
+        if not _launchd_load(unit):
+            return None
+        run(["launchctl", "kickstart", target], timeout=20)
+        return True
+    if _runit():
+        d = service_dir(unit)
+        try:
+            os.remove(os.path.join(d, "down"))
+        except OSError:
+            pass
+        rc, out, err = svctl(["up", d], timeout=30)
+        if rc == 0:
+            return True
+        why = ((err or out).strip().splitlines() or ["sv exited %d" % rc])[0]
+        say("todo   %-12s sv up %s failed: %s" % (unit, name, why))
+        return False
+    rc, out, err = sysctl(["enable", "--now", name], timeout=30)
+    if rc == 0:
+        return True
+    why = ((err or out).strip().splitlines() or ["systemctl exited %d" % rc])[0]
+    say("todo   %-12s systemctl --user enable --now %s failed: %s" % (unit, name[:-8], why))
+    return False
+
+
 def kickstart(cfg, unit="serve", restart=False):
     """(Re)start a loaded unit the way its manager does. A LaunchDaemon needs
     sudo, which no page or script can give: say so (a todo line) and return
@@ -924,6 +1088,7 @@ def kickstart(cfg, unit="serve", restart=False):
         say(daemon_note(cfg, unit))
         return False
     if IS_MAC:
+        _launchd_load(unit)
         subprocess.run(["launchctl", "kickstart", "-k", service_target(cfg, unit)], capture_output=True)
         return True
     if _runit():

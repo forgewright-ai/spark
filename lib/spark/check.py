@@ -322,7 +322,8 @@ def _runit_user(ctx, unit):
     """(enabled, active) for a runit service dir, in the systemd row's
     vocabulary: enabled = no `down` file and a runsv watching it, disabled
     = a `down` file, not-found = no dir (or nobody supervising it); active
-    = `sv status` says run."""
+    = `sv status` says run, restarting = it says finish (the run script
+    exited and runsv brings it back: enabled, not running)."""
     from . import engine
     d = engine.service_dir(unit)
     if not os.path.isdir(d):
@@ -333,7 +334,7 @@ def _runit_user(ctx, unit):
         en = "disabled"
     else:
         en = "enabled" if st != "absent" else "not-found"
-    return en, "active" if st == "run" else "inactive"
+    return en, {"run": "active", "finish": "restarting"}.get(st, "inactive")
 
 
 @row("SOFTWARE")
@@ -388,8 +389,12 @@ def row_services(ctx):
             return na("no user systemd session (headless or container)")
         parts = ["check timer %s, %s" % (en, ac)]
     worst, remedies = OK, []
-    if en != "enabled" or ac != "active":
+    if en != "enabled" or ac not in ("active", "restarting"):
         worst = FAIL
+    elif ac == "restarting":
+        # runit's finish: the loop exited and runsv brings it back
+        worst = WARN
+        remedies.append(engine.restart_line("check"))
     sen, sac = _runit_user(ctx, "serve") if runit else _systemd_user(ctx, "spark-serve.service")
     if sen == "enabled":
         if sac != "active":
@@ -900,10 +905,16 @@ def row_gpu(ctx):
         return na("%s build: no GPU counters in sysfs" % build)
     node = "/dev/dri/renderD128"
     if not IS_MAC and os.path.exists(node) and not os.access(node, os.R_OK | os.W_OK):
+        # runit: the services take their groups from runsvdir-USER when it
+        # starts, not from a login -- a new login changes nothing for them
+        runit = init_shape() == "runit"
+        again = ("sudo sv restart runsvdir-%s" % (os.environ.get("USER") or ctx.cfg.user)
+                 if runit else "log out of every session and in again")
         if engine.render_wrap(["x"])[0] == "sg":
-            return ok("card present; in the render group since this login -- servers use sg render until you log in again")
+            return ok("card present; in the render group since the services started -- they use sg render until runsvdir restarts"
+                      if runit else "card present; in the render group since this login -- servers use sg render until you log in again")
         return warn("GPU present but %s is not readable: new servers fall back to the CPU" % node,
-                    "./bootstrap.sh adds you to the render group; then log out of every session and in again")
+                    "./bootstrap.sh adds you to the render group; then " + again)
     files = [f for f in engine.roles(ctx.cfg).values() if f and os.path.isfile(f)]
     size = sum(os.path.getsize(f) for f in files)
     vram, gtt = g.get("vram_total", 0), g.get("gtt_total", 0)
@@ -1313,6 +1324,9 @@ def row_headless(ctx):
     """A box that is the brain keeps the FORGE up from boot with nobody logged
     in and never sleeps (SITE_HEADLESS=yes; bootstrap applies it)."""
     if not ctx.cfg.headless:
+        if not IS_MAC and init_shape() == "runit":
+            # runsvdir-USER is a root service: from boot, login or not
+            return na("the services run from boot on runit, headless or not")
         return na("under your login; spark headless on keeps it up from boot")
     from . import site
     missing = [piece for piece, good, _ in site.headless_facts(ctx.cfg) if not good]

@@ -101,7 +101,14 @@ def _restart_server(cfg):
             return
         say("ok     server       restarting -- the model loads again (about 30 s) ...")
         engine.service_stop(noreload=False)
-        engine.wait_gone(engine.server_pids(cfg.port), 30)
+        # a server spark started by hand beside the unit goes too: left on
+        # the port, the restarted unit stood down (78) and the OLD model
+        # answered the wait below with "ready"
+        left = engine.clear_port(cfg, 30)
+        if left:
+            say("todo   server       llama-server pid %s holds port %d and spark did not start it -- "
+                "spark serve off --force, then spark serve on" % (",".join(str(p) for p in left), cfg.port))
+            return
         if not engine.kickstart(cfg):
             return
         # the brain cache names the model that WAS served (60 s): the next
@@ -126,7 +133,7 @@ def _restart_server(cfg):
     elif engine.pidfile_pid():
         from . import serve
         serve.cmd_stop([])
-        serve.cmd_serve([])
+        serve.cmd_serve([], by_hand=True)
     else:
         say("ok     server       not running -- the next spark serve uses it")
 

@@ -683,6 +683,36 @@ def lan_wait_cases(t):
         t.ok(got == "192.0.2.8" and not naps, "an address already there is taken with no wait", "%r %r" % (got, naps))
     finally:
         spark.lan_ip, spark.time.sleep = real_lan, real_sleep
+    # v1.64: dhcpcd's IPv4LL (Void) routes by 169.254/16 before the lease;
+    # a server bound there is lost when the real address comes, so
+    # lan_ip says "" (the wait goes on) until a real one is there
+    import socket as _socket
+
+    class _Routed:
+        addr = ""
+
+        def __init__(self, *a):
+            pass
+
+        def connect(self, where):
+            pass
+
+        def getsockname(self):
+            return (_Routed.addr, 40000)
+
+        def close(self):
+            pass
+    real_socket = _socket.socket
+    _socket.socket = _Routed
+    try:
+        seen = []
+        for addr in ("169.254.17.3", "192.0.2.10", "198.51.100.4"):
+            _Routed.addr = addr
+            seen.append(spark.lan_ip())
+    finally:
+        _socket.socket = real_socket
+    t.ok(seen == ["", "192.0.2.10", "198.51.100.4"],
+         "lan_ip never answers a link-local 169.254 address (dhcpcd IPv4LL): the wait goes on", seen)
     for mod in ("serve", "forgeserve"):
         src = open(os.path.join(REPO, "lib", "spark", mod + ".py")).read()
         t.ok("_wait_lan_ip" not in src and "wait_lan_ip(" in src,
@@ -5932,7 +5962,8 @@ def main():
         # disable, a missing dir absent
         os.makedirs(home + "/svbin", exist_ok=True)
         with open(home + "/svbin/sv", "w") as f:
-            f.write('#!/bin/sh\necho "sv $*" >> "${SV_LOG:-/dev/null}"\ncase $1 in\n'
+            f.write('#!/bin/sh\nx=""; [ "$1" != exit ] || { [ -f "$2/down" ] && x=" down=yes" || x=" down=no"; }\n'
+                    'echo "sv $*$x" >> "${SV_LOG:-/dev/null}"\ncase $1 in\n'
                     '    status) if [ ! -d "$2/supervise" ]; then echo "fail: $2: runsv not running"; exit 1\n'
                     '            elif [ -f "$2/down" ]; then echo "down: $2: 1s, normally up"\n'
                     '            else echo "run: $2: (pid 1) 1s"; fi ;;\n'
@@ -5941,39 +5972,55 @@ def main():
         os.chmod(home + "/svbin/sv", 0o755)
         vhome = home + "/void-home"
         vd = vhome + "/.config/spark/sv/spark-serve"
-        _eng = r'''
+        _eng = r"""
 import os
 from spark import engine
 d = engine.service_dir("serve")
 print("dir", d)
 print("name", engine.unit_name("serve"), engine.unit_name("check"))
 print("parse", engine.parse_sv_status("run: /x: (pid 1) 1s"), engine.parse_sv_status("down: /x: 1s, normally up"),
-      engine.parse_sv_status("fail: /x: runsv not running"), engine.parse_sv_status(""))
+      engine.parse_sv_status("fail: /x: runsv not running"), engine.parse_sv_status(""),
+      engine.parse_sv_status("finish: /x: (pid 9) 2s, normally up"))
 print("absent", engine.service_state(None, "serve"), engine.sv_status("serve"))
 os.makedirs(d)
+print("unsupervised", engine.service_state(None, "serve"))
+os.makedirs(os.path.join(d, "supervise"))
 print("loaded", engine.service_state(None, "serve"))
 open(os.path.join(d, "down"), "w").close()
 print("disabled", engine.service_state(None, "serve"))
 os.remove(os.path.join(d, "down"))
 print("stop", engine.service_stop(False, "serve"), "|", os.path.exists(os.path.join(d, "down")))
 print("stopnr", engine.service_stop(True, "serve"), "|", os.path.exists(os.path.join(d, "down")))
-os.makedirs(os.path.join(d, "supervise"))
 print("status", engine.sv_status("serve"))
 os.remove(os.path.join(d, "down"))
 print("status", engine.sv_status("serve"))
 print("kick", engine.kickstart(None, "serve"), engine.kickstart(None, "serve", restart=True))
+open(os.path.join(d, "down"), "w").close()
+print("start", engine.service_start(None, "serve"), os.path.exists(os.path.join(d, "down")))
 os.environ["SV_FAIL"] = "1"
 print("kickfail", engine.kickstart(None, "serve"))
+print("startfail", engine.service_start(None, "serve"))
+del os.environ["SV_FAIL"]
+print("unit", engine.unit_state(None, "serve"))
 print("restart", engine.restart_line("serve"), "|", engine.restart_line("check"))
-'''
+P = engine.parse_unit_state
+print("runit", P("runit", "finish: /x: (pid 9) 2s, normally up"), P("runit", "run: /x: (pid 42) 3s"),
+      P("runit", "down: /x: 1s, normally up"), P("runit", "fail: /x: runsv not running"))
+print("systemd", P("systemd", "MainPID=77\nActiveState=active\nSubState=running"),
+      P("systemd", "MainPID=0\nActiveState=activating\nSubState=auto-restart"),
+      P("systemd", "MainPID=0\nActiveState=inactive\nSubState=dead"), P("systemd", "ActiveState=failed"))
+print("launchd", P("launchd", "gui/501/spark.serve = {\n\tstate = running\n\tpid = 88\n}"),
+      P("launchd", "gui/501/spark.serve = {\n\tstate = not running\n}"), P("launchd", ""))
+"""
         _svlog = home + "/sv-twin.log"
         got = twin(_eng, HOME=vhome, XDG_CONFIG_HOME=vhome + "/.config", XDG_STATE_HOME=vhome + "/.local/state",
                    PATH=home + "/svbin:" + env["PATH"], SV_LOG=_svlog)
         want = "\n".join([
             "dir " + vd,
             "name spark-serve spark-check",
-            "parse run down absent absent",
+            "parse run down absent absent finish",
             "absent absent ('absent', '')",
+            "unsupervised absent",
             "loaded loaded",
             "disabled disabled",
             "stop sv up ~/.config/spark/sv/spark-serve | False",
@@ -5981,21 +6028,124 @@ print("restart", engine.restart_line("serve"), "|", engine.restart_line("check")
             "status ('down', 'down: %s: 1s, normally up')" % vd,
             "status ('run', 'run: %s: (pid 1) 1s')" % vd,
             "kick True True",
+            "start True False",
             "todo   serve        sv up spark-serve failed: fail: %s: runsv not running" % vd,
             "kickfail False",
+            "todo   serve        sv up spark-serve failed: fail: %s: runsv not running" % vd,
+            "startfail False",
+            "unit ('run', 1)",
             "restart sv restart ~/.config/spark/sv/spark-serve; tail ~/.local/state/spark/log/spark-serve/current | "
             "sv restart ~/.config/spark/sv/spark-check; tail ~/.local/state/spark/log/spark-check/current",
+            "runit ('finish', 0) ('run', 42) ('down', 0) ('', 0)",
+            "systemd ('run', 77) ('finish', 0) ('down', 0) ('down', 0)",
+            "launchd ('run', 88) ('finish', 0) ('down', 0)",
         ])
-        t.ok(got == want, "engine on runit: the dir is the unit, down is the disable, sv status's three words, the undo lines, "
-             "sv up/restart through kickstart and its todo, restart_line per unit",
+        t.ok(got == want, "engine on runit: the dir is the unit only while a runsv answers, down is the disable, sv status's "
+             "four words (finish is its own), the undo lines, sv up/restart through kickstart and service_start (the down "
+             "file goes) and their todo, restart_line per unit, parse_unit_state per init",
              "\n".join(l for l in got.splitlines() if l not in want.splitlines()) or got)
         try:
             with open(_svlog) as f:
                 _svcalls = f.read().splitlines()
         except OSError:
             _svcalls = []
-        t.ok(_svcalls == ["sv down " + vd, "sv down " + vd, "sv status " + vd, "sv status " + vd, "sv up " + vd, "sv restart " + vd, "sv up " + vd],
-             "engine on runit: sv is asked by the dir's path -- down twice (a stop, a stop with the down file), status, up, restart, up", str(_svcalls))
+        t.ok(_svcalls == ["sv status " + vd] * 3 + ["sv down " + vd, "sv down " + vd, "sv status " + vd, "sv status " + vd,
+                                                    "sv up " + vd, "sv restart " + vd, "sv up " + vd, "sv up " + vd,
+                                                    "sv up " + vd, "sv status " + vd],
+             "engine on runit: sv is asked by the dir's path -- status for the state (a runsv must answer), down twice, "
+             "status, up, restart, up through service_start, the two failing ups, status for unit_state", str(_svcalls))
+        # v1.64: a pid file is signalled only when its command line is
+        # spark's own (serve.pid a llama-server or `serve --foreground`,
+        # forge.pid a `forge --foreground`), written 0600 even over an
+        # older 0644 one; uninstall touches each runit dir's `down` before
+        # `sv exit` (runsvdir's next scan must not start it again) and
+        # leaves a forge.pid that names someone else's process alone
+        _pid = r"""
+import os, subprocess, sys, time
+from spark import FORGE_PID, PID_FILE, engine, state_dir, uninstall
+state_dir()
+open(PID_FILE, "w").close(); os.chmod(PID_FILE, 0o644)
+fake = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)", "llama-server", "--port", "1"])
+other = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+forge = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)", "forge", "--foreground"])
+time.sleep(0.3)
+engine.write_pidfile(fake.pid)
+print("mode", oct(os.stat(PID_FILE).st_mode & 0o777), engine.pidfile_pid() == fake.pid)
+engine.write_pidfile(other.pid)
+print("foreign", engine.pidfile_pid())
+gone = subprocess.Popen([sys.executable, "-c", "pass", "llama-server"]); gone.wait()
+engine.write_pidfile(gone.pid)
+print("gone", engine.pidfile_pid())
+engine.write_pid(FORGE_PID, forge.pid)
+print("forge", engine.pid_of(FORGE_PID, engine.FORGE_MARKS) == forge.pid, engine.pid_of(FORGE_PID, engine.SERVER_MARKS))
+for u in uninstall.SV_UNITS:
+    os.makedirs(os.path.join(engine.service_dir(u), "supervise"), exist_ok=True)
+engine.write_pid(FORGE_PID, other.pid)
+uninstall.step_services(uninstall.Ctx(False, False, False))
+print("left alone", other.poll() is None, all(not os.path.exists(engine.service_dir(u)) for u in uninstall.SV_UNITS))
+engine.write_pid(FORGE_PID, forge.pid)
+uninstall.step_services(uninstall.Ctx(False, False, False))
+try:
+    forge.wait(timeout=10)
+    print("forge ended", True)
+except subprocess.TimeoutExpired:
+    print("forge ended", False)
+for p in (fake, other, forge):
+    p.kill()
+"""
+        _svlog2 = home + "/sv-uninstall.log"
+        uhome = home + "/void-uninstall"
+        got = twin(_pid, HOME=uhome, XDG_CONFIG_HOME=uhome + "/.config", XDG_STATE_HOME=uhome + "/.local/state",
+                   XDG_DATA_HOME=uhome + "/.local/share", PATH=home + "/svbin:" + env["PATH"], SV_LOG=_svlog2,
+                   SPARK_PORT="1", SPARK_ETC_SV=home + "/no-etc-sv", USER="spark-twin")
+        want = "\n".join(["mode 0o600 True", "foreign 0", "gone 0", "forge True 0"])
+        t.ok(got.startswith(want), "pid files: 0600 over an older 0644 one; signalled only when the command line is spark's "
+             "(a llama-server, a forge --foreground; a foreign pid or a dead one is 0)", got)
+        t.ok("left alone True True" in got, "uninstall: a forge.pid naming someone else's process leaves it alone", got)
+        t.ok("forge ended True" in got, "uninstall: a forge.pid naming the page's server stops it", got)
+        try:
+            with open(_svlog2) as f:
+                _exits = [l for l in f.read().splitlines() if l.startswith("sv exit ")]
+        except OSError:
+            _exits = []
+        t.ok(len(_exits) == 3 and all(l.endswith(" down=yes") for l in _exits),
+             "uninstall on runit: each dir's down file is there before sv exit (runsvdir's rescan starts nothing)", str(_exits))
+        # v1.64: runit's finish: (the run exited, runsv brings it back) is
+        # its own state -- enabled, not running -- so the services row
+        # warns with the restart line, never "on demand"
+        _fin = r"""
+import os
+from spark import check, engine
+class C(check.Ctx):
+    def sh(self, cmd, timeout=10, env=None):
+        if cmd[:2] == ["sv", "status"]:
+            said = {"spark-check": "run: %s: (pid 3) 9s", "spark-serve": "finish: %s: (pid 4) 1s, normally up",
+                    "spark-forge": "run: %s: (pid 5) 9s"}
+            return 0, said[os.path.basename(cmd[2])] % cmd[2]
+        return check.Ctx.sh(self, cmd, timeout, env)
+for u in ("check", "serve", "forge"):
+    os.makedirs(engine.service_dir(u), exist_ok=True)
+c = C(fresh=True)
+print(check._runit_user(c, "serve"))
+r = check.row_services(c)
+print(r.status, "|", r.value, "|", r.remedy)
+r = check.row_headless(c)
+print(r.status, "|", r.value)
+from spark import site
+site.cmd_headless([])
+"""
+        fhome = home + "/void-finish"
+        got = twin(_fin, HOME=fhome, XDG_CONFIG_HOME=fhome + "/.config", XDG_STATE_HOME=fhome + "/.local/state",
+                   SPARK_VAR_SERVICE=home + "/void-service", SPARK_PORT="1")
+        lines = got.splitlines()
+        t.ok(len(lines) > 2 and lines[0] == "('enabled', 'restarting')" and lines[1].startswith("warn |")
+             and "serve restarting" in lines[1] and "sv restart ~/.config/spark/sv/spark-serve" in lines[1],
+             "runit finish: enabled, not running -- the services row warns and names the restart line", got)
+        # runit runs the services from boot, headless or not: the row and
+        # `spark headless` never say "under your login" there
+        t.ok(len(lines) > 3 and lines[2] == "na | the services run from boot on runit, headless or not"
+             and lines[3] == "spark headless -- SITE_HEADLESS=no: the services run from boot on runit, headless or not",
+             "runit, not headless: the headless row and spark headless say the services run from boot anyway", got)
         if sys.platform != "darwin":
             wsl = dict(SPARK_PROC_VERSION=home + "/version-wsl", SPARK_NO_APPLY="1")
             rc, out, _ = spark("headless", "on", extra=wsl)

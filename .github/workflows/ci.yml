@@ -33,7 +33,7 @@ jobs:
       - name: syntax
         # one file per call: `sh -n A B` parses A and hands B to it as $1
         run: |
-          for f in bootstrap.sh install.sh lib/env.sh get .githooks/pre-commit .githooks/pre-push tests/install_test.sh; do sh -n "$f"; done
+          for f in bootstrap.sh install.sh lib/env.sh get .githooks/pre-commit .githooks/pre-push tests/install_test.sh tests/finish_test.sh; do sh -n "$f"; done
           for f in home/.config/spark/completion.bash home/.config/spark/hook.bash home/.config/spark/widget.bash; do bash -n "$f"; done
           python3 -m py_compile bin/spark lib/spark/*.py tests/*.py
           sudo apt-get install -y -qq shellcheck >/dev/null && shellcheck -S warning bootstrap.sh install.sh lib/env.sh get .githooks/pre-commit .githooks/pre-push
@@ -64,6 +64,7 @@ jobs:
           sh tests/get_test.sh
           sh tests/update_test.sh
           sh tests/uninstall_test.sh
+          sh tests/finish_test.sh
           python3 tests/smoke.py
           python3 tests/serve_smoke.py
           python3 tests/forge_smoke.py
@@ -255,6 +256,7 @@ jobs:
           sh tests/get_test.sh
           sh tests/update_test.sh
           sh tests/uninstall_test.sh
+          sh tests/finish_test.sh
           /usr/bin/python3 tests/smoke.py
           /usr/bin/python3 tests/serve_smoke.py
           /usr/bin/python3 tests/forge_smoke.py

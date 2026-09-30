@@ -74,7 +74,7 @@ print(", ".join(w for w, p in SOURCE_SHAPES if w not in paste_only + source_only
 fi
 
 # --- 2. syntax ------------------------------------------------------------
-for f in bootstrap.sh install.sh get .githooks/pre-commit .githooks/pre-push tests/install_test.sh tests/uninstall_test.sh; do
+for f in bootstrap.sh install.sh get .githooks/pre-commit .githooks/pre-push tests/install_test.sh tests/uninstall_test.sh tests/finish_test.sh; do
     [ -f "$f" ] || continue
     sh -n "$f" || bad "sh -n $f"
 done
@@ -100,6 +100,10 @@ fi
 for t in tests/smoke.py tests/serve_smoke.py tests/forge_smoke.py tests/bench_smoke.py tests/vault_test.py tests/sandbox_test.py tests/knowledge_test.py tests/qr_test.py tests/docs_test.py tests/policy_test.py; do
     [ -f "$t" ] && { python3 "$t" >/dev/null || bad "$t"; }
 done
+# the runit finish scripts, run as runsv runs them (sv and sleep stubbed)
+if [ -f tests/finish_test.sh ]; then
+    sh tests/finish_test.sh >/dev/null || bad "tests/finish_test.sh"
+fi
 if [ -f tests/widget_pty.py ]; then
     case "$(uname -s)" in
         Darwin) python3 tests/widget_pty.py zsh home/.config/spark/widget.zsh >/dev/null || bad "widget_pty zsh"
