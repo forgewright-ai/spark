@@ -1459,6 +1459,18 @@ def engine_wire_cases(t, spark, home, url):
          "line: the role seam keeps the line's own system message (no identity for the ember)")
 
 
+def server_pids_cases(t):
+    """v1.64: a process counts as the engine only when its program IS
+    llama-server -- a shell whose command line mentions it is not."""
+    from spark import engine as _en
+    ps = ("  101 /x/llama.cpp-b1/llama-server -m m.gguf --host 192.0.2.5 --port 8080 -c 8192\n"
+          "  202 bash -c pgrep -f 'llama-server.*--port 8080'\n"
+          "  303 /x/llama-server -m m.gguf --port 80800\n"
+          "  404 vim notes-about-llama-server --port 8080\n"
+          "  505 /usr/bin/python3 /t/fake/llama-server --port 8080\n")
+    t.ok(_en.pids_in_ps(ps, 8080) == [101, 505], "engine: only a real llama-server on the port is one", str(_en.pids_in_ps(ps, 8080)))
+
+
 def living_core_cases(t):
     """v1.59, the living prompt's core: an unawakened machine prints
     today's bytes (the pulse, the wrap, the check's colours); awakened,
@@ -6868,6 +6880,7 @@ site.cmd_headless([])
              "%s clears the hint it drew when Ctrl-U empties the line" % name)
 
     knowledge_cases(t)
+    server_pids_cases(t)
     living_core_cases(t)
     living_awaken_cases(t)
     living_widget_cases(t)

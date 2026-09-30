@@ -579,11 +579,19 @@ def mem_needed_gb(cfg, model):
 def server_pids(port):
     """pids of every llama-server bound to this port, ours or not"""
     rc, out = run(["ps", "-axo", "pid=,command="])
-    pat = re.compile(r"llama-server\b.*--port\s+%d\b" % port)
+    return pids_in_ps(out, port)
+
+
+def pids_in_ps(out, port):
+    """The pids in `ps -o pid=,command=` output whose program IS
+    llama-server (the first word's basename, or the second's after an
+    interpreter) with --port PORT: a shell or an editor whose command
+    line merely mentions both is not one."""
+    pat = re.compile(r"(?:^|\s)--port\s+%d(?:\s|$)" % port)
     pids = []
     for line in out.splitlines():
         p = line.split(None, 1)
-        if len(p) == 2 and pat.search(p[1]):
+        if len(p) == 2 and "llama-server" in [os.path.basename(w) for w in p[1].split()[:2]] and pat.search(p[1]):
             try:
                 pids.append(int(p[0]))
             except ValueError:
