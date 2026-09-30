@@ -130,7 +130,12 @@ class H(BaseHTTPRequestHandler):
     def do_GET(self):
         body = json.dumps({"status": "ok", "forge": True, "version": open(sys.argv[1]).read().strip()}).encode()
         self.send_response(200); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
-srv = HTTPServer(("127.0.0.1", 0), H)
+class S(HTTPServer):
+    def server_bind(self):          # no getfqdn: a runner's DNS can stall it
+        import socketserver
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = "localhost", self.server_address[1]
+srv = S(("127.0.0.1", 0), H)
 open(sys.argv[2], "w").write(str(srv.server_address[1]))
 srv.serve_forever()
 PY
