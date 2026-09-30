@@ -122,7 +122,7 @@ SH
 chmod +x "$T/svbin/sv"
 for s in spark-serve spark-forge; do mkdir -p "$HOME/.config/spark/sv/$s/supervise"; done
 printf '0.0-old\n' > "$T/page-version"
-python3 - "$T/page-version" "$T/page-port" <<'PY' &
+cat > "$T/page.py" <<'PY'
 import json, sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 class H(BaseHTTPRequestHandler):
@@ -134,8 +134,10 @@ srv = HTTPServer(("127.0.0.1", 0), H)
 open(sys.argv[2], "w").write(str(srv.server_address[1]))
 srv.serve_forever()
 PY
+python3 "$T/page.py" "$T/page-version" "$T/page-port" > "$T/page.log" 2>&1 < /dev/null &
 page=$!
 i=0; while [ ! -s "$T/page-port" ] && [ "$i" -lt 200 ]; do sleep 0.1; i=$((i + 1)); done
+[ -s "$T/page-port" ] || { echo "the stub page did not start ($(command -v python3)):"; cat "$T/page.log"; }
 mkdir -p "$HOME/.local/state/spark"
 printf 'http://127.0.0.1:%s\n' "$(cat "$T/page-port")" > "$HOME/.local/state/spark/forge-url"
 urun() { env SPARK_OS=Linux SPARK_ETC_RUNIT="$T/runit" SV_LOG="$T/sv.log" PATH="$T/svbin:$PATH" "$SPARK" update 2>&1; }
@@ -151,6 +153,15 @@ rm -f "$T/sv.log"
 out=$(urun) && ok "not moved, the page on this tree: exits 0" || bad "current page: rc $? $out"
 grep -q ' restart ' "$T/sv.log" 2>/dev/null && bad "the page on this tree, yet a restart: $(tr '\n' ' ' < "$T/sv.log")" \
     || ok "not moved, the page on this very version: nothing restarts"
+# a stale page started by hand (no page unit): one line says so, nothing
+# restarts that hand process
+printf '0.0-old\n' > "$T/page-version"
+rm -rf "$HOME/.config/spark/sv/spark-forge" "$T/sv.log"
+out=$(urun) && ok "not moved, a stale page by hand: exits 0" || bad "stale hand page: rc $? $out"
+printf '%s\n' "$out" | grep -q "started by hand: spark serve off; spark serve on" \
+    && ! grep -q "spark-forge" "$T/sv.log" 2>/dev/null && kill -0 "$page" 2>/dev/null \
+    && ok "not moved, a stale page by hand: said in one line, the hand process left alone" \
+    || bad "stale hand page: $out $(tr '\n' ' ' < "$T/sv.log" 2>/dev/null)"
 { kill "$page"; wait "$page"; } 2>/dev/null || true
 rm -rf "$HOME/.config/spark/sv" "$HOME/.local/state/spark/forge-url"
 

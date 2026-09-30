@@ -647,6 +647,16 @@ def row_serve(ctx):
     return warn("serve-url says %s but nothing answers" % url.split("//")[-1], "spark serve off   (clears it)")
 
 
+def _page_restart(ctx):
+    """The page alone restarted: its unit by its init's own line (the
+    engine and spark.env untouched); a page by hand has no unit, so the
+    one verb that starts it again."""
+    from . import engine
+    if engine.forge_service_state(ctx.cfg) == "absent":
+        return "spark serve off; spark serve on"
+    return engine.restart_line("forge")
+
+
 @row("CAPABILITY")
 def row_forge(ctx):
     from . import engine, forge_url, lan_ip, wire
@@ -663,17 +673,15 @@ def row_forge(ctx):
     if "0.0.0.0" in url:
         problems.append("bound to 0.0.0.0")
     if problems:
-        return warn("; ".join(problems), "chmod 600 %s; spark serve off; spark serve on   (SPARK_FORGE_HOST picks the address)"
-                    % " ".join(loose or [ctx.short(ctx.cfg.forge_token_file)]))
+        return warn("; ".join(problems), "chmod 600 %s; %s   (SPARK_FORGE_HOST picks the address)"
+                    % (" ".join(loose or [ctx.short(ctx.cfg.forge_token_file)]), _page_restart(ctx)))
     where = url.split("//")[-1]
     host = where.split(":")[0]
     fh = wire.forge_health(url, timeout=2)
     if isinstance(fh, dict):
         ip = lan_ip()
         if ip and host not in (ip, "127.0.0.1", "localhost"):
-            st = engine.forge_service_state(ctx.cfg)
-            return warn("moved: serving on %s but the LAN address is now %s (DHCP)" % (host, ip),
-                        "spark serve off; spark serve on" if st == "absent" else engine.restart_line("forge"))
+            return warn("moved: serving on %s but the LAN address is now %s (DHCP)" % (host, ip), _page_restart(ctx))
         up = fh.get("upstream") or "down"
         model = os.path.basename(str(fh.get("model") or "-")).replace(".gguf", "")
         value = "at %s, model %s, upstream %s" % (where, model, up)
@@ -683,11 +691,10 @@ def row_forge(ctx):
         # code with every row green: the health's version must match
         ver, mine = str(fh.get("version") or ""), version.version()
         if ver and mine and ver != mine:
-            return warn("the page's server runs %s, the tree is %s" % (ver, mine),
-                        "spark serve off; spark serve on")
+            return warn("the page's server runs %s, the tree is %s" % (ver, mine), _page_restart(ctx))
         return ok(value)
     if fh is None:
-        return warn("forge-url says %s but what answers is not the page's server" % where, "spark serve off; spark serve on")
+        return warn("forge-url says %s but what answers is not the page's server" % where, _page_restart(ctx))
     return warn("forge-url says %s but nothing answers" % where, "spark serve on   (or spark serve off to forget it)")
 
 
@@ -806,7 +813,7 @@ def row_hardening(ctx):
         broken = [g for g in gates if not g[1]] or [("probe", False, "no gates answered")]
         return warn("%d of %d gates hold at %s -- %s" % (len(held), len(gates), where,
                                                           "; ".join("%s: %s" % (g[0], g[2]) for g in broken[:3])),
-                    "spark serve off; spark serve on   (the page's server must be this tree's; spark update)")
+                    _page_restart(ctx) + "   (the page's server must be this tree's; spark update)")
     return ok("%d of %d gates hold at %s" % (len(held), len(gates), where))
 
 

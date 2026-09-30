@@ -157,6 +157,12 @@ def main():
         latin = subprocess.Popen([sys.executable, "-c", "import os, sys, time\nwhile os.getppid() == int(sys.argv[1]): time.sleep(0.5)",
                                   str(os.getpid()), "t\udce9tulo.txt"])
 
+        # a fresh machine: nothing runs, no unit -- bare serve says what is
+        # true, never "on ... kept up" read from the defaults
+        rc, out, _ = spark("serve")
+        ok(rc == 0 and out.startswith("spark serve -- not set: spark serve on runs the engine and the page")
+           and "kept up" not in out, "bare spark serve on a fresh machine: not set, how to start", out)
+
         # serve: token, serve-url, pidfile, argv
         rc, out, err = spark("serve", "on")
         ok(rc == 0 and "ready (pid" in out, "spark serve starts and waits for /health", out + err)
@@ -250,6 +256,10 @@ def main():
         rc, out, _ = spark("serve", "--login")
         ok(rc == 0 and out.splitlines()[0] == furl + "/login" and ("spark client " + furl) in out,
            "serve --login: the page's login URL, then how another machine joins", out)
+        rc, out, _ = spark("serve", "--login", extra={"SITE_AI_MODEL": "none", "SITE_PEER_AI_URL": "http://192.0.2.10:8081"})
+        ok(rc == 0 and "a client of 192.0.2.10:8081" in out and "spark serve --login there" in out
+           and "spark client " not in out.replace("spark client off", ""),
+           "serve --login on a client: names the other machine, no join steps for itself", out)
         rc, out, _ = spark("serve", "bogus")
         ok(rc == 2 and out.startswith("spark serve -- "), "serve with an unknown word: the usage, exit 2", out)
 
@@ -405,6 +415,26 @@ def main():
         ok(rc == 0 and wait_down(up) and get(url + "/health") == 0 and os.path.exists(svd + "/down")
            and ("sv down " + svd) in open(svlog).read(),
            "the unit's server running: serve off stops it and keeps it down (its down file, sv down)", out + err)
+
+        # 1b. the unit disabled on purpose (serve off above): only `serve
+        #    on` starts it. `serve --host ADDR` and setup's start (a bare
+        #    cmd_serve) go by hand -- the down file stays, no sv up
+        open(svlog, "w").close()
+        rc, out, err = spark("serve", "--host", "127.0.0.1", extra=unit)
+        hand = int(open(state + "/serve.pid").read()) if os.path.exists(state + "/serve.pid") else 0
+        ok(rc == 0 and "ready (pid" in out and os.path.exists(svd + "/down") and "sv up" not in open(svlog).read()
+           and hand and hand != unit_pid(),
+           "a disabled unit: serve --host ADDR binds ADDR by hand, never re-enables the unit", out + err + open(svlog).read())
+        rc, out, err = spark("serve", "off", extra=unit)
+        ok(rc == 0 and wait_down(hand), "and serve off stops that hand server", out + err)
+        p = subprocess.run([sys.executable, "-c", "import sys; sys.path.insert(0, %r)\nfrom spark import serve\n"
+                            "sys.exit(serve.cmd_serve([]))" % os.path.join(REPO, "lib")],
+                           capture_output=True, text=True, env=dict(env, **unit), timeout=120)
+        hand = int(open(state + "/serve.pid").read()) if os.path.exists(state + "/serve.pid") else 0
+        ok(p.returncode == 0 and os.path.exists(svd + "/down") and "sv up" not in open(svlog).read() and hand and hand != unit_pid(),
+           "a disabled unit: setup's start (cmd_serve, not serve on) goes by hand, the unit stays down", p.stdout + p.stderr)
+        rc, out, err = spark("serve", "off", extra=unit)
+        ok(rc == 0 and wait_down(hand), "and serve off stops it again", out + err)
 
         # 2. the unit down (it stood down) and spark's own server by hand
         #    on the port: serve off stops that one -- the services row's

@@ -239,8 +239,13 @@ def cmd_update(args):
         # nothing moved, yet the units may run an older tree (a pull by
         # hand, an update whose restart failed): the page says which
         # version it runs, and a stale one is restarted like a move
-        from . import config
+        from . import config, engine
         if _page_is_stale():
-            _restart_units(config.load())
+            cfg = config.load()
+            _restart_units(cfg)
+            if engine.service_state(cfg, "forge") != "loaded":
+                # a page started by hand is nobody's to restart here
+                say("%s update -- the page's server here runs another version, started by hand: "
+                    "spark serve off; spark serve on puts it on this tree" % MARK)
         _door()
     return rc

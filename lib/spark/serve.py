@@ -197,18 +197,25 @@ def _through_unit(cfg, url, quiet):
     return 0
 
 
-def cmd_serve(args, by_hand=False, wait_unit=False):
+def cmd_serve(args, by_hand=False, wait_unit=False, start_disabled=False):
     """The engine's half of `spark serve on`, and the unit's
     `--foreground`. by_hand: a restart of a server spark started by hand
     stays by hand (model, bench) -- it never enables a unit disabled on
     purpose. wait_unit: bootstrap enabled the unit just now (`spark serve
-    on`), so its server loading is waited for, not refused."""
+    on`), so its server loading is waited for, not refused.
+    start_disabled: only `spark serve on` starts a unit disabled on
+    purpose (`serve off` kept it down); every other caller goes through
+    a loaded unit, else by hand. `--host ADDR` binds ADDR, by hand: the
+    unit binds its own address."""
     cfg = config.load()
     fg = "--foreground" in args
     host = ""
     if "--host" in args:
         i = args.index("--host")
         host = args[i + 1] if i + 1 < len(args) else ""
+        if not host or host.startswith("-"):
+            return _die("--host needs an address", 2)
+        by_hand = True
     if "--warm-when-up" in args:
         # the server's pid follows the flag; an older unit's helper had
         # none and watched its parent -- that parent is the server too
@@ -279,7 +286,7 @@ def cmd_serve(args, by_hand=False, wait_unit=False):
         what = sep.join("%s %s (%.1f GB)" % (role, os.path.basename(files[role]), os.path.getsize(files[role]) / 2**30)
                         for role in engine.ROLES if files[role])
         say("%s serve%sengine %s%s%s%s%s (token required)" % (MARK, sep, engine.engine_dir(cfg), sep, what, sep, url))
-    if unit in ("loaded", "disabled"):
+    if unit == "loaded" or (unit == "disabled" and start_disabled):
         rc = _through_unit(cfg, url, quiet)
         if rc is not None:
             return rc
@@ -431,21 +438,26 @@ def cmd_show():
         from .check import client_of
         say("%s serve -- %s" % (MARK, client_of(cfg)))
     else:
+        url = wire.serve_url() or "http://%s:%d" % (cfg.serve_host or lan_ip() or "<lan-ip>", cfg.port)
+        st = wire.health(url)
+        furl = forge_url()
+        fh = wire.forge_health(furl) if furl else "down"
+        units = (engine.service_state(cfg), engine.service_state(cfg, "forge"))
         kept = _kept(cfg)
+        if kept == "on" and st not in ("ok", "loading") and not isinstance(fh, dict) and units == ("absent", "absent"):
+            # the defaults read "on", but nothing runs and no unit exists:
+            # a fresh machine, not one kept up
+            kept = "not set: spark serve on runs the engine and the page"
         say("%s serve -- %s" % (MARK, {"on": "on: the engine and the page, kept up",
                                        "off": "off: the engine and the page, kept down"}.get(kept, kept)))
     for label, value in rows:
         say("  %-8s %s" % (label, value))
     if cfg.base_url or cfg.client:
         return 0
-    url = wire.serve_url() or "http://%s:%d" % (cfg.serve_host or lan_ip() or "<lan-ip>", cfg.port)
-    st = wire.health(url)
     engine_is = {"ok": "serving at %s" % url, "loading": "loading its model at %s" % url}.get(st, "not running")
-    say("  %-8s %s (%s)" % ("engine", engine_is, UNIT_WORD[engine.service_state(cfg)]))
-    furl = forge_url()
-    fh = wire.forge_health(furl) if furl else "down"
+    say("  %-8s %s (%s)" % ("engine", engine_is, UNIT_WORD[units[0]]))
     page_is = ("%s/login" % furl) if isinstance(fh, dict) else "not running"
-    say("  %-8s %s (%s)" % ("page", page_is, UNIT_WORD[engine.service_state(cfg, "forge")]))
+    say("  %-8s %s (%s)" % ("page", page_is, UNIT_WORD[units[1]]))
     tok = cfg.forge_token_file
     if os.path.exists(tok):
         mode = os.stat(tok).st_mode & 0o777
@@ -495,7 +507,7 @@ def cmd_on(args):
     rc = site.apply(UNIT_ROWS)
     if rc:
         return rc
-    rc = cmd_serve(args, wait_unit=not os.environ.get("SPARK_NO_APPLY"))
+    rc = cmd_serve(args, wait_unit=not os.environ.get("SPARK_NO_APPLY"), start_disabled=True)
     if rc:
         return rc
     from . import forgeserve

@@ -5324,6 +5324,13 @@ def main():
         t.ok(re.search(r"^CAPABILITY\twarn\tforge\tthe page's server runs 0\.0, the tree is [^\t]+\tspark serve off; spark serve on", outf, re.M) is not None,
              "check: the forge row warns when the FORGE runs an older version than the tree",
              "\n".join(l for l in outf.splitlines() if "\tforge\t" in l))
+        # with a unit, the remedy restarts the page alone by its init's own
+        # line -- never serve off; on (the engine bounced, spark.env rewritten)
+        rc, outf, _ = spark("check", "--porcelain", "--fresh", extra={"SPARK_SERVICE_STATE": "loaded"})
+        _frow = "\n".join(l for l in outf.splitlines() if "\tforge\t" in l)
+        t.ok("the page's server runs 0.0" in _frow and "spark serve off" not in _frow
+             and re.search(r"restart spark-forge|kickstart -k \S*spark\.forge|sv restart \S*spark-forge", _frow) is not None,
+             "check: a page unit's stale server -- the remedy restarts the page's unit alone", _frow)
         os.remove(_stdir + "/forge-url")
         os.remove(_ftok)
 
@@ -5799,7 +5806,18 @@ def main():
         site_env = open(home + "/.config/spark/site.env").read()
         t.ok("SITE_AI_MODEL=none\n" in site_env and "SITE_AI_BUDGET=40" not in site_env and "SITE_EMBER_MODEL=qwen3" not in site_env,
              "the refusals wrote nothing", site_env)
-        rc, out, _ = spark("client", "off", extra=off)
+        # a joiner's shared token and a preference for the other machine:
+        # client off takes them too (off means off); another key stays
+        _senv = home + "/.config/spark/spark.env"
+        _keep = open(_senv).read() if os.path.exists(_senv) else ""
+        with open(_senv, "a") as f:
+            f.write("\nSPARK_API_KEY_FILE=%s/share-token\nSPARK_PREFER_URL=http://192.0.2.10:8080\n" % home)
+        rc, out, _ = spark("client", "off", extra=dict(off, SPARK_SHARE_TOKEN=home + "/share-token"))
+        _senv_after = open(_senv).read()
+        t.ok(rc == 0 and "SPARK_API_KEY_FILE=\n" in _senv_after and "SPARK_PREFER_URL=\n" in _senv_after,
+             "spark client off empties a joiner's SPARK_API_KEY_FILE and a SPARK_PREFER_URL naming the other machine", _senv_after)
+        with open(_senv, "w") as f:
+            f.write(_keep)
         site_env = open(home + "/.config/spark/site.env").read()
         t.ok(rc == 0 and "SITE_AI_MODEL=auto\n" in site_env and "not asked again until spark client URL" in out,
              "spark client off hands the model choice back to auto", out)

@@ -422,6 +422,16 @@ def cmd_client(args):
         # brain's order, wire.candidates) until `spark client URL`
         say("the other machine is not asked again until spark client URL; this machine serves its own model")
         set_keys(SITE_AI_MODEL="auto", SITE_PEER_AI_URL="")
+        # a joiner's shared token and a preference for the other machine
+        # go too: either would still send this machine there
+        gone = {}
+        if cfg.get("SPARK_API_KEY_FILE", "") == SHARE_TOKEN:
+            gone["SPARK_API_KEY_FILE"] = ""
+        prefer = cfg.get("SPARK_PREFER_URL", "")
+        if prefer and urlsplit(prefer).hostname == urlsplit(cfg.peer_ai_url or "").hostname:
+            gone["SPARK_PREFER_URL"] = ""
+        if gone:
+            set_keys(_file=SPARK_ENV, **gone)
         from . import model
         return model.cmd_model(["auto"])
     url = args[0].rstrip("/")

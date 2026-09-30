@@ -76,9 +76,12 @@ RUN_CAP = 1800                  # seconds a verb may run through /api/run
 RUN_ARG = re.compile(r"^[A-Za-z0-9._/:@+= -]{0,200}$")
 # The verbs the page may run, and what their arguments must be (None: any
 # that match RUN_ARG). The verb itself validates and applies; nothing else
-# from the LAN writes config.
+# from the LAN writes config. `serve` is the bare view and the rotate
+# button only: the page never switches the server (off, boot, share, the
+# token on show).
 RUN_VERBS = {"model": None, "ember": None, "bench": None, "on": None, "off": None,
-             "serve": None, "stop": None, "remember": None, "forget": None,
+             "serve": lambda a: a in ([], ["--login", "--new"]),
+             "stop": None, "remember": None, "forget": None,
              "tune": lambda a: a[:1] == ["apply"],
              "forge": lambda a: a == ["token", "--new"]}
 # Every route the server answers, and who may: none (open -- /api/login
@@ -1903,6 +1906,13 @@ def cmd_login(args):
     the admin token instead, asking first at a terminal."""
     if "--new" in args:
         return cmd_token(args)
+    cfg = config.load()
+    if cfg.client:
+        # nothing serves here: the login and the join steps are the other
+        # machine's, never this one's
+        from .check import client_of
+        say("%s serve -- %s: the login is the other machine's -- spark serve --login there" % (MARK, client_of(cfg)))
+        return 0
     rc = cmd_print_url(args)
     if rc == 0:
         say("\n".join(client_steps(_url_of(config.load()))))

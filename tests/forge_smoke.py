@@ -955,6 +955,9 @@ def main():
             for gone in ("theme", "font", "quiet"):
                 st, _, _ = req(url, "POST", "/api/run", {"verb": gone, "args": ["none"]}, headers=post)
                 ok(st == 400, "/api/run %s is no verb the page may run (v1.62) -> 400" % gone, st)
+            for args in (["off"], ["off", "--force"], ["boot", "on"], ["share", "on"], ["on"], ["--login", "--show-token"]):
+                st, _, _ = req(url, "POST", "/api/run", {"verb": "serve", "args": args}, headers=post)
+                ok(st == 400, "/api/run serve %s: the page never switches the server -> 400" % " ".join(args), st)
             st, _, _ = req(url, "POST", "/api/run", {"verb": "history", "args": ["clear"]}, headers=post)
             ok(st == 400, "/api/run history is gone (DELETE /api/threads instead) -> 400", st)
             st, _, _ = req(url, "POST", "/api/run", {"verb": "model", "args": ["none; rm -rf /"]}, headers=post)
