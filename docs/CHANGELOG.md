@@ -1,5 +1,39 @@
 # Changelog
 
+## v1.65
+
+The chat, awake. An awakened machine greets you in `spark chat`,
+wears its face on every reply and says goodbye. Every machine says
+which conversation the chat goes on with, and the chat gains four
+commands.
+
+- The continuing line, on every machine: `continuing "<first words>"
+  (N min ago) -- /new starts fresh`. The chat went on with the newest
+  thread before too, in silence.
+- Awake, the chat opens with the face and a greeting from the
+  machine's own words, then the continuing line, then `/help lists
+  the commands; Ctrl-D ends`. Unawakened, the opening is `chat --
+  /help, Ctrl-D or /q ends` and the continuing line.
+- Awake, each reply starts with the face, and its lines wrap under the
+  text. The face is thinking while a reply is on its way, idle on a
+  reply and puzzled on an error or a refusal. The puzzled face says
+  its hint as a whole sentence.
+- Awake, `/q`, `Ctrl-D` and the quit words end with the machine's
+  goodbye line and its pleased face. Unawakened, the chat still ends
+  in silence.
+- `/copy [N]` puts the last reply, or the Nth from the end, on the
+  clipboard: `pbcopy`, `wl-copy`, `xclip` or `xsel`. Without one it
+  says so and points at `/save`.
+- `/save [FILE]` writes the conversation as plain text, by default
+  `~/spark-chat-YYYY-MM-DD.txt`. It never overwrites a file, and the
+  file is 0600. It says the path and the turn count.
+- `/read @FILE [question]` answers about the file the way `spark read`
+  does, every line quoting it, and the exchange lands on the thread.
+- `/do GOAL` and `/do --sandbox GOAL` hand the goal to `spark do`,
+  each step confirmed, then return to `chat> `.
+- `@FILE` in an ordinary message is unchanged: a free answer about the
+  file.
+
 ## v1.64
 
 One server, and services that hold. The engine and the page are one

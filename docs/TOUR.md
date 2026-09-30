@@ -110,8 +110,13 @@ Two sentences are plenty. Then teach it one fact:
 
     spark memory add "short answers, and call me by name"
 
-Chat once with `spark chat` and feel the difference. The soul and the
-facts ride on every answer. The soul is a file under
+Chat once with `spark chat` and feel the difference. Inside it, ask
+about a file with its words quoted back:
+
+    /read @notes.txt what is due this week
+
+Then `/copy` puts that reply on your clipboard, where there is one.
+The soul and the facts ride on every answer. The soul is a file under
 `~/.config/spark/`. The facts live sealed in your store. Both go to the
 one server you chose: this machine's, or the one machine of yours a
 client points at.

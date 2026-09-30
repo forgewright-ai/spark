@@ -230,13 +230,70 @@ A script, a cron job and `ssh HOST 'spark ...'` name
 spark's hook in a shell that is not interactive, so `~/.local/bin` is
 not on `PATH`.
 
-`spark chat` is a conversation at a `chat> ` prompt. `/help` lists its
-verbs. `/q` or `Ctrl-D` ends. `Ctrl-C` clears the line, or cancels a
-reply, and the chat goes on. `spark chat --thread N` continues an older
-thread from the `spark history` list. A thread lives `SPARK_HISTORY`
-days. `/keep` keeps this one past that and past `spark clear --history`,
-and `/keep off` lets it go. With `SPARK_HISTORY=off`, `spark chat` goes
-on with the newest kept thread.
+`spark chat` is a conversation at a `chat> ` prompt. It goes on with
+your newest thread and says so in its opening lines:
+
+    continuing "how do I resize a partition" (12 min ago) -- /new starts fresh
+
+On a machine that is not awake, the opening is `chat -- /help, Ctrl-D
+or /q ends` and that line. Awake, it opens with the face and a greeting
+from the machine's own words, then the continuing line, then `/help
+lists the commands; Ctrl-D ends`.
+
+`/q` or `Ctrl-D` ends. `Ctrl-C` clears the line, or cancels a reply,
+and the chat goes on. `spark chat --thread N` continues an older thread
+from the `spark history` list. A thread lives `SPARK_HISTORY` days.
+With `SPARK_HISTORY=off`, `spark chat` goes on with the newest kept
+thread.
+
+The commands:
+
+| command | what it does |
+|---|---|
+| `/help` | lists the commands |
+| `/new` | a fresh thread |
+| `/resume [N]` | an older thread: bare lists the newest 5, N picks one |
+| `/clear` | wipes the screen, and the thread goes on |
+| `/keep` | keeps this thread past `SPARK_HISTORY` and `spark clear --history`. `/keep off` lets it go |
+| `/last` | the last turn, with its tok/s |
+| `/model` | which model answers |
+| `/reveal [N\|auto\|off]` | the pace of the replies. Bare, the measured numbers |
+| `/copy [N]` | the last reply, or the Nth from the end, to the clipboard |
+| `/save [FILE]` | the conversation as a text file |
+| `/read @FILE [question]` | an answer about the file, every line quoting it |
+| `/do GOAL` | a task, one confirmed step at a time, as `spark do` runs it |
+| `/do --sandbox GOAL` | the same task in a copy, as `spark do --sandbox` runs it |
+| `/q` | ends the chat |
+
+`/copy` uses the clipboard tool it finds: `pbcopy` on macOS, `wl-copy`
+on Wayland, `xclip` or `xsel` on X11. On the console or over ssh there
+is none, and it says `No clipboard here: /save writes the conversation
+to a file.`
+
+`/save` writes the conversation as plain text to FILE, by default
+`~/spark-chat-YYYY-MM-DD.txt`. It never overwrites a file: a second
+save that day gets `-2`, then `-3`. The file is 0600, and the chat says
+its path and how many turns it holds. The thread stays sealed, and the
+file is your own copy.
+
+`/read @FILE question` answers the way `spark read` does. Every line
+quotes the file, and a line the file does not hold is dropped. When
+nothing is left, one line says the file does not answer. The question
+and the answer land on the chat's thread. `@FILE` in an ordinary
+message stays a free answer about the file.
+
+`/do GOAL` hands the goal to `spark do`. Each step is confirmed as
+below, and `--sandbox` ends with the diff to review. Then you are back
+at `chat> `. The chat itself runs nothing.
+
+Awake, each reply starts with the face, and its lines wrap under the
+text, clear of it. The face shows the mood: thinking while a reply is
+on its way, idle on a reply, puzzled on an error or a refusal. A
+puzzled face says its hint as a whole sentence. `/q`, `Ctrl-D` and the
+quit words end with the machine's goodbye line and its pleased face.
+`spark words` shows the faces. Unawakened, the replies are bare text
+and the chat ends in silence. `/copy` and `/save` work on every
+machine.
 
 `spark <words>` streams one answer. `spark @FILE words` sends a text
 file's first 4 kB and last 12 kB with the question.
@@ -346,7 +403,9 @@ was. Run it again to start over. The 4 parts, which `spark look` shows:
 - Words: a greeting at the first prompt after 4 hours away, a change
   shown once (the model asleep or awake again, runs waiting) and the
   faces. A greeting may say a fact you asked it to remember. It shows
-  the fact and writes it nowhere.
+  the fact and writes it nowhere. In `spark chat` the words greet you,
+  the faces lead the replies and a goodbye ends it, as the chat says
+  above.
 
 Awake, a failed command that ran over 30 seconds says how long:
 `* failed (1) after 4 min -- press Esc s to ask why`.
