@@ -346,7 +346,7 @@ def row_services(ctx):
         parts, worst = [], OK
 
         def state(label):
-            # a LaunchDaemon (spark headless on) lives in root's system/ domain
+            # a LaunchDaemon (spark serve boot on) lives in root's system/ domain
             rc, _ = ctx.sh(["launchctl", "print", "system/" + label], 10)
             if rc == 0:
                 return "daemon"
@@ -400,8 +400,7 @@ def row_services(ctx):
         if sac != "active":
             if engine.server_pids(ctx.cfg.port):
                 parts.append("serve unit inactive; a hand-started server answers")
-                remedies.append("spark serve off; %s   (to hand it back to the unit)"
-                                % ("sv up " + ctx.short(engine.service_dir("serve")) if runit else "systemctl --user start spark-serve"))
+                remedies.append("spark serve off; spark serve on   (to hand it back to the unit)")
             else:
                 parts.append("serve %s" % sac)
                 remedies.append(engine.restart_line("serve"))
@@ -617,15 +616,15 @@ def row_serve(ctx):
     st = engine.service_state(ctx.cfg)
     url = wire.serve_url()
     if not url:
-        return na({"loaded": "managed, but has not written serve-url yet", "disabled": "disabled on purpose",
-                   "absent": "on demand, not running"}[st], "spark serve" if st != "disabled" else "")
+        return na({"loaded": "managed, but has not written serve-url yet", "disabled": "off on purpose",
+                   "absent": "on demand, not running"}[st], "spark serve on" if st != "disabled" else "")
     h = wire.health(url)
     host = url.split("//")[-1].split(":")[0]
     if h == "ok":
         ip = lan_ip()
         if ip and host not in (ip, "127.0.0.1", "localhost"):
             return warn("moved: serving on %s but the LAN address is now %s (DHCP)" % (host, ip),
-                        "spark serve off; spark serve on" if st == "absent" else "restart the unit")
+                        "spark serve off; spark serve on" if st == "absent" else engine.restart_line("serve"))
         try:
             served = wire.models(ctx.cfg, url)
         except wire.BrainError:
@@ -642,7 +641,7 @@ def row_serve(ctx):
         if cache and "--cache-ram" in ctx.cfg.extra_args:
             return ok(where + ", host cache %s MiB from SPARK_EXTRA_ARGS)" % cache)
         return warn(where + ") but the prompt cache in RAM is on: an older start",
-                    "spark serve off; spark serve on" if st == "absent" else "restart the unit")
+                    "spark serve off; spark serve on" if st == "absent" else engine.restart_line("serve"))
     if h == "loading":
         return warn("loading the model at %s" % url.split("//")[-1])
     return warn("serve-url says %s but nothing answers" % url.split("//")[-1], "spark serve off   (clears it)")
@@ -654,8 +653,8 @@ def row_forge(ctx):
     url = forge_url()
     if not url:
         if ctx.cfg.forge == "off":
-            return na("off on purpose (spark forge on)")
-        return na("not started (spark forge on)")
+            return na("off on purpose (spark serve on)")
+        return na("not started (spark serve on)")
     problems, loose = [], []
     tok = ctx.cfg.forge_token_file
     if not os.path.exists(tok) or os.stat(tok).st_mode & 0o077:
@@ -664,7 +663,7 @@ def row_forge(ctx):
     if "0.0.0.0" in url:
         problems.append("bound to 0.0.0.0")
     if problems:
-        return warn("; ".join(problems), "chmod 600 %s; spark forge off; spark forge on   (SPARK_FORGE_HOST picks the address)"
+        return warn("; ".join(problems), "chmod 600 %s; spark serve off; spark serve on   (SPARK_FORGE_HOST picks the address)"
                     % " ".join(loose or [ctx.short(ctx.cfg.forge_token_file)]))
     where = url.split("//")[-1]
     host = where.split(":")[0]
@@ -674,22 +673,22 @@ def row_forge(ctx):
         if ip and host not in (ip, "127.0.0.1", "localhost"):
             st = engine.forge_service_state(ctx.cfg)
             return warn("moved: serving on %s but the LAN address is now %s (DHCP)" % (host, ip),
-                        "spark forge off; spark forge on" if st == "absent" else "restart the unit")
+                        "spark serve off; spark serve on" if st == "absent" else engine.restart_line("forge"))
         up = fh.get("upstream") or "down"
         model = os.path.basename(str(fh.get("model") or "-")).replace(".gguf", "")
         value = "at %s, model %s, upstream %s" % (where, model, up)
         if up != "ok":
-            return warn(value, "spark serve")
+            return warn(value, "spark serve on")
         # a converge that moved the tree leaves the unit serving the OLD
         # code with every row green: the health's version must match
         ver, mine = str(fh.get("version") or ""), version.version()
         if ver and mine and ver != mine:
             return warn("the page's server runs %s, the tree is %s" % (ver, mine),
-                        "spark forge off; spark forge on")
+                        "spark serve off; spark serve on")
         return ok(value)
     if fh is None:
-        return warn("forge-url says %s but what answers is not the page's server" % where, "spark forge off; spark forge on")
-    return warn("forge-url says %s but nothing answers" % where, "spark forge on   (or spark forge off to forget it)")
+        return warn("forge-url says %s but what answers is not the page's server" % where, "spark serve off; spark serve on")
+    return warn("forge-url says %s but nothing answers" % where, "spark serve on   (or spark serve off to forget it)")
 
 
 @row("CAPABILITY")
@@ -698,20 +697,20 @@ def row_ember(ctx):
     pair = engine.chosen_rows(ctx.cfg)
     er = pair.get("ember")
     if ctx.cfg.ember_model == "none" or not er:
-        return na("spark answers everything (spark ember NAME adds one)")
+        return na("spark answers everything (spark model --chat NAME adds one)")
     budget = mem_total_gb() * ctx.cfg.ai_budget / 100.0
     need = er[5] + (pair["spark"][5] if pair.get("spark") else 0.0)
     stem = er[1].replace(".gguf", "")
     if need > budget:
         return warn("spark and the chat model %.0f GB > budget %.0f GB" % (need, budget),
-                    "spark ember list   (a pair that fits)")
+                    "spark model --chat list   (a pair that fits)")
     if not engine.model_file(ctx.cfg, "ember"):
         return warn("%s not downloaded" % stem, "./bootstrap.sh   (downloads it)")
     url = wire.serve_url()
     if url and wire.health(url) == "ok":
         st = engine.models_status(ctx.cfg, url).get("ember")
         if st and st != "loaded":
-            return warn("%s not warm" % stem, "spark serve   (warms it)")
+            return warn("%s not warm" % stem, "spark serve on   (warms it)")
         if st == "loaded":
             return ok("%s, loaded" % stem)
     return ok(stem)
@@ -794,7 +793,7 @@ def row_hardening(ctx):
     if not url:
         url = ctx.cfg.peer_ai_url
     if not url:
-        return na("no page served here and no other machine named (spark forge on, or spark client URL)")
+        return na("no page served here and no other machine named (spark serve on, or spark client URL)")
     where = url.split("//")[-1].rstrip("/")
     if not isinstance(wire.forge_health(url), dict):
         return na("%s is not up as the page's server (the forge and peer rows say why)" % where)
@@ -807,7 +806,7 @@ def row_hardening(ctx):
         broken = [g for g in gates if not g[1]] or [("probe", False, "no gates answered")]
         return warn("%d of %d gates hold at %s -- %s" % (len(held), len(gates), where,
                                                           "; ".join("%s: %s" % (g[0], g[2]) for g in broken[:3])),
-                    "spark forge off; spark forge on   (the page's server must be this tree's; spark update)")
+                    "spark serve off; spark serve on   (the page's server must be this tree's; spark update)")
     return ok("%d of %d gates hold at %s" % (len(held), len(gates), where))
 
 
@@ -1210,7 +1209,7 @@ def row_sends(ctx):
     if strange:
         dest, b = strange[0]
         return warn("%s went to %s today, not the address you configured" % (stats.kb(b), dest),
-                    "spark stats --sends; spark brain   (SPARK_BASE_URL / SITE_PEER_AI_URL name the destination)")
+                    "spark stats --sends; spark status   (SPARK_BASE_URL / SITE_PEER_AI_URL name the destination)")
     return ok(", ".join("%s to %s" % (stats.kb(b), dest) for _day, dest, b, _n in rows) + " today")
 
 
@@ -1327,7 +1326,7 @@ def row_headless(ctx):
         if not IS_MAC and init_shape() == "runit":
             # runsvdir-USER is a root service: from boot, login or not
             return na("the services run from boot on runit, headless or not")
-        return na("under your login; spark headless on keeps it up from boot")
+        return na("under your login; spark serve boot on keeps it up from boot")
     from . import site
     missing = [piece for piece, good, _ in site.headless_facts(ctx.cfg) if not good]
     if missing:
@@ -1342,17 +1341,17 @@ def row_headless(ctx):
 @row("CAPABILITY", fixture=False, reason="reads the real spark group and the shared token; the group needs root to create")
 def row_share(ctx):
     """This box's engine, shared with its other OS users: a `spark` group
-    reads a 0640 copy of the api-token (SITE_SHARE=yes; spark share on).
+    reads a 0640 copy of the api-token (SITE_SHARE=yes; spark serve share on).
     Never fails -- sharing is opt-in; a stale or mis-permissioned token warns."""
     from . import site
     if site.no_share():                                # macOS, WSL 2: not this machine's to share
         return na(site.no_share())
     if not ctx.cfg.share:
-        return na("not shared; spark share on lets this machine's OS users in")
+        return na("not shared; spark serve share on lets this machine's OS users in")
     facts = site.share_facts(ctx.cfg)
     bad = [piece for piece, good, _ in facts if not good]
     if bad:
-        return warn("check: " + ", ".join(bad), "spark share on   (re-syncs the token; sudo)")
+        return warn("check: " + ", ".join(bad), "spark serve share on   (re-syncs the token; sudo)")
     return ok(next((d for piece, _g, d in facts if piece == "spark group"), "shared with the spark group"))
 
 
@@ -1414,7 +1413,7 @@ VOID_ROWS = ()
 # a client's rows: nothing runs here (SITE_AI_MODEL=none + SITE_PEER_AI_URL),
 # so the engine, the units, their snapshot, the local AI, its two servers and
 # a second model of its own are na before they look; the peer row is where a
-# client's health lives, and `spark ember list` shows what the peer offers
+# client's health lives, and `spark model --chat list` shows what the peer offers
 CLIENT_ROWS = ("engine", "services", "watchdog", "ai", "serve", "forge", "ember")
 
 

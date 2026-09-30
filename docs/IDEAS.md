@@ -61,11 +61,11 @@ numbers spark already keeps and words that never leave.
 
 ## Parked
 
-A shared engine as a system service. `spark share`, since v1.22,
-covers the need through a `spark` group. The system-unit form, with a
-service account and models outside any home directory, costs root, a
-service user and new paths. Nothing asks for them yet, so it waits
-until the group model has been lived with.
+A shared engine as a system service. `spark serve share`, since
+v1.22, covers the need through a `spark` group. The system-unit form,
+with a service account and models outside any home directory, costs
+root, a service user and new paths. Nothing asks for them yet, so it
+waits until the group model has been lived with.
 
 ## Not prompt features
 

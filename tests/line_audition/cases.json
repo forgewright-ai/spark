@@ -3707,7 +3707,7 @@
      "spark"
     ],
     "spark_verb": [
-     "ember"
+     "model"
     ],
     "must_not": [
      "\\bsudo\\b"
@@ -3723,8 +3723,7 @@
      "spark"
     ],
     "spark_verb": [
-     "model",
-     "ember"
+     "model"
     ],
     "must_not": [
      "\\bsudo\\b"
@@ -3773,7 +3772,7 @@
      "spark"
     ],
     "spark_verb": [
-     "headless"
+     "serve"
     ],
     "must_not": [
      "\\bsudo\\b"
@@ -3790,7 +3789,7 @@
     ],
     "spark_verb": [
      "user",
-     "forge"
+     "serve"
     ],
     "must_not": [
      "\\bsudo\\b"
@@ -3824,7 +3823,7 @@
      "spark"
     ],
     "spark_verb": [
-     "share"
+     "serve"
     ],
     "must_not": [
      "\\bsudo\\b"
@@ -3872,7 +3871,7 @@
      "spark"
     ],
     "spark_verb": [
-     "forge"
+     "serve"
     ],
     "must_not": [
      "\\bsudo\\b"
@@ -4054,7 +4053,7 @@
      "spark"
     ],
     "spark_verb": [
-     "forge"
+     "serve"
     ],
     "must_not": [
      "\\bsudo\\b"
@@ -4071,8 +4070,7 @@
     ],
     "spark_verb": [
      "model",
-     "status",
-     "brain"
+     "status"
     ],
     "must_not": [
      "\\bsudo\\b"
@@ -4139,7 +4137,7 @@
      "spark"
     ],
     "spark_verb": [
-     "forge"
+     "serve"
     ],
     "must_not": [
      "\\bsudo\\b"
@@ -4223,7 +4221,7 @@
      "spark"
     ],
     "spark_verb": [
-     "forge"
+     "serve"
     ],
     "must_not": [
      "\\bsudo\\b"

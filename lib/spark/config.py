@@ -130,7 +130,7 @@ class Config:
     def ember_model(self):
         """none | auto | a name from models.env: the second, larger model
         for conversations; spark stays the small one at the prompt. The
-        default is none: one model does both until `spark ember` adds one."""
+        default is none: one model does both until `spark model --chat` adds one."""
         return self.get("SITE_EMBER_MODEL", "none")
 
     @property
@@ -161,9 +161,10 @@ class Config:
 
     @property
     def quiet_start(self):
-        """yes: spark itself starts quietly -- no login banner, a one-line
-        `spark serve` / `spark forge`, a one-line bare `spark` (explicit
-        `spark status` stays the full report). Both OSes; core."""
+        """yes: spark itself starts quietly -- no login banner, one line
+        each for the engine and the page from `spark serve on`, a one-line
+        bare `spark` (explicit `spark status` stays the full report). Both
+        OSes; core."""
         return self.get("SITE_QUIET_START", "no") == "yes"
 
     @property
@@ -174,7 +175,7 @@ class Config:
     @property
     def share(self):
         """yes: this box's engine is shared with its other OS users -- a
-        `spark` group may read the api-token (spark share on)."""
+        `spark` group may read the api-token (spark serve share on)."""
         return self.get("SITE_SHARE", "no") == "yes"
 
     @property

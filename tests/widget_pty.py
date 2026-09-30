@@ -604,6 +604,19 @@ def completion_main(shell, comp):
         ok(sh.expect("anite-4-2-8b"), "spark model gr<TAB> completes to granite-4-2-8b", since())
         sh.send("\x15")
         time.sleep(0.2)
+
+        # 3. the one server verb's words (v1.64): `spark serve --lo<TAB>`
+        #    -> --login, and `spark model --ch<TAB>` -> --chat
+        since = sh.mark()
+        sh.send("spark serve --lo\t")
+        ok(sh.expect("gin"), "spark serve --lo<TAB> completes to --login", since())
+        sh.send("\x15")
+        time.sleep(0.2)
+        since = sh.mark()
+        sh.send("spark model --ch\t")
+        ok(sh.expect("at"), "spark model --ch<TAB> completes to --chat", since())
+        sh.send("\x15")
+        time.sleep(0.2)
         sh.send("exit\r")
         sh.read(0.5)
         sh.close()

@@ -303,7 +303,7 @@ def _closing():
     say("  spark chat                      a conversation")
     say("  ? how big is this dir           a command in your line, a hint above it")
     say("  cmd 2>&1 | explain              what went wrong, and the fix")
-    say("spark ember NAME adds a chat model: a bigger one, just for conversation")
+    say("spark model --chat NAME adds a chat model: a bigger one, just for conversation")
     door()
 
 
@@ -386,7 +386,7 @@ def _run(opts):
     say()
     name = _decide(cfg, "SITE_NAME", opts["name"], cfg.name, "this machine's name", yes)
     user = _decide(cfg, "SITE_USER", opts["user"], cfg.user, "your name", yes)
-    # a shared engine already runs on this box (spark share on) and this user
+    # a shared engine already runs on this box (spark serve share on) and this user
     # has no server of their own: join it -- no model to download, no root
     if os.access(SHARE_TOKEN, os.R_OK) and not os.path.exists(TOKEN_FILE) and _joining(yes):
         return _join(name, user, opts, yes)

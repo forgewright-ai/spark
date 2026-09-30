@@ -7,6 +7,9 @@
 # readline's TAB does the work.
 # Not completed on purpose (plumbing, or aliases of ver):
 #   line version --version
+# Older spellings, still dispatched and named nowhere (serve boot|share,
+# serve --login|--audit, model --chat and status took their places):
+#   forge ember headless share brain
 
 _spark_repo() {
     # ~/.local/bin/spark is a symlink to <repo>/bin/spark; print <repo>
@@ -34,9 +37,9 @@ _spark_complete() {
     cur=${COMP_WORDS[COMP_CWORD]}
     COMPREPLY=()
     if [ "$COMP_CWORD" -eq 1 ]; then
-        words="chat do recall serve check update headless share client setup
-               ver last status brain history stats clear bench model ember
-               forge soul memory quiet bar look height off
+        words="chat do recall serve check update client setup
+               ver last status history stats clear bench model
+               soul memory quiet bar look height off
                on user explain edit ask read drill watch reveal help uninstall
                awaken words"
         COMPREPLY=($(compgen -W "$words" -- "$cur"))
@@ -45,10 +48,7 @@ _spark_complete() {
     [ "$COMP_CWORD" -eq 2 ] || return 0
     case ${COMP_WORDS[1]} in
         quiet)   words="start audio status" ;;
-        model)   words="list verify budget rm add auto none status $(_spark_model_names)" ;;
-        ember)   words="list auto none status $(_spark_model_names)" ;;
-        headless | share) words="on off status" ;;
-        forge)   words="on off status audit token" ;;
+        model)   words="list verify budget rm add auto none status --chat $(_spark_model_names)" ;;
         bar)     words="line" ;;
         memory)  words="add forget clear on off" ;;
         reveal)  words="auto off" ;;
@@ -56,7 +56,7 @@ _spark_complete() {
         height)  words="1 2 3 4 5" ;;
         check)   words="--watch --porcelain --report --fresh --fetch --selftest --chaos" ;;
         uninstall) words="--dry-run --yes --purge --packages --keep-packages" ;;
-        serve)   words="on off status --foreground --host --print-client" ;;
+        serve)   words="on off boot share status --login --audit" ;;
         chat)    words="--thread" ;;
         do)      words="--sandbox --detach --porcelain --review --accept --discard" ;;
         soul)    words="show edit reset" ;;

@@ -118,7 +118,7 @@ client points at.
 
 The pocket test:
 
-    spark forge --print-url
+    spark serve --login
 
 Open that address in your phone's browser, log in, and go on with the
 thread you started at the terminal. Same voice, same facts, another

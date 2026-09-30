@@ -347,8 +347,8 @@ def test_audit_store():
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
         rc = audit.cmd_audit([])
-    check("spark forge audit on a trail that does not open: one signed line, exit 2",
-          (rc, out.getvalue().strip()), (2, "spark forge -- " + audit.NO_OPEN))
+    check("spark serve --audit on a trail that does not open: one signed line, exit 2",
+          (rc, out.getvalue().strip()), (2, "spark serve -- " + audit.NO_OPEN))
     check("the corrupted trail is byte-for-byte as it was", read_bytes(apath), bad)
     with open(apath, "wb") as f:
         f.write(b"not sealed\n")

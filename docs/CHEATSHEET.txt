@@ -61,20 +61,22 @@ SPARK
 ON THE LAN (server / client)
   spark model [NAME|auto|none]    choose one. model list = the table
                                   (--porcelain: data. grounded = audition)
+  spark model --chat NAME         the chat model, a second one (auto|none|list)
   spark model budget [N]          percent of RAM+GPU auto may use (10-95)
   spark model add URL             add your own (--sha256, --license required)
   spark model verify              sha256 every downloaded file now. exit 1 bad
-  spark serve [on|off]            one LAN address, token required
-  spark serve off --force         also the unit's, or one spark did not start
-  spark serve --print-client      the two lines another machine needs
-  spark ember [NAME|auto|none]    the chat model, a second one (ember list)
-  spark forge [on|off]            the page and the API on the LAN. Bare: status
-  spark forge --print-url         the page's login URL. At a terminal the admin
+  spark serve [on|off]            the engine and the page on the LAN, kept.
+                                  Bare: what answers, the models, the units
+  spark serve boot [on|off]       up from boot, never asleep (the machine
+                                  that stays on)
+  spark serve share [on|off]      one engine for every OS user here (Linux).
+                                  Each keeps their own soul and memory
+  spark serve --login             the page's URL. At a terminal the admin
                                   token and a QR to scan (--no-qr; piped,
                                   --show-token adds the token)
-  spark forge --print-client      what another machine needs: URL + a user
-  spark forge token --new         rotate the admin token
-  spark forge audit [N]           every admin action, sealed (--porcelain)
+  spark serve --login --new       rotate the admin token
+  spark serve --audit [N]         every admin action, sealed (--porcelain)
+  spark serve off --force         also an engine spark did not start
   spark user [list]               the named users, each a sealed store
   spark user add NAME             mint an account. The token and its QR
                                   show once (--no-qr)
@@ -82,14 +84,11 @@ ON THE LAN (server / client)
                                   (asks. SPARK_YES=1 answers for a script)
   spark user login [NAME] | logout  act as NAME here / forget the login
   spark user token --new          rotate your token. Old logins die
-  spark headless [on|off]         up from boot, never asleep (the machine
-                                  that stays on)
-  spark share [on|off]            one engine for every OS user here (Linux).
-                                  Each keeps their own soul and memory
-  spark client [URL|off]          use another machine's spark. None here.
-                                  Bare: what is set, and whether it answers
+  spark client [URL|off]          use another machine's server. None here.
+                                  Bare: what is set, and whether it answers.
+                                  off: never asked again until client URL
 
-THE PAGE (spark forge --print-url)  chat first. Keys when no input has focus
+THE PAGE (spark serve --login)  chat first. Keys when no input has focus
   1..5                            chat, activity, do, settings, help
   r  refresh                      ?  help
   /                               focus the input (Esc leaves it)
@@ -118,7 +117,7 @@ THE MACHINE
   long output (help, check, lists) pages via $PAGER (less). Piped stays plain
 
 THE INTERFACE
-  spark quiet start on|off        no banner, one-line serve/forge + bare spark
+  spark quiet start on|off        no banner, one-line serve and bare spark
   spark quiet audio on|off        no sound from spark (both OSes)
   ~/.config/spark/theme.env       a palette a tool may write: spark ver and
                                   the status line follow it
@@ -150,13 +149,13 @@ LINUX
 MACOS
   launchctl print gui/$UID/spark.serve         is the agent loaded? (.forge too)
   launchctl kickstart -k gui/$UID/spark.serve  restart it
-  spark headless on: all 3 agents live in system/. Restart and stop
-                     need sudo launchctl
+  spark serve boot on: all 3 agents live in system/. Restart and stop
+                       need sudo launchctl
   Alt is Option: Option-s, not Cmd-s
 
 WINDOWS (Ubuntu 24.04 on WSL 2 -- Linux to spark)
   wsl --install -d Ubuntu-24.04    then docs/INSTALL.md section 1 (Linux)
-  the CPU build. No headless: the distro stops with its last window
+  the CPU build. No serve boot: the distro stops with its last window
   units: [boot] systemd=true in /etc/wsl.conf, then wsl --shutdown
 
 DOCUMENTS (4 at the root: README, CREDITS, CLAUDE, AGENTS. The rest: docs/)

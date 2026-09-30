@@ -8,6 +8,9 @@
 # still complete, silently. Binds no key of its own.
 # Not completed on purpose (plumbing, or aliases of ver):
 #   line version --version
+# Older spellings, still dispatched and named nowhere (serve boot|share,
+# serve --login|--audit, model --chat and status took their places):
+#   forge ember headless share brain
 
 _spark_repo() {
     # ~/.local/bin/spark is a symlink to <repo>/bin/spark; print <repo>
@@ -33,26 +36,23 @@ _spark_model_names() {
 _spark() {
     local -a comp
     if (( CURRENT == 2 )); then
-        comp=(chat do recall serve check update headless share client setup
-              ver last status brain history stats clear bench model ember
-              forge soul memory quiet bar look height off
+        comp=(chat do recall serve check update client setup
+              ver last status history stats clear bench model
+              soul memory quiet bar look height off
               on user explain edit ask read drill watch reveal help uninstall
               awaken words)
     elif (( CURRENT == 3 )); then
         case ${words[2]} in
             quiet)   comp=(start audio status) ;;
-            model)   comp=(list verify budget rm add auto none status ${(f)"$(_spark_model_names)"}) ;;
-            ember)   comp=(list auto none status ${(f)"$(_spark_model_names)"}) ;;
-            headless | share) comp=(on off status) ;;
+            model)   comp=(list verify budget rm add auto none status --chat ${(f)"$(_spark_model_names)"}) ;;
             memory)  comp=(add forget clear on off) ;;
             reveal)  comp=(auto off) ;;
             look)    comp=(motion colour words reveal off status) ;;
             height)  comp=(1 2 3 4 5) ;;
-            forge) comp=(on off status audit token) ;;
             bar)     comp=(line) ;;
             check)   comp=(--watch --porcelain --report --fresh --fetch --selftest --chaos) ;;
             uninstall) comp=(--dry-run --yes --purge --packages --keep-packages) ;;
-            serve)   comp=(on off status --foreground --host --print-client) ;;
+            serve)   comp=(on off boot share status --login --audit) ;;
             chat)    comp=(--thread) ;;
             do)      comp=(--sandbox --detach --porcelain --review --accept --discard) ;;
             soul)    comp=(show edit reset) ;;

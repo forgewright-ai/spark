@@ -1,5 +1,50 @@
 # Changelog
 
+## v1.64
+
+One server, and services that hold. The engine and the page are one
+verb, and the services behave the same on runit, systemd and launchd.
+
+- `spark serve on|off` runs the engine and the page together, and
+  remembers it: `SPARK_SERVICE` and `SPARK_FORGE` are written as one.
+  `off` stops both and keeps them down. Bare `spark serve` shows what
+  answers, the models, the page's URL, the units, boot and share.
+- The settings and actions of the servers live under the same verb:
+  `spark serve boot on|off` (up from boot), `spark serve share on|off`
+  (one engine for every OS user), `spark serve --login` (the page's
+  URL, a QR and the token), `spark serve --login --new` (a new admin
+  token) and `spark serve --audit [N]`.
+- `spark model --chat NAME|auto|none|list` chooses the chat model.
+- `spark status` shows what the engine answers. `spark brain
+  --porcelain` stays for a program.
+- `spark client off` means off. The other machine is never asked again,
+  even while it answers, until `spark client URL`.
+- The old spellings still work and appear in no help and no doc:
+  `spark forge on|off`, `forge --print-url`, `forge token --new`,
+  `forge audit`, `spark ember`, `spark headless`, `spark share` and
+  `spark brain`.
+- `spark serve on` never starts a second server beside a unit. A
+  loaded or disabled unit is started through its init, then waited on.
+- `spark serve --foreground` takes over from a server spark started by
+  hand. When a server spark did not start holds the port, it still
+  exits 78.
+- `spark serve off` also stops a server spark started by hand when the
+  unit is down.
+- `spark update` restarts the services on a new tree, even when the
+  clone was already at the tag.
+- The LAN address is never a link-local 169.254 one, as Void's dhcpcd
+  gives before the real lease. The servers wait for the real address.
+- A runit service that keeps crashing is held, and the `services` row
+  warns.
+- `spark model NAME`, the chat model and `spark bench` never say ready
+  while the old model still answers.
+- The pid files are 0600, and spark checks a pid is its own before it
+  signals it.
+- The runit services are written `down` first, so a half-written
+  service never starts. The check's service keeps its errors in its
+  log.
+- `tests/finish_test.sh` proves the runit finish scripts.
+
 ## v1.63
 
 The hand-back leaves another tool's look alone. It takes back only

@@ -12,8 +12,9 @@ spark is live. A tool becomes a spark app as a client of `spark edit`
 it, another contract is defined and apps connect the same way. Inside,
 the `FORGE` is the identity spark builds and keeps on this machine: the
 model, one soul, one memory and the threads, served on the LAN by
-`spark forge`. It is one identity per machine, the same one for the
-prompt line, the page and any program.
+`spark serve`. It is one identity per machine, the same one for the
+prompt line, the page and any program. `FORGE` is the code's name for
+it, and no verb carries the word.
 
 ## Principles
 
@@ -34,7 +35,7 @@ prompt line, the page and any program.
   and font and a quiet boot are the machine's look, not spark's. spark's
   side is generic: `~/.config/spark/theme.env` is a palette a look
   layer may write, and no shell code lives in this tree. The bar line
-  and `spark quiet start|audio` are core, beside `spark headless`: the
+  and `spark quiet start|audio` are core, beside `spark serve boot`: the
   behaviour of an AI appliance. Quiet hides noise, never a safety line:
   no watchdog, fsck, log or check is switched off to silence it.
 - **Privacy by design.** Nothing leaves the machine except the package
@@ -147,14 +148,14 @@ prompt line, the page and any program.
   selftest passes run there. Windows is reached through WSL 2. Ubuntu
   there is Linux to spark, minus what WSL cannot do. `is_wsl()` sits
   beside `os_pretty`. A verb WSL cannot serve refuses in one signed
-  line, such as `spark headless`, and a row says so, never fails. CI
+  line, such as `spark serve boot`, and a row says so, never fails. CI
   has no WSL runner: `check.WSL_ROWS` and the fourth selftest pass pin
   the branch by fixture. A real run there is the maintainer's, by hand.
 - **The user chooses.** Model, machine name, user, spark's own look:
   all keys with defaults. Nothing aesthetic or sized to hardware
   is baked in. A model is the user's own choice, never a spark change:
-  `spark model add URL --license "NAME URL"` and `spark ember NAME`
-  bring one in, and nothing credits it beyond its license. A new
+  `spark model add URL --license "NAME URL"` and `spark model --chat
+  NAME` bring one in, and nothing credits it beyond its license. A new
   behaviour is measured and offered, never imposed: today's behaviour
   stays the default, and the measure names the choice. Nothing runs,
   routes or switches without the user's own action: which engine
@@ -204,7 +205,7 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 bar (the status line)
                 site (site.env custodian: set_keys/apply, rc custody, quiet
                 headless client share)
-                model (spark model / spark ember: the table, add, verify, budget)
+                model (spark model and --chat: the table, add, verify, budget)
                 edit (spark edit: contract 10)
                 facts (the machine's decisions as KEY=value for bootstrap's eval:
                 distro, build, WSL, memory, engine home + flavour, model picks)
@@ -236,7 +237,7 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 forge (identity, threads and the kept ones, reply, the chat
                 loop, @FILE; the chat-history save skips a sealed file that
                 does not open)
-                forgeserve (the page's server: spark forge, the API, the page;
+                forgeserve (the page's server under spark serve: the API, the page;
                 ROUTES is the one table of every route and its role)
                 do (spark do: the one loop, a face per driver -- the terminal,
                 --porcelain (contract 15) -- the budget, the hold, the man excerpt)
@@ -249,8 +250,8 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 the steps inside, the review, the apply bound to it, a run's
                 life and its lock; every list that decides is a named line)
                 audit (the sealed audit trail: one record per admin action in
-                the box account's store, numbers and names only; spark forge
-                audit [N] reads it)
+                the box account's store, numbers and names only; spark serve
+                --audit [N] reads it)
                 version (the version, from git, cached: spark ver, check's
                 header, forgeserve)
                 update (spark update: the newest release tag signed by a key in
@@ -797,8 +798,8 @@ and may change freely.
    they answer everywhere. `spark uninstall -- not a terminal: spark
    uninstall --yes runs it` is the refusal of a non-terminal without
    `--yes`: the plan printed, exit 2. On WSL 2 the same shape: `spark
-   headless -- WSL 2 stops with its last window: it cannot stay on and
-   answer (a Linux machine can)` (exit 2).
+   serve -- WSL 2 stops with its last window: it cannot stay on and
+   answer (a Linux machine can)` (exit 2), from `spark serve boot on`.
 9. The `FORGE` HTTP API. `lib/spark/forgeserve.py` serves it on
    `SPARK_FORGE_HOST:SPARK_FORGE_PORT`: one LAN address, never the
    unspecified address in any spelling. `bind_check` in
@@ -817,7 +818,7 @@ and may change freely.
    chat the default, and navigation is one header menu button. For a
    user only chat, config and help exist. Monitor and do redirect to
    chat. The login link `/login#t=<token>` signs in by itself: `spark
-   forge --print-url` and `spark user add` draw it as a QR at a
+   serve --login` and `spark user add` draw it as a QR at a
    terminal. The page reads the fragment before routing, strips it with
    history.replaceState, and posts it to `/api/login` once. A stale link
    is one 401, never a retry loop. A browser never sends a fragment, so
@@ -993,9 +994,9 @@ and may change freely.
    `vault.append_sealed`). The records are `do/run` `{ts, ip, action,
    digest, rc}`, `/api/run` `{ts, ip, action, verb, rc}`, a user minted,
    removed or rotated `{ts, ip|cli, action, name}` (`spark user
-   add|remove|token --new`, `POST /api/user/token`), and `spark forge
-   token --new` `{ts, cli, action}`. Numbers and names, never a
-   command's text or its arguments. `spark forge audit [N]
+   add|remove|token --new`, `POST /api/user/token`), and `spark serve
+   --login --new` `{ts, cli, action}`. Numbers and names, never a
+   command's text or its arguments. `spark serve --audit [N]
    [--porcelain]` prints the newest N (50 by default), one line each. A
    trail that does not open is one signed line, exit 2, never written
    over. `GET /api/config` returns no key matching `KEY|TOKEN|SECRET`,
@@ -1321,22 +1322,30 @@ One grammar for every verb. A verb that breaks a rule is a bug.
 
 1. A bare verb shows and never mutates, and `spark bar` piped still
    prints the bar line.
-2. `on|off` is the only switch vocabulary at the CLI: headless, serve,
-   forge, quiet, memory. The two servers hold the same kind of state and
-   answer the same way. There is no `start`/`stop` pair beside it, and
-   `--force`/`--noreload` are flags of `off`. Stored values are storage,
-   not interface: `SITE_HEADLESS` and the `SITE_QUIET_*` keys stay
-   `yes|no` in `site.env`, and the verb translates. Choices keep their
-   value grammars (`model NAME|auto|none`, `client URL|off`, `look
-   PART auto|on|off`). The one carve-out is bare `spark
-   off` / `spark on`, which silences and restores the whole prompt: it
-   is the global mute, and reads better without a noun in front of it.
-3. `status` is an alias of bare for every stateful verb. `list` is the
-   table word (model, ember). A noun keeps its own verbs as
-   sub-words rather than taking top-level ones: `spark soul edit|reset`,
-   `spark memory add|forget|clear`. A command reads verb first, its
-   object a flag or a word after it: `spark clear --history`, with the
-   old `spark history clear` kept as an alias named nowhere.
+2. `on|off` is the only switch vocabulary at the CLI: serve, serve boot,
+   serve share, quiet, memory. One verb holds the two servers: `spark
+   serve on|off` writes `SPARK_SERVICE` and `SPARK_FORGE` together,
+   through their units, and they answer as one. There is no
+   `start`/`stop` pair beside it, and `--force` is a flag of `off`. A
+   setting of the servers is a word after the verb (`serve boot`, `serve
+   share`), and an action on them a flag (`serve --login`, `serve
+   --audit`). Stored values are storage, not interface: `SITE_HEADLESS`
+   and the `SITE_QUIET_*` keys stay `yes|no` in `site.env`, and the verb
+   translates. Choices keep their value grammars (`model
+   NAME|auto|none`, `client URL|off`, `look PART auto|on|off`). The one
+   carve-out is bare `spark off` / `spark on`, which silences and
+   restores the whole prompt: it is the global mute, and reads better
+   without a noun in front of it.
+3. `status` is an alias of bare for every stateful verb: `spark status`
+   is bare `spark`, and it holds what the engine answers (`spark brain
+   --porcelain` stays contract 5). `list` is the table word (`model
+   list`, `model --chat list`). A noun keeps its own verbs as sub-words
+   rather than taking top-level ones: `spark soul edit|reset`, `spark
+   memory add|forget|clear`. A command reads verb first, its object a
+   flag or a word after it: `spark clear --history`, with the old `spark
+   history clear` kept as an alias named nowhere. The spellings `spark
+   serve` and `spark model --chat` took over stay as aliases too, never
+   in help or completion, named in `docs/CHANGELOG.md` alone.
 4. Every verb answers `-h|--help|help` first, before any gate or config
    read, signed per contract 8.
 5. One confirm shape: `<question>? yes/NO: `. Only `y` or `yes`
@@ -1558,24 +1567,26 @@ One grammar for every verb. A verb that breaks a rule is a bug.
   rows in `check.CLIENT_ROWS` (engine, services, watchdog, ai, serve,
   forge, ember) read `na`. `--selftest`'s third pass asserts that with
   the `peer` row ok. The `peer` row is where a client's health lives. A
-  client stays a client until `spark client off`. `spark model`, `ember
-  list` and `model budget` there print the other machine's table, never
-  this machine's RAM as a budget (`model.peer_models`, `GET /api/models`
-  with the login token). When the other machine is down, a bare server
-  or an older `FORGE`, they print the rows alone, without a fit.
-  `bootstrap.sh --list-models` does likewise. `spark model
-  NAME|auto|none`, `model budget N`, `model rm` and `spark ember NAME`
-  are refused with one line (`model._client_no`): each would have made
-  a server of the client in silence. `spark client off` is the one
-  deliberate promotion. It ends the shape, then runs `spark model
-  auto`. The other machine may be this same machine's raw engine
-  (`spark share on` there). The client injects its
-  own soul and memory (forge=False), so it stays sovereign. `cmd_client`
-  records `SPARK_API_KEY_FILE=$SHARE_TOKEN` when that group-readable
-  token is present, rather than minting one the engine would reject.
+  client stays a client until `spark client off`. `spark model`, `model
+  --chat list` and `model budget` there print the other machine's table,
+  never this machine's RAM as a budget (`model.peer_models`, `GET
+  /api/models` with the login token). When the other machine is down, a
+  bare server or an older `FORGE`, they print the rows alone, without a
+  fit. `bootstrap.sh --list-models` does likewise. `spark model
+  NAME|auto|none`, `model budget N`, `model rm` and `spark model --chat
+  NAME` are refused with one line (`model._client_no`): each would have
+  made a server of the client in silence. `spark client off` is the one
+  deliberate promotion. It ends the shape, then runs `spark model auto`.
+  Off means off: from then on the other machine is never asked, even
+  while it answers, until `spark client URL` names it again. The other
+  machine may be this same machine's raw engine (`spark serve share on`
+  there). The client injects its own soul and memory (forge=False), so
+  it stays sovereign. `cmd_client` records
+  `SPARK_API_KEY_FILE=$SHARE_TOKEN` when that group-readable token is
+  present, rather than minting one the engine would reject.
   `config.token_file` also falls back to it for a user with none of
   their own.
-- **A shared engine.** `spark share on` (`SITE_SHARE=yes`,
+- **A shared engine.** `spark serve share on` (`SITE_SHARE=yes`,
   `site.cmd_share`) lets a machine's other OS users answer from its one
   engine instead of each loading the model. Bootstrap's `share` row
   ensures a `spark` OS group and a `0640 root:spark` copy of the
@@ -1596,7 +1607,7 @@ One grammar for every verb. A verb that breaks a rule is a bug.
   stays per `$HOME`. Compute is shared and chosen explicitly. spark
   never routes to an engine the user did not name. Linux only in this
   version: macOS and WSL are one user per machine (`site.no_share`), a
-  signed refusal from `spark share on` and a skip row.
+  signed refusal from `spark serve share on` and a skip row.
 - **A model.** One list, `models.env`. A row is `MODEL_<NAME>` with the
   5 fields, and its `_LICENSE` always. A `_NOTE` goes on when one
   line helps. A `_GROUND="<kept>/<run> <date>"` goes on once the
@@ -1624,7 +1635,7 @@ One grammar for every verb. A verb that breaks a rule is a bug.
 spark check                     # must exit 0
 spark check --selftest          # every fixture-testable row flips
 spark check --chaos             # every rehearsed failure: break, red, remedy, green
-spark forge                     # the page's server: up, at one LAN address
+spark serve                     # the engine and the page: up, at one LAN address
 python3 tests/forge_smoke.py    # the API and the page, against a stub model
 python3 tests/docs_test.py      # the docs say what the tree holds (credits, counts)
 python3 tests/widget_pty.py pager        # $PAGER at a tty; plain when absent

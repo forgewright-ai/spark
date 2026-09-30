@@ -768,8 +768,8 @@ def knowledge_cases(t):
     cverbs = re.search(r'COMP_CWORD" -eq 1 \]; then\s+words="([^"]*)"', comp).group(1).split()
     smap = grounding.shell_map()
     said = set(re.findall(r"(?:\bspark |\|)([a-z]+)", smap)) | set(re.findall(r"\| (explain)\b", smap))
-    t.ok(not set(cverbs) - said and {"ver", "share", "off", "on", "recall", "reveal"} <= said,
-         "knowledge: shell_map names every verb completion.bash completes (ver, share, off, on, recall, reveal)",
+    t.ok(not set(cverbs) - said and {"ver", "serve", "off", "on", "recall", "reveal"} <= said,
+         "knowledge: shell_map names every verb completion.bash completes (ver, serve, off, on, recall, reveal)",
          "missing: %s" % sorted(set(cverbs) - said))
     grounding._MAP.clear()
     grounding._TREE.clear()
@@ -1110,12 +1110,12 @@ def knowledge_cases(t):
             "spark uninstall", "spark clear --history", "spark history clear", "spark memory forget 3",
             "spark memory clear",
             "spark user remove ana", "spark model rm qwen3-4b", "spark soul reset", "spark forge token --new",
-            "spark user token --new"]
+            "spark serve --login --new", "spark user token --new"]
     safe = ["apt-get install x", "apt-cache search x", "dpkg -l", "dpkg -L curl", "pacman -Qi x",
             "pacman -Syu", "brew list", "brew info jq", "apk add x",
             "spark history", "spark clear", "spark memory", "spark memory add x", "spark user list",
             "spark model list",
-            "spark forge", "ls -l deploy.sh", "stat -f %p f",
+            "spark forge", "spark serve", "spark serve --login", "ls -l deploy.sh", "stat -f %p f",
             "find . -exec ls {} \\;", "find . -name x -print", "dd if=/dev/zero bs=1 count=1", "cmd 2>/dev/null",
             "cmd 2>&1", "cmd 2>>err.log", "cmd >/dev/null 2>&1", "crontab -l", "crontab -e",
             "rmdir build", "docker run --rm img", "grep rm notes.txt"]
@@ -2763,7 +2763,7 @@ def main():
         # grammar rule 4: the loop verbs answer -h first, signed (contract 8)
         for sub, first in (("last", "spark last -- the last exchange, with its tok/s"),
                            ("status", "spark status -- the model, prompt line, server, soul, memory, last answer"),
-                           ("brain", "spark brain -- what answers right now: the page's server or the engine"),
+                           ("brain", "spark status -- the model, prompt line, server, soul, memory, last answer"),
                            ("off", "spark off -- silence the prompt line, every pane at once"),
                            ("on", "spark on -- the prompt line answers again"),
                            ("history", "spark history -- the threads kept on this machine"),
@@ -4023,10 +4023,14 @@ def main():
              "session.once: success passes through, a cut is a skip, an auth fault is raised")
 
         # spark share: one engine for the machine's other OS users (v1.22)
-        rc, out, _ = spark("share", "-h")
-        t.ok(rc == 0 and out.startswith("spark share -- "), "share -h is signed", out[:40])
-        rc, out, _ = spark("share")
-        t.ok(rc == 0 and "SITE_SHARE=no" in out, "share: status shows not-shared by default", out[:80])
+        rc, out, _ = spark("serve", "share", "-h")
+        t.ok(rc == 0 and out.startswith("spark serve share -- "), "serve share -h is signed", out[:40])
+        rc, out2, _ = spark("share", "-h")
+        t.ok(rc == 0 and out2 == out, "share -h, the older spelling: the same help", out2[:40])
+        rc, out, _ = spark("serve", "share")
+        t.ok(rc == 0 and "SITE_SHARE=no" in out, "serve share: status shows not-shared by default", out[:80])
+        rc, out2, _ = spark("share")
+        t.ok(rc == 0 and out2 == out, "share, the older spelling: the same status", out2[:80])
         from spark import site as sitemod, config as configmod
         t.ok(isinstance(sitemod.no_share(), str) and isinstance(sitemod.share_facts(configmod.load()), list),
              "share: no_share() and share_facts() answer on this OS without a crash")
@@ -5000,25 +5004,32 @@ def main():
                 spark("do", "--discard", r, cwd=box)
             import shutil
             shutil.rmtree(box, ignore_errors=True)
-        # the ember verb: status, choose, refuse, the shared table's marks
+        # the chat model (spark model --chat; spark ember is its older
+        # spelling): status, choose, refuse, the shared table's marks
         mem = {"SPARK_NO_APPLY": "1", "SPARK_MEM_TOTAL_GB": "64"}
-        rc, out, _ = spark("ember", extra=mem)
+        rc, out, _ = spark("model", "--chat", extra=mem)
         t.ok(rc == 0 and re.search(r"^  spark", out, re.M) and re.search(r"^  ember", out, re.M),
-             "spark ember: one line per role", out)
-        rc, out, _ = spark("ember", "-h")
-        t.ok(rc == 0 and out.splitlines()[0] == "spark ember -- the chat model",
-             "spark ember -h signs (contract 8)", out)
-        rc, out, _ = spark("ember", "nosuch", extra=mem)
-        t.ok(rc == 2 and "spark ember list" in out, "an unknown ember name is refused, naming the list", out)
+             "spark model --chat: one line per role", out)
+        rc, out2, _ = spark("ember", extra=mem)
+        t.ok(rc == 0 and out2 == out, "spark ember, the older spelling: the same lines", out2)
+        rc, out, _ = spark("model", "--chat", "-h")
+        t.ok(rc == 0 and out.splitlines()[0] == "spark model --chat -- the chat model",
+             "spark model --chat -h signs (contract 8)", out)
+        rc, out2, _ = spark("ember", "-h")
+        t.ok(rc == 0 and out2 == out, "spark ember -h, the older spelling: the same help", out2)
+        rc, out, _ = spark("model", "--chat", "nosuch", extra=mem)
+        t.ok(rc == 2 and "spark model --chat list" in out, "an unknown chat model name is refused, naming the list", out)
         rc, out, _ = spark("ember", "none", extra=mem)
-        t.ok(rc == 0 and "SITE_EMBER_MODEL=none" in out, "spark ember none writes the key", out)
+        t.ok(rc == 0 and "SITE_EMBER_MODEL=none" in out, "spark ember none (the older spelling) writes the key", out)
+        rc, out, _ = spark("model", "--chat", "none", extra=mem)
+        t.ok(rc == 0 and "SITE_EMBER_MODEL=none" in out, "spark model --chat none writes the key", out)
         # the restart narration lives behind apply(); SPARK_NO_APPLY returns
         # before it (same as spark model), so none of it may leak here
         t.ok("restarting" not in out and "download" not in out,
              "SPARK_NO_APPLY: the key only -- no restart or download narration", out)
         t.ok("SITE_EMBER_MODEL=none" in open(home + "/.config/spark/site.env").read(), "site.env carries the choice")
-        rc, out, _ = spark("ember", extra=mem)
-        t.ok(rc == 0 and "spark answers everything" in out, "ember none: spark answers everything", out)
+        rc, out, _ = spark("model", "--chat", extra=mem)
+        t.ok(rc == 0 and "spark answers everything" in out, "chat model none: spark answers everything", out)
         marks = {"SPARK_NO_APPLY": "1", "SPARK_MEM_TOTAL_GB": "64",
                  "SITE_AI_MODEL": "qwen3-1-7b", "SITE_EMBER_MODEL": "qwen3-4b"}
         rc, out, _ = spark("model", "list", extra=marks)
@@ -5032,10 +5043,12 @@ def main():
         t.ok(re.search(r"^     qwen2-5-coder-7b .* Apache-2.0      ", out, re.M), "an untested row has no line mark", out)
         t.ok("u = yours" in out and "auto picks among the rows tested on the line" in out, "the legend names the mark and the auto rule", out)
         t.ok("community" not in out and "embers" not in out and "curated" not in out, "one list: no list words", out)
+        rc, out2, _ = spark("model", "--chat", "list", extra=marks)
+        t.ok(rc == 0 and out2 == out, "spark model --chat list prints the same table", out2)
         rc, out2, _ = spark("ember", "list", extra=marks)
-        t.ok(rc == 0 and out2 == out, "spark ember list prints the same table", out2)
+        t.ok(rc == 0 and out2 == out, "spark ember list (the older spelling) prints the same table", out2)
         client = {"SPARK_NO_APPLY": "1", "SPARK_MEM_TOTAL_GB": "64", "SITE_AI_MODEL": "none", "SITE_EMBER_MODEL": "auto"}
-        rc, out3, _ = spark("ember", "list", extra=client)
+        rc, out3, _ = spark("model", "--chat", "list", extra=client)
         row_lines3 = [ln for ln in out3.splitlines() if re.match(r"^  [ *+][ u] \S+ +\d+\.\d GB ", ln)]
         t.ok(rc == 0 and row_lines3 and not any(re.match(r"^  [*+]", ln) for ln in row_lines3),
              "SITE_AI_MODEL=none: nothing served, so ember auto picks nothing", out3)
@@ -5308,7 +5321,7 @@ def main():
         os.write(_fd, b"t\n")
         os.close(_fd)
         rc, outf, _ = spark("check", "--porcelain")
-        t.ok(re.search(r"^CAPABILITY\twarn\tforge\tthe page's server runs 0\.0, the tree is [^\t]+\tspark forge off; spark forge on", outf, re.M) is not None,
+        t.ok(re.search(r"^CAPABILITY\twarn\tforge\tthe page's server runs 0\.0, the tree is [^\t]+\tspark serve off; spark serve on", outf, re.M) is not None,
              "check: the forge row warns when the FORGE runs an older version than the tree",
              "\n".join(l for l in outf.splitlines() if "\tforge\t" in l))
         os.remove(_stdir + "/forge-url")
@@ -5607,6 +5620,8 @@ def main():
         t.ok(bool(_cands) and not _badr,
              "check.py: every spark remedy names a live verb and a sub-word its help lists",
              str(_badr[:8]))
+        _old = [_seg for _verb, _sub, _seg in _cands if _verb in ("forge", "ember", "headless", "share", "brain")]
+        t.ok(not _old, "check.py: no remedy names an older spelling (forge, ember, headless, share, brain)", str(_old[:8]))
 
         # the interface is quiet and the bar line; `shell`, `theme` and
         # `font` are no verbs of spark's -- unknown words like any other
@@ -5639,6 +5654,59 @@ def main():
                 if _old.search(_l) or re.search(r"\bFORGE\b", _l) or len(_l) > 80:
                     _bad.append("%s: %s" % (_v or "help", _l))
         t.ok(not _bad, "spark help and every usage text: one voice, every line within 80 columns", "\n".join(_bad[:8]))
+        # v1.64, one server verb: the help's group is the plan's lines,
+        # verbatim; the older spellings are named nowhere in it, and every
+        # one of them still answers as an alias
+        _grp = re.search(r"(?m)^the model and the server\n(.*?)(?:\n\n|\Z)", out, re.S)
+        t.ok(_grp is not None and _grp.group(1).splitlines() == [
+            " spark serve [on|off]         the engine and the page on the LAN, kept",
+            " spark serve boot [on|off]    up from boot, never asleep",
+            " spark serve share [on|off]   one engine for every OS user here (Linux)",
+            " spark serve --login          the page's URL; at a terminal a QR and the token",
+            " spark serve --audit [N]      every admin action, sealed",
+            " spark model [NAME|auto|none] the model: download, restart (-h: more)",
+            " spark model --chat NAME      the chat model, a second one (auto|none)",
+            " spark client [URL|off]       use another machine's server; none here",
+            " spark user [add NAME]        the named users; add shows a token once"],
+             "spark help: the group 'the model and the server', line for line", _grp.group(1) if _grp else out)
+        t.ok(not re.search(r"\bspark (?:forge|ember|headless|share|brain)\b|\bbrain,", out),
+             "spark help names no older spelling (forge, ember, headless, share, brain)", out)
+        for _args, _want in ((("forge", "-h"), "spark forge -- "), (("forge", "audit", "x"), "spark serve -- --audit takes a count"),
+                             (("forge", "token"), "spark forge -- "), (("ember", "-h"), "spark model --chat -- "),
+                             (("headless", "-h"), "spark serve boot -- "), (("share", "-h"), "spark serve share -- "),
+                             (("brain", "-h"), "spark status -- "), (("forge", "--print-client"), "SITE_PEER_AI_URL="),
+                             (("serve", "--print-client"), "SITE_PEER_AI_URL="), (("forge", "--print-url"), "http")):
+            _rc, _txt, _ = spark(*_args, extra=off)
+            t.ok(_txt.startswith(_want), "spark %s: the older spelling still answers" % " ".join(_args), _txt[:120])
+        # the aliases run what the new words run: forge bare is the serve
+        # view, brain bare is the status, forge off is the page's half
+        _here = dict(off, SPARK_BASE_URL="")          # this machine's own view, not a client's
+        _rc, _v1, _ = spark("serve", extra=_here)
+        _rc2, _v2, _ = spark("forge", extra=_here)
+        t.ok(_rc == 0 and _rc2 == 0 and _v1 == _v2 and _v1.startswith("spark serve -- ") and "\n  page     " in _v1
+             and "\n  engine   " in _v1 and "\n  boot     " in _v1 and "\n  share    " in _v1 and "\n  answers  " in _v1,
+             "bare spark serve (and bare spark forge): one view -- answers, engine, page, boot, share", _v1)
+        _rc, _v2, _ = spark("forge", "off", extra=off)
+        t.ok(_rc == 0 and "SPARK_FORGE=off" in _v2 and "the page not running" in _v2, "spark forge off: the page's half, as it was", _v2)
+        _senv = home + "/.config/spark/spark.env"
+        with open(_senv) as f:
+            _keep = [l for l in f.read().splitlines() if not l.startswith("SPARK_FORGE=")]
+        with open(_senv, "w") as f:
+            f.write("\n".join(_keep) + "\n")
+        _rc, _st, _ = spark("status", extra=off)
+        _rc2, _br, _ = spark("brain", extra=off)
+        t.ok(_rc2 == 0 and _br.splitlines()[:2] == _st.splitlines()[:2], "bare spark brain is spark status", _br[:200])
+        _tok = home + "/.local/state/spark/forge-token"
+        _before = open(_tok).read() if os.path.exists(_tok) else ""
+        _rc, _txt, _ = spark("forge", "token", "--new", extra=off)
+        t.ok(_rc == 0 and "new admin token" in _txt and os.path.exists(_tok) and open(_tok).read() != _before,
+             "spark forge token --new, the older spelling: a new admin token", _txt)
+        # a slip is never pointed at an older spelling: `spark force` is not
+        # a try for `spark forge`, and a near-miss of serve still is
+        _rc, _txt, _ = spark("force", extra=off)
+        t.ok(_rc == 2 and "no command named force" in _txt and "forge" not in _txt, "spark force: a slip, never pointed at forge", _txt)
+        _rc, _txt, _ = spark("server", "on", extra=off)
+        t.ok(_rc == 2 and "try: spark serve" in _txt, "spark server on: a near-miss of serve", _txt)
 
         # the pager: piped output never touches $PAGER -- a pager that would
         # fail (/bin/false) proves page() never ran it off a tty
@@ -5723,17 +5791,31 @@ def main():
         rc, outb, _ = spark("model", "budget", extra=cl)
         t.ok(rc == 0 and outb == out, "spark model budget on a client prints the same table, no local percent", outb)
         for verb in (("model", "budget", "40"), ("model", "qwen3-1-7b"), ("model", "auto"), ("model", "rm", "qwen3-1-7b"),
-                     ("ember", "qwen3-1-7b"), ("ember", "auto")):
+                     ("model", "--chat", "qwen3-1-7b"), ("ember", "auto")):
             rc, outv, _ = spark(*verb, extra=cl)
-            t.ok(rc == 2 and "serves nothing" in outv and "spark client off" in outv and outv.startswith("spark " + verb[0]),
+            t.ok(rc == 2 and "serves nothing" in outv and "spark client off" in outv
+                 and outv.startswith("spark model" if verb[0] in ("model", "ember") else "spark " + verb[0]),
                  "spark %s on a client is refused with the one line" % " ".join(verb), outv)
         site_env = open(home + "/.config/spark/site.env").read()
         t.ok("SITE_AI_MODEL=none\n" in site_env and "SITE_AI_BUDGET=40" not in site_env and "SITE_EMBER_MODEL=qwen3" not in site_env,
              "the refusals wrote nothing", site_env)
         rc, out, _ = spark("client", "off", extra=off)
         site_env = open(home + "/.config/spark/site.env").read()
-        t.ok(rc == 0 and "SITE_AI_MODEL=auto\n" in site_env and "the other machine stays first" in out,
+        t.ok(rc == 0 and "SITE_AI_MODEL=auto\n" in site_env and "not asked again until spark client URL" in out,
              "spark client off hands the model choice back to auto", out)
+        # off means off: the peer goes with it, so the other machine is
+        # never a candidate again -- not first, not a fallback -- until
+        # `spark client URL`; an explicit SPARK_BASE_URL keeps its meaning
+        t.ok("SITE_PEER_AI_URL=\n" in site_env, "spark client off empties SITE_PEER_AI_URL", site_env)
+        _cand = os.path.join(home, "candidates.py")
+        with open(_cand, "w") as f:
+            f.write("import sys\nsys.path.insert(0, %r)\nfrom spark import config, wire\n"
+                    "print(' '.join(wire.candidates(config.load())))\n" % os.path.join(REPO, "lib"))
+        rc, cands, _ = spark(extra=dict(off, SPARK_BASE_URL=""), exe=_cand)
+        t.ok(rc == 0 and "192.0.2.10" not in cands and cands.strip(),
+             "after client off the other machine is never a candidate (only this machine's own)", cands)
+        rc, cands, _ = spark(extra=dict(off, SPARK_BASE_URL="http://192.0.2.11:8081"), exe=_cand)
+        t.ok(rc == 0 and cands.strip() == "http://192.0.2.11:8081", "SPARK_BASE_URL keeps its meaning: it alone", cands)
         rc, out, _ = spark("client", "-h")
         t.ok(rc == 0 and out.splitlines()[0] == "spark client -- a client of another machine's server",
              "spark client -h signs (contract 8)", out)
@@ -5757,7 +5839,7 @@ def main():
         t.ok(rc == 2 and "no option --theme" in out, "setup --theme: no option any more (v1.62), exit 2", out)
         rc, out, _ = spark("setup", "--yes", "--no-serve", "--model", "none", extra=off)
         t.ok("\u2588" in out and "GB for models" in out and "SITE_AI_MODEL=none" in out and "open a new shell" in out
-             and "spark ember NAME adds a chat model" in out,
+             and "spark model --chat NAME adds a chat model" in out,
              "setup printed the logo, the table header, the model line and the closing block", out)
         t.ok("no model chosen" in out, "setup with none says how to choose later", out)
         t.ok("skip   account      no model here" in out and "the token, shown once" not in out
@@ -6142,15 +6224,15 @@ site.cmd_headless([])
              and "serve restarting" in lines[1] and "sv restart ~/.config/spark/sv/spark-serve" in lines[1],
              "runit finish: enabled, not running -- the services row warns and names the restart line", got)
         # runit runs the services from boot, headless or not: the row and
-        # `spark headless` never say "under your login" there
+        # `spark serve boot` never say "under your login" there
         t.ok(len(lines) > 3 and lines[2] == "na | the services run from boot on runit, headless or not"
-             and lines[3] == "spark headless -- SITE_HEADLESS=no: the services run from boot on runit, headless or not",
-             "runit, not headless: the headless row and spark headless say the services run from boot anyway", got)
+             and lines[3] == "spark serve boot -- SITE_HEADLESS=no: the services run from boot on runit, headless or not",
+             "runit, not headless: the headless row and spark serve boot say the services run from boot anyway", got)
         if sys.platform != "darwin":
             wsl = dict(SPARK_PROC_VERSION=home + "/version-wsl", SPARK_NO_APPLY="1")
-            rc, out, _ = spark("headless", "on", extra=wsl)
+            rc, out, _ = spark("serve", "boot", "on", extra=wsl)
             t.ok(rc == 2 and "WSL 2 stops with its last window" in out and "SITE_HEADLESS=yes" not in open(home + "/.config/spark/site.env").read(),
-                 "WSL 2: spark headless on refuses: it cannot stay on", out)
+                 "WSL 2: spark serve boot on refuses: it cannot stay on", out)
             rc, out, _ = spark("status", extra=wsl)
             t.ok("(WSL 2)" in out, "WSL 2: the status line names it", out.splitlines()[0] if out else "")
             # Void (ID="void" in os-release, /etc/runit a dir, not booted):
@@ -6158,17 +6240,18 @@ site.cmd_headless([])
             # reads the supervisor fact, no linger or sleep
             void = dict(SPARK_OS_RELEASE=home + "/os-release-void", SPARK_PROC_VERSION=home + "/version-plain", SPARK_NO_APPLY="1",
                         SPARK_ETC_RUNIT=home + "/runit", SPARK_VAR_SERVICE=home + "/no-service")
-            rc, out, _ = spark("headless", "on", extra=void)
+            rc, out, _ = spark("serve", "boot", "on", extra=void)
             t.ok(rc == 0 and "SITE_HEADLESS=yes" in open(home + "/.config/spark/site.env").read(),
-                 "Void: spark headless on is allowed (a Void box can be a brain): the key is set", "%d %s" % (rc, out))
-            rc, out, _ = spark("headless", extra=void)
+                 "Void: spark serve boot on is allowed (a Void box can be a brain): the key is set", "%d %s" % (rc, out))
+            rc, out, _ = spark("serve", "boot", extra=void)
             # the fact LABELS (the header says "never asleep": a word test
             # on the whole output would read sleep in it)
             t.ok(rc == 0 and "supervisor from boot" in out and "runit is not running here (a container)" in out
                  and not any(label in out for label in ("  linger ", " sleep masked ", " lid ignored ")),
-                 "Void: spark headless status reads the supervisor fact; no linger, sleep or lid fact on runit", out)
+                 "Void: spark serve boot status reads the supervisor fact; no linger, sleep or lid fact on runit", out)
             rc, out, _ = spark("headless", "off", extra=void)
-            t.ok(rc == 0 and "SITE_HEADLESS=no" in open(home + "/.config/spark/site.env").read(), "Void: spark headless off sets the key back", "%d %s" % (rc, out))
+            t.ok(rc == 0 and "SITE_HEADLESS=no" in open(home + "/.config/spark/site.env").read(),
+                 "Void: spark headless off (the older spelling) sets the key back", "%d %s" % (rc, out))
 
         # the egg (lib/spark/lua.py): the forest, headless through --sim, then a pty
         rc, out, _ = spark("lua", "--sim", "1", "auto")

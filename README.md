@@ -79,11 +79,12 @@ hour in `docs/TOUR.md`:
   text does not answer, what a source says, practice from a source,
   and a live stream watched for one thing. Every line quotes the
   source.
-- `spark model list`: 26 models, each with its license. `spark ember
-  NAME` adds the chat model, a bigger second one.
-- `spark forge --print-url`: the same model, soul and memory in a
-  browser on the LAN, and on a phone that scans the QR. `spark client
-  URL` lets another machine of yours use this one's model.
+- `spark model list`: 26 models, each with its license. `spark model
+  --chat NAME` adds the chat model, a bigger second one.
+- `spark serve on`, then `spark serve --login`: the same model, soul
+  and memory in a browser on the LAN, and on a phone that scans the
+  QR. `spark client URL` lets another machine of yours use this one's
+  model.
 - `spark awaken`: give this machine a personality and a look. Until
   you run it, spark stays as it is. `spark look` shows the parts, and
   `spark look off` turns motion, colour and words off.
@@ -169,7 +170,7 @@ Its size and sha256 are in `models.env`. Nothing else.
 
 On this machine: the server binds one LAN address, never `0.0.0.0`,
 behind tokens kept at 0600. A token is shown once, when you ask
-(`spark forge --print-url`, `spark user add`). Turns and threads live
+(`spark serve --login`, `spark user add`). Turns and threads live
 30 days under `~/.local/state/spark/` (`SPARK_HISTORY=off` keeps none).
 A thread you keep (`/keep` in `spark chat`, or a program through the
 page's server API) stays until you let it go.

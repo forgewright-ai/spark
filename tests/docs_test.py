@@ -9,6 +9,9 @@
 # docs/ is pointed to and the root holds four; no doc names the lists that
 # are gone; the living prompt's verbs, keys and temperaments are in the
 # cheatsheet and INSTALL, and nothing calls awaken minting;
+# no doc but the CHANGELOG and no line of `spark help` names a spelling
+# v1.64 folded into `spark serve` or `spark model --chat`, and help's
+# server group is in the cheatsheet;
 # the docs a new user reads speak two nouns (spark, spark apps) and no
 # doc names what is private; the voice's mechanical half (docs/CONTRIBUTING.md
 # "## Voice") holds over every doc, its two measures included (a sentence
@@ -315,6 +318,53 @@ def living():
         check(m is None, "words.d/%s: no line claims where data goes%s" % (t, " (found '%s')" % m.group(0) if m else ""))
 
 
+# v1.64: one server. The spellings `spark serve` and `spark model --chat`
+# took over stay as aliases, named in no doc but the CHANGELOG and never
+# in `spark help`. Read with the whitespace folded, so a command wrapped
+# over a line break is still one. `FORGE`, the code's name, and the
+# `spark-forge` unit are not commands; `spark brain --porcelain` is
+# contract 5 and stays.
+OLD_SPELLING = re.compile(
+    r"\bspark (?:forge|ember|headless|share)\b(?!-)"
+    r"|\bspark brain\b(?! --porcelain)"
+    r"|(?<![\w-])forge (?:on|off|--print-url|--print-client|audit|token)\b"
+    r"|(?<![\w-])ember (?:list|auto|none|NAME)\b")
+SERVER_GROUP = "the model and the server"
+
+
+def one_server():
+    """The v1.64 verbs, as the docs and the help say them: no doc but the
+    CHANGELOG and no line of `spark help` names an old spelling; every
+    command of help's "the model and the server" group is in the
+    cheatsheet."""
+    import subprocess
+    for doc in ALL_DOCS:
+        if doc == "docs/CHANGELOG.md":
+            continue
+        m = OLD_SPELLING.search(" ".join(read(doc).split()))
+        check(m is None, "%s: no old server spelling%s" % (doc, " (found '%s')" % m.group(0) if m else ""))
+    out = subprocess.run([sys.executable, os.path.join(ROOT, "bin", "spark"), "help"],
+                         capture_output=True, text=True).stdout
+    m = OLD_SPELLING.search(" ".join(out.split()))
+    check(m is None, "spark help: no old server spelling%s" % (" (found '%s')" % m.group(0) if m else ""))
+    m = re.search(r"(?m)^%s\n(.*?)(?:\n\n|\Z)" % re.escape(SERVER_GROUP), out, re.S)
+    check(m is not None, "spark help has a '%s' group" % SERVER_GROUP)
+    cheat = read("docs/CHEATSHEET.txt")
+    for line in (m.group(1).split("\n") if m else []):
+        if not line.startswith(" spark "):
+            continue
+        # the command column ends at two spaces, its words at a
+        # placeholder ([on|off], NAME)
+        words = []
+        for w in re.split(r"\s{2,}", line.strip())[0].split():
+            if w.startswith("[") or re.match(r"^[A-Z]+$", w):
+                break
+            words.append(w)
+        cmd = " ".join(words)
+        check(re.search(re.escape(cmd) + r"(?![\w-])", cheat) is not None,
+              "docs/CHEATSHEET.txt names %s (spark help, %s)" % (cmd, SERVER_GROUP))
+
+
 def main():
     tests_named()
     credits = read("CREDITS.md")
@@ -615,6 +665,8 @@ def main():
           % ("" if not off else " (differs at %s)" % ", ".join("%s %s" % k for k in off[:3])))
     # the living prompt: its verbs, keys and temperaments in the docs
     living()
+    # one server: the old spellings nowhere, the group in the cheatsheet
+    one_server()
     # the voice's mechanical half, and the two nouns in what spark prints
     voice()
     measures()

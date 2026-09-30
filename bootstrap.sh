@@ -556,7 +556,7 @@ forge_ready=0
 case ${SPARK_FORGE:-auto} in on) forge_ready=1 ;; auto) forge_ready=$serve_ready ;; esac
 forge_why="SPARK_FORGE=${SPARK_FORGE:-auto}, server $([ "$serve_ready" = 1 ] && echo yes || echo no)"
 # a box that is the brain: the units run from boot with nobody logged in
-# and the box never sleeps (SITE_HEADLESS=yes; `spark headless on`)
+# and the box never sleeps (SITE_HEADLESS=yes; `spark serve boot on`)
 headless=0; [ "$SITE_HEADLESS" = yes ] && headless=1
 if [ "$client" = 1 ]; then
     skip services "$CLIENT_OF"
@@ -842,7 +842,7 @@ EOF
     else
         # sleep: a brain never sleeps (the four sleep targets masked) and a laptop
         # as the box keeps running with its lid shut (a logind drop-in, HUP to
-        # logind). `spark headless off` undoes both (SPARK_HEADLESS_UNDO=1): a
+        # logind). `spark serve boot off` undoes both (SPARK_HEADLESS_UNDO=1): a
         # plain run with SITE_HEADLESS=no never touches another user's brain.
         targets="sleep.target suspend.target hibernate.target hybrid-sleep.target"
         nmasked=0
@@ -850,7 +850,7 @@ EOF
         dropin=/etc/systemd/logind.conf.d/spark.conf
         lid=$(printf '[Login]\nHandleLidSwitch=ignore\nHandleLidSwitchExternalPower=ignore\n')
         # WSL 2 stops with its last window: a hand-set SITE_HEADLESS=yes there is a
-        # todo, never a systemctl mask (spark headless on refuses it first)
+        # todo, never a systemctl mask (spark serve boot on refuses it first)
         if [ "$headless" = 1 ] && is_wsl; then row todo headless "WSL 2 stops with its last window: not a brain (a Linux machine is)"; headless=0; fi
         if [ "$headless" = 1 ]; then
             if [ "$nmasked" = 4 ]; then ok sleep "sleep, suspend, hibernate masked"
@@ -866,7 +866,7 @@ EOF
         elif [ "$nmasked" = 0 ] && [ ! -f "$dropin" ]; then
             skip sleep "a workstation (SITE_HEADLESS=no)"
         elif [ "${SPARK_HEADLESS_UNDO:-}" != 1 ]; then
-            skip sleep "masked by a brain on this machine (spark headless off undoes it)"
+            skip sleep "masked by a brain on this machine (spark serve boot off undoes it)"
         else
             if [ "$nmasked" != 0 ] && need sleep "systemctl unmask $targets (SITE_HEADLESS=no) (sudo)"; then
                 # shellcheck disable=SC2086
@@ -899,9 +899,9 @@ elif [ "$OS" = Darwin ] || is_wsl; then
 elif [ "$SITE_SHARE" != yes ]; then
     if { [ -f "$share_tok" ] || [ -f "$share_url" ]; } && need share "remove $share_tok, $share_url (SITE_SHARE=no) (sudo)"; then
         as_root rm -f "$share_tok" "$share_url"; ok share "not shared"
-    else skip share "not shared (SITE_SHARE=no; spark share on)"; fi
+    else skip share "not shared (SITE_SHARE=no; spark serve share on)"; fi
 elif [ ! -s "$tok" ]; then
-    row todo share "no api-token yet: spark serve first, then spark share on"
+    row todo share "no api-token yet: spark serve on first, then spark serve share on"
 else
     if getent group spark >/dev/null 2>&1; then ok share "group spark exists"
     elif need share "groupadd spark (sudo)"; then as_root groupadd spark; ok share "group spark created"; fi
@@ -922,7 +922,7 @@ else
     # the engine's address, so a joining user finds it without reading the
     # owner's $HOME. Not a secret (the token gates use): 0644.
     surl=$(cat "$SPARK_STATE_DIR/serve-url" 2>/dev/null || true)
-    if [ -z "$surl" ]; then row todo share "engine URL unknown yet ($share_url): spark serve, then spark share on"
+    if [ -z "$surl" ]; then row todo share "engine URL unknown yet ($share_url): spark serve on, then spark serve share on"
     elif [ -f "$share_url" ] && [ "$(cat "$share_url" 2>/dev/null)" = "$surl" ]; then ok share "$share_url ($surl)"
     elif need share "publish the engine URL to $share_url (sudo)"; then
         as_root mkdir -p "$(dirname "$share_url")"

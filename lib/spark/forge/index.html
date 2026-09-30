@@ -47,9 +47,9 @@
     <p id="login-hello" class="muted">your own AI, on a machine you own</p>
     <p class="muted web small">Ask the machine's admin for a token
       (<code>spark user add NAME</code> mints one and shows a QR to scan);
-      the admin's is at <code>spark forge --print-url</code>.</p>
+      the admin's is at <code>spark serve --login</code>.</p>
     <p class="muted tauri small">The address of the page's server and a token from that machine
-      (<code>spark forge --print-url</code> shows both).</p>
+      (<code>spark serve --login</code> shows both).</p>
     <form id="login-form">
       <label for="server-url" class="tauri">server url</label>
       <input id="server-url" class="tauri" type="text" placeholder="http://host:8081"
@@ -227,7 +227,6 @@
       <button type="button" data-run="off">off</button>
       <span class="lbl">server</span>
       <button type="button" data-run="serve">serve</button>
-      <button type="button" data-run="stop">stop</button>
       <span class="lbl">tune</span>
       <button type="button" data-run="tune" data-args="apply">apply winner</button>
     </div>
@@ -239,7 +238,7 @@
       <span id="token-role" class="mono muted"></span>
     </div>
     <div class="actions">
-      <button type="button" class="danger" data-run="forge" data-args="token --new">rotate admin token</button>
+      <button type="button" class="danger" data-run="serve" data-args="--login --new">rotate admin token</button>
     </div>
     <p class="muted small">rotating logs the admin out everywhere; a user rotates their own above</p>
   </div>

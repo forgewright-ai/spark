@@ -430,15 +430,15 @@ that fits.
    table.
 3. A `.gguf` of your own in `~/.local/share/spark/models` is served
    with `SPARK_MODEL=<file>` in `spark.env`.
-4. `spark ember NAME` adds the chat model: a second, larger model for
-   conversations. The prompt line stays with the small one, at context
-   4096 with reasoning off, so a thinking model answers fast. Every
-   conversation goes to the chat model: `spark <words>`, `chat`, `do`,
-   the page, and any `/v1` client naming no model. One engine, one
-   port, one token: the request's `model` field picks. `spark ember
-   auto` pairs the smallest tested row with the largest that fits
-   beside it. `spark ember none`, the default, runs one model in both
-   roles.
+4. `spark model --chat NAME` adds the chat model: a second, larger
+   model for conversations. The prompt line stays with the small one, at
+   context 4096 with reasoning off, so a thinking model answers fast.
+   Every conversation goes to the chat model: `spark <words>`, `chat`,
+   `do`, the page, and any `/v1` client naming no model. One engine, one
+   port, one token: the request's `model` field picks. `spark model
+   --chat auto` pairs the smallest tested row with the largest that fits
+   beside it. `spark model --chat none`, the default, runs one model in
+   both roles. `spark model --chat list` shows the pair.
 5. `spark model add URL` adds your own row. A huggingface.co
    `.../resolve/<rev>/<file>` URL is checked from its redirect headers,
    and any other URL needs `--sha256 HEX`. `--license "NAME URL"` is
@@ -482,21 +482,27 @@ LAN address: `http://<host>:8081`. The admin token stays on this
 machine.
 Everyone else is a named user with a token of their own.
 
-The servers. Two run on this machine. The engine, llama-server on port
-8080, holds the model. The page's server on port 8081 holds the soul,
-the memory and the threads, and answers the page, the API and every
-client. `spark serve on` starts the engine and waits until it answers.
-`spark serve off` stops it, `--force` also stops the unit's, or one
-spark did not start, and `--noreload` keeps it down. `--host ADDR`
-binds another address, `--print-client` prints the two lines another
-machine needs, and `--foreground` is what the unit runs.
+The servers. Two run on this machine, and one verb runs them both. The
+engine, llama-server on port 8080, holds the model. The page's server
+on port 8081 holds the soul, the memory and the threads. It answers
+the page, the API and every client.
+
+- `spark serve on` starts both through their services and waits until
+  they answer. It is kept: they come back after a restart.
+- `spark serve off` stops both and keeps them down. `--force` also
+  stops an engine spark did not start.
+- `spark serve` alone shows what answers, this machine or the other
+  one. It names the model and the chat model, the page's URL, the
+  services, boot and share.
+- `--login` also prints what another machine needs to join, and
+  `--foreground` is what a service runs.
 
 Another machine of yours:
 
 1. Here: `spark user add NAME` mints an account. Its token is shown
    once and never stored.
 2. There, with spark installed: `spark client URL`, with the URL from
-   `spark forge --print-client` here. Then `spark user login NAME` with
+   `spark serve --login` here. Then `spark user login NAME` with
    that token.
 3. `spark client` there says whether this machine answers.
 
@@ -511,15 +517,17 @@ account of its own. The login is the token minted here. `spark check`
 there reads `na` on those rows, and the `peer` row says whether this
 machine answers and accepts that login. `spark model` there prints
 this machine's table, and choosing a model there is refused. `spark
-client off` gives it a model of its own again.
+client off` gives it a model of its own again. From then on it never
+asks this machine, even while this one answers, until `spark client
+URL` there again.
 
-Another OS user on this same machine, on Linux: you run `spark share
-on` once. That makes a `spark` group with one engine for everyone. Add
-the user to the group with `sudo gpasswd -a NAME spark`, and they log
-in again. Then they run the one-liner in their own home, with no `sudo`
-and no download. `spark setup` sees the shared engine and joins it:
-their own soul and memory, one model loaded once. `spark share off`
-ends it.
+Another OS user on this same machine, on Linux: you run `spark serve
+share on` once. That makes a `spark` group with one engine for everyone.
+Add the user to the group with `sudo gpasswd -a NAME spark`, and they
+log in again. Then they run the one-liner in their own home, with no
+`sudo` and no download. `spark setup` sees the shared engine and joins
+it: their own soul and memory, one model loaded once. `spark serve share
+off` ends it.
 
 Every program that calls spark, a script, an app or a CI job, gets its
 own user with `spark user add NAME` and its own token. The admin token
@@ -561,7 +569,7 @@ starting with a letter, at most 32 characters.
 
 The page, in any browser on the LAN:
 
-1. `spark forge --print-url` prints `http://<host>:8081/login`. At a
+1. `spark serve --login` prints `http://<host>:8081/login`. At a
    terminal it also prints the admin token and a QR code. Piped, it
    prints the URL alone, and `--show-token` adds the token. Scan the
    QR with a phone's camera and the page signs in by itself. The token
@@ -577,13 +585,12 @@ The page, in any browser on the LAN:
    opens in a browser tab. The page needs this machine reachable when
    it opens. There is no offline copy.
 
-`spark forge` alone is the status: URL, health, model, unit, token and
-the log tail. `spark forge on|off` enables or disables it. `spark forge
-token --new` rotates the admin token, and `spark user token --new`
-rotates a user's. That user logs in again. `spark forge audit` lists
-the newest admin actions, sealed in this machine's own store. Each is a
-command run from the page, with its sha256 prefix and exit code and
-never its text, a verb run, or a user added, removed or rotated.
+`spark serve --login --new` rotates the admin token, and `spark user
+token --new` rotates a user's. That user logs in again. `spark serve
+--audit [N]` lists the newest admin actions, sealed in this machine's
+own store. Each is a command run from the page, with its sha256 prefix
+and exit code and never its text, a verb run, or a user added, removed
+or rotated.
 
 Sealed stores. Each user's threads, memory and chat history are
 encrypted under a key wrapped by that user's token. The cipher is
@@ -592,7 +599,7 @@ verifier and the wrap, never the token. Nobody, the admin included,
 holds a key to another user's messages. A lost token is lost history.
 There is no TLS on the LAN: the trust model is your LAN.
 
-Headless. On the machine that stays on, `spark headless on`:
+Up from boot. On the machine that stays on, `spark serve boot on`:
 
 - Linux: the units run from boot without a login, by linger. The GPU is
   reachable without a seat, by the `render` group. Sleep, suspend and
@@ -606,7 +613,7 @@ Headless. On the machine that stays on, `spark headless on`:
   auto-login, and FileVault's login screen is untouched. `pmset` keeps
   the machine awake. Restart and stop then need `sudo launchctl`, and
   the verbs print the line. `off` puts the login agents back.
-- WSL 2 stops with its last window, so `spark headless on` refuses
+- WSL 2 stops with its last window, so `spark serve boot on` refuses
   there.
 - A machine that starts before its network has no LAN address yet. The
   model and the page then wait for one, as long as it takes, and start
@@ -679,8 +686,8 @@ Linux:
 - Units: `systemctl --user status spark-serve spark-forge
   spark-check.timer` and `journalctl --user -u spark-serve -n 50`. On
   Void: `sv status ~/.config/spark/sv/*`. Without a user systemd
-  session, as in a container, the `services` row reads `na`. Run
-  `spark serve` and `spark forge` by hand.
+  session, as in a container, the `services` row reads `na`, and
+  `spark serve on` starts both by hand.
 
 Arch:
 
@@ -710,15 +717,18 @@ Void:
   or not. The 3 live in `~/.config/spark/sv/`, and `sv status
   ~/.config/spark/sv/*` shows them. Each log is
   `~/.local/state/spark/log/NAME/current`. `spark serve off` puts a
-  `down` file in the service's directory, and `spark check` runs every
+  `down` file in each service's directory, and `spark check` runs every
   5 minutes as a supervised loop. A `runsvdir-USER` of your own is
   used as it is: spark links its services into its directory. spark's
   own has a `control/t`: a stop, or the shutdown, ends each service
   cleanly first, then the supervisor.
 - Void's base has no `hostname` command. With `SITE_SET_HOSTNAME=yes`
   spark writes `/etc/hostname` and sets the kernel's name.
-- `spark headless on` works. The services run from boot either way,
-  and sleep and the lid are the machine's own.
+- `spark serve boot on` works. The services run from boot either way,
+  and sleep and the lid are the machine's own. A service that keeps
+  crashing is held, and the `services` row warns.
+- A machine whose network gives only a link-local address, 169.254,
+  waits: the model and the page bind the real address when it comes.
 
 Windows, as Ubuntu 24.04 on WSL 2:
 
@@ -733,7 +743,7 @@ Windows, as Ubuntu 24.04 on WSL 2:
   `/etc/wsl.conf`, run `wsl --shutdown` from PowerShell, reopen Ubuntu,
   then `./bootstrap.sh`.
 - Not a server for the LAN: the distro stops with its last window, so
-  `spark headless on` refuses. Reaching the page from the LAN needs
+  `spark serve boot on` refuses. Reaching the page from the LAN needs
   `networkingMode=mirrored` in `.wslconfig` on Windows 11, untested
   here.
 
@@ -794,14 +804,14 @@ running `./bootstrap.sh` does the same.
 | `SITE_USER` | your display name | your login |
 | `SITE_SET_HOSTNAME` | `yes`: the OS hostname follows `SITE_NAME` (sudo) | `no` |
 | `SITE_AI_MODEL` | `auto`, `none`, or a name -- `spark model NAME`. `none` beside the other machine's URL is a client | `auto` |
-| `SITE_EMBER_MODEL` | `none`, `auto`, or a name: the chat model -- `spark ember NAME` | `none` |
+| `SITE_EMBER_MODEL` | `none`, `auto`, or a name: the chat model -- `spark model --chat NAME` | `none` |
 | `SITE_AI_BUDGET` | 10 to 95: the percent of RAM plus GPU memory `auto` may use -- `spark model budget N` | `60` |
 | `SITE_AI_BUILD` | `auto`, `cpu` or `vulkan`: the Linux engine build. macOS ignores it, and WSL 2 lands on `cpu` | `auto` |
-| `SITE_PEER_AI_URL` | another machine's URL, from `spark forge --print-client` there -- `spark client URL` | unset |
+| `SITE_PEER_AI_URL` | another machine's URL, from `spark serve --login` there -- `spark client URL` | unset |
 | `SITE_PEER_SSH` | an ssh target, with key auth, that `spark check` should be able to reach | unset |
-| `SITE_HEADLESS` | `yes`: up from boot, never asleep -- `spark headless on\|off` | `no` |
-| `SITE_SHARE` | `yes`: a `spark` group shares this machine's engine with its other OS users (Linux) -- `spark share on\|off` | `no` |
-| `SITE_QUIET_START` | `yes`: no banner, and one-line `serve`, `forge` and bare `spark` -- `spark quiet start on` | `no` |
+| `SITE_HEADLESS` | `yes`: up from boot, never asleep -- `spark serve boot on\|off` | `no` |
+| `SITE_SHARE` | `yes`: a `spark` group shares this machine's engine with its other OS users (Linux) -- `spark serve share on\|off` | `no` |
+| `SITE_QUIET_START` | `yes`: no banner, and one-line `serve` and bare `spark` -- `spark quiet start on` | `no` |
 | `SITE_QUIET_AUDIO` | `yes`: no sound from spark -- `spark quiet audio on` | `no` |
 
 Runtime keys live in `~/.config/spark/spark.env`, and
@@ -811,7 +821,8 @@ Runtime keys live in `~/.config/spark/spark.env`, and
 |---|---|---|
 | `SPARK_MEMORY` | `on` or `off`: send the remembered facts -- `spark memory on\|off` | `on` |
 | `SPARK_REVEAL` | `off`, `auto` or N: a reply's pace at a terminal in chat, explain and a question -- `spark reveal N`, `auto` or `off` sets it, `--reveal` on the verb and `/reveal` in chat for one time. `spark stats` shows the measured threshold | `off` |
-| `SPARK_FORGE` | `auto`, `on` or `off`: serve the page and the API -- `spark forge on\|off` | `auto` |
+| `SPARK_SERVICE` | the engine as a service: `auto` wherever a model is served -- `spark serve on\|off` sets it with `SPARK_FORGE` | `auto` |
+| `SPARK_FORGE` | `auto`, `on` or `off`: serve the page and the API -- `spark serve on\|off` sets it with `SPARK_SERVICE` | `auto` |
 | `SPARK_FORGE_HOST` / `SPARK_FORGE_PORT` | the page's address and port, never `0.0.0.0` | the LAN address / `8081` |
 | `SPARK_HISTORY` | days a turn or a thread lives. `off` keeps none. A kept thread (`/keep` in `spark chat`) stays until you let it go | `30` |
 | `SPARK_NGL` `SPARK_FLASH_ATTN` `SPARK_KV` `SPARK_THREADS` | the engine's tuning -- `spark bench tune apply` | auto |
@@ -827,7 +838,7 @@ do, and never calls `sudo`:
 - Always: the package manager for the `packages` row, and the hostname
   when `SITE_SET_HOSTNAME=yes`. On Void the `runsvdir-USER` service,
   once. On macOS the hostname only.
-- `spark headless on`: linger, the `render` group, the sleep targets
+- `spark serve boot on`: linger, the `render` group, the sleep targets
   and the lid. On Void nothing: the services already run from boot.
   On macOS the LaunchDaemons and `pmset`.
 
@@ -854,9 +865,8 @@ When something stops working:
 3. `spark` says which engine answers and which shells have the prompt
    line.
 4. A stale server after a DHCP move shows as `moved` on the `serve`
-   row: `spark serve off; spark serve on`. The `forge` row likewise:
-   `spark forge off; spark forge on`.
-5. `spark forge` says whether the page is up and at which address. One
+   or the `forge` row: `spark serve off; spark serve on`.
+5. `spark serve` says whether the page is up and at which address. One
    line per request lands in `~/.local/state/spark/forge.log`, never a
    body.
 6. The `ember` row names the pair over budget, a file not downloaded,
@@ -888,7 +898,7 @@ addresses you gave it and nothing else.
   address out for a minute. The login sleep is bounded, so a burst
   cannot pin the server's threads. The remedy is rotation: `spark user
   token --new` for your own token, which re-keys your sessions on the
-  spot, and `spark forge token --new` for the admin's.
+  spot, and `spark serve --login --new` for the admin's.
 - With the disk, an attacker reads the admin's own store, because its
   key sits beside it so the machine can work, plus the soul, which is
   plain config. Every named user's store is ciphertext. The key is

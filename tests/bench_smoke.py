@@ -102,7 +102,7 @@ def main():
 
         # the two roles: the ember is measured by default, --spark the line model
         rc, out, _ = spark("bench", "--ember")
-        ok(rc == 78 and "ember" in out, "--ember with none served: exit 78 naming spark ember", out)
+        ok(rc == 78 and "spark model --chat NAME" in out, "--ember with none served: exit 78 naming spark model --chat", out)
         for fname in ("Qwen3-1.7B-Q4_K_M.gguf", "Qwen_Qwen3-4B-Instruct-2507-Q4_K_M.gguf"):
             with open(os.path.join(models, fname), "w") as f:
                 f.write("gguf" * 64)

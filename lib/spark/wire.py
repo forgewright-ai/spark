@@ -283,9 +283,12 @@ def serve_url():
 
 
 def candidates(cfg):
-    """Where to look, in order: a hard client URL alone; else the preferred
-    peer, then the FORGE `spark forge` bound here, then whatever `spark
-    serve` bound here, then loopback."""
+    """Where to look, in order: a hard client URL alone (SPARK_BASE_URL);
+    else the other machine when one is named (SPARK_PREFER_URL, or
+    SITE_PEER_AI_URL -- `spark client off` empties it, so the other
+    machine is never asked again until `spark client URL`), then the
+    page's server bound here, then the engine bound here, then
+    loopback."""
     if cfg.base_url:
         return [cfg.base_url]
     out = []
@@ -341,7 +344,8 @@ def no_brain_hint(cfg):
     if cfg.base_url:
         return "no answer from SPARK_BASE_URL %s" % cfg.base_url
     if cfg.prefer_url:
-        return "no answer from the other machine at %s -- is it up? (spark serve starts a local engine)" % cfg.prefer_url
+        return "no answer from the other machine at %s -- is it up? (%s)" % (
+            cfg.prefer_url, "spark client off serves here instead" if cfg.client else "spark serve on serves here")
     from . import engine
     st = engine.service_state(cfg)
     if st == "loaded":
@@ -350,12 +354,12 @@ def no_brain_hint(cfg):
             return "no engine awake -- %slaunchctl kickstart -k %s" % ("sudo " if dom == "system" else "", engine.service_target(cfg))
         return "no engine awake -- " + engine.restart_line("serve")
     if st == "disabled":
-        return "no engine awake -- the service is disabled on purpose; `spark serve` starts one by hand"
+        return "no engine awake -- it is off on purpose; spark serve on starts it and keeps it"
     m = engine.model_file(cfg)
     if not m:
         return "no engine awake -- no model in %s (./bootstrap.sh downloads one)" % cfg.models_dir
     gb = os.path.getsize(m) / 2**30
-    return "no engine awake -- `spark serve` loads %s (%.1f GB)" % (os.path.basename(m), gb)
+    return "no engine awake -- spark serve on loads %s (%.1f GB)" % (os.path.basename(m), gb)
 
 
 def resolve_brain(cfg, fresh=False):
