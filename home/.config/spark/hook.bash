@@ -10,4 +10,8 @@ case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) PATH="$HOME/.local/bin:$PATH" ;;
 export PATH
 [ -r ~/.config/spark/widget.bash ] && . ~/.config/spark/widget.bash
 if [[ -z ${STARSHIP_SHELL:-} && $PS1 != \\n* && $PS1 != $'\n'* ]]; then PS1='\n'$PS1; fi
+# a quiet boot an older spark set turns the VT cursor off until the
+# reboot after the hand-back; a human session turns it back on. It
+# goes when bootstrap's handback row goes
+[ "$TERM" = linux ] && printf '\033[?25h'
 [ -r "$HOME/.config/spark/completion.bash" ] && . "$HOME/.config/spark/completion.bash"

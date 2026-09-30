@@ -10,4 +10,8 @@ case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) PATH="$HOME/.local/bin:$PATH" ;;
 export PATH
 [[ -r ~/.config/spark/widget.zsh ]] && source ~/.config/spark/widget.zsh
 if [[ -z ${STARSHIP_SHELL:-} && $PROMPT != $'\n'* ]]; then PROMPT=$'\n'$PROMPT; fi
+# a quiet boot an older spark set turns the VT cursor off until the
+# reboot after the hand-back; a human session turns it back on. It
+# goes when bootstrap's handback row goes
+[ "$TERM" = linux ] && printf '\033[?25h'
 [[ -r "$HOME/.config/spark/completion.zsh" ]] && source "$HOME/.config/spark/completion.zsh"

@@ -316,9 +316,12 @@ fi
 #     Debian GRUB drop-in; the Arch UKI drop-in and the splash mark; Void's
 #     marked lines in GRUB's file, rc.conf and the getty's conf. A dry run
 #     names each and never calls sudo. The apply puts each back through a
-#     sudo that runs what it is given, and your own lines stay. A second
-#     run, and a machine that never had any of it, say nothing and never
-#     call sudo. Both OSes: python, the Linux shape by SPARK_OS.
+#     sudo that runs what it is given, and your own lines stay, byte for
+#     byte. A stale .orig never overwrites a login file you changed; a
+#     failed boot rebuild runs again next time; a failed palette step keeps
+#     spark's palette files. A second run, and a machine that never had any
+#     of it, say nothing and never call sudo. Both OSes: python, the Linux
+#     shape by SPARK_OS.
 H=$T/hb; mkdir -p "$H/bin"
 printf '#!/bin/sh\n[ "$1" = -n ] && shift\necho "sudo $*" >> "$HBLOG"\nexec "$@"\n' > "$H/bin/sudo"
 for c in setvtrgb systemctl update-grub mkinitcpio setupcon setfont; do
@@ -329,7 +332,7 @@ printf 'Linux version 6.12.0-fixture (fixture) #1 SMP\n' > "$H/version"
 # hb COMMAND...: the fixture's seams; HBPATH first on PATH ($H/bin by
 # default: the sudo that runs; "$T/bin:$H/bin" puts the one that shouts first)
 hb() {
-    env HOME="$H/home" XDG_CONFIG_HOME="$H/home/.config" SPARK_OS=Linux SPARK_PROC_VERSION="$H/version" TERM=xterm \
+    env HOME="$H/home" XDG_CONFIG_HOME="$H/home/.config" XDG_STATE_HOME="$H/home/.local/state" SPARK_OS=Linux SPARK_PROC_VERSION="$H/version" TERM=xterm \
         SPARK_ETC_CONSOLE_UNIT="$H/etc/spark-console.service" SPARK_ETC_RC_LOCAL="$H/etc/rc.local" \
         SPARK_ETC_CONSOLE_SETUP="$H/etc/console-setup" SPARK_ETC_VCONSOLE="$H/etc/vconsole.conf" SPARK_ETC_RCCONF="$H/etc/rc.conf" \
         SPARK_ETC_MOTD="$H/etc/motd" SPARK_ETC_ISSUE="$H/etc/issue" SPARK_ETC_UNAME_MOTD="$H/etc/10-uname" \
@@ -359,7 +362,7 @@ hb_painted() {
     mv "$H/etc/issue" "$H/etc/issue.orig"; printf '\033[?25h' > "$H/etc/issue"
     printf 'GRUB_TIMEOUT=0\n' > "$H/etc/zz-spark-quiet.cfg"
     printf 'GRUB_TIMEOUT=0 #spark-quiet#\n' >> "$H/etc/default-grub"
-    printf 'GETTY_ARGS="--noclear"\nGETTY_ARGS= #spark-quiet#\n' > "$H/etc/getty-conf"
+    printf 'GETTY_ARGS="--noclear" # caf\351\nGETTY_ARGS= #spark-quiet#\n' > "$H/etc/getty-conf"
     printf 'quiet loglevel=3\n' > "$H/etc/zz-spark-quiet.conf"
     printf 'default_uki="/boot/x.efi"\n#spark-quiet# default_options="--splash /x.bmp"\n' > "$H/etc/mkinitcpio.d/linux.preset"
 }
@@ -369,7 +372,7 @@ out=$(HBPATH="$T/bin:$H/bin" hb python3 -m spark.handback --dry-run 2>&1) || bad
 printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "hand-back dry run called sudo" || ok "hand-back dry run: no sudo"
 [ -f "$H/etc/motd.orig" ] && [ -f "$H/home/.config/spark/console-colors" ] && [ -f "$H/etc/zz-spark-quiet.cfg" ] && ok "hand-back dry run: nothing changed" || bad "hand-back dry run changed a file"
 out=$(hb python3 -m spark.handback 2>&1) || bad "handback apply failed: $out"
-[ "$(printf '%s\n' "$out" | tail -1)" = "the look is off this machine now" ] && ok "hand-back apply ends with its one line" || bad "hand-back last line: $(printf '%s\n' "$out" | tail -1)"
+printf '%s\n' "$out" | grep -q "the look is off this machine now" && bad "hand-back said the look is off with a todo left" || ok "hand-back with a todo left: no closing line"
 [ "$(printf '%s\n' "$out" | grep -c '^todo')" = 2 ] && printf '%s\n' "$out" | grep -qE '^todo +handback +.*rc.local still paints' \
     && printf '%s\n' "$out" | grep -qE "^todo +handback +the boot menu's wait stays as spark set it" \
     && ok "hand-back: your rc.local line and the loader's wait are said, never guessed (2 todo rows)" || bad "hand-back todo rows: $(printf '%s\n' "$out" | grep '^todo' | tr '\n' ' ')"
@@ -383,19 +386,48 @@ grep -q 'setvtrgb' "$H/etc/rc.local" && ok "hand-back: rc.local is yours, left a
     && [ -z "$(ls "$H"/etc/*.spark-orig 2>/dev/null)" ] \
     && ok "hand-back: each console font line is back from its .spark-orig, your later lines kept, the copies gone" \
     || bad "hand-back font: $(cat "$H/etc/console-setup" "$H/etc/vconsole.conf" "$H/etc/rc.conf" | tr '\n' ' ')"
-grep -q '^setupcon --force$' "$H/log" && grep -q '^systemctl restart systemd-vconsole-setup$' "$H/log" && grep -q '^setfont$' "$H/log" \
-    && ok "hand-back: each console redraws its own way (setupcon, systemd-vconsole-setup, setfont)" || bad "hand-back redraw: $(tr '\n' ' ' < "$H/log")"
+grep -q '^setupcon --force$' "$H/log" && grep -q '^systemctl restart systemd-vconsole-setup$' "$H/log" && ! grep -q '^setfont' "$H/log" \
+    && printf '%s\n' "$out" | grep -q 'the console font returns at the next boot' \
+    && ok "hand-back: each console redraws its own way (setupcon, systemd-vconsole-setup; Void's at the next boot)" || bad "hand-back redraw: $(tr '\n' ' ' < "$H/log")"
 [ "$(cat "$H/etc/motd")" = "the distro notice" ] && [ "$(cat "$H/etc/issue")" = 'Debian \n \l' ] && [ -x "$H/etc/10-uname" ] \
     && [ ! -e "$H/etc/motd.orig" ] && [ ! -e "$H/etc/issue.orig" ] \
     && ok "hand-back: motd and issue from their .orig, 10-uname runnable, the .orig gone" || bad "hand-back login: $(ls -l "$H/etc" | tr '\n' ' ')"
 [ ! -e "$H/etc/zz-spark-quiet.cfg" ] && [ ! -e "$H/etc/zz-spark-quiet.conf" ] \
     && [ "$(cat "$H/etc/mkinitcpio.d/linux.preset")" = "$(printf 'default_uki="/boot/x.efi"\ndefault_options="--splash /x.bmp"')" ] \
-    && grep -q '^mkinitcpio -P$' "$H/log" && [ "$(grep -c '^update-grub$' "$H/log")" = 2 ] \
+    && grep -q '^mkinitcpio -P$' "$H/log" && [ "$(grep -c '^update-grub$' "$H/log")" = 1 ] && [ ! -e "$H/home/.local/state/spark/handback-rebuild" ] \
     && ok "hand-back: the GRUB and UKI drop-ins gone, the splash unmarked, update-grub and mkinitcpio -P run" || bad "hand-back boot: $(tr '\n' ' ' < "$H/log")"
-[ "$(cat "$H/etc/default-grub")" = "GRUB_TIMEOUT=5" ] && [ "$(cat "$H/etc/getty-conf")" = 'GETTY_ARGS="--noclear"' ] \
-    && ok "hand-back: Void's marked lines gone, your own GRUB and getty lines as they were" || bad "hand-back marks: $(cat "$H/etc/default-grub" "$H/etc/getty-conf" | tr '\n' ' ')"
+printf 'GETTY_ARGS="--noclear" # caf\351\n' > "$H/expect"
+[ "$(cat "$H/etc/default-grub")" = "GRUB_TIMEOUT=5" ] && cmp -s "$H/etc/getty-conf" "$H/expect" \
+    && ok "hand-back: Void's marked lines gone, your own GRUB and getty lines as they were (a Latin-1 byte kept)" || bad "hand-back marks: $(cat "$H/etc/default-grub" "$H/etc/getty-conf" | od -c | tr '\n' ' ')"
 out=$(HBPATH="$T/bin:$H/bin" hb python3 -m spark.handback 2>&1) || bad "handback again failed: $out"
 [ -z "$out" ] && ok "hand-back, a second run: nothing left, silent, no sudo" || bad "hand-back second run: $out"
+# a stale .orig (an older `quiet login off` copied it back, never removed
+# it) under a login screen you changed since: the .orig goes, yours stays
+hb_clean
+printf 'the old notice\n' > "$H/etc/motd.orig"; printf 'old issue\n' > "$H/etc/issue.orig"
+printf 'my issue\n' > "$H/etc/issue"; chmod 0644 "$H/etc/10-uname"
+out=$(hb python3 -m spark.handback 2>&1) || bad "handback (stale .orig) failed: $out"
+[ "$(cat "$H/etc/issue")" = "my issue" ] && [ "$(cat "$H/etc/motd")" = "the distro notice" ] && [ ! -x "$H/etc/10-uname" ] \
+    && [ ! -e "$H/etc/motd.orig" ] && [ ! -e "$H/etc/issue.orig" ] && [ "$(printf '%s\n' "$out" | tail -1)" = "the look is off this machine now" ] \
+    && ok "hand-back: a stale .orig goes, your changed motd and issue and your 10-uname stay" || bad "hand-back stale .orig: $out / $(cat "$H/etc/motd" "$H/etc/issue")"
+# a boot rebuild that fails is marked and runs again next time; a root
+# step that fails keeps spark's palette files for the next run
+hb_clean
+printf 'GRUB_TIMEOUT=0\n' > "$H/etc/zz-spark-quiet.cfg"
+printf '\033]P0282828\n' > "$H/home/.config/spark/console-colors"
+mkdir -p "$H/fail"; printf '#!/bin/sh\necho "$(basename "$0") failed" >> "$HBLOG"\nexit 1\n' > "$H/fail/update-grub"
+cp "$H/fail/update-grub" "$H/fail/setvtrgb"; chmod +x "$H"/fail/*
+out=$(HBPATH="$H/fail:$H/bin" hb python3 -m spark.handback 2>&1) || bad "handback (failing rebuild) failed: $out"
+[ ! -e "$H/etc/zz-spark-quiet.cfg" ] && grep -qx grub "$H/home/.local/state/spark/handback-rebuild" \
+    && printf '%s\n' "$out" | grep -qE '^todo +handback +sudo update-grub$' && [ -f "$H/home/.config/spark/console-colors" ] \
+    && ok "hand-back: a failed update-grub is a todo and stays marked; a failed setvtrgb keeps the palette files" || bad "hand-back failing rebuild: $out"
+out=$(hb python3 -m spark.handback --dry-run 2>&1)
+printf '%s\n' "$out" | grep -qE '^would +handback +update-grub ran' && ok "hand-back dry run: the marked rebuild would run again" || bad "hand-back dry run (marked): $out"
+: > "$H/log"
+out=$(hb python3 -m spark.handback 2>&1) || bad "handback (retry) failed: $out"
+[ "$(grep -c '^update-grub$' "$H/log")" = 1 ] && [ ! -e "$H/home/.local/state/spark/handback-rebuild" ] && [ ! -e "$H/home/.config/spark/console-colors" ] \
+    && [ "$(printf '%s\n' "$out" | tail -1)" = "the look is off this machine now" ] \
+    && ok "hand-back, the next run: update-grub again, the mark gone, the palette files gone, then its one line" || bad "hand-back retry: $out"
 hb_clean
 out=$(HBPATH="$T/bin:$H/bin" hb python3 -m spark.handback --dry-run 2>&1; HBPATH="$T/bin:$H/bin" hb python3 -m spark.handback 2>&1)
 [ -z "$out" ] && [ ! -e "$H/log" ] && ok "hand-back on a machine spark never painted: nothing to do, no sudo" || bad "hand-back clean: $out"
