@@ -105,7 +105,11 @@ it, and no verb carries the word.
   that passes through whole until the closing fence. Awakened, it also
   draws `inline code` in the accent, its backticks dropped, and a `- `,
   `* ` or `N. ` line as a bullet whose wrapped lines hang under its
-  first word. Piped, the bytes are the model's. Text in is strict UTF-8
+  first word. In `spark chat`, awakened, a reply starts with the face,
+  a `text.Wrap` lead, and every wrapped line hangs the face's width in.
+  The face is ASCII like every frame: idle on a reply, puzzled on an
+  error or a refusal. Unawakened, a reply is bare text, byte for byte.
+  Piped, the bytes are the model's. Text in is strict UTF-8
   as well. stdin is decoded with the replacement mark
   (`text.stdin_text`). Every string bound for the wire or a store goes
   through `text.clean` first: a thread, the ledger, a turn record. A
@@ -236,7 +240,13 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 `text.Wrap(cps=)`, `cli.reveal_flag`)
                 forge (identity, threads and the kept ones, reply, the chat
                 loop, @FILE; the chat-history save skips a sealed file that
-                does not open)
+                does not open. The loop's opening says the thread it goes on
+                with, for everyone; awake it adds the face, a greet.* line and
+                the done line at the end. SLASH_VERBS: /help /new /resume
+                /clear /keep /last /model /reveal, /copy (pbcopy, wl-copy,
+                xclip, xsel), /save (0600, never overwrites), /read @FILE
+                (contract 11 on the file, onto the chat's thread), /do
+                [--sandbox] (spark do's terminal loop; the chat runs nothing))
                 forgeserve (the page's server under spark serve: the API, the page;
                 ROUTES is the one table of every route and its role)
                 do (spark do: the one loop, a face per driver -- the terminal,
@@ -1163,7 +1173,10 @@ and may change freely.
     always held back first (`text.hold_secrets`, contract 10's
     `--source` rule). Every span that looks like a secret becomes
     `[held]` before the parts are cut, one stderr line names the count
-    and the shapes, and the turn records `held`.
+    and the shapes, and the turn records `held`. `/read @FILE
+    [question]` in `spark chat` is a client inside the chat: the file is
+    the source, the same law holds, and the exchange lands on the chat's
+    thread.
 12. `spark ask` is the questioner's protocol: the text on stdin (a plan,
     a draft, a decision) and questions about it out, raw, one per line.
     Never a path, never a `[cwd]` line. Mode comes from the argument

@@ -67,7 +67,7 @@ The first 3 things to type:
 ```
 ? how big is this dir           a command in your line, a hint above it
 cmd 2>&1 | explain              what went wrong, and the fix
-spark chat                      a conversation; /help lists its verbs
+spark chat                      a conversation; /help lists its commands
 ```
 
 Then the rest, one line each in `docs/CHEATSHEET.txt`, and a first

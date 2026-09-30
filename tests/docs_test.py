@@ -11,7 +11,8 @@
 # cheatsheet and INSTALL, and nothing calls awaken minting;
 # no doc but the CHANGELOG and no line of `spark help` names a spelling
 # v1.64 folded into `spark serve` or `spark model --chat`, and help's
-# server group is in the cheatsheet;
+# server group is in the cheatsheet; every chat command
+# (forge.SLASH_VERBS) is in the cheatsheet and INSTALL's chat table;
 # the docs a new user reads speak two nouns (spark, spark apps) and no
 # doc names what is private; the voice's mechanical half (docs/CONTRIBUTING.md
 # "## Voice") holds over every doc, its two measures included (a sentence
@@ -365,6 +366,21 @@ def one_server():
               "docs/CHEATSHEET.txt names %s (spark help, %s)" % (cmd, SERVER_GROUP))
 
 
+def chat_commands():
+    """Every command of the chat (forge.SLASH_VERBS, what /help lists)
+    is in the cheatsheet and in docs/INSTALL.md's chat table: a command
+    added without its doc line fails here."""
+    from spark import forge
+    cheat = read("docs/CHEATSHEET.txt")
+    inst = read("docs/INSTALL.md")
+    for verb in sorted(forge.SLASH_VERBS):
+        pat = re.escape(verb) + r"(?![\w-])"
+        check(re.search(pat, cheat) is not None,
+              "docs/CHEATSHEET.txt names %s (forge.SLASH_VERBS)" % verb)
+        check(re.search(r"(?m)^\| `" + pat, inst) is not None,
+              "docs/INSTALL.md's chat table has a row for %s (forge.SLASH_VERBS)" % verb)
+
+
 def main():
     tests_named()
     credits = read("CREDITS.md")
@@ -667,6 +683,8 @@ def main():
     living()
     # one server: the old spellings nowhere, the group in the cheatsheet
     one_server()
+    # the chat's commands: each in the cheatsheet and INSTALL's table
+    chat_commands()
     # the voice's mechanical half, and the two nouns in what spark prints
     voice()
     measures()
