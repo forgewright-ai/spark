@@ -5702,7 +5702,8 @@ def main():
             f.write("\n".join(_keep) + "\n")
         _rc, _st, _ = spark("status", extra=off)
         _rc2, _br, _ = spark("brain", extra=off)
-        t.ok(_rc2 == 0 and _br.splitlines()[:2] == _st.splitlines()[:2], "bare spark brain is spark status", _br[:200])
+        _stable = lambda out: [re.sub(r"\d+ ?ms", "N ms", l) for l in out.splitlines()[:2]]
+        t.ok(_rc2 == 0 and _stable(_br) == _stable(_st), "bare spark brain is spark status", _br[:200])
         _tok = home + "/.local/state/spark/forge-token"
         _before = open(_tok).read() if os.path.exists(_tok) else ""
         _rc, _txt, _ = spark("forge", "token", "--new", extra=off)
