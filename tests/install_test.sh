@@ -410,6 +410,35 @@ out=$(hb python3 -m spark.handback 2>&1) || bad "handback (stale .orig) failed: 
 [ "$(cat "$H/etc/issue")" = "my issue" ] && [ "$(cat "$H/etc/motd")" = "the distro notice" ] && [ ! -x "$H/etc/10-uname" ] \
     && [ ! -e "$H/etc/motd.orig" ] && [ ! -e "$H/etc/issue.orig" ] && [ "$(printf '%s\n' "$out" | tail -1)" = "the look is off this machine now" ] \
     && ok "hand-back: a stale .orig goes, your changed motd and issue and your 10-uname stay" || bad "hand-back stale .orig: $out / $(cat "$H/etc/motd" "$H/etc/issue")"
+# spark-shell's look (v1.63): its quiet login (motd empty, 10-uname off,
+# issue the cursor escape alone, its copies *.spark-shell-orig and no
+# .orig of spark's), its palette unit and rc.local line, its marked boot
+# lines and drop-ins, its font copy. None of it is spark's: the hand-back
+# does nothing, says nothing and never calls sudo, every byte stays
+hb_clean
+mv "$H/etc/motd" "$H/etc/motd.spark-shell-orig"; : > "$H/etc/motd"; chmod 0644 "$H/etc/10-uname"
+mv "$H/etc/issue" "$H/etc/issue.spark-shell-orig"; printf '\033[?25h' > "$H/etc/issue"
+printf '[Unit]\n' > "$H/etc/spark-shell-console.service"
+printf "#!/bin/sh\n[ -r '%s' ] && setvtrgb '%s' #spark-shell-palette#\n" "$H/home/.config/spark-shell/console-colors.rgb" "$H/home/.config/spark-shell/console-colors.rgb" > "$H/etc/rc.local"
+printf 'GRUB_TIMEOUT=0\n' > "$H/etc/zz-spark-shell-quiet.cfg"; printf 'quiet\n' > "$H/etc/zz-spark-shell-quiet.conf"
+printf 'GRUB_TIMEOUT=0 #spark-shell-quiet#\n' >> "$H/etc/default-grub"
+printf 'GETTY_ARGS= #spark-shell-quiet#\n' > "$H/etc/getty-conf"
+printf 'default_uki="/boot/x.efi"\n#spark-shell-quiet# default_options="--splash /x.bmp"\n' > "$H/etc/mkinitcpio.d/linux.preset"
+cp "$H/etc/console-setup" "$H/etc/console-setup.spark-shell-orig"
+printf 'FONT="Terminus" #spark-shell-quiet#\n' > "$H/etc/rc.conf"
+before=$(cd "$H" && find etc home -type f | sort | xargs cksum; ls -l "$H/etc/10-uname")
+out=$(HBPATH="$T/bin:$H/bin" hb python3 -m spark.handback --dry-run 2>&1; HBPATH="$T/bin:$H/bin" hb python3 -m spark.handback 2>&1)
+after=$(cd "$H" && find etc home -type f | sort | xargs cksum; ls -l "$H/etc/10-uname")
+[ -z "$out" ] && [ ! -e "$H/log" ] && [ "$before" = "$after" ] \
+    && ok "hand-back: spark-shell's quiet login, palette, boot lines and drop-ins are not spark's, left byte for byte, no sudo" \
+    || bad "hand-back touched spark-shell's look: $out / $(printf '%s\n' "$after" | tr '\n' ' ')"
+# spark's own palette files beside spark-shell's rc.local line: spark's
+# go, and the line is spark-shell's, never called yours to delete
+printf '\033]P0282828\n' > "$H/home/.config/spark/console-colors"
+out=$(hb python3 -m spark.handback 2>&1) || bad "handback (spark-shell's rc.local) failed: $out"
+[ ! -e "$H/home/.config/spark/console-colors" ] && ! printf '%s\n' "$out" | grep -q 'rc.local still paints' \
+    && [ "$(cat "$H/etc/issue")" = "$(printf '\033[?25h')" ] && [ -e "$H/etc/issue.spark-shell-orig" ] \
+    && ok "hand-back: spark's palette files go; spark-shell's rc.local line and login are not called spark's" || bad "hand-back (spark-shell's rc.local): $out"
 # a boot rebuild that fails is marked and runs again next time; a root
 # step that fails keeps spark's palette files for the next run
 hb_clean
@@ -432,16 +461,17 @@ hb_clean
 out=$(HBPATH="$T/bin:$H/bin" hb python3 -m spark.handback --dry-run 2>&1; HBPATH="$T/bin:$H/bin" hb python3 -m spark.handback 2>&1)
 [ -z "$out" ] && [ ! -e "$H/log" ] && ok "hand-back on a machine spark never painted: nothing to do, no sudo" || bad "hand-back clean: $out"
 if [ "$(uname -s)" = Darwin ]; then
-    # macOS: the spark-* profiles leave Terminal.app's preferences (a
-    # fixture plist, never the real ones) and a default naming one is Basic
-    python3 -c 'import plistlib, sys; plistlib.dump({"Window Settings": {"spark-gruvbox-dark": {"a": 1}, "Basic": {"b": 2}}, "Default Window Settings": "spark-gruvbox-dark", "Startup Window Settings": "Basic"}, open(sys.argv[1], "wb"))' "$H/terminal.plist"
+    # macOS: the profiles spark made leave Terminal.app's preferences (a
+    # fixture plist, never the real ones) and a default naming one is
+    # Basic; spark-shell's profile is spark-shell's and stays (v1.63)
+    python3 -c 'import plistlib, sys; plistlib.dump({"Window Settings": {"spark-gruvbox-dark": {"a": 1}, "spark-shell": {"c": 3}, "Basic": {"b": 2}}, "Default Window Settings": "spark-gruvbox-dark", "Startup Window Settings": "spark-shell"}, open(sys.argv[1], "wb"))' "$H/terminal.plist"
     : > "$H/home/.config/spark/spark-gruvbox-dark.terminal"
     out=$(hb env SPARK_OS=Darwin SPARK_TERMINAL_DOMAIN="$H/terminal.plist" python3 -m spark.handback --dry-run 2>&1)
     printf '%s\n' "$out" | grep -qE '^would +handback +the spark profiles left Terminal.app' && ok "macOS hand-back dry run: the profiles would go" || bad "macOS hand-back dry run: $out"
     out=$(hb env SPARK_OS=Darwin SPARK_TERMINAL_DOMAIN="$H/terminal.plist" python3 -m spark.handback 2>&1)
-    left=$(python3 -c 'import plistlib, sys; p = plistlib.load(open(sys.argv[1], "rb")); print(" ".join(sorted(p["Window Settings"])), p["Default Window Settings"])' "$H/terminal.plist")
-    [ "$left" = "Basic Basic" ] && [ ! -e "$H/home/.config/spark/spark-gruvbox-dark.terminal" ] && [ "$(printf '%s\n' "$out" | tail -1)" = "the look is off this machine now" ] \
-        && ok "macOS hand-back: the spark profiles and their .terminal file gone, the default Basic" || bad "macOS hand-back: $left / $out"
+    left=$(python3 -c 'import plistlib, sys; p = plistlib.load(open(sys.argv[1], "rb")); print(" ".join(sorted(p["Window Settings"])), p["Default Window Settings"], p["Startup Window Settings"])' "$H/terminal.plist")
+    [ "$left" = "Basic spark-shell Basic spark-shell" ] && [ ! -e "$H/home/.config/spark/spark-gruvbox-dark.terminal" ] && [ "$(printf '%s\n' "$out" | tail -1)" = "the look is off this machine now" ] \
+        && ok "macOS hand-back: the spark profiles and their .terminal file gone, the default Basic, spark-shell's profile kept" || bad "macOS hand-back: $left / $out"
 fi
 if [ "$(uname -s)" != Darwin ]; then
     # bootstrap's row: the dry run prints the would rows and counts them; a

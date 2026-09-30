@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.63
+
+The hand-back leaves another tool's look alone. It takes back only
+what spark itself made, by its own record.
+
+- The motd and `/etc/issue` change only when spark's own `.orig` copy
+  is there. A quiet login from spark-shell stays as it is, on every
+  `spark update` and `spark uninstall`.
+- On macOS only the profiles spark made leave Terminal.app. The
+  `spark-shell` profile stays.
+- A line in `/etc/rc.local` from spark-shell is not called yours to
+  delete.
+- spark-shell's marked lines, drop-ins, unit and copies are never
+  matched.
+
 ## v1.62
 
 spark is the AI at the prompt, and nothing else. The machine's look

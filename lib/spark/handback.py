@@ -5,9 +5,15 @@
 # console font (its lines from the .spark-orig copy), the login screen
 # (/etc/motd and /etc/issue from their .orig, 10-uname runnable again), a
 # quiet boot (spark's GRUB drop-in, the Arch UKI drop-in and splash mark,
-# Void's marked lines) and Terminal.app's spark-* profiles. Each step finds
+# Void's marked lines) and Terminal.app's spark profiles. Each step finds
 # spark's own files and marks, so a machine that never had them does
 # nothing, and root is asked only for what is there.
+#
+# Only what spark itself made (v1.63), each by spark's own record: its
+# exact file names, its own marks, its .orig and .spark-orig copies, the
+# profile names it wrote. Another tool may paint the same things under
+# names of its own, and a login screen that looks quiet with no .orig of
+# spark's beside it is not spark's: all of that stays as it is.
 #
 # One undo, two callers: bootstrap's `handback` row (`python3 -m
 # spark.handback [--dry-run]`, every `spark update`) and `spark
@@ -57,6 +63,12 @@ REBUILDS = {"grub": (["update-grub"], "update-grub ran: GRUB's menu and the kern
 LINE_MARK = " #spark-quiet#"       # the end of each line spark appended (Void)
 SPLASH_MARK = "#spark-quiet# "     # the start of the preset line spark commented (Arch UKI)
 CURSOR_ON = "\033[?25h"            # all the /etc/issue a quiet login left
+# the Terminal.app profiles spark made: spark-<palette>, one of the nine
+# palettes it shipped (v1.61's themes/), or a name whose .terminal file it
+# wrote in ~/.config/spark. Any other spark-<word> is another tool's.
+SHIPPED_PALETTES = ("catppuccin-mocha", "dracula", "everforest-dark", "gruvbox-dark", "nord",
+                    "rose-pine", "selenized-dark", "solarized-light", "tokyonight-night")
+PALETTE_ROWS = "/spark/console-colors"   # what a boot line naming spark's palette files holds
 # the kernel's own sixteen: what a running VT gets back
 VGA = ["#000000", "#aa0000", "#00aa00", "#aa5500", "#0000aa", "#aa00aa", "#00aaaa", "#aaaaaa",
        "#555555", "#ff5555", "#55ff55", "#ffff55", "#5555ff", "#ff55ff", "#55ffff", "#ffffff"]
@@ -152,6 +164,18 @@ def font_restored(text, orig, keys):
     return "\n".join(out)
 
 
+def profile_names(written=()):
+    """The Terminal.app profile names spark made: spark- and a palette it
+    shipped, and the names of the .terminal files it wrote (written). Pure."""
+    return {"spark-" + n for n in SHIPPED_PALETTES} | set(written)
+
+
+def _written_profiles():
+    """The .terminal files spark wrote (~/.config/spark/spark-*.terminal),
+    by the profile name each carries."""
+    return [os.path.basename(p)[:-len(".terminal")] for p in glob.glob(os.path.join(CONFIG_DIR, "spark-*.terminal"))]
+
+
 def unmarked(text):
     """text without the lines spark appended (each ends with the mark). Pure."""
     return "".join(l for l in _lines(text) if not l.rstrip("\r\n").endswith(LINE_MARK))
@@ -182,7 +206,7 @@ def palette(ctx, tmp):
                                    "{ systemctl daemon-reload >/dev/null 2>&1 || true; }" % shlex.quote(CONSOLE_UNIT)],
                             "spark-console.service is disabled and removed",
                             "sudo systemctl disable spark-console.service; sudo rm -f %s" % CONSOLE_UNIT) and held
-        if "console-colors" in (_read(RC_LOCAL) or ""):
+        if any(PALETTE_ROWS in l for l in _lines(_read(RC_LOCAL) or "")):
             ctx.row("todo", WHAT, "%s still paints spark's old palette at boot: its setvtrgb line is yours to delete" % RC_LOCAL)
     if ctx.dry:
         ctx.row("would", WHAT, "spark's palette files leave ~/.config/spark (console-colors)")
@@ -218,15 +242,17 @@ def font(ctx, tmp):
 
 
 def login(ctx, tmp):
-    """The login screen: /etc/motd and /etc/issue from their .orig while
-    the live file is still spark's (an empty motd, an issue holding only
-    the cursor escape), and the kernel line in the motd runnable again
-    with it. A live file changed since is yours: only its stale .orig
-    goes. An issue spark left with no .orig empties."""
+    """The login screen, only by spark's own record: /etc/motd and
+    /etc/issue from their .orig while the live file is still spark's (an
+    empty motd, an issue holding only the cursor escape), and the kernel
+    line in the motd runnable again with it. A live file changed since is
+    yours: only its stale .orig goes. No .orig, not spark's: an issue
+    holding the cursor escape alone is another tool's quiet login, and
+    it stays as it is, the motd and 10-uname with it."""
     motd_o, issue_o = MOTD + ".orig", ISSUE + ".orig"
     spark_motd = _read(MOTD) == ""
     spark_issue = (_read(ISSUE) or "").rstrip("\n") == CURSOR_ON
-    if IS_MAC or not (os.path.exists(motd_o) or os.path.exists(issue_o) or spark_issue):
+    if IS_MAC or not (os.path.exists(motd_o) or os.path.exists(issue_o)):
         return False
     q = shlex.quote
     steps, manual, back = [], [], []
@@ -239,10 +265,6 @@ def login(ctx, tmp):
             back.append(path)
         steps.append("rm -f %s" % q(orig))
         manual.append("sudo rm -f %s" % orig)
-    if spark_issue and not os.path.exists(issue_o):
-        steps.append(": > %s" % q(ISSUE))
-        manual.append("sudo truncate -s 0 %s" % ISSUE)
-        back.append(ISSUE)
     if MOTD in back and os.path.isfile(UNAME_MOTD) and not os.access(UNAME_MOTD, os.X_OK):
         steps.append("chmod +x %s" % q(UNAME_MOTD))
         manual.append("sudo chmod +x %s" % UNAME_MOTD)
@@ -359,16 +381,18 @@ def _terminal_prefs(path):
 
 
 def terminal(ctx, tmp):
-    """macOS: every spark-* profile leaves Terminal.app's preferences (a
-    default or startup setting that named one is Basic again) and the
-    .terminal files spark wrote go. Open windows keep their look."""
+    """macOS: every profile spark made (profile_names: never a spark-<word>
+    of another tool's) leaves Terminal.app's preferences (a default or
+    startup setting that named one is Basic again) and the .terminal
+    files spark wrote go. Open windows keep their look."""
     if not IS_MAC:
         return False
     files = glob.glob(os.path.join(CONFIG_DIR, "spark-*.terminal"))
+    names = profile_names(_written_profiles())
     path = os.path.join(tmp, "terminal")
     prefs = _terminal_prefs(path)
     ws = prefs.get("Window Settings")
-    gone = sorted(k for k in ws if k.startswith("spark-")) if isinstance(ws, dict) else []
+    gone = sorted(k for k in ws if k in names) if isinstance(ws, dict) else []
     if not gone and not files:
         return False
     done = "the spark profiles left Terminal.app; open windows keep their look until closed"
@@ -381,7 +405,7 @@ def terminal(ctx, tmp):
         for k in gone:
             del ws[k]
         for key in ("Default Window Settings", "Startup Window Settings"):
-            if str(prefs.get(key, "")).startswith("spark-"):
+            if str(prefs.get(key, "")) in names:
                 prefs[key] = "Basic"
         with open(path + ".prefs", "wb") as f:
             plistlib.dump(prefs, f, fmt=plistlib.FMT_BINARY)

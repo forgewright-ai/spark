@@ -623,6 +623,30 @@ class T:
         print("  skip %s   (%s)" % (what, why))
 
 
+def handback_cases(t):
+    """v1.63: the hand-back takes back only what spark itself made.
+    spark-shell paints the same things under its own names: a profile
+    called spark-shell, lines ending #spark-shell-quiet#, a preset line
+    starting #spark-shell-quiet#. None of spark's matchers reach them."""
+    from spark import handback as hb
+    names = hb.profile_names(["spark-mine"])
+    t.ok("spark-gruvbox-dark" in names and "spark-mine" in names,
+         "a profile spark made (a shipped palette, or a .terminal file it wrote) is spark's", sorted(names))
+    t.ok(not any(n in names for n in ("spark-shell", "spark-", "spark-other", "Basic", "spark-gruvbox-dark 1")),
+         "spark-shell's profile, and any name spark never made, is not spark's", sorted(names))
+    text = "A=1\nB=2 #spark-quiet#\nC=3 #spark-shell-quiet#\n"
+    t.ok(hb.unmarked(text) == "A=1\nC=3 #spark-shell-quiet#\n",
+         "spark's marked lines go, spark-shell's marked lines stay", repr(hb.unmarked(text)))
+    t.ok(not "#spark-shell-quiet# default_options=x".startswith(hb.SPLASH_MARK),
+         "spark's splash mark never matches spark-shell's")
+    t.ok(hb.PALETTE_ROWS in "setvtrgb ~/.config/spark/console-colors.rgb"
+         and hb.PALETTE_ROWS not in "[ -r ~/.config/spark-shell/console-colors.rgb ] && setvtrgb x #spark-shell-palette#",
+         "an rc.local line naming spark's palette files is said; spark-shell's line is not")
+    for path, theirs in ((hb.GRUB_DROPIN, "zz-spark-shell-quiet.cfg"), (hb.CMDLINE_DROPIN, "zz-spark-shell-quiet.conf"),
+                         (hb.CONSOLE_UNIT, "spark-shell-console.service")):
+        t.ok(os.path.basename(path) != theirs, "spark's %s is not spark-shell's %s" % (os.path.basename(path), theirs))
+
+
 def lan_wait_cases(t):
     """v1.58: a server's LAN address. A person gets '' at once (the verb
     says so, exit 78); a service waits for as long as it takes and says
@@ -6597,6 +6621,7 @@ print("restart", engine.restart_line("serve"), "|", engine.restart_line("check")
     living_widget_cases(t)
     living_waits_cases(t)
     lan_wait_cases(t)
+    handback_cases(t)
     srv.shutdown()
     print("smoke: %s" % ("all ok" if not t.fail else "%d FAILED" % t.fail))
     return 1 if t.fail else 0
