@@ -135,7 +135,7 @@ open(sys.argv[2], "w").write(str(srv.server_address[1]))
 srv.serve_forever()
 PY
 page=$!
-i=0; while [ ! -s "$T/page-port" ] && [ "$i" -lt 50 ]; do sleep 0.1; i=$((i + 1)); done
+i=0; while [ ! -s "$T/page-port" ] && [ "$i" -lt 200 ]; do sleep 0.1; i=$((i + 1)); done
 mkdir -p "$HOME/.local/state/spark"
 printf 'http://127.0.0.1:%s\n' "$(cat "$T/page-port")" > "$HOME/.local/state/spark/forge-url"
 urun() { env SPARK_OS=Linux SPARK_ETC_RUNIT="$T/runit" SV_LOG="$T/sv.log" PATH="$T/svbin:$PATH" "$SPARK" update 2>&1; }
