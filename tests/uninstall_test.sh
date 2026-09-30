@@ -22,6 +22,12 @@ printf '#!/bin/sh\nexit 0\n' > "$T/bin/micro"; chmod +x "$T/bin/micro"
 export PATH="$T/bin:$PATH" SPARK_NO_REFRESH=1 TERM=xterm-256color
 export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
 unset SPARK_HOME SPARK_REPO SPARK_NO_APPLY SPARK_YES SITE_THEME SITE_AI_MODEL SITE_HEADLESS
+# the hand-back's files, pinned: the machine underneath is never read (a
+# runner's own /etc, a developer's Terminal.app preferences)
+for k in CONSOLE_UNIT RC_LOCAL CONSOLE_SETUP VCONSOLE RCCONF MOTD ISSUE UNAME_MOTD GRUB_DROPIN DEFAULT_GRUB GETTY_CONF MKINITCPIO_D CMDLINE_DROPIN; do
+    export "SPARK_ETC_$k=$T/no-etc/$k"
+done
+export SPARK_TERMINAL_DOMAIN="$T/no-terminal.plist"
 
 case $(uname -s) in Darwin) rc=.zshrc; other=.bashrc ;; *) rc=.bashrc; other=.zshrc ;; esac
 
@@ -135,6 +141,7 @@ state=$(cd "$HOME/.local/state/spark" && find . | sort | tr '\n' ' ')
 [ "$state" = ". ./account ./users ./users/ana ./users/ana/token.hash " ] && ok "state keeps only the sealed users and the account" || bad "state left: $state"
 conf=$(cd "$HOME/.config/spark" && find . | sort | tr '\n' ' ')
 [ "$conf" = ". ./memory ./models.env ./privacy-terms ./soul ./themes ./themes/mine.env " ] && ok "config keeps only soul, memory, models.env, themes, privacy-terms" || bad "config left: $conf"
+printf '%s\n' "$out" | grep -qE "^ok +handback +spark's palette files left ~/.config/spark" && ok "the look an older spark painted goes through the hand-back (one undo)" || bad "handback row: $(printf '%s\n' "$out" | grep -E ' handback ' | head -2 | tr '\n' ' ')"
 printf '%s\n' "$out" | grep -qE '^spark: |^fail ' && bad "a step failed outright: $(printf '%s\n' "$out" | grep -E '^spark: |^fail ' | head -2)" || ok "no step failed outright (a refusing sudo is a todo row)"
 printf '%s\n' "$out" | grep -q 'kept (yours): ' && printf '%s\n' "$out" | grep -q 'is gone from this machine' && ok "the summary names what stayed and says spark is gone" || bad "summary: $(printf '%s\n' "$out" | tail -6)"
 [ -e "$HOME/.local/bin/starship" ] && ok "starship is not spark's, left alone" || bad "starship removed"

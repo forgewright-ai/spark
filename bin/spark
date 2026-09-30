@@ -89,9 +89,7 @@ USAGE_MACHINE = """the machine
 """
 
 USAGE_INTERFACE = """the interface
- spark theme [NAME|list|show] the palettes, and yours; show = its colours
- spark quiet [SUB on|off]     start (banner), login (motd), boot (menu), audio
- spark font [FACE SIZE|list]  the console font (Linux) / Terminal.app's
+ spark quiet [SUB on|off]     start (banner), audio (sounds): spark's own noise
  spark bar [line]             the machine's one-line status
 """
 
@@ -118,7 +116,7 @@ version %s
 
 
 def usage():
-    """The help: theme, quiet, font and the bar line are the interface;
+    """The help: quiet and the bar line are the interface;
     awaken, look, words and height the living prompt.
     The version is formatted here, not at import: nothing on the `spark
     line` path may call git, and version() does, on a cache miss."""
@@ -172,9 +170,8 @@ VERBS = {"setup": ("setup", "main", False), "check": ("check", "main", False),
          "look": ("look", "cmd_look", False), "height": ("look", "cmd_height", False),
          "awaken": ("awaken", "main", False), "words": ("words", "main", False),
          "update": ("update", "cmd_update", False), "bar": ("bar", "main", False),
-         "theme": ("theme", "main", False), "bench": ("bench", "main", True),
-         "stats": ("stats", "main", False),
-         "font": ("site", "cmd_font", False), "quiet": ("site", "cmd_quiet", False),
+         "bench": ("bench", "main", True), "stats": ("stats", "main", False),
+         "quiet": ("site", "cmd_quiet", False),
          "headless": ("site", "cmd_headless", False), "client": ("site", "cmd_client", False),
          "share": ("site", "cmd_share", False),
          "model": ("model", "cmd_model", False), "ember": ("model", "cmd_ember", False),
@@ -214,10 +211,8 @@ def near_verb(word):
 
 
 def misplaced(word):
-    from spark import REPO, config
-    if word in config.theme_names(REPO) or word == "none":
-        say("spark: %s is a palette -- spark theme %s" % (word, word))
-    elif word in {r[0] for r in config.model_tables()} or word == "auto":
+    from spark import config
+    if word in {r[0] for r in config.model_tables()} or word == "auto":
         say("spark: %s is a model -- spark model %s" % (word, word))
     else:
         near = near_verb(word)

@@ -30,12 +30,13 @@ prompt line, the page and any program.
   way. micro came first: forgewright-ai/spark-micro. spark ships no app,
   no app package, no app check row and no per-app verb. A machine's
   desktop, its prompt and its daily tools are not spark's business:
-  `spark look` dresses spark's own lines alone. spark's side is
-  generic: `~/.config/spark/theme.env` is a palette any renderer may
-  read, and no shell code lives in this tree. The bar line and `spark
-  quiet` are core, beside `spark headless`: the behaviour of an AI
-  appliance. Quiet hides noise, never a safety line: no watchdog, fsck,
-  log or check is switched off to silence what it prints.
+  `spark look` dresses spark's own lines alone. The console's palette
+  and font and a quiet boot are the machine's look, not spark's. spark's
+  side is generic: `~/.config/spark/theme.env` is a palette a look
+  layer may write, and no shell code lives in this tree. The bar line
+  and `spark quiet start|audio` are core, beside `spark headless`: the
+  behaviour of an AI appliance. Quiet hides noise, never a safety line:
+  no watchdog, fsck, log or check is switched off to silence it.
 - **Privacy by design.** Nothing leaves the machine except the package
   managers, pinned sha256-verified downloads, and `spark` talking to a
   `FORGE` or a llama-server you run. Identity lives in
@@ -126,8 +127,8 @@ prompt line, the page and any program.
   `NO_COLOR` unset. The machine's own lines never claim where data goes:
   awaken's brief forbids it, and `README.md` says what leaves.
 - **Symmetric.** Every feature exists on both OSes, through each OS's
-  native mechanism: apt, pacman or xbps for the packages, systemd,
-  launchd or runit for the services, bash or zsh for the shell.
+  native mechanism. That is apt, pacman or xbps for the packages,
+  systemd, launchd or runit for the services, bash or zsh for the shell.
   Nothing OS-only ships. A Linux package family is one oracle beside
   `is_wsl()`: `distro()` reads `ID`, then `ID_LIKE`, from os-release,
   and `SPARK_OS_RELEASE` pins it. Its names are one data file,
@@ -141,16 +142,16 @@ prompt line, the page and any program.
   The engine pin is a glibc build, so Void's musl flavour refuses at
   `get`: `musl libc: the pinned engine is a glibc build -- Void's glibc
   flavour runs spark`. What a family lacks refuses in one signed line,
-  and its rows say so, never fail (`check.ARCH_ROWS` and
-  `check.VOID_ROWS`, the fifth and sixth selftest passes). Windows is
-  reached through WSL 2. Ubuntu there is Linux to spark, minus what the
-  VT console and the boot loader own. `is_wsl()` sits beside
-  `os_pretty`, the verbs that own those refuse in one signed line, and
-  their rows say so, never fail. CI has no WSL runner: `check.WSL_ROWS`
-  and the fourth selftest pass pin the branch by fixture. A real run
-  there is the maintainer's, by hand.
-- **The user chooses.** Theme, prompt, model, machine name, user: all
-  `site.env` keys with defaults. Nothing aesthetic or sized to hardware
+  and its rows say so, never fail. `check.ARCH_ROWS` and
+  `check.VOID_ROWS` name those rows, none today, and the fifth and sixth
+  selftest passes run there. Windows is reached through WSL 2. Ubuntu
+  there is Linux to spark, minus what WSL cannot do. `is_wsl()` sits
+  beside `os_pretty`. A verb WSL cannot serve refuses in one signed
+  line, such as `spark headless`, and a row says so, never fails. CI
+  has no WSL runner: `check.WSL_ROWS` and the fourth selftest pass pin
+  the branch by fixture. A real run there is the maintainer's, by hand.
+- **The user chooses.** Model, machine name, user, spark's own look:
+  all keys with defaults. Nothing aesthetic or sized to hardware
   is baked in. A model is the user's own choice, never a spark change:
   `spark model add URL --license "NAME URL"` and `spark ember NAME`
   bring one in, and nothing credits it beyond its license. A new
@@ -195,13 +196,13 @@ lib/env.sh      the KEY=value reader for the two scripts (config.py is the pytho
 distro/         one KEY=value file per Linux package family (debian.env, arch.env,
                 void.env): the manager, its install line, the doc's name, the 3
                 package groups
-site.env.example, models.env, engine.env, themes/*.env       KEY=value data
+site.env.example, models.env, engine.env      KEY=value data
                 (engine.env is the llama.cpp pin: version + one sha per flavour)
 bin/spark, bin/explain -> spark                  the one command
 lib/spark/      __init__ config wire engine serve session persona cli check
                 verify (sha256, cached: spark model verify, check's models row)
-                bar (the status line) theme
-                site (site.env custodian: set_keys/apply, rc custody, font quiet
+                bar (the status line)
+                site (site.env custodian: set_keys/apply, rc custody, quiet
                 headless client share)
                 model (spark model / spark ember: the table, add, verify, budget)
                 edit (spark edit: contract 10)
@@ -279,8 +280,8 @@ lib/spark/forge/  index.html spark.css spark.js manifest.webmanifest favicon.svg
                   mark.svg -- the page, ASCII, no inline script
 home/           the shared $HOME mirror, linked. .config/spark/ holds the two
                 widgets (widget.bash widget.zsh), the two rc hooks (hook.bash
-                hook.zsh: PATH, the widget, the blank row, completion, the VT
-                palette -- TERM=linux only), the two completion files
+                hook.zsh: PATH, the widget, the blank row, completion), the
+                two completion files
                 (completion.bash completion.zsh: TAB completes the verbs and
                 their names, offline), the banner, spark.env.example, tale
                 (a text of the maintainer's own, credited in CREDITS.md),
@@ -360,27 +361,15 @@ docs/           every document but the 4 at the root. With a release (the
 ```
 
 Runtime paths. Config is `~/.config/spark/`: `site.env`, `spark.env`,
-`theme.env`, `models.env` (yours), `themes/<name>.env` (yours),
-`privacy-terms`, `console-colors`, `console-colors.rgb`, `soul`,
+`theme.env`, `models.env` (yours), `privacy-terms`, `soul`,
 `personality`, `words`, `faces` and `memory` (the pre-v1.4 facts file,
 read until the first write). `personality` (0600) is the paragraph
 `spark awaken` writes after the soul's fixed core. `words` (0600) is
 `ID<TAB>line` per line, and `faces` (0600) is `MOOD=frame` per line
 plus `RATE=` and `TEMPER=`. Awaken writes both, and every line passes
 `look.clean` when it is stored and again when it is printed.
-`console-colors` is the precomputed Linux VT palette: one
-`\033]P<n><rrggbb>` per ansi colour, the 16 VGA values after
-`none`, never `\033]R`, because the kernel's defaults may be a theme.
-`spark theme` and `spark setup` alone write it. `theme.apply_console`
-sends it to a running VT and then redraws, because a framebuffer paints
-a palette only into cells drawn after it. The rc hooks send it at
-login, `TERM=linux` only. `console-colors.rgb` is the same palette in
-`setvtrgb`'s three-line form, for root at boot. Bootstrap's
-`vt-palette` row installs the one-shot `spark-console.service`, which
-sets the kernel's defaults so the login screen and every VT wear it
-before any shell runs. The `theme` row compares that file with
-`/sys/module/vt/parameters`. `SPARK_SYSFS_VT` pins it in the fixture.
-`soul` is prose, 0600, yours, never linked from `home/`. `memory`
+`theme.env` is a palette a look layer may write, never spark (contract
+3). `soul` is prose, 0600, yours, never linked from `home/`. `memory`
 there is the pre-v1.4 fallback: the facts live sealed in your store
 since v1.4, and the file is read until the first write.
 
@@ -424,8 +413,9 @@ Data is `~/.local/share/spark/{engine,models}`. Tools are linked into
 `~/.local/bin`. `spark uninstall` (`lib/spark/uninstall.py`) removes
 all of it but the sealed stores, the account keys and your prose: the
 soul and its personality stay, and the words and faces files go.
-`--purge` takes those too. It runs bootstrap once first, with headless
-and quiet undone through their rows, and never `site.apply` or
+`--purge` takes those too. It runs bootstrap once first, headless
+undone through its row. It gives back a look an older spark set, as
+the `handback` row does (contract 1). It never runs `site.apply` or
 `check.refresh` after: each would put things back. Root steps become
 `todo` rows when sudo refuses. The clone goes last, only when it is
 `${SPARK_HOME:-~/.spark}` and clean.
@@ -467,10 +457,14 @@ and may change freely.
    appended. Another shell, or a bash older than 4, is a `todo` naming
    the fix. On bash, a regular `~/.bash_profile` that neither sources
    `~/.bashrc` nor holds the marker shadows the hook on a console login.
-   The `rc-login` row appends the same marked line there. One hand-back
-   row covers what older sparks made. The `micro` row removes the plugin
+   The `rc-login` row appends the same marked line there. Two hand-back
+   rows cover what older sparks made. The `micro` row removes the plugin
    links a pre-v1.10 install left under `~/.config/micro` and names the
-   app's own repository.
+   app's own repository. The `handback` row, run by `spark update`,
+   gives back the look a pre-v1.62 spark set: the stock console palette
+   and font, a loud boot, the motd and `/etc/issue`. On macOS it removes
+   the Terminal.app spark profiles. It is idempotent, and once it acted
+   it says `the look is off this machine now`.
 2. `install.sh --dry-run` prints rows `ok|would link|would render|would
    back up  <path>` and the same final line. Apply is quiet the same
    way: an `ok` row, already in place, prints only with `--verbose`.
@@ -483,10 +477,10 @@ and may change freely.
    non-blank, non-comment line (``^[A-Z_0-9]+=[^;`$()|&<>]*$``). The
    keys:
    - `site.env`: `SITE_NAME SITE_USER SITE_SET_HOSTNAME SITE_PEER_AI_URL
-     SITE_PEER_SSH SITE_THEME SITE_AI_MODEL SITE_EMBER_MODEL
-     SITE_AI_BUDGET SITE_AI_BUILD SITE_FONT_FACE SITE_FONT_SIZE
-     SITE_QUIET_LOGIN SITE_QUIET_BOOT SITE_QUIET_START SITE_QUIET_AUDIO
-     SITE_HEADLESS SITE_SHARE`.
+     SITE_PEER_SSH SITE_AI_MODEL SITE_EMBER_MODEL SITE_AI_BUDGET
+     SITE_AI_BUILD SITE_QUIET_START SITE_QUIET_AUDIO SITE_HEADLESS
+     SITE_SHARE`. A key an older spark wrote, such as `SITE_THEME`,
+     still loads: a well-formed key spark does not know is not refused.
    - `spark.env`: `SPARK_PORT SPARK_BASE_URL SPARK_PREFER_URL
      SPARK_SERVE_HOST SPARK_ENGINE_DIR SPARK_MODELS_DIR SPARK_MODEL
      SPARK_NGL SPARK_CTX SPARK_FLASH_ATTN SPARK_KV SPARK_THREADS
@@ -494,8 +488,9 @@ and may change freely.
      SPARK_TIMEOUT SPARK_MAX_TOKENS SPARK_REVEAL SPARK_LOOK_MOTION
      SPARK_LOOK_COLOUR SPARK_LOOK_WORDS SPARK_HEIGHT SPARK_HISTORY
      SPARK_MEMORY SPARK_KNOWLEDGE SPARK_SERVICE SPARK_FORGE
-     SPARK_FORGE_HOST SPARK_FORGE_PORT SPARK_FORGE_TOKEN_FILE`. `SPARK_REVEAL_CPS` is
-     optional: the reveal pace in characters a second (`spark reveal`).
+     SPARK_FORGE_HOST SPARK_FORGE_PORT SPARK_FORGE_TOKEN_FILE`.
+     `SPARK_REVEAL_CPS` is optional: the reveal pace in characters a
+     second (`spark reveal`).
      The 3 `SPARK_LOOK_*` keys are `auto`, `on` or `off`, `off` until
      `spark awaken` sets `auto` (`spark look PART`). `SPARK_HEIGHT` is 1
      to 5, default 1 (`spark height N`). The 6 `SPARK_*_SGR` variables
@@ -523,15 +518,12 @@ and may change freely.
      bootstrap.sh evals it from `lib/spark/facts.py`, and
      `SPARK_OS_RELEASE` pins it. `init_shape()` sits beside it, and
      `SPARK_ETC_RUNIT` and `SPARK_VAR_SERVICE` pin the runit answer.
-   - `themes/<name>.env`: `THEME_BG THEME_FG THEME_ACCENT THEME_MUTED
-     THEME_ANSI_0..15`, the same 20 keys in `config.theme_palette` and
-     the `theme` row's `check.THEME_KEYS`.
-     `~/.config/spark/themes/<name>.env` is yours, the same keys, and
-     wins on a name clash (`config.theme_path`). `THEME_LOGO` is
-     optional in either: 6 colour names, one per banner row, `bright-`
-     allowed. `spark ver` draws the logo in them (`cli.recolour`).
-     Unset, the logo keeps its own. It rides in `theme.env` with the
-     rest when present.
+   - `~/.config/spark/theme.env`: a palette a look layer may write,
+     `THEME_BG THEME_FG THEME_ACCENT THEME_MUTED THEME_ANSI_0..15`.
+     spark writes none. `THEME_LOGO` is optional: 6 colour names, one
+     per banner row, `bright-` allowed. `spark ver` draws the logo in
+     them (`cli.recolour`), and the bar line takes its accent slot from
+     the file (`bar._accent`). Without the file both keep their own.
    Precedence: environment, then file, then default.
 4. `spark line --cwd D --shell S` reads the prompt buffer on stdin and
    prints two lines. Line 1 is `cmd<TAB>command`, `danger<TAB>command`,
@@ -542,16 +534,17 @@ and may change freely.
    failure makes line 2 its reason and exits 1. The verdict
    (`judge.verdict`) runs before line 1 is written. A command it finds
    wrong is asked again once, with the tool's own manual lines as a
-   Reference block in the user message, and line 1 is never repainted;
+   Reference block in the user message. Line 1 is never repainted:
    still wrong, it lands and the hint names what to check.
    `SPARK_KNOWLEDGE=off` is the line without it. The request asks the
    engine for slot 0 (`id_slot`), so the line's prefix stays warm; a
    server that refuses the field is asked again without it.
    `SPARK_LINE_BENCH=1` (`spark bench --line`, the audition) keeps the
-   turn's numbers, marked `bench`, and opens no thread. A `danger` line's hint may
-   open with `<- <facts> -- `: `persona.blast`'s count for a recursive
-   `rm`, the files, bytes and git-tracked, read from the command with
-   nothing run. The facts lead, so the cut eats the model's words first.
+   turn's numbers, marked `bench`, and opens no thread. A `danger`
+   line's hint may open with `<- <facts> -- `: `persona.blast`'s count
+   for a recursive `rm`, the files, bytes and git-tracked, read from the
+   command with nothing run. The facts lead, so the cut eats the
+   model's words first.
    The widget trims to the terminal's own width. An optional line 3,
    `proof<TAB>command` on a cmd or danger reply, is one read-only check
    that the command did what was asked: `test ! -d build` after `rm -rf
@@ -564,8 +557,9 @@ and may change freely.
    options that make a read-only head write or run something:
    `--output`, `-o`, `--ext-diff`, `--textconv`, `tail -f`, `git -c`,
    `-exec`, `-delete`, `file -C` and more. A one-letter option is
-   caught inside a cluster too, with a value glued on or not. The widgets show the proof in the hint row after the
-   command runs and offer it on `Esc s`. `spark do` offers it after each
+   caught inside a cluster too, with a value glued on or not. The
+   widgets show the proof in the hint row after the command runs and
+   offer it on `Esc s`. `spark do` offers it after each
    confirmed step like a step of its own: Enter runs it,
    `do.PROOF_TIMEOUT` seconds at most. `e` edits it, and the edit runs
    when `proof_ok` still takes it, else it is skipped. `spark do` shows
@@ -610,17 +604,18 @@ and may change freely.
    contents wherever they appear (`do.own_secrets`). Those are the
    api-token, the file `SPARK_API_KEY_FILE` names, the forge-token, the
    ember-token, the shared engine's token, the account key and the
-   login's token, `OWN_SECRET_MIN` 16 characters at least. One stderr
-   line says `held=N`. The one named exemption is `do.CHECKSUM_LINE`.
-   When the step's argv[0] is one of `do.CHECKSUM_TOOLS` (md5sum through
-   b2sum, and shasum), a line of the checksum shape whose digest length
-   is in `DIGEST_LENGTHS` keeps its digest. The same line from any other
-   command is held. A step that exits non-zero with an option refused
-   (`do.BAD_OPTION`) brings back `do.man_excerpt`. That runs `man HEAD`
-   as argv through `intake.man_page`, with `HEAD` a plain name. Both it
-   and `man` must be found on `$PATH` with its empty and relative entries
-   dropped (`intake.abs_path`): a `man` planted in the step's directory is
-   not the machine's. man runs from `/` in one clean environment
+   login's token. Each is `OWN_SECRET_MIN` 16 characters at least. One
+   stderr line says `held=N`. The one named exemption is
+   `do.CHECKSUM_LINE`. When the step's argv[0] is one of
+   `do.CHECKSUM_TOOLS` (md5sum through b2sum, and shasum), a line of the
+   checksum shape whose digest length is in `DIGEST_LENGTHS` keeps its
+   digest. The same line from any other command is held. A step that
+   exits non-zero with an option refused (`do.BAD_OPTION`) brings back
+   `do.man_excerpt`. That runs `man HEAD` as argv through
+   `intake.man_page`, with `HEAD` a plain name. Both it and `man` must
+   be found on `$PATH` with its empty and relative entries dropped
+   (`intake.abs_path`): a `man` planted in the step's directory is not
+   the machine's. man runs from `/` in one clean environment
    (`MANPAGER=cat`: `man -P cat` fails on the mandoc man Void ships) and
    `MANWIDTH=80`, on `MAN_TIMEOUT` 5 seconds with the process group
    killed. Overstrikes are stripped, and at most `MAN_MAX` 1500 bytes
@@ -658,25 +653,26 @@ and may change freely.
    /Volumes, the home, spark's state and config, /private/etc/spark and
    the temp dirs (/private/var/folders, /private/tmp, /private/var/tmp).
    It denies reads of the system keychain, root's home and the package
-   manager's service config (/opt/homebrew/etc, /usr/local/etc), but not
-   the public files git, openssl, node and clang read. It denies every
-   write but the clone, the run's own home and temp and the null
-   devices, and it denies the terminal. It denies the mach services, so
-   a program the step builds cannot reach them either: Apple events,
-   Launch Services, the clipboard, the keychain daemons, Shortcuts and
-   the workflow runner, login items and launchd jobs, the preferences
-   daemons, recent items, plugins, mounts, file providers and consent.
-   It denies the exec of osascript, osacompile, open, launchctl, sudo,
-   security, pbcopy, pbpaste, shortcuts, automator, defaults and
-   sfltool. It also denies screencapture, lsregister, lsappinfo,
-   pluginkit, qlmanage, tccutil, hdiutil, diskutil, tmutil, crontab, at,
-   fileproviderctl and brctl. setuid programs do not run. It does not
-   make the machine private: a step reads everything else, sees the
-   process list, and can talk to any system service the profile does not
-   name. The review is the gate. sandbox-exec is Apple's, and its own
-   man page tells developers to move off it. Steps and proofs run
-   without asking, `proof_ok` still applying, `STEP_TIMEOUT` each, under
-   `RLIMIT_FSIZE` (`sandbox.preexec`). The copy's total is weighed every
+   manager's service config (/opt/homebrew/etc, /usr/local/etc). The
+   public files git, openssl, node and clang read stay readable. It
+   denies every write but the clone, the run's own home and temp and the
+   null devices, and it denies the terminal. It denies the mach
+   services, so a program the step builds cannot reach them either. They
+   are Apple events, Launch Services, the clipboard, the keychain
+   daemons, Shortcuts and the workflow runner, and login items and
+   launchd jobs. The preferences daemons, recent items, plugins, mounts,
+   file providers and consent are denied too. It denies the exec of
+   osascript, osacompile, open, launchctl, sudo, security, pbcopy,
+   pbpaste, shortcuts, automator, defaults and sfltool. It also denies
+   screencapture, lsregister, lsappinfo, pluginkit, qlmanage, tccutil,
+   hdiutil, diskutil, tmutil, crontab, at, fileproviderctl and brctl.
+   setuid programs do not run. It does not make the machine private: a
+   step reads everything else, sees the process list, and can talk to
+   any system service the profile does not name. The review is the gate.
+   sandbox-exec is Apple's, and its own man page tells developers to
+   move off it. Steps and proofs run without asking, `proof_ok` still
+   applying, `STEP_TIMEOUT` each, under `RLIMIT_FSIZE`
+   (`sandbox.preexec`). The copy's total is weighed every
    `do.WATCH_SECONDS` (2 seconds) during a step: past
    `SANDBOX_MAX_BYTES` (1 GB) the step's group is killed (rc 124).
    Between steps the same cap stops the run (`cap`). A run is 8 steps. A
@@ -763,10 +759,10 @@ and may change freely.
    `FORGE`, `??` continues the newest thread on the `FORGE`
    (`forge.peer_newest`, the requester's own store over contract 9) and
    the turn lands there. Any trouble falls back to the local store.
-   `SPARK_HINT_ROW=N` in the environment, a digit 1 to 5 (the widgets
-   set it on their two calls, N the height), lets `spark line` draw the
-   pulse (`text.Busy.hint_row`) N rows above the cursor on `/dev/tty`
-   while the model answers. Each frame saves the cursor, goes up N rows,
+   `SPARK_HINT_ROW=N` in the environment, a digit 1 to 5, lets `spark
+   line` draw the pulse (`text.Busy.hint_row`) N rows above the cursor
+   on `/dev/tty` while the model answers. The widgets set it on their
+   two calls, N the height. Each frame saves the cursor, goes up N rows,
    clears that row, draws the mark and the dots, and restores. The
    widgets' own lines (`_spark_say`) go to the same row. A hand-run
    `spark line` never touches that row, and stdout stays the two lines
@@ -783,11 +779,11 @@ and may change freely.
    also the widget's stamp for `~/.local/state/spark/look`. A shell
    reads that file again only when it is newer than its marker. It reads
    it line by line, never sourced or eval'd, and drops a value with a
-   control character. Its keys are `AWAKE`, `MOTION`, `COLOUR`, `WORDS`, `HEIGHT`,
-   `SGR_<ROLE>` for the 6 roles, `FACE_<MOOD>`, `BLINK` and `TEMPER`
-   (`look.content`). `SPARK_HEIGHT` in the environment wins over
-   `HEIGHT`. The `look` row compares the file with what `spark.env` and
-   the faces file say now.
+   control character. Its keys are `AWAKE`, `MOTION`, `COLOUR`,
+   `WORDS`, `HEIGHT`, `SGR_<ROLE>` for the 6 roles, `FACE_<MOOD>`,
+   `BLINK` and `TEMPER` (`look.content`). `SPARK_HEIGHT` in the
+   environment wins over `HEIGHT`. The `look` row compares the file with
+   what `spark.env` and the faces file say now.
 7. `spark check` exits 0 when no row is `fail`, else 1. A `CAPABILITY`
    row never fails. `--porcelain` prints
    `category<TAB>status<TAB>name<TAB>value<TAB>remedy`. Every run writes
@@ -796,48 +792,12 @@ and may change freely.
    help is `spark <sub> -- <one line>`, plain ASCII, so every terminal
    can draw it. A refusal signs the same way. `spark setup --` is the
    offer bare `spark` prints after the banner, on a clone with no
-   `site.env` at a terminal. `spark theme`, `spark font`, `spark quiet`
-   and `spark bar` are core: they answer everywhere. `spark uninstall --
-   not a terminal: spark uninstall --yes runs it` is the refusal of a
-   non-terminal without `--yes`: the plan printed, exit 2. On WSL 2 the
-   same shape: `spark font -- no console on WSL 2: the font lives in
-   Windows Terminal's settings` (show 0, set 2), `spark quiet boot -- no
-   GRUB on WSL 2: Windows boots it` and `spark headless -- WSL 2 stops
-   with its last window: it cannot stay on and answer (a Linux machine
-   can)` (exit 2). On Arch
-   the verb is real only when a mkinitcpio preset builds a Unified
-   Kernel Image (`site.boot_shape()` is `uki`), through the
-   `/etc/cmdline.d` drop-in. Otherwise it answers `spark quiet boot --
-   no UKI on this Arch: the kernel line is the boot loader's (a loader
-   entry's options line, or GRUB_CMDLINE_LINUX_DEFAULT then
-   grub-mkconfig)`, exit 2. On Void the verb is real where
-   `/etc/default/grub` and `update-grub` are: Void's grub-mkconfig reads
-   no drop-in, so `site.GRUB_WANT` lands as 3 lines at the file's end,
-   each ending ` #spark-quiet#` (`site.GRUB_MARK`, bootstrap's twin);
-   off deletes them. runit's own lines take a second set:
-   `site.RC_WANT` lands as 10 lines at the end of `/etc/rc.conf`,
-   marked the same way (bootstrap's `rc_want` is the twin). runit's
-   stage 1 sources that file before its scripts. Inside stage 1 only,
-   `msg` says nothing. fsck, `sysctl -p`, seedrng and modules-load keep
-   a clean run's output off the screen. Stage 3 reads the file too and
-   prints as Void prints it: the shutdown's lines explain its pause. A
-   warning, an error, stderr and a fsck that finds something still
-   print. The warning, the error and the fsck leave a mark in /run
-   (`msg_warn` and `msg_error` are Void's own, the mark added). A third
-   set, `site.GETTY_WANT`, is 2 lines at the end of
-   `/etc/sv/agetty-tty1/conf`, which every getty sources. tty1 drops
-   `--noclear` when there is no mark and no critical kernel line, so the
-   lines no file reaches (runit's own, runsvchdir's, a tool's) clear
-   with the login prompt. A boot that marked keeps its whole screen. The
-   `quiet` row is ok only when all 3 sets are whole, and off deletes
-   them all. A Void without GRUB answers `spark quiet boot -- no GRUB on
-   this Void: its boot loader is left alone`, exit 2
-   (`site.VOID_NO_BOOT`). The console font goes by mechanism,
-   never by family (`site.console_shape()`: console-setup's file, else
-   vconsole.conf, else rc.conf beside `/etc/runit`, else none). A Linux
-   with none answers `spark font -- no console-setup, vconsole.conf or
-   rc.conf here: the console font is not spark's to set` (show 0, set
-   2).
+   `site.env` at a terminal. `spark quiet` and `spark bar` are core:
+   they answer everywhere. `spark uninstall -- not a terminal: spark
+   uninstall --yes runs it` is the refusal of a non-terminal without
+   `--yes`: the plan printed, exit 2. On WSL 2 the same shape: `spark
+   headless -- WSL 2 stops with its last window: it cannot stay on and
+   answer (a Linux machine can)` (exit 2).
 9. The `FORGE` HTTP API. `lib/spark/forgeserve.py` serves it on
    `SPARK_FORGE_HOST:SPARK_FORGE_PORT`: one LAN address, never the
    unspecified address in any spelling. `bind_check` in
@@ -911,7 +871,6 @@ and may change freely.
    GET     /api/check                 user
    GET     /api/stats                 user
    GET     /api/bar                   user
-   GET     /api/theme                 user
    GET     /api/events                user
    GET     /api/soul                  user
    GET     /api/memory                user
@@ -943,8 +902,8 @@ and may change freely.
 
    `POST /api/soul` takes `{text, core?}` and answers `{chars, cut,
    part}`, `part` the one written: `personality` after an unchanged
-   core once awaken gave one, else `soul`, and a changed core there is
-   409 `{error: {kind: core}}` unless `core` is true.
+   core once awaken gave one, else `soul`. A changed core there is 409
+   `{error: {kind: core}}` unless `core` is true.
    `GET /api/me` answers `{role, user, name, version}`: how the page
    decides which console to draw and whom to greet. `GET /api/models`
    answers this machine's model table `{name, total_gb, budget_gb,
@@ -971,25 +930,25 @@ and may change freely.
    `Content-Type: application/json` besides (415 otherwise). A `DELETE`
    carries no body. `POST /v1/chat/completions` takes the bearer only. A
    cookie does not open it (401), so a browser's login cannot be ridden
-   into the model from another origin. The forwarded body asks for at most
-   `forgeserve.V1_MAX_TOKENS` (8192) completion tokens: `max_tokens` is
-   set when absent, not a positive integer or larger, and `n_predict`
-   and `max_completion_tokens` are capped the same when present. `POST
-   /api/threads` makes a kept thread in the requester's own store with
-   no model turn: how a program keeps what it must not lose. The body is
-   `{id?}`. A thread id is `forge.valid_id`: 1 to 64 letters, digits,
-   `-` and `_`, checked before any path is joined, else 400. No id
-   mints a timestamp one the way `Store.new_thread` does (`-2`, `-3` on
-   a clash), 201 `{id, kept: true}`. A new id is made, 201. An id
-   already kept answers 200 as it is. A regular thread of that id is
-   moved to kept, a rename: the header is the AAD (`thread <id>`), so
-   every record still opens, 200. An id in both directories is 409
-   `{error: {kind: both}}` and left as it is. A user keeps at most
-   `forge.KEEP_MAX` (2000) threads, counted over `kept/*.sealed`: past
-   it, 409 `{error: {kind: full}}`. It works with `SPARK_HISTORY` off.
-   Kept threads live in `kept/` beside `threads/` in the same store.
-   `Store.prune`, `forge.prune_stores`, the stale-header sweep and
-   `Store.clear` read `threads/` alone. A kept thread leaves through
+   into the model from another origin. The forwarded body asks for at
+   most `forgeserve.V1_MAX_TOKENS` (8192) completion tokens.
+   `max_tokens` is set when absent, not a positive integer or larger,
+   and `n_predict` and `max_completion_tokens` are capped the same when
+   present. `POST /api/threads` makes a kept thread in the requester's
+   own store with no model turn: how a program keeps what it must not
+   lose. The body is `{id?}`. A thread id is `forge.valid_id`: 1 to 64
+   letters, digits, `-` and `_`, checked before any path is joined, else
+   400. No id mints a timestamp one the way `Store.new_thread` does
+   (`-2`, `-3` on a clash), 201 `{id, kept: true}`. A new id is made,
+   201. An id already kept answers 200 as it is. A regular thread of
+   that id is moved to kept, a rename: the header is the AAD (`thread
+   <id>`), so every record still opens, 200. An id in both directories
+   is 409 `{error: {kind: both}}` and left as it is. A user keeps at
+   most `forge.KEEP_MAX` (2000) threads, counted over `kept/*.sealed`:
+   past it, 409 `{error: {kind: full}}`. It works with `SPARK_HISTORY`
+   off. Kept threads live in `kept/` beside `threads/` in the same
+   store. `Store.prune`, `forge.prune_stores`, the stale-header sweep
+   and `Store.clear` read `threads/` alone. A kept thread leaves through
    `/keep off` in `spark chat` (a rename back to `threads/`) or `spark
    user remove NAME` (the whole store). Every store method that takes
    an id finds the thread in either directory, `kept/` first. `POST
@@ -997,9 +956,9 @@ and may change freely.
    thread: `{role: user|assistant, text}`, with `mode` and `kind` as
    short optional fields. That is how a client's `??` lands its turn
    here, so the machine's prompt line, a client's prompt line and the
-   page share one thread, and how a program writes its kept thread. The
-   answer tells the truth. Stored is 200 `{ok: true, chars, cut}`:
-   `chars` the length stored, `cut` true when the text was cut at
+   page share one thread. It is how a program writes its kept thread
+   too. The answer tells the truth. Stored is 200 `{ok: true, chars,
+   cut}`: `chars` the length stored, `cut` true when the text was cut at
    `forge.HISTORY_MAX_CHARS`. History off and the thread not kept is
    409 `{error: {kind: off}}`, nothing stored. A kept thread takes
    appends with history off. The store failing (a seal or disk error,
@@ -1030,42 +989,42 @@ and may change freely.
    sha256 prefix of the command beside its truncated text, and a second
    line the rc. Every admin action is one sealed record in the box
    account's `audit` (`lib/spark/audit.py`, kind `audit`,
-   `vault.append_sealed`): `do/run` `{ts, ip, action, digest, rc}`,
-   `/api/run` `{ts, ip, action, verb, rc}`, a user minted, removed or
-   rotated `{ts, ip|cli, action, name}` (`spark user add|remove|token
-   --new`, `POST /api/user/token`), and `spark forge token --new` `{ts,
-   cli, action}`. Numbers and names, never a command's text or its
-   arguments. `spark forge audit [N] [--porcelain]` prints the newest N
-   (50 by default), one line each. A trail that does not open is one
-   signed line, exit 2, never written over. `GET /api/config` returns no
-   key matching `KEY|TOKEN|SECRET`, whatever spark.env holds. Streams
-   are SSE. `/api/chat` (mode `chat|answer`) emits `queued` when the
-   model is busy, `delta {t}`, `done {thread, ms, model}` and `error
-   {kind, hint, thread?}`. `talk` and `ask` are still accepted as
-   aliases of `chat` and `answer`, and records write the new names.
-   `thread` rides a `cut`, whose partial already landed, so the page
-   continues that thread instead of opening a new one. A client that
-   hangs up mid-stream (the stop button) still lands the turn. The user
-   line and any partial answer (`partial: true`) go on the thread, and
-   the log line says 499. A client that leaves while queued pays no
-   prefill and lands nothing, 499 likewise. `/api/run` emits `line {s}`
-   then `done {rc}`. `/api/events` emits `check`, `bar` and `serve` on
-   change, `log` too for an admin, and a `:keepalive` comment every 15
-   seconds. `/v1/chat/completions` and `/v1/models` are OpenAI-shaped
-   and proxied to the llama-server with the api-token. The request's
-   `model` field routes, and a missing `model` means `ember`. The
-   identity is injected into the system message only for an `ember`
-   request. It is the soul, plus the requester's own remembered facts: a
-   user's sealed memory, or the box account's for the admin. A `spark`
-   request passes through untouched. A body with `"identity": false`
-   keeps an `ember` request untouched too, for a program that brings its
-   own system prompt. `true` or no field injects the identity, and any
-   other value is a 400. The field never goes upstream. The identity is
-   no security boundary, since a `spark` request is bare already. JSON
-   or SSE bytes come back as they are. Every `/api/*` answer is
-   `Cache-Control: no-store`. The page and its files are served with
-   `Content-Security-Policy: default-src 'self'`,
-   `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer` and
+   `vault.append_sealed`). The records are `do/run` `{ts, ip, action,
+   digest, rc}`, `/api/run` `{ts, ip, action, verb, rc}`, a user minted,
+   removed or rotated `{ts, ip|cli, action, name}` (`spark user
+   add|remove|token --new`, `POST /api/user/token`), and `spark forge
+   token --new` `{ts, cli, action}`. Numbers and names, never a
+   command's text or its arguments. `spark forge audit [N]
+   [--porcelain]` prints the newest N (50 by default), one line each. A
+   trail that does not open is one signed line, exit 2, never written
+   over. `GET /api/config` returns no key matching `KEY|TOKEN|SECRET`,
+   whatever spark.env holds. Streams are SSE. `/api/chat` (mode
+   `chat|answer`) emits `queued` when the model is busy, `delta {t}`,
+   `done {thread, ms, model}` and `error {kind, hint, thread?}`. `talk`
+   and `ask` are still accepted as aliases of `chat` and `answer`, and
+   records write the new names. `thread` rides a `cut`, whose partial
+   already landed, so the page continues that thread instead of opening
+   a new one. A client that hangs up mid-stream (the stop button) still
+   lands the turn. The user line and any partial answer (`partial:
+   true`) go on the thread, and the log line says 499. A client that
+   leaves while queued pays no prefill and lands nothing, 499 likewise.
+   `/api/run` emits `line {s}` then `done {rc}`. `/api/events` emits
+   `check`, `bar` and `serve` on change, `log` too for an admin, and a
+   `:keepalive` comment every 15 seconds. `/v1/chat/completions` and
+   `/v1/models` are OpenAI-shaped and proxied to the llama-server with
+   the api-token. The request's `model` field routes, and a missing
+   `model` means `ember`. The identity is injected into the system
+   message only for an `ember` request. It is the soul, plus the
+   requester's own remembered facts: a user's sealed memory, or the box
+   account's for the admin. A `spark` request passes through untouched.
+   A body with `"identity": false` keeps an `ember` request untouched
+   too, for a program that brings its own system prompt. `true` or no
+   field injects the identity, and any other value is a 400. The field
+   never goes upstream. The identity is no security boundary, since a
+   `spark` request is bare already. JSON or SSE bytes come back as they
+   are. Every `/api/*` answer is `Cache-Control: no-store`. The page and
+   its files are served with `Content-Security-Policy: default-src
+   'self'`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer` and
    `X-Content-Type-Options: nosniff`, and depend on nothing else.
    Errors are `{error: {kind, hint}}`.
 10. `spark edit` is the editor's protocol: the text on stdin. `--at N`
@@ -1129,17 +1088,17 @@ and may change freely.
     after stdin is read. `text.SOURCE_SHAPES` is the paste's shapes plus
     two.
     A one-time code is its digits, whole or split once or twice by a
-    space or a hyphen, within 30 characters after or before code, otp,
-    pin, passcode or verification. A link token is every token-like
-    parameter of an http(s) URL. It is found as a pair, the URL first
-    and then its parameters, so no one regex backtracks over a crafted
-    megabyte. A named `s` group is the part held. Each becomes `[held]`.
-    The reading, the context, `--sel`'s offsets, the anchors and the
-    thread's `text_sha` all see the held text: what the model saw.
-    `--name`, `--about` and `--type` ride in the same message and are
-    held the same way. The ledger keeps the name as given. One stderr
-    line says how many and which shapes. The turn records `held`, a
-    number. A rewrite, `--at` and a `?` without `--source` send the
+    space or a hyphen. It stands within 30 characters after or before
+    code, otp, pin, passcode or verification. A link token is every
+    token-like parameter of an http(s) URL. It is found as a pair, the
+    URL first and then its parameters, so no one regex backtracks over a
+    crafted megabyte. A named `s` group is the part held. Each becomes
+    `[held]`. The reading, the context, `--sel`'s offsets, the anchors
+    and the thread's `text_sha` all see the held text: what the model
+    saw. `--name`, `--about` and `--type` ride in the same message and
+    are held the same way. The ledger keeps the name as given. One
+    stderr line says how many and which shapes. The turn records `held`,
+    a number. A rewrite, `--at` and a `?` without `--source` send the
     author's own text as it is. `--` ends the options: every argument
     after it is a word, so a question that says `--name` cannot eat the
     flag after it. `--decline --name NAME` (the pane's `d`) keeps the
@@ -1313,7 +1272,8 @@ and may change freely.
       when none. `control` is true when its name, link target or text
       holds a control character. Every item inside a git directory is
       its own entry.
-    - `{"ev":"end","reason":"done|cap|quit|refused|stopped|error","hint","rc"}`.
+    - `{"ev":"end","reason","hint","rc"}`, `reason` one of done, cap,
+      quit, refused, stopped and error.
     `stopped` is spark stopping the run: a skipped step proposed again,
     verbatim, after it was re-asked once. A sandboxed run's `end` is its
     review's, however the steps stopped, and a note says that: `done`
@@ -1366,12 +1326,12 @@ One grammar for every verb. A verb that breaks a rule is a bug.
    `--force`/`--noreload` are flags of `off`. Stored values are storage,
    not interface: `SITE_HEADLESS` and the `SITE_QUIET_*` keys stay
    `yes|no` in `site.env`, and the verb translates. Choices keep their
-   value grammars (`theme NAME|none`, `model NAME|auto|none`, `client
-   URL|off`, `look PART auto|on|off`). The one carve-out is bare `spark
+   value grammars (`model NAME|auto|none`, `client URL|off`, `look
+   PART auto|on|off`). The one carve-out is bare `spark
    off` / `spark on`, which silences and restores the whole prompt: it
    is the global mute, and reads better without a noun in front of it.
 3. `status` is an alias of bare for every stateful verb. `list` is the
-   table word (theme, model, ember, font). A noun keeps its own verbs as
+   table word (model, ember). A noun keeps its own verbs as
    sub-words rather than taking top-level ones: `spark soul edit|reset`,
    `spark memory add|forget|clear`. A command reads verb first, its
    object a flag or a word after it: `spark clear --history`, with the
@@ -1390,9 +1350,9 @@ One grammar for every verb. A verb that breaks a rule is a bug.
    the mark and `.` `..` `...` redrawn in place, a tty only (the hint
    row, chat, explain, an answer, `spark do`). Awakened, with motion
    active, the dots become the scanner, `* (o.O) [ = ]`: 8 cells, a
-   frame every 0.12 seconds, the face while words is active too, on
-   every terminal: ssh on a LAN and the console keep up with it, and
-   every frame is ASCII. Motion `off` keeps the dots. The wait
+   frame every 0.12 seconds, the face while words is active too. It
+   runs on every terminal: ssh on a LAN and the console keep up with it,
+   and every frame is ASCII. Motion `off` keeps the dots. The wait
    escalates, never louder: from 2 seconds the elapsed seconds, from 15
    seconds (or three quarters of the verb's timeout) one sentence. A
    model loading shows `text.Estimate`: a bar filled by the time over
@@ -1415,7 +1375,7 @@ One grammar for every verb. A verb that breaks a rule is a bug.
   publishes it (Releasing, step 3). Its look mirrors the colour tokens
   of `lib/spark/forge/spark.css`. That lockstep is checked where the
   site is rendered, against this tree. `tests/docs_test.py` keeps the
-  docs true (pre-commit, CI). Every palette and every model upstream is
+  docs true (pre-commit, CI). Every package and every model upstream is
   in `CREDITS.md`, the check-row and model counts the docs state are the
   tree's, and no retired word survives. A new fact a doc states that the
   tree can derive goes there as one more check: the test is the
@@ -1433,7 +1393,7 @@ One grammar for every verb. A verb that breaks a rule is a bug.
   follows.
 - **A package.** Linux: the right `PKG_*` group in every
   `distro/<id>.env`, with a comment saying why, under the name that
-  family's manager knows, and its credit in `CREDITS.md` (docs_test
+  family's manager knows. Its credit goes in `CREDITS.md` (docs_test
   looks every name up). `PKG_CORE`, `PKG_ENGINE` and `PKG_AI` are the
   AI, always installed. spark installs no shell tool. The mac core
   needs nothing from Homebrew. No editor, no app and no contributor tool
@@ -1449,9 +1409,9 @@ One grammar for every verb. A verb that breaks a rule is a bug.
   `docs/INSTALL.md`. Test by changing a setting in the app and running
   `ls -l` on the path: still a symlink, or now a regular file?
 - **The landing rule.** Nothing is done until it is in all of: `spark
-  help` (`bin/spark`), a `spark` command, a `spark check` row when it is
-  a promise the machine makes, contract 3 above if it is a key, and
-  `README.md`, `docs/INSTALL.md`, `docs/CHEATSHEET.txt` and
+  help` (`bin/spark`), a `spark` command, and a `spark check` row when
+  it is a promise the machine makes. Add contract 3 above if it is a
+  key, and `README.md`, `docs/INSTALL.md`, `docs/CHEATSHEET.txt` and
   `docs/CHANGELOG.md`. A key without a command, or a command without a
   row and a doc line, is half a feature. A choice is a `SITE_*` key
   with a default in `site.env.example`, applied by `bootstrap.sh` or
@@ -1512,7 +1472,7 @@ One grammar for every verb. A verb that breaks a rule is a bug.
   pattern: telemetry, numbers only. `session.record` strips every
   free-text field (`session.TEXT_FIELDS`), and the words live only in
   the sealed threads. A thread lives `SPARK_HISTORY` days, unless it is
-  kept: a kept thread sits in `kept/` beside `threads/`, and pruning and
+  kept. A kept thread sits in `kept/` beside `threads/`, and pruning and
   `spark clear --history` never touch it (`/keep` in `spark chat`, `POST
   /api/threads` for a program, contract 9). What a request weighed and
   where it went do ride the record: `out_bytes` and `dest` (`host:port`,
@@ -1534,17 +1494,15 @@ One grammar for every verb. A verb that breaks a rule is a bug.
   lands only when it is the client side of a contract change. No new
   page features in this release or the next.
 - **A shell thing.** The look and the tools of a machine are not spark's
-  business. `spark look` dresses spark's own lines, never the prompt.
-  spark's side of any renderer is 3 things. `theme.env` is the palette
-  `spark theme` writes, a `KEY=value` file any renderer or terminal may
-  read. The three `SPARK_*_SGR` variables are what an rc may export:
-  colour at the prompt's marks, plain when unset. The bar line (`spark
-  bar line`) is for any status bar to run. `spark theme`, `spark font`,
-  `spark quiet` and the bar line are core: the page reads `theme.env`,
-  the console palette and font are the machine's own, the status line is
-  the machine's own report. Nothing in this tree names a renderer as a
-  dependency. A coexistence check for a prompt program (the hooks'
-  `STARSHIP_SHELL` test) is not a coupling.
+  business: the console's palette and font, a quiet boot, the prompt,
+  the desktop. `spark look` dresses spark's own lines, never the prompt.
+  spark's side of any renderer is 3 things. `theme.env` is a palette a
+  look layer may write, a `KEY=value` file spark reads for its logo and
+  its bar accent (contract 3). The 6 `SPARK_*_SGR` variables are what an
+  rc may export: colour at the prompt's marks, plain when unset. The
+  bar line (`spark bar line`) is for any status bar to run. Nothing in
+  this tree names a renderer as a dependency. A coexistence check for a
+  prompt program (the hooks' `STARSHIP_SHELL` test) is not a coupling.
 - **A grounded contract.** One law, 5 contracts (10, 11, 12, 13, 14):
   what a model says about a text is checked against that text before the
   reader sees it. The judge is `lib/spark/text.py`. `anchor()` works at
@@ -1570,9 +1528,9 @@ One grammar for every verb. A verb that breaks a rule is a bug.
   what the text is, and for a `?` its own reading is restated to it,
   because small models drift otherwise. The audition
   (`tests/audition.py`) scores those briefs against a live model. micro
-  is the first app, forgewright-ai/spark-micro: it spawns `spark
-  edit` with the text on stdin and streams the answer back, never speaks
-  HTTP, never sees a token, never sends a path. Its pty test, its
+  is the first app, forgewright-ai/spark-micro. It spawns `spark edit`
+  with the text on stdin and streams the answer back. It never speaks
+  HTTP, never sees a token and never sends a path. Its pty test, its
   `Alt-s` line and its README are its own. Nine apps today: micro,
   neovim, vim, helix, nano, w3m, newsboat, aerc and acp. The editors
   take two shapes. A full plugin (micro, neovim, vim) carries the whole
@@ -1632,8 +1590,8 @@ One grammar for every verb. A verb that breaks a rule is a bug.
   removes the owner's token. `spark setup` on such a machine detects
   `$SHARE_TOKEN` and offers the join. It writes the client shape for
   them: `SITE_AI_MODEL=none`, `SITE_PEER_AI_URL` from `$SHARE_URL`,
-  `SPARK_API_KEY_FILE=$SHARE_TOKEN` and `SITE_THEME=none`. No model is
-  downloaded, and their own soul and memory stay in `$HOME`. Identity
+  and `SPARK_API_KEY_FILE=$SHARE_TOKEN`. No model is downloaded, and
+  their own soul and memory stay in `$HOME`. Identity
   stays per `$HOME`. Compute is shared and chosen explicitly. spark
   never routes to an engine the user did not name. Linux only in this
   version: macOS and WSL are one user per machine (`site.no_share`), a
@@ -1657,21 +1615,6 @@ One grammar for every verb. A verb that breaks a rule is a bug.
   URL"` is always required there. `spark model verify` (and the `models`
   check row, cached) re-hashes every downloaded file
   (`lib/spark/verify.py`).
-- **A palette.** Two files, nothing else hand-listed.
-  `themes/<name>.env` carries the full 20-key `THEME_*` set (contract
-  3), and its header comment names the upstream project and its license.
-  `spark.js`'s `theme.builtin` map carries its flat 20-value row,
-  because the page has no build step. `tests/install_test.sh` renders
-  every palette by glob, and `tests/smoke.py` asserts the
-  `theme.builtin` map matches `themes/*.env` value for value: a gap in
-  either goes loud. A palette of the user's own is one file,
-  `~/.config/spark/themes/<name>.env`, the same 20 keys, and lives
-  nowhere else: not on the page, not in `CREDITS.md`, not in that map.
-  On macOS `spark theme NAME` also switches every open Terminal.app
-  window to the profile (`theme._switch_windows`). The running app reads
-  its preferences only at launch. So a profile it does not know yet is
-  imported live by opening the `.terminal` file, and one window opens
-  with it. osascript then makes it the default and sets it on every tab.
 
 ## Verifying a claim
 
@@ -1692,19 +1635,17 @@ sh tests/get_test.sh            # the one-liner: clone, pull, refusals, the hand
 sh tests/update_test.sh         # spark update: pull, move to a signed tag, unsigned and dirty refused, --dry-run
 ```
 
-`spark check` has 42 rows today, by category `11 SOFTWARE, 22
+`spark check` has 39 rows today, by category `8 SOFTWARE, 22
 CAPABILITY, 9 NONFUNCTIONAL` (`grep -c '^@row' lib/spark/check.py`
 counts them). `--selftest` runs 6 passes. The first two prove every
 fixture-testable row flips between a good and a bad fixture. The third
 is the client shape: the 7 rows in `check.CLIENT_ROWS` answer `na`. On
-Linux the fourth runs under a WSL 2 kernel line, where the 3 rows in
-`check.WSL_ROWS` say so and never fail. The fifth runs under `ID=arch`,
-where the 1 row in `check.ARCH_ROWS` says so, the font row is ok
-through vconsole.conf and the packages row answers through a pacman
-stub. The sixth runs under `ID=void`, where the 1 row in
-`check.VOID_ROWS` says so, the font row is ok through rc.conf, the
-packages row answers through an xbps stub and the services row through
-an sv stub.
+Linux the fourth runs under a WSL 2 kernel line, where the 1 row in
+`check.WSL_ROWS` says so and never fails. The fifth runs under
+`ID=arch`: the packages row answers through a pacman stub. The sixth
+runs under `ID=void`: the packages row answers through an xbps stub and
+the services row through an sv stub. `check.ARCH_ROWS` and
+`check.VOID_ROWS` are empty, so no row there says it cannot serve.
 
 ## Releasing
 

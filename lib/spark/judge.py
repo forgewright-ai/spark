@@ -480,25 +480,18 @@ def _flags(head, args, entry):
 
 
 def _dynamic(verb):
-    """The names the tree fills a slot with: a palette, a model."""
+    """The names the tree fills a slot with: a model."""
     names = set()
-    if verb == "theme":
-        for d in (os.path.join(REPO, "themes"), os.path.join(CONFIG_DIR, "themes")):
-            try:
-                names.update(n[:-4] for n in os.listdir(d) if n.endswith(".env"))
-            except OSError:
-                pass
-    else:
-        for f in (os.path.join(REPO, "models.env"), os.path.join(CONFIG_DIR, "models.env")):
-            try:
-                with open(f, encoding="utf-8") as fh:
-                    src = fh.read()
-            except OSError:
-                continue
-            for m in re.finditer(r"^MODEL_([A-Z0-9_]+)=", src, re.M):
-                key = m.group(1)
-                if not key.endswith(("_LICENSE", "_NOTE", "_TESTED", "_GROUND")):
-                    names.add(key.lower().replace("_", "-"))
+    for f in (os.path.join(REPO, "models.env"), os.path.join(CONFIG_DIR, "models.env")):
+        try:
+            with open(f, encoding="utf-8") as fh:
+                src = fh.read()
+        except OSError:
+            continue
+        for m in re.finditer(r"^MODEL_([A-Z0-9_]+)=", src, re.M):
+            key = m.group(1)
+            if not key.endswith(("_LICENSE", "_NOTE", "_TESTED", "_GROUND")):
+                names.add(key.lower().replace("_", "-"))
     return names
 
 

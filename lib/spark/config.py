@@ -15,11 +15,12 @@ LINE = re.compile(r"^[A-Z_0-9]+=[^;`$()|&<>]*$")
 PLACEHOLDERS = {}
 
 # Contract 3: every key a config file may carry, in the documented order.
+# A key not here (an older release's, say SITE_THEME) still loads: the
+# reader refuses a line's shape, never its name.
 SITE_KEYS = ("SITE_NAME", "SITE_USER", "SITE_SET_HOSTNAME",
-             "SITE_PEER_AI_URL", "SITE_PEER_SSH", "SITE_THEME",
+             "SITE_PEER_AI_URL", "SITE_PEER_SSH",
              "SITE_AI_MODEL", "SITE_EMBER_MODEL", "SITE_AI_BUDGET", "SITE_AI_BUILD",
-             "SITE_FONT_FACE", "SITE_FONT_SIZE", "SITE_QUIET_LOGIN", "SITE_QUIET_BOOT", "SITE_QUIET_START",
-             "SITE_QUIET_AUDIO", "SITE_HEADLESS", "SITE_SHARE")
+             "SITE_QUIET_START", "SITE_QUIET_AUDIO", "SITE_HEADLESS", "SITE_SHARE")
 SPARK_KEYS = ("SPARK_PORT", "SPARK_BASE_URL", "SPARK_PREFER_URL", "SPARK_SERVE_HOST", "SPARK_ENGINE_DIR",
               "SPARK_MODELS_DIR", "SPARK_MODEL", "SPARK_NGL", "SPARK_CTX", "SPARK_FLASH_ATTN", "SPARK_KV",
               "SPARK_THREADS", "SPARK_EXTRA_ARGS", "SPARK_MEM_NEEDED_GB", "SPARK_API_KEY_FILE",
@@ -122,10 +123,6 @@ class Config:
         return self.get("SITE_USER", os.environ.get("USER") or "user")
 
     @property
-    def theme(self):
-        return self.get("SITE_THEME", "none")
-
-    @property
     def model_choice(self):
         return self.get("SITE_AI_MODEL", "auto")
 
@@ -155,22 +152,6 @@ class Config:
         ignores it: Metal). engine.backend() resolves auto by the GPU probe,
         as engine.backend answers."""
         return self.get("SITE_AI_BUILD", "auto")
-
-    @property
-    def font_face(self):
-        return self.get("SITE_FONT_FACE", "Menlo-Regular" if IS_MAC else "")
-
-    @property
-    def font_size(self):
-        return self.get("SITE_FONT_SIZE", "13" if IS_MAC else "16x32")
-
-    @property
-    def quiet_login(self):
-        return self.get("SITE_QUIET_LOGIN", "no") == "yes"
-
-    @property
-    def quiet_boot(self):
-        return self.get("SITE_QUIET_BOOT", "no") == "yes"
 
     @property
     def quiet_audio(self):
@@ -406,43 +387,6 @@ class Config:
 
 def load():
     return Config()
-
-
-def theme_path(name, repo=REPO):
-    """The file behind a palette name: yours (`~/.config/spark/themes/
-    <name>.env`) first, then the repository's `themes/<name>.env`; None
-    when neither exists."""
-    for d in (os.path.join(CONFIG_DIR, "themes"), os.path.join(repo, "themes")):
-        path = os.path.join(d, name + ".env")
-        if os.path.isfile(path):
-            return path
-    return None
-
-
-def theme_names(repo=REPO):
-    """Every palette name: the repository's and yours, sorted, each once."""
-    names = set()
-    for d in (os.path.join(repo, "themes"), os.path.join(CONFIG_DIR, "themes")):
-        try:
-            names.update(f[:-4] for f in os.listdir(d) if f.endswith(".env"))
-        except OSError:
-            pass
-    return sorted(names)
-
-
-def theme_palette(name, repo=REPO):
-    """dict of THEME_* for a palette name, or None for `none`."""
-    if name == "none":
-        return None
-    path = theme_path(name, repo)
-    if path is None:
-        die("SITE_THEME=%s: no such palette (themes/*.env, ~/.config/spark/themes/*.env)" % name, 2)
-    pal = parse_env(path)
-    # contract 3's 20 keys (check.THEME_KEYS is the same list)
-    for k in ("THEME_BG", "THEME_FG", "THEME_ACCENT", "THEME_MUTED") + tuple("THEME_ANSI_%d" % i for i in range(16)):
-        if k not in pal:
-            die("theme %s lacks %s" % (name, k), 2)
-    return pal
 
 
 OPEN_LICENSES = ("Apache-2.0", "MIT")     # the first word of a MODEL_*_LICENSE that auto may take (the one home)

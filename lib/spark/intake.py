@@ -44,8 +44,8 @@
 # An app whose program is already an entry folds into it. No app is named
 # in this file.
 # spark: its verbs and their words from completion.bash (the list smoke's
-# drift guard holds equal to bin/spark; the palettes and models its
-# helpers fill, read from the tree), their slots from bin/spark's
+# drift guard holds equal to bin/spark; the models its helpers fill,
+# read from the tree), their slots from bin/spark's
 # USAGE_* text, and each verb's `spark VERB -h`, run with an empty home.
 # A new spark tree rebuilds every entry: the parsers may have changed.
 # Services: the init's own dirs (runit, systemd, launchd; see "services"
@@ -1733,18 +1733,16 @@ def spark_words():
 
 def tree_names():
     """What completion.bash's helpers fill a slot with, read from the tree
-    the same way they read it: {"_spark_theme_names": the palettes in
-    themes/, "_spark_model_names": models.env's MODEL_X keys as x (the
-    _LICENSE, _NOTE and _TESTED keys are not models)}. The repository's
-    own only: a person's palettes and models are theirs."""
-    themes = sorted(f[:-4] for f in _listdir(os.path.join(REPO, "themes")) if f.endswith(".env"))
+    the same way they read it: {"_spark_model_names": models.env's
+    MODEL_X keys as x (the _LICENSE, _NOTE and _TESTED keys are not
+    models)}. The repository's own only: a person's models are theirs."""
     try:
         with open(os.path.join(REPO, "models.env"), encoding="utf-8") as f:
             keys = re.findall(r"^MODEL_([A-Z0-9_]*)=", f.read(), re.M)
     except OSError:
         keys = []
     models = [k.lower().replace("_", "-") for k in keys if not k.endswith(("_LICENSE", "_NOTE", "_TESTED"))]
-    return {"_spark_theme_names": themes, "_spark_model_names": list(dict.fromkeys(models))}
+    return {"_spark_model_names": list(dict.fromkeys(models))}
 
 
 def _listdir(d):

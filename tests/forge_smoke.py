@@ -472,7 +472,9 @@ def main():
                         keys(v, acc)
                 return acc
             ks = keys(d, [])
-            ok(st == 200 and "themes" in d and "models" in d and "effective" in d, "/api/config: themes, models, effective", raw[:200])
+            ok(st == 200 and "themes" not in d and "models" in d and "effective" in d
+               and not any(k in d["effective"] for k in ("SITE_THEME", "SITE_FONT_FACE", "SITE_QUIET_BOOT")),
+               "/api/config: models, effective; no palettes, no look keys", raw[:200])
             secret = [k for k in ks if re.search("KEY|TOKEN|SECRET", k)]
             ok(not secret, "/api/config never names a key matching KEY|TOKEN|SECRET (spark.env holds three)", secret)
             ok(token not in raw.decode() and smoke.TOKEN not in raw.decode() and "forge-token" not in raw.decode()
@@ -482,9 +484,8 @@ def main():
             else:
                 with open(spark_env, "w") as f:
                     f.write(spark_was)
-            st, _, raw = req(url, "GET", "/api/theme", headers=bearer)
-            d = json.loads(raw)
-            ok(st == 200 and d["name"] == "none" and d["palette"] is None and isinstance(d["palettes"], list), "/api/theme", raw[:100])
+            st, _, _ = req(url, "GET", "/api/theme", headers=bearer)
+            ok(st == 404, "/api/theme is gone (v1.62: the look left core) -> 404", st)
             st, _, raw = req(url, "GET", "/api/serve", headers=bearer)
             d = json.loads(raw)
             ok(st == 200 and d["url"] == stub_url and d["health"] == "ok" and d["model"] == "stub-7b-q4", "/api/serve sees the upstream", raw[:200])
@@ -948,6 +949,9 @@ def main():
                "DELETE /api/threads empties the requester's own store", raw[:100])
             st, _, _ = req(url, "POST", "/api/run", {"verb": "check", "args": []}, headers=post)
             ok(st == 400, "/api/run check -> 400", st)
+            for gone in ("theme", "font", "quiet"):
+                st, _, _ = req(url, "POST", "/api/run", {"verb": gone, "args": ["none"]}, headers=post)
+                ok(st == 400, "/api/run %s is no verb the page may run (v1.62) -> 400" % gone, st)
             st, _, _ = req(url, "POST", "/api/run", {"verb": "history", "args": ["clear"]}, headers=post)
             ok(st == 400, "/api/run history is gone (DELETE /api/threads instead) -> 400", st)
             st, _, _ = req(url, "POST", "/api/run", {"verb": "model", "args": ["none; rm -rf /"]}, headers=post)
@@ -1208,8 +1212,6 @@ def main():
             ok(st == 200, "user /api/stats 200", st)
             st, _, _ = req(url, "GET", "/api/bar", headers=ubearer, timeout=30)
             ok(st == 200, "user /api/bar 200", st)
-            st, _, _ = req(url, "GET", "/api/theme", headers=ubearer)
-            ok(st == 200, "user /api/theme 200", st)
             st, _, raw = req(url, "POST", "/v1/chat/completions",
                              {"messages": [{"role": "user", "content": "capital of France?"}], "stream": False}, headers=ubearer)
             ok(st == 200 and "Paris" in json.loads(raw)["choices"][0]["message"]["content"], "/v1 with the user bearer 200", raw[:200])

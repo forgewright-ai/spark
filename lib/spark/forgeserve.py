@@ -38,7 +38,7 @@ import urllib.request
 import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import (BAR_CACHE, CHECK_JSON, CONFIG_DIR, EMBER_TOKEN_FILE, FORGE_LOCK, FORGE_LOG, FORGE_PID,
+from . import (BAR_CACHE, CHECK_JSON, EMBER_TOKEN_FILE, FORGE_LOCK, FORGE_LOG, FORGE_PID,
                FORGE_URL_FILE, HOME, IS_MAC, MARK, OFF_FLAG, REPO, SERVE_URL_FILE, SPARK_ENV,
                bind_check, config, forge_url, lan_ip, log_exc, own_hostnames, say, state_dir, wait_lan_ip,
                wait_ready)
@@ -77,7 +77,7 @@ RUN_ARG = re.compile(r"^[A-Za-z0-9._/:@+= -]{0,200}$")
 # The verbs the page may run, and what their arguments must be (None: any
 # that match RUN_ARG). The verb itself validates and applies; nothing else
 # from the LAN writes config.
-RUN_VERBS = {"theme": None, "model": None, "ember": None, "font": None, "quiet": None, "bench": None, "on": None, "off": None,
+RUN_VERBS = {"model": None, "ember": None, "bench": None, "on": None, "off": None,
              "serve": None, "stop": None, "remember": None, "forget": None,
              "tune": lambda a: a[:1] == ["apply"],
              "forge": lambda a: a == ["token", "--new"]}
@@ -100,7 +100,6 @@ ROUTES = {
     ("GET", "/api/check"): "user",
     ("GET", "/api/stats"): "user",
     ("GET", "/api/bar"): "user",
-    ("GET", "/api/theme"): "user",
     ("GET", "/api/events"): "user",
     ("GET", "/api/soul"): "user",
     ("GET", "/api/memory"): "user",
@@ -423,7 +422,7 @@ class ForgeServer(ThreadingHTTPServer):
     @property
     def cfg(self):
         """The config, re-read when site.env or spark.env changes: `spark
-        model NAME` (theme, ember, budget alike) restarts spark-serve and
+        model NAME` (ember, budget alike) restarts spark-serve and
         not the forge, so a table answered from the config the forge
         started with marked the old pick until someone restarted it. A
         file that fails to parse keeps the last good config (the
@@ -776,7 +775,7 @@ class Handler(BaseHTTPRequestHandler):
             fn = {"/v1/models": self.v1_models, "/api/me": self.api_me, "/api/check": self.api_check,
                   "/api/stats": self.api_stats,
                   "/api/bar": self.api_bar, "/api/serve": self.api_serve, "/api/gpu": self.api_gpu,
-                  "/api/bench": self.api_bench, "/api/config": self.api_config, "/api/theme": self.api_theme,
+                  "/api/bench": self.api_bench, "/api/config": self.api_config,
                   "/api/log": self.api_log, "/api/events": self.api_events, "/api/threads": self.api_threads,
                   "/api/soul": self.api_soul, "/api/memory": self.api_memory,
                   "/api/users": self.api_users, "/api/models": self.api_models}.get(path)
@@ -1065,7 +1064,7 @@ class Handler(BaseHTTPRequestHandler):
                          "models": modeltab.model_rows(cfg, self.server.serving(_url, model, st))})
 
     def api_config(self):
-        from . import model as modeltab, theme
+        from . import model as modeltab
         cfg = self.server.cfg
         _url, model, st = self.server.upstream.resolve()
 
@@ -1073,21 +1072,9 @@ class Handler(BaseHTTPRequestHandler):
             return {k: v for k, v in d.items() if not SECRET_KEY.search(k)}
         self._json(200, {"site": clean(cfg.site_file), "spark": clean(cfg.spark_file),
                          "effective": clean({k: cfg.get(k, "") for k in config.KEYS}),
-                         "themes": theme.palettes(), "models": modeltab.model_rows(cfg, self.server.serving(_url, model, st)),
+                         "models": modeltab.model_rows(cfg, self.server.serving(_url, model, st)),
                          "off": os.path.exists(OFF_FLAG), "service": engine.service_state(cfg),
                          "forge": {"url": self.server.url, "service": engine.forge_service_state(cfg), "mode": cfg.forge}})
-
-    def api_theme(self):
-        from . import theme
-        cfg = self.server.cfg
-        pal = None
-        path = os.path.join(CONFIG_DIR, "theme.env")
-        if os.path.isfile(path):
-            try:
-                pal = config.parse_env(path)
-            except SystemExit:
-                pal = None
-        self._json(200, {"name": cfg.theme, "palette": pal, "palettes": theme.palettes()})
 
     def api_log(self):
         try:

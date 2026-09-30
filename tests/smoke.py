@@ -720,7 +720,7 @@ def knowledge_cases(t):
     grounding._MAP.clear()
     grounding._TREE.clear()
     t.ok(grounding.shell_map() == smap and len(smap) <= 1000 and smap.isascii()
-         and "spark quiet start|login|boot|audio on|off" in smap and "spark memory on|off" in smap,
+         and "spark quiet start|audio on|off" in smap and "spark memory on|off" in smap,
          "knowledge: shell_map is byte-stable, ASCII, <= 1000 characters, SUB and on|off filled", "%d: %s" % (len(smap), smap))
     example = open(os.path.join(REPO, "home", ".config", "spark", "spark.env.example")).read()
     keys = re.findall(r"SPARK_[A-Z_]+", grounding.SHELL_TAIL)
@@ -982,8 +982,9 @@ def knowledge_cases(t):
                 ("tar -czf a.tgz d", []),
                 ("spark engine stop", [("verb", "spark", "engine")]),
                 ("spark serve stop", [("verb", "spark serve", "stop")]),
-                ("spark quiet boot maybe", [("verb", "spark quiet boot", "maybe")]),
-                ("spark quiet boot on", []), ("spark theme dracula", []), ("spark model list", []),
+                ("spark quiet start maybe", [("verb", "spark quiet start", "maybe")]),
+                ("spark quiet start on", []), ("spark theme dracula", [("verb", "spark", "theme")]),
+                ("spark model list", []),
                 ("spark what model am I on?", []), ("cmd 2>&1 | explain", [("missing", "cmd", "cmd")]),
                 ("micro <file>", [("placeholder", "micro", "<file>")]),
                 ("micro [file]", [("placeholder", "micro", "[file]")]),
@@ -2836,8 +2837,9 @@ def main():
              "a fork's origin remote names itself in spark ver's credits line", out)
 
         # a lone word is a slip, not a question
-        rc, out, _ = spark("gruvbox-dark")
-        t.ok(rc == 2 and "spark theme gruvbox-dark" in out, "a palette name alone points at spark theme", out)
+        rc, out, _ = spark("theme")
+        t.ok(rc == 2 and out.startswith("spark: no command named theme"),
+             "theme alone is an unknown word like any other (v1.62: the look left core)", out)
         rc, out, _ = spark("qwen3-8b")
         t.ok(rc == 2 and "spark model qwen3-8b" in out, "a model name alone points at spark model", out)
         rc, out, _ = spark("frobnicate")
@@ -4003,14 +4005,6 @@ def main():
              "share: a client skips the share section -- no root, the owner's token untouched",
              "\n".join(ln for ln in lines if "share" in ln)[-200:] + p.stderr[-120:])
 
-        # the Terminal.app profile carries the keys micro needs
-        from spark import theme as thememod
-        fixture_pal = dict(("THEME_ANSI_%d" % i, "#%02x%02x%02x" % (i, i, i)) for i in range(16))
-        fixture_pal.update({"THEME_BG": "#111111", "THEME_FG": "#eeeeee", "THEME_ACCENT": "#ff0000", "THEME_MUTED": "#888888"})
-        pd = thememod.profile_dict("spark-fixture", fixture_pal, "Menlo", 13)
-        t.ok(pd.get("useOptionAsMetaKey") is True and pd["keyMapBoundKeys"]["$F701"] == "\x1b[1;2B" and len(pd["keyMapBoundKeys"]) == 8,
-             "profile: Option is Meta and Shift/Ctrl arrows are bound", json.dumps(pd.get("keyMapBoundKeys")))
-
         # the privacy claim: what the request contains
         req = {}
 
@@ -4049,7 +4043,7 @@ def main():
         t.ok("Preferred when installed" in esys and "Flags that exist" not in esys,
              "ask keeps the full shell prefix, and no hand-kept flag list (v1.53: the judge reads the manuals)",
              esys[:200])
-        t.ok("spark's own commands" in esys and "spark quiet start|login|boot|audio on|off" in esys and "SPARK_REVEAL" in esys
+        t.ok("spark's own commands" in esys and "spark quiet start|audio on|off" in esys and "SPARK_REVEAL" in esys
              and "spark shell on|off" not in esys,
              "ask knows spark's own commands (the machine can explain itself)", esys[:200])
         t.ok("spark's own commands" in system1, "the line prompt knows spark's own commands too", system1[:200])
@@ -4084,7 +4078,8 @@ def main():
              and "no graphical display" not in _page,
              "machine line: a Linux session with no display says so; a display, or the page's server, does not", _plain)
         t.ok("no markdown marks" in csys, "chat rules out markdown for the terminal", csys[-200:])
-        t.ok("spark's own commands" in csys and "The look: spark theme NAME" in csys,
+        t.ok("spark's own commands" in csys and "spark bar -- the status line" in csys
+             and "spark theme" not in csys and "spark font" not in csys,
              "chat knows spark's own commands, grouped with meanings", csys[:200])
         spark("chat", "hello again", extra={"SPARK_BASE_URL": url2})
         t.ok(req["body"]["messages"][0]["content"] == csys, "the chat system message is byte-identical across requests")
@@ -5559,16 +5554,17 @@ def main():
              "check.py: every spark remedy names a live verb and a sub-word its help lists",
              str(_badr[:8]))
 
-        # the interface is theme, quiet, font and the bar line; `shell` is
-        # no verb of spark's -- an unknown word like any other
+        # the interface is quiet and the bar line; `shell`, `theme` and
+        # `font` are no verbs of spark's -- unknown words like any other
         off = {"SPARK_NO_APPLY": "1"}
         rc, out, _ = spark("shell", extra=off)
         t.ok(rc == 2 and out.startswith("spark: no command named shell"),
              "spark shell: an unknown verb -- the no-command line, exit 2", out)
         rc, out, _ = spark("help", extra=off)
         gated = [l for l in out.splitlines() if l.startswith(" spark shell")]
-        t.ok(rc == 0 and "spark font" in out and "spark theme" in out and not gated,
-             "spark help: theme and font are there, no spark shell line", gated or out)
+        t.ok(rc == 0 and " spark quiet [SUB on|off]" in out and " spark bar [line]" in out and not gated
+             and not re.search(r"^ spark (theme|font)\b", out, re.M),
+             "spark help: quiet and bar are there, no theme, font or shell line", gated or out)
         t.ok("spark-shell" not in out and "SHELL.md" not in out and "shell layer" not in out.lower(),
              "spark help names no shell layer", out)
         t.ok("Esc s" in out and "empty line" in out,
@@ -5604,45 +5600,6 @@ def main():
         rc, out, _ = spark("bar", "on", extra=off)
         t.ok(rc == 2 and out.startswith("spark bar -- ") and "spark bar line" in out,
              "spark bar on: an unknown word -- the usage, exit 2", out)
-        # spark font: it shows, lists and sets, core
-        rc, out, _ = spark("font", extra=off)
-        t.ok(rc == 0 and out.startswith("spark font -- "), "spark font shows (core)", out)
-        rc, out, _ = spark("font", "-h", extra=off)
-        t.ok(rc == 0 and out.splitlines()[0] == "spark font -- the console font, or Terminal.app's",
-             "spark font -h signs (contract 8)", out)
-        rc, out, _ = spark("font", "list", extra=off)
-        # a show answers on every family: where there is no console file
-        # to list (WSL 2, a bare Linux) the answer is the signed refusal, still 0
-        t.ok(rc == 0 and out.startswith(("spark font list -- ", "spark font -- no console")),
-             "spark font list answers on either OS", out)
-        from spark import site as _site2
-        t.ok([_site2.size_as_taken(x) for x in ("32x16", "16", "12x6")] == ["16x32", "8x16", "6x12"],
-             "font list: a file's HxW (or bare height) is spelled as the command takes it, WxH")
-        if sys.platform != "darwin" and os.path.isdir("/usr/share/consolefonts"):
-            rc, out, _ = spark("font", "NoSuchFace", "16x32", extra=off)
-            t.ok(rc == 2 and "spark font list" in out,
-                 "a console face consolefonts lacks is refused, naming spark font list", out)
-            rc, out, _ = spark("font", "list", extra=off)
-            pairs = [tuple(int(v) for v in tok.split("x")) for ln in out.splitlines()[1:] for tok in ln.split() if re.match(r"^\d+x\d+$", tok)]
-            t.ok(rc == 0 and pairs and all(w <= h for w, h in pairs), "font list: every size printed is width by height", out[:200])
-        if sys.platform == "darwin":
-            from spark import site as _site
-            if _site.mac_font_installed("VGA") is False:       # Spotlight indexes here
-                rc, out, _ = spark("font", "VGA", "16", extra=dict(off, SPARK_NO_APPLY="1"))
-                t.ok(rc == 2 and "no font named VGA is installed here" in out and "spark font list" in out,
-                     "macOS: a face this Mac lacks (a console face) is refused, naming spark font list", out)
-                rc, out, _ = spark("font", "Menlo-Regular", "13", extra=dict(off, SPARK_NO_APPLY="1"))
-                with open(home + "/.config/spark/site.env") as f:
-                    site_env = f.read()
-                t.ok(rc == 0 and "SITE_FONT_FACE=Menlo-Regular\n" in site_env and "SITE_FONT_SIZE=13\n" in site_env,
-                     "macOS: an installed face and points are written", out + site_env)
-                rc, out, _ = spark("font", "Menlo-Regular", "99", extra=dict(off, SPARK_NO_APPLY="1"))
-                t.ok(rc == 2 and "6 to 72" in out, "macOS: a size outside 6..72 points is refused", out)
-                rc, out, _ = spark("font", "list", extra=off)
-                t.ok("Menlo-Regular" in out and "the default" in out and "Nerd" not in out,
-                     "macOS: spark font list names the faces every Mac ships, Menlo-Regular as the default", out)
-            else:
-                print("  skip macOS font guard: Spotlight indexing is off here")
         # quiet audio: both OSes, core, the key is the behaviour
         rc, out, _ = spark("quiet", "audio", "on", extra=off)
         with open(home + "/.config/spark/site.env") as f:
@@ -5659,7 +5616,7 @@ def main():
         t.ok(rc == 2 and out.startswith("spark: no command named bootconfig"),
              "spark bootconfig is no command any more (v1.3's stub is gone): a slip, exit 2", out)
 
-        # spark quiet: core start round-trip; login/boot per OS (grammar law)
+        # spark quiet: core start round-trip; login and boot left core (v1.62)
         rc, out, _ = spark("quiet", "-h", extra=off)
         t.ok(rc == 0 and out.splitlines()[0].startswith("spark quiet -- "), "spark quiet -h signs (contract 8)", out)
         rc, out, _ = spark("quiet", extra=off)
@@ -5674,46 +5631,15 @@ def main():
              "spark quiet start off writes it back", out)
         rc, out, _ = spark("quiet", "sideways", extra=off)
         t.ok(rc == 2 and out.startswith("spark quiet -- "), "spark quiet sideways: usage, exit 2", out)
-        if sys.platform == "darwin":
-            rc, out, _ = spark("quiet", "login", extra=off)
-            t.ok(rc == 0 and out.strip() == "spark quiet login -- macOS: no motd, no GRUB",
-                 "spark quiet login shows on macOS: nothing there, exit 0", out)
-            rc, out, _ = spark("quiet", "login", "on", extra=off)
-            t.ok(rc == 2 and out.strip() == "spark quiet login -- macOS: no motd, no GRUB",
-                 "spark quiet login on on macOS: nothing to set, exit 2", out)
-        else:
-            rc, out, _ = spark("quiet", "login", extra=off)
-            t.ok(rc == 0 and out.startswith("spark quiet login -- "), "spark quiet login shows its state (core, no gate)", out)
-            rc, out, _ = spark("quiet", "login", "on", extra=off)
-            t.ok(rc == 0 and "SITE_QUIET_LOGIN=yes" in open(home + "/.config/spark/site.env").read(),
-                 "spark quiet login on writes the key (core, no gate)", out)
-            spark("quiet", "login", "off", extra=off)
-        rc, out, _ = spark("theme", "-h", extra=off)
-        t.ok(rc == 0 and out.startswith("spark theme -- "), "spark theme -h signs (contract 8)", out)
-        # the palette's runtime files, one writer: spark theme NAME writes
-        # theme.env, console-colors (the VT escapes) and console-colors.rgb
-        # (setvtrgb's three lines, for the boot unit); none removes theme.env
-        # and turns both into the VGA sixteen
-        rc, out, _ = spark("theme", "gruvbox-dark", extra=off)
-        theme_env = open(home + "/.config/spark/theme.env").read()
-        cc = open(home + "/.config/spark/console-colors").read()
-        t.ok(rc == 0 and "THEME_BG=#282828\n" in theme_env and "THEME_BTOP" not in theme_env,
-             "spark theme NAME writes theme.env from the palette (20 keys, no THEME_BTOP)", theme_env)
-        t.ok(cc.startswith("\033]P0282828") and "\033]P9fb4934" in cc and "\033]Pfebdbb2" in cc,
-             "console-colors holds the sixteen VT escapes, ansi 0-15 in hex", repr(cc))
-        rgb = open(home + "/.config/spark/console-colors.rgb").read()
-        from spark import theme as _theme_mod, config as _config_mod
-        _pal = _config_mod.theme_palette("gruvbox-dark", REPO)
-        t.ok(rgb == _theme_mod.vt_lines([_pal["THEME_ANSI_%d" % i] for i in range(16)]) and rgb.startswith("40,204,152,215,")
-             and len(rgb.splitlines()) == 3 and all(len(l.split(",")) == 16 for l in rgb.splitlines()),
-             "console-colors.rgb holds setvtrgb's three lines: red, green, blue of ansi 0-15", repr(rgb))
-        rc, out, _ = spark("theme", "none", extra=off)
-        t.ok(rc == 0 and not os.path.exists(home + "/.config/spark/theme.env")
-             and open(home + "/.config/spark/console-colors").read().startswith("\033]P0000000\033]P1aa0000")
-             and open(home + "/.config/spark/console-colors.rgb").read().splitlines()[0] == "0,170,0,170,0,170,0,170,85,255,85,255,85,255,85,255",
-             "spark theme none removes theme.env and leaves the VGA sixteen in both console files", out)
-        rc, out, _ = spark("theme", "nosuch", extra=off)
-        t.ok(rc == 2 and out.startswith("spark theme -- "), "spark theme nosuch: usage, exit 2", out)
+        before = open(home + "/.config/spark/site.env").read()
+        for _sub in ("login", "boot"):
+            rc, out, _ = spark("quiet", _sub, "on", extra=off)
+            t.ok(rc == 2 and out.startswith("spark quiet -- ") and open(home + "/.config/spark/site.env").read() == before,
+                 "spark quiet %s on: no longer spark's -- the usage, exit 2, site.env untouched" % _sub, out)
+        for _verb in ("theme", "font"):
+            rc, out, _ = spark(_verb, extra=off)
+            t.ok(rc == 2 and out.startswith("spark: no command named %s" % _verb),
+                 "spark %s: an unknown word (v1.62: the look left core)" % _verb, out)
 
         # the client shape: spark client (state, URL, off); the check's client rows
         rc, out, _ = spark("client", extra=off)
@@ -5765,28 +5691,17 @@ def main():
              "spark setup -h signs (contract 8)", out)
         rc, out, _ = spark(extra=off)
         t.ok(rc == 0 and "'s AI on" in out, "bare spark with no site.env, not a tty: the status (the offer is tty-only)", out)
-        for stale in ("theme.env", "console-colors"):   # earlier cases left theirs
-            try:
-                os.remove(home + "/.config/spark/" + stale)
-            except OSError:
-                pass
         rc, out, err = spark("setup", "--yes", "--no-serve", "--model", "none", extra=off)
         site_env = open(home + "/.config/spark/site.env").read()
         t.ok(rc == 0 and err == "", "spark setup --yes --no-serve --model none exits 0", out + err)
         t.ok(re.search(r"^SITE_NAME=\S", site_env, re.M) and re.search(r"^SITE_USER=\S", site_env, re.M)
              and "SITE_AI_MODEL=none\n" in site_env,
              "setup wrote SITE_NAME, SITE_USER, SITE_AI_MODEL=none", site_env)
-        t.ok("SITE_THEME=none\n" in site_env and "theme [" not in out,
-             "setup never asks the palette: none is written unasked", site_env + out)
-        t.ok(not os.path.exists(home + "/.config/spark/theme.env")
-             and not os.path.exists(home + "/.config/spark/console-colors"),
-             "setup applies no palette: the machine looks untouched (spark theme paints)", out)
-        rc, out, _ = spark("setup", "--yes", "--no-serve", "--model", "none", "--theme", "nosuch", extra=off)
-        t.ok(rc == 2 and "no palette named nosuch" in out and "none" in out,
-             "setup --theme nosuch exits 2 naming the palettes", out)
+        t.ok("theme" not in out and not os.path.exists(home + "/.config/spark/theme.env"),
+             "setup names no palette and writes none: the machine looks untouched", out)
         rc, out, _ = spark("setup", "--yes", "--no-serve", "--model", "none", "--theme", "none", extra=off)
-        t.ok(rc == 0 and "SITE_THEME=none\n" in open(home + "/.config/spark/site.env").read(),
-             "setup --theme none writes none (the flag is how you say no)", out)
+        t.ok(rc == 2 and "no option --theme" in out, "setup --theme: no option any more (v1.62), exit 2", out)
+        rc, out, _ = spark("setup", "--yes", "--no-serve", "--model", "none", extra=off)
         t.ok("\u2588" in out and "GB for models" in out and "SITE_AI_MODEL=none" in out and "open a new shell" in out
              and "spark ember NAME adds a chat model" in out,
              "setup printed the logo, the table header, the model line and the closing block", out)
@@ -5873,31 +5788,6 @@ def main():
         t.ok("SITE_AI_MODEL=qwen3-1-7b\n" in open(home + "/.config/spark/site.env").read(),
              "setup --model NAME writes the name", out)
 
-        # your own palettes: ~/.config/spark/themes/<name>.env, found by
-        # config.theme_path,
-        # listed as yours, and winning over the repository's on a clash
-        mine_dir = home + "/.config/spark/themes"
-        os.makedirs(mine_dir, exist_ok=True)
-        with open(os.path.join(REPO, "themes", "nord.env")) as f:
-            mine = f.read().replace("#2e3440", "#101010")
-        with open(mine_dir + "/mine.env", "w") as f:
-            f.write(mine)
-        rc, out, _ = spark("theme")
-        t.ok(rc == 0 and "mine" in out and "yours: ~/.config/spark/themes/mine.env" in out,
-             "theme: a palette in ~/.config/spark/themes is listed as yours", out)
-        rc, out, err = spark("theme", "mine", extra={"SPARK_NO_APPLY": "1"})
-        with open(home + "/.config/spark/theme.env") as f:
-            theme_env = f.read()
-        t.ok(rc == 0 and "THEME_BG=#101010" in theme_env, "theme mine: chosen and written from your file", out + err + theme_env)
-        with open(mine_dir + "/nord.env", "w") as f:
-            f.write(mine.replace("#101010", "#202020"))
-        rc, out, err = spark("theme", "nord", extra={"SPARK_NO_APPLY": "1"})
-        with open(home + "/.config/spark/theme.env") as f:
-            theme_env = f.read()
-        t.ok(rc == 0 and "THEME_BG=#202020" in theme_env, "theme: yours wins over the repository's on a name clash", out + err)
-        os.remove(mine_dir + "/nord.env")
-        rc, out, _ = spark("mine")
-        t.ok(rc == 2 and "is a palette -- spark theme mine" in out, "a bare palette name of yours is a slip, not a question", out)
         # spark uninstall: signed, shows and never mutates without the word;
         # SPARK_NO_APPLY = the plan only (the real run is tests/uninstall_test.sh)
         rc, out, _ = spark("uninstall", "-h")
@@ -6011,20 +5901,6 @@ def main():
                "p.package_for('batcat'), repr(p.package_for('nosuch')))")
         t.ok(twin(_pk) == "xbps | sudo xbps-install -Sy fd | sudo xbps-install -Su | xbps-remove -y fd | sudo xbps-remove -y fd | fd fd bat ''",
              "void: manager xbps, install through xbps-install -Sy, upgrade -Su, removal xbps-remove -y, the tools' xbps column", twin(_pk))
-        # the console's third shape: rc.conf beside /etc/runit is rcconf and
-        # the font file; rc.conf without runit is no shape (by mechanism, not
-        # by file); quiet boot on a void without GRUB is the Void line either way
-        with open(home + "/rc.conf", "w") as f:
-            f.write('#KEYMAP="us"\nFONT="Terminus"\n')
-        rcconf = dict(SPARK_ETC_CONSOLE_SETUP=home + "/no-console-setup", SPARK_ETC_VCONSOLE=home + "/no-vconsole", SPARK_ETC_RCCONF=home + "/rc.conf",
-                      SPARK_ETC_DEFAULT_GRUB=home + "/no-default-grub")
-        _shape = "from spark import site; print(site.console_shape() or '-', site.font_file(), site.no_console_font() or '-', '|', site.no_grub())"
-        _void_no_boot = "no GRUB on this Void: its boot loader is left alone"
-        t.ok(twin(_shape, **rcconf) == "rcconf %s/rc.conf - | %s" % (home, _void_no_boot),
-             "void: rc.conf beside /etc/runit is the rcconf shape, the font file is rc.conf, quiet boot is refused with the Void line", twin(_shape, **rcconf))
-        t.ok(twin(_shape, SPARK_ETC_RUNIT=home + "/no-runit", **rcconf)
-             == "- %s/no-vconsole no console-setup, vconsole.conf or rc.conf here: the console font is not spark's to set | %s" % (home, _void_no_boot),
-             "rc.conf without /etc/runit is no shape: the font is not spark's to set there", twin(_shape, SPARK_ETC_RUNIT=home + "/no-runit", **rcconf))
         # the service manager's verbs on runit, against an sv stub that logs
         # its argv and answers status from the dir the way runsv leaves it
         # (a supervise/ dir and no down file is run:, a down file is down:,
@@ -6098,136 +5974,16 @@ print("restart", engine.restart_line("serve"), "|", engine.restart_line("check")
              "engine on runit: sv is asked by the dir's path -- down twice (a stop, a stop with the down file), status, up, restart, up", str(_svcalls))
         if sys.platform != "darwin":
             wsl = dict(SPARK_PROC_VERSION=home + "/version-wsl", SPARK_NO_APPLY="1")
-            rc, out, _ = spark("font", extra=wsl)
-            t.ok(rc == 0 and out.strip() == "spark font -- no console on WSL 2: the font lives in Windows Terminal's settings",
-                 "WSL 2: spark font shows the one line (contract 8), exit 0", out)
-            before = open(home + "/.config/spark/site.env").read()
-            rc, out, _ = spark("font", "Terminus", "16x32", extra=wsl)
-            t.ok(rc == 2 and "no console on WSL 2" in out and open(home + "/.config/spark/site.env").read() == before,
-                 "WSL 2: spark font FACE SIZE refuses with the same line, exit 2, site.env untouched", "%d %s" % (rc, out))
-            rc, out, _ = spark("quiet", "boot", "on", extra=wsl)
-            t.ok(rc == 2 and out.strip() == "spark quiet boot -- no GRUB on WSL 2: Windows boots it",
-                 "WSL 2: spark quiet boot on refuses: no GRUB", out)
             rc, out, _ = spark("headless", "on", extra=wsl)
             t.ok(rc == 2 and "WSL 2 stops with its last window" in out and "SITE_HEADLESS=yes" not in open(home + "/.config/spark/site.env").read(),
                  "WSL 2: spark headless on refuses: it cannot stay on", out)
             rc, out, _ = spark("status", extra=wsl)
             t.ok("(WSL 2)" in out, "WSL 2: the status line names it", out.splitlines()[0] if out else "")
-            # Arch (ID=arch in os-release): the console font is by mechanism
-            # -- vconsole.conf's FONT= names a kbd font file, its size in the
-            # file's own header (PSF1 and PSF2, gzip or plain); the fixture
-            # holds one of each, and no console-setup file
-            arch = dict(SPARK_OS_RELEASE=home + "/os-release-arch", SPARK_PROC_VERSION=home + "/version-plain", SPARK_NO_APPLY="1",
-                        SPARK_ETC_CONSOLE_SETUP=home + "/no-console-setup", SPARK_ETC_VCONSOLE=home + "/vconsole.conf",
-                        SPARK_CONSOLEFONTS_DIR=home + "/consolefonts")
-            import gzip as _gzip
-            import struct as _struct
-            os.makedirs(home + "/consolefonts", exist_ok=True)
-            with open(home + "/vconsole.conf", "w") as f:
-                f.write("KEYMAP=us\nFONT=default8x16\n")
-            psf2 = b"\x72\xb5\x4a\x86" + _struct.pack("<IIIIIII", 0, 32, 0, 256, 16, 16, 8) + b"\0" * 16   # 8x16
-            with _gzip.open(home + "/consolefonts/fixture16.psfu.gz", "wb") as f:
-                f.write(psf2)
-            with open(home + "/consolefonts/old12.psf", "wb") as f:
-                f.write(b"\x36\x04\x00\x0c" + b"\0" * 28)                              # PSF1, 8x12
-            with open(home + "/consolefonts/README", "w") as f:
-                f.write("not a font\n")
-            from spark import site as _site3
-            t.ok(_site3.psf_size(home + "/consolefonts/fixture16.psfu.gz") == "8x16" and _site3.psf_size(home + "/consolefonts/old12.psf") == "8x12"
-                 and _site3.psf_size(home + "/consolefonts/README") == "",
-                 "psf_size: a PSF2 (gzip) and a PSF1 (plain) header say their cell; anything else says nothing")
-            rc, out, _ = spark("font", "list", extra=arch)
-            t.ok(rc == 0 and "  fixture16                8x16" in out and "  old12                    8x12" in out and "README" not in out
-                 and "vconsole.conf" in out,
-                 "Arch: spark font list prints the kbd fonts with the size their headers say, and names vconsole.conf", out)
-            rc, out, _ = spark("font", "fixture16", "8x16", extra=arch)
-            site_env = open(home + "/.config/spark/site.env").read()
-            t.ok(rc == 0 and "SITE_FONT_FACE=fixture16\n" in site_env and "SITE_FONT_SIZE=8x16\n" in site_env,
-                 "Arch: spark font FACE SIZE sets both keys for a font the files hold", "%d %s" % (rc, out))
-            rc, out, _ = spark("font", extra=arch)
-            t.ok(rc == 0 and out.strip() == "spark font -- console: fixture16 8x16 (%s/vconsole.conf)" % home,
-                 "Arch: spark font shows the choice and the file it lands in", out)
-            before = site_env
-            rc, out, _ = spark("font", "fixture16", "16x32", extra=arch)
-            t.ok(rc == 2 and "fixture16 comes in 8x16, not 16x32" in out and open(home + "/.config/spark/site.env").read() == before,
-                 "Arch: a size the file does not have is refused, naming the one it has; site.env untouched", "%d %s" % (rc, out))
-            rc, out, _ = spark("font", "nosuch", "8x16", extra=arch)
-            t.ok(rc == 2 and "no console font named nosuch" in out, "Arch: a font the files lack is refused", out)
-            rc, out, _ = spark("font", "none", extra=arch)
-            t.ok(rc == 0 and "SITE_FONT_FACE=\n" in open(home + "/.config/spark/site.env").read(), "Arch: spark font none clears the keys", out)
-            # neither file: not spark's to set, one signed line (contract 8)
-            bare = dict(arch, SPARK_ETC_VCONSOLE=home + "/no-vconsole")
-            rc, out, _ = spark("font", extra=bare)
-            t.ok(rc == 0 and out.strip() == "spark font -- no console-setup, vconsole.conf or rc.conf here: the console font is not spark's to set",
-                 "no console file: spark font shows the one line (contract 8), exit 0", out)
-            before = open(home + "/.config/spark/site.env").read()
-            rc, out, _ = spark("font", "fixture16", "8x16", extra=bare)
-            t.ok(rc == 2 and "not spark's to set" in out and open(home + "/.config/spark/site.env").read() == before,
-                 "no console file: spark font FACE SIZE refuses with the same line, exit 2, site.env untouched", "%d %s" % (rc, out))
-            # no UKI preset (the dir is pinned empty): the kernel line is the
-            # boot loader's, the verb refuses in one signed line
-            arch["SPARK_ETC_MKINITCPIO_D"] = home + "/no-mkinitcpio.d"
-            rc, out, _ = spark("quiet", "boot", "on", extra=arch)
-            t.ok(rc == 2 and out.strip() == "spark quiet boot -- no UKI on this Arch: the kernel line is the boot loader's "
-                 "(a loader entry's options line, or GRUB_CMDLINE_LINUX_DEFAULT then grub-mkconfig)",
-                 "Arch without a UKI: spark quiet boot on refuses: the kernel line is the boot loader's", out)
-            # a Unified Kernel Image (a preset's default_uki=): the verb is
-            # real -- the key is set (SPARK_NO_APPLY keeps bootstrap off)
-            os.makedirs(home + "/mkinitcpio.d", exist_ok=True)
-            with open(home + "/mkinitcpio.d/linux.preset", "w") as f:
-                f.write('ALL_kver="/boot/vmlinuz-linux"\nPRESETS=(\'default\')\ndefault_uki="/boot/EFI/Linux/arch-linux.efi"\n'
-                        'default_options="--splash /usr/share/systemd/bootctl/splash-arch.bmp"\n')
-            uki = dict(arch, SPARK_ETC_MKINITCPIO_D=home + "/mkinitcpio.d")
-            rc, out, _ = spark("quiet", "boot", "on", extra=uki)
-            t.ok(rc == 0 and "SITE_QUIET_BOOT=yes" in open(home + "/.config/spark/site.env").read(),
-                 "Arch with a UKI: spark quiet boot on sets the key (the cmdline.d drop-in is spark's there)", "%d %s" % (rc, out))
-            rc, out, _ = spark("quiet", "boot", extra=uki)
-            t.ok(rc == 0 and out.strip() == "spark quiet boot -- on", "Arch with a UKI: spark quiet boot shows on", out)
-            rc, out, _ = spark("quiet", "boot", "off", extra=uki)
-            t.ok(rc == 0 and "SITE_QUIET_BOOT=no" in open(home + "/.config/spark/site.env").read(),
-                 "Arch with a UKI: spark quiet boot off sets the key back", "%d %s" % (rc, out))
-            rc, out, _ = spark("quiet", "login", "on", extra=arch)
-            t.ok(rc == 0 and "SITE_QUIET_LOGIN=yes" in open(home + "/.config/spark/site.env").read(),
-                 "Arch: spark quiet login on still sets the key (the motd is real there)", "%d %s" % (rc, out))
-            rc, out, _ = spark("quiet", "login", "off", extra=arch)
             # Void (ID="void" in os-release, /etc/runit a dir, not booted):
-            # without GRUB quiet boot refuses in one signed line and the
-            # status says n/a and why; with GRUB it is real; quiet login is real; headless
-            # is allowed (a Void box can be a brain) and its status reads
-            # the supervisor fact, no linger or sleep; the console font is
-            # rc.conf's FONT=, named on every line
+            # headless is allowed (a Void box can be a brain) and its status
+            # reads the supervisor fact, no linger or sleep
             void = dict(SPARK_OS_RELEASE=home + "/os-release-void", SPARK_PROC_VERSION=home + "/version-plain", SPARK_NO_APPLY="1",
-                        SPARK_ETC_CONSOLE_SETUP=home + "/no-console-setup", SPARK_ETC_VCONSOLE=home + "/no-vconsole",
-                        SPARK_ETC_RCCONF=home + "/rc.conf", SPARK_ETC_RUNIT=home + "/runit", SPARK_VAR_SERVICE=home + "/no-service",
-                        SPARK_CONSOLEFONTS_DIR=home + "/consolefonts", SPARK_ETC_DEFAULT_GRUB=home + "/no-default-grub")
-            rc, out, _ = spark("quiet", "boot", "on", extra=void)
-            t.ok(rc == 2 and out.strip() == "spark quiet boot -- " + _void_no_boot
-                 and "SITE_QUIET_BOOT=yes" not in open(home + "/.config/spark/site.env").read(),
-                 "Void: spark quiet boot on refuses with the Void line, exit 2, the key not set", "%d %s" % (rc, out))
-            rc, out, _ = spark("quiet", "boot", extra=void)
-            t.ok(rc == 0 and out.strip() == "spark quiet boot -- " + _void_no_boot,
-                 "Void: bare spark quiet boot shows the same line, exit 0", out)
-            rc, out, _ = spark("quiet", extra=void)
-            t.ok(rc == 0 and "boot n/a," in out and "boot is n/a: " + _void_no_boot in out,
-                 "Void: spark quiet's status says boot is n/a, and why on a line of its own", out)
-            # with /etc/default/grub and update-grub the verb is real: the key
-            # is set (bootstrap appends the marked lines), then set back
-            os.makedirs(home + "/grub-bin", exist_ok=True)
-            with open(home + "/grub-bin/update-grub", "w") as f:
-                f.write("#!/bin/sh\nexit 0\n")
-            os.chmod(home + "/grub-bin/update-grub", 0o755)
-            with open(home + "/default-grub", "w") as f:
-                f.write('GRUB_TIMEOUT=5\n')
-            vgrub = dict(void, SPARK_ETC_DEFAULT_GRUB=home + "/default-grub",
-                         PATH=home + "/grub-bin:" + os.environ.get("PATH", ""))
-            rc, out, _ = spark("quiet", "boot", "on", extra=vgrub)
-            t.ok(rc == 0 and "SITE_QUIET_BOOT=yes" in open(home + "/.config/spark/site.env").read(),
-                 "Void with GRUB: spark quiet boot on sets the key", "%d %s" % (rc, out))
-            rc, out, _ = spark("quiet", "boot", "off", extra=vgrub)
-            rc, out, _ = spark("quiet", "login", "on", extra=void)
-            t.ok(rc == 0 and "SITE_QUIET_LOGIN=yes" in open(home + "/.config/spark/site.env").read(),
-                 "Void: spark quiet login on still sets the key (the motd is real there)", "%d %s" % (rc, out))
-            rc, out, _ = spark("quiet", "login", "off", extra=void)
+                        SPARK_ETC_RUNIT=home + "/runit", SPARK_VAR_SERVICE=home + "/no-service")
             rc, out, _ = spark("headless", "on", extra=void)
             t.ok(rc == 0 and "SITE_HEADLESS=yes" in open(home + "/.config/spark/site.env").read(),
                  "Void: spark headless on is allowed (a Void box can be a brain): the key is set", "%d %s" % (rc, out))
@@ -6239,19 +5995,6 @@ print("restart", engine.restart_line("serve"), "|", engine.restart_line("check")
                  "Void: spark headless status reads the supervisor fact; no linger, sleep or lid fact on runit", out)
             rc, out, _ = spark("headless", "off", extra=void)
             t.ok(rc == 0 and "SITE_HEADLESS=no" in open(home + "/.config/spark/site.env").read(), "Void: spark headless off sets the key back", "%d %s" % (rc, out))
-            rc, out, _ = spark("font", "list", extra=void)
-            t.ok(rc == 0 and "  fixture16                8x16" in out and "it lands in %s/rc.conf" % home in out,
-                 "Void: spark font list prints the kbd fonts and names rc.conf as where a choice lands", out)
-            rc, out, _ = spark("font", "fixture16", "8x16", extra=void)
-            t.ok(rc == 0 and "SITE_FONT_FACE=fixture16\n" in open(home + "/.config/spark/site.env").read(),
-                 "Void: spark font FACE SIZE sets the keys on the rcconf shape", "%d %s" % (rc, out))
-            rc, out, _ = spark("font", extra=void)
-            t.ok(rc == 0 and out.strip() == "spark font -- console: fixture16 8x16 (%s/rc.conf)" % home,
-                 "Void: spark font shows the choice and rc.conf as its file", out)
-            rc, out, _ = spark("font", "none", extra=void)
-            rc, out, _ = spark("font", extra=void)
-            t.ok(rc == 0 and out.strip() == "spark font -- console: not managed (SITE_FONT_FACE unset; %s/rc.conf keeps its font)" % home,
-                 "Void: spark font none, then bare spark font names rc.conf as the file that keeps its font", out)
 
         # the egg (lib/spark/lua.py): the forest, headless through --sim, then a pty
         rc, out, _ = spark("lua", "--sim", "1", "auto")
@@ -6282,12 +6025,9 @@ print("restart", engine.restart_line("serve"), "|", engine.restart_line("check")
             t.ok("Top runs" in out and out.count("+--") == 0
                  and "Cobra" not in out and "the moon, in Portuguese" not in out,
                  "lua: the win splash is the score and the board -- no box, no credits", out)
-            # the palette is the whole forest's prize: a first-night win
-            # says what is still to come, and hands over nothing
-            t.ok("spark theme canarinho" not in out and "Night 2 awaits" in out,
-                 "lua: winning night 1 offers the next night, not the palette", out)
-        t.ok(not os.path.exists(mine_dir + "/canarinho.env"),
-             "lua: no palette until the last night is won")
+            # a first-night win says what is still to come
+            t.ok("Night 2 awaits" in out and "whole forest" not in out,
+                 "lua: winning night 1 offers the next night", out)
         # the last night: the same pilot, the forest at its thickest
         last = ""
         for seed in range(1, 21):
@@ -6297,16 +6037,10 @@ print("restart", engine.restart_line("serve"), "|", engine.restart_line("check")
                 break
         t.ok(bool(last), "lua: the pilot can still cross on the last night", last[:200])
         if last:
-            t.ok("spark theme canarinho" in last and "awaits" not in last,
-                 "lua: winning the last night is what hands over the palette", last)
-        t.ok(os.path.exists(mine_dir + "/canarinho.env"),
-             "lua: the last night writes canarinho.env into your palettes")
-        rc, out, err = spark("theme", "canarinho", extra={"SPARK_NO_APPLY": "1"})
-        with open(home + "/.config/spark/theme.env") as f:
-            theme_env = f.read()
-        t.ok(rc == 0 and "THEME_ACCENT=#ffdf00" in theme_env and theme_env.count("THEME_") == 21
-             and "THEME_LOGO=bright-green" in theme_env,
-             "spark theme canarinho: the prize applies like any palette, its logo colours with it", out + err)
+            t.ok("Every night won: the whole forest is yours." in last and "awaits" not in last,
+                 "lua: winning the last night says the whole forest is crossed", last)
+        t.ok(not os.path.exists(home + "/.config/spark/themes/canarinho.env"),
+             "lua: the win writes no palette file (v1.62: the look left core)")
         from spark import cli as _cli
         with open(os.path.join(REPO, "home", ".config", "spark", "banner")) as f:
             banner = f.read()
@@ -6792,35 +6526,23 @@ print("restart", engine.restart_line("serve"), "|", engine.restart_line("check")
         t.ok(have == want, "%s completes every spark do option (do.OPTIONS)" % cf,
              "have %s, want %s" % (sorted(have), sorted(want)))
 
-    # palette drift guard: the page's theme.builtin map is a hand copy of
-    # themes/*.env (the page has no build step) -- parse spark.js and
-    # compare, name for name and value for value. A palette added to
-    # themes/ without its spark.js row, or the reverse, goes loud here.
+    # the page's own palettes: theme.builtin is the page's alone (the
+    # viewer's picker) -- every row is a name and 20 #rrggbb values, bg fg
+    # accent muted then ansi 0..15, and nothing asks the machine for one
     js = open(os.path.join(REPO, "lib", "spark", "forge", "spark.js")).read()
     block = re.search(r"builtin: \{(.*?)\n    \}", js, re.S).group(1)
-    js_map = {m.group(1): re.findall(r'"(#[0-9a-fA-F]{6})"', m.group(2))
-              for m in re.finditer(r'"([a-z0-9-]+)":\s*\[([^\]]*)\]', block)}
-    env_map = {}
-    tdir = os.path.join(REPO, "themes")
-    for fname in sorted(os.listdir(tdir)):
-        if not fname.endswith(".env"):
-            continue
-        with open(os.path.join(tdir, fname)) as f:
-            kv = dict(line.strip().split("=", 1) for line in f
-                      if "=" in line and not line.startswith("#"))
-        env_map[fname[:-4]] = ([kv["THEME_BG"], kv["THEME_FG"], kv["THEME_ACCENT"], kv["THEME_MUTED"]]
-                               + [kv["THEME_ANSI_%d" % i] for i in range(16)])
-    t.ok(js_map == env_map, "spark.js theme.builtin matches themes/*.env, value for value",
-         "js only: %s; themes only: %s; differing: %s" % (
-             sorted(set(js_map) - set(env_map)), sorted(set(env_map) - set(js_map)),
-             sorted(k for k in set(js_map) & set(env_map) if js_map[k] != env_map[k])))
+    rows = re.findall(r'"([a-z0-9-]+)":\s*\[([^\]]*)\]', block)
+    bad = [n for n, vals in rows if not re.fullmatch(r'\s*"#[0-9a-fA-F]{6}"(?:,\s*"#[0-9a-fA-F]{6}"){19}\s*', vals)]
+    t.ok(len(rows) == 9 and not bad and len({n for n, _ in rows}) == 9 and "/api/theme" not in js,
+         "spark.js theme.builtin: the page's own nine, 20 colours each; no /api/theme call",
+         "rows %d, malformed: %s" % (len(rows), bad))
 
     # the guard (v1.48): spark's core is decoupled from any shell layer.
     # Nothing a user installs or runs names one -- not a message, a check
     # row, a help line, a model prompt, a verb, a comment, a fixture. The
     # generic contracts stay and are described as generic: theme.env (the
-    # palette any renderer reads), the console palette and font, the
-    # three SPARK_*_SGR variables, `spark bar line`. A hit names file:line.
+    # palette any renderer may write), the three SPARK_*_SGR variables,
+    # `spark bar line`. A hit names file:line.
     _guard = re.compile(r"spark-shell|(?i:shell layer)|SITE_SHELL|shell-moved|THEME_BTOP|state/prompt")
     _hits = []
     for _r in ("bin", "lib", "home", "linux", "templates", "themes", "get", "bootstrap.sh", "install.sh", "uninstall"):

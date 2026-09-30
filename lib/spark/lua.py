@@ -8,8 +8,8 @@
 # do raio, e seu corpo foi se enchendo de uma forca que ele havia
 # esquecido." The line assembles under the band, in English, as he collects
 # it; each zone's gate opens with its star. Eight stars open the Great Palm; the king vulture
-# carries him up, SUCCESS in the flag's colours, a palette of your own in
-# ~/.config/spark/themes/, and a card that explains the word you typed.
+# carries him up, SUCCESS in the flag's colours, and a card that explains
+# the word you typed.
 #
 # This is the ONE feature deliberately outside the landing rule: no help
 # line, no cheatsheet row, no check row, no page, no AGENTS.md mention.
@@ -46,16 +46,6 @@ from . import ASCII, CONFIG_DIR, IS_MAC, MARK, REPO, STATE_DIR, config, say
 STATE_FILE = os.path.join(STATE_DIR, "lua")
 SOUND_DIR = os.path.join(STATE_DIR, "cache", "lua")
 TALE_FILES = (os.path.join(CONFIG_DIR, "tale"), os.path.join(REPO, "home", ".config", "spark", "tale"))
-PALETTE_NAME = "canarinho"
-PALETTE = (
-    "# Canarinho -- spark's own, written by the one who crossed the forest (MIT, like spark)",
-    "THEME_BG=#0a1a33", "THEME_FG=#f4f4ec", "THEME_ACCENT=#ffdf00", "THEME_MUTED=#4c6e5a",
-    "THEME_ANSI_0=#11233f", "THEME_ANSI_1=#d94f4f", "THEME_ANSI_2=#009c3b", "THEME_ANSI_3=#ffdf00",
-    "THEME_ANSI_4=#2e6fd6", "THEME_ANSI_5=#a86fcf", "THEME_ANSI_6=#3aa6a6", "THEME_ANSI_7=#d8dccf",
-    "THEME_ANSI_8=#3d5a80", "THEME_ANSI_9=#f07070", "THEME_ANSI_10=#33cc66", "THEME_ANSI_11=#ffe94d",
-    "THEME_ANSI_12=#5b93ff", "THEME_ANSI_13=#c79bff", "THEME_ANSI_14=#5fd0d0", "THEME_ANSI_15=#ffffff",
-    "THEME_LOGO=bright-green bright-green bright-yellow bright-yellow bright-blue bright-blue",
-)
 # the one line that keeps the joke: the rest is in CREDITS.md
 
 # glyphs: (terminal, console) -- every one drawable on the Linux console
@@ -183,21 +173,6 @@ def save_state(st):
         json.dump(st, f)
     os.chmod(tmp, 0o600)
     os.replace(tmp, STATE_FILE)
-
-
-def write_palette():
-    d = os.path.join(CONFIG_DIR, "themes")
-    os.makedirs(d, exist_ok=True)
-    path = os.path.join(d, PALETTE_NAME + ".env")
-    try:
-        with open(path, encoding="utf-8") as f:
-            have = f.read()
-    except OSError:
-        have = ""
-    if "THEME_LOGO=" not in have:           # absent, or written before the logo line existed
-        with open(path, "w", encoding="utf-8") as f:
-            f.write("\n".join(PALETTE) + "\n")
-    return path
 
 
 # ------------------------------------------------------------ the world --
@@ -1291,15 +1266,11 @@ def splash(lines, rows, width):
 
 def finish(g, st, tl):
     """After a run, at the shell: one box -- the outcome, the memory as it
-    stands, the tale's line; a win adds the ending, the palette and the
-    one line that keeps the joke."""
-    path = None
-    # The palette is the prize for the WHOLE forest, not for one crossing:
-    # it comes when the last night is won. Winning night 1 used to hand it
-    # over, which left nothing to play for.
+    stands, the tale's line; a win adds the ending and the one line that
+    keeps the joke."""
+    # the WHOLE forest is the last night won; a crossing before it names
+    # the night still to come
     last_night = g.over == "won" and g.night >= NIGHTS
-    if last_night:
-        path = write_palette()       # before a word is printed: a closed pipe must not lose the prize
     _remember(g, st)
     taken = set(g.taken)
     zone = fold(ZONE_NAMES[g.zone_max - 1][0])
@@ -1309,7 +1280,7 @@ def finish(g, st, tl):
     score = "Score %d (night %d)" % (g.score, g.night)
     if g.over == "won":
         lines = ["Eight stars, the forest crossed.", score,
-                 "A palette of your own:  spark theme %s" % PALETTE_NAME if last_night
+                 "Every night won: the whole forest is yours." if last_night
                  else "Night %d awaits: faster, thicker, and every point counts %d times."
                       % (g.night + 1, g.night + 1)]
     else:
@@ -1339,8 +1310,6 @@ def cmd_lua(args):
         say(USAGE.rstrip())
         return 0
     tl = tale()
-    if os.path.exists(os.path.join(CONFIG_DIR, "themes", PALETTE_NAME + ".env")):
-        write_palette()                      # a prize written before the logo line existed gets it
     if args and args[0] == "--moon":
         day = date.fromisoformat(args[1]) if len(args) > 1 else None
         say(moon_line(day))

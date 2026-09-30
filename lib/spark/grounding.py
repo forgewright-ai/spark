@@ -475,7 +475,7 @@ def alike(question, missing, store=None, present=None, k=ALIKE):
 Clause = namedtuple("Clause", "verb slots")
 # verbs: every word bin/spark dispatches; order: the help's order;
 # words: {verb: the words its first slot takes} for a closed verb;
-# dynamic: verbs whose words the tree fills (a palette, a model);
+# dynamic: verbs whose words the tree fills (a model);
 # third: {(verb, word): the words the next slot takes}
 Tree = namedtuple("Tree", "verbs order clauses words dynamic third comp")
 
@@ -677,7 +677,7 @@ _MAP = {}
 
 def shell_map(store=None):
     """spark's own commands for the prefix, from the tree: byte-stable for
-    a given tree (nothing dynamic -- no palette, no model, no version), so
+    a given tree (nothing dynamic -- no model, no version), so
     the prompt cache holds. `store` is accepted for the interface; spark's
     verbs come from the tree, never the index."""
     got = _MAP.get(REPO)

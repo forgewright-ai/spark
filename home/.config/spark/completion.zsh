@@ -3,8 +3,8 @@
 # live -- nothing here runs compinit, so without it this file degrades
 # silently (functions defined, nothing bound). Offline
 # always, no python: the dynamic names come from the repository
-# `command -v spark` links into (readlink), themes by glob, models by sed
-# over the four model lists; when any of that fails, the static words
+# `command -v spark` links into (readlink), models by sed over
+# the four model lists; when any of that fails, the static words
 # still complete, silently. Binds no key of its own.
 # Not completed on purpose (plumbing, or aliases of ver):
 #   line version --version
@@ -17,17 +17,6 @@ _spark_repo() {
     case $link in /*) ;; *) link=${bin%/*}/$link ;; esac
     link=${link%/spark}
     print -r -- "${link%/bin}"
-}
-
-_spark_theme_names() {
-    # the repository's palettes and yours (~/.config/spark/themes)
-    local repo f
-    local -a files
-    repo=$(_spark_repo) || return 0
-    files=("$repo"/themes/*.env(N) "${XDG_CONFIG_HOME:-$HOME/.config}"/spark/themes/*.env(N))
-    for f in "${files[@]}"; do
-        print -r -- "${${f:t}%.env}"
-    done | sort -u
 }
 
 _spark_model_names() {
@@ -46,13 +35,12 @@ _spark() {
     if (( CURRENT == 2 )); then
         comp=(chat do recall serve check update headless share client setup
               ver last status brain history stats clear bench model ember
-              forge soul memory quiet theme font bar look height off
+              forge soul memory quiet bar look height off
               on user explain edit ask read drill watch reveal help uninstall
               awaken words)
     elif (( CURRENT == 3 )); then
         case ${words[2]} in
-            quiet)   comp=(start login boot audio on off status) ;;
-            theme)   comp=(list show none status ${(f)"$(_spark_theme_names)"}) ;;
+            quiet)   comp=(start audio status) ;;
             model)   comp=(list verify budget rm add auto none status ${(f)"$(_spark_model_names)"}) ;;
             ember)   comp=(list auto none status ${(f)"$(_spark_model_names)"}) ;;
             headless | share) comp=(on off status) ;;
@@ -71,7 +59,6 @@ _spark() {
             words)   comp=(edit) ;;
             bench)   comp=(--line) ;;
             clear)   comp=(--history) ;;
-            font)    comp=(list none status) ;;
             client)  comp=(off status) ;;
             user)    comp=(list add remove login logout token claim status) ;;
         esac

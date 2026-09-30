@@ -159,9 +159,9 @@ marked `*`. Then it:
 
 It paints nothing: the machine looks as it did. You can run it again at
 any time. `--yes` takes every default, and is implied when stdin is not
-a terminal. `--model NAME|auto|none`, `--name NAME`, `--user NAME`,
-`--theme NAME` and `--no-serve` pre-answer, as do `SITE_NAME`,
-`SITE_USER`, `SITE_AI_MODEL` and `SITE_THEME` in the environment.
+a terminal. `--model NAME|auto|none`, `--name NAME`, `--user NAME`
+and `--no-serve` pre-answer, as do `SITE_NAME`, `SITE_USER` and
+`SITE_AI_MODEL` in the environment.
 
 The rc line. `bootstrap.sh` appends one line to your login shell's rc
 file, `~/.bashrc` for bash or `~/.zshrc` for zsh, and only when it is
@@ -367,6 +367,11 @@ Your own colours win over the built-in ones. `SPARK_OK_SGR` and
 `SPARK_TROUBLE_SGR` join the 3 exports above, the same SGR codes.
 `spark check` paints its rows with them when awake. `SPARK_YOU_SGR` is
 reserved: nothing paints with it yet.
+
+The machine's own look is not spark's: the console's palette and font,
+the terminal's profile, a quiet boot. A tool of your choice may write a
+palette to `~/.config/spark/theme.env`. When it is there, `spark ver`
+draws its logo in it and the status line takes its accent.
 
 `spark words` shows the lines by id and the faces. `spark words edit`
 changes the lines in your editor: one `ID<TAB>line` a line, ASCII, at
@@ -623,10 +628,6 @@ macOS:
   clears its quarantine flag. If Gatekeeper still objects: `xattr -dr
   com.apple.quarantine ~/.local/share/spark/engine`. Nothing comes from
   Homebrew.
-- `spark theme NAME` makes a `spark-NAME` profile in Terminal.app.
-  `spark theme profile` writes it again, imports it and makes it the
-  default. `spark font FACE SIZE` sets the profile's font, by
-  PostScript name and points, from `spark font list`.
 - Units: `launchctl print gui/$UID/spark.serve`, and `.forge` and
   `.check` likewise. `launchctl kickstart -k gui/$UID/spark.serve`
   restarts one.
@@ -664,19 +665,10 @@ Linux:
   `bootstrap.sh` adds you on a Vulkan build. Log out of every session
   and in again for the units to see it. Void has no such group: its
   GPU node is open to every user, and the `headless` row says so.
-- `spark font FACE SIZE` gives the console a readable font, and
-  `spark font list` shows what this machine has. The font lands in the
-  file the console reads: `/etc/default/console-setup` on Debian, as in
-  `spark font Terminus 16x32`, `/etc/vconsole.conf` on Arch, as in
-  `spark font Lat2-Terminus16 8x16`, and `/etc/rc.conf` on Void. The
-  original is kept beside it, and `spark uninstall` puts it back.
-  `spark font none` leaves the console its own font. The console cannot
-  draw the check and arrow glyphs, so spark prints ASCII there.
+- The console's font, its palette and a quiet boot are yours to set:
+  spark leaves them as the machine has them. The console cannot draw
+  the check and arrow glyphs, so spark prints ASCII there.
   `SPARK_ASCII=1` forces it.
-- `spark theme NAME` reaches the text console: the palette is sent to
-  the console you type on and set at boot for every VT, by the
-  `spark-console` unit and `setvtrgb`. GUI terminals stay yours. Apply
-  `theme.env` in their settings by hand.
 - `spark do --sandbox` needs bubblewrap 0.11 or newer, which Debian 13
   and Arch ship. Ubuntu 24.04's 0.9 has no overlay, and the `sandbox`
   row reads `na` there. Each step runs in fresh namespaces: no network,
@@ -694,32 +686,12 @@ Arch:
 
 - Linux to spark: the same one-liner, the same rows. The engine is the
   pinned `ubuntu-*` tarball, a glibc build, and Arch's glibc is newer.
-  CI proves the one-liner in an Arch container. The console, the units
-  and the GPU there are proven by hand.
+  CI proves the one-liner in an Arch container. The units and the GPU
+  there are proven by hand.
 - Packages come through `pacman -S --needed`, never `-Sy` alone. When a
   name cannot be found, the `packages` row says `sudo pacman -Syu`
   first. `gcc-libs` is in `base`, so without a GPU nothing is
   installed.
-- The console font is the `FONT=` line of `/etc/vconsole.conf`, and
-  `spark font` writes it there. `spark font list` reads the kbd fonts,
-  and `terminus-font` adds the `ter-*` faces. A change restarts
-  `systemd-vconsole-setup`, so every VT redraws.
-- `spark quiet login on` works. `spark quiet boot on` works on an Arch
-  that boots a Unified Kernel Image, the shape `archinstall` makes with
-  `systemd-boot`. spark writes one drop-in,
-  `/etc/cmdline.d/zz-spark-quiet.conf`, marks the preset's `--splash`
-  line off, sets `timeout 0` in `/boot/loader/loader.conf` and runs
-  `mkinitcpio -P`. The running kernel keeps its old line until you
-  reboot, and the `quiet` row says `boot quiet after a reboot` until
-  then. `spark quiet boot off` reverses each step. Hold Space at boot
-  for the menu.
-- Without a UKI the kernel line is your boot loader's, and `spark quiet
-  boot` refuses. Put `quiet splash loglevel=3 systemd.show_status=false
-  udev.log_level=3 vt.global_cursor_default=0 fbcon=nodefer` on the
-  entry's `options` line under `/boot/loader/entries/`. With GRUB, put
-  them in `GRUB_CMDLINE_LINUX_DEFAULT` with `GRUB_TIMEOUT=0` and
-  `GRUB_TIMEOUT_STYLE=hidden`, then `sudo grub-mkconfig -o
-  /boot/grub/grub.cfg`.
 
 Void:
 
@@ -727,8 +699,7 @@ Void:
   pinned `ubuntu-*` tarball, a glibc build. Void's glibc flavour runs
   it, and `get` refuses the musl flavour in one line. CI proves the
   one-liner and the supervised services in a Void container. The
-  engine, the GPU and the console there are not yet proven on a
-  machine.
+  engine and the GPU there are not yet proven on a machine.
 - Packages come through `xbps-install -Sy`. When xbps refuses an
   install, the `packages` row says `sudo xbps-install -Su` first: on a
   rolling distro xbps itself must be current. `libgomp` is its own
@@ -746,31 +717,6 @@ Void:
   cleanly first, then the supervisor.
 - Void's base has no `hostname` command. With `SITE_SET_HOSTNAME=yes`
   spark writes `/etc/hostname` and sets the kernel's name.
-- The console font is the `FONT=` line of `/etc/rc.conf`, and `spark
-  font` writes it there. `setfont` redraws this console now, and every
-  VT gets it at the next boot.
-- `spark quiet login on` works, and so does `spark quiet boot on`.
-  Void's GRUB reads no drop-in, so spark appends 3 lines to the end of
-  `/etc/default/grub`, each marked `#spark-quiet#`, then runs `sudo
-  update-grub`. The last line wins, and your own lines stay as they
-  are.
-- runit prints its own lines at boot, and the kernel's `quiet` does
-  not reach them. So spark also appends 10 marked lines to
-  `/etc/rc.conf`, which runit reads before its boot scripts. They hide
-  runit's `=>` lines. They also hide what a clean boot prints: the fsck
-  summary, the sysctl values, the module list and seedrng's lines.
-- A shutdown prints as Void prints it. Its lines explain the pause
-  while the services stop.
-- A few lines come from runit itself and no file reaches them. So 2
-  marked lines in `/etc/sv/agetty-tty1/conf` let the login prompt clear
-  the screen after a clean boot.
-- A boot with a warning, an error, a fsck that finds a problem or a
-  critical kernel line keeps its whole screen. `spark quiet boot off`
-  deletes the marked lines from the 3 files.
-- The palette at boot is yours. `spark theme` paints this console now.
-  One `setvtrgb` line in `/etc/rc.local`, naming your
-  `~/.config/spark/console-colors.rgb` by its full path, paints it at
-  boot.
 - `spark headless on` works. The services run from boot either way,
   and sleep and the lid are the machine's own.
 
@@ -783,9 +729,6 @@ Windows, as Ubuntu 24.04 on WSL 2:
   as a DRM card, so `auto` lands on `cpu` and picks under the 3 GB cap,
   `qwen3-4b` on most machines. `SITE_AI_BUILD=vulkan` through Mesa is
   yours to try, untested.
-- No console: the font is Windows Terminal's. `spark font` refuses, and
-  the `font` row reads `na`. No GRUB: `spark quiet boot` refuses, and
-  `spark quiet login` works.
 - Units: if the `services` row reads `na`, put `[boot] systemd=true` in
   `/etc/wsl.conf`, run `wsl --shutdown` from PowerShell, reopen Ubuntu,
   then `./bootstrap.sh`.
@@ -807,6 +750,11 @@ on a branch pulls `--ff-only`. Either way it converges: `bootstrap.sh`
 runs and `spark check` reads again. `--dry-run` says what it would do.
 By hand: `git -C ~/.spark pull --ff-only && ~/.spark/bootstrap.sh`.
 
+The first update past v1.62 hands the machine's look back, once. The
+console gets its stock palette and font, the boot is loud again, and
+the motd and `/etc/issue` return. On macOS the spark profiles leave
+Terminal.app. It says `the look is off this machine now`.
+
 A release tag is signed. `spark update` moves only to a tag signed by a
 key in the tree's `allowed-signers`. Any other tag is refused in one
 line, `spark update -- v1.36 is not signed by a known key: refused`,
@@ -821,14 +769,14 @@ spark uninstall
 
 1. It prints the plan, one row per thing, then asks for the word `yes`.
 2. Everything spark made goes: the units, the hook line from your rc
-   file, the console palette and font, `~/.local/bin/spark`, the engine
-   and every model, `~/.config/spark` and `~/.local/state/spark`. The
-   clone at `~/.spark` goes when it is the one `get` made and clean.
-   Headless and the quiet login and boot are undone first, with `sudo`.
-   On Void the `runsvdir-USER` service spark wrote goes too.
+   file, `~/.local/bin/spark`, the engine and every model,
+   `~/.config/spark` and `~/.local/state/spark`. The clone at `~/.spark`
+   goes when it is the one `get` made and clean. Headless is undone
+   first, with `sudo`, and so is a look an older spark set. On Void the
+   `runsvdir-USER` service spark wrote goes too.
 3. What stays, on purpose: your soul and its personality, your memory,
-   the sealed users' stores with their keys, your `models.env`, your
-   themes and `privacy-terms`. `--purge` takes those too. The packages
+   the sealed users' stores with their keys, your `models.env` and
+   `privacy-terms`. `--purge` takes those too. The packages
    spark installed are a question, and `--packages` or `--keep-packages`
    answer it up front. `--dry-run` shows the plan. `--yes`, or
    `SPARK_YES=1`, skips the question for a script.
@@ -853,10 +801,6 @@ running `./bootstrap.sh` does the same.
 | `SITE_PEER_SSH` | an ssh target, with key auth, that `spark check` should be able to reach | unset |
 | `SITE_HEADLESS` | `yes`: up from boot, never asleep -- `spark headless on\|off` | `no` |
 | `SITE_SHARE` | `yes`: a `spark` group shares this machine's engine with its other OS users (Linux) -- `spark share on\|off` | `no` |
-| `SITE_THEME` | `none`, or a palette from `themes/` or `~/.config/spark/themes/` -- `spark theme NAME` | `none` |
-| `SITE_FONT_FACE` / `SITE_FONT_SIZE` | Linux console: a face and size from `spark font list`, such as `Terminus` `16x32`. macOS: Terminal.app's font and points -- `spark font FACE SIZE`. The file is console-setup's on Debian, `/etc/vconsole.conf` on Arch and `/etc/rc.conf` on Void. Refused on WSL 2 | unset / `16x32` on Linux, `Menlo-Regular` / `13` on macOS |
-| `SITE_QUIET_LOGIN` | Linux: `yes` bares the login: the motd and `/etc/issue`, originals kept -- `spark quiet login on` | `no` |
-| `SITE_QUIET_BOOT` | Linux: `yes` makes the boot silent with one drop-in, GRUB's on Debian or `/etc/cmdline.d` on an Arch kernel image, or marked lines at the end of `/etc/default/grub`, `/etc/rc.conf` and `/etc/sv/agetty-tty1/conf` on Void -- `spark quiet boot on`. Refused on WSL 2, on an Arch without a UKI and on a Void without GRUB | `no` |
 | `SITE_QUIET_START` | `yes`: no banner, and one-line `serve`, `forge` and bare `spark` -- `spark quiet start on` | `no` |
 | `SITE_QUIET_AUDIO` | `yes`: no sound from spark -- `spark quiet audio on` | `no` |
 
@@ -883,8 +827,6 @@ do, and never calls `sudo`:
 - Always: the package manager for the `packages` row, and the hostname
   when `SITE_SET_HOSTNAME=yes`. On Void the `runsvdir-USER` service,
   once. On macOS the hostname only.
-- `spark font`, `spark theme` and `spark quiet`: the console font and
-  palette, the quiet login and boot, each only when its key says so.
 - `spark headless on`: linger, the `render` group, the sleep targets
   and the lid. On Void nothing: the services already run from boot.
   On macOS the LaunchDaemons and `pmset`.
@@ -893,7 +835,7 @@ do, and never calls `sudo`:
 is yours to decide: `echo 'you ALL=(ALL) NOPASSWD:ALL' | sudo tee
 /etc/sudoers.d/you` is fine for a test bench.
 
-The check. `spark check` has 42 rows, one per promise this machine
+The check. `spark check` has 39 rows, one per promise this machine
 makes, and exits 0 when no row fails. `--watch N` redraws every N
 seconds. `--porcelain` prints one tab-separated row per line, for a
 program. `--fresh` ignores cached answers, and `--fetch` asks origin
@@ -999,7 +941,7 @@ get -> spark setup -> bootstrap.sh (apply) -> install.sh (links, renders)
                       the engine, the model, the token, the units, one rc
                       line; a spark app is its own repository (spark-<app>)
 
-spark check   42 rows: every promise the machine makes, fixture-tested
+spark check   39 rows: every promise the machine makes, fixture-tested
 spark update  the newest signed tag, or main on a developer clone; converge
 
 what leaves the machine: pinned downloads in, your questions to the

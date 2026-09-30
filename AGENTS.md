@@ -176,6 +176,9 @@ whole of it.
   artwork.
 - Put an app inside this repository: `CLAUDE.md`, "A spark app", says
   where one lives.
+- Set the machine's look from core: the console's palette and font, a
+  quiet boot, a terminal profile. `CLAUDE.md`, "A shell thing", says
+  what spark's side is.
 - Add a model row without its size and sha256 from Hugging Face's file
   metadata and its license. Mark one `_TESTED="line"` only with the line
   proof: `spark line` answers valid JSON for it.

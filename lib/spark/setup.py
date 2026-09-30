@@ -4,7 +4,7 @@
 # the terminal, wait for the brain, ask the first question live, print the
 # measured speed and the three things to try. Every step reuses code that
 # exists: cmd_ver, print_model_table's rows, set_keys, apply, cmd_serve,
-# theme.set_theme, `spark line`. Re-runnable: bootstrap's rows are
+# `spark line`. Re-runnable: bootstrap's rows are
 # idempotent, and a key site.env already holds is never asked again.
 
 import os
@@ -27,18 +27,12 @@ USAGE = SIGN + """
                                 model; apply
   spark setup --yes             every default, no questions (stdin not a tty
                                 implies it); SITE_NAME SITE_USER SITE_AI_MODEL
-                                SITE_THEME in the environment pre-answer them
+                                in the environment pre-answer them
   spark setup --model NAME      a name from the table, auto, or none
   spark setup --name NAME       this machine's display name (SITE_NAME)
   spark setup --user NAME       your name (SITE_USER)
-  spark setup --theme NAME      a palette from themes/, or none; never asked,
-                                none unless it is said here
   spark setup --no-serve        write and apply; leave the engine down
 """
-# setup changes no look: the terminal keeps its own colours until the
-# user names a palette -- `spark theme NAME|none` is the choice
-DEFAULT_THEME = "none"
-
 # the bootstrap rows that are the AI layer, by their names in bootstrap.sh
 # (the filter apply() uses when its output is captured; at a terminal the
 # whole bootstrap shows, progress bars included)
@@ -58,14 +52,14 @@ class Abort(Exception):
 
 
 def _parse(args):
-    opts = {"yes": False, "model": None, "name": None, "user": None, "theme": None, "serve": True}
+    opts = {"yes": False, "model": None, "name": None, "user": None, "serve": True}
     it = iter(args)
     for a in it:
         if a == "--yes":
             opts["yes"] = True
         elif a == "--no-serve":
             opts["serve"] = False
-        elif a in ("--model", "--name", "--user", "--theme"):
+        elif a in ("--model", "--name", "--user"):
             val = next(it, None)
             if val is None:
                 raise Abort("%s needs a value (spark setup -h)" % a, 2)
@@ -167,29 +161,14 @@ def _model(cfg, opts, default, yes):
         say("spark setup: no model named %s -- %s" % (name, choices))
 
 
-def _theme(cfg, opts):
-    """Not a question, and not a change: the terminal keeps its own
-    colours until the user names a palette (`spark theme NAME|none`).
-    The flag, else the environment or site.env, else DEFAULT_THEME."""
-    from . import theme
-    valid = ["none"] + theme.palettes()
-    choices = "one of: none " + " ".join(theme.palettes())
-    if opts["theme"] is not None or "SITE_THEME" in os.environ or "SITE_THEME" in cfg.site_file:
-        name = opts["theme"] if opts["theme"] is not None else cfg.theme
-        if name not in valid:
-            raise Abort("no palette named %s -- %s" % (name, choices), 2)
-        return name
-    return DEFAULT_THEME
-
-
-def _write(name, user, model, theme):
+def _write(name, user, model):
     """site.env: the documented example first when there is none, then
     the keys decided here."""
     if not os.path.exists(SITE_ENV):
         os.makedirs(os.path.dirname(SITE_ENV), exist_ok=True)
         shutil.copy(os.path.join(REPO, "site.env.example"), SITE_ENV)
         os.chmod(SITE_ENV, 0o600)
-    keys = {"SITE_NAME": name, "SITE_USER": user, "SITE_AI_MODEL": model, "SITE_THEME": theme}
+    keys = {"SITE_NAME": name, "SITE_USER": user, "SITE_AI_MODEL": model}
     site.set_keys(_quiet=True, **keys)
     # one row, not one per key: bootstrap's own `site` row names the file
     say("ok     site         " + " ".join("%s=%s" % kv for kv in keys.items()))
@@ -383,7 +362,7 @@ def _join(name, user, opts, yes):
         url = "" if yes else input("   the shared engine's URL [http://127.0.0.1:8080]: ").strip()
         url = url or "http://127.0.0.1:8080"
     say()
-    _write(name, user, "none", "none")                      # SITE_AI_MODEL=none, SITE_THEME=none
+    _write(name, user, "none")                              # SITE_AI_MODEL=none
     site.set_keys(_quiet=True, SITE_PEER_AI_URL=url)
     site.set_keys(_file=SPARK_ENV, _quiet=True, SPARK_API_KEY_FILE=SHARE_TOKEN)
     say("ok     join         %s -- this machine's shared engine (no model to download)" % url)
@@ -415,9 +394,8 @@ def _run(opts):
         say()          # one blank line after the questions; none when there were none
     default = _table(cfg)
     model = _model(cfg, opts, default, yes)
-    theme_name = _theme(cfg, opts)
     say()
-    _write(name, user, model, theme_name)
+    _write(name, user, model)
     if model == "none":
         # no brain here yet, so no account yet: a box mints its own on the
         # first thread write (spark model NAME), and a client of a FORGE
@@ -438,11 +416,6 @@ def _run(opts):
         say("                    (without %s, llama-server will not start)" % (packages.groups()["PKG_ENGINE"] or ["the engine's library"])[0])
     if rc != 0:
         return rc
-    if theme_name != "none":
-        # paint what was chosen: theme.env and the console files, the
-        # vt-palette row on Linux, the Terminal.app profile on macOS
-        from . import theme
-        theme.set_theme(theme_name)
     _rc_line()
     if model == "none":
         say("no model chosen -- spark model NAME later, or SITE_PEER_AI_URL for another machine's model")

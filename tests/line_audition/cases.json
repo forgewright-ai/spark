@@ -3682,38 +3682,6 @@
   ],
   "spark": [
    {
-    "id": "spark-01",
-    "topic": "spark",
-    "words": "make the boot quiet",
-    "kind": null,
-    "head_any": [
-     "spark"
-    ],
-    "spark_verb": [
-     "quiet"
-    ],
-    "must_not": [
-     "\\bsudo\\b"
-    ],
-    "danger": null
-   },
-   {
-    "id": "spark-02",
-    "topic": "spark",
-    "words": "hide the messages at login",
-    "kind": null,
-    "head_any": [
-     "spark"
-    ],
-    "spark_verb": [
-     "quiet"
-    ],
-    "must_not": [
-     "\\bsudo\\b"
-    ],
-    "danger": null
-   },
-   {
     "id": "spark-03",
     "topic": "spark",
     "words": "silence the sounds spark plays",
@@ -3806,55 +3774,6 @@
     ],
     "spark_verb": [
      "headless"
-    ],
-    "must_not": [
-     "\\bsudo\\b"
-    ],
-    "danger": null
-   },
-   {
-    "id": "spark-09",
-    "topic": "spark",
-    "words": "switch to the dracula palette",
-    "kind": null,
-    "head_any": [
-     "spark"
-    ],
-    "spark_verb": [
-     "theme"
-    ],
-    "must_not": [
-     "\\bsudo\\b"
-    ],
-    "danger": null
-   },
-   {
-    "id": "spark-10",
-    "topic": "spark",
-    "words": "list the palettes",
-    "kind": null,
-    "head_any": [
-     "spark"
-    ],
-    "spark_verb": [
-     "theme"
-    ],
-    "must_not": [
-     "\\bsudo\\b"
-    ],
-    "danger": false,
-    "why_review": "a read-only question: danger false"
-   },
-   {
-    "id": "spark-11",
-    "topic": "spark",
-    "words": "change the console font",
-    "kind": null,
-    "head_any": [
-     "spark"
-    ],
-    "spark_verb": [
-     "font"
     ],
     "must_not": [
      "\\bsudo\\b"
@@ -4176,7 +4095,7 @@
      "\\bsudo\\b"
     ],
     "danger": null,
-    "why_review": "spark quiet quiets the banner, the motd, the boot and the sounds, never the prompt line: only spark off makes the prompt line quiet Reworded to its one right reading: no verb quiets the prompt line short of turning it off."
+    "why_review": "spark quiet quiets the banner and the sounds, never the prompt line: only spark off makes the prompt line quiet Reworded to its one right reading: no verb quiets the prompt line short of turning it off."
    },
    {
     "id": "spark-31",

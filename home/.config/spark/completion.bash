@@ -1,8 +1,8 @@
 # spark completion.bash -- TAB completes spark's verbs and their names.
 # Self-contained (bash 4+; the bash-completion package is not needed) and
 # sourced by hook.bash. Offline always, no python: the dynamic names come
-# from the repository `command -v spark` links into (readlink), themes by
-# glob, models by sed over the four model lists; when any of that fails,
+# from the repository `command -v spark` links into (readlink), models by
+# sed over the four model lists; when any of that fails,
 # the static words still complete, silently. Binds no key of its own --
 # readline's TAB does the work.
 # Not completed on purpose (plumbing, or aliases of ver):
@@ -16,17 +16,6 @@ _spark_repo() {
     case $link in /*) ;; *) link=${bin%/*}/$link ;; esac
     link=${link%/spark}
     printf '%s\n' "${link%/bin}"
-}
-
-_spark_theme_names() {
-    # the repository's palettes and yours (~/.config/spark/themes)
-    local repo f
-    repo=$(_spark_repo) || return 0
-    for f in "$repo"/themes/*.env "${XDG_CONFIG_HOME:-$HOME/.config}"/spark/themes/*.env; do
-        [ -f "$f" ] || continue
-        f=${f##*/}
-        printf '%s\n' "${f%.env}"
-    done | sort -u
 }
 
 _spark_model_names() {
@@ -47,7 +36,7 @@ _spark_complete() {
     if [ "$COMP_CWORD" -eq 1 ]; then
         words="chat do recall serve check update headless share client setup
                ver last status brain history stats clear bench model ember
-               forge soul memory quiet theme font bar look height off
+               forge soul memory quiet bar look height off
                on user explain edit ask read drill watch reveal help uninstall
                awaken words"
         COMPREPLY=($(compgen -W "$words" -- "$cur"))
@@ -55,8 +44,7 @@ _spark_complete() {
     fi
     [ "$COMP_CWORD" -eq 2 ] || return 0
     case ${COMP_WORDS[1]} in
-        quiet)   words="start login boot audio on off status" ;;
-        theme)   words="list show none status $(_spark_theme_names)" ;;
+        quiet)   words="start audio status" ;;
         model)   words="list verify budget rm add auto none status $(_spark_model_names)" ;;
         ember)   words="list auto none status $(_spark_model_names)" ;;
         headless | share) words="on off status" ;;
@@ -75,7 +63,6 @@ _spark_complete() {
         words)   words="edit" ;;
         bench)   words="--line" ;;
         clear)   words="--history" ;;
-        font)    words="list none status" ;;
         client)  words="off status" ;;
         user)    words="list add remove login logout token claim status" ;;
         *)       return 0 ;;

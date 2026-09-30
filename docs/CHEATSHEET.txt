@@ -112,21 +112,16 @@ THE MACHINE
   spark uninstall [--purge]       remove spark: shows, asks yes. Keeps yours
   spark bar line                  the one-line status (a bar runs it, 15 s)
   ./bootstrap.sh --dry-run        what a rebuild would change (never sudo)
-  ~/.config/spark/site.env        name, user, model, budget, theme, the
-                                  other machine's URL ...
+  ~/.config/spark/site.env        name, user, model, budget, the other
+                                  machine's URL ...
   ~/.config/spark/spark.env       ports, engine, history, memory
   long output (help, check, lists) pages via $PAGER (less). Piped stays plain
 
 THE INTERFACE
-  spark theme NAME | list | show  one palette: the console (Terminal.app on
-                                  macOS). none = off
-  spark theme profile             macOS: the Terminal.app profile, imported
-  ~/.config/spark/themes/NAME.env your own palette: the same 20 THEME_* keys
   spark quiet start on|off        no banner, one-line serve/forge + bare spark
-  spark quiet login|boot on|off   Linux: motd. Boot menu + kernel line
   spark quiet audio on|off        no sound from spark (both OSes)
-  spark font FACE SIZE | list     console font (Linux) / Terminal.app's font
-  spark font none                 the console keeps whatever font it has
+  ~/.config/spark/theme.env       a palette a tool may write: spark ver and
+                                  the status line follow it
 
 THE LIVING PROMPT
   spark awaken                    give this machine a personality and a look
@@ -161,7 +156,7 @@ MACOS
 
 WINDOWS (Ubuntu 24.04 on WSL 2 -- Linux to spark)
   wsl --install -d Ubuntu-24.04    then docs/INSTALL.md section 1 (Linux)
-  the CPU build. No console (the font is Windows Terminal's). No GRUB
+  the CPU build. No headless: the distro stops with its last window
   units: [boot] systemd=true in /etc/wsl.conf, then wsl --shutdown
 
 DOCUMENTS (4 at the root: README, CREDITS, CLAUDE, AGENTS. The rest: docs/)

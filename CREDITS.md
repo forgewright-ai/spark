@@ -20,20 +20,6 @@ Linux arm64, Linux arm64 Vulkan.
 The text in `home/.config/spark/tale` is the maintainer's own, CC
 BY-NC-ND 4.0.
 
-## Palettes
-
-Colour values only, no code copied. The license is the upstream's:
-
-- Catppuccin -- https://github.com/catppuccin/catppuccin -- MIT.
-- Dracula -- https://github.com/dracula/dracula-theme -- MIT.
-- Everforest -- https://github.com/sainnhe/everforest -- MIT.
-- Gruvbox -- https://github.com/morhetz/gruvbox -- MIT.
-- Nord -- https://www.nordtheme.com -- MIT.
-- Rose Pine -- https://github.com/rose-pine/rose-pine-theme -- MIT.
-- Selenized -- https://github.com/jan-warchol/selenized -- MIT.
-- Solarized -- https://ethanschoonover.com/solarized -- MIT.
-- Tokyo Night -- https://github.com/folke/tokyonight.nvim -- Apache-2.0.
-
 ## The packages
 
 apt, pacman or xbps installs these from the distro's own repositories,
@@ -67,16 +53,13 @@ name is here.
   vulkan build only.
 - mesa-vulkan-intel -- MIT and others, Mesa's Intel driver on Void, the
   vulkan build only.
-- kbd -- https://kbd-project.org/ -- GPL-2.0-or-later. `setvtrgb` for
-  the console palette, and `setfont` and the console fonts on Arch and
-  Void.
 
 ## The apps
 
 An app's plugin is its own repository with its own credits, at
-github.com/forgewright-ai/<name>: spark-micro, spark-neovim, spark-vim,
-spark-helix, spark-nano, spark-w3m, spark-newsboat, spark-aerc and
-spark-acp.
+github.com/forgewright-ai/<name>. The apps are spark-micro,
+spark-neovim, spark-vim, spark-helix, spark-nano, spark-w3m,
+spark-newsboat, spark-aerc and spark-acp.
 
 ## Models
 

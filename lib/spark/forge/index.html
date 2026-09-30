@@ -208,24 +208,6 @@
       </form>
     </div>
   </div>
-  <div class="two adm">
-    <div class="card">
-      <h2>theme</h2>
-      <form id="theme-form" class="row">
-        <select id="theme-pick" data-main aria-label="theme"></select>
-        <button type="submit" class="primary">apply</button>
-      </form>
-      <p class="muted small">the machine's own look: the console</p>
-    </div>
-    <div class="card">
-      <h2>font</h2>
-      <form id="font-form" class="row">
-        <input id="font-face" type="text" placeholder="face" aria-label="face" autocomplete="off">
-        <input id="font-size" type="text" placeholder="size" aria-label="size" autocomplete="off" class="short">
-        <button type="submit" class="primary">apply</button>
-      </form>
-    </div>
-  </div>
   <div class="card adm">
     <div class="head">
       <h2>model</h2>
@@ -246,9 +228,6 @@
       <span class="lbl">server</span>
       <button type="button" data-run="serve">serve</button>
       <button type="button" data-run="stop">stop</button>
-      <span class="lbl">boot</span>
-      <button type="button" data-run="quiet" data-args="boot on">quiet</button>
-      <button type="button" data-run="quiet" data-args="boot off">loud</button>
       <span class="lbl">tune</span>
       <button type="button" data-run="tune" data-args="apply">apply winner</button>
     </div>
@@ -304,8 +283,7 @@
       page can do is what your shell can do: every button is a
       <code>spark</code> verb run on the machine, and the page never runs a
       command you did not click.</p>
-    <p>The palette under settings changes this browser only; the theme
-      picker (admin) runs <code>spark theme</code> on the machine itself.</p>
+    <p>The palette under settings changes this browser only.</p>
     <p>API health: <code id="help-health"></code> (no token needed; everything
       else under <code>/api/</code> takes your token as a cookie or bearer).</p>
   </div>

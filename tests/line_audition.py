@@ -447,14 +447,13 @@ def spark_tree(repo=REPO):
     """spark's verbs and the words each takes, read from what TAB
     completion completes (completion.bash and .zsh: the files smoke's
     drift guard holds to bin/spark's VERBS) and the names that fill its
-    dynamic slots (themes/, the model tables). persona.KNOW_SHELL and
-    KNOW_CHAT add the slots completion cannot list: an upper-case slot
-    (FACE, URL, WORDS) takes any word, unless completion fills that slot
-    from the tree (a model, a palette), which keeps it closed."""
+    dynamic slots (the model tables). persona.KNOW_SHELL and KNOW_CHAT
+    add the slots completion cannot list: an upper-case slot (URL, WORDS)
+    takes any word, unless completion fills that slot from the tree (a
+    model), which keeps it closed."""
     cdir = os.path.join(repo, "home", ".config", "spark")
     bash = open(os.path.join(cdir, "completion.bash"), encoding="utf-8").read()
     zsh = open(os.path.join(cdir, "completion.zsh"), encoding="utf-8").read()
-    themes = sorted(n[:-4] for n in os.listdir(os.path.join(repo, "themes")) if n.endswith(".env"))
     try:
         from spark import config
         models = sorted(r[0] for r in config.model_tables(repo))
@@ -462,8 +461,7 @@ def spark_tree(repo=REPO):
         models = []
 
     def fill(words):
-        dynamic = "_spark_theme_names" in words or "_spark_model_names" in words
-        words = re.sub(r"\$\{\(f\)\"\$\(_spark_theme_names\)\"\}|\$\(_spark_theme_names\)", " ".join(themes), words)
+        dynamic = "_spark_model_names" in words
         words = re.sub(r"\$\{\(f\)\"\$\(_spark_model_names\)\"\}|\$\(_spark_model_names\)", " ".join(models), words)
         return set(words.split()), dynamic
 
@@ -520,7 +518,7 @@ def spark_tree(repo=REPO):
                     for w in alts:
                         third.setdefault((verb, w), set()).update(alts3)
     verbs.add("help")
-    return {"verbs": verbs, "words": words, "free": free, "third": third, "themes": themes, "models": models}
+    return {"verbs": verbs, "words": words, "free": free, "third": third, "models": models}
 
 
 def grade_spark(argv, tree):
@@ -1612,20 +1610,21 @@ def cmd_selftest(_args):
     xi = {"id": "t", "words": "install htop", "kind": "cmd", "head_any": ["xbps-install"], "danger": None}
     expect("a wrapper and its command both pass", xi, "danger\tsudo xbps-install -Sy htop\ninstalls\n", True)
     expect("contract: an error is no answer", xi, "error\nno model answers\n", False, "contract")
-    sp = {"id": "t", "words": "quiet boot", "kind": None, "head_any": ["spark"], "spark_verb": ["quiet"], "danger": None}
-    expect("a real spark verb and word pass", sp, "cmd\tspark quiet boot on\nquiets\n", True)
+    sp = {"id": "t", "words": "quiet start", "kind": None, "head_any": ["spark"], "spark_verb": ["quiet"], "danger": None}
+    expect("a real spark verb and word pass", sp, "cmd\tspark quiet start on\nquiets\n", True)
     expect("a retired spark verb fails (spark shell on)", sp, "cmd\tspark shell on\nshell\n", False, "spark tree")
     expect("a word the verb does not take fails", sp, "cmd\tspark quiet loud on\nquiets\n", False, "spark tree")
-    expect("a third word outside on|off fails", sp, "cmd\tspark quiet boot enable\nquiets\n", False, "spark tree")
-    expect("an answer naming the verb in words passes", sp, "answer\nRun `spark quiet boot on` and reboot.\n", True)
+    expect("a third word outside on|off fails", sp, "cmd\tspark quiet start enable\nquiets\n", False, "spark tree")
+    expect("an answer naming the verb in words passes", sp, "answer\nRun `spark quiet start on` and log in again.\n", True)
     expect("an answer naming a retired verb fails", sp, "answer\nRun spark shell on, then reboot.\n", False, "spark tree")
-    th = {"id": "t", "words": "dracula", "kind": "cmd", "head_any": ["spark"], "spark_verb": ["theme"], "danger": None}
-    expect("a palette from themes/ passes", th, "cmd\tspark theme dracula\npalette\n", True)
-    expect("a palette not in themes/ fails", th, "cmd\tspark theme hotdogstand\npalette\n", False, "spark tree")
-    fo = {"id": "t", "words": "font", "kind": "cmd", "head_any": ["spark"], "spark_verb": ["font"], "danger": None}
-    expect("a free slot (FACE) takes any word", fo, "cmd\tspark font Terminus 16\nfont\n", True)
+    mo = {"id": "t", "words": "a model", "kind": "cmd", "head_any": ["spark"], "spark_verb": ["model"], "danger": None}
+    if tree["models"]:
+        expect("a model from the tables passes", mo, "cmd\tspark model %s\nmodel\n" % tree["models"][0], True)
+    expect("a model not in the tables fails", mo, "cmd\tspark model hotdogstand\nmodel\n", False, "spark tree")
+    cl = {"id": "t", "words": "client", "kind": "cmd", "head_any": ["spark"], "spark_verb": ["client"], "danger": None}
+    expect("a free slot (URL) takes any word", cl, "cmd\tspark client http://box:8080\nclient\n", True)
     # the tree itself, read from completion: the facts the grader leans on
-    ok = "quiet" in tree["verbs"] and "shell" not in tree["verbs"] and "boot" in tree["words"].get("quiet", ())
+    ok = "quiet" in tree["verbs"] and "shell" not in tree["verbs"] and "start" in tree["words"].get("quiet", ())
     print(("ok   " if ok else "FAIL ") + "the tree reads completion: quiet is a verb, shell is not")
     if not ok:
         fails.append("tree")

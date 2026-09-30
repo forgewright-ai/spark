@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # docs_test.py -- the docs say what the tree holds. Every fact below is
 # derived from the tree and looked up in the doc that states it, so a
-# palette, a model row or a check row cannot land without its credit or
-# its count following: every themes/*.env upstream is in CREDITS.md; every
+# package, a model row or a check row cannot land without its credit or
+# its count following: every package a distro/<id>.env names and every
 # model row's license upstream is in CREDITS.md; the check-row count the
 # docs state is the count in check.py; the model count they state is the
 # count in models.env; every docs/X a doc names exists, every document in
@@ -11,8 +11,9 @@
 # cheatsheet and INSTALL, and nothing calls awaken minting;
 # the docs a new user reads speak two nouns (spark, spark apps) and no
 # doc names what is private; the voice's mechanical half (docs/CONTRIBUTING.md
-# "## Voice") holds over every doc, and the two nouns hold in `spark help`
-# and every usage text too.
+# "## Voice") holds over every doc, its two measures included (a sentence
+# of 30 words at most, prose within 72 columns), and the two nouns hold
+# in `spark help` and every usage text too.
 # Hermetic, stdlib, fast.
 import os
 import re
@@ -53,8 +54,8 @@ CAPS_OK = {
     "HEAD", "POST",
     # what the code prints: the gate's marker, the three row categories
     "NOTICE", "SOFTWARE", "CAPABILITY", "NONFUNCTIONAL",
-    # the help's placeholders (spark font FACE SIZE, spark look PART)
-    "FACE", "SIZE", "PART",
+    # the help's placeholder (spark look PART)
+    "PART",
 }
 # a contraction, any case: the n't family and the pronoun+verb pairs
 CONTRACTION = re.compile(
@@ -159,6 +160,88 @@ def voice():
               % (doc, "" if not wide else " (line %s)" % ", ".join(wide)))
 
 
+URL = re.compile(r"https?://")
+BULLET = re.compile(r"^\s*(?:[-*]|\d+\.)\s")
+SENTENCE_END = re.compile(r"[.?!] ")
+WORD = re.compile(r"[A-Za-z0-9']+")
+
+
+def prose_lines(text):
+    """Each prose line of a Markdown doc as (line number, text), None for a
+    boundary. Out: a fenced block, an indented block (a paragraph whose
+    first line is 4 spaces in and no bullet), a table row (starts with
+    `|`), a line holding a URL, a heading. Each is a boundary, as a blank
+    line is."""
+    out, fence, para_code = [], False, False
+    lines = text.split("\n")
+    for n, line in enumerate(lines, 1):
+        if line.strip().startswith("```"):
+            fence = not fence
+            out.append(None)
+            continue
+        if not line.strip():
+            para_code = False
+            out.append(None)
+            continue
+        if n == 1 or not lines[n - 2].strip():
+            para_code = line.startswith("    ") and not BULLET.match(line)
+        if fence or para_code or line.lstrip().startswith(("|", "#")) or URL.search(line):
+            out.append(None)
+            continue
+        out.append((n, line))
+    return out
+
+
+def sentences(text):
+    """(line, words) for every sentence of a Markdown doc's prose. A
+    sentence ends at ". ", "? " or "! " (a line's end counts as a space);
+    a boundary (prose_lines) or a bullet starts a new one. A code span and
+    a **bold** mark are taken out first: a span counts as one word, and
+    its dots end nothing. Words are runs of letters, digits and
+    apostrophes."""
+    runs, cur = [], []
+    for item in prose_lines(text) + [None]:
+        if item is None or BULLET.match(item[1]):
+            if cur:
+                runs.append(cur)
+            cur = [] if item is None else [item]
+        else:
+            cur.append(item)
+    for run in runs:
+        joined, starts = "", []
+        for n, line in run:
+            starts.append((len(joined), n))
+            joined += line.strip() + " "
+        # a span becomes one word of the same length, so offsets hold
+        joined = SPAN.sub(lambda m: "x" * len(m.group(0)), joined).replace("**", "  ")
+        at = 0
+        for m in list(SENTENCE_END.finditer(joined)) + [None]:
+            end = m.end() if m else len(joined)
+            words = len(WORD.findall(joined[at:end]))
+            line = max(n for off, n in starts if off <= at)
+            if words:
+                yield line, words
+            at = end
+
+
+def measures():
+    """docs/CONTRIBUTING.md "## Voice", the two measures, over every
+    Markdown doc but the CHANGELOG (history stays as written; the
+    cheatsheet has its own 80 columns): no sentence over 30 words, no
+    prose line over 72 columns. A failure names the file, the line and
+    the count."""
+    for doc in ALL_DOCS:
+        if not doc.endswith(".md") or doc == "docs/CHANGELOG.md":
+            continue
+        text = read(doc)
+        wide = ["%d (%d)" % (n, len(line)) for n, line in filter(None, prose_lines(text)) if len(line) > 72]
+        check(not wide, "%s: prose within 72 columns%s"
+              % (doc, "" if not wide else " (line %s)" % ", ".join(wide)))
+        long = ["%d (%d words)" % (n, w) for n, w in sentences(text) if w > 30]
+        check(not long, "%s: no sentence over 30 words%s"
+              % (doc, "" if not long else " (line %s)" % ", ".join(long)))
+
+
 def help_voice():
     """The two nouns hold in what spark prints too: `spark help` and every
     *USAGE string in lib/spark (lua aside: nobody is told about it)."""
@@ -235,15 +318,6 @@ def living():
 def main():
     tests_named()
     credits = read("CREDITS.md")
-    # palettes: the header comment of every themes/*.env names its upstream URL
-    for f in sorted(os.listdir(os.path.join(ROOT, "themes"))):
-        if not f.endswith(".env"):
-            continue
-        head = read(os.path.join("themes", f)).split("\n", 1)[0]
-        m = re.search(r"https?://\S+?(?=[\s)]|$)", head)
-        check(bool(m), "themes/%s: the header names its upstream URL" % f)
-        if m:
-            check(m.group(0) in credits, "CREDITS.md names %s (%s)" % (f[:-4], m.group(0)))
     # models: every row's license upstream is credited
     rows = [r for r in config.model_tables(ROOT) if r[6] == "repo"]
     seen = set()
@@ -324,7 +398,7 @@ def main():
     for m in re.finditer(r'(?m)^(MODEL_[A-Z_0-9]+_GROUND)="?([^"\n]*)"?\s*$', read("models.env")):
         check(re.match(r"^\d+/\d+ \d{4}-\d{2}-\d{2}$", m.group(2)) is not None,
               "models.env: %s is '<kept>/<run> <YYYY-MM-DD>' (got %r)" % (m.group(1), m.group(2)))
-    # the split by category CLAUDE.md states ("11 SOFTWARE, 20 CAPABILITY, 9 NONFUNCTIONAL")
+    # the split by category CLAUDE.md states ("8 SOFTWARE, 22 CAPABILITY, 9 NONFUNCTIONAL")
     src_rows = read(os.path.join("lib", "spark", "check.py"))
     for cat in ("SOFTWARE", "CAPABILITY", "NONFUNCTIONAL"):
         n_cat = len(re.findall(r'^@row\("%s"' % cat, src_rows, re.M))
@@ -389,10 +463,11 @@ def main():
     for const in ("WSL_ROWS", "ARCH_ROWS", "VOID_ROWS", "CLIENT_ROWS"):
         m = re.search(r"^%s = \(([^)]*)\)" % const, src, re.M)
         named[const] = re.findall(r'"([a-z]+)"', m.group(1)) if m else []
-        check(bool(named[const]), "check.py defines %s" % const)
-        for c in re.finditer(r"the (\d+) rows in `check\.%s`" % const, claude):
+        # ARCH_ROWS and VOID_ROWS may be empty: nothing a family lacks
+        check(m is not None, "check.py defines %s" % const)
+        for c in re.finditer(r"the (\d+) rows?\s+in\s+`check\.%s`" % const, claude):
             check(int(c.group(1)) == len(named[const]),
-                  "CLAUDE.md: '%s' is check.py's count (%d)" % (c.group(0), len(named[const])))
+                  "CLAUDE.md: '%s' is check.py's count (%d)" % (" ".join(c.group(0).split()), len(named[const])))
     m = re.search(r"`check\.CLIENT_ROWS` \(([^)]*)\)", claude)
     listed = re.split(r",\s+", " ".join(m.group(1).split())) if m else []
     check(listed == named["CLIENT_ROWS"],
@@ -508,9 +583,16 @@ def main():
     for doc in ROOT_DOCS + ("docs/INSTALL.md", "docs/CHEATSHEET.txt", "docs/CONTRIBUTING.md", "docs/ROADMAP.md", "site.env.example"):
         check(not re.search(r"embers\.env|community\.env|\bcurated\b|PKG_QA|PKG_EDITOR|micro-aspell|\bbootconfig\b|SITE_SHELL|PKG_SHELL|PKG_CLI", read(doc)),
               "%s: no retired list word" % doc)
+    # v1.62: the machine's look left core -- no doc but the CHANGELOG
+    # names the verbs that set it
+    for doc in ALL_DOCS:
+        if doc in ("docs/CHANGELOG.md", "site.env.example"):
+            continue
+        m = re.search(r"\bspark (?:theme|font)\b|\bspark quiet (?:login|boot)\b|--theme\b|\bthemes/", read(doc))
+        check(m is None, "%s: the look is not core%s" % (doc, " (found '%s')" % m.group(0) if m else ""))
     # v1.48: the core knows nothing of a shell layer, and neither does a
-    # doc -- the generic contracts (theme.env, the console, the three
-    # SPARK_*_SGR variables, spark bar line) are described as generic; the
+    # doc -- the generic contracts (theme.env, the six SPARK_*_SGR
+    # variables, spark bar line) are described as generic; the
     # CHANGELOG alone keeps the history
     for doc in ALL_DOCS:
         if doc == "docs/CHANGELOG.md":
@@ -535,6 +617,7 @@ def main():
     living()
     # the voice's mechanical half, and the two nouns in what spark prints
     voice()
+    measures()
     help_voice()
     if fails:
         print("docs_test: %d failed" % len(fails))

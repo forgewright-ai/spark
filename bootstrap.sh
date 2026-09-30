@@ -176,13 +176,13 @@ sudo_upfront() {
     [ "$(id -u)" -ne 0 ] || return 0
     [ "$client" = 1 ] && return 0               # a client of a shared engine needs no root
     if ! command -v sudo >/dev/null 2>&1; then
-        echo "bootstrap: no sudo here, and packages, the console and the units need root." >&2
+        echo "bootstrap: no sudo here, and the packages and the units need root." >&2
         echo "bootstrap: run it as root, or install sudo first. Nothing was changed." >&2
         exit 1
     fi
     sudo -n true 2>/dev/null && return 0        # passwordless, or already cached
     [ -t 0 ] || return 0                        # nobody to ask: let the root step speak
-    printf 'spark needs sudo once, now: packages, the console, the units.\n'
+    printf 'spark needs sudo once, now: the packages and the units.\n'
     if ! sudo -v; then
         echo "bootstrap: sudo refused. Nothing was changed." >&2
         exit 1
@@ -920,372 +920,26 @@ else
     fi
 fi
 
-# ============================================================ 12. terminal
-section terminal
-if [ "$SITE_THEME" = none ]; then
-    skip theme "SITE_THEME=none: your terminal keeps its colours"
+# ============================================================ 12. handback
+# v1.62 took the look out of spark. What an older spark painted here goes
+# back as it was, once: the console palette and font, the quiet login and
+# boot, Terminal.app's spark profiles. lib/spark/handback.py is the one
+# undo (spark uninstall runs it too). It finds spark's own files and
+# marks, so a machine that never had them has nothing to do, and it asks
+# root only for what is there. A later release drops this row.
+section handback
+handback() { SPARK_OS=$OS PYTHONPATH="$REPO/lib" python3 -m spark.handback "$@"; }
+hb=$(handback --dry-run 2>/dev/null) || hb=
+if [ -z "$hb" ]; then
+    skip handback "nothing of an older spark's look is left here"
+elif [ "$MODE" = dry ]; then
+    printf '%s\n' "$hb"
+    todo=$((todo + $(printf '%s\n' "$hb" | grep -c '^would' || true)))
 else
-    # the palette must exist (yours first, then the repository's), but
-    # writing theme.env, the console files and the mac profile is
-    # `spark theme NAME`'s alone: a bootstrap run paints nothing
-    tf="$SPARK_CONFIG_DIR/themes/$SITE_THEME.env"
-    [ -f "$tf" ] || tf="$REPO/themes/$SITE_THEME.env"
-    if [ ! -f "$tf" ]; then
-        printf 'spark: SITE_THEME=%s: no such palette (themes/*.env, ~/.config/spark/themes/*.env)\n' "$SITE_THEME" >&2
-        exit 1
-    fi
-    if [ -f "$SPARK_CONFIG_DIR/theme.env" ]; then
-        ok theme "$SITE_THEME (painted: theme.env; spark theme NAME repaints)"
-    else
-        skip theme "$SITE_THEME chosen, not painted (spark theme $SITE_THEME)"
-    fi
-fi
-# the text console's font, when chosen: core -- spark font sets
-# SITE_FONT_FACE either way. The file is the console's own, by mechanism
-# and never by family (site.console_shape is the twin): console-setup's
-# FONTFACE + FONTSIZE where /etc/default/console-setup is (Debian), else
-# vconsole.conf's FONT= where /etc/vconsole.conf is (Arch and every
-# systemd distro), else rc.conf's FONT= beside /etc/runit (Void: runit's
-# stage 1 reads it at boot, setfont draws it now); seamed for the tests
-# (SPARK_ETC_*)
-console_setup=${SPARK_ETC_CONSOLE_SETUP:-/etc/default/console-setup}
-vconsole=${SPARK_ETC_VCONSOLE:-/etc/vconsole.conf}
-rcconf=${SPARK_ETC_RCCONF:-/etc/rc.conf}
-if [ "$client" = 1 ]; then
-    skip console "a client: the console keeps its font"
-elif [ "$OS" = Darwin ]; then
-    skip console "macOS: the font is in the Terminal.app profile (spark theme profile)"
-elif is_wsl; then
-    skip console "WSL 2: no console -- the font is Windows Terminal's"
-elif [ -z "$SITE_FONT_FACE" ]; then
-    skip console "SITE_FONT_FACE unset: the console keeps its font"
-elif [ ! -f "$console_setup" ] && [ ! -f "$vconsole" ] && ! { [ -f "$rcconf" ] && [ "$INIT" = runit ]; }; then
-    skip console "no console-setup, vconsole.conf or rc.conf: the console keeps its font"
-else
-    size=${SITE_FONT_SIZE:-16x32}
-    # both values are interpolated into a root sed below: only the shapes
-    # a console font can have pass (face a word, size WxH)
-    if ! printf '%s' "$SITE_FONT_FACE" | grep -qE '^[A-Za-z0-9._-]+$' \
-       || ! printf '%s' "$size" | grep -qE '^[0-9]+x[0-9]+$'; then
-        row todo console "SITE_FONT_FACE=$SITE_FONT_FACE SITE_FONT_SIZE=$size: a face is [A-Za-z0-9._-]+ and a size WxH -- spark font FACE SIZE sets both"
-    elif [ -f "$console_setup" ]; then
-        cur=$(sed -n 's/^FONTFACE="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p; s/^FONTSIZE="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' "$console_setup" 2>/dev/null | paste -sd' ' -)
-        if [ "$cur" = "$SITE_FONT_FACE $size" ]; then ok console "$SITE_FONT_FACE $size ($console_setup)"
-        elif need console "FONTFACE=$SITE_FONT_FACE FONTSIZE=$size in $console_setup; setupcon (sudo)"; then
-            # the original, once: spark uninstall puts it back
-            as_root cp -n "$console_setup" "$console_setup.spark-orig" 2>/dev/null || true
-            as_root sed -i "s/^FONTFACE=.*/FONTFACE=\"$SITE_FONT_FACE\"/; s/^FONTSIZE=.*/FONTSIZE=\"$size\"/" "$console_setup"
-            made console-font
-            as_root setupcon --force 2>/dev/null || true
-            ok console "$SITE_FONT_FACE $size ($console_setup)"
-        fi
-    else
-        # the two FONT= shapes: vconsole.conf, redrawn by systemd-vconsole-setup,
-        # or rc.conf (the value quoted, as Void ships it), redrawn by setfont;
-        # a commented #FONT= line is the one the sed takes over
-        if [ -f "$vconsole" ]; then fontfile=$vconsole; fontline="FONT=$SITE_FONT_FACE"; redraw="systemd-vconsole-setup restarted"
-        else fontfile=$rcconf; fontline="FONT=\"$SITE_FONT_FACE\""; redraw=setfont; fi
-        cur=$(sed -n 's/^FONT="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' "$fontfile" 2>/dev/null | head -1)
-        if [ "$cur" = "$SITE_FONT_FACE" ]; then ok console "$SITE_FONT_FACE $size ($fontfile)"
-        elif need console "FONT=$SITE_FONT_FACE in $fontfile; $redraw (sudo)"; then
-            as_root cp -n "$fontfile" "$fontfile.spark-orig" 2>/dev/null || true
-            if grep -q '^#\{0,1\}FONT=' "$fontfile"; then
-                as_root sed -i "s/^#\{0,1\}FONT=.*/$fontline/" "$fontfile"
-            else
-                printf '%s\n' "$fontline" | as_root tee -a "$fontfile" >/dev/null
-            fi
-            made console-font
-            if [ "$fontfile" = "$vconsole" ]; then as_root systemctl restart systemd-vconsole-setup 2>/dev/null || true
-            else as_root setfont "$SITE_FONT_FACE" 2>/dev/null || true; fi
-            ok console "$SITE_FONT_FACE $size ($fontfile)"
-        fi
-    fi
-fi
-# the console palette at boot: a user's escapes reach their own VT (the rc
-# hook, spark theme), but the login screen is drawn before any shell runs
-# and other VTs keep the kernel's defaults. This one-shot unit (root,
-# setvtrgb: the same sudo as the font) sets the defaults at every boot from
-# the .rgb twin of console-colors. No palette painted yet: nothing to do.
-vt_unit=/etc/systemd/system/spark-console.service
-vt_file="$SPARK_CONFIG_DIR/console-colors.rgb"
-if [ "$client" = 1 ]; then
-    skip vt-palette "a client: no boot unit installed here"
-elif [ "$OS" = Darwin ]; then
-    skip vt-palette "macOS: the palette is the Terminal.app profile's"
-elif is_wsl; then
-    skip vt-palette "WSL 2: no console"
-elif [ ! -f "$vt_file" ]; then
-    skip vt-palette "no palette painted yet (spark theme NAME)"
-elif ! command -v setvtrgb >/dev/null 2>&1; then
-    row todo vt-palette "setvtrgb is missing: $PM_INSTALL kbd"
-elif [ "$INIT" = runit ]; then
-    skip vt-palette "runit: the palette at boot is /etc/rc.local's; left alone (spark theme paints this console now)"
-elif [ ! -d /run/systemd/system ]; then
-    skip vt-palette "no booted systemd here (a container): the unit waits for a machine that boots"
-else
-    vt_want=$(printf '[Unit]\nDescription=spark: the console palette (setvtrgb)\nAfter=console-setup.service systemd-vconsole-setup.service\nConditionPathExists=%s\n\n[Service]\nType=oneshot\nExecStart=/usr/bin/setvtrgb %s\n\n[Install]\nWantedBy=multi-user.target\n' "$vt_file" "$vt_file")
-    # the kernel's live defaults (sysfs, the red line) must be the file's:
-    # spark theme rewrites the file under a unit that
-    # already exists, and the defaults follow only when someone sets them
-    vt_live=$(cat "${SPARK_SYSFS_VT:-/sys/module/vt/parameters}/default_red" 2>/dev/null || true)
-    vt_mine=$(sed -n 1p "$vt_file")
-    vt_unit_ok=0
-    [ "$(cat "$vt_unit" 2>/dev/null)" = "$vt_want" ] && systemctl is-enabled spark-console.service >/dev/null 2>&1 && vt_unit_ok=1
-    if [ "$vt_unit_ok" = 1 ] && [ "$vt_live" = "$vt_mine" ]; then
-        ok vt-palette "spark-console.service: setvtrgb $vt_file at boot; the defaults are the file's"
-    elif [ "$vt_unit_ok" = 1 ]; then
-        if need vt-palette "setvtrgb $vt_file: the defaults changed under the unit (sudo)"; then
-            as_root setvtrgb "$vt_file" 2>/dev/null || true
-            ok vt-palette "spark-console.service: setvtrgb $vt_file at boot; the defaults set now"
-        fi
-    elif need vt-palette "write $vt_unit; enable it; setvtrgb now (sudo)"; then
-        printf '%s\n' "$vt_want" | as_root tee "$vt_unit" >/dev/null
-        as_root systemctl daemon-reload
-        as_root systemctl enable spark-console.service >/dev/null 2>&1 || true
-        as_root setvtrgb "$vt_file" 2>/dev/null || true      # the defaults now, for the other VTs
-        ok vt-palette "spark-console.service: setvtrgb $vt_file at boot; the defaults set now"
-    fi
-fi
-if [ "$client" = 1 ]; then
-    skip quiet-login "a client: the login screen is left as it is"
-    skip quiet-boot "a client: the boot is left as it is"
-elif [ "$OS" = Darwin ]; then
-    skip quiet-login "macOS: no motd"
-    skip quiet-boot "macOS: no GRUB"
-else
-    # a quiet login: no distro notice, no kernel line before the greeting,
-    # and a bare `login:` -- /etc/issue (the pre-login OS banner) empties
-    # with the motd, so the console shows the prompt and nothing else.
-    # The one thing issue keeps is invisible: the cursor-on escape
-    # (ESC [?25h), because quiet boot's vt.global_cursor_default=0 is
-    # global and would leave the login prompt cursorless without it
-    cursor_on=$(printf '\033[?25h')
-    # the login files, seamed for the tests (SPARK_ETC_* pin a fixture)
-    motd=${SPARK_ETC_MOTD:-/etc/motd}
-    issue=${SPARK_ETC_ISSUE:-/etc/issue}
-    uname_motd=${SPARK_ETC_UNAME_MOTD:-/etc/update-motd.d/10-uname}
-    if [ "$SITE_QUIET_LOGIN" != yes ]; then
-        # restore only spark's own trace: $motd.orig is the backup a
-        # quieting made. A stock box (no /etc/motd, the distro's file at
-        # /usr/share/base-files/motd) was never quieted by spark, and its
-        # motd is not spark's to write as root.
-        if [ -f "$motd.orig" ]; then
-            if need quiet-login "restore the distro notice, kernel line and login banner (sudo)"; then
-                as_root cp "$motd.orig" "$motd"
-                [ -f "$uname_motd" ] && as_root chmod +x "$uname_motd"
-                [ -f "$issue.orig" ] && as_root cp "$issue.orig" "$issue"
-                ok quiet-login "loud: distro notice, kernel line and login banner back"
-            fi
-        else skip quiet-login "loud (SITE_QUIET_LOGIN=no)"; fi
-    elif [ ! -s "$motd" ] && [ ! -x "$uname_motd" ] && [ "$(cat "$issue" 2>/dev/null)" = "$cursor_on" ]; then
-        ok quiet-login "motd empty, no kernel line, bare login prompt (cursor kept)"
-    elif need quiet-login "empty /etc/motd and /etc/issue (cursor escape only), disable update-motd.d/10-uname (sudo)"; then
-        [ -s "$motd" ] && as_root cp -n "$motd" "$motd.orig" 2>/dev/null
-        [ -f "$motd" ] && as_root truncate -s 0 "$motd"      # Arch ships none: an absent motd is quiet already
-        [ -x "$uname_motd" ] && as_root chmod -x "$uname_motd"
-        [ -s "$issue" ] && ! grep -q '25h' "$issue" && as_root cp -n "$issue" "$issue.orig" 2>/dev/null
-        printf '\033[?25h' | as_root tee "$issue" >/dev/null
-        made motd
-        ok quiet-login "motd empty, no kernel line, bare login prompt (cursor kept; originals: *.orig)"
-    fi
-    # a quiet boot: straight past GRUB's menu, a silent kernel line, and
-    # only errors from systemd. One drop-in spark owns -- the user's
-    # GRUB_CMDLINE_LINUX_DEFAULT is never sed'd; grub-mkconfig sources
-    # /etc/default/grub.d/*.cfg after the main file, zz- sorts it last so
-    # it wins. quiet+loglevel=3 silence the kernel, splash hands plymouth
-    # the boot when it is installed (inert otherwise),
-    # systemd.show_status=false keeps mount/fsck status lines off the
-    # console entirely (failures still land in the journal; loglevel=3
-    # keeps a broken kernel able to say so), udev.log_level=3 quiets the
-    # initramfs, vt.global_cursor_default=0 stops the early blinking
-    # cursor, fbcon=nodefer stops the framebuffer's mid-boot flicker.
-    # update-grub is the Debian-family guard: no update-grub, no touch.
-    # The same seven words on every shape (site.QUIET_WORDS is the twin)
-    QUIET_WORDS='quiet splash loglevel=3 systemd.show_status=false udev.log_level=3 vt.global_cursor_default=0 fbcon=nodefer'
-    grub_dropin=/etc/default/grub.d/zz-spark-quiet.cfg
-    # Void's grub-mkconfig sources /etc/default/grub alone (no grub.d):
-    # there spark appends the same lines to the file's END, each marked --
-    # a sourced file, so the last assignment wins and the user's own lines
-    # stay as they are; off deletes the marked lines (site.GRUB_MARK twin)
-    default_grub=${SPARK_ETC_DEFAULT_GRUB:-/etc/default/grub}
-    grub_mark='#spark-quiet#'
-    grub_marked() { grep -s " $grub_mark\$" "$default_grub" | sed "s/ $grub_mark\$//"; }
-    # the $GRUB_CMDLINE reference below is grub's to expand, not ours
-    grub_want="GRUB_TIMEOUT=0
-GRUB_TIMEOUT_STYLE=hidden
-GRUB_CMDLINE_LINUX_DEFAULT=\"\$GRUB_CMDLINE_LINUX_DEFAULT $QUIET_WORDS\""
-    # Void's runit prints its own lines at boot, which the kernel's
-    # `quiet` never reaches. Two sets of marked lines, the same mark as
-    # GRUB's. /etc/rc.conf (a conf file xbps keeps) is sourced by runit's
-    # stage 1 after /etc/runit/functions and before its scripts: there msg
-    # (the `=>` lines) says nothing, and a clean fsck, sysctl's values,
-    # the module list and seedrng's lines stay off the screen. Stage 3
-    # sources it too and is left as Void prints it: the shutdown's lines
-    # explain its pause. A warning, an error, stderr
-    # and a fsck that finds something still print, and each of the three
-    # leaves a mark in /run (msg_warn and msg_error are Void's own, the
-    # mark added). What no file reaches -- runit's own `- runit:` lines,
-    # stage 2's runsvchdir, a tool's stray line -- the getty clears:
-    # /etc/sv/agetty-tty1/conf (every getty sources it) drops tty1's
-    # --noclear after a clean boot, one with no mark and no critical
-    # kernel line. A boot that marked keeps its whole screen: quiet never
-    # hides a problem. site.RC_WANT and site.GETTY_WANT are the twins
-    getty_conf=${SPARK_ETC_GETTY_CONF:-/etc/sv/agetty-tty1/conf}
-    rc_marked() { grep -s " $grub_mark\$" "$rcconf" | sed "s/ $grub_mark\$//"; }
-    getty_marked() { grep -s " $grub_mark\$" "$getty_conf" | sed "s/ $grub_mark\$//"; }
-    rc_want_lines() {
-        cat <<'EOF'
-# spark quiet boot on wrote these lines, spark quiet boot off removes them
-case $0 in */runit/1)
-msg() { :; }
-msg_warn() { { : >"${SPARK_BOOT_LOUD:-/run/spark-boot-loud}"; } 2>/dev/null; printf "\033[1m\033[33mWARNING: $@\033[m\n"; }
-msg_error() { { : >"${SPARK_BOOT_LOUD:-/run/spark-boot-loud}"; } 2>/dev/null; printf "\033[1m\033[31mERROR: $@\033[m\n"; }
-fsck() { _spark_out=$(command fsck "$@" 2>&1); _spark_rc=$?; [ "$_spark_rc" = 0 ] || { printf '%s\n' "$_spark_out"; { : >"${SPARK_BOOT_LOUD:-/run/spark-boot-loud}"; } 2>/dev/null; }; return "$_spark_rc"; }
-sysctl() { if [ "$1" = -p ]; then command sysctl "$@" >/dev/null; else command sysctl "$@"; fi; }
-seedrng() { command seedrng "$@" >/dev/null; }
-alias modules-load='modules-load >/dev/null'
-esac
-EOF
-    }
-    getty_want_lines() {
-        cat <<'EOF'
-# spark quiet boot on wrote these lines, spark quiet boot off removes them
-[ -e "${SPARK_BOOT_LOUD:-/run/spark-boot-loud}" ] || [ -n "$(dmesg -l emerg,alert,crit 2>/dev/null)" ] || GETTY_ARGS=$(printf '%s' "$GETTY_ARGS" | sed 's/--noclear//')
-EOF
-    }
-    rc_want=$(rc_want_lines)
-    getty_want=$(getty_want_lines)
-    # marked_append FILE LINES -- spark's marked lines out, LINES in at the
-    # end, each marked (a file with no final newline would glue the first
-    # line onto its last)
-    marked_append() {
-        [ -f "$1" ] && as_root sed -i "/ $grub_mark\$/d" "$1"
-        [ ! -s "$1" ] || [ -z "$(tail -c1 "$1")" ] || printf '\n' | as_root tee -a "$1" >/dev/null
-        printf '%s\n' "$2" | sed "s/\$/ $grub_mark/" | as_root tee -a "$1" >/dev/null
-    }
-    # Arch with a Unified Kernel Image (an uncommented `<preset>_uki=` in a
-    # mkinitcpio preset): no GRUB, no loader entry -- mkinitcpio embeds the
-    # kernel line from /etc/kernel/cmdline plus every /etc/cmdline.d/*.conf,
-    # so one drop-in spark owns is the GRUB drop-in's mirror; the Arch
-    # logo is the preset's `--splash`, marked off with spark's own prefix
-    # (stripped on off: no .orig); systemd-boot's menu wait is loader.conf's
-    # `timeout` (root to read: /boot is 0700 on Arch). The three land, then
-    # `mkinitcpio -P` rebuilds the images, and the next boot is the proof.
-    # The presets and the drop-in are seamed for the tests (SPARK_ETC_*).
-    mkinitcpio_d=${SPARK_ETC_MKINITCPIO_D:-/etc/mkinitcpio.d}
-    cmdline_dropin=${SPARK_ETC_CMDLINE_DROPIN:-/etc/cmdline.d/zz-spark-quiet.conf}
-    loader_conf=/boot/loader/loader.conf
-    splash_mark='#spark-quiet# '
-    uki_shape() { grep -qs '^[a-z_]*_uki=' "$mkinitcpio_d"/*.preset; }
-    splash_live() { grep -qs '^[a-z_]*_options=.*--splash' "$mkinitcpio_d"/*.preset; }
-    splash_marked() { grep -qs "^$splash_mark" "$mkinitcpio_d"/*.preset; }
-    uki_path() { sed -n 's/^[a-z_]*_uki="\{0,1\}\([^"]*\)"\{0,1\}$/\1/p' "$mkinitcpio_d"/*.preset 2>/dev/null | head -1; }
-    loader_timeout() {   # loader_timeout N -- systemd-boot's menu wait; nothing without a loader dir
-        as_root test -d "${loader_conf%/*}" || return 0
-        if as_root grep -qs '^#\{0,1\}timeout' "$loader_conf"; then
-            as_root sed -i "s/^#\{0,1\}timeout.*/timeout $1/" "$loader_conf"
-        else
-            printf 'timeout %s\n' "$1" | as_root tee -a "$loader_conf" >/dev/null
-        fi
-    }
-    # /usr/sbin is not in a user's PATH on Debian: look for update-grub
-    # there too (sudo's secure_path finds it at run time either way) --
-    # `command -v` alone once mis-skipped a real Debian as "not GRUB"
-    have_update_grub() { command -v update-grub >/dev/null 2>&1 || [ -x /usr/sbin/update-grub ]; }
-    # the row is only ok when the ARTIFACT agrees: the generated
-    # /boot/grub/grub.cfg carries our kernel line (update-grub failures
-    # were once swallowed and the row lied ok). Reading it needs root on
-    # newer Debians (0600): the action path verifies as root right after
-    # update-grub; the steady state and --dry-run verify only when the
-    # file is readable without sudo (dry-run never calls sudo).
-    grub_live_quiet() { as_root grep -q 'loglevel=3' /boot/grub/grub.cfg 2>/dev/null; }
-    grub_user_ok() { [ ! -r /boot/grub/grub.cfg ] || grep -q 'loglevel=3' /boot/grub/grub.cfg 2>/dev/null; }
-    if [ "$SITE_QUIET_BOOT" != yes ]; then
-        if [ -f "$cmdline_dropin" ] || splash_marked; then
-            if need quiet-boot "show the boot menu again, 3 s; kernel messages and the splash back; mkinitcpio -P (sudo)"; then
-                as_root rm -f "$cmdline_dropin"
-                splash_marked && as_root sed -i "s/^$splash_mark//" "$mkinitcpio_d"/*.preset
-                loader_timeout 3
-                if as_root mkinitcpio -P >/dev/null 2>&1; then
-                    ok quiet-boot "loud: boot menu shown for 3 s, kernel messages and the splash back"
-                else
-                    row todo quiet-boot "mkinitcpio -P failed -- run: sudo mkinitcpio -P"
-                fi
-            fi
-        elif grep -qs " $grub_mark\$" "$default_grub" "$rcconf" "$getty_conf"; then
-            if need quiet-boot "remove spark's marked lines from $default_grub, $rcconf and $getty_conf; update-grub (sudo)"; then
-                for f in "$default_grub" "$rcconf" "$getty_conf"; do
-                    [ -f "$f" ] && as_root sed -i "/ $grub_mark\$/d" "$f"
-                done
-                if as_root update-grub >/dev/null 2>&1; then
-                    ok quiet-boot "loud: GRUB's menu, the kernel messages, runit's lines and the getty as your files say"
-                else
-                    row todo quiet-boot "update-grub failed -- run: sudo update-grub"
-                fi
-            fi
-        elif [ -f "$grub_dropin" ] || { [ "$DISTRO" != void ] && grep -q '^GRUB_TIMEOUT=0$' /etc/default/grub 2>/dev/null; }; then
-            if need quiet-boot "show GRUB's menu again, 5 s; kernel messages back (sudo)"; then
-                as_root rm -f "$grub_dropin"
-                as_root sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=5/; s/^GRUB_TIMEOUT_STYLE=.*/GRUB_TIMEOUT_STYLE=menu/' /etc/default/grub
-                if as_root update-grub >/dev/null 2>&1; then
-                    ok quiet-boot "loud: GRUB menu shown for 5 s, kernel messages back"
-                else
-                    row todo quiet-boot "update-grub failed -- run: sudo update-grub"
-                fi
-            fi
-        else skip quiet-boot "loud (SITE_QUIET_BOOT=no)"; fi
-    elif is_wsl; then
-        skip quiet-boot "WSL 2: no GRUB (Windows boots it)"
-    elif uki_shape; then
-        if [ "$(cat "$cmdline_dropin" 2>/dev/null)" = "$QUIET_WORDS" ] && ! splash_live; then
-            ok quiet-boot "silent: menu hidden, kernel line quiet, no splash ($cmdline_dropin)"
-        elif need quiet-boot "cmdline.d drop-in $cmdline_dropin, the preset's splash marked off, loader.conf timeout 0; mkinitcpio -P (sudo)"; then
-            as_root mkdir -p "${cmdline_dropin%/*}"
-            printf '%s\n' "$QUIET_WORDS" | as_root tee "$cmdline_dropin" >/dev/null
-            splash_live && as_root sed -i "s/^\([a-z_]*_options=.*--splash\)/$splash_mark\1/" "$mkinitcpio_d"/*.preset
-            loader_timeout 0
-            made uki
-            uki=$(uki_path)
-            if as_root mkinitcpio -P >/dev/null 2>&1 && as_root grep -aq 'loglevel=3' "$uki"; then
-                ok quiet-boot "silent after a reboot: menu hidden, kernel line quiet, no splash (hold Space at boot for the menu)"
-            else
-                row todo quiet-boot "the image does not carry the quiet line -- run: sudo mkinitcpio -P, then spark check"
-            fi
-        fi
-    elif [ "$DISTRO" = arch ]; then
-        skip quiet-boot "Arch without a UKI: the kernel line is the boot loader's -- left alone"
-    elif [ "$DISTRO" = void ]; then
-        if [ ! -f "$default_grub" ] || ! have_update_grub; then
-            skip quiet-boot "no GRUB on this Void -- its boot loader is left alone"
-        elif [ "$(grub_marked)" = "$grub_want" ] && [ "$(rc_marked)" = "$rc_want" ] && [ "$(getty_marked)" = "$getty_want" ] && grub_user_ok; then
-            ok quiet-boot "silent: menu hidden, kernel line quiet, runit's lines off, a clean boot cleared (the marked lines in $default_grub, $rcconf and $getty_conf)"
-        elif need quiet-boot "marked lines at the end of $default_grub (3), $rcconf (10) and $getty_conf (2); update-grub (sudo)"; then
-            marked_append "$default_grub" "$grub_want"
-            marked_append "$rcconf" "$rc_want"
-            marked_append "$getty_conf" "$getty_want"
-            made grub
-            if as_root update-grub >/dev/null 2>&1 && grub_live_quiet; then
-                ok quiet-boot "silent after a reboot: menu hidden, kernel line quiet, runit's lines off, a clean boot cleared (hold Shift at boot for the menu)"
-            else
-                row todo quiet-boot "grub.cfg does not carry the quiet line -- run: sudo update-grub, then spark check"
-            fi
-        fi
-    elif [ ! -f /etc/default/grub ]; then
-        skip quiet-boot "no /etc/default/grub here"
-    elif ! have_update_grub; then
-        skip quiet-boot "no update-grub: not a Debian-family GRUB -- left alone"
-    elif [ -f "$grub_dropin" ] && [ "$(cat "$grub_dropin" 2>/dev/null)" = "$grub_want" ] && grub_user_ok; then
-        ok quiet-boot "silent: menu hidden, kernel line quiet ($grub_dropin)"
-    elif need quiet-boot "GRUB drop-in $grub_dropin; update-grub (sudo)"; then
-        as_root mkdir -p /etc/default/grub.d
-        printf '%s\n' "$grub_want" | as_root tee "$grub_dropin" >/dev/null
-        made grub
-        if as_root update-grub >/dev/null 2>&1 && grub_live_quiet; then
-            ok quiet-boot "silent: menu hidden, kernel line quiet (hold Shift at boot for the menu)"
-        else
-            row todo quiet-boot "grub.cfg does not carry the quiet line -- run: sudo update-grub, then spark check"
-        fi
-    fi
+    hb=$(handback) || true
+    printf '%s\n' "$hb"
+    todo=$((todo + $(printf '%s\n' "$hb" | grep -c '^ok' || true)))
+    needs=$((needs + $(printf '%s\n' "$hb" | grep -c '^todo' || true)))
 fi
 
 # =========================================================== 13. knowledge

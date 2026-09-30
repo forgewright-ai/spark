@@ -324,7 +324,7 @@ LINE_SCHEMA = {
 
 MODE_LINE = (
     "The user typed a question at the shell prompt. A question about spark itself -- its model, chat "
-    "model, palette, font, engine, page, users, history, memory, speed or version -- is kind=cmd with "
+    "model, engine, page, users, history, memory, speed or version -- is kind=cmd with "
     "one of spark's own commands listed above; never say spark cannot do it. "
     "If it asks for something a shell command can do, "
     "reply kind=cmd. Set danger=true when the command deletes, overwrites, kills, reboots, or changes "
@@ -395,7 +395,7 @@ KNOW_CHAT = (
     "The machine: spark serve on|off -- the engine; spark model NAME|list -- "
     "the table, or choose one; spark check -- every row; spark update -- "
     "the newest version; spark setup -- the guided first run; spark quiet "
-    "start|login|boot|audio on|off -- a quieter machine; spark headless on|off; "
+    "start|audio on|off -- a quieter spark; spark headless on|off; "
     "spark client URL|off -- another machine's spark; spark user add|login.\n"
     "Reading and writing: cmd | explain; spark read WORDS < text; spark ask < plan; "
     "spark drill < text; stream | spark watch WORDS; spark edit, from a spark app.\n"
@@ -403,8 +403,7 @@ KNOW_CHAT = (
     "N|auto|off for one chat, /reveal in a chat; SPARK_REVEAL in "
     "~/.config/spark/spark.env (the settings file, with "
     "SPARK_MAX_TOKENS, SPARK_TIMEOUT, SPARK_HISTORY).\n"
-    "The look: spark theme NAME -- the palette; spark font FACE SIZE -- the "
-    "console font; spark bar -- the status line."
+    "The status: spark bar -- the status line."
 )
 MODE_DO = (
     "You are completing a task in steps. Propose ONE shell command as kind=cmd with a one-line `hint` "

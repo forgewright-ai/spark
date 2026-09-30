@@ -1,214 +1,22 @@
 # spark.site -- the site.env custodian and the machine-shape verbs:
 # set_keys/apply (every choice lands through them), the rc-hook custody,
-# `spark font`, `spark quiet`, `spark headless`, `spark client` (and
-# `spark theme` in theme.py, `spark model`/`ember` in model.py). Each
-# writes the key, then runs bootstrap.sh so the machine follows; editing
-# site.env by hand and running bootstrap does the same thing.
+# `spark quiet`, `spark headless`, `spark share`, `spark client` (and
+# `spark model`/`ember` in model.py). Each writes the key, then runs
+# bootstrap.sh so the machine follows; editing site.env by hand and
+# running bootstrap does the same thing.
 
-import gzip
 import os
 import pwd
 import re
-import struct
 import subprocess
 import sys
 from urllib.parse import urlsplit
 
-from . import (CONFIG_DIR, HOME, IS_MAC, MARK, REPO, RUNIT_DIR, SHARE_TOKEN, SHARE_URL, SITE_ENV, SPARK_ENV,
-               TOKEN_FILE, VAR_SERVICE, config, distro, glyph, init_shape, is_wsl, runit_live, say)
+from . import (CONFIG_DIR, HOME, IS_MAC, MARK, REPO, SHARE_TOKEN, SHARE_URL, SITE_ENV, SPARK_ENV,
+               TOKEN_FILE, VAR_SERVICE, config, glyph, init_shape, is_wsl, runit_live, say)
 
-# WSL 2: Linux, minus what the VT console and GRUB own (contract 8 lines)
-WSL_NO_FONT = "no console on WSL 2: the font lives in Windows Terminal's settings"
-WSL_NO_BOOT = "no GRUB on WSL 2: Windows boots it"
+# WSL 2 cannot stay on and answer (contract 8 line)
 WSL_NO_BRAIN = "WSL 2 stops with its last window: it cannot stay on and answer (a Linux machine can)"
-# a Linux with none of the three console mechanisms (contract 8 line);
-# Arch keeps only the kernel-line refusal, and only without a Unified
-# Kernel Image; Void's GRUB reads no drop-in, so its kernel line stays
-# the user's
-NO_CONSOLE_FONT = "no console-setup, vconsole.conf or rc.conf here: the console font is not spark's to set"
-ARCH_NO_BOOT = ("no UKI on this Arch: the kernel line is the boot loader's "
-                "(a loader entry's options line, or GRUB_CMDLINE_LINUX_DEFAULT then grub-mkconfig)")
-VOID_NO_BOOT = "no GRUB on this Void: its boot loader is left alone"
-# the quiet kernel line, the same seven words on every shape (bootstrap.sh
-# QUIET_WORDS is the sh twin): quiet+loglevel=3 silence the kernel, splash
-# hands Plymouth the boot when it is installed (inert otherwise),
-# systemd.show_status=false keeps the Started/Stopping lines off the
-# console at boot and shutdown, udev.log_level=3 quiets the initramfs,
-# vt.global_cursor_default=0 the early cursor, fbcon=nodefer the flicker
-QUIET_WORDS = "quiet splash loglevel=3 systemd.show_status=false udev.log_level=3 vt.global_cursor_default=0 fbcon=nodefer"
-# the one drop-in spark owns on an Arch UKI: mkinitcpio embeds every
-# /etc/cmdline.d/*.conf after /etc/kernel/cmdline (zz- sorts it last)
-CMDLINE_DROPIN = os.environ.get("SPARK_ETC_CMDLINE_DROPIN", "/etc/cmdline.d/zz-spark-quiet.conf")
-SPLASH_MARK = "#spark-quiet# "
-# Void: grub-mkconfig sources /etc/default/grub alone, so spark appends
-# the drop-in's lines to its end, each marked (bootstrap.sh grub_want and
-# grub_mark are the twins); the last assignment wins, the user's stay
-GRUB_MARK = "#spark-quiet#"
-GRUB_WANT = ["GRUB_TIMEOUT=0", "GRUB_TIMEOUT_STYLE=hidden",
-             'GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT %s"' % QUIET_WORDS]
-
-
-# Void's runit prints its own lines at boot, which the kernel's `quiet`
-# never reaches (bootstrap.sh rc_want and getty_want are the twins, the
-# mark GRUB's). /etc/rc.conf is sourced by runit's stage 1 before its
-# scripts: there msg says nothing, and a clean fsck, sysctl's values,
-# the module list and seedrng's lines stay off the screen. Stage 3 reads
-# it too and is left as Void prints it: its lines explain its pause. A warning, an error and a fsck that finds something print
-# and leave a mark in /run. The getty's conf (every getty sources tty1's)
-# drops tty1's --noclear after a clean boot: no mark, no critical kernel
-# line. A boot that marked keeps its whole screen.
-BOOT_LOUD = '"${SPARK_BOOT_LOUD:-/run/spark-boot-loud}"'
-RC_WANT = [
-    "# spark quiet boot on wrote these lines, spark quiet boot off removes them",
-    "case $0 in */runit/1)",
-    "msg() { :; }",
-    r'msg_warn() { { : >%s; } 2>/dev/null; printf "\033[1m\033[33mWARNING: $@\033[m\n"; }' % BOOT_LOUD,
-    r'msg_error() { { : >%s; } 2>/dev/null; printf "\033[1m\033[31mERROR: $@\033[m\n"; }' % BOOT_LOUD,
-    r"""fsck() { _spark_out=$(command fsck "$@" 2>&1); _spark_rc=$?; [ "$_spark_rc" = 0 ] """
-    r"""|| { printf '%%s\n' "$_spark_out"; { : >%s; } 2>/dev/null; }; return "$_spark_rc"; }""" % BOOT_LOUD,
-    """sysctl() { if [ "$1" = -p ]; then command sysctl "$@" >/dev/null; else command sysctl "$@"; fi; }""",
-    """seedrng() { command seedrng "$@" >/dev/null; }""",
-    "alias modules-load='modules-load >/dev/null'",
-    "esac",
-]
-GETTY_CONF = os.environ.get("SPARK_ETC_GETTY_CONF", "/etc/sv/agetty-tty1/conf")
-GETTY_WANT = [
-    "# spark quiet boot on wrote these lines, spark quiet boot off removes them",
-    """[ -e %s ] || [ -n "$(dmesg -l emerg,alert,crit 2>/dev/null)" ] """
-    """|| GETTY_ARGS=$(printf '%%s' "$GETTY_ARGS" | sed 's/--noclear//')""" % BOOT_LOUD,
-]
-
-
-def default_grub():
-    return os.environ.get("SPARK_ETC_DEFAULT_GRUB", "/etc/default/grub")
-
-
-def _marked(path):
-    tail = " " + GRUB_MARK
-    try:
-        with open(path, encoding="utf-8", errors="replace") as f:
-            return [ln.rstrip("\n")[:-len(tail)] for ln in f if ln.rstrip("\n").endswith(tail)]
-    except OSError:
-        return []
-
-
-def grub_marked():
-    """The lines spark appended to /etc/default/grub, marker off."""
-    return _marked(default_grub())
-
-
-def rc_marked():
-    """The lines spark appended to /etc/rc.conf, marker off."""
-    return _marked(RCCONF)
-
-
-def getty_marked():
-    """The lines spark appended to the getty's conf, marker off."""
-    return _marked(GETTY_CONF)
-
-
-def has_update_grub():
-    import shutil
-    return bool(shutil.which("update-grub")) or os.access("/usr/sbin/update-grub", os.X_OK)
-
-
-def mkinitcpio_d():
-    return os.environ.get("SPARK_ETC_MKINITCPIO_D", "/etc/mkinitcpio.d")
-
-
-def boot_shape():
-    """How this Linux gets its kernel line, root-free: `uki` when a
-    mkinitcpio preset builds a Unified Kernel Image (an uncommented
-    `<preset>_uki=` line: the cmdline is /etc/kernel/cmdline plus
-    /etc/cmdline.d/*.conf, the splash the preset's --splash), `grub` when
-    /etc/default/grub is here, else ''. SPARK_ETC_MKINITCPIO_D pins the
-    preset dir in tests."""
-    if IS_MAC or is_wsl():
-        return ""
-    try:
-        names = sorted(n for n in os.listdir(mkinitcpio_d()) if n.endswith(".preset"))
-    except OSError:
-        names = []
-    for name in names:
-        try:
-            with open(os.path.join(mkinitcpio_d(), name), encoding="utf-8", errors="replace") as f:
-                if re.search(r"^[a-z_]+_uki=", f.read(), re.M):
-                    return "uki"
-        except OSError:
-            continue
-    return "grub" if os.path.isfile("/etc/default/grub") else ""
-
-
-def splash_live():
-    """True while a mkinitcpio preset still embeds a splash (an unmarked
-    `*_options=... --splash` line): the logo is on the next image."""
-    try:
-        names = sorted(n for n in os.listdir(mkinitcpio_d()) if n.endswith(".preset"))
-    except OSError:
-        return False
-    for name in names:
-        try:
-            with open(os.path.join(mkinitcpio_d(), name), encoding="utf-8", errors="replace") as f:
-                if re.search(r"^[a-z_]+_options=.*--splash", f.read(), re.M):
-                    return True
-        except OSError:
-            continue
-    return False
-
-
-# the three files a Linux sets its console font in, seamed for the tests
-CONSOLE_SETUP = os.environ.get("SPARK_ETC_CONSOLE_SETUP", "/etc/default/console-setup")
-VCONSOLE = os.environ.get("SPARK_ETC_VCONSOLE", "/etc/vconsole.conf")
-RCCONF = os.environ.get("SPARK_ETC_RCCONF", "/etc/rc.conf")
-
-
-def console_shape():
-    """How this Linux sets its console font, root-free and by mechanism,
-    never by family: `setup` when console-setup's file is here (Debian:
-    FONTFACE and FONTSIZE, composed from /usr/share/consolefonts),
-    `vconsole` when /etc/vconsole.conf is (Arch, and every systemd distro
-    without console-setup: FONT= names one of the kbd font files),
-    `rcconf` when /etc/rc.conf sits beside /etc/runit (Void: the same
-    FONT=, read by runit's stage 1 at boot), '' when none. bootstrap's
-    console row is the sh twin."""
-    if IS_MAC or is_wsl():
-        return ""
-    if os.path.isfile(CONSOLE_SETUP):
-        return "setup"
-    if os.path.isfile(VCONSOLE):
-        return "vconsole"
-    if os.path.isfile(RCCONF) and os.path.isdir(RUNIT_DIR):
-        return "rcconf"
-    return ""
-
-
-def no_console_font():
-    """The one line that says why this Linux's console font is not spark's
-    to set ('' when it is): WSL 2 has no console; a Linux with none of
-    console-setup, vconsole.conf and rc.conf has no file to write."""
-    if IS_MAC:
-        return ""
-    if is_wsl():
-        return WSL_NO_FONT
-    if not console_shape():
-        return NO_CONSOLE_FONT
-    return ""
-
-
-def no_grub():
-    """The one line that says why quiet boot is not spark's to set here
-    ('' when it is): WSL 2 has no GRUB; Arch has no update-grub, so only
-    a Unified Kernel Image (a cmdline.d drop-in) is spark's there; a
-    Void without GRUB has nothing spark sets."""
-    if IS_MAC:
-        return ""
-    if is_wsl():
-        return WSL_NO_BOOT
-    if distro() == "arch" and boot_shape() != "uki":
-        return ARCH_NO_BOOT
-    if distro() == "void" and not (os.path.isfile(default_grub()) and has_update_grub()):
-        return VOID_NO_BOOT
-    return ""
 
 
 def set_keys(_file=None, _quiet=False, **kv):
@@ -278,247 +86,20 @@ def apply(rows, stream=False):
     return 0
 
 
-# ------------------------------------------------------------------- font
-# The console is the machine's face: its font is spark's to set (a
-# terminal emulator's font is set in the emulator).
-FONT_USAGE = """%s font -- the console font, or Terminal.app's
-
-  spark font                    what is set
-  spark font list               Linux: the console fonts installed here, as
-                                FACE and size (console-setup's faces, or the
-                                kbd font files); macOS: the monospace faces
-                                installed, by PostScript name
-  spark font FACE SIZE          Linux console: a face and size from the list
-                                (Terminus 16x32; Lat2-Terminus16 8x16);
-                                macOS: an installed font's PostScript name
-                                and points (13); one face and size for every
-                                spark profile
-  spark font none               the console keeps whatever font it has
-""" % MARK
-# monospace faces a Mac may hold, by PostScript name: the list shows the installed ones
-MAC_MONO = ("Menlo-Regular", "Monaco", "SFMono-Regular", "JetBrainsMono-Regular", "Courier",
-            "CourierNewPSMT", "AndaleMono", "PTMono-Regular", "FiraCode-Regular", "Hack-Regular",
-            "SourceCodePro-Regular", "CascadiaCode-Regular", "UbuntuMono-Regular", "DejaVuSansMono",
-            "Inconsolata-Regular", "RobotoMono-Regular", "IBMPlexMono", "VictorMono-Regular")
-
-
-# the monospace faces every Mac ships (/System/Library/Fonts, outside Spotlight's index)
-MAC_SYSTEM = {"Menlo-Regular", "Menlo-Bold", "Monaco", "SFMono-Regular", "SFMono-Bold", "Courier", "Courier-Bold",
-              "CourierNewPSMT", "AndaleMono"}
-
-
-def mac_font_installed(face):
-    """True for a face every Mac ships or one Spotlight finds (kMDItemFonts
-    holds PostScript names, 20 ms); False when Spotlight indexes and has
-    no such face; None when indexing is off, or not a Mac -- so a caller
-    never refuses on no evidence."""
-    if not IS_MAC:
-        return None
-    seam = os.environ.get("SPARK_MAC_FONTS")          # the fixture's installed faces, colon-separated
-    if seam is not None:
-        return face in seam.split(":")
-    if face in MAC_SYSTEM:
-        return True
-    from . import run
-    rc, out = run(["mdfind", "kMDItemFonts == '%s'" % face.replace("'", "")], timeout=5)
-    if rc == 0 and out.strip():
-        return True
-    rc, out = run(["mdutil", "-s", "/"], timeout=5)
-    return False if rc == 0 and "Indexing enabled" in out else None
-
-
-# where a Linux keeps its console fonts: kbd's dir (Arch, Fedora), then
-# console-setup's (Debian); SPARK_CONSOLEFONTS_DIR pins one in tests
-CONSOLEFONTS_DIRS = ("/usr/share/kbd/consolefonts", "/usr/share/consolefonts")
-_COMPOSED_FILE = re.compile(r"^[A-Za-z0-9]+-([A-Za-z]+?)(\d+(?:x\d+)?)\.psfu?(?:\.gz)?$")   # console-setup: <codeset>-<Face><Size>
-_PSF_FILE = re.compile(r"^(.+?)\.psfu?(?:\.gz)?$")
-
-
-def consolefonts_dir():
-    want = os.environ.get("SPARK_CONSOLEFONTS_DIR")
-    for d in ((want,) if want else CONSOLEFONTS_DIRS):
-        if os.path.isdir(d):
-            return d
-    return ""
-
-
-def psf_size(path):
-    """A console font file's cell as WxH, from its own header (gzip or
-    plain): PSF1 (magic 36 04) is 8 wide with the height in byte 3; PSF2
-    (magic 72 b5 4a 86) keeps the height at offset 24 and the width at
-    28, little-endian. '' for anything else."""
-    try:
-        opener = gzip.open if path.endswith(".gz") else open
-        with opener(path, "rb") as f:
-            head = f.read(32)
-    except (OSError, EOFError):
-        return ""
-    if head[:2] == b"\x36\x04" and len(head) >= 4:
-        return "8x%d" % head[3]
-    if head[:4] == b"\x72\xb5\x4a\x86" and len(head) >= 32:
-        h, w = struct.unpack("<II", head[24:32])
-        return "%dx%d" % (w, h)
-    return ""
-
-
-def console_fonts():
-    """{face: set of sizes}, every size the way spark font takes it (WxH).
-    On the console-setup shape a face is what console-setup composes,
-    parsed from the file names (<codeset>-<Face><Size>, the sizes there
-    HxW -- size_as_taken flips them); on the vconsole and rcconf shapes a
-    face is a kbd font file's stem and its size comes from the file's own
-    header. {} when the directory is unreadable (then nothing can be
-    validated)."""
-    d = consolefonts_dir()
-    try:
-        names = os.listdir(d) if d else []
-    except OSError:
-        return {}
-    composed = console_shape() == "setup"
-    out = {}
-    for n in names:
-        if composed:
-            m = _COMPOSED_FILE.match(n)
-            if m:
-                out.setdefault(m.group(1), set()).add(size_as_taken(m.group(2)))
-        else:
-            m = _PSF_FILE.match(n)
-            size = psf_size(os.path.join(d, n)) if m else ""
-            if size:
-                out.setdefault(m.group(1), set()).add(size)
-    return out
-
-
-def _size_key(size):
-    return tuple(int(p) for p in size.split("x")[::-1])
-
-
-def font_file():
-    """The file a chosen console font is written into on this Linux, per
-    console shape (vconsole.conf when there is none to name)."""
-    return {"setup": CONSOLE_SETUP, "rcconf": RCCONF}.get(console_shape(), VCONSOLE)
-
-
-def font_list():
-    """`spark font list`: what FACE SIZE may name here."""
-    if IS_MAC:
-        say("%s font list -- macOS: the monospace faces installed here, by PostScript name; the size is points" % MARK)
-        notes = {"Menlo-Regular": "the default: every Mac ships it"}
-        seen = 0
-        for face in MAC_MONO:
-            here = mac_font_installed(face)
-            if here or (here is None and face in MAC_MONO[:5]):
-                say("  %-28s %s" % (face, notes.get(face, "")))
-                seen += 1
-        if not seen:
-            say("  (Spotlight has no font index here: Menlo-Regular, Monaco and SFMono-Regular are always on a Mac)")
-        say("  any other: Font Book shows a font's PostScript name (select it, Cmd-I)")
-        return 0
-    fonts = console_fonts()
-    if not fonts:
-        say("%s font list -- no console font files under %s" % (MARK, consolefonts_dir() or " or ".join(CONSOLEFONTS_DIRS)))
-    else:
-        say("%s font list -- the console fonts in %s, as spark font takes them: FACE and WxH" % (MARK, consolefonts_dir()))
-        for face in sorted(fonts):
-            say("  %-24s %s" % (face, " ".join(sorted(fonts[face], key=_size_key))))
-        say("  spark font FACE SIZE sets one: it lands in %s" % font_file())
-    # a terminal emulator's face (a .ttf) is never one of these: the console
-    # takes .psf faces; the emulator's font is set in the emulator
-    say("  a terminal emulator's font is set in the emulator; spark font is the console")
-    return 0
-
-
-def size_as_taken(file_size):
-    """A composed font file's size the way spark font (console-setup's
-    FONTSIZE) spells it: the files say HxW, or the height alone for an
-    8-wide face -- 32x16 is taken as 16x32, 16 as 8x16."""
-    if "x" in file_size:
-        h, w = file_size.split("x", 1)
-        return "%sx%s" % (w, h)
-    return "8x%s" % file_size
-
-
-def cmd_font(args):
-    if args and args[0] in ("-h", "--help", "help"):
-        say(FONT_USAGE.rstrip())
-        return 0
-    cfg = config.load()
-    why = no_console_font()
-    if why:
-        # show forms answer; set forms refuse: nothing is written for a
-        # console spark does not manage here
-        say("%s font -- %s" % (MARK, why))
-        return 0 if not args or args[0] in ("status", "list") else 2
-    if not args or args[0] == "status":
-        if IS_MAC:
-            say("%s font -- Terminal.app profile: %s %s   (spark theme profile applies it)" % (MARK, cfg.font_face, cfg.font_size))
-        elif cfg.font_face:
-            say("%s font -- console: %s %s (%s)" % (MARK, cfg.font_face, cfg.font_size, font_file()))
-        else:
-            say("%s font -- console: not managed (SITE_FONT_FACE unset; %s keeps its font)" % (MARK, font_file()))
-        return 0
-    if args[0] == "list":
-        return font_list()
-    if args[0] == "none":
-        set_keys(SITE_FONT_FACE="", SITE_FONT_SIZE="")
-        say("the console keeps whatever font it has now")
-        return 0
-    if len(args) != 2:
-        say(FONT_USAGE.rstrip())
-        return 2
-    face, size = args
-    if IS_MAC:
-        if not re.match(r"^\d+(\.\d+)?$", size) or not 6 <= float(size) <= 72:
-            say("spark font: %s is not a size -- points on macOS, 6 to 72, e.g. 13" % size)
-            return 2
-        # refuse a face this Mac does not have (a console face such as VGA,
-        # a typo): Terminal.app would fall back to its own font in silence
-        if mac_font_installed(face) is False:
-            say("spark font: no font named %s is installed here -- spark font list shows the monospace ones" % face)
-            return 2
-    else:
-        if not re.match(r"^\d+x\d+$", size):
-            say("spark font: %s is not a size -- WxH on the Linux console, e.g. 16x32 (spark font list)" % size)
-            return 2
-        # refuse a face or size the font files do not hold, before anything
-        # is written; an unreadable fonts dir validates nothing
-        fonts = console_fonts()
-        if fonts and face not in fonts:
-            say("spark font: no console font named %s -- spark font list shows them" % face)
-            return 2
-        if fonts and size not in fonts[face]:
-            say("spark font: %s comes in %s, not %s -- spark font list" % (face, " ".join(sorted(fonts[face], key=_size_key)), size))
-            return 2
-    set_keys(SITE_FONT_FACE=face, SITE_FONT_SIZE=size)
-    if IS_MAC:
-        if os.environ.get("SPARK_NO_APPLY"):
-            say("ok     font         %s %s written (SPARK_NO_APPLY: no profile)" % (face, size))
-            return 0
-        from . import theme
-        return theme.profile(config.load(), False)
-    return apply(["console"])
-
-
 # ------------------------------------------------------------------ quiet
-QUIET_USAGE = """%s quiet -- what spark and the machine keep silent
+QUIET_USAGE = """%s quiet -- what spark keeps silent
 
-  spark quiet                   the four states: start, login, boot, audio
-  spark quiet start [on|off]    spark's own noise, both OSes: no login banner,
-                                one-line serve and forge, one-line bare spark
-  spark quiet login [on|off]    Linux: no distro notice, no kernel line
-  spark quiet boot [on|off]     Linux: straight past the boot menu, a silent
-                                kernel line (GRUB, or an Arch kernel image)
-  spark quiet audio [on|off]    both OSes: no sound from spark (the audio row
-                                says which player it would use)
+  spark quiet                   the two states: start, audio
+  spark quiet start [on|off]    spark's own noise: no login banner, one-line
+                                serve and forge, one-line bare spark
+  spark quiet audio [on|off]    no sound from spark (the audio row says which
+                                player it would use)
 """ % MARK
-QUIET_KEYS = {"start": "SITE_QUIET_START", "login": "SITE_QUIET_LOGIN", "boot": "SITE_QUIET_BOOT",
-              "audio": "SITE_QUIET_AUDIO"}
-MAC_NO_QUIET = "macOS: no motd, no GRUB"
+QUIET_KEYS = {"start": "SITE_QUIET_START", "audio": "SITE_QUIET_AUDIO"}
 
 
 def _quiet_state(cfg, sub):
-    return "on" if {"start": cfg.quiet_start, "login": cfg.quiet_login, "boot": cfg.quiet_boot,
-                    "audio": cfg.quiet_audio}[sub] else "off"
+    return "on" if {"start": cfg.quiet_start, "audio": cfg.quiet_audio}[sub] else "off"
 
 
 def cmd_quiet(args):
@@ -527,51 +108,25 @@ def cmd_quiet(args):
         return 0
     cfg = config.load()
     if not args or args[0] == "status":
-        start, audio = _quiet_state(cfg, "start"), _quiet_state(cfg, "audio")
-        if IS_MAC:
-            say("%s quiet -- start %s, audio %s (login, boot: macOS has no motd, no GRUB)" % (MARK, start, audio))
-        else:
-            say("%s quiet -- start %s, login %s, boot %s, audio %s" % (
-                MARK, start, _quiet_state(cfg, "login"), "n/a" if no_grub() else _quiet_state(cfg, "boot"), audio))
-            if no_grub():
-                say("boot is n/a: %s" % no_grub())
+        say("%s quiet -- start %s, audio %s" % (MARK, _quiet_state(cfg, "start"), _quiet_state(cfg, "audio")))
         return 0
     sub = args[0]
     if sub not in QUIET_KEYS or len(args) > 2 or (len(args) == 2 and args[1] not in ("on", "off")):
         say(QUIET_USAGE.rstrip())
         return 2
-    linux_only = sub in ("login", "boot")                  # start and audio are both OSes, core
-    no_boot = no_grub() if sub == "boot" else ""             # login (motd) is real on WSL and Arch; GRUB is not spark's there
     if len(args) == 1:                                     # show one state
-        if linux_only and IS_MAC:
-            say("%s quiet %s -- %s" % (MARK, sub, MAC_NO_QUIET))
-            return 0
-        if no_boot:
-            say("%s quiet %s -- %s" % (MARK, sub, no_boot))
-            return 0
         say("%s quiet %s -- %s" % (MARK, sub, _quiet_state(cfg, sub)))
         return 0
-    if linux_only and IS_MAC:                              # nothing to set there
-        say("%s quiet %s -- %s" % (MARK, sub, MAC_NO_QUIET))
-        return 2
-    if no_boot:
-        say("%s quiet %s -- %s" % (MARK, sub, no_boot))
-        return 2
+    # the key is the behavior: nothing on disk to converge, no bootstrap row
     set_keys(**{QUIET_KEYS[sub]: "yes" if args[1] == "on" else "no"})
     if sub == "audio":
-        # the key is the behavior: what spark plays reads it at start
         say("audio is %s" % ("quiet: spark plays no sound" if args[1] == "on" else "on: the sounds spark has play again"))
-        from . import check
-        check.refresh()
-        return 0
-    if sub == "start":
-        # the key is the behavior: nothing on disk to converge, no bootstrap row
+    else:
         say("start is %s" % ("quiet: no login banner, one line from serve, forge and bare spark"
                              if args[1] == "on" else "loud again: the banner and the full narration are back"))
-        from . import check
-        check.refresh()
-        return 0
-    return apply(["quiet-" + sub])
+    from . import check
+    check.refresh()
+    return 0
 
 
 # --------------------------------------------------------------- headless
@@ -978,4 +533,4 @@ def main(sub, args):
         return cmd_headless(args)
     if sub == "client":
         return cmd_client(args)
-    return cmd_font(args) if sub == "font" else cmd_quiet(args)
+    return cmd_quiet(args)

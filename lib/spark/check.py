@@ -223,136 +223,6 @@ def row_engine(ctx):
     return ok(" ".join(x for x in (name, flavour, "(%s)" % where if where else "") if x))
 
 
-def _console_font_row(ctx):
-    """The Linux half of the font row, by console shape: ok/fail against
-    SITE_FONT_FACE (console-setup's FONTFACE + FONTSIZE, or the FONT= of
-    vconsole.conf or rc.conf -- quotes stripped, a #FONT= line unset),
-    None when nothing is chosen there."""
-    from . import site
-    if IS_MAC or not ctx.cfg.font_face:
-        return None
-    want = "%s %s" % (ctx.cfg.font_face, ctx.cfg.font_size)
-    shape, cur = site.console_shape(), ""
-    try:
-        with open(site.font_file(), encoding="utf-8") as f:
-            kv = dict(l.strip().split("=", 1) for l in f if "=" in l and not l.startswith("#"))
-        if shape == "setup":
-            cur = "%s %s" % (kv.get("FONTFACE", "").strip('"'), kv.get("FONTSIZE", "").strip('"'))
-        else:
-            cur = kv.get("FONT", "").strip('"')
-    except (OSError, ValueError):
-        pass
-    if cur != (want if shape == "setup" else ctx.cfg.font_face):
-        return fail("console font is %s, site.env says %s (%s)" % (cur.strip() or "unset", want, site.font_file()),
-                    "./bootstrap.sh   (sudo)")
-    return ok("console %s (%s)" % (want, site.font_file()))
-
-
-@row("SOFTWARE")
-def row_font(ctx):
-    """The console font choice (SITE_FONT_FACE, Linux) and the macOS
-    Terminal face -- the machine's own; a terminal emulator's font is
-    set in the emulator. WSL 2 has no console: the font is Windows
-    Terminal's, the row says so and stops."""
-    from . import site
-    why = site.no_console_font()
-    if why and is_wsl():
-        return na(why)
-    console = na(why) if why and ctx.cfg.font_face else _console_font_row(ctx)
-    if IS_MAC:
-        # a face this Mac does not have makes Terminal.app fall back to its
-        # own font in silence (a console face such as VGA carried over);
-        # an installed one is the promise kept; no Spotlight index, no verdict
-        installed = site.mac_font_installed(ctx.cfg.font_face)
-        if installed is False:
-            return warn("SITE_FONT_FACE=%s is not installed here: Terminal.app falls back to its own font" % ctx.cfg.font_face,
-                        "spark font list; spark font FACE %s" % ctx.cfg.font_size)
-        if installed:
-            return ok("Terminal.app profile: %s %s" % (ctx.cfg.font_face, ctx.cfg.font_size))
-        return na("Terminal.app profile: %s %s (Spotlight has no font index: not verified)" % (ctx.cfg.font_face, ctx.cfg.font_size))
-    if console:
-        return console
-    if why:
-        return na(why)
-    return na("console not managed (spark font FACE SIZE; spark font list)")
-
-
-def _env_lines(path):
-    """KEY -> value from a KEY=value file, tolerant (a check row must judge
-    a broken file, not die on it); None when the file cannot be read."""
-    try:
-        with open(path, encoding="utf-8") as f:
-            lines = f.read().splitlines()
-    except OSError:
-        return None
-    out = {}
-    for line in lines:
-        if "=" in line and not line.lstrip().startswith("#"):
-            k, v = line.split("=", 1)
-            out[k.strip()] = v.strip()
-    return out
-
-
-THEME_KEYS = (["THEME_BG", "THEME_FG", "THEME_ACCENT", "THEME_MUTED"]
-              + ["THEME_ANSI_%d" % i for i in range(16)])
-
-
-def _vt_palette(sysfs):
-    """The kernel's current default VT palette as setvtrgb's three lines,
-    from /sys/module/vt/parameters/default_{red,grn,blu}; None when
-    unreadable (no VT here)."""
-    lines = []
-    for ch in ("red", "grn", "blu"):
-        try:
-            with open(os.path.join(sysfs, "default_" + ch), encoding="utf-8") as f:
-                lines.append(f.read().strip())
-        except OSError:
-            return None
-    return lines
-
-
-@row("SOFTWARE")
-def row_theme(ctx):
-    """The chosen palette actually applied: ~/.config/spark/theme.env (the
-    palette the FORGE page and any renderer read) matches the palette's
-    file -- yours under ~/.config/spark/themes/ first, else
-    themes/<SITE_THEME>.env -- key for key, and on Linux console-colors (the
-    VT palette the rc hook applies) is in place. A palette is only PAINTED
-    by `spark theme NAME`: a key naming one nothing has applied yet is
-    `na`, not a fault."""
-    from . import CONFIG_DIR
-    name = ctx.cfg.theme
-    if name == "none":
-        return na("none -- the terminal keeps its own colours (spark theme NAME)")
-    from . import config
-    path = config.theme_path(name, ctx.repo)
-    want = _env_lines(path) if path else None
-    if want is None:
-        return fail("SITE_THEME=%s: no %s.env in themes/ or ~/.config/spark/themes/" % (name, name), "spark theme")
-    have = _env_lines(os.path.join(CONFIG_DIR, "theme.env"))
-    if have is None:
-        return na("%s chosen, not painted (spark theme %s)" % (name, name))
-    stale = [k for k in THEME_KEYS if have.get(k) != want.get(k)]
-    if stale:
-        return fail("%s -- theme.env is stale: %s differ%s" % (name, " ".join(stale[:3]), "s" if len(stale) == 1 else ""),
-                    "spark theme %s" % name)
-    if not IS_MAC and not os.path.isfile(os.path.join(CONFIG_DIR, "console-colors")):
-        return fail("%s -- theme.env current, but no console-colors for the VT" % name, "spark theme %s" % name)
-    if not IS_MAC and not is_wsl():
-        # the kernel's default palette (sysfs, world-readable) is what the
-        # spark-console unit set at boot -- the login screen and every VT
-        live = _vt_palette(os.environ.get("SPARK_SYSFS_VT", "/sys/module/vt/parameters"))
-        try:
-            with open(os.path.join(CONFIG_DIR, "console-colors.rgb"), encoding="utf-8") as f:
-                mine = [line.strip() for line in f.read().splitlines()[:3]]
-        except OSError:
-            mine = None
-        if live and mine and live != mine:
-            return warn("%s -- theme.env current, but the console's boot palette is another" % name,
-                        "./bootstrap.sh   (the vt-palette row: setvtrgb at boot, sudo)")
-    return ok("%s -- theme.env current" % name)
-
-
 @row("SOFTWARE")
 def row_git(ctx):
     g = ["git", "-C", ctx.repo]
@@ -713,7 +583,7 @@ def row_failure(ctx):
 @row("CAPABILITY")
 def row_completion(ctx):
     """TAB completion: the two files install.sh links, each hook sourcing
-    its own. Static verbs always; theme and model names offline, from the
+    its own. Static verbs always; model names offline, from the
     repository the spark symlink points into. Core -- the hooks are core."""
     d = os.path.join(ctx.home, ".config", "spark")
     missing = []
@@ -730,7 +600,7 @@ def row_completion(ctx):
             missing.append("hook." + sh)
     if missing:
         return warn("missing: %s" % ", ".join(missing), "sh install.sh")
-    return ok("bash and zsh: the verbs, their words, theme and model names")
+    return ok("bash and zsh: the verbs, their words, model names")
 
 
 @row("CAPABILITY")
@@ -962,82 +832,6 @@ def row_audio(ctx):
     if player:
         return ok("%s -- sounds play (spark quiet audio on silences them)" % player)
     return warn("no player on PATH: the terminal bell at most", "%s (aplay), or spark quiet audio on" % packages.install_line(["alsa-utils"]))
-
-
-@row("SOFTWARE", fixture=False, reason="reads /etc")
-def row_quiet(ctx):
-    # `start` is a config echo (the key IS the behavior): never fail-worthy
-    start = "start %s" % ("on" if ctx.cfg.quiet_start else "off")
-    if IS_MAC:
-        return na("%s; macOS: no motd, no GRUB" % start)
-    parts, bad, pending = [start], [], False
-    if ctx.cfg.quiet_login:
-        try:
-            with open("/etc/issue", encoding="utf-8", errors="replace") as f:
-                issue = f.read().strip()
-        except OSError:
-            issue = ""
-        quiet = (not os.path.getsize("/etc/motd") if os.path.exists("/etc/motd") else True) \
-            and not os.access("/etc/update-motd.d/10-uname", os.X_OK) \
-            and issue in ("", "\033[?25h")
-        parts.append("login quiet" if quiet else "login LOUD")
-        if not quiet:
-            bad.append("login")
-    else:
-        parts.append("login loud")
-    from . import site
-    if ctx.cfg.quiet_boot and site.no_grub():
-        parts.append("boot n/a (%s)" % site.no_grub())
-    elif ctx.cfg.quiet_boot and site.boot_shape() == "uki":
-        # the promise is spark's cmdline.d drop-in (the words) and no
-        # splash left in a preset; the running kernel's line is the LIVE
-        # proof, and a machine not yet rebooted is a warn, not a fault
-        try:
-            with open(site.CMDLINE_DROPIN, encoding="utf-8", errors="replace") as f:
-                quiet = f.read().strip() == site.QUIET_WORDS
-        except OSError:
-            quiet = False
-        quiet = quiet and not site.splash_live()
-        if not quiet:
-            parts.append("boot LOUD")
-            bad.append("boot")
-        else:
-            try:
-                with open(os.environ.get("SPARK_PROC_CMDLINE", "/proc/cmdline"), encoding="utf-8", errors="replace") as f:
-                    live = "loglevel=3" in f.read()
-            except OSError:
-                live = True
-            parts.append("boot quiet" if live else "boot quiet after a reboot")
-            pending = not live
-    elif ctx.cfg.quiet_boot:
-        # the promise is spark's GRUB drop-in (menu hidden + silent kernel
-        # line), proven against the generated grub.cfg when it is readable
-        # without root (newer Debians keep it 0600 -- then the drop-in's
-        # presence is the best a user process can check; bootstrap's
-        # action path verifies as root at write time)
-        quiet = (os.path.isfile("/etc/default/grub.d/zz-spark-quiet.cfg")
-                 or (site.distro() == "void" and site.grub_marked() == site.GRUB_WANT
-                     and site.rc_marked() == site.RC_WANT
-                     and site.getty_marked() == site.GETTY_WANT))
-        cfg_path = "/boot/grub/grub.cfg"
-        if quiet and os.access(cfg_path, os.R_OK):
-            try:
-                with open(cfg_path, encoding="utf-8", errors="replace") as f:
-                    quiet = "loglevel=3" in f.read()
-            except OSError:
-                pass
-        if not os.path.isfile("/etc/default/grub"):
-            quiet = True  # no GRUB here: nothing promised
-        parts.append("boot quiet" if quiet else "boot LOUD")
-        if not quiet:
-            bad.append("boot")
-    else:
-        parts.append("boot loud")
-    if bad:
-        return fail(", ".join(parts) + " -- site.env says otherwise", "./bootstrap.sh   (sudo)")
-    if pending:
-        return warn(", ".join(parts), "sudo systemctl reboot   (the image carries the quiet line; the running kernel does not)")
-    return ok(", ".join(parts))
 
 
 @row("CAPABILITY")
@@ -1593,18 +1387,16 @@ def row_cost(ctx):
 # ------------------------------------------------------------------- runner
 # the rows WSL 2 answers differently (na or a WSL 2 note, never a fault):
 # the selftest's fourth pass, on Linux, proves each says so
-WSL_ROWS = ("font", "quiet", "gpu")
-# the rows Arch answers differently (na or an Arch note on the half it
-# lacks -- the kernel line without a UKI -- never a fault): the selftest's
-# fifth pass, on Linux, proves each says so, that the font row is real
-# through vconsole.conf and that the packages row answers through pacman
-ARCH_ROWS = ("quiet",)
-# the rows Void answers differently (na or a Void note on the half it
-# lacks -- no GRUB -- never a fault): the selftest's
-# sixth pass, on Linux, proves each says so, that the font row is real
-# through rc.conf, that the packages row answers through xbps and the
-# services row through sv
-VOID_ROWS = ("quiet",)
+WSL_ROWS = ("gpu",)
+# the rows Arch answers differently (na or an Arch note, never a fault):
+# none today. The selftest's fifth pass, on Linux, proves each says so
+# and that the packages row answers through pacman
+ARCH_ROWS = ()
+# the rows Void answers differently (na or a Void note, never a fault):
+# none today. The selftest's sixth pass, on Linux, proves each says so,
+# that the packages row answers through xbps and the services row
+# through sv
+VOID_ROWS = ()
 # a client's rows: nothing runs here (SITE_AI_MODEL=none + SITE_PEER_AI_URL),
 # so the engine, the units, their snapshot, the local AI, its two servers and
 # a second model of its own are na before they look; the peer row is where a
@@ -1868,17 +1660,6 @@ def make_fixture(root, good, stub_url="", real_spark=False):
                 'MODEL_QWEN3_30B_A3B_LICENSE="Apache-2.0 https://models.invalid"\n'
                 'MODEL_QWEN3_30B_A3B_TESTED="line"\n'
                 % (fixture_sha, fixture_sha, zero_sha))
-    # a palette for the theme row: SITE_THEME=fixture below; the good
-    # machine's theme.env matches it, the bad one's is stale
-    os.makedirs(os.path.join(repo, "themes"))
-    fixture_theme = ["%s=#%06x" % (k, 0x101010 + n) for n, k in enumerate(
-        ["THEME_BG", "THEME_FG", "THEME_ACCENT", "THEME_MUTED"] + ["THEME_ANSI_%d" % i for i in range(16)])]
-    # the good machine keeps the palette as its own (~/.config/spark/themes/),
-    # the bad one in the repository: the row must find it in either place
-    pal_dir = os.path.join(home, ".config", "spark", "themes") if good else os.path.join(repo, "themes")
-    os.makedirs(pal_dir, exist_ok=True)
-    with open(os.path.join(pal_dir, "fixture.env"), "w") as f:
-        f.write("\n".join(fixture_theme) + "\n")
     # a throwaway release key: its public half is the tree's allowed-signers,
     # and the repository's own config signs any `git tag -s` with it -- a
     # chaos scenario's tags, so `spark update` (which moves to a signed tag
@@ -1920,11 +1701,6 @@ def make_fixture(root, good, stub_url="", real_spark=False):
     os.makedirs(os.path.join(state, "cache"))
     with open(os.path.join(home, ".config", "spark", "site.env"), "w") as f:
         f.write("SITE_PEER_AI_URL=%s\n" % (stub_url if good else "http://127.0.0.1:9"))
-        f.write("SITE_THEME=fixture\n")     # the theme row: applied (good) or stale (bad)
-        if IS_MAC:                      # a face every Mac ships: the font row judges an installed face, not Spotlight's index
-            f.write("SITE_FONT_FACE=Menlo-Regular\nSITE_FONT_SIZE=13\n")
-        else:                           # the console font: console-setup's file (below) agrees (good) or not (bad)
-            f.write("SITE_FONT_FACE=Terminus\nSITE_FONT_SIZE=16x32\n")
         if good:
             f.write("SITE_EMBER_MODEL=auto\n")     # the default is none; auto fits an ember beside the spark row
         else:
@@ -1962,38 +1738,12 @@ def make_fixture(root, good, stub_url="", real_spark=False):
         with open(os.path.join(home, ".local", "share", "spark", "models", mf), "w") as f:
             f.write("x" * 4096)
         time.sleep(0.01)
-    # the theme: the good machine's theme.env matches themes/fixture.env
-    # and console-colors is in place; the bad one's theme.env is stale
     cfgd = os.path.join(home, ".config", "spark")
-    with open(os.path.join(cfgd, "theme.env"), "w") as f:
-        if good:
-            f.write("\n".join(fixture_theme) + "\n")
-        else:
-            f.write("\n".join(["THEME_BG=#000000"] + fixture_theme[1:]) + "\n")
-    with open(os.path.join(cfgd, "console-colors"), "w") as f:
-        f.write("".join("\033]P%x101010" % i for i in range(16)) + "\n")
-    with open(os.path.join(cfgd, "console-colors.rgb"), "w") as f:
-        f.write(("16," * 15 + "16\n") * 3)
-    # the console font files, pinned: console-setup's (the good machine's
-    # face and size, the bad one's another), vconsole.conf's for the Arch
-    # pass (the same face, FONT= alone) and rc.conf's for the Void pass
-    # (FONT= quoted, as Void ships it, under a commented KEYMAP); the shape
-    # is which exists. The runit dirs beside them: runit/ says the init,
-    # service/ says it is booted -- every pass but the sixth points
-    # SPARK_ETC_RUNIT at a dir that is not there and stays systemd
-    with open(os.path.join(root, "console-setup"), "w") as f:
-        f.write('CHARMAP="UTF-8"\nFONTFACE="%s"\nFONTSIZE="16x32"\n' % ("Terminus" if good else "VGA"))
-    with open(os.path.join(root, "vconsole.conf"), "w") as f:
-        f.write("KEYMAP=us\nFONT=%s\n" % ("Terminus" if good else "default8x16"))
-    with open(os.path.join(root, "rc.conf"), "w") as f:
-        f.write('#KEYMAP="us"\nFONT="%s"\n' % ("Terminus" if good else "default8x16"))
+    # the runit dirs: runit/ says the init, service/ says it is booted --
+    # every pass but the sixth points SPARK_ETC_RUNIT at a dir that is not
+    # there and stays systemd
     os.makedirs(os.path.join(root, "runit"))
     os.makedirs(os.path.join(root, "service"))
-    # the live kernel palette the theme row compares with (sysfs, pinned)
-    os.makedirs(os.path.join(root, "vt"))
-    for ch in ("red", "grn", "blu"):
-        with open(os.path.join(root, "vt", "default_" + ch), "w") as f:
-            f.write("16," * 15 + "16\n")
     # soul and memory: the user's files, private (good) or world-readable and
     # the old key still set (bad); one thread, 0600 or not
     with open(os.path.join(cfgd, "soul"), "w") as f:
@@ -2180,12 +1930,9 @@ def make_fixture(root, good, stub_url="", real_spark=False):
             "PATH": os.path.join(home, ".local", "bin") + ":" + bin_ + ":" + os.environ.get("PATH", ""),
             "SPARK_REPO": repo, "SPARK_ENGINE_DIR": engine if good else os.path.join(root, "nope"),
             "SPARK_API_KEY": "stub-token", "SPARK_SERVICE": "none", "TMUX": "", "SPARK_SYSFS_DRM": os.path.join(root, "drm"),
-            "SPARK_PROC_VERSION": os.path.join(root, "version"), "SPARK_SYSFS_VT": os.path.join(root, "vt"),
+            "SPARK_PROC_VERSION": os.path.join(root, "version"),
             "SPARK_OS_RELEASE": os.path.join(root, "os-release"),
-            "SPARK_ETC_CONSOLE_SETUP": os.path.join(root, "console-setup"), "SPARK_ETC_VCONSOLE": os.path.join(root, "vconsole.conf"),
-            "SPARK_ETC_RCCONF": os.path.join(root, "rc.conf"), "SPARK_ETC_RUNIT": os.path.join(root, "no-runit"),
-            "SPARK_VAR_SERVICE": os.path.join(root, "service"),
-            "SPARK_MAC_FONTS": "Menlo-Regular" if good else "",     # macOS: the font row's installed faces, pinned
+            "SPARK_ETC_RUNIT": os.path.join(root, "no-runit"), "SPARK_VAR_SERVICE": os.path.join(root, "service"),
             "SPARK_MEM_TOTAL_GB": "16" if good else "8", "SHELL": "/bin/zsh" if IS_MAC else "/bin/bash",
             "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8"}
 
@@ -2256,9 +2003,9 @@ def selftest():
     row must be ok in the good one and not ok in the bad one. A third
     pass, the good fixture as a client of the stub, must make every
     client row na; a fourth, on Linux, the good fixture under WSL 2:
-    every WSL row says so; a fifth under ID=arch likewise; a sixth under
-    ID=void, where the services row answers through sv and the font row
-    through rc.conf."""
+    every WSL row says so; a fifth under ID=arch, where the packages row
+    answers through pacman; a sixth under ID=void, where the packages row
+    answers through xbps and the services row through sv."""
     base = {k: v for k, v in os.environ.items()
             if not k.startswith(("GIT_", "SPARK_", "XDG_", "SITE_"))}
     results = {}
@@ -2299,7 +2046,7 @@ def selftest():
             if len(parts) == 5:
                 results["client"][parts[2]] = (parts[1], parts[3])
         # the fourth pass, Linux only: the good fixture under WSL 2 (a kernel
-        # line naming microsoft) -- font, quiet and gpu say so, never fail
+        # line naming microsoft) -- gpu says so, never fails
         results["wsl"] = {}
         if not IS_MAC:
             root = os.path.join(tmp, "wsl")
@@ -2308,7 +2055,6 @@ def selftest():
             env.update(make_fixture(root, True, stub_url))
             with open(os.path.join(root, "version"), "w") as f:
                 f.write("Linux version 6.6.87.2-microsoft-standard-WSL2 (root@fixture) #1 SMP\n")
-            env["SITE_QUIET_BOOT"] = "yes"                          # the boot half is what WSL lacks
             env["SPARK_SYSFS_DRM"] = os.path.join(root, "nodrm")    # no DRM card: WSL shows /dev/dxg
             p = subprocess.run([sys.executable, os.path.join(REPO, "bin", "spark"), "check", "--porcelain", "--fresh"],
                                env=env, capture_output=True, text=True, timeout=180)
@@ -2317,9 +2063,7 @@ def selftest():
                 if len(parts) == 5:
                     results["wsl"][parts[2]] = (parts[1], parts[3])
         # the fifth pass, Linux only: the good fixture as Arch (ID=arch in
-        # os-release, a pacman stub, vconsole.conf and no console-setup) --
-        # quiet says so on the half Arch lacks, never fails; the font row is
-        # ok through vconsole.conf; the packages row answers through pacman
+        # os-release, a pacman stub) -- the packages row answers through pacman
         results["arch"] = {}
         if not IS_MAC:
             root = os.path.join(tmp, "arch")
@@ -2328,8 +2072,6 @@ def selftest():
             env.update(make_fixture(root, True, stub_url))
             with open(os.path.join(root, "os-release"), "w") as f:
                 f.write('ID=arch\nPRETTY_NAME="Arch Linux"\n')
-            env["SITE_QUIET_BOOT"] = "yes"                          # the boot half Arch leaves alone (no UKI in the fixture)
-            env["SPARK_ETC_CONSOLE_SETUP"] = os.path.join(root, "none")   # the vconsole shape: FONT= in vconsole.conf
             p = subprocess.run([sys.executable, os.path.join(REPO, "bin", "spark"), "check", "--porcelain", "--fresh"],
                                env=env, capture_output=True, text=True, timeout=180)
             for line in p.stdout.splitlines():
@@ -2338,10 +2080,8 @@ def selftest():
                     results["arch"][parts[2]] = (parts[1], parts[3])
         # the sixth pass, Linux only: the good fixture as Void (ID="void" in
         # os-release, xbps and sv stubs, /etc/runit and /var/service dirs,
-        # rc.conf with neither console-setup nor vconsole.conf, spark-check's
-        # service dir present without a `down` file, no /etc/default/grub) --
-        # quiet says so on the half that Void lacks, never fails; the font row is ok through rc.conf;
-        # the packages row answers through xbps and the services row through sv
+        # spark-check's service dir present without a `down` file) -- the
+        # packages row answers through xbps and the services row through sv
         results["void"] = {}
         if not IS_MAC:
             root = os.path.join(tmp, "void")
@@ -2350,10 +2090,6 @@ def selftest():
             env.update(make_fixture(root, True, stub_url))
             with open(os.path.join(root, "os-release"), "w") as f:
                 f.write('ID="void"\nPRETTY_NAME="Void Linux"\n')
-            env["SITE_QUIET_BOOT"] = "yes"                          # the boot half a Void without GRUB lacks
-            env["SPARK_ETC_DEFAULT_GRUB"] = os.path.join(root, "none")   # a runner's own GRUB is not this Void's
-            env["SPARK_ETC_CONSOLE_SETUP"] = os.path.join(root, "none")
-            env["SPARK_ETC_VCONSOLE"] = os.path.join(root, "none")    # the rcconf shape: FONT= in rc.conf beside /etc/runit
             env["SPARK_ETC_RUNIT"] = os.path.join(root, "runit")
             env["SPARK_VAR_SERVICE"] = os.path.join(root, "service")
             os.makedirs(os.path.join(root, "home", ".config", "spark", "sv", "spark-check"))   # supervised, no `down`
@@ -2399,25 +2135,21 @@ def selftest():
         off = [n for n in ARCH_ROWS
                if results["arch"].get(n, ("missing", ""))[0] not in (NA, OK) or "Arch" not in results["arch"].get(n, ("", ""))[1]]
         pk = results["arch"].get("packages", ("missing", ""))[0]
-        font = results["arch"].get("font", ("missing", ""))
-        font_ok = font[0] == OK and "vconsole.conf" in font[1]
-        say("  %s arch: %d rows say Arch, packages %s via pacman, font %s via vconsole.conf%s"
-            % (GLYPH[OK] if not off and pk == OK and font_ok else GLYPH[FAIL], len(ARCH_ROWS) - len(off), pk, font[0],
+        say("  %s arch: %d rows say Arch, packages %s via pacman%s"
+            % (GLYPH[OK] if not off and pk == OK else GLYPH[FAIL], len(ARCH_ROWS) - len(off), pk,
                "" if not off else "   not so: " + " ".join(off)))
-        bad += bool(off) or pk != OK or not font_ok
+        bad += bool(off) or pk != OK
     if IS_MAC:
         say("  %s void: skipped on macOS (a Linux gate proves it)" % GLYPH[NA])
     else:
         off = [n for n in VOID_ROWS
                if results["void"].get(n, ("missing", ""))[0] not in (NA, OK) or "Void" not in results["void"].get(n, ("", ""))[1]]
         pk = results["void"].get("packages", ("missing", ""))[0]
-        font = results["void"].get("font", ("missing", ""))
-        font_ok = font[0] == OK and "rc.conf" in font[1]
         svc = results["void"].get("services", ("missing", ""))[0]
-        say("  %s void: %d rows say Void, packages %s via xbps, font %s via rc.conf, services %s via sv%s"
-            % (GLYPH[OK] if not off and pk == OK and font_ok and svc == OK else GLYPH[FAIL], len(VOID_ROWS) - len(off), pk, font[0], svc,
+        say("  %s void: %d rows say Void, packages %s via xbps, services %s via sv%s"
+            % (GLYPH[OK] if not off and pk == OK and svc == OK else GLYPH[FAIL], len(VOID_ROWS) - len(off), pk, svc,
                "" if not off else "   not so: " + " ".join(off)))
-        bad += bool(off) or pk != OK or not font_ok or svc != OK
+        bad += bool(off) or pk != OK or svc != OK
     say("  %d row%s failed to flip" % (bad, "" if bad == 1 else "s") if bad else "  every fixture-testable row flips")
     return 1 if bad else 0
 

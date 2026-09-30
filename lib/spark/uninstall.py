@@ -1,7 +1,8 @@
 # spark.uninstall -- `spark uninstall`: take spark off this machine.
 #
-# Everything spark made goes: the units, the console palette, the rc
-# line, the engine and the models, the state, the links, the clone.
+# Everything spark made goes: the units, the look an older spark
+# painted (handback.py, the one undo), the rc line, the engine and the
+# models, the state, the links, the clone.
 # What is yours stays -- the soul and its personality, the memory, the
 # sealed users' stores (and the account keys that open them), your
 # models.env, your themes, privacy-terms -- unless --purge. The packages
@@ -9,23 +10,22 @@
 # shape), then the typed word `yes` (spark do's danger shape); --dry-run
 # shows only.
 #
-# Order matters (the traps): the one bootstrap pass -- headless and quiet
-# undone through their own rows first, so bootstrap
-# does not skip them -- runs BEFORE anything is removed; nothing calls
-# bootstrap or check.refresh after that (each would put things back).
+# Order matters (the traps): the one bootstrap pass -- headless undone
+# through its own rows first, so bootstrap does not skip them -- runs
+# BEFORE anything is removed; nothing calls bootstrap or check.refresh
+# after that (each would put things back).
 # Root steps try sudo and become a `todo` row naming the command when it
 # refuses; the clone goes last, only when it is the default clone and
 # clean.
 
-import glob
 import os
 import re
 import shutil
-import subprocess
 import sys
 
 from . import (BIN_DIR, CONFIG_DIR, DATA_DIR, FORGE_PID, FORGE_URL_FILE, HOME, IS_MAC, MARK, REPO, STATE_DIR,
                VAR_SERVICE, config, init_shape, is_wsl, run, say)
+from . import handback
 from . import packages as pkg
 
 USAGE = """%s uninstall -- remove spark from this machine: shows first, then asks yes
@@ -55,43 +55,18 @@ SV_UNITS = ("forge", "serve", "check")            # runit: ~/.config/spark/sv/sp
 ETC_SV = os.environ.get("SPARK_ETC_SV", "/etc/sv")    # runit's service definitions (bootstrap's seam too)
 SV_USER = re.compile(r"^[a-z_][a-z0-9_-]*$")      # a user name that may ride in a root path (bootstrap's rule)
 SV_MARK = "rendered by spark bootstrap.sh"        # what marks /etc/sv/runsvdir-USER/run as spark's
-CONSOLE_UNIT = "/etc/systemd/system/spark-console.service"
 RC_CANDIDATES = (".bashrc", ".zshrc", ".bash_profile", ".zprofile")
 
 
-class Ctx(object):
+class Ctx(handback.Ctx):
+    """handback's row and root (one shape for both), plus the plan's own."""
+
     def __init__(self, dry, purge, packages):
-        self.dry, self.purge, self.packages = dry, purge, packages
+        super(Ctx, self).__init__(dry)
+        self.purge, self.packages = purge, packages
         self.cfg = config.load()
-        self.todo = []          # (what, the manual line)
         self.kept = []          # paths that stayed on purpose
         self.freed = 0          # bytes the data dir held
-
-    def row(self, status, what, detail=""):
-        if self.dry and status == "ok":
-            status = "would"
-        say("%-6s %-12s %s" % (status, what, detail))
-        if status == "todo":
-            self.todo.append((what, detail))
-
-    def root(self, what, cmd, done, manual=None, timeout=120):
-        """Run cmd as root (sudo): a `would` row when dry, `ok` when it ran,
-        `todo` with the manual line when sudo refused or is absent."""
-        manual = manual or "sudo " + " ".join(cmd)
-        if self.dry:
-            self.row("would", what, done + " (sudo)")
-            return False
-        if shutil.which("sudo"):
-            argv = ["sudo"] + ([] if sys.stdin.isatty() else ["-n"]) + cmd
-            try:
-                rc = subprocess.run(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=timeout).returncode
-            except (OSError, subprocess.TimeoutExpired):
-                rc = 1
-            if rc == 0:
-                self.row("ok", what, done)
-                return True
-        self.row("todo", what, manual)
-        return False
 
     def remove(self, what, path, detail=None):
         """Remove a file, a link or a tree the user's way (no root)."""
@@ -131,36 +106,27 @@ def _rmdir_empty(path):
 
 # ---------------------------------------------------------------- the steps
 def step_bootstrap_undo(ctx):
-    """The one bootstrap pass: headless and quiet undone through their
-    own rows, keys flipped first. Before anything is removed."""
+    """The one bootstrap pass: headless undone through its own rows, the
+    key flipped first. Before anything is removed."""
     from . import site
-    keys = {}
-    if ctx.cfg.headless:
-        keys["SITE_HEADLESS"] = "no"
-    if ctx.cfg.quiet_login:
-        keys["SITE_QUIET_LOGIN"] = "no"
-    if ctx.cfg.quiet_boot:
-        keys["SITE_QUIET_BOOT"] = "no"
-    if not keys:
-        ctx.row("skip", "undo", "headless and quiet were never on")
+    if not ctx.cfg.headless:
+        ctx.row("skip", "undo", "headless was never on")
         return
     if ctx.dry:
-        ctx.row("would", "undo", "set %s to no and run bootstrap once (sudo for sleep, lid, motd, GRUB)"
-                % ", ".join(sorted(keys)))
+        ctx.row("would", "undo", "set SITE_HEADLESS to no and run bootstrap once (sudo for sleep and the lid)")
         return
-    site.set_keys(_quiet=True, **keys)
+    site.set_keys(_quiet=True, SITE_HEADLESS="no")
     os.environ["SPARK_HEADLESS_UNDO"] = "1"
-    rc = site.apply(["quiet-login", "quiet-boot", "sleep", "lid", "daemons", r"spark\.(serve|forge|check)"], stream=True)
+    rc = site.apply(["handback", "sleep", "lid", "daemons", r"spark\.(serve|forge|check)"], stream=True)
     if rc == 0:
-        ctx.row("ok", "undo", "headless and quiet off through bootstrap")
+        ctx.row("ok", "undo", "headless off through bootstrap")
         return
     # The undo is the one root step that runs bootstrap rather than a
-    # command of its own -- it is bootstrap that knows how to unmask sleep,
-    # drop the lid file, put the motd and GRUB back. So the remedy has to
-    # be "run ./bootstrap.sh", and the clone has to still be there to run:
-    # step_clone reads this.
+    # command of its own -- it is bootstrap that knows how to unmask sleep
+    # and drop the lid file. So the remedy has to be "run ./bootstrap.sh",
+    # and the clone has to still be there to run: step_clone reads this.
     ctx.undo_pending = True
-    ctx.row("todo", "undo", "bootstrap.sh could not finish (sudo): sleep, lid, motd and GRUB "
+    ctx.row("todo", "undo", "bootstrap.sh could not finish (sudo): sleep and the lid "
                             "are still spark's -- ./bootstrap.sh in the clone undoes them")
 
 
@@ -343,41 +309,18 @@ def step_rc_lines(ctx):
             ctx.row("ok", "rc", "%s: the spark line removed" % _tilde(path))
 
 
-def step_console(ctx):
-    """Linux: the VT palette back to VGA (this console, the kernel's
-    defaults, the boot unit gone), the console font back when the original
-    was kept, the motd/issue originals cleaned."""
-    if IS_MAC or is_wsl():
-        return
-    from . import theme
-    cc = os.path.join(CONFIG_DIR, "console-colors")
-    painted = os.path.exists(cc) or os.path.exists(CONSOLE_UNIT)
-    if painted:
-        if not ctx.dry and os.environ.get("TERM") == "linux" and sys.stdout.isatty():
-            sys.stdout.write(theme.vt_escapes(theme.VGA) + "\033[2J\033[H")
-            sys.stdout.flush()
-        if shutil.which("setvtrgb"):
-            ctx.root("palette", ["setvtrgb", "vga"], "the kernel's default palette is VGA again")
-    if os.path.exists(CONSOLE_UNIT):
-        ctx.root("palette", ["systemctl", "disable", "--now", "spark-console.service"], "spark-console.service disabled")
-        ctx.root("palette", ["rm", "-f", CONSOLE_UNIT], "%s removed" % CONSOLE_UNIT)
-        ctx.root("palette", ["systemctl", "daemon-reload"], "systemd reloaded")
-    from . import site
-    shape = site.console_shape()
-    path, orig = site.font_file(), site.font_file() + ".spark-orig"
-    # the redraw per shape: console-setup's own, systemd-vconsole-setup's
-    # unit, or a bare setfont (the kernel's default face) on rc.conf
-    redraw = {"setup": "setupcon --force", "rcconf": "setfont"}.get(shape, "systemctl restart systemd-vconsole-setup")
-    if shape and os.path.exists(orig):
-        ctx.root("console", ["sh", "-c", "cp %s %s && rm -f %s && (%s 2>/dev/null || true)" % (orig, path, orig, redraw)],
-                 "the console font is back as it was (%s)" % orig,
-                 "sudo cp %s %s; sudo %s" % (orig, path, redraw))
-    elif ctx.cfg.font_face and shape == "setup":
-        ctx.row("todo", "console", "the font stays %s %s (no original kept before v1.12): sudo dpkg-reconfigure console-setup"
-                % (ctx.cfg.font_face, ctx.cfg.font_size))
-    origs = [p for p in ("/etc/motd.orig", "/etc/issue.orig") if os.path.exists(p)]
-    if origs:
-        ctx.root("quiet", ["rm", "-f"] + origs, "%s removed (restored by the undo pass)" % " ".join(origs))
+def step_handback(ctx):
+    """The look an older spark painted: handback.walk, the one undo
+    bootstrap's handback row runs too (the palette, the console font,
+    motd and issue, a quiet boot, Terminal.app's spark profiles). A font
+    set before v1.12 kept no original: said, never guessed."""
+    handback.walk(ctx)
+    face = ctx.cfg.get("SITE_FONT_FACE", "")
+    setup = handback.CONSOLE_SETUP
+    if (face and not IS_MAC and not os.path.exists(setup + ".spark-orig")
+            and re.search(r'^FONTFACE="?%s"?$' % re.escape(face), handback._read(setup) or "", re.M)):
+        ctx.row("todo", "console", "the font stays %s (no original kept before v1.12): sudo dpkg-reconfigure console-setup"
+                % face)
 
 
 def _made():
@@ -418,23 +361,6 @@ def step_headless_leftovers(ctx):
                 else "sudo hostnamectl set-hostname NAME" if shutil.which("hostnamectl")
                 else "echo NAME | sudo tee /etc/hostname; sudo sysctl -qw kernel.hostname=NAME")
         ctx.row("todo", "hostname", "spark set it to %s; the name before is not recorded: %s" % (cfg.name, line))
-
-
-def step_terminal(ctx):
-    if not IS_MAC:
-        return
-    from . import theme
-    files = glob.glob(os.path.join(CONFIG_DIR, "spark-*.terminal"))
-    if ctx.dry:
-        if files or theme.spark_profiles():
-            ctx.row("would", "terminal", "the spark-* profiles leave Terminal.app's preferences; open windows keep their look until closed")
-        return
-    gone = theme.remove_profiles()
-    for f in files:
-        os.remove(f)
-    if gone or files:
-        ctx.row("ok", "terminal", "%s profile%s removed from Terminal.app; open windows keep their look until closed"
-                % (len(gone), "" if len(gone) == 1 else "s"))
 
 
 def step_bin(ctx):
@@ -565,8 +491,8 @@ def step_clone(ctx):
     ctx.row("ok", "clone", "%s removed" % _tilde(REPO))
 
 
-STEPS = (step_bootstrap_undo, step_services, step_look, step_rc_lines, step_console, step_headless_leftovers,
-         step_terminal, step_bin, step_data, step_packages, step_state_config, step_clone)
+STEPS = (step_bootstrap_undo, step_services, step_look, step_rc_lines, step_handback, step_headless_leftovers,
+         step_bin, step_data, step_packages, step_state_config, step_clone)
 
 
 def walk(ctx):

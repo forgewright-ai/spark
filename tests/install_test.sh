@@ -1,11 +1,19 @@
 #!/bin/sh
 # spark tests/install_test.sh -- install.sh against a throwaway HOME.
 # Proves contract 2: the row shapes, link/render/back-up semantics,
-# idempotence, and that a bad theme name is refused.
+# idempotence, and that shell syntax in site.env is refused. bootstrap's
+# rows on every shape, and the hand-back of what an older spark painted.
 set -eu
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 T=$(mktemp -d)
 trap 'rm -rf "$T"' EXIT
+# the hand-back's files, pinned: the machine underneath is never read (a
+# runner's own /etc, a developer's Terminal.app preferences). 9c pins its
+# own fixture over these.
+for k in CONSOLE_UNIT RC_LOCAL CONSOLE_SETUP VCONSOLE RCCONF MOTD ISSUE UNAME_MOTD GRUB_DROPIN DEFAULT_GRUB GETTY_CONF MKINITCPIO_D CMDLINE_DROPIN; do
+    export "SPARK_ETC_$k=$T/no-etc/$k"
+done
+export SPARK_TERMINAL_DOMAIN="$T/no-terminal.plist"
 export HOME="$T/home" XDG_CONFIG_HOME="$T/home/.config"
 mkdir -p "$HOME/.config/spark"
 # a site.env with nothing chosen: every default applies
@@ -90,13 +98,10 @@ run >/dev/null
     && [ "$(readlink "$HOME/.config/spark/spark.env.example")" = "$REPO/home/.config/spark/spark.env.example" ] \
     && ok "a stale symlink into the repo is replaced, no .bak" || bad "stale repo symlink"
 
-# 4. a bad theme name (bootstrap's theme row) and shell syntax in
-#    site.env (site_load, both scripts) are refused
-printf 'SITE_THEME=nope\n' > "$HOME/.config/spark/site.env"
-if sh "$REPO/bootstrap.sh" --dry-run >/dev/null 2>&1; then bad "unknown theme accepted"; else ok "unknown theme refused"; fi
-printf 'SITE_THEME=none; rm -rf /\n' > "$HOME/.config/spark/site.env"
+# 4. shell syntax in site.env (site_load, both scripts) is refused
+printf 'SITE_NAME=x; rm -rf /\n' > "$HOME/.config/spark/site.env"
 if run >/dev/null 2>&1; then bad "shell syntax in site.env accepted"; else ok "shell syntax in site.env refused"; fi
-printf 'SITE_THEME=none\n' > "$HOME/.config/spark/site.env"
+: > "$HOME/.config/spark/site.env"
 
 # 7. bootstrap --dry-run with SITE_HEADLESS=yes announces the headless rows
 #    (contract 1: would/skip, a count line, never sudo -- a sudo on PATH that
@@ -127,7 +132,8 @@ out=$(PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootst
 printf '%s\n' "$out" | grep -qE "^ok +rc +~/$rc sources the hook\$" && ok "rc: with the line: ok rc sources the hook" || bad "rc: no ok row: $(printf '%s\n' "$out" | grep -E ' rc ')"
 out=$(SHELL=/usr/local/bin/fish PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (fish) failed"
 printf '%s\n' "$out" | grep -qE '^todo +rc +shell fish' && ok "rc: an unknown login shell is a todo naming it" || bad "rc: fish: $(printf '%s\n' "$out" | grep -E ' rc ')"
-printf '%s\n' "$out" | grep -qE '^skip +console +(macOS:|SITE_FONT_FACE unset)' && ok "the console row is core, its skip names its own reason" || bad "console row: $(printf '%s\n' "$out" | grep -E ' console ' | head -1)"
+printf '%s\n' "$out" | grep -qE '^[a-z]+ +(theme|console|vt-palette|quiet-login|quiet-boot) ' && bad "a row of the look survives: $(printf '%s\n' "$out" | grep -E ' (theme|console|vt-palette|quiet-login|quiet-boot) ' | head -1)" || ok "no theme, console, vt-palette or quiet row: the look left core"
+printf '%s\n' "$out" | grep -qE "^skip +handback +nothing of an older spark's look is left here" && ok "the handback row: nothing left here, a skip" || bad "handback row: $(printf '%s\n' "$out" | grep -E ' handback ' | head -1)"
 printf '%s\n' "$out" | grep -qE '^skip +hostname +SITE_SET_HOSTNAME=no' && ok "the hostname row is core (identity), its skip names its key" || bad "hostname row: $(printf '%s\n' "$out" | grep -E ' hostname ' | head -1)"
 printf '%s\n' "$out" | grep -qE ' micro-aspell ' && bad "a micro-aspell row survives (spark ships no app)" || ok "no micro-aspell row: spark installs no editor"
 printf '%s\n' "$out" | grep -qE "^would +dir +mkdir .*/projects" && bad "the workspace folder would be made" || ok "no workspace folder for a new user"
@@ -268,27 +274,14 @@ case $(uname -s) in
 esac
 
 # 9. WSL 2 (Linux only: the rows are Linux's): a kernel line naming
-#    microsoft makes the console and quiet-boot rows honest skips and a
-#    hand-set SITE_HEADLESS=yes a todo -- never a systemctl mask, no sudo
+#    microsoft makes a hand-set SITE_HEADLESS=yes a todo -- never a
+#    systemctl mask, no sudo
 if [ "$(uname -s)" != Darwin ]; then
     printf 'Linux version 6.6.87.2-microsoft-standard-WSL2 (root@w) #1 SMP\n' > "$T/version-wsl"
-    printf 'SITE_FONT_FACE=Terminus\nSITE_FONT_SIZE=16x32\nSITE_QUIET_BOOT=yes\nSITE_HEADLESS=yes\nSITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
+    printf 'SITE_HEADLESS=yes\nSITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
     out=$(SPARK_PROC_VERSION="$T/version-wsl" PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (WSL 2) failed: $out"
-    printf '%s\n' "$out" | grep -qE '^skip +console +WSL 2' && ok "WSL 2: the console row skips (the font is Windows Terminal's)" || bad "WSL 2 console row: $(printf '%s\n' "$out" | grep -E ' console ' | head -1)"
-    printf '%s\n' "$out" | grep -qE '^skip +quiet-boot +WSL 2' && ok "WSL 2: the quiet-boot row skips (no GRUB)" || bad "WSL 2 quiet-boot row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
     printf '%s\n' "$out" | grep -qE '^todo +headless +WSL 2' && ok "WSL 2: SITE_HEADLESS=yes is a todo, never a mask" || bad "WSL 2 headless: $(printf '%s\n' "$out" | grep -E ' headless | sleep ' | head -2)"
     printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "WSL 2 dry-run called sudo" || ok "WSL 2 dry-run: no sudo"
-    # the console palette is root's: with a painted palette the vt-palette
-    # row wants the boot unit (would, never sudo in a dry run); without one
-    # it has nothing to do
-    printf 'SITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
-    printf '40,204,152,215,69,177,104,168,146,251,184,250,131,211,142,235\n40,36,151,153,133,135,157,153,131,73,187,189,165,134,192,219\n40,29,26,33,136,166,116,132,116,54,38,47,152,155,164,178\n' > "$HOME/.config/spark/console-colors.rgb"
-    out=$(PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (palette) failed"
-    printf '%s\n' "$out" | grep -qE '^(would|todo) +vt-palette ' && ok "a painted palette: the vt-palette row would install the boot unit (or names kbd)" || bad "vt-palette row: $(printf '%s\n' "$out" | grep -E ' vt-palette ' | head -1)"
-    printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "vt-palette dry-run called sudo" || ok "vt-palette dry-run: no sudo"
-    rm -f "$HOME/.config/spark/console-colors.rgb"
-    out=$(PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run failed"
-    printf '%s\n' "$out" | grep -qE '^skip +vt-palette +no palette painted yet' && ok "no palette: the vt-palette row skips" || bad "vt-palette skip: $(printf '%s\n' "$out" | grep -E ' vt-palette ' | head -1)"
 fi
 
 # 9b. spark client URL on a machine that served (Linux): the enabled
@@ -314,77 +307,143 @@ SH
     printf 'SITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
 fi
 
-# 9c. quiet-login restores only spark's own trace (Linux: the row is
-#     Linux's). A stock Ubuntu -- no /etc/motd, the distro's file at
-#     /usr/share/base-files/motd -- with SITE_QUIET_LOGIN=no was never
-#     quieted by spark: the row is a skip (loud already), never a
-#     `would ... (sudo)` that writes /etc/motd as root. With spark's
-#     own motd.orig beside it, the restore is offered.
+# 9c. the hand-back (v1.62): what an older spark painted goes back once,
+#     through lib/spark/handback.py (bootstrap's handback row, and spark
+#     uninstall). A fixture holds every file and mark spark made, on every
+#     shape: the palette files, the boot unit and a line of yours in
+#     rc.local; the console font's .spark-orig beside console-setup,
+#     vconsole.conf and rc.conf; motd and issue with their .orig; the
+#     Debian GRUB drop-in; the Arch UKI drop-in and the splash mark; Void's
+#     marked lines in GRUB's file, rc.conf and the getty's conf. A dry run
+#     names each and never calls sudo. The apply puts each back through a
+#     sudo that runs what it is given, and your own lines stay. A second
+#     run, and a machine that never had any of it, say nothing and never
+#     call sudo. Both OSes: python, the Linux shape by SPARK_OS.
+H=$T/hb; mkdir -p "$H/bin"
+printf '#!/bin/sh\n[ "$1" = -n ] && shift\necho "sudo $*" >> "$HBLOG"\nexec "$@"\n' > "$H/bin/sudo"
+for c in setvtrgb systemctl update-grub mkinitcpio setupcon setfont; do
+    printf '#!/bin/sh\necho "%s${*:+ $*}" >> "$HBLOG"\nexit 0\n' "$c" > "$H/bin/$c"
+done
+chmod +x "$H"/bin/*
+printf 'Linux version 6.12.0-fixture (fixture) #1 SMP\n' > "$H/version"
+# hb COMMAND...: the fixture's seams; HBPATH first on PATH ($H/bin by
+# default: the sudo that runs; "$T/bin:$H/bin" puts the one that shouts first)
+hb() {
+    env HOME="$H/home" XDG_CONFIG_HOME="$H/home/.config" SPARK_OS=Linux SPARK_PROC_VERSION="$H/version" TERM=xterm \
+        SPARK_ETC_CONSOLE_UNIT="$H/etc/spark-console.service" SPARK_ETC_RC_LOCAL="$H/etc/rc.local" \
+        SPARK_ETC_CONSOLE_SETUP="$H/etc/console-setup" SPARK_ETC_VCONSOLE="$H/etc/vconsole.conf" SPARK_ETC_RCCONF="$H/etc/rc.conf" \
+        SPARK_ETC_MOTD="$H/etc/motd" SPARK_ETC_ISSUE="$H/etc/issue" SPARK_ETC_UNAME_MOTD="$H/etc/10-uname" \
+        SPARK_ETC_GRUB_DROPIN="$H/etc/zz-spark-quiet.cfg" SPARK_ETC_DEFAULT_GRUB="$H/etc/default-grub" SPARK_ETC_GETTY_CONF="$H/etc/getty-conf" \
+        SPARK_ETC_MKINITCPIO_D="$H/etc/mkinitcpio.d" SPARK_ETC_CMDLINE_DROPIN="$H/etc/zz-spark-quiet.conf" \
+        PYTHONPATH="$REPO/lib" HBLOG="$H/log" PATH="${HBPATH:-$H/bin}:$PATH" "$@"
+}
+hb_clean() {
+    rm -rf "${H:?}/etc" "${H:?}/home" "${H:?}/log"; mkdir -p "$H/etc/mkinitcpio.d" "$H/home/.config/spark"
+    printf 'SITE_AI_MODEL=none\n' > "$H/home/.config/spark/site.env"
+    printf 'CHARMAP="UTF-8"\nFONTFACE="Fixed"\nFONTSIZE="8x16"\n' > "$H/etc/console-setup"
+    printf 'GRUB_TIMEOUT=5\n' > "$H/etc/default-grub"
+    printf 'the distro notice\n' > "$H/etc/motd"; printf 'Debian \\n \\l\n' > "$H/etc/issue"
+    printf '#!/bin/sh\n' > "$H/etc/10-uname"; chmod 0755 "$H/etc/10-uname"
+}
+hb_painted() {
+    hb_clean
+    printf '\033]P0282828\n' > "$H/home/.config/spark/console-colors"; printf '40\n40\n40\n' > "$H/home/.config/spark/console-colors.rgb"
+    printf '[Unit]\n' > "$H/etc/spark-console.service"
+    printf '#!/bin/sh\nsetvtrgb %s/.config/spark/console-colors.rgb\n' "$H/home" > "$H/etc/rc.local"
+    cp "$H/etc/console-setup" "$H/etc/console-setup.spark-orig"
+    printf 'CHARMAP="UTF-8"\nFONTFACE="Terminus"\nFONTSIZE="16x32"\n# mine, after spark\n' > "$H/etc/console-setup"
+    printf 'KEYMAP=us\n' > "$H/etc/vconsole.conf.spark-orig"; printf 'KEYMAP=us\nFONT=Terminus\n' > "$H/etc/vconsole.conf"
+    printf '#KEYMAP="us"\n#FONT="lat9w-16"\n' > "$H/etc/rc.conf.spark-orig"
+    printf '#KEYMAP="us"\nFONT="Terminus"\nTIMEZONE="UTC"\nmsg() { :; } #spark-quiet#\n' > "$H/etc/rc.conf"
+    mv "$H/etc/motd" "$H/etc/motd.orig"; : > "$H/etc/motd"; chmod 0644 "$H/etc/10-uname"
+    mv "$H/etc/issue" "$H/etc/issue.orig"; printf '\033[?25h' > "$H/etc/issue"
+    printf 'GRUB_TIMEOUT=0\n' > "$H/etc/zz-spark-quiet.cfg"
+    printf 'GRUB_TIMEOUT=0 #spark-quiet#\n' >> "$H/etc/default-grub"
+    printf 'GETTY_ARGS="--noclear"\nGETTY_ARGS= #spark-quiet#\n' > "$H/etc/getty-conf"
+    printf 'quiet loglevel=3\n' > "$H/etc/zz-spark-quiet.conf"
+    printf 'default_uki="/boot/x.efi"\n#spark-quiet# default_options="--splash /x.bmp"\n' > "$H/etc/mkinitcpio.d/linux.preset"
+}
+hb_painted
+out=$(HBPATH="$T/bin:$H/bin" hb python3 -m spark.handback --dry-run 2>&1) || bad "handback --dry-run failed: $out"
+[ "$(printf '%s\n' "$out" | grep -cE '^would +handback ')" -ge 10 ] && ok "hand-back dry run: a would row for each thing spark left (palette, unit, files, 3 fonts, login, 3 boots)" || bad "hand-back dry run: $out"
+printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "hand-back dry run called sudo" || ok "hand-back dry run: no sudo"
+[ -f "$H/etc/motd.orig" ] && [ -f "$H/home/.config/spark/console-colors" ] && [ -f "$H/etc/zz-spark-quiet.cfg" ] && ok "hand-back dry run: nothing changed" || bad "hand-back dry run changed a file"
+out=$(hb python3 -m spark.handback 2>&1) || bad "handback apply failed: $out"
+[ "$(printf '%s\n' "$out" | tail -1)" = "the look is off this machine now" ] && ok "hand-back apply ends with its one line" || bad "hand-back last line: $(printf '%s\n' "$out" | tail -1)"
+[ "$(printf '%s\n' "$out" | grep -c '^todo')" = 2 ] && printf '%s\n' "$out" | grep -qE '^todo +handback +.*rc.local still paints' \
+    && printf '%s\n' "$out" | grep -qE "^todo +handback +the boot menu's wait stays as spark set it" \
+    && ok "hand-back: your rc.local line and the loader's wait are said, never guessed (2 todo rows)" || bad "hand-back todo rows: $(printf '%s\n' "$out" | grep '^todo' | tr '\n' ' ')"
+[ ! -e "$H/home/.config/spark/console-colors" ] && [ ! -e "$H/home/.config/spark/console-colors.rgb" ] && [ ! -e "$H/etc/spark-console.service" ] \
+    && grep -q '^setvtrgb vga$' "$H/log" && grep -q '^systemctl disable spark-console.service$' "$H/log" \
+    && ok "hand-back: the palette is VGA, the boot unit and spark's palette files are gone" || bad "hand-back palette: $(tr '\n' ' ' < "$H/log")"
+grep -q 'setvtrgb' "$H/etc/rc.local" && ok "hand-back: rc.local is yours, left as it is" || bad "hand-back edited rc.local"
+[ "$(cat "$H/etc/console-setup")" = "$(printf 'CHARMAP="UTF-8"\nFONTFACE="Fixed"\nFONTSIZE="8x16"\n# mine, after spark')" ] \
+    && [ "$(cat "$H/etc/vconsole.conf")" = "KEYMAP=us" ] \
+    && [ "$(cat "$H/etc/rc.conf")" = "$(printf '#KEYMAP="us"\n#FONT="lat9w-16"\nTIMEZONE="UTC"')" ] \
+    && [ -z "$(ls "$H"/etc/*.spark-orig 2>/dev/null)" ] \
+    && ok "hand-back: each console font line is back from its .spark-orig, your later lines kept, the copies gone" \
+    || bad "hand-back font: $(cat "$H/etc/console-setup" "$H/etc/vconsole.conf" "$H/etc/rc.conf" | tr '\n' ' ')"
+grep -q '^setupcon --force$' "$H/log" && grep -q '^systemctl restart systemd-vconsole-setup$' "$H/log" && grep -q '^setfont$' "$H/log" \
+    && ok "hand-back: each console redraws its own way (setupcon, systemd-vconsole-setup, setfont)" || bad "hand-back redraw: $(tr '\n' ' ' < "$H/log")"
+[ "$(cat "$H/etc/motd")" = "the distro notice" ] && [ "$(cat "$H/etc/issue")" = 'Debian \n \l' ] && [ -x "$H/etc/10-uname" ] \
+    && [ ! -e "$H/etc/motd.orig" ] && [ ! -e "$H/etc/issue.orig" ] \
+    && ok "hand-back: motd and issue from their .orig, 10-uname runnable, the .orig gone" || bad "hand-back login: $(ls -l "$H/etc" | tr '\n' ' ')"
+[ ! -e "$H/etc/zz-spark-quiet.cfg" ] && [ ! -e "$H/etc/zz-spark-quiet.conf" ] \
+    && [ "$(cat "$H/etc/mkinitcpio.d/linux.preset")" = "$(printf 'default_uki="/boot/x.efi"\ndefault_options="--splash /x.bmp"')" ] \
+    && grep -q '^mkinitcpio -P$' "$H/log" && [ "$(grep -c '^update-grub$' "$H/log")" = 2 ] \
+    && ok "hand-back: the GRUB and UKI drop-ins gone, the splash unmarked, update-grub and mkinitcpio -P run" || bad "hand-back boot: $(tr '\n' ' ' < "$H/log")"
+[ "$(cat "$H/etc/default-grub")" = "GRUB_TIMEOUT=5" ] && [ "$(cat "$H/etc/getty-conf")" = 'GETTY_ARGS="--noclear"' ] \
+    && ok "hand-back: Void's marked lines gone, your own GRUB and getty lines as they were" || bad "hand-back marks: $(cat "$H/etc/default-grub" "$H/etc/getty-conf" | tr '\n' ' ')"
+out=$(HBPATH="$T/bin:$H/bin" hb python3 -m spark.handback 2>&1) || bad "handback again failed: $out"
+[ -z "$out" ] && ok "hand-back, a second run: nothing left, silent, no sudo" || bad "hand-back second run: $out"
+hb_clean
+out=$(HBPATH="$T/bin:$H/bin" hb python3 -m spark.handback --dry-run 2>&1; HBPATH="$T/bin:$H/bin" hb python3 -m spark.handback 2>&1)
+[ -z "$out" ] && [ ! -e "$H/log" ] && ok "hand-back on a machine spark never painted: nothing to do, no sudo" || bad "hand-back clean: $out"
+if [ "$(uname -s)" = Darwin ]; then
+    # macOS: the spark-* profiles leave Terminal.app's preferences (a
+    # fixture plist, never the real ones) and a default naming one is Basic
+    python3 -c 'import plistlib, sys; plistlib.dump({"Window Settings": {"spark-gruvbox-dark": {"a": 1}, "Basic": {"b": 2}}, "Default Window Settings": "spark-gruvbox-dark", "Startup Window Settings": "Basic"}, open(sys.argv[1], "wb"))' "$H/terminal.plist"
+    : > "$H/home/.config/spark/spark-gruvbox-dark.terminal"
+    out=$(hb env SPARK_OS=Darwin SPARK_TERMINAL_DOMAIN="$H/terminal.plist" python3 -m spark.handback --dry-run 2>&1)
+    printf '%s\n' "$out" | grep -qE '^would +handback +the spark profiles left Terminal.app' && ok "macOS hand-back dry run: the profiles would go" || bad "macOS hand-back dry run: $out"
+    out=$(hb env SPARK_OS=Darwin SPARK_TERMINAL_DOMAIN="$H/terminal.plist" python3 -m spark.handback 2>&1)
+    left=$(python3 -c 'import plistlib, sys; p = plistlib.load(open(sys.argv[1], "rb")); print(" ".join(sorted(p["Window Settings"])), p["Default Window Settings"])' "$H/terminal.plist")
+    [ "$left" = "Basic Basic" ] && [ ! -e "$H/home/.config/spark/spark-gruvbox-dark.terminal" ] && [ "$(printf '%s\n' "$out" | tail -1)" = "the look is off this machine now" ] \
+        && ok "macOS hand-back: the spark profiles and their .terminal file gone, the default Basic" || bad "macOS hand-back: $left / $out"
+fi
 if [ "$(uname -s)" != Darwin ]; then
-    mkdir -p "$T/etc"
-    printf 'SITE_AI_MODEL=none\nSITE_QUIET_LOGIN=no\n' > "$HOME/.config/spark/site.env"
-    ql() { SPARK_ETC_MOTD="$T/etc/motd" SPARK_ETC_ISSUE="$T/etc/issue" SPARK_ETC_UNAME_MOTD="$T/etc/10-uname" \
-           PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1; }
-    out=$(ql) || bad "bootstrap --dry-run (stock, no .orig) failed: $out"
-    printf '%s\n' "$out" | grep -qE '^skip +quiet-login +loud' && ok "quiet-login: a stock box with no .orig is loud already (skip, not would)" || bad "quiet-login stock: $(printf '%s\n' "$out" | grep -E ' quiet-login ' | head -1)"
-    printf 'the distro notice\n' > "$T/etc/motd.orig"
-    out=$(ql) || bad "bootstrap --dry-run (with .orig) failed: $out"
-    printf '%s\n' "$out" | grep -qE '^would +quiet-login +restore' && ok "quiet-login: spark's own motd.orig makes the restore a would row" || bad "quiet-login .orig: $(printf '%s\n' "$out" | grep -E ' quiet-login ' | head -1)"
-    rm -f "$T/etc/motd.orig"
-    printf 'SITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
+    # bootstrap's row: the dry run prints the would rows and counts them; a
+    # machine with nothing left is one skip; never sudo
+    hb_painted
+    out=$(HBPATH="$T/bin:$H/bin" hb sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (hand-back) failed: $out"
+    printf '%s\n' "$out" | grep -qE '^would +handback +spark-console.service is disabled and removed \(sudo\)$' && ok "bootstrap's handback row: the would rows" || bad "handback row: $(printf '%s\n' "$out" | grep -E ' handback ' | head -3 | tr '\n' ' ')"
+    printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "handback row dry run called sudo" || ok "handback row dry run: no sudo"
+    printf '%s\n' "$out" | tail -1 | grep -qE '^[0-9]+ to do$' && ok "handback row: the would rows count in the last line" || bad "handback last line: $(printf '%s\n' "$out" | tail -1)"
+    hb_clean
+    out=$(HBPATH="$T/bin:$H/bin" hb sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (hand-back, clean) failed: $out"
+    printf '%s\n' "$out" | grep -qE "^skip +handback +nothing of an older spark's look is left here" && ok "handback row, nothing left: one skip" || bad "handback clean row: $(printf '%s\n' "$out" | grep -E ' handback ' | head -2 | tr '\n' ' ')"
 fi
 
 # 10. Arch (the second family): ID=arch in os-release, pinned by
 #     SPARK_OS_RELEASE, and a pacman on PATH that answers -- the packages
-#     row asks it, the console row writes vconsole.conf's FONT= and, without
-#     a UKI, the quiet-boot row is an honest skip; never sudo. The names come from distro/arch.env (both OSes, the uname stub);
-#     the dry-run is Linux's (the rows are).
+#     row asks it; never sudo. The names come from distro/arch.env (both
+#     OSes, the uname stub); the dry-run is Linux's (the rows are).
 printf 'ID=arch\nPRETTY_NAME="Arch Linux"\n' > "$T/os-release-arch"
 printf 'ID=manjaro\nID_LIKE=arch\nPRETTY_NAME="Manjaro Linux"\n' > "$T/os-release-manjaro"
 lp() { env PATH="$T/os:$PATH" SPARK_SYSFS_DRM="$T/nodrm" SPARK_OS_RELEASE="$1" sh "$REPO/bootstrap.sh" --list-packages 2>&1; }
 printf 'SITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
 out=$(lp "$T/os-release-arch")
-printf '%s\n' "$out" | grep -qx gcc-libs && printf '%s\n' "$out" | grep -qx kbd && ! printf '%s\n' "$out" | grep -qxE 'fd-find|libgomp1|tmux' \
-    && ok "Arch: --list-packages speaks pacman's names (gcc-libs, kbd)" || bad "Arch --list-packages: $(printf '%s' "$out" | tr '\n' ' ')"
+printf '%s\n' "$out" | grep -qx gcc-libs && ! printf '%s\n' "$out" | grep -qxE 'kbd|fd-find|libgomp1|tmux' \
+    && ok "Arch: --list-packages speaks pacman's names (gcc-libs; no kbd, the look left core)" || bad "Arch --list-packages: $(printf '%s' "$out" | tr '\n' ' ')"
 [ "$(lp "$T/os-release-manjaro")" = "$out" ] && ok "Manjaro (ID_LIKE=arch): the same list" || bad "Manjaro list differs"
 lp "$T/os-release-debian" | grep -qx libgomp1 && ok "Ubuntu (ID_LIKE=debian): libgomp1 still" || bad "Ubuntu list lost libgomp1"
 if [ "$(uname -s)" != Darwin ]; then
     mkdir -p "$T/arch"
     printf '#!/bin/sh\ncase $1 in -Qq) shift; printf "%%s\\n" "$@" ;; -Sp) exit 0 ;; *) exit 1 ;; esac\n' > "$T/arch/pacman"; chmod +x "$T/arch/pacman"
-    printf 'SITE_FONT_FACE=Terminus\nSITE_FONT_SIZE=16x32\nSITE_QUIET_BOOT=yes\nSITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
-    printf 'KEYMAP=us\nFONT=default8x16\n' > "$T/vconsole.conf"
-    out=$(SPARK_OS_RELEASE="$T/os-release-arch" SPARK_ETC_MKINITCPIO_D="$T/no-mkinitcpio.d" SPARK_ETC_CONSOLE_SETUP="$T/no-console-setup" SPARK_ETC_VCONSOLE="$T/vconsole.conf" PATH="$T/arch:$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Arch) failed: $out"
+    printf 'SITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
+    out=$(SPARK_OS_RELEASE="$T/os-release-arch" PATH="$T/arch:$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Arch) failed: $out"
     printf '%s\n' "$out" | grep -qE '^ok +packages ' && ok "Arch: the packages row answers through pacman (everything installed)" || bad "Arch packages row: $(printf '%s\n' "$out" | grep -E ' packages ' | head -1)"
-    printf '%s\n' "$out" | grep -qE '^would +console +FONT=Terminus in .*vconsole.conf; systemd-vconsole-setup' && ok "Arch: the console row would write FONT= into vconsole.conf (the vconsole shape, by mechanism)" || bad "Arch console row: $(printf '%s\n' "$out" | grep -E ' console ' | head -1)"
-    printf '%s\n' "$out" | grep -qE '^skip +quiet-boot +Arch without a UKI' && ok "Arch: the quiet-boot row skips (no UKI: the kernel line is the boot loader's)" || bad "Arch quiet-boot row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
     printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "Arch dry-run called sudo" || ok "Arch dry-run: no sudo"
-    printf 'KEYMAP=us\nFONT=Terminus\n' > "$T/vconsole.conf"
-    out=$(SPARK_OS_RELEASE="$T/os-release-arch" SPARK_ETC_MKINITCPIO_D="$T/no-mkinitcpio.d" SPARK_ETC_CONSOLE_SETUP="$T/no-console-setup" SPARK_ETC_VCONSOLE="$T/vconsole.conf" PATH="$T/arch:$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Arch, font set) failed: $out"
-    printf '%s\n' "$out" | grep -qE '^ok +console +Terminus 16x32 \(.*vconsole.conf\)' && ok "Arch: vconsole.conf already naming the face is ok" || bad "Arch console ok row: $(printf '%s\n' "$out" | grep -E ' console ' | head -1)"
-    out=$(SPARK_OS_RELEASE="$T/os-release-arch" SPARK_ETC_MKINITCPIO_D="$T/no-mkinitcpio.d" SPARK_ETC_CONSOLE_SETUP="$T/no-console-setup" SPARK_ETC_VCONSOLE="$T/no-vconsole" PATH="$T/arch:$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (no console file) failed: $out"
-    printf '%s\n' "$out" | grep -qE '^skip +console +no console-setup, vconsole.conf or rc.conf' && ok "no console file: the console row skips, naming both" || bad "bare console row: $(printf '%s\n' "$out" | grep -E ' console ' | head -1)"
-    # 10a. Arch with a Unified Kernel Image (a preset's `default_uki=`, the
-    #     splash on its `default_options`): the quiet-boot row is REAL --
-    #     a would row naming the cmdline.d drop-in, never sudo in a dry
-    #     run; with the drop-in holding the words and the splash marked
-    #     off, ok; with the key off and the drop-in still there, a would
-    #     row puts the loud back. Both files are seamed (SPARK_ETC_*).
-    mkdir -p "$T/mkinitcpio.d"
-    printf 'ALL_kver="/boot/vmlinuz-linux"\nPRESETS=(%s)\ndefault_uki="/boot/EFI/Linux/arch-linux.efi"\ndefault_options="--splash /usr/share/systemd/bootctl/splash-arch.bmp"\n' "'default'" > "$T/mkinitcpio.d/linux.preset"
-    ukienv() { env SPARK_OS_RELEASE="$T/os-release-arch" SPARK_ETC_MKINITCPIO_D="$T/mkinitcpio.d" SPARK_ETC_CMDLINE_DROPIN="$T/zz-spark-quiet.conf" PATH="$T/arch:$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1; }
-    out=$(ukienv) || bad "bootstrap --dry-run (Arch UKI) failed: $out"
-    printf '%s\n' "$out" | grep -qE '^would +quiet-boot +cmdline.d drop-in .*zz-spark-quiet.conf' && ok "Arch UKI: the quiet-boot row would write the cmdline.d drop-in, mark the splash, rebuild" || bad "Arch UKI quiet-boot row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
-    printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "Arch UKI dry-run called sudo" || ok "Arch UKI dry-run: no sudo"
-    printf '%s\n' 'quiet splash loglevel=3 systemd.show_status=false udev.log_level=3 vt.global_cursor_default=0 fbcon=nodefer' > "$T/zz-spark-quiet.conf"
-    printf 'ALL_kver="/boot/vmlinuz-linux"\nPRESETS=(%s)\ndefault_uki="/boot/EFI/Linux/arch-linux.efi"\n#spark-quiet# default_options="--splash /usr/share/systemd/bootctl/splash-arch.bmp"\n' "'default'" > "$T/mkinitcpio.d/linux.preset"
-    out=$(ukienv) || bad "bootstrap --dry-run (Arch UKI, quiet) failed: $out"
-    printf '%s\n' "$out" | grep -qE '^ok +quiet-boot +silent' && ok "Arch UKI: the drop-in with the words and the splash marked off is ok" || bad "Arch UKI quiet row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
-    printf 'SITE_FONT_FACE=Terminus\nSITE_FONT_SIZE=16x32\nSITE_QUIET_BOOT=no\nSITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
-    out=$(ukienv) || bad "bootstrap --dry-run (Arch UKI, off) failed: $out"
-    printf '%s\n' "$out" | grep -qE '^would +quiet-boot +show the boot menu again' && ok "Arch UKI, key off with the drop-in there: a would row puts the loud back (never sudo in a dry run)" || bad "Arch UKI off row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
-    printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "Arch UKI off dry-run called sudo" || ok "Arch UKI off dry-run: no sudo"
-    rm -f "$T/zz-spark-quiet.conf"
-    printf 'SITE_FONT_FACE=Terminus\nSITE_FONT_SIZE=16x32\nSITE_QUIET_BOOT=yes\nSITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
     # a pacman that knows nothing installed: the row would install, as root
     printf '#!/bin/sh\ncase $1 in -Sp) exit 0 ;; *) exit 1 ;; esac\n' > "$T/arch/pacman"; chmod +x "$T/arch/pacman"
     out=$(SPARK_OS_RELEASE="$T/os-release-arch" PATH="$T/arch:$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Arch, bare) failed: $out"
@@ -393,7 +452,9 @@ if [ "$(uname -s)" != Darwin ]; then
     # 10b. a CLIENT on the same bare box: no root row at all -- the dry
     # run holds no `sudo` word, and an APPLY makes no as_root call (the
     # sudo stub would shout SUDO CALLED); python3 and curl are all it runs
-    printf 'SITE_AI_MODEL=none\nSITE_PEER_AI_URL=http://192.0.2.10:8081\nSITE_SET_HOSTNAME=yes\nSITE_FONT_FACE=Terminus\nSITE_FONT_SIZE=16x32\nSITE_QUIET_BOOT=yes\nSITE_QUIET_LOGIN=yes\n' > "$HOME/.config/spark/site.env"
+    # the keys of the look an older site.env still holds load as any key
+    # nothing reads: no row, no refusal
+    printf 'SITE_AI_MODEL=none\nSITE_PEER_AI_URL=http://192.0.2.10:8081\nSITE_SET_HOSTNAME=yes\nSITE_THEME=gruvbox-dark\nSITE_FONT_FACE=Terminus\nSITE_FONT_SIZE=16x32\nSITE_QUIET_BOOT=yes\nSITE_QUIET_LOGIN=yes\n' > "$HOME/.config/spark/site.env"
     out=$(SPARK_OS_RELEASE="$T/os-release-arch" PATH="$T/arch:$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (client, bare PM) failed: $out"
     printf '%s\n' "$out" | grep -qE '^skip +packages +a client' && ok "client: the packages row skips even with a package missing" || bad "client packages row: $(printf '%s\n' "$out" | grep -E ' packages ' | head -1)"
     printf '%s\n' "$out" | grep -qi 'sudo' && bad "client dry-run holds a sudo word: $(printf '%s\n' "$out" | grep -i sudo | head -2 | tr '\n' ' ')" || ok "client dry-run: no sudo word anywhere"
@@ -407,16 +468,15 @@ fi
 #     (a stub in the fixture's shape: -l lists every name distro/void.env
 #     holds as installed, -p pkgver and -R say installed and in a repo),
 #     runit is the init (SPARK_ETC_RUNIT names a dir; SPARK_VAR_SERVICE says
-#     whether it is booted) and rc.conf beside it is the console's file. The
-#     names come from distro/void.env (both OSes, the uname stub); the dry
-#     runs and the apply are Linux's (the rows are). The sudo stub shouts: a
-#     dry run never reaches it, and the links into a runsvdir of your own
-#     need no root.
+#     whether it is booted). The names come from distro/void.env (both
+#     OSes, the uname stub); the dry runs and the apply are Linux's (the
+#     rows are). The sudo stub shouts: a dry run never reaches it, and the
+#     links into a runsvdir of your own need no root.
 printf 'ID="void"\nPRETTY_NAME="Void Linux"\n' > "$T/os-release-void"
 out=$(lp "$T/os-release-void")
-printf '%s\n' "$out" | grep -qx libgomp && printf '%s\n' "$out" | grep -qx kbd && printf '%s\n' "$out" | grep -qx python3 \
-    && ! printf '%s\n' "$out" | grep -qxE 'gcc-libs|libgomp1|python|fd-find|tmux' \
-    && ok "Void: --list-packages speaks xbps's names (libgomp, kbd, python3)" || bad "Void --list-packages: $(printf '%s' "$out" | tr '\n' ' ')"
+printf '%s\n' "$out" | grep -qx libgomp && printf '%s\n' "$out" | grep -qx python3 \
+    && ! printf '%s\n' "$out" | grep -qxE 'kbd|gcc-libs|libgomp1|python|fd-find|tmux' \
+    && ok "Void: --list-packages speaks xbps's names (libgomp, python3; no kbd)" || bad "Void --list-packages: $(printf '%s' "$out" | tr '\n' ' ')"
 if [ "$(uname -s)" != Darwin ]; then
     V=$T/void; mkdir -p "$V/bin" "$V/runit" "$V/service" "$V/sv-etc" "$T/etc"
     names=$(sed -n 's/^PKG_[A-Z]*=//p' "$REPO/distro/void.env" | tr '\n' ' ')
@@ -442,59 +502,21 @@ SH
     # every file a row reads is pinned, so the machine underneath says nothing
     vrun() {
         env SPARK_OS_RELEASE="$T/os-release-void" SPARK_SYSFS_DRM="$T/nodrm" SPARK_ETC_RUNIT="$V/runit" SPARK_VAR_SERVICE="$V/no-service" \
-            SPARK_ETC_SV="$V/sv-etc" SPARK_ETC_CONSOLE_SETUP="$V/no-console-setup" SPARK_ETC_VCONSOLE="$V/no-vconsole" SPARK_ETC_RCCONF="$V/rc.conf" \
-            SPARK_ETC_MKINITCPIO_D="$T/no-mkinitcpio.d" SPARK_ETC_CMDLINE_DROPIN="$T/no-cmdline.conf" \
-            SPARK_ETC_MOTD="$T/etc/motd" SPARK_ETC_ISSUE="$T/etc/issue" SPARK_ETC_UNAME_MOTD="$T/etc/10-uname" \
-            SPARK_ETC_DEFAULT_GRUB="$V/no-default-grub" SPARK_ETC_GETTY_CONF="$V/getty-conf" \
+            SPARK_ETC_SV="$V/sv-etc" \
             SPARK_SHARE_TOKEN="$V/no-share-token" SPARK_SHARE_URL="$V/no-share-url" \
             SV_LOG="$V/sv.log" PATH="$V/bin:$T/bin:$PATH" "$@"
     }
     # 11a. a container (no /var/service): the packages row answers through
-    #      xbps, the services wait, quiet boot is Void's own, linger, sleep
-    #      and the lid are runit's skips, and the console row writes rc.conf's
-    #      FONT= (a commented #FONT= line is the one it takes over) with
-    #      setfont to redraw; never sudo
-    printf 'SITE_FONT_FACE=Terminus\nSITE_FONT_SIZE=16x32\nSITE_QUIET_BOOT=yes\nSITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
-    printf '# /etc/rc.conf - system configuration for void\n#KEYMAP="us"\n#FONT="lat9w-16"\n' > "$V/rc.conf"
+    #      xbps, the services wait, linger, sleep and the lid are runit's
+    #      skips; never sudo
+    printf 'SITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
     out=$(vrun sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Void) failed: $out"
     printf '%s\n' "$out" | grep -qE '^skip +runit +runit is not running here' && ok "Void, a container: the runit row skips (the services wait for a machine that boots)" || bad "Void runit row: $(printf '%s\n' "$out" | grep -E ' runit ' | head -1)"
     printf '%s\n' "$out" | grep -qE '^ok +packages ' && ok "Void: the packages row answers through xbps (everything installed)" || bad "Void packages row: $(printf '%s\n' "$out" | grep -E ' packages ' | head -1)"
-    printf '%s\n' "$out" | grep -qE '^skip +quiet-boot +no GRUB on this Void' && ok "Void without GRUB: the quiet-boot row skips" || bad "Void quiet-boot row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
     printf '%s\n' "$out" | grep -qE '^skip +linger +runit' && ok "Void: linger skips (the supervisor runs from boot, login or not)" || bad "Void linger row: $(printf '%s\n' "$out" | grep -E ' linger ' | head -1)"
     printf '%s\n' "$out" | grep -qE '^skip +sleep +runit' && printf '%s\n' "$out" | grep -qE '^skip +lid +runit' && ok "Void: sleep and lid skip (no sleep targets, no logind)" || bad "Void sleep/lid rows: $(printf '%s\n' "$out" | grep -E ' (sleep|lid) ' | head -2 | tr '\n' ' ')"
-    printf '%s\n' "$out" | grep -qE '^would +console +FONT=Terminus in .*rc.conf; setfont' && ok "Void: the console row would write FONT= into rc.conf and setfont (the rcconf shape, by mechanism)" || bad "Void console row: $(printf '%s\n' "$out" | grep -E ' console ' | head -1)"
     printf '%s\n' "$out" | grep -qE '^(ok|would|skip|todo) +spark-(check|serve|forge) ' && bad "a container: a service row spoke: $(printf '%s\n' "$out" | grep -E '^(ok|would|skip|todo) +spark-' | head -1)" || ok "a container: no service row (they wait with runit)"
     printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "Void dry-run called sudo" || ok "Void dry-run: no sudo"
-    # 11a'. Void with GRUB: grub-mkconfig reads /etc/default/grub alone, so
-    #       the row would append 3 marked lines to its end; the lines
-    #       site.GRUB_WANT writes (the Python twin) are ok as they stand;
-    #       with the key off they would go. A dry run never calls sudo
-    printf '#!/bin/sh\nexit 0\n' > "$V/bin/update-grub"; chmod +x "$V/bin/update-grub"
-    printf 'GRUB_TIMEOUT=5\nGRUB_CMDLINE_LINUX_DEFAULT="loglevel=4"\n' > "$V/default-grub"
-    printf 'if [ -x /sbin/agetty -o -x /bin/agetty ]; then\n\tif [ "${tty}" = "tty1" ]; then\n\t\tGETTY_ARGS="--noclear"\n\tfi\nfi\n' > "$V/getty-conf"
-    out=$(vrun SPARK_ETC_DEFAULT_GRUB="$V/default-grub" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Void, GRUB) failed: $out"
-    printf '%s\n' "$out" | grep -qE '^would +quiet-boot +marked lines at the end of .*default-grub \(3\), .*rc.conf \(10\) and .*getty-conf \(2\); update-grub \(sudo\)$' && ok "Void with GRUB: the quiet-boot row would append marked lines to GRUB's file, rc.conf and the getty's conf, then update-grub" || bad "Void GRUB quiet-boot row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
-    PYTHONPATH="$REPO/lib" python3 -c 'from spark import site; print("\n".join(l + " " + site.GRUB_MARK for l in site.GRUB_WANT))' >> "$V/default-grub"
-    out=$(vrun SPARK_ETC_DEFAULT_GRUB="$V/default-grub" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Void, GRUB marked) failed: $out"
-    printf '%s\n' "$out" | grep -qE '^would +quiet-boot ' && ok "Void with GRUB marked, rc.conf not: the row still would write (both halves or none)" || bad "Void GRUB half row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
-    PYTHONPATH="$REPO/lib" python3 -c 'from spark import site; print("\n".join(l + " " + site.GRUB_MARK for l in site.RC_WANT))' >> "$V/rc.conf"
-    out=$(vrun SPARK_ETC_DEFAULT_GRUB="$V/default-grub" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Void, GRUB and rc.conf marked) failed: $out"
-    printf '%s\n' "$out" | grep -qE '^would +quiet-boot ' && ok "Void with GRUB and rc.conf marked, the getty not: the row still would write" || bad "Void getty half row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
-    PYTHONPATH="$REPO/lib" python3 -c 'from spark import site; print("\n".join(l + " " + site.GRUB_MARK for l in site.GETTY_WANT))' >> "$V/getty-conf"
-    out=$(vrun SPARK_ETC_DEFAULT_GRUB="$V/default-grub" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Void, all three marked) failed: $out"
-    printf '%s\n' "$out" | grep -qE '^ok +quiet-boot +silent' && ok "Void with GRUB: the marked lines site.GRUB_WANT, RC_WANT and GETTY_WANT write are bootstrap's (the twins agree)" || bad "Void GRUB ok row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
-    grep -q '^GRUB_TIMEOUT=5$' "$V/default-grub" && grep -q '^GRUB_CMDLINE_LINUX_DEFAULT="loglevel=4"$' "$V/default-grub" && ok "Void with GRUB: your own lines stay as they are" || bad "Void default grub: $(cat "$V/default-grub")"
-    printf 'SITE_QUIET_BOOT=no\nSITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
-    out=$(vrun SPARK_ETC_DEFAULT_GRUB="$V/default-grub" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Void, GRUB, off) failed: $out"
-    printf '%s\n' "$out" | grep -qE "^would +quiet-boot +remove spark's marked lines from .*default-grub, .*rc.conf and .*getty-conf; update-grub \(sudo\)$" && ok "Void with GRUB, key off: the marked lines would go from the three files" || bad "Void GRUB off row: $(printf '%s\n' "$out" | grep -E ' quiet-boot ' | head -1)"
-    printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "Void GRUB dry-run called sudo" || ok "Void GRUB dry-run: no sudo"
-    rm -f "$V/bin/update-grub"
-    printf 'SITE_FONT_FACE=Terminus\nSITE_FONT_SIZE=16x32\nSITE_QUIET_BOOT=yes\nSITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
-    printf '# /etc/rc.conf\n#KEYMAP="us"\nFONT="Terminus"\n' > "$V/rc.conf"
-    out=$(vrun sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Void, font set) failed: $out"
-    printf '%s\n' "$out" | grep -qE '^ok +console +Terminus 16x32 \(.*rc.conf\)' && ok "Void: rc.conf already naming the face (quoted, as Void writes it) is ok" || bad "Void console ok row: $(printf '%s\n' "$out" | grep -E ' console ' | head -1)"
-    out=$(vrun SPARK_ETC_RCCONF="$V/no-rc.conf" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Void, no console file) failed: $out"
-    printf '%s\n' "$out" | grep -qE '^skip +console +no console-setup, vconsole.conf or rc.conf' && ok "Void without rc.conf: the console row skips, naming the three files" || bad "Void bare console row: $(printf '%s\n' "$out" | grep -E ' console ' | head -1)"
     # 11b. runit LIVE (/var/service is a dir), no runsvdir-USER yet: the
     #      supervisor row would write the root service and link it (sudo),
     #      spark-check would come up; a dry run says so and changes nothing
@@ -534,7 +556,7 @@ SH
     #      the sudo stub never speaks. runsv is played by the stub: a
     #      supervise/ dir in each service dir is what a runsvdir leaves
     for s in spark-check spark-serve spark-forge; do mkdir -p "$svd/$s/supervise"; : > "$svd/$s/supervise/ok"; done
-    printf 'SITE_QUIET_BOOT=yes\nSITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
+    printf 'SITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
     rm -f "$V/sv.log"
     out=$(vrun SPARK_VAR_SERVICE="$V/service" sh "$REPO/bootstrap.sh" </dev/null 2>&1) || bad "bootstrap apply (Void, your runsvdir) failed: $(printf '%s\n' "$out" | tail -5 | tr '\n' ' ')"
     printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "the apply called as_root: $(printf '%s\n' "$out" | grep 'SUDO CALLED' | head -1)" || ok "your runsvdir apply: no as_root call (the links are yours)"
@@ -566,99 +588,5 @@ SH
     printf '%s\n' "$out" | grep -q 'sv/spark-' && bad "a client under runit: a service dir announced: $(printf '%s\n' "$out" | grep 'sv/spark-' | head -1)" || ok "a client under runit: no service dir (a client runs no unit)"
     printf 'SITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
 fi
-
-# 12. Void's quiet boot at work, on both OSes (plain sh): a stand-in
-#     for runit's stage (its msg, the welcome, rc.conf sourced, then a
-#     core service) over stubs that print what the real tools print. A
-#     clean stage 1 shows only stderr and a value asked for, and leaves
-#     no mark; a warning or a fsck that found something prints and leaves
-#     the mark; stage 3 (the shutdown) and a file outside runit print as
-#     Void prints. Then the getty's conf: tty1 loses --noclear only after a
-#     clean boot (no mark, no critical kernel line). sh here, dash too
-#     when it is on PATH (Void's /bin/sh)
-S=$T/void-stage; mkdir -p "$S/runit" "$S/other" "$S/bin" "$S/crit"
-PYTHONPATH="$REPO/lib" python3 -c 'from spark import site; print("\n".join(l + " " + site.GRUB_MARK for l in site.RC_WANT))' > "$S/rc.conf"
-for tool in fsck sysctl seedrng sv modules-load; do
-    cat > "$S/bin/$tool" <<'SH'
-#!/bin/sh
-case ${0##*/} in
-fsck) echo "/dev/fixture: clean, 1/2 files"; exit "${FSCK_RC:-0}" ;;
-sysctl) if [ "$1" = -n ]; then echo 1; else echo "kernel.fixture = 1"; echo "sysctl: fixture error" >&2; fi ;;
-seedrng) echo "Seeding 256 bits and crediting" ;;
-sv) echo "ok: down: fixture: 0s"; echo "timeout: slow: 7s" ;;
-modules-load) echo "insmod /lib/modules/fixture.ko" ;;
-esac
-SH
-    chmod +x "$S/bin/$tool"
-done
-printf '#!/bin/sh\n' > "$S/bin/dmesg"
-printf '#!/bin/sh\necho "kernel: a critical line"\n' > "$S/crit/dmesg"
-chmod +x "$S/bin/dmesg" "$S/crit/dmesg"
-cat > "$S/core.sh" <<'SH'
-msg "Mounting pseudo-filesystems..."
-modules-load -v | tr '\n' ' '
-[ -n "$WARN" ] && msg_warn "a warning stays"
-fsck -A -T -a
-echo "fsck said $?"
-sysctl -p /fixture.conf
-sysctl -n kernel.dmesg_restrict
-seedrng
-SH
-cat > "$S/shutdown.sh" <<'SH'
-msg "Waiting for services to stop..."
-sv force-stop /fixture
-seedrng
-msg "Sending KILL signal to processes..."
-SH
-cat > "$S/runit/3" <<SH
-msg() { printf '=> %s\n' "\$*"; }
-. "$S/rc.conf"
-. "$S/shutdown.sh"
-SH
-for stage in runit other; do
-    cat > "$S/$stage/1" <<SH
-msg() { printf '=> %s\n' "\$*"; }
-msg_warn() { printf 'WARNING: %s\n' "\$*"; }
-msg "Welcome to Void!"
-. "$S/rc.conf"
-. "$S/core.sh"
-SH
-done
-printf '#!/bin/sh\ntty=$1; GETTY_ARGS=\n' > "$S/getty"
-cat >> "$S/getty" <<'SH'
-if [ -x /sbin/agetty -o -x /bin/agetty -o -n "$FAKE_AGETTY" ]; then
-	if [ "${tty}" = "tty1" ]; then
-		GETTY_ARGS="--noclear"
-	fi
-fi
-SH
-PYTHONPATH="$REPO/lib" python3 -c 'from spark import site; print("\n".join(l + " " + site.GRUB_MARK for l in site.GETTY_WANT))' >> "$S/getty"
-printf 'echo "args=$GETTY_ARGS"\n' >> "$S/getty"
-warn=$(printf '\033[1m\033[33mWARNING: a warning stays\033[m')
-for shell in sh dash; do
-    command -v "$shell" >/dev/null 2>&1 || continue
-    rm -f "$S/loud"
-    out=$(SPARK_BOOT_LOUD="$S/loud" PATH="$S/bin:$PATH" "$shell" "$S/runit/1" 2>&1)
-    want=$(printf '%s\n' "=> Welcome to Void!" "fsck said 0" "sysctl: fixture error" "1")
-    [ "$out" = "$want" ] && [ ! -e "$S/loud" ] && ok "Void quiet boot ($shell): a clean stage 1 prints only stderr and a value asked for, and leaves no mark" || bad "Void quiet stage ($shell): $out"
-    out=$(SPARK_BOOT_LOUD="$S/loud" PATH="$S/bin:$PATH" "$shell" "$S/runit/3" 2>&1)
-    want=$(printf '%s\n' "=> Waiting for services to stop..." "ok: down: fixture: 0s" "timeout: slow: 7s" "Seeding 256 bits and crediting" "=> Sending KILL signal to processes...")
-    [ "$out" = "$want" ] && ok "Void quiet boot ($shell): stage 3, the shutdown, prints as Void prints it" || bad "Void quiet shutdown ($shell): $out"
-    out=$(WARN=1 SPARK_BOOT_LOUD="$S/loud" PATH="$S/bin:$PATH" "$shell" "$S/runit/1" 2>&1)
-    printf '%s\n' "$out" | grep -qxF "$warn" && [ -e "$S/loud" ] && ok "Void quiet boot ($shell): a warning prints as Void prints it and leaves the mark" || bad "Void quiet warn ($shell): $out"
-    rm -f "$S/loud"
-    out=$(FSCK_RC=1 SPARK_BOOT_LOUD="$S/loud" PATH="$S/bin:$PATH" "$shell" "$S/runit/1" 2>&1)
-    printf '%s\n' "$out" | grep -q '^/dev/fixture: clean' && printf '%s\n' "$out" | grep -q '^fsck said 1$' && [ -e "$S/loud" ] && ok "Void quiet boot ($shell): a fsck that found something prints what it said, its code stands, and it leaves the mark" || bad "Void quiet fsck ($shell): $out"
-    rm -f "$S/loud"
-    out=$(SPARK_BOOT_LOUD="$S/loud" PATH="$S/bin:$PATH" "$shell" "$S/other/1" 2>&1)
-    printf '%s\n' "$out" | grep -q '^=> Mounting' && printf '%s\n' "$out" | grep -q '^kernel.fixture' && printf '%s\n' "$out" | grep -q '^Seeding' && ok "Void quiet boot ($shell): outside a runit stage the lines change nothing" || bad "Void quiet outside ($shell): $out"
-    a=$(FAKE_AGETTY=1 SPARK_BOOT_LOUD="$S/loud" PATH="$S/bin:$PATH" "$shell" "$S/getty" tty1)
-    b=$(FAKE_AGETTY=1 SPARK_BOOT_LOUD="$S/loud" PATH="$S/crit:$PATH" "$shell" "$S/getty" tty1)
-    : > "$S/loud"
-    c=$(FAKE_AGETTY=1 SPARK_BOOT_LOUD="$S/loud" PATH="$S/bin:$PATH" "$shell" "$S/getty" tty1)
-    d=$(FAKE_AGETTY=1 SPARK_BOOT_LOUD="$S/loud" PATH="$S/bin:$PATH" "$shell" "$S/getty" tty2)
-    rm -f "$S/loud"
-    [ "$a" = "args=" ] && [ "$b" = "args=--noclear" ] && [ "$c" = "args=--noclear" ] && [ "$d" = "args=" ] && ok "Void quiet boot ($shell): the getty clears tty1 after a clean boot, keeps it after a mark or a critical kernel line" || bad "Void quiet getty ($shell): clean=[$a] crit=[$b] marked=[$c] tty2=[$d]"
-done
 
 [ "$fail" -eq 0 ] && echo "install_test: all ok" || { echo "install_test: FAILED"; exit 1; }

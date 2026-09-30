@@ -1,5 +1,32 @@
 # Changelog
 
+## v1.62
+
+spark is the AI at the prompt, and nothing else. The machine's look
+leaves it: the console's palette and font, the Terminal.app profile
+and a quiet login and boot.
+
+- `spark theme`, `spark font` and `spark quiet login|boot` are gone.
+  `theme` and `font` are unknown words now. `spark quiet start` and
+  `spark quiet audio` stay: they quiet spark's own lines.
+- `spark update` hands the look back, once. The console gets its stock
+  palette and font, the boot is loud again, and the motd and
+  `/etc/issue` return. On macOS the spark profiles leave Terminal.app.
+  It says `the look is off this machine now`.
+- `spark setup` takes no `--theme`. An old `site.env` that holds
+  `SITE_THEME`, `SITE_FONT_FACE`, `SITE_FONT_SIZE`, `SITE_QUIET_LOGIN`
+  or `SITE_QUIET_BOOT` still loads, and spark ignores those keys.
+- `spark check` has 39 rows: the `theme`, `font` and `quiet` rows are
+  gone.
+- The page keeps its own palette picker. Its admin cards for the
+  theme, the font and a quiet boot are gone.
+- The 9 palettes leave the tree. `~/.config/spark/theme.env` stays a
+  plain palette file any tool may write: `spark ver` draws its logo in
+  it and the status line takes its accent, when it is there.
+- Arch and Void no longer install `kbd` for spark.
+- The docs are tested for two more rules: no sentence over 30 words,
+  and prose within 72 columns.
+
 ## v1.61
 
 - An awakened machine draws the scanner and its face on every

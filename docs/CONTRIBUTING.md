@@ -129,4 +129,7 @@ Form:
 - Prose wraps at 72 columns, and the cheatsheet stays under 80.
 
 `tests/docs_test.py` holds the mechanical half of these rules: the words
-that are out, the capitals, the contractions, the widths, the counts.
+that are out, the capitals, the contractions, the widths, the sentence
+length, the counts. It measures prose only. A fence, an indented block,
+a table row, a heading and a line holding a URL are exempt, and a code
+span counts as one word. The CHANGELOG is history and stays as written.

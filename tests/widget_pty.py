@@ -29,8 +29,8 @@
 # absent $PAGER falls back to plain output.
 #
 # widget_pty.py completion <shell> <file>: the same pty machinery around
-# the completion file -- `spark th<TAB>` completes to `theme`, and
-# `spark theme gr<TAB>` to `gruvbox-dark` (the dynamic names, resolved
+# the completion file -- `spark awa<TAB>` completes to `awaken`, and
+# `spark model gr<TAB>` to a model row's name (the dynamic names, resolved
 # offline through a spark symlink into the real repository).
 
 import fcntl
@@ -589,17 +589,19 @@ def completion_main(shell, comp):
             sh.send("autoload -Uz compinit; compinit -u; source %s && echo SOURCED\n" % comp)
         ok(sh.expect("SOURCED"), "completion sourced")
 
-        # 1. the first word: `spark th<TAB>` becomes `spark theme `
+        # 1. the first word: `spark awa<TAB>` becomes `spark awaken `
         since = sh.mark()
-        sh.send("spark th\t")
-        ok(sh.expect("theme"), "spark th<TAB> completes to theme", since())
+        sh.send("spark awa\t")
+        ok(sh.expect("awaken"), "spark awa<TAB> completes to awaken", since())
         sh.send("\x15")     # C-u: clear the line
         time.sleep(0.2)
 
-        # 2. a dynamic name, offline: `spark theme gr<TAB>` -> gruvbox-dark
+        # 2. a dynamic name, offline: `spark model gr<TAB>` -> granite-4-2-8b,
+        #    read from models.env (the one model row that starts with gr)
         since = sh.mark()
-        sh.send("spark theme gr\t")
-        ok(sh.expect("gruvbox-dark"), "spark theme gr<TAB> completes to gruvbox-dark", since())
+        sh.send("spark model gr\t")
+        # (a shell may redraw only the completed tail after the typed gr)
+        ok(sh.expect("anite-4-2-8b"), "spark model gr<TAB> completes to granite-4-2-8b", since())
         sh.send("\x15")
         time.sleep(0.2)
         sh.send("exit\r")
