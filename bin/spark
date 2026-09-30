@@ -6,7 +6,7 @@
 #   spark do <words>           a task, one confirmed command at a time
 #   ? how big is this dir?     at the prompt: the answer lands in your line
 #   cmd 2>&1 | explain         what went wrong (explain is a symlink to spark)
-#   spark serve [on|off]       the engine: one LAN address, token required
+#   spark serve [on|off]       the engine and the page on the LAN, kept
 #   spark check                the machine row by row; exit 0 = every row ok
 #   spark bar                  the machine's one-line status
 #
@@ -65,20 +65,16 @@ spark
  cmd 2>&1 | explain           what went wrong, and the fix
  spark <TAB>                  the verbs, then each verb's words -- offline
 
-the model and the page
- spark model [NAME|auto|none] the served model: download, restart (-h: more)
- spark model list             the table; -h: budget N, add URL, verify, rm NAME
- spark serve [on|off]         one LAN address, token required (-h: --force)
- spark ember [NAME|auto|none] the chat model, a second one; ember list
- spark forge --print-url      the login URL; at a terminal a QR and the token
- spark user [add NAME]        the named users, each with sealed threads; add
-                              shows the token and its QR once (-h)
- spark forge [on|off]         the page's server on the LAN: the API and the page
- spark forge audit [N]        every admin action, sealed: runs, users, tokens
- spark headless [on|off]      the page's server up from boot, never asleep
- spark share [on|off]         one engine for every OS user here (a spark
-                              group), each with their own soul and memory
- spark client [URL|off]       a client of another machine's server; none here
+the model and the server
+ spark serve [on|off]         the engine and the page on the LAN, kept
+ spark serve boot [on|off]    up from boot, never asleep
+ spark serve share [on|off]   one engine for every OS user here (Linux)
+ spark serve --login          the page's URL; at a terminal a QR and the token
+ spark serve --audit [N]      every admin action, sealed
+ spark model [NAME|auto|none] the model: download, restart (-h: more)
+ spark model --chat NAME      the chat model, a second one (auto|none)
+ spark client [URL|off]       use another machine's server; none here
+ spark user [add NAME]        the named users; add shows a token once
 """ % MARK
 
 USAGE_MACHINE = """the machine
@@ -102,7 +98,7 @@ USAGE_LIVING = """the living prompt
 """
 
 USAGE_TAIL = """less often used
- spark                        last, history, clear --history, brain,
+ spark                        last, history, clear --history,
                               stats [--week|--sends], bench [--line|tune]
                               -- each has -h
 
@@ -194,6 +190,12 @@ VERBS = {"setup": ("setup", "main", False), "check": ("check", "main", False),
 # dispatched above, so it is not here.
 KNOWN_GONE = ("shell", "stop", "remember", "talk")
 
+# Older spellings, still dispatched above and named nowhere: help and TAB
+# completion say the new words (serve boot|share|--login|--audit, model
+# --chat, status). A slip is never pointed at one of them: `spark force`
+# is not a try for `spark forge`.
+ALIASES = ("forge", "ember", "headless", "share", "brain")
+
 
 # Ordinary words one letter from a verb that a question starts with:
 # never a slip, a named line each, so it can be argued with.
@@ -206,7 +208,7 @@ def near_verb(word):
     import difflib
     if word in NOT_A_SLIP:
         return None
-    hits = difflib.get_close_matches(word, ("help",) + tuple(VERBS), n=1, cutoff=0.8)
+    hits = difflib.get_close_matches(word, ("help",) + tuple(v for v in VERBS if v not in ALIASES), n=1, cutoff=0.8)
     return hits[0] if hits else None
 
 

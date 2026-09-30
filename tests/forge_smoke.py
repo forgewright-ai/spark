@@ -200,7 +200,7 @@ def main():
            "bind_check passes a LAN address, loopback, a hostname")
         ok(_bc("8.8.8.8")[0] == "warn", "bind_check warns on a public address", _bc("8.8.8.8"))
         rc, out, err = spark("forge", "-h")
-        ok(rc == 0 and out.splitlines()[0] == "spark forge -- the page and its server", "spark forge -h signs (contract 8)", out)
+        ok(rc == 0 and out.splitlines()[0] == "spark forge -- the page's server, what its unit runs", "spark forge -h signs (contract 8)", out)
         ok(all(len(l) <= 80 for l in out.splitlines()), "usage fits 80 columns")
         rc, out, _ = spark("forge")
         ok(rc == 0 and "not running" in out, "status before start: not running", out)
@@ -932,12 +932,14 @@ def main():
                "spark forge audit --porcelain: four tab-separated columns, the newest last", out[-200:])
             rc, out, _ = spark("forge", "audit", "2")
             ok(rc == 0 and len(out.splitlines()) == 2 and "echo hi" not in out and "do/run" in out and "run" in out,
-               "spark forge audit 2: two lines, no command text", out)
+               "spark forge audit 2 (the older spelling): two lines, no command text", out)
+            rc, out2, _ = spark("serve", "--audit", "2")
+            ok(rc == 0 and out2 == out, "spark serve --audit 2: the same two lines", out2)
             ok(any(r.get("action") == "user add" and r.get("name") == "ualice" and r.get("ip") == "cli"
                    and set(r) == {"ts", "ip", "action", "name"} for r in audit_recs()),
                "spark user add landed {ts, ip: cli, action, name}")
-            rc, out, _ = spark("forge", "audit", "x")
-            ok(rc == 2 and out.startswith("spark forge -- audit takes a count"), "spark forge audit x: signed, exit 2", out)
+            rc, out, _ = spark("serve", "--audit", "x")
+            ok(rc == 2 and out.startswith("spark serve -- --audit takes a count"), "spark serve --audit x: signed, exit 2", out)
             ok("SITE_AI_MODEL=none" in open(home + "/.config/spark/site.env").read(), "site.env has SITE_AI_MODEL=none (SPARK_NO_APPLY)")
             st, h, raw = req(url, "POST", "/api/run", {"verb": "ember", "args": ["none"]}, headers=post, timeout=60)
             evs = sse(raw)
@@ -1314,6 +1316,14 @@ def main():
             ok(rc == 0 and "\u2588" not in out and "#t=" not in out
                and len([l for l in out.splitlines() if l.strip()]) == 2,
                "--print-url --no-qr: the two legacy lines", out)
+            rc, out = at_pty("serve", "--login")
+            ok(rc == 0 and out.splitlines()[0] == url + "/login" and "token  " + token in out
+               and (_qr.render(link, ascii_=False) in out or _qr.render(link, ascii_=True) in out)
+               and ("spark client " + url) in out and "spark user add NAME" in out,
+               "serve --login at a pty: the url, the token, the QR, then how another machine joins", out[-300:])
+            rc, out, _ = spark("serve", "--login")
+            ok(rc == 0 and out.splitlines()[0] == url + "/login" and token not in out and "#t=" not in out,
+               "serve --login piped: the url and the joining steps, never the token", out)
 
             rc, out = at_pty("user", "add", "qrguy")
             got_tok = ""
@@ -1343,9 +1353,11 @@ def main():
                "--print-client: mint here, client and login there, no secret", out)
             ok(token not in out and "forge-token" not in out, "--print-client never hands out the admin token", out)
             rc, out, _ = spark("forge")
-            ok(rc == 0 and url in out and "health   ok" in out and "stub-7b-q4" in out
-               and "admin" in out and "users    4" in out,   # alice, bob, the box account, qrguy
-               "spark forge (status): url, ok, model, admin token, the user count", out)
+            ok(rc == 0 and ("page     " + url + "/login") in out and "stub-7b-q4" in out
+               and "admin token" in out and "4 users" in out,   # alice, bob, the box account, qrguy
+               "spark forge (bare, the serve view): the page, the model, the admin token, the user count", out)
+            rc, out2, _ = spark("serve")
+            ok(rc == 0 and out2 == out, "bare spark serve is the same view", out2)
             rc, out, _ = spark("forge", "on")
             ok(rc == 0 and "already running" in out, "start while running: already running", out)
 
@@ -1390,9 +1402,9 @@ def main():
             ok(st == 200, "the admin cookie survived the user rotation")
             st, _, raw = req(url, "GET", "/api/me", headers={"Authorization": "Bearer " + utoken2})
             ok(st == 200 and json.loads(raw).get("role") == "user", "the new user token works without a restart", raw[:100])
-            rc, out, _ = spark("forge", "token", "--new")
+            rc, out, _ = spark("serve", "--login", "--new")
             token2 = open(tok_path).read().strip()
-            ok(rc == 0 and "admin" in out and "log in again" in out and token2 != token, "token --new rewrites the file", out)
+            ok(rc == 0 and "admin" in out and "log in again" in out and token2 != token, "serve --login --new rewrites the file", out)
             last = audit_recs()[-1]
             ok(set(last) == {"ts", "ip", "action"} and last["action"] == "forge token" and last["ip"] == "cli",
                "spark forge token --new landed {ts, ip: cli, action}", last)

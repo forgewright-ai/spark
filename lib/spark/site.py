@@ -1,7 +1,8 @@
 # spark.site -- the site.env custodian and the machine-shape verbs:
 # set_keys/apply (every choice lands through them), the rc-hook custody,
-# `spark quiet`, `spark headless`, `spark share`, `spark client` (and
-# `spark model`/`ember` in model.py). Each writes the key, then runs
+# `spark quiet`, `spark serve boot` and `spark serve share` (their older
+# spellings `spark headless` and `spark share`), `spark client` (and
+# `spark model` in model.py). Each writes the key, then runs
 # bootstrap.sh so the machine follows; editing site.env by hand and
 # running bootstrap does the same thing.
 
@@ -91,7 +92,7 @@ QUIET_USAGE = """%s quiet -- what spark keeps silent
 
   spark quiet                   the two states: start, audio
   spark quiet start [on|off]    spark's own noise: no login banner, one-line
-                                serve and forge, one-line bare spark
+                                spark serve on, one-line bare spark
   spark quiet audio [on|off]    no sound from spark (the audio row says which
                                 player it would use)
 """ % MARK
@@ -122,7 +123,7 @@ def cmd_quiet(args):
     if sub == "audio":
         say("audio is %s" % ("quiet: spark plays no sound" if args[1] == "on" else "on: the sounds spark has play again"))
     else:
-        say("start is %s" % ("quiet: no login banner, one line from serve, forge and bare spark"
+        say("start is %s" % ("quiet: no login banner, one line each from spark serve on and bare spark"
                              if args[1] == "on" else "loud again: the banner and the full narration are back"))
     from . import check
     check.refresh()
@@ -130,15 +131,15 @@ def cmd_quiet(args):
 
 
 # --------------------------------------------------------------- headless
-HEADLESS_USAGE = """%s headless -- the machine that stays on and answers
+HEADLESS_USAGE = """%s serve boot -- the machine that stays on and answers
 
-  spark headless                what is set, and what is in effect here
-  spark headless on             the page's server up from boot, nobody logged
-                                in, never asleep. Linux: linger, the render
-                                group, sleep masked, the lid ignored. macOS:
-                                LaunchDaemons in system/, pmset never sleeps,
-                                wake on LAN
-  spark headless off            under your login again (macOS: pmset untouched)
+  spark serve boot              what is set, and what is in effect here
+  spark serve boot on           the engine and the page up from boot, nobody
+                                logged in, never asleep. Linux: linger, the
+                                render group, sleep masked, the lid ignored.
+                                macOS: LaunchDaemons in system/, pmset never
+                                sleeps, wake on LAN
+  spark serve boot off          under your login again (macOS: pmset untouched)
 """ % MARK
 HEADLESS_ROWS = ["headless", "linger", "render", "sleep", "lid", "daemons", "runit", "supervisor", r"spark\.(serve|forge|check)"]
 SLEEP_TARGETS = ("sleep.target", "suspend.target", "hibernate.target", "hybrid-sleep.target")
@@ -169,7 +170,7 @@ def render_fact(node):
 
 def headless_facts(cfg):
     """What is in effect on this machine, read-only: [(piece, good, detail)].
-    The check row and `spark headless` read it; bootstrap.sh changes it."""
+    The check row and `spark serve boot` read it; bootstrap.sh changes it."""
     from . import engine, run
     facts = []
     if IS_MAC:
@@ -232,11 +233,11 @@ def cmd_headless(args):
         say(HEADLESS_USAGE.rstrip())
         return 0
     if not args or args[0] == "status":
-        say("%s headless -- SITE_HEADLESS=%s: %s" % (MARK, "yes" if cfg.headless else "no",
-                                                    "stays on and answers (the page's server up from boot, never asleep)" if cfg.headless
-                                                    # runit: runsvdir-USER is a root service, from boot either way
-                                                    else "the services run from boot on runit, headless or not" if not IS_MAC and init_shape() == "runit"
-                                                    else "under your login (spark headless on makes it stay on and answer)"))
+        say("%s serve boot -- SITE_HEADLESS=%s: %s" % (MARK, "yes" if cfg.headless else "no",
+                                                      "stays on and answers (the engine and the page up from boot, never asleep)" if cfg.headless
+                                                      # runit: runsvdir-USER is a root service, from boot either way
+                                                      else "the services run from boot on runit, headless or not" if not IS_MAC and init_shape() == "runit"
+                                                      else "under your login (spark serve boot on makes it stay on and answer)"))
         for piece, good, detail in headless_facts(cfg):
             say("  %s %-26s %s" % (glyph("ok") if good else ("!" if cfg.headless else glyph("na")), piece, detail))
         return 0
@@ -244,7 +245,7 @@ def cmd_headless(args):
         say(HEADLESS_USAGE.rstrip())
         return 2
     if args[0] == "on" and not IS_MAC and is_wsl():
-        say("%s headless -- %s" % (MARK, WSL_NO_BRAIN))
+        say("%s serve boot -- %s" % (MARK, WSL_NO_BRAIN))
         return 2
     set_keys(SITE_HEADLESS="yes" if args[0] == "on" else "no")
     if args[0] == "off":
@@ -253,17 +254,17 @@ def cmd_headless(args):
 
 
 # ------------------------------------------------------------------ share
-SHARE_USAGE = """%s share -- one engine, shared with this machine's other OS users
+SHARE_USAGE = """%s serve share -- one engine, shared with this machine's other OS users
 
-  spark share                what is set, and what is in effect here
-  spark share on             let a `spark` OS group read the api-token, so a
-                             group member's spark answers from this machine's
-                             engine as a client -- their own soul and memory,
-                             one model loaded once for everyone
-  spark share off            the shared token goes; the engine is yours again
+  spark serve share           what is set, and what is in effect here
+  spark serve share on        let a `spark` OS group read the api-token, so a
+                              group member's spark answers from this
+                              machine's engine as a client -- their own soul
+                              and memory, one model loaded once for everyone
+  spark serve share off       the shared token goes; the engine is yours again
 
   another OS user joins once, then logs in again:  sudo gpasswd -a NAME spark
-  then, as them:  spark client URL   (spark share prints the URL)
+  then, as them:  spark client URL   (spark serve share prints the URL)
 """ % MARK
 SHARE_ROWS = ["share"]
 
@@ -283,7 +284,7 @@ def _token_fresh(copy, source):
     """Is the shared copy current? By mtime, not contents: the owner is not
     in the spark group and cannot read the 0640 copy, so a content compare
     would false-alarm. The copy is fresh when it is no older than the source
-    (spark share on stamps it after any token change). Unknown source (a
+    (spark serve share on stamps it after any token change). Unknown source (a
     user with no token of their own) is not our concern -- treat as fresh."""
     try:
         return os.stat(copy).st_mtime >= os.stat(source).st_mtime
@@ -319,7 +320,7 @@ def share_facts(cfg):
         facts.append(("spark group", True, "%d member%s%s" % (len(mem), "" if len(mem) == 1 else "s",
                                                               (": " + ", ".join(mem)) if mem else "")))
     except KeyError:
-        facts.append(("spark group", not cfg.share, "not created (spark share on)"))
+        facts.append(("spark group", not cfg.share, "not created (spark serve share on)"))
     if os.path.exists(SHARE_TOKEN):
         try:
             st = os.stat(SHARE_TOKEN)
@@ -330,7 +331,7 @@ def share_facts(cfg):
         perms = mode == "640" and gname == "spark"
         stale = not _token_fresh(SHARE_TOKEN, TOKEN_FILE)
         facts.append(("shared token", perms and not stale, "%s (%s %s)%s" % (SHARE_TOKEN, mode, gname,
-                      " -- STALE, spark share on re-syncs" if stale else "")))
+                      " -- STALE, spark serve share on re-syncs" if stale else "")))
     else:
         facts.append(("shared token", not cfg.share, "%s absent" % SHARE_TOKEN))
     if os.path.exists(SHARE_URL):
@@ -340,7 +341,7 @@ def share_facts(cfg):
             url = "?"
         facts.append(("engine url", bool(url), "%s (%s)" % (SHARE_URL, url or "empty")))
     else:
-        facts.append(("engine url", not cfg.share, "%s absent (spark serve, then spark share on)" % SHARE_URL))
+        facts.append(("engine url", not cfg.share, "%s absent (spark serve on, then spark serve share on)" % SHARE_URL))
     return facts
 
 
@@ -350,9 +351,9 @@ def cmd_share(args):
         say(SHARE_USAGE.rstrip())
         return 0
     if not args or args[0] == "status":
-        say("%s share -- SITE_SHARE=%s: %s" % (MARK, "yes" if cfg.share else "no",
+        say("%s serve share -- SITE_SHARE=%s: %s" % (MARK, "yes" if cfg.share else "no",
             "this machine's engine is shared with its other OS users" if cfg.share
-            else "not shared (spark share on lets the spark group in)"))
+            else "not shared (spark serve share on lets the spark group in)"))
         for piece, good, detail in share_facts(cfg):
             say("  %s %-14s %s" % (glyph("ok") if good else ("!" if cfg.share else glyph("na")), piece, detail))
         if cfg.share and not no_share():
@@ -363,7 +364,7 @@ def cmd_share(args):
         return 2
     why = no_share()
     if args[0] == "on" and why:
-        say("%s share -- %s" % (MARK, why))
+        say("%s serve share -- %s" % (MARK, why))
         return 2
     set_keys(SITE_SHARE="yes" if args[0] == "on" else "no")
     return apply(SHARE_ROWS)
@@ -379,11 +380,13 @@ CLIENT_USAGE = """%s client -- a client of another machine's server
                                 explain do (spark user add NAME on the other
                                 machine mints your token, spark user login
                                 NAME here presents it)
-  spark client off              serve here again: spark model auto picks one
+  spark client off              off for good: the other machine is not asked
+                                again until spark client URL; spark model
+                                auto picks a model to serve here
 
-  the URL may be this same machine's engine (spark share on there): a group
-  member reads its shared token and answers from it, keeping their own
-  soul and memory -- no second model loaded.
+  the URL may be this same machine's engine (spark serve share on there):
+  a group member reads its shared token and answers from it, keeping their
+  own soul and memory -- no second model loaded.
 """ % MARK
 
 
@@ -414,14 +417,16 @@ def cmd_client(args):
     if args[0] == "off":
         # the one deliberate promotion: the client shape ends here, then
         # `spark model auto` runs as on any server (cmd_model refuses a
-        # choice while the shape holds)
-        say("the other machine stays first while it answers; this machine's own model is the fallback")
-        set_keys(SITE_AI_MODEL="auto")
+        # choice while the shape holds). Off means off: SITE_PEER_AI_URL
+        # goes too, so the other machine is never a candidate again (the
+        # brain's order, wire.candidates) until `spark client URL`
+        say("the other machine is not asked again until spark client URL; this machine serves its own model")
+        set_keys(SITE_AI_MODEL="auto", SITE_PEER_AI_URL="")
         from . import model
         return model.cmd_model(["auto"])
     url = args[0].rstrip("/")
     if not re.match(r"^https?://[^/\s]+$", url):
-        say("%s client -- URL is http://host:port, the other machine's server (spark forge --print-client there)" % MARK)
+        say("%s client -- URL is http://host:port, the other machine's server (spark serve --login there)" % MARK)
         return 2
     set_keys(SITE_PEER_AI_URL=url, SITE_AI_MODEL="none")
     if not cfg.get("SPARK_API_KEY_FILE", "") and os.access(SHARE_TOKEN, os.R_OK):
@@ -435,8 +440,7 @@ def cmd_client(args):
             say("then log in as yourself: " + _login_hint(url))
         from . import engine
         # a machine that served: the unit would bring the engine back at
-        # boot, and spark serve off refuses while it is loaded -- stop
-        # and disable it here, remove its links, and say so
+        # boot -- stop and disable it here, remove its links, and say so
         stopped = False
         name = engine.unit_name("serve")
         if IS_MAC:

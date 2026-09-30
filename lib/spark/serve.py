@@ -1,31 +1,41 @@
-# spark.serve -- `spark serve [on|off]`: the local llama-server, by hand
-# or as the unit's foreground process. on|off is the only switch
-# vocabulary (the grammar); bare shows.
+# spark.serve -- `spark serve [on|off]`: the one server verb. on|off
+# switches the engine (the local llama-server) AND the page's server
+# together, kept in spark.env (SPARK_SERVICE, SPARK_FORGE) and run
+# through their units; bare shows one view of what answers. Its words:
+# boot (site.cmd_headless), share (site.cmd_share), --login and --audit
+# (the page's). `--foreground` is what the engine's unit runs.
 
 import os
 import subprocess
 import sys
 import time
 
-from . import IS_MAC, MARK, REPO, bind_check, config, glyph, lan_ip, own_hostnames, say, wait_lan_ip
+from . import (IS_MAC, MARK, REPO, SPARK_ENV, bind_check, config, forge_url, glyph, lan_ip, own_hostnames, say,
+               wait_lan_ip)
 from . import engine, wire
 
-USAGE = """%s serve -- the engine, served on this LAN
+USAGE = """%s serve -- the engine and the page, served on this LAN
 
-  spark serve                 status: the url, whether it answers, the model
-  spark serve on              start it in the background, wait until it answers
-  spark serve off             stop an engine spark serve started
-  spark serve off --force     also the unit's, or one spark did not start
-  spark serve off --force --noreload   and disable the unit so it stays down
-  spark serve --foreground    become the engine (what the unit runs)
-  spark serve --host ADDR     bind ADDR instead of this machine's LAN address
-  spark serve --print-client  the two lines another machine needs to use it
+  spark serve                 what answers (this machine or the other), the
+                              model and the chat model, the page, the units,
+                              boot, share
+  spark serve on              the engine and the page up through their units,
+                              and kept (SPARK_SERVICE, SPARK_FORGE)
+  spark serve off             both stopped, and kept down
+  spark serve off --force     also a llama-server spark did not start
+  spark serve boot [on|off]   up from boot, nobody logged in, never asleep
+  spark serve share [on|off]  one engine for every OS user here (Linux)
+  spark serve --login         the page's URL; at a terminal the admin token
+                              and its QR (--no-qr; --show-token when piped);
+                              how another machine joins
+  spark serve --login --new   rotate the admin token; its logins die
+  spark serve --audit [N]     the newest N admin actions (50), sealed
+                              (--porcelain: tab-separated)
+  spark serve --foreground    become the engine (what its unit runs;
+                              --host ADDR binds ADDR)
 """ % MARK
-
-
-def client_lines(cfg, url):
-    return ["for another machine to use this server:  SPARK_BASE_URL=%s   (or SITE_PEER_AI_URL in its site.env)" % url,
-            "and the token it needs:                  scp <this-machine>:%s ~/.local/state/spark/api-token" % cfg.token_file]
+# the bootstrap rows `spark serve on|off` shows: the two units, per init
+UNIT_ROWS = ["spark-serve", "spark-forge", r"spark\.(serve|forge)", "daemons", "supervisor", "runit", "systemd", "launchd"]
 
 
 def _die(msg, code=1):
@@ -182,26 +192,23 @@ def _through_unit(cfg, url, quiet):
     else:
         sys.stdout.write(" ready%s\n" % at)
         _warm(cfg, url)
-        say("\n".join(client_lines(cfg, url)))
     from . import check
     check.refresh()
     return 0
 
 
-def cmd_serve(args, by_hand=False):
-    """`spark serve on`, and the unit's `--foreground`. by_hand: a restart
-    of a server spark started by hand stays by hand (model, bench) -- it
-    never enables a unit disabled on purpose."""
+def cmd_serve(args, by_hand=False, wait_unit=False):
+    """The engine's half of `spark serve on`, and the unit's
+    `--foreground`. by_hand: a restart of a server spark started by hand
+    stays by hand (model, bench) -- it never enables a unit disabled on
+    purpose. wait_unit: bootstrap enabled the unit just now (`spark serve
+    on`), so its server loading is waited for, not refused."""
     cfg = config.load()
     fg = "--foreground" in args
     host = ""
     if "--host" in args:
         i = args.index("--host")
         host = args[i + 1] if i + 1 < len(args) else ""
-    if "--print-client" in args:
-        url = wire.serve_url() or "http://%s:%d" % (cfg.serve_host or lan_ip() or "<lan-ip>", cfg.port)
-        say("\n".join(client_lines(cfg, url)))
-        return 0
     if "--warm-when-up" in args:
         # the server's pid follows the flag; an older unit's helper had
         # none and watched its parent -- that parent is the server too
@@ -245,10 +252,11 @@ def cmd_serve(args, by_hand=False):
             say("%s serve -- already serving at %s" % (MARK, url))
             return 0
         say("%s serve -- already serving at %s" % (MARK, url))
-        say("\n".join(client_lines(cfg, url)))
         _warm(cfg, url)
         return 0
     if st == "loading" and engine.service_state(cfg) == "loaded":
+        if wait_unit and not fg:
+            return _through_unit(cfg, url, quiet)
         # the unit's own server is loading (503): a second spawn would
         # fail to bind and then forget() the RUNNING server's pidfile and
         # serve-url -- refuse, the way cmd_stop refuses while the unit
@@ -313,16 +321,18 @@ def cmd_serve(args, by_hand=False):
     else:
         sys.stdout.write(" ready (pid %d)\n" % pid)
         _warm(cfg, url)
-        say("\n".join(client_lines(cfg, url)))
     from . import check
     check.refresh()
     return 0
 
 
 def cmd_stop(args):
+    """The engine's half of `spark serve off`: its unit stopped and kept
+    down (the manager's disable), spark's own server by hand TERMed, and
+    a llama-server spark did not start only with --force. `--noreload`
+    is an older spelling: off keeps it down anyway."""
     cfg = config.load()
     force = "--force" in args
-    noreload = "--noreload" in args
     if cfg.base_url:
         host = cfg.base_url.split("//")[-1].split(":")[0].lower()
         if host not in own_hostnames() and host not in (lan_ip(), "127.0.0.1", "localhost"):
@@ -330,30 +340,29 @@ def cmd_stop(args):
     st = engine.service_state(cfg)
     mine = engine.pidfile_pid()
     pids = engine.server_pids(cfg.port)
-    if st == "loaded" and not noreload and mine and mine in pids:
+    if st == "loaded" and mine and mine in pids:
         word, upid = engine.unit_state(cfg)
         if word in ("down", "finish") or (word == "run" and upid and upid != mine):
             # the unit is not the server (it stood down beside this one)
             # and spark's own server by hand answers: that one is ours to
-            # stop, and nothing brings it back -- the services row's
-            # remedy says this verb
-            st = "hand"
+            # stop first -- the services row's remedy says this verb
+            engine.terminate([mine])
+            if engine.wait_gone([mine], 20):
+                engine.terminate([mine], force=True)
+            engine.forget()
+            say("%s serve -- stopped pid %d, a server spark started by hand" % (MARK, mine))
+            mine, pids = 0, engine.server_pids(cfg.port)
     if st == "loaded":
         if IS_MAC and engine.service_domain(cfg) == "system":
-            return _die("the server is a LaunchDaemon (spark headless on) -- sudo launchctl bootout %s stops it; spark headless off puts it back under your login" % engine.service_target(cfg))
-        if not force:
-            from . import init_shape
-            mgr = init_shape()
-            return _die("%s would bring the server straight back -- spark serve off --force stops it; --noreload keeps it down" % mgr)
-        undo = engine.service_stop(noreload)
+            return _die("the server is a LaunchDaemon (spark serve boot on) -- sudo launchctl bootout %s stops it; "
+                        "spark serve boot off puts it back under your login" % engine.service_target(cfg))
+        engine.service_stop(True)
         left = engine.wait_gone(engine.server_pids(cfg.port), 20)
         if left:
             engine.terminate(left, force=True)
         engine.forget()
-        say("%s serve -- %s; to bring it back: %s" % (MARK, "disabled" if noreload else "stopped", undo))
+        say("%s serve -- the engine stopped, and kept down (spark serve on brings it back)" % MARK)
         return 0
-    if noreload:
-        return _die("nothing to disable -- no unit here (%s)" % ("disabled already" if st == "disabled" else "on demand"))
     if mine and mine in pids:
         engine.terminate([mine])
         left = engine.wait_gone([mine], 20)
@@ -377,52 +386,174 @@ def cmd_stop(args):
         say("%s serve -- killed pid %s" % (MARK, ",".join(str(p) for p in pids)))
         return 0
     engine.forget()
-    say("%s serve -- not running" % MARK)
+    say("%s serve -- the engine not running" % MARK)
     return 0
+
+
+UNIT_WORD = {"loaded": "unit always-on", "disabled": "unit off on purpose", "absent": "no unit"}
+
+
+def _kept(cfg):
+    """What spark.env keeps: "on" (the engine's unit wanted and the page
+    with it), "off" (both kept down), else the two keys as they are."""
+    svc, forge = cfg.service, cfg.forge
+    if svc == "auto" and forge in ("auto", "on"):
+        return "on"
+    if svc != "auto" and forge == "off":
+        return "off"
+    return "SPARK_SERVICE=%s, SPARK_FORGE=%s" % (svc, forge)
 
 
 def cmd_show():
-    """`spark serve` alone shows, like every other bare verb: where it
-    would serve, whether anything answers there, and with what."""
+    """`spark serve` alone shows, like every other bare verb: one view of
+    what answers (this machine or the other), its models, the engine and
+    the page here with their units, boot and share. It never mutates."""
+    from . import cli, site
     cfg = config.load()
+    rows = []
+    try:
+        brain = wire.resolve_brain(cfg, fresh=True)
+    except wire.BrainError as e:
+        brain = None
+        rows.append(("answers", e.hint))
+    if brain:
+        here = wire.dest_of(brain.url)
+        mine = {wire.dest_of(u) for u in (forge_url(), wire.serve_url(), cfg.loopback_url()) if u}
+        where = "this machine" if here in mine or here == "local" else "the other machine"
+        rows.append(("answers", "%s, %s (%s)" % (brain.url, "the page's server" if brain.forge else "the engine", where)))
+        roles = dict((r, s) for r, s, _l in cli._role_rows(cfg, brain.url, brain.forge))
+        chat = roles.get("ember")
+        rows.append(("model", "%s, chat model %s" % (roles.get("spark", brain.model), chat) if chat
+                     else "%s (it answers chat too)" % brain.model))
     if cfg.base_url:
         say("%s serve -- a client of %s (SPARK_BASE_URL): nothing serves here" % (MARK, cfg.base_url))
-        return 0
-    if cfg.client:                                     # the check rows say the same
+    elif cfg.client:
         from .check import client_of
         say("%s serve -- %s" % (MARK, client_of(cfg)))
+    else:
+        kept = _kept(cfg)
+        say("%s serve -- %s" % (MARK, {"on": "on: the engine and the page, kept up",
+                                       "off": "off: the engine and the page, kept down"}.get(kept, kept)))
+    for label, value in rows:
+        say("  %-8s %s" % (label, value))
+    if cfg.base_url or cfg.client:
         return 0
     url = wire.serve_url() or "http://%s:%d" % (cfg.serve_host or lan_ip() or "<lan-ip>", cfg.port)
     st = wire.health(url)
-    if st == "loading":
-        say("%s serve -- loading its model at %s" % (MARK, url))
-        return 0
-    if st != "ok":
-        say("%s serve -- not running (spark serve on)" % MARK)
-        return 0
-    what = ""
-    try:
-        files = engine.roles(cfg)
-        what = ", ".join(os.path.basename(files[r]) for r in engine.ROLES if files.get(r))
-    except Exception:                      # a report never fails on its own detail
-        pass
-    say("%s serve -- serving at %s%s" % (MARK, url, " (%s)" % what if what else ""))
+    engine_is = {"ok": "serving at %s" % url, "loading": "loading its model at %s" % url}.get(st, "not running")
+    say("  %-8s %s (%s)" % ("engine", engine_is, UNIT_WORD[engine.service_state(cfg)]))
+    furl = forge_url()
+    fh = wire.forge_health(furl) if furl else "down"
+    page_is = ("%s/login" % furl) if isinstance(fh, dict) else "not running"
+    say("  %-8s %s (%s)" % ("page", page_is, UNIT_WORD[engine.service_state(cfg, "forge")]))
+    tok = cfg.forge_token_file
+    if os.path.exists(tok):
+        mode = os.stat(tok).st_mode & 0o777
+        login = "admin token %s%s" % (_short(tok), "" if mode == 0o600 else " %04o -- chmod 600 it" % mode)
+    else:
+        login = "no admin token yet (the page's first start writes it)"
+    from . import users
+    n = len(users.list_users())
+    say("  %-8s %s; %s (spark serve --login)" % ("login", login, "%d user%s" % (n, "" if n == 1 else "s") if n else "no users yet"))
+    say("  %-8s %s" % ("boot", "up from boot, never asleep (SITE_HEADLESS=yes)" if cfg.headless
+                       else "from boot on runit, headless or not" if not IS_MAC and _runit()
+                       else "under your login (spark serve boot on)"))
+    why = site.no_share()
+    say("  %-8s %s" % ("share", why if why else "shared with the spark group (SITE_SHARE=yes)" if cfg.share
+                       else "not shared (spark serve share on)"))
     return 0
+
+
+def _runit():
+    from . import init_shape
+    return init_shape() == "runit"
+
+
+def _short(path):
+    home = os.path.expanduser("~")
+    return "~" + path[len(home):] if path.startswith(home + "/") else path
+
+
+def cmd_on(args):
+    """`spark serve on`: the engine and the page, kept (SPARK_SERVICE=auto
+    and SPARK_FORGE=on, written together), their units enabled by
+    bootstrap, each waited on until it answers. The engine first: the
+    page fronts it."""
+    cfg = config.load()
+    if cfg.base_url:
+        return _die("this machine is a client of %s (SPARK_BASE_URL) -- unset it to serve here" % cfg.base_url, engine.EX_CONFIG)
+    if cfg.client:
+        from .check import client_of
+        return _refuse(client_of(cfg))
+    try:
+        engine.resolve_for_spawn(cfg)        # nothing to serve: say why before anything is kept
+    except engine.EngineError as e:
+        return _die(str(e), e.code)
+    from . import site
+    wire.ensure_token(cfg)                   # bootstrap enables the unit only once a token exists
+    site.set_keys(_file=SPARK_ENV, SPARK_SERVICE="auto", SPARK_FORGE="on")
+    rc = site.apply(UNIT_ROWS)
+    if rc:
+        return rc
+    rc = cmd_serve(args, wait_unit=not os.environ.get("SPARK_NO_APPLY"))
+    if rc:
+        return rc
+    from . import forgeserve
+    rc = forgeserve.cmd_start([])
+    if rc == 0 and not config.load().quiet_start:
+        say("\n".join(forgeserve.client_steps(forgeserve.page_url())))
+    return rc
+
+
+def cmd_off(args):
+    """`spark serve off`: both kept down (SPARK_SERVICE=none and
+    SPARK_FORGE=off, written together), their units stopped and
+    disabled; the page first, then the engine. --force also ends a
+    llama-server spark did not start."""
+    cfg = config.load()
+    if cfg.base_url:
+        return cmd_stop(args)                 # a client by SPARK_BASE_URL: nothing kept here to switch
+    if cfg.client:
+        from .check import client_of
+        say("%s serve -- %s: nothing serves here" % (MARK, client_of(cfg)))
+        return 0
+    from . import check, forgeserve, site
+    site.set_keys(_file=SPARK_ENV, SPARK_SERVICE="none", SPARK_FORGE="off")
+    rc = site.apply(UNIT_ROWS)
+    page = forgeserve.cmd_stop(["--force"])
+    rc2 = cmd_stop(args)
+    check.refresh()
+    return rc or page or rc2
 
 
 def main(sub, args):
     """`spark serve` alone shows; `on` and `off` are the only switch words
-    (the grammar), and every other argument is the unit's own entry point."""
+    (the grammar); boot and share are its two machine choices, --login and
+    --audit the page's; --foreground and --warm-when-up are the unit's."""
     if args and args[0] in ("-h", "--help", "help"):
         say(USAGE.rstrip())
         return 0
-    if not args or args[0] == "status":
+    word, rest = (args[0], args[1:]) if args else ("status", [])
+    if word == "status":
         return cmd_show()
-    if args[0] == "on":
-        return cmd_serve(args[1:])
-    if args[0] == "off":
-        rc = cmd_stop(args[1:])
-        from . import check
-        check.refresh()
-        return rc
-    return cmd_serve(args)
+    if word == "on":
+        return cmd_on(rest)
+    if word == "off":
+        return cmd_off(rest)
+    from . import site
+    if word == "boot":
+        return site.cmd_headless(rest)
+    if word == "share":
+        return site.cmd_share(rest)
+    from . import forgeserve
+    if word == "--login":
+        return forgeserve.cmd_login(rest)
+    if word == "--print-client":                     # an older spelling: the login's client half
+        return forgeserve.cmd_print_client(rest)
+    if word == "--audit":
+        from . import audit
+        return audit.cmd_audit(rest)
+    if word in ("--foreground", "--warm-when-up", "--host"):
+        return cmd_serve(args)
+    say(USAGE.rstrip())
+    return 2

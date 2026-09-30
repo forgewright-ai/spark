@@ -1,7 +1,7 @@
-# spark.model -- the AI-infrastructure verbs: `spark model` (which model
+# spark.model -- the AI-infrastructure verb: `spark model` (which model
 # this machine serves: the table, a choice, budget, rm, add, verify) and
-# `spark ember` (the conversational model, the second role from the same
-# table). Each writes the site.env key, then applies it (site.set_keys,
+# `spark model --chat` (the conversational model, the second role from
+# the same table; `spark ember` is its older spelling). Each writes the site.env key, then applies it (site.set_keys,
 # site.apply) and restarts the server that must follow.
 
 import json
@@ -63,6 +63,8 @@ MODEL_USAGE = """%s model -- which model this machine serves
   spark model verify            sha256 every downloaded file now; exit 1 on
                                 a mismatch (spark check's models row is the
                                 cached, daily version of this)
+  spark model --chat [NAME]     the chat model, a second one: NAME, auto,
+                                none, or list (-h: more)
 
   On a client (spark client URL) the table is the other machine's and every
   choice is refused: choose there, or spark client off to serve here again.
@@ -71,7 +73,7 @@ MODEL_USAGE = """%s model -- which model this machine serves
 
 def _client_no(cfg, what):
     """The one line a client answers to a model choice: nothing is served
-    here, so a budget, a model or an ember chosen here would silently
+    here, so a budget, a model or a chat model chosen here would silently
     make this machine a server (that is spark client off, by name)."""
     say("%s %s -- a client of %s serves nothing; choose on the other machine, or spark client off to serve here again"
         % (MARK, what, cfg.peer_ai_url))
@@ -112,7 +114,7 @@ def _restart_server(cfg):
         if not engine.kickstart(cfg):
             return
         # the brain cache names the model that WAS served (60 s): the next
-        # `spark brain` after a swap must resolve afresh, not say the old stem
+        # `spark status` after a swap must resolve afresh, not say the old stem
         wire.drop_cache()
         # the server binds to the LAN ip (serve.py does the same), and
         # a just-restarted server has not written serve-url yet: falling
@@ -135,7 +137,7 @@ def _restart_server(cfg):
         serve.cmd_stop([])
         serve.cmd_serve([], by_hand=True)
     else:
-        say("ok     server       not running -- the next spark serve uses it")
+        say("ok     server       not running -- the next spark serve on uses it")
 
 
 SOURCE_MARKS = {"repo": " ", "user": "u"}
@@ -259,7 +261,7 @@ def model_line(r, marks=None, width=13, lic_width=10):
 
 
 def print_model_table(cfg):
-    """The one table `spark model list` and `spark ember list` share:
+    """The one table `spark model list` and `spark model --chat list` share:
     every row of models.env and yours with its RAM verdict, the spark pick
     marked * and the ember pick + (the marks bootstrap.sh --list-models
     draws), a second mark `u` for your own rows, the license's first word,
@@ -463,6 +465,8 @@ def cmd_model(args):
     if args and args[0] in ("-h", "--help", "help"):
         say(MODEL_USAGE.rstrip())
         return 0
+    if args[0:1] == ["--chat"]:
+        return cmd_ember(args[1:])
     if args[0:1] == ["add"]:
         return _model_add(args[1:])
     if args[0:1] == ["verify"]:
@@ -561,14 +565,14 @@ def cmd_model(args):
 
 
 # ------------------------------------------------------------------ ember
-EMBER_USAGE = """%s ember -- the chat model
+EMBER_USAGE = """%s model --chat -- the chat model
 
-  spark ember                   the two roles: model, file, loaded or not
-  spark ember NAME              choose it: site.env, download, engine restart
-  spark ember auto              the largest that fits beside the spark model
-  spark ember none              no second model -- spark answers everything
-  spark ember list              the model table, the spark pick marked *,
-                                the chat model + (the same table as spark model)
+  spark model --chat            the two roles: model, file, loaded or not
+  spark model --chat NAME       choose it: site.env, download, engine restart
+  spark model --chat auto       the largest that fits beside the spark model
+  spark model --chat none       no second model -- spark answers everything
+  spark model --chat list       the model table, the spark pick marked *, the
+                                chat model + (the same table as spark model)
 """ % MARK
 
 
@@ -585,11 +589,11 @@ def cmd_ember(args):
         files = engine.roles(cfg)
         url = wire.serve_url()
         status = engine.models_status(cfg, url) if url and wire.health(url) == "ok" else {}
-        say("%s ember -- SITE_EMBER_MODEL=%s" % (MARK, cfg.ember_model))
+        say("%s model --chat -- SITE_EMBER_MODEL=%s" % (MARK, cfg.ember_model))
         for role in engine.ROLES:
             f, r = files[role], pair.get(role)
             if not f and not r:
-                say("  %-5s  none -- %s" % (role, "spark answers everything (spark ember NAME adds one)"
+                say("  %-5s  none -- %s" % (role, "spark answers everything (spark model --chat NAME adds one)"
                                             if role == "ember" else "no model (./bootstrap.sh downloads one)"))
             elif f:
                 say(("  %-5s  %-14s %5.1f GB  %s" % (role, engine.model_stem(f),
@@ -601,11 +605,11 @@ def cmd_ember(args):
     rows = config.model_tables()
     match = [r for r in rows if r[0] == name]
     if name not in ("auto", "none") and not match:
-        say("spark ember: no model named %s -- one of: auto none %s   (spark ember list)" % (name, " ".join(r[0] for r in rows)))
+        say("spark model --chat: no model named %s -- one of: auto none %s   (spark model --chat list)" % (name, " ".join(r[0] for r in rows)))
         return 2
     if cfg.client:
-        return _client_no(cfg, "ember")
-    if match and not _license_ok(match[0], "ember"):
+        return _client_no(cfg, "model --chat")
+    if match and not _license_ok(match[0], "model --chat"):
         return 1
     set_keys(SITE_EMBER_MODEL=name)
     pend = [] if os.environ.get("SPARK_NO_APPLY") else _downloads_pending(config.load())

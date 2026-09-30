@@ -220,7 +220,7 @@ def resolve_for_spawn(cfg):
         raise EngineError("no model in %s -- ./bootstrap.sh downloads one (or set SPARK_MODEL)" % cfg.models_dir, EX_CONFIG)
     ec = cfg.ember_model
     if ec not in ("auto", "none") and not chosen_model_name(cfg, "ember"):
-        raise EngineError("SITE_EMBER_MODEL=%s: no such row in models.env (./bootstrap.sh --list-models; spark ember none)" % ec, EX_CONFIG)
+        raise EngineError("SITE_EMBER_MODEL=%s: no such row in models.env (./bootstrap.sh --list-models; spark model --chat none)" % ec, EX_CONFIG)
     return b, m
 
 
@@ -914,7 +914,7 @@ def service_target(cfg, unit="serve"):
 
 def daemon_note(cfg, unit="serve", verb="kickstart -k"):
     """The one honest line when a unit is a LaunchDaemon: the user must sudo."""
-    return "todo   %-12s the %s runs as a daemon (spark headless): sudo launchctl %s %s" % (
+    return "todo   %-12s the %s runs as a daemon (spark serve boot): sudo launchctl %s %s" % (
         unit, "page's server" if unit == "forge" else "engine", verb, service_target(cfg, unit))
 
 

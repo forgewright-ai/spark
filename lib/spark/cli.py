@@ -49,13 +49,11 @@ LAST_USAGE = """spark last -- the last exchange, with its tok/s
 STATUS_USAGE = """spark status -- the model, prompt line, server, soul, memory, last answer
 
   spark status                what bare spark shows (SITE_QUIET_START=yes makes
-                              bare spark one line; spark status stays full)
-"""
-BRAIN_USAGE = """spark brain -- what answers right now: the page's server or the engine
-
-  spark brain                 the url, the model, the roles it serves
-  spark brain --porcelain     url<TAB>model<TAB>forge|model; exit 1 when none
-  spark brain --fresh         ignore the cached answer
+                              bare spark one line; spark status stays full):
+                              what answers, the model and the chat model
+  spark brain --porcelain     what answers, for a program: url<TAB>model<TAB>
+                              forge|model; exit 1 when nothing does (--fresh:
+                              ignore the cached answer)
 """
 OFF_USAGE = """spark off -- silence the prompt line, every pane at once
 
@@ -1271,22 +1269,18 @@ def _role_rows(cfg, url, is_forge):
 
 
 def cmd_brain(args):
-    if _help(args, BRAIN_USAGE):
+    """`spark brain --porcelain` is contract 5, exactly; bare `spark
+    brain` is an older spelling of `spark status`, named nowhere."""
+    if _help(args, STATUS_USAGE):
         return 0
-    porcelain = "--porcelain" in args
+    if "--porcelain" not in args:
+        return cmd_status([a for a in args if a != "--fresh"])
     cfg = config.load()
     try:
         url, model, is_forge = wire.resolve_brain(cfg, fresh="--fresh" in args)
-    except wire.BrainError as e:
-        if not porcelain:
-            say(glyph("hammer") + " " + e.hint)
+    except wire.BrainError:
         return 1
-    if porcelain:                       # contract 5: the spark role's stem
-        say("%s\t%s\t%s" % (url, model, "forge" if is_forge else "model"))
-        return 0
-    say("%s  %s  (%s)" % (url, model, "the page's server" if is_forge else "the engine"))
-    for role, stem, loaded in _role_rows(cfg, url, is_forge):
-        say("  %s  %s  %s" % (role, stem, "loaded" if loaded else "unloaded"))
+    say("%s\t%s\t%s" % (url, model, "forge" if is_forge else "model"))   # contract 5: the spark role's stem
     return 0
 
 
@@ -1348,7 +1342,8 @@ def cmd_status(args, _bare=False):
     say("  prompt   %s%s" % ("off (spark on)" if os.path.exists(OFF_FLAG) else "on",
                               "  in %s" % ", ".join("%s %d" % x for x in w) if w else "  (no shell has sourced it)"))
     st = engine.service_state(cfg)
-    say("  service  %s" % {"loaded": "always-on", "disabled": "disabled on purpose", "absent": "on demand (spark serve)"}[st])
+    say("  service  %s" % {"loaded": "always-on (spark serve)", "disabled": "off on purpose (spark serve on)",
+                           "absent": "on demand (spark serve on keeps it)"}[st])
     from . import SOUL_FILE, memory, soul
     _, source = soul.read(cfg)
     if source == "file":

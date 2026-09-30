@@ -4,8 +4,8 @@
 # and its rc, a user's name and what was done to it -- never a command's
 # text. The FORGE's admin routes write it (do/run, /api/run, a user's
 # token rotation), and so do the verbs that mint, remove and rotate
-# (spark user add|remove|token --new, spark forge token --new). `spark
-# forge audit [N] [--porcelain]` reads it, newest N. Append-only:
+# (spark user add|remove|token --new, spark serve --login --new). `spark
+# serve --audit [N] [--porcelain]` reads it, newest N. Append-only:
 # vault.append_sealed holds an existing file to its header first, so a
 # file that is not the trail takes no record and is never written over;
 # a trail that does not open is one signed line, exit 2 -- the ledger's
@@ -93,16 +93,17 @@ def line(rec, porcelain=False):
 
 
 def cmd_audit(args):
-    """spark forge audit [N] [--porcelain]: the newest N admin actions."""
+    """spark serve --audit [N] [--porcelain]: the newest N admin actions
+    (`spark forge audit` is its older spelling)."""
     porcelain = "--porcelain" in args
     words = [a for a in args if a != "--porcelain"]
     if len(words) > 1 or (words and not words[0].isdigit()):
-        say("%s forge -- audit takes a count: spark forge audit [N] [--porcelain]" % MARK)
+        say("%s serve -- --audit takes a count: spark serve --audit [N] [--porcelain]" % MARK)
         return 2
     try:
         recs = records(int(words[0]) if words else DEFAULT_N)
     except Refused as e:
-        say("%s forge -- %s" % (MARK, e.hint))
+        say("%s serve -- %s" % (MARK, e.hint))
         return 2
     if porcelain:
         for r in recs:

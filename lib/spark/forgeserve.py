@@ -38,9 +38,9 @@ import urllib.request
 import zlib
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from . import (BAR_CACHE, CHECK_JSON, EMBER_TOKEN_FILE, FORGE_LOCK, FORGE_LOG, FORGE_PID,
+from . import (BAR_CACHE, CHECK_JSON, FORGE_LOCK, FORGE_LOG, FORGE_PID,
                FORGE_URL_FILE, HOME, IS_MAC, MARK, OFF_FLAG, REPO, SERVE_URL_FILE, SPARK_ENV,
-               bind_check, config, forge_url, lan_ip, log_exc, own_hostnames, say, state_dir, wait_lan_ip,
+               bind_check, config, confirm, forge_url, lan_ip, log_exc, own_hostnames, say, state_dir, wait_lan_ip,
                wait_ready)
 from . import engine, mem_total_gb, qr, wire
 from . import version as _version
@@ -146,23 +146,18 @@ def route_role(method, path):
                 return role
     return None
 
-USAGE = """%s forge -- the page and its server
+USAGE = """%s forge -- the page's server, what its unit runs
 
-  spark forge                  status: url, health, model, unit, token, log tail
-  spark forge on | off         SPARK_FORGE in spark.env; the unit; runs it
-  spark forge off --force      also a managed unit's, or one spark did not start
-  spark forge --foreground     what the unit runs; exit 78 = misconfigured
-                               (--host ADDR, --port N override the config)
-  spark forge --print-url      the page's login URL; at a terminal the admin
-                               token and its QR -- scan it, the phone is
-                               in (--no-qr; --show-token when piped); a
-                               user logs in with their own QR or token
-                               (spark user add NAME)
-  spark forge --print-client   what a client needs: the URL, and how to
-                               mint a user there
-  spark forge token --new      rotate the admin token; its logins die
+  spark forge --foreground     the page's server in the foreground; exit 78
+                               = misconfigured (--host ADDR, --port N
+                               override the config)
+  spark serve                  the view: what answers, the page, its unit
+  spark serve on | off         the engine and the page together, kept
+  spark serve --login          the page's URL; at a terminal the admin
+                               token and its QR; how another machine joins
+  spark serve --login --new    rotate the admin token; its logins die
                                (a user rotates with spark user token --new)
-  spark forge audit [N]        the newest N admin actions (50), sealed in
+  spark serve --audit [N]      the newest N admin actions (50), sealed in
                                the admin's store (--porcelain: tab-separated)
 """ % MARK
 
@@ -475,7 +470,7 @@ class ForgeServer(ThreadingHTTPServer):
         """(role, name, dk) of a logged-in browser, or None. A session is
         a random id minted at login, admin and user alike, in memory
         only -- a restart sends every browser back to the login -- and
-        it dies with its token: a rotation (spark forge token --new,
+        it dies with its token: a rotation (spark serve --login --new,
         spark user token --new) or a removal ends it, and so does its
         expiry."""
         from . import vault
@@ -768,7 +763,7 @@ class Handler(BaseHTTPRequestHandler):
             return None
         self.role, self.user, self.dk = who
         if not self.role:
-            return self._error(401, "auth", "log in with your token (spark user add NAME mints one on %s; the admin's is spark forge --print-url)" % srv.cfg.name)
+            return self._error(401, "auth", "log in with your token (spark user add NAME mints one on %s; the admin's is spark serve --login)" % srv.cfg.name)
         if role == "admin" and self.role != "admin":
             return self._error(403, "role", "this needs the admin token")
         if method == "GET":
@@ -1260,7 +1255,7 @@ class Handler(BaseHTTPRequestHandler):
         once and never stored."""
         from . import users
         if self.role != "user":
-            return self._error(403, "role", "the admin rotates with spark forge token --new")
+            return self._error(403, "role", "the admin rotates with spark serve --login --new")
         new = users.rewrap(self.user, self.dk)
         sid = self.server.new_session("user", new, self.user, self.dk)
         log("%s user token rotated %s" % (self._ip(), self.user))
@@ -1564,7 +1559,7 @@ def _shell():
 
 # ------------------------------------------------------------ the process
 def _die(msg, code=1):
-    print("spark forge: " + msg, file=sys.stderr, flush=True)
+    print("spark serve: " + msg, file=sys.stderr, flush=True)
     return code
 
 
@@ -1664,7 +1659,7 @@ def cmd_foreground(args):
         return _die("bad port", EX_CONFIG)
     why = _misconfigured(cfg)
     if why:
-        return _die(why + " -- ./bootstrap.sh, or spark serve", EX_CONFIG)
+        return _die(why + " -- ./bootstrap.sh, then spark serve on", EX_CONFIG)
     ensure_token(cfg)
     url = "http://%s:%d" % (host, port)
     # bind FIRST, write the records after: writing forge-url before the
@@ -1712,10 +1707,10 @@ def cmd_start(args):
         return _die(why, EX_CONFIG)
     why = _misconfigured(cfg)
     if why:
-        return _die(why + " -- ./bootstrap.sh, or spark serve", EX_CONFIG)
+        return _die(why + " -- ./bootstrap.sh, then spark serve on", EX_CONFIG)
     url = "http://%s:%d" % (host, port)
     if wire.forge_health(url) not in (None, "down"):
-        say("%s forge -- already running at %s" % (MARK, url))
+        say("%s serve -- the page already running at %s/login" % (MARK, url))
         return 0
     if engine.forge_service_state(cfg) in ("loaded", "disabled"):
         # a unit is here: its manager starts the page's server, never a
@@ -1730,7 +1725,7 @@ def cmd_start(args):
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except OSError:
         os.close(lock)
-        return _die("another `spark forge start` is running right now")
+        return _die("another `spark serve on` is starting the page right now")
     try:
         if os.path.exists(FORGE_LOG) and os.path.getsize(FORGE_LOG) > LOG_MAX:
             os.replace(FORGE_LOG, FORGE_LOG + ".1")
@@ -1756,17 +1751,17 @@ def cmd_start(args):
         return False
 
     try:
-        up = wait_ready("" if quiet else "starting", probe, 30, 0.5)
+        up = wait_ready("" if quiet else "the page", probe, 30, 0.5)
     except Exited:
         return _die("exited %d while starting:\n%s" % (p.returncode, "\n".join(log_tail(5))), p.returncode or 1)
     if not up:
         engine.terminate([p.pid])
         return _die("no answer in 30 s -- stopped; the log tail:\n" + "\n".join(log_tail(5)))
     if quiet:
-        say("%s forge -- ready (pid %d) at %s" % (MARK, p.pid, url))
+        say("%s serve -- the page ready (pid %d) at %s/login" % (MARK, p.pid, url))
         return 0
     sys.stdout.write(" ready (pid %d)\n" % p.pid)
-    say("%s forge -- %s/login   (spark forge --print-url for the token)" % (MARK, url))
+    say("%s serve -- the page at %s/login   (spark serve --login for the token)" % (MARK, url))
     return 0
 
 
@@ -1793,7 +1788,7 @@ def _through_unit(cfg, url):
         return False
 
     try:
-        up = wait_ready("" if quiet else "starting", probe, 30, 0.5)
+        up = wait_ready("" if quiet else "the page", probe, 30, 0.5)
     except StoodDown:
         return _die("the unit stood down -- to start it again and read why: %s" % engine.restart_line("forge"))
     if not up:
@@ -1802,37 +1797,36 @@ def _through_unit(cfg, url):
     pid = _pid()
     at = " (pid %d)" % pid if pid else ""
     if quiet:
-        say("%s forge -- ready%s at %s" % (MARK, at, url))
+        say("%s serve -- the page ready%s at %s/login" % (MARK, at, url))
         return 0
     sys.stdout.write(" ready%s\n" % at)
-    say("%s forge -- %s/login   (spark forge --print-url for the token)" % (MARK, url))
+    say("%s serve -- the page at %s/login   (spark serve --login for the token)" % (MARK, url))
     return 0
 
 
 def cmd_stop(args):
+    """The page's half of `spark serve off`: its unit stopped and kept
+    down, a server started by hand TERMed (--force: KILL after 20 s)."""
     cfg = config.load()
     force = "--force" in args
     st = engine.forge_service_state(cfg)
     if st == "loaded":
         if IS_MAC and engine.service_domain(cfg, "forge") == "system":
-            return _die("the page's server is a LaunchDaemon (spark headless on) -- sudo launchctl bootout %s stops it; spark headless off puts it back under your login" % engine.service_target(cfg, "forge"))
-        if not force:
-            from . import init_shape
-            mgr = init_shape()
-            return _die("%s would bring the page's server straight back -- spark forge stop --force stops it; spark forge off keeps it down" % mgr)
-        undo = engine.service_stop(False, "forge")
+            return _die("the page's server is a LaunchDaemon (spark serve boot on) -- sudo launchctl bootout %s stops it; "
+                        "spark serve boot off puts it back under your login" % engine.service_target(cfg, "forge"))
+        engine.service_stop(True, "forge")
         pid = _pid()
         if pid:
             left = engine.wait_gone([pid], 20)
             if left:
                 engine.terminate(left, force=True)
         forget()
-        say("%s forge -- stopped; to bring it back: %s" % (MARK, undo))
+        say("%s serve -- the page stopped, and kept down (spark serve on brings it back)" % MARK)
         return 0
     pid = _pid()
     if not pid:
         forget()
-        say("%s forge -- not running" % MARK)
+        say("%s serve -- the page not running" % MARK)
         return 0
     engine.terminate([pid])
     left = engine.wait_gone([pid], 20)
@@ -1840,46 +1834,9 @@ def cmd_stop(args):
         engine.terminate(left, force=True)
         left = engine.wait_gone(left, 5)
     if left:
-        return _die("pid %d survived SIGTERM -- `spark forge stop --force` sends SIGKILL" % pid)
+        return _die("pid %d survived SIGTERM -- `spark serve off --force` sends SIGKILL" % pid)
     forget()
-    say("%s forge -- stopped pid %d" % (MARK, pid))
-    return 0
-
-
-def cmd_status(args):
-    cfg = config.load()
-    url = forge_url()
-    fh = wire.forge_health(url) if url else "down"
-    if not url and cfg.client:                         # the check rows say the same
-        from .check import client_of
-        say("%s forge -- %s" % (MARK, client_of(cfg)))
-        return 0                                       # no unit, no admin token here to show
-    if not url:
-        say("%s forge -- not running%s" % (MARK, "" if cfg.forge != "off" else " (SPARK_FORGE=off)"))
-        say("  spark forge start     (or spark forge on, to keep it running)")
-    elif fh in (None, "down"):
-        say("%s forge -- forge-url says %s but nothing answers" % (MARK, url))
-        say("  spark forge stop      clears it")
-    else:
-        say("%s forge -- %s/login" % (MARK, url))
-        say("  health   ok%s" % ("" if fh.get("upstream") == "ok" else ", upstream %s" % fh.get("upstream")))
-        say("  model    %s" % (fh.get("model") or "-"))
-    st = engine.forge_service_state(cfg)
-    say("  unit     %s (SPARK_FORGE=%s)" % ({"loaded": "always-on", "disabled": "disabled on purpose", "absent": "none (spark forge on installs one)"}[st], cfg.forge))
-    tok = cfg.forge_token_file
-    if os.path.exists(tok):
-        mode = os.stat(tok).st_mode & 0o777
-        say("  token    admin %s %s" % (tok, "0600" if mode == 0o600 else "%04o -- chmod 600 it" % mode))
-    else:
-        say("  token    admin none yet (written at the first start)")
-    from . import users
-    names = users.list_users()
-    say("  users    %d (spark user list)" % len(names) if names else "  users    none yet (spark user add NAME)")
-    if os.path.exists(EMBER_TOKEN_FILE):
-        say("  !        the v1.3 shared ember-token is no longer accepted -- rm %s" % EMBER_TOKEN_FILE)
-    tail = log_tail(3)
-    if tail:
-        say("  log      " + "\n           ".join(tail))
+    say("%s serve -- the page stopped (pid %d)" % (MARK, pid))
     return 0
 
 
@@ -1907,7 +1864,7 @@ def print_qr(link):
 def cmd_print_url(args):
     cfg = config.load()
     if "--user" in args:
-        say("%s forge -- user tokens are personal now: spark user add NAME mints one, shown once" % MARK)
+        say("%s serve -- user tokens are personal now: spark user add NAME mints one, shown once" % MARK)
         return 2
     url = _url_of(cfg)
     say(url + "/login")
@@ -1920,40 +1877,63 @@ def cmd_print_url(args):
     return 0
 
 
+def client_steps(url):
+    """How another machine joins, three lines, no secret: a user minted
+    here (its token shown once), the client there, the login there."""
+    base = url[:-len("/login")] if url.endswith("/login") else url
+    return ["here:   spark user add NAME        the token is shown once -- carry it",
+            "there:  spark client %s" % base,
+            "then:   spark user login NAME      paste the token; chats land in your own sealed store here"]
+
+
 def cmd_print_client(args):
     """What a peer machine needs: the URL and a personal user. No secret
     ever leaves this box -- the token is shown once at the mint."""
     cfg = config.load()
     url = _url_of(cfg)
     say("SITE_PEER_AI_URL=%s" % url)
-    say("here:   spark user add NAME        the token is shown once -- carry it")
-    say("there:  spark client %s" % url)
-    say("then:   spark user login NAME      paste the token; chats land in your own sealed store here")
-    say("the admin token stays on this machine (spark forge --print-url)")
+    say("\n".join(client_steps(url)))
+    say("the admin token stays on this machine (spark serve --login)")
     return 0
+
+
+def cmd_login(args):
+    """`spark serve --login`: the page's URL (at a terminal the admin
+    token and its QR), then how another machine joins. `--new` rotates
+    the admin token instead, asking first at a terminal."""
+    if "--new" in args:
+        return cmd_token(args)
+    rc = cmd_print_url(args)
+    if rc == 0:
+        say("\n".join(client_steps(_url_of(config.load()))))
+    return rc
 
 
 def cmd_token(args):
     cfg = config.load()
     flags = set(args)
     if "--user" in flags:
-        say("%s forge -- user tokens are personal now: spark user token --new rotates your own" % MARK)
+        say("%s serve -- user tokens are personal now: spark user token --new rotates your own" % MARK)
         return 2
     if "--new" not in flags or flags - {"--new"}:
         say(USAGE.rstrip())
         return 2
+    if sys.stdin.isatty() and sys.stdout.isatty() and not confirm(
+            "rotate the admin token -- every admin login and browser must log in again"):
+        say("%s serve -- the admin token stays as it is" % MARK)
+        return 0
     path = cfg.forge_token_file
     try:
         os.remove(path)
     except OSError:
         pass
     ensure_token(cfg)
-    say("%s forge -- new admin token in %s -- every admin client and browser must log in again (spark forge --print-url)"
+    say("%s serve -- new admin token in %s -- every admin client and browser must log in again (spark serve --login)"
         % (MARK, path))
     from . import audit
     why = audit.record("forge token")
     if why:
-        say("%s forge -- the audit record was not kept: %s" % (MARK, why))
+        say("%s serve -- the audit record was not kept: %s" % (MARK, why))
     return 0
 
 
@@ -1967,15 +1947,20 @@ def cmd_onoff(sub, args=()):
 
 
 def main(argv):
+    """`spark forge`: what the page's unit runs (--foreground), and the
+    older spellings `spark serve` took over -- each kept as an alias
+    named nowhere: bare (the serve view), on|off (the page alone, as it
+    was), --print-url, --print-client, token --new, audit."""
     sub = argv[0] if argv else "status"
     rest = argv[1:]
     if sub in ("-h", "--help", "help"):
         say(USAGE.rstrip())
         return 0
-    if sub == "status":
-        return cmd_status(rest)
     if sub == "--foreground":
         return cmd_foreground(rest)
+    if sub == "status":
+        from . import serve
+        return serve.cmd_show()
     if sub == "--print-url":
         return cmd_print_url(rest)
     if sub == "--print-client":

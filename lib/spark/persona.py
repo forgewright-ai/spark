@@ -106,7 +106,7 @@ _DANGER = [
     # v1.53: what the reviewed audition still found unmarked
     r"\b(?:chmod|chown|chgrp)\b",                 # any permission or owner change (the brief's own rule)
     r"\bspark\s+(?:uninstall|clear\s+--history|history\s+clear|memory\s+(?:forget|clear)"
-    r"|user\s+remove|model\s+rm|soul\s+reset|(?:forge|user)\s+token\s+--new)\b",   # spark's own verbs that destroy or end logins
+    r"|user\s+remove|model\s+rm|soul\s+reset|(?:forge|user)\s+token\s+--new|serve\s+--login\s+--new)\b",   # spark's own verbs that destroy or end logins
     # v1.56: what the lines above still let through -- a named line each.
     # Linear by construction: the option runs are `-X` words split by
     # whitespace, never an \S+ that can also eat a space-free neighbour
@@ -390,12 +390,14 @@ KNOW_CHAT = (
     "spark's own commands.\n"
     "The AI: spark chat -- a conversation; spark do WORDS -- a task, one command at "
     "a time; spark soul edit -- who it is; spark memory add WORDS -- a fact it keeps; "
-    "spark ember NAME -- the chat model; spark forge on|off -- the page's server "
-    "on the LAN; spark history -- the threads; spark stats|bench -- the numbers.\n"
-    "The machine: spark serve on|off -- the engine; spark model NAME|list -- "
+    "spark model --chat NAME -- the chat model; spark history -- the threads; "
+    "spark stats|bench -- the numbers.\n"
+    "The machine: spark serve on|off -- the engine and the page on the LAN; "
+    "spark serve boot|share on|off; spark serve --login -- the page's URL; "
+    "spark model NAME|list -- "
     "the table, or choose one; spark check -- every row; spark update -- "
     "the newest version; spark setup -- the guided first run; spark quiet "
-    "start|audio on|off -- a quieter spark; spark headless on|off; "
+    "start|audio on|off -- a quieter spark; "
     "spark client URL|off -- another machine's spark; spark user add|login.\n"
     "Reading and writing: cmd | explain; spark read WORDS < text; spark ask < plan; "
     "spark drill < text; stream | spark watch WORDS; spark edit, from a spark app.\n"
