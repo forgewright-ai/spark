@@ -1471,6 +1471,319 @@ def server_pids_cases(t):
     t.ok(_en.pids_in_ps(ps, 8080) == [101, 505], "engine: only a real llama-server on the port is one", str(_en.pids_in_ps(ps, 8080)))
 
 
+def chat_awake_cases(t):
+    """v1.65, the chat awake, in process: the wrap's lead and its hanging
+    indent (piped, today's bytes), the continuing line, the opening, the
+    puzzled line, the goodbye, and /do handed to spark do's driver. The
+    look state is pinned to a throwaway dir: the real one is never read."""
+    import io
+    from spark import config as _cf, do as _do, forge as _fg, look, text as _tx, words as _wd
+
+    class Tty(io.StringIO):
+        def isatty(self):
+            return True
+
+        def fileno(self):
+            raise OSError("no fd")
+
+    tmp = tempfile.mkdtemp(prefix="spark-chat-")
+    paths = {n: getattr(look, n) for n in ("LOOK_FILE", "WORDS_FILE", "FACES_FILE")}
+    for n in paths:
+        setattr(look, n, os.path.join(tmp, n.lower()))
+    look.forget()
+    real_out, real_err = sys.stdout, sys.stderr
+
+    def said(fn, *a, living=False):
+        _fg.LIVING[0] = living
+        sys.stdout, sys.stderr = io.StringIO(), io.StringIO()
+        try:
+            fn(*a)
+        finally:
+            got = (sys.stdout.getvalue(), sys.stderr.getvalue())
+            sys.stdout, sys.stderr = real_out, real_err
+            _fg.LIVING[0] = False
+        return got
+    try:
+        # --- the lead: the face opens the reply, the lines hang under it
+        w = _tx.Wrap(Tty(), lead="\033[1m(o.o)\033[0m ")
+        w.width = 30
+        w.feed("one two three four five six seven eight nine ten eleven\n\nnext one")
+        w.close()
+        lines = w.stream.getvalue().split("\n")
+        body = [ln for ln in lines[1:] if ln]
+        t.ok(lines[0].startswith("\033[1m(o.o)\033[0m one ") and len(_tx.SGR_RE.sub("", lines[0])) <= 29
+             and body and all(ln.startswith(" " * 6) and ln[6] != " " for ln in body) and "" in lines[1:-1]
+             and "      next one" in lines,
+             "chat: the lead opens the reply; wrapped and later lines hang 6 columns (the face's width, "
+             "the escapes not counted); a blank line stays blank", repr(w.stream.getvalue()))
+        src = "Some **bold** words here.\n\n    code stays\n- a bullet\n" + "word " * 30
+        piped = []
+        for lead in ("(o.o) ", None):
+            s = io.StringIO()
+            w = _tx.Wrap(s, lead=lead)
+            w.feed(src)
+            w.close()
+            piped.append(s.getvalue())
+        t.ok(piped[0] == piped[1] and piped[0].startswith("* Some **bold**"),
+             "chat: piped, the lead is ignored -- the bytes are today's, byte for byte", repr(piped[0][:60]))
+
+        # --- the continuing line, for everyone
+        now = time.time()
+
+        def stamp(secs):
+            return time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(now - secs))
+        msgs = [{"role": "user", "text": "which fonts can I use", "ts": stamp(150)},
+                {"role": "assistant", "text": "a few", "ts": stamp(125)}]
+        long_msgs = [{"role": "user", "text": "word " * 40, "ts": stamp(3 * 3600 + 5)}]
+        cut = _fg.continuing(long_msgs, now)
+        t.ok(_fg.continuing(msgs, now) == '  continuing "which fonts can I use" (2 min ago) -- /new starts fresh'
+             and cut.endswith('" (3 h ago) -- /new starts fresh') and len(cut) <= 79 and "word" + '"' not in cut
+             and _fg.continuing([{"role": "user", "text": "hi", "ts": stamp(2 * 86400 + 9)}], now).endswith("(2 d ago) -- /new starts fresh")
+             and _fg.continuing([{"role": "user", "text": "hi", "ts": stamp(5)}], now).endswith('"hi" (1 min ago) -- /new starts fresh')
+             and _fg.continuing([], now) == "" and _fg.continuing([{"role": "assistant", "text": "x"}], now) == "",
+             "chat: the continuing line -- the first words cut at a word to 80 columns, N min / h / d ago", cut)
+
+        # --- the opening: awake, the face and a greet line, then the hint
+        awake, _ = said(_fg._opening, None, living=True)
+        plain, _ = said(_fg._opening, None)
+        t.ok(awake == "* (o.o) %s\n  /help lists the commands; Ctrl-D ends\n" % _wd.greeting()
+             and _wd.greeting() in ("Hello again.", "Welcome back.", "Good to see you.")
+             and plain == "chat -- /help, Ctrl-D or /q ends\n",
+             "chat: the opening -- awake, `* FACE greeting` and the hint; unawakened, today's banner", repr((awake, plain)))
+
+        # --- the puzzled line and the goodbye
+        t.ok(said(_fg._refuse, "history is off", living=True) == ("(o.?) History is off.\n", "")
+             and said(_fg._refuse, "@x.txt: no such file", living=True) == ("(o.?) @x.txt: no such file.\n", "")
+             and said(_fg._refuse, "history is off") == ("", "spark: history is off\n"),
+             "chat: a refusal is the puzzled face and a whole sentence awake; unawakened, today's stderr line")
+        t.ok(said(_fg._goodbye, living=True) == ("(^.^) That is everything for now.\n", "")
+             and said(_fg._goodbye) == ("", ""),
+             "chat: the goodbye -- the pleased face and the done line awake; unawakened, silent")
+
+        # --- /do: the goal handed to spark do's own driver, then back
+        calls = []
+
+        def stub(argv):
+            calls.append(list(argv))
+            if argv[-1] == "fails":
+                sys.exit(1)
+            return 0
+        real = _do.cmd_do
+        _do.cmd_do = stub
+        try:
+            cfg = _cf.load()
+            a = said(_fg._slash_do, cfg, "tid", ["--sandbox", "tidy", "the", "logs"])
+            b = said(_fg._slash_do, cfg, "tid", ["list", "files"], living=True)
+            c = said(_fg._slash_do, cfg, "tid", ["it", "fails"])
+            d = said(_fg._slash_do, cfg, "tid", [])
+        finally:
+            _do.cmd_do = real
+        t.ok(calls == [["--sandbox", "--", "tidy", "the", "logs"], ["--", "list", "files"], ["--", "it", "fails"]]
+             and a == ("Back in the chat.\n", "") and b == ("(o.o) Back in the chat.\n", "")
+             and c[0] == "Back in the chat.\n" and "/do takes a goal" in d[1],
+             "chat: /do hands the goal to spark do (--sandbox kept, -- before the words), and the chat goes on",
+             repr((calls, a, b, c, d)))
+    finally:
+        sys.stdout, sys.stderr = real_out, real_err
+        _fg.LIVING[0] = False
+        for n, v in paths.items():
+            setattr(look, n, v)
+        look.forget()
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def chat_tools_cases(t, spark, home):
+    """v1.65, the chat's tools, piped (unawakened): /save, /copy, /read
+    against the stub model, and /do reaching spark do's driver."""
+    import stat as _stat
+    today = time.strftime("%Y-%m-%d")
+    # --- /save: ~/spark-chat-DATE.txt, 0600, -2 on a clash, never over a file
+    for f in glob.glob(os.path.join(home, "spark-chat-*.txt")):
+        os.remove(f)
+    rc, out, err = spark("chat", stdin="count\n/save\n/save\n:q\n")
+    first = os.path.join(home, "spark-chat-%s.txt" % today)
+    second = os.path.join(home, "spark-chat-%s-2.txt" % today)
+    body = open(first).read() if os.path.exists(first) else ""
+    t.ok(rc == 0 and "Saved to ~/spark-chat-%s.txt (1 turn)." % today in out
+         and "Saved to ~/spark-chat-%s-2.txt (1 turn)." % today in out
+         and re.fullmatch(r"you: count\n\nspark: \d+\n", body) and open(second).read() == body
+         and _stat.S_IMODE(os.stat(first).st_mode) == 0o600,
+         "chat: /save writes ~/spark-chat-DATE.txt (you: / spark:, 0600), then -2", out + err + body)
+    mine = os.path.join(home, "mine.txt")
+    with open(mine, "w") as f:
+        f.write("mine\n")
+    rc, out, err = spark("chat", stdin="/save mine.txt\n/save kept.txt\n:q\n", cwd=home)
+    kept = os.path.join(home, "kept.txt")
+    t.ok(rc == 0 and "spark: ~/mine.txt is there already, and /save never writes over a file" in err
+         and open(mine).read() == "mine\n" and "Saved to ~/kept.txt (1 turn)." in out
+         and _stat.S_IMODE(os.stat(kept).st_mode) == 0o600,
+         "chat: /save FILE never writes over a file that is there; a new FILE is written 0600", out + err)
+    rc, out, err = spark("chat", stdin="/new\n/save\n/copy\n:q\n")
+    t.ok(rc == 0 and "spark: this chat has no turns yet, so /save has nothing to take" in err
+         and "spark: this chat has no turns yet, so /copy has nothing to take" in err,
+         "chat: /save and /copy with nothing to take say so", out + err)
+
+    # --- /copy: the reply to the clipboard tool's stdin, or one line
+    stubs = os.path.join(home, "clip-stubs")
+    os.makedirs(stubs, exist_ok=True)
+    cap = os.path.join(home, "clip.txt")
+    for name in ("pbcopy", "wl-copy"):          # macOS picks pbcopy, Linux wl-copy (WAYLAND_DISPLAY)
+        p = os.path.join(stubs, name)
+        with open(p, "w") as f:
+            f.write("#!/bin/sh\ncat > '%s'\n" % cap)
+        os.chmod(p, 0o755)
+    clip = {"PATH": stubs + os.pathsep + os.environ.get("PATH", "/usr/bin:/bin"),
+            "WAYLAND_DISPLAY": "wayland-stub", "DISPLAY": ""}
+    rc, out, err = spark("chat", stdin="/new\ncount\ncount\n/copy\n:q\n", extra=clip)
+    got = open(cap).read() if os.path.exists(cap) else ""
+    replies = re.findall(r"^\* (\d+)$", out, re.M)
+    t.ok(rc == 0 and replies and got == replies[-1]
+         and "The last reply is on the clipboard (%d characters)." % len(got) in out,
+         "chat: /copy puts the last reply on the clipboard (a stub pbcopy / wl-copy)", out + err + got)
+    rc, out, err = spark("chat", stdin="/copy 2\n/copy 9\n/copy x\n:q\n", extra=clip)
+    got = open(cap).read()
+    t.ok(rc == 0 and got == replies[0] and "The reply 2 from the end is on the clipboard (%d characters)." % len(got) in out
+         and "spark: this chat has 2 replies: /copy 2 is the oldest" in err
+         and "spark: /copy takes a number" in err,
+         "chat: /copy N takes the Nth from the end; past the oldest or not a number is refused", out + err)
+    empty = os.path.join(home, "no-tools")
+    os.makedirs(empty, exist_ok=True)
+    rc, out, err = spark("chat", stdin="/copy\n:q\n", extra={"PATH": empty, "WAYLAND_DISPLAY": "", "DISPLAY": ""})
+    t.ok(rc == 0 and "No clipboard here: /save writes the conversation to a file." in out,
+         "chat: /copy with no clipboard tool says so in one line", out + err)
+
+    # --- /read: contract 11 on a file, inside the chat, on its thread
+    with open(os.path.join(home, "gate.txt"), "w") as f:
+        f.write(READ_TEXT)
+    rc, out, err = spark("chat", stdin="/new\n/read @gate.txt when does it open\n/save read.txt\n:q\n", cwd=home)
+    saved = open(os.path.join(home, "read.txt")).read() if os.path.exists(os.path.join(home, "read.txt")) else ""
+    t.ok(rc == 0 and '* It opens "at nine" and closes "at noon".\nChildren go "free for children".\n' in out
+         and "five dollars" not in out and "Here is what it says" not in out,
+         "chat: /read keeps the grounded lines; the invented and the unquoted never show", out + err)
+    t.ok(saved.startswith('you: /read @gate.txt when does it open\n\nspark: It opens "at nine"')
+         and "five dollars" not in saved,
+         "chat: /read lands on the chat's thread like a turn", saved)
+    STATE["read_none"] = True
+    try:
+        rc, out, err = spark("chat", stdin="/read @gate.txt\n/read @nope.txt\n/read\n:q\n", cwd=home)
+    finally:
+        STATE.pop("read_none", None)
+    t.ok(rc == 0 and 'spark: the source does not answer -- it opens: "The gate opens at nine' in err
+         and "spark: @nope.txt: no such file" in err and "spark: /read takes one file: /read @FILE [question]" in err
+         and "ten dollars" not in out,
+         "chat: /read refuses with the opening words, a missing file as @FILE does, and no file", out + err)
+
+    # --- /do: spark do's own driver, in the same terminal, then back
+    rc, out, err = spark("chat", stdin="/do list the files\n/do\n:q\n")
+    t.ok(rc == 0 and "spark: spark do confirms every step -- run it in a terminal" in err
+         and "Back in the chat." in out and "spark: /do takes a goal" in err,
+         "chat: /do reaches spark do's driver (piped, its own refusal) and the chat goes on", out + err)
+    spark("history", "clear")
+
+
+def chat_pty_cases(t, env, home):
+    """v1.65 at a pty: unawakened, today's banner, the continuing line and
+    a silent end; awakened, the face and a greet line, the continuing
+    line, the hint, a face-led reply, the puzzled line, and the goodbye
+    on /q and on Ctrl-D."""
+    import pty
+    h = os.path.join(home, "pty-chat")
+    os.makedirs(os.path.join(h, ".config", "spark"), exist_ok=True)
+    e = dict(env)
+    e.update({"HOME": h, "XDG_CONFIG_HOME": h + "/.config", "XDG_STATE_HOME": h + "/.local/state",
+              "XDG_DATA_HOME": h + "/.local/share", "TERM": "xterm"})
+    for k in ("DISPLAY", "WAYLAND_DISPLAY", "NO_COLOR"):
+        e.pop(k, None)
+    subprocess.run([sys.executable, SPARK, "chat", "which fonts can I use"], env=e, capture_output=True, timeout=30)
+
+    def drive(env2, steps, end=b"/q\n"):
+        """Run `spark chat` at a pty: each step waits for one more
+        `chat>` and types its line; then `end`. The output, escapes
+        and carriage returns gone."""
+        pid, fd = pty.fork()
+        if pid == 0:
+            os.chdir(h)
+            os.execve(sys.executable, [sys.executable, SPARK, "chat"], env2)
+        got = b""
+
+        def upto(n, secs=20):
+            nonlocal got
+            stop = time.time() + secs
+            while got.count(b"chat>") < n and time.time() < stop:
+                if select.select([fd], [], [], 0.2)[0]:
+                    try:
+                        chunk = os.read(fd, 4096)
+                    except OSError:
+                        break
+                    if not chunk:
+                        break
+                    got += chunk
+        for i, (before, line) in enumerate(steps + [(None, end)], 1):
+            upto(i)
+            if before:
+                before()
+            os.write(fd, line)
+        stop, status = time.time() + 15, None
+        while time.time() < stop:
+            done, status = os.waitpid(pid, os.WNOHANG)
+            if done:
+                break
+            if select.select([fd], [], [], 0.2)[0]:
+                try:
+                    got += os.read(fd, 4096)
+                except OSError:
+                    pass
+        else:
+            os.kill(pid, signal.SIGKILL)
+            os.waitpid(pid, 0)
+        try:
+            while select.select([fd], [], [], 0.2)[0]:
+                chunk = os.read(fd, 4096)
+                if not chunk:
+                    break
+                got += chunk
+        except OSError:
+            pass
+        os.close(fd)
+        text = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b[78]|[\x01\x02]", "", got.decode("utf-8", "replace"))
+        text = "\n".join(ln.rstrip("\r").rsplit("\r", 1)[-1] for ln in text.split("\n"))
+        return status is not None and os.WIFEXITED(status) and os.WEXITSTATUS(status) == 0, text
+
+    ok, plain = drive(e, [])
+    t.ok(ok and "chat -- /help, Ctrl-D or /q ends" in plain
+         and '  continuing "which fonts can I use" (1 min ago) -- /new starts fresh' in plain
+         and "(o.o)" not in plain and "(^.^)" not in plain,
+         "chat pty: unawakened, today's banner, the continuing line, a silent end", plain)
+
+    state = os.path.join(h, ".local", "state", "spark")
+    os.makedirs(state, exist_ok=True)
+    with open(os.path.join(state, "look"), "w") as f:
+        f.write("AWAKE=yes\n")
+    awake = dict(e, SPARK_LOOK_WORDS="on", SPARK_LOOK_MOTION="off", SPARK_LOOK_COLOUR="off")
+
+    def garbage():
+        STATE["mode"] = "garbage"
+
+    def fine():
+        STATE["mode"] = "ok"
+    try:
+        ok, lit = drive(awake, [(None, b"count\n"), (None, b"@nope.txt\n"), (garbage, b"hello\n"), (fine, b"/copy 9\n")])
+    finally:
+        STATE["mode"] = "ok"
+    t.ok(ok and re.search(r"^\* \(o\.o\) (Hello again\.|Welcome back\.|Good to see you\.)$", lit, re.M)
+         and '  continuing "which fonts can I use" (1 min ago) -- /new starts fresh' in lit
+         and "  /help lists the commands; Ctrl-D ends" in lit and "chat -- /help" not in lit,
+         "chat pty: awakened, `* FACE greeting`, the continuing line, the hint", lit)
+    t.ok(re.search(r"\(o\.o\) 4$", lit, re.M) and "(o.?) @nope.txt: no such file." in lit
+         and lit.count("(o.?) ") >= 3 and "spark: " not in lit,
+         "chat pty: awakened, the reply face-led; a missing @FILE, a stub error and a refusal are the puzzled face", lit)
+    t.ok(lit.rstrip().endswith("(^.^) That is everything for now."),
+         "chat pty: awakened, /q ends with the pleased face and the done line", lit[-200:])
+    ok, lit = drive(awake, [], end=b"\x04")
+    t.ok(ok and lit.rstrip().endswith("(^.^) That is everything for now."),
+         "chat pty: awakened, Ctrl-D ends with the goodbye too", lit[-200:])
+
+
 def living_core_cases(t):
     """v1.59, the living prompt's core: an unawakened machine prints
     today's bytes (the pulse, the wrap, the check's colours); awakened,
@@ -3153,6 +3466,8 @@ def main():
         t.ok(rc == 0 and "spark clear --history, and /keep off lets it go." in out
              and all(len(ln) <= 80 for ln in out.splitlines()), "chat -h names /keep, within 80 columns", out)
         spark("history", "clear")
+        chat_tools_cases(t, spark, home)
+        chat_pty_cases(t, env, home)
 
         # wrap at 80 columns when piped: a long canned answer breaks into
         # short lines
@@ -6882,6 +7197,7 @@ site.cmd_headless([])
     knowledge_cases(t)
     server_pids_cases(t)
     living_core_cases(t)
+    chat_awake_cases(t)
     living_awaken_cases(t)
     living_widget_cases(t)
     living_waits_cases(t)

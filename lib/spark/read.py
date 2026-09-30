@@ -191,6 +191,39 @@ def cmd_read(args):
         say(READ_USAGE.rstrip())
         say("\n  a question for spark itself is: spark %s" % (" ".join(words) or "<words>"))
         return 2
+    try:
+        answer(config.load(), data, " ".join(words), sys.stdout, want, name)
+    except Refused as e:
+        if e.code == 2:
+            say("%s read -- %s" % (MARK, e.hint))
+            return 2
+        die(e.hint)
+    except wire.BrainError as e:
+        die(e.hint)
+    return 0
+
+
+class Refused(Exception):
+    """Contract 11 said no in one line: `hint`, and the exit code a verb
+    gives it (2: the invocation, a part that is not there; 1: the world,
+    a source too long or one that does not answer)."""
+
+    def __init__(self, hint, code=1):
+        super().__init__(hint)
+        self.hint, self.code = hint, code
+
+
+def answer(cfg, data, question, stream, want=None, name="", on_ask=None):
+    """Contract 11's core, one law for every caller (spark read, the
+    chat's /read): the source `data` held back, cut to the part `want`,
+    read, asked `question` (bare: what it covers), and every line of the
+    answer through the gate before it reaches `stream` -- a line that
+    does not quote the source, or whose quotes are not in it, never gets
+    there. `on_ask()` runs once, after the reading pass, right before the
+    request. Returns the gate's kept count, never 0: nothing kept is
+    Refused, with the source's own opening words. Refused before
+    anything is sent for a part that is not there; wire.BrainError and
+    KeyboardInterrupt pass through, the stream closed first."""
     # a source is someone else's text: what looks like a secret in it (a
     # key, a token, a one-time code) is held back here, before the parts,
     # the reading, the gate and the model see it -- they all see [held]
@@ -200,27 +233,27 @@ def cmd_read(args):
         data = textmod.hold_spans(data, spans)
     total = parts_of(len(data))
     if total > 1 and want is None:
-        die("the source is %d characters, %d parts of %d -- read one: --part N"
-            % (len(data), total, READ_MAX))
+        raise Refused("the source is %d characters, %d parts of %d -- read one: --part N"
+                      % (len(data), total, READ_MAX))
     if want is not None and want > total:
-        say("%s read -- the source is %d part%s; there is no part %d"
-            % (MARK, total, "" if total == 1 else "s", want))
-        return 2
+        raise Refused("the source is %d part%s; there is no part %d"
+                      % (total, "" if total == 1 else "s", want), 2)
     want = want or 1
     part = part_slice(data, want)
-    cfg = config.load()
     shell = os.path.basename(os.environ.get("SHELL") or "sh")
-    text = " ".join(words).strip() or "What does this source cover?"
+    text = question.strip() or "What does this source cover?"
     if held:        # said once nothing can refuse any more: the source is on its way
         print(textmod.held_line(held, names), file=sys.stderr, flush=True)
     read, tail = session.reading(cfg, part, shell)
     context = read + "Source:\n" + part + tail
+    if on_ask:
+        on_ask()
 
     def keep(_line, verdict, _misses):
         return verdict == textmod.GROUNDED  # it quotes, and a quote anchors
 
     header = "[part %d of %d]" % (want, total) if total > 1 else ""
-    out = _Part(sys.stdout, header)
+    out = _Part(stream, header)
     gate = textmod.Gate(out, part, keep)
     fence = textmod.Fence(gate, newline=None)
 
@@ -231,10 +264,7 @@ def cmd_read(args):
     try:
         s = session.Session(cfg, MODE, shell, "", role="ember")
         _out, ms = s.ask_stream(text, context, fence.feed, max_tokens=READ_TOKENS, timeout=READ_TIMEOUT)
-    except wire.BrainError as e:
-        done()
-        die(e.hint)
-    except KeyboardInterrupt:
+    except (wire.BrainError, KeyboardInterrupt):
         done()
         raise
     done()
@@ -253,5 +283,5 @@ def cmd_read(args):
              **dict(first, **({"held": held} if held else {})))
     if not gate.kept:
         where = "part %d of %d" % (want, total) if total > 1 else "the source"
-        die('%s does not answer -- it opens: "%s"' % (where, opening(part)))
-    return 0
+        raise Refused('%s does not answer -- it opens: "%s"' % (where, opening(part)))
+    return gate.kept

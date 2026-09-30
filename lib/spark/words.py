@@ -215,6 +215,18 @@ def _atomic(path, body):
     os.replace(tmp, path)
 
 
+def greeting(day=None):
+    """One of the machine's greet lines, in turn by the day ('' when it
+    has none): the widgets' greeting and the chat's opening say it."""
+    lines = load()
+    greets = [lines[k] for k in sorted(lines) if k.startswith("greet.")]
+    if not greets:
+        return ""
+    if day is None:
+        day = int(time.time() // 86400)
+    return greets[int(day) % len(greets)]
+
+
 def greet(day=None):
     """The greeting the widgets ask for: nothing unless this machine is
     awake, its words part is not off and quiet start is not on; else one
@@ -226,13 +238,12 @@ def greet(day=None):
     cfg = config.load()
     if look.part("words", cfg) == "off" or cfg.get("SITE_QUIET_START", "no").strip().lower() == "yes":
         return []
-    lines = load()
-    greets = [lines[k] for k in sorted(lines) if k.startswith("greet.")]
-    if not greets:
+    line = greeting(day)
+    if not line:
         return []
     if day is None:
         day = int(time.time() // 86400)
-    out = ["* %s %s" % (face("idle"), greets[int(day) % len(greets)])]
+    out = ["* %s %s" % (face("idle"), line)]
     fact = memory.one_fact(cfg, day)
     if fact:
         head = "You asked me to remember: "
