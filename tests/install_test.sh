@@ -269,7 +269,7 @@ env PATH="$T/os:$PATH" SPARK_SYSFS_DRM="$T/drm" SPARK_OS_RELEASE="$T/os-release-
 env PATH="$T/os:$PATH" SPARK_SYSFS_DRM="$T/nodrm" SPARK_OS_RELEASE="$T/os-release-debian" sh "$REPO/bootstrap.sh" --list-packages | grep -qx libvulkan1 && bad "no GPU: --list-packages still adds the vulkan libraries" || ok "auto without a GPU: no vulkan libraries"
 # this OS as it is: macOS is metal whatever the key says, Linux cpu or
 # vulkan. 24 GB -> 14 GB budget: gemma4-e4b, the first in the list that
-# fits, on metal (no cap there); on cpu the 3 GB cap stops it at qwen3-4b.
+# fits, on metal (no cap there) and on cpu (4B working parameters pass).
 out=$(SPARK_MEM_TOTAL_GB=24 SITE_AI_BUILD=cpu sh "$REPO/bootstrap.sh" --list-models 2>&1) || bad "--list-models failed"
 case $(uname -s) in
     Darwin) printf '%s\n' "$out" | head -1 | grep -q ', metal$' && printf '%s\n' "$out" | grep -qx 'spark: gemma4-e4b' && ok "macOS: metal, the key ignored, the first that fits" || bad "macOS header/pick: $(printf '%s\n' "$out" | head -1)" ;;

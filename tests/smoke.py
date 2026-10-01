@@ -5570,9 +5570,9 @@ def main():
         # the speed cap and the auto build, the python twin under the pins
         # tests/install_test.sh section 8 puts on bootstrap.sh: 18 GB -> a
         # 10.8 GB budget over the tested rows (qwen3-14b needs 11, over either
-        # way); auto stops at the 3 GB cap on cpu (qwen3-4b), the 6 GB cap
-        # on vulkan (gemma4-e4b since v1.66, at 19 GB / 11.4 GB budget, where
-        # qwen3-14b would otherwise fit); SITE_AI_BUILD=auto is vulkan when a DRM
+        # way); auto takes the first row in the list that fits and passes
+        # the cap, gemma4-e4b on cpu and on vulkan since v1.68 (its 4B
+        # working parameters count as small); SITE_AI_BUILD=auto is vulkan when a DRM
         # device reports VRAM, else cpu; a name is never second-guessed,
         # and is looked up in the whole list and yours. The Linux rule is forced
         # (engine.IS_MAC) so the pins mean the same on either OS; this OS
@@ -5630,18 +5630,18 @@ def main():
         t.ok(linux_pick(SITE_AI_BUILD="vulkan", SITE_AI_BUDGET="30") == "qwen3-4b none vulkan -",
              "twin: SITE_AI_BUDGET=30 -> qwen3-4b, qwen3-8b no longer fits",
              linux_pick(SITE_AI_BUILD="vulkan", SITE_AI_BUDGET="30"))
-        # 24 GB -> a 14.4 GB budget: on metal (no cap) gemma4-e4b, the
-        # first in the list that fits; on cpu the 3 GB cap holds it back
-        # and qwen3-4b serves.
+        # 24 GB -> a 14.4 GB budget: gemma4-e4b, the first in the list that
+        # fits, on metal (no cap) and on cpu (its 4B working parameters
+        # pass the 3 GB cap).
         cap_env = {"SPARK_NO_APPLY": "1", "SPARK_MEM_TOTAL_GB": "24", "SITE_AI_BUILD": "cpu", "SPARK_SYSFS_DRM": home + "/nodrm"}
         rc, out6, _ = spark("model", "list", extra=cap_env)
         if sys.platform == "darwin":
             t.ok(rc == 0 and out6.splitlines()[0].endswith(", metal") and re.search(r"^  \*\s+gemma4-e4b ", out6, re.M)
                  and "auto stops" not in out6, "macOS: metal whatever the key says, the first that fits, no note", out6)
         else:
-            t.ok(rc == 0 and out6.splitlines()[0].endswith(", cpu") and re.search(r"^  \*\s+qwen3-4b ", out6, re.M)
-                 and "  auto stops at 3 GB files on cpu (bigger fits, slower than 8 tok/s)" in out6.splitlines()[1],
-                 "Linux: spark model list marks the capped pick and says what it held back", out6)
+            t.ok(rc == 0 and out6.splitlines()[0].endswith(", cpu") and re.search(r"^  \*\s+gemma4-e4b ", out6, re.M)
+                 and "auto stops" not in out6,
+                 "Linux: spark model list marks gemma4-e4b on cpu, nothing held back, no note", out6)
         t.ok(all(len(ln) <= 80 for ln in out6.splitlines()[1:]), "the cap note fits 80 columns", out6)
         state = home + "/.local/state/spark"
         os.makedirs(state, mode=0o700, exist_ok=True)
