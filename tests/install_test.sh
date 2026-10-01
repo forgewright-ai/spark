@@ -229,14 +229,14 @@ printf '%s\n' "$out" | grep -q '24 GB\|budget\| fits$\|^spark:\|^ember:' && bad 
 printf '%s\n' "$out" | grep -qE '^   qwen3-1-7b ' && ok "a client's --list-models still lists the rows" || bad "client rows: $(printf '%s\n' "$out" | sed -n 3p)"
 printf 'SITE_AI_MODEL=auto\nSITE_EMBER_MODEL=none\n' > "$HOME/.config/spark/site.env"
 # 19 GB -> 11 GB budget: qwen3-14b (11 GB) fits the budget but its 8.4 GB
-# file is over the 6 GB vulkan cap, so auto still stops at qwen3-8b and
-# the header says what the cap held back.
+# file is over the 6 GB vulkan cap, so auto stops at gemma4-e4b (5.0 GB
+# file, 8 GB of RAM) and the header says what the cap held back.
 out=$(lm SPARK_MEM_TOTAL_GB=19 SITE_AI_BUILD=vulkan) || bad "--list-models failed"
-printf '%s\n' "$out" | grep -qx 'spark: qwen3-8b' && ok "19 GB vulkan: auto stops at the 6 GB cap (qwen3-8b)" || bad "19 GB vulkan spark line"
+printf '%s\n' "$out" | grep -qx 'spark: gemma4-e4b' && ok "19 GB vulkan: auto stops at the 6 GB cap (gemma4-e4b)" || bad "19 GB vulkan spark line"
 printf '%s\n' "$out" | grep -qx 'auto stops at 6 GB files on vulkan (bigger fits, slower than 8 tok/s)' && ok "the header says what the vulkan cap held back" || bad "no vulkan cap note"
 out=$(lm SPARK_MEM_TOTAL_GB=18 SPARK_SYSFS_DRM="$T/drm") || bad "--list-models failed"
 printf '%s\n' "$out" | head -1 | grep -q ', vulkan$' && ok "SITE_AI_BUILD=auto: vulkan when a DRM device reports VRAM" || bad "auto with a GPU: $(printf '%s\n' "$out" | head -1)"
-printf '%s\n' "$out" | grep -qx 'spark: qwen3-8b' && ok "auto with a GPU picks as vulkan" || bad "auto with a GPU spark line"
+printf '%s\n' "$out" | grep -qx 'spark: gemma4-e4b' && ok "auto with a GPU picks as vulkan" || bad "auto with a GPU spark line"
 # SITE_AI_BUDGET=30 drops the budget to 5 GB (18 * 30 / 100): qwen3-4b
 # (5 GB) still fits, qwen3-8b (7 GB) no longer does -- it would at the
 # default 60 % (the case just above); the header names the percent too.
