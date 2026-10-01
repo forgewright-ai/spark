@@ -1,5 +1,27 @@
 # Changelog
 
+## v1.66
+
+Gemma 4, the edge models. Google's E4B joins the tested rows under
+Apache-2.0, and E2B joins by name. A model that thinks with its
+thinking switched off is held.
+
+- `gemma4-e4b`, 5.0 GB, 8 GB of RAM, tested on the prompt line. On a
+  GPU with a budget of 8 GB or more, `auto` now picks it over
+  `qwen3-8b`. Measured on the box, it is ahead on the prompt line, the
+  editor and grounding, and it writes 1.4 times as fast.
+- `gemma4-e2b`, 3.2 GB, 6 GB of RAM, by name: `spark model
+  gemma4-e2b`. It is the fastest row on the box, at 44 tok/s, but
+  `qwen3-4b` is ahead of it on the prompt line, so `auto` keeps the
+  4B.
+- The prompt line's model runs with a thinking budget of 0, and every
+  JSON request carries `reasoning_budget_tokens: 0`. Gemma 4 E2B opened
+  a thought on its own and spent the reply there: 35 % of its prompt
+  line answers were empty before, none after.
+- The grounding scores were measured again, 3 runs over the 10 cases:
+  `qwen3-4b` 18/30, `qwen3-8b` 19/30, `qwen3-14b` 19/30 and
+  `granite-4-2-8b` 23/30.
+
 ## v1.65
 
 The chat, awake. An awakened machine greets you in `spark chat`,

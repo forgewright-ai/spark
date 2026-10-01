@@ -470,9 +470,14 @@ def _send(cfg, url, data, timeout, forge=False):
 # reasoning_content and answers content "" -- every JSON ask came back
 # empty. This is the template's own switch, read by llama-server; a
 # template without one ignores it, and a FORGE passes the field through.
-# (reasoning_budget 0 in the request did not stop it; this did.) A
+# A model may think with the switch off: Gemma 4 E2B opens a thought
+# channel on its own and spends the cap there. NO_THINK_BUDGET is the
+# sampler's hard stop for that: llama-server ends a thought after that
+# many tokens, on a template with thinking tags alone. (`reasoning_budget`
+# is not a field llama-server reads; `reasoning_budget_tokens` is.) A
 # streamed chat or explain carries no schema and keeps the default.
 NO_THINKING = {"enable_thinking": False}
+NO_THINK_BUDGET = {"reasoning_budget_tokens": 0}
 THOUGHT_OUT = "the model spent its whole answer thinking and returned no JSON"
 
 
@@ -480,6 +485,7 @@ def _json_body(body, schema):
     """A request's JSON shape: the schema, and no thinking before it."""
     body["response_format"] = {"type": "json_schema", "json_schema": {"name": "spark_line", "schema": schema}}
     body["chat_template_kwargs"] = dict(NO_THINKING)
+    body.update(NO_THINK_BUDGET)
     return body
 
 

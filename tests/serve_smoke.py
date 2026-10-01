@@ -285,6 +285,7 @@ def main():
         ok("[spark]" in ini and "[ember]" in ini and ini.index("[spark]") < ini.index("[ember]"), "presets.ini has both sections", ini)
         spark_sec, ember_sec = ini.split("[ember]")
         ok("reasoning = off" in spark_sec and "ctx-size = 4096" in spark_sec, "spark preset: reasoning off, ctx 4096", ini)
+        ok("reasoning-budget = 0" in spark_sec, "spark preset: a thinking budget of 0", ini)
         ok("reasoning" not in ember_sec and "ctx-size = 8192" in ember_sec, "ember preset: no reasoning line, SPARK_CTX", ini)
         ok("cache-ram = 0" in spark_sec and "cache-ram = 0" in ember_sec, "both presets: no prompt cache in RAM", ini)
         rc, out, _ = spark("brain", "--porcelain", "--fresh", extra=renv)

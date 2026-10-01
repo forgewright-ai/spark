@@ -78,6 +78,7 @@ and unsloth, and IBM's own for Granite.
 - SmolLM2 1.7B -- https://huggingface.co/HuggingFaceTB -- Apache-2.0.
 - gpt-oss-20b -- https://huggingface.co/openai -- Apache-2.0.
 - Granite 4.2 8B -- https://huggingface.co/ibm-granite -- Apache-2.0.
+- Gemma 4 E2B / E4B -- https://huggingface.co/google -- Apache-2.0.
 - Llama 3.2 1B / 3B and Llama 3.1 8B -- https://huggingface.co/meta-llama
   -- the Llama Community License. Not an open-source license: spark asks
   before downloading.

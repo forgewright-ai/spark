@@ -240,10 +240,13 @@ def settings_key(cfg):
 def _preset(name, path, ctx, cfg, reasoning):
     """One [name] section of presets.ini: the long option names llama-server
     takes, without dashes. reasoning = off makes a thinking model answer
-    the prompt line plainly; the ember keeps the model's own default."""
+    the prompt line plainly, and a budget of 0 holds a model that thinks
+    with the switch off; the ember keeps the model's own default."""
     lines = ["[%s]" % name, "model = %s" % path, "ctx-size = %s" % ctx, "n-gpu-layers = %s" % cfg.ngl]
     if reasoning:
         lines.append("reasoning = %s" % reasoning)
+    if reasoning == "off":
+        lines.append("reasoning-budget = 0")
     lines += ["webui = 0", "cache-ram = 0", "flash-attn = %s" % cfg.flash_attn,
               "cache-type-k = %s" % cfg.kv, "cache-type-v = %s" % cfg.kv]
     if cfg.threads:
@@ -312,9 +315,11 @@ def server_cmd(cfg, host):
     m = files["spark"]
     # one model in both roles answers the prompt line: no thinking, as the
     # router's [spark] preset says (a thinking model's reasoning is not
-    # JSON, and it is slow); SPARK_EXTRA_ARGS comes last and may say otherwise
+    # JSON, and it is slow), the budget 0 for a model that thinks with the
+    # switch off; SPARK_EXTRA_ARGS comes last and may say otherwise
     return ([engine_bin(cfg), "-m", m, "--alias", "spark," + model_stem(m)] + common
-            + ["-c", cfg.ctx, "--reasoning", "off", "--api-key-file", cfg.token_file, "--no-webui", "--no-slots"]
+            + ["-c", cfg.ctx, "--reasoning", "off", "--reasoning-budget", "0",
+               "--api-key-file", cfg.token_file, "--no-webui", "--no-slots"]
             + tuning_args(cfg) + cfg.extra_args)
 
 

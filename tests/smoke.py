@@ -1390,19 +1390,20 @@ def engine_wire_cases(t, spark, home, url):
     rc, out, _ = spark("line", stdin="? files bigger than 1G this week")
     line_bodies = STATE["bodies"][n0:]
     t.ok(rc == 0 and line_bodies and all(b.get("chat_template_kwargs") == no_think and b.get("stream")
-                                          for b in line_bodies),
+                                          and b.get("reasoning_budget_tokens") == 0 for b in line_bodies),
          "thinking: the prompt line's streamed JSON asks for no thinking",
          json.dumps([b.get("chat_template_kwargs") for b in line_bodies]))
     n0 = len(STATE["bodies"])
     rc, out, _ = spark("line", "--paste", stdin="echo a\necho b\n")
     paste = STATE["bodies"][n0:]
-    t.ok(rc == 0 and len(paste) == 1 and not paste[0].get("stream") and paste[0].get("chat_template_kwargs") == no_think,
+    t.ok(rc == 0 and len(paste) == 1 and not paste[0].get("stream") and paste[0].get("chat_template_kwargs") == no_think
+         and paste[0].get("reasoning_budget_tokens") == 0,
          "thinking: a JSON ask in one piece (the paste check) asks for no thinking", json.dumps(paste)[:300])
     n0 = len(STATE["bodies"])
     rc, out, _ = spark("what", "does", "this", "mean")
     plain = STATE["bodies"][n0:]
     t.ok(rc == 0 and len(plain) == 1 and plain[0].get("stream") and "response_format" not in plain[0]
-         and "chat_template_kwargs" not in plain[0],
+         and "chat_template_kwargs" not in plain[0] and "reasoning_budget_tokens" not in plain[0],
          "thinking: a streamed answer with no schema keeps the model's default", json.dumps(plain)[:300])
 
     # a model that ignores the switch: the cap spent thinking, no JSON
@@ -5557,8 +5558,8 @@ def main():
         # tests/install_test.sh section 8 puts on bootstrap.sh: 18 GB -> a
         # 10.8 GB budget over the tested rows (qwen3-14b needs 11, over either
         # way); auto stops at the 3 GB cap on cpu (qwen3-4b), the 6 GB cap
-        # on vulkan (qwen3-8b, at 19 GB / 11.4 GB budget, where qwen3-14b
-        # would otherwise fit); SITE_AI_BUILD=auto is vulkan when a DRM
+        # on vulkan (gemma4-e4b since v1.66, at 19 GB / 11.4 GB budget, where
+        # qwen3-14b would otherwise fit); SITE_AI_BUILD=auto is vulkan when a DRM
         # device reports VRAM, else cpu; a name is never second-guessed,
         # and is looked up in the whole list and yours. The Linux rule is forced
         # (engine.IS_MAC) so the pins mean the same on either OS; this OS
@@ -5579,10 +5580,10 @@ def main():
             return p.stdout.strip() or p.stderr.strip()
         t.ok(linux_pick(SITE_AI_BUILD="cpu") == "qwen3-4b none cpu auto stops at 3 GB files on cpu (bigger fits, slower than 8 tok/s)",
              "twin: 18 GB cpu -> qwen3-4b (the 3 GB cap), the note", linux_pick(SITE_AI_BUILD="cpu"))
-        t.ok(linux_pick(SITE_AI_BUILD="vulkan", SPARK_MEM_TOTAL_GB="19") == "qwen3-8b none vulkan auto stops at 6 GB files on vulkan (bigger fits, slower than 8 tok/s)",
-             "twin: 19 GB vulkan -> qwen3-8b (the 6 GB cap holds back qwen3-14b), the note",
+        t.ok(linux_pick(SITE_AI_BUILD="vulkan", SPARK_MEM_TOTAL_GB="19") == "gemma4-e4b none vulkan auto stops at 6 GB files on vulkan (bigger fits, slower than 8 tok/s)",
+             "twin: 19 GB vulkan -> gemma4-e4b (the 6 GB cap holds back qwen3-14b), the note",
              linux_pick(SITE_AI_BUILD="vulkan", SPARK_MEM_TOTAL_GB="19"))
-        t.ok(linux_pick(SPARK_SYSFS_DRM=home + "/drm").startswith("qwen3-8b none vulkan "),
+        t.ok(linux_pick(SPARK_SYSFS_DRM=home + "/drm").startswith("gemma4-e4b none vulkan "),
              "twin: SITE_AI_BUILD=auto is vulkan when a DRM device reports VRAM", linux_pick(SPARK_SYSFS_DRM=home + "/drm"))
         t.ok(linux_pick().startswith("qwen3-4b none cpu "), "twin: SITE_AI_BUILD=auto is cpu with no GPU in sysfs", linux_pick())
         t.ok(linux_pick(SITE_AI_BUILD="cpu", SITE_EMBER_MODEL="auto").startswith("qwen3-1-7b qwen3-4b cpu "),

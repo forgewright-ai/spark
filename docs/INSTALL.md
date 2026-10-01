@@ -445,7 +445,7 @@ Two files:
 
 | file | what |
 |---|---|
-| `models.env` | every model spark can serve: 26 models, each with its license. `line` marks a row proven on the prompt line |
+| `models.env` | every model spark can serve: 28 models, each with its license. `line` marks a row proven on the prompt line |
 | `~/.config/spark/models.env` | your own rows (`spark model add URL --license`), 0600, marked `u` |
 
 `spark model list` shows every row: the file size, the RAM it needs
@@ -466,11 +466,12 @@ and `too big` means the row does not fit. The tested rows:
 | `qwen3-14b` | 8.4 GB | 11 GB |
 | `qwen3-30b-a3b` | 17.4 GB | 21 GB |
 | `granite-4-2-8b` | 5.0 GB | 7 GB |
+| `gemma4-e4b` | 5.0 GB | 8 GB |
 
-The other 20 rows are yours by name: more Qwen, Mistral, Phi-4,
-DeepSeek-R1, SmolLM2, gpt-oss, Llama and Gemma. A row under a licence
-that is not Apache-2.0 or MIT prints its licence and asks `download
-it? yes/NO:` first. The project site lists them all at
+The other 21 rows are yours by name: more Qwen, Mistral, Phi-4,
+DeepSeek-R1, SmolLM2, gpt-oss, Llama, Gemma 3 and Gemma 4 E2B. A row
+under a licence that is not Apache-2.0 or MIT prints its licence and
+asks `download it? yes/NO:` first. The project site lists them all at
 spark.forgewright.ai/models/.
 
 How `auto` picks. It takes every tested open-licence row whose RAM fits
@@ -489,15 +490,16 @@ that fits.
    table.
 3. A `.gguf` of your own in `~/.local/share/spark/models` is served
    with `SPARK_MODEL=<file>` in `spark.env`.
-4. `spark model --chat NAME` adds the chat model: a second, larger
-   model for conversations. The prompt line stays with the small one, at
-   context 4096 with reasoning off, so a thinking model answers fast.
-   Every conversation goes to the chat model: `spark <words>`, `chat`,
-   `do`, the page, and any `/v1` client naming no model. One engine, one
-   port, one token: the request's `model` field picks. `spark model
-   --chat auto` pairs the smallest tested row with the largest that fits
-   beside it. `spark model --chat none`, the default, runs one model in
-   both roles. `spark model --chat list` shows the pair.
+4. `spark model --chat NAME` adds the chat model: a second, larger model
+   for conversations. The prompt line stays with the small one, at
+   context 4096 with reasoning off and a thinking budget of 0, so a
+   thinking model answers fast. Every conversation goes to the chat
+   model: `spark <words>`, `chat`, `do`, the page, and any `/v1` client
+   naming no model. One engine, one port, one token: the request's
+   `model` field picks. `spark model --chat auto` pairs the smallest
+   tested row with the largest that fits beside it.
+   `spark model --chat none`, the default, runs one model in both roles.
+   `spark model --chat list` shows the pair.
 5. `spark model add URL` adds your own row. A huggingface.co
    `.../resolve/<rev>/<file>` URL is checked from its redirect headers,
    and any other URL needs `--sha256 HEX`. `--license "NAME URL"` is

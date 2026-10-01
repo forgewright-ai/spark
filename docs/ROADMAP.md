@@ -1,6 +1,6 @@
 # Roadmap
 
-What comes after v1.65, in the order it is likely to happen. Nothing
+What comes after v1.66, in the order it is likely to happen. Nothing
 here is a promise. A row in `docs/CHANGELOG.md` is. `docs/IDEAS.md` is
 the field this is picked from.
 
@@ -81,21 +81,26 @@ and records no first line. Measure with a source that answers.
 
 ## 2. Grounding, graded on every row `auto` may pick
 
-Four rows carry a `_GROUND` score: Qwen3 8B 21/27, Qwen3 4B 5/9,
-Gemma 3 12B 5/9 and Granite 4.2 8B 25/30, the best. The 4B and the
-12B scores come from a single run, so plus or minus one. Three rows
-proven on the line carry none: the 1.7B, the 14B and the 30B-A3B.
-`auto` prefers a grounded row when two fit the budget, so between
-those 3 the preference is still blind.
+Measured 2026-09-30 and 2026-10-01 on the box: the grounding audition
+3 times over its 10 cases, and the generation speed from llama-bench.
 
-- Run `tests/audition.py --json` on each `_TESTED` row and write the
-  score into `models.env` by hand, the way `_TESTED` carries the line
-  proof. spark.forgewright.ai/models/ then shows the reader's quality,
-  not only the prompt's.
-- The read-about case, the ninth in the audition, stays the measure of
-  the gap. Three brief rewrites each traded that miss for false
-  grounding elsewhere, so the brief does not move again until a
-  mechanism, not a wording, closes it.
+| model | ground | tg tok/s |
+|---|---|---|
+| Gemma 4 E2B | 21/30 | 43.9 |
+| Gemma 4 E4B | 23/30 | 23.3 |
+| Granite 4.2 8B | 23/30 | 15.4 |
+| Qwen3 4B | 18/30 | 29.6 |
+| Qwen3 8B | 19/30 | 16.9 |
+| Qwen3 14B | 19/30 | 9.4 |
+
+Two rows proven on the line carry no score yet: the 1.7B and the
+30B-A3B. Gemma 3 12B keeps its old 5/9 from the 9-case set.
+
+- Score the 1.7B and the 30B-A3B the same way, and write each into
+  `models.env` by hand, the way `_TESTED` carries the line proof.
+- The ask-complete case is now the measure of the gap. Every row
+  fails it 3 times in 3: each keeps lines the source does not hold.
+  The brief does not move until a mechanism, not a wording, closes it.
 
 ## 3. Bind where promised
 

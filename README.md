@@ -79,7 +79,7 @@ hour in `docs/TOUR.md`:
   text does not answer, what a source says, practice from a source,
   and a live stream watched for one thing. Every line quotes the
   source.
-- `spark model list`: 26 models, each with its license. `spark model
+- `spark model list`: 28 models, each with its license. `spark model
   --chat NAME` adds the chat model, a bigger second one.
 - `spark serve on`, then `spark serve --login`: the same model, soul
   and memory in a browser on the LAN, and on a phone that scans the
