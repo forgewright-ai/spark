@@ -85,24 +85,27 @@ def speed_cap_gb(cfg):
     return SPEED_CAP_GB.get(backend(cfg), SPEED_CAP_GB["cpu"])
 
 
-MOE_ACTIVE = re.compile(r"-a(\d+)b(?:-|$)")   # qwen3-30b-a3b, gemma4-26b-a4b: the active billions
+# the billions that work per token, from a row's name: a MoE's active
+# experts (qwen3-30b-a3b, gemma4-26b-a4b) or a Gemma edge model's
+# effective size (gemma4-e4b: per-layer embeddings fill its file, and
+# they are looked up, not computed, for each token)
+WORKING = re.compile(r"-[ae](\d+)b(?:-|$)")
 
 
-def moe_active(name):
-    """A MoE row's active parameters in billions, from its name, or None.
-    Only a few billion work per token, so it runs at a small model's
-    speed whatever its file weighs."""
-    m = MOE_ACTIVE.search(name.lower())
+def working_b(name):
+    """A row's working parameters in billions, from its name, or None.
+    Such a row runs at a small model's speed whatever its file weighs."""
+    m = WORKING.search(name.lower())
     return int(m.group(1)) if m else None
 
 
 def _usable(row, cap_gb):
-    """The file is at or under the cap; a MoE of 4B active or less
-    counts as the small class, as speed_estimate does (26B-A4B measured
-    24.5 tok/s on a Vulkan iGPU, beside 23.3 for a dense 5 GB file). No
-    cap: everything is."""
-    active = moe_active(row[0])
-    return cap_gb is None or (active is not None and active <= 4) or row[3] <= cap_gb * 2**30
+    """The file is at or under the cap; a row of 4B working parameters
+    or less counts as the small class, as speed_estimate does (measured
+    on the box: 26B-A4B 24.5 tok/s on its Vulkan iGPU, E4B 16.8 tok/s on
+    its CPU alone). No cap: everything is."""
+    work = working_b(row[0])
+    return cap_gb is None or (work is not None and work <= 4) or row[3] <= cap_gb * 2**30
 
 
 def _pick(auto, all_rows, choice, budget, beside=0.0, cap_gb=None, ranked=None):
@@ -1176,12 +1179,12 @@ def speed_estimate(nbytes, backend, name=""):
     size class and the backend. These are estimates -- one box measured
     under vulkan, the other two columns rounded guesses -- and stand only
     until `spark bench` (or a real turn) measures the model here; the
-    table prints them with a `~`. A MoE of 4B active or less (`-a3b`,
-    `-a4b` in its name) is treated as the <=3 GB class for speed; its RAM
-    row is unchanged."""
+    table prints them with a `~`. A row of 4B working parameters or
+    less (`-a4b`, `-e4b` in its name: working_b) is treated as the <=3 GB
+    class for speed; its RAM row is unchanged."""
     gb = nbytes / 2**30
-    active = moe_active(name)
-    if active is not None and active <= 4:
+    work = working_b(name)
+    if work is not None and work <= 4:
         cls = 1
     else:
         cls = len(SPEED_CLASSES_GB)

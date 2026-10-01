@@ -298,7 +298,7 @@ def main():
         ok(rc == 0 and "stopped pid" in out, "stop the router", out + err)
 
         # SITE_EMBER_MODEL=none: the single form, aliased spark + stem (vulkan
-        # again, so a Linux runner's cpu cap does not hold gemma4-e4b back)
+        # pinned as above, so the case reads the same on a Linux runner)
         nenv = {"SITE_AI_MODEL": "auto", "SITE_EMBER_MODEL": "none", "SPARK_MEM_TOTAL_GB": "18", "SITE_AI_BUILD": "vulkan"}
         rc, out, err = spark("serve", "on", extra=nenv)
         ok(rc == 0 and "warm   spark\n" in out, "ember none: serves, warms spark alone", out + err)

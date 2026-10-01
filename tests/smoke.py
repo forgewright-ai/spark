@@ -5591,14 +5591,26 @@ def main():
             e.update(pins)
             p = subprocess.run([sys.executable, "-c", twin], capture_output=True, text=True, env=e, timeout=30)
             return p.stdout.strip() or p.stderr.strip()
-        t.ok(linux_pick(SITE_AI_BUILD="cpu") == "qwen3-4b none cpu auto stops at 3 GB files on cpu (bigger fits, slower than 8 tok/s)",
-             "twin: 18 GB cpu -> qwen3-4b (the 3 GB cap), the note", linux_pick(SITE_AI_BUILD="cpu"))
+        t.ok(linux_pick(SITE_AI_BUILD="cpu") == "gemma4-e4b none cpu -",
+             "twin: 18 GB cpu -> gemma4-e4b (4B working parameters pass the 3 GB cap), no note",
+             linux_pick(SITE_AI_BUILD="cpu"))
+        # the cap note: no row of the list is held back by a cap since
+        # v1.68, so a dense 7 GB tested row put first stands in for one
+        dense = ("('dense-7b', 'dense-7b.gguf', 'https://models.invalid/d.gguf', 4831838208, '0' * 64, 7.0, "
+                 "'repo', 'line', 'Apache-2.0 https://models.invalid', '', '')")
+        p = subprocess.run([sys.executable, "-c", twin.replace(
+            "engine.IS_MAC = False; ", "engine.IS_MAC = False; _t = config.model_tables; "
+            "config.model_tables = lambda *a, **k: [%s] + _t(*a, **k); " % dense)],
+            capture_output=True, text=True, timeout=30,
+            env=dict(env, SPARK_NO_APPLY="1", SPARK_SYSFS_DRM=home + "/nodrm", SPARK_MEM_TOTAL_GB="18", SITE_AI_BUILD="cpu"))
+        t.ok(p.stdout.strip() == "gemma4-e4b none cpu auto stops at 3 GB files on cpu (bigger fits, slower than 8 tok/s)",
+             "twin: a dense row over the cpu cap is held back, the note says so", p.stdout + p.stderr)
         t.ok(linux_pick(SITE_AI_BUILD="vulkan", SPARK_MEM_TOTAL_GB="19") == "gemma4-e4b none vulkan -",
              "twin: 19 GB vulkan -> gemma4-e4b, the first in the list that fits (qwen3-14b fits too), no note",
              linux_pick(SITE_AI_BUILD="vulkan", SPARK_MEM_TOTAL_GB="19"))
         t.ok(linux_pick(SPARK_SYSFS_DRM=home + "/drm").startswith("gemma4-e4b none vulkan "),
              "twin: SITE_AI_BUILD=auto is vulkan when a DRM device reports VRAM", linux_pick(SPARK_SYSFS_DRM=home + "/drm"))
-        t.ok(linux_pick().startswith("qwen3-4b none cpu "), "twin: SITE_AI_BUILD=auto is cpu with no GPU in sysfs", linux_pick())
+        t.ok(linux_pick().startswith("gemma4-e4b none cpu "), "twin: SITE_AI_BUILD=auto is cpu with no GPU in sysfs", linux_pick())
         t.ok(linux_pick(SITE_AI_BUILD="cpu", SITE_EMBER_MODEL="auto").startswith("qwen3-5-2b qwen3-4b cpu "),
              "twin: ember auto takes the first in the list under the cap beside the smallest", linux_pick(SITE_AI_BUILD="cpu", SITE_EMBER_MODEL="auto"))
         t.ok(linux_pick(SITE_AI_BUILD="cpu", SITE_AI_MODEL="qwen3-14b") == "qwen3-14b none cpu -",

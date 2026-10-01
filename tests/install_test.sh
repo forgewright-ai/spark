@@ -194,9 +194,10 @@ rm -f "$HOME/$rc"
 #    Linux rule on either OS (on macOS the build is metal whatever the key
 #    says) and SPARK_SYSFS_DRM the GPU probe. 18 GB -> 10 GB budget: auto
 #    (tested, open-license rows only) takes the first row in the list
-#    that fits AND stays under the build's speed cap -- 3 GB files on cpu
-#    (qwen3-4b), 6 GB on vulkan (gemma4-e4b). With the ember auto: the
-#    smallest row + the first usable in the list that fits beside it.
+#    that fits AND stays under the build's speed cap -- 3 GB files on cpu,
+#    6 GB on vulkan, a row of 4B working parameters counting as small:
+#    gemma4-e4b on both. With the ember auto: the smallest row + the
+#    first usable in the list that fits beside it.
 #    SITE_AI_BUILD=auto (the default) = vulkan when a DRM device reports
 #    VRAM, else cpu. A name is never second-guessed, and is looked up in
 #    the whole list and yours, tested or not, any license.
@@ -217,9 +218,9 @@ out=$(lm SPARK_MEM_TOTAL_GB=18 SITE_AI_BUILD=vulkan) || bad "--list-models faile
 printf '%s\n' "$out" | grep -qx 'ember: qwen3-4b' && ok "18 GB vulkan: ember is the first in the list that fits beside it" || bad "18 GB vulkan ember line"
 printf 'SITE_AI_MODEL=auto\nSITE_EMBER_MODEL=none\n' > "$HOME/.config/spark/site.env"
 out=$(lm SPARK_MEM_TOTAL_GB=18 SITE_AI_BUILD=cpu) || bad "--list-models failed"
-printf '%s\n' "$out" | grep -qx 'spark: qwen3-4b' && ok "18 GB cpu: auto stops at the 3 GB cap (qwen3-4b, not gemma4-e4b)" || bad "18 GB cpu spark line: $(printf '%s\n' "$out" | grep '^spark')"
-printf '%s\n' "$out" | grep -qx 'auto stops at 3 GB files on cpu (bigger fits, slower than 8 tok/s)' && ok "the header says what the cpu cap held back" || bad "no cap note: $(printf '%s\n' "$out" | head -3)"
-printf '%s\n' "$out" | head -3 | awk 'length > 80 { bad = 1 } END { exit bad }' && ok "the header and the cap note fit 80 columns" || bad "a header line is wider than 80"
+printf '%s\n' "$out" | grep -qx 'spark: gemma4-e4b' && ok "18 GB cpu: gemma4-e4b, its 4B working parameters pass the 3 GB cap" || bad "18 GB cpu spark line: $(printf '%s\n' "$out" | grep '^spark')"
+printf '%s\n' "$out" | grep -q '^auto stops' && bad "18 GB cpu: a cap note with nothing held back" || ok "18 GB cpu: nothing held back, no cap note"
+printf '%s\n' "$out" | head -2 | awk 'length > 80 { bad = 1 } END { exit bad }' && ok "the header fits 80 columns" || bad "a header line is wider than 80"
 printf '%s\n' "$out" | head -1 | grep -q ', cpu$' && ok "the header names the cpu build" || bad "header: $(printf '%s\n' "$out" | head -1)"
 # a client (none + a peer): the rows, no budget, never this machine's RAM
 printf 'SITE_AI_MODEL=none\nSITE_PEER_AI_URL=http://192.0.2.10:8081\n' > "$HOME/.config/spark/site.env"
@@ -245,7 +246,7 @@ printf '%s\n' "$out" | grep -qx 'spark: qwen3-4b' && ok "SITE_AI_BUDGET=30: the 
 printf '%s\n' "$out" | head -1 | grep -q 'budget 5 GB (30%)' && ok "the header names the SITE_AI_BUDGET percent" || bad "header: $(printf '%s\n' "$out" | head -1)"
 out=$(lm SPARK_MEM_TOTAL_GB=18) || bad "--list-models failed"
 printf '%s\n' "$out" | head -1 | grep -q ', cpu$' && ok "SITE_AI_BUILD=auto: cpu with no GPU in sysfs" || bad "auto without a GPU: $(printf '%s\n' "$out" | head -1)"
-printf '%s\n' "$out" | grep -qx 'spark: qwen3-4b' && ok "auto without a GPU picks as cpu" || bad "auto without a GPU spark line"
+printf '%s\n' "$out" | grep -qx 'spark: gemma4-e4b' && ok "auto without a GPU picks as cpu" || bad "auto without a GPU spark line"
 out=$(lm SPARK_MEM_TOTAL_GB=18 SITE_AI_BUILD=cpu SITE_AI_MODEL=qwen3-14b) || bad "--list-models failed"
 printf '%s\n' "$out" | grep -qx 'spark: qwen3-14b' && ok "a named model is never second-guessed" || bad "named model line"
 printf '%s\n' "$out" | grep -q '^auto stops' && bad "a name printed the cap note" || ok "a name: no cap note"

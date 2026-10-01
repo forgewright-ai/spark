@@ -1,5 +1,18 @@
 # Changelog
 
+## v1.68
+
+Gemma 4 E4B is the standard with a GPU or without.
+
+- A row of 4B working parameters or fewer counts as a small file under
+  the speed cap. That covers a Gemma edge model's effective size
+  (`-e4b`) as well as a MoE's active size (`-a4b`). Most of E4B's 5 GB
+  file is embeddings that are looked up, not computed, for each token.
+- So a machine with no GPU and a budget of 8 GB or more now gets
+  `gemma4-e4b`. It got `qwen3-4b` before. On the maintainer's box with
+  the GPU switched off, E4B writes 16.8 tok/s and qwen3-4b 22.1.
+- `qwen3-4b` serves a budget of 5 to 7 GB, on every machine.
+
 ## v1.67
 
 The model list, revamped. Every row earns its place by a measurement

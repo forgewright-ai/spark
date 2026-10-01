@@ -464,8 +464,8 @@ line's ladder, measured on the maintainer's box:
 | name | file | RAM | for |
 |---|---|---|---|
 | `gemma4-26b-a4b` | 15.9 GB | 19 GB | the best, a machine with 32 GB |
-| `gemma4-e4b` | 5.0 GB | 8 GB | the standard, a machine with a GPU |
-| `qwen3-4b` | 2.3 GB | 5 GB | a machine without a GPU |
+| `gemma4-e4b` | 5.0 GB | 8 GB | the standard, with a GPU or without |
+| `qwen3-4b` | 2.3 GB | 5 GB | a budget of 5 to 7 GB |
 | `qwen3-5-2b` | 1.3 GB | 3 GB | a small machine |
 
 Five more rows are tested on the line, for you to name or for the chat
@@ -479,9 +479,11 @@ spark.forgewright.ai/models/.
 How `auto` picks. It walks the list in order and takes the first tested
 open-licence row that fits. A row fits when its RAM fits the budget and
 its file is under this build's speed cap: 3 GB on `cpu`, 6 GB on
-`vulkan`, 20 GB on `metal`. Those sizes keep about 8 tok/s. A MoE with
-4B active or fewer, such as `gemma4-26b-a4b`, counts as a small file,
-since only those 4B work per token. When the cap held a row back, the
+`vulkan`, 20 GB on `metal`. Those sizes keep about 8 tok/s. A row with
+4B working parameters or fewer counts as a small file. That is a MoE's
+active 4B, as in `gemma4-26b-a4b`, or a Gemma edge model's effective 4B,
+as in `gemma4-e4b`. On the maintainer's box with no GPU, E4B writes 16.8
+tok/s. When the cap held a row back, the
 table's header says so, and `spark model NAME` takes that row anyway.
 When nothing under the cap fits, it takes the smallest row that fits.
 
@@ -800,8 +802,8 @@ Windows, as Ubuntu 24.04 on WSL 2:
   the status line say `WSL 2`. CI has no WSL runner, so the one-liner
   end to end there is on you, for now.
 - The engine is the CPU build. WSL 2 exposes the GPU as `/dev/dxg`, not
-  as a DRM card, so `auto` lands on `cpu` and picks under the 3 GB cap,
-  `qwen3-4b` on most machines. `SITE_AI_BUILD=vulkan` through Mesa is
+  as a DRM card, so `auto` lands on `cpu`: `gemma4-e4b` from an 8 GB
+  budget, `qwen3-4b` below it. `SITE_AI_BUILD=vulkan` through Mesa is
   yours to try, untested.
 - Units: if the `services` row reads `na`, put `[boot] systemd=true` in
   `/etc/wsl.conf`, run `wsl --shutdown` from PowerShell, reopen Ubuntu,
