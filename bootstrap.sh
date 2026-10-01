@@ -126,7 +126,7 @@ list_models() {
     else
         echo "no model chosen (none, or nothing fits)"
     fi
-    echo "u = yours; auto picks among the rows tested on the line (Apache-2.0, MIT)"
+    echo "u = yours; auto: the first tested row that fits, in this order (Apache-2.0, MIT)"
 }
 
 case $MODE in

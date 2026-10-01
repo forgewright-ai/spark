@@ -519,9 +519,10 @@ and may change freely.
      audition's score, written by hand from a `tests/audition.py --json`
      run, the way `_TESTED` carries the line proof. `spark model list`
      shows it in the proof column and spark.forgewright.ai/models/
-     renders it. `auto` prefers a grounded row when two rows fit the
-     budget at the same RAM, and among equals the earlier row of the
-     list. A name in both files is refused, naming both.
+     renders it. The list's order is the priority: `auto` takes the
+     first tested row that fits, for the prompt line and for the chat
+     model beside it (`engine._choose`). A name in both files is
+     refused, naming both.
    - `distro/<id>.env`, one per Linux package family the oracle
      `distro()` knows (`debian`, `arch`, `void`): `PM PM_INSTALL
      PM_TARGET PKG_CORE PKG_ENGINE PKG_AI`, the same 6 keys in every

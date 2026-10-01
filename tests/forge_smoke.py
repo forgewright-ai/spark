@@ -436,9 +436,9 @@ def main():
                 os.utime(site_env, (when, when))
                 st, _, raw = req(url, "GET", "/api/models", headers={"Authorization": "Bearer " + utoken}, timeout=30)
                 return st, [r["name"] for r in json.loads(raw)["models"] if r.get("role") == "spark"]
-            st1, pick1 = pick_after("qwen3-1-7b", time.time() + 5)
+            st1, pick1 = pick_after("qwen3-5-2b", time.time() + 5)
             st2, pick2 = pick_after("qwen3-4b", time.time() + 10)
-            ok(st1 == 200 and pick1 == ["qwen3-1-7b"] and st2 == 200 and pick2 == ["qwen3-4b"],
+            ok(st1 == 200 and pick1 == ["qwen3-5-2b"] and st2 == 200 and pick2 == ["qwen3-4b"],
                "/api/models follows site.env without a restart (the pick moved)", "%s -> %s" % (pick1, pick2))
             if site_was is None:
                 os.remove(site_env)

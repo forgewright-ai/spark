@@ -263,12 +263,16 @@ def main():
         rc, out, _ = spark("serve", "bogus")
         ok(rc == 2 and out.startswith("spark serve -- "), "serve with an unknown word: the usage, exit 2", out)
 
-        # two models (real rows from models.env, zero bytes): the router form
-        small, big = "Qwen3-1.7B-Q4_K_M.gguf", "Qwen_Qwen3-8B-Q4_K_M.gguf"
-        for f in (small, big):
+        # three models (real rows from models.env, zero bytes): the router
+        # form takes the smallest for the line and the first in the list
+        # that fits beside it for the chat (18 GB: a 10.8 GB budget, so
+        # qwen3-4b beside the 2B); ember none serves gemma4-e4b alone
+        small, big, alone = ("Qwen_Qwen3.5-2B-Q4_K_M.gguf", "Qwen_Qwen3-4B-Instruct-2507-Q4_K_M.gguf",
+                             "google_gemma-4-E4B-it-Q4_K_M.gguf")
+        for f in (small, big, alone):
             open(os.path.join(models, f), "w").close()
         router = state + "/router"
-        # SITE_AI_BUILD=vulkan: the speed cap then admits the 8b as the ember on a
+        # SITE_AI_BUILD=vulkan: the speed cap then admits gemma4-e4b on a
         # Linux runner too (cpu would cap at 3 GB files; macOS ignores the key)
         renv = {"SITE_AI_MODEL": "auto", "SITE_EMBER_MODEL": "auto", "SPARK_MEM_TOTAL_GB": "18", "SITE_AI_BUILD": "vulkan"}
         rc, out, err = spark("serve", "on", extra=renv)
@@ -289,7 +293,7 @@ def main():
         ok("reasoning" not in ember_sec and "ctx-size = 8192" in ember_sec, "ember preset: no reasoning line, SPARK_CTX", ini)
         ok("cache-ram = 0" in spark_sec and "cache-ram = 0" in ember_sec, "both presets: no prompt cache in RAM", ini)
         rc, out, _ = spark("brain", "--porcelain", "--fresh", extra=renv)
-        ok(rc == 0 and out.strip() == furl + "\tQwen3-1.7B-Q4_K_M\tforge", "brain names the spark role's file stem", out)
+        ok(rc == 0 and out.strip() == furl + "\tQwen_Qwen3.5-2B-Q4_K_M\tforge", "brain names the spark role's file stem", out)
         rc, out, err = spark("serve", "off", extra=renv)
         ok(rc == 0 and "stopped pid" in out, "stop the router", out + err)
 
@@ -298,12 +302,12 @@ def main():
         rc, out, err = spark("serve", "on", extra=nenv)
         ok(rc == 0 and "warm   spark\n" in out, "ember none: serves, warms spark alone", out + err)
         argv = json.load(open(home + "/spawned.json"))
-        ok("-m" in argv and argv[argv.index("-m") + 1] == os.path.join(models, big) and "--models-dir" not in argv,
-           "single form serves the largest fit", argv)
-        ok("--alias" in argv and argv[argv.index("--alias") + 1] == "spark,Qwen_Qwen3-8B-Q4_K_M", "aliased spark + file stem", argv)
+        ok("-m" in argv and argv[argv.index("-m") + 1] == os.path.join(models, alone) and "--models-dir" not in argv,
+           "single form serves the first in the list that fits", argv)
+        ok("--alias" in argv and argv[argv.index("--alias") + 1] == "spark,google_gemma-4-E4B-it-Q4_K_M", "aliased spark + file stem", argv)
         ok(not os.path.lexists(router + "/ember.gguf"), "stale ember link removed")
         rc, out, _ = spark("brain", "--porcelain", "--fresh", extra=nenv)
-        ok(rc == 0 and out.strip() == furl + "\tQwen_Qwen3-8B-Q4_K_M\tforge", "brain still names the file stem", out)
+        ok(rc == 0 and out.strip() == furl + "\tgoogle_gemma-4-E4B-it-Q4_K_M\tforge", "brain still names the file stem", out)
         spark("serve", "off", extra=nenv)
         rc, out, err = spark("serve", "on", extra={"SITE_EMBER_MODEL": "nosuch"})
         ok(rc == 78 and "nosuch" in err, "SITE_EMBER_MODEL=nosuch: exit 78 naming the row", err)

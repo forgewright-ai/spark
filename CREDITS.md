@@ -68,23 +68,11 @@ sha256 come from Hugging Face's file metadata, and every row in
 `models.env` names its license. The GGUF quantizations are by bartowski
 and unsloth, and IBM's own for Granite.
 
-- Qwen3 (1.7B, 4B, 4B-Thinking, 8B, 14B, 30B-A3B, Coder-30B-A3B) and
-  Qwen2.5 (7B, 14B, Coder-7B) -- https://huggingface.co/Qwen -- Apache-2.0.
-- Mistral 7B Instruct v0.3 and Mistral Nemo 12B --
-  https://huggingface.co/mistralai -- Apache-2.0.
-- Phi-4 and Phi-4 mini -- https://huggingface.co/microsoft -- MIT.
-- DeepSeek-R1-Distill-Qwen 7B and 14B -- https://huggingface.co/deepseek-ai
-  -- MIT.
-- SmolLM2 1.7B -- https://huggingface.co/HuggingFaceTB -- Apache-2.0.
-- gpt-oss-20b -- https://huggingface.co/openai -- Apache-2.0.
+- Gemma 4 (E2B, E4B, 26B-A4B) -- https://huggingface.co/google --
+  Apache-2.0.
+- Qwen3 (4B, 8B, 14B, 30B-A3B, Coder-30B-A3B) and Qwen3.5 (2B, 4B) --
+  https://huggingface.co/Qwen -- Apache-2.0.
 - Granite 4.2 8B -- https://huggingface.co/ibm-granite -- Apache-2.0.
-- Gemma 4 E2B / E4B -- https://huggingface.co/google -- Apache-2.0.
-- Llama 3.2 1B / 3B and Llama 3.1 8B -- https://huggingface.co/meta-llama
-  -- the Llama Community License. Not an open-source license: spark asks
-  before downloading.
-- Gemma 3 1B / 4B / 12B / 27B -- https://ai.google.dev/gemma/terms -- the
-  Gemma Terms of Use. Not an open-source license: spark asks before
-  downloading.
 
 ## Built with Claude
 

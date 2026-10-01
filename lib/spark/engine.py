@@ -85,26 +85,44 @@ def speed_cap_gb(cfg):
     return SPEED_CAP_GB.get(backend(cfg), SPEED_CAP_GB["cpu"])
 
 
+MOE_ACTIVE = re.compile(r"-a(\d+)b(?:-|$)")   # qwen3-30b-a3b, gemma4-26b-a4b: the active billions
+
+
+def moe_active(name):
+    """A MoE row's active parameters in billions, from its name, or None.
+    Only a few billion work per token, so it runs at a small model's
+    speed whatever its file weighs."""
+    m = MOE_ACTIVE.search(name.lower())
+    return int(m.group(1)) if m else None
+
+
 def _usable(row, cap_gb):
-    """The file is at or under the cap; a `-a3b` MoE counts as its 3B
-    active class, as speed_estimate does. No cap: everything is."""
-    return cap_gb is None or "-a3b" in row[0].lower() or row[3] <= cap_gb * 2**30
+    """The file is at or under the cap; a MoE of 4B active or less
+    counts as the small class, as speed_estimate does (26B-A4B measured
+    24.5 tok/s on a Vulkan iGPU, beside 23.3 for a dense 5 GB file). No
+    cap: everything is."""
+    active = moe_active(row[0])
+    return cap_gb is None or (active is not None and active <= 4) or row[3] <= cap_gb * 2**30
 
 
-def _pick(auto, all_rows, choice, budget, beside=0.0, cap_gb=None):
+def _pick(auto, all_rows, choice, budget, beside=0.0, cap_gb=None, ranked=None):
     """One row (sorted by ram_gb) for a choice: none -> None; a name ->
     that row from the list or yours (or None when there is no such row),
-    never second-guessed; auto -> the largest row of `auto` (the tested,
+    never second-guessed; auto -> a row of `auto` (the tested,
     open-license rows: config.auto_rows) whose ram_gb fits the budget
-    beside `beside` GB and whose file is under the speed cap -- nothing
-    under the cap fits, the smallest such row that fits (never nothing
-    while something fits). An untested row, or one under another
-    license, is by-name only."""
+    beside `beside` GB and whose file is under the speed cap. With
+    `ranked` (the same rows in the list's order, its priority) the first
+    of them that fits; without, the largest. Nothing under the cap fits:
+    the smallest row that fits (never nothing while something fits). An
+    untested row, or one under another license, is by-name only."""
     if choice == "none":
         return None
     if choice == "auto":
         fits = [r for r in auto if beside + r[5] <= budget]
         usable = [r for r in fits if _usable(r, cap_gb)]
+        first = [r for r in (ranked or ()) if r in usable]
+        if first:
+            return first[0]
         return usable[-1] if usable else (fits[0] if fits else None)
     for r in all_rows:
         if r[0] == choice:
@@ -115,29 +133,33 @@ def _pick(auto, all_rows, choice, budget, beside=0.0, cap_gb=None):
 def _choose(cfg, cap_gb):
     from . import mem_total_gb
     try:
-        # grounded rows sort after ungrounded at the same RAM, so auto's
-        # usable[-1] prefers a row with a proven ground score on a tie;
-        # among equals the EARLIER row of the list wins (the list is
-        # ranked: Granite 4.2 must not take the ember from Qwen3-8B at 7 GB)
-        rows = sorted(enumerate(config.model_tables()), key=lambda ir: (ir[1][5], bool(ir[1][10]), -ir[0]))
+        # the list is ranked: its order is the priority, so auto takes
+        # the first tested row that fits, for the prompt line and for the
+        # chat model beside it. `rows` (by RAM) keeps the smallest first,
+        # the line's model beside an auto chat model
+        table = config.model_tables()
+        rows = sorted(enumerate(table), key=lambda ir: (ir[1][5], bool(ir[1][10]), -ir[0]))
         rows = [r for _i, r in rows]
     except SystemExit:
-        rows = []
+        table = rows = []
     auto = config.auto_rows(rows)
+    ranked = config.auto_rows(table)
     budget = mem_total_gb() * cfg.ai_budget / 100.0
     sc, ec = cfg.model_choice, cfg.ember_model
     spark = ember = None
     if sc == "auto":
         if ec != "none" and auto:
-            ember = _pick(auto, rows, ec, budget, auto[0][5], cap_gb)
+            ember = _pick(auto, rows, ec, budget, auto[0][5], cap_gb,
+                          [r for r in ranked if r[1] != auto[0][1]])
             if ember:
                 spark = auto[0]
         if not spark:
-            spark = _pick(auto, rows, "auto", budget, 0.0, cap_gb)
+            spark = _pick(auto, rows, "auto", budget, 0.0, cap_gb, ranked)
             ember = None
     else:
         spark = _pick(auto, rows, sc, budget)
-        ember = _pick(auto, rows, ec, budget, spark[5], cap_gb) if spark else None
+        ember = _pick(auto, rows, ec, budget, spark[5], cap_gb,
+                      [r for r in ranked if r[1] != spark[1]]) if spark else None
     if ember and spark and ember[1] == spark[1]:
         ember = None
     return {"spark": spark, "ember": ember}
@@ -147,12 +169,11 @@ def chosen_rows(cfg):
     """{"spark": row|None, "ember": row|None} from models.env (and yours),
     the rule in its one place (bootstrap.sh eval's the picks through lib/spark/facts.py):
     ember none (the default) -> no ember; ember NAME -> that row; ember
-    auto -> the largest usable row that fits the SITE_AI_BUDGET percent
-    (default 60) of RAM+GPU beside the spark row. spark none -> no spark;
+    auto -> the first usable row, in the list's order, that fits the
+    SITE_AI_BUDGET percent (default 60) of RAM+GPU beside the spark row. spark none -> no spark;
     spark NAME -> that row; spark auto -> the smallest row when an ember
-    then fits beside it, else the largest
-    usable row that fits alone (the default, with the ember none), with no
-    ember. auto reads only the tested, open-license rows (config.auto_rows).
+    then fits beside it, else the first usable row in the list's order
+    that fits alone (the default, with the ember none), with no ember. auto reads only the tested, open-license rows (config.auto_rows).
     Usable = the file is under this backend's speed cap
     (speed_cap_gb); nothing usable fits -> the smallest row that fits. A
     name is never second-guessed. The same file in both roles is one model
@@ -1155,11 +1176,12 @@ def speed_estimate(nbytes, backend, name=""):
     size class and the backend. These are estimates -- one box measured
     under vulkan, the other two columns rounded guesses -- and stand only
     until `spark bench` (or a real turn) measures the model here; the
-    table prints them with a `~`. A MoE whose name carries `-a3b` (3B
-    active) is treated as the <=3 GB class for speed; its RAM row is
-    unchanged."""
+    table prints them with a `~`. A MoE of 4B active or less (`-a3b`,
+    `-a4b` in its name) is treated as the <=3 GB class for speed; its RAM
+    row is unchanged."""
     gb = nbytes / 2**30
-    if "-a3b" in name.lower():
+    active = moe_active(name)
+    if active is not None and active <= 4:
         cls = 1
     else:
         cls = len(SPEED_CLASSES_GB)

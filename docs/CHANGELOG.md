@@ -1,5 +1,35 @@
 # Changelog
 
+## v1.67
+
+The model list, revamped. Every row earns its place by a measurement
+on the box, the order is the priority, and Gemma 4 E4B is the
+standard.
+
+- The list's order is the priority. `auto` takes the first tested row
+  that fits, for the prompt line and for the chat model beside it. It
+  took the largest before.
+- The ladder: `gemma4-26b-a4b` for a machine with a 19 GB budget,
+  `gemma4-e4b` the standard, `qwen3-4b` without a GPU, `qwen3-5-2b` for
+  a small machine.
+- New: `gemma4-26b-a4b`, the best measured. It scores 90 % on the
+  prompt line's tools and 24/30 on grounding, as fast as E4B, since
+  only 4B of its 26B work per token.
+- New: `qwen3-5-2b`, which replaces `qwen3-1-7b` (56 % on the tools
+  against 25 %), and `qwen3-5-4b`, the best on spark's own verbs at
+  71 %.
+- A MoE with 4B active or fewer counts as a small file under the speed
+  cap. Only `-a3b` counted before.
+- 28 rows became 11. Gone: Qwen2.5, Mistral 7B and Nemo, Phi-4,
+  DeepSeek-R1 distills, SmolLM2, `qwen3-4b-thinking`, `qwen3-1-7b`,
+  Llama 3 and Gemma 3. Each was older than a row that replaces it, or
+  thinks where spark asks for none. `gpt-oss-20b` was measured and
+  marked nearly half the safe commands dangerous.
+- Measured and not added: Qwen3.5 9B (78 % on the tools), Ministral 3
+  8B (79 %) and Ministral 3 3B (71 %). E4B scores 85 %.
+- A row you chose by name and that is gone comes back as your own:
+  `spark model add URL --license "NAME URL"`.
+
 ## v1.66
 
 Gemma 4, the edge models. Google's E4B joins the tested rows under

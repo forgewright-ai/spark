@@ -445,7 +445,7 @@ Two files:
 
 | file | what |
 |---|---|
-| `models.env` | every model spark can serve: 28 models, each with its license. `line` marks a row proven on the prompt line |
+| `models.env` | every model spark can serve: 11 models, each with its license, in priority order. `line` marks a row proven on the prompt line |
 | `~/.config/spark/models.env` | your own rows (`spark model add URL --license`), 0600, marked `u` |
 
 `spark model list` shows every row: the file size, the RAM it needs
@@ -454,33 +454,36 @@ downloaded or serving, and its speed here. The budget is
 `SITE_AI_BUDGET`, 60 percent of RAM plus GPU memory by default. The
 proof column says `line` when the row is tested on the prompt line, or
 a `kept/run` score once the grounding audition measured how faithfully
-it quotes a source. A scored row wins an `auto` tie. The speed `~N
-tok/s` is an estimate until `spark bench` or a real turn measures it,
-and `too big` means the row does not fit. The tested rows:
+it quotes a source. The speed `~N tok/s` is an estimate until `spark
+bench` or a real turn measures it, and `too big` means the row does not
+fit.
 
-| name | file | RAM |
-|---|---|---|
-| `qwen3-1-7b` | 1.0 GB | 3 GB |
-| `qwen3-4b` | 2.3 GB | 5 GB |
-| `qwen3-8b` | 4.7 GB | 7 GB |
-| `qwen3-14b` | 8.4 GB | 11 GB |
-| `qwen3-30b-a3b` | 17.4 GB | 21 GB |
-| `granite-4-2-8b` | 5.0 GB | 7 GB |
-| `gemma4-e4b` | 5.0 GB | 8 GB |
+The list is in priority order. The first four rows are the prompt
+line's ladder, measured on the maintainer's box:
 
-The other 21 rows are yours by name: more Qwen, Mistral, Phi-4,
-DeepSeek-R1, SmolLM2, gpt-oss, Llama, Gemma 3 and Gemma 4 E2B. A row
-under a licence that is not Apache-2.0 or MIT prints its licence and
-asks `download it? yes/NO:` first. The project site lists them all at
+| name | file | RAM | for |
+|---|---|---|---|
+| `gemma4-26b-a4b` | 15.9 GB | 19 GB | the best, a machine with 32 GB |
+| `gemma4-e4b` | 5.0 GB | 8 GB | the standard, a machine with a GPU |
+| `qwen3-4b` | 2.3 GB | 5 GB | a machine without a GPU |
+| `qwen3-5-2b` | 1.3 GB | 3 GB | a small machine |
+
+Five more rows are tested on the line, for you to name or for the chat
+model: `qwen3-5-4b`, `qwen3-8b`, `granite-4-2-8b`, `qwen3-14b` and
+`qwen3-30b-a3b`. Two are yours by name: `gemma4-e2b` and
+`qwen3-coder-30b-a3b`. Every row is under Apache-2.0. A row of your own
+under another licence prints its licence and asks `download it?
+yes/NO:` first. The project site lists them all at
 spark.forgewright.ai/models/.
 
-How `auto` picks. It takes every tested open-licence row whose RAM fits
-the budget. Of those, it takes the largest whose file is under this
-build's speed cap: 3 GB on `cpu`, 6 GB on `vulkan`, 20 GB on `metal`.
-Those sizes keep about 8 tok/s. When the cap held a bigger row back,
-the table's header says so, and `spark model NAME` takes that row
-anyway. When nothing under the cap fits, it takes the smallest row
-that fits.
+How `auto` picks. It walks the list in order and takes the first tested
+open-licence row that fits. A row fits when its RAM fits the budget and
+its file is under this build's speed cap: 3 GB on `cpu`, 6 GB on
+`vulkan`, 20 GB on `metal`. Those sizes keep about 8 tok/s. A MoE with
+4B active or fewer, such as `gemma4-26b-a4b`, counts as a small file,
+since only those 4B work per token. When the cap held a row back, the
+table's header says so, and `spark model NAME` takes that row anyway.
+When nothing under the cap fits, it takes the smallest row that fits.
 
 1. `spark model NAME` chooses a model. It downloads the file, checks
    its size and sha256 against the row, and restarts the engine. `spark
@@ -497,7 +500,7 @@ that fits.
    model: `spark <words>`, `chat`, `do`, the page, and any `/v1` client
    naming no model. One engine, one port, one token: the request's
    `model` field picks. `spark model --chat auto` pairs the smallest
-   tested row with the largest that fits beside it.
+   tested row with the first in the list that fits beside it.
    `spark model --chat none`, the default, runs one model in both roles.
    `spark model --chat list` shows the pair.
 5. `spark model add URL` adds your own row. A huggingface.co

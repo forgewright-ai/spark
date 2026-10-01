@@ -103,14 +103,14 @@ def main():
         # the two roles: the ember is measured by default, --spark the line model
         rc, out, _ = spark("bench", "--ember")
         ok(rc == 78 and "spark model --chat NAME" in out, "--ember with none served: exit 78 naming spark model --chat", out)
-        for fname in ("Qwen3-1.7B-Q4_K_M.gguf", "Qwen_Qwen3-4B-Instruct-2507-Q4_K_M.gguf"):
+        for fname in ("Qwen_Qwen3.5-2B-Q4_K_M.gguf", "Qwen_Qwen3-4B-Instruct-2507-Q4_K_M.gguf"):
             with open(os.path.join(models, fname), "w") as f:
                 f.write("gguf" * 64)
-        roles = {"SITE_AI_MODEL": "qwen3-1-7b", "SITE_EMBER_MODEL": "qwen3-4b", "SPARK_MEM_TOTAL_GB": "64"}
+        roles = {"SITE_AI_MODEL": "qwen3-5-2b", "SITE_EMBER_MODEL": "qwen3-4b", "SPARK_MEM_TOTAL_GB": "64"}
         rc, out, _ = spark("bench", "--porcelain", extra=roles)
         ok(rc == 0 and out.startswith("Qwen_Qwen3-4B"), "bench measures the ember by default", out)
         rc, out, _ = spark("bench", "--spark", "--porcelain", extra=roles)
-        ok(rc == 0 and out.startswith("Qwen3-1.7B"), "bench --spark measures the line model", out)
+        ok(rc == 0 and out.startswith("Qwen_Qwen3.5-2B"), "bench --spark measures the line model", out)
         rc, out, _ = spark("bench", "--ember", extra=roles)
         ok(rc == 0 and "(the ember role)" in out, "bench --ember says which role it measures", out)
         rc, out, _ = spark("bench", extra={"SPARK_ENGINE_DIR": tmp + "/nope"})

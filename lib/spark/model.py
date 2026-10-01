@@ -52,9 +52,9 @@ MODEL_USAGE = """%s model -- which model this machine serves
   spark model NAME              choose it: site.env, download, engine restart
                                 (a row not under Apache-2.0 or MIT prints
                                 its licence and asks first)
-  spark model auto | none       auto: the largest tested open-licence row
-                                that fits (smallest beside a chat model);
-                                none: no model here
+  spark model auto | none       auto: the first tested open-licence row,
+                                in the list's order, that fits (smallest
+                                beside a chat model); none: no model here
   spark model budget [N]        percent of RAM+GPU auto may use (10-95)
   spark model rm NAME           delete a downloaded file that is not in use
   spark model add URL           add your own: --sha256 HEX (non-HF URLs need
@@ -307,7 +307,7 @@ def print_model_table(cfg):
         say("    %-13s %5.1f GB file   (not in models.env; SPARK_MODEL=%s serves it)" % (
             "-", os.path.getsize(os.path.join(cfg.models_dir, f)) / 2**30, f))
     say("  * = spark (the prompt line), + = the chat model (conversations), u = yours")
-    say("  auto picks among the rows tested on the line (line) under %s" % " or ".join(config.OPEN_LICENSES))
+    say("  auto: the first tested row that fits, in this order (%s)" % ", ".join(config.OPEN_LICENSES))
     return 0
 
 
@@ -569,7 +569,7 @@ EMBER_USAGE = """%s model --chat -- the chat model
 
   spark model --chat            the two roles: model, file, loaded or not
   spark model --chat NAME       choose it: site.env, download, engine restart
-  spark model --chat auto       the largest that fits beside the spark model
+  spark model --chat auto       the first in the list that fits beside it
   spark model --chat none       no second model -- spark answers everything
   spark model --chat list       the model table, the spark pick marked *, the
                                 chat model + (the same table as spark model)

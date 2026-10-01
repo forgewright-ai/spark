@@ -5521,18 +5521,31 @@ def main():
         t.ok("SITE_EMBER_MODEL=none" in open(home + "/.config/spark/site.env").read(), "site.env carries the choice")
         rc, out, _ = spark("model", "--chat", extra=mem)
         t.ok(rc == 0 and "spark answers everything" in out, "chat model none: spark answers everything", out)
+        # since v1.67 the list holds no row under a licence auto would not
+        # take: two of yours stand in, under names the list once had, so
+        # the licence column and the by-name rules meet the same strings
+        fd = os.open(home + "/.config/spark/models.env", os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write('MODEL_GEMMA3_12B="google_gemma-3-12b-it-Q4_K_M.gguf https://huggingface.co/bartowski/'
+                    'google_gemma-3-12b-it-GGUF/resolve/main/google_gemma-3-12b-it-Q4_K_M.gguf 7300575264 '
+                    'fc57f67efa46d711c346e587cbef7d049e95f3df8db2eb2271153343ef0acc7b 9"\n'
+                    'MODEL_GEMMA3_12B_LICENSE="Gemma-Terms-of-Use https://ai.google.dev/gemma/terms"\n'
+                    'MODEL_LLAMA3_2_1B="Llama-3.2-1B-Instruct-Q4_K_M.gguf https://huggingface.co/bartowski/'
+                    'Llama-3.2-1B-Instruct-GGUF/resolve/main/Llama-3.2-1B-Instruct-Q4_K_M.gguf 807694464 '
+                    '6f85a640a97cf2bf5b8e764087b1e83da0fdb51d7c9fab7d0fece9385611df83 3"\n'
+                    'MODEL_LLAMA3_2_1B_LICENSE="Llama-3.2-Community-License https://huggingface.co/meta-llama/Llama-3.2-1B-Instruct"\n')
         marks = {"SPARK_NO_APPLY": "1", "SPARK_MEM_TOTAL_GB": "64",
-                 "SITE_AI_MODEL": "qwen3-1-7b", "SITE_EMBER_MODEL": "qwen3-4b"}
+                 "SITE_AI_MODEL": "qwen3-5-2b", "SITE_EMBER_MODEL": "qwen3-4b"}
         rc, out, _ = spark("model", "list", extra=marks)
-        t.ok(rc == 0 and re.search(r"^  \*\s+qwen3-1-7b ", out, re.M) and re.search(r"^  \+\s+qwen3-4b ", out, re.M),
+        t.ok(rc == 0 and re.search(r"^  \*\s+qwen3-5-2b ", out, re.M) and re.search(r"^  \+\s+qwen3-4b ", out, re.M),
              "spark model list marks the spark pick * and the ember pick +", out)
-        t.ok(re.search(r"^     gemma3-12b .* Gemma-Terms ", out, re.M) and re.search(r"^     llama3-2-1b .* Llama-3\.2 ", out, re.M)
+        t.ok(re.search(r"^ +u +gemma3-12b .* Gemma-Terms ", out, re.M) and re.search(r"^ +u +llama3-2-1b .* Llama-3\.2 ", out, re.M)
              and "Llama-3.2- " not in out and "Gemma-Term " not in out,
              "spark model list: a license's first word in whole parts, never cut mid-part", out)
         t.ok(all(len(ln) <= 80 for ln in out.splitlines()[1:]), "spark model list: the sized license column keeps 80 columns", out)
-        t.ok(re.search(r"^  \*\s+qwen3-1-7b .* Apache-2\.0 +line ", out, re.M), "a tested row says line", out)
-        t.ok(re.search(r"^     qwen2-5-coder-7b .* Apache-2.0      ", out, re.M), "an untested row has no line mark", out)
-        t.ok("u = yours" in out and "auto picks among the rows tested on the line" in out, "the legend names the mark and the auto rule", out)
+        t.ok(re.search(r"^     qwen3-30b-a3b .* Apache-2\.0 +line ", out, re.M), "a tested row says line", out)
+        t.ok(re.search(r"^     qwen3-coder-30b-a3b .* Apache-2.0      ", out, re.M), "an untested row has no line mark", out)
+        t.ok("u = yours" in out and "auto: the first tested row that fits" in out, "the legend names the mark and the auto rule", out)
         t.ok("community" not in out and "embers" not in out and "curated" not in out, "one list: no list words", out)
         rc, out2, _ = spark("model", "--chat", "list", extra=marks)
         t.ok(rc == 0 and out2 == out, "spark model --chat list prints the same table", out2)
@@ -5580,23 +5593,23 @@ def main():
             return p.stdout.strip() or p.stderr.strip()
         t.ok(linux_pick(SITE_AI_BUILD="cpu") == "qwen3-4b none cpu auto stops at 3 GB files on cpu (bigger fits, slower than 8 tok/s)",
              "twin: 18 GB cpu -> qwen3-4b (the 3 GB cap), the note", linux_pick(SITE_AI_BUILD="cpu"))
-        t.ok(linux_pick(SITE_AI_BUILD="vulkan", SPARK_MEM_TOTAL_GB="19") == "gemma4-e4b none vulkan auto stops at 6 GB files on vulkan (bigger fits, slower than 8 tok/s)",
-             "twin: 19 GB vulkan -> gemma4-e4b (the 6 GB cap holds back qwen3-14b), the note",
+        t.ok(linux_pick(SITE_AI_BUILD="vulkan", SPARK_MEM_TOTAL_GB="19") == "gemma4-e4b none vulkan -",
+             "twin: 19 GB vulkan -> gemma4-e4b, the first in the list that fits (qwen3-14b fits too), no note",
              linux_pick(SITE_AI_BUILD="vulkan", SPARK_MEM_TOTAL_GB="19"))
         t.ok(linux_pick(SPARK_SYSFS_DRM=home + "/drm").startswith("gemma4-e4b none vulkan "),
              "twin: SITE_AI_BUILD=auto is vulkan when a DRM device reports VRAM", linux_pick(SPARK_SYSFS_DRM=home + "/drm"))
         t.ok(linux_pick().startswith("qwen3-4b none cpu "), "twin: SITE_AI_BUILD=auto is cpu with no GPU in sysfs", linux_pick())
-        t.ok(linux_pick(SITE_AI_BUILD="cpu", SITE_EMBER_MODEL="auto").startswith("qwen3-1-7b qwen3-4b cpu "),
-             "twin: ember auto takes the largest under the cap beside the smallest", linux_pick(SITE_AI_BUILD="cpu", SITE_EMBER_MODEL="auto"))
+        t.ok(linux_pick(SITE_AI_BUILD="cpu", SITE_EMBER_MODEL="auto").startswith("qwen3-5-2b qwen3-4b cpu "),
+             "twin: ember auto takes the first in the list under the cap beside the smallest", linux_pick(SITE_AI_BUILD="cpu", SITE_EMBER_MODEL="auto"))
         t.ok(linux_pick(SITE_AI_BUILD="cpu", SITE_AI_MODEL="qwen3-14b") == "qwen3-14b none cpu -",
              "twin: a named model is never second-guessed, no note", linux_pick(SITE_AI_BUILD="cpu", SITE_AI_MODEL="qwen3-14b"))
-        t.ok(linux_pick(SITE_AI_BUILD="cpu", SITE_AI_MODEL="qwen2-5-coder-7b") == "qwen2-5-coder-7b none cpu -",
+        t.ok(linux_pick(SITE_AI_BUILD="cpu", SITE_AI_MODEL="gemma4-e2b") == "gemma4-e2b none cpu -",
              "twin: a named untested row is picked for spark too",
-             linux_pick(SITE_AI_BUILD="cpu", SITE_AI_MODEL="qwen2-5-coder-7b"))
+             linux_pick(SITE_AI_BUILD="cpu", SITE_AI_MODEL="gemma4-e2b"))
         t.ok(linux_pick(SITE_AI_BUILD="cpu", SITE_AI_MODEL="gemma3-12b") == "gemma3-12b none cpu -",
              "twin: a named non-open row is picked for spark too",
              linux_pick(SITE_AI_BUILD="cpu", SITE_AI_MODEL="gemma3-12b"))
-        t.ok(linux_pick(SITE_AI_BUILD="cpu", SPARK_MEM_TOTAL_GB="6") == "qwen3-1-7b none cpu -",
+        t.ok(linux_pick(SITE_AI_BUILD="cpu", SPARK_MEM_TOTAL_GB="6") == "qwen3-5-2b none cpu -",
              "twin: 6 GB -> the smallest row, nothing held back", linux_pick(SITE_AI_BUILD="cpu", SPARK_MEM_TOTAL_GB="6"))
         # SITE_AI_BUDGET=30 on the 18 GB rig drops the budget to 5.4 GB:
         # qwen3-4b (5 GB) still fits, qwen3-8b (7 GB) no longer does (it
@@ -5605,14 +5618,14 @@ def main():
         t.ok(linux_pick(SITE_AI_BUILD="vulkan", SITE_AI_BUDGET="30") == "qwen3-4b none vulkan -",
              "twin: SITE_AI_BUDGET=30 -> qwen3-4b, qwen3-8b no longer fits",
              linux_pick(SITE_AI_BUILD="vulkan", SITE_AI_BUDGET="30"))
-        # 24 GB -> a 14.4 GB budget: qwen3-14b (11 GB) fits and, on metal
-        # (no cap), is the largest that fits; on cpu the 3 GB cap still
-        # stops it at qwen3-4b.
+        # 24 GB -> a 14.4 GB budget: on metal (no cap) gemma4-e4b, the
+        # first in the list that fits; on cpu the 3 GB cap holds it back
+        # and qwen3-4b serves.
         cap_env = {"SPARK_NO_APPLY": "1", "SPARK_MEM_TOTAL_GB": "24", "SITE_AI_BUILD": "cpu", "SPARK_SYSFS_DRM": home + "/nodrm"}
         rc, out6, _ = spark("model", "list", extra=cap_env)
         if sys.platform == "darwin":
-            t.ok(rc == 0 and out6.splitlines()[0].endswith(", metal") and re.search(r"^  \*\s+qwen3-14b ", out6, re.M)
-                 and "auto stops" not in out6, "macOS: metal whatever the key says, the largest that fits, no note", out6)
+            t.ok(rc == 0 and out6.splitlines()[0].endswith(", metal") and re.search(r"^  \*\s+gemma4-e4b ", out6, re.M)
+                 and "auto stops" not in out6, "macOS: metal whatever the key says, the first that fits, no note", out6)
         else:
             t.ok(rc == 0 and out6.splitlines()[0].endswith(", cpu") and re.search(r"^  \*\s+qwen3-4b ", out6, re.M)
                  and "  auto stops at 3 GB files on cpu (bigger fits, slower than 8 tok/s)" in out6.splitlines()[1],
@@ -5655,7 +5668,7 @@ def main():
              "spark model NAME on a non-open row prints the license line", out7 + err7)
         t.ok("SITE_AI_MODEL=gemma3-12b" in open(home + "/.config/spark/site.env").read(),
              "stdin not a tty counts as yes: the key is written", out7)
-        rc, out7b, _ = spark("model", "qwen2-5-coder-7b", extra={"SPARK_NO_APPLY": "1"})
+        rc, out7b, _ = spark("model", "qwen3-coder-30b-a3b", extra={"SPARK_NO_APPLY": "1"})
         t.ok(rc == 0 and "licence:" not in out7b, "an untested Apache-2.0 row downloads without a question", out7b)
 
         # a name in two lists is refused, naming both files (config is
@@ -6289,8 +6302,8 @@ def main():
         t.ok(crow and not any("tok/s" in ln or "too big" in ln for ln in crow), "a client's rows carry no verdict", out)
         rc, outb, _ = spark("model", "budget", extra=cl)
         t.ok(rc == 0 and outb == out, "spark model budget on a client prints the same table, no local percent", outb)
-        for verb in (("model", "budget", "40"), ("model", "qwen3-1-7b"), ("model", "auto"), ("model", "rm", "qwen3-1-7b"),
-                     ("model", "--chat", "qwen3-1-7b"), ("ember", "auto")):
+        for verb in (("model", "budget", "40"), ("model", "qwen3-5-2b"), ("model", "auto"), ("model", "rm", "qwen3-5-2b"),
+                     ("model", "--chat", "qwen3-5-2b"), ("ember", "auto")):
             rc, outv, _ = spark(*verb, extra=cl)
             t.ok(rc == 2 and "serves nothing" in outv and "spark client off" in outv
                  and outv.startswith("spark model" if verb[0] in ("model", "ember") else "spark " + verb[0]),
@@ -6418,7 +6431,7 @@ def main():
         t.ok(rc == 0 and "sealed threads now open" not in out and "this machine is ana" in out,
              "the new token opens the store as its own", out)
         rc, out, _ = spark("setup", "--yes", "--no-serve", "--model", "nosuch", extra=off)
-        t.ok(rc == 2 and "no model named nosuch" in out and "auto none qwen3" in out,
+        t.ok(rc == 2 and "no model named nosuch" in out and "auto none gemma4" in out,
              "setup --model nosuch exits 2 naming the table", out)
         os.remove(home + "/.config/spark/site.env")
         rc, out, _ = spark("setup", "--yes", "--no-serve", "--model", "none", extra=dict(off, SITE_NAME="box"))
@@ -6426,12 +6439,12 @@ def main():
         t.ok(rc == 0 and "SITE_NAME=box\n" in site_env, "SITE_NAME in the environment pre-answers the name", site_env)
         # a model chosen: the first question goes to the brain (the stub) and
         # is shown as the widget shows it, with the speed the server reported
-        rc, out, _ = spark("setup", "--yes", "--model", "qwen3-1-7b", extra=off)
+        rc, out, _ = spark("setup", "--yes", "--model", "qwen3-5-2b", extra=off)
         t.ok(rc == 0 and "? how big is this dir\n* Files over 1G changed this week.\n  find . -type f -size +1G -mtime -7\n" in out,
              "setup asks the first question and shows the hint above the command", out)
         t.ok("12.3 tok/s on your first question (spark bench for the full number)" in out,
              "setup prints the measured tok/s of that question", out)
-        t.ok("SITE_AI_MODEL=qwen3-1-7b\n" in open(home + "/.config/spark/site.env").read(),
+        t.ok("SITE_AI_MODEL=qwen3-5-2b\n" in open(home + "/.config/spark/site.env").read(),
              "setup --model NAME writes the name", out)
 
         # spark uninstall: signed, shows and never mutates without the word;

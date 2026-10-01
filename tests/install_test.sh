@@ -193,15 +193,15 @@ rm -f "$HOME/$rc"
 #    same way). SPARK_MEM_TOTAL_GB pins the budget; a uname stub pins the
 #    Linux rule on either OS (on macOS the build is metal whatever the key
 #    says) and SPARK_SYSFS_DRM the GPU probe. 18 GB -> 10 GB budget: auto
-#    (tested, open-license rows only) takes the largest row that fits AND stays under the
-#    build's speed cap -- 3 GB files on cpu (qwen3-4b), 6 GB on vulkan
-#    (qwen3-8b); qwen3-14b needs 11 GB, over this budget either way. With
-#    the ember auto: the smallest row + the largest usable beside it.
+#    (tested, open-license rows only) takes the first row in the list
+#    that fits AND stays under the build's speed cap -- 3 GB files on cpu
+#    (qwen3-4b), 6 GB on vulkan (gemma4-e4b). With the ember auto: the
+#    smallest row + the first usable in the list that fits beside it.
 #    SITE_AI_BUILD=auto (the default) = vulkan when a DRM device reports
 #    VRAM, else cpu. A name is never second-guessed, and is looked up in
 #    the whole list and yours, tested or not, any license.
 #    6 GB -> 3 GB budget: the smallest row alone, no ember, nothing held
-#    back.
+#    back. The list holds no non-open row: one of yours stands in.
 mkdir -p "$T/os" "$T/drm/card0/device" "$T/nodrm"
 printf '#!/bin/sh\ncase ${1:-} in -s) echo Linux ;; -m) echo x86_64 ;; *) exec /usr/bin/uname "$@" ;; esac\n' > "$T/os/uname"
 chmod +x "$T/os/uname"
@@ -209,39 +209,39 @@ echo 8589934592 > "$T/drm/card0/device/mem_info_vram_total"
 lm() { env PATH="$T/os:$PATH" SPARK_SYSFS_DRM="$T/nodrm" "$@" sh "$REPO/bootstrap.sh" --list-models 2>&1; }
 printf 'SITE_AI_MODEL=auto\nSITE_EMBER_MODEL=auto\n' > "$HOME/.config/spark/site.env"
 out=$(lm SPARK_MEM_TOTAL_GB=18 SITE_AI_BUILD=cpu) || bad "--list-models failed"
-printf '%s\n' "$out" | grep -qx 'spark: qwen3-1-7b' && ok "18 GB cpu: spark is the smallest row" || bad "18 GB cpu spark line"
-printf '%s\n' "$out" | grep -qx 'ember: qwen3-4b' && ok "18 GB cpu: ember is the largest under the 3 GB cap beside it" || bad "18 GB cpu ember line: $(printf '%s\n' "$out" | grep '^ember')"
-printf '%s\n' "$out" | grep -qE '^\*  ?qwen3-1-7b ' && ok "spark pick marked *" || bad "* mark"
+printf '%s\n' "$out" | grep -qx 'spark: qwen3-5-2b' && ok "18 GB cpu: spark is the smallest row" || bad "18 GB cpu spark line"
+printf '%s\n' "$out" | grep -qx 'ember: qwen3-4b' && ok "18 GB cpu: ember is the first in the list under the 3 GB cap beside it" || bad "18 GB cpu ember line: $(printf '%s\n' "$out" | grep '^ember')"
+printf '%s\n' "$out" | grep -qE '^\*  ?qwen3-5-2b ' && ok "spark pick marked *" || bad "* mark"
 printf '%s\n' "$out" | grep -qE '^\+  ?qwen3-4b ' && ok "ember pick marked +" || bad "+ mark"
-printf '%s\n' "$out" | grep -qx 'auto stops at 3 GB files on cpu (bigger fits, slower than 8 tok/s)' && ok "the header says what the cpu cap held back" || bad "no cap note: $(printf '%s\n' "$out" | head -3)"
-printf '%s\n' "$out" | head -3 | awk 'length > 80 { bad = 1 } END { exit bad }' && ok "the header and the cap note fit 80 columns" || bad "a header line is wider than 80"
 out=$(lm SPARK_MEM_TOTAL_GB=18 SITE_AI_BUILD=vulkan) || bad "--list-models failed"
-printf '%s\n' "$out" | grep -qx 'ember: qwen3-8b' && ok "18 GB vulkan: ember is the largest under the 6 GB cap beside it" || bad "18 GB vulkan ember line"
+printf '%s\n' "$out" | grep -qx 'ember: qwen3-4b' && ok "18 GB vulkan: ember is the first in the list that fits beside it" || bad "18 GB vulkan ember line"
 printf 'SITE_AI_MODEL=auto\nSITE_EMBER_MODEL=none\n' > "$HOME/.config/spark/site.env"
 out=$(lm SPARK_MEM_TOTAL_GB=18 SITE_AI_BUILD=cpu) || bad "--list-models failed"
-printf '%s\n' "$out" | grep -qx 'spark: qwen3-4b' && ok "18 GB cpu: auto stops at the 3 GB cap (qwen3-4b, not a bigger tested row)" || bad "18 GB cpu spark line: $(printf '%s\n' "$out" | grep '^spark')"
+printf '%s\n' "$out" | grep -qx 'spark: qwen3-4b' && ok "18 GB cpu: auto stops at the 3 GB cap (qwen3-4b, not gemma4-e4b)" || bad "18 GB cpu spark line: $(printf '%s\n' "$out" | grep '^spark')"
+printf '%s\n' "$out" | grep -qx 'auto stops at 3 GB files on cpu (bigger fits, slower than 8 tok/s)' && ok "the header says what the cpu cap held back" || bad "no cap note: $(printf '%s\n' "$out" | head -3)"
+printf '%s\n' "$out" | head -3 | awk 'length > 80 { bad = 1 } END { exit bad }' && ok "the header and the cap note fit 80 columns" || bad "a header line is wider than 80"
 printf '%s\n' "$out" | head -1 | grep -q ', cpu$' && ok "the header names the cpu build" || bad "header: $(printf '%s\n' "$out" | head -1)"
 # a client (none + a peer): the rows, no budget, never this machine's RAM
 printf 'SITE_AI_MODEL=none\nSITE_PEER_AI_URL=http://192.0.2.10:8081\n' > "$HOME/.config/spark/site.env"
 out=$(lm SPARK_MEM_TOTAL_GB=24 SITE_AI_BUILD=cpu) || bad "--list-models failed on a client"
 printf '%s\n' "$out" | head -1 | grep -q '^this machine is a client of http://192.0.2.10:8081' && ok "a client's --list-models names the peer" || bad "client header: $(printf '%s\n' "$out" | head -1)"
 printf '%s\n' "$out" | grep -q '24 GB\|budget\| fits$\|^spark:\|^ember:' && bad "a client's --list-models printed a local budget or a pick" || ok "a client's --list-models has no budget, verdict or pick"
-printf '%s\n' "$out" | grep -qE '^   qwen3-1-7b ' && ok "a client's --list-models still lists the rows" || bad "client rows: $(printf '%s\n' "$out" | sed -n 3p)"
+printf '%s\n' "$out" | grep -qE '^   gemma4-e4b ' && ok "a client's --list-models still lists the rows" || bad "client rows: $(printf '%s\n' "$out" | sed -n 3p)"
 printf 'SITE_AI_MODEL=auto\nSITE_EMBER_MODEL=none\n' > "$HOME/.config/spark/site.env"
-# 19 GB -> 11 GB budget: qwen3-14b (11 GB) fits the budget but its 8.4 GB
-# file is over the 6 GB vulkan cap, so auto stops at gemma4-e4b (5.0 GB
-# file, 8 GB of RAM) and the header says what the cap held back.
+# 19 GB -> 11 GB budget: qwen3-14b (11 GB) fits the budget, but the
+# list's order is the priority: gemma4-e4b comes first, it is under the
+# 6 GB vulkan cap, and nothing was held back, so no note.
 out=$(lm SPARK_MEM_TOTAL_GB=19 SITE_AI_BUILD=vulkan) || bad "--list-models failed"
-printf '%s\n' "$out" | grep -qx 'spark: gemma4-e4b' && ok "19 GB vulkan: auto stops at the 6 GB cap (gemma4-e4b)" || bad "19 GB vulkan spark line"
-printf '%s\n' "$out" | grep -qx 'auto stops at 6 GB files on vulkan (bigger fits, slower than 8 tok/s)' && ok "the header says what the vulkan cap held back" || bad "no vulkan cap note"
+printf '%s\n' "$out" | grep -qx 'spark: gemma4-e4b' && ok "19 GB vulkan: the first in the list that fits (gemma4-e4b)" || bad "19 GB vulkan spark line"
+printf '%s\n' "$out" | grep -q '^auto stops' && bad "19 GB vulkan: a cap note with nothing held back" || ok "19 GB vulkan: nothing held back, no cap note"
 out=$(lm SPARK_MEM_TOTAL_GB=18 SPARK_SYSFS_DRM="$T/drm") || bad "--list-models failed"
 printf '%s\n' "$out" | head -1 | grep -q ', vulkan$' && ok "SITE_AI_BUILD=auto: vulkan when a DRM device reports VRAM" || bad "auto with a GPU: $(printf '%s\n' "$out" | head -1)"
 printf '%s\n' "$out" | grep -qx 'spark: gemma4-e4b' && ok "auto with a GPU picks as vulkan" || bad "auto with a GPU spark line"
 # SITE_AI_BUDGET=30 drops the budget to 5 GB (18 * 30 / 100): qwen3-4b
-# (5 GB) still fits, qwen3-8b (7 GB) no longer does -- it would at the
+# (5 GB) still fits, gemma4-e4b (8 GB) no longer does -- it would at the
 # default 60 % (the case just above); the header names the percent too.
 out=$(lm SPARK_MEM_TOTAL_GB=18 SITE_AI_BUILD=vulkan SITE_AI_BUDGET=30) || bad "--list-models failed"
-printf '%s\n' "$out" | grep -qx 'spark: qwen3-4b' && ok "SITE_AI_BUDGET=30: the budget drops to 5 GB, qwen3-8b no longer fits" || bad "SITE_AI_BUDGET=30 spark line: $(printf '%s\n' "$out" | grep '^spark')"
+printf '%s\n' "$out" | grep -qx 'spark: qwen3-4b' && ok "SITE_AI_BUDGET=30: the budget drops to 5 GB, gemma4-e4b no longer fits" || bad "SITE_AI_BUDGET=30 spark line: $(printf '%s\n' "$out" | grep '^spark')"
 printf '%s\n' "$out" | head -1 | grep -q 'budget 5 GB (30%)' && ok "the header names the SITE_AI_BUDGET percent" || bad "header: $(printf '%s\n' "$out" | head -1)"
 out=$(lm SPARK_MEM_TOTAL_GB=18) || bad "--list-models failed"
 printf '%s\n' "$out" | head -1 | grep -q ', cpu$' && ok "SITE_AI_BUILD=auto: cpu with no GPU in sysfs" || bad "auto without a GPU: $(printf '%s\n' "$out" | head -1)"
@@ -251,12 +251,14 @@ printf '%s\n' "$out" | grep -qx 'spark: qwen3-14b' && ok "a named model is never
 printf '%s\n' "$out" | grep -q '^auto stops' && bad "a name printed the cap note" || ok "a name: no cap note"
 # a name is looked up in the whole list, tested or not: an untested row
 # and a non-open-license row, picked by name for the spark role
-out=$(lm SPARK_MEM_TOTAL_GB=18 SITE_AI_BUILD=cpu SITE_AI_MODEL=qwen2-5-coder-7b) || bad "--list-models failed"
-printf '%s\n' "$out" | grep -qx 'spark: qwen2-5-coder-7b' && ok "a named untested row is picked for spark too" || bad "named untested row: $(printf '%s\n' "$out" | grep '^spark')"
+out=$(lm SPARK_MEM_TOTAL_GB=18 SITE_AI_BUILD=cpu SITE_AI_MODEL=gemma4-e2b) || bad "--list-models failed"
+printf '%s\n' "$out" | grep -qx 'spark: gemma4-e2b' && ok "a named untested row is picked for spark too" || bad "named untested row: $(printf '%s\n' "$out" | grep '^spark')"
+( umask 077; printf '%s\n' 'MODEL_GEMMA3_12B="google_gemma-3-12b-it-Q4_K_M.gguf https://huggingface.co/bartowski/google_gemma-3-12b-it-GGUF/resolve/main/google_gemma-3-12b-it-Q4_K_M.gguf 7300575264 fc57f67efa46d711c346e587cbef7d049e95f3df8db2eb2271153343ef0acc7b 9"' 'MODEL_GEMMA3_12B_LICENSE="Gemma-Terms-of-Use https://ai.google.dev/gemma/terms"' > "$HOME/.config/spark/models.env" )
 out=$(lm SPARK_MEM_TOTAL_GB=18 SITE_AI_BUILD=cpu SITE_AI_MODEL=gemma3-12b) || bad "--list-models failed"
 printf '%s\n' "$out" | grep -qx 'spark: gemma3-12b' && ok "a named non-open row is picked for spark too" || bad "named non-open row: $(printf '%s\n' "$out" | grep '^spark')"
+rm -f "$HOME/.config/spark/models.env"
 out=$(lm SPARK_MEM_TOTAL_GB=6 SITE_AI_BUILD=cpu) || bad "--list-models failed"
-printf '%s\n' "$out" | grep -qx 'spark: qwen3-1-7b' && ok "6 GB: the smallest row alone" || bad "6 GB spark line"
+printf '%s\n' "$out" | grep -qx 'spark: qwen3-5-2b' && ok "6 GB: the smallest row alone" || bad "6 GB spark line"
 printf '%s\n' "$out" | grep -qx 'ember: none' && ok "6 GB: no ember" || bad "6 GB ember line"
 printf '%s\n' "$out" | grep -q '^auto stops' && bad "6 GB: a cap note with nothing held back" || ok "6 GB: nothing held back, no cap note"
 # the package family is read from os-release, pinned like the kernel line:
@@ -265,11 +267,11 @@ printf 'ID=ubuntu\nID_LIKE=debian\nPRETTY_NAME="Ubuntu fixture"\n' > "$T/os-rele
 env PATH="$T/os:$PATH" SPARK_SYSFS_DRM="$T/drm" SPARK_OS_RELEASE="$T/os-release-debian" sh "$REPO/bootstrap.sh" --list-packages | grep -qx libvulkan1 && ok "auto with a GPU: --list-packages adds the vulkan libraries" || bad "vulkan packages missing with a GPU"
 env PATH="$T/os:$PATH" SPARK_SYSFS_DRM="$T/nodrm" SPARK_OS_RELEASE="$T/os-release-debian" sh "$REPO/bootstrap.sh" --list-packages | grep -qx libvulkan1 && bad "no GPU: --list-packages still adds the vulkan libraries" || ok "auto without a GPU: no vulkan libraries"
 # this OS as it is: macOS is metal whatever the key says, Linux cpu or
-# vulkan. 24 GB -> 14 GB budget: qwen3-14b (11 GB) fits on metal (no cap
-# there); on cpu the 3 GB cap still stops it at qwen3-4b.
+# vulkan. 24 GB -> 14 GB budget: gemma4-e4b, the first in the list that
+# fits, on metal (no cap there); on cpu the 3 GB cap stops it at qwen3-4b.
 out=$(SPARK_MEM_TOTAL_GB=24 SITE_AI_BUILD=cpu sh "$REPO/bootstrap.sh" --list-models 2>&1) || bad "--list-models failed"
 case $(uname -s) in
-    Darwin) printf '%s\n' "$out" | head -1 | grep -q ', metal$' && printf '%s\n' "$out" | grep -qx 'spark: qwen3-14b' && ok "macOS: metal, the key ignored, the largest that fits" || bad "macOS header/pick: $(printf '%s\n' "$out" | head -1)" ;;
+    Darwin) printf '%s\n' "$out" | head -1 | grep -q ', metal$' && printf '%s\n' "$out" | grep -qx 'spark: gemma4-e4b' && ok "macOS: metal, the key ignored, the first that fits" || bad "macOS header/pick: $(printf '%s\n' "$out" | head -1)" ;;
     *) printf '%s\n' "$out" | head -1 | grep -qE ', (cpu|vulkan)$' && ok "Linux: the header names cpu or vulkan" || bad "Linux header: $(printf '%s\n' "$out" | head -1)" ;;
 esac
 

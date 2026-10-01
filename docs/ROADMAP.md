@@ -1,6 +1,6 @@
 # Roadmap
 
-What comes after v1.66, in the order it is likely to happen. Nothing
+What comes after v1.67, in the order it is likely to happen. Nothing
 here is a promise. A row in `docs/CHANGELOG.md` is. `docs/IDEAS.md` is
 the field this is picked from.
 
@@ -86,17 +86,20 @@ Measured 2026-09-30 and 2026-10-01 on the box: the grounding audition
 
 | model | ground | tg tok/s |
 |---|---|---|
-| Gemma 4 E2B | 21/30 | 43.9 |
+| Gemma 4 26B-A4B | 24/30 | 24.5 |
 | Gemma 4 E4B | 23/30 | 23.3 |
 | Granite 4.2 8B | 23/30 | 15.4 |
-| Qwen3 4B | 18/30 | 29.6 |
+| Gemma 4 E2B | 21/30 | 43.9 |
+| Qwen3.5 4B | 21/30 | 23.4 |
+| Qwen3.5 2B | 21/30 | 49.5 |
 | Qwen3 8B | 19/30 | 16.9 |
 | Qwen3 14B | 19/30 | 9.4 |
+| Qwen3 4B | 18/30 | 29.6 |
 
-Two rows proven on the line carry no score yet: the 1.7B and the
-30B-A3B. Gemma 3 12B keeps its old 5/9 from the 9-case set.
+One row proven on the line carries no score yet: the 30B-A3B. It does
+not fit the box's GPU.
 
-- Score the 1.7B and the 30B-A3B the same way, and write each into
+- Score the 30B-A3B on a machine it fits, and write it into
   `models.env` by hand, the way `_TESTED` carries the line proof.
 - The ask-complete case is now the measure of the gap. Every row
   fails it 3 times in 3: each keeps lines the source does not hold.
