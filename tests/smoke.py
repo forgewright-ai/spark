@@ -1471,6 +1471,15 @@ def engine_wire_cases(t, spark, home, url):
          "line: the role seam keeps the line's own system message (no identity for the ember)")
 
 
+def continuing_tag_cases(t):
+    """v1.65: the continuing line shows the user's words, not a turn's tags."""
+    from spark import forge as _fg
+    a = _fg.continuing([{"role": "user", "text": "[explain]", "ts": ""}])
+    b = _fg.continuing([{"role": "user", "text": "[cwd /tmp] how big is this", "ts": ""}])
+    t.ok('continuing "explain"' in a and 'continuing "how big is this"' in b,
+         "chat: the continuing line skips a turn's tags", a + " | " + b)
+
+
 def server_pids_cases(t):
     """v1.64: a process counts as the engine only when its program IS
     llama-server -- a shell whose command line mentions it is not."""
@@ -7349,6 +7358,7 @@ site.cmd_headless([])
              "%s clears the hint it drew when Ctrl-U empties the line" % name)
 
     knowledge_cases(t)
+    continuing_tag_cases(t)
     server_pids_cases(t)
     living_core_cases(t)
     chat_awake_cases(t)

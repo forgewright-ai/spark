@@ -1117,6 +1117,12 @@ def continuing(msgs, now=None):
     head, tail = '  continuing "', '"%s -- /new starts fresh' % (" (%s)" % when if when else "")
     room = CONTINUING_COLS - len(head) - textmod.cols(tail)
     words = " ".join(textmod.scrub(first.get("text", "")).split())
+    # a turn's own tags ([explain], [cwd /x]) are not the user's words:
+    # skip them, and name the tag itself when nothing else is left
+    tags = re.match(r"^((?:\[[^\]]*\]\s*)+)", words)
+    if tags:
+        rest = words[tags.end():].strip()
+        words = rest or tags.group(1).strip().split("]")[0].lstrip("[").split()[0]
     if textmod.cols(words) > room:      # columns, not characters: a wide one takes two
         cut = glyph("cut")
         words = textmod.cut_cols(words, room - textmod.cols(cut))
