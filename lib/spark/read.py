@@ -213,15 +213,16 @@ class Refused(Exception):
         self.hint, self.code = hint, code
 
 
-def answer(cfg, data, question, stream, want=None, name="", on_ask=None):
+def answer(cfg, data, question, stream, want=None, name="", on_ask=None, thread=None):
     """Contract 11's core, one law for every caller (spark read, the
     chat's /read): the source `data` held back, cut to the part `want`,
     read, asked `question` (bare: what it covers), and every line of the
     answer through the gate before it reaches `stream` -- a line that
     does not quote the source, or whose quotes are not in it, never gets
     there. `on_ask()` runs once, after the reading pass, right before the
-    request. Returns the gate's kept count, never 0: nothing kept is
-    Refused, with the source's own opening words. Refused before
+    request. `thread` (the chat's /read) rides the turn record, so `/last`
+    there finds the words. Returns the gate's kept count, never 0:
+    nothing kept is Refused, with the source's own opening words. Refused before
     anything is sent for a part that is not there; wire.BrainError and
     KeyboardInterrupt pass through, the stream closed first."""
     # a source is someone else's text: what looks like a secret in it (a
@@ -280,7 +281,7 @@ def answer(cfg, data, question, stream, want=None, name="", on_ask=None):
     first = {"first_ms": int((out.first - t0) * 1000)} if out.first else {}
     s.record(kind="read", chars=len(part), ms=ms, part=want, parts=total,
              kept=gate.kept, dropped=gate.dropped, quotes=gate.quoted, unanchored=gate.missed,
-             **dict(first, **({"held": held} if held else {})))
+             **dict(first, **({"held": held} if held else {}), **({"thread": thread} if thread else {})))
     if not gate.kept:
         where = "part %d of %d" % (want, total) if total > 1 else "the source"
         raise Refused('%s does not answer -- it opens: "%s"' % (where, opening(part)))

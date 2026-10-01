@@ -35,6 +35,18 @@ os.environ.update({"HOME": _ISOLATED, "XDG_CONFIG_HOME": _ISOLATED + "/.config",
                    "XDG_STATE_HOME": _ISOLATED + "/.local/state", "XDG_DATA_HOME": _ISOLATED + "/.local/share"})
 for _k in [k for k in os.environ if k.startswith("SPARK_LOOK_") or k in ("SPARK_HEIGHT", "SPARK_REVEAL")]:
     del os.environ[_k]
+# The clipboard, fenced: a fake pbcopy, wl-copy, xclip and xsel lead PATH
+# for this process and every case it spawns, so /copy never reaches the
+# real one (a review run once overwrote the maintainer's own clipboard).
+# What they take lands in CLIPBOARD, inside the throwaway HOME.
+CLIPBOARD = os.path.join(_ISOLATED, "clipboard.txt")
+_CLIP_BIN = os.path.join(_ISOLATED, "clip-bin")
+os.makedirs(_CLIP_BIN)
+for _tool in ("pbcopy", "wl-copy", "xclip", "xsel"):
+    with open(os.path.join(_CLIP_BIN, _tool), "w") as _f:
+        _f.write("#!/bin/sh\ncat > '%s'\n" % CLIPBOARD)
+    os.chmod(os.path.join(_CLIP_BIN, _tool), 0o755)
+os.environ["PATH"] = _CLIP_BIN + os.pathsep + os.environ.get("PATH", "/usr/bin:/bin")
 sys.path.insert(0, os.path.join(REPO, "lib"))
 from spark import vault  # noqa: E402  -- to open sealed threads in assertions
 
@@ -1583,6 +1595,108 @@ def chat_awake_cases(t):
              and c[0] == "Back in the chat.\n" and "/do takes a goal" in d[1],
              "chat: /do hands the goal to spark do (--sandbox kept, -- before the words), and the chat goes on",
              repr((calls, a, b, c, d)))
+
+        # --- the review (v1.65): a Unicode digit is not a number
+        cfg = _cf.load()
+        del _fg.SAID[:]
+        _fg.SAID.extend([{"role": "user", "text": "hi"}, {"role": "assistant", "text": "a\tb\x1b[201~c\x07\nd"}])
+        try:
+            got = [said(_fg._slash_copy, cfg, None, ["²"]), said(_fg._slash_read, cfg, None, ["@x", "--part", "²"]),
+                   said(_fg._slash_resume, _cf.load(), None, ["²"])]
+            crash = ""
+        except ValueError as e:
+            got, crash = [], repr(e)
+        t.ok(not crash and _fg.number("12") and not _fg.number("²") and not _fg.number("٣")
+             and got[0][1].count("\n") == 1 and "/copy takes a number" in got[0][1]
+             and got[1][1].count("\n") == 1 and "--part N is a part number" in got[1][1]
+             and "no thread ²" in got[2][1],
+             "chat: `/copy ²`, `/read @f --part ²` and `/resume ²` refuse in one line -- no crash",
+             crash or repr(got))
+
+        # --- /copy: control characters scrubbed (ESC[201~ cannot end a
+        # bracketed paste), tabs and newlines kept; SAID when no thread
+        try:
+            os.remove(CLIPBOARD)
+        except OSError:
+            pass
+        wl = os.environ.get("WAYLAND_DISPLAY")
+        os.environ["WAYLAND_DISPLAY"] = "wayland-stub"      # Linux picks wl-copy: the fake one too
+        try:
+            out, err = said(_fg._slash_copy, cfg, None, [])
+        finally:
+            if wl is None:
+                os.environ.pop("WAYLAND_DISPLAY", None)
+            else:
+                os.environ["WAYLAND_DISPLAY"] = wl
+        clip = open(CLIPBOARD).read() if os.path.exists(CLIPBOARD) else ""
+        t.ok(clip == "a\tbc\nd" and "(6 characters)" in out + err
+             and all(shutil.which(x).startswith(_CLIP_BIN) for x in ("pbcopy", "wl-copy", "xclip", "xsel")),
+             "chat: /copy scrubs control characters (tabs and newlines kept) and takes this chat's own turns "
+             "when no thread keeps them; the clipboard is the fake one", repr((clip, out, err)))
+
+        # --- the failure line keeps the tool's own name lowercase
+        fail = os.path.join(tmp, "fail-bin")
+        os.makedirs(fail)
+        for tool in ("pbcopy", "wl-copy"):
+            with open(os.path.join(fail, tool), "w") as f:
+                f.write("#!/bin/sh\nexit 1\n")
+            os.chmod(os.path.join(fail, tool), 0o755)
+        saved_env = {k: os.environ.get(k) for k in ("PATH", "WAYLAND_DISPLAY")}
+        os.environ.update({"PATH": fail + os.pathsep + os.environ["PATH"], "WAYLAND_DISPLAY": "wayland-stub"})
+        try:
+            out, _ = said(_fg._slash_copy, cfg, None, [], living=True)
+        finally:
+            for k, v in saved_env.items():
+                if v is None:
+                    os.environ.pop(k, None)
+                else:
+                    os.environ[k] = v
+        tool = "pbcopy" if sys.platform == "darwin" else "wl-copy"
+        t.ok(out == "(o.?) %s did not take the reply -- /save writes the conversation to a file.\n" % tool,
+             "chat: a clipboard that fails keeps its name lowercase in the puzzled line", repr(out))
+
+        # --- /save: a directory holds the default name; a name keeps its spaces
+        adir = os.path.join(tmp, "adir")
+        os.makedirs(adir)
+        stem = time.strftime("spark-chat-%Y-%m-%d")
+        t.ok(_fg.save_names(adir)[:2] == [os.path.join(adir, stem + ".txt"), os.path.join(adir, stem + "-2.txt")]
+             and _fg.save_names(adir + "/new/")[0] == os.path.join(adir, "new", stem + ".txt")
+             and _fg.save_names(os.path.join(tmp, "my  chat.txt")) == [os.path.join(tmp, "my  chat.txt")],
+             "chat: /save DIR (or a name ending in /) writes the default name inside it; a name keeps its spaces",
+             repr(_fg.save_names(adir)[:2]))
+
+        # --- the chat's readline history keeps its own prompts only
+        try:
+            import readline as _rl
+        except ImportError:
+            _rl = None
+        if _rl is not None:
+            _rl.clear_history()
+            _rl.add_history("/do tidy the logs")
+            with _fg._prompts_only(_rl):
+                _rl.add_history("e")
+                _rl.add_history("yes")
+            kept = [_rl.get_history_item(i) for i in range(1, _rl.get_current_history_length() + 1)]
+            _rl.clear_history()
+            t.ok(kept == ["/do tidy the logs"],
+                 "chat: the lines spark do read inside /do leave the chat's readline history", repr(kept))
+
+        # --- the reveal never paces the hanging indent; the continuing
+        # line is cut by columns, a wide character two
+        ticked = []
+        w = _tx.Wrap(Tty(), lead="(o.o) ", cps=5000)
+        w._tick = lambda ch, step: (ticked.append(ch), w.stream.write(ch))
+        w.width = 30
+        w.feed("one two three four five six seven eight nine ten eleven twelve")
+        w.close()
+        paced = "".join(ticked)
+        t.ok("\n      " in w.stream.getvalue() and "\n" in paced and "\n " not in paced and "      " not in paced,
+             "chat: the reveal paces the words; the hanging indent is written free", repr((w.stream.getvalue(), paced)))
+        wide = _fg.continuing([{"role": "user", "text": "漢字 " * 40, "ts": stamp(65)}], now)
+        t.ok(_tx.cols(wide) <= 79 and _tx.cols(wide) > len(wide) and wide.endswith("(1 min ago) -- /new starts fresh")
+             and _tx.cols("漢á") == 3,
+             "chat: the continuing line fits 80 columns by display width (a wide character is two)", wide)
+        del _fg.SAID[:]
     finally:
         sys.stdout, sys.stderr = real_out, real_err
         _fg.LIVING[0] = False
@@ -1678,6 +1792,46 @@ def chat_tools_cases(t, spark, home):
     t.ok(rc == 0 and "spark: spark do confirms every step -- run it in a terminal" in err
          and "Back in the chat." in out and "spark: /do takes a goal" in err,
          "chat: /do reaches spark do's driver (piped, its own refusal) and the chat goes on", out + err)
+
+    # --- the review (v1.65)
+    rc, out, err = spark("chat", stdin="/copy ²\n/read @gate.txt --part ²\ncount\n:q\n", extra=clip, cwd=home)
+    t.ok(rc == 0 and "Traceback" not in err and err.count("spark: /copy takes a number") == 1
+         and err.count("spark: --part N is a part number, 1 up") == 1 and re.search(r"^\* \d+$", out, re.M),
+         "chat: `/copy ²` and `/read @f --part ²` refuse in one line, and the chat goes on", out + err)
+    rc, out, err = spark("chat", stdin="/new\n/read @gate.txt when does it open\n/last\n:q\n", cwd=home)
+    t.ok(rc == 0 and re.search(r"  read  /read @gate.txt when does it open\n  \* It opens \"at nine\"", out)
+         and "thread " in out,
+         "chat: /last after /read shows the read turn and its words", out + err)
+    sdir = os.path.join(home, "sdir")
+    os.makedirs(sdir, exist_ok=True)
+    rc, out, err = spark("chat", stdin="/new\ncount\n/save sdir\n/save sdir/\n/save my  chat.txt\n:q\n", cwd=home)
+    t.ok(rc == 0 and "Saved to ~/sdir/spark-chat-%s.txt (1 turn)." % today in out
+         and "Saved to ~/sdir/spark-chat-%s-2.txt (1 turn)." % today in out
+         and os.path.isfile(os.path.join(home, "my  chat.txt")) and "already" not in err,
+         "chat: /save DIR writes the default name inside it; a name keeps its spaces as typed", out + err)
+    off = os.path.join(home, "off.txt")
+    try:
+        os.remove(CLIPBOARD)
+    except OSError:
+        pass
+    rc, out, err = spark("chat", stdin="count\n/save off.txt\n/copy\n:q\n", extra=dict(clip, SPARK_HISTORY="off"), cwd=home)
+    body = open(off).read() if os.path.exists(off) else ""
+    got = open(cap).read() if os.path.exists(cap) else ""
+    t.ok(rc == 0 and re.fullmatch(r"you: count\n\nspark: (\d+)\n", body) and got == body.split("spark: ")[1].strip()
+         and "The last reply is on the clipboard" in out,
+         "chat: SPARK_HISTORY=off -- /save and /copy take this chat's own turns from memory", out + err + body)
+    # /do: the exchange lands on the chat's thread after the run's own, so
+    # the next `spark chat` goes on with the chat, not the run
+    hook = {"SPARK_DO_STDIN": "1"}
+    rc, out, err = spark("chat", stdin="/new\nchat first\n/do say hello\n\n/save do.txt\n:q\n", extra=hook, cwd=home)
+    body = open(os.path.join(home, "do.txt")).read() if os.path.exists(os.path.join(home, "do.txt")) else ""
+    t.ok(rc == 0 and "STEP-ONE" in out and "Back in the chat." in out
+         and "you: /do say hello\n\nspark: done -- all done\n" in body and body.startswith("you: chat first"),
+         "chat: /do lands the goal and the run's end on the chat's thread; /save sees it", out + err + body)
+    rc, out, err = spark("chat", stdin="/save next.txt\n:q\n", cwd=home)
+    body = open(os.path.join(home, "next.txt")).read() if os.path.exists(os.path.join(home, "next.txt")) else ""
+    t.ok(rc == 0 and body.startswith("you: chat first") and "you: /do say hello" in body,
+         "chat: after /do the chat's thread is the newest -- the next spark chat goes on with it", out + err + body)
     spark("history", "clear")
 
 

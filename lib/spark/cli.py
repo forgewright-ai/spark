@@ -1065,12 +1065,14 @@ def reveal_word(word, refuse):
     return n
 
 
-def stream_turn(cfg, mode, text, files=(), context="", thread=None, line=None, mark=True, cps=0, lead=None):
+def stream_turn(cfg, mode, text, files=(), context="", thread=None, line=None, mark=True, cps=0, lead=None,
+                said=None):
     """One turn through forge.reply, wrapped to the terminal (80 when
     piped): the mark (mark=False keeps a conversation bare -- a dialog
     needs no mark), the answer as it streams, a trailing newline. `lead`
     (the awakened chat's face, a tty only) opens the reply in the mark's
-    place, the lines hanging under it. Returns the thread id. RefError,
+    place, the lines hanging under it. `said` (a list) gains the turn's
+    two messages, as forge.reply keeps them. Returns the thread id. RefError,
     BrainError and KeyboardInterrupt pass through -- the wrap is closed
     first so a half-printed answer still ends in a newline (a lead that
     never opened stays unwritten: the caller says what went wrong);
@@ -1087,7 +1089,8 @@ def stream_turn(cfg, mode, text, files=(), context="", thread=None, line=None, m
         busy.stop()
         wrap.feed(delta)
     try:
-        thread, _, _ = forge.reply(cfg, thread, text, files, os.getcwd(), _shell_default(), mode, feed, context, line)
+        thread, _, _ = forge.reply(cfg, thread, text, files, os.getcwd(), _shell_default(), mode, feed, context, line,
+                                   said=said)
     except (wire.BrainError, KeyboardInterrupt) as e:
         busy.stop()
         if wrap.started or not wrap.lead:

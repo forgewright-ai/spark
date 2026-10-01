@@ -59,6 +59,7 @@ from . import text as textmod
 from .cli import _one_line, _short
 
 DO_MAX_STEPS = 8
+END = [None]                # the last terminal run's (reason, hint, rc): what the chat's /do keeps of it
 OUTPUT_TAIL = 4000          # what a step's output sends at most: its last 4 kB
 PROOF_TIMEOUT = 30          # seconds a proof may run before it is killed (rc 124)
 STEP_TIMEOUT = 120          # seconds a step no person watches may run (the page, a sandbox, a program): then rc 124
@@ -741,7 +742,7 @@ class _Terminal:
         say("%s run %s waits: %s -- spark do --review %s" % (_mark(), box["id"], _plural(n, "change"), box["id"]))
 
     def end(self, reason, hint, rc):
-        pass
+        END[0] = (reason, hint, rc)     # the run's last word, for the chat's /do to keep
 
 
 class _Porcelain:

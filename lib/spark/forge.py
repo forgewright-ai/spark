@@ -28,6 +28,7 @@ import os
 import re
 import sys
 import time
+from contextlib import contextmanager
 
 from . import THREADS_DIR, log_exc, paint, state_dir, vault
 from . import memory, persona, soul
@@ -871,7 +872,7 @@ def read_refs(words, cwd=""):
 
 # ------------------------------------------------------------------ reply
 def reply(cfg, thread, text, files=(), cwd="", shell="", mode="chat", on_delta=None, context="", line=None, brain=None,
-          store=None, mem=None):
+          store=None, mem=None, said=None):
     """One turn, no terminal: the answer streams through on_delta(text).
     `thread` None starts one (None stays None when history is off);
     `files` are @FILE names as typed, read here relative to cwd and sent
@@ -886,7 +887,9 @@ def reply(cfg, thread, text, files=(), cwd="", shell="", mode="chat", on_delta=N
     partial reply (partial=True), then re-raises; the thread id rides on
     the exception (`e.thread`) so the caller can keep going with it. Every
     other BrainError failed before a byte came back and leaves the thread
-    as it was. Nothing is printed here -- that is the caller's job."""
+    as it was. `said` (a list), when given, gains the turn's two
+    messages as the thread keeps them -- the chat's memory when no thread
+    does (history off). Nothing is printed here -- that is the caller's job."""
     from . import session          # session imports forge: resolved late on purpose
     from . import wire
     context = "\n\n".join(c for c in (context, file_context(files, cwd)) if c)
@@ -941,6 +944,8 @@ def reply(cfg, thread, text, files=(), cwd="", shell="", mode="chat", on_delta=N
     s.record(kind="answer", ms=ms, thread=thread, chars=len(answer))
     st.append(cfg, thread, "user", line, mode=mode, cwd=cwd)
     st.append(cfg, thread, "assistant", answer, kind="answer")
+    if said is not None:
+        said.extend([{"role": "user", "text": line}, {"role": "assistant", "text": answer}])
     return thread, answer, ms
 
 
@@ -1041,6 +1046,10 @@ QUIT_WORDS = ("/q", "/quit", "/exit", ":q", ":quit", ":wq", "quit", "exit", "bye
 # face on stdout instead of `spark: <hint>` on stderr, and the end says
 # goodbye. Unawakened (or piped) it stays False and every byte is today's.
 LIVING = [False]
+# This chat's own turns since it began (or since /new), in memory only:
+# what /copy and /save take when no thread keeps them (SPARK_HISTORY=0)
+# -- the replies on the screen this session, gone when the chat ends.
+SAID = []
 CONTINUING_COLS = 79    # the continuing line fits 80 columns
 SAVE_MAX = 99           # ~/spark-chat-DATE.txt, then -2 .. -99
 
@@ -1057,12 +1066,26 @@ def _tell(line, mood="idle"):
     say(_face(mood) + " " + line if LIVING[0] else line)
 
 
-def _refuse(hint):
+def _land(cfg, thread, asked, said, user=None, assistant=None):
+    """One exchange of the chat's own (/read, /do) on the chat's thread --
+    a new one when there is none yet, so it is the newest -- and in SAID.
+    Returns the thread to go on with."""
+    if thread is None:
+        thread = new_thread(cfg)
+    if thread:
+        append(cfg, thread, "user", asked, **(user or {}))
+        append(cfg, thread, "assistant", said, **(assistant or {}))
+    SAID.extend([{"role": "user", "text": asked}, {"role": "assistant", "text": said}])
+    return thread
+
+
+def _refuse(hint, head=""):
     """A refusal inside the chat: `spark: <hint>` on stderr, as always;
-    awake, the puzzled face and the hint as a whole sentence on stdout."""
+    awake, the puzzled face and the hint as a whole sentence on stdout
+    (`head`, a program's name that opens the hint, keeps its case)."""
     if LIVING[0]:
         from . import cli, say
-        say(_face("puzzled") + " " + cli._tidy(hint))
+        say(_face("puzzled") + " " + cli._tidy(hint, head=head))
     else:
         print("spark: " + hint, file=sys.stderr, flush=True)
 
@@ -1092,11 +1115,11 @@ def continuing(msgs, now=None):
         return ""
     when = ago(msgs[-1].get("ts", ""), now)
     head, tail = '  continuing "', '"%s -- /new starts fresh' % (" (%s)" % when if when else "")
-    room = CONTINUING_COLS - len(head) - len(tail)
+    room = CONTINUING_COLS - len(head) - textmod.cols(tail)
     words = " ".join(textmod.scrub(first.get("text", "")).split())
-    if len(words) > room:
+    if textmod.cols(words) > room:      # columns, not characters: a wide one takes two
         cut = glyph("cut")
-        words = words[:room - len(cut)]
+        words = textmod.cut_cols(words, room - textmod.cols(cut))
         if " " in words:
             words = words[:words.rfind(" ")]
         words = words.rstrip() + cut
@@ -1127,13 +1150,19 @@ def _goodbye():
         _tell(words.load().get("done") or "That is everything for now.", "pleased")
 
 
+def number(tok):
+    """Whether `tok` is a plain number, 0-9 alone: str.isdigit() says yes
+    to `²` and other Unicode digits, which int() then refuses."""
+    return tok.isascii() and tok.isdigit()
+
+
 def resolve_thread(tok, threads=None):
     """The thread id `tok` names: a 1-based index into the newest threads
     (the /resume listing, 1 = newest) or a literal thread id. None when
     it names nothing."""
     if threads is None:
         threads = list_threads(5)
-    if tok.isdigit():
+    if number(tok):
         n = int(tok)
         return threads[n - 1]["id"] if 1 <= n <= len(threads) else None
     return tok if exists(tok) else None
@@ -1161,6 +1190,7 @@ def _slash_help(cfg, thread, args):
 def _slash_new(cfg, thread, args):
     from . import MARK, say
     say("%s: a fresh thread" % MARK)
+    del SAID[:]
     return None
 
 
@@ -1286,12 +1316,13 @@ def _slash_reveal(cfg, thread, args):
 
 def _turns(cfg, thread, verb):
     """The chat's user and assistant messages, oldest first; None, with
-    the refusal said, when there are none to take."""
-    msgs = [m for m in load(thread) if m.get("role") in ("user", "assistant")] if thread else []
+    the refusal said, when there are none to take. No thread (history
+    off): the turns this chat said since it began or since /new (SAID)."""
+    msgs = [m for m in load(thread) if m.get("role") in ("user", "assistant")] if thread else list(SAID)
     if msgs:
         return msgs
     if not thread and cfg.history <= 0:
-        _refuse("history is off (SPARK_HISTORY), so this chat keeps nothing for %s to take" % verb)
+        _refuse("history is off (SPARK_HISTORY) and this chat has no turns yet, so %s has nothing to take" % verb)
     else:
         _refuse("this chat has no turns yet, so %s has nothing to take" % verb)
     return None
@@ -1318,7 +1349,7 @@ def _slash_copy(cfg, thread, args):
     # wrap and no escape) to the clipboard tool on its stdin; the tool's
     # own output goes nowhere (xclip and wl-copy stay behind to serve it)
     import subprocess
-    if len(args) > 1 or (args and not (args[0].isdigit() and int(args[0]) >= 1)):
+    if len(args) > 1 or (args and not (number(args[0]) and int(args[0]) >= 1)):
         _refuse("/copy takes a number: /copy N copies the Nth reply from the end")
         return thread
     n = int(args[0]) if args else 1
@@ -1337,14 +1368,16 @@ def _slash_copy(cfg, thread, args):
     if tool is None:
         _tell("No clipboard here: /save writes the conversation to a file.", "puzzled")
         return thread
-    text = replies[-n]
+    # no control character leaves (ESC[201~ would end a bracketed paste
+    # early); tabs and newlines stay
+    text = textmod.scrub(replies[-n])
     try:
         rc = subprocess.run(tool, input=text.encode("utf-8"), stdout=subprocess.DEVNULL,
                             stderr=subprocess.DEVNULL, timeout=5).returncode
     except (OSError, subprocess.SubprocessError):
         rc = -1
     if rc != 0:
-        _refuse("%s did not take the reply -- /save writes the conversation to a file" % tool[0])
+        _refuse("%s did not take the reply -- /save writes the conversation to a file" % tool[0], head=tool[0])
         return thread
     what = "The last reply" if n == 1 else "The reply %d from the end" % n
     _tell("%s is on the clipboard (%d characters)." % (what, len(text)))
@@ -1366,6 +1399,21 @@ def _create(path):
     return os.fdopen(fd, "w", encoding="utf-8")
 
 
+def save_names(typed=""):
+    """Where /save may write, in order: the name as typed; a directory
+    (one that is there, or a name ending in /) holds the default name;
+    the default is ~/spark-chat-DATE.txt, then -2 .. -99."""
+    stem = time.strftime("spark-chat-%Y-%m-%d")
+    if typed:
+        path = os.path.abspath(os.path.expanduser(typed))
+        if not (typed.endswith("/") or os.path.isdir(path)):
+            return [path]
+        base = os.path.join(path, stem)
+    else:
+        base = os.path.join(os.path.expanduser("~"), stem)
+    return [base + ".txt"] + ["%s-%d.txt" % (base, i) for i in range(2, SAVE_MAX + 1)]
+
+
 def _slash_save(cfg, thread, args):
     # the thread stays sealed; the file is the person's own export, in
     # plain text, where they said -- never over a file that is there
@@ -1373,12 +1421,8 @@ def _slash_save(cfg, thread, args):
     msgs = _turns(cfg, thread, "/save")
     if msgs is None:
         return thread
-    body = transcript(msgs, cfg.name if look.awake() else "spark")
-    if args:
-        names = [os.path.abspath(os.path.expanduser(" ".join(args)))]
-    else:
-        base = os.path.join(os.path.expanduser("~"), time.strftime("spark-chat-%Y-%m-%d"))
-        names = [base + ".txt"] + ["%s-%d.txt" % (base, i) for i in range(2, SAVE_MAX + 1)]
+    body = textmod.scrub(transcript(msgs, cfg.name if look.awake() else "spark"))
+    names = save_names(" ".join(args))
     for path in names:
         try:
             with _create(path) as f:
@@ -1434,7 +1478,7 @@ def _slash_read(cfg, thread, args):
     want, rest = None, list(args)
     if "--part" in rest:
         i = rest.index("--part")
-        want = int(rest[i + 1]) if rest[i + 1:i + 2] and rest[i + 1].isdigit() else 0
+        want = int(rest[i + 1]) if rest[i + 1:i + 2] and number(rest[i + 1]) else 0
         del rest[i:i + 2]
         if want < 1:
             _refuse("--part N is a part number, 1 up")
@@ -1455,8 +1499,10 @@ def _slash_read(cfg, thread, args):
     wrap = textmod.Wrap(sys.stdout, cps=cps, lead=_face("idle") + " " if LIVING[0] else None)
     busy = textmod.Busy(sys.stderr)
     out = _Kept(wrap, busy)
+    if thread is None:
+        thread = new_thread(cfg)      # made first: the turn record names it, so /last shows this turn
     try:
-        readmod.answer(cfg, data, " ".join(words), out, want, on_ask=busy.start)
+        readmod.answer(cfg, data, " ".join(words), out, want, on_ask=busy.start, thread=thread)
     except (readmod.Refused, wire.BrainError) as e:
         busy.stop()
         if wrap.started:
@@ -1472,12 +1518,8 @@ def _slash_read(cfg, thread, args):
     finally:
         busy.stop()
     wrap.close()
-    if thread is None:
-        thread = new_thread(cfg)
-    if thread:
-        append(cfg, thread, "user", ("/read " + " ".join(args)).strip(), mode="read", cwd=os.getcwd())
-        append(cfg, thread, "assistant", "".join(out.text).rstrip("\n"), kind="read")
-    return thread
+    return _land(cfg, thread, ("/read " + " ".join(args)).strip(), "".join(out.text).rstrip("\n"),
+                 {"mode": "read", "cwd": os.getcwd()}, {"kind": "read"})
 
 
 def _slash_do(cfg, thread, args):
@@ -1492,6 +1534,8 @@ def _slash_do(cfg, thread, args):
         _refuse("/do takes a goal: /do GOAL, or /do --sandbox GOAL")
         return thread
     term = signal.getsignal(signal.SIGTERM)
+    domod.END[0] = None
+    said = "the run did not start"
     try:
         domod.cmd_do((["--sandbox"] if boxed else []) + ["--"] + goal)
     except SystemExit as e:
@@ -1499,8 +1543,15 @@ def _slash_do(cfg, thread, args):
             raise               # SIGTERM ends the chat too
     except KeyboardInterrupt:
         say()
+        said = "stopped"
     finally:
         signal.signal(signal.SIGTERM, term)
+    if domod.END[0]:
+        said = "%s -- %s" % domod.END[0][:2]
+    # the run made its own thread; the exchange lands on the chat's after
+    # it, so the chat's stays the newest (`??` and the next spark chat go
+    # on with the chat), and /save and /copy see it
+    thread = _land(cfg, thread, " ".join(["/do"] + list(args)), said, {"mode": "do", "cwd": os.getcwd()}, {"kind": "do"})
     _tell("Back in the chat.")
     return thread
 
@@ -1510,6 +1561,23 @@ SLASH_VERBS = {"/help": _slash_help, "/new": _slash_new, "/resume": _slash_resum
                "/copy": _slash_copy, "/save": _slash_save, "/read": _slash_read, "/do": _slash_do}
 
 
+@contextmanager
+def _prompts_only(readline):
+    """The chat's readline history keeps the chat's own prompts: the
+    lines a verb read with input() inside (spark do's Enter, its yes, an
+    edit) are taken out again, so the sealed history never holds them."""
+    n = readline.get_current_history_length() if readline else 0
+    try:
+        yield
+    finally:
+        if readline:
+            for i in range(readline.get_current_history_length() - 1, n - 1, -1):
+                try:
+                    readline.remove_history_item(i)     # 0-based, GNU and libedit alike
+                except ValueError:
+                    break
+
+
 def cmd_chat(args):
     from . import MARK, glyph, config, look, say, wire
     from . import cli
@@ -1517,6 +1585,7 @@ def cmd_chat(args):
         say(CHAT_USAGE.rstrip() % MARK)
         return 0
     LIVING[0] = False
+    del SAID[:]
     picked = None
     args, cps = cli.reveal_flag(args)
     REVEAL[0] = cps
@@ -1597,8 +1666,11 @@ def cmd_chat(args):
                 parts = text.split()
                 verb = parts[0]
                 fn = SLASH_VERBS.get(verb)
+                # /save takes the rest of the line as typed: a name may hold spaces
+                rest = [text[len(verb):].strip()] if verb == "/save" and parts[1:] else parts[1:]
                 if fn:
-                    thread = fn(cfg, thread, parts[1:])
+                    with _prompts_only(readline if verb == "/do" else None):
+                        thread = fn(cfg, thread, rest)
                 else:
                     _refuse("no %s -- /help lists them" % verb)
                 if verb != "/clear":
@@ -1607,7 +1679,7 @@ def cmd_chat(args):
             words, paths = refs(text.split())
             try:
                 thread = cli.stream_turn(cfg, "chat", " ".join(words), paths, thread=thread, cps=REVEAL[0],
-                                         lead=_face("idle") + " " if LIVING[0] else None)
+                                         lead=_face("idle") + " " if LIVING[0] else None, said=SAID)
             except (RefError, wire.BrainError) as e:
                 _refuse(e.hint)
             except KeyboardInterrupt as e:

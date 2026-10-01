@@ -10,6 +10,7 @@ import shutil
 import sys
 import threading
 import time
+import unicodedata
 
 from . import glyph, paint
 
@@ -92,9 +93,11 @@ class Wrap:
         `pause` more steps of breath after the last one (living only)."""
         if self.owed and s and s[0] != "\n":
             # a line under the lead: its indent comes before its first
-            # char, so a blank line stays blank (no trailing spaces)
+            # char, so a blank line stays blank (no trailing spaces);
+            # written free, like an escape -- the reveal paces words, not
+            # the margin
             self.owed = False
-            s = " " * self.indent + s
+            self.stream.write(" " * self.indent)
         if not self.cps or not s:
             self.stream.write(s)
             return
@@ -159,9 +162,10 @@ class Wrap:
                 self._emit("\n")
                 self.col = 0
                 if self.hang or self.indent:
-                    # a bullet's hang counts from the lead's indent already
+                    # a bullet's hang counts from the lead's indent
+                    # already; written free, never paced
                     self.owed = False
-                    self._emit(" " * max(self.hang, self.indent))
+                    self.stream.write(" " * max(self.hang, self.indent))
                     self.col = max(self.hang, self.indent)
             else:
                 self._emit(" ")
@@ -780,6 +784,24 @@ def scrub(s, keep="\t\n"):
     s = _OSC.sub("", s)
     s = _ESC_OTHER.sub("", s)
     return "".join(ch for ch in s if ch in keep or (ord(ch) >= 32 and ord(ch) != 127))
+
+
+def cols(s):
+    """The columns `s` takes at a terminal: a wide character (East Asian
+    wide or fullwidth, most emoji) two, a combining mark none, the rest
+    one."""
+    return sum(0 if unicodedata.combining(ch) else 2 if unicodedata.east_asian_width(ch) in "WF" else 1
+               for ch in s)
+
+
+def cut_cols(s, n):
+    """The longest head of `s` that fits `n` columns (cols)."""
+    used = 0
+    for i, ch in enumerate(s):
+        used += cols(ch)
+        if used > n:
+            return s[:i]
+    return s
 
 
 _SURROGATE = re.compile("[\ud800-\udfff]")
