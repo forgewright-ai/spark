@@ -63,7 +63,7 @@ END = [None]                # the last terminal run's (reason, hint, rc): what t
 OUTPUT_TAIL = 4000          # what a step's output sends at most: its last 4 kB
 PROOF_TIMEOUT = 30          # seconds a proof may run before it is killed (rc 124)
 STEP_TIMEOUT = 120          # seconds a step no person watches may run (the page, a sandbox, a program): then rc 124
-DO_MAX_TOKENS = 200         # a proposal's reply cap; the budget leaves it room
+DO_MAX_TOKENS = 600         # a proposal's reply cap, room for a printf that writes a short file; the budget leaves it room
 DO_GOAL_MAX = 8192          # bytes a goal may carry: the budget keeps the goal whole, so it must fit
 GOAL_TOO_LONG = "a goal is at most %d kB -- this one is %d kB"
 WATCH_SECONDS = 2           # how often a sandboxed step's copy is weighed against SANDBOX_MAX_BYTES
@@ -79,6 +79,19 @@ TRIMMED = "(output trimmed, exit %s)"   # an old step's output, once the budget 
 FEEDBACK_HEAD = re.compile(r"\A(?:\[cwd [^\n]*\]\n)?Output of `(.*)` \(exit (-?\d+)[;)]")
 NO_OUTPUT = "(no output)"
 SKIPPED = "The user skipped this step (%s). Do not propose it again: propose a different step, or reply done."
+# a done before any step ran is asked once more: the 26B answered `spark
+# status` with done and a hint, and nothing ran (2026-10-01, on the box)
+EARLY_DONE = ("No step has run yet for the goal: %s. Propose the first command for it; reply done "
+              "only if the goal needs no command at all.")
+NOTHING_RAN = "nothing ran: %s"
+# a command written over several lines is never joined into one in
+# silence: a script whose lines were joined runs wrong, and a line break
+# can hide a second command from the step line the user confirms. The
+# model is asked once to write it as one line; twice and the run stops
+ONE_LINE = ("Your command for the goal (%s) had line breaks. Write it as ONE line: to write a file, "
+            "use printf with \\n inside its argument.")
+TWO_LINES = "the model wrote the step over several lines twice -- say the goal in smaller steps"
+SEVERAL_LINES = "the model wrote the step over several lines -- ask again, or say the goal in smaller steps"
 STDIN_HOOK = "SPARK_DO_STDIN"   # =1: confirmations come from stdin lines (tests)
 # said once on stderr when the hook is on, before any step is offered: a
 # transcript must show the confirmations were a harness's, not a person's
@@ -325,6 +338,7 @@ def propose(cfg, thread, text, shell, cwd, history=None, brain=None, landed=Fals
     sent = history if landed else history + [{"role": "user", "content": persona.user_message(text, cwd)}]
     s.history = fit(sent, room)[:-1]        # the newest message is `text`'s own, rebuilt by ask_json
     raw, ms = s.ask_json(text, DO_SCHEMA, max_tokens=DO_MAX_TOKENS)
+    multiline = "\n" in textmod.utf8(str(raw.get("command") or "")).strip()
     command = " ".join(textmod.utf8(str(raw.get("command") or "")).split())
     hint = _plain(textmod.utf8(str(raw.get("hint") or "")))
     proof = " ".join(textmod.utf8(str(raw.get("proof") or "")).split())
@@ -333,7 +347,8 @@ def propose(cfg, thread, text, shell, cwd, history=None, brain=None, landed=Fals
         kind, command, hint = "done", "", REFUSED_CONTROL
     reply = {"kind": kind, "command": command if kind == "cmd" else "", "hint": hint,
              "danger": kind == "cmd" and (bool(raw.get("danger")) or persona.is_dangerous(command)),
-             "proof": proof if kind == "cmd" and persona.proof_ok(proof) else ""}
+             "proof": proof if kind == "cmd" and persona.proof_ok(proof) else "",
+             "multiline": kind == "cmd" and multiline}
     if not landed:
         land(cfg, thread, history, text, cwd)
     history.append({"role": "assistant", "content": shown(reply)})
@@ -940,6 +955,8 @@ def _drive(face, cfg, thread, goal, text, shell, cwd, box=None, timeout=None):
     stops once the copy holds more than sandbox.SANDBOX_MAX_BYTES."""
     history, steps, seen, landed = [], 0, [], False
     skipped, reasked = set(), set()          # steps the user skipped; those re-asked once
+    early = False                            # a done before any step, asked again once
+    oneline = False                          # a step written over several lines, asked again once
 
     def record(s, **fields):
         """Every proposal is a turn: the server's timings for it (the
@@ -959,11 +976,27 @@ def _drive(face, cfg, thread, goal, text, shell, cwd, box=None, timeout=None):
                 face.brain(e.hint)
                 return 1, "error", e.hint
             landed = False
+            if reply["kind"] == "done" and not steps and reply["hint"] != REFUSED_CONTROL:
+                if not early:
+                    early = True
+                    record(s, kind="reasked", ms=ms)
+                    text = EARLY_DONE % goal
+                    continue
+                reply["hint"] = NOTHING_RAN % reply["hint"]
             if reply["kind"] == "done":
                 bad = unchecked(reply["hint"], seen)
                 face.done(reply["hint"], bad)
                 record(s, kind="done", answer=reply["hint"], ms=ms)
                 return 0, "done", reply["hint"]
+            if reply.get("multiline"):
+                if oneline:
+                    face.warn(TWO_LINES)
+                    record(s, kind="stopped", answer="a step over several lines twice", ms=ms)
+                    return 1, "stopped", TWO_LINES
+                oneline = True
+                record(s, kind="reasked", ms=ms)
+                text = ONE_LINE % goal
+                continue
             proposed, command, hint = reply["command"], reply["command"], reply["hint"]
             if command.strip() in skipped:
                 # the repair guard of a run: a step the user skipped comes

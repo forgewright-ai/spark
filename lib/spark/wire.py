@@ -479,6 +479,7 @@ def _send(cfg, url, data, timeout, forge=False):
 NO_THINKING = {"enable_thinking": False}
 NO_THINK_BUDGET = {"reasoning_budget_tokens": 0}
 THOUGHT_OUT = "the model spent its whole answer thinking and returned no JSON"
+CUT_OUT = "the answer was cut at %d tokens before it finished -- say the goal in smaller steps"
 
 
 def _json_body(body, schema):
@@ -533,6 +534,8 @@ def chat_json(cfg, url, messages, schema, max_tokens=200, temperature=0.2, forge
         msg = choice.get("message") if isinstance(choice, dict) else None
         if isinstance(msg, dict) and _thought_out(text, choice.get("finish_reason"), msg.get("reasoning_content")):
             raise BrainError("bad", THOUGHT_OUT)
+        if isinstance(choice, dict) and choice.get("finish_reason") == "length":
+            raise BrainError("bad", CUT_OUT % max_tokens)
         raise BrainError("bad", "the model did not return JSON: %s" % str(text or "")[:80].replace("\n", " "))
 
 

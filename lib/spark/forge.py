@@ -72,9 +72,23 @@ def identity(cfg, mem=None):
     """The soul, then the remembered facts when there are any. `mem`
     names whose facts (a memory.store_of tuple): the FORGE passes the
     requesting user's; None is this machine's own account."""
-    t = soul.text(cfg)
+    t = soul.text(cfg) + served(cfg)
     m = memory.block(cfg, mem)
     return t + ("\n\n" + m if m else "")
+
+
+def served(cfg):
+    """One sentence naming the model this machine serves for a
+    conversation (the chat model, else the line's), or "" where nothing is
+    served here (a client: the machine it asks says it). Asked "what is
+    your model", the 26B answered that it could not tell (2026-10-01)."""
+    try:
+        from . import engine
+        files = engine.roles(cfg)
+        f = files.get("ember") or files.get("spark")
+        return ("\nThe model answering is %s, served on this machine." % engine.model_stem(f)) if f else ""
+    except Exception:
+        return ""
 
 
 def system(cfg, mode, shell, mem=None):

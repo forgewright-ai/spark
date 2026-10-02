@@ -190,6 +190,11 @@ class Stub(BaseHTTPRequestHandler):
             self.wfile.write(("data: " + json.dumps({"choices": [{"delta": {}, "finish_reason": "length"}], "timings": TIMINGS}) + "\n\n").encode())
             self.wfile.write(b"data: [DONE]\n\n")
             return
+        if STATE.get("cut_out") and body.get("response_format") and not body.get("stream"):
+            # the cap ended the JSON mid-string: a long command written as
+            # a here-document (the 26B, /do in chat, 2026-10-01)
+            return self._send(200, {"choices": [{"message": {"content": '{"kind": "cmd", "command": "cat << EOF > s'},
+                                                 "finish_reason": "length"}], "timings": TIMINGS})
         if "pasted these lines" in system:           # spark line --paste (contract 4)
             reply = {"summary": "downloads and runs a script" if "curl" in user else "two harmless echo lines",
                      "danger": "curl" in user}
@@ -471,6 +476,22 @@ def answer_json(messages):
                 return {"kind": "done", "command": "", "hint": "all done", "danger": False}
             return {"kind": "cmd", "command": "nohup sh -c 'while :; do echo x >> bg.log; sleep 0.1; done' >/dev/null 2>&1 & echo started",
                     "hint": "start a writer", "danger": False}
+        if "earlydone" in goal:                 # done before any step: asked once more, then a step
+            if outs:
+                return {"kind": "done", "command": "", "hint": "all done", "danger": False}
+            if "No step has run yet" in user:
+                return {"kind": "cmd", "command": "echo EARLY-STEP", "hint": "the first step", "danger": False}
+            return {"kind": "done", "command": "", "hint": "Checking the status.", "danger": False}
+        if "multistep" in goal:                 # a step over several lines: asked once for one line
+            if outs:
+                return {"kind": "done", "command": "", "hint": "all done", "danger": False}
+            if "had line breaks" in user:
+                return {"kind": "cmd", "command": "printf 'one\\ntwo\\n' > two.txt", "hint": "write it", "danger": False}
+            return {"kind": "cmd", "command": "printf 'one\ntwo\n' > two.txt", "hint": "write it", "danger": False}
+        if "multitwice" in goal:                # over several lines twice: the run stops
+            return {"kind": "cmd", "command": "printf 'one\ntwo\n' > two.txt", "hint": "write it", "danger": False}
+        if "stubborn" in goal:                  # done twice before any step: the run ends, nothing ran
+            return {"kind": "done", "command": "", "hint": "Checking the status.", "danger": False}
         if "ctrlchar" in goal:                  # a terminal escape inside the command
             return {"kind": "cmd", "command": "echo \x1b[2K\x1b[1Gbenign; rm -rf junk2",
                     "hint": "say hi\x1b]0;evil\x07", "danger": False}
@@ -1434,6 +1455,41 @@ def engine_wire_cases(t, spark, home, url):
          "thinking: a streamed reply that thought its whole cap away says so in a sentence", repr(out))
     t.ok(said == "bad: " + _wire.THOUGHT_OUT,
          "thinking: a JSON reply in one piece that thought its whole cap away says so (kind bad)", said)
+
+    # the cap ends a JSON reply mid-string: the error says the answer was
+    # cut and at what cap, never that the model returned no JSON
+    STATE["cut_out"] = True
+    saved = os.environ.get("SPARK_API_KEY")
+    os.environ["SPARK_API_KEY"] = TOKEN
+    try:
+        import types as _types
+        cfg = _types.SimpleNamespace(token_file=os.path.join(home, "no-token"), timeout=5)
+        _wire.chat_json(cfg, url, [{"role": "system", "content": "x"}, {"role": "user", "content": "y"}],
+                        {"type": "object"}, max_tokens=600)
+        said = "no error"
+    except _wire.BrainError as e:
+        said = "%s: %s" % (e.kind, e.hint)
+    finally:
+        STATE["cut_out"] = False
+        if saved is None:
+            os.environ.pop("SPARK_API_KEY", None)
+        else:
+            os.environ["SPARK_API_KEY"] = saved
+    t.ok(said == "bad: " + _wire.CUT_OUT % 600,
+         "a JSON reply the cap cut says it was cut, at 600 tokens", said)
+
+    # a conversation is told the model that answers it, by its file's stem
+    from spark import forge as _forge, engine as _engine
+    _roles = _engine.roles
+    _engine.roles = lambda _c: {"spark": "/m/google_gemma-4-E4B-it-Q4_K_M.gguf", "ember": ""}
+    try:
+        named = _forge.served(None)
+        _engine.roles = lambda _c: {"spark": "", "ember": ""}
+        bare = _forge.served(None)
+    finally:
+        _engine.roles = _roles
+    t.ok(named == "\nThe model answering is google_gemma-4-E4B-it-Q4_K_M, served on this machine." and bare == "",
+         "the identity names the served model, and nothing where none is served (a client)", repr((named, bare)))
 
     # spark model: every model the router holds loaded is serving
     def router(ember_state):
@@ -4868,6 +4924,21 @@ def main():
         t.ok(len(dos) == 2 and dos[0]["kind"] == "cmd" and dos[0]["rc"] == 0 and dos[1]["kind"] == "done", "spark do: the turn log has the step with its rc, then the done", dos)
         t.ok(all(k not in x for x in turns for k in ("line", "command", "hint", "answer", "cwd", "context")),
              "turns are numbers only: no free text survives the strip", [sorted(x) for x in turns[:3]])
+        # a done before any step is asked once more; a second one ends the
+        # run and says nothing ran (the 26B answered `spark status` so)
+        rc2, out2, err2 = spark("do", "earlydone", stdin="\n", extra=hook, cwd=work)
+        t.ok(rc2 == 0 and "EARLY-STEP" in out2 and "done  all done" in out2,
+             "spark do: an early done is asked once more, and the step it proposes runs", out2 + err2)
+        rc2, out2, err2 = spark("do", "stubborn", stdin="", extra=hook, cwd=work)
+        t.ok(rc2 == 0 and "nothing ran: Checking the status." in out2,
+             "spark do: a second early done ends the run, saying nothing ran", out2 + err2)
+        rc2, out2, err2 = spark("do", "multistep", stdin="yes\n", extra=hook, cwd=work)
+        two = open(work + "/two.txt").read() if os.path.exists(work + "/two.txt") else ""
+        t.ok(rc2 == 0 and two == "one\ntwo\n" and "done  all done" in out2,
+             "spark do: a step over several lines is asked again as one line, and that one runs", out2 + err2 + repr(two))
+        rc2, out2, err2 = spark("do", "multitwice", stdin="", extra=hook, cwd=work)
+        t.ok(rc2 == 1 and "the model wrote the step over several lines twice" in out2 + err2,
+             "spark do: a step over several lines twice stops the run, nothing joined in silence", out2 + err2)
         os.mkdir(work + "/junk")
         rc, out, err = spark("do", "rm-plain", "junk", stdin="no\n", extra=hook, cwd=work)
         t.ok(rc == 0 and "type yes to run it" in out and os.path.isdir(work + "/junk"), "spark do: an unflagged rm -rf asks for yes; `no` does not run it", out + err)

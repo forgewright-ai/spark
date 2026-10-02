@@ -1473,6 +1473,10 @@ class Handler(BaseHTTPRequestHandler):
                 if e.kind == "down":
                     self.server.upstream.resolve(fresh=True)
                 return self._error(502, e.kind, e.hint)
+        if reply.pop("multiline", False):
+            # never joined into one line in silence (do.ONE_LINE): the page
+            # gets no step, and the reason, and asks again
+            reply = {"kind": "done", "command": "", "hint": do.SEVERAL_LINES, "danger": False, "proof": ""}
         s.record(kind="danger" if reply["danger"] else reply["kind"], thread=thread, ms=ms,
                  **({"held": held} if held else {}))
         rm = self.server.role_models(self.server.upstream.resolve()[0])

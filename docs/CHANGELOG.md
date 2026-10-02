@@ -24,6 +24,16 @@ thing.
   `SITE_QUIET_AUDIO` or a `SPARK_LOOK_*` key still loads, and spark
   ignores those keys.
 - The `audio` row says only which player is here.
+- `spark do` asks once more when the model says done before any step
+  ran. A second done ends the run and says `nothing ran`.
+- `spark do` gives each step 600 tokens, room to write a short file
+  with `printf`. A reply the cap cuts says so, and never that the
+  model returned no JSON.
+- A step written over several lines is no longer joined into one in
+  silence. The model is asked once for one line. A second time, the
+  run stops and says so.
+- The chat knows the model that answers it: the machine that serves it
+  names it.
 
 ## v1.68
 
