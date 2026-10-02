@@ -46,10 +46,11 @@ USAGE = """%s uninstall -- remove spark from this machine: shows first, then ask
 
 KEEP_CONFIG = ("soul", "personality", "memory", "models.env", "themes", "privacy-terms")
 KEEP_STATE = ("users", "account", "account-key")
-# words and faces are spark awaken's (the state's look, news, news-seen and
-# loads.json go with the whole state dir); the personality is the soul's
+# words, faces and voice (the voice it kept) are spark awaken's (the
+# state's look, news, news-seen and loads.json go with the whole state
+# dir); the personality is the soul's
 SPARK_CONFIG = ("site.env", "spark.env", "theme.env", "console-colors", "console-colors.rgb", "check.log",
-                "words", "faces")
+                "words", "faces", "voice")
 UNITS_LINUX = ("spark-serve.service", "spark-forge.service", "spark-check.timer", "spark-check.service")
 SV_UNITS = ("forge", "serve", "check")            # runit: ~/.config/spark/sv/spark-<unit>, the same three
 ETC_SV = os.environ.get("SPARK_ETC_SV", "/etc/sv")    # runit's service definitions (bootstrap's seam too)
@@ -387,10 +388,14 @@ def _du(path):
 
 
 def step_data(ctx):
+    """The data dir whole: the engine, the models and the voice's engine
+    (voice/, spark voice's download)."""
     if not os.path.isdir(DATA_DIR):
         return
     ctx.freed = _du(DATA_DIR)
-    ctx.remove("data", DATA_DIR, "%s -- the engine and the models, %.1f GB" % (_tilde(DATA_DIR), ctx.freed / 2**30))
+    what = "the engine, the models and the voice" if os.path.isdir(os.path.join(DATA_DIR, "voice")) \
+        else "the engine and the models"
+    ctx.remove("data", DATA_DIR, "%s -- %s, %.1f GB" % (_tilde(DATA_DIR), what, ctx.freed / 2**30))
 
 
 def step_packages(ctx):

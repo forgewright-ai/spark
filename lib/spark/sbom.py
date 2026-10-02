@@ -1,8 +1,10 @@
 # spark.sbom -- what the tree depends on, as one CycloneDX 1.5 JSON
 # document (`spark ver --sbom`; the release carries it as sbom.cdx.json).
 # Built from the tree's own data files, never from a network or a live
-# machine: the llama.cpp engine per flavour from engine.env, every model
-# row config.model_tables() holds (the repo's list and yours), the
+# machine: the llama.cpp engine per flavour from engine.env, the voice's
+# pins from voice.env (the sherpa-onnx runtime per flavour, its three
+# models), every model row config.model_tables() holds (the repo's list
+# and yours), the
 # packages every distro/<id>.env names, the python floor, and the GitHub
 # Actions the workflows pin by sha. The order is fixed, so two runs of
 # the same tree differ only in the timestamp -- tests/smoke.py holds it
@@ -39,6 +41,54 @@ def _engine(repo):
                     "purl": "pkg:github/%s@%s" % (LLAMA_REPO, pin),
                     "hashes": [{"alg": "SHA-256", "content": sha}],
                     "properties": [_prop("spark:flavour", name)]})
+    return out
+
+
+VOICE_REPO = "k2-fsa/sherpa-onnx"
+# voice.env's model rows: the key, the component's name
+VOICE_MODELS = (("VOICE_MOUTH", "Kokoro-82M v1.0"), ("VOICE_EARS", "Whisper base"),
+                ("VOICE_VAD", "Silero VAD"))
+
+
+def _license(text):
+    words = (text or "").split()
+    lic = {"name": words[0] if words else "unknown"}
+    if len(words) > 1:
+        lic["url"] = words[1]
+    return [{"license": lic}]
+
+
+def _voice(repo):
+    """The voice's pins: one library component per sherpa-onnx flavour
+    (the release, the tarball's sha256, the flavour as a property), then
+    one machine-learning-model component per model row, each with its
+    sha256, its license and its download URL."""
+    try:
+        pins = config.parse_env(os.path.join(repo, "voice.env"))
+    except SystemExit:
+        return []
+    pin = pins.get("VOICE_RUNTIME_VERSION", "")
+    out = []
+    for key in sorted(k for k in pins if k.startswith("VOICE_RUNTIME_")
+                      and k not in ("VOICE_RUNTIME_LICENSE", "VOICE_RUNTIME_VERSION")):
+        words = pins[key].split()
+        if not pin or len(words) != 3:
+            continue
+        out.append({"type": "library", "name": "sherpa-onnx", "version": pin,
+                    "purl": "pkg:github/%s@%s" % (VOICE_REPO, pin),
+                    "hashes": [{"alg": "SHA-256", "content": words[2]}],
+                    "licenses": _license(pins.get("VOICE_RUNTIME_LICENSE")),
+                    "externalReferences": [{"type": "distribution", "url": words[0]}],
+                    "properties": [_prop("spark:flavour", key[len("VOICE_RUNTIME_"):].lower().replace("_", "-"))]})
+    for key, name in VOICE_MODELS:
+        words = pins.get(key, "").split()
+        if len(words) != 3:
+            continue
+        out.append({"type": "machine-learning-model", "name": name, "version": words[2][:12],
+                    "hashes": [{"alg": "SHA-256", "content": words[2]}],
+                    "licenses": _license(pins.get(key + "_LICENSE")),
+                    "externalReferences": [{"type": "distribution", "url": words[0]}],
+                    "properties": [_prop("spark:bytes", words[1])]})
     return out
 
 
@@ -105,7 +155,7 @@ def build(repo=REPO):
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "component": {"type": "application", "name": "spark", "version": version.version()},
         },
-        "components": (_engine(repo) + _models(repo) + _distro(repo)
+        "components": (_engine(repo) + _voice(repo) + _models(repo) + _distro(repo)
                        + [{"type": "platform", "name": "python", "version": PYTHON_FLOOR}]
                        + _actions(repo)),
     }

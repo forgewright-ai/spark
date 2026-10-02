@@ -41,7 +41,7 @@ _spark_complete() {
                ver last status history stats clear bench model
                soul memory bar look height off
                on user explain edit ask read drill watch reveal help uninstall
-               awaken words"
+               awaken words voice"
         COMPREPLY=($(compgen -W "$words" -- "$cur"))
         return 0
     fi
@@ -52,6 +52,7 @@ _spark_complete() {
         memory)  words="add forget clear on off" ;;
         reveal)  words="auto off" ;;
         look)    words="on off auto status" ;;
+        voice)   words="clear on off rate test status" ;;
         height)  words="1 2 3 4 5" ;;
         check)   words="--watch --porcelain --report --fresh --fetch --selftest --chaos" ;;
         uninstall) words="--dry-run --yes --purge --packages --keep-packages" ;;
