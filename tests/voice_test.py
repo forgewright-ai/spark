@@ -1017,6 +1017,9 @@ check("lead-in: the clear wav opens with %d ms of zero samples, then the engine'
       % voice.LEAD_IN_MS, voice.LEAD_IN_MS == 250 and shape == shape0 and data[:lead] == b"\0" * lead
       and data[lead:] == tone0 and stat.S_IMODE(os.stat(w).st_mode) == 0o600, (shape, len(data), len(tone0)))
 voice.cleanup(w)
+w = voice.speak(Cfg(SPARK_VOICE="clear"), "hello there", "clear", lead=0)
+check("lead-in: speak(lead=0) adds none", frames(w)[1] == tone0)
+voice.cleanup(w)
 os.environ["SPARK_VOICE_LEAD_MS"] = "0"
 w = voice.speak(cfg, "Hello there.", "clear")
 check("lead-in: SPARK_VOICE_LEAD_MS=0 adds none", frames(w)[1] == tone0)
@@ -1103,6 +1106,15 @@ def wait_for(cond, secs=15):
 
 reset_logs()
 os.environ.update(STUB_TTS="0.4", STUB_PLAY="0.8")
+_leads, _speak0 = [], voice.speak
+
+
+def _speak_noted(*a, **k):
+    _leads.append(k.get("lead"))
+    return _speak0(*a, **k)
+
+
+voice.speak = _speak_noted
 r = voice.Reader(Cfg(SPARK_VOICE="clear"))
 t0 = time.time()
 for line in ("one.", "two.", "three."):
@@ -1127,6 +1139,16 @@ else:
 check("Reader: sentence 2 is made WHILE sentence 1 plays (overlap %.2f s), so it starts as 1 ends (gap %.2f s)"
       % (overlap, gap), overlap > 0.2 and gap < 0.35, (overlap, gap))
 check("Reader: every wav removed once played", wait_for(lambda: not ours(), 5), ours())
+# the lead-in wakes a sleeping card: before the first sentence after
+# quiet, never between sentences that follow one another
+check("Reader: the lead-in only on the first of a run of sentences (None, then 0, 0)",
+      _leads == [None, 0, 0], _leads)
+time.sleep(voice.WAKE_AFTER + 0.3)
+os.environ.update(STUB_PLAY="0.1")
+r.put("four.")
+r.drain(10, played=True)
+check("Reader: after a quiet moment the next sentence has its lead-in again", _leads[3:] == [None], _leads)
+voice.speak = _speak0
 
 # cut: the text that waits and the wavs made ready go (their files too),
 # and what plays stops; a new line after it plays

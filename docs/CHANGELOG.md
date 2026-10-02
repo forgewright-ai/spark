@@ -18,8 +18,9 @@ The voice keeps pace with the reply.
 - The next sentence is made while one plays, so the voice no longer
   stops between sentences. `spark do` and the other surfaces gain this
   too.
-- A short silence before every clip, 250 ms, so the first word is
-  never lost on a sound card that sleeps between sounds.
+- A short silence, 250 ms, before the first sentence after a quiet
+  moment, so the first word is never lost on a sound card that sleeps
+  between sounds. Sentences that follow one another get none.
   `SPARK_VOICE_LEAD_MS` in the environment changes it, 0 to 1000.
 - A new reply stops the old one's voice. Ctrl-C on a reply stops its
   voice too. `/again` speaks the last reply sentence by sentence.

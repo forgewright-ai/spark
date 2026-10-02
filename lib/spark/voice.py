@@ -139,6 +139,8 @@ SENTENCE_MAX = 240
 # Kept small on purpose: a period after one of these ends no sentence.
 ABBREVIATIONS = ("e.g.", "i.e.", "dr.", "mr.", "mrs.", "ms.", "vs.")
 AHEAD = 2                   # wavs the Reader makes ahead of the one playing
+WAKE_AFTER = 0.8            # seconds of quiet after which a sound card may sleep: the lead-in wakes it
+SR_EVERY = 30.0             # seconds a Reader trusts its screen-reader check
 
 # What fetch() names the parts, the voice.env key each comes from, and
 # where each lands under the voice directory. The runtime's key is the
@@ -816,13 +818,15 @@ def lead_in(path, ms=None):
     return path
 
 
-def speak(cfg, text, mode_="clear", lang=None, recipe=None, d=None):
+def speak(cfg, text, mode_="clear", lang=None, recipe=None, d=None, lead=None):
     """The text as a wav (its path, 0600, in a private 0700 directory the
     caller removes with cleanup(); `d`, one _private_dir() made, is used
     instead of a new one): Kokoro through the runtime. "on" runs the
     machine's character over it (recipe, else the one kept); "clear" is
     the plain voice at SPARK_VOICE_RATE. Either way the final wav opens
-    with the lead-in (lead_in), so every surface has it."""
+    with the lead-in (lead_in; `lead` ms, lead_ms() when None): a Reader
+    passes 0 for a sentence that follows one still playing, where the
+    card is awake and a lead-in would only be a pause."""
     cfg = cfg or config.load()
     t = _speakable(text)
     if not t:
@@ -859,14 +863,14 @@ def speak(cfg, text, mode_="clear", lang=None, recipe=None, d=None):
         raise VoiceError("the voice engine did not speak (exit %d)" % p.returncode)
     os.chmod(raw, 0o600)
     if mode_ != "on":
-        return lead_in(raw)
+        return lead_in(raw, lead)
     try:
         out = character(raw, recipe, os.path.join(d, "character.wav"))
     except (VoiceError, OSError, EOFError, wave.Error) as e:
         cleanup(d)
         raise VoiceError("the character did not run (%s)" % e)
     os.remove(raw)
-    return lead_in(out)
+    return lead_in(out, lead)
 
 
 # ---------------------------------------------------------------- playing
@@ -1031,13 +1035,14 @@ def say_aloud(cfg, text, wait=False):
         return None
 
 
-def _sayable(cfg, text):
+def _sayable(cfg, text, reader=None):
     """The mode a text is spoken in, or None: off, nothing to say, or a
-    screen reader running in clear mode (unless --anyway)."""
+    screen reader running in clear mode (unless --anyway). `reader`, a
+    screen_reader() answer the caller already has, saves asking again."""
     m = mode(cfg)
     if m == "off" or not (text or "").strip():
         return None
-    if m == "clear" and screen_reader() and not anyway():
+    if m == "clear" and (screen_reader() if reader is None else reader) and not anyway():
         return None
     return m
 
@@ -1395,6 +1400,8 @@ class Reader:
         self.starting = False       # a wav being handed to the player now
         self.playing = None
         self.owned = set()          # private dirs made here, not yet the player's
+        self.quiet = 0.0            # when the last wav stopped playing (0: never played)
+        self.sr = (0.0, "")         # (when, screen_reader()): asked once per SR_EVERY
         self.cv = threading.Condition()
         self.threads = None
         _READERS.append(self)
@@ -1479,7 +1486,10 @@ class Reader:
         d = None
         try:
             cfg = self.cfg or config.load()
-            m = _sayable(cfg, text)
+            now = time.time()
+            if now - self.sr[0] > SR_EVERY:
+                self.sr = (now, screen_reader())
+            m = _sayable(cfg, text, self.sr[1])
             if m is None:
                 return None
             if os.environ.get("SPARK_VOICE_STUB"):
@@ -1488,7 +1498,11 @@ class Reader:
             d = _private_dir()
             with self.cv:
                 self.owned.add(d)
-            return speak(cfg, text, m, d=d)
+                # the card is awake while one plays or just stopped: no
+                # lead-in between sentences, only before the first after quiet
+                awake = (self.playing is not None or self.starting or self.ready
+                         or (self.quiet and time.time() - self.quiet < WAKE_AFTER))
+            return speak(cfg, text, m, d=d, lead=0 if awake else None)
         except Exception as e:  # noqa: BLE001 -- the voice never breaks the verb it speaks for
             if d:
                 with self.cv:
@@ -1527,6 +1541,7 @@ class Reader:
             with self.cv:
                 if self.playing is h:
                     self.playing = None
+                self.quiet = time.time()
                 self.cv.notify_all()
 
     def _start(self, wav):

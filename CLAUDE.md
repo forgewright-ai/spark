@@ -307,7 +307,7 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 a byte unpacks; speak, the 4 characters, play and stop;
                 listen, the recording removed before it returns; the clear
                 reading of a command, a do step, a block; the screen reader;
-                the lead-in, silence before every wav; Reader, the lines
+                the lead-in, silence after quiet; Reader, the lines
                 spoken in two threads of their own, the next made while one
                 plays; Sentences, a streamed reply cut into sentences)
 lib/spark/forge/  index.html spark.css spark.js manifest.webmanifest favicon.svg
@@ -552,8 +552,9 @@ and may change freely.
      N`). `SPARK_VOICE_DEVICE` is the ALSA device the voice plays to
      and listens on (Linux), such as `plughw:1,0`, default ALSA's own.
      `SPARK_VOICE_LEAD_MS`, 0 to 1000, is environment only, never read
-     from a file. It is the silence before every clip in milliseconds,
-     250 by default (`voice.LEAD_IN_MS`).
+     from a file. It is the silence in milliseconds before the first
+     clip after `voice.WAKE_AFTER` of quiet, 250 by default
+     (`voice.LEAD_IN_MS`).
      `SPARK_PERSONA_EXTRA` is still read as the soul's fallback, and the
      `soul` row warns while it is set.
    - `models.env`, and `~/.config/spark/models.env` for your own rows:
@@ -882,7 +883,9 @@ and may change freely.
    wav, at most `voice.AHEAD` ahead, while a player thread plays them
    in order, so the next line is ready when one ends. A cut drops the
    text that waits and the ready wavs with their files, and stops what
-   plays. Every wav opens with `voice.LEAD_IN_MS` of silence. The chat
+   plays. A wav made while another plays, or within `voice.WAKE_AFTER`
+   of the last, opens with no silence; any other with
+   `voice.LEAD_IN_MS`. The chat
    speaks a reply as it streams: `cli.stream_turn`'s `on_shown` hands
    each chunk, once the wrap printed it, to `voice.Sentences`, and each
    finished sentence goes to the Reader at once. The shell widgets
