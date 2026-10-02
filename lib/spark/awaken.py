@@ -19,7 +19,8 @@
 #            again (the next seed) or none. What the engine lacks is
 #            downloaded first, its size said and asked (voice.audition)
 #   7 done   the look on auto, the look file rendered; a voice kept is
-#            written and SPARK_VOICE set to on
+#            written and SPARK_VOICE set to on (a clear voice stays clear:
+#            the recipe is written, and spark voice on takes it up)
 #
 # Nothing is written until the end, and then each file atomically: Ctrl-C
 # at any question leaves the machine as it was (exit 130), but for a
@@ -306,6 +307,8 @@ def offer_voice(cfg, temper, lines, ask=None):
     kept = voice.audition(cfg, temper, _seed(cfg), line, ask or _Ask())
     if kept:
         say("Its voice is kept: %s. spark voice says more." % voice.describe(kept))
+        if voice.mode(cfg) == "clear":
+            say("The clear voice stays on: spark voice on speaks in this one.")
     say("")
     return kept
 
@@ -390,7 +393,8 @@ def run(cfg, ask):
     if kept:
         from . import voice
         voice.write_recipe(kept)
-        keys["SPARK_VOICE"] = "on"
+        if voice.mode(cfg) != "clear":      # a clear voice is a person's need: it stays
+            keys["SPARK_VOICE"] = "on"
     site.set_keys(_file=SPARK_ENV, _quiet=True, **keys)
     look.render(config.load(), awake_now=True)
     say("* %s Awake. The look is on auto: motion, colour and words. spark look shows it." % fs["pleased"])

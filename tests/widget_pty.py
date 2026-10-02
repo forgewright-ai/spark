@@ -501,6 +501,59 @@ def living(shell, widget, tmp, env, ok):
     rendered_height(shell, widget, tmp, env, ok)
 
 
+def voice_keys(shell, widget, tmp, env, ok):
+    """v1.70: Esc v and Esc x are bound only where the voice is on or
+    clear when the shell starts -- SPARK_VOICE from the environment, else
+    spark.env's line; off (or unset), the keys stay the shell's own
+    (zsh's Esc x is execute-named-cmd)."""
+    vhome = os.path.join(tmp, "vhome")
+    conf = os.path.join(vhome, ".config", "spark")
+    os.makedirs(conf, exist_ok=True)
+    os.makedirs(os.path.join(vhome, ".local", "state"), exist_ok=True)
+    base = {k: v for k, v in env.items() if k != "SPARK_VOICE"}
+    base.update(HOME=vhome, XDG_STATE_HOME=os.path.join(vhome, ".local", "state"), ZDOTDIR=vhome)
+    if shell == "bash":
+        argv = ["bash", "--norc", "--noprofile", "-i"]
+        ask = "bind -X | grep -cE '_spark_(listen|hush)' ; echo VOICE-KEYS-$((6*7))"
+    else:
+        argv, ask = ["zsh", "-f", "-i"], "bindkey '\\ex'; bindkey '\\ev'; echo VOICE-KEYS-$((6*7))"
+    for label, voice_env, file_line, bound in (
+            ("unset, no spark.env", None, None, False),
+            ("unset, spark.env says clear", None, 'SPARK_VOICE="clear"', True),
+            ("unset, spark.env says off", None, "SPARK_VOICE=off", False),
+            ("the environment off over spark.env's clear", "off", "SPARK_VOICE=clear", False),
+            ("the environment on", "on", None, True)):
+        envf = os.path.join(conf, "spark.env")
+        if os.path.exists(envf):
+            os.remove(envf)
+        if file_line:
+            with open(envf, "w") as f:
+                f.write("SPARK_PORT=8080\n" + file_line + "\n")
+        e = dict(base, **({"SPARK_VOICE": voice_env} if voice_env else {}))
+        sh = Shell(argv, e, os.path.join(tmp, "work"))
+        try:
+            sh.send("source %s; echo SOURCED\n" % widget)
+            sh.expect("SOURCED")
+            sh.settle()
+            since = sh.mark()
+            sh.send(ask + "\n")
+            sh.expect("VOICE-KEYS-42", 5)
+            sh.settle()
+            out = since()
+        finally:
+            sh.send("exit\n")
+            sh.read(0.5)
+            sh.close()
+        if shell == "bash":
+            n = [l.strip() for l in out.splitlines() if l.strip().isdigit()]
+            got = n[-1:] == ["2"] if bound else n[-1:] == ["0"]
+        else:
+            got = (("spark-hush" in out and "spark-listen" in out) if bound
+                   else ("spark-hush" not in out and "spark-listen" not in out and "execute-named-cmd" in out))
+        ok(got, "the voice keys, %s: Esc v and Esc x %s" % (label, "bound" if bound else "left to the shell"),
+           out[-300:])
+
+
 def rendered_height(shell, widget, tmp, env, ok):
     """A real screen: tmux renders a two-line prompt at height 2 -- the
     hint sits on the blank row above INFO-LINE, and INFO-LINE is intact."""
@@ -680,6 +733,7 @@ def main(shell, widget):
         vlog = os.path.join(tmp, "voice.log")
         env = {"HOME": home, "XDG_STATE_HOME": state, "SPARK_BIN": stub, "STUB_LOG": log,
                "EXPLAIN_LOG": elog, "STUB_ENV": envlog, "STUB_VOICE": vlog, "STUB_HEARD": "list the big files",
+               "SPARK_VOICE": "clear",
                "PATH": os.path.join(home, "bin") + ":" + os.environ.get("PATH", ""),
                "TERM": "xterm-256color", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "ZDOTDIR": home}
         # the judged line's cases run the real spark line behind the stub
@@ -1233,6 +1287,9 @@ def main(shell, widget):
 
         # 9b. the living prompt (v1.59): height, Esc k, awake, the fallbacks
         living(shell, widget, tmp, env, ok)
+
+        # 9c. the voice keys are bound only where the voice is on or clear
+        voice_keys(shell, widget, tmp, env, ok)
 
         # 10. nothing the widget started outlives its shell: a streamed
         #     answer's reader and its spark line stop with it

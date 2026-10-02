@@ -7,8 +7,12 @@
 # Nothing is vendored: fetch() downloads what is missing into
 # ~/.local/share/spark/voice (SPARK_VOICE_DIR overrides it, the tests'
 # seam), checks the size and the sha256 before it unpacks a byte, and
-# unpacks member by member, refusing an absolute path, a `..`, a link
-# that points out, or anything but files, directories and links.
+# unpacks member by member, refusing an absolute path, a `..`, a name
+# twice, a path through a link, a link that points out (as written, and
+# again on disk once every link is made, links last), a hard link to
+# anything but a file of the archive (written from the archive, never
+# from the disk), or anything but files, directories and links; every
+# file is a new one (O_EXCL, O_NOFOLLOW).
 #
 # Three modes, SPARK_VOICE (contract 3, spark.env):
 #   off    silent (the default)
@@ -38,7 +42,11 @@
 # wav; Whisper (sherpa-onnx-offline) reads it and prints one JSON line
 # whose "text" and "lang" listen() returns. The directory is removed
 # before listen() returns, always. One tool on each OS ends at silence,
-# and Whisper names the language itself.
+# and Whisper names the language itself. The recorder never outlives
+# spark: it runs on a LEASH (a pipe only spark holds: its EOF, spark's
+# exit or death, stops it; a bound on its whole life too), in spark's
+# process group, and on Linux it dies with its parent; a SIGHUP or
+# SIGTERM while listening raises SystemExit, so the cleanup runs.
 #
 # The API the voice's surfaces call: mode(cfg), say_aloud(cfg, text,
 # wait=False), stop(), listen(cfg), spoken_command(command), lang_of(text),
@@ -56,7 +64,8 @@
 #
 # SPARK_VOICE_STUB=<file>, the tests' seam: say_aloud appends the text
 # it would speak to that file (one line each) and plays nothing, and
-# listen() opens no microphone: it hears SPARK_VOICE_STUB_HEARD.
+# listen() opens no microphone: it hears SPARK_VOICE_STUB_HEARD. Once
+# honoured it says so on stderr, one line a process (SEAM_BANNER).
 
 import array
 import hashlib
@@ -103,6 +112,7 @@ VOICE_USAGE = """%s voice -- spark reads aloud, and hears a question
 """ % MARK
 
 MODES = ("off", "on", "clear")
+VERB_WORDS = ("status", "on", "clear", "off", "rate", "test", "listen", "stop")
 RATE_MIN, RATE_MAX, RATE_DEFAULT = 50, 300, 100
 SPEAK_MAX = 2000            # characters one speak() reads; the rest is cut at a word
 SPEAK_TIMEOUT = 120         # seconds the engine may take for one text
@@ -180,11 +190,15 @@ def _bin(name):
     return os.path.join(voice_dir(), "runtime", "bin", name)
 
 
+def _lib_path():
+    """(the loader's variable, the runtime's lib directory)."""
+    return ("DYLD_LIBRARY_PATH" if IS_MAC else "LD_LIBRARY_PATH"), os.path.join(voice_dir(), "runtime", "lib")
+
+
 def _lib_env():
     """The environment the runtime's tools run in: its lib on the loader's path."""
     env = dict(os.environ)
-    lib = os.path.join(voice_dir(), "runtime", "lib")
-    key = "DYLD_LIBRARY_PATH" if IS_MAC else "LD_LIBRARY_PATH"
+    key, lib = _lib_path()
     env[key] = lib + (os.pathsep + env[key] if env.get(key) else "")
     return env
 
@@ -312,64 +326,101 @@ def verify(path, size, sha):
 
 
 def _members(tf):
-    """[(member, relative path parts, a link's target inside)] for every
-    member, the archive's one top directory stripped; VoiceError on the
-    first one that may not land: an absolute path, a `..`, a link
-    pointing out, a device or a fifo."""
+    """[(member, relative path parts, the regular member a hard link
+    names)] for every member, the archive's one top directory stripped;
+    VoiceError on the first one that may not land: an absolute path, a
+    `..`, a name twice, a path through a link or a file of the archive,
+    a symbolic link pointing out, a hard link to anything but a regular
+    file of the archive, a device or a fifo."""
     rows = []
     for m in tf.getmembers():
         name = m.name.replace("\\", "/")
         bits = [b for b in name.split("/") if b not in ("", ".")]
         if name.startswith("/") or ".." in bits:
             raise VoiceError("the archive holds %s, a path outside it -- nothing unpacked" % m.name)
-        if not (m.isfile() or m.isdir() or m.issym() or m.islnk()):
+        if not (m.isreg() or m.isdir() or m.issym() or m.islnk()):
             raise VoiceError("the archive holds %s, neither a file nor a directory -- nothing unpacked" % m.name)
         rows.append((m, bits))
     tops = {bits[0] for _m, bits in rows if bits}
     strip = 1 if len(tops) == 1 and any(len(bits) > 1 for _m, bits in rows) else 0
-    out = []
+    seen = {}
     for m, bits in rows:
-        rel, where = bits[strip:], ""
+        rel = tuple(bits[strip:])
         if not rel:
             continue
-        if m.issym() or m.islnk():
+        if rel in seen:
+            raise VoiceError("the archive holds %s twice -- nothing unpacked" % m.name)
+        seen[rel] = m
+    out = []
+    for rel, m in seen.items():
+        for i in range(1, len(rel)):
+            up = seen.get(rel[:i])
+            if up is not None and not up.isdir():
+                raise VoiceError("the archive's %s lies under %s, not a directory -- nothing unpacked"
+                                 % (m.name, up.name))
+        src = None
+        if m.issym():
             link = m.linkname.replace("\\", "/")
-            if m.issym():
-                where = os.path.normpath(os.path.join(*(rel[:-1] or ["."]), link))
-            else:
-                lb = [b for b in link.split("/") if b not in ("", ".")]
-                where = os.path.normpath(os.path.join(*(lb[strip:] or ["."])))
-            if link.startswith("/") or where == ".." or where.startswith("../") or os.path.isabs(where):
+            where = os.path.normpath(os.path.join(*(list(rel[:-1]) or ["."]), link))
+            if not link or link.startswith("/") or where == ".." or where.startswith("../") or os.path.isabs(where):
                 raise VoiceError("the archive's link %s points out of it -- nothing unpacked" % m.name)
-        out.append((m, rel, where))
+        elif m.islnk():
+            lb = [b for b in m.linkname.replace("\\", "/").split("/") if b not in ("", ".")]
+            src = seen.get(tuple(lb[strip:])) if ".." not in lb else None
+            if src is None or not src.isreg():
+                raise VoiceError("the archive's link %s names no file of it -- nothing unpacked" % m.name)
+        out.append((m, list(rel), src))
     return out
+
+
+def _inside(path, real):
+    return path == real or path.startswith(real + os.sep)
+
+
+def _write(tf, member, path):
+    """A regular member's bytes into a NEW file at path: never through a
+    link, never over anything already there."""
+    src = tf.extractfile(member)
+    if src is None:
+        raise VoiceError("the archive's %s has no data -- nothing kept" % member.name)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+                 0o755 if member.mode & 0o111 else 0o644)
+    with os.fdopen(fd, "wb") as f:
+        shutil.copyfileobj(src, f, 1 << 20)
 
 
 def unpack(tarpath, dest):
     """Unpack a verified tarball into dest (made fresh), member by member,
-    every member checked first: nothing lands unless all of it may."""
+    every member checked first: nothing lands unless all of it may. The
+    directories and files first (a hard link is written again from the
+    member it names, out of the archive, never from the disk), the
+    symbolic links last, each one resolved inside dest, then all again."""
     with tarfile.open(tarpath, "r:*") as tf:
         rows = _members(tf)
         os.makedirs(dest, mode=0o755)
         real = os.path.realpath(dest)
-        for m, rel, where in rows:
-            path = os.path.join(dest, *rel)
-            parent = os.path.realpath(os.path.dirname(path))
-            if parent != real and not parent.startswith(real + os.sep):
-                raise VoiceError("the archive's %s lands outside it -- nothing kept" % m.name)
+        links = []
+        for m, rel, src in rows:
+            path = os.path.join(real, *rel)
+            if m.issym():
+                links.append((m, path))
+                continue
             if m.isdir():
                 os.makedirs(path, mode=0o755, exist_ok=True)
-                continue
-            os.makedirs(os.path.dirname(path), mode=0o755, exist_ok=True)
-            if m.issym():
-                os.symlink(m.linkname, path)
-            elif m.islnk():
-                shutil.copyfile(os.path.join(dest, where), path)
             else:
-                src = tf.extractfile(m)
-                fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o755 if m.mode & 0o111 else 0o644)
-                with os.fdopen(fd, "wb") as f:
-                    shutil.copyfileobj(src, f, 1 << 20)
+                os.makedirs(os.path.dirname(path), mode=0o755, exist_ok=True)
+            if not _inside(os.path.realpath(os.path.dirname(path)), real):
+                raise VoiceError("the archive's %s lands outside it -- nothing kept" % m.name)
+            if not m.isdir():
+                _write(tf, src if m.islnk() else m, path)
+        for m, path in links:
+            os.makedirs(os.path.dirname(path), mode=0o755, exist_ok=True)
+            os.symlink(m.linkname, path)
+            if not _inside(os.path.realpath(path), real):
+                raise VoiceError("the archive's link %s leads out of it -- nothing kept" % m.name)
+        for m, path in links:
+            if not _inside(os.path.realpath(path), real):
+                raise VoiceError("the archive's link %s leads out of it -- nothing kept" % m.name)
 
 
 def _install(part, part_file):
@@ -909,6 +960,7 @@ def say_aloud(cfg, text, wait=False):
         if m == "clear" and screen_reader() and not anyway():
             return None
         if os.environ.get("SPARK_VOICE_STUB"):
+            _seam()
             _stubbed(text)
             return None
         stop()
@@ -942,6 +994,7 @@ def listen(cfg=None, max_seconds=15):
     returns, always. VoiceError when the engine is not here."""
     cfg = cfg or config.load()
     if os.environ.get("SPARK_VOICE_STUB"):
+        _seam()
         heard = " ".join(os.environ.get("SPARK_VOICE_STUB_HEARD", "").split())
         return heard, (lang_of(heard) if heard else "")
     tool = mic_tool()
@@ -951,6 +1004,7 @@ def listen(cfg=None, max_seconds=15):
     if not tool or not os.path.isfile(vad) or not os.path.isdir(ears) or not os.access(asr, os.X_OK):
         raise VoiceError("the voice engine is not here -- spark voice on or clear fetches it")
     d = _private_dir()
+    held = _hold_signals()
     try:
         argv = tool + ["--silero-vad-model=" + vad, "--silero-vad-min-silence-duration=%.2f" % SILENCE,
                        "--silero-vad-max-speech-duration=%d" % max_seconds]
@@ -980,18 +1034,136 @@ def listen(cfg=None, max_seconds=15):
         return "", ""
     finally:
         shutil.rmtree(d, ignore_errors=True)
+        _release_signals(held)
+
+
+def _ended(signum, _frame):
+    """SIGHUP or SIGTERM while listening (a closed terminal, a kill): the
+    finally blocks run -- the recorder stopped, its directory removed --
+    then spark exits as the signal would have it."""
+    raise SystemExit(128 + signum)
+
+
+def _hold_signals():
+    """SIGHUP and SIGTERM raise SystemExit while listen() runs (the main
+    thread only: elsewhere a handler cannot be set). The old handlers,
+    for _release_signals."""
+    held = {}
+    if threading.current_thread() is not threading.main_thread():
+        return held
+    for sig in (signal.SIGHUP, signal.SIGTERM):
+        try:
+            held[sig] = signal.signal(sig, _ended)
+        except (OSError, ValueError):
+            pass
+    return held
+
+
+def _release_signals(held):
+    for sig, old in held.items():
+        try:
+            signal.signal(sig, old)
+        except (OSError, ValueError, TypeError):
+            pass
+
+
+def _prctl():
+    """Linux: libc's prctl, resolved here in the parent (a child of a
+    process with threads must not import), or None."""
+    if not sys.platform.startswith("linux"):
+        return None
+    try:
+        import ctypes
+        return ctypes.CDLL(None, use_errno=True).prctl
+    except Exception:   # noqa: BLE001 -- best effort: the pipe still ties it
+        return None
+
+
+def _leash_child(prctl):
+    """The leash's preexec: the 0077 umask; on Linux SIGTERM when spark
+    dies (PR_SET_PDEATHSIG, best effort -- the pipe ties it anyway)."""
+    def pre():
+        os.umask(0o077)
+        if prctl is not None:
+            try:
+                prctl(1, int(signal.SIGTERM), 0, 0, 0)
+            except Exception:   # noqa: BLE001
+                pass
+    return pre
+
+
+# The leash the listener runs on: a tiny python between spark and the
+# recorder. It holds the read end of a pipe whose write end only spark
+# has; when spark closes it or dies (any death, SIGKILL too), the read
+# sees EOF and the recorder is stopped (SIGINT, SIGTERM, then SIGKILL).
+# It stops it too after LIMIT seconds, or on a SIGHUP or SIGTERM of its
+# own; on Linux the recorder dies with it as well (PR_SET_PDEATHSIG). The
+# recorder stays in spark's process group, so a closed terminal's hangup
+# reaches it directly. When spark is gone, not just done, the leash
+# removes the private directory it runs in.
+LEASH = r"""
+import os, select, shutil, signal, subprocess, sys, time
+limit, key, lib, argv = float(sys.argv[1]), sys.argv[2], sys.argv[3], sys.argv[4:]
+ppid, stop, env, prctl = os.getppid(), [], dict(os.environ), None
+env[key] = lib + (os.pathsep + env[key] if env.get(key) else "")
+if sys.platform.startswith("linux"):
+    try:
+        import ctypes
+        prctl = ctypes.CDLL(None).prctl
+    except Exception:
+        pass
+def pre():
+    os.umask(0o077)
+    if prctl is not None:
+        try:
+            prctl(1, 9, 0, 0, 0)
+        except Exception:
+            pass
+for s in (signal.SIGHUP, signal.SIGTERM):
+    signal.signal(s, lambda n, f: stop.append(n))
+try:
+    p = subprocess.Popen(argv, stdin=subprocess.DEVNULL, env=env, preexec_fn=pre)
+except OSError as e:
+    sys.stderr.write("leash: %s\n" % e)
+    sys.exit(127)
+signal.signal(signal.SIGINT, signal.SIG_IGN)
+end = time.time() + limit
+while not stop and p.poll() is None and time.time() < end and os.getppid() == ppid:
+    try:
+        r = select.select([0], [], [], max(0.0, min(0.2, end - time.time())))[0]
+        if r and not os.read(0, 64):
+            break
+    except OSError:
+        break
+for s, wait in ((signal.SIGINT, 0.3), (signal.SIGTERM, 1.0), (signal.SIGKILL, 2.0)):
+    if p.poll() is not None:
+        break
+    try:
+        p.send_signal(s)
+        p.wait(wait)
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+if os.getppid() != ppid:
+    d = os.getcwd()
+    if os.path.basename(d).startswith("spark-voice-"):
+        shutil.rmtree(d, ignore_errors=True)
+"""
+LEASH_SLACK = 5         # seconds the leash allows past listen's own bound
 
 
 def _record(argv, d, max_seconds):
     """Run the listener in d until it saves its first segment (its
     `Saved to NAME` line on stderr) or max_seconds pass; the segment's
-    path, or ''. The listener is stopped either way."""
+    path, or ''. The listener runs on the LEASH, in spark's own process
+    group: it is stopped either way, and it can never outlive spark."""
+    end = time.time() + max_seconds + SILENCE + 1
+    limit = max_seconds + SILENCE + 1 + LEASH_SLACK
     try:
-        proc = subprocess.Popen(argv, cwd=d, env=_lib_env(), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                                stderr=subprocess.PIPE, start_new_session=True, preexec_fn=_umask)
+        proc = subprocess.Popen([sys.executable, "-I", "-S", "-c", LEASH, "%.1f" % limit] + list(_lib_path())
+                                + list(argv), cwd=d, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+                                stderr=subprocess.PIPE, preexec_fn=_leash_child(_prctl()))
     except OSError as e:
         raise VoiceError("the listener did not start (%s)" % e)
-    end = time.time() + max_seconds + SILENCE + 1
     buf, seg = b"", ""
     try:
         while not seg and time.time() < end:
@@ -1010,17 +1182,20 @@ def _record(argv, d, max_seconds):
                     seg = os.path.join(d, m.group(1))
                     break
     finally:
-        if proc.poll() is None:
-            for sig in (signal.SIGINT, signal.SIGKILL):
-                try:
-                    os.killpg(proc.pid, sig)
-                except OSError:
-                    pass
-                try:
-                    proc.wait(2)
-                    break
-                except subprocess.TimeoutExpired:
-                    continue
+        try:
+            proc.stdin.close()              # the leash's EOF: the recorder stops
+        except OSError:
+            pass
+        for sig, wait in ((None, 4), (signal.SIGTERM, 3), (signal.SIGKILL, 2)):
+            try:
+                if sig is not None:
+                    proc.send_signal(sig)
+                proc.wait(wait)
+                break
+            except subprocess.TimeoutExpired:
+                continue
+            except OSError:
+                break
         proc.stderr.close()
     return seg
 
@@ -1089,6 +1264,23 @@ def screen_reader(mac=None):
 
 
 # --------------------------------------------------------------- surfaces
+SEAM_BANNER = "spark voice: a test seam (SPARK_VOICE_STUB) -- speech goes to a file, nothing plays, no mic opens"
+_SEAM_SAID = []
+
+
+def _seam():
+    """The stub seam honoured: said once a process on stderr (as
+    SPARK_DO_STDIN's banner is), so a stray export never passes silently."""
+    if _SEAM_SAID:
+        return
+    _SEAM_SAID.append(True)
+    try:
+        sys.stderr.write(SEAM_BANNER + "\n")
+        sys.stderr.flush()
+    except (OSError, ValueError):
+        pass
+
+
 def _stubbed(text):
     """The tests' seam: the text say_aloud would speak, one line appended
     to SPARK_VOICE_STUB; nothing is synthesized or played."""
@@ -1124,6 +1316,8 @@ class Reader:
         self.playing = None
         self.cv = threading.Condition()
         self.thread = None
+        if os.environ.get("SPARK_VOICE_STUB"):
+            _seam()                 # here, not in the thread: never in the middle of a prompt
 
     def put(self, text, cut=False):
         text = plain(text)
@@ -1244,30 +1438,59 @@ def line_words(lines):
     return ""
 
 
-_HEREDOC = re.compile(r"<<-?\s*['\"]?\w")
+_HEREDOC = re.compile(r"<<(-?)[ \t]*(['\"]?)(\w+)\2")
 _INTO = re.compile(r"(?:^|[\s;|&])(?:\d?>>?|&>)\s*([^\s<>|&;]+)|\btee\s+(?:-a\s+)?([^\s<>|&;-][^\s<>|&;]*)")
 
 
+def _plural(n, word):
+    return "%d %s%s" % (n, word, "" if n == 1 else "s")
+
+
 def block_words(command):
-    """A block as clear mode names it: "a here-document writing NAME, K
-    lines" when its first line feeds a here-document into a file, else
-    "a block of K lines"."""
-    first = command.split("\n", 1)[0]
-    k = command.count("\n") + 1
-    m = _INTO.search(first)
-    name = (m.group(1) or m.group(2)) if m else ""
-    if name and _HEREDOC.search(first) and not name.startswith("/dev/"):
-        return "a here-document writing %s, %d lines" % (os.path.basename(name.strip("'\"")) or name, k)
-    return "a block of %d lines" % k
+    """A block as clear mode reads it: every line OUTSIDE a here-document's
+    body by its symbols (spoken_command) -- a line after a here-document
+    is never hidden behind its name -- and each body as "a here-document
+    writing NAME, N lines of text" (no file: "a here-document, N lines of
+    text"); the delimiter line that ends a body is not said."""
+    lines = command.split("\n")
+    out, i = [], 0
+    while i < len(lines):
+        line = lines[i]
+        i += 1
+        said = spoken_command(line)
+        if said:
+            out.append(said)
+        for m in _HEREDOC.finditer(line):
+            tabs, delim = m.group(1), m.group(3)
+            body = 0
+            while i < len(lines) and (lines[i].lstrip("\t") if tabs else lines[i]) != delim:
+                body += 1
+                i += 1
+            i += 1                          # the delimiter's own line
+            into = _INTO.search(line)
+            name = (into.group(1) or into.group(2)) if into else ""
+            name = os.path.basename(name.strip("'\"")) if name and not name.startswith("/dev/") else ""
+            out.append("a here-document%s, %s of text" % (" writing " + name if name else "", _plural(body, "line")))
+    return ". ".join(out)
 
 
 def step_words(n, command, hint, danger=False):
     """A spark do step as clear mode reads it: a danger step's warning
-    first, then the step, then its hint."""
+    first, then the step (a block every line, block_words), then its
+    hint."""
     what = block_words(command) if "\n" in command else spoken_command(command)
     if danger:
         return "warning: %s step %d: %s." % (_said(hint), n, what)
     return "step %d: %s. %s" % (n, what, _said(hint))
+
+
+def read_words(command):
+    """Every line of a step, numbered, as `r` reads it: the body of a
+    here-document too."""
+    lines = command.split("\n")
+    if len(lines) == 1:
+        return spoken_command(command)
+    return ". ".join("line %d: %s" % (k, spoken_command(l) or "blank") for k, l in enumerate(lines, 1))
 
 
 def tail_words(text, n=3):
@@ -1370,7 +1593,7 @@ def cmd_voice(args):
         say(VOICE_USAGE.rstrip())
         return 0
     cfg = config.load()
-    if not args or args[0] == "status":
+    if not args or args == ["status"]:
         return show(cfg)
     word, rest = args[0].lower(), args[1:]
     if word == "on" and not rest:
@@ -1450,6 +1673,12 @@ def cmd_voice(args):
         return 0
     if word == "listen" and rest in ([], ["--buffer"]):
         return _listen_verb(cfg, buffer=bool(rest))
+    if word in VERB_WORDS or any(a.startswith("-") for a in args):
+        # one of the verb's own words with what it does not take, or a
+        # flag it does not know: never a question for the model
+        say("%s voice -- spark voice %s is not a voice command" % (MARK, " ".join(args)))
+        say(VOICE_USAGE.rstrip())
+        return 2
     if len(args) > 1 or args[-1].endswith("?"):
         # `spark voice of reason?` is a question
         from . import cli
