@@ -1038,9 +1038,13 @@ CHAT_USAGE = """%s chat -- a conversation
 
   Inside it: @FILE words asks about a file; /help lists the verbs (/new,
   /resume, /clear, /keep, /last, /model, /reveal, /copy, /save, /read,
-  /do); /q (or /quit, /exit, :q, quit, exit, bye, Ctrl-D) ends it, with a
-  goodbye on an awakened machine; Ctrl-C clears the line at the prompt and
-  cancels a reply in progress, and neither ends the chat. Every turn is
+  /do, /aloud, /again); Esc on an empty line, Ctrl-D or /q (or /quit,
+  /exit, :q, quit, exit, bye) ends it, with a goodbye on an awakened
+  machine; Ctrl-C clears the line at the prompt and cancels a reply in
+  progress, and neither ends the chat. With spark voice on or clear, Esc v
+  listens and puts the words on the line (Enter sends them), Esc x stops
+  the speaking, /aloud speaks every reply (clear does from the start) and
+  /again says the last one again. Every turn is
   kept as a thread (spark history) for SPARK_HISTORY days; /keep keeps
   this one past that and past
   spark clear --history, and /keep off lets it go.
@@ -1066,6 +1070,13 @@ LIVING = [False]
 SAID = []
 CONTINUING_COLS = 79    # the continuing line fits 80 columns
 SAVE_MAX = 99           # ~/spark-chat-DATE.txt, then -2 .. -99
+# The chat's voice (SPARK_VOICE, at a terminal): `reader` is a
+# voice.Reader while the mode is on or clear, None while off. Mode on
+# speaks the greeting and the goodbye in the machine's own voice and,
+# after /aloud, every reply; clear speaks them all from the start, and
+# the refusals too. Every spoken line is printed as well.
+VOICE = {"reader": None, "mode": "off", "aloud": False}
+GOODBYE_WAIT = 8        # seconds the goodbye may take to begin playing before the chat exits
 
 
 def _face(mood):
@@ -1093,10 +1104,65 @@ def _land(cfg, thread, asked, said, user=None, assistant=None):
     return thread
 
 
+def _voice_setup(cfg, tty):
+    """The chat's voice for this conversation (VOICE): at a terminal only."""
+    from . import voice
+    VOICE.update(reader=None, mode="off", aloud=False)
+    if not tty:
+        return
+    try:
+        m = voice.mode(cfg)
+    except Exception:       # noqa: BLE001 -- the voice never breaks the chat
+        m = "off"
+    if m != "off":
+        VOICE.update(reader=voice.Reader(cfg), mode=m, aloud=m == "clear")
+
+
+def _aloud(text, cut=False):
+    """The text spoken too (the reader's thread: the prompt never waits)."""
+    if VOICE["reader"] is not None and text:
+        VOICE["reader"].put(text, cut=cut)
+
+
+def _hush():
+    """Esc x: the speaking stops, here and in any other spark."""
+    from . import voice
+    if VOICE["reader"] is not None:
+        return VOICE["reader"].hush()
+    return voice.stop()
+
+
+def _hear():
+    """Esc v: (the words heard, as one line for `chat>`, or '';
+    what to say when there are none, or '')."""
+    from . import voice
+    if VOICE["reader"] is None:
+        return "", "the voice is off -- spark voice on or clear, then Esc v listens"
+    VOICE["reader"].hush()          # spark does not hear itself
+    try:
+        text, _lang = voice.listen(VOICE["reader"].cfg)
+    except voice.VoiceError as e:
+        return "", str(e)
+    except KeyboardInterrupt:
+        return "", ""
+    text = voice.heard_line(text)
+    return text, ("" if text else "nothing heard")
+
+
+def _listening():
+    """The line Esc v shows while it listens: the listening face when awake."""
+    from . import words
+    face = (paint(words.face("listening"), "accent") + " ") if LIVING[0] else ""
+    return face + "listening -- speak, a pause ends it"
+
+
 def _refuse(hint, head=""):
     """A refusal inside the chat: `spark: <hint>` on stderr, as always;
     awake, the puzzled face and the hint as a whole sentence on stdout
-    (`head`, a program's name that opens the hint, keeps its case)."""
+    (`head`, a program's name that opens the hint, keeps its case).
+    Clear mode reads it aloud too."""
+    if VOICE["mode"] == "clear":
+        _aloud(hint)
     if LIVING[0]:
         from . import cli, say
         say(_face("puzzled") + " " + cli._tidy(hint, head=head))
@@ -1153,21 +1219,42 @@ def _opening(thread):
     from . import glyph, say, words
     cont = continuing(load(thread)) if thread else ""
     if LIVING[0]:
-        say(paint(glyph("hammer") + " " + words.face("idle"), "accent") + " " + words.greeting())
+        hello = words.greeting()
+        say(paint(glyph("hammer") + " " + words.face("idle"), "accent") + " " + hello)
+        _aloud(hello)
         if cont:
             say(cont)
-        say(paint("  /help lists the commands; Ctrl-D ends", "muted"))
+        say(paint("  /help lists the commands; Esc or Ctrl-D ends", "muted"))
         return
-    say("chat -- /help, Ctrl-D or /q ends")
+    say("chat -- /help, Esc, Ctrl-D or /q ends")
+    if VOICE["mode"] == "clear":
+        _aloud("chat. slash help lists the commands; Escape ends it.")
     if cont:
         say(cont)
 
 
 def _goodbye():
-    """Awake, the end of the chat: the pleased face and the done line."""
+    """Awake, the end of the chat: the pleased face and the done line --
+    spoken too, waited for (GOODBYE_WAIT at most) until it plays: the
+    player outlives the chat, the words are never cut off."""
     from . import words
     if LIVING[0]:
-        _tell(words.load().get("done") or "That is everything for now.", "pleased")
+        done = words.load().get("done") or "That is everything for now."
+        _tell(done, "pleased")
+        if VOICE["reader"] is not None:
+            _aloud(done, cut=True)
+            VOICE["reader"].drain(GOODBYE_WAIT)
+
+
+def _last_reply(thread):
+    """This chat's last reply: from what it said, else from its thread."""
+    for m in reversed(SAID):
+        if m.get("role") == "assistant" and m.get("text"):
+            return m["text"]
+    for m in reversed(load(thread) if thread else []):
+        if m.get("role") == "assistant" and m.get("text"):
+            return m["text"]
+    return ""
 
 
 def number(tok):
@@ -1203,7 +1290,40 @@ def _slash_help(cfg, thread, args):
     say("/save    the conversation to ~/spark-chat-DATE.txt, or /save FILE")
     say("/read    /read @FILE [question]: an answer that quotes the file")
     say("/do      /do GOAL: spark do here, each step confirmed; /do --sandbox GOAL")
-    say("/q       end the conversation (Ctrl-D works too)")
+    say("/aloud   speak every reply, or stop (spark voice on or clear)")
+    say("/again   the last reply again, printed and spoken")
+    say("/q       end the conversation (Esc on an empty line, Ctrl-D too)")
+    say("Esc v    listen: the words land on the line; Esc x stops the speaking")
+    return thread
+
+
+def _slash_aloud(cfg, thread, args):
+    if args not in ([], ["on"], ["off"]):
+        _refuse("/aloud takes nothing, on or off")
+        return thread
+    if VOICE["reader"] is None:
+        _refuse("the voice is off -- spark voice on or clear, then /aloud")
+        return thread
+    VOICE["aloud"] = (not VOICE["aloud"]) if not args else args == ["on"]
+    if VOICE["aloud"]:
+        _tell("Every reply aloud now -- /aloud again stops it.")
+    else:
+        VOICE["reader"].hush()
+        _tell("Replies are quiet now -- /aloud speaks them again.")
+    return thread
+
+
+def _slash_again(cfg, thread, args):
+    from . import say
+    last = _last_reply(thread)
+    if not last:
+        _refuse("no reply yet to say again")
+        return thread
+    say(_face("idle") + " " + last if LIVING[0] else last)
+    if VOICE["reader"] is None:
+        _tell("The voice is off -- spark voice on or clear speaks it.")
+    else:
+        _aloud(last, cut=True)
     return thread
 
 
@@ -1578,7 +1698,204 @@ def _slash_do(cfg, thread, args):
 
 SLASH_VERBS = {"/help": _slash_help, "/new": _slash_new, "/resume": _slash_resume, "/reveal": _slash_reveal,
                "/clear": _slash_clear, "/keep": _slash_keep, "/last": _slash_last, "/model": _slash_model,
-               "/copy": _slash_copy, "/save": _slash_save, "/read": _slash_read, "/do": _slash_do}
+               "/copy": _slash_copy, "/save": _slash_save, "/read": _slash_read, "/do": _slash_do,
+               "/aloud": _slash_aloud, "/again": _slash_again}
+
+
+class _Keys:
+    """The chat's own keys at `chat>` (a terminal only):
+
+      Esc alone, on an EMPTY line, ends the chat exactly as Ctrl-D does.
+      An Esc counts as alone only when nothing follows it within the
+      key-sequence wait (readline's keyseq-timeout, 500 ms by default),
+      so the arrows, Alt-b and Esc v still arrive whole; with text on
+      the line, Esc does what it always did and the words stay.
+      Esc v listens (_hear): the words land on the line; Enter sends.
+      Esc x stops the speaking (_hush).
+
+    GNU readline (Linux): Python runs it in callback mode, where a
+    binding for a lone Esc never fires -- the key-sequence wait is not
+    applied there. So a getc hook (ctypes over rl_getc_function) sees
+    each key first: a lone Esc on an empty line, outside a search,
+    becomes the terminal's EOF character, readline's own Ctrl-D; Esc v
+    and Esc x are taken there on any line, and the line is redrawn
+    (C-x C-], bound to redraw-current-line). libedit (Apple's
+    python3), or no hook: the first key on an EMPTY line is read raw
+    before input() -- a lone Esc ends, Esc v and Esc x are taken, and
+    anything else goes back into the terminal's input queue (TIOCSTI)
+    for readline to read as typed. With text on a libedit line, Esc is
+    libedit's own."""
+
+    RL_SEARCHING = 0x780        # RL_STATE_ISEARCH|NSEARCH|SEARCH|NUMERICARG
+    REDRAW = r'"\C-x\C-]": redraw-current-line'
+
+    def __init__(self, readline):
+        self.rl = readline
+        self.fd = sys.stdin.fileno()
+        self.wait = 0.5
+        self.active = False
+        self.how = "raw"
+        self.hook = None
+        if readline is not None and "libedit" not in (readline.__doc__ or ""):
+            try:
+                self._gnu()
+                self.how = "gnu"
+            except Exception:       # noqa: BLE001 -- no hook: the raw read on an empty line
+                self.hook = None
+
+    # ------------------------------------------------------------ GNU
+    def _gnu(self):
+        import ctypes
+        import termios
+        lib = ctypes.CDLL(self.rl.__file__)
+        getc = ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p)
+        ptr = ctypes.c_void_p.in_dll(lib, "rl_getc_function")
+        if not ptr.value:
+            raise OSError("no rl_getc_function")
+        self.orig_ptr = ptr.value
+        self.orig = getc(ptr.value)
+        self.end = ctypes.c_int.in_dll(lib, "rl_end")
+        self.point = ctypes.c_int.in_dll(lib, "rl_point")
+        self.state = ctypes.c_ulong.in_dll(lib, "rl_readline_state")
+        self.stuff = lib.rl_stuff_char
+        self.stuff.argtypes = [ctypes.c_int]
+        try:
+            lib.rl_variable_value.restype = ctypes.c_char_p
+            lib.rl_variable_value.argtypes = [ctypes.c_char_p]
+            ms = int(lib.rl_variable_value(b"keyseq-timeout") or 500)
+            self.wait = ms / 1000.0 if ms > 0 else 0.5
+        except (AttributeError, ValueError, TypeError):
+            pass
+        eof = termios.tcgetattr(self.fd)[6][termios.VEOF]
+        self.eof = eof if isinstance(eof, int) else ord(eof)
+        self.rl.parse_and_bind(self.REDRAW)
+        self.hook = getc(self._getc)        # kept: the pointer must outlive the call
+        self.ptr = ptr
+        ptr.value = ctypes.cast(self.hook, ctypes.c_void_p).value
+
+    def _getc(self, stream):
+        c = self.orig(stream)
+        if c != 27 or not self.active:
+            return c
+        try:
+            import select
+            if select.select([self.fd], [], [], self.wait)[0]:
+                nxt = os.read(self.fd, 1)
+                if nxt == b"v":
+                    return self._gnu_listen()
+                if nxt == b"x":
+                    _hush()
+                    return self._redraw()
+                if nxt:
+                    self.stuff(nxt[0])
+                return 27
+            if self.end.value == 0 and not (self.state.value & self.RL_SEARCHING):
+                return self.eof                 # a lone Esc on an empty line: Ctrl-D
+        except BaseException:   # noqa: BLE001 -- a key is never lost to the hook
+            pass
+        return 27
+
+    def _redraw(self):
+        self.stuff(0x1d)
+        return 0x18
+
+    def _gnu_listen(self):
+        os.write(1, ("\r\x1b[2K" + _listening()).encode("utf-8", "replace"))
+        text, why = _hear()
+        os.write(1, b"\r\x1b[2K")
+        if text:
+            line, at = self.rl.get_line_buffer(), self.point.value
+            self.rl.insert_text((" " if line and at and not line[at - 1].isspace() else "") + text)
+        elif why:
+            os.write(1, (why + "\r\n").encode("utf-8", "replace"))
+        return self._redraw()
+
+    def close(self):
+        if self.hook is not None:
+            self.ptr.value = self.orig_ptr
+            self.hook = None
+
+    # ------------------------------------------------------------ raw
+    def _push(self, data):
+        """Bytes back into the terminal's input queue, as if typed."""
+        import fcntl
+        import termios
+        for b in data:
+            fcntl.ioctl(self.fd, termios.TIOCSTI, bytes([b]))
+
+    def _raw(self, prompt):
+        """The first key on an empty line, read before input(): EOFError
+        for a lone Esc (and Ctrl-D); Esc v and Esc x taken; anything else
+        pushed back for readline."""
+        import select
+        import termios
+        shown = prompt.replace("\001", "").replace("\002", "")
+        old = termios.tcgetattr(self.fd)
+        raw = termios.tcgetattr(self.fd)
+        raw[3] &= ~(termios.ICANON | termios.ECHO)
+        raw[6][termios.VMIN], raw[6][termios.VTIME] = 1, 0
+        first = True
+        while True:
+            # raw before the prompt shows: a key typed the moment it
+            # appears is neither echoed nor held for a line
+            termios.tcsetattr(self.fd, termios.TCSANOW, raw)
+            if first:
+                sys.stdout.write(shown)
+                sys.stdout.flush()
+                first = False
+            try:
+                select.select([self.fd], [], [])
+                got = os.read(self.fd, 1024)
+                if got == b"\x1b":
+                    if not select.select([self.fd], [], [], self.wait)[0]:
+                        raise EOFError          # a lone Esc: as Ctrl-D
+                    got += os.read(self.fd, 1024)
+                if got == b"\x04":
+                    raise EOFError
+                while select.select([self.fd], [], [], 0)[0]:
+                    more = os.read(self.fd, 1024)
+                    if not more:
+                        break
+                    got += more
+                if got == b"\x1bx":
+                    _hush()
+                    continue
+                if got == b"\x1bv":
+                    sys.stdout.write("\r\x1b[2K" + _listening())
+                    sys.stdout.flush()
+                    text, why = _hear()
+                    sys.stdout.write("\r\x1b[2K")
+                    if not text:
+                        sys.stdout.write((why + "\r\n" if why else "") + shown)
+                        sys.stdout.flush()
+                        continue
+                    got = text.encode("utf-8", "replace")
+                try:
+                    self._push(got)
+                except OSError:
+                    # no TIOCSTI here: what was typed lands through the
+                    # startup hook when it is text, and the keys are
+                    # readline's own from now on
+                    self.how = None
+                    typed = got.decode("utf-8", "replace")
+                    if self.rl is not None and typed.isprintable():
+                        self.rl.set_startup_hook(lambda: (self.rl.insert_text(typed), self.rl.set_startup_hook(None)))
+                sys.stdout.write("\r")
+                sys.stdout.flush()
+                return
+            finally:
+                termios.tcsetattr(self.fd, termios.TCSANOW, old)
+
+    # ------------------------------------------------------------ both
+    def read(self, prompt):
+        """input(prompt) with the chat's keys."""
+        if self.how == "raw":
+            self._raw(prompt)
+        self.active = True
+        try:
+            return input(prompt)
+        finally:
+            self.active = False
 
 
 @contextmanager
@@ -1647,9 +1964,13 @@ def cmd_chat(args):
             LIVING[0] = look.active("words", sys.stdout)
         except Exception:       # noqa: BLE001 -- a look file is never a reason to fail
             LIVING[0] = False
+        _voice_setup(cfg, tty)
         # piped, stdout carries the replies alone: no banner, no prompt
         _opening(thread)
+    else:
+        _voice_setup(cfg, False)
     prompt = (paint("chat>", "accent", sys.stdout, readline=True) + " ") if tty else ""
+    keys = _Keys(readline) if tty else None
     bye = False
     try:
         while True:
@@ -1662,7 +1983,7 @@ def cmd_chat(args):
                         pass    # scrolled-in escape codes must not become input
                 # the prompt in the accent at a tty (readline-bracketed
                 # escapes; the plain text stays exactly `chat> `)
-                text = input(prompt)
+                text = keys.read(prompt) if keys else input(prompt)
             except EOFError:
                 if tty:
                     say()
@@ -1689,8 +2010,11 @@ def cmd_chat(args):
                 # /save takes the rest of the line as typed: a name may hold spaces
                 rest = [text[len(verb):].strip()] if verb == "/save" and parts[1:] else parts[1:]
                 if fn:
+                    heard = len(SAID)
                     with _prompts_only(readline if verb == "/do" else None):
                         thread = fn(cfg, thread, rest)
+                    if verb == "/read" and VOICE["aloud"] and len(SAID) > heard:
+                        _aloud(SAID[-1]["text"], cut=True)
                 else:
                     _refuse("no %s -- /help lists them" % verb)
                 if verb != "/clear":
@@ -1698,8 +2022,11 @@ def cmd_chat(args):
                 continue
             words, paths = refs(text.split())
             try:
+                heard = len(SAID)
                 thread = cli.stream_turn(cfg, "chat", " ".join(words), paths, thread=thread, cps=REVEAL[0],
                                          lead=_face("idle") + " " if LIVING[0] else None, said=SAID)
+                if VOICE["aloud"] and len(SAID) > heard and SAID[-1].get("role") == "assistant":
+                    _aloud(SAID[-1]["text"], cut=True)
             except (RefError, wire.BrainError) as e:
                 _refuse(e.hint)
             except KeyboardInterrupt as e:
@@ -1708,6 +2035,8 @@ def cmd_chat(args):
                 say("%s (stopped)" % glyph("hammer"))
             say()              # a blank line between turns
     finally:
+        if keys:
+            keys.close()
         if readline and hist_on:
             _write_chat_history(readline)
     if bye:

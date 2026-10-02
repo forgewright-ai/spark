@@ -1635,9 +1635,9 @@ def chat_awake_cases(t):
         # --- the opening: awake, the face and a greet line, then the hint
         awake, _ = said(_fg._opening, None, living=True)
         plain, _ = said(_fg._opening, None)
-        t.ok(awake == "* (o.o) %s\n  /help lists the commands; Ctrl-D ends\n" % _wd.greeting()
+        t.ok(awake == "* (o.o) %s\n  /help lists the commands; Esc or Ctrl-D ends\n" % _wd.greeting()
              and _wd.greeting() in ("Hello again.", "Welcome back.", "Good to see you.")
-             and plain == "chat -- /help, Ctrl-D or /q ends\n",
+             and plain == "chat -- /help, Esc, Ctrl-D or /q ends\n",
              "chat: the opening -- awake, `* FACE greeting` and the hint; unawakened, today's banner", repr((awake, plain)))
 
         # --- the puzzled line and the goodbye
@@ -1912,6 +1912,13 @@ def chat_tools_cases(t, spark, home):
     spark("history", "clear")
 
 
+# a fresh `chat>` at a pty: it opens a line (an escape -- the awake
+# accent, readline's bracketed paste -- may come first). libedit's raw
+# first key (forge._Keys) draws the prompt once more after a lone "\r"
+# as the line goes back to readline -- that one is not a new prompt.
+PROMPT_AT = re.compile(rb"\n(?:\x1b\[[0-9;?]*[A-Za-z])*chat>")
+
+
 def chat_pty_cases(t, env, home):
     """v1.65 at a pty: unawakened, today's banner, the continuing line and
     a silent end; awakened, the face and a greet line, the continuing
@@ -1940,7 +1947,7 @@ def chat_pty_cases(t, env, home):
         def upto(n, secs=20):
             nonlocal got
             stop = time.time() + secs
-            while got.count(b"chat>") < n and time.time() < stop:
+            while len(PROMPT_AT.findall(got)) < n and time.time() < stop:
                 if select.select([fd], [], [], 0.2)[0]:
                     try:
                         chunk = os.read(fd, 4096)
@@ -1981,7 +1988,7 @@ def chat_pty_cases(t, env, home):
         return status is not None and os.WIFEXITED(status) and os.WEXITSTATUS(status) == 0, text
 
     ok, plain = drive(e, [])
-    t.ok(ok and "chat -- /help, Ctrl-D or /q ends" in plain
+    t.ok(ok and "chat -- /help, Esc, Ctrl-D or /q ends" in plain
          and '  continuing "which fonts can I use" (1 min ago) -- /new starts fresh' in plain
          and "(o.o)" not in plain and "(^.^)" not in plain,
          "chat pty: unawakened, today's banner, the continuing line, a silent end", plain)
@@ -2003,7 +2010,7 @@ def chat_pty_cases(t, env, home):
         STATE["mode"] = "ok"
     t.ok(ok and re.search(r"^\* \(o\.o\) (Hello again\.|Welcome back\.|Good to see you\.)$", lit, re.M)
          and '  continuing "which fonts can I use" (1 min ago) -- /new starts fresh' in lit
-         and "  /help lists the commands; Ctrl-D ends" in lit and "chat -- /help" not in lit,
+         and "  /help lists the commands; Esc or Ctrl-D ends" in lit and "chat -- /help" not in lit,
          "chat pty: awakened, `* FACE greeting`, the continuing line, the hint", lit)
     t.ok(re.search(r"\(o\.o\) 4$", lit, re.M) and "(o.?) @nope.txt: no such file." in lit
          and lit.count("(o.?) ") >= 3 and "spark: " not in lit,
@@ -2013,6 +2020,146 @@ def chat_pty_cases(t, env, home):
     ok, lit = drive(awake, [], end=b"\x04")
     t.ok(ok and lit.rstrip().endswith("(^.^) That is everything for now."),
          "chat pty: awakened, Ctrl-D ends with the goodbye too", lit[-200:])
+
+
+def chat_voice_pty_cases(t, env, home):
+    """v1.70 at a pty: Esc on an EMPTY `chat>` line ends the chat as
+    Ctrl-D does (the goodbye awake, silence otherwise); an arrow and an
+    Esc with text on the line do not. The voice through the stub seam
+    (SPARK_VOICE_STUB: what would be spoken, one line each; no engine,
+    no sound, no microphone): mode on speaks the greeting and the
+    goodbye, a reply only after /aloud; clear speaks every reply; /again
+    prints and speaks the last; Esc v lands the heard words on the line
+    and nothing is sent until Enter; Esc x stops. The readline is the
+    python's own: GNU on Linux (the getc hook), libedit on Apple's (the
+    raw first key and TIOCSTI)."""
+    import fcntl
+    import pty
+    import struct
+    import termios
+    try:
+        import readline as _rl
+        lib = "libedit" if "libedit" in (_rl.__doc__ or "") else "GNU readline"
+    except ImportError:
+        lib = "no readline"
+    h = os.path.join(home, "pty-voice")
+    os.makedirs(os.path.join(h, ".config", "spark"), exist_ok=True)
+    spoke = os.path.join(h, "spoken")
+    e = dict(env)
+    e.update({"HOME": h, "XDG_CONFIG_HOME": h + "/.config", "XDG_STATE_HOME": h + "/.local/state",
+              "XDG_DATA_HOME": h + "/.local/share", "TERM": "xterm", "SPARK_VOICE_STUB": spoke,
+              "SPARK_VOICE_STUB_HEARD": "how many files are here"})
+    for k in ("DISPLAY", "WAYLAND_DISPLAY", "NO_COLOR", "SPARK_VOICE"):
+        e.pop(k, None)
+
+    def spoken():
+        try:
+            with open(spoke) as f:
+                return f.read().splitlines()
+        except OSError:
+            return []
+
+    def drive(env2, keys, secs=20):
+        """`spark chat` at a pty; `keys` is [(wait for this text, then send
+        these bytes, then pause)]. (exit status or None while it runs on,
+        the screen text, whether it was alive after each pause)."""
+        if os.path.exists(spoke):
+            os.remove(spoke)
+        pid, fd = pty.fork()
+        if pid == 0:
+            os.chdir(h)
+            os.execve(sys.executable, [sys.executable, SPARK, "chat"], env2)
+        fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", 24, 100, 0, 0))
+        got, alive, status = b"", [], None
+
+        def pump(wait):
+            nonlocal got, status
+            stop = time.time() + wait
+            while time.time() < stop:
+                if status is None:
+                    done, st = os.waitpid(pid, os.WNOHANG)
+                    if done:
+                        status = st
+                if select.select([fd], [], [], 0.05)[0]:
+                    try:
+                        chunk = os.read(fd, 4096)
+                    except OSError:
+                        chunk = b""
+                    if chunk:
+                        got += chunk
+                        continue
+                if status is not None:
+                    return
+        mark = 0
+        for want, data, pause in keys:
+            stop = time.time() + secs
+            while want and not PROMPT_AT.search(got[mark:]) and status is None and time.time() < stop:
+                pump(0.1)
+            mark = len(got)
+            if status is None:
+                os.write(fd, data)
+            pump(pause)
+            alive.append(status is None)
+        pump(10 if status is None else 0.5)
+        if status is None:
+            os.kill(pid, signal.SIGKILL)
+            os.waitpid(pid, 0)
+        os.close(fd)
+        text = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b[78]|[\x01\x02\x07]", "", got.decode("utf-8", "replace"))
+        return status, text, alive
+
+    def ended(status):
+        return status is not None and os.WIFEXITED(status) and os.WEXITSTATUS(status) == 0
+
+    # unawakened, voice off: a lone Esc on the empty line ends it in silence
+    st, text, _ = drive(e, [("\nchat>", b"\x1b", 2.5)])
+    t.ok(ended(st) and "chat -- /help, Esc, Ctrl-D or /q ends" in text and not spoken(),
+         "chat pty (%s): Esc on an empty line ends the chat, rc 0, nothing said" % lib, text[-300:])
+    # an arrow key is a sequence that starts with Esc: the chat goes on
+    st, text, alive = drive(e, [("\nchat>", b"\x1b[A", 1.5), (None, b"\x15/q\r", 1.0)])
+    t.ok(alive[0] and ended(st), "chat pty (%s): an arrow (Esc [ A) does not end the chat; /q does" % lib, text[-300:])
+    # Esc with text on the line: nothing ends, nothing is sent
+    st, text, alive = drive(e, [("\nchat>", b"hello there", 0.3), (None, b"\x1b", 1.5), (None, b"\x15\x15/q\r", 1.0)])
+    t.ok(alive[1] and ended(st) and "The output means X." not in text,
+         "chat pty (%s): Esc with text on the line does not end the chat, and sends nothing" % lib, text[-300:])
+
+    # awake, mode on: the greeting and the goodbye spoken, a reply only
+    # after /aloud; Esc on the empty line ends with the goodbye
+    state = os.path.join(h, ".local", "state", "spark")
+    os.makedirs(state, exist_ok=True)
+    with open(os.path.join(state, "look"), "w") as f:
+        f.write("AWAKE=yes\n")
+    on = dict(e, SPARK_LOOK="on", SPARK_VOICE="on")
+    st, text, _ = drive(on, [("\nchat>", b"count\r", 0.2), ("\nchat>", b"/aloud\r", 0.2), ("\nchat>", b"count\r", 0.2),
+                             ("\nchat>", b"\x1b", 3.0)])
+    said = spoken()
+    t.ok(ended(st) and text.rstrip().endswith("(^.^) That is everything for now.") and len(said) == 3
+         and said[0] in ("Hello again.", "Welcome back.", "Good to see you.") and re.fullmatch(r"\d+", said[1])
+         and said[2] == "That is everything for now." and "Every reply aloud now" in text,
+         "chat pty (%s): mode on -- the greeting spoken, a reply only after /aloud, Esc ends with the goodbye "
+         "spoken" % lib, repr((said, text[-300:])))
+
+    # clear mode: Esc v lands the heard words, Enter sends them, the reply
+    # is spoken; /again prints and speaks it again; Esc x stops; the
+    # puzzled line is read too
+    clear = dict(e, SPARK_VOICE="clear")
+    os.remove(os.path.join(state, "look"))
+    st, text, alive = drive(clear, [("\nchat>", b"\x1bv", 1.5), (None, b"\r", 0.2), ("\nchat>", b"/again\r", 0.3),
+                                    ("\nchat>", b"\x1bx", 0.5), ("\nchat>", b"/nope\r", 0.3), ("\nchat>", b"\x04", 2.0)])
+    said = spoken()
+    t.ok(ended(st) and "listening -- speak, a pause ends it" in text and "chat> how many files are here" in text
+         and text.count("The output means X.") == 2 and alive[0],
+         "chat pty (%s): clear -- Esc v lands the heard words on the line; Enter sends them; /again prints the "
+         "reply again" % lib, text[-500:])
+    t.ok(said[:1] == ["chat. slash help lists the commands; Escape ends it."]
+         and said.count("The output means X.") == 2 and any("no /nope" in x for x in said),
+         "chat pty (%s): clear -- the opening, every reply, /again and a refusal spoken" % lib, repr(said))
+    st, text, alive = drive(e, [("\nchat>", b"\x1bv", 1.5), (None, b"/aloud\r", 0.5), ("\nchat>", b"\x04", 2.0)])
+    t.ok(ended(st) and "the voice is off -- spark voice on or clear, then Esc v listens" in text
+         and "chat> how many" not in text and "the voice is off -- spark voice on or clear, then /aloud" in text
+         and not spoken(),
+         "chat pty (%s): voice off -- Esc v and /aloud say how to turn it on, nothing heard or said" % lib,
+         text[-400:])
 
 
 def living_core_cases(t):
@@ -2416,8 +2563,10 @@ def living_awaken_cases(t):
          "awaken: eyes off the kit are picked by the machine's name, a kit mouth is kept, the same every time", str(fs))
     every = [_words.make_faces(e, m, b) for e in k["EYES"] for m in k["MOUTH"] for b in k["BODY"]]
     t.ok(every and all(len(f) <= 8 and _look.clean(f) == f for faces in every for f in faces.values())
-         and all(len(set(faces[m] for m in _look.MOODS)) == 7 and faces["blink"] != faces["asleep"] for faces in every),
-         "faces.kit: every face of every kit choice is ASCII, 8 columns at most, 7 distinct moods, a blink apart from asleep")
+         and all(len(set(faces[m] for m in _look.MOODS)) == len(_look.MOODS) == 8 and faces["blink"] != faces["asleep"]
+                 and faces["listening"] == faces["idle"] + "~" for faces in every),
+         "faces.kit: every face of every kit choice is ASCII, 8 columns at most, 8 distinct moods, a blink apart from "
+         "asleep, listening the idle face with its ear mark")
     for temper in _words.TEMPERS:
         path = os.path.join(REPO, "home", ".config", "spark", "words.d", temper)
         got, bad = _words.parse(path)
@@ -2952,6 +3101,38 @@ def main():
         t.ok(rc == 0 and out.startswith("danger\t"), "line: model-flagged danger", out)
         rc, out, _ = spark("line", stdin="rm-plain?")
         t.ok(rc == 0 and out.startswith("danger\trm -rf build"), "line: regex catches an unflagged rm -rf", out)
+        # v1.70 clear mode: once the lines are out, a detached process
+        # reads them (the stub seam records what it would say); stdout is
+        # contract 4 byte for byte, and mode on never speaks the line
+        _spoke = os.path.join(home, "line-spoken")
+
+        def _said(secs=15):
+            stop = time.time() + secs
+            while time.time() < stop and not os.path.exists(_spoke):
+                time.sleep(0.1)
+            time.sleep(0.3)
+            try:
+                with open(_spoke) as f:
+                    return f.read().splitlines()
+            except OSError:
+                return []
+        _v = {"SPARK_VOICE": "clear", "SPARK_VOICE_STUB": _spoke}
+        rc2, out2, _ = spark("line", stdin="rm-plain?", extra=_v)
+        heard = _said()
+        t.ok(rc2 == 0 and out2 == out and len(heard) == 1 and heard[0].startswith("warning: ")
+             and heard[0].endswith(" rm, dash r f, build."),
+             "line, clear: a danger line is read warning first, then the hint, then the command; stdout unchanged",
+             repr((out2, heard)))
+        os.remove(_spoke)
+        rc, out, _ = spark("line", "--cwd", "/tmp", "--shell", "bash", stdin="? files bigger than 1G this week")
+        rc2, out2, _ = spark("line", "--cwd", "/tmp", "--shell", "bash", stdin="? files bigger than 1G this week", extra=_v)
+        heard = _said()
+        t.ok(rc2 == 0 and out2 == out and heard == ["find, ., dash type, f, dash size, +1G, dash mtime, dash 7. "
+                                                     "Files over 1G changed this week."],
+             "line, clear: a command read with its symbols, then the hint; stdout unchanged", repr((out2, heard)))
+        os.remove(_spoke)
+        rc2, out2, _ = spark("line", stdin="rm-plain?", extra=dict(_v, SPARK_VOICE="on"))
+        t.ok(rc2 == 0 and not _said(2), "line, mode on: the prompt line is never spoken", out2)
         # blast radius: with a real build/ under --cwd, line 2 opens with the facts
         btree = os.path.join(home, "blast")
         os.makedirs(os.path.join(btree, "build", "sub"))
@@ -3742,6 +3923,7 @@ def main():
         spark("history", "clear")
         chat_tools_cases(t, spark, home)
         chat_pty_cases(t, env, home)
+        chat_voice_pty_cases(t, env, home)
 
         # wrap at 80 columns when piped: a long canned answer breaks into
         # short lines
@@ -4966,6 +5148,29 @@ def main():
              and "type yes to run it" in out2 and open(work + "/script.py").read() == _script,
              "spark do: the same block onto a file that exists is danger -- the typed yes; `no` runs nothing",
              out2 + err2)
+        os.remove(work + "/script.py")
+        # v1.70 clear mode: the step read aloud -- a block by its file and
+        # its lines -- the prompt's choices once, the end; stdout as ever
+        _spoke = os.path.join(home, "do-spoken")
+        rc2, out3, err2 = spark("do", "blockstep", stdin="\n", cwd=work,
+                                extra=dict(hook, SPARK_VOICE="clear", SPARK_VOICE_STUB=_spoke))
+        _heard = open(_spoke).read().splitlines() if os.path.exists(_spoke) else []
+        t.ok(rc2 == 0 and _heard[:2] == ["step 1: a here-document writing script.py, 5 lines. write the script.",
+                                         "Enter runs it, e edits, s skips, q quits."]
+             and _heard[-1] == "done: all done" and "     1  cat > script.py <<'EOF'" in out3
+             and open(work + "/script.py").read() == _script,
+             "spark do, clear: the block read as a here-document writing script.py, 5 lines; the choices once; "
+             "the end", repr((_heard, out3[-300:], err2[-300:])))
+        os.remove(_spoke)
+        rc2, out3, err2 = spark("do", "blockstep", stdin="no\n", cwd=work,
+                                extra=dict(hook, SPARK_VOICE="clear", SPARK_VOICE_STUB=_spoke))
+        _heard = open(_spoke).read().splitlines() if os.path.exists(_spoke) else []
+        t.ok(rc2 == 0 and _heard[:1] and _heard[0].startswith("warning: ")
+             and "step 1: a here-document writing script.py, 5 lines." in _heard[0]
+             and "this can destroy data -- type yes to run it." in _heard
+             and open(work + "/script.py").read() == _script,
+             "spark do, clear: a danger block's warning comes first; the typed yes still decides", repr(_heard))
+        os.remove(_spoke)
         os.remove(work + "/script.py")
         # danger reads every line: a block whose second line deletes
         os.makedirs(work + "/junk", exist_ok=True)

@@ -48,11 +48,12 @@ BLINK_DEFAULT = 14      # scanner frames between two blinks; 0 = never
 ROLES = ("accent", "muted", "warn", "trouble", "ok", "you")
 DEFAULT_SGR = {"accent": "1", "muted": "2", "warn": "31", "trouble": "1;31", "ok": "32", "you": ""}
 
-MOODS = ("asleep", "waking", "idle", "thinking", "pleased", "puzzled", "alarmed")
+MOODS = ("asleep", "waking", "idle", "thinking", "pleased", "puzzled", "alarmed", "listening")
 # The shipped kit's one face per mood, used until awaken writes the
 # machine's own into FACES_FILE. ASCII only: the console draws them.
+# listening (Esc v) is the idle face with an ear mark, `~`.
 DEFAULT_FACES = {"asleep": "(-.-)z", "waking": "(-o-)", "idle": "(o.o)", "thinking": "(o.O)",
-                 "pleased": "(^.^)", "puzzled": "(o.?)", "alarmed": "(O.O)",
+                 "pleased": "(^.^)", "puzzled": "(o.?)", "alarmed": "(O.O)", "listening": "(o.o)~",
                  "blink": "(-.-)", "glance": "(.o.)"}
 # the faces file's two settings beside the frames (awaken writes them):
 # RATE= the frames between blinks, TEMPER= the temperament's name
@@ -216,12 +217,16 @@ def faces(path=None):
     """The machine's faces: the faces file over the shipped kit, each
     cleaned. RATE= and TEMPER= are settings, not faces."""
     out = dict(DEFAULT_FACES)
+    own = set()
     for mood, frame in _read_kv(path or FACES_FILE).items():
         if mood.upper() in FACE_SETTINGS:
             continue
         m = mood.lower()
         if m in out and face_ok(frame):
             out[m] = frame.strip()
+            own.add(m)
+    if "idle" in own and "listening" not in own and face_ok(out["idle"] + "~"):
+        out["listening"] = out["idle"] + "~"     # a faces file older than the mood: its own idle, listening
     return out
 
 

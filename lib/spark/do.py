@@ -793,11 +793,40 @@ class _Terminal:
     """A person at the terminal -- or SPARK_DO_STDIN's harness, or nobody
     at all (detach: a timer's log). The lines spark do has always
     printed, the prompts it has always asked; sandboxed, no prompt until
-    the review, and a detached run leaves its changes waiting."""
+    the review, and a detached run leaves its changes waiting.
+    SPARK_VOICE=clear reads it aloud as well (voice.Reader): each step
+    (a block by its name and size), a danger step's warning first, each
+    prompt's choices once a run, the last lines of each output, the
+    notices and the end. Every spoken line is printed too, and nothing
+    spoken answers a prompt: danger stays a typed yes."""
     echo = True
 
     def __init__(self, detach=False):
         self.detach = detach
+        self.reader = None          # voice.Reader in clear mode, False otherwise
+        self.told = set()           # the prompts whose choices were read this run
+
+    def _aloud(self, text):
+        if self.detach or self.reader is False:
+            return
+        if self.reader is None:
+            try:
+                from . import voice
+                cfg = config.load()
+                self.reader = voice.Reader(cfg) if voice.mode(cfg) == "clear" else False
+            except Exception:       # noqa: BLE001 -- the voice never breaks the run
+                self.reader = False
+            if not self.reader:
+                return
+        self.reader.put(text)
+
+    def _choices(self, reply):
+        """The prompt's choices, read once a run (clear mode)."""
+        key = "danger" if reply.get("danger") else "step"
+        if key not in self.told:
+            self.told.add(key)
+            self._aloud("this can destroy data -- type yes to run it." if key == "danger"
+                        else "Enter runs it, e edits, s skips, q quits.")
 
     def refuse(self, text):
         say("%s do -- %s" % (MARK, text))
@@ -823,6 +852,7 @@ class _Terminal:
 
     def warn(self, text):
         say("%s %s" % (glyph("warn"), text))
+        self._aloud(text)
 
     def note(self, text):
         say("%s %s" % (_mark(), text))
@@ -830,6 +860,7 @@ class _Terminal:
     def missing(self, n, command, hint, word):
         say("%s %d  %s   %s" % (glyph("warn"), n, _head(command),
                                   _one_line("%s: not on this machine -- %s" % (word, hint))))
+        self._aloud("%s is not on this machine." % word)
 
     def step(self, n, reply, contained):
         """The step line; a block's every line, numbered, beneath it."""
@@ -842,6 +873,8 @@ class _Terminal:
             _block(command, reply["danger"])
         if reply["danger"] and contained:
             say("  %s can destroy data -- it runs in the sandbox's copy" % glyph("warn"))
+        from . import voice
+        self._aloud(voice.step_words(n, command, reply["hint"], reply["danger"]))
 
     def confirm(self, reply, cwd):
         """(run|skip|quit, the command): Enter, e, s, q -- danger needs `yes`.
@@ -850,6 +883,7 @@ class _Terminal:
         refused() -- a control character, past the cap -- is skipped
         (the proposal is what the model hears was skipped)."""
         command = reply["command"]
+        self._choices(reply)
         choice = _confirm(reply, cwd)
         while choice == "edit" and "\n" in command:
             new = _edit_block(command)
@@ -870,12 +904,17 @@ class _Terminal:
                 say("%s    edited: %s" % (_mark(), _head(command)))
                 _block(command, reply["danger"])
             choice = "run"
+            if reply["danger"]:
+                self._choices(reply)
             if reply["danger"] and _confirm(dict(reply, command=command), cwd) != "run":
                 choice = "skip"
         return choice, command
 
     def ran(self, rc, text):
-        pass                                  # the output was echoed as it came
+        # the output was echoed as it came; clear mode reads its last lines
+        from . import voice
+        last = voice.tail_words(text)
+        self._aloud(" ".join(x for x in (last + "." if last else "", "exit %d." % rc if rc else "") if x))
 
     def man(self, man):
         # what leaves is said: the page's lines ride the next request
@@ -887,6 +926,9 @@ class _Terminal:
         say("%s    proof: %s" % (_mark(), proof))
         if contained:
             return "run", proof
+        from . import voice
+        self._aloud("the proof: %s." % voice.spoken_command(proof))
+        self._choices({"danger": False})
         try:
             choice = _confirm({"danger": False, "command": proof}, cwd)
             if choice == "edit":
@@ -946,6 +988,9 @@ class _Terminal:
 
     def end(self, reason, hint, rc):
         END[0] = (reason, hint, rc)     # the run's last word, for the chat's /do to keep
+        self._aloud("%s: %s" % (reason, hint) if reason in ("done", "error") else hint)
+        if self.reader:
+            self.reader.drain(10)       # the end begins to play before the process goes
 
 
 class _Porcelain:

@@ -131,7 +131,8 @@ def pick(choices, seed, salt):
 
 def make_faces(eyes, mouth, body):
     """Every mood of one face from its parts: the same eyes, mouth and body
-    in each, the blink closed eyes without the asleep face's z."""
+    in each, the blink closed eyes without the asleep face's z, listening
+    the idle face with an ear mark (`~`)."""
     left, right = body[0], body[-1]
     wide = "o" if eyes == "O" else "O"
 
@@ -139,7 +140,8 @@ def make_faces(eyes, mouth, body):
         return left + a + m + b + right + tail
     return {"idle": f(eyes, mouth, eyes), "blink": f("-", mouth, "-"), "asleep": f("-", mouth, "-", "z"),
             "waking": f("-", "o", "-"), "thinking": f(eyes, mouth, wide), "pleased": f("^", mouth, "^"),
-            "puzzled": f(eyes, mouth, "?"), "alarmed": f("O", mouth, "O"), "glance": f(".", eyes, ".")}
+            "puzzled": f(eyes, mouth, "?"), "alarmed": f("O", mouth, "O"), "glance": f(".", eyes, "."),
+            "listening": f(eyes, mouth, eyes, "~")}
 
 
 def face(mood="idle"):

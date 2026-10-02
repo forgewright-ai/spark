@@ -47,7 +47,7 @@ _spark() {
             memory)  comp=(add forget clear on off) ;;
             reveal)  comp=(auto off) ;;
             look)    comp=(on off auto status) ;;
-            voice)   comp=(clear on off rate test status) ;;
+            voice)   comp=(clear on off rate test listen stop status) ;;
             height)  comp=(1 2 3 4 5) ;;
             bar)     comp=(line) ;;
             check)   comp=(--watch --porcelain --report --fresh --fetch --selftest --chaos) ;;

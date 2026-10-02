@@ -44,6 +44,19 @@
 # wait=False), stop(), listen(cfg), spoken_command(command), lang_of(text),
 # screen_reader(); below them speak(), character(), play(), fetch(),
 # mint(), read_recipe() and write_recipe().
+#
+# The surfaces (the chat, the prompt line, spark do) read through these:
+# Reader, the lines one after another in a thread of its own, so a prompt
+# never waits for a voice; aloud_later(), a line spoken by a detached
+# process after the verb has exited (spark line: the widget waits for no
+# speech); line_words(), step_words() and block_words(), what clear mode
+# says for contract 4's lines and for a spark do step. Every spoken line
+# is printed too: the voice only adds sound. Nothing here answers a
+# confirmation: a spoken yes never runs a step.
+#
+# SPARK_VOICE_STUB=<file>, the tests' seam: say_aloud appends the text
+# it would speak to that file (one line each) and plays nothing, and
+# listen() opens no microphone: it hears SPARK_VOICE_STUB_HEARD.
 
 import array
 import hashlib
@@ -60,6 +73,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import threading
 import time
 import wave
 
@@ -78,6 +92,9 @@ VOICE_USAGE = """%s voice -- spark reads aloud, and hears a question
   spark voice rate [N]          the clear voice's speed, 50 to 300 (100 is
                                 as made)
   spark voice test              one line aloud, in the current mode
+  spark voice listen            one spoken question, written out: a pause
+                                ends it (Esc v at the prompt and in chat)
+  spark voice stop              stop speaking now (Esc x)
 
   The first on or clear downloads the engine, about 380 MB, into
   ~/.local/share/spark/voice: sherpa-onnx, the Kokoro voice, Whisper and a
@@ -891,6 +908,9 @@ def say_aloud(cfg, text, wait=False):
             return None
         if m == "clear" and screen_reader() and not anyway():
             return None
+        if os.environ.get("SPARK_VOICE_STUB"):
+            _stubbed(text)
+            return None
         stop()
         wav = speak(cfg, text, m)
         try:
@@ -921,6 +941,9 @@ def listen(cfg=None, max_seconds=15):
     directory; Whisper reads the segment; the directory goes before this
     returns, always. VoiceError when the engine is not here."""
     cfg = cfg or config.load()
+    if os.environ.get("SPARK_VOICE_STUB"):
+        heard = " ".join(os.environ.get("SPARK_VOICE_STUB_HEARD", "").split())
+        return heard, (lang_of(heard) if heard else "")
     tool = mic_tool()
     vad = os.path.join(voice_dir(), "vad", "silero_vad.onnx")
     ears = os.path.join(voice_dir(), "ears")
@@ -1063,6 +1086,194 @@ def screen_reader(mac=None):
     if os.path.isdir(os.path.join(os.environ.get("SPARK_SYS_MODULE", "/sys/module"), "speakup")):
         return "speakup"
     return ""
+
+
+# --------------------------------------------------------------- surfaces
+def _stubbed(text):
+    """The tests' seam: the text say_aloud would speak, one line appended
+    to SPARK_VOICE_STUB; nothing is synthesized or played."""
+    try:
+        with open(os.environ["SPARK_VOICE_STUB"], "a", encoding="utf-8") as f:
+            f.write(_speakable(text) + "\n")
+    except OSError:
+        pass
+
+
+_MARKS = re.compile(r"^\s*(?:```.*|#{1,6}\s+|>\s+|[-*+]\s+|\d+[.)]\s+)|[`*_]{1,3}(?=\S)|(?<=\S)[`*_]{1,3}", re.M)
+
+
+def plain(text):
+    """A reply as it is read aloud: the Markdown marks (fences, headings,
+    bullets, emphasis, backticks) gone, the words kept."""
+    return _speakable(_MARKS.sub(" ", text or ""))
+
+
+class Reader:
+    """The lines a surface reads aloud, one after another, in a thread of
+    its own: put() returns at once, so a prompt never waits for a voice.
+    cut=True drops what waits and stops what plays (a new reply over an
+    old one); hush() is Esc x; drain() waits, bounded, until every line
+    put has begun to play -- the player outlives the process, so a
+    goodbye is never cut off by the exit."""
+
+    def __init__(self, cfg=None):
+        self.cfg = cfg
+        self.lines = []
+        self.gen = 0
+        self.busy = False
+        self.playing = None
+        self.cv = threading.Condition()
+        self.thread = None
+
+    def put(self, text, cut=False):
+        text = plain(text)
+        if not text:
+            return
+        with self.cv:
+            if cut:
+                self._drop()
+            self.lines.append((self.gen, text))
+            if self.thread is None:
+                self.thread = threading.Thread(target=self._run, name="spark-voice", daemon=True)
+                self.thread.start()
+            self.cv.notify_all()
+
+    def _drop(self):
+        del self.lines[:]
+        self.gen += 1
+        h, self.playing = self.playing, None
+        if h is not None:
+            h.stop()
+
+    def hush(self):
+        """Esc x: what waits is dropped, what plays stops (and another
+        spark's voice too). True when something stopped."""
+        with self.cv:
+            had = bool(self.lines) or self.playing is not None
+            self._drop()
+        return stop() or had
+
+    def _run(self):
+        while True:
+            with self.cv:
+                while not self.lines:
+                    self.cv.wait()
+                gen, text = self.lines.pop(0)
+                self.busy = True
+            h = None
+            try:
+                h = say_aloud(self.cfg, text, wait=False)
+            finally:
+                with self.cv:
+                    stale = gen != self.gen
+                    self.busy = False
+                    self.playing = None if stale else h
+                    self.cv.notify_all()
+            if h is not None:
+                if stale:
+                    h.stop()
+                else:
+                    try:
+                        h.wait()
+                    except Exception:  # noqa: BLE001 -- a player gone wrong ends this line only
+                        pass
+                    with self.cv:
+                        if self.playing is h:
+                            self.playing = None
+                        self.cv.notify_all()
+
+    def drain(self, timeout=10.0, played=False):
+        """Wait until every line put has begun to play (played=True: has
+        finished), at most `timeout` seconds."""
+        end = time.time() + timeout
+        with self.cv:
+            while self.lines or self.busy or (played and self.playing is not None):
+                left = end - time.time()
+                if left <= 0:
+                    return False
+                self.cv.wait(min(0.2, left))
+        return True
+
+
+def aloud_later(cfg, text):
+    """The text spoken by a process of its own, detached: the verb that
+    asked exits at once and its caller (a widget) waits for no speech.
+    The text rides the child's stdin, never its argv. False when there
+    is nothing to say or the mode is off."""
+    text = _speakable(text)
+    if not text or mode(cfg) == "off":
+        return False
+    lib = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    code = ("import sys; sys.path.insert(0, sys.argv[1]); from spark import voice; "
+            "voice.say_aloud(None, sys.stdin.read(), wait=True)")
+    try:
+        p = subprocess.Popen([sys.executable, "-c", code, lib], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL, start_new_session=True, close_fds=True)
+        p.stdin.write(text.encode("utf-8", "replace"))
+        p.stdin.close()
+    except (OSError, ValueError):
+        return False
+    return True
+
+
+def _said(hint):
+    """A hint as one sentence to read: a danger's `<- facts -- ` lead as
+    plain words, its own end, a full stop added."""
+    h = " ".join((hint or "").split()).rstrip()
+    if h.startswith("<- "):
+        h = h[3:].replace(" -- ", ", ", 1)
+    return h if not h or h[-1] in ".!?" else h + "."
+
+
+def line_words(lines):
+    """What clear mode says for contract 4's lines (spark line's stdout):
+    a command by its symbols, then the hint; a danger line its warning
+    first; an answer as it is; an error its reason. '' for nothing."""
+    lines = [l for l in lines if l is not None]
+    if not lines:
+        return ""
+    head, _tab, command = lines[0].partition("\t")
+    hint = lines[1] if len(lines) > 1 else ""
+    if head == "cmd" and command:
+        return "%s. %s" % (spoken_command(command), _said(hint))
+    if head == "danger":
+        cmd = (" " + spoken_command(command) + ".") if command else ""
+        return ("warning: %s%s" % (_said(hint), cmd)).strip()
+    if head in ("answer", "error"):
+        return _said(hint)
+    return ""
+
+
+_HEREDOC = re.compile(r"<<-?\s*['\"]?\w")
+_INTO = re.compile(r"(?:^|[\s;|&])(?:\d?>>?|&>)\s*([^\s<>|&;]+)|\btee\s+(?:-a\s+)?([^\s<>|&;-][^\s<>|&;]*)")
+
+
+def block_words(command):
+    """A block as clear mode names it: "a here-document writing NAME, K
+    lines" when its first line feeds a here-document into a file, else
+    "a block of K lines"."""
+    first = command.split("\n", 1)[0]
+    k = command.count("\n") + 1
+    m = _INTO.search(first)
+    name = (m.group(1) or m.group(2)) if m else ""
+    if name and _HEREDOC.search(first) and not name.startswith("/dev/"):
+        return "a here-document writing %s, %d lines" % (os.path.basename(name.strip("'\"")) or name, k)
+    return "a block of %d lines" % k
+
+
+def step_words(n, command, hint, danger=False):
+    """A spark do step as clear mode reads it: a danger step's warning
+    first, then the step, then its hint."""
+    what = block_words(command) if "\n" in command else spoken_command(command)
+    if danger:
+        return "warning: %s step %d: %s." % (_said(hint), n, what)
+    return "step %d: %s. %s" % (n, what, _said(hint))
+
+
+def tail_words(text, n=3):
+    """The last `n` lines of an output, as they are read."""
+    rows = [l.strip() for l in (text or "").splitlines() if l.strip()]
+    return ". ".join(rows[-n:])
 
 
 # ------------------------------------------------------------------ state
@@ -1234,12 +1445,56 @@ def cmd_voice(args):
             say("%s voice -- %s" % (MARK, e))
             return 1
         return 0
+    if word == "stop" and not rest:
+        say("stopped" if stop() else "nothing was playing")
+        return 0
+    if word == "listen" and rest in ([], ["--buffer"]):
+        return _listen_verb(cfg, buffer=bool(rest))
     if len(args) > 1 or args[-1].endswith("?"):
         # `spark voice of reason?` is a question
         from . import cli
         return cli.main(["voice"] + list(args))
-    say("%s voice -- no word %s: spark voice on, clear, off, rate N or test" % (MARK, args[0]))
+    say("%s voice -- no word %s: spark voice on, clear, off, rate N, test, listen or stop" % (MARK, args[0]))
     return 2
+
+
+def heard_line(text):
+    """What was heard as one line a prompt may hold: every control
+    character gone (a heard newline never sends the line), spaces folded."""
+    t = "".join(c if (c >= " " and not ("\x7f" <= c <= "\x9f")) else " " for c in text or "")
+    return " ".join(t.split())
+
+
+def _listen_verb(cfg, buffer=False):
+    """`spark voice listen`: one spoken question, written out. --buffer
+    (the widgets' Esc v) prints the words on stdout and nothing else:
+    exit 0, 1 when nothing was heard, 2 when the voice cannot listen (the
+    reason on stderr)."""
+    def no(why):
+        if buffer:
+            sys.stderr.write("%s voice -- %s\n" % (MARK, why))
+        else:
+            say("%s voice -- %s" % (MARK, why))
+        return 2
+    if mode(cfg) == "off":
+        return no("the voice is off -- spark voice on or clear, then Esc v listens")
+    if not buffer:
+        say("listening -- speak, a pause ends it")
+    try:
+        text, _lang = listen(cfg)
+    except VoiceError as e:
+        return no(str(e))
+    except KeyboardInterrupt:
+        if not buffer:
+            say()
+        return 130
+    text = heard_line(text)
+    if not text:
+        if not buffer:
+            say("nothing heard")
+        return 1
+    say(text)
+    return 0
 
 
 def _flag(on):

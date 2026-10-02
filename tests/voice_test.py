@@ -16,7 +16,13 @@ and uninstall naming the voice; play(),
 stop(); listen() and its private directory; spoken_command(); lang_of();
 screen_reader(); say_aloud() never raising; the `spark voice` verb under
 SPARK_NO_APPLY; the check row's na, ok and warn; awaken's offer (keep,
-again, none, and none under SPARK_NO_APPLY).
+again, none, and none under SPARK_NO_APPLY). Then the surfaces' half:
+the SPARK_VOICE_STUB seam (what would be spoken, appended to a file; a
+heard question from SPARK_VOICE_STUB_HEARD, no microphone), heard_line()
+taking every control character out, what clear mode says for contract
+4's lines and for a spark do step or block, plain() over Markdown, the
+Reader's order, cut and hush, aloud_later() from a detached process, and
+`spark voice listen [--buffer]` and `spark voice stop`.
 """
 import array
 import hashlib
@@ -625,6 +631,93 @@ rc, out = awaken("plain\n\n")
 check("awaken with no engine: the size asked first (yes/NO), Enter is no, nothing fetched",
       rc == 0 and "MB to download first? yes/NO" in out and not os.path.exists(VDIR) and voice.read_recipe() is None,
       out[-600:])
+
+# ---------------------------------------------------- 15. the surfaces
+STUBF = os.path.join(ROOT, "spoken")
+
+
+def spoken():
+    try:
+        with open(STUBF) as f:
+            return f.read().splitlines()
+    except OSError:
+        return []
+
+
+os.environ["SPARK_VOICE_STUB"] = STUBF
+check("stub: say_aloud appends what it would say, one line, and plays nothing",
+      voice.say_aloud(Cfg(SPARK_VOICE="clear"), "two\nlines  here") is None and spoken() == ["two lines here"],
+      spoken())
+voice.say_aloud(Cfg(SPARK_VOICE="off"), "never")
+check("stub: mode off says nothing", spoken() == ["two lines here"], spoken())
+os.environ["SPARK_VOICE_STUB_HEARD"] = "  what is   using the disk  "
+check("stub: listen hears SPARK_VOICE_STUB_HEARD and opens no microphone (the engine is gone)",
+      voice.listen(Cfg(SPARK_VOICE="clear")) == ("what is using the disk", "en"))
+check("heard_line: every control character out -- a heard newline never sends a line",
+      voice.heard_line("rm -rf /\r\nyes\x1b[A\x07 ok") == "rm -rf / yes [A ok")
+check("line_words: a command by its symbols, then the hint",
+      voice.line_words(["cmd\tdu -ah ~ | sort -rh", "The biggest first"])
+      == "du, dash a h, tilde, pipe, sort, dash r h. The biggest first.")
+check("line_words: a danger line says warning first, then the hint's facts, then the command",
+      voice.line_words(["danger\trm -rf build", "<- 5 files -- removes the build", "proof\ttest ! -d build"])
+      == "warning: 5 files, removes the build. rm, dash r f, build.")
+check("line_words: an answer as it is; an error its reason; a paste's danger its warning",
+      voice.line_words(["answer", "Forty-two"]) == "Forty-two."
+      and voice.line_words(["error", "no engine is awake"]) == "no engine is awake."
+      and voice.line_words(["danger", "deletes the home"]) == "warning: deletes the home."
+      and voice.line_words([]) == "" and voice.line_words(["spark line -- usage"]) == "")
+block = "cat > script.py <<'EOF'\nprint(1)\nprint(2)\nprint(3)\nEOF"
+check("block_words: a here-document into a file is named by the file and its lines",
+      voice.block_words(block) == "a here-document writing script.py, 5 lines"
+      and voice.block_words("cat <<EOF > out.txt\nx\nEOF") == "a here-document writing out.txt, 3 lines"
+      and voice.block_words("tee -a notes.md <<'END'\nx\nEND") == "a here-document writing notes.md, 3 lines"
+      and voice.block_words("echo one\necho two") == "a block of 2 lines"
+      and voice.block_words("cat <<EOF\nx\nEOF") == "a block of 3 lines")
+check("step_words: a step, then its hint; a danger step's warning first",
+      voice.step_words(1, block, "write the script") == "step 1: a here-document writing script.py, 5 lines. write the script."
+      and voice.step_words(2, "rm -rf ./junk", "tidy up", True).startswith("warning: tidy up. step 2: rm, dash r f, "))
+check("plain: Markdown marks out, the words kept",
+      voice.plain("# Title\n- **bold** and `code`\n```sh\nls\n```") == "Title bold and code ls")
+os.remove(STUBF)
+r = voice.Reader(Cfg(SPARK_VOICE="clear"))
+for line in ("one", "two", "three"):
+    r.put(line)
+check("Reader: every line put is said, in order; drain waits for them",
+      r.drain(10) and spoken() == ["one", "two", "three"], spoken())
+r.put("four")
+r.put("five", cut=True)
+r.drain(10)
+check("Reader: cut drops what waited and says the new line", spoken()[-1] == "five", spoken())
+r.hush()
+check("Reader: hush leaves nothing waiting", r.drain(1) and not r.lines)
+os.remove(STUBF)
+check("aloud_later: off says nothing", voice.aloud_later(Cfg(SPARK_VOICE="off"), "x") is False)
+os.environ["SPARK_VOICE"] = "clear"
+t0 = time.time()
+started = voice.aloud_later(None, "said by a detached process")
+while time.time() - t0 < 15 and not spoken():
+    time.sleep(0.1)
+check("aloud_later: a detached process says it; the caller returned at once",
+      started and spoken() == ["said by a detached process"], spoken())
+rc, out = spark("voice", "listen", "--buffer")
+check("spark voice listen --buffer: the words on stdout alone, exit 0", rc == 0 and out == "what is using the disk\n",
+      repr(out))
+rc, out = spark("voice", "listen")
+check("spark voice listen: says it listens, then the words",
+      rc == 0 and out == "listening -- speak, a pause ends it\nwhat is using the disk\n", repr(out))
+rc, out = spark("voice", "listen", "--buffer", extra={"SPARK_VOICE_STUB_HEARD": " "})
+check("spark voice listen --buffer, nothing heard: nothing on stdout, exit 1", rc == 1 and out == "", repr(out))
+env_off = dict(os.environ, SPARK_VOICE="off", SPARK_NO_APPLY="1")
+p = subprocess.run([PY, SPARK, "voice", "listen", "--buffer"], capture_output=True, text=True, env=env_off, timeout=60)
+check("spark voice listen --buffer while off: stdout empty, the reason on stderr, exit 2",
+      p.returncode == 2 and p.stdout == "" and "off" in p.stderr, (p.returncode, p.stdout, p.stderr))
+rc, out = spark("voice", "stop")
+check("spark voice stop: nothing playing, said, exit 0", rc == 0 and out == "nothing was playing\n", repr(out))
+rc, out = spark("voice", "-h")
+check("spark voice -h: listen and stop named, within 80 columns",
+      "spark voice listen" in out and "spark voice stop" in out and max(len(l) for l in out.splitlines()) <= 80, out)
+for k in ("SPARK_VOICE", "SPARK_VOICE_STUB", "SPARK_VOICE_STUB_HEARD"):
+    os.environ.pop(k, None)
 
 shutil.rmtree(ROOT, ignore_errors=True)
 print("voice_test: %s" % ("all ok" if not FAILED else "%d failed" % FAILED))

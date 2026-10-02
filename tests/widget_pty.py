@@ -19,7 +19,12 @@
 # height 2 gets its hint on the blank row, Esc k moves the row, an awake
 # look file brings the greeting and the news once, the built-in colour and
 # a long failure's duration; one text per fallback; bash chains an EXIT
-# trap it found.
+# trap it found. Then the voice keys (v1.70): Esc v lands what a stub
+# `spark voice listen --buffer` heard -- a `? ` question on an empty line,
+# beside the words at the cursor otherwise -- and runs nothing; the row
+# says it listens (the listening face when awake), nothing heard is one
+# quiet line, a voice that cannot listen says how to turn it on; Esc x
+# is `spark voice stop`.
 #
 #   widget_pty.py bash home/.config/spark/widget.bash
 #   widget_pty.py zsh  home/.config/spark/widget.zsh
@@ -60,6 +65,18 @@ fi
 if [ "$1" = line ] && [ "$2" = "--paste" ]; then
     cat > /dev/null
     printf 'answer\ntwo echo lines, harmless\n'
+    exit 0
+fi
+# the voice keys (v1.70): Esc v asks `spark voice listen --buffer` --
+# STUB_HEARD is what it heard (empty: nothing, exit 1; STUB_NOVOICE: the
+# voice is off, exit 2) -- and Esc x `spark voice stop`; both logged
+if [ "$1" = voice ]; then
+    printf '%s\n' "$*" >> "${STUB_VOICE:-/dev/null}"
+    if [ "$2" = listen ]; then
+        [ -n "${STUB_NOVOICE:-}" ] && { echo "spark voice -- the voice is off" >&2; exit 2; }
+        [ -n "${STUB_HEARD:-}" ] || exit 1
+        printf '%s\n' "$STUB_HEARD"
+    fi
     exit 0
 fi
 # the row's height (v1.59): Esc k keeps its choice through `spark height N`
@@ -271,7 +288,7 @@ def wrapped(shell, widget, tmp, env, prompt, ok):
 # the look file as look.content writes it: one switch, SPARK_LOOK, so the
 # three parts always carry the same value
 LOOK_AWAKE = ("AWAKE=yes\nMOTION=on\nCOLOUR=on\nWORDS=on\nHEIGHT=2\nSGR_ACCENT=1\nSGR_MUTED=2\n"
-              "SGR_WARN=31\nSGR_OK=32\nSGR_TROUBLE=1;31\nSGR_YOU=\nFACE_IDLE=(o.o)\n"
+              "SGR_WARN=31\nSGR_OK=32\nSGR_TROUBLE=1;31\nSGR_YOU=\nFACE_IDLE=(o.o)\nFACE_LISTENING=(o.o)~\n"
               # a value with an escape in it is dropped whole: the face stays
               "FACE_IDLE=\x1b[2J(x.x)\nFACE_ASLEEP=(-.-)z\n")
 
@@ -438,6 +455,14 @@ def living(shell, widget, tmp, env, ok):
        "awake: the built-in accent, at height 2", since()[-300:])
     sh.send("\r")
     sh.expect(prompt)
+    # awake, Esc v: the row shows the listening face while it listens
+    since = sh.mark()
+    sh.send("\x1bv")
+    ok(sh.expect("(o.o)~ listening -- speak, a pause ends it"), "awake: Esc v shows the listening face",
+       since()[-300:])
+    ok(sh.expect("heard -- Enter asks it"), "awake: Esc v lands what it heard", since()[-300:])
+    sh.send("\x15")
+    sh.settle()
     with open(look, "w") as f:
         f.write(LOOK_AWAKE.replace("MOTION=on", "MOTION=auto").replace("COLOUR=on", "COLOUR=auto")
                 .replace("WORDS=on", "WORDS=auto"))
@@ -652,8 +677,9 @@ def main(shell, widget):
         log = os.path.join(tmp, "asked.log")
         elog = os.path.join(tmp, "explained.log")
         envlog = os.path.join(tmp, "env.log")
+        vlog = os.path.join(tmp, "voice.log")
         env = {"HOME": home, "XDG_STATE_HOME": state, "SPARK_BIN": stub, "STUB_LOG": log,
-               "EXPLAIN_LOG": elog, "STUB_ENV": envlog,
+               "EXPLAIN_LOG": elog, "STUB_ENV": envlog, "STUB_VOICE": vlog, "STUB_HEARD": "list the big files",
                "PATH": os.path.join(home, "bin") + ":" + os.environ.get("PATH", ""),
                "TERM": "xterm-256color", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "ZDOTDIR": home}
         # the judged line's cases run the real spark line behind the stub
@@ -1131,6 +1157,69 @@ def main(shell, widget):
             seen_env = []
         ok(seen_env and all(l == "SPARK_HINT_ROW=1" for l in seen_env) and len(seen_env) >= asked(),
            "every spark line call carried SPARK_HINT_ROW=1 (the ask and the paste)", seen_env[:5])
+
+        # 7i. the voice keys (v1.70): Esc v lands the heard words as a
+        # question on an empty line and runs nothing; Enter asks spark
+        n = asked()
+        since = sh.mark()
+        sh.send("\x1bv")
+        ok(sh.expect("* listening -- speak, a pause ends it"), "Esc v: the row says it listens", since())
+        ok(sh.expect("heard -- Enter asks it") and sh.expect("? list the big files"),
+           "Esc v: the heard words land in the line as a ? question", since())
+        time.sleep(0.4)
+        sh.read(0.4)
+        try:
+            with open(vlog) as f:
+                vcalls = f.read().splitlines()
+        except OSError:
+            vcalls = []
+        ok(asked() == n and "EXECUTED-MARK" not in since() and vcalls == ["voice listen --buffer"],
+           "Esc v: nothing ran and nothing was asked -- only spark voice listen --buffer", (vcalls, since()[-200:]))
+        sh.send("\r")
+        ok(sh.expect("A hint about it"), "Esc v: Enter asks the heard question", since())
+        with open(log) as f:
+            last = f.read().splitlines()[-1:]
+        ok(asked() == n + 1 and last == ["? list the big files"], "Esc v: spark line got the heard words", last)
+        sh.send("\x15")
+        sh.settle()
+        # with words on the line: the heard ones join them at the cursor
+        since = sh.mark()
+        sh.send("echo hi")
+        time.sleep(0.2)
+        sh.send("\x1bv")
+        ok(sh.expect("heard -- in your line"), "Esc v on a line: said where the words went", since())
+        sh.send("\r")
+        ok(sh.expect("hi list the big files"), "Esc v on a line: the words join at the cursor, run only on Enter",
+           since())
+        sh.expect(prompt)
+        sh.settle()
+        # nothing heard; a voice that cannot listen
+        sh.send("export STUB_HEARD=\r")
+        sh.expect(prompt)
+        sh.settle()
+        since = sh.mark()
+        sh.send("\x1bv")
+        ok(sh.expect("* nothing heard"), "Esc v, nothing heard: one quiet line", since())
+        sh.send("export STUB_NOVOICE=1\r")
+        sh.expect(prompt)
+        sh.settle()
+        since = sh.mark()
+        sh.send("\x1bv")
+        ok(sh.expect("Esc v needs the voice -- spark voice on or clear"), "Esc v, no voice: says how to turn it on",
+           since())
+        sh.send("unset STUB_NOVOICE; export STUB_HEARD='list the big files'\r")
+        sh.expect(prompt)
+        sh.settle()
+        # Esc x: spark voice stop
+        sh.send("\x1bx")
+        time.sleep(0.5)
+        try:
+            with open(vlog) as f:
+                vcalls = f.read().splitlines()
+        except OSError:
+            vcalls = []
+        ok(vcalls[-1:] == ["voice stop"], "Esc x: spark voice stop", vcalls)
+        sh.settle()
 
         # 8. exit removes the marker
         sh.send("exit\r")

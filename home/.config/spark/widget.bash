@@ -14,6 +14,10 @@
 #              variables and die with it.
 #   Esc k      moves spark's row: 1, 2 or 3 rows above the line you type
 #              on (`spark height N` keeps it). A two-line prompt needs 2.
+#   Esc v      listens (spark voice on or clear): a pause ends it, and the
+#              words land in your line -- as a `? ` question on an empty
+#              one. Nothing runs until you press Enter.
+#   Esc x      stops spark speaking.
 #   spark off / spark on        silence / restore (a flag file, checked at
 #              every Enter and on the failing path, so one `spark off`
 #              reaches every pane at once)
@@ -70,11 +74,11 @@ unset _spark_exit
 # only when it is newer than the marker, then the marker is written anew.
 # SPARK_HEIGHT in the environment wins over the file's HEIGHT.
 _spark_height=1 _spark_lk_had='' _spark_lk_awake='' _spark_lk_colour=''
-_spark_lk_words='' _spark_lk_acc='' _spark_lk_warn='' _spark_lk_face=''
+_spark_lk_words='' _spark_lk_acc='' _spark_lk_warn='' _spark_lk_face='' _spark_lk_ear=''
 _spark_look_read() {
     local f=$SPARK_DIR/look line k v n=0
     _spark_height=1 _spark_lk_had='' _spark_lk_awake='' _spark_lk_colour=''
-    _spark_lk_words='' _spark_lk_acc='' _spark_lk_warn='' _spark_lk_face=''
+    _spark_lk_words='' _spark_lk_acc='' _spark_lk_warn='' _spark_lk_face='' _spark_lk_ear=''
     if [[ -r $f ]]; then
         _spark_lk_had=1
         while (( n++ < 64 )) && { IFS= read -r line || [[ -n $line ]]; }; do
@@ -89,6 +93,7 @@ _spark_look_read() {
                 SGR_ACCENT) _spark_lk_acc=$v ;;
                 SGR_WARN) _spark_lk_warn=$v ;;
                 FACE_IDLE) _spark_lk_face=$v ;;
+                FACE_LISTENING) _spark_lk_ear=$v ;;
             esac
         done < "$f"
     fi
@@ -704,6 +709,43 @@ _spark_height_key() {
     _spark_say "$_spark_h spark writes here. Esc k moves this line."
 }
 bind -x '"\ek": _spark_height_key'
+
+# --- Esc v: listen; Esc x: stop speaking -------------------------------------
+# Esc v hands the hearing to `spark voice listen --buffer` (the words on
+# stdout and nothing else; a pause ends them) and lands the words at the
+# cursor -- on an empty line as a `? ` question, so Enter asks spark and
+# never runs what was heard. While it listens the row says so, with the
+# listening face on an awake machine. Esc x is `spark voice stop`.
+_spark_listen() {
+    local words rc face=''
+    _spark_reap
+    [[ -e $SPARK_DIR/off ]] && return
+    [[ $_spark_lk_awake == yes && -n $_spark_lk_ear ]] && face="$_spark_lk_ear "
+    _spark_say "$_spark_h ${face}listening -- speak, a pause ends it"
+    _spark_hold "$READLINE_LINE"          # the line stays while it listens
+    words=$("$SPARK_BIN" voice listen --buffer </dev/null 2>/dev/null)
+    rc=$?
+    _spark_drop
+    words=${words//[[:cntrl:]]/ }
+    if (( rc == 0 )) && [[ -n ${words//[[:space:]]/} ]]; then
+        if [[ -z $READLINE_LINE ]]; then
+            READLINE_LINE="? $words"; READLINE_POINT=${#READLINE_LINE}
+            _spark_say "$_spark_h heard -- Enter asks it"
+        else
+            (( READLINE_POINT > 0 )) && [[ ${READLINE_LINE:READLINE_POINT-1:1} != [[:space:]] ]] && words=" $words"
+            READLINE_LINE=${READLINE_LINE:0:READLINE_POINT}$words${READLINE_LINE:READLINE_POINT}
+            READLINE_POINT=$(( READLINE_POINT + ${#words} ))
+            _spark_say "$_spark_h heard -- in your line"
+        fi
+    elif (( rc == 1 || rc == 130 )); then
+        _spark_say "$_spark_h nothing heard"
+    else
+        _spark_say "$_spark_h Esc v needs the voice -- spark voice on or clear"
+    fi
+}
+bind -x '"\ev": _spark_listen'
+_spark_hush() { "$SPARK_BIN" voice stop </dev/null >/dev/null 2>&1; }
+bind -x '"\ex": _spark_hush'
 
 # --- paste inspection: a multi-line paste into an EMPTY prompt --------------
 # Rebinding the paste-begin sequence takes the paste from readline: the

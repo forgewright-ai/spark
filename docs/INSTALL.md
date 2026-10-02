@@ -235,16 +235,16 @@ your newest thread and says so in its opening lines:
 
     continuing "how do I resize a partition" (12 min ago) -- /new starts fresh
 
-On a machine that is not awake, the opening is `chat -- /help, Ctrl-D
-or /q ends` and that line. Awake, it opens with the face and a greeting
-from the machine's own words, then the continuing line, then `/help
-lists the commands; Ctrl-D ends`.
+On a machine that is not awake, the opening is `chat -- /help, Esc,
+Ctrl-D or /q ends` and that line. Awake, it opens with the face and a
+greeting from the machine's own words, then the continuing line, then
+`/help lists the commands; Esc or Ctrl-D ends`.
 
-`/q` or `Ctrl-D` ends. `Ctrl-C` clears the line, or cancels a reply,
-and the chat goes on. `spark chat --thread N` continues an older thread
-from the `spark history` list. A thread lives `SPARK_HISTORY` days.
-With `SPARK_HISTORY=off`, `spark chat` goes on with the newest kept
-thread.
+`Esc` on an empty line, `/q` or `Ctrl-D` ends. `Ctrl-C` clears the
+line, or cancels a reply, and the chat goes on. `spark chat --thread N`
+continues an older thread from the `spark history` list. A thread
+lives `SPARK_HISTORY` days. With `SPARK_HISTORY=off`, `spark chat` goes
+on with the newest kept thread.
 
 The commands:
 
@@ -263,6 +263,8 @@ The commands:
 | `/read @FILE [question]` | an answer about the file, every line quoting it |
 | `/do GOAL` | a task, one confirmed step at a time, as `spark do` runs it |
 | `/do --sandbox GOAL` | the same task in a copy, as `spark do --sandbox` runs it |
+| `/aloud` | speaks every reply, or stops: `spark voice on` or `clear` first |
+| `/again` | the last reply again, printed and spoken |
 | `/q` | ends the chat |
 
 `/copy` uses the clipboard tool it finds: `pbcopy` on macOS, `wl-copy`

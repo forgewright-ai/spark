@@ -837,9 +837,52 @@ def _judged(s, reply, command, hint, text, asked, ms, know, early):
     return reply, command, hint, kind, ms, early, None
 
 
+class _Tee:
+    """stdout as it was, every byte the same, and a copy kept: what clear
+    mode reads once spark line has written its lines."""
+
+    def __init__(self, out):
+        self.out, self.kept = out, []
+
+    def write(self, s):
+        self.kept.append(s)
+        return self.out.write(s)
+
+    def flush(self):
+        self.out.flush()
+
+    def lines(self):
+        return "".join(self.kept).splitlines()
+
+    def __getattr__(self, name):
+        return getattr(self.out, name)
+
+
 def cmd_line(args):
     """Contract 4. stdin = the prompt buffer. stdout line 1 = cmd<TAB>command
-    | danger<TAB>command | answer | error; line 2 = hint / answer / reason."""
+    | danger<TAB>command | answer | error; line 2 = hint / answer / reason.
+    SPARK_VOICE=clear: the lines, once written, are read aloud by a
+    detached process (voice.aloud_later) -- the widget waits for no
+    speech, and stdout stays byte for byte contract 4. Never in mode on.
+    The mode is read from the config alone: the line imports no voice
+    unless it speaks."""
+    try:
+        clear = config.load().get("SPARK_VOICE", "off").strip().lower() == "clear"
+    except Exception:       # noqa: BLE001 -- the voice never breaks the line
+        clear = False
+    if not clear:
+        return _cmd_line(args)
+    from . import voice
+    tee = sys.stdout = _Tee(sys.stdout)
+    try:
+        return _cmd_line(args)
+    finally:
+        sys.stdout = tee.out
+        if not (args[:1] and args[0] in ("-h", "--help", "help")):
+            voice.aloud_later(None, voice.line_words(tee.lines()))
+
+
+def _cmd_line(args):
     if _help(args, LINE_USAGE):
         return 0
     cwd, shell = "", _shell_default()

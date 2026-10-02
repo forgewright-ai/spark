@@ -52,7 +52,7 @@ _spark_complete() {
         memory)  words="add forget clear on off" ;;
         reveal)  words="auto off" ;;
         look)    words="on off auto status" ;;
-        voice)   words="clear on off rate test status" ;;
+        voice)   words="clear on off rate test listen stop status" ;;
         height)  words="1 2 3 4 5" ;;
         check)   words="--watch --porcelain --report --fresh --fetch --selftest --chaos" ;;
         uninstall) words="--dry-run --yes --purge --packages --keep-packages" ;;

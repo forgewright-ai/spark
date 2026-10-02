@@ -86,7 +86,7 @@ USAGE_MACHINE = """the machine
 USAGE_INTERFACE = """the interface
  spark bar [line]             the machine's one-line status
  spark voice [clear|on|off]   read aloud: clear for low vision, on in its
-                              own voice; rate N, test (-h)
+                              own voice; rate N, test, listen, stop (-h)
 """
 
 USAGE_LIVING = """the living prompt
