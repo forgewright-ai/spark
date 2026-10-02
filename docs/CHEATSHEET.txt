@@ -11,7 +11,8 @@ SPARK
   spark ver                       about, version, credits
   spark ver --sbom                what it depends on, as CycloneDX JSON
   spark chat [words]              a conversation. It says which one it goes on
-                                  with. /help lists its commands
+                                  with. /help lists its commands. Esc on an
+                                  empty line, Ctrl-D or /q ends it
   spark chat --thread N [words]   go on with an older thread (spark history)
   /resume [N] /clear /new /keep   in the chat: older thread, wipe, fresh, keep
   /last /model                    in the chat: the last turn, which model
@@ -22,6 +23,8 @@ SPARK
   /aloud /again                   in the chat: every reply aloud, the last again
   spark <words>                   one answer, streamed     spark last  again
   spark do <words>                a task, one confirmed command at a time
+                                  A step of several lines (a here-document)
+                                  is shown whole, numbered. e: $EDITOR
   spark do --sandbox <words>      the same in a copy, no network: it runs on
                                   its own, then the diff. yes applies exactly
                                   what it showed
@@ -107,7 +110,8 @@ THE PAGE (spark serve --login)  chat first. Keys when no input has focus
   share -> add to home screen     an app on iOS. A browser shortcut on Android
 
 THE MACHINE
-  spark setup                     first run: name, user, model, then apply
+  spark setup                     first run: name, user, model, then apply.
+                                  One more question: read aloud? (default no)
   spark check                     every promise, one row. exit 0 = no row failed
   spark check knowledge           the manuals and apps the prompt line reads
   spark check --watch 5           redraw every 5 seconds  --selftest  prove
@@ -128,6 +132,21 @@ THE MACHINE
 THE INTERFACE
   ~/.config/spark/theme.env       a palette a tool may write: spark ver and
                                   the status line follow it
+  spark voice                     the voice: mode, engine, player, mic
+  spark voice clear [--anyway]    read aloud in a plain clear voice, for low
+                                  vision. No awaken needed. A screen reader
+                                  running keeps it silent (--anyway speaks)
+  spark voice on                  this machine's own voice, from spark awaken
+  spark voice off [--remove]      silent. --remove deletes the engine
+  spark voice rate [N]            the clear voice's speed, 50..300 (100)
+  spark voice test                one line aloud
+  spark voice listen | stop       one spoken question, written out / hush
+  Esc v                           listen, at the prompt and in the chat: the
+                                  words land in your line. Enter sends
+  Esc x                           stop speaking
+  the first on or clear           downloads the engine: about 369 MB on Linux,
+                                  384 MB on macOS (~/.local/share/spark/voice)
+  SPARK_VOICE_DEVICE=plughw:1,0   Linux: a headset on the second card
 
 THE LIVING PROMPT
   spark awaken                    give this machine a personality and a look

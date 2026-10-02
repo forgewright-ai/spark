@@ -128,7 +128,11 @@ it, and no verb carries the word.
   `on`, then `auto`. A pipe never sees a frame or an escape. `on` wins
   over `NO_COLOR`. `auto` needs a tty, not `TERM=dumb`, and for colour
   `NO_COLOR` unset. The machine's own lines never claim where data goes:
-  awaken's brief forbids it, and `README.md` says what leaves.
+  awaken's brief forbids it, and `README.md` says what leaves. The
+  voice follows the same door. Awaken offers the machine's own voice
+  (`SPARK_VOICE=on`) where a player is. The clear voice, for low
+  vision, is accessibility, not a look: it works before awaken, and
+  `spark setup` offers it.
 - **Symmetric.** Every feature exists on both OSes, through each OS's
   native mechanism. That is apt, pacman or xbps for the packages,
   systemd, launchd or runit for the services, bash or zsh for the shell.
@@ -136,16 +140,17 @@ it, and no verb carries the word.
   `is_wsl()`: `distro()` reads `ID`, then `ID_LIKE`, from os-release,
   and `SPARK_OS_RELEASE` pins it. Its names are one data file,
   `distro/<id>.env`. The verbs that ask a package manager switch once on
-  `PM`: bootstrap's `pkg_*` and `lib/spark/packages.py`. The init is
-  one oracle too, `init_shape()` beside `distro()`: launchd on macOS,
-  runit when `/etc/runit` is a directory, else systemd. On runit the 3
+  `PM`: bootstrap's `pkg_*` and `lib/spark/packages.py`. The init is one
+  oracle too, `init_shape()` beside `distro()`: launchd on macOS, runit
+  when `/etc/runit` is a directory, else systemd. On runit the 3
   services are directories under `~/.config/spark/sv/`, rendered by
   `install.sh`. A root `runsvdir-USER` service, written once by
   bootstrap and linked into `/var/service`, supervises them from boot.
   The engine pin is a glibc build, so Void's musl flavour refuses at
   `get`: `musl libc: the pinned engine is a glibc build -- Void's glibc
-  flavour runs spark`. What a family lacks refuses in one signed line,
-  and its rows say so, never fail. `check.ARCH_ROWS` and
+  flavour runs spark`. The voice's runtime is a glibc build too, and its
+  fetch refuses on musl in one line. What a family lacks refuses in one
+  signed line, and its rows say so, never fail. `check.ARCH_ROWS` and
   `check.VOID_ROWS` name those rows, none today, and the fifth and sixth
   selftest passes run there. Windows is reached through WSL 2. Ubuntu
   there is Linux to spark, minus what WSL cannot do. `is_wsl()` sits
@@ -199,8 +204,10 @@ lib/env.sh      the KEY=value reader for the two scripts (config.py is the pytho
 distro/         one KEY=value file per Linux package family (debian.env, arch.env,
                 void.env): the manager, its install line, the doc's name, the 3
                 package groups
-site.env.example, models.env, engine.env      KEY=value data
-                (engine.env is the llama.cpp pin: version + one sha per flavour)
+site.env.example, models.env, engine.env, voice.env   KEY=value data
+                (engine.env is the llama.cpp pin: version + one sha per flavour;
+                voice.env the voice's: the sherpa-onnx runtime per flavour and
+                its 3 models, each "<url> <bytes> <sha256>" with its licence)
 bin/spark, bin/explain -> spark                  the one command
 lib/spark/      __init__ config wire engine serve session persona cli check
                 verify (sha256, cached: spark model verify, check's models row)
@@ -244,7 +251,11 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 /clear /keep /last /model /reveal, /copy (pbcopy, wl-copy,
                 xclip, xsel), /save (0600, never overwrites), /read @FILE
                 (contract 11 on the file, onto the chat's thread), /do
-                [--sandbox] (spark do's terminal loop; the chat runs nothing))
+                [--sandbox] (spark do's terminal loop; the chat runs
+                nothing), /aloud /again (the voice). Esc on an empty line,
+                Ctrl-D or /q ends it; Esc v listens onto the line, Esc x
+                stops the speaking (_Keys: a getc hook under GNU readline,
+                the first key read raw under libedit))
                 forgeserve (the page's server under spark serve: the API, the page;
                 ROUTES is the one table of every route and its role)
                 do (spark do: the one loop, a face per driver -- the terminal,
@@ -283,9 +294,15 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 widgets read, the news; spark look, spark height)
                 awaken (spark awaken: the temperament, the birth -- one JSON
                 object, `why` first, each line through look.clean -- the
-                personality paragraph, the pace)
+                personality paragraph, the pace, its voice where a player
+                is: keep, again or none)
                 words (spark words: the lines by id, the faces, the greeting
                 the widgets ask for)
+                voice (spark voice: the engine's fetch, size and sha256 before
+                a byte unpacks; speak, the 4 characters, play and stop;
+                listen, the recording removed before it returns; the clear
+                reading of a command, a do step, a block; the screen reader;
+                Reader, the lines spoken in a thread of their own)
 lib/spark/forge/  index.html spark.css spark.js manifest.webmanifest favicon.svg
                   mark.svg -- the page, ASCII, no inline script
 home/           the shared $HOME mirror, linked. .config/spark/ holds the two
@@ -312,6 +329,8 @@ tests/          smoke.py serve_smoke.py forge_smoke.py bench_smoke.py
                 life and its lock, and the real escapes where the probe says
                 this machine has a sandbox)
                 qr_test.py (ISO 18004 format table, the RS vector, a decode-back)
+                voice_test.py (the voice: a stub runtime, player and recorder;
+                the fetch's refusals, the characters' bytes, the clear reading)
                 docs_test.py (the docs say what the tree holds: credits, counts,
                 the voice)
                 widget_pty.py (the widgets, the pager and completion at a pty)
@@ -373,8 +392,11 @@ docs/           every document but the 4 at the root. With a release (the
 
 Runtime paths. Config is `~/.config/spark/`: `site.env`, `spark.env`,
 `theme.env`, `models.env` (yours), `privacy-terms`, `soul`,
-`personality`, `words`, `faces` and `memory` (the pre-v1.4 facts file,
-read until the first write). `personality` (0600) is the paragraph
+`personality`, `words`, `faces`, `voice` and `memory` (the pre-v1.4
+facts file, read until the first write). `voice` (0600) is the
+machine's own voice, `KEY=value`: `FAMILY`, `SID`, `SID_PT` and its
+chain's numbers. Awaken writes it, or `spark voice on` on an awake
+machine that has none. `personality` (0600) is the paragraph
 `spark awaken` writes after the soul's fixed core. `words` (0600) is
 `ID<TAB>line` per line, and `faces` (0600) is `MOOD=frame` per line
 plus `RATE=` and `TEMPER=`. Awaken writes both, and every line passes
@@ -393,6 +415,9 @@ State is `~/.local/state/spark/`, 0700:
   models dir, written by `spark serve`.
 - `off`, `widgets/`, `turns/`, `chat-history` 0600, `brain`,
   `check.json`, `bar`, `bench.jsonl`, `tune.json`.
+- `voice-anyway`: `spark voice clear --anyway` was chosen, kept until
+  the next `clear` or `off`. `voice-playing`: the pid of the player
+  speaking now and its private directory, for `spark voice stop`.
 - `look`: the living prompt's state for the widgets (contract 6),
   written by `look.render` alone. `news` is one `ID<TAB>line` the check
   writes on an awakened machine, and `news-seen` the id a shell last
@@ -420,10 +445,11 @@ State is `~/.local/state/spark/`, 0700:
   `account-key` 0600, the unwrapped data key, so the hot paths never pay
   the KDF.
 
-Data is `~/.local/share/spark/{engine,models}`. Tools are linked into
-`~/.local/bin`. `spark uninstall` (`lib/spark/uninstall.py`) removes
-all of it but the sealed stores, the account keys and your prose: the
-soul and its personality stay, and the words and faces files go.
+Data is `~/.local/share/spark/{engine,models,voice}`, `voice` only
+once the voice was turned on. Tools are linked into `~/.local/bin`.
+`spark uninstall` (`lib/spark/uninstall.py`) removes all of it but the
+sealed stores, the account keys and your prose: the soul and its
+personality stay, and the words, faces and voice files go.
 `--purge` takes those too. It runs bootstrap once first, headless
 undone through its row. It gives back a look an older spark set, as
 the `handback` row does (contract 1). It never runs `site.apply` or
@@ -498,9 +524,10 @@ and may change freely.
      SPARK_NGL SPARK_CTX SPARK_FLASH_ATTN SPARK_KV SPARK_THREADS
      SPARK_EXTRA_ARGS SPARK_MEM_NEEDED_GB SPARK_API_KEY_FILE
      SPARK_TIMEOUT SPARK_MAX_TOKENS SPARK_REVEAL SPARK_LOOK
-     SPARK_HEIGHT SPARK_HISTORY
-     SPARK_MEMORY SPARK_KNOWLEDGE SPARK_SERVICE SPARK_FORGE
-     SPARK_FORGE_HOST SPARK_FORGE_PORT SPARK_FORGE_TOKEN_FILE`.
+     SPARK_HEIGHT SPARK_VOICE SPARK_VOICE_RATE SPARK_VOICE_DEVICE
+     SPARK_HISTORY SPARK_MEMORY SPARK_KNOWLEDGE SPARK_SERVICE
+     SPARK_FORGE SPARK_FORGE_HOST SPARK_FORGE_PORT
+     SPARK_FORGE_TOKEN_FILE`.
      `SPARK_REVEAL_CPS` is optional: the reveal pace in characters a
      second (`spark reveal`).
      `SPARK_LOOK` is `auto`, `on` or `off`, `off` until `spark awaken`
@@ -511,6 +538,11 @@ and may change freely.
      `SPARK_HEIGHT` is 1 to 5, default 1 (`spark height N`). The 6
      `SPARK_*_SGR` variables are environment only, never read from a
      file.
+     `SPARK_VOICE` is `off`, `clear` or `on`, default `off`, anything
+     else `off` (`spark voice clear|on|off`). `SPARK_VOICE_RATE` is the
+     clear voice's speed, 50 to 300, default 100 (`spark voice rate
+     N`). `SPARK_VOICE_DEVICE` is the ALSA device the voice plays to
+     and listens on (Linux), such as `plughw:1,0`, default ALSA's own.
      `SPARK_PERSONA_EXTRA` is still read as the soul's fallback, and the
      `soul` row warns while it is set.
    - `models.env`, and `~/.config/spark/models.env` for your own rows:
@@ -535,6 +567,19 @@ and may change freely.
      bootstrap.sh evals it from `lib/spark/facts.py`, and
      `SPARK_OS_RELEASE` pins it. `init_shape()` sits beside it, and
      `SPARK_ETC_RUNIT` and `SPARK_VAR_SERVICE` pin the runit answer.
+   - `voice.env`: `VOICE_RUNTIME_VERSION`, then
+     `VOICE_RUNTIME_LINUX_X64`, `VOICE_RUNTIME_LINUX_ARM64`,
+     `VOICE_RUNTIME_MACOS`, `VOICE_MOUTH`, `VOICE_EARS` and `VOICE_VAD`,
+     each `"<url> <bytes> <sha256>"`, and `VOICE_RUNTIME_LICENSE`,
+     `VOICE_MOUTH_LICENSE`, `VOICE_EARS_LICENSE` and
+     `VOICE_VAD_LICENSE`, each `"<name> <url>"`. `lib/spark/voice.py`
+     and the SBOM read it, and `tests/docs_test.py` looks every licence
+     up in `CREDITS.md`.
+   - `~/.config/spark/voice`: the machine's own voice, `FAMILY SID
+     SID_PT` and the family's numbers. Its reader takes its own keys
+     and ignores any other line. A family it does not know, or a
+     speaker out of Kokoro's table, reads as no voice, and a number out
+     of range is clamped to it.
    - `~/.config/spark/theme.env`: a palette a look layer may write,
      `THEME_BG THEME_FG THEME_ACCENT THEME_MUTED THEME_ANSI_0..15`.
      spark writes none. `THEME_LOGO` is optional: 6 colour names, one
@@ -585,14 +630,34 @@ and may change freely.
    thread the moment the step ran (`do.land`). The feedback is the
    command that ran, `edited from` the proposal when the user changed
    it, its exit code, the proof that ran and its exit code. So the last
-   step of a run is recorded like every other. A control character in
-   the model's command or proof refuses the reply whole, a `done` with
-   `do.REFUSED_CONTROL`. `do.CONTROL` is C0, DEL, C1 and the bidi
-   controls U+200E/F, U+202A-E and U+2066-9. An edit carrying one is
-   skipped. A `sudo` step is a danger step: the typed `yes`. A goal is
-   at most `do.DO_GOAL_MAX` (8 kB), else one signed line, exit 2,
-   nothing sent. The budget keeps the goal whole, so it must fit. The OS
-   is `spark do`'s harness. An agent's harness is its tools, its
+   step of a run is recorded like every other. A step is a line or a
+   block: two or more lines, kept exactly as written and never joined
+   (`do.step_text`). A here-document that writes a file is the block
+   the brief allows (`persona.MODE_DO`). `do.refused` reads a step
+   before any pattern does. A line may carry no `do.CONTROL` character:
+   C0, DEL, C1 and the bidi controls U+200E/F, U+202A-E and U+2066-9.
+   A block may carry the line feed alone (`do.BLOCK_CONTROL`). A line
+   is `do.DO_LINE_MAX` (4096) characters at most, a block
+   `do.DO_BLOCK_MAX` (16384). A control character in the model's
+   command or proof refuses the reply whole, a `done` with
+   `do.REFUSED_CONTROL`. A step past its cap is a `done` with
+   `do.REFUSED_SIZE`. An edit `do.refused` refuses is skipped. The
+   terminal shows a block whole before the confirm: the step line with
+   its first line and `(K lines)`, then every line numbered beneath
+   it. A line break cannot carry a second command unseen. `e` on a
+   line is readline's edit. On a block it opens `soul._editor`
+   (`$VISUAL`, `$EDITOR`, else micro, nano or vi) on a 0600 temp file,
+   removed after. No editor, an editor that fails or an empty edit is
+   one line, and the step is unchanged. Danger is `do.danger`:
+   `persona.is_dangerous` over the whole text and over each line, a
+   line continued with a backslash read as one. It reads past a `>` or
+   `>|` onto a file that does not exist yet in the step's cwd, and past
+   a `>` that ends a line with no target. A `cd`, `pushd` or `popd`
+   anywhere in the step reads past nothing, and no other pattern is
+   ever read past. A `sudo` step is a danger step: the typed `yes`. A
+   goal is at most `do.DO_GOAL_MAX` (8 kB), else one signed line, exit
+   2, nothing sent. The budget keeps the goal whole, so it must fit.
+   The OS is `spark do`'s harness. An agent's harness is its tools, its
    permissions, its context, its triggers and its memory. spark brings
    only the last. The tools are the programs on PATH and their man
    pages: a step refused for an option brings back its own page's
@@ -783,7 +848,20 @@ and may change freely.
    clears that row, draws the mark and the dots, and restores. The
    widgets' own lines (`_spark_say`) go to the same row. A hand-run
    `spark line` never touches that row, and stdout stays the two lines
-   either way. The shell widgets depend on nothing else.
+   either way. With `SPARK_VOICE=clear`, `spark line` reads its lines
+   aloud once they are written, from a detached process
+   (`voice.aloud_later`, `voice.line_words`). stdout stays this
+   contract byte for byte, and the widget waits for no speech. Mode
+   `on` never speaks here. The widgets bind `Esc v` to `spark voice
+   listen --buffer`: the words heard land at the cursor, on an empty
+   line as a `? ` question, and nothing runs until the user's Enter.
+   `Esc x` is `spark voice stop`. In clear mode `spark do` at a
+   terminal reads aloud too (`voice.Reader`, `voice.step_words`). It
+   reads each step, a block by its name and size, with a danger step's
+   warning first. Then the choices once a run, each output's last 3
+   lines and the end.
+   Nothing spoken answers a prompt: a danger step stays the typed
+   `yes`. The shell widgets depend on nothing else.
 5. `spark brain --porcelain` prints `<url><TAB><model><TAB>forge|model`
    and exits 0, or exits 1. `<model>` is the spark role's model, the
    file stem. `forge` means `/api/health` there says `forge: true`. This
@@ -995,13 +1073,17 @@ and may change freely.
    seconds: rc 124, the process group killed) and answers `{rc, tail}`.
    When the step was refused for an option, `man` carries
    `do.man_excerpt`'s lines, and the page appends it to the feedback it
-   proposes on, as the prompt line does. A control character in the
-   command (`do.CONTROL`) is refused: 400, one line of printable text.
-   So is a command over `forgeserve.DO_COMMAND_MAX` (4096) characters,
-   before any pattern reads it.
+   proposes on, as the prompt line does. The command is a line or a
+   block, as contract 4 says, and `do.refused` reads it before any
+   pattern does. A control character (`do.CONTROL` in a line,
+   `do.BLOCK_CONTROL` in a block) is 400, `a command is printable
+   text: a line, or lines a line feed separates`. So is a line over
+   `forgeserve.DO_COMMAND_MAX` (4096) characters or a block over
+   `do.DO_BLOCK_MAX` (16384). The page shows a block whole in a `pre`,
+   every line, before its Run button.
    Both do routes take `cwd` as sent (`HOME` when empty) and refuse one
    with a control character or that is not the absolute path of a
-   directory (400). A command `persona.is_dangerous` flags runs only
+   directory (400). A command `do.danger` flags runs only
    with `confirmed: true`, else 400 `{error: {kind: confirm}}`,
    which the page sends after its second click. The log line carries a
    sha256 prefix of the command beside its truncated text, and a second
@@ -1317,21 +1399,23 @@ and may change freely.
     nothing: a note, `end` reason `error` rc 1, and the run waits. There
     is no `yes` word. Outside the sandbox the line is all that is
     checked before a step runs. A step that can destroy data
-    (`persona.is_dangerous`, or the model's danger flag) is refused
-    without waiting. So is one whose effect cannot be read from the line
+    (`do.danger`, or the model's danger flag) is refused without
+    waiting. So is one whose effect cannot be read from the line
     (`persona.OPAQUE`). The refusal is a note, and the model hears it
     was skipped. `persona.OPAQUE` is a command substitution, a backtick,
     eval, a backslash inside a word, an interpreter handed inline code
-    or a script on stdin, and a curl or wget upload. An edit is held to
-    the same two. Anything else runs on the program's `run` with the
-    user's own rights. A program that cannot vouch for every step drives
-    the run with `--sandbox`. EOF while a step waits is quit. Every
-    refusal before the run is one `end` event, reason `refused`, rc 2,
-    and nothing else on stdout. The refusals are an option spark do does
-    not take, no goal, a goal over 8 kB, `--detach`, the probe, the cwd
-    and the waiting cap. `--review`, `--accept` and `--discard` are
-    refused there too, because they are not runs. No model to drive the
-    run is one `end`, reason `error`, rc 1. Outside the sandbox the
+    or a script on stdin, and a curl or wget upload. A block is read
+    whole and line by line. An edit is held to the same two. `edit
+    <command>` is one line: its whitespace folds, so an edit turns a
+    block into a line. Anything else runs on the program's `run` with
+    the user's own rights. A program that cannot vouch for every step
+    drives the run with `--sandbox`. EOF while a step waits is quit.
+    Every refusal before the run is one `end` event, reason `refused`,
+    rc 2, and nothing else on stdout. The refusals are an option spark
+    do does not take, no goal, a goal over 8 kB, `--detach`, the probe,
+    the cwd and the waiting cap. `--review`, `--accept` and `--discard`
+    are refused there too, because they are not runs. No model to drive
+    the run is one `end`, reason `error`, rc 1. Outside the sandbox the
     steps run on `do.STEP_TIMEOUT`. `SIGTERM` ends the run and its step.
     The exit code is the `end` event's rc. Its first app is spark-acp
     (`docs/APPS.md`), an Agent Client Protocol agent: a step is a Run or
@@ -1353,7 +1437,8 @@ One grammar for every verb. A verb that breaks a rule is a bug.
    --audit`). Stored values are storage, not interface: `SITE_HEADLESS`
    and `SITE_SHARE` stay `yes|no` in `site.env`, and the verb
    translates. Choices keep their value grammars (`model
-   NAME|auto|none`, `client URL|off`, `look on|off|auto`). The one
+   NAME|auto|none`, `client URL|off`, `look on|off|auto`, `voice
+   clear|on|off`). The one
    carve-out is bare `spark off` / `spark on`, which silences and
    restores the whole prompt: it is the global mute, and reads better
    without a noun in front of it.

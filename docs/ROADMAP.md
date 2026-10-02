@@ -1,6 +1,6 @@
 # Roadmap
 
-What comes after v1.69, in the order it is likely to happen. Nothing
+What comes after v1.70, in the order it is likely to happen. Nothing
 here is a promise. A row in `docs/CHANGELOG.md` is. `docs/IDEAS.md` is
 the field this is picked from.
 
@@ -8,7 +8,8 @@ The rule for this stretch: spark has one user, on one box, and what
 that use measures goes first. No new contract and no new verb until
 the first two items below are done. Fifteen contracts is more surface
 than one user lives in, and the two numbers that describe the daily
-experience have sat in the ideas file behind the test suite.
+experience have sat in the ideas file behind the test suite. v1.70's
+`spark voice` is the one exception, by the maintainer's choice.
 
 ## 1. The wait for the first line is the model's own speed
 
@@ -200,3 +201,16 @@ way to say "the last run: again" or "go on".
   and steps as the history, the same budget and the goal kept. The
   words are the next user message, and bare `??` means "go on".
 - `??` then means the newest thread everywhere, one grammar.
+
+## 9. The voice, lived with
+
+v1.70 speaks and listens. What the box's headset says about it decides
+what comes next.
+
+- A block in clear mode is read by its name and size. Its lines are
+  read on request: a key that reads the block line by line.
+- A spoken question's language is Whisper's own. The reply is read in
+  the language spark guesses from its words. The two should agree:
+  the voice that answers follows the language that was heard.
+- The measure: how long a reply waits before it is heard, by mode, in
+  `spark stats`, the way the first line is measured today.

@@ -134,10 +134,11 @@ install line. It never runs `sudo`. `SPARK_HOME` moves the clone,
 `SPARK_URL` points it at another repository, and `SPARK_REF=main`
 follows development. `sh get --clone-only` stops after the clone.
 
-What `spark setup` does. It asks 3 things and never more: this
-machine's name, yours, and the model. The name defaults to the short
-hostname, yours to your login. The model row this machine earns is
-marked `*`. Then it:
+What `spark setup` does. It asks 3 things: this machine's name, yours,
+and the model. The name defaults to the short hostname, yours to your
+login. The model row this machine earns is marked `*`. One question
+more, default no: should spark read aloud for you, in the clear voice
+for low vision? "The voice" in section 3 says what that is. Then it:
 
 1. Writes `~/.config/spark/site.env` at 0600.
 2. On Linux, asks `sudo -v` once when a package is missing: `libgomp1`
@@ -153,15 +154,18 @@ marked `*`. Then it:
 4. Brings the engine up and waits for it.
 5. Asks `? how big is this dir` for you, its dots showing while the
    model answers, and prints the tok/s it measured.
-6. Prints the 3 things to try.
-7. Suggests the next step in one line: `next: spark awaken -- give this
+6. With a yes to reading aloud, runs `spark voice clear`: the engine's
+   download, its size said first.
+7. Prints the 3 things to try.
+8. Suggests the next step in one line: `next: spark awaken -- give this
    machine a personality and a look`. Nothing changes until you run it.
 
 It paints nothing: the machine looks as it did. You can run it again at
 any time. `--yes` takes every default, and is implied when stdin is not
 a terminal. `--model NAME|auto|none`, `--name NAME`, `--user NAME`
 and `--no-serve` pre-answer, as do `SITE_NAME`, `SITE_USER` and
-`SITE_AI_MODEL` in the environment.
+`SITE_AI_MODEL` in the environment. A `SPARK_VOICE` already set, in
+the environment or in `spark.env`, is not asked again.
 
 The rc line. `bootstrap.sh` appends one line to your login shell's rc
 file, `~/.bashrc` for bash or `~/.zshrc` for zsh, and only when it is
@@ -288,11 +292,19 @@ message stays a free answer about the file.
 below, and `--sandbox` ends with the diff to review. Then you are back
 at `chat> `. The chat itself runs nothing.
 
+With the voice on or clear, `Esc v` at `chat> ` listens. A pause ends
+it, and the words land on the line: `Enter` sends them. `Esc x` stops
+the speaking. In clear mode every reply is read aloud from the start.
+In mode on the machine speaks its greeting and its goodbye, and
+`/aloud` reads the replies too. `/again` prints the last reply again,
+and speaks it while the voice is on. "The voice" below has the rest.
+
 Awake, each reply starts with the face, and its lines wrap under the
 text, clear of it. The face shows the mood: thinking while a reply is
 on its way, idle on a reply, puzzled on an error or a refusal. A
-puzzled face says its hint as a whole sentence. `/q`, `Ctrl-D` and the
-quit words end with the machine's goodbye line and its pleased face.
+puzzled face says its hint as a whole sentence. `Esc`, `/q`, `Ctrl-D`
+and the quit words end with the machine's goodbye line and its pleased
+face.
 `spark words` shows the faces. Unawakened, the replies are bare text
 and the chat ends in silence. `/copy` and `/save` work on every
 machine.
@@ -307,6 +319,23 @@ check, is offered the same way, and only its exit code goes back. Each
 step's output, the last 4 kB, goes back to the model until it says
 done, or after 8 steps. A goal is at most 8 kB, and one that starts
 with `-` goes after `--`.
+
+A step is one line, or a block of several lines: a here-document that
+writes a file. A block is shown whole before you confirm it, the step
+line first, then every line numbered beneath it:
+
+    * 1  cat > count.py <<'EOF'   (3 lines)   write the script
+         1  cat > count.py <<'EOF'
+         2  print(len(open("notes.txt").read().split()))
+         3  EOF
+
+Danger is read on every line. A redirect onto a file that does not
+exist yet destroys nothing, so it is not marked. One onto a file that
+is there is marked, and so is any redirect in a step that runs `cd`.
+`e` on a block opens it in your editor: `$VISUAL`, `$EDITOR`, else
+micro, nano or vi. With none, `e` says so and the step is unchanged.
+A block is 16 kB at most, a line 4096 characters, and a line feed is
+the only control character a block may hold.
 
 `spark do --sandbox <words>` does the same task in a copy of this
 directory. Every step runs on its own, 2 minutes at most, with no
@@ -388,12 +417,17 @@ it nothing changes. Step by step:
    shipped one stands in. A soul file of your own is kept.
 4. One reply plays at a measured pace. Answer `yes`, `faster`,
    `slower` or `off`.
-5. The look turns to `auto`: motion, colour and words. Your next
-   prompt, in every open shell, is awake.
+5. Where a player is, it offers a voice of its own, made from the
+   temperament. It asks before the engine downloads, plays the hello
+   line in that voice, and asks `keep`, `again` or `none`. "The voice"
+   below has the rest.
+6. The look turns to `auto`: motion, colour and words. Your next
+   prompt, in every open shell, is awake. A voice you kept is on.
 
 Nothing is written until the end, so `Ctrl-C` leaves the machine as it
-was. Run it again to start over. The look is one switch, and 3 parts
-follow it. `spark look` shows it, with the height and the reveal:
+was. An engine already downloaded stays for the next run. Run it
+again to start over. The look is one switch, and 3 parts follow it.
+`spark look` shows it, with the height and the reveal:
 
 - Motion: while a reply comes, a scanner with a face,
   `* (o.O) [  =     ]`. While a model loads, a bar with an estimate
@@ -440,6 +474,95 @@ most 72 characters. A line with an escape or the shape of a secret is
 never said, and the shipped line stands in. After awaken, `spark soul
 edit` changes the personality paragraph alone, and `spark soul edit
 --core` the whole soul.
+
+The voice. `spark voice` reads aloud and hears a question, all on this
+machine. It has 3 modes, the key `SPARK_VOICE`:
+
+- `off`: silent. The default.
+- `clear`: a plain clear voice, for low vision. It needs no `spark
+  awaken`, and `spark setup` offers it.
+- `on`: this machine's own voice, the one `spark awaken` made for it.
+  It is never a plain human voice.
+
+```
+spark voice                    the mode, the engine, its own voice, the
+                               player, the mic, a screen reader
+spark voice clear [--anyway]   read aloud in the clear voice
+spark voice on                 speak in this machine's own voice
+spark voice off [--remove]     silent; --remove deletes the engine too
+spark voice rate [N]           the clear voice's speed, 50 to 300
+spark voice test               one line aloud, in the current mode
+spark voice listen             one spoken question, written out
+spark voice stop               stop speaking now
+```
+
+Clear mode reads the prompt line's command with its symbols. `du -ah
+~ | sort -rh` is "du, dash a h, tilde, pipe, sort, dash r h". Then it
+reads the hint. A line marked `!` is read with its warning first. In
+`spark do` it reads each step, a block by its name and size, such as "a
+here-document writing count.py, 3 lines". It reads the choices once a
+run, the last 3 lines of each output and the end. It reads the chat's
+replies and the errors. Every line it speaks is printed too.
+
+Mode on speaks the chat's greeting and goodbye, and the replies after
+`/aloud`. It never reads the prompt line. The voice comes from the
+temperament: plain is a radio, warm a soft robot choir, playful eight
+bit and terse a robot. The machine's seed picks a speaker and tunes the
+sound, so two machines rarely sound alike. `spark voice` names it, such
+as `radio, Kokoro af_heart`. `spark voice on` on an awake machine that
+kept none makes one from its temperament.
+
+A reply in Portuguese is read in a Brazilian Portuguese voice, and one
+in English in an English voice.
+
+The keys, at the prompt and in the chat:
+
+- `Esc v` listens. A pause ends it, and the words land in your line. On
+  an empty prompt they land as a `? ` question. Nothing runs until you
+  press `Enter`.
+- `Esc x` stops the speaking, in this shell and in any other.
+
+A spoken yes never confirms anything. A step that can destroy data
+still needs `yes` typed, and `spark do` never listens.
+
+The engine. It is downloaded only when you turn the voice on, by
+`spark voice on`, `spark voice clear`, or a yes at setup or at awaken.
+The size is said first. Each part is pinned in `voice.env`, and its
+size and sha256 are checked before a byte is unpacked. A part that
+does not match is refused, and nothing is kept.
+
+| part | what | size | licence |
+|---|---|---|---|
+| the runtime | sherpa-onnx v1.13.8, with onnxruntime inside | 28 MB on Linux, 44 MB on macOS | Apache-2.0; onnxruntime MIT |
+| the mouth | Kokoro-82M v1.0, int8, with espeak-ng-data | 132 MB | Apache-2.0; espeak-ng-data GPL-3.0 |
+| the ears | Whisper base, int8 | 208 MB | MIT |
+| the end of a question | Silero VAD | under 1 MB | MIT |
+
+That is about 369 MB on Linux and 384 MB on macOS, in
+`~/.local/share/spark/voice`. The voice spark awaken made lives in
+`~/.config/spark/voice`, 0600. `spark voice off --remove` deletes the
+engine, and `spark uninstall` takes both. `CREDITS.md` names every
+part. The runtime is a glibc build, so Void's musl flavour refuses it
+in one line.
+
+Where it plays and listens. macOS plays through `afplay`, and the
+terminal asks once for the microphone: allow it. Linux plays through
+`aplay`, else `paplay`, and listens through ALSA. A headset on the
+second card needs `SPARK_VOICE_DEVICE=plughw:1,0` in `spark.env`.
+`aplay -l` lists the cards. The `voice` row of `spark check` says
+whether the engine is here and is its pin, and names the player and the
+listener. It is `na` while the voice is off.
+
+Screen readers. VoiceOver on macOS, and Orca or speakup on Linux, read
+for you already. While one runs, clear mode stays silent. `spark voice
+clear` says why, and `spark voice` shows it. `spark voice clear
+--anyway` speaks beside it.
+
+What it hears. Listening is push to talk alone: `Esc v` or `spark voice
+listen`, and no wake word. The recording goes to a private directory
+and is deleted before the words come back. The voice runs here, on a
+client of another machine too, and nothing it hears or says leaves the
+machine.
 
 ## 4. Models
 
@@ -709,6 +832,8 @@ macOS:
   restarts one.
 - `spark stats` and the `gpu` row say the counter needs root.
 - `Alt-s` is Option-s. `Esc` then `s`, quickly, is the same keys.
+- The voice: the terminal asks once for the microphone the first time
+  `Esc v` listens. Allow it. Section 3, "The voice", has the rest.
 - `spark do --sandbox` copies the project as an APFS clone and runs
   each step in it under `sandbox-exec`. A step opens no network socket
   and writes only to the copy and the run's own home and temp. It
@@ -741,6 +866,9 @@ Linux:
   `bootstrap.sh` adds you on a Vulkan build. Log out of every session
   and in again for the units to see it. Void has no such group: its
   GPU node is open to every user, and the `headless` row says so.
+- The voice plays and listens on ALSA's default device. A headset on
+  another card needs `SPARK_VOICE_DEVICE`, such as `plughw:1,0`.
+  Section 3, "The voice", has the rest.
 - The console's font, its palette and a quiet boot are yours to set:
   spark leaves them as the machine has them. The console cannot draw
   the check and arrow glyphs, so spark prints ASCII there.
@@ -773,9 +901,10 @@ Void:
 
 - Linux to spark: the same one-liner, the same rows. The engine is the
   pinned `ubuntu-*` tarball, a glibc build. Void's glibc flavour runs
-  it, and `get` refuses the musl flavour in one line. CI proves the
-  one-liner and the supervised services in a Void container. The
-  engine and the GPU there are not yet proven on a machine.
+  it, and `get` refuses the musl flavour in one line. The voice's
+  runtime is a glibc build too. CI proves the one-liner and the
+  supervised services in a Void container. The engine and the GPU
+  there are not yet proven on a machine.
 - Packages come through `xbps-install -Sy`. When xbps refuses an
   install, the `packages` row says `sudo xbps-install -Su` first: on a
   rolling distro xbps itself must be current. `libgomp` is its own
@@ -848,7 +977,7 @@ spark uninstall
 
 1. It prints the plan, one row per thing, then asks for the word `yes`.
 2. Everything spark made goes: the units, the hook line from your rc
-   file, `~/.local/bin/spark`, the engine and every model,
+   file, `~/.local/bin/spark`, the engine, every model and the voice,
    `~/.config/spark` and `~/.local/state/spark`. The clone at `~/.spark`
    goes when it is the one `get` made and clean. Headless is undone
    first, with `sudo`, and so is a look an older spark set. On Void the
@@ -896,6 +1025,9 @@ Runtime keys live in `~/.config/spark/spark.env`, and
 | `SPARK_API_KEY_FILE` | a token file you already have | `~/.local/state/spark/api-token` |
 | `SPARK_LOOK` | `auto`, `on` or `off`: the look, once awake -- the scanner, the waking bar and a face that blinks; the built-in palette where you export no colour; the greeting, the news and the faces -- `spark look on\|off\|auto` | `off`, `auto` after `spark awaken` |
 | `SPARK_HEIGHT` | 1 to 5: the row spark writes in, counted up from the line you type on -- `spark height N`, or `Esc k` at the prompt | `1` |
+| `SPARK_VOICE` | `off`, `clear` or `on`: read aloud in the clear voice for low vision, or in this machine's own voice -- `spark voice clear\|on\|off` | `off` |
+| `SPARK_VOICE_RATE` | 50 to 300: the clear voice's speed, 100 as made -- `spark voice rate N` | `100` |
+| `SPARK_VOICE_DEVICE` | Linux: the ALSA device the voice plays to and listens on, such as `plughw:1,0` for a headset on the second card | ALSA's default |
 
 What needs root. `bootstrap.sh --dry-run` lists which of these it would
 do, and never calls `sudo`:
@@ -974,7 +1106,8 @@ addresses you gave it and nothing else.
   beyond it. `spark user token --new` from any logged-in session, or
   the page's log out, ends it.
 - A command the model proposes runs only after your `Enter`. A command
-  that can destroy data runs only after your `yes`. In `spark do
+  that can destroy data runs only after your `yes`, typed: a spoken yes
+  never confirms it. In `spark do
   --sandbox` it runs in a copy with no network and no view of your
   home, and nothing lands here until you have seen the diff and typed
   `yes`. `spark do --accept ID` applies a waiting run without showing
@@ -983,6 +1116,9 @@ addresses you gave it and nothing else.
   applied, and a link that leads out of the project is refused. The
   sandbox does not hide the whole machine: section 6 names what a step
   can still read.
+- The microphone opens only on your `Esc v` or `spark voice listen`,
+  never on a wake word. The recording is deleted once it is written
+  out, and the voice sends nothing anywhere.
 - What spark depends on is one command. `spark ver --sbom` prints a
   software bill of materials as CycloneDX 1.5 JSON: every component
   this tree pins, with versions and sha256s. Every release carries it

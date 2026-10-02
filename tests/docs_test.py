@@ -14,7 +14,12 @@
 # server group is in the cheatsheet; every chat command
 # (forge.SLASH_VERBS) is in the cheatsheet and INSTALL's chat table;
 # the docs a new user reads speak two nouns (spark, spark apps) and no
-# doc names what is private; the voice's mechanical half (docs/CONTRIBUTING.md
+# doc names what is private; spark voice (v1.70): every voice.env
+# licence upstream is in CREDITS.md and the SBOM holds voice.env's pins,
+# every word of `spark voice` is in the cheatsheet, every key the two
+# widgets bind (Esc k, Esc v, ...) is in the cheatsheet and INSTALL, and
+# every SPARK_VOICE* key is a row of INSTALL's key table; the voice's
+# mechanical half (docs/CONTRIBUTING.md
 # "## Voice") holds over every doc, its two measures included (a sentence
 # of 30 words at most, prose within 72 columns), and the two nouns hold
 # in `spark help` and every usage text too.
@@ -56,6 +61,8 @@ CAPS_OK = {
     # found in the docs at v1.49: real acronyms and names
     "APFS", "BIOS", "DHCP", "VRAM", "SIGINT", "SIGTERM", "ENOSPC", "BSSID", "RSSI", "SLAAC", "SSID",
     "HEAD", "POST",
+    # the voice (v1.70): Linux's sound layer
+    "ALSA",
     # what the code prints: the gate's marker, the three row categories
     "NOTICE", "SOFTWARE", "CAPABILITY", "NONFUNCTIONAL",
 }
@@ -380,6 +387,55 @@ def chat_commands():
               "docs/INSTALL.md's chat table has a row for %s (forge.SLASH_VERBS)" % verb)
 
 
+WIDGETS = ("home/.config/spark/widget.zsh", "home/.config/spark/widget.bash")
+
+
+def spoken():
+    """spark voice (v1.70) as the tree holds it, in the docs that state it:
+    every licence voice.env names is credited (its URL, and its name
+    right after it, in CREDITS.md); the SBOM holds voice.env's pins, one
+    sherpa-onnx component per runtime flavour and one model per model
+    row, by sha256; every word of `spark voice` (voice.VOICE_USAGE) is on
+    a `spark voice` line of the cheatsheet; the keys the widgets bind,
+    `Esc <letter>`, are the same in both widgets and each is in the
+    cheatsheet and INSTALL; every SPARK_VOICE* key (config.SPARK_KEYS)
+    is a row of INSTALL's key table."""
+    from spark import sbom, voice as voicemod
+    pins = config.parse_env(os.path.join(ROOT, "voice.env"))
+    credits = " ".join(read("CREDITS.md").split())
+    lic = sorted(k for k in pins if k.endswith("_LICENSE"))
+    check(bool(lic), "voice.env names a licence for its parts")
+    for key in lic:
+        words = pins[key].split()
+        name, url = (words[0], words[-1]) if len(words) > 1 else ("?", "?")
+        check(upstream(url) in credits and ("%s -- %s" % (url, name)) in credits,
+              "CREDITS.md names %s -- %s (voice.env %s)" % (url, name, key))
+    rows = {k: v.split() for k, v in pins.items()
+            if k.startswith("VOICE_") and not k.endswith(("_LICENSE", "_VERSION")) and len(v.split()) == 3}
+    want = sorted(w[2] for w in rows.values())
+    got = sorted(c["hashes"][0]["content"] for c in sbom.build(ROOT)["components"]
+                 if c["name"] == "sherpa-onnx" or c["type"] == "machine-learning-model")
+    check(bool(want) and got == want, "the SBOM holds voice.env's pins, by sha256 (%d rows)" % len(want))
+    cheat, inst = read("docs/CHEATSHEET.txt"), read("docs/INSTALL.md")
+    verbs = sorted(set(re.findall(r"(?m)^  spark voice ([a-z]+)", voicemod.VOICE_USAGE)))
+    check(bool(verbs), "voice.VOICE_USAGE names the words of spark voice")
+    for w in verbs:
+        check(re.search(r"(?m)^\s*spark voice\b[^\n]*\b%s\b" % re.escape(w), cheat) is not None,
+              "docs/CHEATSHEET.txt has a spark voice line with %s (voice.VOICE_USAGE)" % w)
+    bound = []
+    for f in WIDGETS:
+        bound.append(sorted(set(re.findall(r"""(?:bindkey '|bind -x '")\\e([a-z])['"]""", read(f)))))
+    check(bool(bound[0]) and bound[0] == bound[1], "the two widgets bind the same Esc keys (%s)" % " ".join(bound[0]))
+    for k in bound[0]:
+        for name, text in (("docs/CHEATSHEET.txt", cheat), ("docs/INSTALL.md", inst)):
+            check(re.search(r"\bEsc %s\b" % k, text) is not None, "%s names Esc %s (the widgets bind it)" % (name, k))
+    table = set(re.findall(r"(?m)^\| `([A-Z_]+)`", inst))
+    keys = [k for k in config.SPARK_KEYS if k.startswith("SPARK_VOICE")]
+    check(bool(keys), "config.SPARK_KEYS holds the SPARK_VOICE keys")
+    for k in keys:
+        check(k in table, "docs/INSTALL.md's key table has a row for %s" % k)
+
+
 def main():
     tests_named()
     credits = read("CREDITS.md")
@@ -697,6 +753,8 @@ def main():
     one_server()
     # the chat's commands: each in the cheatsheet and INSTALL's table
     chat_commands()
+    # the voice: its credits, its pins in the SBOM, its words and keys
+    spoken()
     # the voice's mechanical half, and the two nouns in what spark prints
     voice()
     measures()

@@ -1,5 +1,75 @@
 # Changelog
 
+## v1.70
+
+`spark do` takes a step of several lines, shown whole. And spark
+speaks and listens: `spark voice`, a plain clear voice for low vision,
+or the machine's own.
+
+- A `spark do` step is a line or a block of several lines, such as a
+  here-document that writes a script. A block is never joined into one
+  line.
+- A block is shown whole before you confirm it. The step line names
+  its first line and `(24 lines)`, then every line follows, numbered.
+  A line break can no longer hide a second command.
+- Danger is read on every line of a block. A redirect onto a file that
+  does not exist yet is not "can destroy data". One onto a file that is
+  there still is, and a `cd` in the step reads past nothing.
+- `e` on a block opens it in your editor (`$VISUAL`, `$EDITOR`, else
+  micro, nano or vi), as a 0600 file removed after. With none, `e`
+  says so and the step is unchanged. A line is still edited in place.
+- A block is 16 kB at most, a line 4096 characters. A line feed is the
+  only control character a block may hold.
+- Contract 15: the step event carries `lines`, 1 for a line and K for
+  a block of K lines.
+- The page shows a block whole, every line, and runs it under the same
+  rules.
+- v1.69's "write it as one line" retry is gone, and the run no longer
+  stops on a step of several lines.
+- `spark voice` reads aloud and hears a question. `spark voice
+  clear|on|off` sets the mode, `rate N` the clear voice's speed, `test`
+  plays one line, `listen` writes one spoken question out and `stop`
+  ends the speaking.
+- The engine is downloaded only when you turn the voice on: about
+  369 MB on Linux and 384 MB on macOS, into
+  `~/.local/share/spark/voice`.
+  It is sherpa-onnx with the Kokoro voice, Whisper base and the Silero
+  voice activity detector. Each part is pinned in `voice.env` and
+  checked by size and sha256 before a byte is unpacked.
+- `spark voice off --remove` deletes the engine. `spark uninstall`
+  removes it with the rest.
+- Clear mode is for low vision, and it works before `spark awaken`.
+  `spark setup` offers it in one question, default no.
+- Clear mode reads the prompt line's command with its symbols, "du,
+  dash a h, tilde, pipe, sort". A danger line's warning comes first.
+  It reads the hint, `spark do`'s steps, the last lines of each output,
+  the end of a run, the chat's replies and the errors. Everything it
+  says is printed too.
+- On mode is the machine's own voice, never a plain human one. `spark
+  awaken` makes it from the temperament: plain is a radio, warm a soft
+  robot choir, playful eight bit and terse a robot. It plays the hello
+  line in it and asks keep, again or none.
+- `Esc v` listens at the prompt and in the chat. A pause ends it. The
+  words land in your line, on an empty one as a `? ` question, and
+  nothing runs until you press `Enter`.
+- `Esc x` stops the speaking.
+- A spoken yes never confirms a step that can destroy data. That stays
+  a typed `yes`.
+- A screen reader running, VoiceOver, Orca or speakup, keeps clear mode
+  silent, and spark says why. `spark voice clear --anyway` speaks
+  beside it.
+- Listening is push to talk alone: no wake word. The recording is
+  deleted once Whisper has written it out, and nothing leaves the
+  machine.
+- The chat: `/aloud` speaks every reply, or stops, and `/again` says
+  the last one again. Mode on speaks the greeting and the goodbye.
+- `Esc` on an empty `chat>` line ends the chat, as `Ctrl-D` does. With
+  words on the line, `Esc` leaves them as they are.
+- The `voice` row replaces the `audio` row. It is `na` while the voice
+  is off. On, it says the engine is here and is the pin's, a player
+  and the listener, and a screen reader when one runs.
+- The SBOM names the voice runtime per flavour and its 3 models.
+
 ## v1.69
 
 One look switch, and no `spark quiet`. Fewer switches, each doing one

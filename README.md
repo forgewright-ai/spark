@@ -40,8 +40,9 @@ command itself and runs nothing.
    curl -fsSL https://github.com/forgewright-ai/spark/releases/latest/download/get | sh
    ```
 
-   It asks 3 things: this machine's name, yours and the model. Then
-   it asks the first question for you. About 10 minutes, most of it
+   It asks 3 things: this machine's name, yours and the model, and
+   whether spark should read aloud. Then it asks the first question
+   for you. About 10 minutes, most of it
    one model download. To read the script first:
 
    ```sh
@@ -88,6 +89,9 @@ hour in `docs/TOUR.md`:
 - `spark awaken`: give this machine a personality and a look. Until
   you run it, spark stays as it is. `spark look` shows the look, and
   `spark look off` turns motion, colour and words off at once.
+- `spark voice clear`: spark reads aloud in a plain clear voice, for
+  low vision. `spark voice on` speaks in the machine's own voice, and
+  `Esc v` listens to a question. Nothing leaves the machine.
 - `Esc k` at the prompt: when spark's line sits on a prompt of two
   lines, it moves spark's line up a row. `spark height N` keeps it.
 - `spark check`: every promise this machine makes, one row each. It
@@ -166,7 +170,10 @@ place. spark's own tokens are held back the same way.
 No telemetry, no analytics, no crash reports, no account. Downloads:
 `get` and the clone from github.com, one pinned llama.cpp release from
 github.com with its sha256, and the model you chose from huggingface.co.
-Its size and sha256 are in `models.env`. Nothing else.
+Its size and sha256 are in `models.env`. With `spark voice` on, its
+engine comes from github.com, pinned in `voice.env`. Nothing else. The
+voice speaks and listens here, and a recording is deleted once it is
+written out.
 
 On this machine: the server binds one LAN address, never `0.0.0.0`,
 behind tokens kept at 0600. A token is shown once, when you ask
