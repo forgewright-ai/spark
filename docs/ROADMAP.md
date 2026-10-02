@@ -206,13 +206,14 @@ way to say "the last run: again" or "go on".
 ## 9. The voice, lived with
 
 v1.70 speaks and listens. v1.71 speaks a reply sentence by sentence
-as it streams, with a lead-in before every clip. What the box's headset
-says about it decides what comes next.
+as it streams, from a voice loaded once, on one stream to the sound
+card. What the box's headset says about it decides what comes next.
 
 - A spoken question's language is Whisper's own. The reply is read in
   the language spark guesses from its words. The two should agree:
   the voice that answers follows the language that was heard.
 - The measure: how long a reply waits before it is heard, by mode, in
   `spark stats`, the way the first line is measured today. The first
-  sentence now waits for one sentence of text and its synthesis, so
-  this number says whether a smaller first piece is worth it.
+  sound now waits for the text up to the first comma and its
+  synthesis, so this number says whether the cut is in the right
+  place.

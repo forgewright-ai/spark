@@ -71,6 +71,19 @@ def _door():
         pass
 
 
+def _voice_pins(cfg):
+    """The voice follows its pins: with it on or clear, a part whose pin
+    changed (its sha file differs) is fetched again, the old one removed
+    (voice._fetch_said: the size said first). A failure is said, never
+    the update's."""
+    try:
+        from . import voice
+        if voice.mode(cfg) != "off" and voice.missing() and not os.environ.get("SPARK_NO_APPLY"):
+            voice._fetch_said(cfg)
+    except Exception:       # noqa: BLE001 -- the voice never fails an update
+        pass
+
+
 def _converge():
     """bootstrap.sh over the tree. At a terminal it owns the screen (a
     sudo prompt, curl's bar), so no pulse draws over it; captured, it is
@@ -136,6 +149,7 @@ def cmd_update(args):
                 # row green
                 cfg = config.load()
                 _restart_units(cfg)
+                _voice_pins(cfg)
                 # the look file follows the new tree (an awakened machine only)
                 try:
                     from . import look
@@ -240,6 +254,7 @@ def cmd_update(args):
         # hand, an update whose restart failed): the page says which
         # version it runs, and a stale one is restarted like a move
         from . import config, engine
+        _voice_pins(config.load())
         if _page_is_stale():
             cfg = config.load()
             _restart_units(cfg)

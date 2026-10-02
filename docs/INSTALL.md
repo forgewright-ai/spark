@@ -509,10 +509,18 @@ run, the last 3 lines of each output and the end. It reads the chat's
 replies and the errors. Every line it speaks is printed too.
 
 A chat reply is spoken a sentence at a time while the model writes, so
-the voice keeps pace with the reply. After a quiet moment, the first
-sentence starts with a quarter second of silence, so a sound card that
-sleeps never loses the first word. `SPARK_VOICE_LEAD_MS`, 0 to 1000 in
-the environment, changes it.
+the voice keeps pace with the reply. A long first sentence is cut at
+its first comma, so the first sound comes sooner. The voice is loaded
+once for a chat: the first sentence waits about a second for it, and
+every sentence after it is made with no new start.
+
+On Linux the voice is one stream to the sound card for each run of
+sentences. It opens with a quarter second of silence, so a sound card
+that sleeps never loses the first word. Between sentences it plays
+silence, so the card stays awake. It closes after a second and a half
+with nothing to say. On macOS each sentence plays on its own, with the
+quarter second after a quiet moment. `SPARK_VOICE_LEAD_MS`, 0 to 1000
+in the environment, changes that silence.
 
 Mode on speaks the chat's greeting and goodbye, and the replies after
 `/aloud`. It never reads the prompt line. The voice comes from the
@@ -546,11 +554,11 @@ does not match is refused, and nothing is kept.
 | part | what | size | licence |
 |---|---|---|---|
 | the runtime | sherpa-onnx v1.13.8, with onnxruntime inside | 28 MB on Linux, 44 MB on macOS | Apache-2.0; onnxruntime MIT |
-| the mouth | Kokoro-82M v1.0, int8, with espeak-ng-data | 132 MB | Apache-2.0; espeak-ng-data GPL-3.0 |
+| the mouth | Kokoro-82M v1.0, full precision, with espeak-ng-data | 350 MB | Apache-2.0; espeak-ng-data GPL-3.0 |
 | the ears | Whisper base, int8 | 208 MB | MIT |
 | the end of a question | Silero VAD | under 1 MB | MIT |
 
-That is about 369 MB on Linux and 384 MB on macOS, in
+That is about 586 MB on Linux and 602 MB on macOS, in
 `~/.local/share/spark/voice`. The voice spark awaken made lives in
 `~/.config/spark/voice`, 0600. `spark voice off --remove` deletes the
 engine, and `spark uninstall` takes both. `CREDITS.md` names every
@@ -968,6 +976,8 @@ spark update
 A clone `get` made moves to the newest release tag. A developer clone
 on a branch pulls `--ff-only`. Either way it converges: `bootstrap.sh`
 runs and `spark check` reads again. `--dry-run` says what it would do.
+With the voice on, a voice part whose pin changed is downloaded again,
+its size said first, and the old one goes.
 By hand: `git -C ~/.spark pull --ff-only && ~/.spark/bootstrap.sh`.
 
 The first update past v1.62 hands the machine's look back, once. The

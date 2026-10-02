@@ -279,8 +279,10 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 version (the version, from git, cached: spark ver, check's
                 header, forgeserve)
                 update (spark update: the newest release tag signed by a key in
-                allowed-signers, or main; converges; `verified` is the one
-                signature check, check's signed row reuses it)
+                allowed-signers, or main; converges; with the voice on or
+                clear, a voice part whose pin changed is fetched again;
+                `verified` is the one signature check, check's signed row
+                reuses it)
                 uninstall (spark uninstall: the plan, the word yes, then
                 everything spark made goes; yours stays unless --purge; the
                 clone last)
@@ -305,6 +307,8 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 the widgets ask for)
                 voice (spark voice: the engine's fetch, size and sha256 before
                 a byte unpacks; speak, the 4 characters, play and stop;
+                Engine, Kokoro loaded once through the runtime's C API;
+                Stream, one raw stream to the sound card a burst;
                 listen, the recording removed before it returns; the clear
                 reading of a command, a do step, a block; the screen reader;
                 the lead-in, silence after quiet; Reader, the lines
@@ -552,9 +556,9 @@ and may change freely.
      N`). `SPARK_VOICE_DEVICE` is the ALSA device the voice plays to
      and listens on (Linux), such as `plughw:1,0`, default ALSA's own.
      `SPARK_VOICE_LEAD_MS`, 0 to 1000, is environment only, never read
-     from a file. It is the silence in milliseconds before the first
-     clip after `voice.WAKE_AFTER` of quiet, 250 by default
-     (`voice.LEAD_IN_MS`).
+     from a file. It is the silence in milliseconds a stream opens with,
+     or a clip starts with after `voice.WAKE_AFTER` of quiet, 250 by
+     default (`voice.LEAD_IN_MS`).
      `SPARK_PERSONA_EXTRA` is still read as the soul's fallback, and the
      `soul` row warns while it is set.
    - `models.env`, and `~/.config/spark/models.env` for your own rows:
@@ -880,15 +884,28 @@ and may change freely.
    choices once a run, each output's last 3 lines and the end.
    Nothing spoken answers a prompt: a danger step stays the typed
    `yes`. The Reader is two stages. An engine thread makes each line's
-   wav, at most `voice.AHEAD` ahead, while a player thread plays them
-   in order, so the next line is ready when one ends. A cut drops the
-   text that waits and the ready wavs with their files, and stops what
-   plays. A wav made while another plays, or within `voice.WAKE_AFTER`
-   of the last, opens with no silence; any other with
-   `voice.LEAD_IN_MS`. The chat
-   speaks a reply as it streams: `cli.stream_turn`'s `on_shown` hands
-   each chunk, once the wrap printed it, to `voice.Sentences`, and each
-   finished sentence goes to the Reader at once. The shell widgets
+   clip, 16-bit PCM in memory, at most `voice.AHEAD` ahead. A player
+   thread plays them in order, so the next line is ready when one ends.
+   The engine is `voice.Engine`: Kokoro loaded once, at the Reader's
+   first line, through the runtime's C API by ctypes. Its structs are
+   mirrored from the pinned `c-api.h`. Each call makes one sentence,
+   its language and speed riding the call. A runtime it cannot load
+   leaves the Reader on the tool, `sherpa-onnx-offline-tts`, in
+   silence. Mode on runs the character's chain over the samples
+   (`voice.chain`). On Linux the player is one `voice.Stream` a burst:
+   `aplay -t raw`, or `paplay --raw`, reading PCM on its stdin. It
+   opens at the first clip with `voice.LEAD_IN_MS` of silence. It is
+   fed `voice.STREAM_CHUNK` of silence while the next clip is made. It
+   closes `voice.STREAM_IDLE` after the last clip with nothing to
+   come. So the card is opened once a burst, and no sentence's start
+   is clipped by its waking. macOS plays each clip with afplay, the
+   lead-in before the first after `voice.WAKE_AFTER` of quiet. A cut
+   drops the text that waits and the ready clips, and kills what plays,
+   the stream with what it held. The chat speaks a reply as it streams:
+   `cli.stream_turn`'s `on_shown` hands each chunk, once the wrap
+   printed it, to `voice.Sentences`, and each finished sentence goes to
+   the Reader at once. A reply's first sentence past `voice.FIRST_CUT`
+   characters goes at its first comma or semicolon. The shell widgets
    depend on nothing else.
 5. `spark brain --porcelain` prints `<url><TAB><model><TAB>forge|model`
    and exits 0, or exits 1. `<model>` is the spark role's model, the

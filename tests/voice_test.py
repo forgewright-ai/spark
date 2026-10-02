@@ -24,9 +24,17 @@ taking every control character out, what clear mode says for contract
 Reader's order, cut and hush, aloud_later() from a detached process, and
 `spark voice listen [--buffer]` and `spark voice stop`. v1.71: the
 splitter a streamed reply is spoken through (numbers, abbreviations,
-fences, list items, the long-run cut, any chunking the same), the
-lead-in before every wav, and the Reader's two stages timed against a
-slow engine and a player that records when it starts and ends.
+fences, list items, the long-run cut, a long first sentence at its
+first comma, any chunking the same), the lead-in, and the Reader's two
+stages timed against a slow engine: per clip (macOS) against a player
+that records what it got and when, and as one stream (Linux) against a
+stub that keeps every byte it was given at a sound card's pace -- one
+process a burst, the lead-in once, silence between, closed when idle,
+killed by a cut. v1.70's int8 mouth fetched again and removed; spark
+update's voice step; the engine's fallback to the tool. On this Mac
+only, never in CI, the engine against the real runtime when a voice is
+here (SPARK_VOICE_REAL_DIR, else ~/.local/share/spark/voice): the
+structs, one load, two sentences, the language per call, the timings.
 """
 import array
 import hashlib
@@ -53,6 +61,10 @@ LOG = os.path.join(ROOT, "log")
 for d in (HOME, STUBS, LOG):
     os.makedirs(d)
 
+# the real runtime, for the engine's own test (this Mac, never CI)
+REAL_VOICE = os.environ.get("SPARK_VOICE_REAL_DIR") or os.path.join(os.path.expanduser("~"), ".local", "share",
+                                                                     "spark", "voice")
+IN_CI = bool(os.environ.get("CI"))
 for k in [k for k in os.environ if k.startswith(("SPARK_", "XDG_", "SITE_"))]:
     del os.environ[k]
 os.environ.update({"HOME": HOME, "XDG_CONFIG_HOME": HOME + "/.config", "XDG_STATE_HOME": HOME + "/.local/state",
@@ -188,7 +200,13 @@ check("uninstall: the kept voice goes with spark's config, the engine with the d
       "voice" in uninstall.SPARK_CONFIG and voice.voice_dir() != os.path.join(uninstall.DATA_DIR, "voice")
       and os.path.join(uninstall.DATA_DIR, "voice").startswith(uninstall.DATA_DIR))
 total = sum(p["size"] for p in ps) / 1e6
-check("voice.env: about 380 MB in all on this machine (%d MB)" % total, 350 < total < 400)
+check("voice.env: about 600 MB in all on this machine (%d MB)" % total, 570 < total < 620)
+mouth = [p for p in ps if p["name"] == "mouth"][0]
+check("voice.env: the mouth is Kokoro's full-precision export (model.onnx), 350 MB",
+      mouth["url"].endswith("/kokoro-multi-lang-v1_0.tar.bz2") and mouth["size"] == 349906910, mouth)
+check("threads: 8 from 8 cores up, else the cores, at least 2",
+      [voice.threads(n) for n in (16, 10, 8, 6, 4, 2, 1)] == [8, 8, 8, 6, 4, 2, 2]
+      and voice.THREADS == voice.threads(os.cpu_count()))
 
 # ------------------------------------------------------------ 2. fetch
 SRC = os.path.join(ROOT, "src")
@@ -221,7 +239,8 @@ def row(path, size=None, digest=None):
 GOOD_RT = tarball("rt.tar.bz2", [("rt-1/", "dir", None), ("rt-1/bin/", "dir", None),
                                  ("rt-1/bin/sherpa-onnx-offline-tts", "exe", b"#!/bin/sh\n"),
                                  ("rt-1/lib/libx.so.1", "file", b"lib"), ("rt-1/lib/libx.so", "sym", "libx.so.1")])
-GOOD_MOUTH = tarball("mouth.tar.bz2", [("kokoro/model.int8.onnx", "file", b"m"), ("kokoro/voices.bin", "file", b"v")])
+GOOD_MOUTH = tarball("mouth.tar.bz2", [("kokoro/model.onnx", "file", b"m"), ("kokoro/voices.bin", "file", b"v")])
+OLD_MOUTH = tarball("old-mouth.tar.bz2", [("kokoro/model.int8.onnx", "file", b"8"), ("kokoro/voices.bin", "file", b"v")])
 GOOD_EARS = tarball("ears.tar.bz2", [("whisper/base-tokens.txt", "file", b"t")])
 VADF = os.path.join(SRC, "silero_vad.onnx")
 with open(VADF, "wb") as f:
@@ -390,7 +409,27 @@ check("fetch: the top directory is stripped, executables kept, links inside kept
       and os.path.isfile(os.path.join(VDIR, "vad", "silero_vad.onnx")), os.listdir(VDIR))
 check("fetch: nothing missing after, nothing left over, a second fetch does nothing",
       voice.missing(fetch_pins()) == [] and not leftovers() and voice.fetch(None, fetch_pins()) == [], leftovers())
+# a machine that has v1.70's mouth (the int8 export): its sha file is
+# not the new pin's, so the mouth is missing, fetched again, the old gone
+voice.fetch(None, fetch_pins(VOICE_MOUTH=row(OLD_MOUTH)), out=lambda s: None)
+had_int8 = os.path.isfile(os.path.join(VDIR, "mouth", "model.int8.onnx"))
+was = voice._mouth_model(os.path.join(VDIR, "mouth"))
+gone = [p["name"] for p in voice.missing(fetch_pins())]
+fetched[:] = []
+voice.fetch(None, fetch_pins(), out=lambda s: None)
+check("fetch: v1.70's int8 mouth is not the pin; fetched again, the old model gone, nothing left over",
+      had_int8 and was == "model.int8.onnx" and gone == ["mouth"] and fetched == ["mouth.tar.bz2"]
+      and sorted(os.listdir(os.path.join(VDIR, "mouth"))) == ["model.onnx", "voices.bin"] and not leftovers()
+      and voice._mouth_model(os.path.join(VDIR, "mouth")) == "model.onnx", (gone, fetched, leftovers()))
 check("remove: the voice dir goes whole, its bytes counted", voice.remove() > 0 and not os.path.exists(VDIR))
+from spark import update  # noqa: E402
+asked, _fetch_said = [], voice._fetch_said
+voice._fetch_said = lambda c: asked.append(voice.mode(c)) or True
+update._voice_pins(Cfg(SPARK_VOICE="off"))
+update._voice_pins(Cfg(SPARK_VOICE="clear"))
+voice._fetch_said = _fetch_said
+check("spark update: the voice on or clear fetches a part whose pin changed (said first); off, nothing",
+      asked == ["clear"], asked)
 
 # ------------------------------------------------------------ 3. speaking
 stub_engine()
@@ -402,8 +441,8 @@ check("speak clear: a wav 0600 in a private 0700 dir",
       and stat.S_IMODE(os.stat(os.path.dirname(w)).st_mode) == 0o700, w)
 check("speak clear: Kokoro's flags, af_heart, en-us, the rate as the length scale, the text after --",
       "--sid=3" in argv and "--kokoro-lang=en-us" in argv and "--kokoro-length-scale=0.800" in argv
-      and "--kokoro-model=model.int8.onnx" in argv and "--kokoro-lexicon=lexicon-us-en.txt,lexicon-zh.txt" in argv
-      and "--num-threads=4" in argv and argv[-2:] == ["--", "This is how spark reads aloud."], argv)
+      and "--kokoro-model=model.onnx" in argv and "--kokoro-lexicon=lexicon-us-en.txt,lexicon-zh.txt" in argv
+      and "--num-threads=%d" % voice.THREADS in argv and argv[-2:] == ["--", "This is how spark reads aloud."], argv)
 d = os.path.dirname(w)
 voice.cleanup(w)
 check("cleanup: the private dir goes", not os.path.exists(d))
@@ -411,6 +450,19 @@ w = voice.speak(cfg, "Bom dia, você está bem? Não sei.", "clear")
 argv = json.load(open(os.path.join(LOG, "tts.json")))["argv"]
 check("speak clear, Portuguese: pf_dora, pt-br", "--sid=42" in argv and "--kokoro-lang=pt-br" in argv, argv)
 voice.cleanup(w)
+INT8 = os.path.join(VDIR, "mouth", "model.int8.onnx")
+open(INT8, "w").close()
+voice.cleanup(voice.speak(cfg, "Hello.", "clear"))
+argv = json.load(open(os.path.join(LOG, "tts.json")))["argv"]
+os.remove(INT8)
+check("speak: a mouth an older pin left (model.int8.onnx alone) still speaks until the fetch replaces it",
+      "--kokoro-model=model.int8.onnx" in argv, argv)
+check("load_engine: no runtime library here (the stub runtime) -- None, the tool speaks", voice.load_engine() is None)
+LIBF = voice._lib_file()
+with open(LIBF, "wb") as f:
+    f.write(b"not a library")
+check("load_engine: a library that does not load -- None, never a raise", voice.load_engine() is None)
+os.remove(LIBF)
 w = voice.speak(cfg, "-rf is a flag\x1b[31m", "clear")
 argv = json.load(open(os.path.join(LOG, "tts.json")))["argv"]
 check("speak: a text starting with a dash rides after --, a control character is a space",
@@ -1048,33 +1100,107 @@ voice.lead_in(eight, 10)
 check("lead-in: an 8-bit stereo wav keeps its format, its silence the 8-bit middle",
       frames(eight) == ((2, 1, 8000), b"\x80" * 160 + b"\x10\x20" * 10), frames(eight))
 
-# the Reader's two stages: a slow stub engine and a stub player that
-# records when each wav starts and ends; the engine makes the next line
-# while the player plays this one
+# the first sentence of a reply, when it is long, goes at its first comma
+check("Sentences: a long first sentence goes at its first comma; the rest of it, and the next, whole",
+      split("Well, the disk is nearly full and the logs grow by a gigabyte a day, so clean them. "
+            "Then, once that is done, look again.")
+      == ["Well,", "the disk is nearly full and the logs grow by a gigabyte a day, so clean them.",
+          "Then, once that is done, look again."])
+check("Sentences: a semicolon is a first pause too; a comma inside 1,000 is not",
+      split("It holds 1,000 files and 2,000 links in all of its folders today; most are logs. Ok.")
+      == ["It holds 1,000 files and 2,000 links in all of its folders today;", "most are logs.", "Ok."])
+check("Sentences: a short first sentence (%d characters or fewer) is whole, commas and all" % voice.FIRST_CUT,
+      split("Yes, it is here, and it works. Next, the rest of it.")
+      == ["Yes, it is here, and it works.", "Next, the rest of it."])
+check("Sentences: a first sentence with no comma stays whole",
+      split("The disk holds a great many files and nearly all of them are logs today. Ok.")
+      == ["The disk holds a great many files and nearly all of them are logs today.", "Ok."])
+FIRST = ("So, here is what I found after reading the whole log file twice: three errors. "
+         "Two, maybe three, are the same one. Fine.")
+whole = split(FIRST)
+check("Sentences: the first comma's cut is the same whatever the chunking",
+      whole[0] == "So," and all(split_chunks(FIRST, sizes) == whole for sizes in ([1], [2], [3], [7, 1], [64])),
+      whole)
+s = voice.Sentences()
+check("Sentences: the first cut goes the moment the pause is seen past %d characters" % voice.FIRST_CUT,
+      s.feed("Right, " + "word " * 12) == ["Right,"] and s.feed("and more. ") == ["word " * 11 + "word and more."]
+      and s.flush() == [])
+
+# the Reader's two stages, against a slow stub engine: each clip it makes
+# is one value held (an id from its text), so the player's side can say
+# which clip it got, and where silence was
+CLIP_S = 0.2
+
+
+def ident(text):
+    return 1000 + sum(text.encode()) % 20000
+
+
 SLOW_TTS = '''#!%s
-import json, os, shutil, sys, time
+import array, json, os, sys, time, wave
 out = [a.split("=", 1)[1] for a in sys.argv if a.startswith("--output-filename=")][0]
 t0 = time.time()
 time.sleep(float(os.environ.get("STUB_TTS", "0")))
-shutil.copyfile(%r, out)
+text = sys.argv[-1]
+n = int(24000 * float(os.environ.get("STUB_CLIP", "%s")))
+a = array.array("h", [1000 + sum(text.encode()) %% 20000] * n)
+if sys.byteorder == "big":
+    a.byteswap()
+w = wave.open(out, "wb")
+w.setnchannels(1); w.setsampwidth(2); w.setframerate(24000); w.writeframes(a.tobytes()); w.close()
 with open(os.path.join(os.environ["STUB_LOG"], "tts.jsonl"), "a") as f:
-    f.write(json.dumps({"text": sys.argv[-1], "out": out, "t0": t0, "t1": time.time()}) + "\\n")
-''' % (PY, TONE)
+    f.write(json.dumps({"text": text, "t0": t0, "t1": time.time()}) + "\\n")
+''' % (PY, CLIP_S)
+# the player of a file (afplay on macOS): what it got -- the clip's id,
+# the silence before it -- and when it started and ended
 TIMED_PLAYER = '''#!%s
-import json, os, sys, time
+import array, json, os, sys, time, wave
 log = os.path.join(os.environ["STUB_LOG"], "plays.jsonl")
-wav = sys.argv[-1]
+with wave.open(sys.argv[-1]) as w:
+    a = array.array("h", w.readframes(w.getnframes()))
+lead = next((i for i, v in enumerate(a) if v), len(a))
+ident = a[lead] if lead < len(a) else 0
 with open(log, "a") as f:
-    f.write(json.dumps({"wav": wav, "start": time.time()}) + "\\n")
+    f.write(json.dumps({"id": ident, "lead": lead, "start": time.time()}) + "\\n")
 time.sleep(float(os.environ.get("STUB_PLAY", "0")))
 with open(log, "a") as f:
-    f.write(json.dumps({"wav": wav, "end": time.time()}) + "\\n")
+    f.write(json.dumps({"id": ident, "end": time.time()}) + "\\n")
+''' % PY
+# the stream (aplay -t raw on Linux): every byte it was given, in order,
+# with when each read came and whether it held sound; its EOF logged
+STREAM = '''#!%s
+import json, os, sys, time
+log = os.environ["STUB_LOG"]
+pid = os.getpid()
+rate = int(sys.argv[sys.argv.index("-r") + 1]) if "-r" in sys.argv else 24000
+def note(**kv):
+    with open(os.path.join(log, "streams.jsonl"), "a") as f:
+        f.write(json.dumps(dict(pid=pid, **kv)) + "\\n")
+note(start=time.time(), argv=sys.argv[1:])
+with open(os.path.join(log, "stream-%%d.raw" %% pid), "wb") as raw:
+    while True:
+        b = os.read(0, 4800)
+        if not b:
+            break
+        raw.write(b)
+        raw.flush()
+        note(t=time.time(), n=len(b), sound=any(b))
+        time.sleep(len(b) / (2.0 * rate))           # a sound card's pace
+note(eof=time.time())
 ''' % PY
 stub("sherpa-onnx-offline-tts", SLOW_TTS, os.path.join(VDIR, "runtime", "bin"))
 stub(PLAYER, TIMED_PLAYER)
+STREAM_STUB = stub("spark-test-stream", STREAM)
 TMP = os.path.join(ROOT, "tmp")
 os.makedirs(TMP)
 tempfile.tempdir = TMP              # the private dirs land here, so a leftover is seen
+_stream_argv = voice.stream_argv
+
+
+def per_clip(on):
+    """The player the Reader picks: one wav at a time (macOS's afplay),
+    or the stream stub fed raw PCM (Linux's aplay -t raw)."""
+    voice.stream_argv = (lambda cfg, rate: None) if on else (lambda cfg, rate: [STREAM_STUB, "-r", str(rate)])
 
 
 def jsonl(name):
@@ -1090,11 +1216,9 @@ def ours():
 
 
 def reset_logs():
-    for name in ("tts.jsonl", "plays.jsonl"):
-        try:
+    for name in os.listdir(LOG):
+        if name.endswith((".jsonl", ".raw")):
             os.remove(os.path.join(LOG, name))
-        except OSError:
-            pass
 
 
 def wait_for(cond, secs=15):
@@ -1104,17 +1228,29 @@ def wait_for(cond, secs=15):
     return cond()
 
 
+def runs(pid):
+    """A stream's bytes as runs: [(value or 0 for silence, frames)]."""
+    a = array.array("h")
+    with open(os.path.join(LOG, "stream-%d.raw" % pid), "rb") as f:
+        a.frombytes(f.read())
+    if sys.byteorder == "big":
+        a.byteswap()
+    out = []
+    for v in a:
+        if out and out[-1][0] == v:
+            out[-1][1] += 1
+        else:
+            out.append([v, 1])
+    return [tuple(x) for x in out]
+
+
+LEAD = int(24000 * voice.LEAD_IN_MS / 1000)
+FRAMES = int(24000 * CLIP_S)
+
+# per clip (macOS): made ahead while one plays, the lead-in after quiet
+per_clip(True)
 reset_logs()
 os.environ.update(STUB_TTS="0.4", STUB_PLAY="0.8")
-_leads, _speak0 = [], voice.speak
-
-
-def _speak_noted(*a, **k):
-    _leads.append(k.get("lead"))
-    return _speak0(*a, **k)
-
-
-voice.speak = _speak_noted
 r = voice.Reader(Cfg(SPARK_VOICE="clear"))
 t0 = time.time()
 for line in ("one.", "two.", "three."):
@@ -1123,69 +1259,119 @@ put_took = time.time() - t0
 done = r.drain(20, played=True)
 made = jsonl("tts.jsonl")
 plays = jsonl("plays.jsonl")
-by_wav = {m["out"]: m["text"] for m in made}
 starts = [p for p in plays if "start" in p]
-ends = {p["wav"]: p["end"] for p in plays if "end" in p}
-order = [by_wav.get(p["wav"]) for p in starts]
-check("Reader: put returns at once; every line made and played, in order",
+ends = [p for p in plays if "end" in p]
+check("Reader per clip: put returns at once; every line made and played, in order",
       put_took < 0.2 and done and [m["text"] for m in made] == ["one.", "two.", "three."]
-      and order == ["one.", "two.", "three."], (put_took, done, [m["text"] for m in made], order))
+      and [p["id"] for p in starts] == [ident(t) for t in ("one.", "two.", "three.")],
+      (put_took, done, [m["text"] for m in made], starts))
 if len(made) == 3 and len(starts) == 3 and len(ends) == 3:
-    p1 = starts[0]
-    overlap = min(made[1]["t1"], ends[p1["wav"]]) - max(made[1]["t0"], p1["start"])
-    gap = starts[1]["start"] - ends[p1["wav"]]
+    overlap = min(made[1]["t1"], ends[0]["end"]) - max(made[1]["t0"], starts[0]["start"])
+    gap = starts[1]["start"] - ends[0]["end"]
 else:
     overlap, gap = -1.0, 99.0
-check("Reader: sentence 2 is made WHILE sentence 1 plays (overlap %.2f s), so it starts as 1 ends (gap %.2f s)"
-      % (overlap, gap), overlap > 0.2 and gap < 0.35, (overlap, gap))
-check("Reader: every wav removed once played", wait_for(lambda: not ours(), 5), ours())
-# the lead-in wakes a sleeping card: before the first sentence after
-# quiet, never between sentences that follow one another
-check("Reader: the lead-in only on the first of a run of sentences (None, then 0, 0)",
-      _leads == [None, 0, 0], _leads)
+check("Reader per clip: sentence 2 is made WHILE sentence 1 plays (overlap %.2f s), so it starts as 1 ends "
+      "(gap %.2f s)" % (overlap, gap), overlap > 0.2 and gap < 0.35, (overlap, gap))
+check("Reader per clip: every wav removed once played", wait_for(lambda: not ours(), 5), ours())
+check("Reader per clip: the lead-in only on the first of a run of sentences",
+      [p["lead"] for p in starts] == [LEAD, 0, 0], [p["lead"] for p in starts])
 time.sleep(voice.WAKE_AFTER + 0.3)
 os.environ.update(STUB_PLAY="0.1")
 r.put("four.")
 r.drain(10, played=True)
-check("Reader: after a quiet moment the next sentence has its lead-in again", _leads[3:] == [None], _leads)
-voice.speak = _speak0
+check("Reader per clip: after a quiet moment the next sentence has its lead-in again",
+      [p["lead"] for p in jsonl("plays.jsonl") if "start" in p][3:] == [LEAD])
 
-# cut: the text that waits and the wavs made ready go (their files too),
-# and what plays stops; a new line after it plays
+# per clip: cut drops the queued text and the clips made ready, and stops
+# what plays; a new line after it plays
 reset_logs()
 os.environ.update(STUB_TTS="0.3", STUB_PLAY="5")
 r = voice.Reader(Cfg(SPARK_VOICE="clear"))
 for line in ("alpha.", "beta.", "gamma.", "delta."):
     r.put(line)
 full = wait_for(lambda: len(r.ready) == voice.AHEAD and r.playing is not None and len(jsonl("plays.jsonl")) == 1)
-ready_dirs = [os.path.dirname(w) for _g, w in r.ready]
 playing_dir = r.playing.tmp if r.playing is not None else ""
-had = [os.path.isdir(d) for d in ready_dirs + [playing_dir]]
 check("Reader: bounded -- %d made ahead while one plays, the rest still text" % voice.AHEAD,
       full and [t for _g, t in r.lines] == ["delta."], (full, r.lines, len(r.ready)))
 cut = r.cut()
-gone = wait_for(lambda: not any(os.path.isdir(d) for d in ready_dirs + [playing_dir]) and not ours(), 5)
-check("Reader: cut drops the queued text and the ready wavs (their files removed) and stops what plays",
-      cut and all(had) and gone and not r.lines and not r.ready and r.playing is None
+gone = wait_for(lambda: not os.path.isdir(playing_dir) and not ours(), 5)
+check("Reader: cut drops the queued text and the ready clips and stops what plays (its wav removed)",
+      cut and playing_dir and gone and not r.lines and not r.ready and r.playing is None
       and [m["text"] for m in jsonl("tts.jsonl")] == ["alpha.", "beta.", "gamma."]
-      and not any("end" in p for p in jsonl("plays.jsonl")), (cut, had, gone, ours(), jsonl("tts.jsonl")))
+      and not any("end" in p for p in jsonl("plays.jsonl")), (cut, gone, ours(), jsonl("tts.jsonl")))
 os.environ["STUB_PLAY"] = "0"
 r.put("after.")
 r.drain(10, played=True)
-names = [by for by in ({m["out"]: m["text"] for m in jsonl("tts.jsonl")}.get(p["wav"])
-                       for p in jsonl("plays.jsonl") if "start" in p)]
-check("Reader: after a cut the next line is made and played", names == ["alpha.", "after."] and not ours(),
-      (names, ours()))
+check("Reader: after a cut the next line is made and played",
+      [p["id"] for p in jsonl("plays.jsonl") if "start" in p] == [ident("alpha."), ident("after.")] and not ours(),
+      (jsonl("plays.jsonl"), ours()))
 r.put("hushed.")
 wait_for(lambda: r.busy or r.ready or r.playing is not None, 5)
 r.hush()
 check("Reader: hush leaves nothing waiting, nothing ready", r.drain(2) and not r.lines and not r.ready)
 wait_for(lambda: not ours(), 5)
 
-# the exit: a process that ends with wavs made ahead removes them; the
-# one playing runs on and its player removes its own
+# the stream (Linux): one player for a burst -- the lead-in once, the
+# clips in order with silence between, closed once idle, a cut kills it
+per_clip(False)
+reset_logs()
+os.environ.update(STUB_TTS="0.6", STUB_PLAY="0")
+r = voice.Reader(Cfg(SPARK_VOICE="clear"))
+for line in ("one.", "two.", "three."):
+    r.put(line)
+done = r.drain(20, played=True)
+opened = [x for x in jsonl("streams.jsonl") if "start" in x]
+pid = opened[0]["pid"] if opened else 0
+check("stream: one player process for three sentences, raw PCM at the clip's rate",
+      done and len(opened) == 1 and opened[0]["argv"] == ["-r", "24000"], opened)
+# the card's pace lags the writes (the player's start): its EOF, once idle, says all of it was read
+eof = wait_for(lambda: any("eof" in x for x in jsonl("streams.jsonl")), 8)
+got = runs(pid) if pid else []
+said = [v for v, _n in got if v]
+check("stream: the lead-in once, at the start (%d frames of silence), then the first clip" % LEAD,
+      len(got) > 1 and got[0] == (0, LEAD) and got[1] == (ident("one."), FRAMES), got[:3])
+check("stream: the clips whole and in order, silence between them while the next is made",
+      said == [ident(t) for t in ("one.", "two.", "three.")] and all(n == FRAMES for v, n in got if v)
+      and [v for v, _n in got[1:6]] == [ident("one."), 0, ident("two."), 0, ident("three.")], got)
+log = jsonl("streams.jsonl")
+last_sound = max((x["t"] for x in log if x.get("sound")), default=0)
+closed = next((x["eof"] for x in log if "eof" in x), 0)
+check("stream: closed (its end of input, not a kill) about %.1f s after the last clip (%.2f s)"
+      % (voice.STREAM_IDLE, closed - last_sound), eof and 1.0 < closed - last_sound < 3.5 and r.stream is None,
+      (closed - last_sound, r.stream))
+check("stream: the stream's player is gone after its close", wait_for(lambda: not alive(pid), 5))
+r.put("four.")
+r.drain(10, played=True)
+opened = [x for x in jsonl("streams.jsonl") if "start" in x]
+check("stream: the next burst opens a new player, the lead-in first again",
+      len(opened) == 2 and runs(opened[1]["pid"])[:2] == [(0, LEAD), (ident("four."), FRAMES)],
+      runs(opened[1]["pid"])[:3] if len(opened) == 2 else opened)
+wait_for(lambda: r.stream is None, 5)
+
+wait_for(lambda: len([x for x in jsonl("streams.jsonl") if "eof" in x]) == 2, 8)
+reset_logs()
+os.environ.update(STUB_TTS="0.1", STUB_CLIP="3")
+r = voice.Reader(Cfg(SPARK_VOICE="clear"))
+for line in ("long one.", "never two.", "never three."):
+    r.put(line)
+wait_for(lambda: any(x.get("sound") for x in jsonl("streams.jsonl")), 10)
+pid = next((x["pid"] for x in jsonl("streams.jsonl") if "start" in x), 0)
+cut = r.cut()
+dead = wait_for(lambda: not alive(pid), 5)
+time.sleep(0.5)
+said = [v for v, _n in runs(pid) if v] if pid else []
+check("stream: a cut kills the player at once -- no end of input, nothing queued written after",
+      cut and dead and not any("eof" in x and x["pid"] == pid for x in jsonl("streams.jsonl")) and r.stream is None
+      and set(said) <= {ident("long one.")} and not r.lines and not r.ready, (cut, dead, said))
+check("stream: stopped, it leaves no record for another spark's stop", not os.path.exists(voice.PLAYING_FILE))
+os.environ.pop("STUB_CLIP")
+
+# the exit: a process that ends with clips made ahead drops them; the one
+# playing runs on (per clip: its player removes its wav; the stream: its
+# end of input, so it plays out what it holds and exits on its own)
 reset_logs()
 code = ("import sys, time; sys.path.insert(0, %r); from spark import voice\n"
+        "voice.stream_argv = lambda cfg, rate: None\n"
         "r = voice.Reader(None)\n"
         "for t in ('first.', 'second.', 'third.'):\n"
         "    r.put(t)\n"
@@ -1196,12 +1382,103 @@ code = ("import sys, time; sys.path.insert(0, %r); from spark import voice\n"
 p = subprocess.run([PY, "-c", code], capture_output=True, text=True, timeout=60,
                    env=dict(os.environ, TMPDIR=TMP, SPARK_VOICE="clear", STUB_TTS="0.2", STUB_PLAY="1.5"))
 left = ours()
-check("Reader at exit: the wavs made ahead are removed with the process; only the one playing is left",
+check("Reader at exit (per clip): the clips made ahead go with the process; only the one playing is left",
       p.stdout.split() == ["2", "True"] and len(left) <= 1, (p.stdout, p.stderr[-300:], left))
-check("Reader at exit: the one playing removes its own when it ends", wait_for(lambda: not ours(), 8), ours())
+check("Reader at exit (per clip): the one playing removes its own when it ends", wait_for(lambda: not ours(), 8),
+      ours())
+code = ("import sys, time; sys.path.insert(0, %r); from spark import voice\n"
+        "voice.stream_argv = lambda cfg, rate: [%r, '-r', str(rate)]\n"
+        "r = voice.Reader(None)\n"
+        "r.put('last words.')\n"
+        "print(r.drain(15))\n" % (os.path.join(REPO, "lib"), STREAM_STUB))
+p = subprocess.run([PY, "-c", code], capture_output=True, text=True, timeout=60,
+                   env=dict(os.environ, TMPDIR=TMP, SPARK_VOICE="clear", STUB_TTS="0.1"))
+wait_for(lambda: any("start" in x for x in jsonl("streams.jsonl")), 8)     # it may start after the exit
+pid = next((x["pid"] for x in jsonl("streams.jsonl") if "start" in x), 0)
+eof = wait_for(lambda: any("eof" in x and x["pid"] == pid for x in jsonl("streams.jsonl")), 8)
+check("Reader at exit (stream): drain waits until the clip is written whole; the stream ends with its input, "
+      "every frame of it given", p.stdout.split() == ["True"] and eof and pid
+      and [v for v, _n in runs(pid) if v] == [ident("last words.")]
+      and sum(n for v, n in runs(pid) if v) == FRAMES, (p.stdout, p.stderr[-300:], eof))
+voice.stream_argv = _stream_argv
 for k in ("STUB_TTS", "STUB_PLAY"):
     os.environ.pop(k, None)
 tempfile.tempdir = None
+
+# the engine against the real runtime: on this Mac only, when a voice is
+# here (SPARK_VOICE_REAL_DIR, else ~/.local/share/spark/voice); never in CI
+REAL_LIB = os.path.join(REAL_VOICE, "runtime", "lib", "libsherpa-onnx-c-api.dylib")
+REAL_MOUTH = os.path.join(REAL_VOICE, "mouth")
+why = ("not macOS" if not IS_MAC else "CI" if IN_CI else "no runtime library at %s" % REAL_LIB
+       if not os.path.isfile(REAL_LIB) else "no model.onnx in %s" % REAL_MOUTH
+       if not os.path.isfile(os.path.join(REAL_MOUTH, "model.onnx")) else "")
+if why:
+    print("skip the engine against the real runtime: %s" % why)
+else:
+    import ctypes
+    c = voice._c()
+    P = ctypes.sizeof(ctypes.c_void_p)
+    check("engine: the structs mirror c-api.h (Kokoro 7 pointers and a float; lang last; the audio a pointer and 2 ints)",
+          ctypes.sizeof(c["Kokoro"]) == 7 * P + P and c["Kokoro"].lang.offset == 7 * P
+          and c["Kokoro"].length_scale.offset == 4 * P and ctypes.sizeof(c["Audio"]) == P + 8
+          and c["Gen"].extra.offset == ctypes.sizeof(c["Gen"]) - P)
+    t0 = time.monotonic()
+    e = voice.Engine(REAL_LIB, REAL_MOUTH)
+    rate = e.load()
+    load_s = time.monotonic() - t0
+    lib = e.lib
+    lib.SherpaOnnxOfflineTtsNumSpeakers.restype = ctypes.c_int32
+    lib.SherpaOnnxOfflineTtsNumSpeakers.argtypes = [ctypes.c_void_p]
+    speakers = lib.SherpaOnnxOfflineTtsNumSpeakers(e.handles[""])
+    check("engine: loaded once, Kokoro v1.0 as the config said (24 kHz, 54 speakers, %s, lang per call)" % e.model,
+          rate == 24000 and speakers == 54 and e.loads == 1 and e.per_call and e.model == "model.onnx",
+          (rate, speakers, e.loads, e.per_call))
+    SENT = "The quick brown fox jumps over the lazy dog while the sun sets slowly behind the hills."
+    t1 = time.monotonic()
+    x1, fs1 = e.say(SENT, 3, 1.0, "en-us")
+    g1 = time.monotonic() - t1
+    t2 = time.monotonic()
+    x2, fs2 = e.say("Bom dia, você está bem? Não sei o que fazer agora.", 42, 1.0, "pt-br")
+    g2 = time.monotonic() - t2
+    x3, _ = e.say(SENT, 3, 1.25, "en-us")
+    check("engine: two sentences, the second with no reload (loads %d), each well inside its own length"
+          % e.loads, e.loads == 1 and fs1 == fs2 == 24000 and len(x1) > 3 * fs1 and len(x2) > fs2
+          and g1 < len(x1) / fs1 and g2 < len(x2) / fs2 and max(abs(v) for v in x1) <= 1.0
+          and len(x3) < len(x1), (e.loads, g1, g2))
+    x4, _ = e.say("Bom dia, você está bem? Não sei o que fazer agora.", 42, 1.0, "en-us")
+    check("engine: the language rides each call (pt-br and en-us read the same words differently)",
+          abs(len(x4) - len(x2)) > fs2 // 10, (len(x2), len(x4)))
+    pcm, fs = voice.clip(Cfg(SPARK_VOICE="on"), SENT, "on", engine=e, recipe=voice.mint("warm", "fixture-seed"))
+    check("clip on: the character over the engine's samples, 16-bit, the peak at 0.89",
+          fs == 24000 and len(pcm) // 2 > 3 * fs
+          and abs(max(abs(v) for v in array.array("h", pcm)) - 29163) <= 1, (len(pcm), len(x1)))
+    costs = []
+    for temper in ("plain", "warm", "playful", "terse"):
+        t3 = time.monotonic()
+        voice._pcm(voice.chain(x1, fs1, voice.mint(temper, "fixture-seed")), 0.89)
+        costs.append("%s %.2f s" % (temper, time.monotonic() - t3))
+    print("     engine: load %.2f s; generate %.2f s for %.2f s of audio, %.2f s for %.2f s (pt-br); "
+          "the chain and the PCM over it: %s" % (load_s, g1, len(x1) / fs1, g2, len(x2) / fs2, ", ".join(costs)))
+    e.close()
+    # the Reader end to end: the real engine, the stream stub; loaded once
+    per_clip(False)
+    reset_logs()
+    os.environ["SPARK_VOICE_DIR"] = REAL_VOICE
+    r = voice.Reader(Cfg(SPARK_VOICE="clear"))
+    t0 = time.monotonic()
+    r.put("Hello there.")
+    first = wait_for(lambda: any(x.get("sound") for x in jsonl("streams.jsonl")), 20)
+    first_s = time.monotonic() - t0
+    r.put("A second sentence, made by the same engine.")
+    r.drain(20, played=True)
+    pid = next((x["pid"] for x in jsonl("streams.jsonl") if "start" in x), 0)
+    check("Reader with the engine: the first sound %.2f s after put (the load once with it), both sentences "
+          "on one stream, the engine loaded once" % first_s,
+          first and r.engine and r.engine.loads == 1 and len([x for x in jsonl("streams.jsonl") if "start" in x]) == 1
+          and sum(n for v, n in runs(pid) if v) > 24000, (first_s, r.engine))
+    r.cut()
+    os.environ["SPARK_VOICE_DIR"] = VDIR
+    voice.stream_argv = _stream_argv
 
 shutil.rmtree(ROOT, ignore_errors=True)
 print("voice_test: %s" % ("all ok" if not FAILED else "%d failed" % FAILED))

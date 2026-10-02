@@ -18,7 +18,8 @@
 # licence upstream is in CREDITS.md and the SBOM holds voice.env's pins,
 # every word of `spark voice` is in the cheatsheet, every key the two
 # widgets bind (Esc k, Esc v, ...) is in the cheatsheet and INSTALL, and
-# every SPARK_VOICE* key is a row of INSTALL's key table; the voice's
+# every SPARK_VOICE* key is a row of INSTALL's key table, and the sizes
+# INSTALL, the cheatsheet and the CHANGELOG state are voice.env's; the voice's
 # mechanical half (docs/CONTRIBUTING.md
 # "## Voice") holds over every doc, its two measures included (a sentence
 # of 30 words at most, prose within 72 columns), and the two nouns hold
@@ -429,6 +430,20 @@ def spoken():
     for k in bound[0]:
         for name, text in (("docs/CHEATSHEET.txt", cheat), ("docs/INSTALL.md", inst)):
             check(re.search(r"\bEsc %s\b" % k, text) is not None, "%s names Esc %s (the widgets bind it)" % (name, k))
+    # the sizes the docs state are voice.env's: the mouth's row in
+    # INSTALL's engine table, and the total per OS (the runtime of that
+    # OS and the three models) in INSTALL, the cheatsheet and the CHANGELOG
+    mb = {k: int(round(int(w[1]) / 1e6)) for k, w in rows.items()}
+    models = sum(int(rows[k][1]) for k in ("VOICE_MOUTH", "VOICE_EARS", "VOICE_VAD") if k in rows)
+    linux = int(round((int(rows["VOICE_RUNTIME_LINUX_X64"][1]) + models) / 1e6)) if rows else 0
+    mac = int(round((int(rows["VOICE_RUNTIME_MACOS"][1]) + models) / 1e6)) if rows else 0
+    flat = lambda text: " ".join(text.split())     # noqa: E731
+    check(re.search(r"(?m)^\| the mouth \| [^|]*\| %d MB \|" % mb.get("VOICE_MOUTH", -1), inst) is not None,
+          "docs/INSTALL.md's engine table gives the mouth's size, %d MB (voice.env)" % mb.get("VOICE_MOUTH", -1))
+    pair = "%d MB on Linux" % linux, "%d MB on macOS" % mac
+    for name, text in (("docs/INSTALL.md", inst), ("docs/CHEATSHEET.txt", cheat),
+                       ("docs/CHANGELOG.md", read("docs/CHANGELOG.md").split("\n## v", 2)[1])):
+        check(all(p in flat(text) for p in pair), "%s states the engine as %s and %s (voice.env)" % ((name,) + pair))
     table = set(re.findall(r"(?m)^\| `([A-Z_]+)`", inst))
     keys = [k for k in config.SPARK_KEYS if k.startswith("SPARK_VOICE")]
     check(bool(keys), "config.SPARK_KEYS holds the SPARK_VOICE keys")

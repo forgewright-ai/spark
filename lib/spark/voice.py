@@ -57,10 +57,21 @@
 # lead_in()), so a sound card that sleeps between sounds never eats the
 # first word.
 #
+# Engine is Kokoro loaded once into this process through the runtime's
+# C API (ctypes, the structs mirrored from the pinned c-api.h): a
+# sentence per call, no tool started, no model read again. A runtime it
+# cannot load leaves the Reader on the tool, sherpa-onnx-offline-tts, in
+# silence.
+#
 # The surfaces (the chat, the prompt line, spark do) read through these:
 # Reader, the lines one after another in two threads of its own -- the
-# engine makes the next wav while the player plays this one, so a prompt
-# never waits for a voice and the voice never waits between lines;
+# engine makes the next clip while the player plays this one, so a
+# prompt never waits for a voice and the voice never waits between
+# lines. On Linux the player is ONE raw stream to the sound card a burst
+# (Stream): opened at the first clip with the lead-in, fed silence
+# between clips, closed after STREAM_IDLE of nothing, so the card is
+# opened once and no sentence's start is clipped by its waking. macOS
+# plays each clip with afplay, the lead-in after quiet;
 # Sentences, a streamed reply cut into sentences as it arrives, so the
 # chat speaks while the model writes; aloud_later(), a line spoken by a
 # detached process after the verb has exited (spark line: the widget
@@ -113,7 +124,7 @@ VOICE_USAGE = """%s voice -- spark reads aloud, and hears a question
                                 ends it (Esc v at the prompt and in chat)
   spark voice stop              stop speaking now (Esc x)
 
-  The first on or clear downloads the engine, about 380 MB, into
+  The first on or clear downloads the engine, about 600 MB, into
   ~/.local/share/spark/voice: sherpa-onnx, the Kokoro voice, Whisper and a
   voice activity detector, each pinned by sha256 in voice.env. On macOS
   the terminal asks once for the microphone.
@@ -126,7 +137,16 @@ SPEAK_MAX = 2000            # characters one speak() reads; the rest is cut at a
 SPEAK_TIMEOUT = 120         # seconds the engine may take for one text
 LISTEN_TIMEOUT = 60         # seconds Whisper may take for one question
 SILENCE = 0.8               # seconds of quiet that end a spoken question
-THREADS = 4
+
+
+def threads(cores=None):
+    """The engine's threads: 8 on a machine of 8 cores or more (more do
+    not help Kokoro), else the core count, at least 2."""
+    n = cores if cores is not None else (os.cpu_count() or 2)
+    return 8 if n >= 8 else max(2, n)
+
+
+THREADS = threads()
 # The lead-in: every wav speak() writes opens with this much silence, so
 # a sound card that sleeps between sounds (an HDA codec's power save)
 # wakes on nothing and the first word is never lost. SPARK_VOICE_LEAD_MS
@@ -136,11 +156,24 @@ LEAD_MAX_MS = 1000
 # The streamed reply (Sentences): a run with no sentence end is cut at a
 # comma or a space once it is this long, so the voice never waits long.
 SENTENCE_MAX = 240
+# A reply's first sentence longer than this is handed over at its first
+# comma or semicolon, so the first sound comes sooner; later ones whole.
+FIRST_CUT = 60
 # Kept small on purpose: a period after one of these ends no sentence.
 ABBREVIATIONS = ("e.g.", "i.e.", "dr.", "mr.", "mrs.", "ms.", "vs.")
-AHEAD = 2                   # wavs the Reader makes ahead of the one playing
+AHEAD = 2                   # clips the Reader makes ahead of the one playing
 WAKE_AFTER = 0.8            # seconds of quiet after which a sound card may sleep: the lead-in wakes it
 SR_EVERY = 30.0             # seconds a Reader trusts its screen-reader check
+# The stream (Linux): one player process a burst, raw 16-bit mono PCM on
+# its stdin. Between clips it is fed silence STREAM_CHUNK at a time,
+# never more than STREAM_AHEAD ahead (the next clip waits behind it);
+# STREAM_IDLE seconds after the last clip ends with nothing to come, it
+# is closed, and the next burst opens it again, the lead-in first.
+STREAM_IDLE = 1.5
+STREAM_CHUNK = 0.05
+STREAM_AHEAD = 0.15
+STREAM_WRITE = 0.1          # seconds of a clip written at a time: a cut lands between them
+MOUTH_MODELS = ("model.onnx", "model.int8.onnx")    # the pin's, then v1.70's until the fetch replaces it
 
 # What fetch() names the parts, the voice.env key each comes from, and
 # where each lands under the voice directory. The runtime's key is the
@@ -149,7 +182,7 @@ RUNTIME_KEYS = {"macos": "VOICE_RUNTIME_MACOS", "x86_64": "VOICE_RUNTIME_LINUX_X
                 "aarch64": "VOICE_RUNTIME_LINUX_ARM64", "arm64": "VOICE_RUNTIME_LINUX_ARM64"}
 PART_KEYS = (("runtime", None), ("mouth", "VOICE_MOUTH"), ("ears", "VOICE_EARS"), ("vad", "VOICE_VAD"))
 
-# Kokoro v1.0's speaker table (sherpa-onnx's kokoro-int8-multi-lang-v1_0:
+# Kokoro v1.0's speaker table (sherpa-onnx's kokoro-multi-lang-v1_0:
 # 54 speakers, 0..52 and em_santa at 53), the ones spark uses. a* is
 # American English, b* British, p* Brazilian Portuguese; f and m the
 # voice's register. The English ones are those Kokoro's own grades rate
@@ -632,22 +665,35 @@ def _read_wav(path):
     return [v / 32768.0 for v in a], rate
 
 
-def _write_wav(path, x, rate):
-    """16-bit mono PCM, the peak at 0.89 of full scale, 0600."""
-    peak = max((abs(v) for v in x), default=0.0)
-    k = 0.89 / peak if peak > 1e-9 else 1.0
+def _pcm(x, peak=None):
+    """Samples in [-1, 1] as 16-bit little-endian mono PCM bytes; with
+    `peak`, scaled first so the loudest is that much of full scale."""
+    k = 1.0
+    if peak:
+        top = max((abs(v) for v in x), default=0.0)
+        k = peak / top if top > 1e-9 else 1.0
     a = array.array("h", (max(-32767, min(32767, int(round(v * k * 32767)))) for v in x))
     if sys.byteorder == "big":
         a.byteswap()
+    return a.tobytes()
+
+
+def _write_pcm(path, pcm, rate):
+    """16-bit mono PCM bytes as a wav, 0600."""
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "wb") as f:
         w = wave.open(f, "wb")
         w.setnchannels(1)
         w.setsampwidth(2)
         w.setframerate(rate)
-        w.writeframes(a.tobytes())
+        w.writeframes(pcm)
         w.close()
     return path
+
+
+def _write_wav(path, x, rate):
+    """16-bit mono PCM, the peak at 0.89 of full scale, 0600."""
+    return _write_pcm(path, _pcm(x, 0.89), rate)
 
 
 def _norm(x):
@@ -731,14 +777,22 @@ def _robot(x, fs, r, seed):
 CHAINS = {"radio": _radio, "choir": _choir, "eightbit": _eightbit, "robot": _robot}
 
 
-def character(wav_in, recipe, wav_out=None):
-    """The recipe's chain over a 16-bit wav: a new wav, 0600, the same rate."""
+def chain(x, fs, recipe):
+    """The recipe's chain over samples in [-1, 1] at rate fs: the
+    character's samples, deterministic for a recipe."""
     r = _checked(recipe)
     if r is None:
         raise VoiceError("not a voice recipe")
-    x, fs = _read_wav(wav_in)
     seed = int.from_bytes(hashlib.sha256(json.dumps(r, sort_keys=True).encode()).digest()[:8], "big")
-    y = CHAINS[r["FAMILY"]](x, fs, r, seed)
+    return CHAINS[r["FAMILY"]](x, fs, r, seed)
+
+
+def character(wav_in, recipe, wav_out=None):
+    """The recipe's chain over a 16-bit wav: a new wav, 0600, the same rate."""
+    if _checked(recipe) is None:
+        raise VoiceError("not a voice recipe")
+    x, fs = _read_wav(wav_in)
+    y = chain(x, fs, recipe)
     out = wav_out or re.sub(r"(\.wav)?$", "-character.wav", wav_in, count=1)
     return _write_wav(out, y, fs)
 
@@ -818,16 +872,12 @@ def lead_in(path, ms=None):
     return path
 
 
-def speak(cfg, text, mode_="clear", lang=None, recipe=None, d=None, lead=None):
-    """The text as a wav (its path, 0600, in a private 0700 directory the
-    caller removes with cleanup(); `d`, one _private_dir() made, is used
-    instead of a new one): Kokoro through the runtime. "on" runs the
-    machine's character over it (recipe, else the one kept); "clear" is
-    the plain voice at SPARK_VOICE_RATE. Either way the final wav opens
-    with the lead-in (lead_in; `lead` ms, lead_ms() when None): a Reader
-    passes 0 for a sentence that follows one still playing, where the
-    card is awake and a lead-in would only be a pause."""
-    cfg = cfg or config.load()
+def _voice_of(cfg, text, mode_, lang=None, recipe=None):
+    """(the text to read, Portuguese or not, the Kokoro speaker, the
+    length scale, the recipe) for a text in a mode: "on" the recipe's
+    speaker (recipe, else the one kept) at length 1, "clear" af_heart or
+    pf_dora at 100/SPARK_VOICE_RATE. VoiceError when there is nothing
+    to say or no voice of its own."""
     t = _speakable(text)
     if not t:
         raise VoiceError("nothing to say")
@@ -841,13 +891,35 @@ def speak(cfg, text, mode_="clear", lang=None, recipe=None, d=None, lead=None):
     else:
         sid = CLEAR_SID_PT if pt else CLEAR_SID
         scale = 100.0 / rate(cfg)
+    return t, pt, sid, scale, recipe
+
+
+def _mouth_model(mouth):
+    """The mouth's model file: the pin's (model.onnx), else the one an
+    older pin left until the fetch replaces it."""
+    for name in MOUTH_MODELS:
+        if os.path.isfile(os.path.join(mouth, name)):
+            return name
+    return MOUTH_MODELS[0]
+
+
+def speak(cfg, text, mode_="clear", lang=None, recipe=None, d=None, lead=None):
+    """The text as a wav (its path, 0600, in a private 0700 directory the
+    caller removes with cleanup(); `d`, one _private_dir() made, is used
+    instead of a new one): Kokoro through the runtime. "on" runs the
+    machine's character over it (recipe, else the one kept); "clear" is
+    the plain voice at SPARK_VOICE_RATE. Either way the final wav opens
+    with the lead-in (lead_in; `lead` ms, lead_ms() when None): a Reader
+    passes 0, its player adds the lead-in where the card may sleep."""
+    cfg = cfg or config.load()
+    t, pt, sid, scale, recipe = _voice_of(cfg, text, mode_, lang, recipe)
     tts = _bin("sherpa-onnx-offline-tts")
     mouth = os.path.join(voice_dir(), "mouth")
     if not (os.access(tts, os.X_OK) and os.path.isdir(mouth)):
         raise VoiceError("the voice engine is not here -- spark voice %s fetches it" % ("on" if mode_ == "on" else "clear"))
     d = d if d and _ours(d) and os.path.isdir(d) else _private_dir()
     raw = os.path.join(d, "voice.wav")
-    cmd = [tts, "--kokoro-model=model.int8.onnx", "--kokoro-voices=voices.bin", "--kokoro-tokens=tokens.txt",
+    cmd = [tts, "--kokoro-model=" + _mouth_model(mouth), "--kokoro-voices=voices.bin", "--kokoro-tokens=tokens.txt",
            "--kokoro-data-dir=espeak-ng-data", "--kokoro-dict-dir=dict",
            "--kokoro-lexicon=lexicon-us-en.txt,lexicon-zh.txt", "--kokoro-lang=" + ("pt-br" if pt else "en-us"),
            "--kokoro-length-scale=%.3f" % scale, "--num-threads=%d" % THREADS, "--sid=%d" % sid,
@@ -871,6 +943,232 @@ def speak(cfg, text, mode_="clear", lang=None, recipe=None, d=None, lead=None):
         raise VoiceError("the character did not run (%s)" % e)
     os.remove(raw)
     return lead_in(out, lead)
+
+
+# ------------------------------------------------------------ the engine
+# The runtime's C API, mirrored field for field from the c-api.h of the
+# pinned sherpa-onnx (VOICE_RUNTIME_VERSION): the offline TTS config and
+# its seven model families in the header's order, the generated audio,
+# and the generation config. ctypes zero-fills a struct, so every family
+# but Kokoro stays null, as the header's memset does.
+_C = {}
+
+
+def _c():
+    """The ctypes mirror of c-api.h, built once (ctypes is imported only
+    when a voice is loaded)."""
+    if _C:
+        return _C
+    import ctypes as ct
+    s, f, i = ct.c_char_p, ct.c_float, ct.c_int32
+
+    def struct(name, fields):
+        return type(name, (ct.Structure,), {"_fields_": fields})
+    vits = struct("Vits", [("model", s), ("lexicon", s), ("tokens", s), ("data_dir", s), ("noise_scale", f),
+                           ("noise_scale_w", f), ("length_scale", f), ("dict_dir", s)])
+    matcha = struct("Matcha", [("acoustic_model", s), ("vocoder", s), ("lexicon", s), ("tokens", s),
+                               ("data_dir", s), ("noise_scale", f), ("length_scale", f), ("dict_dir", s)])
+    kokoro = struct("Kokoro", [("model", s), ("voices", s), ("tokens", s), ("data_dir", s), ("length_scale", f),
+                               ("dict_dir", s), ("lexicon", s), ("lang", s)])
+    kitten = struct("Kitten", [("model", s), ("voices", s), ("tokens", s), ("data_dir", s), ("length_scale", f)])
+    zipvoice = struct("Zipvoice", [("tokens", s), ("encoder", s), ("decoder", s), ("vocoder", s), ("data_dir", s),
+                                   ("lexicon", s), ("feat_scale", f), ("t_shift", f), ("target_rms", f),
+                                   ("guidance_scale", f)])
+    pocket = struct("Pocket", [("lm_flow", s), ("lm_main", s), ("encoder", s), ("decoder", s),
+                               ("text_conditioner", s), ("vocab_json", s), ("token_scores_json", s),
+                               ("voice_embedding_cache_capacity", i)])
+    supertonic = struct("Supertonic", [("duration_predictor", s), ("text_encoder", s), ("vector_estimator", s),
+                                       ("vocoder", s), ("tts_json", s), ("unicode_indexer", s), ("voice_style", s)])
+    model = struct("Model", [("vits", vits), ("num_threads", i), ("debug", i), ("provider", s), ("matcha", matcha),
+                             ("kokoro", kokoro), ("kitten", kitten), ("zipvoice", zipvoice), ("pocket", pocket),
+                             ("supertonic", supertonic)])
+    config_ = struct("Config", [("model", model), ("rule_fsts", s), ("max_num_sentences", i), ("rule_fars", s),
+                                ("silence_scale", f)])
+    audio = struct("Audio", [("samples", ct.POINTER(f)), ("n", i), ("sample_rate", i)])
+    gen = struct("Gen", [("silence_scale", f), ("speed", f), ("sid", i), ("reference_audio", ct.POINTER(f)),
+                         ("reference_audio_len", i), ("reference_sample_rate", i), ("reference_text", s),
+                         ("num_steps", i), ("extra", s)])
+    _C.update(ct=ct, Kokoro=kokoro, Model=model, Config=config_, Audio=audio, Gen=gen)
+    return _C
+
+
+SILENCE_SCALE = 0.2         # the tool's own default: the pause between sentences inside one text
+
+
+def _lib_file():
+    return os.path.join(voice_dir(), "runtime", "lib", "libsherpa-onnx-c-api" + (".dylib" if IS_MAC else ".so"))
+
+
+def _dlopen(path):
+    """The C API library, its onnxruntime found beside it: the runtime's
+    rpath names its own directory; a runtime that does not is helped by
+    onnxruntime loaded first, globally (the loader's path variables are
+    read once, when a process starts, so _lib_env cannot help here)."""
+    ct = _c()["ct"]
+    try:
+        return ct.CDLL(path)
+    except OSError:
+        lib = os.path.dirname(path)
+        for name in sorted(os.listdir(lib)):
+            if name.startswith("libonnxruntime"):
+                try:
+                    ct.CDLL(os.path.join(lib, name), mode=ct.RTLD_GLOBAL)
+                    break
+                except OSError:
+                    continue
+        return ct.CDLL(path)
+
+
+class Engine:
+    """Kokoro loaded once, through the runtime's C API: say() makes one
+    text's samples with no tool started and no model read again. The
+    language rides each call (the generation config's extra JSON, `lang`)
+    where the runtime has SherpaOnnxOfflineTtsGenerateWithConfig; a
+    runtime without it keeps one loaded voice per language, made when
+    first asked. The speed rides each call too: 1 / the length scale.
+    One thread calls it at a time (a Reader's engine thread); ctypes lets
+    the GIL go while it runs."""
+
+    def __init__(self, path=None, mouth=None, threads_=None):
+        c = _c()
+        self.ct = c["ct"]
+        self.lib = _dlopen(path or _lib_file())
+        self.mouth = mouth or os.path.join(voice_dir(), "mouth")
+        self.model = _mouth_model(self.mouth)
+        self.threads = threads_ or THREADS
+        ct, lib = self.ct, self.lib
+        lib.SherpaOnnxCreateOfflineTts.restype = ct.c_void_p
+        lib.SherpaOnnxCreateOfflineTts.argtypes = [ct.POINTER(c["Config"])]
+        lib.SherpaOnnxDestroyOfflineTts.restype = None
+        lib.SherpaOnnxDestroyOfflineTts.argtypes = [ct.c_void_p]
+        lib.SherpaOnnxOfflineTtsSampleRate.restype = ct.c_int32
+        lib.SherpaOnnxOfflineTtsSampleRate.argtypes = [ct.c_void_p]
+        lib.SherpaOnnxDestroyOfflineTtsGeneratedAudio.restype = None
+        lib.SherpaOnnxDestroyOfflineTtsGeneratedAudio.argtypes = [ct.POINTER(c["Audio"])]
+        try:
+            fn = lib.SherpaOnnxOfflineTtsGenerateWithConfig
+            fn.restype = ct.POINTER(c["Audio"])
+            fn.argtypes = [ct.c_void_p, ct.c_char_p, ct.POINTER(c["Gen"]), ct.c_void_p, ct.c_void_p]
+            self.per_call = True
+        except AttributeError:
+            fn = lib.SherpaOnnxOfflineTtsGenerate
+            fn.restype = ct.POINTER(c["Audio"])
+            fn.argtypes = [ct.c_void_p, ct.c_char_p, ct.c_int32, ct.c_float]
+            self.per_call = False
+        self.generate = fn
+        self.handles = {}           # lang ('' when it rides each call) -> the loaded voice
+        self.keep = []              # the config's strings, alive as long as the engine
+        self.loads = 0
+        self.load_s = 0.0
+
+    def _voice(self, lang):
+        key = "" if self.per_call else lang
+        h = self.handles.get(key)
+        if h:
+            return h
+        c, m, keep = _c(), self.mouth, self.keep
+
+        def b(text):
+            keep.append(text.encode("utf-8"))
+            return keep[-1]
+        cfg = c["Config"]()
+        k = cfg.model.kokoro
+        k.model = b(os.path.join(m, self.model))
+        k.voices = b(os.path.join(m, "voices.bin"))
+        k.tokens = b(os.path.join(m, "tokens.txt"))
+        k.data_dir = b(os.path.join(m, "espeak-ng-data"))
+        k.dict_dir = b(os.path.join(m, "dict"))
+        k.lexicon = b(",".join(os.path.join(m, x) for x in ("lexicon-us-en.txt", "lexicon-zh.txt")))
+        k.lang = b(lang)
+        k.length_scale = 1.0
+        cfg.model.num_threads = self.threads
+        cfg.model.provider = b"cpu"
+        cfg.max_num_sentences = 1
+        cfg.silence_scale = SILENCE_SCALE
+        t0 = time.monotonic()
+        h = self.lib.SherpaOnnxCreateOfflineTts(self.ct.byref(cfg))
+        self.load_s += time.monotonic() - t0
+        if not h:
+            raise VoiceError("the voice engine did not load %s" % self.model)
+        self.loads += 1
+        self.handles[key] = h
+        return h
+
+    def load(self, lang="en-us"):
+        """Load now (the first say() would): the rate, VoiceError when not."""
+        return self.lib.SherpaOnnxOfflineTtsSampleRate(self._voice(lang))
+
+    def say(self, text, sid, speed=1.0, lang="en-us"):
+        """(samples as array('f') in [-1, 1], the rate) for one text."""
+        h = self._voice(lang)
+        t = text.encode("utf-8", "replace")
+        if self.per_call:
+            g = _c()["Gen"]()
+            g.silence_scale, g.speed, g.sid = SILENCE_SCALE, speed, sid
+            g.extra = json.dumps({"lang": lang}).encode()
+            a = self.generate(h, t, self.ct.byref(g), None, None)
+        else:
+            a = self.generate(h, t, sid, speed)
+        if not a:
+            raise VoiceError("the voice engine did not speak")
+        try:
+            n, fs = a.contents.n, a.contents.sample_rate
+            x = array.array("f")
+            if n > 0:
+                x.frombytes(self.ct.string_at(a.contents.samples, n * x.itemsize))
+        finally:
+            self.lib.SherpaOnnxDestroyOfflineTtsGeneratedAudio(a)
+        return x, fs
+
+    def close(self):
+        for h in self.handles.values():
+            self.lib.SherpaOnnxDestroyOfflineTts(h)
+        self.handles = {}
+
+
+def load_engine():
+    """An Engine with English loaded, or None: no runtime library here,
+    a runtime without these symbols, a mouth that does not load. The
+    caller then uses the tool, in silence."""
+    if not os.path.isfile(_lib_file()) or not os.path.isdir(os.path.join(voice_dir(), "mouth")):
+        return None
+    try:
+        e = Engine()
+        e.load()
+        return e
+    except Exception:  # noqa: BLE001 -- any failure here is the tool's turn, never the verb's
+        return None
+
+
+def clip(cfg, text, mode_="clear", engine=None, lang=None, recipe=None):
+    """One text as (16-bit little-endian mono PCM bytes, rate): through
+    the loaded engine when there is one, else the tool. Mode on runs the
+    character's chain over the samples, the peak at 0.89 of full scale.
+    No lead-in: the player adds it where the card may sleep."""
+    if engine is not None:
+        t, pt, sid, scale, recipe = _voice_of(cfg, text, mode_, lang, recipe)
+        try:
+            x, fs = engine.say(t, sid, 1.0 / scale, "pt-br" if pt else "en-us")
+        except VoiceError:
+            x, fs = None, 0
+        if x is not None and fs > 0:
+            return (_pcm(chain(x, fs, recipe), 0.89) if mode_ == "on" else _pcm(x)), fs
+    wav = speak(cfg, text, mode_, lang=lang, recipe=recipe, lead=0)
+    try:
+        return _read_pcm(wav)
+    finally:
+        cleanup(wav)
+
+
+def _read_pcm(path):
+    """A wav as (16-bit little-endian mono PCM bytes, rate)."""
+    with wave.open(path, "rb") as w:
+        ch, width, fs = w.getnchannels(), w.getsampwidth(), w.getframerate()
+        data = w.readframes(w.getnframes())
+    if (ch, width) == (1, 2):
+        return data, fs
+    x, fs = _read_wav(path)
+    return _pcm(x), fs
 
 
 # ---------------------------------------------------------------- playing
@@ -936,6 +1234,20 @@ def _forget(h):
         pass
 
 
+def _track(h):
+    """A player handle known to stop(): this process's list, and
+    state/voice-playing for another spark's `spark voice stop`."""
+    _PLAYING.append(h)
+    try:
+        os.makedirs(STATE_DIR, mode=0o700, exist_ok=True)
+        fd = os.open(PLAYING_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write("%d %s\n" % (h.proc.pid, h.tmp))
+    except OSError:
+        pass
+    return h
+
+
 def play(cfg, wav, wait=True):
     """Play a wav through the OS's player. wait=False returns at once;
     the handle's stop() (or stop()) ends it. VoiceError when nothing can
@@ -949,15 +1261,7 @@ def play(cfg, wav, wait=True):
     proc = subprocess.Popen(["sh", "-c", '"$@"; [ -z "$SPARK_VOICE_TMP" ] || rm -rf -- "$SPARK_VOICE_TMP"', "sh"]
                             + argv + [wav], env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                             stderr=subprocess.DEVNULL, start_new_session=True)
-    h = Playing(proc, tmp)
-    _PLAYING.append(h)
-    try:
-        os.makedirs(STATE_DIR, mode=0o700, exist_ok=True)
-        fd = os.open(PLAYING_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-        with os.fdopen(fd, "w") as f:
-            f.write("%d %s\n" % (proc.pid, tmp))
-    except OSError:
-        pass
+    h = _track(Playing(proc, tmp))
     if wait:
         try:
             h.wait()
@@ -1002,6 +1306,67 @@ def stop():
     except OSError:
         pass
     return stopped
+
+
+def stream_argv(cfg, rate):
+    """The OS's player reading raw 16-bit little-endian mono PCM at
+    `rate` on its stdin, as argv, or None: aplay on Linux (-D
+    SPARK_VOICE_DEVICE when set), else paplay --raw; None on macOS,
+    whose afplay plays files alone."""
+    if IS_MAC:
+        return None
+    if shutil.which("aplay"):
+        dev = (cfg or config.load()).get("SPARK_VOICE_DEVICE", "")
+        return ["aplay", "-q", "-t", "raw", "-f", "S16_LE", "-c", "1", "-r", str(int(rate))] + (
+            ["-D", dev] if dev else [])
+    if shutil.which("paplay"):
+        return ["paplay", "--raw", "--format=s16le", "--channels=1", "--rate=%d" % int(rate)]
+    return None
+
+
+class Stream(Playing):
+    """One player process fed raw PCM: the sound card opened once for a
+    burst of clips. It runs in its own session under a small sh named
+    spark-voice-stream (what `spark voice stop` in another spark knows),
+    and opens with the lead-in. write() blocks while the card is behind,
+    so the writes keep its pace; `until` is when what was written ends,
+    on the monotonic clock. close() is the end of input: what was
+    written plays out, then the player exits. stop() kills it now."""
+
+    def __init__(self, argv, rate, lead=None):
+        proc = subprocess.Popen(["sh", "-c", '"$@"', "spark-voice-stream"] + list(argv), stdin=subprocess.PIPE,
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, bufsize=0,
+                                start_new_session=True)
+        Playing.__init__(self, proc, "")
+        self.rate = int(rate)
+        self.opened = self.until = time.monotonic()
+        _track(self)
+        ms = lead_ms() if lead is None else lead
+        if ms > 0:
+            self.write(self.quiet(ms / 1000.0))
+
+    def quiet(self, seconds):
+        return b"\0\0" * int(self.rate * seconds)
+
+    def write(self, pcm):
+        """All of pcm into the player; False when it is gone."""
+        view = memoryview(pcm)
+        try:
+            fd = self.proc.stdin.fileno()
+            while view:
+                n = os.write(fd, view)
+                view = view[n:]
+        except (OSError, ValueError):
+            return False
+        self.until = max(self.until, time.monotonic()) + len(pcm) / (2.0 * self.rate)
+        return True
+
+    def close(self):
+        try:
+            self.proc.stdin.close()
+        except (OSError, ValueError):
+            pass
+        _forget(self)
 
 
 def anyway():
@@ -1381,27 +1746,37 @@ class Reader:
     """The lines a surface reads aloud, in threads of their own: put()
     returns at once, so a prompt never waits for a voice. Two stages, so
     the next line is ready when the one playing ends: the engine's
-    thread turns the queued text into wavs, at most AHEAD ahead of the
-    player, and the player's thread plays them in order. cut() drops
-    the text that waits AND the wavs made ready (their files removed)
-    and stops what plays -- a new reply over an old one, put(cut=True)
-    too; hush() is Esc x (another spark's voice stops as well); drain()
-    waits, bounded, until every line put has begun to play (played=True:
-    has finished) -- the player outlives the process, so a goodbye is
-    never cut off by the exit. A wav never outlives its line: played,
-    dropped, or removed when the process exits."""
+    thread turns the queued text into clips (PCM in memory), at most
+    AHEAD ahead of the player, and the player's thread plays them in
+    order. The engine is loaded once, at the first line, in the engine's
+    thread (load_engine; the tool when it cannot be), and kept for the
+    reader's life: a chat pays the load once. On Linux the player is one
+    Stream a burst: opened at the first clip with the lead-in, fed
+    silence while the next clip is made, closed STREAM_IDLE after the
+    last clip ends with nothing to come. macOS plays each clip with
+    afplay, the lead-in before the first after WAKE_AFTER of quiet.
+    cut() drops the text that waits AND the clips made ready and stops
+    what plays -- a new reply over an old one, put(cut=True) too; hush()
+    is Esc x (another spark's voice stops as well); drain() waits,
+    bounded, until every line put has begun to play -- on the stream,
+    has been written whole into it -- (played=True: has finished): the
+    player outlives the process, so a goodbye is never cut off by the
+    exit. A wav (macOS) never outlives its line."""
 
     def __init__(self, cfg=None):
         self.cfg = cfg
         self.lines = []             # (gen, text): waiting for the engine
-        self.ready = []             # (gen, wav): made, waiting for the player
+        self.ready = []             # (gen, (pcm, rate)): made, waiting for the player
         self.gen = 0
         self.making = False         # a text in the engine now
-        self.starting = False       # a wav being handed to the player now
-        self.playing = None
-        self.owned = set()          # private dirs made here, not yet the player's
-        self.quiet = 0.0            # when the last wav stopped playing (0: never played)
+        self.starting = False       # a clip being handed to the player now
+        self.playing = None         # per clip (macOS): the one playing
+        self.stream = None          # the stream (Linux): open for this burst
+        self.sounding = 0.0         # when the clips written into the stream end (monotonic)
+        self.quiet = 0.0            # when the last clip stopped playing (0: never played)
         self.sr = (0.0, "")         # (when, screen_reader()): asked once per SR_EVERY
+        self.engine = None          # the loaded engine; False: the tool, for this reader's life
+        self.owned = set()          # private dirs made here, not yet removed
         self.cv = threading.Condition()
         self.threads = None
         _READERS.append(self)
@@ -1429,28 +1804,27 @@ class Reader:
             self.cv.notify_all()
 
     def _drop(self):
-        """(the lock held) What waits goes, every ready wav with its
-        files, and what plays stops. A wav in the engine now is dropped
-        when it comes out (its generation is gone)."""
+        """(the lock held) What waits goes, every ready clip, and what
+        plays stops: the clip playing, or the stream killed with what it
+        still held. A clip in the engine now is dropped when it comes out
+        (its generation is gone)."""
         del self.lines[:]
         self.gen += 1
-        for _gen, wav in self.ready:
-            self._discard(wav)
         del self.ready[:]
         h, self.playing = self.playing, None
-        if h is not None:
-            h.stop()
+        s, self.stream = self.stream, None
+        self.sounding = 0.0
+        for x in (h, s):
+            if x is not None:
+                x.stop()
         self.cv.notify_all()
-
-    def _discard(self, wav):
-        self.owned.discard(os.path.dirname(wav))
-        cleanup(wav)
 
     def cut(self):
         """The speaking of this reader ends: the text that waits, the
-        ready wavs and what plays. True when there was any."""
+        ready clips and what plays. True when there was any."""
         with self.cv:
-            had = bool(self.lines or self.ready or self.busy) or self.playing is not None
+            had = (bool(self.lines or self.ready or self.busy) or self.playing is not None
+                   or (self.stream is not None and time.monotonic() < self.sounding))
             self._drop()
         return had
 
@@ -1467,22 +1841,19 @@ class Reader:
                     self.cv.wait()
                 gen, text = self.lines.pop(0)
                 self.making = True
-            wav = None
+            made = None
             try:
-                wav = self._make(text)
+                made = self._make(text)
             finally:
                 with self.cv:
                     self.making = False
-                    if wav and gen == self.gen:
-                        self.ready.append((gen, wav))
-                    elif wav:
-                        self._discard(wav)
+                    if made and gen == self.gen:
+                        self.ready.append((gen, made))
                     self.cv.notify_all()
 
     def _make(self, text):
-        """One line as a wav in a private dir of this reader's, or None:
-        off, a screen reader in clear mode, the stub seam, a failure
-        (said in one line, never a raise)."""
+        """One line as a clip, or None: off, a screen reader in clear
+        mode, the stub seam, a failure (said in one line, never a raise)."""
         d = None
         try:
             cfg = self.cfg or config.load()
@@ -1495,71 +1866,159 @@ class Reader:
             if os.environ.get("SPARK_VOICE_STUB"):
                 _stubbed(text)
                 return None
+            if self.engine is None:
+                self.engine = load_engine() or False
+            if self.engine:
+                return clip(cfg, text, m, engine=self.engine)
             d = _private_dir()
             with self.cv:
                 self.owned.add(d)
-                # the card is awake while one plays or just stopped: no
-                # lead-in between sentences, only before the first after quiet
-                awake = (self.playing is not None or self.starting or self.ready
-                         or (self.quiet and time.time() - self.quiet < WAKE_AFTER))
-            return speak(cfg, text, m, d=d, lead=0 if awake else None)
+            return _read_pcm_gone(speak(cfg, text, m, d=d, lead=0))
         except Exception as e:  # noqa: BLE001 -- the voice never breaks the verb it speaks for
+            _complain(e)
+            return None
+        finally:
             if d:
                 with self.cv:
                     self.owned.discard(d)
                 shutil.rmtree(d, ignore_errors=True)
-            _complain(e)
-            return None
 
     def _player(self):
         while True:
-            with self.cv:
-                while not self.ready:
+            act = self._next()
+            if act[0] == "silence":
+                act[1].write(act[1].quiet(STREAM_CHUNK))
+            elif act[0] == "close":
+                act[1].close()
+            else:
+                self._play(act[1], act[2])
+
+    def _next(self):
+        """What the player does next: ("clip", gen, clip), or with a stream
+        open and nothing ready, ("silence", stream) when it runs low or
+        ("close", stream) once it has been idle STREAM_IDLE."""
+        with self.cv:
+            while True:
+                if self.ready:
+                    gen, made = self.ready.pop(0)
+                    self.starting = True
+                    self.cv.notify_all()            # the engine may make the next one
+                    return "clip", gen, made
+                s = self.stream
+                if s is None:
                     self.cv.wait()
-                gen, wav = self.ready.pop(0)
-                self.starting = True
-                self.cv.notify_all()            # the engine may make the next one
-            h = None
-            try:
-                h = self._start(wav)
-            finally:
-                with self.cv:
-                    self.owned.discard(os.path.dirname(wav))    # the player's now, or gone
-                    stale = gen != self.gen
-                    self.starting = False
-                    self.playing = None if stale else h
+                    continue
+                now = time.monotonic()
+                if s.done():                        # stopped from outside (spark voice stop)
+                    self.stream = None
+                    _forget(s)
+                    continue
+                if not (self.lines or self.making) and now - max(self.sounding, s.opened) >= STREAM_IDLE:
+                    self.stream = None
+                    self.quiet = time.time()
                     self.cv.notify_all()
-            if h is None:
-                continue
-            if stale:
-                h.stop()
-                continue
-            try:
-                h.wait()
-            except Exception:  # noqa: BLE001 -- a player gone wrong ends this line only
-                pass
+                    return "close", s
+                ahead = s.until - now
+                if ahead < STREAM_AHEAD:
+                    return "silence", s
+                self.cv.wait(min(0.25, ahead - STREAM_AHEAD + 0.005))
+
+    def _play(self, gen, made):
+        cfg = self.cfg or config.load()
+        argv = None
+        try:
+            argv = stream_argv(cfg, made[1])
+        except Exception:  # noqa: BLE001
+            argv = None
+        if argv:
+            self._stream(cfg, argv, gen, made)
+        else:
+            self._clip(gen, made)
+
+    def _stream(self, cfg, argv, gen, made):
+        """A clip into the stream, opened first when there is none (or its
+        rate differs): STREAM_WRITE at a time, so a cut lands between."""
+        pcm, fs = made
+        s = None
+        try:
             with self.cv:
-                if self.playing is h:
-                    self.playing = None
-                self.quiet = time.time()
+                s = self.stream
+            if s is None or s.rate != fs or s.done():
+                if s is not None:
+                    s.close()
+                stop()                              # another spark's voice gives way
+                s = Stream(argv, fs)
+                with self.cv:
+                    if gen != self.gen:
+                        s.stop()
+                        return
+                    self.stream = s
+            step = 2 * max(1, int(fs * STREAM_WRITE))
+            for i in range(0, len(pcm), step):
+                if gen != self.gen or not s.write(pcm[i:i + step]):
+                    break
+        except Exception as e:  # noqa: BLE001 -- a player gone wrong ends this clip only
+            _complain(e)
+        finally:
+            with self.cv:
+                self.starting = False
+                if s is not None and gen == self.gen and self.stream is s:
+                    self.sounding = s.until
                 self.cv.notify_all()
 
-    def _start(self, wav):
+    def _clip(self, gen, made):
+        """A clip as its own wav through the OS's player (afplay): the
+        lead-in when the card may be asleep (nothing played within
+        WAKE_AFTER)."""
+        h = None
+        try:
+            with self.cv:
+                awake = self.quiet and time.time() - self.quiet < WAKE_AFTER
+            h = self._start(made, 0 if awake else None)
+        finally:
+            with self.cv:
+                stale = gen != self.gen
+                self.starting = False
+                self.playing = None if stale else h
+                self.cv.notify_all()
+        if h is None:
+            return
+        if stale:
+            h.stop()
+            return
+        try:
+            h.wait()
+        except Exception:  # noqa: BLE001 -- a player gone wrong ends this line only
+            pass
+        with self.cv:
+            if self.playing is h:
+                self.playing = None
+            self.quiet = time.time()
+            self.cv.notify_all()
+
+    def _start(self, made, lead):
+        wav = None
         try:
             cfg = self.cfg or config.load()
+            d = _private_dir()
+            wav = _write_pcm(os.path.join(d, "voice.wav"), made[0], made[1])
+            lead_in(wav, lead)
             stop()                  # another spark's voice gives way, as say_aloud's does
             return play(cfg, wav, wait=False)
         except Exception as e:  # noqa: BLE001
-            cleanup(wav)
+            if wav:
+                cleanup(wav)
             _complain(e)
             return None
 
     def drain(self, timeout=10.0, played=False):
-        """Wait until every line put has begun to play (played=True: has
-        finished), at most `timeout` seconds."""
+        """Wait until every line put has begun to play -- on the stream,
+        is written whole into it -- (played=True: has finished), at most
+        `timeout` seconds."""
         end = time.time() + timeout
         with self.cv:
-            while self.lines or self.ready or self.busy or (played and self.playing is not None):
+            while (self.lines or self.ready or self.busy
+                   or (played and (self.playing is not None or time.monotonic() < self.sounding))):
                 left = end - time.time()
                 if left <= 0:
                     return False
@@ -1567,9 +2026,10 @@ class Reader:
         return True
 
     def _exit(self):
-        """At the process's exit: the text that waits goes, and every wav
-        not handed to a player is removed (what plays runs on: its sh
-        removes its own)."""
+        """At the process's exit: the text that waits goes, the clips made
+        ready too, every private dir is removed, and the stream gets its
+        end of input -- what it holds plays out, then its player exits
+        (what plays per clip runs on: its sh removes its own)."""
         if not self.cv.acquire(timeout=1.0):
             return
         try:
@@ -1577,10 +2037,21 @@ class Reader:
             self.gen += 1
             del self.ready[:]
             dirs, self.owned = list(self.owned), set()
+            s, self.stream = self.stream, None
         finally:
             self.cv.release()
         for d in dirs:
             shutil.rmtree(d, ignore_errors=True)
+        if s is not None:
+            s.close()
+
+
+def _read_pcm_gone(wav):
+    """A wav speak() made as PCM, its private directory removed."""
+    try:
+        return _read_pcm(wav)
+    finally:
+        cleanup(wav)
 
 
 _READERS = []
@@ -1603,12 +2074,16 @@ class Sentences:
     abbreviation (ABBREVIATIONS), after a list's `1.`, or inside an
     inline code span. A ``` fence is one line, "a code block, N lines"
     (code=True: clear mode), or nothing (code=False: mode on). A run
-    with no end is cut at a comma or a space near SENTENCE_MAX. A
-    decision that needs the next character waits for it, so a stream
-    split anywhere gives the same sentences as the whole text."""
+    with no end is cut at a comma or a space near SENTENCE_MAX. The
+    reply's first sentence, once it is longer than FIRST_CUT, is handed
+    over at its first comma or semicolon before a space, so the first
+    sound starts sooner; the sentences after it stay whole. A decision
+    that needs the next character waits for it, so a stream split
+    anywhere gives the same sentences as the whole text."""
 
     def __init__(self, code=True):
         self.code = code
+        self.first = True           # nothing said yet: the first sentence may go at its first comma
         self.buf = ""               # not scanned yet
         self.cur = ""               # the sentence being built
         self.line = ""              # the current line, as far as scanned
@@ -1703,6 +2178,11 @@ class Sentences:
     def _add(self, s):
         self.cur += s
         self.line += s
+        if self.first and len(self.cur) > FIRST_CUT:
+            m = _FIRST_PAUSE.search(self.cur)
+            if m:
+                piece, self.cur = self.cur[:m.start() + 1], self.cur[m.end():]
+                return self._said(piece)
         if len(self.cur) < SENTENCE_MAX:
             return []
         k = self.cur.rfind(", ")
@@ -1717,16 +2197,22 @@ class Sentences:
         piece, self.cur = self.cur, ""
         return self._said(piece)
 
-    @staticmethod
-    def _said(piece):
+    def _said(self, piece):
         piece = piece.strip()
-        return [piece] if re.search(r"\w", piece) else []
+        if not re.search(r"\w", piece):
+            return []
+        self.first = False
+        return [piece]
 
     def _block(self, lines):
-        return ["a code block, %s" % _plural(lines, "line")] if self.code and lines else []
+        if not (self.code and lines):
+            return []
+        self.first = False
+        return ["a code block, %s" % _plural(lines, "line")]
 
 
 _FENCE = re.compile(r" {0,3}```")
+_FIRST_PAUSE = re.compile(r"[,;]\s")
 _FENCE_START = re.compile(r" {0,3}`{0,2}$")
 
 

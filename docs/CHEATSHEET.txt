@@ -144,8 +144,8 @@ THE INTERFACE
   Esc v                           listen, at the prompt and in the chat: the
                                   words land in your line. Enter sends
   Esc x                           stop speaking
-  the first on or clear           downloads the engine: about 369 MB on Linux,
-                                  384 MB on macOS (~/.local/share/spark/voice)
+  the first on or clear           downloads the engine: about 586 MB on Linux,
+                                  602 MB on macOS (~/.local/share/spark/voice)
   SPARK_VOICE_DEVICE=plughw:1,0   Linux: a headset on the second card
 
 THE LIVING PROMPT

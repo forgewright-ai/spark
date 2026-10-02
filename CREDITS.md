@@ -30,9 +30,10 @@ carries onnxruntime -- https://github.com/microsoft/onnxruntime -- MIT.
 `voice.env`:
 
 - Kokoro-82M v1.0 -- https://huggingface.co/hexgrad/Kokoro-82M --
-  Apache-2.0, the voice, in sherpa-onnx's int8 export. Its tarball
-  carries espeak-ng-data -- https://github.com/espeak-ng/espeak-ng --
-  GPL-3.0, downloaded with it and never vendored.
+  Apache-2.0, the voice, in sherpa-onnx's full-precision export. Its
+  tarball carries espeak-ng-data --
+  https://github.com/espeak-ng/espeak-ng -- GPL-3.0, downloaded with it
+  and never vendored.
 - Whisper base -- https://github.com/openai/whisper -- MIT, the ears,
   in sherpa-onnx's int8 export.
 - Silero VAD -- https://github.com/snakers4/silero-vad -- MIT: where a

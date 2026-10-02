@@ -18,10 +18,22 @@ The voice keeps pace with the reply.
 - The next sentence is made while one plays, so the voice no longer
   stops between sentences. `spark do` and the other surfaces gain this
   too.
-- A short silence, 250 ms, before the first sentence after a quiet
-  moment, so the first word is never lost on a sound card that sleeps
-  between sounds. Sentences that follow one another get none.
-  `SPARK_VOICE_LEAD_MS` in the environment changes it, 0 to 1000.
+- The voice stays loaded for a chat. The first sentence loads it, about
+  a second, and every sentence after it is made with no new start. The
+  same goes for `spark do`.
+- On Linux the voice is one stream to the sound card for each run of
+  sentences. The card is opened once, with a short silence first, 250
+  ms, and kept awake with silence between sentences. So no sentence
+  loses its first word to a sleeping card. `SPARK_VOICE_LEAD_MS` in
+  the environment changes the silence, 0 to 1000. On macOS each
+  sentence plays on its own, the silence before the first after a
+  quiet moment.
+- A long first sentence is cut at its first comma, so the first sound
+  comes sooner. The sentences after it stay whole.
+- The voice is Kokoro's full-precision model now, 350 MB, not the
+  smaller int8 one. It is about 4 times faster on a plain x86 CPU. The
+  engine is 586 MB on Linux and 602 MB on macOS. A machine with the
+  voice on fetches it at `spark update`, and the old one goes.
 - A new reply stops the old one's voice. Ctrl-C on a reply stops its
   voice too. `/again` speaks the last reply sentence by sentence.
 - `spark update` waits for a big model to stop. On Void, spark's `sv`
