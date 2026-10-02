@@ -391,7 +391,7 @@ def main():
         os.makedirs(svbins)
         os.makedirs(os.path.join(tmp, "runit"))
         with open(os.path.join(svbins, "sv"), "w") as f:
-            f.write('#!/bin/sh\necho "sv $*" >> "$SV_LOG"\nd=$2; pf="$d/stub.pid"\n'
+            f.write('#!/bin/sh\necho "sv $*" >> "$SV_LOG"\n[ "$1" != -w ] || shift 2\nd=$2; pf="$d/stub.pid"\n'
                     'alive() { [ -f "$pf" ] && kill -0 "$(cat "$pf")" 2>/dev/null; }\n'
                     'fg() { "$SPARK_PY" "$SPARK_BIN" serve --foreground >> "$d/fg.log" 2>&1 & echo $! > "$pf"; }\n'
                     'case $1 in\n'
@@ -507,6 +507,15 @@ def main():
            and int(open(state + "/serve.pid").read()) == unit_pid(),
            "a model restart: the hand server beside the unit is TERMed, ready is the unit's own server",
            p.stdout + p.stderr + " hand %d unit %d" % (hand, unit_pid()))
+        # v1.71: `spark update`'s restart waits for a big model to stop --
+        # runit's sv gives up after 7 s unless told longer (sv -w)
+        open(svlog, "w").close()
+        p = subprocess.run([sys.executable, "-c", "import sys; sys.path.insert(0, %r)\nfrom spark import config, engine\n"
+                            "print(engine.kickstart(config.load(), 'serve', restart=True))" % os.path.join(REPO, "lib")],
+                           capture_output=True, text=True, env=dict(env, **unit), timeout=120)
+        ok(p.stdout.strip() == "True" and ("sv -w 60 restart " + svd) in open(svlog).read(),
+           "a unit restart on runit: sv -w 60 restart (a 17 GB model unloads past sv's own 7 s)",
+           p.stdout + p.stderr + open(svlog).read())
         up = unit_pid()
         spark("serve", "off", "--force", extra=unit)
         ok(wait_down(up) and get(furl + "/api/health") == 0, "the unit's server and the page stopped again")

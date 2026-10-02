@@ -53,14 +53,21 @@
 # screen_reader(); below them speak(), character(), play(), fetch(),
 # mint(), read_recipe() and write_recipe().
 #
+# Every wav speak() writes opens with a lead-in of silence (LEAD_IN_MS,
+# lead_in()), so a sound card that sleeps between sounds never eats the
+# first word.
+#
 # The surfaces (the chat, the prompt line, spark do) read through these:
-# Reader, the lines one after another in a thread of its own, so a prompt
-# never waits for a voice; aloud_later(), a line spoken by a detached
-# process after the verb has exited (spark line: the widget waits for no
-# speech); line_words(), step_words() and block_words(), what clear mode
-# says for contract 4's lines and for a spark do step. Every spoken line
-# is printed too: the voice only adds sound. Nothing here answers a
-# confirmation: a spoken yes never runs a step.
+# Reader, the lines one after another in two threads of its own -- the
+# engine makes the next wav while the player plays this one, so a prompt
+# never waits for a voice and the voice never waits between lines;
+# Sentences, a streamed reply cut into sentences as it arrives, so the
+# chat speaks while the model writes; aloud_later(), a line spoken by a
+# detached process after the verb has exited (spark line: the widget
+# waits for no speech); line_words(), step_words() and block_words(),
+# what clear mode says for contract 4's lines and for a spark do step.
+# Every spoken line is printed too: the voice only adds sound. Nothing
+# here answers a confirmation: a spoken yes never runs a step.
 #
 # SPARK_VOICE_STUB=<file>, the tests' seam: say_aloud appends the text
 # it would speak to that file (one line each) and plays nothing, and
@@ -68,6 +75,7 @@
 # honoured it says so on stderr, one line a process (SEAM_BANNER).
 
 import array
+import atexit
 import hashlib
 import json
 import math
@@ -119,6 +127,18 @@ SPEAK_TIMEOUT = 120         # seconds the engine may take for one text
 LISTEN_TIMEOUT = 60         # seconds Whisper may take for one question
 SILENCE = 0.8               # seconds of quiet that end a spoken question
 THREADS = 4
+# The lead-in: every wav speak() writes opens with this much silence, so
+# a sound card that sleeps between sounds (an HDA codec's power save)
+# wakes on nothing and the first word is never lost. SPARK_VOICE_LEAD_MS
+# in the environment (0..1000) overrides it: the tests, odd hardware.
+LEAD_IN_MS = 250
+LEAD_MAX_MS = 1000
+# The streamed reply (Sentences): a run with no sentence end is cut at a
+# comma or a space once it is this long, so the voice never waits long.
+SENTENCE_MAX = 240
+# Kept small on purpose: a period after one of these ends no sentence.
+ABBREVIATIONS = ("e.g.", "i.e.", "dr.", "mr.", "mrs.", "ms.", "vs.")
+AHEAD = 2                   # wavs the Reader makes ahead of the one playing
 
 # What fetch() names the parts, the voice.env key each comes from, and
 # where each lands under the voice directory. The runtime's key is the
@@ -760,11 +780,49 @@ def _speakable(text):
     return t
 
 
-def speak(cfg, text, mode_="clear", lang=None, recipe=None):
+def lead_ms():
+    """The lead-in in milliseconds: SPARK_VOICE_LEAD_MS (0..1000) from the
+    environment, else LEAD_IN_MS."""
+    try:
+        n = int(os.environ.get("SPARK_VOICE_LEAD_MS", ""))
+    except ValueError:
+        return LEAD_IN_MS
+    return n if 0 <= n <= LEAD_MAX_MS else LEAD_IN_MS
+
+
+def lead_in(path, ms=None):
+    """`ms` of silence (lead_ms() by default) before the wav's first
+    sample, in place: the same channels, width and rate, still 0600. A
+    wav the stdlib cannot read is left as it is."""
+    ms = lead_ms() if ms is None else ms
+    if ms <= 0:
+        return path
+    try:
+        with wave.open(path, "rb") as w:
+            params = w.getparams()
+            frames = w.readframes(w.getnframes())
+    except (OSError, EOFError, wave.Error):
+        return path
+    n = int(params.framerate * ms / 1000.0) * params.nchannels
+    quiet = (b"\x80" if params.sampwidth == 1 else b"\x00" * params.sampwidth) * n
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "wb") as f:
+        w = wave.open(f, "wb")
+        w.setnchannels(params.nchannels)
+        w.setsampwidth(params.sampwidth)
+        w.setframerate(params.framerate)
+        w.writeframes(quiet + frames)
+        w.close()
+    return path
+
+
+def speak(cfg, text, mode_="clear", lang=None, recipe=None, d=None):
     """The text as a wav (its path, 0600, in a private 0700 directory the
-    caller removes with cleanup()): Kokoro through the runtime. "on" runs
-    the machine's character over it (recipe, else the one kept); "clear"
-    is the plain voice at SPARK_VOICE_RATE."""
+    caller removes with cleanup(); `d`, one _private_dir() made, is used
+    instead of a new one): Kokoro through the runtime. "on" runs the
+    machine's character over it (recipe, else the one kept); "clear" is
+    the plain voice at SPARK_VOICE_RATE. Either way the final wav opens
+    with the lead-in (lead_in), so every surface has it."""
     cfg = cfg or config.load()
     t = _speakable(text)
     if not t:
@@ -783,7 +841,7 @@ def speak(cfg, text, mode_="clear", lang=None, recipe=None):
     mouth = os.path.join(voice_dir(), "mouth")
     if not (os.access(tts, os.X_OK) and os.path.isdir(mouth)):
         raise VoiceError("the voice engine is not here -- spark voice %s fetches it" % ("on" if mode_ == "on" else "clear"))
-    d = _private_dir()
+    d = d if d and _ours(d) and os.path.isdir(d) else _private_dir()
     raw = os.path.join(d, "voice.wav")
     cmd = [tts, "--kokoro-model=model.int8.onnx", "--kokoro-voices=voices.bin", "--kokoro-tokens=tokens.txt",
            "--kokoro-data-dir=espeak-ng-data", "--kokoro-dict-dir=dict",
@@ -801,14 +859,14 @@ def speak(cfg, text, mode_="clear", lang=None, recipe=None):
         raise VoiceError("the voice engine did not speak (exit %d)" % p.returncode)
     os.chmod(raw, 0o600)
     if mode_ != "on":
-        return raw
+        return lead_in(raw)
     try:
         out = character(raw, recipe, os.path.join(d, "character.wav"))
     except (VoiceError, OSError, EOFError, wave.Error) as e:
         cleanup(d)
         raise VoiceError("the character did not run (%s)" % e)
     os.remove(raw)
-    return out
+    return lead_in(out)
 
 
 # ---------------------------------------------------------------- playing
@@ -954,10 +1012,8 @@ def say_aloud(cfg, text, wait=False):
     a failure says one line on stderr, at a terminal only."""
     try:
         cfg = cfg or config.load()
-        m = mode(cfg)
-        if m == "off" or not (text or "").strip():
-            return None
-        if m == "clear" and screen_reader() and not anyway():
+        m = _sayable(cfg, text)
+        if m is None:
             return None
         if os.environ.get("SPARK_VOICE_STUB"):
             _seam()
@@ -971,12 +1027,28 @@ def say_aloud(cfg, text, wait=False):
             cleanup(wav)
             raise
     except Exception as e:  # noqa: BLE001 -- the voice never breaks the verb it speaks for
-        try:
-            if sys.stderr.isatty():
-                sys.stderr.write("%s voice -- %s\n" % (MARK, e if isinstance(e, VoiceError) else e.__class__.__name__))
-        except (OSError, ValueError):
-            pass
+        _complain(e)
         return None
+
+
+def _sayable(cfg, text):
+    """The mode a text is spoken in, or None: off, nothing to say, or a
+    screen reader running in clear mode (unless --anyway)."""
+    m = mode(cfg)
+    if m == "off" or not (text or "").strip():
+        return None
+    if m == "clear" and screen_reader() and not anyway():
+        return None
+    return m
+
+
+def _complain(e):
+    """A voice that failed says one line on stderr, at a terminal only."""
+    try:
+        if sys.stderr.isatty():
+            sys.stderr.write("%s voice -- %s\n" % (MARK, e if isinstance(e, VoiceError) else e.__class__.__name__))
+    except (OSError, ValueError):
+        pass
 
 
 # -------------------------------------------------------------- listening
@@ -1301,23 +1373,37 @@ def plain(text):
 
 
 class Reader:
-    """The lines a surface reads aloud, one after another, in a thread of
-    its own: put() returns at once, so a prompt never waits for a voice.
-    cut=True drops what waits and stops what plays (a new reply over an
-    old one); hush() is Esc x; drain() waits, bounded, until every line
-    put has begun to play -- the player outlives the process, so a
-    goodbye is never cut off by the exit."""
+    """The lines a surface reads aloud, in threads of their own: put()
+    returns at once, so a prompt never waits for a voice. Two stages, so
+    the next line is ready when the one playing ends: the engine's
+    thread turns the queued text into wavs, at most AHEAD ahead of the
+    player, and the player's thread plays them in order. cut() drops
+    the text that waits AND the wavs made ready (their files removed)
+    and stops what plays -- a new reply over an old one, put(cut=True)
+    too; hush() is Esc x (another spark's voice stops as well); drain()
+    waits, bounded, until every line put has begun to play (played=True:
+    has finished) -- the player outlives the process, so a goodbye is
+    never cut off by the exit. A wav never outlives its line: played,
+    dropped, or removed when the process exits."""
 
     def __init__(self, cfg=None):
         self.cfg = cfg
-        self.lines = []
+        self.lines = []             # (gen, text): waiting for the engine
+        self.ready = []             # (gen, wav): made, waiting for the player
         self.gen = 0
-        self.busy = False
+        self.making = False         # a text in the engine now
+        self.starting = False       # a wav being handed to the player now
         self.playing = None
+        self.owned = set()          # private dirs made here, not yet the player's
         self.cv = threading.Condition()
-        self.thread = None
+        self.threads = None
+        _READERS.append(self)
         if os.environ.get("SPARK_VOICE_STUB"):
-            _seam()                 # here, not in the thread: never in the middle of a prompt
+            _seam()                 # here, not in a thread: never in the middle of a prompt
+
+    @property
+    def busy(self):
+        return self.making or self.starting
 
     def put(self, text, cut=False):
         text = plain(text)
@@ -1327,66 +1413,306 @@ class Reader:
             if cut:
                 self._drop()
             self.lines.append((self.gen, text))
-            if self.thread is None:
-                self.thread = threading.Thread(target=self._run, name="spark-voice", daemon=True)
-                self.thread.start()
+            if self.threads is None:
+                self.threads = [threading.Thread(target=fn, name=name, daemon=True)
+                                for fn, name in ((self._engine, "spark-voice-engine"),
+                                                 (self._player, "spark-voice-player"))]
+                for t in self.threads:
+                    t.start()
             self.cv.notify_all()
 
     def _drop(self):
+        """(the lock held) What waits goes, every ready wav with its
+        files, and what plays stops. A wav in the engine now is dropped
+        when it comes out (its generation is gone)."""
         del self.lines[:]
         self.gen += 1
+        for _gen, wav in self.ready:
+            self._discard(wav)
+        del self.ready[:]
         h, self.playing = self.playing, None
         if h is not None:
             h.stop()
+        self.cv.notify_all()
+
+    def _discard(self, wav):
+        self.owned.discard(os.path.dirname(wav))
+        cleanup(wav)
+
+    def cut(self):
+        """The speaking of this reader ends: the text that waits, the
+        ready wavs and what plays. True when there was any."""
+        with self.cv:
+            had = bool(self.lines or self.ready or self.busy) or self.playing is not None
+            self._drop()
+        return had
 
     def hush(self):
         """Esc x: what waits is dropped, what plays stops (and another
         spark's voice too). True when something stopped."""
-        with self.cv:
-            had = bool(self.lines) or self.playing is not None
-            self._drop()
+        had = self.cut()
         return stop() or had
 
-    def _run(self):
+    def _engine(self):
         while True:
             with self.cv:
-                while not self.lines:
+                while not self.lines or len(self.ready) >= AHEAD:
                     self.cv.wait()
                 gen, text = self.lines.pop(0)
-                self.busy = True
-            h = None
+                self.making = True
+            wav = None
             try:
-                h = say_aloud(self.cfg, text, wait=False)
+                wav = self._make(text)
             finally:
                 with self.cv:
+                    self.making = False
+                    if wav and gen == self.gen:
+                        self.ready.append((gen, wav))
+                    elif wav:
+                        self._discard(wav)
+                    self.cv.notify_all()
+
+    def _make(self, text):
+        """One line as a wav in a private dir of this reader's, or None:
+        off, a screen reader in clear mode, the stub seam, a failure
+        (said in one line, never a raise)."""
+        d = None
+        try:
+            cfg = self.cfg or config.load()
+            m = _sayable(cfg, text)
+            if m is None:
+                return None
+            if os.environ.get("SPARK_VOICE_STUB"):
+                _stubbed(text)
+                return None
+            d = _private_dir()
+            with self.cv:
+                self.owned.add(d)
+            return speak(cfg, text, m, d=d)
+        except Exception as e:  # noqa: BLE001 -- the voice never breaks the verb it speaks for
+            if d:
+                with self.cv:
+                    self.owned.discard(d)
+                shutil.rmtree(d, ignore_errors=True)
+            _complain(e)
+            return None
+
+    def _player(self):
+        while True:
+            with self.cv:
+                while not self.ready:
+                    self.cv.wait()
+                gen, wav = self.ready.pop(0)
+                self.starting = True
+                self.cv.notify_all()            # the engine may make the next one
+            h = None
+            try:
+                h = self._start(wav)
+            finally:
+                with self.cv:
+                    self.owned.discard(os.path.dirname(wav))    # the player's now, or gone
                     stale = gen != self.gen
-                    self.busy = False
+                    self.starting = False
                     self.playing = None if stale else h
                     self.cv.notify_all()
-            if h is not None:
-                if stale:
-                    h.stop()
-                else:
-                    try:
-                        h.wait()
-                    except Exception:  # noqa: BLE001 -- a player gone wrong ends this line only
-                        pass
-                    with self.cv:
-                        if self.playing is h:
-                            self.playing = None
-                        self.cv.notify_all()
+            if h is None:
+                continue
+            if stale:
+                h.stop()
+                continue
+            try:
+                h.wait()
+            except Exception:  # noqa: BLE001 -- a player gone wrong ends this line only
+                pass
+            with self.cv:
+                if self.playing is h:
+                    self.playing = None
+                self.cv.notify_all()
+
+    def _start(self, wav):
+        try:
+            cfg = self.cfg or config.load()
+            stop()                  # another spark's voice gives way, as say_aloud's does
+            return play(cfg, wav, wait=False)
+        except Exception as e:  # noqa: BLE001
+            cleanup(wav)
+            _complain(e)
+            return None
 
     def drain(self, timeout=10.0, played=False):
         """Wait until every line put has begun to play (played=True: has
         finished), at most `timeout` seconds."""
         end = time.time() + timeout
         with self.cv:
-            while self.lines or self.busy or (played and self.playing is not None):
+            while self.lines or self.ready or self.busy or (played and self.playing is not None):
                 left = end - time.time()
                 if left <= 0:
                     return False
                 self.cv.wait(min(0.2, left))
         return True
+
+    def _exit(self):
+        """At the process's exit: the text that waits goes, and every wav
+        not handed to a player is removed (what plays runs on: its sh
+        removes its own)."""
+        if not self.cv.acquire(timeout=1.0):
+            return
+        try:
+            del self.lines[:]
+            self.gen += 1
+            del self.ready[:]
+            dirs, self.owned = list(self.owned), set()
+        finally:
+            self.cv.release()
+        for d in dirs:
+            shutil.rmtree(d, ignore_errors=True)
+
+
+_READERS = []
+
+
+def _readers_exit():
+    for r in list(_READERS):
+        r._exit()
+
+
+atexit.register(_readers_exit)
+
+
+class Sentences:
+    """A reply's text as it streams, cut into the sentences the voice
+    says one by one: feed(delta) returns the sentences it completed,
+    flush() the rest at the reply's end. A sentence ends at . ! or ?
+    followed by whitespace (or the end), and at a line break, so a list
+    item ends at its own. Never inside a number (3.14), after an
+    abbreviation (ABBREVIATIONS), after a list's `1.`, or inside an
+    inline code span. A ``` fence is one line, "a code block, N lines"
+    (code=True: clear mode), or nothing (code=False: mode on). A run
+    with no end is cut at a comma or a space near SENTENCE_MAX. A
+    decision that needs the next character waits for it, so a stream
+    split anywhere gives the same sentences as the whole text."""
+
+    def __init__(self, code=True):
+        self.code = code
+        self.buf = ""               # not scanned yet
+        self.cur = ""               # the sentence being built
+        self.line = ""              # the current line, as far as scanned
+        self.at_start = True
+        self.fence = None           # inside a fence: its lines so far
+        self.skip = False           # a fence's line, skipped to its end
+        self.tick = False           # inside an inline `code` span
+
+    def feed(self, delta):
+        self.buf += delta or ""
+        return self._scan(False)
+
+    def flush(self):
+        out = self._scan(True)
+        if self.fence is not None:
+            out += self._block(self.fence + (1 if self.skip else 0))
+        out += self._end()
+        self.__init__(self.code)
+        return out
+
+    def _scan(self, final):
+        out, buf, i = [], self.buf, 0
+        n = len(buf)
+        while i < n:
+            if self.skip:
+                j = buf.find("\n", i)
+                if j < 0:
+                    i = n
+                    break
+                i, self.skip, self.at_start = j + 1, False, True
+                self.fence += 1
+                continue
+            if self.at_start:
+                nl = buf.find("\n", i)
+                head = buf[i:] if nl < 0 else buf[i:nl]
+                if _FENCE.match(head):
+                    if nl < 0 and not final:
+                        break               # the fence's line whole first
+                    if self.fence is None:
+                        out += self._end()
+                        self.fence = 0
+                    else:
+                        out += self._block(self.fence)
+                        self.fence = None
+                    i = n if nl < 0 else nl + 1
+                    continue
+                if nl < 0 and not final and _FENCE_START.match(head):
+                    break                   # it may still become a fence
+                self.at_start = False
+                if self.fence is not None:
+                    self.skip = True
+                    continue
+            c = buf[i]
+            if c == "\n":
+                out += self._end()
+                self.at_start, self.line, self.tick = True, "", False
+                i += 1
+                continue
+            if c in ".!?" and not self.tick:
+                j = i
+                while j < n and buf[j] in ".!?":
+                    j += 1
+                while j < n and buf[j] in "\"')]*_":
+                    j += 1
+                if j >= n and not final:
+                    break                   # the next character decides
+                run = buf[i:j]
+                kept = self._kept(run)
+                out += self._add(run)
+                i = j
+                if (j >= n or buf[j].isspace()) and not kept:
+                    out += self._end()
+                continue
+            if c == "`":
+                self.tick = not self.tick
+            out += self._add(c)
+            i += 1
+        self.buf = buf[i:]
+        return out
+
+    def _kept(self, run):
+        """A period that ends no sentence: an abbreviation's, or a
+        numbered list's `1.` (asked before the period is added)."""
+        if run != ".":
+            return False
+        if re.match(r"\s*\d+$", self.line):
+            return True
+        words = self.cur.split()
+        word = words[-1] if words else ""
+        return word.lstrip("(\"'*_").lower() + "." in ABBREVIATIONS
+
+    def _add(self, s):
+        self.cur += s
+        self.line += s
+        if len(self.cur) < SENTENCE_MAX:
+            return []
+        k = self.cur.rfind(", ")
+        if k >= SENTENCE_MAX // 3:
+            piece, self.cur = self.cur[:k + 1], self.cur[k + 2:]
+        else:
+            k = self.cur.rfind(" ")
+            piece, self.cur = (self.cur[:k], self.cur[k + 1:]) if k > 0 else (self.cur, "")
+        return self._said(piece)
+
+    def _end(self):
+        piece, self.cur = self.cur, ""
+        return self._said(piece)
+
+    @staticmethod
+    def _said(piece):
+        piece = piece.strip()
+        return [piece] if re.search(r"\w", piece) else []
+
+    def _block(self, lines):
+        return ["a code block, %s" % _plural(lines, "line")] if self.code and lines else []
+
+
+_FENCE = re.compile(r" {0,3}```")
+_FENCE_START = re.compile(r" {0,3}`{0,2}$")
 
 
 def aloud_later(cfg, text):

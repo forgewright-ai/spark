@@ -1074,7 +1074,9 @@ SAVE_MAX = 99           # ~/spark-chat-DATE.txt, then -2 .. -99
 # voice.Reader while the mode is on or clear, None while off. Mode on
 # speaks the greeting and the goodbye in the machine's own voice and,
 # after /aloud, every reply; clear speaks them all from the start, and
-# the refusals too. Every spoken line is printed as well.
+# the refusals too. Every spoken line is printed as well. A reply is
+# spoken as it streams, a sentence at a time (_Spoken, voice.Sentences),
+# each one once the reveal printed it.
 VOICE = {"reader": None, "mode": "off", "aloud": False}
 GOODBYE_WAIT = 8        # seconds the goodbye may take to begin playing before the chat exits
 
@@ -1122,6 +1124,44 @@ def _aloud(text, cut=False):
     """The text spoken too (the reader's thread: the prompt never waits)."""
     if VOICE["reader"] is not None and text:
         VOICE["reader"].put(text, cut=cut)
+
+
+class _Spoken:
+    """A reply spoken sentence by sentence: voice.Sentences into the
+    reader. The first sentence cuts what the reader still says, so a new
+    reply never waits behind an old one. Clear mode says a code block as
+    "a code block, N lines"; mode on skips it."""
+
+    def __init__(self):
+        from . import voice
+        self.split = voice.Sentences(code=VOICE["mode"] == "clear")
+        self.first = True
+
+    def feed(self, delta):
+        self._put(self.split.feed(delta))
+
+    def flush(self):
+        self._put(self.split.flush())
+
+    def _put(self, sentences):
+        for s in sentences:
+            if VOICE["reader"] is not None:
+                VOICE["reader"].put(s, cut=self.first)
+                self.first = False
+
+
+def _spoken():
+    """A _Spoken for the reply about to stream, or None: the voice off,
+    or mode on without /aloud."""
+    return _Spoken() if VOICE["reader"] is not None and VOICE["aloud"] else None
+
+
+def _aloud_reply(text):
+    """A whole reply spoken through the same splitter (/again, /read)."""
+    if VOICE["reader"] is not None and text:
+        s = _Spoken()
+        s.feed(text)
+        s.flush()
 
 
 def _hush():
@@ -1339,7 +1379,7 @@ def _slash_again(cfg, thread, args):
     if VOICE["reader"] is None:
         _tell("The voice is off -- spark voice on or clear speaks it.")
     else:
-        _aloud(last, cut=True)
+        _aloud_reply(last)
     return thread
 
 
@@ -2062,22 +2102,27 @@ def cmd_chat(args):
                     with _prompts_only(readline if verb == "/do" else None):
                         thread = fn(cfg, thread, rest)
                     if verb == "/read" and VOICE["aloud"] and len(SAID) > heard:
-                        _aloud(SAID[-1]["text"], cut=True)
+                        _aloud_reply(SAID[-1]["text"])
                 else:
                     _refuse("no %s -- /help lists them" % verb)
                 if verb != "/clear":
                     say()      # a blank line between turns; /clear starts clean
                 continue
             words, paths = refs(text.split())
+            # the voice follows the reveal: each sentence once it is on
+            # the screen, the rest when the reply ends
+            spoken = _spoken()
             try:
-                heard = len(SAID)
                 thread = cli.stream_turn(cfg, "chat", " ".join(words), paths, thread=thread, cps=REVEAL[0],
-                                         lead=_face("idle") + " " if LIVING[0] else None, said=SAID)
-                if VOICE["aloud"] and len(SAID) > heard and SAID[-1].get("role") == "assistant":
-                    _aloud(SAID[-1]["text"], cut=True)
+                                         lead=_face("idle") + " " if LIVING[0] else None, said=SAID,
+                                         on_shown=spoken.feed if spoken else None)
+                if spoken:
+                    spoken.flush()
             except (RefError, wire.BrainError) as e:
                 _refuse(e.hint)
             except KeyboardInterrupt as e:
+                if spoken and VOICE["reader"] is not None:
+                    VOICE["reader"].cut()       # the reply stopped, and its voice with it
                 thread = getattr(e, "thread", thread)
                 say()
                 say("%s (stopped)" % glyph("hammer"))

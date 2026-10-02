@@ -1,5 +1,31 @@
 # Changelog
 
+## v1.71
+
+The voice keeps pace with the reply.
+
+- The voice starts with the reply and keeps pace, sentence by
+  sentence. In clear mode, and in mode on after `/aloud`, each sentence
+  of a chat reply is spoken once it is on the screen, while the model
+  writes the next.
+- With `--reveal`, the voice follows the reveal: it says only what you
+  were shown.
+- A sentence ends at `.`, `!` or `?` and at a line break, so a list
+  item is its own. A number such as 3.14, a short list of
+  abbreviations such as e.g. and Dr., and inline code never end one.
+- A code block is said as "a code block, 4 lines" in clear mode, and
+  skipped in mode on. A long run with no end is cut at a comma.
+- The next sentence is made while one plays, so the voice no longer
+  stops between sentences. `spark do` and the other surfaces gain this
+  too.
+- A short silence before every clip, 250 ms, so the first word is
+  never lost on a sound card that sleeps between sounds.
+  `SPARK_VOICE_LEAD_MS` in the environment changes it, 0 to 1000.
+- A new reply stops the old one's voice. Ctrl-C on a reply stops its
+  voice too. `/again` speaks the last reply sentence by sentence.
+- `spark update` waits for a big model to stop. On Void, spark's `sv`
+  calls that wait now allow 60 seconds, not runit's 7.
+
 ## v1.70
 
 `spark do` takes a step of several lines, shown whole. And spark

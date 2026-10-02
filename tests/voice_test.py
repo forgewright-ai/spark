@@ -22,7 +22,11 @@ heard question from SPARK_VOICE_STUB_HEARD, no microphone), heard_line()
 taking every control character out, what clear mode says for contract
 4's lines and for a spark do step or block, plain() over Markdown, the
 Reader's order, cut and hush, aloud_later() from a detached process, and
-`spark voice listen [--buffer]` and `spark voice stop`.
+`spark voice listen [--buffer]` and `spark voice stop`. v1.71: the
+splitter a streamed reply is spoken through (numbers, abbreviations,
+fences, list items, the long-run cut, any chunking the same), the
+lead-in before every wav, and the Reader's two stages timed against a
+slow engine and a player that records when it starts and ends.
 """
 import array
 import hashlib
@@ -926,6 +930,256 @@ check("spark voice -h: listen and stop named, within 80 columns",
       "spark voice listen" in out and "spark voice stop" in out and max(len(l) for l in out.splitlines()) <= 80, out)
 for k in ("SPARK_VOICE", "SPARK_VOICE_STUB", "SPARK_VOICE_STUB_HEARD"):
     os.environ.pop(k, None)
+
+# ------------------------------------------------- 16. keeping pace (v1.71)
+# the splitter: the reply's text as it streams, cut into sentences
+def split(text, code=True):
+    s = voice.Sentences(code)
+    return s.feed(text) + s.flush()
+
+
+def split_chunks(text, sizes, code=True):
+    s = voice.Sentences(code)
+    out, i, k = [], 0, 0
+    while i < len(text):
+        n = sizes[k % len(sizes)]
+        out += s.feed(text[i:i + n])
+        i, k = i + n, k + 1
+    return out + s.flush()
+
+
+check("Sentences: a sentence ends at . ! ? before a space or the end",
+      split("One here. Two there! Three? Four") == ["One here.", "Two there!", "Three?", "Four"],
+      split("One here. Two there! Three? Four"))
+check("Sentences: never inside a number (3.14, 2.718, v1.70)",
+      split("Pi is 3.14 and e is 2.718 in v1.70. Next.") == ["Pi is 3.14 and e is 2.718 in v1.70.", "Next."],
+      split("Pi is 3.14 and e is 2.718 in v1.70. Next."))
+check("Sentences: never after a kept abbreviation (e.g. i.e. Dr. Mr. Mrs. vs.)",
+      split("Use a tool, e.g. grep, i.e. a finder. Dr. Who and Mr. and Mrs. Smith, vs. them. End.")
+      == ["Use a tool, e.g. grep, i.e. a finder.", "Dr. Who and Mr. and Mrs. Smith, vs. them.", "End."],
+      split("Use a tool, e.g. grep, i.e. a finder. Dr. Who and Mr. and Mrs. Smith, vs. them. End."))
+check("Sentences: closing quotes and brackets stay with their sentence; a run of marks is one end",
+      split('He said "stop." Then (once.) Wait... Really?! Ok') == ['He said "stop."', "Then (once.)", "Wait...",
+                                                                "Really?!", "Ok"])
+check("Sentences: a list item ends at its line break; a numbered item's `1.` ends nothing",
+      split("Steps:\n1. Install it.\n2. Run it\n- one\n- two\n\nAfter.")
+      == ["Steps:", "1. Install it.", "2. Run it", "- one", "- two", "After."],
+      split("Steps:\n1. Install it.\n2. Run it\n- one\n- two\n\nAfter."))
+check("Sentences: nothing splits inside an inline code span",
+      split("Run `ls -la. echo! x?` now. Done.") == ["Run `ls -la. echo! x?` now.", "Done."],
+      split("Run `ls -la. echo! x?` now. Done."))
+FENCED = "Run this:\n```sh\necho one. two!\necho three\n\n```\nThen look."
+check("Sentences: a fence is one line in clear mode -- a code block, N lines -- never split inside",
+      split(FENCED) == ["Run this:", "a code block, 3 lines", "Then look."], split(FENCED))
+check("Sentences: mode on skips a fence whole",
+      split(FENCED, code=False) == ["Run this:", "Then look."], split(FENCED, code=False))
+check("Sentences: an unclosed fence at the end is still one line",
+      split("Look:\n```\nx = 1\ny = 2") == ["Look:", "a code block, 2 lines"], split("Look:\n```\nx = 1\ny = 2"))
+LONG = "word " * 30 + "and then, " + "more " * 60 + "end"
+got = split(LONG)
+check("Sentences: a run with no end is cut near SENTENCE_MAX, at a comma when one is there, else at a space",
+      len(got) >= 2 and got[0].endswith("and then,") and all(len(x) <= voice.SENTENCE_MAX for x in got)
+      and " ".join(got).split() == LONG.split(), [len(x) for x in got])
+got = split("x" * 300)
+check("Sentences: one word longer than the cut is said whole, never lost",
+      "".join(got) == "x" * 300, [len(x) for x in got])
+check("Sentences: marks alone are no sentence", split("**\n---\n\nOk.") == ["Ok."], split("**\n---\n\nOk."))
+REPLY = ("Pi is 3.14, e.g. close. The disk is full! Why?\n1. Free it.\n- `du -sh .` first.\n"
+         "```sh\ndu -sh ~\nls\n```\nAll done" + " and so on, more words" * 14 + ".")
+whole = split(REPLY)
+same = all(split_chunks(REPLY, sizes) == whole for sizes in ([1], [2], [3], [5, 1, 7], [4, 9, 2, 1], [11], [64]))
+check("Sentences: a stream split anywhere -- mid-word, mid-number, mid-fence -- gives the sentences one chunk does",
+      same and len(whole) == 8, whole)
+s = voice.Sentences()
+first = s.feed("The first one is here. The sec")
+check("Sentences: a sentence goes the moment its end is seen; the rest waits",
+      first == ["The first one is here."] and s.feed("ond one") == [] and s.flush() == ["The second one"],
+      first)
+s = voice.Sentences()
+check("Sentences: a period at the chunk's end waits for the next character (3. then 14)",
+      s.feed("Pi is 3.") == [] and s.feed("14 now. ") == ["Pi is 3.14 now."])
+
+# the lead-in: silence before the first word, the wav's format kept
+stub_engine()
+
+
+def frames(path):
+    with wave.open(path) as wv:
+        return (wv.getnchannels(), wv.getsampwidth(), wv.getframerate()), wv.readframes(wv.getnframes())
+
+
+shape0, tone0 = frames(TONE)
+cfg = Cfg(SPARK_VOICE_RATE="100")
+w = voice.speak(cfg, "Hello there.", "clear")
+shape, data = frames(w)
+lead = int(24000 * voice.LEAD_IN_MS / 1000) * 2
+check("lead-in: the clear wav opens with %d ms of zero samples, then the engine's own, the format kept"
+      % voice.LEAD_IN_MS, voice.LEAD_IN_MS == 250 and shape == shape0 and data[:lead] == b"\0" * lead
+      and data[lead:] == tone0 and stat.S_IMODE(os.stat(w).st_mode) == 0o600, (shape, len(data), len(tone0)))
+voice.cleanup(w)
+os.environ["SPARK_VOICE_LEAD_MS"] = "0"
+w = voice.speak(cfg, "Hello there.", "clear")
+check("lead-in: SPARK_VOICE_LEAD_MS=0 adds none", frames(w)[1] == tone0)
+voice.cleanup(w)
+os.environ["SPARK_VOICE_LEAD_MS"] = "100"
+w = voice.speak(cfg, "Hello there.", "clear")
+check("lead-in: SPARK_VOICE_LEAD_MS=100 adds 100 ms", frames(w)[1] == b"\0" * 4800 + tone0)
+voice.cleanup(w)
+for bad in ("1001", "-5", "loud"):
+    os.environ["SPARK_VOICE_LEAD_MS"] = bad
+    check("lead-in: SPARK_VOICE_LEAD_MS=%s is out of 0..1000: the constant" % bad, voice.lead_ms() == voice.LEAD_IN_MS)
+del os.environ["SPARK_VOICE_LEAD_MS"]
+w = voice.speak(cfg, "Hello.", "on", recipe=voice.mint("terse", "fixture-seed"))
+shape, data = frames(w)
+check("lead-in: after the character chain too (mode on), still one wav in its dir",
+      data[:lead] == b"\0" * lead and data[lead:].strip(b"\0") != b"" and shape == (1, 2, 24000)
+      and os.listdir(os.path.dirname(w)) == ["character.wav"], os.listdir(os.path.dirname(w)))
+voice.cleanup(w)
+eight = os.path.join(ROOT, "eight.wav")
+with wave.open(eight, "wb") as wv:
+    wv.setnchannels(2)
+    wv.setsampwidth(1)
+    wv.setframerate(8000)
+    wv.writeframes(b"\x10\x20" * 10)
+voice.lead_in(eight, 10)
+check("lead-in: an 8-bit stereo wav keeps its format, its silence the 8-bit middle",
+      frames(eight) == ((2, 1, 8000), b"\x80" * 160 + b"\x10\x20" * 10), frames(eight))
+
+# the Reader's two stages: a slow stub engine and a stub player that
+# records when each wav starts and ends; the engine makes the next line
+# while the player plays this one
+SLOW_TTS = '''#!%s
+import json, os, shutil, sys, time
+out = [a.split("=", 1)[1] for a in sys.argv if a.startswith("--output-filename=")][0]
+t0 = time.time()
+time.sleep(float(os.environ.get("STUB_TTS", "0")))
+shutil.copyfile(%r, out)
+with open(os.path.join(os.environ["STUB_LOG"], "tts.jsonl"), "a") as f:
+    f.write(json.dumps({"text": sys.argv[-1], "out": out, "t0": t0, "t1": time.time()}) + "\\n")
+''' % (PY, TONE)
+TIMED_PLAYER = '''#!%s
+import json, os, sys, time
+log = os.path.join(os.environ["STUB_LOG"], "plays.jsonl")
+wav = sys.argv[-1]
+with open(log, "a") as f:
+    f.write(json.dumps({"wav": wav, "start": time.time()}) + "\\n")
+time.sleep(float(os.environ.get("STUB_PLAY", "0")))
+with open(log, "a") as f:
+    f.write(json.dumps({"wav": wav, "end": time.time()}) + "\\n")
+''' % PY
+stub("sherpa-onnx-offline-tts", SLOW_TTS, os.path.join(VDIR, "runtime", "bin"))
+stub(PLAYER, TIMED_PLAYER)
+TMP = os.path.join(ROOT, "tmp")
+os.makedirs(TMP)
+tempfile.tempdir = TMP              # the private dirs land here, so a leftover is seen
+
+
+def jsonl(name):
+    try:
+        with open(os.path.join(LOG, name)) as f:
+            return [json.loads(l) for l in f if l.strip()]
+    except OSError:
+        return []
+
+
+def ours():
+    return sorted(d for d in os.listdir(TMP) if d.startswith("spark-voice-"))
+
+
+def reset_logs():
+    for name in ("tts.jsonl", "plays.jsonl"):
+        try:
+            os.remove(os.path.join(LOG, name))
+        except OSError:
+            pass
+
+
+def wait_for(cond, secs=15):
+    end = time.time() + secs
+    while time.time() < end and not cond():
+        time.sleep(0.02)
+    return cond()
+
+
+reset_logs()
+os.environ.update(STUB_TTS="0.4", STUB_PLAY="0.8")
+r = voice.Reader(Cfg(SPARK_VOICE="clear"))
+t0 = time.time()
+for line in ("one.", "two.", "three."):
+    r.put(line)
+put_took = time.time() - t0
+done = r.drain(20, played=True)
+made = jsonl("tts.jsonl")
+plays = jsonl("plays.jsonl")
+by_wav = {m["out"]: m["text"] for m in made}
+starts = [p for p in plays if "start" in p]
+ends = {p["wav"]: p["end"] for p in plays if "end" in p}
+order = [by_wav.get(p["wav"]) for p in starts]
+check("Reader: put returns at once; every line made and played, in order",
+      put_took < 0.2 and done and [m["text"] for m in made] == ["one.", "two.", "three."]
+      and order == ["one.", "two.", "three."], (put_took, done, [m["text"] for m in made], order))
+if len(made) == 3 and len(starts) == 3 and len(ends) == 3:
+    p1 = starts[0]
+    overlap = min(made[1]["t1"], ends[p1["wav"]]) - max(made[1]["t0"], p1["start"])
+    gap = starts[1]["start"] - ends[p1["wav"]]
+else:
+    overlap, gap = -1.0, 99.0
+check("Reader: sentence 2 is made WHILE sentence 1 plays (overlap %.2f s), so it starts as 1 ends (gap %.2f s)"
+      % (overlap, gap), overlap > 0.2 and gap < 0.35, (overlap, gap))
+check("Reader: every wav removed once played", wait_for(lambda: not ours(), 5), ours())
+
+# cut: the text that waits and the wavs made ready go (their files too),
+# and what plays stops; a new line after it plays
+reset_logs()
+os.environ.update(STUB_TTS="0.3", STUB_PLAY="5")
+r = voice.Reader(Cfg(SPARK_VOICE="clear"))
+for line in ("alpha.", "beta.", "gamma.", "delta."):
+    r.put(line)
+full = wait_for(lambda: len(r.ready) == voice.AHEAD and r.playing is not None and len(jsonl("plays.jsonl")) == 1)
+ready_dirs = [os.path.dirname(w) for _g, w in r.ready]
+playing_dir = r.playing.tmp if r.playing is not None else ""
+had = [os.path.isdir(d) for d in ready_dirs + [playing_dir]]
+check("Reader: bounded -- %d made ahead while one plays, the rest still text" % voice.AHEAD,
+      full and [t for _g, t in r.lines] == ["delta."], (full, r.lines, len(r.ready)))
+cut = r.cut()
+gone = wait_for(lambda: not any(os.path.isdir(d) for d in ready_dirs + [playing_dir]) and not ours(), 5)
+check("Reader: cut drops the queued text and the ready wavs (their files removed) and stops what plays",
+      cut and all(had) and gone and not r.lines and not r.ready and r.playing is None
+      and [m["text"] for m in jsonl("tts.jsonl")] == ["alpha.", "beta.", "gamma."]
+      and not any("end" in p for p in jsonl("plays.jsonl")), (cut, had, gone, ours(), jsonl("tts.jsonl")))
+os.environ["STUB_PLAY"] = "0"
+r.put("after.")
+r.drain(10, played=True)
+names = [by for by in ({m["out"]: m["text"] for m in jsonl("tts.jsonl")}.get(p["wav"])
+                       for p in jsonl("plays.jsonl") if "start" in p)]
+check("Reader: after a cut the next line is made and played", names == ["alpha.", "after."] and not ours(),
+      (names, ours()))
+r.put("hushed.")
+wait_for(lambda: r.busy or r.ready or r.playing is not None, 5)
+r.hush()
+check("Reader: hush leaves nothing waiting, nothing ready", r.drain(2) and not r.lines and not r.ready)
+wait_for(lambda: not ours(), 5)
+
+# the exit: a process that ends with wavs made ahead removes them; the
+# one playing runs on and its player removes its own
+reset_logs()
+code = ("import sys, time; sys.path.insert(0, %r); from spark import voice\n"
+        "r = voice.Reader(None)\n"
+        "for t in ('first.', 'second.', 'third.'):\n"
+        "    r.put(t)\n"
+        "end = time.time() + 15\n"
+        "while time.time() < end and not (len(r.ready) == 2 and r.playing is not None):\n"
+        "    time.sleep(0.02)\n"
+        "print(len(r.ready), r.playing is not None)\n" % os.path.join(REPO, "lib"))
+p = subprocess.run([PY, "-c", code], capture_output=True, text=True, timeout=60,
+                   env=dict(os.environ, TMPDIR=TMP, SPARK_VOICE="clear", STUB_TTS="0.2", STUB_PLAY="1.5"))
+left = ours()
+check("Reader at exit: the wavs made ahead are removed with the process; only the one playing is left",
+      p.stdout.split() == ["2", "True"] and len(left) <= 1, (p.stdout, p.stderr[-300:], left))
+check("Reader at exit: the one playing removes its own when it ends", wait_for(lambda: not ours(), 8), ours())
+for k in ("STUB_TTS", "STUB_PLAY"):
+    os.environ.pop(k, None)
+tempfile.tempdir = None
 
 shutil.rmtree(ROOT, ignore_errors=True)
 print("voice_test: %s" % ("all ok" if not FAILED else "%d failed" % FAILED))

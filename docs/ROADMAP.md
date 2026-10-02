@@ -1,6 +1,6 @@
 # Roadmap
 
-What comes after v1.70, in the order it is likely to happen. Nothing
+What comes after v1.71, in the order it is likely to happen. Nothing
 here is a promise. A row in `docs/CHANGELOG.md` is. `docs/IDEAS.md` is
 the field this is picked from.
 
@@ -9,7 +9,8 @@ that use measures goes first. No new contract and no new verb until
 the first two items below are done. Fifteen contracts is more surface
 than one user lives in, and the two numbers that describe the daily
 experience have sat in the ideas file behind the test suite. v1.70's
-`spark voice` is the one exception, by the maintainer's choice.
+`spark voice` and v1.71's pace for it are the one exception, by the
+maintainer's choice.
 
 ## 1. The wait for the first line is the model's own speed
 
@@ -204,11 +205,14 @@ way to say "the last run: again" or "go on".
 
 ## 9. The voice, lived with
 
-v1.70 speaks and listens. What the box's headset says about it decides
-what comes next.
+v1.70 speaks and listens. v1.71 speaks a reply sentence by sentence
+as it streams, with a lead-in before every clip. What the box's headset
+says about it decides what comes next.
 
 - A spoken question's language is Whisper's own. The reply is read in
   the language spark guesses from its words. The two should agree:
   the voice that answers follows the language that was heard.
 - The measure: how long a reply waits before it is heard, by mode, in
-  `spark stats`, the way the first line is measured today.
+  `spark stats`, the way the first line is measured today. The first
+  sentence now waits for one sentence of text and its synthesis, so
+  this number says whether a smaller first piece is worth it.

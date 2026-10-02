@@ -146,6 +146,10 @@ it, and no verb carries the word.
   services are directories under `~/.config/spark/sv/`, rendered by
   `install.sh`. A root `runsvdir-USER` service, written once by
   bootstrap and linked into `/var/service`, supervises them from boot.
+  spark runs sv for them in one place, `engine.svctl`. A verb that waits
+  for the service (`restart`, `stop`, `start`) carries `sv -w 60`
+  (`engine.SV_WAIT`): a big model takes longer than sv's own 7 seconds
+  to unload.
   The engine pin is a glibc build, so Void's musl flavour refuses at
   `get`: `musl libc: the pinned engine is a glibc build -- Void's glibc
   flavour runs spark`. The voice's runtime is a glibc build too, and its
@@ -252,7 +256,8 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 xclip, xsel), /save (0600, never overwrites), /read @FILE
                 (contract 11 on the file, onto the chat's thread), /do
                 [--sandbox] (spark do's terminal loop; the chat runs
-                nothing), /aloud /again (the voice). Esc on an empty line,
+                nothing), /aloud /again (the voice: a reply spoken a
+                sentence at a time as the reveal prints it). Esc on an empty line,
                 Ctrl-D or /q ends it; Esc v listens onto the line, Esc x
                 stops the speaking (_Keys: a getc hook under GNU readline,
                 the first key read raw under libedit))
@@ -302,7 +307,9 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 a byte unpacks; speak, the 4 characters, play and stop;
                 listen, the recording removed before it returns; the clear
                 reading of a command, a do step, a block; the screen reader;
-                Reader, the lines spoken in a thread of their own)
+                the lead-in, silence before every wav; Reader, the lines
+                spoken in two threads of their own, the next made while one
+                plays; Sentences, a streamed reply cut into sentences)
 lib/spark/forge/  index.html spark.css spark.js manifest.webmanifest favicon.svg
                   mark.svg -- the page, ASCII, no inline script
 home/           the shared $HOME mirror, linked. .config/spark/ holds the two
@@ -330,7 +337,8 @@ tests/          smoke.py serve_smoke.py forge_smoke.py bench_smoke.py
                 this machine has a sandbox)
                 qr_test.py (ISO 18004 format table, the RS vector, a decode-back)
                 voice_test.py (the voice: a stub runtime, player and recorder;
-                the fetch's refusals, the characters' bytes, the clear reading)
+                the fetch's refusals, the characters' bytes, the clear reading;
+                the splitter, the lead-in, the Reader's two stages timed)
                 docs_test.py (the docs say what the tree holds: credits, counts,
                 the voice)
                 widget_pty.py (the widgets, the pager and completion at a pty)
@@ -543,6 +551,9 @@ and may change freely.
      clear voice's speed, 50 to 300, default 100 (`spark voice rate
      N`). `SPARK_VOICE_DEVICE` is the ALSA device the voice plays to
      and listens on (Linux), such as `plughw:1,0`, default ALSA's own.
+     `SPARK_VOICE_LEAD_MS`, 0 to 1000, is environment only, never read
+     from a file. It is the silence before every clip in milliseconds,
+     250 by default (`voice.LEAD_IN_MS`).
      `SPARK_PERSONA_EXTRA` is still read as the soul's fallback, and the
      `soul` row warns while it is set.
    - `models.env`, and `~/.config/spark/models.env` for your own rows:
@@ -867,7 +878,15 @@ and may change freely.
    body as "a here-document writing F, N lines of text". Then the
    choices once a run, each output's last 3 lines and the end.
    Nothing spoken answers a prompt: a danger step stays the typed
-   `yes`. The shell widgets depend on nothing else.
+   `yes`. The Reader is two stages. An engine thread makes each line's
+   wav, at most `voice.AHEAD` ahead, while a player thread plays them
+   in order, so the next line is ready when one ends. A cut drops the
+   text that waits and the ready wavs with their files, and stops what
+   plays. Every wav opens with `voice.LEAD_IN_MS` of silence. The chat
+   speaks a reply as it streams: `cli.stream_turn`'s `on_shown` hands
+   each chunk, once the wrap printed it, to `voice.Sentences`, and each
+   finished sentence goes to the Reader at once. The shell widgets
+   depend on nothing else.
 5. `spark brain --porcelain` prints `<url><TAB><model><TAB>forge|model`
    and exits 0, or exits 1. `<model>` is the spark role's model, the
    file stem. `forge` means `/api/health` there says `forge: true`. This

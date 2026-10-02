@@ -269,6 +269,37 @@ class Stub(BaseHTTPRequestHandler):
                 except (BrokenPipeError, ConnectionResetError):
                     pass            # the client gave up first: the point of the test
                 return
+            elif "slowtalk" in user:
+                # v1.71: a reply that streams slowly -- its first sentence,
+                # then a wait until the chat's voice has said it (the stub
+                # seam's file, STATE["voice_file"]), then the rest. What
+                # the voice had said when the rest left is kept: the first
+                # sentence spoken before the reply's stream ended
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.end_headers()
+
+                def said():
+                    try:
+                        with open(STATE.get("voice_file", "")) as f:
+                            return f.read().splitlines()
+                    except OSError:
+                        return []
+
+                def chunk(t):
+                    self.wfile.write(("data: " + json.dumps({"choices": [{"delta": {"content": t}}]}) + "\n\n").encode())
+                    self.wfile.flush()
+                chunk("The first sentence is here. The sec")
+                end = time.time() + 8
+                while time.time() < end and "The first sentence is here." not in said():
+                    time.sleep(0.05)
+                STATE["slowtalk_said"] = said()
+                for piece in ("ond one holds 3.", "14 and e.g. more. ", "Last"):
+                    chunk(piece)
+                    time.sleep(0.2)
+                self.wfile.write(("data: " + json.dumps({"choices": [{"delta": {}, "finish_reason": "stop"}], "timings": TIMINGS}) + "\n\n").encode())
+                self.wfile.write(b"data: [DONE]\n\n")
+                return
             elif "wraptest" in user:
                 pieces = tuple("word%02d " % i for i in range(1, 41))
             elif "fencetest" in user:
@@ -2169,6 +2200,20 @@ def chat_voice_pty_cases(t, env, home):
     t.ok(said[:1] == ["chat. slash help lists the commands; Escape ends it."]
          and said.count("The output means X.") == 2 and any("no /nope" in x for x in said),
          "chat pty (%s): clear -- the opening, every reply, /again and a refusal spoken" % lib, repr(said))
+    # v1.71, clear mode: the reply spoken as it streams, a sentence at a
+    # time -- the stub server holds the reply's rest until the voice has
+    # said its first sentence, and keeps what the voice had said by then
+    STATE["voice_file"] = spoke
+    STATE.pop("slowtalk_said", None)
+    st, text, alive = drive(clear, [("\nchat>", b"slowtalk\r", 0.2), ("\nchat>", b"\x04", 2.0)])
+    said = spoken()
+    early = STATE.get("slowtalk_said") or []
+    t.ok(ended(st) and said == ["chat. slash help lists the commands; Escape ends it.", "The first sentence is here.",
+                                "The second one holds 3.14 and e.g. more.", "Last"]
+         and "The first sentence is here." in early and "Last" not in early,
+         "chat pty (%s): clear -- the reply spoken sentence by sentence as it streams: the first said before the "
+         "stream ended, 3.14 and e.g. never a sentence's end, the rest at the end" % lib,
+         repr((said, early, text[-300:])))
     st, text, alive = drive(e, [("\nchat>", b"\x1bv", 1.5), (None, b"/aloud\r", 0.5), ("\nchat>", b"\x04", 2.0)])
     t.ok(ended(st) and "the voice is off -- spark voice on or clear, then Esc v listens" in text
          and "chat> how many" not in text and "the voice is off -- spark voice on or clear, then /aloud" in text
@@ -7041,8 +7086,9 @@ def main():
         # disable, a missing dir absent
         os.makedirs(home + "/svbin", exist_ok=True)
         with open(home + "/svbin/sv", "w") as f:
-            f.write('#!/bin/sh\nx=""; [ "$1" != exit ] || { [ -f "$2/down" ] && x=" down=yes" || x=" down=no"; }\n'
-                    'echo "sv $*$x" >> "${SV_LOG:-/dev/null}"\ncase $1 in\n'
+            f.write('#!/bin/sh\na="$*"; [ "$1" != -w ] || shift 2\n'
+                    'x=""; [ "$1" != exit ] || { [ -f "$2/down" ] && x=" down=yes" || x=" down=no"; }\n'
+                    'echo "sv $a$x" >> "${SV_LOG:-/dev/null}"\ncase $1 in\n'
                     '    status) if [ ! -d "$2/supervise" ]; then echo "fail: $2: runsv not running"; exit 1\n'
                     '            elif [ -f "$2/down" ]; then echo "down: $2: 1s, normally up"\n'
                     '            else echo "run: $2: (pid 1) 1s"; fi ;;\n'
@@ -7129,10 +7175,11 @@ print("launchd", P("launchd", "gui/501/spark.serve = {\n\tstate = running\n\tpid
         except OSError:
             _svcalls = []
         t.ok(_svcalls == ["sv status " + vd] * 3 + ["sv down " + vd, "sv down " + vd, "sv status " + vd, "sv status " + vd,
-                                                    "sv up " + vd, "sv restart " + vd, "sv up " + vd, "sv up " + vd,
+                                                    "sv up " + vd, "sv -w 60 restart " + vd, "sv up " + vd, "sv up " + vd,
                                                     "sv up " + vd, "sv status " + vd],
              "engine on runit: sv is asked by the dir's path -- status for the state (a runsv must answer), down twice, "
-             "status, up, restart, up through service_start, the two failing ups, status for unit_state", str(_svcalls))
+             "status, up, restart (sv -w 60: a big model unloads past sv's 7 s), up through service_start, the two failing "
+             "ups, status for unit_state", str(_svcalls))
         # v1.64: a pid file is signalled only when its command line is
         # spark's own (serve.pid a llama-server or `serve --foreground`,
         # forge.pid a `forge --foreground`), written 0600 even over an

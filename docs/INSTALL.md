@@ -508,6 +508,11 @@ reads the choices once a
 run, the last 3 lines of each output and the end. It reads the chat's
 replies and the errors. Every line it speaks is printed too.
 
+A chat reply is spoken a sentence at a time while the model writes, so
+the voice keeps pace with the reply. Every clip starts with a quarter
+second of silence, so a sound card that sleeps never loses the first
+word. `SPARK_VOICE_LEAD_MS`, 0 to 1000 in the environment, changes it.
+
 Mode on speaks the chat's greeting and goodbye, and the replies after
 `/aloud`. It never reads the prompt line. The voice comes from the
 temperament: plain is a radio, warm a soft robot choir, playful eight

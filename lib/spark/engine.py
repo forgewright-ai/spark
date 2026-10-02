@@ -895,11 +895,24 @@ def unit_state(cfg, unit="serve"):
     return parse_unit_state("systemd", out) if rc == 0 else ("", 0)
 
 
+# sv's verbs that wait for the service to change (runit's sv waits 7 s
+# by default, then says timeout): a big model takes longer than that to
+# unload, so spark's own units get SV_WAIT seconds (`sv -w`)
+SV_WAIT = 60
+SV_WAITING = ("restart", "stop", "start", "shutdown", "try-restart", "reload",
+              "force-stop", "force-reload", "force-restart", "force-shutdown")
+
+
 def svctl(args, timeout=20):
     """(rc, stdout, stderr) of `sv ARGS`; never raises (rc -1 when sv is
-    missing or hangs)."""
+    missing or hangs). A verb that waits (SV_WAITING) carries `-w
+    SV_WAIT`, and the call is allowed that long and more."""
+    args = list(args)
+    if args and args[0] in SV_WAITING:
+        args = ["-w", str(SV_WAIT)] + args
+        timeout = max(timeout, SV_WAIT + 15)
     try:
-        p = subprocess.run(["sv"] + list(args), capture_output=True, text=True, timeout=timeout)
+        p = subprocess.run(["sv"] + args, capture_output=True, text=True, timeout=timeout)
         return p.returncode, p.stdout, p.stderr
     except (OSError, subprocess.SubprocessError):
         return -1, "", ""

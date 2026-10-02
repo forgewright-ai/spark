@@ -603,7 +603,7 @@ SH
     printf '%s\n' "$out" | grep -qE '^would +spark-check +sv up ~/\.config/spark/sv/spark-check$' && ok "runit live: spark-check would come up (sv up, the dir spelled with ~)" || bad "spark-check row: $(printf '%s\n' "$out" | grep -E ' spark-check ' | head -1)"
     printf '%s\n' "$out" | grep -qE '^(ok|would|skip|todo) +runit ' && bad "runit live: the runit skip row survives" || ok "runit live: no runit skip row"
     printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "runit live dry-run called sudo" || ok "runit live dry-run: no sudo"
-    grep -qE '^sv (up|down|restart|exit) ' "$V/sv.log" 2>/dev/null && bad "a dry run changed a service: $(grep -E '^sv (up|down|restart|exit) ' "$V/sv.log" | head -1)" || ok "a dry run asks sv status and nothing more"
+    grep -qE '^sv (-w [0-9]+ )?(up|down|restart|exit) ' "$V/sv.log" 2>/dev/null && bad "a dry run changed a service: $(grep -E '^sv (-w [0-9]+ )?(up|down|restart|exit) ' "$V/sv.log" | head -1)" || ok "a dry run asks sv status and nothing more"
     # 11c. a runsvdir-USER of your own (no spark marker in its run): spark
     #      reads the directory its runsvdir line names -- the last word,
     #      quotes off, $HOME spelled out -- and would link its three service
@@ -643,7 +643,7 @@ SH
     [ "$linked" = 1 ] && ok "your runsvdir apply: the three symlinks point into ~/.config/spark/sv/" || bad "links: $(ls -l "$HOME/service" 2>&1 | tr '\n' ' ')"
     printf '%s\n' "$out" | grep -qE '^ok +spark-check +supervised \(run\)$' && ok "your runsvdir apply: spark-check is supervised (run)" || bad "spark-check row: $(printf '%s\n' "$out" | grep -E ' spark-check ' | head -1)"
     [ ! -e "$svd/spark-check/down" ] && [ -f "$svd/spark-serve/down" ] && [ -f "$svd/spark-forge/down" ] && ok "your runsvdir apply: spark-check's down file went; serve and forge keep theirs (no model here)" || bad "down files: $(ls "$svd"/*/down 2>&1 | tr '\n' ' ')"
-    grep -qxF "sv up $svd/spark-check" "$V/sv.log" && ! grep -qE '^sv (up|down|restart|exit) .*spark-(serve|forge)$' "$V/sv.log" && ok "your runsvdir apply: sv up spark-check, nothing else moved through sv" || bad "sv log: $(grep -vE '^sv status' "$V/sv.log" 2>/dev/null | tr '\n' ' ')"
+    grep -qxF "sv up $svd/spark-check" "$V/sv.log" && ! grep -qE '^sv (-w [0-9]+ )?(up|down|restart|exit) .*spark-(serve|forge)$' "$V/sv.log" && ok "your runsvdir apply: sv up spark-check, nothing else moved through sv" || bad "sv log: $(grep -vE '^sv status' "$V/sv.log" 2>/dev/null | tr '\n' ' ')"
     out=$(vrun SPARK_VAR_SERVICE="$V/service" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Void, converged) failed: $out"
     printf '%s\n' "$out" | grep -qE "^ok +supervisor +your runsvdir-$me " && printf '%s\n' "$out" | grep -qE '^ok +spark-check +supervised \(run\)$' \
         && printf '%s\n' "$out" | grep -qE '^skip +spark-serve +on demand \(' && printf '%s\n' "$out" | grep -qE '^skip +spark-forge +off \(' \
