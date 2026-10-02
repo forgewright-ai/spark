@@ -1,8 +1,9 @@
 SPARK CHEATSHEET                                 lp ~/.spark/docs/CHEATSHEET.txt
 
 SPARK
-  spark                           status: the model, the prompt line, the
-                                  server, soul, memory, last answer
+  spark                           one line: what answers, the model
+  spark status                    the model, the prompt line, the server,
+                                  soul, memory, last answer
   spark off | on                  silence / restore the prompt line, every pane
   spark soul [edit|reset]         who it is: the default, or your own
   spark memory add <words>        a fact it keeps  memory forget N  drops it
@@ -72,7 +73,8 @@ ON THE LAN (server / client)
   spark model add URL             add your own (--sha256, --license required)
   spark model verify              sha256 every downloaded file now. exit 1 bad
   spark serve [on|off]            the engine and the page on the LAN, kept.
-                                  Bare: what answers, the models, the units
+                                  On: one line each. Bare: what answers, the
+                                  models, the units
   spark serve boot [on|off]       up from boot, never asleep (the machine
                                   that stays on)
   spark serve share [on|off]      one engine for every OS user here (Linux).
@@ -123,15 +125,13 @@ THE MACHINE
   long output (help, check, lists) pages via $PAGER (less). Piped stays plain
 
 THE INTERFACE
-  spark quiet start on|off        no banner, one-line serve and bare spark
-  spark quiet audio on|off        no sound from spark (both OSes)
   ~/.config/spark/theme.env       a palette a tool may write: spark ver and
                                   the status line follow it
 
 THE LIVING PROMPT
   spark awaken                    give this machine a personality and a look
-  spark look [PART auto|on|off]   motion, colour, words. Bare: the parts
-  spark look off                  motion, colour and words off at once
+  spark look [on|off|auto]        motion, colour and words, one switch.
+                                  Bare: the look, the height, the reveal
   spark words [edit]              the lines it says, and its faces
   spark height [N]                the row spark writes in: 1..5 above your line
   Esc k                           at the prompt: move spark's row (1, 2, 3)

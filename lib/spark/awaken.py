@@ -14,7 +14,7 @@
 #            soul file of your own, "Your own soul is kept."
 #   5 pace   one reply revealed at the measured pace; yes, faster, slower
 #            or off (faster and slower replay the same text, no new call)
-#   6 done   the look's parts on auto, the look file rendered
+#   6 done   the look on auto, the look file rendered
 #
 # Nothing is written until the end, and then each file atomically: Ctrl-C
 # at any question leaves the machine as it was (exit 130). Running it
@@ -34,12 +34,12 @@ from . import words as wordsmod
 USAGE = """%s awaken -- give this machine a personality and a look
 
   spark awaken                  a temperament, the lines it says, its face,
-                                the pace of a reply; then motion, colour and
-                                words on auto (run it again to start over)
+                                the pace of a reply; then the look on auto
+                                (run it again to start over)
 
   The model writes the lines and picks the face, once, here. Every line is
   checked, and a shipped line stands in for one it refuses. A soul file of
-  your own is kept. spark words shows the lines, spark look the parts.
+  your own is kept. spark words shows the lines, spark look the look.
 """ % MARK
 
 TEMPER_DESC = {
@@ -359,12 +359,12 @@ def run(cfg, ask):
     if not own:
         soul.write_personality(personality)
     from . import site
-    keys = {"SPARK_LOOK_MOTION": "auto", "SPARK_LOOK_COLOUR": "auto", "SPARK_LOOK_WORDS": "auto"}
+    keys = {"SPARK_LOOK": "auto"}
     if pace_word:
         keys["SPARK_REVEAL"] = pace_word
     site.set_keys(_file=SPARK_ENV, _quiet=True, **keys)
     look.render(config.load(), awake_now=True)
-    say("* %s Awake. Motion, colour and words are on auto. spark look shows them." % fs["pleased"])
+    say("* %s Awake. The look is on auto: motion, colour and words. spark look shows it." % fs["pleased"])
     say("Your next prompt is awake. If spark's line sits on your prompt, press Esc k.")
     return 0
 

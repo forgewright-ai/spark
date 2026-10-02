@@ -15,16 +15,17 @@ LINE = re.compile(r"^[A-Z_0-9]+=[^;`$()|&<>]*$")
 PLACEHOLDERS = {}
 
 # Contract 3: every key a config file may carry, in the documented order.
-# A key not here (an older release's, say SITE_THEME) still loads: the
-# reader refuses a line's shape, never its name.
+# A key not here (an older release's, say SITE_THEME, SITE_QUIET_START or
+# SPARK_LOOK_MOTION) still loads: the reader refuses a line's shape, never
+# its name, and nothing reads it.
 SITE_KEYS = ("SITE_NAME", "SITE_USER", "SITE_SET_HOSTNAME",
              "SITE_PEER_AI_URL", "SITE_PEER_SSH",
              "SITE_AI_MODEL", "SITE_EMBER_MODEL", "SITE_AI_BUDGET", "SITE_AI_BUILD",
-             "SITE_QUIET_START", "SITE_QUIET_AUDIO", "SITE_HEADLESS", "SITE_SHARE")
+             "SITE_HEADLESS", "SITE_SHARE")
 SPARK_KEYS = ("SPARK_PORT", "SPARK_BASE_URL", "SPARK_PREFER_URL", "SPARK_SERVE_HOST", "SPARK_ENGINE_DIR",
               "SPARK_MODELS_DIR", "SPARK_MODEL", "SPARK_NGL", "SPARK_CTX", "SPARK_FLASH_ATTN", "SPARK_KV",
               "SPARK_THREADS", "SPARK_EXTRA_ARGS", "SPARK_MEM_NEEDED_GB", "SPARK_API_KEY_FILE",
-              "SPARK_TIMEOUT", "SPARK_MAX_TOKENS", "SPARK_REVEAL", "SPARK_LOOK_MOTION", "SPARK_LOOK_COLOUR", "SPARK_LOOK_WORDS", "SPARK_HEIGHT", "SPARK_HISTORY", "SPARK_MEMORY", "SPARK_KNOWLEDGE", "SPARK_PERSONA_EXTRA", "SPARK_SERVICE",
+              "SPARK_TIMEOUT", "SPARK_MAX_TOKENS", "SPARK_REVEAL", "SPARK_LOOK", "SPARK_HEIGHT", "SPARK_HISTORY", "SPARK_MEMORY", "SPARK_KNOWLEDGE", "SPARK_PERSONA_EXTRA", "SPARK_SERVICE",
               "SPARK_FORGE", "SPARK_FORGE_HOST", "SPARK_FORGE_PORT", "SPARK_FORGE_TOKEN_FILE")
 KEYS = SITE_KEYS + SPARK_KEYS
 
@@ -152,20 +153,6 @@ class Config:
         ignores it: Metal). engine.backend() resolves auto by the GPU probe,
         as engine.backend answers."""
         return self.get("SITE_AI_BUILD", "auto")
-
-    @property
-    def quiet_audio(self):
-        """yes: spark plays no sound (the sounds it has are a game's and a
-        bell); the audio row reads na. Both OSes; core."""
-        return self.get("SITE_QUIET_AUDIO", "no") == "yes"
-
-    @property
-    def quiet_start(self):
-        """yes: spark itself starts quietly -- no login banner, one line
-        each for the engine and the page from `spark serve on`, a one-line
-        bare `spark` (explicit `spark status` stays the full report). Both
-        OSes; core."""
-        return self.get("SITE_QUIET_START", "no") == "yes"
 
     @property
     def headless(self):

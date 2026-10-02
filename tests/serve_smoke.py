@@ -25,7 +25,8 @@ STUB_SERVER = '''#!%s
 # a stand-in llama-server: records its argv, honours --api-key-file, answers
 # /health (503 for STUB_LOAD_S seconds, then 200), /v1/models (both the
 # single form and the router form, whose presets.ini it reads back) and
-# /v1/chat/completions (for `spark serve`'s warm-up).
+# /v1/chat/completions (for `spark serve`'s warm-up: each model asked is
+# appended to $HOME/warmed, since serve on warms in silence).
 import json, os, sys, time, signal
 from http.server import BaseHTTPRequestHandler, HTTPServer
 args = sys.argv[1:]
@@ -71,6 +72,8 @@ class H(BaseHTTPRequestHandler):
             return self._send(401, {})
         if self.path == "/v1/chat/completions":
             model = json.loads(body or b"{}").get("model", "")
+            with open(os.path.join(os.environ["HOME"], "warmed"), "a") as f:
+                f.write(model + "\\n")
             return self._send(200, {"model": model, "choices": [{"message": {"role": "assistant", "content": "ok"}}]})
         self._send(404, {})
 signal.signal(signal.SIGTERM, lambda *a: sys.exit(0))
@@ -181,8 +184,13 @@ def main():
         ok(get(furl + "/api/health") == 200 and os.path.isfile(state + "/forge.pid"),
            "serve on starts the page too, beside the engine", out + err)
         ok(kept() == "SPARK_SERVICE=auto SPARK_FORGE=on", "serve on keeps both: SPARK_SERVICE=auto and SPARK_FORGE=on", kept())
-        ok(("spark client " + furl) in out and "spark user add NAME" in out and "scp" not in out,
-           "serve on says how another machine joins: the page's URL, a user minted here, no scp", out)
+        # serve on is brief: one line each for the engine and the page,
+        # and no join steps after it (spark serve --login says them)
+        lines = [l for l in out.splitlines() if l.strip() and not l.startswith("ok     spark.env")]
+        ok(len(lines) == 2 and re.match(r"^spark serve -- ready \(pid \d+\) at %s$" % re.escape(url), lines[0])
+           and re.match(r"^spark serve -- the page ready \(pid \d+\) at %s/login$" % re.escape(furl), lines[1])
+           and "spark client" not in out and "spark user add" not in out and "warm   " not in out,
+           "serve on answers with one line each, the engine and the page, and no join steps", out + err)
         # the client resolves through the page (forge-url first, then serve-url)
         rc, out, _ = spark("brain", "--porcelain")
         ok(rc == 0 and out.strip() == furl + "\tstub\tforge", "brain resolves via the page, which fronts serve-url", out)
@@ -207,14 +215,17 @@ def main():
         rc, out, _ = spark("serve", "off")
         ok(rc == 0 and "not running" in out, "stop again: not running, exit 0", out)
 
-        # SITE_QUIET_START=yes: the whole start collapses to one line
-        rc, out, err = spark("serve", "on", extra={"SITE_QUIET_START": "yes"})
+        # an old site.env holding SITE_QUIET_START (gone in v1.69) still
+        # loads, ignored: the same brief start
+        with open(home + "/.config/spark/site.env", "a") as f:
+            f.write("SITE_QUIET_START=no\nSITE_QUIET_AUDIO=yes\n")
+        rc, out, err = spark("serve", "on")
         lines = [l for l in out.splitlines() if l.strip() and not l.startswith("ok     spark.env")]
         ok(rc == 0 and len(lines) == 2 and re.match(r"^spark serve -- ready \(pid \d+\) at %s$" % re.escape(url), lines[0])
            and re.match(r"^spark serve -- the page ready \(pid \d+\) at %s/login$" % re.escape(furl), lines[1]),
-           "quiet start: spark serve on answers with one line each, the engine and the page", out + err)
+           "an old SITE_QUIET_* key in site.env loads, ignored: serve on is still one line each", out + err)
         rc, out, err = spark("serve", "off")
-        ok(rc == 0 and "stopped pid" in out, "stop the quiet server", out + err)
+        ok(rc == 0 and "stopped pid" in out, "stop it again", out + err)
         time.sleep(0.5)
 
         # a foreign server on the port
@@ -275,9 +286,13 @@ def main():
         # SITE_AI_BUILD=vulkan: the speed cap then admits gemma4-e4b on a
         # Linux runner too (cpu would cap at 3 GB files; macOS ignores the key)
         renv = {"SITE_AI_MODEL": "auto", "SITE_EMBER_MODEL": "auto", "SPARK_MEM_TOTAL_GB": "18", "SITE_AI_BUILD": "vulkan"}
+        warmed = home + "/warmed"
+        if os.path.exists(warmed):
+            os.remove(warmed)
         rc, out, err = spark("serve", "on", extra=renv)
         ok(rc == 0 and "ready (pid" in out, "serve with an ember: router starts", out + err)
-        ok("warm   spark, ember" in out, "both roles warmed", out)
+        ok(os.path.exists(warmed) and open(warmed).read() == "spark\nember\n" and "warm   " not in out,
+           "both roles warmed, in silence", out)
         argv = json.load(open(home + "/spawned.json"))
         ok("--models-dir" in argv and "--models-preset" in argv and "--models-max" in argv, "router argv", argv)
         ok("-m" not in argv and "-c" not in argv and "-ngl" not in argv, "per-model args left to presets.ini", argv)
@@ -300,8 +315,11 @@ def main():
         # SITE_EMBER_MODEL=none: the single form, aliased spark + stem (vulkan
         # pinned as above, so the case reads the same on a Linux runner)
         nenv = {"SITE_AI_MODEL": "auto", "SITE_EMBER_MODEL": "none", "SPARK_MEM_TOTAL_GB": "18", "SITE_AI_BUILD": "vulkan"}
+        if os.path.exists(warmed):
+            os.remove(warmed)
         rc, out, err = spark("serve", "on", extra=nenv)
-        ok(rc == 0 and "warm   spark\n" in out, "ember none: serves, warms spark alone", out + err)
+        ok(rc == 0 and os.path.exists(warmed) and open(warmed).read() == "spark\n",
+           "ember none: serves, warms spark alone", out + err)
         argv = json.load(open(home + "/spawned.json"))
         ok("-m" in argv and argv[argv.index("-m") + 1] == os.path.join(models, alone) and "--models-dir" not in argv,
            "single form serves the first in the list that fits", argv)

@@ -471,7 +471,7 @@ def alike(question, missing, store=None, present=None, k=ALIKE):
 # drift guard holds equal to bin/spark's VERBS) and the help's left
 # column (bin/spark's USAGE_* blocks: `spark model [NAME|auto|none]`).
 # An upper-case slot takes any word; SUB is the one the help fills from
-# completion (`spark quiet [SUB on|off]`).
+# completion (a help line `spark VERB [SUB on|off]`).
 Clause = namedtuple("Clause", "verb slots")
 # verbs: every word bin/spark dispatches; order: the help's order;
 # words: {verb: the words its first slot takes} for a closed verb;

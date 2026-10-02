@@ -268,7 +268,9 @@ def wrapped(shell, widget, tmp, env, prompt, ok):
         subprocess.run(t + ["kill-server"], stderr=subprocess.DEVNULL)
 
 
-LOOK_AWAKE = ("AWAKE=yes\nMOTION=auto\nCOLOUR=on\nWORDS=on\nHEIGHT=2\nSGR_ACCENT=1\nSGR_MUTED=2\n"
+# the look file as look.content writes it: one switch, SPARK_LOOK, so the
+# three parts always carry the same value
+LOOK_AWAKE = ("AWAKE=yes\nMOTION=on\nCOLOUR=on\nWORDS=on\nHEIGHT=2\nSGR_ACCENT=1\nSGR_MUTED=2\n"
               "SGR_WARN=31\nSGR_OK=32\nSGR_TROUBLE=1;31\nSGR_YOU=\nFACE_IDLE=(o.o)\n"
               # a value with an escape in it is dropped whole: the face stays
               "FACE_IDLE=\x1b[2J(x.x)\nFACE_ASLEEP=(-.-)z\n")
@@ -383,24 +385,22 @@ def living(shell, widget, tmp, env, ok):
     with open(os.path.join(sd, "news"), "w") as f:
         f.write("n2\tThree runs wait for review.\n")
     os.utime(os.path.join(sd, "news"), (time.time() + 4, time.time() + 4))
-    # quiet start holds it back; spark off too
+    # the look switch alone governs it (v1.69): an old site.env that still
+    # holds SITE_QUIET_START=yes holds nothing back
     cfg = os.path.join(env["HOME"], ".config", "spark")
     os.makedirs(cfg, exist_ok=True)
     with open(os.path.join(cfg, "site.env"), "w") as f:
         f.write("SITE_QUIET_START=yes\n")
     since = sh.mark()
     sh.send("\r")
+    ok(sh.expect("(o.o) Three runs wait for review."),
+       "news: an old SITE_QUIET_START=yes holds nothing back, the look switch alone", since()[-300:])
     sh.expect(prompt)
     sh.settle()
-    ok("Three runs wait" not in since(), "news: SITE_QUIET_START=yes holds it back", since()[-300:])
-    ok(lines(os.path.join(sd, "news-seen")) == ["n2"], "news: under quiet the id counts as seen",
+    ok(lines(os.path.join(sd, "news-seen")) == ["n2"], "news: the id shown counts as seen",
        lines(os.path.join(sd, "news-seen")))
     os.remove(os.path.join(cfg, "site.env"))
-    since = sh.mark()
-    sh.send("\r")
-    sh.expect(prompt)
-    sh.settle()
-    ok("Three runs wait" not in since(), "news: held back by quiet, it never plays later", since()[-300:])
+    # spark off holds it back
     with open(os.path.join(sd, "news"), "w") as f:
         f.write("n3\tThree runs wait for review.\n")
     os.utime(os.path.join(sd, "news"), (time.time() + 6, time.time() + 6))
@@ -413,7 +413,7 @@ def living(shell, widget, tmp, env, ok):
     os.remove(os.path.join(sd, "off"))
     since = sh.mark()
     sh.send("\r")
-    ok(sh.expect("(o.o) Three runs wait for review."), "news: a new id shows once, quiet and off gone", since()[-300:])
+    ok(sh.expect("(o.o) Three runs wait for review."), "news: a new id shows once, spark off gone", since()[-300:])
     sh.expect(prompt)
     sh.settle()
 
@@ -439,7 +439,8 @@ def living(shell, widget, tmp, env, ok):
     sh.send("\r")
     sh.expect(prompt)
     with open(look, "w") as f:
-        f.write(LOOK_AWAKE.replace("COLOUR=on", "COLOUR=auto"))
+        f.write(LOOK_AWAKE.replace("MOTION=on", "MOTION=auto").replace("COLOUR=on", "COLOUR=auto")
+                .replace("WORDS=on", "WORDS=auto"))
     os.utime(look, (time.time() + 6, time.time() + 6))
     sh.send("export NO_COLOR=1\r")
     sh.expect(prompt)

@@ -41,7 +41,7 @@ import unicodedata
 import wave
 from datetime import date
 
-from . import ASCII, CONFIG_DIR, IS_MAC, MARK, REPO, STATE_DIR, config, say
+from . import ASCII, CONFIG_DIR, IS_MAC, MARK, REPO, STATE_DIR, say
 
 STATE_FILE = os.path.join(STATE_DIR, "lua")
 SOUND_DIR = os.path.join(STATE_DIR, "cache", "lua")
@@ -1043,11 +1043,11 @@ class Sound:
     """The sounds, played through the OS's own player -- afplay on macOS,
     aplay or paplay on Linux -- from WAVs synthesized once into the state
     cache; without a player, the two endings ring the terminal bell. m
-    mutes; SPARK_LUA_MUTE=1 or spark quiet audio on starts muted."""
+    mutes; SPARK_LUA_MUTE=1 starts muted."""
 
     def __init__(self, out):
         self.out = out
-        self.mute = os.environ.get("SPARK_LUA_MUTE") == "1" or config.load().quiet_audio     # spark quiet audio on
+        self.mute = os.environ.get("SPARK_LUA_MUTE") == "1"
         self.player = None
         for cmd in (("afplay",) if IS_MAC else ("aplay", "-q"), ("paplay",)):
             if shutil.which(cmd[0]):

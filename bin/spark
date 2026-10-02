@@ -30,8 +30,7 @@ from spark import MARK, page, say  # noqa: E402
 USAGE_HEAD = """%s -- your own AI, on a machine you own: no account, no cloud, nothing leaves
 
 spark
- spark                        status: the model, the prompt line, the server,
-                              soul, memory, last answer
+ spark                        one line: what answers; spark status the rest
  spark off | on               silence / restore the prompt line in every pane
  spark soul [edit|reset]      who it is: ~/.config/spark/soul
  spark memory add <words>     a fact it keeps; memory forget N; memory
@@ -85,13 +84,12 @@ USAGE_MACHINE = """the machine
 """
 
 USAGE_INTERFACE = """the interface
- spark quiet [SUB on|off]     start (banner), audio (sounds): spark's own noise
  spark bar [line]             the machine's one-line status
 """
 
 USAGE_LIVING = """the living prompt
  spark awaken                 give this machine a personality and a look
- spark look [PART on|off]     motion, colour, words: auto, on or off (-h)
+ spark look [on|off|auto]     the look: motion, colour and words (-h)
  spark words [edit]           the lines it says, and its faces
  spark height [N]             the row spark writes in, above your prompt
  Esc k                        at the prompt: move that row (1, 2, 3)
@@ -112,7 +110,7 @@ version %s
 
 
 def usage():
-    """The help: quiet and the bar line are the interface;
+    """The help: the bar line is the interface;
     awaken, look, words and height the living prompt.
     The version is formatted here, not at import: nothing on the `spark
     line` path may call git, and version() does, on a cache miss."""
@@ -145,7 +143,7 @@ def main(argv):
         return misplaced(sub)
     if len(argv) > 1 and "?" not in sub and not sub.startswith("@"):
         # a near-miss of a verb with arguments is a typo, not a question:
-        # `spark quite start on` must not become a conversation
+        # `spark serv on` must not become a conversation
         near = near_verb(sub)
         if near:
             say("spark: no command named %s -- try: spark %s   (a question ends with ?)" % (sub, near))
@@ -167,7 +165,6 @@ VERBS = {"setup": ("setup", "main", False), "check": ("check", "main", False),
          "awaken": ("awaken", "main", False), "words": ("words", "main", False),
          "update": ("update", "cmd_update", False), "bar": ("bar", "main", False),
          "bench": ("bench", "main", True), "stats": ("stats", "main", False),
-         "quiet": ("site", "cmd_quiet", False),
          "headless": ("site", "cmd_headless", False), "client": ("site", "cmd_client", False),
          "share": ("site", "cmd_share", False),
          "model": ("model", "cmd_model", False), "ember": ("model", "cmd_ember", False),

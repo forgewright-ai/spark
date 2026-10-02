@@ -229,14 +229,14 @@ def greeting(day=None):
 
 def greet(day=None):
     """The greeting the widgets ask for: nothing unless this machine is
-    awake, its words part is not off and quiet start is not on; else one
+    awake and its look is not off; else one
     line with its face (the greetings in turn by the day) and, when memory
     holds one, a remembered fact, shown here and written nowhere."""
     from . import config, memory
     if not look.awake():
         return []
     cfg = config.load()
-    if look.part("words", cfg) == "off" or cfg.get("SITE_QUIET_START", "no").strip().lower() == "yes":
+    if look.part("words", cfg) == "off":
         return []
     line = greeting(day)
     if not line:

@@ -39,7 +39,7 @@ _spark_complete() {
     if [ "$COMP_CWORD" -eq 1 ]; then
         words="chat do recall serve check update client setup
                ver last status history stats clear bench model
-               soul memory quiet bar look height off
+               soul memory bar look height off
                on user explain edit ask read drill watch reveal help uninstall
                awaken words"
         COMPREPLY=($(compgen -W "$words" -- "$cur"))
@@ -47,12 +47,11 @@ _spark_complete() {
     fi
     [ "$COMP_CWORD" -eq 2 ] || return 0
     case ${COMP_WORDS[1]} in
-        quiet)   words="start audio status" ;;
         model)   words="list verify budget rm add auto none status --chat $(_spark_model_names)" ;;
         bar)     words="line" ;;
         memory)  words="add forget clear on off" ;;
         reveal)  words="auto off" ;;
-        look)    words="motion colour words reveal off status" ;;
+        look)    words="on off auto status" ;;
         height)  words="1 2 3 4 5" ;;
         check)   words="--watch --porcelain --report --fresh --fetch --selftest --chaos" ;;
         uninstall) words="--dry-run --yes --purge --packages --keep-packages" ;;

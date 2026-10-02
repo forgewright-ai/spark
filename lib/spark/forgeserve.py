@@ -1741,7 +1741,6 @@ def cmd_start(args):
     finally:
         os.close(out)
         os.close(lock)
-    quiet = cfg.quiet_start
 
     class Exited(Exception):
         pass
@@ -1754,17 +1753,13 @@ def cmd_start(args):
         return False
 
     try:
-        up = wait_ready("" if quiet else "the page", probe, 30, 0.5)
+        up = wait_ready("", probe, 30, 0.5)
     except Exited:
         return _die("exited %d while starting:\n%s" % (p.returncode, "\n".join(log_tail(5))), p.returncode or 1)
     if not up:
         engine.terminate([p.pid])
         return _die("no answer in 30 s -- stopped; the log tail:\n" + "\n".join(log_tail(5)))
-    if quiet:
-        say("%s serve -- the page ready (pid %d) at %s/login" % (MARK, p.pid, url))
-        return 0
-    sys.stdout.write(" ready (pid %d)\n" % p.pid)
-    say("%s serve -- the page at %s/login   (spark serve --login for the token)" % (MARK, url))
+    say("%s serve -- the page ready (pid %d) at %s/login" % (MARK, p.pid, url))
     return 0
 
 
@@ -1777,7 +1772,6 @@ def _through_unit(cfg, url):
         return None
     if not started:
         return 1
-    quiet = cfg.quiet_start
     t0 = time.monotonic()
 
     class StoodDown(Exception):
@@ -1791,7 +1785,7 @@ def _through_unit(cfg, url):
         return False
 
     try:
-        up = wait_ready("" if quiet else "the page", probe, 30, 0.5)
+        up = wait_ready("", probe, 30, 0.5)
     except StoodDown:
         return _die("the unit stood down -- to start it again and read why: %s" % engine.restart_line("forge"))
     if not up:
@@ -1799,11 +1793,7 @@ def _through_unit(cfg, url):
     url = forge_url() or url
     pid = _pid()
     at = " (pid %d)" % pid if pid else ""
-    if quiet:
-        say("%s serve -- the page ready%s at %s/login" % (MARK, at, url))
-        return 0
-    sys.stdout.write(" ready%s\n" % at)
-    say("%s serve -- the page at %s/login   (spark serve --login for the token)" % (MARK, url))
+    say("%s serve -- the page ready%s at %s/login" % (MARK, at, url))
     return 0
 
 

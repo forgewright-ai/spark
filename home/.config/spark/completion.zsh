@@ -38,16 +38,15 @@ _spark() {
     if (( CURRENT == 2 )); then
         comp=(chat do recall serve check update client setup
               ver last status history stats clear bench model
-              soul memory quiet bar look height off
+              soul memory bar look height off
               on user explain edit ask read drill watch reveal help uninstall
               awaken words)
     elif (( CURRENT == 3 )); then
         case ${words[2]} in
-            quiet)   comp=(start audio status) ;;
             model)   comp=(list verify budget rm add auto none status --chat ${(f)"$(_spark_model_names)"}) ;;
             memory)  comp=(add forget clear on off) ;;
             reveal)  comp=(auto off) ;;
-            look)    comp=(motion colour words reveal off status) ;;
+            look)    comp=(on off auto status) ;;
             height)  comp=(1 2 3 4 5) ;;
             bar)     comp=(line) ;;
             check)   comp=(--watch --porcelain --report --fresh --fetch --selftest --chaos) ;;

@@ -33,7 +33,7 @@ _ISOLATED = tempfile.mkdtemp(prefix="spark-smoke-home-")
 atexit.register(shutil.rmtree, _ISOLATED, True)
 os.environ.update({"HOME": _ISOLATED, "XDG_CONFIG_HOME": _ISOLATED + "/.config",
                    "XDG_STATE_HOME": _ISOLATED + "/.local/state", "XDG_DATA_HOME": _ISOLATED + "/.local/share"})
-for _k in [k for k in os.environ if k.startswith("SPARK_LOOK_") or k in ("SPARK_HEIGHT", "SPARK_REVEAL")]:
+for _k in [k for k in os.environ if k.startswith("SPARK_LOOK") or k in ("SPARK_HEIGHT", "SPARK_REVEAL")]:
     del os.environ[_k]
 # The clipboard, fenced: a fake pbcopy, wl-copy, xclip and xsel lead PATH
 # for this process and every case it spawns, so /copy never reaches the
@@ -786,8 +786,9 @@ def knowledge_cases(t):
     grounding._MAP.clear()
     grounding._TREE.clear()
     t.ok(grounding.shell_map() == smap and len(smap) <= 1000 and smap.isascii()
-         and "spark quiet start|audio on|off" in smap and "spark memory on|off" in smap,
-         "knowledge: shell_map is byte-stable, ASCII, <= 1000 characters, SUB and on|off filled", "%d: %s" % (len(smap), smap))
+         and "spark look on|off|auto" in smap and "spark memory on|off" in smap and "quiet" not in smap,
+         "knowledge: shell_map is byte-stable, ASCII, <= 1000 characters, on|off filled, no spark quiet",
+         "%d: %s" % (len(smap), smap))
     example = open(os.path.join(REPO, "home", ".config", "spark", "spark.env.example")).read()
     keys = re.findall(r"SPARK_[A-Z_]+", grounding.SHELL_TAIL)
     t.ok(keys and all(re.search(r"^#? *%s=" % k, example, re.M) for k in keys),
@@ -1048,8 +1049,10 @@ def knowledge_cases(t):
                 ("tar -czf a.tgz d", []),
                 ("spark engine stop", [("verb", "spark", "engine")]),
                 ("spark serve stop", [("verb", "spark serve", "stop")]),
-                ("spark quiet start maybe", [("verb", "spark quiet start", "maybe")]),
-                ("spark quiet start on", []), ("spark theme dracula", [("verb", "spark", "theme")]),
+                ("spark look sideways", [("verb", "spark look", "sideways")]),
+                ("spark serve boot on", []), ("spark theme dracula", [("verb", "spark", "theme")]),
+                ("spark quiet start on", [("verb", "spark", "quiet")]),
+                ("spark look motion on", [("verb", "spark look", "motion")]), ("spark look auto", []),
                 ("spark model list", []),
                 ("spark what model am I on?", []), ("cmd 2>&1 | explain", [("missing", "cmd", "cmd")]),
                 ("micro <file>", [("placeholder", "micro", "<file>")]),
@@ -1923,7 +1926,7 @@ def chat_pty_cases(t, env, home):
     os.makedirs(state, exist_ok=True)
     with open(os.path.join(state, "look"), "w") as f:
         f.write("AWAKE=yes\n")
-    awake = dict(e, SPARK_LOOK_WORDS="on", SPARK_LOOK_MOTION="off", SPARK_LOOK_COLOUR="off")
+    awake = dict(e, SPARK_LOOK="on")
 
     def garbage():
         STATE["mode"] = "garbage"
@@ -1973,7 +1976,7 @@ def living_core_cases(t):
     tmp = tempfile.mkdtemp(prefix="spark-living-")
     paths = {n: getattr(look, n) for n in ("LOOK_FILE", "NEWS_FILE", "WORDS_FILE", "FACES_FILE")}
     keys = ("TERM", "NO_COLOR", "SSH_CONNECTION", "SSH_TTY", "TMUX", "SPARK_HINT_ROW", "SPARK_ASCII",
-            "SPARK_LOOK_MOTION", "SPARK_LOOK_COLOUR", "SPARK_LOOK_WORDS", "SPARK_HEIGHT") + tuple(_sp._SGR_VARS.values())
+            "SPARK_LOOK", "SPARK_HEIGHT") + tuple(_sp._SGR_VARS.values())
     saved = {k: os.environ.get(k) for k in keys}
     real_ascii = _sp.ASCII
     for n in paths:
@@ -2020,19 +2023,19 @@ def living_core_cases(t):
              and look.clean("tab\there") is None,
              "living: clean() refuses an escape, non-ASCII, over 72 columns, a secret shape, a control character")
 
-        # --- awakened: the parts through the environment, the file rendered
-        for k in ("SPARK_LOOK_MOTION", "SPARK_LOOK_COLOUR", "SPARK_LOOK_WORDS"):
-            os.environ[k] = "on"
+        # --- awakened: the one switch through the environment, the file rendered
+        os.environ["SPARK_LOOK"] = "on"
         os.makedirs(os.path.dirname(_sp.SPARK_ENV), exist_ok=True)
         with open(_sp.SPARK_ENV, "w") as f:      # smoke's own throwaway spark.env
-            f.write("SPARK_LOOK_MOTION=on\nSPARK_LOOK_COLOUR=on\nSPARK_LOOK_WORDS=on\n")
+            f.write("SPARK_LOOK=on\n")
         look.render(_cf.load(), awake_now=True)
         got = open(look.LOOK_FILE).read()
-        t.ok(look.awake() and "AWAKE=yes\nMOTION=on\n" in got and "FACE_THINKING=(o.O)" in got and "BLINK=14" in got
-             and "SGR_ACCENT=1" in got, "living: render writes the look file the hooks read", got)
-        os.environ.update(SPARK_HEIGHT="3", SPARK_LOOK_WORDS="off")
+        t.ok(look.awake() and "AWAKE=yes\nMOTION=on\nCOLOUR=on\nWORDS=on\n" in got and "FACE_THINKING=(o.O)" in got
+             and "BLINK=14" in got and "SGR_ACCENT=1" in got,
+             "living: render writes the look file the hooks read, the three parts following SPARK_LOOK", got)
+        os.environ.update(SPARK_HEIGHT="3", SPARK_LOOK="off")
         baked = look.content(_cf.load(), True)
-        os.environ.update(SPARK_LOOK_WORDS="on")
+        os.environ.update(SPARK_LOOK="on")
         del os.environ["SPARK_HEIGHT"]
         t.ok("HEIGHT=1\n" in baked and "WORDS=on\n" in baked,
              "living: the look file bakes in spark.env's own values, never this shell's exports", baked[:80])
@@ -2051,13 +2054,33 @@ def living_core_cases(t):
         t.ok(b.long_at == 6 and b._frame(0).endswith(" 7 s  A long one. Ctrl-C stops it."),
              "living: from three quarters of the timeout, one sentence says what to do", repr(b._frame(0)))
         os.environ["SSH_CONNECTION"] = "192.0.2.1 1 192.0.2.2 22"
-        os.environ["SPARK_LOOK_MOTION"] = "auto"
+        os.environ["SPARK_LOOK"] = "auto"
         t.ok(_tx.Busy(Tty()).scan and _tx.Busy(Tty()).face, "living: auto draws the scanner and the face over ssh too")
         os.environ["SPARK_ASCII"] = "1"
         t.ok(_tx.Busy(Tty()).scan, "living: and on the console")
         del os.environ["SPARK_ASCII"]
         del os.environ["SSH_CONNECTION"]
-        del os.environ["SPARK_LOOK_MOTION"]
+        # one switch, three parts: each keeps its own auto rule -- NO_COLOR
+        # holds colour back under auto, never motion or words; on overrides
+        # NO_COLOR; TERM=dumb holds every part back under auto
+        os.environ["NO_COLOR"] = "1"
+        under_auto = tuple(look.active(p, Tty()) for p in look.PARTS)
+        os.environ["SPARK_LOOK"] = "on"
+        under_on = tuple(look.active(p, Tty()) for p in look.PARTS)
+        os.environ["SPARK_LOOK"] = "auto"
+        del os.environ["NO_COLOR"]
+        plain_auto = tuple(look.active(p, Tty()) for p in look.PARTS)
+        os.environ["TERM"] = "dumb"
+        dumb = tuple(look.active(p, Tty()) for p in look.PARTS)
+        os.environ["TERM"] = "xterm"
+        os.environ["SPARK_LOOK"] = "off"
+        off_all = tuple(look.part(p) for p in look.PARTS)
+        t.ok(look.PARTS == ("motion", "colour", "words") and under_auto == (True, False, True)
+             and under_on == (True, True, True) and plain_auto == (True, True, True)
+             and dumb == (False, False, False) and off_all == ("off", "off", "off"),
+             "living: SPARK_LOOK drives the three parts; NO_COLOR turns colour off under auto, on overrides it",
+             repr((under_auto, under_on, plain_auto, dumb, off_all)))
+        os.environ["SPARK_LOOK"] = "on"
         e = _tx.Estimate("waking", 10, Tty())
         cells, pct = e.fill(1000)
         e.started = time.monotonic() - 4.5
@@ -2134,7 +2157,7 @@ def living_core_cases(t):
         class _Ctx2:
             cfg = _cf.load()
         r = _ck.row_look(_Ctx2)
-        t.ok(r.status == "ok" and r.value == "awake: motion on, colour on, words on, height 1", "living: the look row ok when rendered", r.value)
+        t.ok(r.status == "ok" and r.value == "awake: look on, height 1", "living: the look row ok when rendered", r.value)
         with open(look.FACES_FILE, "w") as f:
             f.write("RATE=5\nIDLE=(o\x1b[31m.o)\n")
         r = _ck.row_look(_Ctx2)
@@ -2199,9 +2222,10 @@ def living_core_cases(t):
                            stdin=subprocess.DEVNULL)
         return p.returncode, p.stdout
     rc0, bare = sp("look")
-    rc1, said = sp("look", "motion", "auto")
-    rc2, _ = sp("look", "color", "on")
-    rc3, bad = sp("look", "colour", "loud")
+    rc2, said_on = sp("look", "on")
+    senv_on = open(os.path.join(home, ".config", "spark", "spark.env")).read()
+    rc1, said = sp("look", "auto")
+    rc3, bad = sp("look", "loud")
     rc4, _ = sp("height", "3")
     rc5, hi = sp("height")
     rc6, bad2 = sp("height", "6")
@@ -2209,26 +2233,35 @@ def living_core_cases(t):
     rc8, helped2 = sp("height", "help")
     senv = open(os.path.join(home, ".config", "spark", "spark.env")).read()
     lk = open(os.path.join(home, ".local", "state", "spark", "look")).read()
-    t.ok(rc0 == 0 and "not awakened" in bare and rc1 == 0 and "after spark awaken" in said and rc2 == 0
-         and "SPARK_LOOK_MOTION=auto" in senv and "SPARK_LOOK_COLOUR=on" in senv and "SPARK_HEIGHT=3" in senv
-         and "AWAKE=no" in lk and "MOTION=off" in lk and "HEIGHT=3" in lk,
-         "living: spark look PART and spark height write spark.env and render the look file", senv + lk)
+    t.ok(rc0 == 0 and "not awakened" in bare and bare.startswith("look    off ") and "\nreveal  off " in bare
+         and "\nheight  1 " in bare and rc1 == 0 and "after spark awaken" in said and rc2 == 0
+         and "SPARK_LOOK=on\n" in senv_on and "SPARK_LOOK=auto\n" in senv and "SPARK_LOOK_" not in senv
+         and "SPARK_HEIGHT=3" in senv and "AWAKE=no" in lk and "MOTION=off" in lk and "HEIGHT=3" in lk,
+         "living: spark look on|auto and spark height write spark.env (one key, SPARK_LOOK) and render the look file",
+         bare + senv + lk)
     t.ok(rc3 == 2 and bad.startswith("spark look -- ") and rc6 == 2 and bad2.startswith("spark height -- ")
          and rc5 == 0 and hi.startswith("height 3") and rc7 == 0 and helped.startswith("spark look -- ")
          and rc8 == 0 and helped2.startswith("spark height -- "),
          "living: the verbs refuse signed, exit 2, and answer -h first", bad + bad2 + helped + helped2)
+    _was = open(os.path.join(home, ".config", "spark", "spark.env")).read()
+    _gone = [(a, sp(*a)) for a in (("look", "motion", "on"), ("look", "colour", "auto"), ("look", "words", "off"),
+                                   ("look", "reveal", "off"), ("look", "on", "now"))]
+    t.ok(all(rc == 2 and o.startswith("spark look -- ") for _a, (rc, o) in _gone)
+         and open(os.path.join(home, ".config", "spark", "spark.env")).read() == _was,
+         "living: spark look motion|colour|words|reveal on is refused as unknown, exit 2, spark.env untouched",
+         repr(_gone))
     rc9, off = sp("look", "off")
     senv = open(os.path.join(home, ".config", "spark", "spark.env")).read()
-    t.ok(rc9 == 0 and "reveal is untouched" in off and "SPARK_LOOK_MOTION=off" in senv and "SPARK_LOOK_WORDS=off" in senv
-         and "SPARK_REVEAL" not in senv, "living: spark look off turns three parts off and leaves the reveal", senv)
+    t.ok(rc9 == 0 and "reveal is untouched" in off and "SPARK_LOOK=off\n" in senv
+         and "SPARK_REVEAL" not in senv, "living: spark look off writes SPARK_LOOK=off and leaves the reveal", senv)
     rcg, greet = sp("words", "greet")
     t.ok(rcg == 0 and greet == "", "living: the greeting is silent on an unawakened machine")
     env["SPARK_BASE_URL"] = "http://127.0.0.1:9"     # a question here reaches no model
     rcq, q1 = sp("look", "for", "big", "files", "in", "downloads")
     rcq2, q2 = sp("height", "of", "the", "row?")
     rcq3, q3 = sp("look", "sideways")
-    t.ok(rcq != 2 and "no part named" not in q1 and rcq2 != 2 and "is a number" not in q2
-         and rcq3 == 2 and "no part named sideways" in q3,
+    t.ok(rcq != 2 and "spark look --" not in q1 and rcq2 != 2 and "is a number" not in q2
+         and rcq3 == 2 and "no word sideways" in q3,
          "living: look and height hand ordinary words to the question, as before them; one odd word is refused",
          repr((rcq, q1[:80], rcq2, q2[:80], q3[:80])))
 
@@ -2276,7 +2309,8 @@ def living_awaken_cases(t):
     """v1.59 awaken: the door to the living layer. No model means the
     shipped lines; a garbage birth is refused line by line and the shipped
     line stands in; a soul file of yours is kept; the greeting is silent
-    unawakened and when quiet; the fact it may say is written nowhere."""
+    unawakened and when the look is off; the fact it may say is written
+    nowhere."""
     from spark import look as _look
     from spark import memory as _mem
     from spark import awaken as _aw
@@ -2325,12 +2359,12 @@ def living_awaken_cases(t):
         got, bad = _words.parse(path)
         t.ok(not bad and set(_words.IDS) <= set(got) and "{name}" in got["hello"] and open(path).read().isascii(),
              "words.d/%s: every shipped line passes the check, every id there" % temper, str(bad))
-    # inside awaken the process acts awake, the parts on auto; nothing written
+    # inside awaken the process acts awake, the look on auto; nothing written
     before = (_look.awake(), _look.part("motion"))
     with _look.assume_awake():
         inside = (_look.awake(), _look.part("motion"), _look.part("colour"))
     t.ok(inside == (True, "auto", "auto") and (_look.awake(), _look.part("motion")) == before,
-         "awaken: its own waits and pace see an awake machine, the parts on auto, and only while it runs",
+         "awaken: its own waits and pace see an awake machine, the look on auto, and only while it runs",
          repr((before, inside)))
     # one rule for an id, and a face over FACE_MAX is refused where it is drawn and where it is checked
     with tempfile.TemporaryDirectory(prefix="spark-ids-") as d:
@@ -2454,16 +2488,16 @@ def living_awaken_cases(t):
         warm = _words.shipped("warm")
         wf, ff, pf = cfgd + "/words", cfgd + "/faces", cfgd + "/personality"
         t.ok(rc == 0 and "not answering" in out and out.count("temperament [plain]") == 2
-             and "Awake. Motion, colour and words are on auto. spark look shows them." in out,
+             and "Awake. The look is on auto: motion, colour and words. spark look shows it." in out,
              "awaken with no model: asked again once, the shipped lines said so, the closing line", out + err)
         t.ok("\t" + warm["greet.1"] + "\n" in read(wf) and "TEMPER=warm" in read(ff) and "RATE=28" in read(ff)
              and all(oct(os.stat(p).st_mode & 0o777) == "0o600" for p in (wf, ff, pf) if os.path.exists(p))
              and os.path.exists(pf),
              "awaken with no model: the warm lines, the faces with RATE and TEMPER, each file 0600", read(wf) + read(ff))
         senv = read(cfgd + "/spark.env")
-        t.ok(all("%s=auto" % k in senv for k in ("SPARK_LOOK_MOTION", "SPARK_LOOK_COLOUR", "SPARK_LOOK_WORDS"))
+        t.ok("SPARK_LOOK=auto\n" in senv and "SPARK_LOOK_" not in senv
              and "SPARK_REVEAL" not in senv and "AWAKE=yes" in read(std + "/look"),
-             "awaken: the three parts on auto, the pace untouched with no model, the look file awake", senv)
+             "awaken: SPARK_LOOK on auto, the pace untouched with no model, the look file awake", senv)
         rc, out, _ = run(env, "soul")
         t.ok(rc == 0 and out.startswith("soul  built-in core + personality") and _soul.DEFAULT in out
              and warm["personality.1"] in out,
@@ -2503,14 +2537,20 @@ def living_awaken_cases(t):
         t.ok(rc == 0 and said == ["  You asked me to remember: backups run on Fridays"]
              and all("Fridays" not in read(p) for p in (wf, ff, pf, std + "/look", cfgd + "/spark.env")),
              "words greet: one remembered fact on screen, in no plain file", out)
+        # the keys v1.69 removed, left in an old file: it loads, and spark
+        # ignores them -- the greeting is the look switch's alone
         with open(cfgd + "/site.env", "a") as f:
-            f.write("SITE_QUIET_START=yes\n")
+            f.write("SITE_QUIET_START=yes\nSITE_QUIET_AUDIO=yes\n")
+        with open(cfgd + "/spark.env", "a") as f:
+            f.write("SPARK_LOOK_WORDS=off\nSPARK_LOOK_MOTION=off\nSPARK_LOOK_COLOUR=off\n")
         rc, out, _ = run(env, "words", "greet")
-        t.ok(rc == 0 and out == "", "words greet: silent under quiet start", repr(out))
+        t.ok(rc == 0 and len(out.splitlines()) >= 1 and out.startswith("* "),
+             "words greet: an old site.env and spark.env holding SITE_QUIET_* and SPARK_LOOK_* still load, ignored",
+             repr(out))
         with open(cfgd + "/site.env", "w") as f:
             f.write("")
-        rc, out, _ = run(env, "words", "greet", extra={"SPARK_LOOK_WORDS": "off"})
-        t.ok(rc == 0 and out == "", "words greet: silent with the words part off", repr(out))
+        rc, out, _ = run(env, "words", "greet", extra={"SPARK_LOOK": "off"})
+        t.ok(rc == 0 and out == "", "words greet: silent with the look off", repr(out))
         with open(wf, "a") as f:
             f.write("greet.1\t" + esc + "[2Jcleared\nnot a line\n")
         rc, out, _ = run(env, "words")
@@ -2628,7 +2668,7 @@ def living_waits_cases(t):
     tmp = tempfile.mkdtemp(prefix="spark-waits-")
     paths = {n: getattr(look, n) for n in ("LOOK_FILE", "LOADS_FILE", "FACES_FILE")}
     offered = _su.OFFERED
-    keys = ("TERM", "SSH_CONNECTION", "SSH_TTY", "SPARK_ASCII", "SPARK_LOOK_MOTION", "SPARK_LOOK_WORDS", "SPARK_API_KEY")
+    keys = ("TERM", "SSH_CONNECTION", "SSH_TTY", "SPARK_ASCII", "SPARK_LOOK", "SPARK_API_KEY")
     saved = {k: os.environ.get(k) for k in keys}
     real = {"measured_file": _en.measured_file, "roles": _en.roles}
     out, err = sys.stdout, sys.stderr
@@ -2765,7 +2805,7 @@ def living_waits_cases(t):
 
         # --- awakened: the door is shut, the bar draws, the pulses show
         os.remove(_su.OFFERED)
-        os.environ["SPARK_LOOK_MOTION"] = "on"
+        os.environ["SPARK_LOOK"] = "on"
         look.render(_cf.load(), awake_now=True)
         sys.stdout = Tty()
         try:
@@ -2778,6 +2818,7 @@ def living_waits_cases(t):
              "door: an awakened machine is never told to awaken", shut)
         _en.measured_file = lambda c: model
         up, got, bar = waited("loading", 2, Tty(), Tty())
+        bar = _tx.SGR_RE.sub("", bar)            # the look is one switch: colour is on with motion
         t.ok(up and got == "loading" and "waking [" in bar and "%" in bar and bar.endswith("\r\x1b[2K"),
              "waits: awakened at a terminal, the waking bar replaces the dots and the label follows", repr((got, bar[:60])))
         up, got, bar = waited("loading", 1, io.StringIO(), Tty())
@@ -3260,12 +3301,13 @@ def main():
             rc, out, _ = spark(sub, "-h")
             t.ok(rc == 0 and out.splitlines()[0] == first, "spark %s -h signs (contract 8)" % sub, out)
 
-        # SITE_QUIET_START=yes: bare spark is one line; spark status stays full
-        rc, out, _ = spark(extra={"SITE_QUIET_START": "yes"})
-        t.ok(rc == 0 and out.strip() == "spark -- chat model stub-ember-q4 at %s (spark status for the rest)" % url,
-             "SITE_QUIET_START=yes: bare spark answers with one line", out)
-        rc, out, _ = spark("status", extra={"SITE_QUIET_START": "yes"})
-        t.ok(rc == 0 and "model    " in out, "spark status stays the full report under quiet start", out)
+        # bare spark is one line, always; spark status stays the full report
+        rc, out, _ = spark()
+        t.ok(rc == 0 and out == "spark -- chat model stub-ember-q4 at %s (spark status for the rest)\n" % url,
+             "bare spark answers with one line", out)
+        rc, out, _ = spark("status")
+        t.ok(rc == 0 and "model    " in out and "'s AI on" in out and len(out.splitlines()) > 3,
+             "spark status stays the full report", out)
 
         # the brain cache is keyed on the candidates
         rc, out, _ = spark("brain", "--porcelain", extra={"SPARK_BASE_URL": "http://127.0.0.1:9"})
@@ -3389,10 +3431,14 @@ def main():
         t.ok(rc == 2 and "no command named" in out, "an unknown word alone is refused, not asked", out)
         rc, out, _ = spark("frobnicate?")
         t.ok(rc == 0 and out.startswith("* "), "one word ending in ? is still a question, marked", out)
-        rc, out, _ = spark("quite", "start", "on")
-        t.ok(rc == 2 and "try: spark quiet" in out, "a misspelled verb with arguments is a typo, not a question", out)
-        rc, out, _ = spark("quiett")
-        t.ok(rc == 2 and "try: spark quiet" in out, "a misspelled verb alone points at the right spelling", out)
+        rc, out, _ = spark("modle", "list")
+        t.ok(rc == 2 and "try: spark model" in out, "a misspelled verb with arguments is a typo, not a question", out)
+        rc, out, _ = spark("wrods")
+        t.ok(rc == 2 and "try: spark words" in out, "a misspelled verb alone points at the right spelling", out)
+        # spark quiet left in v1.69: an unknown word like any other
+        rc, out, _ = spark("quiet")
+        t.ok(rc == 2 and out.startswith("spark: no command named quiet") and "try:" not in out,
+             "spark quiet: an unknown word (v1.69), never pointed at a verb", out)
         rc, out, _ = spark("clean", "up", "my", "downloads")
         t.ok(rc == 0 and out.startswith("* "), "a question that starts with clean is not a slip of clear", out)
         rc, out, _ = spark("claer", "--history")
@@ -4592,8 +4638,8 @@ def main():
         t.ok("Preferred when installed" in esys and "Flags that exist" not in esys,
              "ask keeps the full shell prefix, and no hand-kept flag list (v1.53: the judge reads the manuals)",
              esys[:200])
-        t.ok("spark's own commands" in esys and "spark quiet start|audio on|off" in esys and "SPARK_REVEAL" in esys
-             and "spark shell on|off" not in esys,
+        t.ok("spark's own commands" in esys and "spark look on|off|auto" in esys and "SPARK_REVEAL" in esys
+             and "spark shell on|off" not in esys and "spark quiet" not in esys,
              "ask knows spark's own commands (the machine can explain itself)", esys[:200])
         t.ok("spark's own commands" in system1, "the line prompt knows spark's own commands too", system1[:200])
         from spark import persona as _persona
@@ -6146,17 +6192,17 @@ def main():
         _old = [_seg for _verb, _sub, _seg in _cands if _verb in ("forge", "ember", "headless", "share", "brain")]
         t.ok(not _old, "check.py: no remedy names an older spelling (forge, ember, headless, share, brain)", str(_old[:8]))
 
-        # the interface is quiet and the bar line; `shell`, `theme` and
-        # `font` are no verbs of spark's -- unknown words like any other
+        # the interface is the bar line; `shell`, `theme`, `font` and
+        # `quiet` are no verbs of spark's -- unknown words like any other
         off = {"SPARK_NO_APPLY": "1"}
         rc, out, _ = spark("shell", extra=off)
         t.ok(rc == 2 and out.startswith("spark: no command named shell"),
              "spark shell: an unknown verb -- the no-command line, exit 2", out)
         rc, out, _ = spark("help", extra=off)
         gated = [l for l in out.splitlines() if l.startswith(" spark shell")]
-        t.ok(rc == 0 and " spark quiet [SUB on|off]" in out and " spark bar [line]" in out and not gated
-             and not re.search(r"^ spark (theme|font)\b", out, re.M),
-             "spark help: quiet and bar are there, no theme, font or shell line", gated or out)
+        t.ok(rc == 0 and " spark bar [line]" in out and " spark look [on|off|auto]" in out and not gated
+             and not re.search(r"^ spark (theme|font|quiet)\b", out, re.M) and "SUB" not in out,
+             "spark help: bar and look on|off|auto are there, no theme, font, quiet or shell line", gated or out)
         t.ok("spark-shell" not in out and "SHELL.md" not in out and "shell layer" not in out.lower(),
              "spark help names no shell layer", out)
         t.ok("Esc s" in out and "empty line" in out,
@@ -6246,46 +6292,15 @@ def main():
         rc, out, _ = spark("bar", "on", extra=off)
         t.ok(rc == 2 and out.startswith("spark bar -- ") and "spark bar line" in out,
              "spark bar on: an unknown word -- the usage, exit 2", out)
-        # quiet audio: both OSes, core, the key is the behaviour
-        rc, out, _ = spark("quiet", "audio", "on", extra=off)
-        with open(home + "/.config/spark/site.env") as f:
-            site_env = f.read()
-        t.ok(rc == 0 and "audio is quiet" in out and "SITE_QUIET_AUDIO=yes\n" in site_env,
-             "spark quiet audio on writes the key and says so", out)
-        rc, out, _ = spark("quiet", extra=off)
-        t.ok(rc == 0 and "audio on" in out, "spark quiet shows the audio state with the others", out)
-        rc, out, _ = spark("quiet", "audio", "off", extra=off)
-        rc2, out2, _ = spark("quiet", "audio", extra=off)
-        t.ok(rc == 0 and "audio is on" in out and rc2 == 0 and out2.strip().endswith("audio -- off"),
-             "spark quiet audio off, and the one state shows", out + out2)
         rc, out, _ = spark("bootconfig", extra=off)
         t.ok(rc == 2 and out.startswith("spark: no command named bootconfig"),
              "spark bootconfig is no command any more (v1.3's stub is gone): a slip, exit 2", out)
 
-        # spark quiet: core start round-trip; login and boot left core (v1.62)
-        rc, out, _ = spark("quiet", "-h", extra=off)
-        t.ok(rc == 0 and out.splitlines()[0].startswith("spark quiet -- "), "spark quiet -h signs (contract 8)", out)
-        rc, out, _ = spark("quiet", extra=off)
-        t.ok(rc == 0 and out.startswith("spark quiet -- start off"), "spark quiet bare: shows, start first", out)
-        rc, out, _ = spark("quiet", "start", "on", extra=off)
-        t.ok(rc == 0 and "SITE_QUIET_START=yes" in open(home + "/.config/spark/site.env").read(),
-             "spark quiet start on writes the key (stored yes|no, spoken on|off)", out)
-        rc, out, _ = spark("quiet", "start", extra=off)
-        t.ok(rc == 0 and out.splitlines()[0] == "spark quiet start -- on", "spark quiet start bare: shows the one state", out)
-        rc, out, _ = spark("quiet", "start", "off", extra=off)
-        t.ok(rc == 0 and "SITE_QUIET_START=no" in open(home + "/.config/spark/site.env").read(),
-             "spark quiet start off writes it back", out)
-        rc, out, _ = spark("quiet", "sideways", extra=off)
-        t.ok(rc == 2 and out.startswith("spark quiet -- "), "spark quiet sideways: usage, exit 2", out)
-        before = open(home + "/.config/spark/site.env").read()
-        for _sub in ("login", "boot"):
-            rc, out, _ = spark("quiet", _sub, "on", extra=off)
-            t.ok(rc == 2 and out.startswith("spark quiet -- ") and open(home + "/.config/spark/site.env").read() == before,
-                 "spark quiet %s on: no longer spark's -- the usage, exit 2, site.env untouched" % _sub, out)
-        for _verb in ("theme", "font"):
+        # spark quiet left in v1.69, as theme and font left in v1.62
+        for _verb in ("theme", "font", "quiet"):
             rc, out, _ = spark(_verb, extra=off)
             t.ok(rc == 2 and out.startswith("spark: no command named %s" % _verb),
-                 "spark %s: an unknown word (v1.62: the look left core)" % _verb, out)
+                 "spark %s: an unknown word (v1.62 and v1.69 took them out of core)" % _verb, out)
 
         # the client shape: spark client (state, URL, off); the check's client rows
         rc, out, _ = spark("client", extra=off)
@@ -6361,7 +6376,8 @@ def main():
         t.ok(rc == 0 and out.splitlines()[0] == "spark setup -- choose the model this machine can run",
              "spark setup -h signs (contract 8)", out)
         rc, out, _ = spark(extra=off)
-        t.ok(rc == 0 and "'s AI on" in out, "bare spark with no site.env, not a tty: the status (the offer is tty-only)", out)
+        t.ok(rc == 0 and out.startswith("spark -- ") and len(out.splitlines()) == 1,
+             "bare spark with no site.env, not a tty: the one-line status (the offer is tty-only)", out)
         rc, out, err = spark("setup", "--yes", "--no-serve", "--model", "none", extra=off)
         site_env = open(home + "/.config/spark/site.env").read()
         t.ok(rc == 0 and err == "", "spark setup --yes --no-serve --model none exits 0", out + err)

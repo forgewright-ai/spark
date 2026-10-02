@@ -835,14 +835,12 @@ def row_sandbox(ctx):
 @row("CAPABILITY", fixture=False, reason="looks for a player on this machine's PATH")
 def row_audio(ctx):
     """The sounds spark plays (a bell, and what a game of its has): a
-    player on PATH -- afplay on macOS, aplay or paplay on Linux -- unless
-    quiet audio is on. A capability: never fail."""
+    player on PATH -- afplay on macOS, aplay or paplay on Linux. A
+    capability: never fail."""
     player = next((c for c in (("afplay",) if IS_MAC else ("aplay", "paplay")) if shutil.which(c)), None)
-    if ctx.cfg.quiet_audio:
-        return na("quiet audio on: spark plays no sound%s" % ((" (%s is here)" % player) if player else ""))
     if player:
-        return ok("%s -- sounds play (spark quiet audio on silences them)" % player)
-    return warn("no player on PATH: the terminal bell at most", "%s (aplay), or spark quiet audio on" % packages.install_line(["alsa-utils"]))
+        return ok("%s -- sounds play" % player)
+    return warn("no player on PATH: the terminal bell at most", "%s (aplay)" % packages.install_line(["alsa-utils"]))
 
 
 @row("CAPABILITY")
@@ -982,8 +980,7 @@ def row_look(ctx):
         have = ""
     if have != look.content(ctx.cfg, True):
         return warn("the look file is older than spark.env or the faces file", "spark look")
-    return ok("awake: motion %s, colour %s, words %s, height %d" % (
-        look.stored("motion", ctx.cfg), look.stored("colour", ctx.cfg), look.stored("words", ctx.cfg), look.height(ctx.cfg)))
+    return ok("awake: look %s, height %d" % (look.setting(ctx.cfg), look.height(ctx.cfg)))
 
 
 @row("CAPABILITY")
@@ -1837,7 +1834,7 @@ def make_fixture(root, good, stub_url="", real_spark=False):
     # and the faces file say (good); the bad one's faces file holds a line
     # with an escape in it, one spark must never print
     from . import look
-    look_env = {"SPARK_LOOK_MOTION": "auto", "SPARK_LOOK_COLOUR": "auto", "SPARK_LOOK_WORDS": "auto"}
+    look_env = {"SPARK_LOOK": "auto"}
     fd_ = os.open(os.path.join(cfgd, "spark.env"), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
     with os.fdopen(fd_, "w") as f:
         f.write("".join("%s=%s\n" % kv for kv in sorted(look_env.items())))

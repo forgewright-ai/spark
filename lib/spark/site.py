@@ -1,6 +1,6 @@
 # spark.site -- the site.env custodian and the machine-shape verbs:
 # set_keys/apply (every choice lands through them), the rc-hook custody,
-# `spark quiet`, `spark serve boot` and `spark serve share` (their older
+# `spark serve boot` and `spark serve share` (their older
 # spellings `spark headless` and `spark share`), `spark client` (and
 # `spark model` in model.py). Each writes the key, then runs
 # bootstrap.sh so the machine follows; editing site.env by hand and
@@ -82,49 +82,6 @@ def apply(rows, stream=False):
         if p.returncode != 0:
             say("spark: bootstrap.sh failed:\n" + (p.stderr or p.stdout)[-800:])
             return 1
-    from . import check
-    check.refresh()
-    return 0
-
-
-# ------------------------------------------------------------------ quiet
-QUIET_USAGE = """%s quiet -- what spark keeps silent
-
-  spark quiet                   the two states: start, audio
-  spark quiet start [on|off]    spark's own noise: no login banner, one-line
-                                spark serve on, one-line bare spark
-  spark quiet audio [on|off]    no sound from spark (the audio row says which
-                                player it would use)
-""" % MARK
-QUIET_KEYS = {"start": "SITE_QUIET_START", "audio": "SITE_QUIET_AUDIO"}
-
-
-def _quiet_state(cfg, sub):
-    return "on" if {"start": cfg.quiet_start, "audio": cfg.quiet_audio}[sub] else "off"
-
-
-def cmd_quiet(args):
-    if args and args[0] in ("-h", "--help", "help"):
-        say(QUIET_USAGE.rstrip())
-        return 0
-    cfg = config.load()
-    if not args or args[0] == "status":
-        say("%s quiet -- start %s, audio %s" % (MARK, _quiet_state(cfg, "start"), _quiet_state(cfg, "audio")))
-        return 0
-    sub = args[0]
-    if sub not in QUIET_KEYS or len(args) > 2 or (len(args) == 2 and args[1] not in ("on", "off")):
-        say(QUIET_USAGE.rstrip())
-        return 2
-    if len(args) == 1:                                     # show one state
-        say("%s quiet %s -- %s" % (MARK, sub, _quiet_state(cfg, sub)))
-        return 0
-    # the key is the behavior: nothing on disk to converge, no bootstrap row
-    set_keys(**{QUIET_KEYS[sub]: "yes" if args[1] == "on" else "no"})
-    if sub == "audio":
-        say("audio is %s" % ("quiet: spark plays no sound" if args[1] == "on" else "on: the sounds spark has play again"))
-    else:
-        say("start is %s" % ("quiet: no login banner, one line each from spark serve on and bare spark"
-                             if args[1] == "on" else "loud again: the banner and the full narration are back"))
     from . import check
     check.refresh()
     return 0
@@ -547,6 +504,4 @@ def rc_hook_state(shell):
 def main(sub, args):
     if sub == "headless":
         return cmd_headless(args)
-    if sub == "client":
-        return cmd_client(args)
-    return cmd_quiet(args)
+    return cmd_client(args)

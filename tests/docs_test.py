@@ -58,8 +58,6 @@ CAPS_OK = {
     "HEAD", "POST",
     # what the code prints: the gate's marker, the three row categories
     "NOTICE", "SOFTWARE", "CAPABILITY", "NONFUNCTIONAL",
-    # the help's placeholder (spark look PART)
-    "PART",
 }
 # a contraction, any case: the n't family and the pronoun+verb pairs
 CONTRACTION = re.compile(
@@ -274,8 +272,8 @@ def help_voice():
 def living():
     """The living prompt (v1.59) as the tree holds it: every verb of `spark
     help`'s interface block, and `Esc k`, in the cheatsheet and INSTALL;
-    every SPARK_LOOK_* key and SPARK_HEIGHT (config.SPARK_KEYS) a row of
-    INSTALL's key table; every shipped temperament (words.d/) named in
+    SPARK_LOOK, the one switch, and SPARK_HEIGHT (config.SPARK_KEYS) a
+    row of INSTALL's key table; every shipped temperament (words.d/) named in
     INSTALL; no doc calls awaken minting; and no shipped line claims
     where data goes -- README.md says what leaves."""
     import subprocess
@@ -295,8 +293,9 @@ def living():
             check(re.search(r"\b%s\b" % re.escape(word), text) is not None,
                   "%s names %s (spark help, the living prompt)" % (name, word))
     table = set(re.findall(r"(?m)^\| `([A-Z_]+)`", inst))
-    keys = [k for k in config.SPARK_KEYS if k.startswith("SPARK_LOOK_") or k == "SPARK_HEIGHT"]
-    check(len(keys) == 4, "config.SPARK_KEYS holds the 3 SPARK_LOOK_* keys and SPARK_HEIGHT")
+    keys = [k for k in config.SPARK_KEYS if k.startswith("SPARK_LOOK") or k == "SPARK_HEIGHT"]
+    check(keys == ["SPARK_LOOK", "SPARK_HEIGHT"],
+          "config.SPARK_KEYS holds SPARK_LOOK (one switch, no SPARK_LOOK_* part) and SPARK_HEIGHT")
     for k in keys:
         check(k in table, "docs/INSTALL.md's key table has a row for %s" % k)
     shipped = os.path.join(ROOT, "home", ".config", "spark", "words.d")
@@ -656,6 +655,19 @@ def main():
             continue
         m = re.search(r"\bspark (?:theme|font)\b|\bspark quiet (?:login|boot)\b|--theme\b|\bthemes/", read(doc))
         check(m is None, "%s: the look is not core%s" % (doc, " (found '%s')" % m.group(0) if m else ""))
+    # v1.69: no spark quiet, and the look is one switch -- no doc but the
+    # CHANGELOG names the verb, its keys, or a part of the look as a word
+    # of spark look
+    gone = re.compile(r"\bspark quiet\b|\bspark look (?:PART|motion|colou?r|words|reveal)\b")
+    # the removed keys: CLAUDE.md alone names them, as keys an older file
+    # may hold that still load and that nothing reads
+    keys = re.compile(r"\bSITE_QUIET_(?:START|AUDIO)\b|\bSPARK_LOOK_[A-Z]+|\bquiet_(?:start|audio)\b")
+    for doc in ALL_DOCS + ("home/.config/spark/spark.env.example",):
+        if doc == "docs/CHANGELOG.md":
+            continue
+        m = gone.search(read(doc)) or (keys.search(read(doc)) if doc != "CLAUDE.md" else None)
+        check(m is None, "%s: no spark quiet, the look one switch (v1.69)%s"
+              % (doc, " (found '%s')" % m.group(0) if m else ""))
     # v1.48: the core knows nothing of a shell layer, and neither does a
     # doc -- the generic contracts (theme.env, the six SPARK_*_SGR
     # variables, spark bar line) are described as generic; the

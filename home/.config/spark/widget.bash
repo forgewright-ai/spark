@@ -388,25 +388,15 @@ _spark_capture() {
 }
 
 # --- the living layer: the news once, a greeting after an absence ----------
-# Only on an awake machine whose words part is on (or auto, TERM not
-# dumb), with spark not off and SITE_QUIET_START not yes. A prompt costs
-# one stat of the news file; the last-seen stamp (the epoch of a prompt in
-# any shell) is read and written at most every _SPARK_SEEN_EVERY seconds.
+# Only on an awake machine whose look is on (or auto, TERM not dumb),
+# with spark not off: the look switch alone. A prompt costs one stat of
+# the news file; the last-seen stamp (the epoch of a prompt in any shell)
+# is read and written at most every _SPARK_SEEN_EVERY seconds.
 # Absent, or older than _SPARK_ABSENT, the next prompt runs `spark words
 # greet` once and prints what it says, control characters stripped. The
 # news file is one line, ID<TAB>line: shown once per id, in any shell.
 _SPARK_LONG=30 _SPARK_ABSENT=14400 _SPARK_SEEN_EVERY=300
 _spark_seen_at=0 _spark_t0=''
-_spark_quiet() {   # SITE_QUIET_START=yes, the environment first, then site.env
-    local f=${XDG_CONFIG_HOME:-$HOME/.config}/spark/site.env line q=${SITE_QUIET_START-}
-    if [[ -z ${SITE_QUIET_START+x} && -r $f ]]; then
-        while IFS= read -r line || [[ -n $line ]]; do
-            [[ $line == SITE_QUIET_START=* ]] && q=${line#*=}
-        done < "$f"
-    fi
-    q=${q//[\"\']/}
-    [[ $q == yes ]]
-}
 _spark_living() {
     local now t line id seen out greet='' nf=$SPARK_DIR/news ns=$SPARK_DIR/news-seen ls=$SPARK_DIR/last-seen
     [[ $_spark_lk_awake == yes ]] || return 0
@@ -421,7 +411,7 @@ _spark_living() {
         printf '%s\n' "$now" > "$ls" 2>/dev/null
         _spark_seen_at=$now
     fi
-    if [[ -n $greet ]] && ! _spark_quiet; then
+    if [[ -n $greet ]]; then
         out=$("$SPARK_BIN" words greet </dev/null 2>/dev/null) || out=''
         while IFS= read -r line; do
             line=${line//[[:cntrl:]]/}
@@ -435,9 +425,6 @@ _spark_living() {
     id=${line%%$'\t'*}
     [[ $line == *$'\t'* ]] || id=''
     printf '%s\n' "$id" > "$ns" 2>/dev/null
-    # quiet: the news counts as seen, so it never plays later, and the
-    # next prompt costs a stat again
-    _spark_quiet && return 0
     [[ -n $id && $id != "$seen" ]] || return 0
     line=${line#*$'\t'}
     [[ -n $line && $line != *[[:cntrl:]]* ]] || return 0

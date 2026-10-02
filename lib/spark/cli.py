@@ -48,9 +48,8 @@ LAST_USAGE = """spark last -- the last exchange, with its tok/s
 """
 STATUS_USAGE = """spark status -- the model, prompt line, server, soul, memory, last answer
 
-  spark status                what bare spark shows (SITE_QUIET_START=yes makes
-                              bare spark one line; spark status stays full):
-                              what answers, the model and the chat model
+  spark status                the full report: what answers, the model and
+                              the chat model (bare spark is its one line)
   spark brain --porcelain     what answers, for a program: url<TAB>model<TAB>
                               forge|model; exit 1 when nothing does (--fresh:
                               ignore the cached answer)
@@ -1322,8 +1321,8 @@ def cmd_status(args, _bare=False):
         say(setup.SIGN)
         return 0
     cfg = config.load()
-    if _bare and cfg.quiet_start:
-        # SITE_QUIET_START=yes: bare spark is one line; spark status stays full
+    if _bare:
+        # bare spark is one line; spark status is the full report
         try:
             url, model, is_forge = wire.resolve_brain(cfg)
             # only a machine that really serves an ember role says "ember";
@@ -1570,7 +1569,7 @@ def cmd_do(args):
 # --------------------------------------------------------------- dispatch
 def main(argv):
     """The fallback behind bin/spark's VERBS table: bare spark is the
-    status, anything else is a question."""
+    status in one line, anything else is a question."""
     if not argv:
         return cmd_status([], _bare=True)
     return cmd_ask(argv)

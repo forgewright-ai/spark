@@ -103,6 +103,17 @@ printf 'SITE_NAME=x; rm -rf /\n' > "$HOME/.config/spark/site.env"
 if run >/dev/null 2>&1; then bad "shell syntax in site.env accepted"; else ok "shell syntax in site.env refused"; fi
 : > "$HOME/.config/spark/site.env"
 
+# 4b. the keys v1.69 removed (SITE_QUIET_START, SITE_QUIET_AUDIO and the
+#     three SPARK_LOOK_* parts), left in an older file: both scripts and
+#     spark itself load it, and nothing reads them (both OSes)
+printf 'SITE_QUIET_START=yes\nSITE_QUIET_AUDIO=yes\n' > "$HOME/.config/spark/site.env"
+printf 'SPARK_LOOK_MOTION=on\nSPARK_LOOK_COLOUR=on\nSPARK_LOOK_WORDS=off\n' > "$HOME/.config/spark/spark.env"
+if run --dry-run >/dev/null 2>&1; then ok "install.sh loads an old site.env and spark.env holding the removed keys"; else bad "install.sh refused an old file with the removed keys"; fi
+out=$(python3 "$REPO/bin/spark" look 2>&1) && printf '%s\n' "$out" | grep -qE '^look +off ' \
+    && ok "spark look loads them too, and reads SPARK_LOOK alone (off)" || bad "spark look with the removed keys: $out"
+: > "$HOME/.config/spark/site.env"
+rm -f "$HOME/.config/spark/spark.env"
+
 # 7. bootstrap --dry-run with SITE_HEADLESS=yes announces the headless rows
 #    (contract 1: would/skip, a count line, never sudo -- a sudo on PATH that
 #    shouts proves it); SITE_HEADLESS=no leaves sleep alone
@@ -517,9 +528,9 @@ if [ "$(uname -s)" != Darwin ]; then
     # 10b. a CLIENT on the same bare box: no root row at all -- the dry
     # run holds no `sudo` word, and an APPLY makes no as_root call (the
     # sudo stub would shout SUDO CALLED); python3 and curl are all it runs
-    # the keys of the look an older site.env still holds load as any key
-    # nothing reads: no row, no refusal
-    printf 'SITE_AI_MODEL=none\nSITE_PEER_AI_URL=http://192.0.2.10:8081\nSITE_SET_HOSTNAME=yes\nSITE_THEME=gruvbox-dark\nSITE_FONT_FACE=Terminus\nSITE_FONT_SIZE=16x32\nSITE_QUIET_BOOT=yes\nSITE_QUIET_LOGIN=yes\n' > "$HOME/.config/spark/site.env"
+    # the keys of the look an older site.env still holds (v1.62's and
+    # v1.69's) load as any key nothing reads: no row, no refusal
+    printf 'SITE_AI_MODEL=none\nSITE_PEER_AI_URL=http://192.0.2.10:8081\nSITE_SET_HOSTNAME=yes\nSITE_THEME=gruvbox-dark\nSITE_FONT_FACE=Terminus\nSITE_FONT_SIZE=16x32\nSITE_QUIET_BOOT=yes\nSITE_QUIET_LOGIN=yes\nSITE_QUIET_START=yes\nSITE_QUIET_AUDIO=yes\n' > "$HOME/.config/spark/site.env"
     out=$(SPARK_OS_RELEASE="$T/os-release-arch" PATH="$T/arch:$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (client, bare PM) failed: $out"
     printf '%s\n' "$out" | grep -qE '^skip +packages +a client' && ok "client: the packages row skips even with a package missing" || bad "client packages row: $(printf '%s\n' "$out" | grep -E ' packages ' | head -1)"
     printf '%s\n' "$out" | grep -qi 'sudo' && bad "client dry-run holds a sudo word: $(printf '%s\n' "$out" | grep -i sudo | head -2 | tr '\n' ' ')" || ok "client dry-run: no sudo word anywhere"

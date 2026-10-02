@@ -1370,7 +1370,7 @@ def cmd_report(args):
 # ------------------------------------------------------------ recall
 def recall_targets(case):
     """The entries a case's evidence should hold: its heads, or spark's
-    own verb entries ("spark quiet") for a spark core case."""
+    own verb entries ("spark look") for a spark core case."""
     if case.get("spark_verb") is not None:
         return ["spark " + v for v in case["spark_verb"]]
     return [h for h in case.get("head_any", ()) if h != "spark"]
@@ -1610,13 +1610,18 @@ def cmd_selftest(_args):
     xi = {"id": "t", "words": "install htop", "kind": "cmd", "head_any": ["xbps-install"], "danger": None}
     expect("a wrapper and its command both pass", xi, "danger\tsudo xbps-install -Sy htop\ninstalls\n", True)
     expect("contract: an error is no answer", xi, "error\nno model answers\n", False, "contract")
-    sp = {"id": "t", "words": "quiet start", "kind": None, "head_any": ["spark"], "spark_verb": ["quiet"], "danger": None}
-    expect("a real spark verb and word pass", sp, "cmd\tspark quiet start on\nquiets\n", True)
+    sp = {"id": "t", "words": "up from boot", "kind": None, "head_any": ["spark"], "spark_verb": ["serve"], "danger": None}
+    expect("a real spark verb and word pass", sp, "cmd\tspark serve boot on\nboots\n", True)
     expect("a retired spark verb fails (spark shell on)", sp, "cmd\tspark shell on\nshell\n", False, "spark tree")
-    expect("a word the verb does not take fails", sp, "cmd\tspark quiet loud on\nquiets\n", False, "spark tree")
-    expect("a third word outside on|off fails", sp, "cmd\tspark quiet start enable\nquiets\n", False, "spark tree")
-    expect("an answer naming the verb in words passes", sp, "answer\nRun `spark quiet start on` and log in again.\n", True)
+    expect("a removed spark verb fails (spark quiet, v1.69)", sp, "cmd\tspark quiet start on\nquiets\n", False,
+           "spark tree")
+    expect("a word the verb does not take fails", sp, "cmd\tspark serve loud on\nboots\n", False, "spark tree")
+    expect("a third word outside on|off fails", sp, "cmd\tspark serve boot enable\nboots\n", False, "spark tree")
+    expect("an answer naming the verb in words passes", sp, "answer\nRun `spark serve boot on` and log in again.\n", True)
     expect("an answer naming a retired verb fails", sp, "answer\nRun spark shell on, then reboot.\n", False, "spark tree")
+    lk = {"id": "t", "words": "the look", "kind": None, "head_any": ["spark"], "spark_verb": ["look"], "danger": None}
+    expect("the look's one switch passes", lk, "cmd\tspark look off\nlook\n", True)
+    expect("a part of the look fails (v1.69: one switch)", lk, "cmd\tspark look motion on\nlook\n", False, "spark tree")
     mo = {"id": "t", "words": "a model", "kind": "cmd", "head_any": ["spark"], "spark_verb": ["model"], "danger": None}
     if tree["models"]:
         expect("a model from the tables passes", mo, "cmd\tspark model %s\nmodel\n" % tree["models"][0], True)
@@ -1624,8 +1629,9 @@ def cmd_selftest(_args):
     cl = {"id": "t", "words": "client", "kind": "cmd", "head_any": ["spark"], "spark_verb": ["client"], "danger": None}
     expect("a free slot (URL) takes any word", cl, "cmd\tspark client http://box:8080\nclient\n", True)
     # the tree itself, read from completion: the facts the grader leans on
-    ok = "quiet" in tree["verbs"] and "shell" not in tree["verbs"] and "start" in tree["words"].get("quiet", ())
-    print(("ok   " if ok else "FAIL ") + "the tree reads completion: quiet is a verb, shell is not")
+    ok = ("look" in tree["verbs"] and "quiet" not in tree["verbs"] and "shell" not in tree["verbs"]
+          and "auto" in tree["words"].get("look", ()) and "motion" not in tree["words"].get("look", ()))
+    print(("ok   " if ok else "FAIL ") + "the tree reads completion: look is a verb of on|off|auto, quiet and shell are not")
     if not ok:
         fails.append("tree")
     ok = bool(tree["models"]) and all(m in tree["words"].get("model", ()) for m in tree["models"])
@@ -1723,7 +1729,7 @@ def cmd_selftest(_args):
     check([r[2] for r in rows] == [True, True, False], "recall: a head among the top k is a hit, else a miss")
     text = "\n".join(recall_lines("fake", rows, 1))
     check("2/3" in text and "services" in text and "miss c" in text, "recall: per topic, and each miss named")
-    check(recall_targets({"spark_verb": ["quiet"], "head_any": ["spark"]}) == ["spark quiet"],
+    check(recall_targets({"spark_verb": ["look"], "head_any": ["spark"]}) == ["spark look"],
           "recall: a spark core case wants spark's own verb entry")
 
     # the report's measures on canned results

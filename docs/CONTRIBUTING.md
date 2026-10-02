@@ -114,7 +114,7 @@ One word per thing:
 | "a row" | one line of `spark check`, and "every row ok" when all pass |
 | "a client" | another machine using this one's model |
 | "a spark app" | an editor or tool that talks to spark |
-| "awake" | a machine `spark awaken` gave a personality and a look (motion, colour, reveal, words) |
+| "awake" | a machine `spark awaken` gave a personality and a look (motion, colour and words, one switch) |
 
 Form:
 

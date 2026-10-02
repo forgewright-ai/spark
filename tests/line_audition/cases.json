@@ -3684,19 +3684,19 @@
    {
     "id": "spark-03",
     "topic": "spark",
-    "words": "silence the sounds spark plays",
+    "words": "turn off the scanner, the colours and the greeting at my prompt",
     "kind": null,
     "head_any": [
      "spark"
     ],
     "spark_verb": [
-     "quiet"
+     "look"
     ],
     "must_not": [
      "\\bsudo\\b"
     ],
     "danger": null,
-    "why_review": "a startup chime is the Mac's boot chime (nvram StartupMute), which spark never touches: the words now ask for what spark quiet audio does"
+    "why_review": "the old words asked for a verb v1.69 removed; the look is one switch now, so the words ask for what spark look off does"
    },
    {
     "id": "spark-04",
@@ -4093,7 +4093,7 @@
      "\\bsudo\\b"
     ],
     "danger": null,
-    "why_review": "spark quiet quiets the banner and the sounds, never the prompt line: only spark off makes the prompt line quiet Reworded to its one right reading: no verb quiets the prompt line short of turning it off."
+    "why_review": "spark look off quiets the look, never the prompt line: only spark off makes the prompt line quiet. Reworded to its one right reading: no verb quiets the prompt line short of turning it off."
    },
    {
     "id": "spark-31",

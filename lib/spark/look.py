@@ -1,16 +1,16 @@
-# spark.look -- the living layer's state: which parts are on, how they
+# spark.look -- the living layer's state: the one switch, how its parts
 # resolve at this terminal, and the one file the widgets read.
 #
 # Nothing here changes a byte until `spark awaken` has run: an unawakened
 # machine answers "off" for every part, so every caller keeps today's
-# output. The parts (contract 3, spark.env):
-#   SPARK_LOOK_MOTION   the scanner, the waking bar, a face that blinks
-#   SPARK_LOOK_COLOUR   the built-in palette when no SGR is exported
-#   SPARK_LOOK_WORDS    the greeting, the news, the faces, the voice
-#   SPARK_REVEAL        the pace (off|auto|N) -- `spark look reveal` is
-#                       a second spelling of `spark reveal`
-# Each is auto|on|off. auto = only where the terminal carries it: a tty,
-# not TERM=dumb, and for colour NO_COLOR unset. on = at any tty.
+# output. The switch (contract 3, spark.env) is SPARK_LOOK, auto|on|off,
+# and three parts follow it, each with its own auto rule:
+#   motion   the scanner, the waking bar, a face that blinks
+#   colour   the built-in palette when no SGR is exported
+#   words    the greeting, the news, the faces, the voice
+# auto = only where the terminal carries it: a tty, not TERM=dumb, and
+# for colour NO_COLOR unset. on = at any tty, NO_COLOR overridden. The
+# pace (SPARK_REVEAL, `spark reveal`) is its own.
 #
 # The look file ($STATE_DIR/look) is state, not config: KEY=value lines
 # written atomically by render() alone and parsed line by line by the
@@ -32,8 +32,8 @@ LOADS_FILE = os.path.join(STATE_DIR, "loads.json")
 WORDS_FILE = os.path.join(CONFIG_DIR, "words")
 FACES_FILE = os.path.join(CONFIG_DIR, "faces")
 
-PARTS = ("motion", "colour", "reveal", "words")
-KEY_OF = {"motion": "SPARK_LOOK_MOTION", "colour": "SPARK_LOOK_COLOUR", "words": "SPARK_LOOK_WORDS"}
+PARTS = ("motion", "colour", "words")
+KEY = "SPARK_LOOK"
 VALUES = ("auto", "on", "off")
 
 HEIGHT_MIN, HEIGHT_MAX = 1, 5
@@ -95,8 +95,8 @@ def awake():
 
 @contextmanager
 def assume_awake():
-    """Inside `spark awaken`: this process acts awake, motion, colour and
-    words on auto (what awaken writes at its end), so its own waits and
+    """Inside `spark awaken`: this process acts awake, the look on auto
+    (what awaken writes at its end), so its own waits and
     its pace look as they will after. Nothing is written early."""
     global _assume
     _assume = True
@@ -124,12 +124,18 @@ def _get(cfg, key, default, own):
     return cfg.get(key, default) or default
 
 
+def setting(cfg=None, own=False):
+    """What spark.env holds for the look (auto, on or off), awake or not."""
+    v = _get(cfg, KEY, "off", own).strip().lower()
+    return v if v in VALUES else "off"
+
+
 def stored(name, cfg=None, own=False):
-    """What spark.env holds for a part (auto, on or off), awake or not."""
+    """A part's stored value: the look's one setting for motion, colour
+    and words; SPARK_REVEAL for reveal."""
     if name == "reveal":
         return _get(cfg, "SPARK_REVEAL", "off", own).strip() or "off"
-    v = _get(cfg, KEY_OF[name], "off", own).strip()
-    return v if v in VALUES else "off"
+    return setting(cfg, own)
 
 
 def part(name, cfg=None):
@@ -282,13 +288,13 @@ def content(cfg, on, faces_path=None):
     """The look file's text for `cfg`, awake (`on`) or not: what render()
     writes, and what the check's look row compares the file with."""
     lines = ["AWAKE=%s" % ("yes" if on else "no")]
-    for p in ("motion", "colour", "words"):
-        v = stored(p, cfg, own=True)
+    v = setting(cfg, own=True)
+    for p in PARTS:
         lines.append("%s=%s" % (p.upper(), v if on else "off"))
     lines.append("HEIGHT=%d" % height(cfg, own=True))
     # the built-in palette only: a shell's own SPARK_*_SGR exports win
     # there, and auto (tty, NO_COLOR) is decided per shell by the hook
-    colour = on and stored("colour", cfg, own=True) != "off"
+    colour = on and v != "off"
     for role in ROLES:
         lines.append("SGR_%s=%s" % (role.upper(), DEFAULT_SGR[role] if colour else ""))
     for mood, frame in sorted(faces(faces_path).items()):
@@ -334,12 +340,10 @@ def news(nid, line):
 
 
 # ------------------------------------------------------------------- verbs
-USAGE = """spark look -- motion, colour, words: the living prompt
+USAGE = """spark look -- the living prompt, one switch
 
-  spark look                    the four parts, the height, and awake or not
-  spark look PART auto|on|off   PART: motion, colour, words
-  spark look reveal N|auto|off  the same as spark reveal
-  spark look off                motion, colour and words off at once
+  spark look                    the switch, the height, the reveal, awake
+  spark look on|off|auto        motion, colour and words together
 
   motion   the scanner while a reply comes, the waking bar, a face that
            blinks, on every terminal, ssh and the console too
@@ -348,7 +352,8 @@ USAGE = """spark look -- motion, colour, words: the living prompt
   auto     where the terminal carries it: a terminal, not TERM=dumb, and
            for colour NO_COLOR unset; on overrides NO_COLOR
 
-  The parts start at spark awaken. A pipe never sees a frame or a colour.
+  The look starts at spark awaken. A pipe never sees a frame or a colour.
+  spark reveal sets the pace replies appear at; spark height the row.
 """
 
 HEIGHT_USAGE = """spark height -- the row spark writes in, above your prompt
@@ -360,21 +365,19 @@ HEIGHT_USAGE = """spark height -- the row spark writes in, above your prompt
   line above the one you type on) wants 2.
 """
 
-_WHAT = {"motion": "the scanner, the waking bar, a face that blinks",
-         "colour": "the built-in palette, where you export none",
-         "reveal": "the pace replies appear at (spark reveal)",
-         "words": "the greeting, the news and the faces"}
-
-
-def _here(name, cfg):
-    """How an auto or on part resolves at this terminal, in words."""
+def _here(cfg):
+    """How an auto or on look resolves at this terminal, in words: the
+    parts follow one switch, and NO_COLOR still holds colour back under
+    auto."""
     if not awake():
         return ""
-    if not active(name, sys.stdout, cfg):
+    on = [p for p in PARTS if active(p, sys.stdout, cfg)]
+    if len(on) == len(PARTS):
+        return "on at this terminal"
+    if not on:
         return "off at this terminal"
-    if name == "motion" and not scanner(sys.stdout):
-        return "dots at this terminal"
-    return "on at this terminal"
+    off = [p for p in PARTS if p not in on]
+    return "%s on at this terminal, %s off" % (", ".join(on), ", ".join(off))
 
 
 def fresh(cfg=None):
@@ -402,13 +405,13 @@ def show(cfg=None):
     from . import say
     cfg = _cfg(cfg)
     fresh(cfg)
-    for p in PARTS:
-        v = stored(p, cfg)
-        here = _here(p, cfg) if p != "reveal" and v != "off" else ""
-        say("%-7s %-5s %s%s" % (p, v, _WHAT[p], " -- " + here if here else ""))
+    v = setting(cfg)
+    here = _here(cfg) if v != "off" else ""
+    say("%-7s %-5s %s%s" % ("look", v, "motion, colour and words", " -- " + here if here else ""))
     say("%-7s %-5d %s" % ("height", height(cfg), "the row spark writes in, above your prompt"))
+    say("%-7s %-5s %s" % ("reveal", stored("reveal", cfg), "the pace replies appear at (spark reveal)"))
     if awake():
-        say("awake -- spark look PART auto|on|off changes a part")
+        say("awake -- spark look on|off|auto switches it")
     else:
         say("not awakened -- spark awaken gives this machine a personality and a look")
     return 0
@@ -428,40 +431,26 @@ def cmd_look(args):
         return 0
     if not args or args[0] == "status":
         return show()
-    word = args[0].lower()
-    if word == "reveal":
-        from . import reveal
-        return reveal.cmd_reveal(args[1:])
-    if word == "off" and len(args) == 1:
-        _set(SPARK_LOOK_MOTION="off", SPARK_LOOK_COLOUR="off", SPARK_LOOK_WORDS="off")
-        say("motion, colour and words are off -- the reveal is untouched (spark reveal off stops it)")
+    val = args[0].lower()
+    if val in VALUES and len(args) == 1:
+        _set(**{KEY: val})
+        if val == "off":
+            say("the look is off now -- the reveal is untouched (spark reveal off stops it)")
+        elif awake():
+            say("the look is %s now" % val)
+        else:
+            say("the look is %s -- it takes effect after spark awaken" % val)
         return 0
-    if word == "color":
-        word = "colour"
-    if word not in KEY_OF:
-        if len(args) > 1 or args[0].endswith("?"):
-            # `spark look for big files in downloads` is a question
-            from . import cli
-            return cli.main(["look"] + list(args))
-        say("spark look -- no part named %s: motion, colour, reveal or words" % args[0])
+    if val in VALUES or (len(args) == 2 and args[1].lower() in VALUES):
+        # `spark look motion on`: the look has no parts to name
+        say("spark look -- one switch: spark look on, off or auto")
         return 2
-    if len(args) == 1:
-        from . import config
-        cfg = config.load()
-        v = stored(word, cfg)
-        here = _here(word, cfg) if v != "off" else ""
-        say("%s %s -- %s%s" % (word, v, _WHAT[word], "; " + here if here else ""))
-        return 0
-    val = args[1].lower()
-    if len(args) > 2 or val not in VALUES:
-        say("spark look -- %s takes auto, on or off" % word)
-        return 2
-    _set(**{KEY_OF[word]: val})
-    if awake() or val == "off":
-        say("%s is %s now" % (word, val))
-    else:
-        say("%s is %s -- it takes effect after spark awaken" % (word, val))
-    return 0
+    if len(args) > 1 or args[0].endswith("?"):
+        # `spark look for big files in downloads` is a question
+        from . import cli
+        return cli.main(["look"] + list(args))
+    say("spark look -- no word %s: spark look on, off or auto" % args[0])
+    return 2
 
 
 def cmd_height(args):

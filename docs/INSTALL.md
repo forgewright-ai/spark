@@ -386,11 +386,12 @@ it nothing changes. Step by step:
    shipped one stands in. A soul file of your own is kept.
 4. One reply plays at a measured pace. Answer `yes`, `faster`,
    `slower` or `off`.
-5. Motion, colour and words turn to `auto`. Your next prompt, in every
-   open shell, is awake.
+5. The look turns to `auto`: motion, colour and words. Your next
+   prompt, in every open shell, is awake.
 
 Nothing is written until the end, so `Ctrl-C` leaves the machine as it
-was. Run it again to start over. The 4 parts, which `spark look` shows:
+was. Run it again to start over. The look is one switch, and 3 parts
+follow it. `spark look` shows it, with the height and the reveal:
 
 - Motion: while a reply comes, a scanner with a face,
   `* (o.O) [  =     ]`. While a model loads, a bar with an estimate
@@ -398,8 +399,6 @@ was. Run it again to start over. The 4 parts, which `spark look` shows:
   on every terminal, ssh and the console too.
 - Colour: a built-in palette of bold, dim, red, bold red and green,
   where you export no colour of your own. Dim is only for decoration.
-- Reveal: the pace a reply appears at, as `spark reveal` sets it. On an
-  awake machine it breathes at the punctuation.
 - Words: a greeting at the first prompt after 4 hours away, a change
   shown once (the model asleep or awake again, runs waiting) and the
   faces. A greeting may say a fact you asked it to remember. It shows
@@ -410,16 +409,17 @@ was. Run it again to start over. The 4 parts, which `spark look` shows:
 Awake, a failed command that ran over 30 seconds says how long:
 `* failed (1) after 4 min -- press Esc s to ask why`.
 
-`spark look PART auto|on|off` sets motion, colour or words. `auto`
-draws only where the terminal carries it: a terminal, not `TERM=dumb`,
-and for colour `NO_COLOR` unset. `on` draws at any terminal, over
-`NO_COLOR` too. `spark look off` turns motion, colour and words off at
-once, and `spark reveal off` stops the reveal. A pipe never sees a
-frame or a colour.
+The reveal is the pace a reply appears at, as `spark reveal` sets it.
+On an awake machine it breathes at the punctuation.
+
+`spark look on|off|auto` sets the 3 parts at once. `auto` draws each
+only where the terminal carries it: a terminal, not `TERM=dumb`, and
+for colour `NO_COLOR` unset. `on` draws at any terminal, over
+`NO_COLOR` too. `off` turns them all off, and `spark reveal off` stops
+the reveal. A pipe never sees a frame or a colour.
 
 What wins, strongest first: a pipe, then `spark off`, which silences
-the prompt line with the greeting and the news. Then `spark quiet start
-on`, which keeps the greeting and the news away. Then a part set `off`,
+the prompt line with the greeting and the news. Then the look `off`,
 then `on`, then `auto`.
 
 Your own colours win over the built-in ones. `SPARK_OK_SGR` and
@@ -554,7 +554,8 @@ on port 8081 holds the soul, the memory and the threads. It answers
 the page, the API and every client.
 
 - `spark serve on` starts both through their services and waits until
-  they answer. It is kept: they come back after a restart.
+  they answer, then says one line each. It is kept: they come back
+  after a restart.
 - `spark serve off` stops both and keeps them down. `--force` also
   stops an engine spark did not start.
 - `spark serve` alone shows what answers, this machine or the other
@@ -877,8 +878,6 @@ running `./bootstrap.sh` does the same.
 | `SITE_PEER_SSH` | an ssh target, with key auth, that `spark check` should be able to reach | unset |
 | `SITE_HEADLESS` | `yes`: up from boot, never asleep -- `spark serve boot on\|off` | `no` |
 | `SITE_SHARE` | `yes`: a `spark` group shares this machine's engine with its other OS users (Linux) -- `spark serve share on\|off` | `no` |
-| `SITE_QUIET_START` | `yes`: no banner, and one-line `serve` and bare `spark` -- `spark quiet start on` | `no` |
-| `SITE_QUIET_AUDIO` | `yes`: no sound from spark -- `spark quiet audio on` | `no` |
 
 Runtime keys live in `~/.config/spark/spark.env`, and
 `spark.env.example` lists them all. The ones with a verb:
@@ -893,9 +892,7 @@ Runtime keys live in `~/.config/spark/spark.env`, and
 | `SPARK_HISTORY` | days a turn or a thread lives. `off` keeps none. A kept thread (`/keep` in `spark chat`) stays until you let it go | `30` |
 | `SPARK_NGL` `SPARK_FLASH_ATTN` `SPARK_KV` `SPARK_THREADS` | the engine's tuning -- `spark bench tune apply` | auto |
 | `SPARK_API_KEY_FILE` | a token file you already have | `~/.local/state/spark/api-token` |
-| `SPARK_LOOK_MOTION` | `auto`, `on` or `off`: the scanner, the waking bar and a face that blinks, once awake -- `spark look motion auto\|on\|off` | `off`, `auto` after `spark awaken` |
-| `SPARK_LOOK_COLOUR` | `auto`, `on` or `off`: the built-in palette where you export no colour, once awake -- `spark look colour auto\|on\|off` | `off`, `auto` after `spark awaken` |
-| `SPARK_LOOK_WORDS` | `auto`, `on` or `off`: the greeting, the news and the faces, once awake -- `spark look words auto\|on\|off` | `off`, `auto` after `spark awaken` |
+| `SPARK_LOOK` | `auto`, `on` or `off`: the look, once awake -- the scanner, the waking bar and a face that blinks; the built-in palette where you export no colour; the greeting, the news and the faces -- `spark look on\|off\|auto` | `off`, `auto` after `spark awaken` |
 | `SPARK_HEIGHT` | 1 to 5: the row spark writes in, counted up from the line you type on -- `spark height N`, or `Esc k` at the prompt | `1` |
 
 What needs root. `bootstrap.sh --dry-run` lists which of these it would

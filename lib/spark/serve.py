@@ -10,7 +10,7 @@ import subprocess
 import sys
 import time
 
-from . import (IS_MAC, MARK, REPO, SPARK_ENV, bind_check, config, forge_url, glyph, lan_ip, own_hostnames, say,
+from . import (IS_MAC, MARK, REPO, SPARK_ENV, bind_check, config, forge_url, lan_ip, own_hostnames, say,
                wait_lan_ip)
 from . import engine, wire
 
@@ -20,7 +20,8 @@ USAGE = """%s serve -- the engine and the page, served on this LAN
                               model and the chat model, the page, the units,
                               boot, share
   spark serve on              the engine and the page up through their units,
-                              and kept (SPARK_SERVICE, SPARK_FORGE)
+                              and kept (SPARK_SERVICE, SPARK_FORGE); one line
+                              each when ready
   spark serve off             both stopped, and kept down
   spark serve off --force     also a llama-server spark did not start
   spark serve boot [on|off]   up from boot, nobody logged in, never asleep
@@ -153,7 +154,7 @@ def _take_over(cfg, url):
     engine.forget()
 
 
-def _through_unit(cfg, url, quiet):
+def _through_unit(cfg, url):
     """`spark serve on` where a unit is (loaded or disabled): the manager
     starts it -- never a second server beside it -- and this waits on
     /health the way a spawn does. None when there is no unit after all
@@ -178,7 +179,7 @@ def _through_unit(cfg, url, quiet):
         return False
 
     try:
-        up = engine.wait_load(cfg, "" if quiet else "loading", probe, 180, 1)
+        up = engine.wait_load(cfg, "", probe, 180, 1)
     except StoodDown:
         return _die("the unit stood down -- to start it again and read why: %s" % engine.restart_line())
     if not up:
@@ -186,12 +187,8 @@ def _through_unit(cfg, url, quiet):
     url = wire.serve_url() or url
     pid = engine.pidfile_pid()
     at = " (pid %d)" % pid if pid else ""
-    if quiet:
-        say("%s serve -- ready%s at %s" % (MARK, at, url))
-        _warming(cfg, url)
-    else:
-        sys.stdout.write(" ready%s\n" % at)
-        _warm(cfg, url)
+    say("%s serve -- ready%s at %s" % (MARK, at, url))
+    _warming(cfg, url)
     from . import check
     check.refresh()
     return 0
@@ -240,7 +237,6 @@ def cmd_serve(args, by_hand=False, wait_unit=False, start_disabled=False):
     wire.ensure_token(cfg)
     url = "http://%s:%d" % (host, cfg.port)
 
-    quiet = cfg.quiet_start
     if fg:
         _take_over(cfg, url)
     st = wire.health(url)
@@ -254,16 +250,12 @@ def cmd_serve(args, by_hand=False, wait_unit=False, start_disabled=False):
         return engine.EX_CONFIG
     if st == "ok":
         engine.write_serve_url(url)
-        if quiet:
-            _warming(cfg, url)
-            say("%s serve -- already serving at %s" % (MARK, url))
-            return 0
+        _warming(cfg, url)
         say("%s serve -- already serving at %s" % (MARK, url))
-        _warm(cfg, url)
         return 0
     if st == "loading" and engine.service_state(cfg) == "loaded":
         if wait_unit and not fg:
-            return _through_unit(cfg, url, quiet)
+            return _through_unit(cfg, url)
         # the unit's own server is loading (503): a second spawn would
         # fail to bind and then forget() the RUNNING server's pidfile and
         # serve-url -- refuse, the way cmd_stop refuses while the unit
@@ -281,13 +273,8 @@ def cmd_serve(args, by_hand=False, wait_unit=False, start_disabled=False):
     avail = engine.mem_available_gb()
     if avail >= 0 and need > avail:
         say("%s serve -- %s needs ~%.1f GB, %.1f GB free (%s)" % (MARK, " + ".join(os.path.basename(f) for f in served), need, avail, engine.top_consumers()))
-    sep = glyph("sep")
-    if not quiet:
-        what = sep.join("%s %s (%.1f GB)" % (role, os.path.basename(files[role]), os.path.getsize(files[role]) / 2**30)
-                        for role in engine.ROLES if files[role])
-        say("%s serve%sengine %s%s%s%s%s (token required)" % (MARK, sep, engine.engine_dir(cfg), sep, what, sep, url))
     if unit == "loaded" or (unit == "disabled" and start_disabled):
-        rc = _through_unit(cfg, url, quiet)
+        rc = _through_unit(cfg, url)
         if rc is not None:
             return rc
     engine.write_serve_url(url)
@@ -314,7 +301,7 @@ def cmd_serve(args, by_hand=False, wait_unit=False, start_disabled=False):
         return False
 
     try:
-        up = engine.wait_load(cfg, "" if quiet else "loading", probe, 180, 1)
+        up = engine.wait_load(cfg, "", probe, 180, 1)
     except Exited:
         engine.forget()
         return _die("llama-server exited while loading:\n" + engine.log_tail())
@@ -322,12 +309,8 @@ def cmd_serve(args, by_hand=False, wait_unit=False, start_disabled=False):
         engine.terminate([pid])
         engine.forget()
         return _die("no answer from llama-server in 180 s -- stopped; the log tail:\n" + engine.log_tail())
-    if quiet:
-        say("%s serve -- ready (pid %d) at %s" % (MARK, pid, url))
-        _warming(cfg, url)
-    else:
-        sys.stdout.write(" ready (pid %d)\n" % pid)
-        _warm(cfg, url)
+    say("%s serve -- ready (pid %d) at %s" % (MARK, pid, url))
+    _warming(cfg, url)
     from . import check
     check.refresh()
     return 0
@@ -511,10 +494,7 @@ def cmd_on(args):
     if rc:
         return rc
     from . import forgeserve
-    rc = forgeserve.cmd_start([])
-    if rc == 0 and not config.load().quiet_start:
-        say("\n".join(forgeserve.client_steps(forgeserve.page_url())))
-    return rc
+    return forgeserve.cmd_start([])
 
 
 def cmd_off(args):

@@ -86,8 +86,8 @@ hour in `docs/TOUR.md`:
   QR. `spark client URL` lets another machine of yours use this one's
   model.
 - `spark awaken`: give this machine a personality and a look. Until
-  you run it, spark stays as it is. `spark look` shows the parts, and
-  `spark look off` turns motion, colour and words off.
+  you run it, spark stays as it is. `spark look` shows the look, and
+  `spark look off` turns motion, colour and words off at once.
 - `Esc k` at the prompt: when spark's line sits on a prompt of two
   lines, it moves spark's line up a row. `spark height N` keeps it.
 - `spark check`: every promise this machine makes, one row each. It

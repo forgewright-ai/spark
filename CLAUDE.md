@@ -35,9 +35,7 @@ it, and no verb carries the word.
   and font and a quiet boot are the machine's look, not spark's. spark's
   side is generic: `~/.config/spark/theme.env` is a palette a look
   layer may write, and no shell code lives in this tree. The bar line
-  and `spark quiet start|audio` are core, beside `spark serve boot`: the
-  behaviour of an AI appliance. Quiet hides noise, never a safety line:
-  no watchdog, fsck, log or check is switched off to silence it.
+  is core, beside `spark serve boot`: the behaviour of an AI appliance.
 - **Privacy by design.** Nothing leaves the machine except the package
   managers, pinned sha256-verified downloads, and `spark` talking to a
   `FORGE` or a llama-server you run. Identity lives in
@@ -121,13 +119,13 @@ it, and no verb carries the word.
   awaken` gives the machine a personality and a look. Until it runs
   nothing living happens: `look.part` answers `off` for every part, so
   every caller keeps its old bytes. Awaken is the one place spark asks
-  the model for its own lines, never unasked. It sets motion, colour and
-  words to `auto` and writes the look file with `AWAKE=yes`. Four fixes
+  the model for its own lines, never unasked. It sets the look, one
+  switch (`SPARK_LOOK`), to `auto` and writes the look file with
+  `AWAKE=yes`. Motion, colour and words follow the switch. Four fixes
   reach every machine: setup's one suggestion line, the height (`spark
   height N`, `Esc k`), one text for every line, and the bugs.
-  Precedence, strongest first: a pipe, `spark off`, `spark quiet start
-  on`, a part `off`, a part `on`, then `auto`. A pipe never sees a frame
-  or an escape. `quiet start` drops the greeting and the news. `on` wins
+  Precedence, strongest first: a pipe, `spark off`, the look `off`,
+  `on`, then `auto`. A pipe never sees a frame or an escape. `on` wins
   over `NO_COLOR`. `auto` needs a tty, not `TERM=dumb`, and for colour
   `NO_COLOR` unset. The machine's own lines never claim where data goes:
   awaken's brief forbids it, and `README.md` says what leaves.
@@ -207,7 +205,7 @@ bin/spark, bin/explain -> spark                  the one command
 lib/spark/      __init__ config wire engine serve session persona cli check
                 verify (sha256, cached: spark model verify, check's models row)
                 bar (the status line)
-                site (site.env custodian: set_keys/apply, rc custody, quiet
+                site (site.env custodian: set_keys/apply, rc custody,
                 headless client share)
                 model (spark model and --chat: the table, add, verify, budget)
                 edit (spark edit: contract 10)
@@ -279,9 +277,10 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 to the caller's header first, so a foreign file takes no record)
                 users (the named users, their store under state/users/, and
                 this machine's login: spark user)
-                look (the living prompt's state: the parts, the height, the
-                six colour roles, look.clean for every line spark says, the
-                look file the widgets read, the news; spark look, spark height)
+                look (the living prompt's state: the one switch and the 3
+                parts that follow it, the height, the six colour roles,
+                look.clean for every line spark says, the look file the
+                widgets read, the news; spark look, spark height)
                 awaken (spark awaken: the temperament, the birth -- one JSON
                 object, `why` first, each line through look.clean -- the
                 personality paragraph, the pace)
@@ -490,23 +489,28 @@ and may change freely.
    keys:
    - `site.env`: `SITE_NAME SITE_USER SITE_SET_HOSTNAME SITE_PEER_AI_URL
      SITE_PEER_SSH SITE_AI_MODEL SITE_EMBER_MODEL SITE_AI_BUDGET
-     SITE_AI_BUILD SITE_QUIET_START SITE_QUIET_AUDIO SITE_HEADLESS
-     SITE_SHARE`. A key an older spark wrote, such as `SITE_THEME`,
-     still loads: a well-formed key spark does not know is not refused.
+     SITE_AI_BUILD SITE_HEADLESS SITE_SHARE`. A key an older spark
+     wrote, such as `SITE_THEME` or `SITE_QUIET_START`, still loads: a
+     well-formed key spark does not know is not refused, and nothing
+     reads it.
    - `spark.env`: `SPARK_PORT SPARK_BASE_URL SPARK_PREFER_URL
      SPARK_SERVE_HOST SPARK_ENGINE_DIR SPARK_MODELS_DIR SPARK_MODEL
      SPARK_NGL SPARK_CTX SPARK_FLASH_ATTN SPARK_KV SPARK_THREADS
      SPARK_EXTRA_ARGS SPARK_MEM_NEEDED_GB SPARK_API_KEY_FILE
-     SPARK_TIMEOUT SPARK_MAX_TOKENS SPARK_REVEAL SPARK_LOOK_MOTION
-     SPARK_LOOK_COLOUR SPARK_LOOK_WORDS SPARK_HEIGHT SPARK_HISTORY
+     SPARK_TIMEOUT SPARK_MAX_TOKENS SPARK_REVEAL SPARK_LOOK
+     SPARK_HEIGHT SPARK_HISTORY
      SPARK_MEMORY SPARK_KNOWLEDGE SPARK_SERVICE SPARK_FORGE
      SPARK_FORGE_HOST SPARK_FORGE_PORT SPARK_FORGE_TOKEN_FILE`.
      `SPARK_REVEAL_CPS` is optional: the reveal pace in characters a
      second (`spark reveal`).
-     The 3 `SPARK_LOOK_*` keys are `auto`, `on` or `off`, `off` until
-     `spark awaken` sets `auto` (`spark look PART`). `SPARK_HEIGHT` is 1
-     to 5, default 1 (`spark height N`). The 6 `SPARK_*_SGR` variables
-     are environment only, never read from a file.
+     `SPARK_LOOK` is `auto`, `on` or `off`, `off` until `spark awaken`
+     sets `auto` (`spark look on|off|auto`). Motion, colour and words
+     follow it, each by its own `auto` rule (`look.active`): a terminal,
+     not `TERM=dumb`, and for colour `NO_COLOR` unset. An older
+     `SPARK_LOOK_*` key still loads, and nothing reads it.
+     `SPARK_HEIGHT` is 1 to 5, default 1 (`spark height N`). The 6
+     `SPARK_*_SGR` variables are environment only, never read from a
+     file.
      `SPARK_PERSONA_EXTRA` is still read as the soul's fallback, and the
      `soul` row warns while it is set.
    - `models.env`, and `~/.config/spark/models.env` for your own rows:
@@ -793,8 +797,9 @@ and may change freely.
    reads that file again only when it is newer than its marker. It reads
    it line by line, never sourced or eval'd, and drops a value with a
    control character. Its keys are `AWAKE`, `MOTION`, `COLOUR`,
-   `WORDS`, `HEIGHT`, `SGR_<ROLE>` for the 6 roles, `FACE_<MOOD>`,
-   `BLINK` and `TEMPER` (`look.content`). `SPARK_HEIGHT` in the
+   `WORDS` (each `SPARK_LOOK`'s value, `off` unawakened), `HEIGHT`,
+   `SGR_<ROLE>` for the 6 roles, `FACE_<MOOD>`, `BLINK` and `TEMPER`
+   (`look.content`). `SPARK_HEIGHT` in the
    environment wins over `HEIGHT`. The `look` row compares the file with
    what `spark.env` and the faces file say now.
 7. `spark check` exits 0 when no row is `fail`, else 1. A `CAPABILITY`
@@ -805,8 +810,8 @@ and may change freely.
    help is `spark <sub> -- <one line>`, plain ASCII, so every terminal
    can draw it. A refusal signs the same way. `spark setup --` is the
    offer bare `spark` prints after the banner, on a clone with no
-   `site.env` at a terminal. `spark quiet` and `spark bar` are core:
-   they answer everywhere. `spark uninstall -- not a terminal: spark
+   `site.env` at a terminal. `spark bar` is core: it answers
+   everywhere. `spark uninstall -- not a terminal: spark
    uninstall --yes runs it` is the refusal of a non-terminal without
    `--yes`: the plan printed, exit 2. On WSL 2 the same shape: `spark
    serve -- WSL 2 stops with its last window: it cannot stay on and
@@ -1337,27 +1342,29 @@ One grammar for every verb. A verb that breaks a rule is a bug.
 1. A bare verb shows and never mutates, and `spark bar` piped still
    prints the bar line.
 2. `on|off` is the only switch vocabulary at the CLI: serve, serve boot,
-   serve share, quiet, memory. One verb holds the two servers: `spark
+   serve share, memory. One verb holds the two servers: `spark
    serve on|off` writes `SPARK_SERVICE` and `SPARK_FORGE` together,
    through their units, and they answer as one. There is no
    `start`/`stop` pair beside it, and `--force` is a flag of `off`. A
    setting of the servers is a word after the verb (`serve boot`, `serve
    share`), and an action on them a flag (`serve --login`, `serve
    --audit`). Stored values are storage, not interface: `SITE_HEADLESS`
-   and the `SITE_QUIET_*` keys stay `yes|no` in `site.env`, and the verb
+   and `SITE_SHARE` stay `yes|no` in `site.env`, and the verb
    translates. Choices keep their value grammars (`model
-   NAME|auto|none`, `client URL|off`, `look PART auto|on|off`). The one
+   NAME|auto|none`, `client URL|off`, `look on|off|auto`). The one
    carve-out is bare `spark off` / `spark on`, which silences and
    restores the whole prompt: it is the global mute, and reads better
    without a noun in front of it.
-3. `status` is an alias of bare for every stateful verb: `spark status`
-   is bare `spark`, and it holds what the engine answers (`spark brain
-   --porcelain` stays contract 5). `list` is the table word (`model
-   list`, `model --chat list`). A noun keeps its own verbs as sub-words
-   rather than taking top-level ones: `spark soul edit|reset`, `spark
-   memory add|forget|clear`. A command reads verb first, its object a
-   flag or a word after it: `spark clear --history`, with the old `spark
-   history clear` kept as an alias named nowhere. The spellings `spark
+3. `status` is an alias of bare for every stateful verb. The one
+   exception is spark itself: bare `spark` is one line, what answers,
+   and `spark status` is the full report, with what the engine answers
+   (`spark brain --porcelain` stays contract 5). `list` is the table
+   word (`model list`, `model --chat list`). A noun keeps its own verbs
+   as sub-words rather than taking top-level ones: `spark soul
+   edit|reset`, `spark memory add|forget|clear`. A command reads verb
+   first, its object a flag or a word after it: `spark clear
+   --history`, with the old `spark history clear` kept as an alias
+   named nowhere. The spellings `spark
    serve` and `spark model --chat` took over stay as aliases too, never
    in help or completion, named in `docs/CHANGELOG.md` alone.
 4. Every verb answers `-h|--help|help` first, before any gate or config
@@ -1372,11 +1379,11 @@ One grammar for every verb. A verb that breaks a rule is a bug.
    timeout, interval)` in `lib/spark/__init__.py`, plain dots that
    survive in a log. One pulse for every wait on a reply: `text.Busy`,
    the mark and `.` `..` `...` redrawn in place, a tty only (the hint
-   row, chat, explain, an answer, `spark do`). Awakened, with motion
+   row, chat, explain, an answer, `spark do`). Awakened, with the look
    active, the dots become the scanner, `* (o.O) [ = ]`: 8 cells, a
-   frame every 0.12 seconds, the face while words is active too. It
-   runs on every terminal: ssh on a LAN and the console keep up with it,
-   and every frame is ASCII. Motion `off` keeps the dots. The wait
+   frame every 0.12 seconds, with the face. It runs on every terminal:
+   ssh on a LAN and the console keep up with it, and every frame is
+   ASCII. The look `off` keeps the dots. The wait
    escalates, never louder: from 2 seconds the elapsed seconds, from 15
    seconds (or three quarters of the verb's timeout) one sentence. A
    model loading shows `text.Estimate`: a bar filled by the time over

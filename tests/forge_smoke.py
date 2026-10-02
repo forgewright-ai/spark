@@ -459,7 +459,7 @@ def main():
             spark_was = open(spark_env).read() if os.path.exists(spark_env) else None
             with open(spark_env, "w") as f:
                 f.write("SPARK_API_KEY_FILE=%s/api-token\nSPARK_FORGE_TOKEN_FILE=%s/forge-token\nSPARK_PAGE_TOKEN=abc\n"
-                        % (state, state))
+                        "SPARK_LOOK_MOTION=on\n" % (state, state))   # a key v1.69 removed: it loads, ignored
             st, _, raw = req(url, "GET", "/api/config", headers=bearer, timeout=30)
             d = json.loads(raw)
 
@@ -474,8 +474,10 @@ def main():
                 return acc
             ks = keys(d, [])
             ok(st == 200 and "themes" not in d and "models" in d and "effective" in d
-               and not any(k in d["effective"] for k in ("SITE_THEME", "SITE_FONT_FACE", "SITE_QUIET_BOOT")),
-               "/api/config: models, effective; no palettes, no look keys", raw[:200])
+               and not any(k in d["effective"] for k in ("SITE_THEME", "SITE_FONT_FACE", "SITE_QUIET_BOOT",
+                                                          "SITE_QUIET_START", "SITE_QUIET_AUDIO", "SPARK_LOOK_MOTION"))
+               and "SPARK_LOOK" in d["effective"],
+               "/api/config: models, effective (SPARK_LOOK); no palettes, no removed keys", raw[:200])
             secret = [k for k in ks if re.search("KEY|TOKEN|SECRET", k)]
             ok(not secret, "/api/config never names a key matching KEY|TOKEN|SECRET (spark.env holds three)", secret)
             ok(token not in raw.decode() and smoke.TOKEN not in raw.decode() and "forge-token" not in raw.decode()

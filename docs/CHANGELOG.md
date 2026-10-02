@@ -1,5 +1,30 @@
 # Changelog
 
+## v1.69
+
+One look switch, and no `spark quiet`. Fewer switches, each doing one
+thing.
+
+- Bare `spark` is one line now: what answers, the model and its URL.
+  `spark status` is the full report, as before.
+- `spark serve on` is brief now: one line for the engine and one for
+  the page, once each answers. The steps to join from another machine
+  are in `spark serve --login`, as before.
+- `spark quiet` is gone. `quiet` is an unknown word now, like any
+  other. The greeting and the news follow the look alone.
+- `spark look` is one switch: `spark look on|off|auto` sets motion,
+  colour and words together, in one key, `SPARK_LOOK`. It is `off`
+  until `spark awaken` sets `auto`. Each part keeps its own `auto`
+  rule, so `NO_COLOR` still keeps the colour off under `auto`.
+- `spark look motion|colour|words` and `spark look reveal` are gone.
+  `spark reveal` and `spark height` stay as they are.
+- Bare `spark look` shows the switch, the height, the reveal and
+  whether the machine is awake.
+- An old `site.env` or `spark.env` that holds `SITE_QUIET_START`,
+  `SITE_QUIET_AUDIO` or a `SPARK_LOOK_*` key still loads, and spark
+  ignores those keys.
+- The `audio` row says only which player is here.
+
 ## v1.68
 
 Gemma 4 E4B is the standard with a GPU or without.
