@@ -17,7 +17,9 @@
 #   Esc v      listens (spark voice on or clear): a pause ends it, and the
 #              words land in your line -- as a `? ` question on an empty
 #              one. Nothing runs until you press Enter.
-#   Esc x      stops spark speaking.
+#   Esc x      stops spark speaking. Both are bound only where the voice
+#              is on or clear when the shell starts; off, the keys stay
+#              the shell's own.
 #   spark off / spark on        silence / restore (a flag file, checked at
 #              every Enter and on the failing path, so one `spark off`
 #              reaches every pane at once)
@@ -743,9 +745,23 @@ _spark_listen() {
         _spark_say "$_spark_h Esc v needs the voice -- spark voice on or clear"
     fi
 }
-bind -x '"\ev": _spark_listen'
 _spark_hush() { "$SPARK_BIN" voice stop </dev/null >/dev/null 2>&1; }
-bind -x '"\ex": _spark_hush'
+# bound only where the voice is on or clear as the shell starts --
+# SPARK_VOICE from the environment, else spark.env's line, read line by
+# line and never sourced; off, Esc v and Esc x stay readline's own
+_spark_voice=${SPARK_VOICE-}
+_spark_vf=${XDG_CONFIG_HOME:-$HOME/.config}/spark/spark.env
+if [[ -z $_spark_voice && -r $_spark_vf ]]; then
+    _spark_vn=0
+    while (( _spark_vn++ < 256 )) && { IFS= read -r _spark_vl || [[ -n $_spark_vl ]]; }; do
+        [[ $_spark_vl == SPARK_VOICE=* ]] && _spark_voice=${_spark_vl#SPARK_VOICE=}
+    done < "$_spark_vf"
+fi
+_spark_voice=${_spark_voice#\"}; _spark_voice=${_spark_voice%\"}
+case ${_spark_voice,,} in
+    on|clear) bind -x '"\ev": _spark_listen'; bind -x '"\ex": _spark_hush' ;;
+esac
+unset _spark_vf _spark_vl _spark_vn
 
 # --- paste inspection: a multi-line paste into an EMPTY prompt --------------
 # Rebinding the paste-begin sequence takes the paste from readline: the

@@ -17,7 +17,9 @@
 #   Esc v      listens (spark voice on or clear): a pause ends it, and the
 #              words land in your line -- as a `? ` question on an empty
 #              one. Nothing runs until you press Enter.
-#   Esc x      stops spark speaking.
+#   Esc x      stops spark speaking. Both are bound only where the voice
+#              is on or clear when the shell starts; off, the keys stay
+#              the shell's own.
 #   spark off / spark on        silence / restore (a flag file, checked at
 #              every Enter and on the failing path, so one `spark off`
 #              reaches every pane at once)
@@ -607,10 +609,25 @@ spark-listen() {
     zle -R
 }
 zle -N spark-listen
-bindkey '\ev' spark-listen
 spark-hush() { "$SPARK_BIN" voice stop </dev/null >/dev/null 2>&1; }
 zle -N spark-hush
-bindkey '\ex' spark-hush
+# bound only where the voice is on or clear as the shell starts --
+# SPARK_VOICE from the environment, else spark.env's line, read line by
+# line and never sourced; off, Esc x stays zsh's execute-named-cmd
+typeset -g _spark_voice=${SPARK_VOICE-}
+if [[ -z $_spark_voice && -r ${XDG_CONFIG_HOME:-$HOME/.config}/spark/spark.env ]]; then
+    () {
+        local line n=0
+        while (( n++ < 256 )) && { IFS= read -r line || [[ -n $line ]]; }; do
+            [[ $line == SPARK_VOICE=* ]] && _spark_voice=${line#SPARK_VOICE=}
+        done < "${XDG_CONFIG_HOME:-$HOME/.config}/spark/spark.env"
+    }
+fi
+_spark_voice=${${_spark_voice#\"}%\"}
+if [[ ${(L)_spark_voice} == (on|clear) ]]; then
+    bindkey '\ev' spark-listen
+    bindkey '\ex' spark-hush
+fi
 
 # --- paste inspection: a multi-line paste into an EMPTY prompt --------------
 # The builtin widget inserts the paste (newlines literal -- nothing

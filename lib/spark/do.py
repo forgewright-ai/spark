@@ -139,14 +139,24 @@ REFUSED_CONTROL = "the model's command carried control characters -- refused"
 # ... and a block's: the same, but a line feed separates its lines. A
 # lone CR, a TAB, an escape or a bidi mark in a block still refuses it
 BLOCK_CONTROL = re.compile("[\x00-\x09\x0b-\x1f\x7f-\x9f\u200e\u200f\u202a-\u202e\u2066-\u2069]")
-# A redirect that writes a file, `>` or `>|` (not `>>`, which appends,
-# nor `2>`, `&>` or `>&`, which move a stream), and its target word. One
-# onto a file that does not exist yet in the step's cwd destroys nothing:
-# danger() reads past it. A `cd` anywhere means the cwd is not where the
-# target lands, and then no redirect is read past
-REDIRECT = re.compile(r"(?<![\d&>|<])>\|?(?![>&])[ \t]*([^\s;&|<>()]*)")
-MOVES_DIR = re.compile(r"\b(?:cd|pushd|popd)\b")
-UNREAD_TARGET = re.compile(r"[\"'$`\\*?\[\]{}~]")    # a target the shell rewrites: not read
+# The one step danger() reads past: a here-document writing ONE new file
+# and nothing else. Its first line `cat > F <<'D'` (or <<"D", <<D, or
+# `cat <<'D' > F`), its body, then the line D and nothing after; F a
+# plain word (a leading ~/ allowed). Every other step keeps the verdict
+# of the patterns (persona.is_dangerous, each line too): what the step's
+# earlier commands do to F -- a link made, a directory moved, a cd -- is
+# never read, so nothing before or after the here-document may stand
+HEREDOC_NEW = re.compile(r"cat[ \t]+(?:>[ \t]*(?P<f1>[\w.+~/-]+)[ \t]+<<[ \t]*(?P<q1>['\"]?)(?P<d1>\w+)(?P=q1)"
+                         r"|<<[ \t]*(?P<q2>['\"]?)(?P<d2>\w+)(?P=q2)[ \t]+>[ \t]*(?P<f2>[\w.+~/-]+))[ \t]*")
+# a file the step writes (a redirect onto it, tee, cp/mv/ln/install's
+# last word, curl -o, wget -O) and a file the step runs (an interpreter
+# or source given it, or ./NAME): the same step doing both is opaque --
+# what runs is not on the line
+WRITES = re.compile(r"(?:\d?>>?\|?|&>>?)[ \t]*([^\s;&|<>()]+)|\btee(?:[ \t]+-a)?[ \t]+([^\s;&|<>()-][^\s;&|<>()]*)"
+                    r"|\b(?:curl|wget)\b[^\n;&|]*?[ \t]-[oO][ \t]*([^\s;&|<>()]+)"
+                    r"|\b(?:cp|mv|ln|install)\b[^\n;&|]*?[ \t]([^\s;&|<>()-][^\s;&|<>()]*)[ \t]*(?=$|[;&|\n)])")
+RUNS = re.compile(r"(?:^|[\s;&|(`])(?:(?:sh|bash|zsh|dash|ksh|python3?|node|perl|ruby|source|\.)[ \t]+"
+                  r"(?:-[A-Za-z]+[ \t]+)*([^\s;&|<>()-][^\s;&|<>()]*)|(\./[^\s;&|<>()]+))")
 
 # The OS documents its tools: a step refused for an option brings back
 # the lines of that command's own man page (man_excerpt). What a tool
@@ -187,8 +197,10 @@ DO_USAGE = """%s do -- a task, step by step
                                JSON Lines, for a program (contract 15)
   spark do -- <words>          a goal that starts with - or is the word help
 
-  Every step:  Enter runs it, e edits it first, s skips it, q quits.
-  A step that can destroy data (sudo too) runs only when you type yes.
+  Every step:  Enter runs it, e edits it first, s skips it, q quits;
+  r reads a step of several lines again, every line (aloud too in
+  clear mode). A step that can destroy data (sudo too) runs only when
+  you type yes.
   After a step, its proof -- one read-only check -- is offered the same
   way; only its exit code goes back to the model, never its output.
   Sandboxed, steps (%d s at most each) and their proofs run on their own.
@@ -357,50 +369,52 @@ def _dangerous(text):
     return "\n" in text and any(persona.is_dangerous(l) for l in text.replace("\\\n", " ").split("\n"))
 
 
-def _new_file(word, base):
-    """True when the redirect target `word` is a file that does not exist
-    yet under `base`: a plain word (quotes around it allowed, a leading
-    ~/), whose lstat says ENOENT. Anything the shell would rewrite, and
-    any other answer, is False."""
-    if len(word) >= 2 and word[0] == word[-1] and word[0] in "'\"":
-        word = word[1:-1]
-    if word.startswith("~/"):
-        word = os.path.expanduser(word)
-    if not word or UNREAD_TARGET.search(word):
-        return False
+def heredoc_file(command, cwd=""):
+    """The file a step writes when the WHOLE step is one here-document
+    writing one new file (HEREDOC_NEW): the delimiter's line ends it and
+    nothing follows; an unquoted delimiter's body runs no command
+    substitution; the file's directory exists and is reached without a
+    link from the step's cwd; the file itself is not there (lstat says
+    ENOENT). Else ''."""
+    lines = command.split("\n")
+    m = HEREDOC_NEW.fullmatch(lines[0])
+    if len(lines) < 2 or not m:
+        return ""
+    f, d = m.group("f1") or m.group("f2"), m.group("d1") or m.group("d2")
+    quoted = bool(m.group("q1") or m.group("q2"))
+    body = lines[1:-1]
+    if lines[-1] != d or d in body or f == d:
+        return ""
+    if not quoted and any("`" in l or "$(" in l for l in body):
+        return ""
+    if f.startswith("~"):
+        if not f.startswith("~/"):
+            return ""
+        f = os.path.expanduser(f)
+    if ".." in f.split("/") or f.endswith("/"):
+        return ""
+    root = os.path.realpath(os.path.expanduser(cwd) if cwd else os.getcwd())
+    path = os.path.normpath(os.path.join(root, f))
+    parent = os.path.dirname(path)
+    if not os.path.isdir(parent) or os.path.realpath(parent) != parent:
+        return ""
     try:
-        os.lstat(os.path.join(base, word))
-    except (FileNotFoundError, NotADirectoryError):
-        return True
+        os.lstat(path)
+    except FileNotFoundError:
+        return path
     except (OSError, ValueError):
-        return False
-    return False
+        return ""
+    return ""
 
 
 def danger(command, cwd=""):
-    """Can this step destroy data: _dangerous, read past every redirect
-    (REDIRECT) onto a file that does not exist yet in `cwd` -- writing a
-    new file loses nothing -- and past a `>` that ends a line with no
-    target (no redirect the shell runs: a here-document's text). Only
-    those are read past: rm, dd, mkfs, a redirect onto a file that is
-    there, and every other pattern still flag. A `cd` anywhere in the
-    step (MOVES_DIR) reads past nothing."""
+    """Can this step destroy data: _dangerous (persona.is_dangerous over
+    the text and each line), the verdict v1.69 gave every step -- but for
+    the one step read past, heredoc_file(): a here-document writing one
+    new file, and nothing else, loses nothing."""
     if not _dangerous(command):
         return False
-    if MOVES_DIR.search(command):
-        return True
-    base = os.path.abspath(os.path.expanduser(cwd)) if cwd else os.getcwd()
-    kept, at = [], 0
-    for m in REDIRECT.finditer(command):
-        word = m.group(1)
-        dangling = not word and command[m.end():m.end() + 1] in ("\n", "")
-        if not dangling and not _new_file(word, base):
-            continue
-        kept.append(command[at:m.start()] + " ")
-        at = m.end()
-    if not kept:
-        return True
-    return _dangerous("".join(kept) + command[at:])
+    return not heredoc_file(command, cwd)
 
 
 def _blast(command, cwd):
@@ -409,13 +423,29 @@ def _blast(command, cwd):
     return persona.blast(command.replace("\n", " ; "), cwd)
 
 
+def _written_run(command):
+    """The file a step both writes and runs (WRITES, RUNS), or ''."""
+    written = set()
+    for m in WRITES.finditer(command):
+        w = next(g for g in m.groups() if g)
+        written.add(os.path.normpath(w.strip("'\"")))
+    for m in RUNS.finditer(command):
+        w = os.path.normpath((m.group(1) or m.group(2)).strip("'\""))
+        if w in written:
+            return w
+    return ""
+
+
 def _opaque(command):
     """persona.opaque for a step: a block's text whole, then each line
-    alone -- a quote on one line cannot hide the next from the reading."""
+    alone -- a quote on one line cannot hide the next from the reading;
+    and a step that runs a file it writes itself (_written_run)."""
     what = persona.opaque(command)
-    if what or "\n" not in command:
-        return what
-    return next((w for w in map(persona.opaque, command.split("\n")) if w), "")
+    if not what and "\n" in command:
+        what = next((w for w in map(persona.opaque, command.split("\n")) if w), "")
+    if not what and _written_run(command):
+        what = "a file the same step writes, then runs"
+    return what
 
 
 def _thread_messages(thread):
@@ -822,11 +852,25 @@ class _Terminal:
 
     def _choices(self, reply):
         """The prompt's choices, read once a run (clear mode)."""
-        key = "danger" if reply.get("danger") else "step"
+        key = "danger" if reply.get("danger") else "block" if "\n" in reply.get("command", "") else "step"
         if key not in self.told:
             self.told.add(key)
-            self._aloud("this can destroy data -- type yes to run it." if key == "danger"
-                        else "Enter runs it, e edits, s skips, q quits.")
+            self._aloud(_prompt(reply).strip().rstrip(":") + ".")
+
+    def _ask(self, reply, cwd):
+        """_confirm, with `r` answered here: every line of the step
+        printed, numbered, and in clear mode spoken, then asked again."""
+        while True:
+            choice = _confirm(reply, cwd)
+            if choice != "read":
+                return choice
+            command = reply.get("command", "")
+            if "\n" in command:
+                _block(command, reply.get("danger"))
+            else:
+                say("     " + command)
+            from . import voice
+            self._aloud(voice.read_words(command) + ".")
 
     def refuse(self, text):
         say("%s do -- %s" % (MARK, text))
@@ -884,13 +928,13 @@ class _Terminal:
         (the proposal is what the model hears was skipped)."""
         command = reply["command"]
         self._choices(reply)
-        choice = _confirm(reply, cwd)
+        choice = self._ask(reply, cwd)
         while choice == "edit" and "\n" in command:
             new = _edit_block(command)
             if new is not None:
                 command = new
                 break
-            choice = _confirm(reply, cwd)
+            choice = self._ask(reply, cwd)
         if choice == "edit":
             block = "\n" in reply["command"]
             if not block:
@@ -906,7 +950,7 @@ class _Terminal:
             choice = "run"
             if reply["danger"]:
                 self._choices(reply)
-            if reply["danger"] and _confirm(dict(reply, command=command), cwd) != "run":
+            if reply["danger"] and self._ask(dict(reply, command=command), cwd) != "run":
                 choice = "skip"
         return choice, command
 
@@ -930,7 +974,7 @@ class _Terminal:
         self._aloud("the proof: %s." % voice.spoken_command(proof))
         self._choices({"danger": False})
         try:
-            choice = _confirm({"danger": False, "command": proof}, cwd)
+            choice = self._ask({"danger": False, "command": proof}, cwd)
             if choice == "edit":
                 proof = _edit(proof)
                 choice = "run"
@@ -1163,16 +1207,27 @@ class _Porcelain:
             self.emit(ev="end", reason=reason, hint=hint, rc=rc)
 
 
+def _prompt(reply):
+    """The words a step's prompt asks with: a danger step's typed yes; a
+    block's choices name r, which reads it."""
+    if reply.get("danger"):
+        return "  this can destroy data -- type yes to run it: "
+    if "\n" in reply.get("command", ""):
+        return "  Enter runs it, r reads it, e edits, s skips, q quits: "
+    return "  Enter runs it, e edits, s skips, q quits: "
+
+
 def _confirm(reply, cwd=""):
-    """What the user wants for this step: run | edit | skip | quit."""
+    """What the user wants for this step: run | read | edit | skip | quit
+    (danger: the typed yes, else skip)."""
     if reply["danger"]:
         facts = _blast(reply.get("command", ""), cwd)
         if facts:
             say("  %s %s" % (glyph("arrow"), facts))
-        answer = input("  this can destroy data -- type yes to run it: ").strip()
+        answer = input(_prompt(reply)).strip()
         return "run" if answer == "yes" else "skip"
-    answer = input("  Enter runs it, e edits, s skips, q quits: ").strip().lower()
-    return {"": "run", "e": "edit", "s": "skip", "q": "quit"}.get(answer, "skip")
+    answer = input(_prompt(reply)).strip().lower()
+    return {"": "run", "r": "read", "e": "edit", "s": "skip", "q": "quit"}.get(answer, "skip")
 
 
 # ------------------------------------------------------------------ the loop

@@ -1500,6 +1500,14 @@ class Handler(BaseHTTPRequestHandler):
         command, cwd = body.get("command"), body.get("cwd") or ""
         if not isinstance(command, str) or not command.strip():
             return self._error(400, "bad", "command is empty")
+        if len(command) > do.DO_BLOCK_MAX:
+            return self._error(400, "bad", "a %s is at most %d characters" % (
+                ("block", do.DO_BLOCK_MAX) if "\n" in command.strip() else ("command", DO_COMMAND_MAX)))
+        if do.BLOCK_CONTROL.search(command):
+            return self._error(400, "bad", "a command is printable text: a line, or lines a line feed separates")
+        # as a step runs: one line plus a trailing newline is a line (its
+        # 4096 cap), never a block of one
+        command = do.step_text(command)
         if "\n" not in command and len(command) > DO_COMMAND_MAX:
             return self._error(400, "bad", "a command is at most %d characters" % DO_COMMAND_MAX)
         why = do.refused(command)

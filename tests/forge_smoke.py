@@ -848,9 +848,31 @@ def main():
             ok(st == 400 and json.loads(raw).get("error", {}).get("hint") == "a block is at most 16384 characters",
                "/api/do/run of a block over 16 kB -> 400, before any pattern", (st, raw[:120]))
             st, _, raw = req(url, "POST", "/api/do/run",
-                             {"command": "printf 'a\\n' > blk.txt\necho " + "y" * 6000, "cwd": tmp}, headers=post)
-            ok(st == 200 and json.loads(raw)["rc"] == 0 and open(os.path.join(tmp, "blk.txt")).read() == "a\n",
-               "/api/do/run of a block past a line's 4096 characters runs (a new file is no danger)", (st, raw[:80]))
+                             {"command": "cat > blk.txt <<'EOF'\na\n" + "y" * 6000 + "\nEOF", "cwd": tmp}, headers=post)
+            ok(st == 200 and json.loads(raw)["rc"] == 0
+               and open(os.path.join(tmp, "blk.txt")).read() == "a\n" + "y" * 6000 + "\n",
+               "/api/do/run of a block past a line's 4096 characters runs (one here-document, a new file: no danger)",
+               (st, raw[:80]))
+            os.remove(os.path.join(tmp, "blk.txt"))
+            st, _, raw = req(url, "POST", "/api/do/run",
+                             {"command": "printf 'a\\n' > blk.txt\necho done", "cwd": tmp}, headers=post)
+            ok(st == 400 and json.loads(raw).get("error", {}).get("kind") == "confirm"
+               and not os.path.exists(os.path.join(tmp, "blk.txt")),
+               "/api/do/run of a redirect, then another line -> 400 confirm (only a lone here-document is read past)",
+               (st, raw[:80]))
+            st, _, raw = req(url, "POST", "/api/do/run", {"command": "printf 'a\\n' > blk.txt", "cwd": tmp,
+                                                          "confirmed": True}, headers=post)
+            ok(st == 200 and open(os.path.join(tmp, "blk.txt")).read() == "a\n",
+               "/api/do/run of a one-line redirect runs with confirmed: true (v1.69's verdict)", (st, raw[:80]))
+            # one line plus a trailing newline is a line: its 4096 cap, not a block's 16 kB
+            st, _, raw = req(url, "POST", "/api/do/run", {"command": "echo hey\n", "cwd": tmp}, headers=post)
+            ok(st == 200 and json.loads(raw) == {"rc": 0, "tail": "hey\n"},
+               "/api/do/run of one line and a trailing newline runs as that line", (st, raw[:80]))
+            st, _, raw = req(url, "POST", "/api/do/run", {"command": "echo " + "z" * 5000 + "\n\n"}, headers=post)
+            ok(st == 400 and json.loads(raw).get("error", {}).get("hint")
+               == "a command is at most %d characters" % _fsv.DO_COMMAND_MAX,
+               "/api/do/run of a 5000-character line and a trailing newline -> 400, a line's cap (never a block's)",
+               (st, raw[:120]))
             st, _, raw = req(url, "POST", "/api/do/run", {"command": "echo one\necho b > blk.txt", "cwd": tmp}, headers=post)
             ok(st == 400 and json.loads(raw).get("error", {}).get("kind") == "confirm",
                "/api/do/run of a block that overwrites a file that is there -> 400 confirm", (st, raw[:80]))
@@ -917,10 +939,11 @@ def main():
             hi = [r for r in runs if r.get("digest") == _hl.sha256(b"echo hi").hexdigest()[:12]]
             ok(len(hi) == 1 and set(hi[0]) == {"ts", "ip", "action", "digest", "rc"} and hi[0]["rc"] == 0
                and hi[0]["ip"] == "127.0.0.1", "do/run echo hi landed one audit record: {ts, ip, action, digest, rc}", hi)
-            # 8: the 4096-character run and the two blocks count, the refused
-            # 90 kB one and the refused blocks do not
-            ok(len(runs) == 8 and all(isinstance(r["rc"], int) and re.match(r"^[0-9a-f]{12}$", r["digest"]) for r in runs),
-               "every do/run that ran (8) has its record: rc a number, digest 12 hex", runs)
+            # 10: the 4096-character run, the two blocks, the confirmed
+            # one-line redirect and the line with its trailing newline
+            # count; the refused 90 kB one and the refused blocks do not
+            ok(len(runs) == 10 and all(isinstance(r["rc"], int) and re.match(r"^[0-9a-f]{12}$", r["digest"]) for r in runs),
+               "every do/run that ran (10) has its record: rc a number, digest 12 hex", runs)
             blob = json.dumps(arecs)
             ok("echo hi" not in blob and "rm -rf" not in blob and "pwd" not in blob and tmp not in blob,
                "no command text, no path in the trail", blob[:200])

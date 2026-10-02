@@ -1149,6 +1149,22 @@ def _hear():
     return text, ("" if text else "nothing heard")
 
 
+def _ended(e):
+    """A SystemExit inside a readline callback (voice.listen's SIGHUP or
+    SIGTERM: its recorder already stopped, its directory gone) cannot
+    raise through C: the signal is delivered again with its default
+    action, and the exit code is the fallback."""
+    import signal
+    code = e.code if isinstance(e.code, int) else 1
+    if code - 128 in (signal.SIGHUP, signal.SIGTERM):
+        try:
+            signal.signal(code - 128, signal.SIG_DFL)
+            os.kill(os.getpid(), code - 128)
+        except (OSError, ValueError):
+            pass
+    os._exit(code)
+
+
 def _listening():
     """The line Esc v shows while it listens: the listening face when awake."""
     from . import words
@@ -1708,8 +1724,10 @@ class _Keys:
       Esc alone, on an EMPTY line, ends the chat exactly as Ctrl-D does.
       An Esc counts as alone only when nothing follows it within the
       key-sequence wait (readline's keyseq-timeout, 500 ms by default),
-      so the arrows, Alt-b and Esc v still arrive whole; with text on
-      the line, Esc does what it always did and the words stay.
+      so the arrows, Alt-b and Esc v still arrive whole. With text on
+      the line a lone Esc is dropped under GNU readline (the next key is
+      never taken as Alt-key), and the words stay -- but in a search,
+      where Esc ends it, and in vi mode, where Esc is the command mode.
       Esc v listens (_hear): the words land on the line; Enter sends.
       Esc x stops the speaking (_hush).
 
@@ -1719,12 +1737,17 @@ class _Keys:
     each key first: a lone Esc on an empty line, outside a search,
     becomes the terminal's EOF character, readline's own Ctrl-D; Esc v
     and Esc x are taken there on any line, and the line is redrawn
-    (C-x C-], bound to redraw-current-line). libedit (Apple's
+    (C-x C-], bound to redraw-current-line). A Ctrl-C during the wait
+    is the chat's Ctrl-C: it is sent again to the main thread once the
+    hook has returned (a ctypes callback cannot raise), so input()
+    raises KeyboardInterrupt as at any other moment. libedit (Apple's
     python3), or no hook: the first key on an EMPTY line is read raw
     before input() -- a lone Esc ends, Esc v and Esc x are taken, and
     anything else goes back into the terminal's input queue (TIOCSTI)
     for readline to read as typed. With text on a libedit line, Esc is
-    libedit's own."""
+    libedit's own: its rl_getc_function is read once, when readline
+    starts, so no hook can see a key after that -- a lone Esc there
+    stays libedit's Alt prefix for the next key."""
 
     RL_SEARCHING = 0x780        # RL_STATE_ISEARCH|NSEARCH|SEARCH|NUMERICARG
     REDRAW = r'"\C-x\C-]": redraw-current-line'
@@ -1757,6 +1780,10 @@ class _Keys:
         self.end = ctypes.c_int.in_dll(lib, "rl_end")
         self.point = ctypes.c_int.in_dll(lib, "rl_point")
         self.state = ctypes.c_ulong.in_dll(lib, "rl_readline_state")
+        try:
+            self.mode = ctypes.c_int.in_dll(lib, "rl_editing_mode")     # 0 vi, 1 emacs
+        except ValueError:
+            self.mode = None
         self.stuff = lib.rl_stuff_char
         self.stuff.argtypes = [ctypes.c_int]
         try:
@@ -1789,11 +1816,32 @@ class _Keys:
                 if nxt:
                     self.stuff(nxt[0])
                 return 27
-            if self.end.value == 0 and not (self.state.value & self.RL_SEARCHING):
+            if self.state.value & self.RL_SEARCHING:
+                return 27                       # Esc ends a search
+            if self.end.value == 0:
                 return self.eof                 # a lone Esc on an empty line: Ctrl-D
-        except BaseException:   # noqa: BLE001 -- a key is never lost to the hook
+            if self.mode is not None and self.mode.value == 0:
+                return 27                       # vi mode: Esc is the command mode
+            return self._redraw()              # a lone Esc on a line: dropped, never Alt for the next key
+        except KeyboardInterrupt:
+            self._interrupt()                   # Ctrl-C in the wait: the chat's Ctrl-C, once this returns
+            return self._redraw()
+        except SystemExit as e:
+            _ended(e)                           # a hangup while it listened: the mic is off; end as the signal would
+        except Exception:   # noqa: BLE001 -- a key is never lost to the hook
             pass
         return 27
+
+    @staticmethod
+    def _interrupt():
+        """SIGINT again, to the main thread, a moment after the hook has
+        returned to readline's wait: input() then raises KeyboardInterrupt."""
+        import signal
+        import threading
+        main = threading.main_thread().ident
+        t = threading.Timer(0.05, signal.pthread_kill, (main, signal.SIGINT))
+        t.daemon = True
+        t.start()
 
     def _redraw(self):
         self.stuff(0x1d)
