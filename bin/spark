@@ -85,6 +85,8 @@ USAGE_MACHINE = """the machine
 
 USAGE_INTERFACE = """the interface
  spark bar [line]             the machine's one-line status
+ spark voice [clear|on|off]   read aloud: clear for low vision, on in its
+                              own voice; rate N, test (-h)
 """
 
 USAGE_LIVING = """the living prompt
@@ -110,7 +112,7 @@ version %s
 
 
 def usage():
-    """The help: the bar line is the interface;
+    """The help: the bar line and the voice are the interface;
     awaken, look, words and height the living prompt.
     The version is formatted here, not at import: nothing on the `spark
     line` path may call git, and version() does, on a cache miss."""
@@ -162,6 +164,7 @@ VERBS = {"setup": ("setup", "main", False), "check": ("check", "main", False),
          "watch": ("watch", "cmd_watch", False),
          "reveal": ("reveal", "cmd_reveal", False),
          "look": ("look", "cmd_look", False), "height": ("look", "cmd_height", False),
+         "voice": ("voice", "cmd_voice", False),
          "awaken": ("awaken", "main", False), "words": ("words", "main", False),
          "update": ("update", "cmd_update", False), "bar": ("bar", "main", False),
          "bench": ("bench", "main", True), "stats": ("stats", "main", False),

@@ -2,7 +2,7 @@
 #
 # The door to the living layer. Nothing living happens before it runs,
 # and it is the one place spark asks the model for its own lines: never
-# unasked, never anywhere else. Six steps, each short:
+# unasked, never anywhere else. Seven steps, each short:
 #
 #   1 ask    the temperament (plain, warm, playful, terse); Enter keeps plain
 #   2 wake   the model, when it is loading (the waking wait)
@@ -14,12 +14,19 @@
 #            soul file of your own, "Your own soul is kept."
 #   5 pace   one reply revealed at the measured pace; yes, faster, slower
 #            or off (faster and slower replay the same text, no new call)
-#   6 done   the look on auto, the look file rendered
+#   6 voice  where a player is: its own voice, from the temperament and the
+#            seed the face's body uses, the hello line spoken in it; keep,
+#            again (the next seed) or none. What the engine lacks is
+#            downloaded first, its size said and asked (voice.audition)
+#   7 done   the look on auto, the look file rendered; a voice kept is
+#            written and SPARK_VOICE set to on
 #
 # Nothing is written until the end, and then each file atomically: Ctrl-C
-# at any question leaves the machine as it was (exit 130). Running it
-# again runs the birth again. It needs a terminal; SPARK_AWAKEN_TTY names
-# a file of answers instead, one a line (the tests' seam).
+# at any question leaves the machine as it was (exit 130), but for a
+# voice part already downloaded and verified, which the next run keeps.
+# Running it again runs the birth again. It needs a terminal;
+# SPARK_AWAKEN_TTY names a file of answers instead, one a line (the
+# tests' seam).
 
 import os
 import re
@@ -34,8 +41,9 @@ from . import words as wordsmod
 USAGE = """%s awaken -- give this machine a personality and a look
 
   spark awaken                  a temperament, the lines it says, its face,
-                                the pace of a reply; then the look on auto
-                                (run it again to start over)
+                                the pace of a reply, its voice where sound
+                                plays; then the look on auto (run it again
+                                to start over)
 
   The model writes the lines and picks the face, once, here. Every line is
   checked, and a shipped line stands in for one it refuses. A soul file of
@@ -286,6 +294,22 @@ def pace(s, cfg, temper, ask):
     return None
 
 
+# ----------------------------------------------------------------- the voice
+def offer_voice(cfg, temper, lines, ask=None):
+    """Step 6: the voice, offered where a player is and a person answers
+    (never under SPARK_NO_APPLY). The recipe kept, or None: Enter, none,
+    no player or a failure leave SPARK_VOICE as it is."""
+    from . import voice
+    if os.environ.get("SPARK_NO_APPLY") or not voice.player(cfg):
+        return None
+    line = look.clean((lines.get("hello") or "").replace("{name}", cfg.name or "this machine")) or "I am awake."
+    kept = voice.audition(cfg, temper, _seed(cfg), line, ask or _Ask())
+    if kept:
+        say("Its voice is kept: %s. spark voice says more." % voice.describe(kept))
+    say("")
+    return kept
+
+
 # ------------------------------------------------------------------ the flow
 def _seed(cfg):
     try:
@@ -353,6 +377,7 @@ def run(cfg, ask):
         say("No model can show the pace now, so spark reveal sets it later.")
     else:
         pace_word = pace(s, cfg, temper, ask)
+    kept = offer_voice(cfg, temper, lines, ask)
     # the end: every file at once, each atomically
     wordsmod.write_words(lines)
     wordsmod.write_faces(fs, temper)
@@ -362,6 +387,10 @@ def run(cfg, ask):
     keys = {"SPARK_LOOK": "auto"}
     if pace_word:
         keys["SPARK_REVEAL"] = pace_word
+    if kept:
+        from . import voice
+        voice.write_recipe(kept)
+        keys["SPARK_VOICE"] = "on"
     site.set_keys(_file=SPARK_ENV, _quiet=True, **keys)
     look.render(config.load(), awake_now=True)
     say("* %s Awake. The look is on auto: motion, colour and words. spark look shows it." % fs["pleased"])

@@ -73,6 +73,7 @@ jobs:
           python3 tests/sandbox_test.py
           python3 tests/knowledge_test.py
           python3 tests/qr_test.py
+          python3 tests/voice_test.py
           python3 tests/docs_test.py
           python3 tests/policy_test.py
           python3 tests/widget_pty.py bash home/.config/spark/widget.bash
@@ -267,6 +268,7 @@ jobs:
           /usr/bin/python3 tests/sandbox_test.py
           /usr/bin/python3 tests/knowledge_test.py
           /usr/bin/python3 tests/qr_test.py
+          /usr/bin/python3 tests/voice_test.py
           /usr/bin/python3 tests/widget_pty.py zsh home/.config/spark/widget.zsh
           /usr/bin/python3 tests/widget_pty.py completion zsh home/.config/spark/completion.zsh
           /usr/bin/python3 tests/widget_pty.py pager

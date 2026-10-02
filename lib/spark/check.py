@@ -832,15 +832,37 @@ def row_sandbox(ctx):
     return na(detail, sandbox.install_hint())
 
 
-@row("CAPABILITY", fixture=False, reason="looks for a player on this machine's PATH")
-def row_audio(ctx):
-    """The sounds spark plays (a bell, and what a game of its has): a
-    player on PATH -- afplay on macOS, aplay or paplay on Linux. A
-    capability: never fail."""
-    player = next((c for c in (("afplay",) if IS_MAC else ("aplay", "paplay")) if shutil.which(c)), None)
-    if player:
-        return ok("%s -- sounds play" % player)
-    return warn("no player on PATH: the terminal bell at most", "%s (aplay)" % packages.install_line(["alsa-utils"]))
+@row("CAPABILITY")
+def row_voice(ctx):
+    """spark voice: off is na, its remedy the clear voice. On or clear,
+    the engine and its models are here and are voice.env's pins (each
+    part's sha file holds the pin's sha256), a player is on PATH, the
+    listener is there; on needs the voice spark awaken kept. A screen
+    reader running is noted: clear stays silent beside it. A capability:
+    never fail."""
+    from . import voice
+    s = voice.status(ctx.cfg, ctx.repo)
+    m = s["mode"]
+    if m == "off":
+        return na("off", "spark voice clear  (reads aloud; spark voice on speaks in its own voice)")
+    if not s["pinned"]:
+        return warn("%s, but no voice runtime is pinned for this machine" % m)
+    if s["missing"]:
+        return warn("%s, but the engine is not here or not its pin: %s (%d MB)"
+                    % (m, ", ".join(s["missing"]), s["missing_mb"]), "spark voice %s" % m)
+    if not s["player"]:
+        return warn("%s, but no player on PATH: nothing can be heard" % m,
+                    "%s (aplay)" % packages.install_line(["alsa-utils"]))
+    if m == "on" and not s["recipe"]:
+        return warn("on, but this machine has no voice of its own yet", "spark awaken")
+    said = "%s -- the engine, %s, the listener" % (m, s["player"])
+    if not IS_MAC and not s["capture"]:
+        said += ", no capture device"
+    if s["reader"] and m == "clear":
+        said += "; %s runs, so clear %s" % (s["reader"], "speaks too (--anyway)" if s["anyway"] else "stays silent")
+    elif s["reader"]:
+        said += "; %s runs too" % s["reader"]
+    return ok(said)
 
 
 @row("CAPABILITY")
@@ -1677,6 +1699,13 @@ def make_fixture(root, good, stub_url="", real_spark=False):
                 'MODEL_QWEN3_30B_A3B_LICENSE="Apache-2.0 https://models.invalid"\n'
                 'MODEL_QWEN3_30B_A3B_TESTED="line"\n'
                 % (fixture_sha, fixture_sha, zero_sha))
+    # the voice's pins (voice.env): stand-ins, the same in both fixtures;
+    # the good one's voice dir holds every part with the pin's sha file
+    with open(os.path.join(repo, "voice.env"), "w") as f:
+        for key, digit in (("VOICE_RUNTIME_LINUX_X64", "1"), ("VOICE_RUNTIME_LINUX_ARM64", "1"),
+                           ("VOICE_RUNTIME_MACOS", "1"), ("VOICE_MOUTH", "2"), ("VOICE_EARS", "3")):
+            f.write('%s="https://voice.invalid/%s.tar.bz2 4096 %s"\n' % (key, key.lower(), digit * 64))
+        f.write('VOICE_VAD="https://voice.invalid/silero_vad.onnx 4096 %s"\n' % ("4" * 64))
     # a throwaway release key: its public half is the tree's allowed-signers,
     # and the repository's own config signs any `git tag -s` with it -- a
     # chaos scenario's tags, so `spark update` (which moves to a signed tag
@@ -1838,6 +1867,23 @@ def make_fixture(root, good, stub_url="", real_spark=False):
     fd_ = os.open(os.path.join(cfgd, "spark.env"), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
     with os.fdopen(fd_, "w") as f:
         f.write("".join("%s=%s\n" % kv for kv in sorted(look_env.items())))
+    # the voice row: clear in both; the good fixture's engine is here (each
+    # part where it lands and its sha file the pin's), the bad one's is not
+    fd_ = os.open(os.path.join(cfgd, "spark.env"), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    with os.fdopen(fd_, "w") as f:
+        f.write("SPARK_VOICE=clear\n")
+    if good:
+        vdir = os.path.join(home, ".local", "share", "spark", "voice")
+        for part, digit in (("runtime", "1"), ("mouth", "2"), ("ears", "3"), ("vad", "4")):
+            os.makedirs(os.path.join(vdir, part), exist_ok=True)
+            with open(os.path.join(vdir, part + ".sha"), "w") as f:
+                f.write(digit * 64 + "\n")
+        os.makedirs(os.path.join(vdir, "runtime", "bin"))
+        for tool in ("sherpa-onnx-offline-tts", "sherpa-onnx-offline", "sherpa-onnx-vad-microphone",
+                     "sherpa-onnx-vad-alsa"):
+            _stub(os.path.join(vdir, "runtime", "bin", tool), "#!/bin/sh\nexit 0\n")
+        with open(os.path.join(vdir, "vad", "silero_vad.onnx"), "w") as f:
+            f.write("fixture\n")
     faces_path = os.path.join(cfgd, "faces")
     if not good:
         with open(faces_path, "w") as f:
@@ -1907,6 +1953,8 @@ def make_fixture(root, good, stub_url="", real_spark=False):
             f.write(site.RC_LINE["zsh" if IS_MAC else "bash"] + "\n")
 
     # stub commands: what the OS would answer
+    if good:            # the voice row's player, where the OS has none of its own
+        _stub(os.path.join(bin_, "aplay"), "#!/bin/sh\nexit 0\n")
     _stub(os.path.join(bin_, "infocmp"), "#!/bin/sh\n" + ("echo 'kUP=\\E[1;2A,'\n" if good else "exit 1\n"))
     _stub(os.path.join(bin_, "brew"), "#!/bin/sh\n" + ("exit 0\n" if good else "exit 1\n"))
     _stub(os.path.join(bin_, "dpkg-query"),

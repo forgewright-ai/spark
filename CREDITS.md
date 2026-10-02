@@ -2,9 +2,10 @@
 
 spark vendors none of the projects below. `bootstrap.sh` downloads each
 one, pinned by version and sha256, from its own upstream to your
-machine at install time. apt, pacman and xbps install the rest from
-their own repositories. spark's own code is MIT (`LICENSE`). The banner
-in `home/.config/spark/banner` is spark's own artwork.
+machine at install time. `spark voice` downloads the voice the same
+way, only when you turn it on. apt, pacman and xbps install the rest
+from their own repositories. spark's own code is MIT (`LICENSE`). The
+banner in `home/.config/spark/banner` is spark's own artwork.
 
 ## The engine
 
@@ -14,6 +15,28 @@ llama.cpp -- https://github.com/ggml-org/llama.cpp -- MIT
 Release b10689 (`LLAMA_VERSION` in `engine.env`), 6 flavours, each
 pinned by sha256: macOS arm64, macOS x64, Linux x64, Linux x64 Vulkan,
 Linux arm64, Linux arm64 Vulkan.
+
+## The voice
+
+sherpa-onnx -- https://github.com/k2-fsa/sherpa-onnx -- Apache-2.0
+(c) Xiaomi Corporation
+
+Release v1.13.8 (`VOICE_RUNTIME_VERSION` in `voice.env`), 3 flavours,
+each pinned by size and sha256: Linux x64, Linux arm64 and macOS. Each
+carries onnxruntime -- https://github.com/microsoft/onnxruntime -- MIT.
+
+`spark voice on` or `clear` downloads the models it runs into
+`~/.local/share/spark/voice`, each pinned by size and sha256 in
+`voice.env`:
+
+- Kokoro-82M v1.0 -- https://huggingface.co/hexgrad/Kokoro-82M --
+  Apache-2.0, the voice, in sherpa-onnx's int8 export. Its tarball
+  carries espeak-ng-data -- https://github.com/espeak-ng/espeak-ng --
+  GPL-3.0, downloaded with it and never vendored.
+- Whisper base -- https://github.com/openai/whisper -- MIT, the ears,
+  in sherpa-onnx's int8 export.
+- Silero VAD -- https://github.com/snakers4/silero-vad -- MIT: where a
+  spoken question ends.
 
 ## The tale
 

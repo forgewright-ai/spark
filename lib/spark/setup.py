@@ -1,5 +1,6 @@
 # spark.setup -- `spark setup`: the guided first run. Greet, ask three
-# things (this machine's name, yours, the model), write
+# things (this machine's name, yours, the model) and whether spark should
+# read aloud (the clear voice, default no, acted on last), write
 # site.env, sudo once when the package manager has something to install, run bootstrap on
 # the terminal, wait for the brain, ask the first question live, print the
 # measured speed and the three things to try. Every step reuses code that
@@ -335,6 +336,33 @@ def door(once=False):
     return True
 
 
+VOICE_QUESTION = "spark can read aloud for you (clear voice, for low vision) -- turn it on? [y/N]: "
+
+
+def _voice_question(cfg, yes):
+    """One question, default no, before any awaken: the clear voice. Not
+    asked when SPARK_VOICE is already set, or nobody is there to answer."""
+    global ASKED
+    if yes or os.environ.get("SPARK_VOICE") or "SPARK_VOICE" in cfg.spark_file:
+        return False
+    ASKED = True
+    try:
+        ans = input(VOICE_QUESTION).strip().lower()
+    except EOFError:
+        say()
+        return False
+    return ans in ("y", "yes")
+
+
+def _voice(want):
+    """The answer acted on, last: `spark voice clear` (its download, its
+    screen reader rule)."""
+    if want:
+        from . import voice
+        say()
+        voice.cmd_voice(["clear"])
+
+
 def _joining(yes):
     """This box shares an engine; join it? Default yes (it is the point of a
     shared box, and running your own would need root a joining user lacks)."""
@@ -348,7 +376,7 @@ def _joining(yes):
     return ans in ("", "y", "yes")
 
 
-def _join(name, user, opts, yes):
+def _join(name, user, opts, yes, voice=False):
     """The userspace join: a client of this box's shared engine. No model,
     no console, no units, no sudo -- only this user's ~/.config and
     ~/.local/state, and their own sealed account. Mirrors spark client."""
@@ -374,6 +402,7 @@ def _join(name, user, opts, yes):
     cfg = config.load()
     if opts["serve"]:
         _first_question(cfg)                                # asks the shared engine
+    _voice(voice)
     _closing()
     return 0
 
@@ -388,8 +417,9 @@ def _run(opts):
     user = _decide(cfg, "SITE_USER", opts["user"], cfg.user, "your name", yes)
     # a shared engine already runs on this box (spark serve share on) and this user
     # has no server of their own: join it -- no model to download, no root
+    voice = _voice_question(cfg, yes)
     if os.access(SHARE_TOKEN, os.R_OK) and not os.path.exists(TOKEN_FILE) and _joining(yes):
-        return _join(name, user, opts, yes)
+        return _join(name, user, opts, yes, voice)
     if ASKED:
         say()          # one blank line after the questions; none when there were none
     default = _table(cfg)
@@ -427,6 +457,7 @@ def _run(opts):
             _closing()
             return 1
         _first_question(cfg)
+    _voice(voice)
     _closing()
     return 0
 
