@@ -1,9 +1,11 @@
 # spark.do -- a task done one confirmed command at a time (`spark do`).
 #
-# The model proposes ONE command per step (kind=cmd) with a hint, or says
-# the goal is met (kind=done). Nothing runs until the user says so at the
-# prompt: Enter runs it, e edits it first, s skips it, q quits; a step the
-# model or persona.is_dangerous flags runs only on the literal `yes`. The
+# The model proposes ONE step (kind=cmd) with a hint, or says the goal is
+# met (kind=done). A step is a line, or a block of several lines (a
+# here-document that writes a file), shown whole before it runs. Nothing
+# runs until the user says so at the prompt: Enter runs it, e edits it
+# first ($EDITOR for a block), s skips it, q quits; a step the model or
+# danger() flags runs only on the literal `yes`. The
 # output of each step (its last 4 kB) is the next user message, so the
 # model reads what happened before proposing the next one; that message
 # lands on the thread the moment the step ran (land), naming the command
@@ -49,6 +51,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 
@@ -75,8 +78,8 @@ CTX_FALLBACK = 8192         # the served context when SPARK_CTX says nothing usa
 CTX_SHARE = 0.8
 TRIMMED = "(output trimmed, exit %s)"   # an old step's output, once the budget needs its room
 # a feedback message as land() keeps it: the [cwd] line, then its first
-# line -- the command that ran, and its exit code
-FEEDBACK_HEAD = re.compile(r"\A(?:\[cwd [^\n]*\]\n)?Output of `(.*)` \(exit (-?\d+)[;)]")
+# line -- the command that ran (a block's lines too), and its exit code
+FEEDBACK_HEAD = re.compile(r"\A(?:\[cwd [^\n]*\]\n)?Output of `(.*?)` \(exit (-?\d+)[;)]", re.S)
 NO_OUTPUT = "(no output)"
 SKIPPED = "The user skipped this step (%s). Do not propose it again: propose a different step, or reply done."
 # a done before any step ran is asked once more: the 26B answered `spark
@@ -84,14 +87,15 @@ SKIPPED = "The user skipped this step (%s). Do not propose it again: propose a d
 EARLY_DONE = ("No step has run yet for the goal: %s. Propose the first command for it; reply done "
               "only if the goal needs no command at all.")
 NOTHING_RAN = "nothing ran: %s"
-# a command written over several lines is never joined into one in
-# silence: a script whose lines were joined runs wrong, and a line break
-# can hide a second command from the step line the user confirms. The
-# model is asked once to write it as one line; twice and the run stops
-ONE_LINE = ("Your command for the goal (%s) had line breaks. Write it as ONE line: to write a file, "
-            "use printf with \\n inside its argument.")
-TWO_LINES = "the model wrote the step over several lines twice -- say the goal in smaller steps"
-SEVERAL_LINES = "the model wrote the step over several lines -- ask again, or say the goal in smaller steps"
+# a step is a LINE or a BLOCK: two or more lines, a here-document that
+# writes a file as the brief allows. A block is never joined into one
+# line (a script whose lines were joined runs wrong), and it is shown
+# whole, every line numbered, before the confirm: a line break cannot
+# carry a second command unseen. Its cap is DO_BLOCK_MAX; a line's is
+# DO_LINE_MAX (forgeserve's DO_COMMAND_MAX), read before any pattern is
+DO_LINE_MAX = 4096
+DO_BLOCK_MAX = 16384
+REFUSED_SIZE = "the model's step was too long (%s) -- refused"
 STDIN_HOOK = "SPARK_DO_STDIN"   # =1: confirmations come from stdin lines (tests)
 # said once on stderr when the hook is on, before any step is offered: a
 # transcript must show the confirmations were a harness's, not a person's
@@ -132,6 +136,17 @@ OWN_SECRET_MIN = 16         # shorter contents are no token of spark's (and woul
 # reply is refused whole (a `done` with REFUSED_CONTROL), an edit skipped
 CONTROL = re.compile("[\x00-\x1f\x7f-\x9f\u200e\u200f\u202a-\u202e\u2066-\u2069]")
 REFUSED_CONTROL = "the model's command carried control characters -- refused"
+# ... and a block's: the same, but a line feed separates its lines. A
+# lone CR, a TAB, an escape or a bidi mark in a block still refuses it
+BLOCK_CONTROL = re.compile("[\x00-\x09\x0b-\x1f\x7f-\x9f\u200e\u200f\u202a-\u202e\u2066-\u2069]")
+# A redirect that writes a file, `>` or `>|` (not `>>`, which appends,
+# nor `2>`, `&>` or `>&`, which move a stream), and its target word. One
+# onto a file that does not exist yet in the step's cwd destroys nothing:
+# danger() reads past it. A `cd` anywhere means the cwd is not where the
+# target lands, and then no redirect is read past
+REDIRECT = re.compile(r"(?<![\d&>|<])>\|?(?![>&])[ \t]*([^\s;&|<>()]*)")
+MOVES_DIR = re.compile(r"\b(?:cd|pushd|popd)\b")
+UNREAD_TARGET = re.compile(r"[\"'$`\\*?\[\]{}~]")    # a target the shell rewrites: not read
 
 # The OS documents its tools: a step refused for an option brings back
 # the lines of that command's own man page (man_excerpt). What a tool
@@ -301,6 +316,108 @@ def _plain(s):
     return " ".join(CONTROL.sub(" ", textmod.scrub(s)).split())
 
 
+def step_text(s):
+    """A step's command as it runs. A LINE: whitespace runs one space, as
+    ever. A BLOCK, two or more lines once the blank lines around it are
+    gone: its lines exactly as written, never joined."""
+    lines = s.split("\n")
+    while lines and not lines[-1].strip():
+        lines.pop()
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    if len(lines) < 2:
+        return " ".join("".join(lines).split())
+    return "\n".join(lines)
+
+
+def line_count(command):
+    """How many lines a step is: 1 for a line, K for a block."""
+    return command.count("\n") + 1 if command else 1
+
+
+def refused(command):
+    """Why a step may not run as written, or '': a control character
+    (CONTROL in a line, BLOCK_CONTROL in a block) or a size past the
+    cap (DO_LINE_MAX, DO_BLOCK_MAX), read before any pattern is."""
+    block = "\n" in command
+    cap = DO_BLOCK_MAX if block else DO_LINE_MAX
+    if len(command) > cap:
+        return "a %s is at most %d characters" % ("block" if block else "command", cap)
+    if (BLOCK_CONTROL if block else CONTROL).search(command):
+        return "control"
+    return ""
+
+
+def _dangerous(text):
+    """persona.is_dangerous over the whole text and over each of its
+    lines (a line continued with a backslash read as one): a pattern
+    anchored at a line's start must see every line's start."""
+    if persona.is_dangerous(text):
+        return True
+    return "\n" in text and any(persona.is_dangerous(l) for l in text.replace("\\\n", " ").split("\n"))
+
+
+def _new_file(word, base):
+    """True when the redirect target `word` is a file that does not exist
+    yet under `base`: a plain word (quotes around it allowed, a leading
+    ~/), whose lstat says ENOENT. Anything the shell would rewrite, and
+    any other answer, is False."""
+    if len(word) >= 2 and word[0] == word[-1] and word[0] in "'\"":
+        word = word[1:-1]
+    if word.startswith("~/"):
+        word = os.path.expanduser(word)
+    if not word or UNREAD_TARGET.search(word):
+        return False
+    try:
+        os.lstat(os.path.join(base, word))
+    except (FileNotFoundError, NotADirectoryError):
+        return True
+    except (OSError, ValueError):
+        return False
+    return False
+
+
+def danger(command, cwd=""):
+    """Can this step destroy data: _dangerous, read past every redirect
+    (REDIRECT) onto a file that does not exist yet in `cwd` -- writing a
+    new file loses nothing -- and past a `>` that ends a line with no
+    target (no redirect the shell runs: a here-document's text). Only
+    those are read past: rm, dd, mkfs, a redirect onto a file that is
+    there, and every other pattern still flag. A `cd` anywhere in the
+    step (MOVES_DIR) reads past nothing."""
+    if not _dangerous(command):
+        return False
+    if MOVES_DIR.search(command):
+        return True
+    base = os.path.abspath(os.path.expanduser(cwd)) if cwd else os.getcwd()
+    kept, at = [], 0
+    for m in REDIRECT.finditer(command):
+        word = m.group(1)
+        dangling = not word and command[m.end():m.end() + 1] in ("\n", "")
+        if not dangling and not _new_file(word, base):
+            continue
+        kept.append(command[at:m.start()] + " ")
+        at = m.end()
+    if not kept:
+        return True
+    return _dangerous("".join(kept) + command[at:])
+
+
+def _blast(command, cwd):
+    """persona.blast's facts for a step: a block's lines read as one
+    line's `;`-separated commands."""
+    return persona.blast(command.replace("\n", " ; "), cwd)
+
+
+def _opaque(command):
+    """persona.opaque for a step: a block's text whole, then each line
+    alone -- a quote on one line cannot hide the next from the reading."""
+    what = persona.opaque(command)
+    if what or "\n" not in command:
+        return what
+    return next((w for w in map(persona.opaque, command.split("\n")) if w), "")
+
+
 def _thread_messages(thread):
     """The run on disk as it was sent: each user message rebuilt with its
     [cwd] line (persona.user_message, from the cwd land() stored), so a
@@ -314,13 +431,15 @@ def _thread_messages(thread):
 
 def propose(cfg, thread, text, shell, cwd, history=None, brain=None, landed=False):
     """One step, no terminal: (reply, ms, session). reply is {"kind": cmd|done,
-    "command", "hint", "danger", "proof"} with danger normalised (the
-    model's flag or persona.is_dangerous), the proof kept only when
-    persona.proof_ok takes it, every field strict UTF-8 (text.utf8: a
-    lone surrogate in the model's JSON is no string to print or store)
-    and the hint _plain (it is printed into a live terminal). A command
-    or proof carrying a CONTROL character is refused whole: the reply is
-    a `done` whose hint is REFUSED_CONTROL. `history` is the run so far
+    "command", "hint", "danger", "proof"} with the command a line or a
+    block (step_text), danger normalised (the model's flag or danger()),
+    the proof kept only when persona.proof_ok takes it, every field
+    strict UTF-8 (text.utf8: a lone surrogate in the model's JSON is no
+    string to print or store) and the hint _plain (it is printed into a
+    live terminal). A command refused() for a control character, or a
+    proof carrying a CONTROL one, is refused whole: the reply is a `done`
+    whose hint is REFUSED_CONTROL (REFUSED_SIZE for a step past its
+    cap). `history` is the run so far
     as chat messages, extended in place; None reads the thread from disk
     (_thread_messages). `landed` says
     `text` is already the newest user message of both (land() put it
@@ -338,17 +457,18 @@ def propose(cfg, thread, text, shell, cwd, history=None, brain=None, landed=Fals
     sent = history if landed else history + [{"role": "user", "content": persona.user_message(text, cwd)}]
     s.history = fit(sent, room)[:-1]        # the newest message is `text`'s own, rebuilt by ask_json
     raw, ms = s.ask_json(text, DO_SCHEMA, max_tokens=DO_MAX_TOKENS)
-    multiline = "\n" in textmod.utf8(str(raw.get("command") or "")).strip()
-    command = " ".join(textmod.utf8(str(raw.get("command") or "")).split())
+    command = step_text(textmod.utf8(str(raw.get("command") or "")))
     hint = _plain(textmod.utf8(str(raw.get("hint") or "")))
     proof = " ".join(textmod.utf8(str(raw.get("proof") or "")).split())
     kind = "cmd" if raw.get("kind") == "cmd" and command else "done"
-    if kind == "cmd" and (CONTROL.search(command) or CONTROL.search(proof)):
+    why = refused(command) if kind == "cmd" else ""
+    if kind == "cmd" and (why == "control" or CONTROL.search(proof)):
         kind, command, hint = "done", "", REFUSED_CONTROL
+    elif why:
+        kind, command, hint = "done", "", REFUSED_SIZE % why
     reply = {"kind": kind, "command": command if kind == "cmd" else "", "hint": hint,
-             "danger": kind == "cmd" and (bool(raw.get("danger")) or persona.is_dangerous(command)),
-             "proof": proof if kind == "cmd" and persona.proof_ok(proof) else "",
-             "multiline": kind == "cmd" and multiline}
+             "danger": kind == "cmd" and (bool(raw.get("danger")) or danger(command, cwd)),
+             "proof": proof if kind == "cmd" and persona.proof_ok(proof) else ""}
     if not landed:
         land(cfg, thread, history, text, cwd)
     history.append({"role": "assistant", "content": shown(reply)})
@@ -610,6 +730,55 @@ def _edit(command):
     return " ".join(new.split()) or command
 
 
+def _edit_block(command):
+    """A block back from $EDITOR (soul._editor): the block in a 0600 temp
+    file, removed after; what the editor left is the step, a block or a
+    line (step_text). None, said in one line, when there is no editor,
+    it fails, or it leaves nothing: the step is unchanged."""
+    from .soul import _editor
+    ed = _editor()
+    if not ed:
+        say("  %s no editor found -- set $EDITOR; the step is unchanged" % glyph("warn"))
+        return None
+    fd, path = tempfile.mkstemp(prefix="spark-do-", suffix=".sh")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(command + "\n")
+        try:
+            rc = subprocess.call(ed + [path])
+        except OSError as e:
+            say("  %s cannot run %s: %s -- the step is unchanged" % (glyph("warn"), ed[0], e.strerror or e))
+            return None
+        with open(path, encoding="utf-8", errors="replace") as f:
+            new = step_text(f.read())
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+    if rc != 0 or not new:
+        say("  %s %s -- the step is unchanged" % (glyph("warn"), "the editor exited %d" % rc if rc else "the edit is empty"))
+        return None
+    return new
+
+
+def _block(command, warn=False):
+    """A block's lines, numbered and indented under its step line: every
+    line shown, nothing hidden (warn paints them as a danger step's)."""
+    w = len(str(line_count(command)))
+    for i, l in enumerate(command.split("\n"), 1):
+        row = "     %*d  %s" % (w, i, l)
+        say(paint(row, "warn", sys.stdout) if warn else row)
+
+
+def _head(command):
+    """A step as its step line names it: a line whole; a block's first
+    line and its count, `(K lines)`."""
+    if "\n" not in command:
+        return command
+    return "%s   (%d lines)" % (command.split("\n", 1)[0], line_count(command))
+
+
 def _mark():
     """the answer mark, in the accent at a tty (plain piped or unset)"""
     return paint(glyph("hammer"), "accent", sys.stdout)
@@ -659,28 +828,47 @@ class _Terminal:
         say("%s %s" % (_mark(), text))
 
     def missing(self, n, command, hint, word):
-        say("%s %d  %s   %s" % (glyph("warn"), n, command, _one_line("%s: not on this machine -- %s" % (word, hint))))
+        say("%s %d  %s   %s" % (glyph("warn"), n, _head(command),
+                                  _one_line("%s: not on this machine -- %s" % (word, hint))))
 
     def step(self, n, reply, contained):
+        """The step line; a block's every line, numbered, beneath it."""
+        command = reply["command"]
         if reply["danger"]:
-            say(paint("%s %d  %s   %s" % (glyph("warn"), n, reply["command"], reply["hint"]), "warn", sys.stdout))
-            if contained:
-                say("  %s can destroy data -- it runs in the sandbox's copy" % glyph("warn"))
+            say(paint("%s %d  %s   %s" % (glyph("warn"), n, _head(command), reply["hint"]), "warn", sys.stdout))
         else:
-            say("%s %d  %s   %s" % (_mark(), n, reply["command"], reply["hint"]))
+            say("%s %d  %s   %s" % (_mark(), n, _head(command), reply["hint"]))
+        if "\n" in command:
+            _block(command, reply["danger"])
+        if reply["danger"] and contained:
+            say("  %s can destroy data -- it runs in the sandbox's copy" % glyph("warn"))
 
     def confirm(self, reply, cwd):
         """(run|skip|quit, the command): Enter, e, s, q -- danger needs `yes`.
-        An edit carrying a CONTROL character is skipped (the proposal is
-        what the model hears was skipped)."""
+        `e` on a line is readline's edit, on a block $EDITOR's
+        (_edit_block: no editor or an empty edit asks again). An edit
+        refused() -- a control character, past the cap -- is skipped
+        (the proposal is what the model hears was skipped)."""
         command = reply["command"]
         choice = _confirm(reply, cwd)
+        while choice == "edit" and "\n" in command:
+            new = _edit_block(command)
+            if new is not None:
+                command = new
+                break
+            choice = _confirm(reply, cwd)
         if choice == "edit":
-            command = _edit(command)
-            if CONTROL.search(command):
-                say("  %s an edit is one line of printable text -- skipped" % glyph("warn"))
+            block = "\n" in reply["command"]
+            if not block:
+                command = _edit(command)
+            if refused(command):
+                say("  %s %s -- skipped" % (glyph("warn"), "an edit is printable text, %d kB at most" % (DO_BLOCK_MAX >> 10)
+                                            if block else "an edit is one line of printable text"))
                 return "skip", reply["command"]
-            reply["danger"] = bool(reply["danger"]) or persona.is_dangerous(command)
+            reply["danger"] = bool(reply["danger"]) or danger(command, cwd)
+            if "\n" in command:
+                say("%s    edited: %s" % (_mark(), _head(command)))
+                _block(command, reply["danger"])
             choice = "run"
             if reply["danger"] and _confirm(dict(reply, command=command), cwd) != "run":
                 choice = "skip"
@@ -815,7 +1003,8 @@ class _Porcelain:
 
     def _step(self, command, hint, danger, proof):
         self.k += 1
-        self.emit(ev="step", n=self.k, command=command, hint=hint, danger=danger, proof=proof)
+        self.emit(ev="step", n=self.k, command=command, hint=hint, danger=danger, proof=proof,
+                  lines=line_count(command))
 
     def step(self, n, reply, contained):
         self._step(reply["command"], reply["hint"], bool(reply["danger"]), reply.get("proof") or None)
@@ -839,7 +1028,7 @@ class _Porcelain:
         if danger:
             self.note(REFUSED_DANGER % command)
             return True
-        what = persona.opaque(command)
+        what = _opaque(command)
         if what:
             self.note(REFUSED_OPAQUE % (command, what))
         return bool(what)
@@ -855,7 +1044,7 @@ class _Porcelain:
         if not new or CONTROL.search(rest):
             self.note("an edit is one line of printable text -- skipped")
             return "skip", command
-        if self._refused(new, persona.is_dangerous(new)):
+        if self._refused(new, danger(new, cwd)):
             return "skip", new
         self.note("step %d runs `%s` (edited)" % (self.k, new))
         return "run", new
@@ -932,7 +1121,7 @@ class _Porcelain:
 def _confirm(reply, cwd=""):
     """What the user wants for this step: run | edit | skip | quit."""
     if reply["danger"]:
-        facts = persona.blast(reply.get("command", ""), cwd)
+        facts = _blast(reply.get("command", ""), cwd)
         if facts:
             say("  %s %s" % (glyph("arrow"), facts))
         answer = input("  this can destroy data -- type yes to run it: ").strip()
@@ -956,7 +1145,6 @@ def _drive(face, cfg, thread, goal, text, shell, cwd, box=None, timeout=None):
     history, steps, seen, landed = [], 0, [], False
     skipped, reasked = set(), set()          # steps the user skipped; those re-asked once
     early = False                            # a done before any step, asked again once
-    oneline = False                          # a step written over several lines, asked again once
 
     def record(s, **fields):
         """Every proposal is a turn: the server's timings for it (the
@@ -988,15 +1176,6 @@ def _drive(face, cfg, thread, goal, text, shell, cwd, box=None, timeout=None):
                 face.done(reply["hint"], bad)
                 record(s, kind="done", answer=reply["hint"], ms=ms)
                 return 0, "done", reply["hint"]
-            if reply.get("multiline"):
-                if oneline:
-                    face.warn(TWO_LINES)
-                    record(s, kind="stopped", answer="a step over several lines twice", ms=ms)
-                    return 1, "stopped", TWO_LINES
-                oneline = True
-                record(s, kind="reasked", ms=ms)
-                text = ONE_LINE % goal
-                continue
             proposed, command, hint = reply["command"], reply["command"], reply["hint"]
             if command.strip() in skipped:
                 # the repair guard of a run: a step the user skipped comes

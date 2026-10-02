@@ -834,8 +834,31 @@ def main():
                "/api/do/propose: a goal over 8 kB -> 400, the house error shape", (st, raw[:120]))
             st, _, _ = req(url, "POST", "/api/do/run", {"command": ""}, headers=post)
             ok(st == 400, "/api/do/run with no command -> 400", st)
-            st, _, raw = req(url, "POST", "/api/do/run", {"command": "echo one\necho two"}, headers=post)
-            ok(st == 400, "/api/do/run with a control character (a second line) -> 400", (st, raw[:80]))
+            # v1.70: a block -- lines a line feed separates -- runs whole;
+            # any other control character in it is still refused
+            st, _, raw = req(url, "POST", "/api/do/run", {"command": "echo one\necho two", "cwd": tmp}, headers=post)
+            ok(st == 200 and json.loads(raw) == {"rc": 0, "tail": "one\ntwo\n"},
+               "/api/do/run of a block (two lines) runs both lines", (st, raw[:80]))
+            for bad, what in (("echo one\recho two\necho three", "a CR"), ("echo one\n\techo two", "a TAB"),
+                              ("echo one\necho \x1b[2K two", "an escape"), ("echo one\necho \u202e two", "a bidi mark")):
+                st, _, raw = req(url, "POST", "/api/do/run", {"command": bad, "cwd": tmp}, headers=post)
+                ok(st == 400 and json.loads(raw).get("error", {}).get("kind") == "bad",
+                   "/api/do/run of a block carrying %s -> 400" % what, (st, raw[:80]))
+            st, _, raw = req(url, "POST", "/api/do/run", {"command": "echo one\n" + "x" * 16400}, headers=post)
+            ok(st == 400 and json.loads(raw).get("error", {}).get("hint") == "a block is at most 16384 characters",
+               "/api/do/run of a block over 16 kB -> 400, before any pattern", (st, raw[:120]))
+            st, _, raw = req(url, "POST", "/api/do/run",
+                             {"command": "printf 'a\\n' > blk.txt\necho " + "y" * 6000, "cwd": tmp}, headers=post)
+            ok(st == 200 and json.loads(raw)["rc"] == 0 and open(os.path.join(tmp, "blk.txt")).read() == "a\n",
+               "/api/do/run of a block past a line's 4096 characters runs (a new file is no danger)", (st, raw[:80]))
+            st, _, raw = req(url, "POST", "/api/do/run", {"command": "echo one\necho b > blk.txt", "cwd": tmp}, headers=post)
+            ok(st == 400 and json.loads(raw).get("error", {}).get("kind") == "confirm",
+               "/api/do/run of a block that overwrites a file that is there -> 400 confirm", (st, raw[:80]))
+            st, _, raw = req(url, "POST", "/api/do/propose", {"text": "blockstep", "cwd": tmp}, headers=post, timeout=30)
+            d = json.loads(raw) if st == 200 else {}
+            ok(st == 200 and d.get("reply") == {"kind": "cmd", "command": smoke.BLOCK_STEP, "hint": "write the script",
+                                                "danger": False, "proof": ""},
+               "/api/do/propose returns a block as it is: its lines, no danger for a new file", raw[:300])
             # v1.56: the length is capped before any pattern reads the
             # command -- a 100 kB line once pinned a thread in is_dangerous
             from spark import forgeserve as _fsv_cap
@@ -894,9 +917,10 @@ def main():
             hi = [r for r in runs if r.get("digest") == _hl.sha256(b"echo hi").hexdigest()[:12]]
             ok(len(hi) == 1 and set(hi[0]) == {"ts", "ip", "action", "digest", "rc"} and hi[0]["rc"] == 0
                and hi[0]["ip"] == "127.0.0.1", "do/run echo hi landed one audit record: {ts, ip, action, digest, rc}", hi)
-            # 6: the 4096-character run counts, the refused 90 kB one does not
-            ok(len(runs) == 6 and all(isinstance(r["rc"], int) and re.match(r"^[0-9a-f]{12}$", r["digest"]) for r in runs),
-               "every do/run that ran (6) has its record: rc a number, digest 12 hex", runs)
+            # 8: the 4096-character run and the two blocks count, the refused
+            # 90 kB one and the refused blocks do not
+            ok(len(runs) == 8 and all(isinstance(r["rc"], int) and re.match(r"^[0-9a-f]{12}$", r["digest"]) for r in runs),
+               "every do/run that ran (8) has its record: rc a number, digest 12 hex", runs)
             blob = json.dumps(arecs)
             ok("echo hi" not in blob and "rm -rf" not in blob and "pwd" not in blob and tmp not in blob,
                "no command text, no path in the trail", blob[:200])
@@ -1348,6 +1372,8 @@ def main():
             ok(st == 200 and "history.replaceState" in body and "#t=" in body,
                "spark.js: the fragment login is wired (replaceState, #t=)")
             ok("confirmed: !!r.danger" in body, "spark.js: do/run carries confirmed after the second click")
+            ok('el("pre", "block")' in body and 'r.command.indexOf("\\n") >= 0' in body,
+               "spark.js: a block's command is shown in a <pre>, a line stays <code>")
             rc, out, _ = spark("forge", "--print-url", "--user", "--show-token")
             ok(rc == 2 and "spark user add" in out, "--print-url --user: gone, names spark user add", out)
             rc, out, _ = spark("forge", "--print-client")

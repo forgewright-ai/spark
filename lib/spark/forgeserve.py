@@ -56,8 +56,9 @@ FAILS_PER_MIN = 10              # wrong logins from one address before 429
 TOKEN_MIN = 32                  # a SPARK_FORGE_TOKEN from the environment shorter than this is refused
 V1_MAX_TOKENS = 8192            # the most completion tokens a /v1 request may ask the model for
 BODY_MAX = 1_000_000            # a request body larger than this is 413
-DO_COMMAND_MAX = 4096           # /api/do/run: a longer command is 400 before any pattern reads it
-                                # (a 100 kB line pinned a thread for seconds in is_dangerous)
+DO_COMMAND_MAX = 4096           # /api/do/run: a longer line is 400 before any pattern reads it
+                                # (a 100 kB line pinned a thread for seconds in is_dangerous);
+                                # a block (several lines) has do.DO_BLOCK_MAX
 LOG_MAX = 1_000_000             # forge.log rotates here, like serve.log
 STATIC = {"index.html": "text/html; charset=utf-8", "spark.css": "text/css; charset=utf-8",
           "spark.js": "text/javascript; charset=utf-8",
@@ -1473,10 +1474,6 @@ class Handler(BaseHTTPRequestHandler):
                 if e.kind == "down":
                     self.server.upstream.resolve(fresh=True)
                 return self._error(502, e.kind, e.hint)
-        if reply.pop("multiline", False):
-            # never joined into one line in silence (do.ONE_LINE): the page
-            # gets no step, and the reason, and asks again
-            reply = {"kind": "done", "command": "", "hint": do.SEVERAL_LINES, "danger": False, "proof": ""}
         s.record(kind="danger" if reply["danger"] else reply["kind"], thread=thread, ms=ms,
                  **({"held": held} if held else {}))
         rm = self.server.role_models(self.server.upstream.resolve()[0])
@@ -1488,29 +1485,34 @@ class Handler(BaseHTTPRequestHandler):
     def api_do_run(self, body):
         """One step the user clicked, run as typed. The page asked twice
         for a dangerous one; the server holds it to that: a command
-        persona.is_dangerous flags runs only with confirmed: true, and a
-        control character (a second line, an escape, do.CONTROL) is
-        refused, a command over DO_COMMAND_MAX characters before any
-        pattern reads it, and a cwd that is not an absolute directory. Nobody
+        do.danger flags runs only with confirmed: true. do.refused says
+        what is refused before any pattern reads it: a control character
+        (do.CONTROL in a line; in a block of several lines, do.BLOCK_CONTROL:
+        a line feed separates them, nothing else passes) and a line over
+        DO_COMMAND_MAX characters or a block over do.DO_BLOCK_MAX; and so
+        is a cwd that is not an absolute directory. Nobody
         watches it at a terminal: do.STEP_TIMEOUT is its leash (rc 124,
         the whole process group killed). The log carries a sha256 prefix
         and the truncated text, then the rc. `man` rides the answer when
         the step was refused for an option (do.man_excerpt): the lines of
         its own man page, which the page's next proposal carries."""
-        from . import do, persona
+        from . import do
         command, cwd = body.get("command"), body.get("cwd") or ""
         if not isinstance(command, str) or not command.strip():
             return self._error(400, "bad", "command is empty")
-        if len(command) > DO_COMMAND_MAX:
+        if "\n" not in command and len(command) > DO_COMMAND_MAX:
             return self._error(400, "bad", "a command is at most %d characters" % DO_COMMAND_MAX)
-        if do.CONTROL.search(command):
-            return self._error(400, "bad", "a command is one line of printable text")
+        why = do.refused(command)
+        if why == "control":
+            return self._error(400, "bad", "a command is printable text: a line, or lines a line feed separates")
+        if why:
+            return self._error(400, "bad", why)
         if not isinstance(cwd, str):
             return self._error(400, "bad", "cwd must be a string")
         cwd = self._do_cwd(cwd)
         if cwd is None:
             return None
-        if persona.is_dangerous(command) and body.get("confirmed") is not True:
+        if do.danger(command, cwd) and body.get("confirmed") is not True:
             return self._error(400, "confirm", "a dangerous command runs only with confirmed: true")
         digest = hashlib.sha256(command.encode("utf-8")).hexdigest()[:12]
         log("%s do/run %s %s" % (self._ip(), digest, " ".join(command.split())[:200]))

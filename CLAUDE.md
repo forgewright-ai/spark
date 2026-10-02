@@ -1276,7 +1276,9 @@ and may change freely.
     object a line:
     - `{"ev":"start","thread","sandbox","run"}`, with `run` null outside
       the sandbox.
-    - `{"ev":"step","n","command","hint","danger","proof"}`.
+    - `{"ev":"step","n","command","hint","danger","proof","lines"}`:
+      `lines` is 1 for a line and K for a block of K lines, whose
+      `command` holds its line feeds.
     - `{"ev":"output","n","text"}`: the step's last 4 kB after
       `do.hold`, what the model reads.
     - `{"ev":"rc","n","rc"}`.

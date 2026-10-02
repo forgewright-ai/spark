@@ -413,8 +413,8 @@ MODE_DO = (
     "goal is met. Read the output of the previous step before proposing the next; if a step failed, fix "
     "it or say so. Set danger=true when the command deletes, overwrites, kills, reboots, or changes "
     "permissions. Never propose a command that needs interactive input, and never repeat a step whose "
-    "output already answers the goal. `command` is ONE line: to write a file, use printf with \\n "
-    "inside its argument, never a here-document."
+    "output already answers the goal. A step that writes a file may be a here-document over several "
+    "lines; every other step is one line."
 )
 # A mode is named for what spark DOES. "answer" was called "ask" until
 # v1.16, which read backwards beside `spark ask` (contract 12), where

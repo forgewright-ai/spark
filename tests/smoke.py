@@ -380,6 +380,11 @@ def watch_pieces(user):
     return ()
 
 
+# the here-document the stub's `blockstep` proposes (spark do, v1.70): a
+# step of 5 lines, a `>` in its text that is no redirect
+BLOCK_STEP = "cat > script.py <<'EOF'\nprint(\"hello from the block\")\nif 2 > 1:\n    print(\"two\")\nEOF"
+
+
 def is_do(messages):
     """mode do: the system message carries MODE_DO"""
     return "completing a task in steps" in messages[0]["content"]
@@ -482,14 +487,17 @@ def answer_json(messages):
             if "No step has run yet" in user:
                 return {"kind": "cmd", "command": "echo EARLY-STEP", "hint": "the first step", "danger": False}
             return {"kind": "done", "command": "", "hint": "Checking the status.", "danger": False}
-        if "multistep" in goal:                 # a step over several lines: asked once for one line
-            if outs:
+        if "blockstep" in goal or "blockedit" in goal:   # a step of several lines: a here-document writes a file
+            if outs or "skipped this step" in user:
                 return {"kind": "done", "command": "", "hint": "all done", "danger": False}
-            if "had line breaks" in user:
-                return {"kind": "cmd", "command": "printf 'one\\ntwo\\n' > two.txt", "hint": "write it", "danger": False}
-            return {"kind": "cmd", "command": "printf 'one\ntwo\n' > two.txt", "hint": "write it", "danger": False}
-        if "multitwice" in goal:                # over several lines twice: the run stops
-            return {"kind": "cmd", "command": "printf 'one\ntwo\n' > two.txt", "hint": "write it", "danger": False}
+            return {"kind": "cmd", "command": "\n" + BLOCK_STEP + "\n  \n", "hint": "write the script",
+                    "danger": False}
+        if "blockrm" in goal:                   # a block whose second line can destroy data
+            if outs or "skipped this step" in user:
+                return {"kind": "done", "command": "", "hint": "all done", "danger": False}
+            return {"kind": "cmd", "command": "echo one\nrm -rf ./junk", "hint": "tidy up", "danger": False}
+        if "blockcr" in goal:                   # a lone CR inside a block: a line that draws over another
+            return {"kind": "cmd", "command": "echo safe\rrm -rf junk\necho two", "hint": "say hi", "danger": False}
         if "stubborn" in goal:                  # done twice before any step: the run ends, nothing ran
             return {"kind": "done", "command": "", "hint": "Checking the status.", "danger": False}
         if "ctrlchar" in goal:                  # a terminal escape inside the command
@@ -4932,13 +4940,97 @@ def main():
         rc2, out2, err2 = spark("do", "stubborn", stdin="", extra=hook, cwd=work)
         t.ok(rc2 == 0 and "nothing ran: Checking the status." in out2,
              "spark do: a second early done ends the run, saying nothing ran", out2 + err2)
-        rc2, out2, err2 = spark("do", "multistep", stdin="yes\n", extra=hook, cwd=work)
-        two = open(work + "/two.txt").read() if os.path.exists(work + "/two.txt") else ""
-        t.ok(rc2 == 0 and two == "one\ntwo\n" and "done  all done" in out2,
-             "spark do: a step over several lines is asked again as one line, and that one runs", out2 + err2 + repr(two))
-        rc2, out2, err2 = spark("do", "multitwice", stdin="", extra=hook, cwd=work)
-        t.ok(rc2 == 1 and "the model wrote the step over several lines twice" in out2 + err2,
-             "spark do: a step over several lines twice stops the run, nothing joined in silence", out2 + err2)
+        # v1.70: a step of several lines -- a block -- is shown whole,
+        # every line numbered beneath the step line, before the prompt
+        from spark import do as _do
+        rc2, out2, err2 = spark("do", "blockstep", stdin="\n", extra=hook, cwd=work)
+        _script = open(work + "/script.py").read() if os.path.exists(work + "/script.py") else ""
+        _rows = ["     %d  %s" % (i, l) for i, l in enumerate(BLOCK_STEP.split("\n"), 1)]
+        _at = [out2.find(r) for r in _rows]
+        t.ok(rc2 == 0 and "1  cat > script.py <<'EOF'   (5 lines)   write the script" in out2
+             and all(i >= 0 for i in _at) and _at == sorted(_at) and max(_at) < out2.find("Enter runs it")
+             and "type yes" not in out2 and "done  all done" in out2,
+             "spark do: a block is shown whole -- the step line, then every line numbered -- before the prompt",
+             out2 + err2)
+        t.ok(_script == 'print("hello from the block")\nif 2 > 1:\n    print("two")\n',
+             "spark do: Enter runs the block; the file holds its lines exactly", repr(_script))
+        newest = max(os.listdir(threads), key=lambda f: os.path.getmtime(os.path.join(threads, f)))
+        lines = read_thread(home, os.path.join(threads, newest))
+        t.ok(len(lines) == 4 and lines[2]["text"].startswith("Output of `" + BLOCK_STEP + "` (exit 0):")
+             and _do.FEEDBACK_HEAD.match(lines[2]["text"]).group(1) == BLOCK_STEP,
+             "spark do: the thread records the block that ran, its lines kept", lines[2:3])
+        # a redirect onto a file that is not there yet destroys nothing;
+        # onto one that is there, it is danger again: the typed yes
+        rc2, out2, err2 = spark("do", "blockstep", stdin="no\n", extra=hook, cwd=work)
+        t.ok(rc2 == 0 and out2.splitlines()[1].startswith("! 1  cat > script.py <<'EOF'   (5 lines)")
+             and "type yes to run it" in out2 and open(work + "/script.py").read() == _script,
+             "spark do: the same block onto a file that exists is danger -- the typed yes; `no` runs nothing",
+             out2 + err2)
+        os.remove(work + "/script.py")
+        # danger reads every line: a block whose second line deletes
+        os.makedirs(work + "/junk", exist_ok=True)
+        rc2, out2, err2 = spark("do", "blockrm", stdin="no\n", extra=hook, cwd=work)
+        t.ok(rc2 == 0 and out2.splitlines()[1].startswith("! 1  echo one   (2 lines)   tidy up")
+             and "     2  rm -rf ./junk" in out2 and "type yes to run it" in out2 and os.path.isdir(work + "/junk"),
+             "spark do: a block whose second line is rm -rf is danger; `no` does not run it", out2 + err2)
+        # a lone CR in a block: refused whole, like an escape in a line
+        rc2, out2, err2 = spark("do", "blockcr", stdin="", extra=hook, cwd=work)
+        t.ok(rc2 == 0 and "done  " + _do.REFUSED_CONTROL in out2 and "Enter runs it" not in out2
+             and "\r" not in out2 and os.path.isdir(work + "/junk"),
+             "spark do: a block carrying a CR is refused as done (do.BLOCK_CONTROL); nothing ran", repr(out2) + err2)
+        os.rmdir(work + "/junk")
+        # danger(): a new file is no loss, an existing one is; every other
+        # pattern is never read past
+        open(work + "/there.txt", "w").write("keep\n")
+        for _c, _want, _why in (("echo hi > new.txt", False, "a redirect onto a new file"),
+                                ("echo hi >| new.txt", False, "a >| redirect onto a new file"),
+                                ("echo hi > there.txt", True, "a redirect onto a file that is there"),
+                                ("cat > there.txt <<'EOF'\nx\nEOF", True, "a here-document onto a file that is there"),
+                                ("rm -f new.txt > new.log", True, "rm with a new-file redirect"),
+                                ("dd if=/dev/zero of=new.bin > new.log", True, "dd with a new-file redirect"),
+                                ("cd sub && echo hi > there.txt", True, "a cd: the cwd is not where it lands"),
+                                ("echo hi > $HOME/new.txt", True, "a target the shell rewrites"),
+                                ("echo hi 2> new.log", True, "2> is a stream, not read past"),
+                                ("echo one\nmkfs.ext4 new.img", True, "mkfs on a block's second line")):
+            t.ok(_do.danger(_c, work) is _want, "do.danger: %s -> %s" % (_why, _want), _c)
+        os.remove(work + "/there.txt")
+        # e on a block: $EDITOR on a 0600 temp file, removed after; the
+        # edited text is the step
+        _ed = os.path.join(home, "do-editor.py")
+        with open(_ed, "w") as f:
+            f.write("import os, sys\n"
+                    "p = sys.argv[1]\n"
+                    "open(p + '.seen', 'w').write('%o %s' % (os.stat(p).st_mode & 0o777, open(p).read()))\n"
+                    "open(os.environ['DO_ED_LOG'], 'w').write(p)\n"
+                    "open(p, 'w').write(os.environ.get('DO_ED_TEXT', ''))\n")
+        _edlog = os.path.join(home, "do-editor.log")
+        _edenv = dict(hook, VISUAL=sys.executable + " " + _ed, EDITOR=sys.executable + " " + _ed, DO_ED_LOG=_edlog,
+                      DO_ED_TEXT="printf 'edited\\n' > edited.txt\necho EDITED-BLOCK\n")
+        rc2, out2, err2 = spark("do", "blockedit", stdin="e\n", extra=_edenv, cwd=work)
+        _tmp = open(_edlog).read() if os.path.exists(_edlog) else "/nonexistent"
+        _seen = open(_tmp + ".seen").read() if os.path.exists(_tmp + ".seen") else ""
+        t.ok(rc2 == 0 and "EDITED-BLOCK" in out2 and open(work + "/edited.txt").read() == "edited\n"
+             and "edited: printf 'edited\\n' > edited.txt   (2 lines)" in out2 and "     2  echo EDITED-BLOCK" in out2
+             and not os.path.exists(work + "/script.py"),
+             "spark do: e on a block opens $EDITOR on it; the edited block is shown, then runs", out2 + err2)
+        t.ok(_seen == "600 " + BLOCK_STEP + "\n" and not os.path.exists(_tmp),
+             "spark do: the editor's file is the block, 0600, and it is removed after", (_seen, _tmp))
+        newest = max(os.listdir(threads), key=lambda f: os.path.getmtime(os.path.join(threads, f)))
+        lines = read_thread(home, os.path.join(threads, newest))
+        t.ok(len(lines) >= 3 and lines[2]["text"].startswith("Output of `printf 'edited\\n' > edited.txt\necho EDITED-BLOCK`")
+             and "; edited from `cat > script.py" in lines[2]["text"],
+             "spark do: an edited block lands on the thread, `edited from` the proposal", lines[2:3])
+        os.remove(work + "/edited.txt")
+        rc2, out2, err2 = spark("do", "blockedit", stdin="e\nq\n", extra=dict(_edenv, DO_ED_TEXT="\n"), cwd=work)
+        t.ok(rc2 == 0 and "the edit is empty -- the step is unchanged" in out2 and out2.count("Enter runs it") == 2
+             and "stopped after 0 steps" in out2 and not os.path.exists(work + "/script.py"),
+             "spark do: an empty edit leaves the block unchanged, says so, and asks again", out2 + err2)
+        rc2, out2, err2 = spark("do", "blockedit", stdin="e\nq\n",
+                                extra=dict(hook, VISUAL=home + "/no-such-editor", EDITOR=home + "/no-such-editor"),
+                                cwd=work)
+        t.ok(rc2 == 0 and "the step is unchanged" in out2 and "stopped after 0 steps" in out2
+             and not os.path.exists(work + "/script.py"),
+             "spark do: no editor to run -- the block is unchanged, said in one line, asked again", out2 + err2)
         os.mkdir(work + "/junk")
         rc, out, err = spark("do", "rm-plain", "junk", stdin="no\n", extra=hook, cwd=work)
         t.ok(rc == 0 and "type yes to run it" in out and os.path.isdir(work + "/junk"), "spark do: an unflagged rm -rf asks for yes; `no` does not run it", out + err)
@@ -5216,15 +5308,25 @@ def main():
         t.ok(rc == 0 and kinds(evs) == ["start", "note", "step", "output", "rc", "step", "rc", "end"]
              and evs[0] == {"ev": "start", "thread": evs[0]["thread"], "sandbox": False, "run": None}
              and evs[2] == {"ev": "step", "n": 1, "command": "echo 26", "hint": "count things", "danger": False,
-                            "proof": "test -d ."}
+                            "proof": "test -d .", "lines": 1}
              and evs[3] == {"ev": "output", "n": 1, "text": "26\n"} and evs[4] == {"ev": "rc", "n": 1, "rc": 0}
              and evs[5] == {"ev": "step", "n": 2, "command": "test -d .", "hint": "proof of step 1",
-                            "danger": False, "proof": None}
+                            "danger": False, "proof": None, "lines": 1}
              and evs[7] == {"ev": "end", "reason": "done", "hint": "Total: 26", "rc": 0},
              "spark do --porcelain: start, the step, its output and rc, the proof as its own step, end (contract 15)",
              out + err)
         t.ok(err.count(_do.PORCELAIN_BANNER) == 1 and "driving" not in err,
              "spark do --porcelain: a stderr banner says a program drives it; stdout is only JSON lines", err)
+        # a block over --porcelain: `command` holds its line feeds, `lines` counts them
+        rc, out, err = spark("do", "--porcelain", "blockstep", stdin="run\n", cwd=work)
+        evs = events(out)
+        _script = open(work + "/script.py").read() if os.path.exists(work + "/script.py") else ""
+        t.ok(rc == 0 and kinds(evs) == ["start", "note", "step", "rc", "end"]
+             and evs[2]["command"] == BLOCK_STEP and evs[2]["lines"] == 5 and evs[2]["danger"] is False
+             and _script.startswith('print("hello from the block")') and evs[4]["reason"] == "done",
+             "spark do --porcelain: a block's step event carries its lines (`lines` 5), and run runs it", out + err)
+        if os.path.exists(work + "/script.py"):
+            os.remove(work + "/script.py")
         os.makedirs(work + "/junk", exist_ok=True)
         rc, out, err = spark("do", "--porcelain", "rm-plain", "junk", stdin="run\n", cwd=work)
         evs = events(out)
