@@ -244,8 +244,10 @@ Ctrl-D or /q ends` and that line. Awake, it opens with the face and a
 greeting from the machine's own words, then the continuing line, then
 `/help lists the commands; Esc or Ctrl-D ends`.
 
-`Esc` on an empty line, `/q` or `Ctrl-D` ends. `Ctrl-C` clears the
-line, or cancels a reply, and the chat goes on. `spark chat --thread N`
+`Esc` on an empty line, `/q` or `Ctrl-D` ends. On a line with text,
+`Esc` does nothing. On macOS the system's line editor reads that `Esc`
+as Alt for the next key. `Ctrl-C` clears the line, or cancels a reply,
+and the chat goes on. `spark chat --thread N`
 continues an older thread from the `spark history` list. A thread
 lives `SPARK_HISTORY` days. With `SPARK_HISTORY=off`, `spark chat` goes
 on with the newest kept thread.
@@ -313,12 +315,12 @@ machine.
 file's first 4 kB and last 12 kB with the question.
 
 `spark do <words>` proposes one command at a time. `Enter` runs it, `e`
-edits it, `s` skips it, `q` quits. A step that can destroy data runs
-only when you type `yes`. After a step, its proof, one read-only
-check, is offered the same way, and only its exit code goes back. Each
-step's output, the last 4 kB, goes back to the model until it says
-done, or after 8 steps. A goal is at most 8 kB, and one that starts
-with `-` goes after `--`.
+edits it, `s` skips it, `q` quits. On a block, `r` reads it again. A
+step that can destroy data runs only when you type `yes`. After a step,
+its proof, one read-only check, is offered the same way, and only its
+exit code goes back. Each step's output, the last 4 kB, goes back to the
+model until it says done, or after 8 steps. A goal is at most 8 kB, and
+one that starts with `-` goes after `--`.
 
 A step is one line, or a block of several lines: a here-document that
 writes a file. A block is shown whole before you confirm it, the step
@@ -499,8 +501,10 @@ spark voice stop               stop speaking now
 Clear mode reads the prompt line's command with its symbols. `du -ah
 ~ | sort -rh` is "du, dash a h, tilde, pipe, sort, dash r h". Then it
 reads the hint. A line marked `!` is read with its warning first. In
-`spark do` it reads each step, a block by its name and size, such as "a
-here-document writing count.py, 3 lines". It reads the choices once a
+`spark do` it reads each step. In a block it reads every command line
+with its symbols, and the text of a here-document as "a here-document
+writing count.py, 3 lines of text". `r` reads every line again. It
+reads the choices once a
 run, the last 3 lines of each output and the end. It reads the chat's
 replies and the errors. Every line it speaks is printed too.
 
@@ -521,6 +525,8 @@ The keys, at the prompt and in the chat:
   an empty prompt they land as a `? ` question. Nothing runs until you
   press `Enter`.
 - `Esc x` stops the speaking, in this shell and in any other.
+- The prompt binds both keys only when the voice is on or clear as the
+  shell starts. After `spark voice on` or `clear`, open a new shell.
 
 A spoken yes never confirms anything. A step that can destroy data
 still needs `yes` typed, and `spark do` never listens.
@@ -903,8 +909,8 @@ Void:
   pinned `ubuntu-*` tarball, a glibc build. Void's glibc flavour runs
   it, and `get` refuses the musl flavour in one line. The voice's
   runtime is a glibc build too. CI proves the one-liner and the
-  supervised services in a Void container. The engine and the GPU
-  there are not yet proven on a machine.
+  supervised services in a Void container, and the maintainer's box
+  runs Void with the engine on its GPU.
 - Packages come through `xbps-install -Sy`. When xbps refuses an
   install, the `packages` row says `sudo xbps-install -Su` first: on a
   rolling distro xbps itself must be current. `libgomp` is its own

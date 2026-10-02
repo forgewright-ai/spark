@@ -12,9 +12,13 @@ or the machine's own.
 - A block is shown whole before you confirm it. The step line names
   its first line and `(24 lines)`, then every line follows, numbered.
   A line break can no longer hide a second command.
-- Danger is read on every line of a block. A redirect onto a file that
-  does not exist yet is not "can destroy data". One onto a file that is
-  there still is, and a `cd` in the step reads past nothing.
+- Danger is read on every line of a block. One exception: a step that
+  is only a here-document writing one new file, in a directory reached
+  without a symlink, is not "can destroy data". Anything before or
+  after it, or a file that is there already, keeps the danger.
+- `r` reads a block again, every line numbered, then asks again. In
+  clear mode it speaks each line.
+- Keeping a voice at awaken leaves clear mode on when it was on.
 - `e` on a block opens it in your editor (`$VISUAL`, `$EDITOR`, else
   micro, nano or vi), as a 0600 file removed after. With none, `e`
   says so and the step is unchanged. A line is still edited in place.

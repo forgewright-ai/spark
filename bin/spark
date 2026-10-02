@@ -35,7 +35,7 @@ spark
  spark soul [edit|reset]      who it is: ~/.config/spark/soul
  spark memory add <words>     a fact it keeps; memory forget N; memory
  spark ver [--sbom]           about, version, credits; or what it depends on
- spark chat [words]           a conversation; /help lists its verbs, Ctrl-D ends
+ spark chat [words]           a conversation; /help its verbs; Esc, Ctrl-D end
  spark [@FILE] <words>        ask about anything, or a file; a streamed answer
  spark do [--sandbox] <words> a task, one command at a time, each one confirmed,
                               or, sandboxed, the changes once at the end
@@ -77,7 +77,7 @@ the model and the server
 """ % MARK
 
 USAGE_MACHINE = """the machine
- spark setup                  the guided first run: name, user, model (-h)
+ spark setup                  the guided first run: name, user, model, voice
  spark check                  the machine row by row; exit 0 when no row fails
  spark update [--dry-run]     the newest release tag; main on a developer clone
  spark uninstall [--purge]    remove spark from this machine: shows, asks yes

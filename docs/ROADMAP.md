@@ -207,8 +207,6 @@ way to say "the last run: again" or "go on".
 v1.70 speaks and listens. What the box's headset says about it decides
 what comes next.
 
-- A block in clear mode is read by its name and size. Its lines are
-  read on request: a key that reads the block line by line.
 - A spoken question's language is Whisper's own. The reply is read in
   the language spark guesses from its words. The two should agree:
   the voice that answers follows the language that was heard.

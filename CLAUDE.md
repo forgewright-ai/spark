@@ -650,11 +650,14 @@ and may change freely.
    removed after. No editor, an editor that fails or an empty edit is
    one line, and the step is unchanged. Danger is `do.danger`:
    `persona.is_dangerous` over the whole text and over each line, a
-   line continued with a backslash read as one. It reads past a `>` or
-   `>|` onto a file that does not exist yet in the step's cwd, and past
-   a `>` that ends a line with no target. A `cd`, `pushd` or `popd`
-   anywhere in the step reads past nothing, and no other pattern is
-   ever read past. A `sudo` step is a danger step: the typed `yes`. A
+   line continued with a backslash read as one. It reads past one
+   shape alone (`do.heredoc_file`): the whole step is one here-document
+   writing one file, with nothing before or after it. The file is named
+   nowhere else, its directory is reached without a symlink, and the
+   file is not there yet. An unquoted delimiter's body holds no `$(` or
+   backtick. No other pattern is ever read past. `r` at the prompt
+   prints a block again, numbered, and in clear mode speaks each line.
+   A `sudo` step is a danger step: the typed `yes`. A
    goal is at most `do.DO_GOAL_MAX` (8 kB), else one signed line, exit
    2, nothing sent. The budget keeps the goal whole, so it must fit.
    The OS is `spark do`'s harness. An agent's harness is its tools, its
@@ -852,14 +855,17 @@ and may change freely.
    aloud once they are written, from a detached process
    (`voice.aloud_later`, `voice.line_words`). stdout stays this
    contract byte for byte, and the widget waits for no speech. Mode
-   `on` never speaks here. The widgets bind `Esc v` to `spark voice
-   listen --buffer`: the words heard land at the cursor, on an empty
-   line as a `? ` question, and nothing runs until the user's Enter.
+   `on` never speaks here. The widgets bind `Esc v` and `Esc x` only
+   when the voice is on or clear as the shell starts (SPARK_VOICE from
+   the environment, else spark.env). `Esc v` is `spark voice listen
+   --buffer`: the words heard land at the cursor, on an empty line as a
+   `? ` question, and nothing runs until the user's Enter.
    `Esc x` is `spark voice stop`. In clear mode `spark do` at a
    terminal reads aloud too (`voice.Reader`, `voice.step_words`). It
-   reads each step, a block by its name and size, with a danger step's
-   warning first. Then the choices once a run, each output's last 3
-   lines and the end.
+   reads each step, a danger step's warning first. In a block it reads
+   every line outside a here-document's body with its symbols, and the
+   body as "a here-document writing F, N lines of text". Then the
+   choices once a run, each output's last 3 lines and the end.
    Nothing spoken answers a prompt: a danger step stays the typed
    `yes`. The shell widgets depend on nothing else.
 5. `spark brain --porcelain` prints `<url><TAB><model><TAB>forge|model`
