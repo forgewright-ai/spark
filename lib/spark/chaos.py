@@ -91,6 +91,11 @@ class Machine:
         # (loaded or disabled) through that manager, and the real machine's
         # units are not the fixture's to start
         self.env["SPARK_SERVICE_STATE"] = "absent"
+        # nor its voice: the fixture carries a stub engine with the voice
+        # clear (the voice row's selftest), and a scenario's `spark line`
+        # then left a detached speaker importing into a HOME being
+        # deleted (CI macOS, v1.70: "Directory not empty: python3.9")
+        self.env["SPARK_VOICE"] = "off"
         # make_fixture keeps its own git identity to itself; a scenario
         # that commits (the git row's) needs one of its own
         self.env.update({"GIT_AUTHOR_NAME": "chaos", "GIT_AUTHOR_EMAIL": "chaos@fixture",
