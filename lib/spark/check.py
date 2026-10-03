@@ -543,7 +543,7 @@ def row_prompt(ctx):
             return na("no shell open")
         return warn("no shell has it yet", "exec $SHELL")
     url, model = _brain(ctx)
-    who = ", ".join("%s %d" % (s, p) for s, p in live[:3])
+    who = ", ".join(sorted({s for s, _ in live}))
     if not url:
         return na("in %s, no model answers" % who, model)
     return ok("in %s, %s answers" % (who, config.model_name(model)))

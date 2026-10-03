@@ -159,7 +159,7 @@ USAGE = """%s bench -- how fast this machine runs a model
 
   spark bench              measure the model in use, saved as the baseline
   spark bench --spark      measure the prompt line's model
-  spark bench --ember      measure the chat model
+  spark bench --chat       measure the chat model
   spark bench --quick      a shorter run
   spark bench --line [N]   time N prompt-line questions (5 by default)
   spark bench tune         try settings to find the fastest
@@ -189,7 +189,7 @@ def cmd_bench(args):
     if args and args[0] in ("-h", "--help", "help"):
         say(USAGE.rstrip())
         return 0
-    known = ("--line", "--tune", "--porcelain", "--quick", "--ember", "--spark")
+    known = ("--line", "--tune", "--porcelain", "--quick", "--chat", "--ember", "--spark")
     for i, a in enumerate(args):
         if a not in known and not (i and args[i - 1] == "--line" and not a.startswith("-")):
             say("spark bench -- no word %s; spark bench -h lists them" % a)
@@ -203,7 +203,7 @@ def cmd_bench(args):
         say("! no engine here -- spark update")
         return engine.EX_CONFIG
     files = engine.roles(cfg)
-    want = "ember" if "--ember" in args else ("spark" if "--spark" in args else "")
+    want = "ember" if ("--chat" in args or "--ember" in args) else ("spark" if "--spark" in args else "")
     if want == "ember" and not files["ember"]:
         say("! no chat model to measure -- spark model --chat NAME")
         return engine.EX_CONFIG

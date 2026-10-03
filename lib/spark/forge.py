@@ -1020,8 +1020,7 @@ def _write_chat_history(readline):
 # ------------------------------------------------------------------- chat
 CHAT_USAGE = """%s chat -- talk with the model
 
-  spark chat                     a conversation that goes on with the
-                                 newest thread
+  spark chat                     go on with the newest thread
   spark chat <words>             one more turn on the newest thread
   spark chat --thread N [words]  an older thread: N from spark history
                                  (1 is the newest), or its id

@@ -14,7 +14,7 @@ from . import (IS_MAC, MARK, REPO, SPARK_ENV, bind_check, config, forge_url, lan
                wait_lan_ip)
 from . import engine, wire
 
-USAGE = """%s serve -- the engine and the page, served on this LAN
+USAGE = """%s serve -- serve the model and the page on your network
 
   spark serve                 what answers, the models, the page
   spark serve on              start the engine and the page, keep them up

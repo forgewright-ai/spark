@@ -271,7 +271,7 @@ def for_tmux(sub):
 
 USAGE = """spark bar -- the machine's status in one line
 
-  spark bar            load, memory, disk, network, AI, check, runs, clock
+  spark bar            load, memory, disk, network, model, check, runs, clock
   spark bar line       the same, for a status bar (every 15 s)
 """
 
