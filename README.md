@@ -161,12 +161,14 @@ another machine of yours (`spark client URL`). What each command sends:
 - `ask`: the text, up to 12 kB.
 - `read` and `drill`: the source, 16 kB at a time.
 - `watch`: the stream, 8 kB at a time.
-- `recall` (`Esc r`): the last 400 lines of your shell history.
+- `recall` (`Esc r`): the last 400 lines of your shell history, with
+  secrets replaced by `[held]`.
 - `paste`: a paste of several lines, up to 8 kB. A paste that looks
   like a secret is not sent.
 - `awaken`: the temperament you chose, once.
 
-`read`, `do` and `edit ? --source` replace secrets with `[held]`. They
+`read`, `do`, `recall` and `edit ? --source` replace secrets with
+`[held]`. They
 catch a private key, an AWS access key, a GitHub token, a Slack token
 and an API key. They also catch a credential line, a long base64 run, a
 one-time code and a link token. The other commands send the text as it
@@ -180,9 +182,9 @@ github.com, and your model from huggingface.co. The engine, the voice
 and the model are checked by sha256. Your package manager installs the
 basics and checks for updates. There is no telemetry.
 
-A first install trusts the signing key it downloads. Each update is
-checked against the key already installed. A clone on `main` is not
-checked.
+A release is signed. A first install checks it against the key inside
+`get`. Each update checks against the key already installed, and only
+moves forward. A clone on `main` is not checked.
 
 ## On this machine
 

@@ -435,10 +435,10 @@ spark update
 It moves to the newest signed release, sets it up and runs `spark
 check`. `spark update --dry-run` says what it would do.
 
-A release is signed. `spark update` moves only to a release signed by
-a key this install already trusts. A first install trusts the key it
-downloads. A clone on `main`, or one made with `SPARK_REF`, is not
-checked.
+A release is signed. `spark update` moves only forward, to a release
+signed by a key this install already trusts. It skips a tag that fails,
+and says why. A first install checks against the key inside `get`. A
+clone on `main`, or one made with `SPARK_REF`, is not checked.
 
 Uninstall:
 
@@ -507,7 +507,7 @@ When something stops working:
 4. `SPARK_DEBUG=1 spark ...` writes `~/.local/state/spark/debug.log`.
 5. The page's server logs each request in
    `~/.local/state/spark/forge.log`. A command run from the page is
-   logged with its first 200 characters, as typed.
+   logged by its sha256 and its length, never its text.
 6. `the ledger does not open`: log in with your own token, `spark user
    login NAME`.
 7. spark's line sits on your prompt: press `Esc k`, or run `spark
@@ -536,13 +536,13 @@ is the trust boundary.
   So can `spark do --accept`.
 - `spark do --sandbox` runs steps in a copy with no network. A step can
   still read most of the system: see section 6.
-- `spark read`, `spark do` and `spark edit ? --source` replace secrets
-  with `[held]`. `recall` (`Esc r`), `explain`, `@FILE` and `spark
-  chat` send text as it is.
-- The page's server logs the first 200 characters of each command run
-  from the page. The audit trail, `spark serve --audit`, keeps no
-  command text.
-- A first install trusts the signing key it downloads. Updates check
+- `spark read`, `spark do`, `recall` (`Esc r`) and `spark edit ?
+  --source` replace secrets with `[held]`. `explain`, `@FILE` and
+  `spark chat` send text as it is.
+- No log keeps the text of a command run from the page.
+- A reply's terminal escapes, such as a clipboard write, never reach
+  your screen.
+- A first install checks against the key inside `get`. Updates check
   against the key already installed. A clone on `main` is not checked.
 - The microphone opens only on `Esc v` or `spark voice listen`.
 

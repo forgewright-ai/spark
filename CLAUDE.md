@@ -126,8 +126,12 @@ it, and no verb carries the word.
   at `chat>` and before the chat prints a line of its own. Once the
   reply's rows reach the terminal's height less one, or the terminal
   is resized, it moves no more.
-  Piped, the bytes are the model's. Text in is strict UTF-8
-  as well. stdin is decoded with the replacement mark
+  A reply's escapes and control characters never print, at a
+  terminal or piped. `text.Printable` drops ESC and 8-bit CSI
+  sequences, OSC, DCS, SOS, PM and APC whole, a sequence split across
+  chunks too. It drops C0 but tab and line feed, DEL, C1 and the bidi
+  controls. Printable text stays byte for byte. Text in is strict
+  UTF-8 as well. stdin is decoded with the replacement mark
   (`text.stdin_text`). Every string bound for the wire or a store goes
   through `text.clean` first: a thread, the ledger, a turn record. A
   lone surrogate is an HTTP 500 from the engine's JSON parser and a
@@ -692,9 +696,19 @@ and may change freely.
    removed after. No editor, an editor that fails or an empty edit is
    one line, and the step is unchanged. Danger is `do.danger`:
    `persona.is_dangerous` over the whole text and over each line, a
-   line continued with a backslash read as one. It reads past one
-   shape alone (`do.heredoc_file`): the whole step is one here-document
-   writing one file, with nothing before or after it. The file is named
+   line continued with a backslash read as one. `persona._read` cuts
+   the text into commands as the shell does and judges each with its
+   wrappers removed (`persona.WRAPPERS`, judge's list too). The text
+   inside `sh -c`, `eval`, `trap`, `watch` and `find -exec` is read as
+   commands. Three more things are danger. One is a command word the
+   shell rewrites (`persona.REWRITTEN`: a quote, `$`, braces, a glob or
+   a backslash). One is a command carrier (`persona.CARRIERS`: ssh with
+   a command, a session's exec, a deferred run, a command inside an
+   option or a variable, a tool's own script). The last is a text too
+   deep to read (`TOO_DEEP`). `proof_ok` denies any abbreviation of a
+   denied long option. `do.danger` reads past one shape alone
+   (`do.heredoc_file`): the whole step is one here-document writing
+   one file, with nothing before or after it. The file is named
    nowhere else, its directory is reached without a symlink, and the
    file is not there yet. An unquoted delimiter's body holds no `$(` or
    backtick. No other pattern is ever read past. `r` at the prompt
@@ -926,10 +940,12 @@ and may change freely.
    The engine is `voice.Engine`: Kokoro loaded once, at the Reader's
    first line, through the runtime's C API by ctypes. Its structs are
    mirrored from the pinned `c-api.h`. Each call makes one sentence,
-   its language and speed riding the call. A runtime it cannot load
-   leaves the Reader on the tool, `sherpa-onnx-offline-tts`, in
-   silence. Mode on runs the character's chain over the samples
-   (`voice.chain`). On Linux the player is one `voice.Stream` a burst:
+   its language and speed riding the call. Every text is made in the
+   spark process (`voice.process_engine`): no tool is started, so no
+   spoken text is on a command line. A runtime it cannot load is one
+   line, `voice.NO_ENGINE`, and silence. Mode on runs the character's
+   chain over the samples (`voice.chain`). On Linux the player is one
+   `voice.Stream` a burst:
    `aplay -t raw`, or `paplay --raw`, reading PCM on its stdin. It
    opens at the first clip with `voice.LEAD_IN_MS` of silence. It is
    fed `voice.STREAM_CHUNK` of silence while the next clip is made. It
@@ -1165,7 +1181,8 @@ and may change freely.
    appends with history off. The store failing (a seal or disk error,
    logged) is 500 `{error: {kind: store}}`. `Store.append` returns
    True or False to say which. `GET /api/check` returns `check.json` as
-   written plus `age` in seconds. `POST /api/do/propose` answers
+   written plus `age` in seconds to the admin, and `{ts, counts, age}`
+   to a user. `POST /api/do/propose` answers
    `{thread, reply, ms, driver, unchecked}`: `driver` is the `ember`
    role's model stem, `unchecked` the done hint's numbers no user
    message of the thread backs (`[]` otherwise). A new thread's text is
@@ -1191,9 +1208,15 @@ and may change freely.
    directory (400). A command `do.danger` flags runs only
    with `confirmed: true`, else 400 `{error: {kind: confirm}}`,
    which the page sends after its second click. The log line carries a
-   sha256 prefix of the command beside its truncated text, and a second
-   line the rc. Every admin action is one sealed record in the box
-   account's `audit` (`lib/spark/audit.py`, kind `audit`,
+   sha256 prefix of the command and its length, never its text, and a
+   second line the rc. The server holds at most
+   `forgeserve.MAX_CONNECTIONS` (64) connections, one more is 503. A
+   user holds `EVENTS_PER_USER` (4) event streams, one more is 429. A
+   name keeps `SESSIONS_PER_NAME` (20) sessions, the oldest dropped.
+   Every JSON and SSE answer carries `X-Content-Type-Options:
+   nosniff`. `POST /api/soul` writes an audit record too. Every admin
+   action is one sealed record in the box account's `audit`
+   (`lib/spark/audit.py`, kind `audit`,
    `vault.append_sealed`). The records are `do/run` `{ts, ip, action,
    digest, rc}`, `/api/run` `{ts, ip, action, verb, rc}`, a user minted,
    removed or rotated `{ts, ip|cli, action, name}` (`spark user
@@ -1510,7 +1533,9 @@ and may change freely.
     (`persona.OPAQUE`). The refusal is a note, and the model hears it
     was skipped. `persona.OPAQUE` is a command substitution, a backtick,
     eval, a backslash inside a word, an interpreter handed inline code
-    or a script on stdin, and a curl or wget upload. A block is read
+    or a script on stdin, and a curl or wget upload. It is also
+    `REWRITTEN`, the 5 `CARRIERS` and `TOO_DEEP`, named before a danger
+    reason. A block is read
     whole and line by line. An edit is held to the same two. `edit
     <command>` is one line: its whitespace folds, so an edit turns a
     block into a line. Anything else runs on the program's `run` with
@@ -1870,10 +1895,15 @@ The git tag is the release: one control, not two. There is no `VERSION`
 constant. `spark ver` derives it from git (`lib/spark/version.py`,
 cached): `1.0` exactly at a tag, `1.0+3` 3 commits past it. A major
 is an architecture break only: a feature inside the standing shape is
-a minor, however large. A release tag is signed. `get`, `spark update`
-and `release.yml` verify its ssh signature against the tree's
-`allowed-signers` and move to no other tag. That file is one line per
-key, the principal the literal `spark-release`, never a real name. So a
+a minor, however large. A release tag is signed. `spark update`
+verifies its ssh signature against the installed tree's
+`allowed-signers`. `get` verifies against its own copy of that file
+(`SIGNERS`, docs_test holds the two equal), and `release.yml` against
+the previous release's. Each also requires the tag object's own `tag
+NAME` line to match the ref, and an update moves forward only. The walk
+takes the newest tag that passes and names the newer ones it skipped.
+`allowed-signers` is one line per key, the principal the literal
+`spark-release`, never a real name. So a
 pushed tag alone runs nothing on anyone's install. A key in that file
 does. The `signed` row of `spark check` names the key's principal on a
 release clone. Update `CREDITS.md` when a pin or a model row changes.
@@ -1881,7 +1911,8 @@ release clone. Update `CREDITS.md` when a pin or a model row changes.
 Signing, once per machine: `git config gpg.format ssh` and `git config
 user.signingkey ~/.ssh/id_ed25519.pub`, with the private half beside it
 or in the agent. Key rotation is a commit that adds the new key's line
-to `allowed-signers`, released under a tag signed by the old key. Every
+to `allowed-signers` and to `get`'s `SIGNERS`, released under a tag
+signed by the old key. Every
 clone verifies with the file it has and moves to the tree that knows
 the new key. The old line comes out in a later release, signed by the
 new one. `verify-tag` with an ssh signature needs git 2.34 or newer and

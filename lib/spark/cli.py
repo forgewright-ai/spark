@@ -209,7 +209,9 @@ def _paste_verdict(shell):
         say("looks like a secret (%s) -- not sent" % what)
         session.record(cfg, mode="paste", kind="paste", chars=len(data), held=True)
         return 0
-    local_danger = any(persona.is_dangerous(l) for l in data.splitlines())
+    # the reading of the whole paste (it skips a here-document's body),
+    # then the patterns line by line, as do._dangerous reads a block
+    local_danger = persona.is_dangerous(data) or any(persona.danger_shape(l) for l in data.splitlines())
     try:
         with textmod.Busy.hint_row():
             s = session.Session(cfg, "paste", shell, "", role="spark")

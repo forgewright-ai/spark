@@ -2,8 +2,28 @@
 
 ## v1.75
 
-The docs say less, and nothing more than spark does.
+Security fixes from an audit, and docs that say less.
 
+- `spark do` and the prompt line catch a command hidden from the
+  danger check: a quoted or rewritten command word (`"rm"`, `$x`), a
+  wrapper (`timeout`, `doas`, `env`), and a command handed to ssh, a
+  session (`swaymsg exec`, `tmux`) or a later run. Each needs `yes`
+  typed. An app driving `spark do` cannot run one outside the sandbox.
+- A reply's terminal escapes never reach your screen or a pipe. A
+  model can no longer write to your clipboard or clear the screen.
+- `Esc r` replaces secrets in your shell history with `[held]` before
+  it is sent.
+- `spark update` checks that a tag's name matches the release it
+  signs, and moves forward only. It skips a bad tag and says why,
+  instead of stopping.
+- A first install checks the release against the key inside `get`,
+  not a file from the clone.
+- The voice makes every sound inside spark. No spoken text is on a
+  command line that other users could read.
+- The page's server logs a command by its sha256 and length, never
+  its text. A user sees only counts from the check report. It limits
+  connections, event streams and sessions.
+- A model row in your own `models.env` needs a real sha256.
 - Every document is shorter and plainer. The README, INSTALL and the
   cheatsheet state each limit: plain HTTP between machines, what the
   admin token can do, and which commands hold secrets back.
