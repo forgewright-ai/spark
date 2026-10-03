@@ -86,7 +86,7 @@ META_FIELDS = ("id", "thread", "cwd", "start", "os", "state")
 STATES = ("running", "waiting", "applied", "discarded")
 
 NEEDS_PROJECT = "the sandbox needs a project directory, not ~ or /"
-OTHER_VOLUME = "the sandbox clones the project on its own volume, and spark's state is on another"
+OTHER_VOLUME = "the project and spark's state must be on the same disk"
 CHANGED = "the copy changed after the review -- nothing applied"
 RUNNING = "run %s is still running"
 NO_RUN = "no sandboxed run %s -- spark do --review lists them"
@@ -418,11 +418,9 @@ def _walk(root, cap=None, seconds=None):
                 if stat.S_ISDIR(st.st_mode):
                     stack.append(r)
                 if cap and len(out) > cap:
-                    raise SandboxError("the sandbox copies at most %d files, and this directory holds more"
-                                       " -- run it in a smaller one" % cap)
+                    raise SandboxError("more than %d files here -- use a smaller directory" % cap)
         if deadline and time.time() > deadline:
-            raise SandboxError("this directory took over %d s to list -- run the sandbox in a smaller one"
-                               % seconds)
+            raise SandboxError("this directory took over %d s to list -- use a smaller one" % seconds)
     return out
 
 
@@ -1508,7 +1506,7 @@ def diff_text(entries):
         if g and g not in shown:
             shown.add(g)
             n, held = gits[g]
-            out.append("git        %s/ -- %d item%s inside git's own directory, %d held back"
+            out.append("git        %s/ -- %d item%s, %d held back"
                        % (g, n, "" if n == 1 else "s", held))
         x = " (+x)" if e.get("exec_added") else ""
         c = " (control characters)" if e.get("control") or _control(e) else ""

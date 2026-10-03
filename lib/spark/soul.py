@@ -31,19 +31,14 @@ DEFAULT = (
 # the core and the personality together stay within SOUL_MAX
 PERSONALITY_MAX = SOUL_MAX - len(DEFAULT) - 2
 
-SOUL_USAGE = """%s soul -- who it is
+SOUL_USAGE = """%s soul -- who spark is
 
-  spark ships with a default soul; spark soul edit writes your own.
-
-  spark soul                    the paragraph in use, and where it comes from
-  spark soul edit               write your own in $VISUAL / $EDITOR (0600)
-  spark soul edit --core        the whole soul, when spark awaken gave it a
-                                personality (bare edit changes only that)
+  spark soul                    who spark is now
+  spark soul edit               write your own (in $EDITOR)
+  spark soul edit --core        edit all of it, not only the personality
   spark soul reset              back to the default
 
-  The file is ~/.config/spark/soul, plain text, at most %d characters.
-  spark awaken writes ~/.config/spark/personality, one paragraph added
-  after the built-in core. A soul file of your own replaces both.
+  Your soul is ~/.config/spark/soul, plain text, at most %d characters.
 """ % (MARK, SOUL_MAX)
 
 
@@ -159,7 +154,7 @@ def _show(cfg):
     say(t)
     if source == "file" and has_personality():
         say("")
-        say("Your soul file replaces the core and the personality (spark soul reset uses them).")
+        say("Your own soul is in use (spark soul reset goes back).")
     return 0
 
 
@@ -187,10 +182,9 @@ def _edit_personality():
     if n > PERSONALITY_MAX:
         say("ok     personality  %d characters, over the cap, cut at %d" % (n, PERSONALITY_MAX))
     elif n == 0:
-        say("ok     personality  empty -- the built-in core alone applies")
+        say("ok     personality  empty -- the built-in soul applies")
     else:
-        say("ok     personality  %d characters, after the built-in core" % n)
-    say("The core stays. spark soul edit --core replaces the whole soul.")
+        say("ok     personality  %d characters" % n)
     from . import check
     check.refresh()
     return 0
@@ -226,7 +220,7 @@ def _edit(cfg, core=False):
     if n > SOUL_MAX:
         say("ok     soul         %d characters, over the cap, cut at %d" % (n, SOUL_MAX))
     elif n == 0:
-        say("ok     soul         empty -- the built-in paragraph applies")
+        say("ok     soul         empty -- the built-in soul applies")
     else:
         say("ok     soul         %d characters, yours" % n)
     from . import check

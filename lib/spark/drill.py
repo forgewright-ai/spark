@@ -54,20 +54,16 @@ DRILL_TIMEOUT = 180
 # line (reveal, then yes/no, per item). Real use never sets it.
 ANSWER_TTY = "SPARK_DRILL_TTY"
 
-DRILL_USAGE = """spark drill -- practice against a source (contract 13)
+DRILL_USAGE = """spark drill -- practice questions from a text
 
-  spark drill < FILE          the source becomes questions it answers; each
-                              one you try, then see the source's own words
-  --name NAME                 keep a schedule for this source: a missed item
-                              comes back on a widening interval until it is
-                              right twice; without --name, nothing is kept
-  --ledger [clear] [--name NAME]  the schedule, soonest due first; clear
-                              drops it
+  spark drill < FILE          one question at a time; you answer, then see
+                              the text's own words
+  --name NAME                 keep a schedule: a missed question comes back
+                              until you have it right twice
+  --ledger [clear] [--name NAME]  the schedule; clear forgets it
 
-  both the question and its answer are spans of the source -- an invented
-  answer is dropped before it is ever asked. Too little to drill is one
-  line and exit 1, never padded from the model's own knowledge.
-  From a pipe: w3m -dump URL | spark drill --name page
+  Every question and answer comes from the text. Too little text: one
+  line and exit 1. From a pipe: w3m -dump URL | spark drill --name page
 """
 
 

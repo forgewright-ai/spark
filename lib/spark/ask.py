@@ -39,25 +39,18 @@ ASK_CAP = 3             # questions kept, at most -- never a target
 ASK_TOKENS = 400
 ASK_TIMEOUT = 180
 
-ASK_USAGE = """spark ask -- the questions a text does not answer (contract 12): on stdin
+ASK_USAGE = """spark ask -- the questions a text leaves open (text on stdin)
 
-  spark ask                   at most three questions about the text
+  spark ask                   up to three questions about the text
   spark ask <words>           the same, told what you are deciding
-  --name NAME                 the text's name, a hint -- never its path
-  --about TEXT                what you say the text is ("a migration plan")
-  --thread ID                 keep the exchange under ID (yours to name,
-                              1 to 64 of [A-Za-z0-9_-]); the same ID again
-                              continues it
-  --answered --name NAME      keep the question on stdin as answered for
-                              NAME: it is not asked again
-  --ledger [clear] --name NAME  the questions answered for NAME, newest
-                              first; clear drops them
+  --name NAME                 the text's name (never its path)
+  --about TEXT                what the text is ("a migration plan")
+  --thread ID                 keep the exchange; the same ID continues it
+  --answered --name NAME      never ask the question on stdin again
+  --ledger [clear] --name NAME  the answered questions; clear forgets them
 
-  every line out is a question: one that does not end in `?`, one whose
-  every quote is not in the text, and one that could be asked of any
-  plan never reach you. Nothing survives -> one line and exit 1: a
-  reader with nothing to ask says nothing. At most 12000 characters in.
-  From a pipe: spark ask < plan.md
+  Every line is a question about the text. None left: one line, exit 1.
+  At most 12000 characters in. From a pipe: spark ask < plan.md
 """
 
 # A question that could be asked of any plan says nothing about this one.
@@ -297,5 +290,5 @@ def cmd_ask(args):
         counts["thread"] = tid
     s.record(kind="questions", chars=len(data), ms=ms, **counts)
     if not gate.kept:
-        die("nothing to ask -- no question came back that this text does not answer")
+        die("nothing to ask: the text answers it")
     return 0

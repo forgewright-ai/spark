@@ -3728,7 +3728,7 @@ def main():
 
         # a lone word is a slip, not a question
         rc, out, _ = spark("theme")
-        t.ok(rc == 2 and out.startswith("spark: no command named theme"),
+        t.ok(rc == 2 and out.startswith("spark -- no command named theme"),
              "theme alone is an unknown word like any other (v1.62: the look left core)", out)
         rc, out, _ = spark("qwen3-8b")
         t.ok(rc == 2 and "spark model qwen3-8b" in out, "a model name alone points at spark model", out)
@@ -3742,7 +3742,7 @@ def main():
         t.ok(rc == 2 and "try: spark words" in out, "a misspelled verb alone points at the right spelling", out)
         # spark quiet left in v1.69: an unknown word like any other
         rc, out, _ = spark("quiet")
-        t.ok(rc == 2 and out.startswith("spark: no command named quiet") and "try:" not in out,
+        t.ok(rc == 2 and out.startswith("spark -- no command named quiet") and "try:" not in out,
              "spark quiet: an unknown word (v1.69), never pointed at a verb", out)
         rc, out, _ = spark("clean", "up", "my", "downloads")
         t.ok(rc == 0 and out.startswith("* "), "a question that starts with clean is not a slip of clear", out)
@@ -3753,7 +3753,7 @@ def main():
         for gone in (("shell", "on"), ("remember", "a", "fact"), ("stop",), ("talk", "to", "me")):
             hits0 = STATE["hits"]
             rc, out, _ = spark(*gone)
-            t.ok(rc == 2 and out.strip() == "spark: no command named %s -- spark help lists them" % gone[0]
+            t.ok(rc == 2 and out.strip() == "spark -- no command named %s; spark help lists them" % gone[0]
                  and STATE["hits"] == hits0,
                  "spark %s: a gone verb answers the no-command line, exit 2, no model call" % " ".join(gone), out)
         hits0 = STATE["hits"]
@@ -3839,7 +3839,7 @@ def main():
         rc, out, _ = spark("chat", "-h")
         t.ok(rc == 0 and out.splitlines()[0] == "spark chat -- a conversation", "spark chat -h signs (contract 8)", out)
         rc, out, _ = spark("talk")
-        t.ok(rc == 2 and out.startswith("spark: no command named talk"),
+        t.ok(rc == 2 and out.startswith("spark -- no command named talk"),
              "spark talk is no command any more (v1.3's stub is gone): a slip, exit 2, no model call", out)
         # the quit grammar: all silent, rc 0, nothing sent to the model
         hits0 = STATE["hits"]
@@ -6036,7 +6036,7 @@ def main():
         # spelling): status, choose, refuse, the shared table's marks
         mem = {"SPARK_NO_APPLY": "1", "SPARK_MEM_TOTAL_GB": "64"}
         rc, out, _ = spark("model", "--chat", extra=mem)
-        t.ok(rc == 0 and re.search(r"^  spark", out, re.M) and re.search(r"^  ember", out, re.M),
+        t.ok(rc == 0 and re.search(r"^  line ", out, re.M) and re.search(r"^  chat ", out, re.M),
              "spark model --chat: one line per role", out)
         rc, out2, _ = spark("ember", extra=mem)
         t.ok(rc == 0 and out2 == out, "spark ember, the older spelling: the same lines", out2)
@@ -6196,7 +6196,7 @@ def main():
         # table header carries the new percent; SPARK_NO_APPLY leaves out
         # the download/restart narration, same as spark model NAME
         rc, outb, _ = spark("model", "budget", extra=speed_env)
-        t.ok(rc == 0 and re.search(r"^spark model budget.*\d+% of \d+ GB = \d+ GB$", outb.splitlines()[0]),
+        t.ok(rc == 0 and re.search(r"^spark model -- \d+ GB for models, budget \d+ GB \(\d+%\)", outb.splitlines()[0]),
              "spark model budget: the percent, the GB it buys", outb)
         t.ok("GB for models" in outb, "spark model budget also prints the table", outb)
         rc, outb2, _ = spark("model", "budget", "5", extra=speed_env)
@@ -6281,12 +6281,12 @@ def main():
         with open(model_path, "wb") as f:
             f.write(content)
         rc, outv, _ = spark("model", "verify")
-        t.ok(rc == 0 and re.search(r"^ok\s+tiny-model\s+sha256 ok \(0\.0 GB\)", outv, re.M),
+        t.ok(rc == 0 and re.search(r"^ok\s+tiny-model\s+intact \(0\.0 GB\)", outv, re.M),
              "spark model verify: a matching file is ok", outv)
         with open(model_path, "wb") as f:
             f.write(b"X" * len(content))
         rc, outv2, _ = spark("model", "verify")
-        t.ok(rc == 1 and "bad" in outv2 and "sha256 mismatch" in outv2
+        t.ok(rc == 1 and "bad" in outv2 and "damaged" in outv2
              and "spark model rm tiny-model; spark model tiny-model" in outv2,
              "spark model verify: a corrupted file is bad, with the remedy, exit 1", outv2)
 
@@ -6687,7 +6687,7 @@ def main():
         # `quiet` are no verbs of spark's -- unknown words like any other
         off = {"SPARK_NO_APPLY": "1"}
         rc, out, _ = spark("shell", extra=off)
-        t.ok(rc == 2 and out.startswith("spark: no command named shell"),
+        t.ok(rc == 2 and out.startswith("spark -- no command named shell"),
              "spark shell: an unknown verb -- the no-command line, exit 2", out)
         rc, out, _ = spark("help", extra=off)
         gated = [l for l in out.splitlines() if l.startswith(" spark shell")]
@@ -6719,15 +6719,15 @@ def main():
         # one of them still answers as an alias
         _grp = re.search(r"(?m)^the model and the server\n(.*?)(?:\n\n|\Z)", out, re.S)
         t.ok(_grp is not None and _grp.group(1).splitlines() == [
-            " spark serve [on|off]         the engine and the page on the LAN, kept",
-            " spark serve boot [on|off]    up from boot, never asleep",
-            " spark serve share [on|off]   one engine for every OS user here (Linux)",
-            " spark serve --login          the page's URL; at a terminal a QR and the token",
-            " spark serve --audit [N]      every admin action, sealed",
-            " spark model [NAME|auto|none] the model: download, restart (-h: more)",
-            " spark model --chat NAME      the chat model, a second one (auto|none)",
-            " spark client [URL|off]       use another machine's server; none here",
-            " spark user [add NAME]        the named users; add shows a token once"],
+            " spark serve [on|off]         serve the AI and the page on your network",
+            " spark serve boot [on|off]    start at boot",
+            " spark serve share [on|off]   one AI for every user here (Linux)",
+            " spark serve --login          the page's address and the login",
+            " spark serve --audit [N]      what the admin did",
+            " spark model [NAME|auto|none] choose the model (-h)",
+            " spark model --chat NAME      choose a second model for chat",
+            " spark client [URL|off]       use another machine's AI",
+            " spark user [add NAME]        the users; add shows a token once"],
              "spark help: the group 'the model and the server', line for line", _grp.group(1) if _grp else out)
         t.ok(not re.search(r"\bspark (?:forge|ember|headless|share|brain)\b|\bbrain,", out),
              "spark help names no older spelling (forge, ember, headless, share, brain)", out)
@@ -6784,13 +6784,13 @@ def main():
         t.ok(rc == 2 and out.startswith("spark bar -- ") and "spark bar line" in out,
              "spark bar on: an unknown word -- the usage, exit 2", out)
         rc, out, _ = spark("bootconfig", extra=off)
-        t.ok(rc == 2 and out.startswith("spark: no command named bootconfig"),
+        t.ok(rc == 2 and out.startswith("spark -- no command named bootconfig"),
              "spark bootconfig is no command any more (v1.3's stub is gone): a slip, exit 2", out)
 
         # spark quiet left in v1.69, as theme and font left in v1.62
         for _verb in ("theme", "font", "quiet"):
             rc, out, _ = spark(_verb, extra=off)
-            t.ok(rc == 2 and out.startswith("spark: no command named %s" % _verb),
+            t.ok(rc == 2 and out.startswith("spark -- no command named %s" % _verb),
                  "spark %s: an unknown word (v1.62 and v1.69 took them out of core)" % _verb, out)
 
         # the client shape: spark client (state, URL, off); the check's client rows
@@ -6893,7 +6893,7 @@ def main():
         rc, out, _ = spark("user", "add", "ana", "--show-token", "--no-qr", extra=_xdg5)
         t.ok(rc == 0 and "ok     user         ana" in out, "spark user add ana in a fresh state dir", out)
         rc, out, _ = spark("user", "login", "bo", stdin="not-anas-token\n", extra=_xdg5)
-        t.ok(rc == 1 and "this machine's store is ana's" in out and "spark user remove ana frees it" in out,
+        t.ok(rc == 1 and "this machine is ana's" in out and "spark user remove ana frees it" in out,
              "user login with a foreign token names the remedy (spark user remove NAME)", out)
         rc, out, _ = spark("user", "remove", "ana", extra=_xdg5)
         t.ok(rc == 0 and "spark user: kept" in out and os.path.isdir(home + "/.local/state-users/spark/users/ana"),
@@ -7690,7 +7690,7 @@ site.cmd_headless([])
              "bench --line: the questions ride spark line to the model", repr(asked[-3:]))
         last = json.loads([ln for ln in open(home + "/.local/state/spark/bench.jsonl") if ln.strip()][-1])
         t.ok(last.get("size") == "line" and last.get("warm") == 3 and last.get("known") == 3 and last.get("read") == 40
-             and ("inside spark line the command was ready" in out) == ("cmd_ms" in last),
+             and ("the command was ready at" in out) == ("cmd_ms" in last),
              "bench --line: the medians saved as a line record; cmd_ms said only when the turns carry it", repr(last))
         rc, out, err = spark("bench", "--line", "2", "--porcelain")
         lines = out.splitlines()

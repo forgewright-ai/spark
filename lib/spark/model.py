@@ -13,7 +13,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
-from . import CONFIG_DIR, HOME, IS_MAC, MARK, REPO, config, confirm, glyph, mem_total_gb, paged, say
+from . import CONFIG_DIR, HOME, IS_MAC, MARK, REPO, config, confirm, mem_total_gb, paged, say
 from .site import apply, set_keys
 from .text import pulse as _pulse   # each file's hash in spark model verify
 
@@ -33,41 +33,26 @@ def _downloads_pending(cfg):
 def _announce_downloads(pend):
     """One row per pending download, before bootstrap runs: what, how big."""
     for r in pend:
-        say("ok     download     %s (%.1f GB)%s" % (
-            r[1], r[3] / 2**30,
-            " -- curl's progress bar follows" if sys.stdout.isatty() else ""))
+        say("ok     download     %s (%.1f GB)" % (r[0], r[3] / 2**30))
 
 
 # ------------------------------------------------------------------ model
 MODEL_USAGE = """%s model -- which model this machine serves
 
-  spark model                   the table: size, RAM, licence, the proof
-                                column (line, or the grounding audition's
-                                kept/run score), downloaded, serving,
-                                tok/s; the spark pick marked *, the chat
-                                model +, your own rows u
-  spark model list --porcelain  the same as data: one row per line, tab
-                                separated (name, source, GB, RAM, licence,
-                                line, grounded, state)
-  spark model NAME              choose it: site.env, download, engine restart
-                                (a row not under Apache-2.0 or MIT prints
-                                its licence and asks first)
-  spark model auto | none       auto: the first tested open-licence row,
-                                in the list's order, that fits (smallest
-                                beside a chat model); none: no model here
-  spark model budget [N]        percent of RAM+GPU auto may use (10-95)
-  spark model rm NAME           delete a downloaded file that is not in use
-  spark model add URL           add your own: --sha256 HEX (non-HF URLs need
-                                it), --license "NAME URL" (required); writes
-                                ~/.config/spark/models.env, downloads it
-  spark model verify            sha256 every downloaded file now; exit 1 on
-                                a mismatch (spark check's models row is the
-                                cached, daily version of this)
-  spark model --chat [NAME]     the chat model, a second one: NAME, auto,
-                                none, or list (-h: more)
+  spark model                   the list: * answers the prompt line, + the
+                                chat, u is yours
+  spark model list --porcelain  the same, tab separated, for a program
+  spark model NAME              download and serve it (asks first when its
+                                licence is not open)
+  spark model auto | none       the first tested model that fits, or none
+  spark model budget [N]        the share of memory models may use (10-95)
+  spark model rm NAME           delete a downloaded model not in use
+  spark model add URL           add your own: --license "NAME URL", and
+                                --sha256 HEX unless it is on Hugging Face
+  spark model verify            check every downloaded model is intact
+  spark model --chat [NAME]     a second model for chat (-h)
 
-  On a client (spark client URL) the table is the other machine's and every
-  choice is refused: choose there, or spark client off to serve here again.
+  On a client, the list is the other machine's: choose there.
 """ % MARK
 
 
@@ -75,7 +60,7 @@ def _client_no(cfg, what):
     """The one line a client answers to a model choice: nothing is served
     here, so a budget, a model or a chat model chosen here would silently
     make this machine a server (that is spark client off, by name)."""
-    say("%s %s -- a client of %s serves nothing; choose on the other machine, or spark client off to serve here again"
+    say("%s %s -- a client of %s serves nothing: choose there, or spark client off"
         % (MARK, what, cfg.peer_ai_url))
     return 2
 
@@ -101,15 +86,15 @@ def _restart_server(cfg):
         if IS_MAC and engine.service_domain(cfg) == "system":
             say(engine.daemon_note(cfg))
             return
-        say("ok     server       restarting -- the model loads again (about 30 s) ...")
+        say("ok     server       restarting")
         engine.service_stop(noreload=False)
         # a server spark started by hand beside the unit goes too: left on
         # the port, the restarted unit stood down (78) and the OLD model
         # answered the wait below with "ready"
         left = engine.clear_port(cfg, 30)
         if left:
-            say("todo   server       llama-server pid %s holds port %d and spark did not start it -- "
-                "spark serve off --force, then spark serve on" % (",".join(str(p) for p in left), cfg.port))
+            say("todo   server       another server holds port %d -- spark serve off --force, then spark serve on"
+                % cfg.port)
             return
         if not engine.kickstart(cfg):
             return
@@ -129,7 +114,7 @@ def _restart_server(cfg):
         if engine.wait_load(cfg, "", _up, 180, 2):
             say("ok     server       ready")
         else:
-            say("todo   server       not ready yet -- spark check --watch 5 follows it")
+            say("todo   server       not ready yet -- spark check --watch 5")
         from . import check
         check.refresh()
     elif engine.pidfile_pid():
@@ -137,7 +122,7 @@ def _restart_server(cfg):
         serve.cmd_stop([])
         serve.cmd_serve([], by_hand=True)
     else:
-        say("ok     server       not running -- the next spark serve on uses it")
+        say("ok     server       not running -- spark serve on starts it")
 
 
 SOURCE_MARKS = {"repo": " ", "user": "u"}
@@ -277,20 +262,19 @@ def print_model_table(cfg):
         # speeds); else the rows alone, no verdict
         peer = peer_models(cfg)
         if peer:
-            say("%s model -- a client of %s: the other machine's table: %.0f GB for models, budget %.0f GB (%d%%), %s" % (
+            say("%s model -- a client of %s: the other machine's table, %.0f GB for models, budget %.0f GB (%d%%), %s" % (
                 MARK, cfg.peer_ai_url, peer.get("total_gb", 0), peer.get("budget_gb", 0),
                 peer.get("budget_pct", 0), peer.get("backend", "?")))
             if peer.get("cap_note"):
                 say("  " + peer["cap_note"])
             rows = peer["models"]
         else:
-            say("%s model -- a client of %s: nothing is served here; what fits is the other machine's (spark model there)" % (
-                MARK, cfg.peer_ai_url))
+            say("%s model -- a client of %s: run spark model there to see what fits" % (MARK, cfg.peer_ai_url))
             rows = model_rows(cfg)
     else:
         budget = mem_total_gb() * cfg.ai_budget / 100.0
-        say("%s model -- SITE_AI_MODEL=%s SITE_EMBER_MODEL=%s%s%.0f GB for models (RAM + GPU), budget %.0f GB (%d%%), %s" % (
-            MARK, cfg.model_choice, cfg.ember_model, glyph("sep"), mem_total_gb(), budget, cfg.ai_budget, engine.backend(cfg)))
+        say("%s model -- %.0f GB for models, budget %.0f GB (%d%%), %s" % (
+            MARK, mem_total_gb(), budget, cfg.ai_budget, engine.backend(cfg)))
         note = engine.cap_note(cfg)
         if note:
             say("  " + note)
@@ -304,10 +288,10 @@ def print_model_table(cfg):
     known = {row[1] for row in config.model_tables()}
     others = [f for f in os.listdir(cfg.models_dir) if f.endswith(".gguf") and f not in known] if os.path.isdir(cfg.models_dir) else []
     for f in others:
-        say("    %-13s %5.1f GB file   (not in models.env; SPARK_MODEL=%s serves it)" % (
+        say("    %-13s %5.1f GB file   (%s, not in models.env)" % (
             "-", os.path.getsize(os.path.join(cfg.models_dir, f)) / 2**30, f))
-    say("  * = spark (the prompt line), + = the chat model (conversations), u = yours")
-    say("  auto: the first tested row that fits, in this order (%s)" % ", ".join(config.OPEN_LICENSES))
+    say("  * the prompt line, + the chat, u = yours")
+    say("  auto: the first tested row that fits, %s" % " or ".join(config.OPEN_LICENSES))
     return 0
 
 
@@ -326,7 +310,7 @@ def _license_ok(row, verb):
     if os.environ.get("SPARK_YES") == "1" or not sys.stdin.isatty():
         return True
     if not confirm("download it"):
-        say("spark %s: cancelled" % verb)
+        say("spark %s -- cancelled" % verb)
         return False
     return True
 
@@ -423,39 +407,36 @@ def _model_add(args):
         say(MODEL_USAGE.rstrip())
         return 2
     if not license_:
-        say('spark model add: --license "NAME URL" is required -- your own row states its licence too')
+        say('spark model add -- add --license "NAME URL"')
         return 2
     bad = re.search(r"[;`$()|&<>]", license_)
     if bad:
         # contract 3 refuses the whole file over one such character, and
         # then every verb dies with exit 2 -- refuse it before it lands
-        say("spark model add -- the licence cannot hold %s (contract 3); use -- or , instead" % bad.group(0))
+        say("spark model add -- a licence cannot hold %s; use - or , instead" % bad.group(0))
         return 2
     nbytes, sha256, err = _probe_model_url(url, sha)
     if err:
-        say("spark model add: %s" % err)
+        say("spark model add -- %s" % err)
         return 2
     fname = os.path.basename(urlsplit(url).path)
     if not fname:
-        say("spark model add: %s has no file name" % url)
+        say("spark model add -- %s has no file name" % url)
         return 2
     name = _model_name(fname)
     if not name:
-        say("spark model add: %s has no name once the quantisation is stripped" % fname)
+        say("spark model add -- %s gives no name" % fname)
         return 2
     existing = {r[0]: r[6] for r in config.model_tables()}
     if name in existing:
-        say("spark model add: %s is already in %s" % (name, _short(_source_file(existing[name]))))
+        say("spark model add -- %s is already in %s" % (name, _short(_source_file(existing[name]))))
         return 2
     ram_gb = math.ceil(nbytes / 2**30 * 1.1 + 1.5)
     stem = name.upper().replace("-", "_")
     set_keys(_file=USER_MODELS_FILE, _quiet=True, **{
         "MODEL_" + stem: '"%s %s %d %s %d"' % (fname, url, nbytes, sha256, ram_gb),
         "MODEL_" + stem + "_LICENSE": '"%s"' % license_})
-    # no --sha256 given: the pin came from the host's own metadata, so say so
-    pin = "" if sha else ", sha256 %s... from Hugging Face's metadata" % sha256[:12]
-    say("ok     model        added %s (%.1f GB, ram %d GB%s) -- %s" % (
-        name, nbytes / 2**30, ram_gb, pin, _short(USER_MODELS_FILE)))
+    say("ok     model        added %s (%.1f GB, needs %d GB)" % (name, nbytes / 2**30, ram_gb))
     return cmd_model([name])
 
 
@@ -474,16 +455,16 @@ def cmd_model(args):
         with _pulse():
             rows = verify.verify_all(cfg, force=True)
         if not rows:
-            say("spark model verify: no downloaded model")
+            say("spark model verify -- no model downloaded")
             return 0
         bad = False
         width = max(12, max(len(r["name"]) for r in rows))
         for r in rows:
             if r["status"] == "ok":
-                say("%-7s%-*s sha256 ok (%.1f GB)" % ("ok", width, r["name"], r["bytes"] / 2**30))
+                say("%-7s%-*s intact (%.1f GB)" % ("ok", width, r["name"], r["bytes"] / 2**30))
             else:
                 bad = True
-                say("%-7s%-*s sha256 mismatch -- spark model rm %s; spark model %s" % (
+                say("%-7s%-*s damaged -- spark model rm %s; spark model %s" % (
                     "bad", width, r["name"], r["name"], r["name"]))
         return 1 if bad else 0
     rows = config.model_tables()
@@ -498,10 +479,6 @@ def cmd_model(args):
         return paged(lambda: print_model_table(cfg))
     if args[0] == "budget":
         if len(args) == 1:
-            if cfg.client:
-                return print_model_table(cfg)
-            gb = mem_total_gb() * cfg.ai_budget / 100.0
-            say("%s model budget -- %d%% of %.0f GB = %.0f GB" % (MARK, cfg.ai_budget, mem_total_gb(), gb))
             return print_model_table(cfg)
         if len(args) != 2 or not args[1].isdigit() or not 10 <= int(args[1]) <= 95:
             say(MODEL_USAGE.rstrip())
@@ -518,8 +495,6 @@ def cmd_model(args):
             cfg = config.load()
             if engine.model_file(cfg):
                 _restart_server(cfg)
-            else:
-                say("ok     server       nothing to serve -- left as it is")
         return print_model_table(config.load())
     if args[0] == "rm":
         if len(args) != 2:
@@ -531,18 +506,18 @@ def cmd_model(args):
         fname = match[0][1] if match else args[1]
         path = os.path.join(cfg.models_dir, fname)
         if not os.path.isfile(path):
-            say("spark model: %s is not downloaded -- nothing to remove" % fname)
+            say("spark model -- %s is not downloaded" % args[1])
             return 2
         if fname == engine.chosen_model_name(cfg) or path == engine.model_file(cfg):
-            say("spark model: %s is in use -- choose another first" % fname)
+            say("spark model -- %s is in use: choose another first" % args[1])
             return 1
         os.remove(path)
-        say("ok     removed      %s" % path)
+        say("ok     removed      %s" % args[1])
         return 0
     name = args[0]
     match = [r for r in rows if r[0] == name]
     if name not in ("auto", "none") and not match:
-        say("spark model: no model named %s -- one of: auto none %s" % (name, " ".join(r[0] for r in rows)))
+        say("spark model -- no model named %s; one of: auto none %s" % (name, " ".join(r[0] for r in rows)))
         return 2
     if cfg.client:
         return _client_no(cfg, "model")
@@ -558,7 +533,6 @@ def cmd_model(args):
         return 0
     cfg = config.load()
     if name == "none" or not engine.model_file(cfg):
-        say("ok     server       nothing to serve -- left as it is")
         return 0
     _restart_server(cfg)
     return 0
@@ -567,13 +541,16 @@ def cmd_model(args):
 # ------------------------------------------------------------------ ember
 EMBER_USAGE = """%s model --chat -- the chat model
 
-  spark model --chat            the two roles: model, file, loaded or not
-  spark model --chat NAME       choose it: site.env, download, engine restart
-  spark model --chat auto       the first in the list that fits beside it
-  spark model --chat none       no second model -- spark answers everything
-  spark model --chat list       the model table, the spark pick marked *, the
-                                chat model + (the same table as spark model)
+  spark model --chat            the two models, and whether they are loaded
+  spark model --chat NAME       download and use NAME for chat
+  spark model --chat auto       the first model that fits beside the other
+  spark model --chat none       no chat model: one model answers everything
+  spark model --chat list       the list of models
 """ % MARK
+
+
+# the two roles as a person reads them: the prompt line's model, the chat's
+ROLE_WORDS = {"spark": "line", "ember": "chat"}
 
 
 def cmd_ember(args):
@@ -589,23 +566,24 @@ def cmd_ember(args):
         files = engine.roles(cfg)
         url = wire.serve_url()
         status = engine.models_status(cfg, url) if url and wire.health(url) == "ok" else {}
-        say("%s model --chat -- SITE_EMBER_MODEL=%s" % (MARK, cfg.ember_model))
+        say("%s model --chat -- the chat model: %s" % (MARK, cfg.ember_model))
         for role in engine.ROLES:
             f, r = files[role], pair.get(role)
+            label = ROLE_WORDS.get(role, role)
             if not f and not r:
-                say("  %-5s  none -- %s" % (role, "spark answers everything (spark model --chat NAME adds one)"
-                                            if role == "ember" else "no model (./bootstrap.sh downloads one)"))
+                say("  %-5s  none -- %s" % (label, "spark answers everything (spark model --chat NAME adds one)"
+                                             if role == "ember" else "spark model NAME picks one"))
             elif f:
-                say(("  %-5s  %-14s %5.1f GB  %s" % (role, engine.model_stem(f),
+                say(("  %-5s  %-14s %5.1f GB  %s" % (label, config.model_name(f),
                                                      os.path.getsize(f) / 2**30, status.get(role, ""))).rstrip())
             else:
-                say("  %-5s  %-14s not downloaded (./bootstrap.sh)" % (role, r[1].replace(".gguf", "")))
+                say("  %-5s  %-14s not downloaded -- spark update fetches it" % (label, r[0]))
         return 0
     name = args[0]
     rows = config.model_tables()
     match = [r for r in rows if r[0] == name]
     if name not in ("auto", "none") and not match:
-        say("spark model --chat: no model named %s -- one of: auto none %s   (spark model --chat list)" % (name, " ".join(r[0] for r in rows)))
+        say("spark model --chat -- no model named %s; spark model --chat list shows them" % name)
         return 2
     if cfg.client:
         return _client_no(cfg, "model --chat")
@@ -621,7 +599,6 @@ def cmd_ember(args):
         return 0
     cfg = config.load()
     if not engine.model_file(cfg):
-        say("ok     server       nothing to serve -- left as it is")
         return 0
     _restart_server(cfg)
     return 0

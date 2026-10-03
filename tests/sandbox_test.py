@@ -902,7 +902,7 @@ def test_mac_manifest():
     sandbox.SANDBOX_MAX_ENTRIES = 3
     try:
         refused("SANDBOX_MAX_ENTRIES: a larger project is refused before the copy",
-                lambda: sandbox.new_run(root, "t", platform="macos"), "at most 3 files")
+                lambda: sandbox.new_run(root, "t", platform="macos"), "more than 3 files")
     finally:
         sandbox.SANDBOX_MAX_ENTRIES = was
     check("SANDBOX_MAX_ENTRIES: a refused run leaves nothing", sandbox.runs() == [])

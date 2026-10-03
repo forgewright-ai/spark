@@ -5,21 +5,17 @@ import json
 import os
 import time
 
-from . import IS_MAC, MARK, TURNS_DIR, config, glyph, paged, say
+from . import MARK, TURNS_DIR, config, glyph, paged, say
 from . import bench, engine, wire
 
 WINDOWS = {"--today": 1, "--week": 7, "--all": 3650}
 
-USAGE = """%s stats -- throughput from the turns on disk
+USAGE = """%s stats -- how fast spark answers
 
-  spark stats                  today: tok/s, latency, cache hits by mode,
-                               the baseline and the line pace (spark
-                               bench --line measures it)
+  spark stats                  today: speed, waits and cache hits
   spark stats --week | --all   a wider window
-  spark stats --sends          what left, in bytes: by destination and day,
-                               the last 7 days (local = this machine)
-  spark stats --porcelain      key<TAB>value lines; with --sends,
-                               day<TAB>destination<TAB>bytes<TAB>turns
+  spark stats --sends          what left this machine, by day (7 days)
+  spark stats --porcelain      the same, tab separated, for a program
 """ % MARK
 
 SENDS_DAYS = 7
@@ -146,7 +142,7 @@ def _sends(argv):
         return 0
     say("%s stats%ssends, last %d days" % (MARK, glyph("sep"), SENDS_DAYS))
     if not rows:
-        say("  nothing sent in the last %d days -- ask something at the prompt" % SENDS_DAYS)
+        say("  nothing sent in the last %d days" % SENDS_DAYS)
         return 0
     say("  %-12s %-28s %10s %6s" % ("day", "destination", "kB", "turns"))
     for day, dest, b, c in rows:
@@ -193,7 +189,7 @@ def _report(argv):
     else:
         say("  turns       %d" % s["turns"])
         say("  generate    %.1f tok/s mean, %.1f p50, %.1f p05" % (s["tg_mean"], s["tg_p50"], s["tg_p05"]))
-        say("  prompt      %.0f tok/s mean, %.0f%% of prompt tokens from the cache" % (s["pp_mean"], s["cache"]))
+        say("  prompt      %.0f tok/s mean, %.0f%% from the cache" % (s["pp_mean"], s["cache"]))
         say("  latency     %.1f s p50, %.1f s p95" % (s["ms_p50"] / 1000.0, s["ms_p95"] / 1000.0))
         # per mode: the cache hit rate is where a slow rerun shows -- a read
         # that carries its source again and hits 0 % is paying the prefill
@@ -205,7 +201,7 @@ def _report(argv):
                 "%8.1f s" % (m["first_p50"] / 1000.0) if m["first_p50"] else "%10s" % "-"))
         by = {}
         for t in rows:
-            k = "%s (%s)" % (t.get("backend", "?").split("//")[-1], t.get("model", "?"))
+            k = "%s (%s)" % (t.get("backend", "?").split("//")[-1], config.model_name(t.get("model", "?")))
             by.setdefault(k, []).append(t)
         if len(by) > 1:
             for k, v in by.items():
@@ -236,7 +232,8 @@ def _report(argv):
     try:
         url, model, _forge = wire.resolve_brain(cfg)
         rs = running_settings(cfg)
-        say("  server      %s  %s%s" % (url.split("//")[-1], model, ("  " + bench.key_of(rs)) if rs else ""))
+        say("  server      %s  %s%s" % (url.split("//")[-1], config.model_name(model),
+                                         ("  " + bench.key_of(rs)) if rs else ""))
     except wire.BrainError as e:
         say("  server      " + e.hint)
     g = engine.gpu_info()
@@ -244,6 +241,4 @@ def _report(argv):
         say("  gpu         %s%% busy, vram %.1f/%.1f GB, gtt %.1f/%.1f GB" % (
             g.get("busy", 0), g.get("vram_used", 0) / 2**30, g.get("vram_total", 0) / 2**30,
             g.get("gtt_used", 0) / 2**30, g.get("gtt_total", 0) / 2**30))
-    elif IS_MAC:
-        say("  gpu         not readable without root on macOS")
     return 0

@@ -25,22 +25,21 @@ from . import (ACCOUNT_FILE, ACCOUNT_KEY_FILE, MARK, THREADS_DIR, USERS_DIR,
 
 NAME_RE = re.compile(r"^[a-z][a-z0-9-]{0,31}$")
 
-USAGE = """%s user -- the named users of the page
+USAGE = """%s user -- the users of this machine
 
-  spark user                  who this machine is; the users here
-  spark user list             the table: name, threads, last activity
-  spark user add NAME         mint an account; the token and a QR of its
-                              login link are shown once (--no-qr)
-  spark user remove NAME      delete the account and its sealed data (asks;
-                              SPARK_YES=1 answers yes, a script's form)
-  spark user login [NAME]     paste a token: this machine acts as NAME
-  spark user logout           forget the login (the sealed data stays)
-  spark user token --new      rotate your token; other logins die
-  spark user claim            seal the pre-v1.4 plaintext history into
-                              your store (re-runnable, verifies first)
+  spark user                  who you are, and the users here
+  spark user list             the users: threads, last seen
+  spark user add NAME         add a user; shows the token and a QR once
+                              (--no-qr)
+  spark user remove NAME      delete a user and all they kept (asks;
+                              SPARK_YES=1 for a script)
+  spark user login [NAME]     log in with a token
+  spark user logout           log out (your data stays)
+  spark user token --new      a new token; other logins end
+  spark user claim            seal old plaintext history into your store
 
   A name is a-z, 0-9 and -, starting with a letter, at most 32 characters.
-  The token is the only key to the data: keep it, there is no reset.
+  The token is the only key to your data: keep it, there is no reset.
 """ % MARK
 
 
@@ -309,7 +308,7 @@ def cmd_add(args):
         if os.isatty(1) and "--no-qr" not in args:
             from . import forgeserve   # local: forgeserve imports users
             if forgeserve.print_qr(forgeserve.page_url() + "#t=" + token):
-                say("scan on %s's phone: the page signs them in" % name)
+                say("scan on %s's phone to sign in" % name)
                 say("")
     else:
         say("spark user: the token is shown only at a terminal (--show-token to print it here)")
@@ -473,7 +472,7 @@ def cmd_login(args):
             say("spark user: on this machine say who you are -- spark user login NAME")
             return 2
         write_login(name, token)
-        say("ok     account      this machine is %s (verified by the page's server on first use)" % name)
+        say("ok     account      this machine is %s" % name)
         return 0
     found = find_by_token(token)
     if name and found and name != found:
@@ -483,8 +482,8 @@ def cmd_login(args):
         found = name
     name = name or found
     if not name or not exists(name):
-        say("spark user: no user here matches that token -- this machine's store is %s's; "
-            "spark user remove %s frees it (its sealed threads go)" % (", ".join(local), local[0]))
+        say("spark user: no user here has that token -- this machine is %s's (spark user remove %s frees it)"
+            % (", ".join(local), local[0]))
         return 1
     try:
         dk = unlock(name, token)
@@ -514,7 +513,7 @@ def cmd_token(args):
         say("spark user: no login here -- spark user login NAME first")
         return 2
     if not exists(name):
-        say("spark user: %s's sealed store is not on this machine -- rotate on the machine that holds it" % name)
+        say("spark user: %s's store is not on this machine -- rotate the token there" % name)
         return 2
     try:
         new = rotate(name, token)

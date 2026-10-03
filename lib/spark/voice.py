@@ -107,27 +107,19 @@ import wave
 
 from . import CONFIG_DIR, DATA_DIR, IS_MAC, MARK, REPO, SPARK_ENV, STATE_DIR, config, is_musl, say
 
-VOICE_USAGE = """%s voice -- spark reads aloud, and hears a question
+VOICE_USAGE = """%s voice -- read aloud and listen
 
-  spark voice                   the state: the mode, the engine, the voice,
-                                the player, the mic, a screen reader
-  spark voice clear [--anyway]  read aloud in a plain clear voice, for low
-                                vision; it needs no awaken. A screen reader
-                                running wins, unless --anyway
-  spark voice on                speak in this machine's own voice, the one
-                                spark awaken chose for it
-  spark voice off [--remove]    silent; --remove deletes the engine too
-  spark voice rate [N]          the clear voice's speed, 50 to 300 (100 is
-                                as made)
-  spark voice test              one line aloud, in the current mode
-  spark voice listen            one spoken question, written out: a pause
-                                ends it (Esc v at the prompt and in chat)
-  spark voice stop              stop speaking now (Esc x)
+  spark voice                   show the voice settings
+  spark voice clear [--anyway]  read aloud in a clear voice
+  spark voice on                use this machine's own voice
+  spark voice off [--remove]    turn the voice off (--remove frees 600 MB)
+  spark voice rate N            set the speed (50 to 300, default 100)
+  spark voice test              say one line
+  spark voice listen            ask a question by voice (Esc v)
+  spark voice stop              stop speaking (Esc x)
 
-  The first on or clear downloads the engine, about 600 MB, into
-  ~/.local/share/spark/voice: sherpa-onnx, the Kokoro voice, Whisper and a
-  voice activity detector, each pinned by sha256 in voice.env. On macOS
-  the terminal asks once for the microphone.
+  The first time, spark downloads about 600 MB.
+  A screen reader that is running reads instead, unless --anyway.
 """ % MARK
 
 MODES = ("off", "on", "clear")
@@ -373,11 +365,11 @@ def verify(path, size, sha):
     try:
         got = os.path.getsize(path)
     except OSError:
-        return "missing"
+        return "is missing"
     if got != size:
-        return "%d bytes, the pin says %d" % (got, size)
+        return "is the wrong size (%d bytes, not %d)" % (got, size)
     if _sha256(path) != sha:
-        return "sha256 mismatch"
+        return "is damaged"
     return ""
 
 
@@ -516,25 +508,25 @@ def fetch(cfg=None, p=None, out=say):
     before it is unpacked, and installed atomically. The names fetched;
     VoiceError on the first that fails, its partial file removed."""
     if not IS_MAC and is_musl():
-        raise VoiceError("musl libc: the pinned voice runtime is a glibc build")
+        raise VoiceError("the voice needs glibc, and this machine runs musl")
     todo = missing(p)
     if not todo:
         return []
     for part in todo:
         if not part["url"]:
-            raise VoiceError("no pinned voice runtime for %s %s" % (platform.system(), platform.machine()))
+            raise VoiceError("the voice is not available for %s %s" % (platform.system(), platform.machine()))
     d = voice_dir()
     os.makedirs(d, mode=0o755, exist_ok=True)
     done = []
-    for part in todo:
+    for k, part in enumerate(todo, 1):
         partial = os.path.join(d, "." + part["name"] + ".part")
-        out("       downloading %s (%d MB)" % (os.path.basename(part["url"]), _mb(part["size"])))
+        out("downloading the voice (%d of %d, %d MB)" % (k, len(todo), _mb(part["size"])))
         try:
             if not _download(part["url"], partial):
-                raise VoiceError("could not download %s (nothing left behind)" % os.path.basename(part["url"]))
+                raise VoiceError("the download failed -- try again")
             why = verify(partial, part["size"], part["sha"])
             if why:
-                raise VoiceError("%s: %s -- refused, nothing kept" % (os.path.basename(part["url"]), why))
+                raise VoiceError("the download %s -- nothing kept, try again" % why)
             _install(part, partial)
         finally:
             if os.path.exists(partial):
@@ -543,10 +535,8 @@ def fetch(cfg=None, p=None, out=say):
     return done
 
 
-def remove():
-    """Delete the voice directory whole; the bytes it held."""
-    stop()
-    d = voice_dir()
+def _size(d):
+    """The bytes the files under d hold."""
     total = 0
     for root, _dirs, files in os.walk(d):
         for f in files:
@@ -554,6 +544,14 @@ def remove():
                 total += os.lstat(os.path.join(root, f)).st_size
             except OSError:
                 pass
+    return total
+
+
+def remove():
+    """Delete the voice directory whole; the bytes it held."""
+    stop()
+    d = voice_dir()
+    total = _size(d)
     shutil.rmtree(d, ignore_errors=True)
     return total
 
@@ -644,9 +642,9 @@ def write_recipe(recipe, path=None):
 
 
 def describe(recipe):
-    """`radio, Kokoro af_heart` for a recipe."""
+    """`radio, heart` for a recipe: the family and the speaker's name."""
     sid = int(recipe["SID"])
-    return "%s, Kokoro %s" % (recipe["FAMILY"], SPEAKERS.get(sid, "speaker %d" % sid))
+    return "%s, %s" % (recipe["FAMILY"], SPEAKERS.get(sid, "x_speaker %d" % sid).split("_", 1)[1])
 
 
 # -------------------------------------------------------------- the chains
@@ -917,7 +915,7 @@ def speak(cfg, text, mode_="clear", lang=None, recipe=None, d=None, lead=None):
     tts = _bin("sherpa-onnx-offline-tts")
     mouth = os.path.join(voice_dir(), "mouth")
     if not (os.access(tts, os.X_OK) and os.path.isdir(mouth)):
-        raise VoiceError("the voice engine is not here -- spark voice %s fetches it" % ("on" if mode_ == "on" else "clear"))
+        raise VoiceError("the voice is not downloaded -- spark voice %s" % ("on" if mode_ == "on" else "clear"))
     d = d if d and _ours(d) and os.path.isdir(d) else _private_dir()
     raw = os.path.join(d, "voice.wav")
     cmd = [tts, "--kokoro-model=" + _mouth_model(mouth), "--kokoro-voices=voices.bin", "--kokoro-tokens=tokens.txt",
@@ -930,10 +928,10 @@ def speak(cfg, text, mode_="clear", lang=None, recipe=None, d=None, lead=None):
                            stderr=subprocess.PIPE, timeout=SPEAK_TIMEOUT, preexec_fn=_umask)
     except (OSError, subprocess.TimeoutExpired) as e:
         cleanup(d)
-        raise VoiceError("the voice engine did not answer (%s)" % e.__class__.__name__)
+        raise VoiceError("the voice did not answer (%s)" % e.__class__.__name__)
     if p.returncode != 0 or not os.path.isfile(raw):
         cleanup(d)
-        raise VoiceError("the voice engine did not speak (exit %d)" % p.returncode)
+        raise VoiceError("the voice did not speak (exit %d)" % p.returncode)
     os.chmod(raw, 0o600)
     if mode_ != "on":
         return lead_in(raw, lead)
@@ -941,7 +939,7 @@ def speak(cfg, text, mode_="clear", lang=None, recipe=None, d=None, lead=None):
         out = character(raw, recipe, os.path.join(d, "character.wav"))
     except (VoiceError, OSError, EOFError, wave.Error) as e:
         cleanup(d)
-        raise VoiceError("the character did not run (%s)" % e)
+        raise VoiceError("the voice did not play (%s)" % e)
     os.remove(raw)
     return lead_in(out, lead)
 
@@ -1090,7 +1088,7 @@ class Engine:
         h = self.lib.SherpaOnnxCreateOfflineTts(self.ct.byref(cfg))
         self.load_s += time.monotonic() - t0
         if not h:
-            raise VoiceError("the voice engine did not load %s" % self.model)
+            raise VoiceError("the voice did not load")
         self.loads += 1
         self.handles[key] = h
         return h
@@ -1111,7 +1109,7 @@ class Engine:
         else:
             a = self.generate(h, t, sid, speed)
         if not a:
-            raise VoiceError("the voice engine did not speak")
+            raise VoiceError("the voice did not speak")
         try:
             n, fs = a.contents.n, a.contents.sample_rate
             x = array.array("f")
@@ -1276,7 +1274,7 @@ def play(cfg, wav, wait=True):
     play. A wav in speak()'s private directory goes with the playing."""
     argv = player(cfg)
     if not argv:
-        raise VoiceError("no player on PATH (afplay on macOS, aplay or paplay on Linux)")
+        raise VoiceError("nothing here can play sound -- install aplay or paplay")
     tmp = os.path.dirname(os.path.abspath(wav))
     tmp = tmp if _ours(tmp) else ""
     env = dict(os.environ, SPARK_VOICE_TMP=tmp)
@@ -1466,7 +1464,7 @@ def listen(cfg=None, max_seconds=15):
     ears = os.path.join(voice_dir(), "ears")
     asr = _bin("sherpa-onnx-offline")
     if not tool or not os.path.isfile(vad) or not os.path.isdir(ears) or not os.access(asr, os.X_OK):
-        raise VoiceError("the voice engine is not here -- spark voice on or clear fetches it")
+        raise VoiceError("the voice is not downloaded -- spark voice on or clear")
     d = _private_dir()
     held = _hold_signals()
     try:
@@ -1486,7 +1484,7 @@ def listen(cfg=None, max_seconds=15):
                                cwd=d, env=_lib_env(), stdin=subprocess.DEVNULL, capture_output=True, text=True,
                                errors="replace", timeout=LISTEN_TIMEOUT, preexec_fn=_umask)
         except (OSError, subprocess.TimeoutExpired) as e:
-            raise VoiceError("the ears did not answer (%s)" % e.__class__.__name__)
+            raise VoiceError("listening did not work (%s)" % e.__class__.__name__)
         for line in p.stdout.splitlines():
             line = line.strip()
             if line.startswith("{"):
@@ -1627,7 +1625,7 @@ def _record(argv, d, max_seconds):
                                 + list(argv), cwd=d, stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
                                 stderr=subprocess.PIPE, preexec_fn=_leash_child(_prctl()))
     except OSError as e:
-        raise VoiceError("the listener did not start (%s)" % e)
+        raise VoiceError("listening did not start (%s)" % e)
     buf, seg = b"", ""
     try:
         while not seg and time.time() < end:
@@ -2455,11 +2453,6 @@ def status(cfg=None, repo=None):
 
 
 # ------------------------------------------------------------------- verb
-def _tilde(path):
-    home = os.path.expanduser("~")
-    return "~" + path[len(home):] if path.startswith(home + os.sep) else path
-
-
 def _set(**kv):
     from . import site
     site.set_keys(_file=SPARK_ENV, _quiet=True, **kv)
@@ -2474,7 +2467,6 @@ def _fetch_said(cfg):
     gone = missing()
     if not gone:
         return True
-    say("the voice engine: %d MB to download into %s" % (_mb(sum(x["size"] for x in gone)), _tilde(voice_dir())))
     try:
         fetch(cfg)
     except VoiceError as e:
@@ -2486,28 +2478,28 @@ def _fetch_said(cfg):
 def show(cfg=None):
     cfg = cfg or config.load()
     s = status(cfg)
-    hint = {"off": "spark voice clear reads aloud; spark voice on, in its own voice",
-            "clear": "the plain clear voice", "on": "this machine's own voice"}[s["mode"]]
-    say("%-7s %-6s %s" % ("voice", s["mode"], hint))
+    say("%-7s %s" % ("voice", {"off": "off -- spark voice clear or spark voice on",
+                               "clear": "clear", "on": "on, its own voice"}[s["mode"]]))
     if not s["pinned"]:
-        say("%-7s %s" % ("engine", "no pinned runtime for %s %s" % (platform.system(), platform.machine())))
+        say("%-7s %s" % ("engine", "not available for %s %s" % (platform.system(), platform.machine())))
     elif s["missing"]:
-        say("%-7s %s" % ("engine", "not here -- %d MB, fetched by spark voice on or clear" % s["missing_mb"]))
+        say("%-7s %s" % ("engine", "not downloaded yet (%d MB)" % s["missing_mb"]))
     else:
-        say("%-7s %s" % ("engine", "here, %s" % _tilde(voice_dir())))
+        say("%-7s %s" % ("engine", "downloaded"))
     r = s["recipe"]
-    say("%-7s %s" % ("own", describe(r) + " -- spark awaken chose it" if r else "none -- spark awaken chooses one"))
-    say("%-7s %s" % ("player", s["player"] or "none on PATH -- nothing can be heard"))
-    mic = "the engine's listener" if s["mic"] else "with the engine"
-    if IS_MAC:
-        mic += " -- the terminal asks once for the microphone"
-    elif not s["capture"]:
-        mic += " -- no capture device found"
+    say("%-7s %s" % ("own", describe(r) if r else "none yet -- spark awaken gives one"))
+    say("%-7s %s" % ("player", s["player"] or "none -- nothing can be heard"))
+    if not s["mic"]:
+        mic = "comes with the download"
+    elif IS_MAC:
+        mic = "ready -- the terminal asks once"
+    else:
+        mic = "ready" if s["capture"] else "no microphone found"
     say("%-7s %s" % ("mic", mic))
     if s["reader"]:
-        say("%-7s %s" % ("reader", "%s is running: clear stays silent%s" % (
-            s["reader"], " -- unless --anyway, which you chose" if s["anyway"] else "")))
-    say("%-7s %-6d %s" % ("rate", s["rate"], "the clear voice's speed (spark voice rate N)"))
+        say("%-7s %s" % ("reader", "%s is on; you chose --anyway, so spark reads too" % s["reader"]
+                         if s["anyway"] else "%s is on, so spark stays silent (unless --anyway)" % s["reader"]))
+    say("%-7s %d" % ("rate", s["rate"]))
     return 0
 
 
@@ -2530,60 +2522,64 @@ def cmd_voice(args):
     if word == "on" and not rest:
         from . import look
         if not look.awake():
-            say("%s voice -- on speaks in this machine's own voice, and it has none before spark awaken -- "
-                "spark awaken, or spark voice clear" % MARK)
+            say("%s voice -- no voice of its own yet -- spark awaken, or spark voice clear" % MARK)
             return 1
         r = read_recipe()
         if r is None:
             from . import awaken, words
             r = write_recipe(mint(words.temper(), awaken._seed(cfg)))
-            say("its own voice: %s, from its temperament" % describe(r))
+            say("its voice: %s" % describe(r))
         if not _no_apply() and not _fetch_said(cfg):
             return 1
+        was = mode(cfg) == "on"
         _set(SPARK_VOICE="on")
-        say("the voice is on -- spark voice test plays it")
+        if not was:
+            say("the voice is on -- spark voice test says a line")
         return 0
     if word == "clear" and rest in ([], ["--anyway"]):
         forced = rest == ["--anyway"]
         reader = screen_reader()
         if reader and not forced:
-            say("%s voice -- %s is running and reads for you, so spark stays silent -- "
-                "spark voice clear --anyway speaks too" % (MARK, reader))
+            say("%s voice -- %s is reading -- spark voice clear --anyway reads too" % (MARK, reader))
             return 1
         if not _no_apply() and not _fetch_said(cfg):
             return 1
+        was = mode(cfg) == "clear" and anyway() == forced
         _set(SPARK_VOICE="clear")
         _flag(forced)
-        say("the voice is clear -- spark voice test plays it")
+        if not was:
+            say("the voice is clear -- spark voice test says a line")
         return 0
     if word == "off" and rest in ([], ["--remove"]):
+        was = mode(cfg) == "off"
         _set(SPARK_VOICE="off")
         _flag(False)
         stop()
         if rest:
-            if _no_apply():
-                say("the voice is off -- %s would go" % _tilde(voice_dir()))
-                return 0
-            freed = remove()
-            say("the voice is off -- %s removed, %d MB" % (_tilde(voice_dir()), _mb(freed)))
+            n = _size(voice_dir()) if _no_apply() else remove()
+            said = " would be freed" if _no_apply() else " freed"
+            say("the voice is off -- %d MB%s" % (max(1, _mb(n)), said) if n else "the voice is off")
             return 0
-        say("the voice is off -- spark voice off --remove deletes the engine too")
+        if not was:
+            say("the voice is off")
         return 0
     if word == "rate" and len(rest) <= 1:
         if not rest:
-            say("rate %d -- the clear voice's speed, %d to %d" % (rate(cfg), RATE_MIN, RATE_MAX))
+            say("rate %d (%d to %d, default %d)" % (rate(cfg), RATE_MIN, RATE_MAX, RATE_DEFAULT))
             return 0
         n = int(rest[0]) if rest[0].isdigit() else 0
         if not RATE_MIN <= n <= RATE_MAX:
-            say("%s voice -- the rate is a number, %d to %d" % (MARK, RATE_MIN, RATE_MAX))
+            say("%s voice -- the rate is a number from %d to %d" % (MARK, RATE_MIN, RATE_MAX))
             return 2
+        was = n == rate(cfg)
         _set(SPARK_VOICE_RATE=str(n))
-        say("rate %d now -- the clear voice's speed" % n)
+        if not was:
+            say("rate %d" % n)
         return 0
     if word == "test" and not rest:
         m = mode(cfg)
         if m == "off":
-            say("%s voice -- the voice is off -- spark voice clear, or spark voice on" % MARK)
+            say("%s voice -- the voice is off -- spark voice clear or spark voice on" % MARK)
             return 1
         line = _test_line(cfg, m)
         say("* " + line)
@@ -2600,7 +2596,8 @@ def cmd_voice(args):
             return 1
         return 0
     if word == "stop" and not rest:
-        say("stopped" if stop() else "nothing was playing")
+        if stop():
+            say("stopped")
         return 0
     if word == "listen" and rest in ([], ["--buffer"]):
         return _listen_verb(cfg, buffer=bool(rest))
@@ -2614,7 +2611,7 @@ def cmd_voice(args):
         # `spark voice of reason?` is a question
         from . import cli
         return cli.main(["voice"] + list(args))
-    say("%s voice -- no word %s: spark voice on, clear, off, rate N, test, listen or stop" % (MARK, args[0]))
+    say("%s voice -- no word %s -- spark voice -h lists them" % (MARK, args[0]))
     return 2
 
 
@@ -2637,7 +2634,7 @@ def _listen_verb(cfg, buffer=False):
             say("%s voice -- %s" % (MARK, why))
         return 2
     if mode(cfg) == "off":
-        return no("the voice is off -- spark voice on or clear, then Esc v listens")
+        return no("the voice is off -- spark voice clear or spark voice on")
     if not buffer:
         say("listening -- speak, a pause ends it")
     try:
@@ -2677,7 +2674,7 @@ def audition(cfg, temper, seed, line, ask, out=say):
     said and asked. The recipe kept, or None; nothing is written here."""
     gone = missing()
     if gone:
-        a = ask("a voice of its own too? %d MB to download first? yes/NO: " % _mb(sum(x["size"] for x in gone)))
+        a = ask("a voice of its own too, %d MB to download? yes/NO: " % _mb(sum(x["size"] for x in gone)))
         if a not in ("y", "yes"):
             return None
         try:

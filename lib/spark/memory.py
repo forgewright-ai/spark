@@ -18,18 +18,16 @@ TOTAL_MAX = 2000      # characters sent, all facts together
 # what a writer says of a file it cannot read: never written over
 NO_OPEN = "the memory does not open -- spark user login again"
 
-MEMORY_USAGE = """%s memory -- what it keeps
+MEMORY_USAGE = """%s memory -- what spark remembers
 
   spark memory                  the facts, numbered
-  spark memory on | off         recall them on every answer, or not
+  spark memory on | off         use them in every answer, or not
   spark memory clear            forget them all
-  spark memory add <words>      keep a fact (at most %d characters, %d facts)
-  spark memory forget N         drop fact N as listed above
-  spark memory forget <words>   drop the one fact containing the words
+  spark memory add <words>      keep a fact (%d characters, %d facts at most)
+  spark memory forget N         forget fact N
+  spark memory forget <words>   forget the fact with these words
 
-  The facts live sealed in your store. The pre-v1.4 file
-  ~/.config/spark/memory is read until the first write.
-  Quote a fact that carries ( ) * ? or | -- the shell eats them first.
+  Quote a fact with ( ) * ? or | in it: the shell reads them first.
 """ % (MARK, FACT_MAX, FACTS_MAX)
 
 
@@ -212,7 +210,7 @@ def cmd_remember(words):
     try:
         fact = remember(" ".join(words or []))
     except Refused as e:
-        say("spark remember: " + e.hint)
+        say("spark memory: " + e.hint)
         return 1
     say("ok     remembered   %s" % fact)
     return 0
@@ -228,26 +226,26 @@ def cmd_forget(args):
     try:
         lines = _lines(strict=True)
     except Refused as e:
-        say("spark forget: " + e.hint)
+        say("spark memory: " + e.hint)
         return 1
     idx = [i for i, ln in enumerate(lines) if ln.strip() and not ln.lstrip().startswith("#")]
     if not idx:
-        say("spark forget: nothing is remembered")
+        say("spark memory: nothing is remembered")
         return 1
     if len(args) == 1 and args[0].isdigit():
         fact = forget_n(int(args[0]))
         if fact is None:
-            say("spark forget: no fact %s -- spark memory lists 1..%d" % (args[0], len(idx)))
+            say("spark memory: no fact %s -- spark memory lists 1..%d" % (args[0], len(idx)))
             return 1
         say("ok     forgot       %s" % fact)
         return 0
     needle = " ".join(args).lower()
     hits = [i for i in idx if needle in lines[i].lower()]
     if not hits:
-        say("spark forget: no fact contains: %s" % " ".join(args))
+        say("spark memory: no fact contains: %s" % " ".join(args))
         return 1
     if len(hits) > 1:
-        say("spark forget: %d facts match -- say which by number:" % len(hits))
+        say("spark memory: %d facts match -- say which by number:" % len(hits))
         for i in hits:
             say("  %-3d %s" % (idx.index(i) + 1, lines[i].strip()))
         return 1
@@ -260,9 +258,7 @@ def cmd_memory(args):
     cfg = config.load()
     if not args:
         fs = _all_facts()
-        st = _store()
-        where = (st[0] + " (sealed)") if st and os.path.isfile(st[0]) else MEMORY_FILE
-        say("%s  %s  %d fact%s  %s" % ("memory", "on" if cfg.memory else "off", len(fs), "" if len(fs) == 1 else "s", where))
+        say("%s  %s  %d fact%s" % ("memory", "on" if cfg.memory else "off", len(fs), "" if len(fs) == 1 else "s"))
         for n, f in enumerate(fs, 1):
             say("  %-3d %s" % (n, f))
         return 0
@@ -291,7 +287,7 @@ def cmd_memory(args):
         except OSError as e:
             say("spark memory: cannot clear: %s" % e)
             return 1
-        say("ok     memory       cleared" if removed else "ok     memory       nothing was kept")
+        say("ok     memory       cleared" if removed else "ok     memory       empty already")
         _refresh()
         return 0
     say(MEMORY_USAGE.rstrip())

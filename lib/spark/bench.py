@@ -153,21 +153,16 @@ def pause_server(cfg):
 
 
 # ------------------------------------------------------------------- bench
-USAGE = """%s bench -- how fast is this machine, with llama-bench
+USAGE = """%s bench -- how fast this machine runs a model
 
-  spark bench              prompt 512 / generate 128, current settings; saved
-                           as the baseline of the measured file (the chat
-                           model when one is served, else the spark model)
-  spark bench --spark      measure the spark role (the prompt line's model)
-  spark bench --ember      measure the chat model; an error when none is served
-  spark bench --quick      smaller sizes, fewer repetitions
-  spark bench --line [N]   N prompt-line questions (5 by default) through
-                           spark line, against the served model: command
-                           ready, whole answer, warm slots; saved as the
-                           line pace that spark stats shows
-  spark bench tune         try GPU/CPU, flash attention, KV types, thread counts
-  spark bench tune show    the last tune's result against what runs now
-  spark bench tune apply   write the winner to spark.env and restart the engine
+  spark bench              measure the model in use, saved as the baseline
+  spark bench --spark      measure the prompt line's model
+  spark bench --ember      measure the chat model
+  spark bench --quick      a shorter run
+  spark bench --line [N]   time N prompt-line questions (5 by default)
+  spark bench tune         try settings to find the fastest
+  spark bench tune show    the last tune against what runs now
+  spark bench tune apply   use the fastest and restart the engine
 """ % MARK
 
 
@@ -198,27 +193,27 @@ def cmd_bench(args):
     tune, porcelain = "--tune" in args, "--porcelain" in args
     size = "quick" if ("--quick" in args or tune) else "full"
     if not engine.bench_bin(cfg):
-        say("spark bench: no llama-bench in %s -- ./bootstrap.sh installs the engine" % engine.engine_dir(cfg))
+        say("spark bench: no engine here -- ./bootstrap.sh installs it")
         return engine.EX_CONFIG
     files = engine.roles(cfg)
     want = "ember" if "--ember" in args else ("spark" if "--spark" in args else "")
     if want == "ember" and not files["ember"]:
-        say("spark bench: no chat model to measure -- spark model --chat NAME chooses one, ./bootstrap.sh downloads it")
+        say("spark bench: no chat model to measure -- spark model --chat NAME")
         return engine.EX_CONFIG
     role = want or ("ember" if files["ember"] else "spark")
     model = files[role]
     if not model:
-        say("spark bench: no model in %s -- ./bootstrap.sh downloads one" % cfg.models_dir)
+        say("spark bench: no model downloaded -- spark model NAME")
         return engine.EX_CONFIG
     resume = pause_server(cfg)
     if resume and not porcelain:
-        say("the server is paused while llama-bench runs")
+        say("the server pauses while this runs")
     try:
         if not tune:
             s = settings_of(cfg)
             if not porcelain:
-                say("%s bench%s%s (the %s role)%s%s" % (MARK, glyph("sep"), os.path.basename(model), role, glyph("sep"), key_of(s)))
-                say("  llama-bench is running -- a few minutes; the numbers print when done ...")
+                say("%s bench%s%s (the %s role)%s%s" % (MARK, glyph("sep"), config.model_name(model), role, glyph("sep"), key_of(s)))
+                say("  this takes a few minutes")
             pp, tg = run_one(cfg, model, s, size)
             record(cfg, model, s, size, pp, tg)
             if porcelain:
@@ -227,12 +222,12 @@ def cmd_bench(args):
                 p, n, _ = SIZES[size]
                 say("  prompt   pp%-4d %7.1f tok/s" % (p, pp))
                 say("  generate tg%-4d %7.1f tok/s" % (n, tg))
-                say("  saved as the baseline in %s" % BENCH_LOG)
+                say("  saved as the baseline")
             return 0
         rows, cur = _matrix(cfg)
         if not porcelain:
-            say("%s bench --tune%s%s (the %s role)%s%d settings, quick sizes" % (MARK, glyph("sep"), os.path.basename(model), role, glyph("sep"), len(rows)))
-            say("  a row prints as each setting finishes -- a few minutes in all ...")
+            say("%s bench --tune%s%s (the %s role)%s%d settings" % (MARK, glyph("sep"), config.model_name(model), role, glyph("sep"), len(rows)))
+            say("  a few minutes, one row per setting")
         results = []
         for i, s in enumerate(rows, 1):
             try:
@@ -246,7 +241,7 @@ def cmd_bench(args):
             if not porcelain:
                 say("  %2d/%d %-34s pp %6.1f  tg %6.1f%s" % (i, len(rows), key_of(s), pp, tg, "   (current)" if s == cur else ""))
         if not results:
-            say("spark bench: every setting failed -- the engine cannot run this file here")
+            say("spark bench: every setting failed")
             return 1
         results.sort(key=lambda r: (r[0], r[1]), reverse=True)
         tg, pp, best = results[0]
@@ -263,9 +258,9 @@ def cmd_bench(args):
             for t, p, s in results:
                 say("%s\t%.1f\t%.1f" % (key_of(s), p, t))
         else:
-            say("  winner: %s  (tg %.1f, pp %.1f tok/s)%s" % (key_of(best), tg, pp, "" if best != cur else " -- what you have (nothing beats it by 5 %)"))
+            say("  winner: %s  (tg %.1f, pp %.1f tok/s)%s" % (key_of(best), tg, pp, "" if best != cur else " -- what you have"))
             if best != cur:
-                say("  spark tune apply   takes it (spark.env, then a restart)")
+                say("  spark bench tune apply uses it")
         return 0
     except engine.EngineError as e:
         say("spark bench: %s" % e)
@@ -273,7 +268,7 @@ def cmd_bench(args):
     finally:
         if resume:
             if not porcelain:
-                say("the server is coming back -- the model loads again (about 30 s) ...")
+                say("the server is coming back")
             resume()
             url = wire.serve_url() or cfg.loopback_url()
             for _ in range(60):          # the model takes a while to load again
@@ -434,7 +429,7 @@ def cmd_line_bench(cfg, args):
     porcelain = "--porcelain" in args
     n = _line_count(args)
     if n is None:
-        say("spark bench -- --line takes a count, 1 to %d (the questions to ask)" % LINE_MAX)
+        say("spark bench -- --line takes a count, 1 to %d" % LINE_MAX)
         return 2
     try:
         _url, model, _forge = wire.resolve_brain(cfg)
@@ -445,8 +440,7 @@ def cmd_line_bench(cfg, args):
     fmt = "  %2s  %-30s %7s %7s %6s %6s  %s"
     if not porcelain:
         sep = glyph("sep")
-        say("%s bench --line%s%s (the spark model)%s%d questions" % (MARK, sep, model, sep, n))
-        say("  each runs through spark line as the prompt line asks it; nothing runs")
+        say("%s bench --line%s%s%s%d questions" % (MARK, sep, config.model_name(model), sep, n))
         say(fmt % ("", "question", "ready", "whole", "read", "wrote", "slot"))
     rows = []
     with tempfile.TemporaryDirectory(prefix="spark-bench-") as scratch:
@@ -469,7 +463,7 @@ def cmd_line_bench(cfg, args):
                            "-" if pp is None else pp, "-" if tg is None else tg, slot))
     good = [r for r in rows if r["ok"]]
     if not good:
-        say("spark bench -- no question got an answer: spark line shows why (echo '? which kernel' | spark line)")
+        say("spark bench -- no question got an answer: echo '? which kernel' | spark line shows why")
         return 1
     known = [r for r in good if r["slot"]]
 
@@ -503,12 +497,12 @@ def cmd_line_bench(cfg, args):
                 rec.get("read", "-"), rec.get("wrote", "-"), "")).rstrip())
     say("  the line pace: " + line_words(rec))
     if "cmd_ms" in rec:
-        say("  inside spark line the command was ready at %.2f s, by its own clock" % (rec["cmd_ms"] / 1000.0))
+        say("  the command was ready at %.2f s inside spark line" % (rec["cmd_ms"] / 1000.0))
     for words in knowledge_words(rec):
         say("  " + words)
     if len(good) < len(rows):
         say("  %d of %d questions got an error; the medians are of the rest" % (len(rows) - len(good), len(rows)))
-    say("  saved in %s -- spark stats shows it" % BENCH_LOG)
+    say("  saved -- spark stats shows it")
     return 0
 
 
@@ -532,17 +526,18 @@ def cmd_tune(args):
         return 0
     t = load_tune()
     if not t:
-        say("%s bench tune -- nothing measured yet -- spark bench tune" % MARK)
+        say("%s bench tune -- nothing measured yet: spark bench tune" % MARK)
         return 1
     cfg = config.load()
     cur = settings_of(cfg)
     if sub == "show":
-        say("%s bench tune -- %s, %s" % (MARK, t["model"], t["ts"]))
+        say("%s bench tune -- %s, %s" % (MARK, config.model_name(t["model"]), t["ts"]))
         say("  now:    %s" % key_of(cur))
         say("  winner: %s  (tg %.1f, pp %.1f tok/s)" % (key_of(t["winner"]), t["winner_tg"], t["winner_pp"]))
         for row in t["table"][:6]:
             say("    %-34s pp %6.1f  tg %6.1f" % (key_of(row["settings"]), row["pp"], row["tg"]))
-        say("  the knobs are SPARK_NGL SPARK_FLASH_ATTN SPARK_KV SPARK_THREADS in ~/.config/spark/spark.env")
+        if t["winner"] != cur:
+            say("  spark bench tune apply uses the winner")
         return 0
     if sub == "apply":
         from . import model, site

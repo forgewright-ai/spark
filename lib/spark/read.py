@@ -55,23 +55,17 @@ READ_TOKENS = 500
 READ_TIMEOUT = 180
 OPEN_MAX = 60           # chars of the source the refusal line shows
 
-READ_USAGE = """spark read -- what a source says, and only what it says (contract 11)
+READ_USAGE = """spark read -- answers from a text, quoted from it
 
-  spark read <words>          the answer, every line quoting the source
-  spark read                  the same, asked what the source covers
-  --part N                    a source past 16000 characters is parts; read
-                              one, and the answer's first line names it
-  --name NAME                 the ledger's name for this source: the question
-                              is recorded under it, never sent anywhere
-  --ledger [clear] [--name NAME]  the questions asked, newest first;
-                              clear drops them
+  spark read <words>          the answer, every line quoting the text
+  spark read                  what the text covers
+  --part N                    read part N of a long text (16000 characters
+                              a part)
+  --name NAME                 a name to keep the questions under
+  --ledger [clear] [--name NAME]  the questions asked; clear forgets them
 
-  every line out quotes the source and the quote is checked: a line whose
-  quotes are not in it, or that quotes nothing, never reaches you. When
-  the source does not answer, the reply is one line showing its opening
-  words -- composed here, never the model's guess -- and exit 1.
-  spans that look like secrets (a key, a token, a one-time code) are
-  held back before the source leaves: the model sees [held].
+  A line that does not quote the text is dropped. When the text does not
+  answer, spark shows how it opens and exits 1. Secrets are held back.
   From a pipe: w3m -dump URL | spark read "what is this page for"
 """
 
@@ -182,8 +176,7 @@ def cmd_read(args):
         # stderr (a usage line, an error) or wrote nothing at all -- say
         # that, not the whole usage (ssh -h | spark read ... read as a
         # misuse of spark read, and explain blamed spark read)
-        say("%s read -- the pipe brought no text: the command before it wrote nothing "
-            "to stdout. If it wrote to stderr, put 2>&1 before the |." % MARK)
+        say("%s read -- the pipe brought no text (an error? put 2>&1 before the |)" % MARK)
         return 2
     if not data:
         # at a terminal with nothing piped in, this is almost always a

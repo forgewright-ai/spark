@@ -275,7 +275,7 @@ try:
 except voice.VoiceError as e:
     refused = str(e)
 check("fetch: a sha256 mismatch is refused, nothing kept of it",
-      "sha256 mismatch" in refused and not os.path.exists(os.path.join(VDIR, "mouth"))
+      "damaged" in refused and not os.path.exists(os.path.join(VDIR, "mouth"))
       and not os.path.exists(os.path.join(VDIR, "mouth.sha")) and not leftovers(), (refused, leftovers()))
 check("fetch: the part before it landed whole (runtime, its sha file)",
       voice.installed(voice.parts(fetch_pins())[0]), os.listdir(VDIR))
@@ -284,7 +284,7 @@ try:
     refused = ""
 except voice.VoiceError as e:
     refused = str(e)
-check("fetch: a size mismatch is refused before the sha256", "the pin says 5" in refused and not leftovers(), refused)
+check("fetch: a size mismatch is refused before the sha256", "the wrong size" in refused and not leftovers(), refused)
 
 for label, members in (
         ("a `..` member", [("kokoro/model.int8.onnx", "file", b"m"), ("kokoro/../../evil", "file", b"x")]),
@@ -401,7 +401,8 @@ said = []
 got = voice.fetch(None, fetch_pins(), out=said.append)
 check("fetch: the missing parts come, each said with its size; the one there is not fetched again",
       got == ["mouth", "ears", "vad"] and fetched == ["mouth.tar.bz2", "ears.tar.bz2", "silero_vad.onnx"]
-      and all("downloading" in s and "MB)" in s for s in said), (got, fetched, said))
+      and said == ["downloading the voice (%d of 3, %d MB)" % (k, voice._mb(x["size"]))
+                   for k, x in enumerate(voice.parts(fetch_pins())[1:], 1)], (got, fetched, said))
 check("fetch: the top directory is stripped, executables kept, links inside kept",
       os.path.isfile(os.path.join(VDIR, "mouth", "voices.bin"))
       and os.access(os.path.join(VDIR, "runtime", "bin", "sherpa-onnx-offline-tts"), os.X_OK)
@@ -748,8 +749,8 @@ check("spark voice -h: signed, within 80 columns",
       rc == 0 and out.startswith("spark voice -- ") and max(len(l) for l in out.splitlines()) <= 80, out)
 rc, out = spark("voice")
 check("spark voice: the state, off; nothing written",
-      rc == 0 and out.startswith("voice   off ") and "\nengine  here" in out and "\nplayer  " in out
-      and "\nrate    100 " in out and not senv(), out)
+      rc == 0 and out.startswith("voice   off ") and "\nengine  downloaded" in out and "\nplayer  " in out
+      and out.endswith("\nrate    100\n") and not senv(), out)
 rc, out = spark("voice", "status")
 check("spark voice status is bare", rc == 0 and out.startswith("voice   off "), out)
 rc, out = spark("voice", "clear")
@@ -783,8 +784,8 @@ check("spark voice: the screen reader and the --anyway named", rc == 0 and "\nre
 shutil.rmtree(os.path.join(proc, "4545"))
 stub("defaults", "#!/bin/sh\necho 0\n")
 rc, out = spark("voice", "off", "--remove")
-check("spark voice off --remove under SPARK_NO_APPLY: says what would go, keeps it; the --anyway choice goes",
-      rc == 0 and "would go" in out and os.path.isdir(VDIR) and not os.path.exists(voice.ANYWAY_FILE), out)
+check("spark voice off --remove under SPARK_NO_APPLY: says what would be freed, keeps it; the --anyway choice goes",
+      rc == 0 and "MB would be freed" in out and os.path.isdir(VDIR) and not os.path.exists(voice.ANYWAY_FILE), out)
 rc, out = spark("voice", "loud")
 check("spark voice loud: one signed line, exit 2", rc == 2 and out.startswith("spark voice -- no word loud"), out)
 for bad in (["on", "please"], ["test", "it", "now"], ["listen", "--bufer"], ["stop", "x"], ["status", "now"],
@@ -868,7 +869,7 @@ check("awaken under SPARK_NO_APPLY: no voice offered", rc == 0 and "keep it?" no
 shutil.rmtree(VDIR)
 rc, out = awaken("plain\n\n")
 check("awaken with no engine: the size asked first (yes/NO), Enter is no, nothing fetched",
-      rc == 0 and "MB to download first? yes/NO" in out and not os.path.exists(VDIR) and voice.read_recipe() is None,
+      rc == 0 and "MB to download? yes/NO" in out and not os.path.exists(VDIR) and voice.read_recipe() is None,
       out[-600:])
 
 # ---------------------------------------------------- 15. the surfaces
@@ -976,7 +977,7 @@ p = subprocess.run([PY, SPARK, "voice", "listen", "--buffer"], capture_output=Tr
 check("spark voice listen --buffer while off: stdout empty, the reason on stderr, exit 2",
       p.returncode == 2 and p.stdout == "" and "off" in p.stderr, (p.returncode, p.stdout, p.stderr))
 rc, out = spark("voice", "stop")
-check("spark voice stop: nothing playing, said, exit 0", rc == 0 and out == "nothing was playing\n", repr(out))
+check("spark voice stop: nothing playing, nothing said, exit 0", rc == 0 and out == "", repr(out))
 rc, out = spark("voice", "-h")
 check("spark voice -h: listen and stop named, within 80 columns",
       "spark voice listen" in out and "spark voice stop" in out and max(len(l) for l in out.splitlines()) <= 80, out)

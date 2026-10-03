@@ -24,40 +24,27 @@ EDIT_TIMEOUT = 180                      # a big selection takes a while to read
 EDIT_WATCH_POLL = 3                     # --watch: seconds between looks at the file
 EDIT_WATCH_IDLE = 90                    # --watch: a pause this long earns a whole-draft review
 
-EDIT_USAGE = """spark edit -- the editor's protocol (contract 10): the text on stdin
+EDIT_USAGE = """spark edit -- write and review text with spark (text on stdin)
 
-  spark edit --at N           prints what goes at byte offset N (a completion)
-  spark edit <words>          prints the text rewritten as the words ask
-  spark edit ? [words]        answers about the text; ? alone reviews it
-  spark edit --watch FILE      watch a draft as you write: a grounded comment
-                              on each stanza you save, a review when you pause
-  --type FT                   the editor's filetype, a hint (markdown, python)
-  --name NAME                 the file's name, a hint -- never its path
-  --about TEXT                what the author says the text is, when it
-                              should not guess ("a novel chapter")
-  --part                      the text is a selection from a larger file:
-                              a rewrite replaces exactly that part
-  --sel A B                   ?: stdin is the whole file; the question is
-                              about bytes A..B, the file around it context
-  --thread ID                 ?: keep the exchange under ID (yours to name,
-                              1 to 64 of [A-Za-z0-9_-]); the same ID again
-                              continues it
-  --source                    ?: the text is a published source you discuss,
-                              not a draft to edit -- answer the question, never
-                              suggest changes (the reading apps pass this)
-                              -- its secret-shaped spans are held back
-  --decline --name NAME       keep the note on stdin as declined for NAME: a
-                              later ? about NAME is told not to raise it
-  --ledger [clear] --name NAME  the notes declined for NAME (every file's
-                              without a name), newest first; clear drops them
-  --                          the end of the options: the rest are words
+  spark edit <words>          rewrite the text as the words ask
+  spark edit ? [words]        ask about the text; ? alone reviews it
+  spark edit --at N           what comes next at byte N (a completion)
+  spark edit --watch FILE     comments on a draft as you save it
+  --type FT                   the kind of file (markdown, python)
+  --name NAME                 the file's name (never its path)
+  --about TEXT                what the text is ("a novel chapter")
+  --part                      the text is part of a larger file
+  --sel A B                   ?: ask about bytes A to B of the whole file
+  --thread ID                 ?: keep the exchange; the same ID continues it
+  --source                    ?: the text is someone else's: discuss it,
+                              never edit it (secrets in it are held back)
+  --decline --name NAME       never raise the note on stdin again
+  --ledger [clear] --name NAME  the declined notes; clear forgets them
+  --                          the rest are words, not options
 
-  raw streamed text: no mark, no wrap, a code fence around the answer is
-  removed; an empty text with words is written from nothing (a new file);
-  exit 1 when ? or --at find no text, or no model answers. In an editor:
-  its plugin, github.com/forgewright-ai/spark-<app> (micro, neovim, vim,
-  helix, nano), or its filter (:'<,'>!  |  ^T |) with the same words.
-  From a pipe: spark edit fix grammar < draft.md
+  Prints plain text. Exit 1 when there is no text or no model answers.
+  Editors: github.com/forgewright-ai/spark-<app> (micro, neovim, vim,
+  helix, nano). From a pipe: spark edit fix grammar < draft.md
 """
 
 
@@ -183,8 +170,7 @@ def _watch_draft(cfg, shell, path, words, name):
     started = bool(text.strip())
     last_change = time.time() if started else None   # a non-empty draft owes a review
     reviewed = not started
-    say("%s edit --watch %s -- a comment as you save, a review when you pause; Ctrl-C ends."
-        % (MARK, os.path.basename(path)))
+    say("%s edit --watch %s -- comments as you save; Ctrl-C ends" % (MARK, os.path.basename(path)))
     poll = float(os.environ.get("SPARK_EDIT_WATCH_POLL") or EDIT_WATCH_POLL)   # a test seam
     try:
         while True:

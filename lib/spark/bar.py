@@ -269,10 +269,10 @@ def for_tmux(sub):
     return sub == "line" or bool(os.environ.get("TMUX")) or not sys.stdout.isatty()
 
 
-USAGE = """spark bar -- the machine's one-line status
+USAGE = """spark bar -- the machine's status in one line
 
-  spark bar            print it: load, mem, disk, net, ai, check, runs, clock
-  spark bar line       the same line (what a status bar runs every 15 s)
+  spark bar            load, memory, disk, network, AI, check, runs, clock
+  spark bar line       the same, for a status bar (every 15 s)
 """
 
 
