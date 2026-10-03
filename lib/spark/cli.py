@@ -1102,8 +1102,14 @@ def stream_turn(cfg, mode, text, files=(), context="", thread=None, line=None, m
     follow = voice is not None and bool(wrap.cps) and voice.follows()
     if follow:
         voice.begin(wrap, busy)
+    # the model's escapes and controls go before anything shows or speaks
+    # them (the wrap scrubs again: the same text passes unchanged)
+    clean = textmod.Printable()
 
     def feed(delta):
+        delta = clean.feed(delta)
+        if not delta:
+            return
         if follow:
             voice.take(delta)
             return
@@ -1207,8 +1213,10 @@ def _fmt_turn(t, short=False):
         msgs = forge.load(t["thread"])
         asked = [m for m in msgs if m.get("role") == "user"]
         replied = [m for m in msgs if m.get("role") == "assistant"]
-        line = asked[-1]["text"] if asked else ""
-        body = replied[-1]["text"] if replied else ""
+        # the thread keeps the model's own bytes: its escapes and controls
+        # go before they reach a terminal (`spark last`, /last)
+        line = textmod.printable(asked[-1]["text"]) if asked else ""
+        body = textmod.printable(replied[-1]["text"]) if replied else ""
         if short:
             body = _first_line(body) or body.strip()[:70]
     head = "%s  %s  %s" % (t.get("ts", "?"), t.get("kind", "?"), line)
@@ -1242,7 +1250,10 @@ def cmd_recall(args):
     model matches meaning; every candidate is then checked against the
     history with text.anchor, so a line that was not in it is dropped and
     the answer is always a command that ran. One per line; none -> one line
-    on stderr, exit 1. Nothing is written; the turn record is numbers."""
+    on stderr, exit 1. A span that looks like a secret (text.SOURCE_SHAPES)
+    is held back before the history leaves, one stderr line says so, and
+    the turn records `held`. Nothing is written; the turn record is
+    numbers."""
     if _help(args, RECALL_USAGE):
         return 0
     intent = " ".join(args).strip()
@@ -1254,6 +1265,20 @@ def cmd_recall(args):
         print("! no history on stdin", file=sys.stderr)
         return 1
     cfg = config.load()
+    # the history is held back line by line before it rides the request
+    # (an `export TOKEN=...` the user once typed is not the model's): a
+    # held line keeps its place, so an answer quoting it maps back to the
+    # line that ran, and that one, the user's own text, is printed
+    orig = history.splitlines()
+    sent, held, names = [], 0, []
+    for l in orig:
+        spans, found = textmod.held_spans(l)
+        sent.append(textmod.hold_spans(l, spans) if spans else l)
+        held += len(spans)
+        names += found
+    if held:
+        history = "\n".join(sent) + ("\n" if history.endswith("\n") else "")
+        print(textmod.held_line(held, textmod.shape_order(names)), file=sys.stderr, flush=True)
     prompt = "What I am looking for: %s\n\nMy shell history:\n%s" % (intent, history)
     try:
         s = session.Session(cfg, "recall", _shell_default(), "", role="spark")
@@ -1265,20 +1290,26 @@ def cmd_recall(args):
     # the promise is line-level: a candidate is kept only when it equals
     # a line of the history after fold -- a substring ("rm -rf /" inside
     # "rm -rf /tmp/build") is not a command that ran
-    lines = set(textmod.fold(l) for l in history.splitlines() if l.strip())
+    # -- and what prints is the history's own line, as it ran (bash's `fc
+    # -ln` indent off): a held one matches as the model saw it ([held])
+    # and prints as the user typed it
+    lines = {}
+    for l, h in zip(orig, sent):
+        if l.strip():
+            lines.setdefault(textmod.fold(h), l.strip())
+            lines.setdefault(textmod.fold(l), l.strip())
     seen, out = set(), []
     for c in raw:
-        line = str(c).rstrip("\n")
-        key = line.strip()
-        if not key or key in seen:
-            continue
-        if textmod.fold(key) not in lines:
+        ran = lines.get(textmod.fold(str(c).strip()))
+        if ran is None:
             continue                        # grounding: only a line that ran
-        seen.add(key)
-        out.append(line)
+        if ran in seen:
+            continue
+        seen.add(ran)
+        out.append(ran)
         if len(out) >= 5:
             break
-    s.record(kind="recall", chars=len(history), ms=ms, candidates=len(out))
+    s.record(kind="recall", chars=len(history), ms=ms, candidates=len(out), **({"held": held} if held else {}))
     if not out:
         print("! nothing in the history matches", file=sys.stderr)
         return 1

@@ -1627,7 +1627,9 @@ def _slash_aloud(cfg, thread, args):
 
 
 def _slash_again(cfg, thread, args):
-    last = _last_reply(thread)
+    # the thread keeps the model's own bytes: its escapes and controls go
+    # before the terminal or the voice has them
+    last = textmod.printable(_last_reply(thread))
     if not last:
         _refuse("no reply yet")
         return thread

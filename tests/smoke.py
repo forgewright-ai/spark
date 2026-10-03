@@ -428,6 +428,9 @@ def answer_json(messages):
         # a substring of a line that ran ("rm -rf /" inside "rm -rf
         # /tmp/build"), a prefix word, and the dangerous line itself.
         # cli.cmd_recall keeps only whole history lines; danger carries !.
+        # A history with a held line: the model quotes it as it saw it
+        if "GITHUB_TOKEN=[held]" in last:
+            return {"candidates": ["export GITHUB_TOKEN=[held]", "git push"]}
         return {"candidates": ["docker network rm $(docker network ls -q)",
                                "docker network prune --force --invented",
                                "rm -rf /", "ls", "rm -rf /tmp/build"]}
@@ -3364,6 +3367,22 @@ def main():
                                               "!\trm -rf /tmp/build"]
              and "invented" not in out,
              "recall: only whole history lines survive; rm -rf / and ls are dropped; danger carries !", out + "|" + err)
+        # a secret in the history is held back before it rides the request
+        # (one stderr line, held=N in the turn), and the line that ran is
+        # still the answer, as the user typed it
+        _gh = "ghp_" + "Rk3vQ9xL2mT7wZ4pN8sB1cY6hJ0dF5gA3eUi"         # spark:allow-secret
+        hist2 = "ls -la\n\t export GITHUB_TOKEN=%s\ngit push\n" % _gh   # spark:allow-secret
+        n0 = len(STATE["bodies"])
+        rc, out, err = spark("recall", "set", "the", "token", stdin=hist2)
+        sent = json.dumps(STATE["bodies"][n0:])
+        _turns = sorted(glob.glob(home + "/.local/state/spark/turns/*.jsonl"))
+        lt = json.loads(open(_turns[-1]).read().splitlines()[-1]) if _turns else {}
+        t.ok(rc == 0 and _gh not in sent and "GITHUB_TOKEN=[held]" in sent
+             and err.strip().splitlines() == ["! held back 1 span that looks like a secret (a GitHub token)"]
+             and out.splitlines() == ["export GITHUB_TOKEN=" + _gh, "git push"]
+             and lt.get("kind") == "recall" and lt.get("held") == 1,
+             "recall: a token in the history is held in the request, named on stderr, held=1 in the turn, "
+             "and its line is still the answer", repr(err) + json.dumps(lt)[:160])
         rc, out, err = spark("recall", stdin=hist)
         t.ok(rc == 1 and "what the command did" in err,
              "recall: no intent is one line on stderr, exit 1", out + "|" + err)
@@ -3557,6 +3576,43 @@ def main():
         t.ok(_text.scrub("a\x1b]0;evil\x07b\x1b[31mc\x1b[0m\td\x00e\x7ff") == "abc\tdef",
              "scrub: OSC, CSI and control chars go; tabs stay",
              repr(_text.scrub("a\x1b]0;evil\x07b\x1b[31mc\x1b[0m\td\x00e\x7ff")))
+        t.ok(_text.scrub("a\x9b31mb\x9d0;t\x07c‮d⁦e\x85f\x1bP1|x\x1b\\g") == "abcdefg",
+             "scrub: 8-bit CSI and OSC, C1, the bidi controls and DCS go too",
+             repr(_text.scrub("a\x9b31mb\x9d0;t\x07c‮d⁦e\x85f\x1bP1|x\x1b\\g")))
+
+        # a reply streamed through the wrap: the model's escapes and
+        # controls never reach the terminal or the pipe -- a clipboard
+        # write (OSC 52), a hidden link (OSC 8), a screen clear, a C1 CSI,
+        # a bidi override -- and a sequence split across two chunks goes
+        # whole; plain text and the wrap's own bold stay as they were
+        import io
+
+        class _Tty(io.StringIO):
+            def isatty(self):
+                return True
+
+        def _wrapped(*chunks, out=None):
+            w = _text.Wrap(out if out is not None else io.StringIO(), mark=False)
+            for c in chunks:
+                w.feed(c)
+            w.close()
+            return w.stream.getvalue()
+        t.ok(_wrapped("ok \x1b]52;c;cm0gLXJmIH4K\x07 done\n") == "ok done\n\n",
+             "wrap: an OSC 52 clipboard write in a reply is dropped", repr(_wrapped("ok \x1b]52;c;cm0gLXJmIH4K\x07 done\n")))
+        t.ok(_wrapped("ok \x1b]52;c;cm0g", "LXJmIH4K\x1b", "\\ done\n") == "ok done\n\n"
+             and _wrapped("a \x1b", "[2J", "b\n") == "a b\n\n",
+             "wrap: a sequence split across two feeds is dropped whole",
+             repr(_wrapped("ok \x1b]52;c;cm0g", "LXJmIH4K\x1b", "\\ done\n")))
+        t.ok(_wrapped("x\x1b[2Jy see \x1b]8;;http://e.x/\x1b\\here\x1b]8;;\x1b\\ \x9b2Jz ‮evil\rok\x07\n")
+             == "xy see here z evilok\n\n",
+             "wrap: CSI 2J, OSC 8, a C1 CSI, a bidi override, CR and BEL are dropped",
+             repr(_wrapped("x\x1b[2Jy see \x1b]8;;http://e.x/\x1b\\here\x1b]8;;\x1b\\ \x9b2Jz ‮evil\rok\x07\n")))
+        plain = "café, tabs\there -- **bold** and `code`\n\n    indented   code\n"
+        t.ok(_wrapped(plain) == plain + "\n",
+             "wrap: plain text passes byte for byte, piped (no Markdown drawn)", repr(_wrapped(plain)))
+        tty = _wrapped("a **bold** word \x1b[31mred\x1b[0m\n", out=_Tty())
+        t.ok("\033[1mbold\033[22m" in tty and "\x1b[31m" not in tty and "red" in tty,
+             "wrap: at a terminal its own bold is drawn, the model's colour is not", repr(tty))
         rc, out, _ = spark("line", stdin="?   ")
         t.ok(rc == 1 and out.startswith("error"), "line: empty question is an error", out)
 
