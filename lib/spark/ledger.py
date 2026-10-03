@@ -57,9 +57,11 @@ RULES = {
 }
 FAILS_INDEX = os.path.join(STATE_DIR, "fails")           # hash head rc fix -- the hook reads it
 FAIL_PENDING = os.path.join(STATE_DIR, "fail-pending")   # shape head rc -- explain writes it
-# a fix line can carry a secret (`export TOKEN=... && curl`): in the plain
-# index every NAME=value whose NAME smells of one becomes NAME=... -- the
-# sealed ledger keeps the line whole
+# a fix line can carry a secret (`export TOKEN=... && curl`, a token a
+# command takes as a word): the plain index holds back what every other text spark keeps
+# or sends holds back (text.hold_secrets, text.SOURCE_SHAPES: each span
+# becomes [held]), and on top of it every NAME=value whose NAME smells of
+# a secret becomes NAME=... -- the sealed ledger keeps the line whole
 SECRET_RE = re.compile(r"(?i)\b(\w*(?:pass|pwd|token|secret|key|auth)\w*)=(?:\"[^\"]*\"|'[^']*'|\S+)")
 # what a writer says of a file it cannot read: never written over
 NO_OPEN = "the ledger does not open -- spark user login again"
@@ -331,6 +333,13 @@ def fail_fix(fix, cfg=None):
     return 0
 
 
+def plain_fix(note):
+    """A fix as the plain index keeps it: NAME=... for a NAME that smells
+    of a secret (SECRET_RE), then every span text.hold_secrets holds
+    back, the shapes every other text spark keeps or sends is held to."""
+    return textmod.hold_secrets(SECRET_RE.sub(r"\1=...", note))[0]
+
+
 def write_fails_index(entries=None, cfg=None):
     """state/fails, the ONE file the widgets' prompt hook may read: one
     `hash head rc fix` line per living fail record. Retirement applies
@@ -342,7 +351,7 @@ def write_fails_index(entries=None, cfg=None):
         if _kind(e) != KIND_FAIL or _retired(e, "path", None):
             continue
         lines.append("%s %s %s %s\n" % (e.get("shape", ""), e.get("head", ""), e.get("rc", ""),
-                                         SECRET_RE.sub(r"\1=...", e["note"])))
+                                         plain_fix(e["note"])))
     try:
         from . import state_dir
         state_dir()

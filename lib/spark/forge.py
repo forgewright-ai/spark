@@ -257,25 +257,32 @@ class Store:
 
     def load(self, tid):
         """Every message of a thread: [{"ts","role","text",...}]. A record
-        that does not open (or parse) is dropped, never fatal. A file
-        whose header is not `thread tid` -- a renamed sealed file -- is
-        refused whole, counted (self.refused) and reported to the debug
-        log: read as another thread, its next append would fail its AAD
-        in silence."""
+        that does not open (its tag fails) or does not parse is skipped
+        and counted, never fatal and never shown: the messages before and
+        after it still read (vault.read_sealed_records), and the person
+        is told once (skipped_line). A file whose header is not `thread
+        tid` -- a renamed sealed file -- is refused whole, counted
+        (self.refused) and reported to the debug log: read as another
+        thread, its next append would fail its AAD in silence."""
         out = []
         try:
-            for rec in vault.read_sealed(self._path(tid), self.dk, "thread", tid):
-                try:
-                    d = json.loads(rec.decode("utf-8"))
-                except ValueError:
-                    continue
-                if isinstance(d, dict) and d.get("role") and isinstance(d.get("text"), str):
-                    out.append(d)
+            recs, bad = vault.read_sealed_records(self._path(tid), self.dk, "thread", tid)
         except vault.SealError:
             self.refused = getattr(self, "refused", 0) + 1
             log_exc("thread %s refused" % tid)
+            return out
         except OSError:
-            pass
+            return out
+        for rec in recs:
+            try:
+                d = json.loads(rec.decode("utf-8"))
+            except ValueError:
+                bad += 1
+                continue
+            if isinstance(d, dict) and d.get("role") and isinstance(d.get("text"), str):
+                out.append(d)
+        if bad:
+            skipped_line(self._path(tid), tid, bad)
         return out
 
     def append(self, cfg, tid, role, text, **fields):
@@ -435,6 +442,19 @@ class Store:
             pass
 
 
+_TOLD = set()     # the thread files this process already said were damaged
+
+
+def skipped_line(path, tid, n):
+    """The one stderr line that says a thread lost records to damage --
+    once a thread file a process, however often it is read."""
+    if path in _TOLD:
+        return
+    _TOLD.add(path)
+    print("! %d record%s in thread %s could not be read -- skipped"
+          % (n, "" if n == 1 else "s", tid), file=sys.stderr, flush=True)
+
+
 class _NullStore:
     """No account and none mintable: reads answer empty, writes vanish
     (logged). The line path must never crash on store trouble."""
@@ -535,13 +555,10 @@ def local_store(provision=False, cfg=None):
                     # account-key must never seal against a fresh key
                     from . import die
                     die("the account's key is gone -- spark user login %s again" % name, 78)
-                users.write_login(name, token)      # keep the login
+                users.write_login(name, token)      # keep the login, drop a cached key
                 users.make_dirs(name)
                 ndk = vault.new_key()
-                vault.write_private(os.path.join(d, "token.hash"),
-                                    (vault.token_hash(token) + "\n").encode())
-                vault.write_private(os.path.join(d, "key"),
-                                    vault.wrap_key(ndk, token, name).encode())
+                users.write_key(name, ndk, token)
                 # refresh the cached account-key NOW, so account_key()
                 # below answers the key just minted -- an earlier login's
                 # stale cache must never seal what this key wraps

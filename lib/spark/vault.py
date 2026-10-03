@@ -143,31 +143,55 @@ def _expect(path, kind, name):
     return fkind, fname
 
 
-def read_sealed(path, dk, kind=None, name=None):
-    """Every record of a sealed file, decrypted, newest last. `kind` and
-    `name`, when given, are what the caller believes this file is."""
+def _record_lines(path, kind, name):
+    """(header, the record lines) of a sealed file, its header held to the
+    caller's expectation first (_expect)."""
     kind, name = _expect(path, kind, name)
-    hdr = header(kind, name)
-    out = []
     with open(path, encoding="utf-8", errors="replace") as f:
         f.readline()
-        for line in f:
-            if line.strip():
-                out.append(open_line(dk, hdr, line))
-    return out
+        return header(kind, name), [ln for ln in f if ln.strip()]
+
+
+def read_sealed(path, dk, kind=None, name=None):
+    """Every record of a sealed file, decrypted, newest last. `kind` and
+    `name`, when given, are what the caller believes this file is. One
+    record that does not open refuses the whole file: a whole-blob file
+    (memory, chat-history, the ledger) is never written over by a writer
+    that could not read it."""
+    hdr, lines = _record_lines(path, kind, name)
+    return [open_line(dk, hdr, line) for line in lines]
+
+
+def read_sealed_records(path, dk, kind=None, name=None):
+    """(records, skipped): every record of a sealed file that opens,
+    newest last, and how many did not. A thread is one record a message,
+    each sealed on its own, so one bad record (a flipped byte, a torn
+    write) is skipped and counted and the records before and after it
+    still read. A record that fails its tag is never returned as text.
+    The header is held to the caller's expectation, as read_sealed
+    holds it: a renamed file is still refused whole."""
+    hdr, lines = _record_lines(path, kind, name)
+    out, skipped = [], 0
+    for line in lines:
+        try:
+            out.append(open_line(dk, hdr, line))
+        except SealError:
+            skipped += 1
+    return out, skipped
 
 
 def read_sealed_tail(path, dk, max_chars, kind=None, name=None):
     """The newest records whose decrypted sizes sum to <= max_chars (at
-    least one when any exists): the cheap tail for a long thread."""
-    kind, name = _expect(path, kind, name)
-    hdr = header(kind, name)
-    with open(path, encoding="utf-8", errors="replace") as f:
-        f.readline()
-        lines = [ln for ln in f if ln.strip()]
+    least one when any exists): the cheap tail for a long thread. A
+    record that does not open is skipped, as read_sealed_records skips
+    it."""
+    hdr, lines = _record_lines(path, kind, name)
     out, total = [], 0
     for line in reversed(lines):
-        rec = open_line(dk, hdr, line)
+        try:
+            rec = open_line(dk, hdr, line)
+        except SealError:
+            continue
         if out and total + len(rec) > max_chars:
             break
         out.append(rec)
@@ -176,17 +200,39 @@ def read_sealed_tail(path, dk, max_chars, kind=None, name=None):
     return out
 
 
-def write_private(path, data):
+def sync_dir(path):
+    """fsync a directory, so a rename or a removal in it is on disk before
+    the next step; a filesystem that refuses a directory fsync is let be."""
+    try:
+        fd = os.open(path or ".", os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(fd)
+    except OSError:
+        pass
+    finally:
+        os.close(fd)
+
+
+def write_private(path, data, durable=False):
     """A 0600 file that was never world-readable: private temp beside the
     target, then an atomic replace. The temp's name is mkstemp's, unique
     per call: two threads of one process (the threaded server) writing
-    the same path no longer collide on one pid-named temp."""
+    the same path no longer collide on one pid-named temp. `durable`
+    fsyncs the temp before the replace and the directory after it: a
+    commit point (a key file) survives a power cut whole, or not at all."""
     fd, tmp = tempfile.mkstemp(prefix=os.path.basename(path) + ".tmp.", dir=os.path.dirname(path) or ".")
     os.fchmod(fd, 0o600)
     try:
         with os.fdopen(fd, "wb") as f:
             f.write(data)
+            if durable:
+                f.flush()
+                os.fsync(f.fileno())
         os.replace(tmp, path)
+        if durable:
+            sync_dir(os.path.dirname(path))
     finally:
         try:
             os.remove(tmp)
@@ -212,6 +258,10 @@ def append_sealed(path, dk, kind, name, record):
         fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_APPEND, 0o600)
         with os.fdopen(fd, "w") as f:
             f.write(hdr + "\n")
-    fd = os.open(path, os.O_WRONLY | os.O_APPEND, 0o600)
-    with os.fdopen(fd, "w") as f:
-        f.write(seal_line(dk, hdr, record) + "\n")
+    fd = os.open(path, os.O_RDWR | os.O_APPEND, 0o600)
+    with os.fdopen(fd, "r+b") as f:
+        # a write torn short (a crash, a full disk) leaves a line with no
+        # end: the next record starts on a line of its own, so only the
+        # torn one is lost, never the one after it too
+        torn = f.seek(0, os.SEEK_END) > 0 and os.pread(f.fileno(), 1, f.tell() - 1) != b"\n"
+        f.write((("\n" if torn else "") + seal_line(dk, hdr, record) + "\n").encode())

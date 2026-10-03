@@ -216,11 +216,8 @@ def _hash_current(name, h):
     """Whether hash h is still the named user's token verifier -- a
     rotation or removal kills every cached key and session for them."""
     from . import users
-    try:
-        with open(os.path.join(users.user_dir(name), "token.hash"), encoding="utf-8") as f:
-            return hmac.compare_digest(h, f.read().strip())
-    except OSError:
-        return False
+    v = users.verifier(name)
+    return bool(v) and hmac.compare_digest(h, v)
 
 
 # a burst of wrong logins must not hold a hundred threads in time.sleep:

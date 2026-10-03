@@ -1,5 +1,19 @@
 # Changelog
 
+## v1.77
+
+The last four fixes from the audit.
+
+- A new token can no longer lock you out. The token's check and the
+  key it opens are one file now, so after a crash the old token or the
+  new one works.
+- One damaged line in a thread no longer hides the whole thread. spark
+  skips it, reads the rest and says so once.
+- The fixes the prompt remembers hold back the same secrets as
+  everything else, such as a GitHub token given to a command.
+- A weekly check opens an issue when the voice's engine, sherpa-onnx,
+  publishes a security advisory after its pin.
+
 ## v1.76
 
 - `spark edit` drops escapes and control characters from the model's

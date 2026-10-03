@@ -1,18 +1,25 @@
 # spark.users -- the named users of this FORGE, and this machine's login.
 #
-# Each user owns ~/.local/state/spark/users/<name>/ (0700): token.hash
-# (the lookup verifier), key (the data key, wrapped by the token --
-# vault.py), threads/, kept/ (the threads SPARK_HISTORY never ages),
-# memory, chat-history. The box never stores a token or a data key in
-# the clear: only the user's token opens their data, and a lost token is
-# lost history, by design.
+# Each user owns ~/.local/state/spark/users/<name>/ (0700): key (the
+# data key, wrapped by the token -- vault.py -- and on its second line
+# the token's lookup verifier), token.hash (a copy of that verifier, the
+# only one a store from before v1.77 has), threads/, kept/ (the threads
+# SPARK_HISTORY never ages), memory, chat-history. The box never stores
+# a token or a data key in the clear: only the user's token opens their
+# data, and a lost token is lost history, by design.
+#
+# A token change is one atomic replace of the key file: the wrap and the
+# verifier move together, so a crash leaves the old token or the new one
+# in force, never a verifier that does not match the wrap (write_key).
 #
 # The local login is two 0600 files beside it: `account` (name and
 # token: who this machine acts as) and `account-key` (the unwrapped
-# data key, so the hot paths never pay scrypt). On the box that means
-# your OS login can read your own chat data -- and nobody else's; a
-# stolen disk is ciphertext plus the full-disk story (spark check's
-# encryption row).
+# data key, so the hot paths never pay the KDF). The key is a cache of
+# the account: it goes before the account changes and comes back after
+# (write_login), so a crash leaves no key cached for another login. On
+# the box that means your OS login can read your own chat data -- and
+# nobody else's; a stolen disk is ciphertext plus the full-disk story
+# (spark check's encryption row).
 
 import base64
 import os
@@ -24,6 +31,9 @@ from . import (ACCOUNT_FILE, ACCOUNT_KEY_FILE, MARK, THREADS_DIR, USERS_DIR,
                confirm, say, state_dir, vault)
 
 NAME_RE = re.compile(r"^[a-z][a-z0-9-]{0,31}$")
+# the key file's second line: `verifier <sha256 hex of the token>`
+VERIFIER = "verifier"
+HEX64 = re.compile(r"^[0-9a-f]{64}$")
 
 USAGE = """%s user -- the users of this machine
 
@@ -95,13 +105,44 @@ def add(name):
     import secrets
     if os.path.isdir(user_dir(name)):
         raise FileExistsError(user_dir(name))
-    d = make_dirs(name)
+    make_dirs(name)
     token = secrets.token_urlsafe(32)
-    vault.write_private(os.path.join(d, "token.hash"),
-                        (vault.token_hash(token) + "\n").encode())
-    vault.write_private(os.path.join(d, "key"),
-                        vault.wrap_key(vault.new_key(), token, name).encode())
+    write_key(name, vault.new_key(), token)
     return token
+
+
+def write_key(name, dk, token):
+    """The data key wrapped by `token`, and the token's verifier, as ONE
+    change: both lines of the key file land in one atomic replace,
+    fsynced (the commit). token.hash is written after it, a copy for an
+    older spark; a crash between the two leaves a stale copy, and
+    verifier() reads the key file's own line first."""
+    d = user_dir(name)
+    h = vault.token_hash(token)
+    vault.write_private(os.path.join(d, "key"),
+                        (vault.wrap_key(dk, token, name) + "%s %s\n" % (VERIFIER, h)).encode(),
+                        durable=True)
+    vault.write_private(os.path.join(d, "token.hash"), (h + "\n").encode())
+
+
+def verifier(name):
+    """The sha256 verifier of a user's token, or '': the key file's second
+    line, which changes with the wrap it belongs to; token.hash for a key
+    file from before v1.77, which has none."""
+    d = user_dir(name)
+    try:
+        with open(os.path.join(d, "key"), encoding="utf-8", errors="replace") as f:
+            f.readline()
+            parts = f.readline().split()
+        if len(parts) == 2 and parts[0] == VERIFIER and HEX64.match(parts[1]):
+            return parts[1]
+    except OSError:
+        pass
+    try:
+        with open(os.path.join(d, "token.hash"), encoding="utf-8") as f:
+            return f.read().strip()
+    except OSError:
+        return ""
 
 
 def remove(name):
@@ -117,13 +158,9 @@ def find_by_token(token):
     import hmac
     h = vault.token_hash(token)
     for name in list_users():
-        try:
-            with open(os.path.join(user_dir(name), "token.hash"),
-                      encoding="utf-8") as f:
-                if hmac.compare_digest(h, f.read().strip()):
-                    return name
-        except OSError:
-            continue
+        v = verifier(name)
+        if v and hmac.compare_digest(h, v):
+            return name
     return ""
 
 
@@ -138,11 +175,7 @@ def rewrap(name, dk, new=None):
     store to a box's token. The old token dies with its hash."""
     import secrets
     new = new or secrets.token_urlsafe(32)
-    d = user_dir(name)
-    vault.write_private(os.path.join(d, "token.hash"),
-                        (vault.token_hash(new) + "\n").encode())
-    vault.write_private(os.path.join(d, "key"),
-                        vault.wrap_key(dk, new, name).encode())
+    write_key(name, dk, new)
     return new
 
 
@@ -181,10 +214,21 @@ def account_key():
 
 
 def write_login(name, token, dk=None):
+    """This machine's login, and its cached data key when `dk` is given.
+    The key is a cache of the account, so it never outlives the login it
+    was cached for: it goes first, the account is replaced, and only then
+    is the key written back, each step on disk before the next. A crash
+    anywhere leaves no key or the right one; with none, the hot paths
+    unwrap it once with the account's token (forge.local_store)."""
     state_dir()
-    vault.write_private(ACCOUNT_FILE, ("name=%s\ntoken=%s\n" % (name, token)).encode())
+    try:
+        os.remove(ACCOUNT_KEY_FILE)
+    except FileNotFoundError:
+        pass
+    vault.sync_dir(os.path.dirname(ACCOUNT_KEY_FILE))
+    vault.write_private(ACCOUNT_FILE, ("name=%s\ntoken=%s\n" % (name, token)).encode(), durable=True)
     if dk is not None:
-        vault.write_private(ACCOUNT_KEY_FILE, base64.b64encode(dk) + b"\n")
+        vault.write_private(ACCOUNT_KEY_FILE, base64.b64encode(dk) + b"\n", durable=True)
 
 
 def logout():

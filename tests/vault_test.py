@@ -8,7 +8,9 @@ tests: seal/unseal round-trips, a flipped bit, a wrong key, a swapped
 AAD all refuse, and a throughput floor so a slow regression goes loud.
 Then the stores built on the vault, in a throwaway HOME: a writer never
 writes over a file it cannot open, a user name is validated before the
-store is touched, and the plain fails index carries no secret.
+store is touched, a thread's bad record is skipped and the rest read, a
+token change survives a crash at every step, and the plain fails index
+carries no secret.
 """
 import os
 import shutil
@@ -464,6 +466,176 @@ def test_remove_validates_the_name():
     check("a valid name that is no user is exit 2", users.cmd_remove(["nobody"]), 2)
 
 
+def test_a_bad_record_is_skipped():
+    # one bad record in a sealed thread hid the WHOLE thread while new
+    # turns went on landing in it. Now it is skipped and counted, the
+    # records around it read, and stderr says so once; a record that
+    # fails its tag is never text
+    import contextlib
+    import io
+    import json
+    from spark import config, forge, users
+    token = users.add("gina")
+    dk = users.unlock("gina", token)
+    st = forge.store_for("gina", dk)
+    cfg = config.load()
+    tid = "2000-01-02-000000"
+    st.open_thread(cfg, tid)
+    for i in range(5):
+        st.append(cfg, tid, "user" if i % 2 == 0 else "assistant", "message %d" % i)
+    path = st._path(tid)
+    with open(path, encoding="utf-8") as f:
+        lines = f.read().splitlines(True)
+    rec = lines[3].rstrip("\n")                            # message 2, in the middle
+    flipped = rec[:20] + ("A" if rec[20] != "A" else "B") + rec[21:]
+    lines[3] = flipped + "\n"
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("".join(lines))
+
+    recs, skipped = vault.read_sealed_records(path, dk, "thread", tid)
+    check("the records around a bad one still open", (len(recs), skipped), (4, 1))
+    check("the bad one is not among them", any(b"message 2" in r for r in recs), False)
+    refuse("read_sealed still refuses the file whole", lambda: vault.read_sealed(path, dk, "thread", tid))
+    check("the tail skips it too", [json.loads(r)["text"] for r in vault.read_sealed_tail(path, dk, 10 ** 6)],
+          ["message 0", "message 1", "message 3", "message 4"])
+    refuse("a renamed file is still refused whole",
+           lambda: vault.read_sealed_records(path, dk, "thread", "2000-01-02-000001"))
+
+    err = io.StringIO()
+    with contextlib.redirect_stderr(err):
+        got = [m["text"] for m in st.load(tid)]
+        st.load(tid)                                       # read again: told once
+    check("the thread reads, the bad record skipped", got, ["message 0", "message 1", "message 3", "message 4"])
+    check("one line on stderr, once",
+          err.getvalue(), "! 1 record in thread %s could not be read -- skipped\n" % tid)
+    check("the line is ASCII", err.getvalue().isascii(), True)
+
+    # a turn after the damage lands and reads, and a write torn short (no
+    # line end) loses itself alone, never the record after it
+    st.append(cfg, tid, "user", "message 5")
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(vault.seal_line(dk, vault.header("thread", tid), b'{"role":"user","text":"torn"}')[:30])
+    st.append(cfg, tid, "assistant", "message 6")
+    with contextlib.redirect_stderr(io.StringIO()):
+        got = [m["text"] for m in st.load(tid)]
+    check("a turn after the damage and one after a torn write both read", got[-2:], ["message 5", "message 6"])
+    check("two records are skipped now", vault.read_sealed_records(path, dk, "thread", tid)[1], 2)
+    check("the thread is listed", [t["id"] for t in st.list_threads(5)], [tid])
+
+
+class Crash(Exception):
+    """The process dying at one step: nothing after it runs."""
+
+
+def crash_at(when):
+    """os.replace and os.remove, patched to die when `when(dst)` says so:
+    the step before it is on disk, that one and every later one never
+    happen. Returns the undo."""
+    real_replace, real_remove = os.replace, os.remove
+
+    def replace(src, dst, *a, **k):
+        if when(str(dst)):
+            raise Crash(dst)
+        return real_replace(src, dst, *a, **k)
+
+    def remove(p, *a, **k):
+        if when(str(p)) and not os.path.basename(str(p)).count(".tmp."):
+            raise Crash(p)
+        return real_remove(p, *a, **k)
+    os.replace, os.remove = replace, remove
+
+    def undo():
+        os.replace, os.remove = real_replace, real_remove
+    return undo
+
+
+def test_token_change_is_crash_safe():
+    # a token change was two files, token.hash then key: a crash between
+    # them left a verifier no wrap matched, and the account was locked out.
+    # Now the key file carries both, one atomic replace, so a crash leaves
+    # the old token in force or the new one, never neither
+    from spark import ACCOUNT_FILE, ACCOUNT_KEY_FILE, forgeserve, users
+    t0 = users.add("erin")
+    d = users.user_dir("erin")
+    dk = users.unlock("erin", t0)
+    with open(os.path.join(d, "key"), encoding="utf-8") as f:
+        lines = f.read().splitlines()
+    check("the key file holds the wrap and the verifier", (len(lines), lines[1].split()[0]), (2, "verifier"))
+    check("its verifier is the token's", users.verifier("erin"), vault.token_hash(t0))
+    check("the token finds its user", users.find_by_token(t0), "erin")
+
+    # a crash before the key file's replace: the old token is whole
+    t1 = "t1-" + "x" * 40
+    undo = crash_at(lambda p: p.endswith(os.sep + "key"))
+    try:
+        refuse("a crash at the commit", lambda: users.rewrap("erin", dk, t1), Crash)
+    finally:
+        undo()
+    check("before the commit, the old token finds erin", users.find_by_token(t0), "erin")
+    check("and opens her key", users.unlock("erin", t0), dk)
+    check("the new one finds nobody", users.find_by_token(t1), "")
+    check("no temp file is left", sorted(f for f in os.listdir(d) if ".tmp." in f), [])
+
+    # a crash after the key file, before token.hash: the new token is whole
+    undo = crash_at(lambda p: p.endswith(os.sep + "token.hash"))
+    try:
+        refuse("a crash after the commit", lambda: users.rewrap("erin", dk, t1), Crash)
+    finally:
+        undo()
+    with open(os.path.join(d, "token.hash"), encoding="utf-8") as f:
+        check("token.hash is the stale copy", f.read().strip(), vault.token_hash(t0))
+    check("after the commit, the new token finds erin", users.find_by_token(t1), "erin")
+    check("and opens her key", users.unlock("erin", t1), dk)
+    check("the old token finds nobody", users.find_by_token(t0), "")
+    check("a session of the old token is dead", forgeserve._hash_current("erin", vault.token_hash(t0)), False)
+    check("one of the new token lives", forgeserve._hash_current("erin", vault.token_hash(t1)), True)
+
+    # a store from before v1.77: the key file is the wrap alone, and
+    # token.hash is the verifier
+    vault.write_private(os.path.join(d, "key"), vault.wrap_key(dk, t0, "erin").encode())
+    vault.write_private(os.path.join(d, "token.hash"), (vault.token_hash(t0) + "\n").encode())
+    check("an older store's token.hash still answers", users.find_by_token(t0), "erin")
+    check("and its key file still opens", users.unlock("erin", t0), dk)
+    with open(os.path.join(d, "key"), "a", encoding="utf-8") as f:
+        f.write("verifier not-a-hash\n")
+    check("a verifier line out of shape falls back to token.hash", users.verifier("erin"), vault.token_hash(t0))
+    t2 = users.rotate("erin", t0)
+    check("a rotation writes the new shape", users.verifier("erin"), vault.token_hash(t2))
+    check("and the rotated token opens", users.unlock("erin", t2), dk)
+
+    # the login: the cached key never outlives the account it belongs to
+    t3 = users.add("frank")
+    ddk = users.unlock("frank", t3)
+    users.write_login("erin", t2, dk)
+    check("the cached key is erin's", users.account_key(), dk)
+    undo = crash_at(lambda p: p == ACCOUNT_KEY_FILE)
+    try:
+        refuse("a crash before the cached key goes", lambda: users.write_login("frank", t3, ddk), Crash)
+    finally:
+        undo()
+    check("then the login is erin's still, her key cached", (users.account()[0], users.account_key()),
+          ("erin", dk))
+    undo = crash_at(lambda p: p == ACCOUNT_FILE)
+    try:
+        refuse("a crash at the account's replace", lambda: users.write_login("frank", t3, ddk), Crash)
+    finally:
+        undo()
+    check("then the login is erin's, and no key is cached", (users.account()[0], users.account_key()),
+          ("erin", None))
+    users.write_login("erin", t2, dk)
+    undo = crash_at(lambda p: p == ACCOUNT_KEY_FILE and os.path.exists(ACCOUNT_FILE) and users.account()[0] == "frank")
+    try:
+        refuse("a crash after the account, before the key", lambda: users.write_login("frank", t3, ddk), Crash)
+    finally:
+        undo()
+    check("then the login is frank's, and erin's key is not cached for him",
+          (users.account()[0], users.account_key()), ("frank", None))
+    from spark import forge
+    st = forge.local_store()
+    check("the store unwraps frank's key once with his token", (st.name, users.account_key()), ("frank", ddk))
+    users.write_login("erin", t2, dk)
+
+
 def test_fails_index_redacts():
     # the plain index the prompt hook reads: NAME=value where NAME smells
     # of a secret becomes NAME=...; PATH=/usr/bin stays
@@ -484,6 +656,26 @@ def test_fails_index_redacts():
           "export API_KEY=... PASSWORD=... --auth=... path=y")
     check("a plain word survives", red("make target=all"), "make target=all")
 
+    # the shapes every other text spark keeps or sends is held to: a
+    # token given to a command as a word or in a header has no NAME= in
+    # front, and the old NAME=... rule alone let both through to the
+    # plain index
+    gh = "ghp_" + "Q7" * 18                    # built here: the diff carries no token
+    sk = "sk-" + "a1B2" * 6
+    fix = "gh auth login --hostname github.com --with-token " + gh
+    check("the old rule alone missed a GitHub token", red(fix), fix)
+    entries = [{"kind": "fail", "name": "gh", "note": fix,
+                "shape": "c" * 16, "head": "gh", "rc": "1"},
+               {"kind": "fail", "name": "curl", "note": "curl -H 'Authorization: Bearer %s' host" % sk,
+                "shape": "d" * 16, "head": "curl", "rc": "22"}]
+    ledger.write_fails_index(entries)
+    with open(ledger.FAILS_INDEX, encoding="utf-8") as f:
+        text = f.read()
+    check("the fails index holds a GitHub token back", gh not in text and "--with-token [held]\n" in text, True)
+    check("the fails index holds an sk- key back", sk not in text and "Bearer [held]'" in text, True)
+    check("a held fix stays one line", len(text.splitlines()), 2)
+    check("the sealed ledger's note is untouched", entries[0]["note"], fix)
+
 
 def main():
     test_block_2_3_2()
@@ -502,6 +694,8 @@ def main():
     test_audit_store()
     test_chat_history_never_written_over()
     test_remove_validates_the_name()
+    test_a_bad_record_is_skipped()
+    test_token_change_is_crash_safe()
     test_fails_index_redacts()
     test_throughput_floor()
     if FAILED:

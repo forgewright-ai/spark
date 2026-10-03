@@ -512,6 +512,8 @@ When something stops working:
    login NAME`.
 7. spark's line sits on your prompt: press `Esc k`, or run `spark
    height 2`.
+8. `1 record in thread ID could not be read -- skipped`: part of that
+   thread is damaged on disk. The rest of it reads, and new turns land.
 
 ## 8. What an attacker can and cannot do
 

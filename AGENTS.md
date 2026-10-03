@@ -78,8 +78,9 @@ proves `spark-check` running supervised. The `workflows` job runs
 zizmor over the workflows, medium and above failing. `codeql.yml` is
 GitHub's static analysis over the python and the javascript.
 `advisories.yml` opens one issue when llama.cpp publishes a security
-advisory after the engine pin's date. `dependabot.yml` keeps every
-action's sha pin current. `tests/forge_probe.py URL` is not in the
+advisory after the engine pin's date, and one when sherpa-onnx does
+after the voice pin's. `dependabot.yml` keeps every action's sha pin
+current. `tests/forge_probe.py URL` is not in the
 gate: it asks a live `FORGE`'s gates from the wire, one line per gate,
 exit 1 when any does not hold.
 

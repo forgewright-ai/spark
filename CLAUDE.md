@@ -267,7 +267,9 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 ledger (what you have already weighed: one sealed file, a kind
                 per contract, the retiring rule the contract's own; a writer
                 refuses a file that does not open; the plain state/fails index
-                it writes carries `NAME=...` where NAME smells of a secret)
+                it writes holds a fix to `text.hold_secrets`, each span
+                `[held]`, and carries `NAME=...` where NAME smells of a
+                secret)
                 ask (spark ask: contract 12) read (spark read: contract 11)
                 drill (spark drill: contract 13) watch (spark watch: contract 14)
                 reveal (spark reveal: stdin at a reader's pace at a terminal, an exact
@@ -323,7 +325,12 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 spec in tests/qr_test.py: the login link, scannable at a terminal)
                 vault (the sealed-file format and the key custody: a per-user
                 data key wrapped by the token; an append holds an existing file
-                to the caller's header first, so a foreign file takes no record)
+                to the caller's header first, so a foreign file takes no record,
+                and starts a line of its own after a torn one; a thread's
+                record that fails its tag is skipped and counted
+                (`read_sealed_records`), never shown, and `Store.load` says so
+                once on stderr: `! N records in thread ID could not be read --
+                skipped`; a whole-blob file is still refused whole)
                 users (the named users, their store under state/users/, and
                 this machine's login: spark user)
                 look (the living prompt's state: the one switch and the 3
@@ -407,8 +414,9 @@ tests/          smoke.py serve_smoke.py forge_smoke.py bench_smoke.py
                 section, on a signed v* tag
                 workflows/codeql.yml: GitHub's static analysis over the python
                 and the javascript, on a push to main, a pull request and weekly
-                workflows/advisories.yml: weekly, one issue when llama.cpp
-                published a security advisory after the engine pin's date
+                workflows/advisories.yml: weekly, one job per pin: one issue
+                when llama.cpp published a security advisory after the
+                engine pin's date, or sherpa-onnx after the voice pin's
                 workflows/line-audition-help.yml: by hand, each OS's --help for
                 the commands the prompt-line audition names, as artifacts
                 dependabot.yml: the workflows' action sha pins, kept current weekly
@@ -476,15 +484,22 @@ State is `~/.local/state/spark/`, 0700:
   `runs/detach.lock` is the one detached run's flock.
 - `sandbox/probe.json`: the probe's answer, keyed by the bwrap version,
   the kernel and the AppArmor userns switch.
-- `users/<name>/` 0700 per user: `token.hash` and `key` 0600 (the sha256
-  token verifier and the wrapped data key), plus that user's sealed
+- `users/<name>/` 0700 per user: `key` and `token.hash` 0600. `key` is
+  the wrapped data key, and on its second line `verifier <sha256>`, the
+  token's verifier. A token change is one atomic replace of `key`,
+  fsynced (`users.write_key`), so a crash leaves the old token or the
+  new one in force. `token.hash` is a copy written after it, the one
+  verifier a store from before v1.77 has (`users.verifier`). Then that
+  user's sealed
   `threads/`, `kept/`, `memory`, `chat-history` and `ledger`. `kept/`
   (0700, made on first use) holds the kept threads: the same sealed
   files, the same header, never pruned or cleared. The box account's
   store holds `audit` too, the admin actions.
 - `account` 0600, this machine's login (name and token), and
   `account-key` 0600, the unwrapped data key, so the hot paths never pay
-  the KDF.
+  the KDF. The key is a cache of the login (`users.write_login`): it
+  goes before `account` changes and comes back after, so a crash never
+  leaves a key cached for another login.
 
 Data is `~/.local/share/spark/{engine,models,voice}`, `voice` only
 once the voice was turned on. Tools are linked into `~/.local/bin`.
