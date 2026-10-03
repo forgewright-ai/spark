@@ -400,7 +400,7 @@ class Busy:
     CELLS = 8
     TIER_SECONDS = 2
     TIER_LONG = 15
-    LONG = "A long one. Ctrl-C stops it."
+    LONG = "Ctrl-C stops it."
 
     def __init__(self, stream=sys.stderr, above=False, mark=None, close=False, timeout=None, row=1):
         self.stream = stream

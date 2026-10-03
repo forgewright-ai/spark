@@ -1229,11 +1229,11 @@ def line_knowledge_cases(t, spark, home):
 
     # a failing verdict stops the stream at the command and re-asks once:
     # line 1 never shows the first command; the re-ask carries the found
-    # head's manual lines; the hint says what it was checked against
+    # head's manual lines; the hint is the model's own, no clause added
     hung = STATE.get("know_hung_up", 0)
     rc, lines, took, bodies, err = ask("? knowcut show processes by memory")
-    t.ok(rc == 0 and lines == ["cmd\tps aux -m", KNOW_PS[:1].upper() + KNOW_PS[1:] + ", checked against the ps manual."],
-         "line knowledge: a flag the manual lacks is asked again once; the passing command lands, checked", repr(lines))
+    t.ok(rc == 0 and lines == ["cmd\tps aux -m", KNOW_PS[:1].upper() + KNOW_PS[1:] + "."],
+         "line knowledge: a flag the manual lacks is asked again once; the passing command lands, its hint plain", repr(lines))
     # the stub serves one request at a time, so the re-ask waits out the
     # first reply's pause there; what proves the stop is the hang-up the
     # stub met writing the rest of that reply
@@ -1282,15 +1282,15 @@ def line_knowledge_cases(t, spark, home):
     t.ok(rc == 0 and len(bodies) == 2 and lines[:2] == ["cmd\tmicro <file>", "Opens the editor; type the file name before Enter."],
          "line knowledge: a placeholder the re-ask kept stays visible, the hint asks for the file name", repr(lines))
     rc, lines, took, bodies, err = ask("? knowverb stop the engine")
-    t.ok(rc == 0 and len(bodies) == 2 and lines[:2] == ["cmd\tspark off", "Stops the engine, checked against spark's own help."]
+    t.ok(rc == 0 and len(bodies) == 2 and lines[:2] == ["cmd\tspark off", "Stops the engine."]
          and "spark has no engine command." in bodies[-1]["messages"][-1]["content"],
-         "line knowledge: a spark verb the tree lacks is asked again; the passing verb lands, checked", repr(lines))
+         "line knowledge: a spark verb the tree lacks is asked again; the passing verb lands", repr(lines))
 
     # a command word the manual does not list: asked again with the sv
-    # manual's commands on its card; kept, the note names the manual
+    # manual's commands on its card
     rc, lines, took, bodies, err = ask("? knowsv enable sshd at boot")
     t.ok(rc == 0 and len(bodies) == 2 and lines[:2] == ["cmd\tln -s /etc/sv/sshd /var/service/",
-                                                          "Enables sshd at boot, checked against the sv manual."]
+                                                          "Enables sshd at boot."]
          and "enable is not a command in sv's manual here." in bodies[-1]["messages"][-1]["content"]
          and "| commands: status up down once exit start stop restart" in bodies[-1]["messages"][-1]["content"],
          "line knowledge: a command word sv's manual does not list is asked again, its commands on the card",
@@ -1358,7 +1358,7 @@ def line_knowledge_cases(t, spark, home):
          "line knowledge: the SPARK_KNOWLEDGE_DIR seam is said on stderr", repr(err[-300:]))
 
     f = _judge.Finding("command", "sv", "enable")
-    t.ok(_cli._gap(f) + ", so spark asks again" == "sv has no command enable, so spark asks again"
+    t.ok(_cli._gap(f) + " -- asking again" == "sv has no command enable -- asking again"
          and _cli._said(f) == "enable is not a command in sv's manual here.",
          "line knowledge: the pulse during a re-ask says the command the manual lacks, in a whole sentence")
 
@@ -1388,7 +1388,7 @@ def line_knowledge_cases(t, spark, home):
 
     # a note follows the words without the model's end mark, and a hint
     # the note leaves only a fragment of is dropped whole
-    t.ok(_cli._noted("", "Restarts sshd.", ", checked against the sv manual") == "Restarts sshd, checked against the sv manual"
+    t.ok(_cli._noted("", "Restarts sshd.", ", says the sv manual") == "Restarts sshd, says the sv manual"
          and _cli._noted("", "Lists network connections listening on port 8080 with their process",
                         "netstat is not on this machine -- check it before Enter") == "netstat is not on this machine -- check it before Enter",
          "line knowledge: a note never follows an end mark or a fragment of the hint")
@@ -1579,6 +1579,22 @@ def continuing_tag_cases(t):
          "chat: the continuing line skips a turn's tags", a + " | " + b)
 
 
+def model_name_cases(t):
+    """v1.72: a model is named by its row in the list wherever a person
+    reads it -- a stem, a file or a path; a file no row names keeps its
+    stem; the person-facing lines use it, the porcelain keeps the stem."""
+    from spark import config as _cf
+    stem = "google_gemma-4-26B-A4B-it-Q4_K_M"
+    t.ok(_cf.model_name(stem) == "gemma4-26b-a4b" and _cf.model_name(stem + ".gguf") == "gemma4-26b-a4b"
+         and _cf.model_name("/m/" + stem + ".gguf") == "gemma4-26b-a4b"
+         and _cf.model_name("stub-7b-q4") == "stub-7b-q4" and _cf.model_name("") == "",
+         "config.model_name: the row's name for a stem, a file or a path; an unknown file keeps its stem",
+         _cf.model_name(stem))
+    src = {n: open(os.path.join(REPO, "lib", "spark", n + ".py")).read() for n in ("cli", "forge", "do")}
+    t.ok(all("config.model_name(" in src[n] for n in src),
+         "config.model_name: bare spark and status, the chat's opening and /model, and do's notes use it")
+
+
 def server_pids_cases(t):
     """v1.64: a process counts as the engine only when its program IS
     llama-server -- a shell whose command line mentions it is not."""
@@ -1592,12 +1608,13 @@ def server_pids_cases(t):
 
 
 def chat_awake_cases(t):
-    """v1.65, the chat awake, in process: the wrap's lead and its hanging
-    indent (piped, today's bytes), the continuing line, the opening, the
-    puzzled line, the goodbye, and /do handed to spark do's driver. The
+    """v1.65, the chat in process: the wrap's lead and its hanging indent
+    (piped, today's bytes); v1.72, one UI -- the opening is one line, the
+    model by name or the thread it goes on with; a refusal is `! hint` on
+    stderr, awake or not; no goodbye; /do handed to spark do's driver. The
     look state is pinned to a throwaway dir: the real one is never read."""
     import io
-    from spark import config as _cf, do as _do, forge as _fg, look, text as _tx, words as _wd
+    from spark import config as _cf, do as _do, forge as _fg, look, text as _tx
 
     class Tty(io.StringIO):
         def isatty(self):
@@ -1613,15 +1630,13 @@ def chat_awake_cases(t):
     look.forget()
     real_out, real_err = sys.stdout, sys.stderr
 
-    def said(fn, *a, living=False):
-        _fg.LIVING[0] = living
+    def said(fn, *a):
         sys.stdout, sys.stderr = io.StringIO(), io.StringIO()
         try:
             fn(*a)
         finally:
             got = (sys.stdout.getvalue(), sys.stderr.getvalue())
             sys.stdout, sys.stderr = real_out, real_err
-            _fg.LIVING[0] = False
         return got
     try:
         # --- the lead: the face opens the reply, the lines hang under it
@@ -1647,7 +1662,8 @@ def chat_awake_cases(t):
         t.ok(piped[0] == piped[1] and piped[0].startswith("* Some **bold**"),
              "chat: piped, the lead is ignored -- the bytes are today's, byte for byte", repr(piped[0][:60]))
 
-        # --- the continuing line, for everyone
+        # --- the opening: one line -- the thread it goes on with, cut at a
+        # word to 80 columns, else the model it talks to, by name
         now = time.time()
 
         def stamp(secs):
@@ -1655,30 +1671,28 @@ def chat_awake_cases(t):
         msgs = [{"role": "user", "text": "which fonts can I use", "ts": stamp(150)},
                 {"role": "assistant", "text": "a few", "ts": stamp(125)}]
         long_msgs = [{"role": "user", "text": "word " * 40, "ts": stamp(3 * 3600 + 5)}]
-        cut = _fg.continuing(long_msgs, now)
-        t.ok(_fg.continuing(msgs, now) == '  continuing "which fonts can I use" (2 min ago) -- /new starts fresh'
-             and cut.endswith('" (3 h ago) -- /new starts fresh') and len(cut) <= 79 and "word" + '"' not in cut
-             and _fg.continuing([{"role": "user", "text": "hi", "ts": stamp(2 * 86400 + 9)}], now).endswith("(2 d ago) -- /new starts fresh")
-             and _fg.continuing([{"role": "user", "text": "hi", "ts": stamp(5)}], now).endswith('"hi" (1 min ago) -- /new starts fresh')
-             and _fg.continuing([], now) == "" and _fg.continuing([{"role": "assistant", "text": "x"}], now) == "",
-             "chat: the continuing line -- the first words cut at a word to 80 columns, N min / h / d ago", cut)
+        cut = _fg.continuing(long_msgs)
+        t.ok(_fg.continuing(msgs) == '* continuing "which fonts can I use" -- /new starts fresh, Esc ends'
+             and cut.endswith('" -- /new starts fresh, Esc ends') and len(cut) <= 79 and "word" + '"' not in cut
+             and _fg.continuing([]) == "" and _fg.continuing([{"role": "assistant", "text": "x"}]) == "",
+             "chat: the continuing line -- the first words cut at a word to 80 columns", cut)
+        cfg = _cf.load()
+        real_name = _fg.chat_model
+        try:
+            _fg.chat_model = lambda c: "gemma4-26b-a4b"
+            named, _ = said(_fg._opening, cfg, None)
+            _fg.chat_model = lambda c: ""
+            bare, _ = said(_fg._opening, cfg, None)
+        finally:
+            _fg.chat_model = real_name
+        t.ok(named == "* chat with gemma4-26b-a4b -- Esc ends, /help lists commands\n"
+             and bare == "* chat -- Esc ends, /help lists commands\n",
+             "chat: the opening is one line -- the model by name, or none when nothing says", repr((named, bare)))
 
-        # --- the opening: awake, the face and a greet line, then the hint
-        awake, _ = said(_fg._opening, None, living=True)
-        plain, _ = said(_fg._opening, None)
-        t.ok(awake == "* (o.o) %s\n  /help lists the commands; Esc or Ctrl-D ends\n" % _wd.greeting()
-             and _wd.greeting() in ("Hello again.", "Welcome back.", "Good to see you.")
-             and plain == "chat -- /help, Esc, Ctrl-D or /q ends\n",
-             "chat: the opening -- awake, `* FACE greeting` and the hint; unawakened, today's banner", repr((awake, plain)))
-
-        # --- the puzzled line and the goodbye
-        t.ok(said(_fg._refuse, "history is off", living=True) == ("(o.?) History is off.\n", "")
-             and said(_fg._refuse, "@x.txt: no such file", living=True) == ("(o.?) @x.txt: no such file.\n", "")
-             and said(_fg._refuse, "history is off") == ("", "spark: history is off\n"),
-             "chat: a refusal is the puzzled face and a whole sentence awake; unawakened, today's stderr line")
-        t.ok(said(_fg._goodbye, living=True) == ("(^.^) That is everything for now.\n", "")
-             and said(_fg._goodbye) == ("", ""),
-             "chat: the goodbye -- the pleased face and the done line awake; unawakened, silent")
+        # --- a refusal: `! hint` on stderr, awake or not; no goodbye
+        t.ok(said(_fg._refuse, "history is off") == ("", "! history is off\n")
+             and not hasattr(_fg, "_goodbye") and not hasattr(_fg, "LIVING"),
+             "chat: a refusal is `! hint` on stderr, one shape; there is no goodbye")
 
         # --- /do: the goal handed to spark do's own driver, then back
         calls = []
@@ -1693,14 +1707,14 @@ def chat_awake_cases(t):
         try:
             cfg = _cf.load()
             a = said(_fg._slash_do, cfg, "tid", ["--sandbox", "tidy", "the", "logs"])
-            b = said(_fg._slash_do, cfg, "tid", ["list", "files"], living=True)
+            b = said(_fg._slash_do, cfg, "tid", ["list", "files"])
             c = said(_fg._slash_do, cfg, "tid", ["it", "fails"])
             d = said(_fg._slash_do, cfg, "tid", [])
         finally:
             _do.cmd_do = real
         t.ok(calls == [["--sandbox", "--", "tidy", "the", "logs"], ["--", "list", "files"], ["--", "it", "fails"]]
-             and a == ("Back in the chat.\n", "") and b == ("(o.o) Back in the chat.\n", "")
-             and c[0] == "Back in the chat.\n" and "/do takes a goal" in d[1],
+             and a == ("* back in the chat\n", "") and b == a
+             and c[0] == "* back in the chat\n" and "/do takes a goal" in d[1],
              "chat: /do hands the goal to spark do (--sandbox kept, -- before the words), and the chat goes on",
              repr((calls, a, b, c, d)))
 
@@ -1715,8 +1729,8 @@ def chat_awake_cases(t):
         except ValueError as e:
             got, crash = [], repr(e)
         t.ok(not crash and _fg.number("12") and not _fg.number("²") and not _fg.number("٣")
-             and got[0][1].count("\n") == 1 and "/copy takes a number" in got[0][1]
-             and got[1][1].count("\n") == 1 and "--part N is a part number" in got[1][1]
+             and got[0][1].count("\n") == 1 and "/copy N copies the Nth reply" in got[0][1]
+             and got[1][1].count("\n") == 1 and "--part takes a number" in got[1][1]
              and "no thread ²" in got[2][1],
              "chat: `/copy ²`, `/read @f --part ²` and `/resume ²` refuse in one line -- no crash",
              crash or repr(got))
@@ -1752,7 +1766,7 @@ def chat_awake_cases(t):
         saved_env = {k: os.environ.get(k) for k in ("PATH", "WAYLAND_DISPLAY")}
         os.environ.update({"PATH": fail + os.pathsep + os.environ["PATH"], "WAYLAND_DISPLAY": "wayland-stub"})
         try:
-            out, _ = said(_fg._slash_copy, cfg, None, [], living=True)
+            _o, out = said(_fg._slash_copy, cfg, None, [])
         finally:
             for k, v in saved_env.items():
                 if v is None:
@@ -1760,8 +1774,8 @@ def chat_awake_cases(t):
                 else:
                     os.environ[k] = v
         tool = "pbcopy" if sys.platform == "darwin" else "wl-copy"
-        t.ok(out == "(o.?) %s did not take the reply -- /save writes the conversation to a file.\n" % tool,
-             "chat: a clipboard that fails keeps its name lowercase in the puzzled line", repr(out))
+        t.ok(out == "! the clipboard (%s) failed -- /save writes a file\n" % tool,
+             "chat: a clipboard that fails is named in one line on stderr", repr(out))
 
         # --- /save: a directory holds the default name; a name keeps its spaces
         adir = os.path.join(tmp, "adir")
@@ -1800,14 +1814,13 @@ def chat_awake_cases(t):
         paced = "".join(ticked)
         t.ok("\n      " in w.stream.getvalue() and "\n" in paced and "\n " not in paced and "      " not in paced,
              "chat: the reveal paces the words; the hanging indent is written free", repr((w.stream.getvalue(), paced)))
-        wide = _fg.continuing([{"role": "user", "text": "漢字 " * 40, "ts": stamp(65)}], now)
-        t.ok(_tx.cols(wide) <= 79 and _tx.cols(wide) > len(wide) and wide.endswith("(1 min ago) -- /new starts fresh")
+        wide = _fg.continuing([{"role": "user", "text": "漢字 " * 40, "ts": stamp(65)}])
+        t.ok(_tx.cols(wide) <= 79 and _tx.cols(wide) > len(wide) and wide.endswith('" -- /new starts fresh, Esc ends')
              and _tx.cols("漢á") == 3,
              "chat: the continuing line fits 80 columns by display width (a wide character is two)", wide)
         del _fg.SAID[:]
     finally:
         sys.stdout, sys.stderr = real_out, real_err
-        _fg.LIVING[0] = False
         for n, v in paths.items():
             setattr(look, n, v)
         look.forget()
@@ -1826,8 +1839,8 @@ def chat_tools_cases(t, spark, home):
     first = os.path.join(home, "spark-chat-%s.txt" % today)
     second = os.path.join(home, "spark-chat-%s-2.txt" % today)
     body = open(first).read() if os.path.exists(first) else ""
-    t.ok(rc == 0 and "Saved to ~/spark-chat-%s.txt (1 turn)." % today in out
-         and "Saved to ~/spark-chat-%s-2.txt (1 turn)." % today in out
+    t.ok(rc == 0 and "* saved to ~/spark-chat-%s.txt (1 turn)" % today in out
+         and "* saved to ~/spark-chat-%s-2.txt (1 turn)" % today in out
          and re.fullmatch(r"you: count\n\nspark: \d+\n", body) and open(second).read() == body
          and _stat.S_IMODE(os.stat(first).st_mode) == 0o600,
          "chat: /save writes ~/spark-chat-DATE.txt (you: / spark:, 0600), then -2", out + err + body)
@@ -1836,13 +1849,12 @@ def chat_tools_cases(t, spark, home):
         f.write("mine\n")
     rc, out, err = spark("chat", stdin="/save mine.txt\n/save kept.txt\n:q\n", cwd=home)
     kept = os.path.join(home, "kept.txt")
-    t.ok(rc == 0 and "spark: ~/mine.txt is there already, and /save never writes over a file" in err
-         and open(mine).read() == "mine\n" and "Saved to ~/kept.txt (1 turn)." in out
+    t.ok(rc == 0 and "! ~/mine.txt is already there -- /save FILE names another" in err
+         and open(mine).read() == "mine\n" and "* saved to ~/kept.txt (1 turn)" in out
          and _stat.S_IMODE(os.stat(kept).st_mode) == 0o600,
          "chat: /save FILE never writes over a file that is there; a new FILE is written 0600", out + err)
     rc, out, err = spark("chat", stdin="/new\n/save\n/copy\n:q\n")
-    t.ok(rc == 0 and "spark: this chat has no turns yet, so /save has nothing to take" in err
-         and "spark: this chat has no turns yet, so /copy has nothing to take" in err,
+    t.ok(rc == 0 and "! nothing to save yet" in err and "! nothing to copy yet" in err,
          "chat: /save and /copy with nothing to take say so", out + err)
 
     # --- /copy: the reply to the clipboard tool's stdin, or one line
@@ -1860,18 +1872,18 @@ def chat_tools_cases(t, spark, home):
     got = open(cap).read() if os.path.exists(cap) else ""
     replies = re.findall(r"^\* (\d+)$", out, re.M)
     t.ok(rc == 0 and replies and got == replies[-1]
-         and "The last reply is on the clipboard (%d characters)." % len(got) in out,
+         and "* copied the last reply (%d characters)" % len(got) in out,
          "chat: /copy puts the last reply on the clipboard (a stub pbcopy / wl-copy)", out + err + got)
     rc, out, err = spark("chat", stdin="/copy 2\n/copy 9\n/copy x\n:q\n", extra=clip)
     got = open(cap).read()
-    t.ok(rc == 0 and got == replies[0] and "The reply 2 from the end is on the clipboard (%d characters)." % len(got) in out
-         and "spark: this chat has 2 replies: /copy 2 is the oldest" in err
-         and "spark: /copy takes a number" in err,
+    t.ok(rc == 0 and got == replies[0] and "* copied reply 2 from the end (%d characters)" % len(got) in out
+         and "! only 2 replies -- /copy 2 is the oldest" in err
+         and "! /copy N copies the Nth reply from the end" in err,
          "chat: /copy N takes the Nth from the end; past the oldest or not a number is refused", out + err)
     empty = os.path.join(home, "no-tools")
     os.makedirs(empty, exist_ok=True)
     rc, out, err = spark("chat", stdin="/copy\n:q\n", extra={"PATH": empty, "WAYLAND_DISPLAY": "", "DISPLAY": ""})
-    t.ok(rc == 0 and "No clipboard here: /save writes the conversation to a file." in out,
+    t.ok(rc == 0 and "! no clipboard here -- /save writes a file" in err,
          "chat: /copy with no clipboard tool says so in one line", out + err)
 
     # --- /read: contract 11 on a file, inside the chat, on its thread
@@ -1890,21 +1902,21 @@ def chat_tools_cases(t, spark, home):
         rc, out, err = spark("chat", stdin="/read @gate.txt\n/read @nope.txt\n/read\n:q\n", cwd=home)
     finally:
         STATE.pop("read_none", None)
-    t.ok(rc == 0 and 'spark: the source does not answer -- it opens: "The gate opens at nine' in err
-         and "spark: @nope.txt: no such file" in err and "spark: /read takes one file: /read @FILE [question]" in err
+    t.ok(rc == 0 and '! the source does not answer -- it opens: "The gate opens at nine' in err
+         and "! @nope.txt: no such file" in err and "! /read takes one file: /read @FILE [question]" in err
          and "ten dollars" not in out,
          "chat: /read refuses with the opening words, a missing file as @FILE does, and no file", out + err)
 
     # --- /do: spark do's own driver, in the same terminal, then back
     rc, out, err = spark("chat", stdin="/do list the files\n/do\n:q\n")
-    t.ok(rc == 0 and "spark: spark do confirms every step -- run it in a terminal" in err
-         and "Back in the chat." in out and "spark: /do takes a goal" in err,
+    t.ok(rc == 0 and "spark: spark do asks before every step -- run it in a terminal" in err
+         and "* back in the chat" in out and "! /do takes a goal" in err,
          "chat: /do reaches spark do's driver (piped, its own refusal) and the chat goes on", out + err)
 
     # --- the review (v1.65)
     rc, out, err = spark("chat", stdin="/copy ²\n/read @gate.txt --part ²\ncount\n:q\n", extra=clip, cwd=home)
-    t.ok(rc == 0 and "Traceback" not in err and err.count("spark: /copy takes a number") == 1
-         and err.count("spark: --part N is a part number, 1 up") == 1 and re.search(r"^\* \d+$", out, re.M),
+    t.ok(rc == 0 and "Traceback" not in err and err.count("! /copy N copies the Nth reply") == 1
+         and err.count("! --part takes a number, 1 or more") == 1 and re.search(r"^\* \d+$", out, re.M),
          "chat: `/copy ²` and `/read @f --part ²` refuse in one line, and the chat goes on", out + err)
     rc, out, err = spark("chat", stdin="/new\n/read @gate.txt when does it open\n/last\n:q\n", cwd=home)
     t.ok(rc == 0 and re.search(r"  read  /read @gate.txt when does it open\n  \* It opens \"at nine\"", out)
@@ -1913,9 +1925,9 @@ def chat_tools_cases(t, spark, home):
     sdir = os.path.join(home, "sdir")
     os.makedirs(sdir, exist_ok=True)
     rc, out, err = spark("chat", stdin="/new\ncount\n/save sdir\n/save sdir/\n/save my  chat.txt\n:q\n", cwd=home)
-    t.ok(rc == 0 and "Saved to ~/sdir/spark-chat-%s.txt (1 turn)." % today in out
-         and "Saved to ~/sdir/spark-chat-%s-2.txt (1 turn)." % today in out
-         and os.path.isfile(os.path.join(home, "my  chat.txt")) and "already" not in err,
+    t.ok(rc == 0 and "* saved to ~/sdir/spark-chat-%s.txt (1 turn)" % today in out
+         and "* saved to ~/sdir/spark-chat-%s-2.txt (1 turn)" % today in out
+         and os.path.isfile(os.path.join(home, "my  chat.txt")) and "already there" not in err,
          "chat: /save DIR writes the default name inside it; a name keeps its spaces as typed", out + err)
     off = os.path.join(home, "off.txt")
     try:
@@ -1926,14 +1938,14 @@ def chat_tools_cases(t, spark, home):
     body = open(off).read() if os.path.exists(off) else ""
     got = open(cap).read() if os.path.exists(cap) else ""
     t.ok(rc == 0 and re.fullmatch(r"you: count\n\nspark: (\d+)\n", body) and got == body.split("spark: ")[1].strip()
-         and "The last reply is on the clipboard" in out,
+         and "* copied the last reply" in out,
          "chat: SPARK_HISTORY=off -- /save and /copy take this chat's own turns from memory", out + err + body)
     # /do: the exchange lands on the chat's thread after the run's own, so
     # the next `spark chat` goes on with the chat, not the run
     hook = {"SPARK_DO_STDIN": "1"}
     rc, out, err = spark("chat", stdin="/new\nchat first\n/do say hello\n\n/save do.txt\n:q\n", extra=hook, cwd=home)
     body = open(os.path.join(home, "do.txt")).read() if os.path.exists(os.path.join(home, "do.txt")) else ""
-    t.ok(rc == 0 and "STEP-ONE" in out and "Back in the chat." in out
+    t.ok(rc == 0 and "STEP-ONE" in out and "* back in the chat" in out
          and "you: /do say hello\n\nspark: done -- all done\n" in body and body.startswith("you: chat first"),
          "chat: /do lands the goal and the run's end on the chat's thread; /save sees it", out + err + body)
     rc, out, err = spark("chat", stdin="/save next.txt\n:q\n", cwd=home)
@@ -1951,10 +1963,9 @@ PROMPT_AT = re.compile(rb"\n(?:\x1b\[[0-9;?]*[A-Za-z])*chat>")
 
 
 def chat_pty_cases(t, env, home):
-    """v1.65 at a pty: unawakened, today's banner, the continuing line and
-    a silent end; awakened, the face and a greet line, the continuing
-    line, the hint, a face-led reply, the puzzled line, and the goodbye
-    on /q and on Ctrl-D."""
+    """v1.72 at a pty, one UI awake or not: the opening is one line (the
+    thread it goes on with), a reply is `* ` and never a face, a refusal
+    is `! `, and the end -- /q or Ctrl-D -- says nothing."""
     import pty
     h = os.path.join(home, "pty-chat")
     os.makedirs(os.path.join(h, ".config", "spark"), exist_ok=True)
@@ -2018,11 +2029,11 @@ def chat_pty_cases(t, env, home):
         text = "\n".join(ln.rstrip("\r").rsplit("\r", 1)[-1] for ln in text.split("\n"))
         return status is not None and os.WIFEXITED(status) and os.WEXITSTATUS(status) == 0, text
 
+    opening = '* continuing "which fonts can I use" -- /new starts fresh, Esc ends'
     ok, plain = drive(e, [])
-    t.ok(ok and "chat -- /help, Esc, Ctrl-D or /q ends" in plain
-         and '  continuing "which fonts can I use" (1 min ago) -- /new starts fresh' in plain
-         and "(o.o)" not in plain and "(^.^)" not in plain,
-         "chat pty: unawakened, today's banner, the continuing line, a silent end", plain)
+    t.ok(ok and plain.splitlines()[0] == opening and plain.count(opening) == 1
+         and "(o.o)" not in plain and "(^.^)" not in plain and plain.rstrip().endswith("chat> /q"),
+         "chat pty: unawakened, one opening line -- the thread it goes on with -- and a silent end", plain)
 
     state = os.path.join(h, ".local", "state", "spark")
     os.makedirs(state, exist_ok=True)
@@ -2039,27 +2050,26 @@ def chat_pty_cases(t, env, home):
         ok, lit = drive(awake, [(None, b"count\n"), (None, b"@nope.txt\n"), (garbage, b"hello\n"), (fine, b"/copy 9\n")])
     finally:
         STATE["mode"] = "ok"
-    t.ok(ok and re.search(r"^\* \(o\.o\) (Hello again\.|Welcome back\.|Good to see you\.)$", lit, re.M)
-         and '  continuing "which fonts can I use" (1 min ago) -- /new starts fresh' in lit
-         and "  /help lists the commands; Esc or Ctrl-D ends" in lit and "chat -- /help" not in lit,
-         "chat pty: awakened, `* FACE greeting`, the continuing line, the hint", lit)
-    t.ok(re.search(r"\(o\.o\) 4$", lit, re.M) and "(o.?) @nope.txt: no such file." in lit
-         and lit.count("(o.?) ") >= 3 and "spark: " not in lit,
-         "chat pty: awakened, the reply face-led; a missing @FILE, a stub error and a refusal are the puzzled face", lit)
-    t.ok(lit.rstrip().endswith("(^.^) That is everything for now."),
-         "chat pty: awakened, /q ends with the pleased face and the done line", lit[-200:])
+    t.ok(ok and lit.splitlines()[0] == opening and lit.count(opening) == 1
+         and not re.search(r"Hello again|Welcome back|Good to see you|/help lists the commands", lit),
+         "chat pty: awakened, the same one opening line -- no greeting, no face", lit)
+    t.ok(re.search(r"^\* 4$", lit, re.M) and "! @nope.txt: no such file" in lit
+         and lit.count("! ") >= 3 and "(o." not in lit and "spark: " not in lit,
+         "chat pty: awakened, a reply is `* ` with no face; a missing @FILE, a stub error and a refusal are `! `", lit)
+    t.ok(lit.rstrip().endswith("chat> /q") and "everything for now" not in lit,
+         "chat pty: awakened, /q ends with nothing said", lit[-200:])
     ok, lit = drive(awake, [], end=b"\x04")
-    t.ok(ok and lit.rstrip().endswith("(^.^) That is everything for now."),
-         "chat pty: awakened, Ctrl-D ends with the goodbye too", lit[-200:])
+    t.ok(ok and "(^.^)" not in lit and "everything for now" not in lit and lit.rstrip().splitlines()[-1].startswith("chat>"),
+         "chat pty: awakened, Ctrl-D ends with nothing said too", lit[-200:])
 
 
 def chat_voice_pty_cases(t, env, home):
     """v1.70 at a pty: Esc on an EMPTY `chat>` line ends the chat as
-    Ctrl-D does (the goodbye awake, silence otherwise); an arrow and an
-    Esc with text on the line do not. The voice through the stub seam
-    (SPARK_VOICE_STUB: what would be spoken, one line each; no engine,
-    no sound, no microphone): mode on speaks the greeting and the
-    goodbye, a reply only after /aloud; clear speaks every reply; /again
+    Ctrl-D does, in silence; an arrow and an Esc with text on the line do
+    not. The voice through the stub seam (SPARK_VOICE_STUB: what would be
+    spoken, one line each; no engine, no sound, no microphone): mode on
+    speaks a reply only after /aloud, no greeting and no goodbye (v1.72);
+    clear speaks every reply; /again
     prints and speaks the last; Esc v lands the heard words on the line
     and nothing is sent until Enter; Esc x stops. The readline is the
     python's own: GNU on Linux (the getc hook), libedit on Apple's (the
@@ -2144,7 +2154,7 @@ def chat_voice_pty_cases(t, env, home):
 
     # unawakened, voice off: a lone Esc on the empty line ends it in silence
     st, text, _ = drive(e, [("\nchat>", b"\x1b", 2.5)])
-    t.ok(ended(st) and "chat -- /help, Esc, Ctrl-D or /q ends" in text and not spoken(),
+    t.ok(ended(st) and "-- Esc ends, /help lists commands" in text and not spoken(),
          "chat pty (%s): Esc on an empty line ends the chat, rc 0, nothing said" % lib, text[-300:])
     # an arrow key is a sequence that starts with Esc: the chat goes on
     st, text, alive = drive(e, [("\nchat>", b"\x1b[A", 1.5), (None, b"\x15/q\r", 1.0)])
@@ -2169,8 +2179,8 @@ def chat_voice_pty_cases(t, env, home):
              "chat pty (%s): a Ctrl-C inside the Esc wait clears the line as Ctrl-C does; nothing sent" % lib,
              text[-300:])
 
-    # awake, mode on: the greeting and the goodbye spoken, a reply only
-    # after /aloud; Esc on the empty line ends with the goodbye
+    # awake, mode on: a reply spoken only after /aloud; no greeting, no
+    # goodbye, and Esc on the empty line ends in silence
     state = os.path.join(h, ".local", "state", "spark")
     os.makedirs(state, exist_ok=True)
     with open(os.path.join(state, "look"), "w") as f:
@@ -2179,11 +2189,10 @@ def chat_voice_pty_cases(t, env, home):
     st, text, _ = drive(on, [("\nchat>", b"count\r", 0.2), ("\nchat>", b"/aloud\r", 0.2), ("\nchat>", b"count\r", 0.2),
                              ("\nchat>", b"\x1b", 3.0)])
     said = spoken()
-    t.ok(ended(st) and text.rstrip().endswith("(^.^) That is everything for now.") and len(said) == 3
-         and said[0] in ("Hello again.", "Welcome back.", "Good to see you.") and re.fullmatch(r"\d+", said[1])
-         and said[2] == "That is everything for now." and "Every reply aloud now" in text,
-         "chat pty (%s): mode on -- the greeting spoken, a reply only after /aloud, Esc ends with the goodbye "
-         "spoken" % lib, repr((said, text[-300:])))
+    t.ok(ended(st) and "everything for now" not in text and len(said) == 1 and re.fullmatch(r"\d+", said[0])
+         and "* replies aloud -- /aloud stops" in text and "(o.o)" not in text,
+         "chat pty (%s): mode on -- a reply spoken only after /aloud; no greeting, no goodbye, no face"
+         % lib, repr((said, text[-300:])))
 
     # clear mode: Esc v lands the heard words, Enter sends them, the reply
     # is spoken; /again prints and speaks it again; Esc x stops; the
@@ -2193,12 +2202,12 @@ def chat_voice_pty_cases(t, env, home):
     st, text, alive = drive(clear, [("\nchat>", b"\x1bv", 1.5), (None, b"\r", 0.2), ("\nchat>", b"/again\r", 0.3),
                                     ("\nchat>", b"\x1bx", 0.5), ("\nchat>", b"/nope\r", 0.3), ("\nchat>", b"\x04", 2.0)])
     said = spoken()
-    t.ok(ended(st) and "listening -- speak, a pause ends it" in text and "chat> how many files are here" in text
+    t.ok(ended(st) and "* listening -- a pause ends it" in text and "chat> how many files are here" in text
          and text.count("The output means X.") == 2 and alive[0],
          "chat pty (%s): clear -- Esc v lands the heard words on the line; Enter sends them; /again prints the "
          "reply again" % lib, text[-500:])
-    t.ok(said[:1] == ["chat. slash help lists the commands; Escape ends it."]
-         and said.count("The output means X.") == 2 and any("no /nope" in x for x in said),
+    t.ok(said[:1] == ["chat. Escape ends it; slash help lists the commands."]
+         and said.count("The output means X.") == 2 and any("no command /nope" in x for x in said),
          "chat pty (%s): clear -- the opening, every reply, /again and a refusal spoken" % lib, repr(said))
     # v1.71, clear mode: the reply spoken as it streams, a sentence at a
     # time -- the stub server holds the reply's rest until the voice has
@@ -2208,15 +2217,15 @@ def chat_voice_pty_cases(t, env, home):
     st, text, alive = drive(clear, [("\nchat>", b"slowtalk\r", 0.2), ("\nchat>", b"\x04", 2.0)])
     said = spoken()
     early = STATE.get("slowtalk_said") or []
-    t.ok(ended(st) and said == ["chat. slash help lists the commands; Escape ends it.", "The first sentence is here.",
+    t.ok(ended(st) and said == ["chat. Escape ends it; slash help lists the commands.", "The first sentence is here.",
                                 "The second one holds 3.14 and e.g. more.", "Last"]
          and "The first sentence is here." in early and "Last" not in early,
          "chat pty (%s): clear -- the reply spoken sentence by sentence as it streams: the first said before the "
          "stream ended, 3.14 and e.g. never a sentence's end, the rest at the end" % lib,
          repr((said, early, text[-300:])))
     st, text, alive = drive(e, [("\nchat>", b"\x1bv", 1.5), (None, b"/aloud\r", 0.5), ("\nchat>", b"\x04", 2.0)])
-    t.ok(ended(st) and "the voice is off -- spark voice on or clear, then Esc v listens" in text
-         and "chat> how many" not in text and "the voice is off -- spark voice on or clear, then /aloud" in text
+    t.ok(ended(st) and "! the voice is off -- spark voice on, then Esc v" in text
+         and "chat> how many" not in text and "! the voice is off -- spark voice on turns it on" in text
          and not spoken(),
          "chat pty (%s): voice off -- Esc v and /aloud say how to turn it on, nothing heard or said" % lib,
          text[-400:])
@@ -2322,7 +2331,7 @@ def living_core_cases(t):
              repr(b._frame(0)))
         b = _tx.Busy(Tty(), timeout=8)
         b.started = time.monotonic() - 7
-        t.ok(b.long_at == 6 and b._frame(0).endswith(" 7 s  A long one. Ctrl-C stops it."),
+        t.ok(b.long_at == 6 and b._frame(0).endswith(" 7 s  Ctrl-C stops it."),
              "living: from three quarters of the timeout, one sentence says what to do", repr(b._frame(0)))
         os.environ["SSH_CONNECTION"] = "192.0.2.1 1 192.0.2.2 22"
         os.environ["SPARK_LOOK"] = "auto"
@@ -2504,7 +2513,7 @@ def living_core_cases(t):
     rc8, helped2 = sp("height", "help")
     senv = open(os.path.join(home, ".config", "spark", "spark.env")).read()
     lk = open(os.path.join(home, ".local", "state", "spark", "look")).read()
-    t.ok(rc0 == 0 and "not awakened" in bare and bare.startswith("look    off ") and "\nreveal  off " in bare
+    t.ok(rc0 == 0 and "* not awake yet" in bare and bare.startswith("look    off\n") and "\nreveal  off\n" in bare
          and "\nheight  1 " in bare and rc1 == 0 and "after spark awaken" in said and rc2 == 0
          and "SPARK_LOOK=on\n" in senv_on and "SPARK_LOOK=auto\n" in senv and "SPARK_LOOK_" not in senv
          and "SPARK_HEIGHT=3" in senv and "AWAKE=no" in lk and "MOTION=off" in lk and "HEIGHT=3" in lk,
@@ -2523,8 +2532,10 @@ def living_core_cases(t):
          repr(_gone))
     rc9, off = sp("look", "off")
     senv = open(os.path.join(home, ".config", "spark", "spark.env")).read()
-    t.ok(rc9 == 0 and "reveal is untouched" in off and "SPARK_LOOK=off\n" in senv
-         and "SPARK_REVEAL" not in senv, "living: spark look off writes SPARK_LOOK=off and leaves the reveal", senv)
+    rc10, again = sp("look", "off")
+    t.ok(rc9 == 0 and off == "* the look is off\n" and rc10 == 0 and again == "" and "SPARK_LOOK=off\n" in senv
+         and "SPARK_REVEAL" not in senv,
+         "living: spark look off writes SPARK_LOOK=off, leaves the reveal; again, nothing changed, says nothing", senv)
     rcg, greet = sp("words", "greet")
     t.ok(rcg == 0 and greet == "", "living: the greeting is silent on an unawakened machine")
     env["SPARK_BASE_URL"] = "http://127.0.0.1:9"     # a question here reaches no model
@@ -2579,9 +2590,8 @@ def living_core_cases(t):
 def living_awaken_cases(t):
     """v1.59 awaken: the door to the living layer. No model means the
     shipped lines; a garbage birth is refused line by line and the shipped
-    line stands in; a soul file of yours is kept; the greeting is silent
-    unawakened and when the look is off; the fact it may say is written
-    nowhere."""
+    line stands in; a soul file of yours is kept; nothing is greeted,
+    awake or not (v1.72)."""
     from spark import look as _look
     from spark import memory as _mem
     from spark import awaken as _aw
@@ -2761,7 +2771,7 @@ def living_awaken_cases(t):
         warm = _words.shipped("warm")
         wf, ff, pf = cfgd + "/words", cfgd + "/faces", cfgd + "/personality"
         t.ok(rc == 0 and "not answering" in out and out.count("temperament [plain]") == 2
-             and "Awake. The look is on auto: motion, colour and words. spark look shows it." in out,
+             and "* awake -- the look is on auto" in out and "(^.^)" not in out and "I am awake" not in out,
              "awaken with no model: asked again once, the shipped lines said so, the closing line", out + err)
         t.ok("\t" + warm["greet.1"] + "\n" in read(wf) and "TEMPER=warm" in read(ff) and "RATE=28" in read(ff)
              and all(oct(os.stat(p).st_mode & 0o777) == "0o600" for p in (wf, ff, pf) if os.path.exists(p))
@@ -2799,31 +2809,18 @@ def living_awaken_cases(t):
         rc, out, _ = run(env, "soul")
         t.ok(rc == 0 and esc not in out and "lighthouse keeper.[31m" in out,
              "spark soul: a control character in the personality file is never shown", repr(out))
-        rc, out, _ = run(env, "words", "greet")
-        idle = read(ff).split("IDLE=", 1)[-1].split("\n", 1)[0]
-        t.ok(rc == 0 and len(out.splitlines()) == 1 and idle and out.rstrip() in
-             ["* %s %s" % (idle, warm[g]) for g in ("greet.1", "greet.2", "greet.3")],
-             "words greet: one line, this machine's face and a greeting", out)
+        # an older widget still asks `spark words greet`: awake, with a
+        # fact remembered and old keys in the files, it says nothing
         run(env, "memory", "add", "backups", "run", "on", "Fridays")
-        rc, out, _ = run(env, "words", "greet")
-        said = [ln for ln in out.splitlines() if ln.startswith("  You asked me to remember: ")]
-        t.ok(rc == 0 and said == ["  You asked me to remember: backups run on Fridays"]
-             and all("Fridays" not in read(p) for p in (wf, ff, pf, std + "/look", cfgd + "/spark.env")),
-             "words greet: one remembered fact on screen, in no plain file", out)
-        # the keys v1.69 removed, left in an old file: it loads, and spark
-        # ignores them -- the greeting is the look switch's alone
         with open(cfgd + "/site.env", "a") as f:
             f.write("SITE_QUIET_START=yes\nSITE_QUIET_AUDIO=yes\n")
         with open(cfgd + "/spark.env", "a") as f:
             f.write("SPARK_LOOK_WORDS=off\nSPARK_LOOK_MOTION=off\nSPARK_LOOK_COLOUR=off\n")
         rc, out, _ = run(env, "words", "greet")
-        t.ok(rc == 0 and len(out.splitlines()) >= 1 and out.startswith("* "),
-             "words greet: an old site.env and spark.env holding SITE_QUIET_* and SPARK_LOOK_* still load, ignored",
-             repr(out))
+        t.ok(rc == 0 and out == "" and all("Fridays" not in read(p) for p in (wf, ff, pf, std + "/look", cfgd + "/spark.env")),
+             "words greet: silent awake too (v1.72), old keys loading, the fact in no plain file", repr(out))
         with open(cfgd + "/site.env", "w") as f:
             f.write("")
-        rc, out, _ = run(env, "words", "greet", extra={"SPARK_LOOK": "off"})
-        t.ok(rc == 0 and out == "", "words greet: silent with the look off", repr(out))
         with open(wf, "a") as f:
             f.write("greet.1\t" + esc + "[2Jcleared\nnot a line\n")
         rc, out, _ = run(env, "words")
@@ -2836,7 +2833,7 @@ def living_awaken_cases(t):
         cfgd = home + "/.config/spark"
         rc, out, err = run(env, "awaken", answers="playful\nfaster\nyes\n")
         body = read(cfgd + "/words")
-        t.ok(rc == 0 and esc not in out and "Hello there. Nice to meet you." in out and "did not pass the check" in out,
+        t.ok(rc == 0 and esc not in out and "Hello there. Nice to meet you." in out and "failed the check" in out,
              "awaken, a garbage birth: said plainly, the pace shown, not one escape printed", out + err)
         t.ok("\tAwake and glad.\n" in body and "\t" + ship["greet.1"] + "\n" in body and esc not in body and token not in body
              and all(len(ln.split("\t", 1)[1]) <= 72 for ln in body.splitlines()),
@@ -2860,7 +2857,7 @@ def living_awaken_cases(t):
         with open(cfgd + "/soul", "w") as f:
             f.write("Call yourself Fixture.\n")
         rc, out, _ = run(env, "awaken", answers="\nyes\n")
-        t.ok(rc == 0 and "Your own soul is kept." in out and read(cfgd + "/soul") == "Call yourself Fixture.\n"
+        t.ok(rc == 0 and "* your soul is kept" in out and read(cfgd + "/soul") == "Call yourself Fixture.\n"
              and not os.path.exists(cfgd + "/personality"),
              "awaken: an existing soul file is untouched, no personality beside it", out)
         home = root + "/d"
@@ -2894,26 +2891,27 @@ def living_widget_cases(t):
              "%s passes its height to both spark line calls (SPARK_HINT_ROW=N)" % name)
         say = body(text, "_spark_say")
         t.ok("_spark_height" in say and "[1A" not in say, "%s draws its row _spark_height rows up" % name, say)
-        t.ok("spark writes here. Esc k moves this line." in text
+        t.ok("spark writes here -- Esc k moves it" in text
              and ("bindkey '\\ek'" in text or "bind -x '\"\\ek\"" in text),
              "%s binds Esc k and draws the test line" % name)
-        for fallback in ("no hint came", "no answer came", "no engine is awake"):
+        for fallback in ("no hint came", "no answer came", "no model answers"):
             t.ok(fallback in text, "%s says %r" % (name, fallback))
-        t.ok("no brain awake" not in text, "%s no longer says 'no brain awake'" % name)
+        t.ok("no brain awake" not in text and "no engine is awake" not in text, "%s no longer says the old texts" % name)
         t.ok(not re.search(r"(^|[;&|\s])(source|\.|eval)\s[^\n]*look", text, re.M),
              "%s never sources or evals the look file" % name)
         t.ok("[[:cntrl:]]" in body(text, "_spark_look_read"),
              "%s drops a look value holding a control character" % name)
-        t.ok("words greet" in text and "news-seen" in text and "last-seen" in text,
-             "%s carries the greeting, the news and the last-seen stamp" % name)
+        t.ok("words greet" not in text and "news" not in text and "last-seen" not in text and "FACE_" not in text,
+             "%s says no greeting, no news and no face (v1.72)" % name)
+        t.ok("_spark_note" in body(text, "_spark_failure") and "_spark_say" not in body(text, "_spark_failure"),
+             "%s: the failure line goes to the hint row through _spark_note" % name)
         hot = "".join(body(text, f) for f in ("_spark_failed", "_spark_failure", "_spark_look_check", "_spark_look_read"))
         t.ok(hot and "$SPARK_BIN" not in hot and not re.search(r"\$\((?!\()|`", hot),
              "%s: the prompt hook's own path calls no spark and forks nothing" % name)
     fails = [sorted(set(re.findall(r'"\$_spark_h (failed [^"]*)"', x))) for x in (wz, wb)]
     t.ok(fails[0] and fails[0] == fails[1] and all("$took --" in f for f in fails[0]),
          "the failure lines are one text in both widgets, each with room for the duration", fails)
-    for key in ("_SPARK_LONG=30", "_SPARK_ABSENT=14400", "_SPARK_SEEN_EVERY=300"):
-        t.ok(key in wz and key in wb, "%s in both widgets" % key)
+    t.ok("_SPARK_LONG=30" in wz and "_SPARK_LONG=30" in wb, "_SPARK_LONG=30 in both widgets")
     t.ok("trap -p EXIT" in wb and "trap '_spark_gone' EXIT" not in wb,
          "widget.bash chains an EXIT trap it finds instead of replacing it")
 
@@ -3360,18 +3358,18 @@ def main():
              "line --paste: a locally dangerous line forces danger whatever the model says", repr(out))
         _n0 = STATE["hits"]
         rc, out, _ = spark("line", "--paste", stdin="x" * 9000 + "\ny\n")
-        t.ok(rc == 0 and out.splitlines()[0] == "answer" and "too big to inspect" in out
+        t.ok(rc == 0 and out.splitlines()[0] == "answer" and "too big to check" in out
              and STATE["hits"] == _n0,
              "line --paste: over 8 kB is one line and NO model call", repr(out))
         # a paste that looks like a secret never leaves: one line naming
         # the shape, no model call; the plain two-line paste above was sent
         _key = "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXkt\n-----END OPENSSH PRIVATE KEY-----\n"
         rc, out, _ = spark("line", "--paste", stdin=_key)
-        t.ok(rc == 0 and out.splitlines() == ["answer", "looks like a secret (a private key): not sent"]
+        t.ok(rc == 0 and out.splitlines() == ["answer", "looks like a secret (a private key) -- not sent"]
              and STATE["hits"] == _n0,
              "line --paste: a private key block is held back, NO model call", repr(out))
         rc, out, _ = spark("line", "--paste", stdin="export FOO=1\nTOKEN=abcdefgh1234\n")
-        t.ok(rc == 0 and out.splitlines() == ["answer", "looks like a secret (a credential line): not sent"]
+        t.ok(rc == 0 and out.splitlines() == ["answer", "looks like a secret (a credential line) -- not sent"]
              and STATE["hits"] == _n0,
              "line --paste: a TOKEN=... line is held back, NO model call", repr(out))
 
@@ -3542,7 +3540,7 @@ def main():
         t.ok(rc == 0 and "means X" in out, "explain: reads stdin", out + err)
         t.ok(STATE.get("model") == "ember", "explain: the request names the ember role", str(STATE.get("model")))
         rc, out, err = spark("explain")
-        t.ok(rc == 1 and "stdin" in err, "explain: refuses without stdin", err)
+        t.ok(rc == 1 and "piped in" in err, "explain: refuses without stdin", err)
         rc, out, _ = spark(stdin="some output\n", exe=os.path.join(REPO, "bin", "explain"))
         t.ok(rc == 0 and "means X" in out, "explain symlink dispatches on its name", out)
 
@@ -3585,22 +3583,22 @@ def main():
         rc, out, _ = spark("line", stdin="anything?", extra={"SPARK_HISTORY": "off"})
         t.ok(rc == 0 and not os.listdir(home + "/.local/state/spark/turns"), "SPARK_HISTORY=off writes nothing")
         rc, out, _ = spark("status")
-        t.ok(rc == 0 and out.startswith("spark") and "model    " + url in out, "status", out)
+        t.ok(rc == 0 and out.startswith("* ") and "server   " + url in out and "line     stub-7b-q4" in out, "status", out)
 
         # off / on
         rc, out, _ = spark("off")
         t.ok(rc == 0 and os.path.exists(home + "/.local/state/spark/off"), "off creates the flag")
         rc, out, _ = spark("status")
-        t.ok("off (spark on)" in out, "status says off", out)
+        t.ok("prompt   off -- spark on turns it on" in out, "status says off", out)
         rc, out, _ = spark("on")
         t.ok(rc == 0 and not os.path.exists(home + "/.local/state/spark/off"), "on removes the flag")
 
         # grammar rule 4: the loop verbs answer -h first, signed (contract 8)
-        for sub, first in (("last", "spark last -- the last exchange, with its tok/s"),
-                           ("status", "spark status -- the model, prompt line, server, soul, memory, last answer"),
-                           ("brain", "spark status -- the model, prompt line, server, soul, memory, last answer"),
-                           ("off", "spark off -- silence the prompt line, every pane at once"),
-                           ("on", "spark on -- the prompt line answers again"),
+        for sub, first in (("last", "spark last -- the last exchange"),
+                           ("status", "spark status -- what answers, and how this machine is set"),
+                           ("brain", "spark status -- what answers, and how this machine is set"),
+                           ("off", "spark off -- turn the prompt line off, in every shell"),
+                           ("on", "spark on -- turn the prompt line back on"),
                            ("history", "spark history -- the threads kept on this machine"),
                            ("ver", "spark ver -- logo, version, credits")):
             rc, out, _ = spark(sub, "-h")
@@ -3608,11 +3606,12 @@ def main():
 
         # bare spark is one line, always; spark status stays the full report
         rc, out, _ = spark()
-        t.ok(rc == 0 and out == "spark -- chat model stub-ember-q4 at %s (spark status for the rest)\n" % url,
-             "bare spark answers with one line", out)
+        t.ok(rc == 0 and out == "* stub-ember-q4 at %s\n" % url,
+             "bare spark answers with one line: the chat model and where", out)
         rc, out, _ = spark("status")
-        t.ok(rc == 0 and "model    " in out and "'s AI on" in out and len(out.splitlines()) > 3,
-             "spark status stays the full report", out)
+        t.ok(rc == 0 and "line     stub-7b-q4" in out and "chat     stub-ember-q4" in out and "'s spark on" in out
+             and len(out.splitlines()) > 3,
+             "spark status stays the full report: each role's model by name", out)
 
         # the brain cache is keyed on the candidates
         rc, out, _ = spark("brain", "--porcelain", extra={"SPARK_BASE_URL": "http://127.0.0.1:9"})
@@ -3636,7 +3635,11 @@ def main():
         rc, out, _ = spark("ver")
         t.ok(rc == 0 and re.search(r"^spark (\d+\.\d+(\+\d+)?|0\+[0-9a-f]+|dev)$", out, re.M)
              and re.search(r"by \S+ [·|] github\.com/\S+/\S+", out),
-             "spark ver (the login greeting) still answers, credited", out)
+             "spark ver still answers, credited", out)
+        rc, out2, _ = spark("ver", "--banner")
+        t.ok(rc == 0 and re.search(r"^spark (\d+\.\d+(\+\d+)?|0\+[0-9a-f]+|dev)$", out2, re.M)
+             and "github.com" not in out2 and "CREDITS.md" not in out2 and out.startswith(out2),
+             "spark ver --banner (the login's lines): the logo and the version, no credits", out2)
 
         # spark ver --sbom (v1.36, lib/spark/sbom.py): the JSON and one
         # newline, nothing else -- CycloneDX 1.5 with its four top-level
@@ -3830,14 +3833,14 @@ def main():
         rc, out, _ = spark("chat", stdin="count\n\n/new\ncount\n")
         answers = re.findall(r"^\* (\d+)", out, re.M)
         t.ok(rc == 0 and answers == ["6", "2"], "spark chat REPL: continues (6), /new starts afresh (2), blank ignored", out)
-        t.ok("chat>" not in out and "fresh thread" in out, "the REPL piped: no prompt text, says so on /new, ends on EOF", out)
-        t.ok("Ctrl-D or /q ends" not in out, "the intro line is for a tty: piped, stdout is the replies alone", out)
+        t.ok("chat>" not in out and "* new thread" in out, "the REPL piped: no prompt text, says so on /new, ends on EOF", out)
+        t.ok("/help lists commands" not in out, "the opening line is for a tty: piped, stdout is the replies alone", out)
         rc, out, err = spark("chat", stdin="count\n")
         t.ok(rc == 0 and re.fullmatch(r"\* \d+", out.strip()) and err == "", "piped chat: stdout is the answer alone, no banner, no `chat> `", repr(out))
         t.ok("* " in out, "chat replies print marked answers", out)
         t.ok(len(os.listdir(threads)) == 2, "the REPL left one thread continued and one new")
         rc, out, _ = spark("chat", "-h")
-        t.ok(rc == 0 and out.splitlines()[0] == "spark chat -- a conversation", "spark chat -h signs (contract 8)", out)
+        t.ok(rc == 0 and out.splitlines()[0] == "spark chat -- talk with the model", "spark chat -h signs (contract 8)", out)
         rc, out, _ = spark("talk")
         t.ok(rc == 2 and out.startswith("spark: no command named talk"),
              "spark talk is no command any more (v1.3's stub is gone): a slip, exit 2, no model call", out)
@@ -3858,13 +3861,13 @@ def main():
         hits0 = STATE["hits"]
         rc, out, err = spark("chat", stdin="/help\n:q\n")
         t.ok(rc == 0 and STATE["hits"] == hits0, "chat: /help hits the stub zero times", out + err)
-        for v in ("/help", "/new", "/resume", "/clear", "/keep", "/last", "/model", "/q"):
+        for v in ("/new", "/resume", "/clear", "/keep", "/last", "/model", "/q"):
             t.ok(v in out, "chat: /help lists %s" % v, out)
 
         # an unknown slash verb is refused on stderr, not sent to the model
         hits0 = STATE["hits"]
         rc, out, err = spark("chat", stdin="/nope\n:q\n")
-        t.ok(rc == 0 and STATE["hits"] == hits0 and "no /nope -- /help lists them" in err,
+        t.ok(rc == 0 and STATE["hits"] == hits0 and "! no command /nope -- /help lists them" in err,
              "chat: an unknown /nope is refused on stderr, no model call", out + err)
 
         # /last: the last turn, with its tok/s
@@ -3874,14 +3877,14 @@ def main():
 
         # /model: names the stub's ember (see the stub's /v1/models fixture)
         rc, out, err = spark("chat", stdin="/model\n:q\n")
-        t.ok(rc == 0 and ("ember: stub-ember-q4 via " + url) in out, "chat: /model names the stub's ember", out)
+        t.ok(rc == 0 and ("* stub-ember-q4 at " + url) in out, "chat: /model names the stub's ember", out)
 
         # /model on a one-model machine: no ember is served, so no ember
         # label -- the single model answers everything
         STATE["single_model"] = True
         rc, out, err = spark("chat", stdin="/model\n:q\n")
-        t.ok(rc == 0 and ("model: stub-7b-q4 via " + url) in out and "ember:" not in out,
-             "chat: /model with one model served says model:, never ember:", out + err)
+        t.ok(rc == 0 and ("* stub-7b-q4 at " + url) in out and "ember" not in out,
+             "chat: /model with one model served names it, never ember", out + err)
         STATE["single_model"] = False
 
         # /resume and --thread: picking up an older thread. Two seeded
@@ -3899,14 +3902,14 @@ def main():
         t.ok(rc == 0 and STATE["hits"] == hits0 and "no thread 9 -- /resume lists them" in err,
              "chat: /resume with an unknown N is refused on stderr", out + err)
         rc, out, err = spark("chat", stdin="/resume 2\ncount\n")
-        t.ok(rc == 0 and "* resuming: older (2 turns)" in out and re.findall(r"^\* (\d+)", out, re.M) == ["6"],
+        t.ok(rc == 0 and '* continuing "older" (2 turns)' in out and re.findall(r"^\* (\d+)", out, re.M) == ["6"],
              "chat: /resume 2 goes on with the older thread (system + 4 + line)", out + err)
         rc, out, err = spark("chat", stdin="/resume\n:q\n", extra={"SPARK_HISTORY": "off"})
-        t.ok(rc == 0 and "spark: history is off" in err, "chat: /resume with history off says so", out + err)
+        t.ok(rc == 0 and "! history is off" in err, "chat: /resume with history off says so", out + err)
         rc, out, _ = spark("chat", "--thread", "1", "count")
         t.ok(rc == 0 and out.strip() == "* 8", "spark chat --thread 1 count goes on with the newest thread", out)
         rc, out, _ = spark("chat", "--thread", "9", "count")
-        t.ok(rc == 2 and out.strip() == "spark chat -- no thread 9 (spark history lists them)",
+        t.ok(rc == 2 and out.strip() == "spark chat -- no thread 9: spark history lists them",
              "chat --thread with an unknown N refuses, signed, exit 2", out)
         rc, out, _ = spark("chat", "--thread", "1", "count", extra={"SPARK_HISTORY": "off"})
         t.ok(rc == 2 and out.strip() == "spark chat -- history is off (SPARK_HISTORY)",
@@ -3926,12 +3929,12 @@ def main():
         rc, out, err = spark("chat", stdin="count\n/keep\n:q\n")
         kdir = os.path.join(os.path.dirname(tdir()), "kept")
         kept0 = sorted(os.listdir(kdir)) if os.path.isdir(kdir) else []
-        t.ok(rc == 0 and "kept: this thread stays past SPARK_HISTORY and spark clear --history" in out and len(kept0) == 1
+        t.ok(rc == 0 and "* kept -- /keep off lets it go" in out and len(kept0) == 1
              and not os.listdir(tdir()) and oct(os.stat(kdir).st_mode & 0o777) == "0o700"
              and oct(os.stat(kdir + "/" + kept0[0]).st_mode & 0o777) == "0o600",
              "chat: /keep moves the thread into kept/ (dir 0700, file 0600)", out + err)
         rc, out, _ = spark("history")
-        t.ok(rc == 0 and "count  (kept)" in out and "  1 kept thread stays past SPARK_HISTORY and spark clear --history" in out,
+        t.ok(rc == 0 and "count  (kept)" in out and "  1 kept thread\n" in out,
              "history marks the kept thread and counts it", out)
         rc, out, _ = spark("user")
         t.ok(rc == 0 and re.search(r"^  \S+ +1 thread \(1 kept\)  ", out, re.M), "spark user counts the kept one", out)
@@ -3939,7 +3942,7 @@ def main():
         t.ok(rc == 0 and out.rstrip().endswith("; 1 kept thread stays") and sorted(os.listdir(kdir)) == kept0,
              "spark clear --history removes the rest and says the kept thread stays", out)
         rc, out, _ = spark("history", "clear")
-        t.ok(rc == 0 and out.startswith("spark history: removed ") and out.rstrip().endswith("; 1 kept thread stays"),
+        t.ok(rc == 0 and out.startswith("* removed ") and out.rstrip().endswith("; 1 kept thread stays"),
              "spark history clear still works, the older spelling of spark clear --history", out)
         rc, out, _ = spark("clear")
         rc2, out2, _ = spark("clear", "--everything")
@@ -3966,19 +3969,18 @@ def main():
              "?? goes on with the kept thread, past a newer file that is a header alone", out)
         os.remove(kdir + "/zz-made-by-a-program.sealed")
         rc, out, err = spark("chat", stdin="/keep off\n/keep off\n:q\n")
-        t.ok(rc == 0 and "let go: this thread lives SPARK_HISTORY days like any other" in out
-             and "this thread is not kept, so there is nothing to let go" in out
+        t.ok(rc == 0 and out.count("* let go -- it ages out like the rest") == 1
              and not os.listdir(kdir) and len(os.listdir(tdir())) == 1,
-             "chat: /keep off moves it back to threads/, and says so when it is not kept", out + err)
+             "chat: /keep off moves it back to threads/, and says nothing when it is not kept", out + err)
         rc, out, err = spark("chat", stdin="/new\n/keep\n/keep now\n:q\n")
-        t.ok(rc == 0 and "spark: this chat has no thread yet, and its first turn makes the one /keep keeps" in err
-             and "spark: /keep takes nothing, or off" in err and not os.listdir(kdir),
+        t.ok(rc == 0 and "! no thread yet -- ask something first" in err
+             and "! /keep takes nothing, or off" in err and not os.listdir(kdir),
              "chat: /keep after /new has no thread to keep, and /keep takes only off", out + err)
         rc, out, err = spark("chat", stdin="/keep\n:q\n", extra={"SPARK_HISTORY": "off"})
-        t.ok(rc == 0 and "spark: history is off (SPARK_HISTORY) and nothing is kept, so this chat has no thread to keep" in err,
+        t.ok(rc == 0 and "! history is off -- no thread to keep" in err,
              "chat: /keep with history off and nothing kept says so", out + err)
         rc, out, _ = spark("chat", "-h")
-        t.ok(rc == 0 and "spark clear --history, and /keep off lets it go." in out
+        t.ok(rc == 0 and "/keep keeps it longer" in out
              and all(len(ln) <= 80 for ln in out.splitlines()), "chat -h names /keep, within 80 columns", out)
         spark("history", "clear")
         chat_tools_cases(t, spark, home)
@@ -5155,8 +5157,8 @@ def main():
              "tests/forge_probe.py URL: one line per gate, exit 1 when any does not hold", p.stdout + p.stderr)
         rc, out, err = spark("do", "say", "hello", stdin="\n", extra={"SPARK_DO_STDIN": "1"}, cwd=work)
         t.ok(rc == 0 and "STEP-ONE" in out
-             and err.count("spark do: confirmations come from stdin (SPARK_DO_STDIN) -- a harness, not a person") == 1
-             and "harness" not in out,
+             and err.count("! the answers come from stdin (SPARK_DO_STDIN), not a person") == 1
+             and "SPARK_DO_STDIN" not in out,
              "spark do: SPARK_DO_STDIN=1 says so once on stderr -- a harness, not a person; stdout stays the run", out + err)
         # ---- end of the v1.36 block ------------------------------------------
 
@@ -5204,7 +5206,7 @@ def main():
         # a redirect onto a file that is not there yet destroys nothing;
         # onto one that is there, it is danger again: the typed yes
         rc2, out2, err2 = spark("do", "blockstep", stdin="no\n", extra=hook, cwd=work)
-        t.ok(rc2 == 0 and out2.splitlines()[1].startswith("! 1  cat > script.py <<'EOF'   (5 lines)")
+        t.ok(rc2 == 0 and out2.splitlines()[0].startswith("! 1  cat > script.py <<'EOF'   (5 lines)")
              and "type yes to run it" in out2 and open(work + "/script.py").read() == _script,
              "spark do: the same block onto a file that exists is danger -- the typed yes; `no` runs nothing",
              out2 + err2)
@@ -5254,7 +5256,7 @@ def main():
         # danger reads every line: a block whose second line deletes
         os.makedirs(work + "/junk", exist_ok=True)
         rc2, out2, err2 = spark("do", "blockrm", stdin="no\n", extra=hook, cwd=work)
-        t.ok(rc2 == 0 and out2.splitlines()[1].startswith("! 1  echo one   (2 lines)   tidy up")
+        t.ok(rc2 == 0 and out2.splitlines()[0].startswith("! 1  echo one   (2 lines)   tidy up")
              and "     2  rm -rf ./junk" in out2 and "type yes to run it" in out2 and os.path.isdir(work + "/junk"),
              "spark do: a block whose second line is rm -rf is danger; `no` does not run it", out2 + err2)
         # a lone CR in a block: refused whole, like an escape in a line
@@ -5340,23 +5342,24 @@ def main():
              "spark do: an edited block lands on the thread, `edited from` the proposal", lines[2:3])
         os.remove(work + "/edited.txt")
         rc2, out2, err2 = spark("do", "blockedit", stdin="e\nq\n", extra=dict(_edenv, DO_ED_TEXT="\n"), cwd=work)
-        t.ok(rc2 == 0 and "the edit is empty -- the step is unchanged" in out2 and out2.count("Enter runs it") == 2
+        t.ok(rc2 == 0 and "the edit is empty -- the step stays as it was" in out2 and out2.count("Enter runs it") == 2
              and "stopped after 0 steps" in out2 and not os.path.exists(work + "/script.py"),
              "spark do: an empty edit leaves the block unchanged, says so, and asks again", out2 + err2)
         rc2, out2, err2 = spark("do", "blockedit", stdin="e\nq\n",
                                 extra=dict(hook, VISUAL=home + "/no-such-editor", EDITOR=home + "/no-such-editor"),
                                 cwd=work)
-        t.ok(rc2 == 0 and "the step is unchanged" in out2 and "stopped after 0 steps" in out2
+        t.ok(rc2 == 0 and "! cannot run " + home + "/no-such-editor" in out2 and "stopped after 0 steps" in out2
              and not os.path.exists(work + "/script.py"),
              "spark do: no editor to run -- the block is unchanged, said in one line, asked again", out2 + err2)
         os.mkdir(work + "/junk")
         rc, out, err = spark("do", "rm-plain", "junk", stdin="no\n", extra=hook, cwd=work)
         t.ok(rc == 0 and "type yes to run it" in out and os.path.isdir(work + "/junk"), "spark do: an unflagged rm -rf asks for yes; `no` does not run it", out + err)
-        t.ok(out.splitlines()[1].startswith("! 1  rm -rf ./junk"), "spark do: the danger mark on the step line", out)
+        t.ok(out.splitlines()[0].startswith("! 1  rm -rf ./junk"), "spark do: the danger mark on the step line", out)
         rc, out, err = spark("do", "rm-plain", "junk", stdin="yes\n", extra=hook, cwd=work)
         t.ok(rc == 0 and not os.path.exists(work + "/junk"), "spark do: `yes` runs it", out + err)
         rc, out, err = spark("do", "forever", stdin="\n" * 9, extra=hook, cwd=work)
-        t.ok(rc == 1 and "step limit (8)" in out and out.count("again\n") == 8, "spark do: stops after 8 steps", out + err)
+        t.ok(rc == 1 and "! stopped at 8 steps -- spark do again to go on" in out and out.count("again\n") == 8,
+             "spark do: stops after 8 steps", out + err)
         rc, out, err = spark("do", "forever", stdin="q\n", extra=hook, cwd=work)
         t.ok(rc == 0 and "stopped after 0 steps" in out and "again\n" not in out, "spark do: q quits before running", out + err)
         rc, out, err = spark("do", "forever", stdin="e\necho EDITED\nq\n", extra=hook, cwd=work)
@@ -5386,15 +5389,15 @@ def main():
         before = len(os.listdir(threads))
         rc, out, err = spark("do", "say", "hello", stdin="\n", extra=dict(hook, SPARK_HISTORY="off"), cwd=work)
         t.ok(rc == 0 and "done  all done" in out and len(os.listdir(threads)) <= before, "SPARK_HISTORY=off: spark do still reads its own steps, keeps no thread", out + err)
-        # the provenance guard and the driver line
-        rc, bout, _ = spark("brain", "--porcelain")
-        fam = bout.strip().split("\t")[1].split("-")[0]
+        # the provenance guard; no driver line (v1.72: the pulse shows the wait)
         rc, out, err = spark("do", "badsum", "inventory", stdin="\n", extra=hook, cwd=work)
-        t.ok(rc == 0 and "! done  Total: 96 fields" in out and "unchecked: no command produced 96" in out,
+        t.ok(rc == 0 and "! done  Total: 96 fields" in out and "unchecked: no step printed 96 -- trust the outputs above" in out,
              "spark do: a done number no output backs is marked unchecked", out + err)
-        t.ok(("driving with " + fam) in out.splitlines()[0], "spark do: opens naming the model driving", out)
+        t.ok("driving" not in out + err and out.splitlines()[0].startswith("* 1  "),
+             "spark do: opens with the first step -- no driving line", out)
         rc, out, err = spark("do", "goodsum", stdin="\n\n", extra=hook, cwd=work)
-        t.ok(rc == 0 and "unchecked" not in out and "done  Total: 26" in out, "spark do: a number an output backs passes clean", out + err)
+        t.ok(rc == 0 and "unchecked" not in out and "* done  Total: 26" in out and "\u2713" not in out,
+             "spark do: a number an output backs passes clean, `* done`", out + err)
         t.ok(out.count("Enter runs it") == 2 and "proof: test -d ." in out and "proof -> ok" in out
              and out.index("proof: test -d .") < out.index("proof -> ok"),
              "spark do: the proof is asked for like a step (Enter), then runs and shows its result", out)
@@ -5544,7 +5547,7 @@ def main():
         umsg = STATE["bodies"][-1]["messages"][-1]["content"]
         t.ok(rc == 0 and "From man fakeflag:\nOPTIONS\n     --frob  never an option here\n     -v      verbose" in umsg
              and "\x08" not in umsg and umsg.index("From man") > umsg.index("unrecognized option")
-             and "From man fakeflag: 3 lines go back with the output" in out,
+             and "3 lines of man fakeflag go to the model" in out,
              "spark do: a step refused for an option -- the next request carries its man page's lines about it", repr(umsg[-300:]) + out)
         t.ok(open(home + "/man-argv").read() == "fakeflag\n"
              and open(home + "/man-env").read() == "MANWIDTH=80 MANPAGER=cat PAGER=cat MANOPT=unset\n"
@@ -5670,19 +5673,19 @@ def main():
         t.ok(events(out) is not None and STATE["bodies"][-1]["messages"][1]["content"].endswith("]\n-la help"),
              "spark do --: the words after it are the goal, a leading - and help included", out + err)
         rc, out, err = spark("do", "--", "help", stdin="q\n", extra=hook, cwd=work)
-        t.ok(rc == 0 and "driving with" in out and not out.startswith("spark do --"),
+        t.ok(rc == 0 and out.startswith("* 1  ") and not out.startswith("spark do --"),
              "spark do -- help: help after -- is a goal, not the usage", out)
         rc, out, _ = spark("do", "--sandbx", "fix", "it", cwd=work)
-        t.ok(rc == 2 and out.startswith("spark do -- no option --sandbx:"),
+        t.ok(rc == 2 and out.startswith("spark do -- no option --sandbx "),
              "spark do: an option it does not take is refused, signed, exit 2", out)
         rc, out, _ = spark("do", "--detach", "x", cwd=work)
         rc2, out2, _ = spark("do", "--sandbox", "--detach", "--porcelain", "x", cwd=work)
-        t.ok(rc == 2 and "--detach runs sandboxed only" in out and rc2 == 2 and "do not mix" in out2,
+        t.ok(rc == 2 and "--detach needs --sandbox" in out and rc2 == 2 and "do not go together" in out2,
              "spark do --detach: sandboxed only, and never with --porcelain", out + out2)
         # over --porcelain every refusal before the run is ONE end event
         # (reason refused, rc 2) and nothing else on stdout
         for _args, _why in ((("--bogus", "x"), "no option --bogus"), ((), "no goal"),
-                            (("--review",), "--review is not a run"), (("--sandbox", "--detach", "x"), "do not mix"),
+                            (("--review",), "--review is not a run"), (("--sandbox", "--detach", "x"), "do not go together"),
                             (("x" * (_do.DO_GOAL_MAX + 1),), "a goal is at most 8 kB")):
             rc, out, err = spark("do", "--porcelain", *_args, cwd=work)
             evs = events(out)
@@ -5693,7 +5696,7 @@ def main():
         t.ok(rc == 2 and out == "spark do -- a goal is at most 8 kB -- this one is 9 kB\n",
              "spark do: a goal over do.DO_GOAL_MAX is refused in one signed line", out + err)
         rc, out, err = spark("do", "-la", "x", cwd=work)
-        t.ok(rc == 2 and out.startswith("spark do -- no option -la:"),
+        t.ok(rc == 2 and out.startswith("spark do -- no option -la "),
              "spark do: a goal that starts with - is refused unless it comes after --", out)
         # no `yes` word over a pipe: it is not an answer, and EOF then quits
         rc, out, err = spark("do", "--porcelain", "forever", stdin="yes\n", cwd=work)
@@ -5772,9 +5775,9 @@ def main():
              "spark do --porcelain: SIGTERM ends the run with an end event (quit, rc 143)", "".join(_first) + _rest + _err)
         rc, out, _ = spark("do", "-h")
         t.ok(all(w in out for w in ("--sandbox", "--detach", "--review [ID]", "--accept ID", "--discard ID",
-                                    "--porcelain", "contract 15", "spark do -- <words>", "held back", "man page"))
+                                    "--porcelain", "spark do -- <words>", "held back", "man page"))
              and not [l for l in out.splitlines() if len(l) > 80],
-             "spark do -h names every option, contract 15, the hold and the man page, within 80 columns", out)
+             "spark do -h names every option, the hold and the man page, within 80 columns", out)
 
         # the sandbox, for real where this machine has one (sandbox-exec on
         # macOS, bwrap 0.11+ on Linux); a CI container has none: skipped
@@ -5842,7 +5845,7 @@ def main():
             t.ok("boxwork" not in meta and '"thread"' in meta, "the run's record keeps no words of the goal", meta)
             rc, out, _ = spark("bar", cwd=box)
             rc2, out2, _ = spark("status", cwd=box)
-            t.ok("1 run waiting" in out and "runs     1 run waiting (spark do --review)" in out2,
+            t.ok("1 run waiting" in out and "runs     1 run waiting -- spark do --review" in out2,
                  "the bar line and spark status count the runs waiting", out + out2)
             rc, out, _ = spark("do", "--review", rid, cwd=box)
             t.ok(rc == 2 and ("spark do --accept %s" % rid) in out,
@@ -5880,7 +5883,7 @@ def main():
             spark("do", "--discard", ids[0] if ids else "none", cwd=box)
             # nothing changed: said, and the run goes
             rc, out, err = spark("do", "--sandbox", "boxlook", stdin="", extra=hook, cwd=box)
-            t.ok(rc == 0 and "nothing changed in the copy" in out and not waiting() and "type yes" not in out,
+            t.ok(rc == 0 and "* nothing changed" in out and not waiting() and "type yes" not in out,
                  "spark do --sandbox: a run that changed nothing says so and leaves nothing waiting", out + err)
             # detached: no terminal, the id printed, the changes wait; one at a time
             reset_box()
@@ -6867,7 +6870,7 @@ def main():
         t.ok(rc == 0 and out.splitlines()[0] == "spark setup -- choose the model this machine can run",
              "spark setup -h signs (contract 8)", out)
         rc, out, _ = spark(extra=off)
-        t.ok(rc == 0 and out.startswith("spark -- ") and len(out.splitlines()) == 1,
+        t.ok(rc == 0 and out.startswith(("* ", "! ")) and len(out.splitlines()) == 1,
              "bare spark with no site.env, not a tty: the one-line status (the offer is tty-only)", out)
         rc, out, err = spark("setup", "--yes", "--no-serve", "--model", "none", extra=off)
         site_env = open(home + "/.config/spark/site.env").read()
@@ -7610,7 +7613,7 @@ site.cmd_headless([])
         t.ok(rc != 0 and "Traceback" not in err and "went quiet for 1" in err and "incomplete" in err and out.startswith("* Half an"),
              "chat: a reply that stalls past SPARK_TIMEOUT ends in one line, the half kept", repr(out + err))
         rc, out, err = spark("chat", stdin="stall\n:q\n", extra={"SPARK_TIMEOUT": "1"})
-        t.ok(rc == 0 and "Traceback" not in err and err.startswith("spark: http"), "chat REPL: a stalled brain is one line, the chat goes on", repr(err))
+        t.ok(rc == 0 and "Traceback" not in err and err.startswith("! http"), "chat REPL: a stalled brain is one line, the chat goes on", repr(err))
         # v1.43: the reveal inside the streaming verbs
         import time as _time
         _p = _Tty()
@@ -7657,14 +7660,15 @@ site.cmd_headless([])
         t.ok(rc == 0 and rc2 == 0 and out.startswith("* ") and "\033[" not in out + err and len(out.splitlines()) == len(out2.splitlines()),
              "chat --reveal piped: the same shape as chat without it, no pace, no escape", repr(out))
         rc, out, err = spark("chat", "--reveal", "999", "count")
-        t.ok(rc != 0 and "5..200" in out + err, "chat --reveal 999: refused, the range named", repr(out + err))
+        t.ok(rc != 0 and "5 to 200" in out + err, "chat --reveal 999: refused, the range named", repr(out + err))
         rc, out, err = spark("chat", stdin="/reveal 50\n/reveal x\n/reveal off\n/reveal\n/reveal auto\n:q\n")
-        t.ok(rc == 0 and "at 50 characters a second" in out and "/reveal takes a number" in out and "as they are made" in out
-             and "the model writes" in out and "characters a second" in out and "never waits on it (auto = " in out and "now: off" in out
-             and "at the measured threshold" in out,
-             "/reveal 50, x, off, bare (the benchmark), auto inside chat", repr(out))
+        t.ok(rc == 0 and "* replies at 50 characters a second" in out and "! /reveal takes N (5 to 200), auto or off" in err
+             and "* replies come as they are made" in out
+             and "* the model writes" in out and "characters a second" in out and "* auto is " in out and "now: off" in out
+             and "* replies at the measured pace" in out,
+             "/reveal 50, x, off, bare (the benchmark), auto inside chat", repr(out + err))
         rc, out, err = spark("stats")
-        t.ok(rc == 0 and "  pace        the model writes" in out and "never waits on it" in out, "spark stats: the pace lines (what the model writes, the threshold)", repr(out))
+        t.ok(rc == 0 and "  pace        the model writes" in out and "just under that" in out, "spark stats: the pace lines (what the model writes, the threshold)", repr(out))
         # spark bench --line (v1.52): the real spark line path, timed as
         # the widget sees it; the stub's timings read 40 prompt tokens, a
         # warm slot. No turn record (history off): the slot is unknown.
@@ -7713,9 +7717,8 @@ site.cmd_headless([])
         rc, out, err = spark("explain", stdin="ls: cannot access 'x': No such file\n", extra=_col)
         t.ok(rc == 0 and "\033[" not in out + err, "explain piped with the vars set: no escape", repr(out + err))
         rc, out, err = spark("do", "say", "hello", stdin="\n", extra=dict(_col, SPARK_DO_STDIN="1"), cwd=work)
-        t.ok(rc == 0 and "\033[" not in out + err and out.splitlines()[0].startswith("* driving with ")
-             and "\n* 1  echo STEP-ONE   say hello" in out,
-             "spark do piped with the vars set: the driving line and the step marks stay plain", repr(out + err))
+        t.ok(rc == 0 and "\033[" not in out + err and out.splitlines()[0] == "* 1  echo STEP-ONE   say hello",
+             "spark do piped with the vars set: the step marks stay plain", repr(out + err))
         p = subprocess.run([sys.executable, SPARK, "line"], input="? files bigger than 1G", capture_output=True, text=True,
                            env=dict(env, SPARK_HINT_ROW="1", **_col), timeout=30, start_new_session=True)
         t.ok(p.returncode == 0 and p.stdout == _plain and p.stderr == "",
@@ -7732,7 +7735,7 @@ site.cmd_headless([])
          repr(p.stdout[:80]))
     p = subprocess.run([sys.executable, SPARK, "reveal", "999"], input=b"",
                        capture_output=True, env=env, timeout=30)
-    t.ok(p.returncode == 2 and b"5..200" in p.stdout + p.stderr, "reveal: CPS out of range is the usage",
+    t.ok(p.returncode == 2 and b"5 to 200" in p.stdout + p.stderr, "reveal: CPS out of range is the usage",
          repr(p.stdout + p.stderr))
     p = subprocess.run([sys.executable, SPARK, "reveal", "30", "x"], input=b"",
                        capture_output=True, env=env, timeout=30)
@@ -7799,9 +7802,9 @@ site.cmd_headless([])
     t.ok(rc == 0 and "now: 22 a second" in out, "bare reveal at a terminal: the numbers and the pace now", repr(out))
     rc, out = _at_tty("off")
     kept = open(_kept).read() if os.path.exists(_kept) else ""
-    t.ok(rc == 0 and "as they come" in out and "SPARK_REVEAL=off" in kept, "reveal off at a terminal: kept", repr(out))
+    t.ok(rc == 0 and "* replies come as they are made" in out and "SPARK_REVEAL=off" in kept, "reveal off at a terminal: kept", repr(out))
     rc, out = _at_tty("fast")
-    t.ok(rc == 2 and "auto, or off" in out, "reveal with a wrong word at a terminal: the one line, exit 2", repr(out))
+    t.ok(rc == 2 and "auto or off" in out, "reveal with a wrong word at a terminal: the one line, exit 2", repr(out))
 
     # completion drift guard: every verb the CLI dispatches (bin/spark's
     # one VERBS table) appears in completion.bash -- a new verb without a
@@ -7894,6 +7897,7 @@ site.cmd_headless([])
 
     knowledge_cases(t)
     continuing_tag_cases(t)
+    model_name_cases(t)
     server_pids_cases(t)
     living_core_cases(t)
     chat_awake_cases(t)

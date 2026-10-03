@@ -14,12 +14,14 @@
 #
 #   spark words           the lines by id, and the faces
 #   spark words edit      change them in $VISUAL / $EDITOR, then the check
-#   spark words greet     (the widgets, the first prompt after an absence)
+#
+# spark prints none of the lines at the prompt or in a chat (v1.72): the
+# face shows only in the wait. `spark words greet` is kept, silent, for a
+# shell that loaded an older widget.
 
 import hashlib
 import os
 import sys
-import time
 
 from . import MARK, REPO, look, say
 
@@ -34,15 +36,13 @@ BLINK_RATE = {"playful": 14, "warm": 28, "plain": 50, "terse": 0}
 # the order the faces are shown in
 FACE_ORDER = look.MOODS + ("blink", "glance")
 
-USAGE = """%s words -- the lines it says, and its faces
+USAGE = """%s words -- the lines spark awaken wrote, and the faces
 
-  spark words                   the lines by id, and the faces
-  spark words edit              change the lines in $VISUAL / $EDITOR; each
-                                line is checked again after
+  spark words                   show the lines and the faces
+  spark words edit              edit the lines in your editor
 
-  The file is ~/.config/spark/words, one ID<TAB>line a line: ASCII, at
-  most 72 characters. spark awaken writes it and the faces. A line that
-  fails the check is never said: the shipped line stands in for it.
+  Each line is ID, a tab, then the line: ASCII, 72 characters at most.
+  A line that fails the check is replaced by the shipped one.
 """ % MARK
 
 
@@ -144,21 +144,16 @@ def make_faces(eyes, mouth, body):
             "listening": f(eyes, mouth, eyes, "~")}
 
 
-def face(mood="idle"):
-    """One of this machine's faces (look.faces: the file over the kit)."""
-    return look.faces().get(mood, look.DEFAULT_FACES["idle"])
-
-
 def _show():
     have = os.path.isfile(look.WORDS_FILE)
     lines = load()
-    say("words  %s  %s" % (temper(), look.WORDS_FILE if have else "shipped (spark awaken makes them this machine's own)"))
+    say("words  %s  %s" % (temper(), look.WORDS_FILE if have else "shipped"))
     for key in IDS + tuple(sorted(k for k in lines if k not in IDS and not k.startswith("personality."))):
         if key in lines:
             say("  %-10s %s" % (key, lines[key]))
     _, refused = parse(look.WORDS_FILE)
     for n, key, why in refused:
-        say("  refused    line %d (%s): %s -- the shipped line stands in" % (n, key, why))
+        say("  refused    line %d (%s): %s" % (n, key, why))
     fs = look.faces()
     say("faces  %s" % (look.FACES_FILE if os.path.isfile(look.FACES_FILE) else "shipped"))
     row = ["%s %s" % (m, fs[m]) for m in FACE_ORDER if m in fs]
@@ -171,25 +166,23 @@ def _edit():
     from . import soul
     ed = soul._editor()
     if not ed:
-        say("spark words: no editor found -- set $EDITOR, or write %s by hand" % look.WORDS_FILE)
+        say("spark words -- no editor: set $EDITOR")
         return 1
     if not os.path.isfile(look.WORDS_FILE):
         write_words(shipped(temper()))
-        say("ok     seeded       from the %s lines" % temper())
     else:
         os.chmod(look.WORDS_FILE, 0o600)
     import subprocess
     try:
         rc = subprocess.call(ed + [look.WORDS_FILE])
     except OSError as e:
-        say("spark words: cannot run %s: %s" % (ed[0], e))
+        say("spark words -- cannot run %s: %s" % (ed[0], e))
         return 1
     if rc != 0:
-        say("spark words: %s exited %d -- the file is as it left it" % (ed[0], rc))
+        say("! %s exited %d" % (ed[0], rc))
     lines, refused = parse(look.WORDS_FILE)
     for n, key, why in refused:
-        say("refused  line %d (%s): %s -- the shipped line stands in" % (n, key, why))
-    say("ok     words        %d line%s, %d refused" % (len(lines), "" if len(lines) == 1 else "s", len(refused)))
+        say("! line %d (%s) refused: %s" % (n, key, why))
     return 0
 
 
@@ -217,48 +210,6 @@ def _atomic(path, body):
     os.replace(tmp, path)
 
 
-def greeting(day=None):
-    """One of the machine's greet lines, in turn by the day ('' when it
-    has none): the widgets' greeting and the chat's opening say it."""
-    lines = load()
-    greets = [lines[k] for k in sorted(lines) if k.startswith("greet.")]
-    if not greets:
-        return ""
-    if day is None:
-        day = int(time.time() // 86400)
-    return greets[int(day) % len(greets)]
-
-
-def greet(day=None):
-    """The greeting the widgets ask for: nothing unless this machine is
-    awake and its look is not off; else one
-    line with its face (the greetings in turn by the day) and, when memory
-    holds one, a remembered fact, shown here and written nowhere."""
-    from . import config, memory
-    if not look.awake():
-        return []
-    cfg = config.load()
-    if look.part("words", cfg) == "off":
-        return []
-    line = greeting(day)
-    if not line:
-        return []
-    if day is None:
-        day = int(time.time() // 86400)
-    out = ["* %s %s" % (face("idle"), line)]
-    fact = memory.one_fact(cfg, day)
-    if fact:
-        head = "You asked me to remember: "
-        room = look.LINE_MAX - 2 - len(head)
-        fact = " ".join(fact.split())
-        if len(fact) > room:
-            fact = fact[:room - 3].rsplit(" ", 1)[0].rstrip() + "..."
-        c = look.clean(head + fact)
-        if c:
-            out.append("  " + c)
-    return out
-
-
 def main(args):
     if args and args[0] in ("-h", "--help", "help"):
         say(USAGE.rstrip())
@@ -268,12 +219,7 @@ def main(args):
     if args[0] == "edit":
         return _edit()
     if args[0] == "greet":
-        try:
-            for line in greet():
-                say(line)
-        except Exception:  # noqa: BLE001 -- a greeting never stands between you and the prompt
-            pass
-        return 0
+        return 0        # an older widget's greeting: nothing is said now
     if len(args) > 1 or args[0].endswith("?"):
         # `spark words that rhyme with moon?` is a question, not a sub-word
         from . import cli

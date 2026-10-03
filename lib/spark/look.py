@@ -7,7 +7,7 @@
 # and three parts follow it, each with its own auto rule:
 #   motion   the scanner, the waking bar, a face that blinks
 #   colour   the built-in palette when no SGR is exported
-#   words    the greeting, the news, the faces, the voice
+#   words    the face in the wait (no line is printed for it: v1.72)
 # auto = only where the terminal carries it: a tty, not TERM=dumb, and
 # for colour NO_COLOR unset. on = at any tty, NO_COLOR overridden. The
 # pace (SPARK_REVEAL, `spark reveal`) is its own.
@@ -345,29 +345,21 @@ def news(nid, line):
 
 
 # ------------------------------------------------------------------- verbs
-USAGE = """spark look -- the living prompt, one switch
+USAGE = """spark look -- spark's own look: motion, colour and the face
 
-  spark look                    the switch, the height, the reveal, awake
-  spark look on|off|auto        motion, colour and words together
+  spark look                    show the look, the height and the pace
+  spark look on|off|auto        turn the look on or off; auto is on at a
+                                terminal, and colour only without NO_COLOR
 
-  motion   the scanner while a reply comes, the waking bar, a face that
-           blinks, on every terminal, ssh and the console too
-  colour   the built-in palette, where you export no SPARK_*_SGR
-  words    the greeting, the news and the faces
-  auto     where the terminal carries it: a terminal, not TERM=dumb, and
-           for colour NO_COLOR unset; on overrides NO_COLOR
-
-  The look starts at spark awaken. A pipe never sees a frame or a colour.
-  spark reveal sets the pace replies appear at; spark height the row.
+  The look starts with spark awaken. A pipe never sees it.
 """
 
 HEIGHT_USAGE = """spark height -- the row spark writes in, above your prompt
 
-  spark height                  the row now
-  spark height N                N rows up from the line you type on, 1..5
+  spark height                  show the row
+  spark height N                N rows above the line you type on, 1 to 5
 
-  1 is the row just above the prompt. A prompt of two lines (a status
-  line above the one you type on) wants 2.
+  A prompt of two lines wants 2.
 """
 
 def _here(cfg):
@@ -412,14 +404,17 @@ def show(cfg=None):
     fresh(cfg)
     v = setting(cfg)
     here = _here(cfg) if v != "off" else ""
-    say("%-7s %-5s %s%s" % ("look", v, "motion, colour and words", " -- " + here if here else ""))
-    say("%-7s %-5d %s" % ("height", height(cfg), "the row spark writes in, above your prompt"))
-    say("%-7s %-5s %s" % ("reveal", stored("reveal", cfg), "the pace replies appear at (spark reveal)"))
-    if awake():
-        say("awake -- spark look on|off|auto switches it")
-    else:
-        say("not awakened -- spark awaken gives this machine a personality and a look")
+    say(("%-7s %-5s %s" % ("look", v, here)).rstrip())
+    say("%-7s %-5d %s" % ("height", height(cfg), _rows(height(cfg))))
+    say("%-7s %s" % ("reveal", stored("reveal", cfg)))
+    if not awake():
+        say("* not awake yet -- spark awaken turns the look on")
     return 0
+
+
+def _rows(n):
+    """Where height n writes, in words."""
+    return "the row above your prompt" if n == 1 else "%d rows above your prompt" % n
 
 
 def _set(**kv):
@@ -438,13 +433,14 @@ def cmd_look(args):
         return show()
     val = args[0].lower()
     if val in VALUES and len(args) == 1:
+        same = val == setting(own=True)
         _set(**{KEY: val})
-        if val == "off":
-            say("the look is off now -- the reveal is untouched (spark reveal off stops it)")
-        elif awake():
-            say("the look is %s now" % val)
+        if same:
+            return 0                # nothing changed: nothing to say
+        if awake() or val == "off":
+            say("* the look is %s" % val)
         else:
-            say("the look is %s -- it takes effect after spark awaken" % val)
+            say("* the look is %s -- it starts after spark awaken" % val)
         return 0
     if val in VALUES or (len(args) == 2 and args[1].lower() in VALUES):
         # `spark look motion on`: the look has no parts to name
@@ -464,7 +460,7 @@ def cmd_height(args):
         say(HEIGHT_USAGE.rstrip())
         return 0
     if not args or args[0] == "status":
-        say("height %d -- the row spark writes in, above your prompt" % height())
+        say("height %d -- %s" % (height(), _rows(height())))
         return 0
     try:
         n = int(args[0])
@@ -475,8 +471,11 @@ def cmd_height(args):
             from . import cli
             return cli.main(["height"] + list(args))
     if len(args) > 1 or not HEIGHT_MIN <= n <= HEIGHT_MAX:
-        say("spark height -- the height is a number, %d..%d" % (HEIGHT_MIN, HEIGHT_MAX))
+        say("spark height -- the height is a number, %d to %d" % (HEIGHT_MIN, HEIGHT_MAX))
         return 2
+    same = str(n) == _cfg(None).own("SPARK_HEIGHT", "")
     _set(SPARK_HEIGHT=str(n))
-    say("height %d now -- spark writes %s above the line you type on" % (n, "the row just" if n == 1 else "%d rows" % n))
+    if same:
+        return 0                    # nothing changed: nothing to say
+    say("* height %d -- %s" % (n, _rows(n)))
     return 0

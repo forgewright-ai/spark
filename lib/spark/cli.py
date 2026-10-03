@@ -10,7 +10,7 @@ import re
 import sys
 import time
 
-from . import CONFIG_DIR, MARK, OFF_FLAG, REPO, STATE_DIR, WIDGETS_DIR, config, die, glyph, paged, paint, say, state_dir
+from . import CONFIG_DIR, MARK, OFF_FLAG, REPO, WIDGETS_DIR, config, die, glyph, paged, paint, say, state_dir
 from . import bar, engine, forge, ledger, persona, session, version, wire
 from . import text as textmod
 
@@ -20,71 +20,55 @@ ANSWER_MAX = 300           # an answer IS the content: the widget fits it
 STDIN_TAIL = 6000          # what `explain` sends at most: the last 6 kB
 
 # Grammar rule 4: every verb answers -h first, signed per contract 8.
-LINE_USAGE = """spark line -- the prompt line's protocol (contract 4)
+LINE_USAGE = """spark line -- the prompt line, for the shell widgets
 
-  spark line --cwd D --shell S   reads the prompt buffer on stdin; prints
-                                 cmd|danger<TAB>command, answer or error,
-                                 then the hint / answer / reason, then --
-                                 when a cmd earns one -- proof<TAB>command:
-                                 a read-only check that it worked (the
-                                 prompt line offers it on Esc s after the run)
-  spark line --paste             a multi-line paste on stdin: no command
-                                 back, one answer|danger line naming what
-                                 it does; over 8 kB nothing is sent
+  spark line --cwd D --shell S   read the prompt line on stdin; print the
+                                 command or the answer, then the hint, then
+                                 a check that it worked, when there is one
+  spark line --paste             a pasted block on stdin: one line on what
+                                 it does; nothing runs
 """
-EXPLAIN_USAGE = """spark explain -- what went wrong in the piped output, and the fix
+EXPLAIN_USAGE = """spark explain -- what went wrong, and the fix
 
-  cmd 2>&1 | explain [words]  reads stdin (the last 6 kB); explain on PATH
-                              is a symlink to spark
-  --reveal [N|auto|off]       the pace of the answer at a terminal: N a
-                              second, auto (the measured threshold), off
-                              (as it comes, the default); spark stats
-                              shows the numbers
+  cmd 2>&1 | explain [words]  explain the output piped in (its last 6 kB)
+  --reveal [N|auto|off]       the reply pace at a terminal
 """
-LAST_USAGE = """spark last -- the last exchange, with its tok/s
+LAST_USAGE = """spark last -- the last exchange
 
-  spark last                  the newest turn: the line, the answer, the
-                              model that answered and its speed
+  spark last                  the last question, the answer, the model and
+                              its speed
 """
-STATUS_USAGE = """spark status -- the model, prompt line, server, soul, memory, last answer
+STATUS_USAGE = """spark status -- what answers, and how this machine is set
 
-  spark status                the full report: what answers, the model and
-                              the chat model (bare spark is its one line)
-  spark brain --porcelain     what answers, for a program: url<TAB>model<TAB>
-                              forge|model; exit 1 when nothing does (--fresh:
-                              ignore the cached answer)
+  spark status                the model, the prompt line, the server, the
+                              soul, the memory and the last answer
+  spark brain --porcelain     for a program: url<TAB>model<TAB>forge|model,
+                              exit 1 when nothing answers (--fresh asks again)
 """
-OFF_USAGE = """spark off -- silence the prompt line, every pane at once
+OFF_USAGE = """spark off -- turn the prompt line off, in every shell
 
-  spark off                   Enter is the shell's again and a failure says
-                              nothing; Esc s and spark <words> still work;
-                              spark on restores
+  spark off                   Enter and a failure are the shell's own again;
+                              Esc s and spark <words> still work
 """
-ON_USAGE = """spark on -- the prompt line answers again
+ON_USAGE = """spark on -- turn the prompt line back on
 
-  spark on                    ? words and words? go to the model again
+  spark on                    ? words and words? ask the model again
 """
 HISTORY_USAGE = """spark history -- the threads kept on this machine
 
-  spark history               where they live, the newest five, and the
-                              fixes the failure line remembers
-  spark clear --history       remove every turn and thread but the kept
-                              ones (/keep in spark chat)
+  spark history               the newest threads and the fixes remembered
+  spark clear --history       remove every thread but the kept ones
 """
 CLEAR_USAGE = """spark clear -- remove the history this machine keeps
 
-  spark clear --history       remove every turn and every thread but the
-                              kept ones (/keep in spark chat), and say how
-                              many kept threads stay
+  spark clear --history       remove every turn and thread but the kept
+                              ones (/keep in spark chat)
 """
 VER_USAGE = """spark ver -- logo, version, credits
 
-  spark ver                   the banner, the version (from git), the credits
-  spark ver --sbom            what the tree depends on, as CycloneDX 1.5 JSON:
-                              the engine per flavour, every model with its
-                              sha256 and licence, the distro packages, the
-                              python floor, the pinned actions -- the JSON
-                              alone, so it pipes (the release's sbom.cdx.json)
+  spark ver                   the logo, the version and the credits
+  spark ver --banner          the logo and the version, for a login
+  spark ver --sbom            what spark depends on, as CycloneDX JSON
 """
 
 
@@ -216,13 +200,13 @@ def _paste_verdict(shell):
         return 1
     if len(data) > PASTE_MAX:
         say("answer")
-        say("a %d-character paste -- too big to inspect; nothing was sent" % len(data))
+        say("too big to check (%d characters) -- nothing sent" % len(data))
         return 0
     cfg = config.load()
     what = secret_shape(data)
     if what:
         say("answer")
-        say("looks like a secret (%s): not sent" % what)
+        say("looks like a secret (%s) -- not sent" % what)
         session.record(cfg, mode="paste", kind="paste", chars=len(data), held=True)
         return 0
     local_danger = any(persona.is_dangerous(l) for l in data.splitlines())
@@ -238,7 +222,7 @@ def _paste_verdict(shell):
         say("error")
         say(_one_line(e.hint))
         return 1
-    summary = _one_line(_tidy(str(reply.get("summary") or ""), hint=False), ANSWER_MAX) or "a paste; nothing more to say"
+    summary = _one_line(_tidy(str(reply.get("summary") or ""), hint=False), ANSWER_MAX) or "a paste"
     danger = bool(reply.get("danger")) or local_danger
     say("danger" if danger else "answer")
     say(summary)
@@ -554,19 +538,6 @@ def _left(f):
     return _gap(f) + " -- check it before Enter"
 
 
-def _checked(found):
-    """The note on a re-ask's command that passed: what it was checked
-    against. Quiet otherwise -- a first answer that passes has none."""
-    f = found[0] if found else None
-    if f is None or f.kind == "placeholder":
-        return ""
-    if f.kind in ("flag", "command"):
-        return ", checked against the %s manual" % _nw(f.head)
-    if f.kind == "verb":
-        return ", checked against spark's own help"
-    return ", checked against this machine's programs"
-
-
 def _noted(lead, hint, note, width=HINT_COLS):
     """lead + hint + note as one line within `width`. The cut eats the
     model's words, never the lead (a danger's facts) or the note. A note
@@ -808,11 +779,11 @@ def _judged(s, reply, command, hint, text, asked, ms, know, early):
             said.append("Installed here: %s." % ", ".join("%s (%s)" % (n, w) if w else n for n, w in alike))
         ev = know.evidence(text, [f.head for f in found if f.kind != "missing"] + [n for n, _w in alike])
         if found:
-            early.busy.tell(_gap(found[0]) + ", so spark asks again")
+            early.busy.tell(_gap(found[0]) + " -- asking again")
         s.history.extend([{"role": "user", "content": asked},
                           {"role": "assistant", "content": "`%s`" % command}])
         again = _Early(early.cwd, early.more, early.history, early.busy, know, rode=bool(ev.text),
-                       retry=True, note=_checked(found), t0=early.t0)
+                       retry=True, t0=early.t0)
         retry, ms2, err = _line_stream(s, " ".join(said) + " " + ASK_AGAIN, again, ev.text)
         know.reasked, ms = 1, ms + ms2
         if again.head is not None:
@@ -824,8 +795,6 @@ def _judged(s, reply, command, hint, text, asked, ms, know, early):
             left = know.verdict(c2)
             rep2 = early.more and c2 == _last_proposed(early.history)
             if len(left) + rep2 <= len(found) + repeat:
-                if not left and not rep2:
-                    early.note = again.note     # it passed, only too late to go early
                 reply, command, rode, repeat = retry, c2, bool(ev.text), rep2
                 hint = _one_line(retry.get("hint", ""))
                 found = left
@@ -1103,30 +1072,27 @@ def reveal_word(word, refuse):
     except ValueError:
         n = -1
     if not reveal.CPS_MIN <= n <= reveal.CPS_MAX:
-        return refuse("--reveal takes auto, off, or a number %d..%d (characters a second)" % (reveal.CPS_MIN, reveal.CPS_MAX))
+        return refuse("--reveal takes N (%d to %d), auto or off" % (reveal.CPS_MIN, reveal.CPS_MAX))
     return n
 
 
-def stream_turn(cfg, mode, text, files=(), context="", thread=None, line=None, mark=True, cps=0, lead=None,
+def stream_turn(cfg, mode, text, files=(), context="", thread=None, line=None, mark=True, cps=0,
                 said=None, voice=None):
     """One turn through forge.reply, wrapped to the terminal (80 when
     piped): the mark (mark=False keeps a conversation bare -- a dialog
-    needs no mark), the answer as it streams, a trailing newline. `lead`
-    (the awakened chat's face, a tty only) opens the reply in the mark's
-    place, the lines hanging under it. `said` (a list) gains the turn's
-    two messages, as forge.reply keeps them. `voice` (the chat's
+    needs no mark), the answer as it streams, a trailing newline. `said`
+    (a list) gains the turn's two messages, as forge.reply keeps them. `voice` (the chat's
     forge._Spoken, a reply read aloud): with the reveal on at a terminal
     of this machine, the text follows the voice -- each sentence shown as
     its sound starts, at its pace; else the voice has each chunk once the
     wrap wrote it, never ahead of the screen. Returns the thread id. RefError,
     BrainError and KeyboardInterrupt pass through -- the wrap is closed
-    first so a half-printed answer still ends in a newline (a lead that
-    never opened stays unwritten: the caller says what went wrong);
-    forge.reply keeps the raw text for the thread record."""
+    first so a half-printed answer still ends in a newline; forge.reply
+    keeps the raw text for the thread record."""
     if cps == "auto":
         from . import reveal
         cps = reveal.auto_cps(cfg)
-    wrap = textmod.Wrap(sys.stdout, mark=mark, cps=cps, lead=lead)
+    wrap = textmod.Wrap(sys.stdout, mark=mark, cps=cps)
     # the pulse on stderr from the request until the first chunk (a tty
     # only: piped, nothing is drawn); the wrap's mark takes over from it
     busy = textmod.Busy(sys.stderr).start()
@@ -1163,8 +1129,7 @@ def stream_turn(cfg, mode, text, files=(), context="", thread=None, line=None, m
         if follow:
             voice.stop(rest=isinstance(e, wire.BrainError))
         busy.stop()
-        if wrap.started or not wrap.lead:
-            wrap.close()
+        wrap.close()
         raise
     finally:
         busy.stop()
@@ -1205,7 +1170,7 @@ def cmd_explain(words):
     cmd = os.environ.get("SPARK_EXPLAIN_CMD", "").strip()
     rc = os.environ.get("SPARK_EXPLAIN_RC", "").strip()
     if not ctx and not cmd:
-        die("explain reads stdin -- cmd 2>&1 | explain")
+        die("explain reads what is piped in -- cmd 2>&1 | explain")
     if cmd:
         if rc.isdigit() and rc != "0":
             # failure memory: remember this failure's shape until a fix
@@ -1233,7 +1198,7 @@ def _fmt_turn(t, short=False):
     # the sealed thread it names, when this machine can open it. short:
     # status's form, the reply's first line of words only
     if not t:
-        return "(no turns yet)"
+        return "none yet"
     line = body = ""
     if t.get("thread"):
         msgs = forge.load(t["thread"])
@@ -1245,8 +1210,8 @@ def _fmt_turn(t, short=False):
             body = _first_line(body) or body.strip()[:70]
     head = "%s  %s  %s" % (t.get("ts", "?"), t.get("kind", "?"), line)
     mark = glyph("warn") if t.get("kind") == "danger" else glyph("hammer")
-    body = "  %s %s" % (mark, body) if body else "  (the thread is gone -- numbers only)"
-    tail = "  via %s (%s) %s" % (t.get("backend", "?"), t.get("model", "?"), speed(t))
+    body = "  %s %s" % (mark, body) if body else "  (the words are gone)"
+    tail = "  %s, %s" % (config.model_name(t.get("model") or "?"), speed(t))
     if t.get("thread"):
         tail += "  thread %s" % t["thread"]
     return "\n".join([head, body, tail])
@@ -1261,15 +1226,11 @@ def speed(t):
     return secs
 
 
-RECALL_USAGE = """spark recall -- find a command you ran, by describing it (intent search)
+RECALL_USAGE = """spark recall -- find a command you ran by what it did
 
-  <history> | spark recall <words>   the shell pipes its history on stdin,
-                                     you say what the command did; the lines
-                                     that match, most likely first, at most 5
-                                     -- every one is a whole line from the
-                                     history, never invented; one that can
-                                     destroy is prefixed `!` and a tab.
-                                     Esc r drives this.
+  <history> | spark recall <words>   the history on stdin; up to 5 lines
+                                     of it that match, best first (Esc r
+                                     at the prompt does this)
 """
 
 
@@ -1284,10 +1245,10 @@ def cmd_recall(args):
     intent = " ".join(args).strip()
     history = textmod.stdin_text()
     if not intent:
-        print("recall: say what the command did -- spark recall <words>", file=sys.stderr)
+        print("! say what the command did -- spark recall <words>", file=sys.stderr)
         return 1
     if not history.strip():
-        print("recall: no history on stdin", file=sys.stderr)
+        print("! no history on stdin", file=sys.stderr)
         return 1
     cfg = config.load()
     prompt = "What I am looking for: %s\n\nMy shell history:\n%s" % (intent, history)
@@ -1295,7 +1256,7 @@ def cmd_recall(args):
         s = session.Session(cfg, "recall", _shell_default(), "", role="spark")
         reply, ms = s.ask_json(prompt, persona.RECALL_SCHEMA, max_tokens=300)
     except wire.BrainError as e:
-        print("recall: " + e.hint, file=sys.stderr)
+        print("! " + e.hint, file=sys.stderr)
         return 1
     raw = reply.get("candidates") or []
     # the promise is line-level: a candidate is kept only when it equals
@@ -1316,7 +1277,7 @@ def cmd_recall(args):
             break
     s.record(kind="recall", chars=len(history), ms=ms, candidates=len(out))
     if not out:
-        print("recall: nothing in the history matches", file=sys.stderr)
+        print("! nothing in the history matches", file=sys.stderr)
         return 1
     for line in out:
         # a line that can destroy carries the warn mark, so the widget
@@ -1388,7 +1349,7 @@ def cmd_status(args, _bare=False):
     from . import SITE_ENV
     if not os.path.exists(SITE_ENV) and sys.stdout.isatty():
         from . import setup
-        cmd_ver([])
+        banner()
         say(setup.SIGN)
         return 0
     cfg = config.load()
@@ -1399,45 +1360,48 @@ def cmd_status(args, _bare=False):
             # only a machine that really serves an ember role says "ember";
             # a single model is just the model
             ember = next((s for role, s, _l in _role_rows(cfg, url, is_forge) if role == "ember"), None)
-            what = ("chat model %s" % ember) if ember else ("model %s" % model)
-            say("%s -- %s at %s%s (spark status for the rest)" % (MARK, what, url, bar.waiting(", ")))
+            say("%s %s at %s%s" % (glyph("hammer"), config.model_name(ember or model), url, bar.waiting(", ")))
         except wire.BrainError as e:
-            say("%s -- %s (spark status for the rest)" % (MARK, e.hint))
+            say("%s %s" % (glyph("warn"), e.hint))
         return 0
     from . import is_wsl
-    say("%s -- %s's AI on %s%s" % (MARK, cfg.user, cfg.name, " (WSL 2)" if is_wsl() else ""))
+    say("%s %s's spark on %s%s" % (glyph("hammer"), cfg.user, cfg.name, " (WSL 2)" if is_wsl() else ""))
     t0 = time.time()
     try:
         url, model, is_forge = wire.resolve_brain(cfg, fresh=True)
         rows = _role_rows(cfg, url, is_forge)
+        ms = int((time.time() - t0) * 1000)
         if rows:
-            model = " - ".join("%s %s" % (role, stem) for role, stem, _loaded in rows)
-        say("  model    %s  (%s%s, /health %dms)" % (url, model, ", the page's server" if is_forge else "", int((time.time() - t0) * 1000)))
+            for role, stem, _loaded in rows:
+                say("  %-8s %s" % ({"spark": "line", "ember": "chat"}.get(role, role), config.model_name(stem)))
+        else:
+            say("  model    %s" % config.model_name(model))
+        say("  server   %s%s, %d ms" % (url, " (the page too)" if is_forge else "", ms))
     except wire.BrainError as e:
         say("  model    " + e.hint)
     w = live_widgets()
-    say("  prompt   %s%s" % ("off (spark on)" if os.path.exists(OFF_FLAG) else "on",
-                              "  in %s" % ", ".join("%s %d" % x for x in w) if w else "  (no shell has sourced it)"))
+    say("  prompt   %s" % ("off -- spark on turns it on" if os.path.exists(OFF_FLAG)
+                           else "on in %s" % ", ".join("%s %d" % x for x in w) if w else "on, no shell loaded yet"))
     st = engine.service_state(cfg)
-    say("  service  %s" % {"loaded": "always-on (spark serve)", "disabled": "off on purpose (spark serve on)",
-                           "absent": "on demand (spark serve on keeps it)"}[st])
-    from . import SOUL_FILE, memory, soul
+    say("  service  %s" % {"loaded": "always on", "disabled": "off -- spark serve on starts it",
+                           "absent": "starts when needed"}[st])
+    from . import memory, soul
     _, source = soul.read(cfg)
     if source == "file":
-        say("  soul     yours, %d characters (%s)" % (len(soul.text(cfg)), _short(SOUL_FILE)))
+        say("  soul     yours, %d characters" % len(soul.text(cfg)))
     elif source == "env":
-        say("  soul     from SPARK_PERSONA_EXTRA (spark soul edit)")
+        say("  soul     from SPARK_PERSONA_EXTRA -- spark soul edit moves it")
     else:
-        say("  soul     built-in (spark soul edit)")
+        say("  soul     built in -- spark soul edit makes it yours")
     nf = len(memory.facts(cfg))
     say("  memory   %s" % ("%d fact%s" % (nf, "" if nf == 1 else "s") if cfg.memory else "off"))
     n = len(forge.list_threads(10**6))
-    say("  history  %s" % ("off" if cfg.history <= 0 else "%d days, %s, %d thread%s"
-                           % (cfg.history, _short(os.path.join(STATE_DIR, "turns")), n, "" if n == 1 else "s")))
+    say("  history  %s" % ("off" if cfg.history <= 0 else "%d days, %d thread%s"
+                           % (cfg.history, n, "" if n == 1 else "s")))
     say("  last     " + _fmt_turn(session.last_turn(), short=True).replace("\n", "\n           "))
     runs = bar.waiting()
     if runs:
-        say("  runs     %s (spark do --review)" % runs)
+        say("  runs     %s -- spark do --review" % runs)
     return 0
 
 
@@ -1454,8 +1418,10 @@ def cmd_off(args):
     if _help(args, OFF_USAGE):
         return 0
     state_dir()
+    was = os.path.exists(OFF_FLAG)
     open(OFF_FLAG, "a").close()
-    say("%s off -- Enter is the shell's again, and a failure says nothing (Esc s and spark <words> still work) -- spark on restores" % MARK)
+    if not was:
+        say("%s the prompt line is off -- spark on turns it back on" % glyph("hammer"))
     from . import check
     check.refresh()
     return 0
@@ -1466,9 +1432,9 @@ def cmd_on(args):
         return 0
     try:
         os.remove(OFF_FLAG)
+        say("%s the prompt line is on" % glyph("hammer"))
     except OSError:
         pass
-    say("%s on -- ? words, words? and the failure line are back" % MARK)
     from . import check
     check.refresh()
     return 0
@@ -1502,16 +1468,15 @@ def _clear_history():
     n = session.clear()
     m = forge.clear()
     k = forge.kept_count()
-    say("%s history: removed %d day file%s and %d thread%s%s" % (
-        MARK, n, "" if n == 1 else "s", m, "" if m == 1 else "s",
+    say("%s removed %d day%s of turns and %d thread%s%s" % (
+        glyph("hammer"), n, "" if n == 1 else "s", m, "" if m == 1 else "s",
         "" if not k else "; %d kept thread%s stay%s" % (k, "" if k == 1 else "s", "s" if k == 1 else "")))
     return 0
 
 
 def _history_show():
     cfg = config.load()
-    say("%s history: %s" % (MARK, "off" if cfg.history <= 0 else "%d days under %s" % (cfg.history, _short(STATE_DIR))))
-    say("  spark clear --history  removes every turn and thread but the kept ones")
+    say("%s history %s" % (glyph("hammer"), "off" if cfg.history <= 0 else "kept %d days" % cfg.history))
     held = forge.list_threads(10**6)       # the count status and spark user say
     threads = held[:5]
     if threads:
@@ -1522,12 +1487,11 @@ def _history_show():
                                          "  (kept)" if th.get("kept") else ""))
     k = forge.kept_count()
     if k:
-        say("  %d kept thread%s past SPARK_HISTORY and spark clear --history"
-            % (k, " stays" if k == 1 else "s stay"))
+        say("  %d kept thread%s" % (k, "" if k == 1 else "s"))
     fixes = [e for e in ledger.entries(kind=ledger.KIND_FAIL)
              if not ledger._retired(e, "path", None)]
     if fixes:
-        say("  fixes remembered (the failure line offers them, no model call):")
+        say("  fixes remembered:")
         for e in reversed(fixes[-5:]):
             say("  %-10s exit %-3s x%-2d %s" % (e.get("head", "?"), e.get("rc", "?"),
                                                 int(e.get("count", 1)), e["note"][:48]))
@@ -1579,7 +1543,7 @@ def logo_names():
 
 
 def cmd_ver(args):
-    """logo, version, credits"""
+    """logo, version, credits; --banner the first two, for a login"""
     if _help(args, VER_USAGE):
         return 0
     if args[:1] == ["--sbom"]:
@@ -1588,6 +1552,15 @@ def cmd_ver(args):
         sys.stdout.write(sbom.dumps())
         sys.stdout.flush()
         return 0
+    banner()
+    if args[:1] != ["--banner"]:
+        say(credits())
+        say("engine llama.cpp %s (MIT) -- CREDITS.md names the rest" % engine.pinned_version())
+    return 0
+
+
+def banner():
+    """The logo and `spark X.Y`: the login's lines, and the setup offer's."""
     for path in (os.path.join(CONFIG_DIR, "banner"), os.path.join(REPO, "home", ".config", "spark", "banner")):
         try:
             with open(path, encoding="utf-8") as f:
@@ -1606,9 +1579,6 @@ def cmd_ver(args):
     # this line is the login greeting, so the version is the cached one
     # (lib/spark/version.py): no blocking git call on the common path.
     say("%s %s" % (MARK, version.version()))
-    say(credits())
-    say("engine llama.cpp %s (MIT) -- CREDITS.md names the rest" % engine.pinned_version())
-    return 0
 
 
 # ---------------------------------------------------- soul and memory

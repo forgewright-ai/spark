@@ -857,7 +857,7 @@ with open(spark_env, "w") as f:
 rc, out = awaken("plain\nkeep\n")
 check("awaken with the clear voice on: the voice kept is written, SPARK_VOICE stays clear, said in one line",
       rc == 0 and voice.read_recipe() and "SPARK_VOICE=clear\n" in senv() and "SPARK_VOICE=on" not in senv()
-      and "The clear voice stays on: spark voice on speaks in this one." in out, out[-600:])
+      and "* the clear voice stays on -- spark voice on uses this one" in out, out[-600:])
 os.remove(voice.RECIPE_FILE)
 os.remove(spark_env)
 rc, out = awaken("plain\n\n")
