@@ -96,7 +96,8 @@ it, and no verb carries the word.
   bracketed in `\001` and `\002`. libedit counts the escape bytes as
   columns, so there it stays plain. Every animation frame is ASCII:
   `text.Busy`, the pulse while a reply is on its way, its scanner, the
-  waking bar (`text.Estimate`) and the faces (`faces.kit`). A reply's
+  waking bar (`text.Estimate`), the faces (`faces.kit`) and the
+  talking face (`look.talking`). A reply's
   Markdown
   is drawn at a terminal, never stripped blind. `text.Wrap` renders
   `**bold**` as bold and a `# heading` line as bold. It drops the `*`
@@ -106,10 +107,25 @@ it, and no verb carries the word.
   that passes through whole until the closing fence. Awakened, it also
   draws `inline code` in the accent, its backticks dropped, and a `- `,
   `* ` or `N. ` line as a bullet whose wrapped lines hang under its
-  first word. The face is the wait, only: it shows inside the pulse,
-  the scanner and the waking bar (the hint row, chat, explain, `spark
-  do`) and is gone when the answer comes. No reply, greeting, goodbye
-  or refusal carries it, so a reply is bare text, awake or not.
+  first word. The face is the wait: it shows inside the pulse, the
+  scanner and the waking bar (the hint row, chat, explain, `spark do`)
+  and is gone when the answer comes. No greeting, goodbye or refusal
+  carries it, and a reply is bare text, awake or not. A reply the chat
+  reads aloud is the one exception, where the look's motion and words
+  are active. It opens with the idle face in the mark's place, its
+  lines hanging under it (`text.Wrap`'s `lead`). The face talks while
+  the voice plays. `forge._Face`, a thread of its own, redraws it in
+  place every `forge.MOUTH_STEP` (0.15 s), idle and talking in turn. It
+  does so while one of the reply's sentences sounds
+  (`voice.Reader.sounds`).
+  The talking frame is the idle one with its mouth open
+  (`look.talking`). The redraw saves the cursor, goes up the rows the
+  reply has taken, writes the frame and restores, under one lock with
+  the reply's writes, which count the rows. It rests on idle between
+  sentences, after the last, on a cut (`Esc x`), at the first key typed
+  at `chat>` and before the chat prints a line of its own. Once the
+  reply's rows reach the terminal's height less one, or the terminal
+  is resized, it moves no more.
   Piped, the bytes are the model's. Text in is strict UTF-8
   as well. stdin is decoded with the replacement mark
   (`text.stdin_text`). Every string bound for the wire or a store goes
@@ -263,7 +279,9 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 (contract 11 on the file, onto the chat's thread), /do
                 [--sandbox] (spark do's terminal loop; the chat runs
                 nothing), /aloud /again (the voice: a reply spoken a
-                sentence at a time as the reveal prints it). Esc on an empty line,
+                sentence at a time as the reveal prints it; awake, a
+                spoken reply is led by the face, which talks while the
+                voice plays -- _Face). Esc on an empty line,
                 Ctrl-D or /q ends it; Esc v listens onto the line, Esc x
                 stops the speaking (_Keys: a getc hook under GNU readline,
                 the first key read raw under libedit))
@@ -927,7 +945,9 @@ and may change freely.
    shows the sentence's text from then, `forge.FOLLOW_EARLY` ahead, at
    the pace that ends it with `forge.FOLLOW_SHARE` of its sound. A sound
    not known within `forge.FOLLOW_WAIT` lets the rest go at the reveal's
-   pace. Otherwise the voice has each chunk once the wrap printed it. A
+   pace. Otherwise the voice has each chunk once the wrap printed it.
+   `Reader.sounds(tags)` says whether one of a reply's sentences sounds
+   now, and the face talks while it does (`forge._Face`). A
    reply's first sentence goes at its first comma, semicolon or colon,
    or after `voice.FIRST_WORDS` words with none. The shell widgets
    depend on nothing else.

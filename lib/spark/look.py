@@ -212,6 +212,19 @@ def face_ok(frame):
     return clean(frame) is not None and len(frame.strip()) <= FACE_MAX
 
 
+def talking(idle):
+    """The idle face with its mouth open: the chat's talking frame while a
+    reply is read aloud. The mouth is the middle of an odd-width frame
+    (the kit's eyes, mouth, eyes inside the body); it opens to `o`, or `O`
+    when an eye or the mouth is `o` already. None when there is no middle."""
+    f = (idle or "").strip()
+    if len(f) < 3 or len(f) % 2 == 0:
+        return None
+    mid = len(f) // 2
+    mouth = next((c for c in "oO0" if c not in f[mid - 1:mid + 2]), None)
+    return f[:mid] + mouth + f[mid + 1:] if mouth else None
+
+
 def faces(path=None):
     """The machine's faces: the faces file over the shipped kit, each
     cleaned. RATE= and TEMPER= are settings, not faces."""

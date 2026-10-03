@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.73
+
+- The face talks. Awake, a chat reply read aloud starts with the face,
+  its lines hanging under it. While a sentence plays, the mouth opens
+  and closes, `(o.o)` and `(oOo)`. Between sentences, after the last
+  one and after `Esc x`, it rests. It rests too once you type at
+  `chat>`, or once the reply's first line has scrolled off the screen.
+  A reply that is not spoken still starts with `*`. Piped, unawake or
+  with the look's motion off, nothing changes.
+- The voice's download is the same: 586 MB on Linux and 602 MB on
+  macOS.
+
 ## v1.72
 
 One voice and one way of looking: spark says less, in short plain
