@@ -190,7 +190,7 @@ def cmd_remember(words):
     try:
         fact = remember(" ".join(words or []))
     except Refused as e:
-        say("spark memory: " + e.hint)
+        say("! " + e.hint)
         return 1
     say("ok     remembered   %s" % fact)
     return 0
@@ -198,7 +198,7 @@ def cmd_remember(words):
 
 def cmd_forget(args):
     if not args:
-        say(MEMORY_USAGE.rstrip())
+        say("spark memory -- say which: spark memory forget N")
         return 2
     if args[0] in ("-h", "--help", "help"):
         say(MEMORY_USAGE.rstrip())
@@ -206,26 +206,26 @@ def cmd_forget(args):
     try:
         lines = _lines(strict=True)
     except Refused as e:
-        say("spark memory: " + e.hint)
+        say("! " + e.hint)
         return 1
     idx = [i for i, ln in enumerate(lines) if ln.strip() and not ln.lstrip().startswith("#")]
     if not idx:
-        say("spark memory: nothing is remembered")
+        say("! nothing is remembered")
         return 1
     if len(args) == 1 and args[0].isdigit():
         fact = forget_n(int(args[0]))
         if fact is None:
-            say("spark memory: no fact %s -- spark memory lists 1..%d" % (args[0], len(idx)))
+            say("! no fact %s -- spark memory lists 1..%d" % (args[0], len(idx)))
             return 1
         say("ok     forgot       %s" % fact)
         return 0
     needle = " ".join(args).lower()
     hits = [i for i in idx if needle in lines[i].lower()]
     if not hits:
-        say("spark memory: no fact contains: %s" % " ".join(args))
+        say("! no fact has the words: %s" % " ".join(args))
         return 1
     if len(hits) > 1:
-        say("spark memory: %d facts match -- say which by number:" % len(hits))
+        say("! %d facts match -- say which by number:" % len(hits))
         for i in hits:
             say("  %-3d %s" % (idx.index(i) + 1, lines[i].strip()))
         return 1
@@ -265,10 +265,11 @@ def cmd_memory(args):
                 os.remove(MEMORY_FILE)
                 removed = True
         except OSError as e:
-            say("spark memory: cannot clear: %s" % e)
+            say("! cannot clear: %s" % e)
             return 1
-        say("ok     memory       cleared" if removed else "ok     memory       empty already")
+        if removed:
+            say("ok     memory       cleared")
         _refresh()
         return 0
-    say(MEMORY_USAGE.rstrip())
+    say("spark memory -- no word %s; spark memory -h lists them" % args[0])
     return 2

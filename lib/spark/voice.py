@@ -2503,12 +2503,7 @@ def show(cfg=None):
     return 0
 
 
-def _test_line(cfg, m):
-    if m == "on":
-        from . import words
-        hello = words.load().get("hello", "") or "I am awake."
-        return hello.replace("{name}", cfg.name)
-    return "This is how spark reads aloud."
+TEST_LINE = "This is how spark reads aloud."
 
 
 def cmd_voice(args):
@@ -2528,13 +2523,13 @@ def cmd_voice(args):
         if r is None:
             from . import awaken, words
             r = write_recipe(mint(words.temper(), awaken._seed(cfg)))
-            say("its voice: %s" % describe(r))
+            say("* its voice: %s" % describe(r))
         if not _no_apply() and not _fetch_said(cfg):
             return 1
         was = mode(cfg) == "on"
         _set(SPARK_VOICE="on")
         if not was:
-            say("the voice is on -- spark voice test says a line")
+            say("* the voice is on -- spark voice test says a line")
         return 0
     if word == "clear" and rest in ([], ["--anyway"]):
         forced = rest == ["--anyway"]
@@ -2548,7 +2543,7 @@ def cmd_voice(args):
         _set(SPARK_VOICE="clear")
         _flag(forced)
         if not was:
-            say("the voice is clear -- spark voice test says a line")
+            say("* the voice is clear -- spark voice test says a line")
         return 0
     if word == "off" and rest in ([], ["--remove"]):
         was = mode(cfg) == "off"
@@ -2558,10 +2553,10 @@ def cmd_voice(args):
         if rest:
             n = _size(voice_dir()) if _no_apply() else remove()
             said = " would be freed" if _no_apply() else " freed"
-            say("the voice is off -- %d MB%s" % (max(1, _mb(n)), said) if n else "the voice is off")
+            say("* the voice is off -- %d MB%s" % (max(1, _mb(n)), said) if n else "* the voice is off")
             return 0
         if not was:
-            say("the voice is off")
+            say("* the voice is off")
         return 0
     if word == "rate" and len(rest) <= 1:
         if not rest:
@@ -2574,14 +2569,14 @@ def cmd_voice(args):
         was = n == rate(cfg)
         _set(SPARK_VOICE_RATE=str(n))
         if not was:
-            say("rate %d" % n)
+            say("* rate %d" % n)
         return 0
     if word == "test" and not rest:
         m = mode(cfg)
         if m == "off":
             say("%s voice -- the voice is off -- spark voice clear or spark voice on" % MARK)
             return 1
-        line = _test_line(cfg, m)
+        line = TEST_LINE
         say("* " + line)
         if _no_apply():
             return 0
@@ -2597,21 +2592,21 @@ def cmd_voice(args):
         return 0
     if word == "stop" and not rest:
         if stop():
-            say("stopped")
+            say("* stopped")
         return 0
     if word == "listen" and rest in ([], ["--buffer"]):
         return _listen_verb(cfg, buffer=bool(rest))
     if word in VERB_WORDS or any(a.startswith("-") for a in args):
         # one of the verb's own words with what it does not take, or a
         # flag it does not know: never a question for the model
-        say("%s voice -- spark voice %s is not a voice command" % (MARK, " ".join(args)))
-        say(VOICE_USAGE.rstrip())
+        bad = next((a for a in args if a.startswith("-")), None) or (rest[0] if rest else args[0])
+        say("%s voice -- no word %s; spark voice -h lists them" % (MARK, bad))
         return 2
     if len(args) > 1 or args[-1].endswith("?"):
         # `spark voice of reason?` is a question
         from . import cli
         return cli.main(["voice"] + list(args))
-    say("%s voice -- no word %s -- spark voice -h lists them" % (MARK, args[0]))
+    say("%s voice -- no word %s; spark voice -h lists them" % (MARK, args[0]))
     return 2
 
 
@@ -2636,7 +2631,7 @@ def _listen_verb(cfg, buffer=False):
     if mode(cfg) == "off":
         return no("the voice is off -- spark voice clear or spark voice on")
     if not buffer:
-        say("listening -- speak, a pause ends it")
+        say("* listening -- a pause ends it")
     try:
         text, _lang = listen(cfg)
     except VoiceError as e:
@@ -2648,7 +2643,7 @@ def _listen_verb(cfg, buffer=False):
     text = heard_line(text)
     if not text:
         if not buffer:
-            say("nothing heard")
+            say("* nothing heard")
         return 1
     say(text)
     return 0
@@ -2680,7 +2675,7 @@ def audition(cfg, temper, seed, line, ask, out=say):
         try:
             fetch(cfg, out=out)
         except VoiceError as e:
-            out("The voice did not download: %s." % e)
+            out("! the voice did not download: %s" % e)
             return None
     for n in range(12):
         r = mint(temper, seed if n == 0 else "%s:%d" % (seed, n))
@@ -2691,7 +2686,7 @@ def audition(cfg, temper, seed, line, ask, out=say):
             finally:
                 cleanup(wav)
         except VoiceError as e:
-            out("The voice did not play: %s." % e)
+            out("! the voice did not play: %s" % e)
             return None
         a = ask("its voice: %s. keep it? (keep, again, none): " % describe(r))
         if a in ("keep", "k", "yes", "y"):

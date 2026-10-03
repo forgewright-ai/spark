@@ -31,7 +31,7 @@ load_env() {
     [ -f "$1" ] || return 0
     bad=$(grep -nEv '^[[:space:]]*(#|$)|^[A-Z_0-9]+=[^;`$()|&<>]*$' "$1" || true)
     if [ -n "$bad" ]; then
-        printf 'spark: %s: refused, these lines are not KEY=value:\n%s\n' "$1" "$bad" >&2
+        printf '! %s: refused, these lines are not KEY=value:\n%s\n' "$1" "$bad" >&2
         return 1
     fi
     while IFS= read -r line || [ -n "$line" ]; do

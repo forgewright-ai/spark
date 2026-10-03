@@ -237,7 +237,8 @@ def cmd_edit(args):
             except ledger.Refused as e:
                 say("%s edit --ledger -- %s" % (MARK, e.hint))
                 return 2
-            say("dropped %d note%s%s" % (n, "" if n == 1 else "s", (" for " + name) if name else ""))
+            if n:
+                say("* dropped %d note%s%s" % (n, "" if n == 1 else "s", (" for " + name) if name else ""))
         else:
             for line in ledger.listing(name):
                 say(line)

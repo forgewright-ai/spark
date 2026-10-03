@@ -39,8 +39,8 @@ def _announce_downloads(pend):
 # ------------------------------------------------------------------ model
 MODEL_USAGE = """%s model -- which model this machine serves
 
-  spark model                   the list: * answers the prompt line, + the
-                                chat, u is yours
+  spark model                   the list (* the prompt line, + the chat,
+                                u = yours)
   spark model list --porcelain  the same, tab separated, for a program
   spark model NAME              download and serve it (asks first when its
                                 licence is not open)
@@ -262,9 +262,9 @@ def print_model_table(cfg):
         # speeds); else the rows alone, no verdict
         peer = peer_models(cfg)
         if peer:
-            say("%s model -- a client of %s: the other machine's table, %.0f GB for models, budget %.0f GB (%d%%), %s" % (
-                MARK, cfg.peer_ai_url, peer.get("total_gb", 0), peer.get("budget_gb", 0),
-                peer.get("budget_pct", 0), peer.get("backend", "?")))
+            say("%s model -- the other machine's table: %.0f GB for models, budget %.0f GB (%d%%)" % (
+                MARK, peer.get("total_gb", 0), peer.get("budget_gb", 0), peer.get("budget_pct", 0)))
+            say("  a client of %s" % cfg.peer_ai_url)
             if peer.get("cap_note"):
                 say("  " + peer["cap_note"])
             rows = peer["models"]
@@ -273,8 +273,8 @@ def print_model_table(cfg):
             rows = model_rows(cfg)
     else:
         budget = mem_total_gb() * cfg.ai_budget / 100.0
-        say("%s model -- %.0f GB for models, budget %.0f GB (%d%%), %s" % (
-            MARK, mem_total_gb(), budget, cfg.ai_budget, engine.backend(cfg)))
+        say("%s model -- %.0f GB for models, budget %.0f GB (%d%%)" % (
+            MARK, mem_total_gb(), budget, cfg.ai_budget))
         note = engine.cap_note(cfg)
         if note:
             say("  " + note)
@@ -310,7 +310,7 @@ def _license_ok(row, verb):
     if os.environ.get("SPARK_YES") == "1" or not sys.stdin.isatty():
         return True
     if not confirm("download it"):
-        say("spark %s -- cancelled" % verb)
+        say("* nothing changed")
         return False
     return True
 
@@ -517,7 +517,7 @@ def cmd_model(args):
     name = args[0]
     match = [r for r in rows if r[0] == name]
     if name not in ("auto", "none") and not match:
-        say("spark model -- no model named %s; one of: auto none %s" % (name, " ".join(r[0] for r in rows)))
+        say("spark model -- no model named %s; spark model lists them" % name)
         return 2
     if cfg.client:
         return _client_no(cfg, "model")

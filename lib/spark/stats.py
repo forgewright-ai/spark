@@ -126,6 +126,10 @@ def main(argv):
     if argv and argv[0] in ("-h", "--help", "help"):
         say(USAGE.rstrip())
         return 0
+    bad = next((a for a in argv if a not in ("--sends", "--porcelain") and a not in WINDOWS), None)
+    if bad is not None:
+        say("%s stats -- no word %s; spark stats -h lists them" % (MARK, bad))
+        return 2
     report = _sends if "--sends" in argv else _report
     if "--porcelain" in argv:
         return report(argv)        # porcelain never pages

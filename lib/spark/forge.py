@@ -1005,7 +1005,7 @@ def _write_chat_history(readline):
             try:
                 vault.read_sealed(path, st.dk, "chathist", st.name)
             except (OSError, vault.SealError):
-                print("spark chat: the chat history does not open -- kept as it is; spark user login again",
+                print("! this chat cannot be opened -- spark user login",
                       file=sys.stderr, flush=True)
                 return
         vault.write_sealed(path, st.dk, "chathist", st.name, blob)

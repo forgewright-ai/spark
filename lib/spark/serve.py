@@ -19,7 +19,7 @@ USAGE = """%s serve -- the engine and the page, served on this LAN
   spark serve                 what answers, the models, the page
   spark serve on              start the engine and the page, keep them up
   spark serve off             stop both, keep them down
-  spark serve off --force     also stop a llama-server spark did not start
+  spark serve off --force     also stop an engine spark did not start
   spark serve boot [on|off]   up from boot, nobody logged in, never asleep
   spark serve share [on|off]  one model for every user here (Linux)
   spark serve --login         the page's address and the admin login
@@ -33,7 +33,7 @@ UNIT_ROWS = ["spark-serve", "spark-forge", r"spark\.(serve|forge)", "daemons", "
 
 
 def _die(msg, code=1):
-    print("spark serve: " + msg, file=sys.stderr, flush=True)
+    print("! " + msg, file=sys.stderr, flush=True)
     return code
 
 
@@ -220,7 +220,7 @@ def cmd_serve(args, by_hand=False, wait_unit=False, start_disabled=False):
     if verdict == "refuse":
         return _die(why + " -- bind the one address the LAN should reach (--host ADDR)", engine.EX_CONFIG)
     if verdict:
-        say("%s serve -- warning: %s" % (MARK, why))
+        say("! %s" % why)
     try:
         engine_bin, model = engine.resolve_for_spawn(cfg)
     except engine.EngineError as e:
@@ -256,7 +256,7 @@ def cmd_serve(args, by_hand=False, wait_unit=False, start_disabled=False):
     others = engine.server_pids(cfg.port)
     mine = engine.pidfile_pid()
     if others and mine not in others:
-        return _die("port %d: a llama-server spark did not start (pid %s) -- spark serve off --force"
+        return _die("port %d: an engine spark did not start (pid %s) -- spark serve off --force"
                     % (cfg.port, ",".join(str(p) for p in others)))
     unit = "" if fg or by_hand else engine.service_state(cfg)
 
@@ -297,7 +297,7 @@ def cmd_serve(args, by_hand=False, wait_unit=False, start_disabled=False):
         up = engine.wait_load(cfg, "", probe, 180, 1)
     except Exited:
         engine.forget()
-        return _die("llama-server exited while loading:\n" + engine.log_tail())
+        return _die("the engine stopped while loading:\n" + engine.log_tail())
     if not up:
         engine.terminate([pid])
         engine.forget()
@@ -359,7 +359,7 @@ def cmd_stop(args):
         return 0
     if pids:
         if not force:
-            return _die("the llama-server on port %d (pid %s) was not started by spark -- spark serve off --force"
+            return _die("the engine on port %d (pid %s) was not started by spark -- spark serve off --force"
                         % (cfg.port, ",".join(str(p) for p in pids)))
         engine.terminate(pids)
         left = engine.wait_gone(pids, 10)
@@ -545,5 +545,5 @@ def main(sub, args):
         return audit.cmd_audit(rest)
     if word in ("--foreground", "--warm-when-up", "--host"):
         return cmd_serve(args)
-    say(USAGE.rstrip())
+    say("%s serve -- no word %s; spark serve -h lists them" % (MARK, word))
     return 2

@@ -36,7 +36,7 @@ USAGE = """%s user -- the users of this machine
   spark user login [NAME]     log in with a token
   spark user logout           log out (your data stays)
   spark user token --new      a new token; other logins end
-  spark user claim            seal old plaintext history into your store
+  spark user claim            move older chats into your account
 
   A name is a-z, 0-9 and -, starting with a letter, at most 32 characters.
   The token is the only key to your data: keep it, there is no reset.
@@ -272,7 +272,7 @@ def _audit(action, name):
     from . import audit
     why = audit.record(action, name=name)
     if why:
-        say("spark user: the audit record was not kept -- %s" % why)
+        say("! the audit record was not kept -- %s" % why)
 
 
 def _ask_token():
@@ -289,14 +289,14 @@ def cmd_add(args):
     show = "--show-token" in args
     names = [a for a in args if not a.startswith("-")]
     if len(names) != 1:
-        say(USAGE.rstrip())
+        say("spark user -- say one name: spark user add NAME")
         return 2
     name = names[0]
     if not valid_name(name):
-        say("spark user: a name is a-z, 0-9 and -, starting with a letter, at most 32 characters")
+        say("spark user -- a name is a-z, 0-9 and -, starting with a letter, at most 32 characters")
         return 2
     if exists(name):
-        say("spark user: %s already exists" % name)
+        say("spark user -- %s already exists" % name)
         return 2
     token = add(name)
     say("ok     user         %s" % name)
@@ -308,10 +308,10 @@ def cmd_add(args):
         if os.isatty(1) and "--no-qr" not in args:
             from . import forgeserve   # local: forgeserve imports users
             if forgeserve.print_qr(forgeserve.page_url() + "#t=" + token):
-                say("scan on %s's phone to sign in" % name)
+                say("* scan on %s's phone to sign in" % name)
                 say("")
     else:
-        say("spark user: the token is shown only at a terminal (--show-token to print it here)")
+        say("* the token shows only at a terminal (--show-token prints it here)")
     # the first user on a machine with no login is its owner: log in.
     # later adds mint guests and leave the login alone.
     if not account()[0] and len(list_users()) == 1:
@@ -326,7 +326,7 @@ def cmd_add(args):
         if confirm("claim the %d existing plaintext thread%s into %s -- sealed, then removed"
                    % (n, "" if n == 1 else "s", name)):
             return cmd_claim()
-        say("spark user: left as they are -- spark user claim moves them later")
+        say("* nothing changed -- spark user claim moves them later")
     return 0
 
 
@@ -360,7 +360,7 @@ def _claim_files(name, dk):
 def cmd_claim():
     name, token = account()
     if not name:
-        say("spark user: no login here -- spark user login NAME first")
+        say("spark user -- no login here; spark user login NAME first")
         return 2
     if not exists(name):
         # a logged-in client with no store yet: the login's token seals a
@@ -368,14 +368,14 @@ def cmd_claim():
         from . import forge
         forge.local_store(provision=True)
     if not exists(name):
-        say("spark user: no sealed store for %s could be made here" % name)
+        say("! no store for %s could be made here" % name)
         return 2
     dk = account_key()
     if dk is None:
         try:
             dk = unlock(name, token)
         except vault.SealError:
-            say("spark user: the stored token no longer opens %s's key -- spark user login again" % name)
+            say("! the stored token no longer opens %s's data -- spark user login again" % name)
             return 1
     from . import forge
     moved = forge.claim_legacy(name, dk)
@@ -387,23 +387,23 @@ def cmd_claim():
             % (moved, "" if moved == 1 else "s", name,
                "" if not left else "; %d left (unreadable)" % left))
         return 0
-    say("spark user: nothing moved -- %d plaintext thread%s left" % (left, "" if left == 1 else "s"))
+    say("! nothing moved -- %d older thread%s left" % (left, "" if left == 1 else "s"))
     return 1
 
 
 def cmd_remove(args):
     if len(args) != 1:
-        say(USAGE.rstrip())
+        say("spark user -- say one name: spark user remove NAME")
         return 2
     name = args[0]
     if not valid_name(name):
-        say("spark user: a name is a-z, 0-9 and -, starting with a letter, at most 32 characters")
+        say("spark user -- a name is a-z, 0-9 and -, starting with a letter, at most 32 characters")
         return 2
     if not exists(name):
-        say("spark user: no user named %s" % name)
+        say("spark user -- no user named %s" % name)
         return 2
     if not confirm("remove user %s and every sealed thread -- unrecoverable" % name):
-        say("spark user: kept")
+        say("* nothing changed")
         return 0
     remove(name)
     if account()[0] == name:
@@ -447,7 +447,7 @@ def _relock(name, token):
     except vault.SealError:
         return False
     if _box_user(cfg.peer_ai_url, token) != name:
-        say("spark user: %s did not accept that token as %s -- the store stays as it is"
+        say("! %s did not accept that token as %s -- nothing changed"
             % (cfg.peer_ai_url, name))
         return False
     rewrap(name, dk, token)
@@ -458,37 +458,37 @@ def _relock(name, token):
 def cmd_login(args):
     name = args[0] if args else ""
     if name and not valid_name(name):
-        say("spark user: a name is a-z, 0-9 and -, starting with a letter, at most 32 characters")
+        say("spark user -- a name is a-z, 0-9 and -, starting with a letter, at most 32 characters")
         return 2
     token = _ask_token()
     if not token:
-        say("spark user: no token given")
+        say("spark user -- no token given")
         return 2
     local = list_users()
     if not local:
         # a client machine: the sealed store lives on the box; the FORGE
         # verifies the token on first use
         if not name:
-            say("spark user: on this machine say who you are -- spark user login NAME")
+            say("spark user -- say who you are: spark user login NAME")
             return 2
         write_login(name, token)
         say("ok     account      this machine is %s" % name)
         return 0
     found = find_by_token(token)
     if name and found and name != found:
-        say("spark user: that token belongs to %s, not %s" % (found, name))
+        say("! that token belongs to %s, not %s" % (found, name))
         return 1
     if not found and name and exists(name) and _relock(name, token):
         found = name
     name = name or found
     if not name or not exists(name):
-        say("spark user: no user here has that token -- this machine is %s's (spark user remove %s frees it)"
+        say("! no user here has that token -- this machine is %s's (spark user remove %s frees it)"
             % (", ".join(local), local[0]))
         return 1
     try:
         dk = unlock(name, token)
     except vault.SealError:
-        say("spark user: the token does not open %s's key" % name)
+        say("! the token does not open %s's data" % name)
         return 1
     write_login(name, token, dk)
     say("ok     account      this machine is %s" % name)
@@ -497,7 +497,6 @@ def cmd_login(args):
 
 def cmd_logout():
     if not account()[0]:
-        say("spark user: no login here")
         return 0
     logout()
     say("ok     account      logged out (the sealed data stays)")
@@ -506,19 +505,19 @@ def cmd_logout():
 
 def cmd_token(args):
     if args != ["--new"]:
-        say(USAGE.rstrip())
+        say("spark user -- spark user token --new makes a new token")
         return 2
     name, token = account()
     if not name:
-        say("spark user: no login here -- spark user login NAME first")
+        say("spark user -- no login here; spark user login NAME first")
         return 2
     if not exists(name):
-        say("spark user: %s's store is not on this machine -- rotate the token there" % name)
+        say("spark user -- %s's data is not on this machine; make the new token there" % name)
         return 2
     try:
         new = rotate(name, token)
     except vault.SealError:
-        say("spark user: the stored token no longer opens %s's key -- spark user login again" % name)
+        say("! the stored token no longer opens %s's data -- spark user login again" % name)
         return 1
     write_login(name, new, unlock(name, new))
     _audit("user token", name)
@@ -550,5 +549,5 @@ def main(args):
         return cmd_token(rest)
     if sub == "claim":
         return cmd_claim()
-    say(USAGE.rstrip())
+    say("spark user -- no word %s; spark user -h lists them" % sub)
     return 2

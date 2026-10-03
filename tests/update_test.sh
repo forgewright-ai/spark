@@ -101,7 +101,7 @@ if [ "$(uname -s)" != Darwin ]; then
         && grep -q -- "--user restart spark-forge.service" "$SYSCTL_LOG" 2>/dev/null \
         && ok "a pull that moved the tree restarts the loaded units" \
         || bad "no restart logged: $(cat "$SYSCTL_LOG" 2>/dev/null | tr '\n' ' ')"
-    printf '%s\n' "$out" | grep -q "restarted on the new tree" && ok "the restart says so" || bad "restart not said: $out"
+    printf '%s\n' "$out" | grep -q "the engine restarted" && ok "the restart says so" || bad "restart not said: $out"
 fi
 
 out=$("$SPARK" update 2>&1) && ok "second pull run: up to date" || bad "second pull run: rc $? $out"
@@ -151,7 +151,7 @@ rm -f "$T/sv.log"
 out=$(urun) && ok "not moved, a stale page: exits 0" || bad "stale page: rc $? $out"
 printf '%s\n' "$out" | grep -q 'up to date' && grep -q "sv -w 60 restart $HOME/.config/spark/sv/spark-serve" "$T/sv.log" 2>/dev/null \
     && grep -q "sv -w 60 restart $HOME/.config/spark/sv/spark-forge" "$T/sv.log" 2>/dev/null \
-    && printf '%s\n' "$out" | grep -q "spark-forge restarted on the new tree" \
+    && printf '%s\n' "$out" | grep -q "the page restarted" \
     && ok "not moved, the page says another version: the units restart on this tree, sv -w 60 (a big model unloads)" \
     || bad "stale page, no restart: $out $(tr '\n' ' ' < "$T/sv.log" 2>/dev/null)"
 python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); from spark import version; print(version.version())' "$T/work/lib" > "$T/page-version"

@@ -309,7 +309,7 @@ def fail_fix(fix, cfg=None):
         try:
             entries = _fresh(_load(strict=True), cfg)
         except Refused as e:
-            say("spark history: " + e.hint)
+            say("! " + e.hint)
             return 1
         rec = next((e for e in entries if _kind(e) == KIND_FAIL and e.get("shape") == shape), None)
         if rec is None:

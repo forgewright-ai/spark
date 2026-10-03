@@ -47,8 +47,8 @@ STATUS_USAGE = """spark status -- what answers, and how this machine is set
 """
 OFF_USAGE = """spark off -- turn the prompt line off, in every shell
 
-  spark off                   Enter and a failure are the shell's own again;
-                              Esc s and spark <words> still work
+  spark off                   stop the ? line and the failure hint; Esc s
+                              still works
 """
 ON_USAGE = """spark on -- turn the prompt line back on
 
@@ -1381,7 +1381,7 @@ def cmd_status(args, _bare=False):
         say("  model    " + e.hint)
     w = live_widgets()
     say("  prompt   %s" % ("off -- spark on turns it on" if os.path.exists(OFF_FLAG)
-                           else "on in %s" % ", ".join("%s %d" % x for x in w) if w else "on, no shell loaded yet"))
+                           else "on in %s" % ", ".join(sorted({x[0] for x in w})) if w else "on, no shell loaded yet"))
     st = engine.service_state(cfg)
     say("  service  %s" % {"loaded": "always on", "disabled": "off -- spark serve on starts it",
                            "absent": "starts when needed"}[st])
@@ -1458,8 +1458,12 @@ def cmd_clear(args):
     clear names what it removes."""
     if _help(args, CLEAR_USAGE):
         return 0
-    if args != ["--history"]:
+    if not args:
         say(CLEAR_USAGE.rstrip())
+        return 2
+    if args != ["--history"]:
+        bad = next((a for a in args if a != "--history"), args[0])
+        say("spark clear -- no word %s; spark clear -h lists them" % bad)
         return 2
     return _clear_history()
 

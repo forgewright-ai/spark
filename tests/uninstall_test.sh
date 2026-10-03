@@ -142,7 +142,7 @@ state=$(cd "$HOME/.local/state/spark" && find . | sort | tr '\n' ' ')
 conf=$(cd "$HOME/.config/spark" && find . | sort | tr '\n' ' ')
 [ "$conf" = ". ./memory ./models.env ./privacy-terms ./soul ./themes ./themes/mine.env " ] && ok "config keeps only soul, memory, models.env, themes, privacy-terms" || bad "config left: $conf"
 printf '%s\n' "$out" | grep -qE "^(ok +handback +spark's palette files left|would +handback +spark's palette files leave) ~/.config/spark" && ok "the look an older spark painted goes through the hand-back (one undo; without root the palette row waits)" || bad "handback row: $(printf '%s\n' "$out" | grep -E ' handback ' | head -2 | tr '\n' ' ')"
-printf '%s\n' "$out" | grep -qE '^spark: |^fail ' && bad "a step failed outright: $(printf '%s\n' "$out" | grep -E '^spark: |^fail ' | head -2)" || ok "no step failed outright (a refusing sudo is a todo row)"
+printf '%s\n' "$out" | grep -qE '^spark: |^! |^fail ' && bad "a step failed outright: $(printf '%s\n' "$out" | grep -E '^spark: |^! |^fail ' | head -2)" || ok "no step failed outright (a refusing sudo is a todo row)"
 printf '%s\n' "$out" | grep -q 'kept (yours): ' && printf '%s\n' "$out" | grep -q 'is gone from this machine' && ok "the summary names what stayed and says spark is gone" || bad "summary: $(printf '%s\n' "$out" | tail -6)"
 [ -e "$HOME/.local/bin/starship" ] && ok "starship is not spark's, left alone" || bad "starship removed"
 

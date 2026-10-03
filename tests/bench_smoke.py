@@ -112,9 +112,9 @@ def main():
         rc, out, _ = spark("bench", "--spark", "--porcelain", extra=roles)
         ok(rc == 0 and out.startswith("Qwen_Qwen3.5-2B"), "bench --spark measures the line model", out)
         rc, out, _ = spark("bench", "--ember", extra=roles)
-        ok(rc == 0 and "(the ember role)" in out, "bench --ember says which role it measures", out)
+        ok(rc == 0 and "(chat)" in out, "bench --ember says which model it measures", out)
         rc, out, _ = spark("bench", extra={"SPARK_ENGINE_DIR": tmp + "/nope"})
-        ok(rc == 78 and "bootstrap" in out, "no engine: exit 78 naming bootstrap", out)
+        ok(rc == 78 and "spark update" in out, "no engine: exit 78 naming spark update", out)
 
     print("bench_smoke: %s" % ("all ok" if not fails else "%d FAILED" % fails))
     return 1 if fails else 0

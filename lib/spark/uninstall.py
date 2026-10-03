@@ -37,9 +37,8 @@ USAGE = """%s uninstall -- remove spark: shows the plan, then asks
   --packages | --keep-packages remove or keep the packages spark installed
                                (asked at a terminal, else kept)
 
-  A few things stay, each named with the line that puts it back, like
-  the hostname spark set. The clone goes only when it is ~/.spark and
-  has no changes.
+  A few things stay (like the hostname); spark prints how to undo each.
+  The clone goes only when it is ~/.spark and has no changes.
 """ % MARK
 
 KEEP_CONFIG = ("soul", "personality", "memory", "models.env", "themes", "privacy-terms")
@@ -509,15 +508,15 @@ def walk(ctx):
 def summary(ctx):
     say()
     if ctx.kept:
-        say("kept (yours): " + ", ".join(sorted(set(_tilde(p) for p in ctx.kept))))
+        say("* kept (yours): " + ", ".join(sorted(set(_tilde(p) for p in ctx.kept))))
         if not ctx.purge:
             say("  spark uninstall --purge takes those too")
     if ctx.todo:
-        say("left for you:")
+        say("* left for you:")
         for what, line in ctx.todo:
             say("  %-10s %s" % (what, line))
     if not ctx.dry:
-        say("%s is gone from this machine%s" % (MARK, " -- open a new shell (exec $SHELL)" if not IS_MAC else ""))
+        say("* %s is gone from this machine%s" % (MARK, " -- open a new shell (exec $SHELL)" if not IS_MAC else ""))
 
 
 def main(argv):
@@ -526,8 +525,11 @@ def main(argv):
         return 0
     flags = set(argv)
     unknown = flags - {"--dry-run", "--yes", "--purge", "--packages", "--keep-packages"}
-    if unknown or ("--packages" in flags and "--keep-packages" in flags):
-        say(USAGE.rstrip())
+    if unknown:
+        say("%s uninstall -- no word %s; spark uninstall -h lists them" % (MARK, next(a for a in argv if a in unknown)))
+        return 2
+    if "--packages" in flags and "--keep-packages" in flags:
+        say("%s uninstall -- --packages or --keep-packages, not both" % MARK)
         return 2
     os.environ["SPARK_NO_REFRESH"] = "1"          # nothing re-creates the state dir behind us
     yes = "--yes" in flags or os.environ.get("SPARK_YES") == "1"
@@ -549,7 +551,7 @@ def main(argv):
         except EOFError:
             answer = ""
         if answer != "yes":
-            say("%s uninstall -- nothing removed" % MARK)
+            say("* nothing changed")
             return 0
 
     if packages is None and tty and pkg.removable():

@@ -1876,7 +1876,7 @@ def chat_tools_cases(t, spark, home):
 
     # --- /do: spark do's own driver, in the same terminal, then back
     rc, out, err = spark("chat", stdin="/do list the files\n/do\n:q\n")
-    t.ok(rc == 0 and "spark: spark do asks before every step -- run it in a terminal" in err
+    t.ok(rc == 0 and "! spark do asks before every step -- run it in a terminal" in err
          and "* back in the chat" in out and "! /do takes a goal" in err,
          "chat: /do reaches spark do's driver (piped, its own refusal) and the chat goes on", out + err)
 
@@ -2810,8 +2810,10 @@ def living_awaken_cases(t):
         cfgd = home + "/.config/spark"
         rc, out, err = run(env, "awaken", answers="playful\nfaster\nyes\n")
         body = read(cfgd + "/words")
-        t.ok(rc == 0 and esc not in out and "Hello there. Nice to meet you." in out and "failed the check" in out,
-             "awaken, a garbage birth: said plainly, the pace shown, not one escape printed", out + err)
+        t.ok(rc == 0 and esc not in out and "Hello there. Nice to meet you." in out and "failed the check" not in out
+             and "its face" not in out,
+             "awaken, a garbage birth: nothing said of its lines or its face, the pace shown, not one escape printed",
+             out + err)
         t.ok("\tAwake and glad.\n" in body and "\t" + ship["greet.1"] + "\n" in body and esc not in body and token not in body
              and all(len(ln.split("\t", 1)[1]) <= 72 for ln in body.splitlines()),
              "awaken, a garbage birth: the words file holds the good line and the shipped ones, nothing refused", body)
@@ -3924,10 +3926,12 @@ def main():
         rc, out, _ = spark("clear")
         rc2, out2, _ = spark("clear", "--everything")
         rc3, out3, _ = spark("clear", "-h")
-        t.ok(rc == 2 and rc2 == 2 and rc3 == 0 and out == out2 == out3
+        t.ok(rc == 2 and rc2 == 2 and rc3 == 0 and out == out3
              and out.splitlines()[0] == "spark clear -- remove the history this machine keeps"
+             and out2 == "spark clear -- no word --everything; spark clear -h lists them\n"
              and "spark clear --history" in out and sorted(os.listdir(kdir)) == kept0,
-             "spark clear bare or with an unknown flag: its usage, exit 2, nothing removed; -h signs, exit 0", out + out2)
+             "spark clear bare: its usage; an unknown flag: one signed line; exit 2, nothing removed; -h exit 0",
+             out + out2)
         rc, out, _ = spark("history", "-h")
         rc2, out2, _ = spark("help")
         t.ok("history clear" not in out and "spark clear --history" in out
@@ -4128,8 +4132,8 @@ def main():
         t.ok(rc == 0 and umsg.count("[held]") == 3 and not any(v in sent for v in (_code, _tok, _key)),
              "edit ? --source: a code, a link token and a key are held back, none of them sent",
              repr(umsg[-240:]) + err)
-        t.ok(err.strip().splitlines()[:1] == ["spark: held back 3 spans that look like secrets (an API key, "
-                                              "a one-time code, a link token) -- the model saw [held]"],
+        t.ok(err.strip().splitlines()[:1] == ["! held back 3 spans that look like secrets (an API key, "
+                                              "a one-time code, a link token)"],
              "edit ? --source: one stderr line names what was held", repr(err))
         _turns = sorted(glob.glob(home + "/.local/state/spark/turns/*.jsonl"))
         lt = json.loads(open(_turns[-1]).read().splitlines()[-1]) if _turns else {}
@@ -4143,7 +4147,7 @@ def main():
                              "--about", "a mail, PIN 7731", "what", stdin="Hello there.\n")  # spark:allow-secret
         sent = json.dumps(STATE["bodies"][-2:])
         t.ok(rc == 0 and "482913" not in sent and "7731" not in sent
-             and "spark: held back 2 spans that look like secrets (a one-time code)" in err,
+             and "! held back 2 spans that look like secrets (a one-time code)" in err,
              "edit ? --source: a code in --name or --about is held back too", sent[-300:] + err)
         # `--` ends the options: a question saying --name cannot eat --source
         rc, out, err = spark("edit", "--source", "--", "?", "why", "--name", stdin=mail)
@@ -4299,7 +4303,7 @@ def main():
         t.ok(rc == 0 and "dropped 30 notes for cap.md" in out and rc2 == 0 and out2.startswith("1 note"),
              "edit --ledger clear --name drops one file's", out + out2)
         rc, out, _ = spark("edit", "--ledger", "clear")
-        t.ok(rc == 0 and out.startswith("dropped ") and spark("edit", "--ledger")[1].startswith("no declined note"),
+        t.ok(rc == 0 and out.startswith("* dropped ") and spark("edit", "--ledger")[1].startswith("no declined note"),
              "edit --ledger clear drops them all", out)
         # two writers at once: the .lock beside the sealed file makes
         # load-mutate-save atomic, so no decline is lost to a race
@@ -4541,13 +4545,13 @@ def main():
         sent = json.dumps(STATE["bodies"][n0:])
         umsg = STATE["bodies"][-1]["messages"][-1]["content"]
         t.ok(rc == 0 and umsg.count("[held]") == 3 and not any(v in sent for v in (_code, _tok, _key))
-             and "spark: held back 3 spans that look like secrets (" in err,
+             and "! held back 3 spans that look like secrets (" in err,
              "read: a source's code, link token and key are held back, none of them sent", repr(umsg[-200:]) + err)
         turns = sorted(glob.glob(home + "/.local/state/spark/turns/*.jsonl"))
         lt = json.loads(open(turns[-1]).read().splitlines()[-1]) if turns else {}
         t.ok(lt.get("held") == 3 and lt.get("mode") == "read-source", "read: the turn records held=3", json.dumps(lt)[:200])
         rc, out, err = spark("read", stdin="The code on the door is 4417, the gate code.\n")  # spark:allow-secret
-        t.ok("spark: held back 1 span that looks like a secret (a one-time code) -- the model saw [held]" in err
+        t.ok("! held back 1 span that looks like a secret (a one-time code)" in err
              and "4417" not in json.dumps(STATE["bodies"][-2:]),
              "read: one span held is said in the singular", repr(err))
         # the shapes a mail takes: a code before its word, split digits,
@@ -5375,8 +5379,8 @@ def main():
         rc, out, err = spark("do", "goodsum", stdin="\n\n", extra=hook, cwd=work)
         t.ok(rc == 0 and "unchecked" not in out and "* done  Total: 26" in out and "\u2713" not in out,
              "spark do: a number an output backs passes clean, `* done`", out + err)
-        t.ok(out.count("Enter runs it") == 2 and "proof: test -d ." in out and "proof -> ok" in out
-             and out.index("proof: test -d .") < out.index("proof -> ok"),
+        t.ok(out.count("Enter runs it") == 2 and "check: test -d ." in out and "check -> ok" in out
+             and out.index("check: test -d .") < out.index("check -> ok"),
              "spark do: the proof is asked for like a step (Enter), then runs and shows its result", out)
         # the proof's output never rides the next request: only its exit
         # code does -- and the step's feedback lands on the thread even
@@ -5384,7 +5388,7 @@ def main():
         open(work + "/secret.txt", "w").write("SECRET-PROOF-MARK\n")
         rc, out, err = spark("do", "proofleak", stdin="\n\n", extra=dict(hook, SPARK_BASE_URL=url2), cwd=work)
         _last = req["body"]["messages"][-1]["content"]
-        t.ok(rc == 0 and "proof -> exit 1" in out and "SECRET-PROOF-MARK" in out
+        t.ok(rc == 0 and "check -> exit 1" in out and "SECRET-PROOF-MARK" in out
              and "Proof `head secret.txt /nonexistent` exited 1." in _last
              and "SECRET-PROOF-MARK" not in json.dumps(req["body"]),
              "spark do: a failed proof's exit code goes back, its output never does", _last[-200:] + out + err)
@@ -5653,7 +5657,7 @@ def main():
         t.ok(rc == 0 and out.startswith("* 1  ") and not out.startswith("spark do --"),
              "spark do -- help: help after -- is a goal, not the usage", out)
         rc, out, _ = spark("do", "--sandbx", "fix", "it", cwd=work)
-        t.ok(rc == 2 and out.startswith("spark do -- no option --sandbx "),
+        t.ok(rc == 2 and out.startswith("spark do -- no word --sandbx;"),
              "spark do: an option it does not take is refused, signed, exit 2", out)
         rc, out, _ = spark("do", "--detach", "x", cwd=work)
         rc2, out2, _ = spark("do", "--sandbox", "--detach", "--porcelain", "x", cwd=work)
@@ -5661,7 +5665,7 @@ def main():
              "spark do --detach: sandboxed only, and never with --porcelain", out + out2)
         # over --porcelain every refusal before the run is ONE end event
         # (reason refused, rc 2) and nothing else on stdout
-        for _args, _why in ((("--bogus", "x"), "no option --bogus"), ((), "no goal"),
+        for _args, _why in ((("--bogus", "x"), "no word --bogus"), ((), "no goal"),
                             (("--review",), "--review is not a run"), (("--sandbox", "--detach", "x"), "do not go together"),
                             (("x" * (_do.DO_GOAL_MAX + 1),), "a goal is at most 8 kB")):
             rc, out, err = spark("do", "--porcelain", *_args, cwd=work)
@@ -5673,7 +5677,7 @@ def main():
         t.ok(rc == 2 and out == "spark do -- a goal is at most 8 kB -- this one is 9 kB\n",
              "spark do: a goal over do.DO_GOAL_MAX is refused in one signed line", out + err)
         rc, out, err = spark("do", "-la", "x", cwd=work)
-        t.ok(rc == 2 and out.startswith("spark do -- no option -la "),
+        t.ok(rc == 2 and out.startswith("spark do -- no word -la;"),
              "spark do: a goal that starts with - is refused unless it comes after --", out)
         # no `yes` word over a pipe: it is not an answer, and EOF then quits
         rc, out, err = spark("do", "--porcelain", "forever", stdin="yes\n", cwd=work)
@@ -5752,9 +5756,9 @@ def main():
              "spark do --porcelain: SIGTERM ends the run with an end event (quit, rc 143)", "".join(_first) + _rest + _err)
         rc, out, _ = spark("do", "-h")
         t.ok(all(w in out for w in ("--sandbox", "--detach", "--review [ID]", "--accept ID", "--discard ID",
-                                    "--porcelain", "spark do -- <words>", "held back", "man page"))
-             and not [l for l in out.splitlines() if len(l) > 80],
-             "spark do -h names every option, the hold and the man page, within 80 columns", out)
+                                    "--porcelain", "spark do -- <words>"))
+             and "man page" not in out and not [l for l in out.splitlines() if len(l) > 80],
+             "spark do -h names every option, not how it works, within 80 columns", out)
 
         # the sandbox, for real where this machine has one (sandbox-exec on
         # macOS, bwrap 0.11+ on Linux); a CI container has none: skipped
@@ -5793,7 +5797,7 @@ def main():
             rc, out, err = spark("do", "--sandbox", "boxwork", stdin="yes\n", extra=hook, cwd=box)
             bodies = [b for b in STATE["bodies"][n0:] if is_do(b["messages"])]
             goal = bodies[0]["messages"][1]["content"] if bodies else ""
-            t.ok(rc == 0 and "Enter runs it" not in out and "proof -> ok" in out
+            t.ok(rc == 0 and "Enter runs it" not in out and "check -> ok" in out
                  and "can destroy data -- it runs in the sandbox's copy" in out
                  and "added      notes.txt" in out and "+hello" in out and "deleted    old.txt" in out
                  and "apply 2 changes to" in out and "applied 2 changes to" in out
@@ -6083,7 +6087,8 @@ def main():
              "spark model list: every fitting row ends in an estimated ~N tok/s", out4)
         t.ok(too_big and all("tok/s" not in ln for ln in too_big), "a too-big row has no speed", out4)
         t.ok(all(len(ln) <= 80 for ln in out4.splitlines()[1:]), "every table row fits 80 columns", out4)
-        t.ok(re.search(r"budget \d+ GB \(\d+%\), (metal|vulkan|cpu)$", out4.splitlines()[0]), "the header names the backend", out4)
+        t.ok(re.search(r"^spark model -- \d+ GB for models, budget \d+ GB \(\d+%\)$", out4.splitlines()[0]),
+             "the header: the memory and the budget, no backend name", out4)
         # the speed cap and the auto build, the python twin under the pins
         # tests/install_test.sh section 8 puts on bootstrap.sh: 18 GB -> a
         # 10.8 GB budget over the tested rows (qwen3-14b needs 11, over either
@@ -6153,7 +6158,7 @@ def main():
         cap_env = {"SPARK_NO_APPLY": "1", "SPARK_MEM_TOTAL_GB": "24", "SITE_AI_BUILD": "cpu", "SPARK_SYSFS_DRM": home + "/nodrm"}
         rc, out6, _ = spark("model", "list", extra=cap_env)
         if sys.platform == "darwin":
-            t.ok(rc == 0 and out6.splitlines()[0].endswith(", metal") and re.search(r"^  \*\s+gemma4-e4b ", out6, re.M)
+            t.ok(rc == 0 and re.search(r"^  \*\s+gemma4-e4b ", out6, re.M)
                  and "auto stops" not in out6, "macOS: metal whatever the key says, the first that fits, no note", out6)
         else:
             t.ok(rc == 0 and out6.splitlines()[0].endswith(", cpu") and re.search(r"^  \*\s+gemma4-e4b ", out6, re.M)
@@ -6713,14 +6718,14 @@ def main():
         # one of them still answers as an alias
         _grp = re.search(r"(?m)^the model and the server\n(.*?)(?:\n\n|\Z)", out, re.S)
         t.ok(_grp is not None and _grp.group(1).splitlines() == [
-            " spark serve [on|off]         serve the AI and the page on your network",
+            " spark serve [on|off]         serve the model and the page on your network",
             " spark serve boot [on|off]    start at boot",
-            " spark serve share [on|off]   one AI for every user here (Linux)",
+            " spark serve share [on|off]   one model for every user here (Linux)",
             " spark serve --login          the page's address and the login",
             " spark serve --audit [N]      what the admin did",
             " spark model [NAME|auto|none] choose the model (-h)",
             " spark model --chat NAME      choose a second model for chat",
-            " spark client [URL|off]       use another machine's AI",
+            " spark client [URL|off]       use another machine's model",
             " spark user [add NAME]        the users; add shows a token once"],
              "spark help: the group 'the model and the server', line for line", _grp.group(1) if _grp else out)
         t.ok(not re.search(r"\bspark (?:forge|ember|headless|share|brain)\b|\bbrain,", out),
@@ -6858,7 +6863,7 @@ def main():
         # spark setup: the guided first run, non-interactive, nothing applied
         os.remove(home + "/.config/spark/site.env")
         rc, out, _ = spark("setup", "-h")
-        t.ok(rc == 0 and out.splitlines()[0] == "spark setup -- choose the model this machine can run",
+        t.ok(rc == 0 and out.splitlines()[0] == "spark setup -- set up the name, user, model and voice",
              "spark setup -h signs (contract 8)", out)
         rc, out, _ = spark(extra=off)
         t.ok(rc == 0 and out.startswith(("* ", "! ")) and len(out.splitlines()) == 1,
@@ -6872,7 +6877,7 @@ def main():
         t.ok("theme" not in out and not os.path.exists(home + "/.config/spark/theme.env"),
              "setup names no palette and writes none: the machine looks untouched", out)
         rc, out, _ = spark("setup", "--yes", "--no-serve", "--model", "none", "--theme", "none", extra=off)
-        t.ok(rc == 2 and "no option --theme" in out, "setup --theme: no option any more (v1.62), exit 2", out)
+        t.ok(rc == 2 and "no word --theme" in out, "setup --theme: no option any more (v1.62), exit 2", out)
         rc, out, _ = spark("setup", "--yes", "--no-serve", "--model", "none", extra=off)
         t.ok("\u2588" in out and "GB for models" in out and "SITE_AI_MODEL=none" in out and "open a new shell" in out
              and "spark chat" in out,
@@ -6890,7 +6895,7 @@ def main():
         t.ok(rc == 1 and "this machine is ana's" in out and "spark user remove ana frees it" in out,
              "user login with a foreign token names the remedy (spark user remove NAME)", out)
         rc, out, _ = spark("user", "remove", "ana", extra=_xdg5)
-        t.ok(rc == 0 and "spark user: kept" in out and os.path.isdir(home + "/.local/state-users/spark/users/ana"),
+        t.ok(rc == 0 and "* nothing changed" in out and os.path.isdir(home + "/.local/state-users/spark/users/ana"),
              "user remove without a yes keeps the user", out)
         os.makedirs(home + "/.local/state-users/spark/users/ana/kept", mode=0o700)
         with open(home + "/.local/state-users/spark/users/ana/kept/ana-kept.sealed", "w") as f:
@@ -6932,7 +6937,7 @@ def main():
              "the machine that serves refuses a pasted token it never minted", out)
         _cl7 = dict(_xdg7, SITE_AI_MODEL="none", SITE_PEER_AI_URL=url)
         rc, out, _ = spark("user", "login", "ana", stdin="a-typo\n", extra=_cl7)
-        t.ok(rc == 1 and "did not accept that token as ana -- the store stays as it is" in out,
+        t.ok(rc == 1 and "did not accept that token as ana -- nothing changed" in out,
              "a client re-locks nothing the box does not accept", out)
         rc, out, _ = spark("user", "login", "ana", stdin="the-new-boxs-token\n", extra=_cl7)
         t.ok(rc == 0 and "ana's sealed threads now open with the new token" in out

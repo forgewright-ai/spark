@@ -434,7 +434,7 @@ def cmd_look(args):
         # `spark look for big files in downloads` is a question
         from . import cli
         return cli.main(["look"] + list(args))
-    say("spark look -- no word %s: spark look on, off or auto" % args[0])
+    say("spark look -- no word %s; spark look -h lists them" % args[0])
     return 2
 
 

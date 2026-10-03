@@ -791,8 +791,8 @@ check("spark voice loud: one signed line, exit 2", rc == 2 and out.startswith("s
 for bad in (["on", "please"], ["test", "it", "now"], ["listen", "--bufer"], ["stop", "x"], ["status", "now"],
             ["--loud"], ["of", "reason", "--x"], ["rate", "1", "2"]):
     rc, out = spark("voice", *bad, extra={"SPARK_BASE_URL": "http://127.0.0.1:9", "SPARK_API_KEY": "t"})
-    check("spark voice %s: the usage, exit 2 -- never a question for the model" % " ".join(bad),
-          rc == 2 and "is not a voice command" in out and "spark voice listen" in out, out[-300:])
+    check("spark voice %s: one signed line, exit 2 -- never a question for the model" % " ".join(bad),
+          rc == 2 and out.startswith("spark voice -- no word ") and out.count("\n") == 1, out[-300:])
 
 
 # --------------------------------------------------- 13. the check row
@@ -969,7 +969,7 @@ check("the stub seam honoured says so once on stderr, as SPARK_DO_STDIN's banner
       err == voice.SEAM_BANNER + "\n" and "SPARK_VOICE_STUB" in err, repr(err))
 rc, out, err = spark3("voice", "listen")
 check("spark voice listen: says it listens, then the words",
-      rc == 0 and out == "listening -- speak, a pause ends it\nwhat is using the disk\n", repr(out))
+      rc == 0 and out == "* listening -- a pause ends it\nwhat is using the disk\n", repr(out))
 rc, out, err = spark3("voice", "listen", "--buffer", extra={"SPARK_VOICE_STUB_HEARD": " "})
 check("spark voice listen --buffer, nothing heard: nothing on stdout, exit 1", rc == 1 and out == "", repr(out))
 env_off = dict(os.environ, SPARK_VOICE="off", SPARK_NO_APPLY="1")

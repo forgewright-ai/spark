@@ -203,9 +203,7 @@ DO_USAGE = """%s do -- a task, step by step
   reads a long step again. A step that can destroy data runs only when
   you type yes. After a step, a check that it worked is offered too.
   In the sandbox, steps run on their own, %d seconds each at most.
-  A run is %d steps at most. Each step's output goes back to the model,
-  a secret held back; a step refused for an option sends lines of its
-  man page too.
+  A run is %d steps at most.
 """
 
 
@@ -973,11 +971,11 @@ class _Terminal:
     def proof(self, proof, cwd, contained):
         """(run|skip|quit, the proof) -- offered like a step; sandboxed it
         runs. An edited proof runs when it is still one (proof_ok)."""
-        say("%s    proof: %s" % (_mark(), proof))
+        say("%s    check: %s" % (_mark(), proof))
         if contained:
             return "run", proof
         from . import voice
-        self._aloud("the proof: %s." % voice.spoken_command(proof))
+        self._aloud("the check: %s." % voice.spoken_command(proof))
         self._choices({"danger": False})
         try:
             choice = self._ask({"danger": False, "command": proof}, cwd)
@@ -992,7 +990,7 @@ class _Terminal:
         return choice, proof
 
     def proof_ran(self, prc, text):
-        say("%s    proof -> %s" % (_mark(), "ok" if prc == 0 else "exit %d" % prc))
+        say("%s    check -> %s" % (_mark(), "ok" if prc == 0 else "exit %d" % prc))
 
     def cap(self):
         say("%s %s" % (glyph("warn"), CAPPED))
@@ -1454,7 +1452,7 @@ def cmd_do(args):
     face = _Porcelain() if porcelain else _Terminal()
     bad = next((f for f in flags if f not in OPTIONS), "")
     if bad:
-        return face.refuse("no option %s -- spark do -h lists them" % bad)
+        return face.refuse("no word %s; spark do -h lists them" % bad)
     if "-h" in flags or "--help" in flags:
         return _usage(0)
     verbs = [f for f in flags if f in ("--review", "--accept", "--discard")]
@@ -1646,7 +1644,7 @@ def _list_runs():
             except sandbox.SandboxError:
                 what = "?"
         say("%s  %4s  %-11s %s" % (r["id"], _age(r["start"]), what, _goal_words(r)))
-    say("spark do --review ID shows one; --accept ID applies it, --discard ID drops it")
+    say("* spark do --review ID shows one; --accept ID applies it, --discard ID drops it")
     return 0
 
 

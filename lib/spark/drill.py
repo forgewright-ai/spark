@@ -147,7 +147,8 @@ def cmd_drill(args):
             except ledger.Refused as e:
                 say("%s drill --ledger -- %s" % (MARK, e.hint))
                 return 2
-            say("dropped %d item%s%s" % (n, "" if n == 1 else "s", (" for " + name) if name else ""))
+            if n:
+                say("* dropped %d item%s%s" % (n, "" if n == 1 else "s", (" for " + name) if name else ""))
         else:
             for line in ledger.drill_listing(name or None):
                 say(line)
@@ -157,7 +158,7 @@ def cmd_drill(args):
         # a terminal with nothing piped: almost always a question for the
         # prompt -- say where it goes, do not guess
         say(DRILL_USAGE.rstrip())
-        say("\n  a question for spark itself is: spark %s" % (" ".join(words) or "<words>"))
+        say("\n  to ask spark: spark %s" % (" ".join(words) or "<words>"))
         return 2
     source = source[:DRILL_MAX]
     # the source came on stdin, so the answers come from the terminal --

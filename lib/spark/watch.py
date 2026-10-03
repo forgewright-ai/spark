@@ -60,7 +60,6 @@ WATCH_USAGE = """spark watch -- one line when a stream matches what you ask
   <stream> | spark watch <words>   say nothing until a line matches the
                                    words, then one line quoting it
 
-  The model sees up to 40 lines (8 kB) at a time, never the whole stream.
   From a pipe: tail -f app.log | spark watch "a 500 appears"
                journalctl -f  | spark watch "anything about the disk"
 """
@@ -116,7 +115,7 @@ def cmd_watch(args):
     instruction = " ".join(args).strip()
     if sys.stdin.isatty() or not instruction:
         say(WATCH_USAGE.rstrip())
-        say("\n  a question for spark itself is: spark %s" % (instruction or "<words>"))
+        say("\n  to ask spark: spark %s" % (instruction or "<words>"))
         return 2
     cfg = config.load()
     shell = os.path.basename(os.environ.get("SHELL") or "sh")

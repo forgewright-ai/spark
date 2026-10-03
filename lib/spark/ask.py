@@ -186,7 +186,8 @@ def cmd_ask(args):
             except ledger.Refused as e:
                 say("%s ask --ledger -- %s" % (MARK, e.hint))
                 return 2
-            say("dropped %d question%s%s" % (n, "" if n == 1 else "s", (" for " + name) if name else ""))
+            if n:
+                say("* dropped %d question%s%s" % (n, "" if n == 1 else "s", (" for " + name) if name else ""))
         else:
             for line in ledger.listing(name or None, ledger.KIND_ASK,
                                        "no question answered (spark ask --answered --name NAME)",
@@ -198,7 +199,7 @@ def cmd_ask(args):
         # at a terminal with nothing piped in, this is almost always a
         # question meant for the prompt: say where it goes, do not guess
         say(ASK_USAGE.rstrip())
-        say("\n  a question for spark itself is: spark %s" % (" ".join(words) or "<words>"))
+        say("\n  to ask spark: spark %s" % (" ".join(words) or "<words>"))
         return 2
     if opts["answered"]:
         try:

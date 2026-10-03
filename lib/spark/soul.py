@@ -38,7 +38,7 @@ SOUL_USAGE = """%s soul -- who spark is
   spark soul edit --core        edit all of it, not only the personality
   spark soul reset              back to the default
 
-  Your soul is ~/.config/spark/soul, plain text, at most %d characters.
+  At most %d characters.
 """ % (MARK, SOUL_MAX)
 
 
@@ -163,16 +163,16 @@ def _edit_personality():
     alone, in the editor; the core stays."""
     ed = _editor()
     if not ed:
-        say("spark soul: no editor found -- set $EDITOR, or write %s by hand" % PERSONALITY_FILE)
+        say("! no editor found -- set $EDITOR")
         return 1
     os.chmod(PERSONALITY_FILE, 0o600)
     try:
         rc = subprocess.call(ed + [PERSONALITY_FILE])
     except OSError as e:
-        say("spark soul: cannot run %s: %s" % (ed[0], e))
+        say("! cannot run %s: %s" % (ed[0], e))
         return 1
     if rc != 0:
-        say("spark soul: %s exited %d -- the file is as it left it" % (ed[0], rc))
+        say("! %s exited %d" % (ed[0], rc))
     try:
         with open(PERSONALITY_FILE, encoding="utf-8", errors="replace") as f:
             raw = " ".join(f.read().split())
@@ -195,7 +195,7 @@ def _edit(cfg, core=False):
         return _edit_personality()
     ed = _editor()
     if not ed:
-        say("spark soul: no editor found -- set $EDITOR, or write %s by hand" % SOUL_FILE)
+        say("! no editor found -- set $EDITOR")
         return 1
     if not os.path.isfile(SOUL_FILE):
         t, source = read(cfg)
@@ -207,10 +207,10 @@ def _edit(cfg, core=False):
     try:
         rc = subprocess.call(ed + [SOUL_FILE])
     except OSError as e:
-        say("spark soul: cannot run %s: %s" % (ed[0], e))
+        say("! cannot run %s: %s" % (ed[0], e))
         return 1
     if rc != 0:
-        say("spark soul: %s exited %d -- the file is as it left it" % (ed[0], rc))
+        say("! %s exited %d" % (ed[0], rc))
     try:
         with open(SOUL_FILE, encoding="utf-8", errors="replace") as f:
             raw = f.read().strip()
@@ -233,9 +233,9 @@ def _reset():
         os.remove(SOUL_FILE)
         say("ok     soul         built-in again")
     except FileNotFoundError:
-        say("ok     soul         built-in already")
+        return 0
     except OSError as e:
-        say("spark soul: cannot remove %s: %s" % (SOUL_FILE, e))
+        say("! cannot remove %s: %s" % (SOUL_FILE, e))
         return 1
     from . import check
     check.refresh()
@@ -253,5 +253,5 @@ def cmd_soul(args):
         return _edit(cfg, core="--core" in args[1:])
     if args[0] == "reset":
         return _reset()
-    say(SOUL_USAGE.rstrip())
+    say("spark soul -- no word %s; spark soul -h lists them" % args[0])
     return 2

@@ -109,7 +109,7 @@ if run >/dev/null 2>&1; then bad "shell syntax in site.env accepted"; else ok "s
 printf 'SITE_QUIET_START=yes\nSITE_QUIET_AUDIO=yes\n' > "$HOME/.config/spark/site.env"
 printf 'SPARK_LOOK_MOTION=on\nSPARK_LOOK_COLOUR=on\nSPARK_LOOK_WORDS=off\n' > "$HOME/.config/spark/spark.env"
 if run --dry-run >/dev/null 2>&1; then ok "install.sh loads an old site.env and spark.env holding the removed keys"; else bad "install.sh refused an old file with the removed keys"; fi
-out=$(python3 "$REPO/bin/spark" look 2>&1) && printf '%s\n' "$out" | grep -qE '^look +off ' \
+out=$(python3 "$REPO/bin/spark" look 2>&1) && printf '%s\n' "$out" | grep -qE '^look +off( |$)' \
     && ok "spark look loads them too, and reads SPARK_LOOK alone (off)" || bad "spark look with the removed keys: $out"
 : > "$HOME/.config/spark/site.env"
 rm -f "$HOME/.config/spark/spark.env"

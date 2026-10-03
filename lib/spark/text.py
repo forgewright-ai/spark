@@ -980,7 +980,7 @@ def hold_secrets(data):
 def held_line(n, names):
     """The one stderr line a verb prints when it held something back."""
     what = "span that looks like a secret" if n == 1 else "spans that look like secrets"
-    return "spark: held back %d %s (%s) -- the model saw %s" % (n, what, ", ".join(names), HELD)
+    return "! held back %d %s (%s)" % (n, what, ", ".join(names))
 
 
 def fold(s):

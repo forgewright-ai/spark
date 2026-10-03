@@ -447,7 +447,7 @@ def main():
                     f.write(site_was)
             rc0, out0, _ = spark("model", extra={"SITE_AI_MODEL": "none", "SITE_PEER_AI_URL": url,
                                                  "SPARK_FORGE_TOKEN": utoken, "SPARK_MEM_TOTAL_GB": "1"})
-            head0 = out0.splitlines()[0] if out0 else ""
+            head0 = " ".join(out0.splitlines()[:2])
             ok(rc0 == 0 and "a client of " + url in head0 and "the other machine's table" in head0 and "%.0f GB for models" % dm["total_gb"] in head0
                and " 1 GB" not in head0,
                "spark model on a client of this FORGE prints the other machine's table, not its own 1 GB", out0[:300])
@@ -555,8 +555,10 @@ def main():
             st, _, raw = req(url, "POST", "/api/chat", {"text": "count"},
                              headers=dict(bearer, **{"X-Spark": "1", "Origin": url, "Content-Type": "application/json"}), timeout=30)
             dn = [d for e, d in sse(raw) if e == "done"]
-            ok(st == 200 and dn and dn[0].get("model") == hj["roles"]["ember"],
-               "the chat's done event names the ember's model", dn)
+            ok(hj.get("names", {}).get("ember") and set(hj.get("names", {})) == set(hj.get("roles", {})),
+               "/api/health carries names: each role's model by its name in the list", hj.get("names"))
+            ok(st == 200 and dn and dn[0].get("model") == hj["names"]["ember"],
+               "the chat's done event names the ember's model by its name", dn)
             for f in __import__("glob").glob(state + "/users/*/threads/*.sealed"):
                 os.remove(f)
 

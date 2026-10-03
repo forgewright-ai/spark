@@ -341,17 +341,12 @@ def run(cfg, ask):
     s, hint = _wake(cfg)
     reply = {}
     if s is None:
-        say("! the model is not answering -- the shipped lines stand in")
+        say("! the model is not answering")
         if hint:
             say("  " + hint)
     else:
         reply = ask_birth(s, temper, k)
-        if not reply:
-            say("! the model gave no usable lines -- the shipped ones stand in")
-    lines, personality, fs, refused = birth_lines(reply, temper, k, _seed(cfg))
-    if reply and refused:
-        say("! %d of its lines failed the check -- the shipped ones stand in" % refused)
-    say("* its face: %s" % fs["idle"])
+    lines, personality, fs, _refused = birth_lines(reply, temper, k, _seed(cfg))
     own = soul.read(cfg)[1] in ("file", "env")
     if own:
         say("* your soul is kept")

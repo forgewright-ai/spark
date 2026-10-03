@@ -66,7 +66,7 @@ def apply(rows, stream=False):
     cmd = ["sh", os.path.join(REPO, "bootstrap.sh")]
     if stream and sys.stdout.isatty():
         if subprocess.run(cmd).returncode != 0:
-            say("! bootstrap.sh failed (see above)")
+            say("! setup failed (see above)")
             return 1
     else:
         p = subprocess.run(cmd, capture_output=True, text=True)
@@ -80,7 +80,7 @@ def apply(rows, stream=False):
                 if not re.match(r"^ok\s", line):
                     say(line)
         if p.returncode != 0:
-            say("! bootstrap.sh failed:\n" + (p.stderr or p.stdout)[-800:])
+            say("! setup failed:\n" + (p.stderr or p.stdout)[-800:])
             return 1
     from . import check
     check.refresh()
@@ -384,7 +384,7 @@ def cmd_client(args):
     rc = apply(["configs", "rc", "engine", "model", "services", "token"])
     if rc == 0:
         if not users.account()[0]:
-            say("then log in: " + _login_hint(url))
+            say("* then log in: " + _login_hint(url))
         from . import engine
         # a machine that served: the unit would bring the engine back at
         # boot -- stop and disable it here, remove its links, and say so
@@ -419,7 +419,7 @@ def cmd_client(args):
             stopped = True
         if stopped:
             engine.forget()
-            say("the engine that ran here is stopped")
+            say("* the engine that ran here is stopped")
     return rc
 
 

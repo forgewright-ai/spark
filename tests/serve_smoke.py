@@ -257,10 +257,10 @@ def main():
         ok(rc == 78 and "0 is 0.0.0.0, every interface" in err, "0 (the short spelling of 0.0.0.0) refused", err)
         before = kept()
         rc, out, err = spark("serve", "on", extra={"SPARK_MODELS_DIR": tmp + "/nope"})
-        ok(rc == 78 and "bootstrap" in err, "no model: exit 78 naming bootstrap", err)
+        ok(rc == 78 and "spark update" in err, "no model: exit 78 naming spark update", err)
         ok(kept() == before, "no model: serve on keeps nothing (spark.env untouched)", kept())
         rc, out, err = spark("serve", "on", extra={"SPARK_ENGINE_DIR": tmp + "/nope"})
-        ok(rc == 78 and "bootstrap" in err, "no engine: exit 78 naming bootstrap", err)
+        ok(rc == 78 and "spark update" in err, "no engine: exit 78 naming spark update", err)
         rc, out, _ = spark("serve", "--print-client")
         ok(rc == 0 and ("SITE_PEER_AI_URL=" + furl) in out and "spark user add NAME" in out and "scp" not in out,
            "--print-client, an older spelling: the page's URL and a user, no scp", out)

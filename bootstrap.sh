@@ -53,7 +53,7 @@ site_load
 # prerequisite of the public path (get refuses without it; spark setup
 # is python itself), so asking python is not a new requirement.
 facts=$(SPARK_OS=$OS SPARK_ARCH=$ARCH python3 "$REPO/lib/spark/facts.py") || {
-    echo "bootstrap: lib/spark/facts.py failed -- python3 >= 3.9 is required" >&2; exit 1; }
+    echo "! spark needs python3 3.9 or newer" >&2; exit 1; }
 eval "$facts"
 ENGINE_DIR="$SPARK_DATA_DIR/engine/$ENGINE_PIN_NAME"
 # thin adapters over the facts: the names the rows below already speak
@@ -119,11 +119,11 @@ list_models() {
     printf 'spark: %s\n' "${spick:-none}"
     printf 'ember: %s\n' "${epick:-none}"
     if [ -n "$spick" ]; then
-        echo "* the prompt line's model, + the chat model"
+        echo "* the prompt line, + the chat, u = yours"
     else
         echo "no model chosen (none, or nothing fits)"
+        echo "u = yours"
     fi
-    echo "u = yours; auto takes the first that fits"
 }
 
 case $MODE in
@@ -173,14 +173,14 @@ sudo_upfront() {
     [ "$(id -u)" -ne 0 ] || return 0
     [ "$client" = 1 ] && return 0               # a client of a shared engine needs no root
     if ! command -v sudo >/dev/null 2>&1; then
-        echo "bootstrap: this needs sudo, and there is none here -- nothing changed" >&2
+        echo "! this needs sudo, and there is none here -- nothing changed" >&2
         exit 1
     fi
     sudo -n true 2>/dev/null && return 0        # passwordless, or already cached
     [ -t 0 ] || return 0                        # nobody to ask: let the root step speak
     printf 'spark needs sudo once, now.\n'
     if ! sudo -v; then
-        echo "bootstrap: no sudo -- nothing changed" >&2
+        echo "! no sudo -- nothing changed" >&2
         exit 1
     fi
 }
@@ -190,7 +190,7 @@ sha_ok() {   # sha_ok FILE SHA
     else sha256sum "$1" | awk '{print $1}' | grep -qx "$2"; fi
 }
 fetch() {   # fetch URL DEST SHA  -- download, verify, or die
-    # at a terminal: name the file and let curl draw its progress bar
+    # at a terminal: curl draws its progress bar
     # (a model is gigabytes -- minutes, not seconds); captured output
     # (spark model/ember filtering, CI) stays quiet as before.
     # PARTIAL is what the EXIT trap removes: a download that dies -- a
@@ -199,16 +199,15 @@ fetch() {   # fetch URL DEST SHA  -- download, verify, or die
     # https only, redirects included: a pinned download never drops to http.
     PARTIAL=$2
     if [ -t 2 ]; then
-        printf '       downloading %s\n' "${1##*/}"
         curl -fL --proto '=https' --proto-redir '=https' --retry 3 --progress-bar -o "$2" "$1" || fetch_died "$1"
     else
         curl -fsSL --proto '=https' --proto-redir '=https' --retry 3 -o "$2" "$1" || fetch_died "$1"
     fi
-    sha_ok "$2" "$3" || { echo "bootstrap: sha256 mismatch for $1" >&2; exit 1; }
+    sha_ok "$2" "$3" || { echo "! the download was damaged -- run it again" >&2; exit 1; }
     PARTIAL=
 }
 fetch_died() {
-    echo "bootstrap: could not download $1 (nothing left behind)" >&2
+    echo "! could not download $1" >&2
     exit 1
 }
 login_shell() {   # the login shell, as a path: $SHELL, else the passwd entry
@@ -348,7 +347,7 @@ else
             # every install until it is current): the full upgrade is the fix
             row todo packages "xbps could not install:$missing -- sudo xbps-install -Su, then spark update"
         else
-            tail -20 "$TMP/pkg.log"; echo "bootstrap: $PM install failed" >&2; exit 1
+            tail -20 "$TMP/pkg.log"; echo "! $PM install failed" >&2; exit 1
         fi
     fi
 fi

@@ -164,7 +164,7 @@ def paint(s, role, stream=None, readline=False):
 
 
 def die(s, code=1):
-    print("spark: " + s, file=sys.stderr, flush=True)
+    print("! " + s, file=sys.stderr, flush=True)
     sys.exit(code)
 
 

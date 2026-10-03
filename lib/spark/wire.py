@@ -107,9 +107,12 @@ def _headers(cfg, extra=None, forge=False):
 
 def _auth_hint(cfg, url, forge):
     if forge:
-        return ("token rejected by %s -- spark user add NAME there (the token shows once), spark user login NAME here; or set SPARK_FORGE_TOKEN"
-                % url)
-    return "token rejected by %s -- copy the serving machine's %s here, or set SPARK_API_KEY" % (url, cfg.token_file)
+        return "token refused by %s -- spark user login NAME" % url
+    return "token refused by %s -- copy %s from the machine that serves" % (url, cfg.token_file)
+
+
+# the one line a wait on a model loading says, everywhere
+LOADING = "loading the model -- ask again in a moment"
 
 
 # ----------------------------------------------------------------- health
@@ -240,7 +243,7 @@ def models(cfg, url, timeout=HEALTH_TIMEOUT, forge=False):
         return []
 
 
-def model_name(cfg, url, timeout=HEALTH_TIMEOUT):
+def model_stem(cfg, url, timeout=HEALTH_TIMEOUT):
     """The spark role's model, by file stem (contract 5): the entry aliased
     spark, else the first one. "?" when the server does not say."""
     rows = models(cfg, url, timeout)
@@ -393,7 +396,7 @@ def resolve_brain(cfg, fresh=False):
         st = health(url)
         debug("health %s -> %s" % (url, st))
         if st == "ok":
-            model = model_name(cfg, url)
+            model = model_stem(cfg, url)
             try:
                 rs = dict((a, st) for a, st, _l in models(cfg, url))
             except (BrainError, Exception):
@@ -403,7 +406,7 @@ def resolve_brain(cfg, fresh=False):
         if st == "loading" and not loading:
             loading = url
     if loading:
-        raise BrainError("loading", "loading the model (about 30 s) -- ask again in a moment")
+        raise BrainError("loading", LOADING)
     raise BrainError("down", no_brain_hint(cfg))
 
 
@@ -432,7 +435,7 @@ def _send(cfg, url, data, timeout, forge=False):
         if e.code == 401:
             raise BrainError("auth", _auth_hint(cfg, url, forge))
         if e.code == 503:
-            raise BrainError("loading", "%s is still loading its model" % url)
+            raise BrainError("loading", LOADING)
         # a FORGE classifies its own failures: the body is
         # {"error": {"kind", "hint"}}. Honour it -- a 502 while the forge
         # re-resolves a just-restarted upstream is "loading", not a raw
@@ -478,7 +481,7 @@ def _send(cfg, url, data, timeout, forge=False):
 # streamed chat or explain carries no schema and keeps the default.
 NO_THINKING = {"enable_thinking": False}
 NO_THINK_BUDGET = {"reasoning_budget_tokens": 0}
-THOUGHT_OUT = "the model spent its whole answer thinking and returned no JSON"
+THOUGHT_OUT = "the model gave no answer -- ask again"
 CUT_OUT = "the answer was cut at %d tokens before it finished -- say the goal in smaller steps"
 
 

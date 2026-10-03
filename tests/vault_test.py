@@ -392,7 +392,7 @@ def test_chat_history_never_written_over():
         forge._write_chat_history(_RL(["ls", "pwd", "cd"]))
     check("a chat history that does not open is kept as it is", read_bytes(cpath), bad)
     check("and one line on stderr says so", err.getvalue().strip(),
-          "spark chat: the chat history does not open -- kept as it is; spark user login again")
+          "! this chat cannot be opened -- spark user login")
 
 
 def test_remove_validates_the_name():

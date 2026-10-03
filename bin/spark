@@ -34,8 +34,8 @@ spark
  spark off | on               turn the prompt line off or on
  spark soul [edit|reset]      who spark is
  spark memory [add <words>]   what spark remembers; add keeps a fact
- spark ver [--sbom]           the version and the credits
- spark chat [words]           talk with spark (Esc ends, /help lists commands)
+ spark ver [--credits]        the version
+ spark chat [words]           talk with the model (Esc ends, /help)
  spark [@FILE] <words>        ask anything, or ask about a file
  spark do [--sandbox] <words> do a task, one command at a time
  spark do --review [ID]       review a sandboxed task's changes
@@ -55,14 +55,14 @@ spark
  spark <TAB>                  complete commands and names
 
 the model and the server
- spark serve [on|off]         serve the AI and the page on your network
+ spark serve [on|off]         serve the model and the page on your network
  spark serve boot [on|off]    start at boot
- spark serve share [on|off]   one AI for every user here (Linux)
+ spark serve share [on|off]   one model for every user here (Linux)
  spark serve --login          the page's address and the login
  spark serve --audit [N]      what the admin did
  spark model [NAME|auto|none] choose the model (-h)
  spark model --chat NAME      choose a second model for chat
- spark client [URL|off]       use another machine's AI
+ spark client [URL|off]       use another machine's model
  spark user [add NAME]        the users; add shows a token once
 """ % MARK
 
@@ -80,16 +80,16 @@ USAGE_INTERFACE = """the interface
 
 USAGE_LIVING = """the living prompt
  spark awaken                 give this machine a personality and a look
- spark look [on|off|auto]     the look: motion, colour and words (-h)
- spark words [edit]           the lines it says, and its faces
+ spark look [on|off|auto]     the look: motion, colour and the face (-h)
+ spark words [edit]           the faces and lines spark awaken made
  spark height [N]             the row above your prompt spark writes in
  Esc k                        move that row
 """
 
 USAGE_TAIL = """less often used (each has -h)
  spark last                   the last answer again
- spark history                past conversations
- spark clear --history        forget past conversations
+ spark history                past threads
+ spark clear --history        forget past threads
  spark stats [--week|--sends] speed, and what left this machine
  spark bench [--line|tune]    measure this machine's speed
 

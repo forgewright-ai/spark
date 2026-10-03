@@ -345,7 +345,7 @@ class Upstream:
             st = wire.health(u)
             if st == "ok":
                 try:
-                    model = wire.model_name(self.cfg, u)
+                    model = wire.model_stem(self.cfg, u)
                 except wire.BrainError as e:
                     return u, "", e.kind
                 return u, model, "ok"
@@ -371,9 +371,9 @@ class Upstream:
         if st == "ok":
             return wire.Brain(url, model, False)
         if st == "loading":
-            raise wire.BrainError("loading", "%s is still loading its model -- try again in a moment" % url)
+            raise wire.BrainError("loading", wire.LOADING)
         if st == "auth":
-            raise wire.BrainError("auth", "the llama-server rejected this machine's api-token")
+            raise wire.BrainError("auth", "the engine refused this machine's token")
         raise wire.BrainError("down", wire.no_brain_hint(self.cfg))
 
     def require(self):
@@ -818,10 +818,12 @@ class Handler(BaseHTTPRequestHandler):
     def api_health(self):
         cfg = self.server.cfg
         url, model, st = self.server.upstream.resolve()
+        roles = self.server.role_models(url if st == "ok" else "")
         self._json(200, {"status": "ok", "forge": True, "name": cfg.name, "version": VERSION,
                          "model": model if st == "ok" else "", "upstream": st,
                          "models": self.server.models_status(url if st == "ok" else ""),
-                         "roles": self.server.role_models(url if st == "ok" else "")})
+                         "roles": roles,
+                         "names": dict((r, config.model_name(f)) for r, f in roles.items())})
 
     def api_login(self):
         """`{token}` in, a session out: the id is minted at random for
@@ -1029,7 +1031,7 @@ class Handler(BaseHTTPRequestHandler):
         model = ""
         if health == "ok":
             try:
-                model = wire.model_name(cfg, url)
+                model = config.model_name(wire.model_stem(cfg, url))
             except wire.BrainError:
                 model = "?"
         self._json(200, {"url": url, "health": health, "model": model, "service": engine.service_state(cfg),
@@ -1353,7 +1355,7 @@ class Handler(BaseHTTPRequestHandler):
             lock.release()
         rm = self.server.role_models(self.server.upstream.resolve()[0])
         used = rm.get("ember") or (sorted(rm.values())[0] if rm else "")
-        self._emit("done", {"thread": thread, "ms": ms, "model": used})
+        self._emit("done", {"thread": thread, "ms": ms, "model": config.model_name(used)})
         session.prune(cfg)
         # every store the server holds a key for is pruned, not only the
         # box account's: named users' threads aged the same way, and
@@ -1545,7 +1547,7 @@ class Handler(BaseHTTPRequestHandler):
                 p = subprocess.Popen([sys.executable, os.path.join(REPO, "bin", "spark"), verb] + args, env=env,
                                      stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
             except OSError as e:
-                self._emit("line", {"s": "spark: cannot run: %s" % (e.strerror or e)})
+                self._emit("line", {"s": "! cannot run: %s" % (e.strerror or e)})
                 self._audit("run", verb=verb, rc=127)
                 return self._emit("done", {"rc": 127})
             timer = threading.Timer(RUN_CAP, p.kill)
@@ -1570,7 +1572,7 @@ def _shell():
 
 # ------------------------------------------------------------ the process
 def _die(msg, code=1):
-    print("spark serve: " + msg, file=sys.stderr, flush=True)
+    print("! " + msg, file=sys.stderr, flush=True)
     return code
 
 

@@ -153,6 +153,8 @@ def pause_server(cfg):
 
 
 # ------------------------------------------------------------------- bench
+ROLE_WORD = {"spark": "prompt line", "ember": "chat"}
+
 USAGE = """%s bench -- how fast this machine runs a model
 
   spark bench              measure the model in use, saved as the baseline
@@ -187,32 +189,37 @@ def cmd_bench(args):
     if args and args[0] in ("-h", "--help", "help"):
         say(USAGE.rstrip())
         return 0
+    known = ("--line", "--tune", "--porcelain", "--quick", "--ember", "--spark")
+    for i, a in enumerate(args):
+        if a not in known and not (i and args[i - 1] == "--line" and not a.startswith("-")):
+            say("spark bench -- no word %s; spark bench -h lists them" % a)
+            return 2
     cfg = config.load()
     if "--line" in args:
         return cmd_line_bench(cfg, args)
     tune, porcelain = "--tune" in args, "--porcelain" in args
     size = "quick" if ("--quick" in args or tune) else "full"
     if not engine.bench_bin(cfg):
-        say("spark bench: no engine here -- ./bootstrap.sh installs it")
+        say("! no engine here -- spark update")
         return engine.EX_CONFIG
     files = engine.roles(cfg)
     want = "ember" if "--ember" in args else ("spark" if "--spark" in args else "")
     if want == "ember" and not files["ember"]:
-        say("spark bench: no chat model to measure -- spark model --chat NAME")
+        say("! no chat model to measure -- spark model --chat NAME")
         return engine.EX_CONFIG
     role = want or ("ember" if files["ember"] else "spark")
     model = files[role]
     if not model:
-        say("spark bench: no model downloaded -- spark model NAME")
+        say("! no model downloaded -- spark model NAME")
         return engine.EX_CONFIG
     resume = pause_server(cfg)
     if resume and not porcelain:
-        say("the server pauses while this runs")
+        say("* the engine pauses while this runs")
     try:
         if not tune:
             s = settings_of(cfg)
             if not porcelain:
-                say("%s bench%s%s (the %s role)%s%s" % (MARK, glyph("sep"), config.model_name(model), role, glyph("sep"), key_of(s)))
+                say("%s bench%s%s (%s)%s%s" % (MARK, glyph("sep"), config.model_name(model), ROLE_WORD[role], glyph("sep"), key_of(s)))
                 say("  this takes a few minutes")
             pp, tg = run_one(cfg, model, s, size)
             record(cfg, model, s, size, pp, tg)
@@ -226,7 +233,7 @@ def cmd_bench(args):
             return 0
         rows, cur = _matrix(cfg)
         if not porcelain:
-            say("%s bench --tune%s%s (the %s role)%s%d settings" % (MARK, glyph("sep"), config.model_name(model), role, glyph("sep"), len(rows)))
+            say("%s bench tune%s%s (%s)%s%d settings" % (MARK, glyph("sep"), config.model_name(model), ROLE_WORD[role], glyph("sep"), len(rows)))
             say("  a few minutes, one row per setting")
         results = []
         for i, s in enumerate(rows, 1):
@@ -241,7 +248,7 @@ def cmd_bench(args):
             if not porcelain:
                 say("  %2d/%d %-34s pp %6.1f  tg %6.1f%s" % (i, len(rows), key_of(s), pp, tg, "   (current)" if s == cur else ""))
         if not results:
-            say("spark bench: every setting failed")
+            say("! every setting failed")
             return 1
         results.sort(key=lambda r: (r[0], r[1]), reverse=True)
         tg, pp, best = results[0]
@@ -263,12 +270,12 @@ def cmd_bench(args):
                 say("  spark bench tune apply uses it")
         return 0
     except engine.EngineError as e:
-        say("spark bench: %s" % e)
+        say("! %s" % e)
         return 1
     finally:
         if resume:
             if not porcelain:
-                say("the server is coming back")
+                say("* the engine is coming back")
             resume()
             url = wire.serve_url() or cfg.loopback_url()
             for _ in range(60):          # the model takes a while to load again
@@ -276,7 +283,7 @@ def cmd_bench(args):
                     break
                 time.sleep(2)
             if not porcelain:
-                say("the server is back" + ("" if wire.health(url) == "ok" else " (still loading)"))
+                say("* the engine is back" + ("" if wire.health(url) == "ok" else " (still loading)"))
             from . import check
             check.refresh()
 
@@ -545,7 +552,7 @@ def cmd_tune(args):
         site.set_keys(_file=SPARK_ENV, SPARK_NGL=w["ngl"], SPARK_FLASH_ATTN=w["fa"], SPARK_KV=w["kv"], SPARK_THREADS=w.get("t", ""))
         model._restart_server(cfg)     # narrates: restarting ... ready
         return 0
-    say(USAGE.rstrip())
+    say("spark bench -- no word %s; spark bench -h lists them" % sub)
     return 2
 
 

@@ -153,7 +153,8 @@ def cmd_read(args):
             except ledger.Refused as e:
                 say("%s read --ledger -- %s" % (MARK, e.hint))
                 return 2
-            say("dropped %d question%s%s" % (n, "" if n == 1 else "s", (" for " + name) if name else ""))
+            if n:
+                say("* dropped %d question%s%s" % (n, "" if n == 1 else "s", (" for " + name) if name else ""))
         else:
             for line in ledger.listing(name or None, ledger.KIND_READ,
                                        "no question asked (spark read <words> --name NAME keeps them)",
@@ -182,7 +183,7 @@ def cmd_read(args):
         # at a terminal with nothing piped in, this is almost always a
         # question meant for the prompt: say where it goes, do not guess
         say(READ_USAGE.rstrip())
-        say("\n  a question for spark itself is: spark %s" % (" ".join(words) or "<words>"))
+        say("\n  to ask spark: spark %s" % (" ".join(words) or "<words>"))
         return 2
     try:
         answer(config.load(), data, " ".join(words), sys.stdout, want, name)

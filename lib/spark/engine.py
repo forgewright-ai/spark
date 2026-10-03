@@ -238,10 +238,10 @@ def resolve_for_spawn(cfg):
     misconfiguration too: say so rather than serve one model quietly."""
     b = engine_bin(cfg)
     if not b:
-        raise EngineError("the engine is missing -- spark update (or ./bootstrap.sh)", EX_CONFIG)
+        raise EngineError("the engine is missing -- spark update", EX_CONFIG)
     m = model_file(cfg)
     if not m:
-        raise EngineError("no model downloaded -- spark update (or ./bootstrap.sh)", EX_CONFIG)
+        raise EngineError("no model downloaded -- spark update", EX_CONFIG)
     ec = cfg.ember_model
     if ec not in ("auto", "none") and not chosen_model_name(cfg, "ember"):
         raise EngineError("no chat model named %s -- spark model --chat list" % ec, EX_CONFIG)

@@ -160,7 +160,7 @@ def row_configs(ctx):
     if would:
         names = sorted({os.path.basename(m.group(1)) for m in would if m})
         more = ", and %d more" % (len(names) - 2) if len(names) > 2 else ""
-        return fail("%d not in place: %s%s" % (len(would), ", ".join(names[:2]), more), "spark update")
+        return fail("%d not in place: %s%s" % (len(names), ", ".join(names[:2]), more), "spark update")
     return ok("%d files in place" % len(done))
 
 
@@ -591,7 +591,7 @@ def row_failure(ctx):
         if ctx.cfg.headless:
             return na("no shell open")
         return warn("no shell has it yet", "exec $SHELL")
-    return ok("on in %s (Esc s explains a failure)" % ", ".join(armed[:3]))
+    return ok("on in %s" % ", ".join(sorted({a.split()[0] for a in armed})))
 
 
 @row("CAPABILITY")
@@ -655,7 +655,7 @@ def row_serve(ctx):
         return warn(where + ", started with old settings",
                     "spark serve off; spark serve on" if st == "absent" else engine.restart_line("serve"))
     if h == "loading":
-        return warn("loading the model at %s" % url.split("//")[-1])
+        return warn("loading the model -- ask again in a moment")
     return warn("nothing answers at %s" % url.split("//")[-1], "spark serve off")
 
 
@@ -924,7 +924,7 @@ def row_throughput(ctx):
             slow.append(stem)
     if slow:
         return warn("%s: slower than measured" % "; ".join(parts),
-                    "spark bench tune show; spark bench --tune")
+                    "spark bench tune show; spark bench tune")
     return ok("; ".join(parts) + tail)
 
 
@@ -2281,11 +2281,16 @@ def main(argv):
         elif a == "--chaos":
             from . import chaos
             return chaos.run()
-        elif a.startswith("--"):
-            say(USAGE.rstrip())
+        elif a.startswith("-"):
+            say("%s check -- no word %s; spark check -h lists them" % (MARK, a))
             return 2
         else:
             names.append(a)
+    known = {s.name for s in SPECS}
+    for n in names:
+        if n not in known:
+            say("%s check -- no row named %s" % (MARK, n))
+            return 2
     ctx = Ctx(fresh=fresh, fetch=fetch)
     ctx.unattended = unattended(porcelain_out, fresh, watch, sys.stdin)
     color = sys.stdout.isatty() and not porcelain_out

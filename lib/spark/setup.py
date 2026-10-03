@@ -21,7 +21,7 @@ from . import engine, packages, session, site, wire
 from . import text as textmod
 from . import model as modeltab      # `model` is a local name here: the chosen row
 
-SIGN = "%s setup -- choose the model this machine can run" % MARK
+SIGN = "%s setup -- set up the name, user, model and voice" % MARK
 USAGE = SIGN + """
 
   spark setup                 a few questions, then it sets spark up
@@ -63,7 +63,7 @@ def _parse(args):
                 raise Abort("%s needs a value (spark setup -h)" % a, 2)
             opts[a[2:]] = val
         else:
-            raise Abort("no option %s (spark setup -h)" % a, 2)
+            raise Abort("no word %s; spark setup -h lists them" % a, 2)
     return opts
 
 
@@ -109,7 +109,7 @@ def _table(cfg):
     the table, not printed: a first run is no place for twenty rows, and
     naming any of them with --model still works."""
     budget = mem_total_gb() * cfg.ai_budget / 100.0
-    say("%.0f GB for models, %.0f GB to use (%d%%), %s" % (mem_total_gb(), budget, cfg.ai_budget, engine.backend(cfg)))
+    say("%.0f GB for models, budget %.0f GB (%d%%)" % (mem_total_gb(), budget, cfg.ai_budget))
     note = engine.cap_note(cfg)
     if note:
         say(note)
@@ -261,12 +261,12 @@ def _first_question(cfg):
     say()
     t = session.last_turn() or {}
     if t.get("tg_tps"):
-        say("%.1f tok/s on your first question" % t["tg_tps"])
+        say("* %.1f tok/s on your first question" % t["tg_tps"])
         return
     row = engine.chosen_rows(cfg).get("spark")
     if row:
         speed, kind = engine.speed_of(cfg, row)
-        say("%s%d tok/s on this machine%s" % ("~" if kind == "estimate" else "", speed,
+        say("* %s%d tok/s on this machine%s" % ("~" if kind == "estimate" else "", speed,
                                               " (a guess)" if kind == "estimate" else ""))
 
 
@@ -296,7 +296,7 @@ def _account(user):
 
 def _closing():
     say()
-    say("open a new shell (exec $SHELL), then try:")
+    say("* open a new shell (exec $SHELL), then try:")
     say("  spark chat               talk with the model")
     say("  ? how big is this dir    get a command for it")
     say("  cmd 2>&1 | explain       why it failed, and the fix")
@@ -441,7 +441,7 @@ def _run(opts):
         return rc
     _rc_line()
     if model == "none":
-        say("no model chosen -- spark model NAME, or spark client URL")
+        say("* no model chosen -- spark model NAME, or spark client URL")
     if opts["serve"] and (model != "none" or cfg.prefer_url):
         cfg = config.load()
         # SPARK_NO_APPLY (tests): no server here, but the question still

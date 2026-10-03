@@ -100,7 +100,7 @@ def _restart_units(cfg):
     units = ["serve", "forge"] + (["check"] if engine.init_shape() == "runit" else [])
     for unit in units:
         if engine.service_state(cfg, unit) == "loaded" and engine.kickstart(cfg, unit, restart=True):
-            say("%s update -- spark-%s restarted on the new tree" % (MARK, unit))
+            say("* the %s restarted" % {"serve": "engine", "forge": "page"}.get(unit, unit))
 
 
 def _page_is_stale():
@@ -155,7 +155,7 @@ def cmd_update(args):
                     pass
                 _door()
             return rc
-        say("%s update -- no option %s (spark update -h)" % (MARK, a))
+        say("%s update -- no word %s; spark update -h lists them" % (MARK, a))
         return 2
     moved = False
 

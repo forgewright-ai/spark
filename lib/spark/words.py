@@ -36,7 +36,7 @@ BLINK_RATE = {"playful": 14, "warm": 28, "plain": 50, "terse": 0}
 # the order the faces are shown in
 FACE_ORDER = look.MOODS + ("blink", "glance")
 
-USAGE = """%s words -- the lines spark awaken wrote, and the faces
+USAGE = """%s words -- the faces and lines spark awaken made
 
   spark words                   show the lines and the faces
   spark words edit              edit the lines in your editor
@@ -224,7 +224,7 @@ def main(args):
         # `spark words that rhyme with moon?` is a question, not a sub-word
         from . import cli
         return cli.main(["words"] + list(args))
-    say(USAGE.rstrip())
+    say("%s words -- no word %s; spark words -h lists them" % (MARK, args[0]))
     return 2
 
 
