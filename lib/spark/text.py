@@ -33,6 +33,7 @@ class Wrap:
     def __init__(self, stream=sys.stdout, mark=True, cps=0, lead=None):
         self.stream = stream
         self.mark = mark
+        self.clean = Printable()  # what feed lets through of the model's text
         # lead (a tty only): a string that opens the reply in the mark's
         # place -- the chat's face -- and every later line hangs under
         # it, indented by its visible width (the escapes not counted).
@@ -283,6 +284,10 @@ class Wrap:
         self.deciding = True
 
     def feed(self, delta):
+        # the model's text loses its escapes and controls first, at a tty
+        # and piped alike (a sequence split across chunks dropped whole);
+        # the wrap's own marks (bold, the accent) are drawn after
+        delta = self.clean.feed(delta)
         for ch in delta:
             if ch == "\n":
                 self._new_line()
@@ -354,6 +359,7 @@ class Wrap:
             self._char(ch)
 
     def close(self):
+        self.clean.close()
         if self.deciding and self.line_head:
             self.deciding = False
             pending, self.line_head = self.line_head, ""
@@ -767,12 +773,103 @@ def quotes(line):
 _MARKS = str.maketrans({"\u201c": '"', "\u201d": '"', "\u2018": "'", "\u2019": "'", "'": '"'})
 
 # terminal escape sequences and control characters have no place in a
-# line the widgets print into a live terminal or a gate writes to
-# stdout: a model -- or a log line it quotes -- could otherwise retitle
-# the window, move the cursor or repaint the screen
-_CSI = re.compile(r"\x1b\[[0-9;:?<=>!\"'#$%&*+,\-./ ]*[@-~]")
-_OSC = re.compile(r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)?")
-_ESC_OTHER = re.compile(r"\x1b.?")
+# line the widgets print into a live terminal, a gate writes to stdout
+# or a reply streams to a terminal or a pipe: a model -- or a log line it
+# quotes -- could otherwise retitle the window, move the cursor, repaint
+# the screen, write the clipboard (OSC 52) or hide a link (OSC 8). A
+# file a pipe wrote replays them at the next `cat`, so a pipe loses them
+# too; the printable text stays byte for byte. The bidi controls reorder
+# what a reader sees, so they go as well.
+_BIDI = "؜‎‏‪‫‬‭‮⁦⁧⁨⁩"
+_UNSAFE = re.compile("[\x00-\x1f\x7f-\x9f" + _BIDI + "]")
+_TEXT, _ESC, _ESC_INT, _CSI, _STR, _STR_ESC = range(6)
+
+
+class Printable:
+    """A model's words fit for a screen, a chunk at a time: feed(chunk)
+    returns what may be printed, close() ends the stream. A sequence split
+    across chunks is kept in the state and dropped whole: ESC and 8-bit
+    CSI with their parameters, OSC, DCS, SOS, PM and APC to their BEL or
+    ST (or CAN, SUB, or the line's end -- a stray ESC ] costs one line,
+    never the rest of the reply). Every other control character goes:
+    C0 but those in `keep`, DEL, C1, the bidi controls."""
+
+    def __init__(self, keep="\t\n"):
+        self.keep = keep
+        self.state = _TEXT
+
+    def feed(self, s):
+        if self.state == _TEXT and not _UNSAFE.search(s):
+            return s                    # the common chunk: nothing to look at
+        out = []
+        for ch in s:
+            while not self._step(ch, out):
+                pass
+        return "".join(out)
+
+    def close(self):
+        """The stream ended: a sequence still open is dropped."""
+        self.state = _TEXT
+        return ""
+
+    def _step(self, ch, out):
+        """One character in the current state; False when the state
+        changed and `ch` must be looked at again in the new one."""
+        st, o = self.state, ord(ch)
+        if st == _TEXT:
+            if ch == "\x1b":
+                self.state = _ESC
+            elif ch == "\x9b":
+                self.state = _CSI
+            elif ch in "\x90\x98\x9d\x9e\x9f":       # DCS, SOS, OSC, PM, APC
+                self.state = _STR
+            elif ch in self.keep or not _UNSAFE.match(ch):
+                out.append(ch)
+            return True
+        if st == _ESC:
+            if ch == "[":
+                self.state = _CSI
+            elif ch in "]PX^_":
+                self.state = _STR
+            elif 0x20 <= o <= 0x2f:
+                self.state = _ESC_INT
+            elif 0x30 <= o <= 0x7e:
+                self.state = _TEXT
+            elif ch != "\x1b":
+                self.state = _TEXT
+                return False
+            return True
+        if st == _ESC_INT:
+            if 0x20 <= o <= 0x2f:
+                return True
+            self.state = _TEXT
+            return 0x30 <= o <= 0x7e
+        if st == _CSI:
+            if 0x20 <= o <= 0x3f:
+                return True
+            self.state = _TEXT
+            return 0x40 <= o <= 0x7e
+        if st == _STR:
+            if ch == "\x1b":
+                self.state = _STR_ESC
+            elif ch in "\x07\x9c\x18\x1a":
+                self.state = _TEXT
+            elif ch == "\n":
+                self.state = _TEXT
+                return False
+            return True
+        # _STR_ESC: ESC \ ends the string; any other ESC starts a new sequence
+        if ch == "\\":
+            self.state = _TEXT
+            return True
+        self.state = _ESC
+        return False
+
+
+def printable(s, keep="\t\n"):
+    """`s` fit for a screen (Printable), whole."""
+    p = Printable(keep)
+    return p.feed(s) + p.close()
 
 
 # man's bold (X\bX) and underline (_\bX) as a pager sees them: mandoc
@@ -787,15 +884,11 @@ def unstrike(s):
 
 
 def scrub(s, keep="\t\n"):
-    """`s` without terminal escape sequences (CSI, OSC and the rest),
-    without man's overstrikes (the letter stays), and without control
-    characters (\\x00-\\x1f, \\x7f) -- tabs and newlines excepted where
-    they belong (`keep`)."""
-    s = unstrike(s)
-    s = _CSI.sub("", s)
-    s = _OSC.sub("", s)
-    s = _ESC_OTHER.sub("", s)
-    return "".join(ch for ch in s if ch in keep or (ord(ch) >= 32 and ord(ch) != 127))
+    """`s` without terminal escape sequences (CSI, OSC, DCS and the rest,
+    7-bit and 8-bit), without man's overstrikes (the letter stays), and
+    without control characters (C0, DEL, C1, the bidi controls) -- tabs
+    and newlines excepted where they belong (`keep`): `printable`."""
+    return printable(unstrike(s), keep)
 
 
 def cols(s):

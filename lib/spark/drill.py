@@ -151,7 +151,7 @@ def cmd_drill(args):
                 say("* dropped %d item%s%s" % (n, "" if n == 1 else "s", (" for " + name) if name else ""))
         else:
             for line in ledger.drill_listing(name or None):
-                say(line)
+                say(textmod.printable(line))    # a kept question is the model's words
         return 0
     source = "" if sys.stdin.isatty() else textmod.stdin_text(source=True)
     if not source.strip():
@@ -199,9 +199,13 @@ def cmd_drill(args):
 
     right = wrong = 0
     for i, it in enumerate(items, 1):
-        prompt("\n%s drill %d/%d: %s\n  your answer (Enter to reveal): " % (MARK, i, len(items), it["question"]))
+        # the model's question and the span it chose reach the terminal
+        # without an escape or a control character (the ledger keeps them
+        # as they were: the anchor reads the source's own bytes)
+        prompt("\n%s drill %d/%d: %s\n  your answer (Enter to reveal): "
+               % (MARK, i, len(items), textmod.printable(it["question"])))
         tty.readline()
-        prompt("  the source says: %s\n  had it? yes/NO: " % it["answer"])
+        prompt("  the source says: %s\n  had it? yes/NO: " % textmod.printable(it["answer"]))
         got = tty.readline().strip().lower() in ("y", "yes")
         right, wrong = right + got, wrong + (not got)
         if name:
