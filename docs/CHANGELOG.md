@@ -4,12 +4,16 @@
 
 The voice keeps pace with the reply.
 
-- The voice starts with the reply and keeps pace, sentence by
-  sentence. In clear mode, and in mode on after `/aloud`, each sentence
-  of a chat reply is spoken once it is on the screen, while the model
-  writes the next.
-- With `--reveal`, the voice follows the reveal: it says only what you
-  were shown.
+- A chat reply read aloud is shown as it is spoken. In clear mode, and
+  in mode on after `/aloud`, each sentence goes to the voice as the
+  model writes it. Its text appears as its sound starts, at the pace
+  of the voice. `spark voice rate` sets both.
+- The text follows the voice only with the reveal on, at a terminal of
+  this machine. Over ssh the sound plays on the far machine, so the
+  text keeps the reveal's pace there. With the reveal off the text
+  shows at once and the voice reads behind it.
+- A sentence whose sound is late by 8 seconds lets the text go on at
+  the reveal's pace for the rest of the reply.
 - A sentence ends at `.`, `!` or `?` and at a line break, so a list
   item is its own. A number such as 3.14, a short list of
   abbreviations such as e.g. and Dr., and inline code never end one.
@@ -18,9 +22,9 @@ The voice keeps pace with the reply.
 - The next sentence is made while one plays, so the voice no longer
   stops between sentences. `spark do` and the other surfaces gain this
   too.
-- The voice stays loaded for a chat. The first sentence loads it, about
-  a second, and every sentence after it is made with no new start. The
-  same goes for `spark do`.
+- The voice stays loaded for a chat. It loads as the chat opens, while
+  you type, and every sentence is made with no new start. `spark do`
+  loads it once too.
 - On Linux the voice is one stream to the sound card for each run of
   sentences. The card is opened once, with a short silence first, 250
   ms, and kept awake with silence between sentences. So no sentence
@@ -28,12 +32,15 @@ The voice keeps pace with the reply.
   the environment changes the silence, 0 to 1000. On macOS each
   sentence plays on its own, the silence before the first after a
   quiet moment.
-- A long first sentence is cut at its first comma, so the first sound
-  comes sooner. The sentences after it stay whole.
+- The first sentence goes at its first comma, semicolon or colon, or
+  after six words with none, so the first sound never waits for a
+  whole sentence. The sentences after it stay whole.
 - The voice is Kokoro's full-precision model now, 350 MB, not the
   smaller int8 one. It is about 4 times faster on a plain x86 CPU. The
   engine is 586 MB on Linux and 602 MB on macOS. A machine with the
   voice on fetches it at `spark update`, and the old one goes.
+- The voice engine's own warnings, such as a sound it skips, no longer
+  print in the middle of a reply.
 - A new reply stops the old one's voice. Ctrl-C on a reply stops its
   voice too. `/again` speaks the last reply sentence by sentence.
 - `spark update` waits for a big model to stop. On Void, spark's `sv`

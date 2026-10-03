@@ -156,9 +156,10 @@ LEAD_MAX_MS = 1000
 # The streamed reply (Sentences): a run with no sentence end is cut at a
 # comma or a space once it is this long, so the voice never waits long.
 SENTENCE_MAX = 240
-# A reply's first sentence longer than this is handed over at its first
-# comma or semicolon, so the first sound comes sooner; later ones whole.
-FIRST_CUT = 60
+# A reply's first sentence is handed over at its first comma, semicolon
+# or colon, or after this many words with none, so the first sound
+# never waits for the whole sentence to be shown; later ones whole.
+FIRST_WORDS = 6
 # Kept small on purpose: a period after one of these ends no sentence.
 ABBREVIATIONS = ("e.g.", "i.e.", "dr.", "mr.", "mrs.", "ms.", "vs.")
 AHEAD = 2                   # clips the Reader makes ahead of the one playing
@@ -1135,9 +1136,30 @@ def load_engine():
     try:
         e = Engine()
         e.load()
-        return e
     except Exception:  # noqa: BLE001 -- any failure here is the tool's turn, never the verb's
         return None
+    hush_native()
+    return e
+
+
+def hush_native():
+    """The runtime writes its warnings (an unknown phoneme skipped) with
+    fprintf(stderr), from inside this process: into a chat's reveal.
+    The C library's stderr stream goes to /dev/null from here on. Python
+    writes file descriptor 2 itself, so spark's own lines, and every
+    process it starts, still reach the terminal. True when it took."""
+    try:
+        import ctypes
+        libc = ctypes.CDLL(None)
+        libc.fopen.restype = ctypes.c_void_p
+        libc.fopen.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
+        null = libc.fopen(os.devnull.encode(), b"w")
+        if not null:
+            return False
+        ctypes.c_void_p.in_dll(libc, "__stderrp" if IS_MAC else "stderr").value = null
+        return True
+    except Exception:  # noqa: BLE001 -- a loud runtime is never a reason to fail
+        return False
 
 
 def clip(cfg, text, mode_="clear", engine=None, lang=None, recipe=None):
@@ -1761,12 +1783,16 @@ class Reader:
     bounded, until every line put has begun to play -- on the stream,
     has been written whole into it -- (played=True: has finished): the
     player outlives the process, so a goodbye is never cut off by the
-    exit. A wav (macOS) never outlives its line."""
+    exit. A wav (macOS) never outlives its line. put() returns the
+    line's tag; when(tag) has when that line starts to sound and for how
+    long -- the chat's text follows it."""
 
     def __init__(self, cfg=None):
         self.cfg = cfg
-        self.lines = []             # (gen, text): waiting for the engine
-        self.ready = []             # (gen, (pcm, rate)): made, waiting for the player
+        self.lines = []             # (gen, text, tag): waiting for the engine
+        self.ready = []             # (gen, (pcm, rate), tag): made, waiting for the player
+        self.tag = 0                # the last line's tag
+        self.heard = {}             # tag -> (starts, seconds) on the monotonic clock; None: never sounds
         self.gen = 0
         self.making = False         # a text in the engine now
         self.starting = False       # a clip being handed to the player now
@@ -1776,6 +1802,7 @@ class Reader:
         self.quiet = 0.0            # when the last clip stopped playing (0: never played)
         self.sr = (0.0, "")         # (when, screen_reader()): asked once per SR_EVERY
         self.engine = None          # the loaded engine; False: the tool, for this reader's life
+        self.loading = threading.Lock()     # one load, whether warm() or the first line starts it
         self.owned = set()          # private dirs made here, not yet removed
         self.cv = threading.Condition()
         self.threads = None
@@ -1787,14 +1814,32 @@ class Reader:
     def busy(self):
         return self.making or self.starting
 
+    def warm(self):
+        """Load the engine now, in a thread of its own, so the first line
+        does not wait for it: the chat calls this as it opens, while the
+        person types. Nothing under the test seam."""
+        if os.environ.get("SPARK_VOICE_STUB"):
+            return
+
+        def go():
+            try:
+                with self.loading:
+                    if self.engine is None:
+                        self.engine = load_engine() or False
+            except Exception:   # noqa: BLE001 -- the first line loads it, or the tool speaks
+                pass
+        threading.Thread(target=go, name="spark-voice-warm", daemon=True).start()
+
     def put(self, text, cut=False):
+        """The line queued; its tag, or None when there is nothing to say."""
         text = plain(text)
         if not text:
-            return
+            return None
         with self.cv:
             if cut:
                 self._drop()
-            self.lines.append((self.gen, text))
+            self.tag += 1
+            self.lines.append((self.gen, text, self.tag))
             if self.threads is None:
                 self.threads = [threading.Thread(target=fn, name=name, daemon=True)
                                 for fn, name in ((self._engine, "spark-voice-engine"),
@@ -1802,12 +1847,36 @@ class Reader:
                 for t in self.threads:
                     t.start()
             self.cv.notify_all()
+            return self.tag
+
+    def when(self, tag, timeout, halt=None):
+        """(starts, seconds) for the line `tag`: when it starts to sound,
+        on the monotonic clock (later than now, while what is before it
+        plays), and its length. None: it never sounds (dropped, a cut,
+        nothing to say, a failure). False: not known within `timeout`,
+        or `halt()` came true."""
+        end = time.monotonic() + timeout
+        with self.cv:
+            while tag not in self.heard:
+                left = end - time.monotonic()
+                if left <= 0 or (halt is not None and halt()):
+                    return False
+                self.cv.wait(min(0.1, left))
+            return self.heard.pop(tag)
+
+    def _heard(self, tag, value):
+        """(the lock held) What when(tag) answers, once."""
+        if tag is not None and tag not in self.heard:
+            self.heard[tag] = value
+            self.cv.notify_all()
 
     def _drop(self):
         """(the lock held) What waits goes, every ready clip, and what
         plays stops: the clip playing, or the stream killed with what it
         still held. A clip in the engine now is dropped when it comes out
         (its generation is gone)."""
+        for item in self.lines + self.ready:
+            self._heard(item[2], None)
         del self.lines[:]
         self.gen += 1
         del self.ready[:]
@@ -1839,7 +1908,7 @@ class Reader:
             with self.cv:
                 while not self.lines or len(self.ready) >= AHEAD:
                     self.cv.wait()
-                gen, text = self.lines.pop(0)
+                gen, text, tag = self.lines.pop(0)
                 self.making = True
             made = None
             try:
@@ -1848,7 +1917,9 @@ class Reader:
                 with self.cv:
                     self.making = False
                     if made and gen == self.gen:
-                        self.ready.append((gen, made))
+                        self.ready.append((gen, made, tag))
+                    else:
+                        self._heard(tag, None)
                     self.cv.notify_all()
 
     def _make(self, text):
@@ -1866,8 +1937,9 @@ class Reader:
             if os.environ.get("SPARK_VOICE_STUB"):
                 _stubbed(text)
                 return None
-            if self.engine is None:
-                self.engine = load_engine() or False
+            with self.loading:
+                if self.engine is None:
+                    self.engine = load_engine() or False
             if self.engine:
                 return clip(cfg, text, m, engine=self.engine)
             d = _private_dir()
@@ -1891,7 +1963,7 @@ class Reader:
             elif act[0] == "close":
                 act[1].close()
             else:
-                self._play(act[1], act[2])
+                self._play(*act[1:])
 
     def _next(self):
         """What the player does next: ("clip", gen, clip), or with a stream
@@ -1900,10 +1972,10 @@ class Reader:
         with self.cv:
             while True:
                 if self.ready:
-                    gen, made = self.ready.pop(0)
+                    gen, made, tag = self.ready.pop(0)
                     self.starting = True
                     self.cv.notify_all()            # the engine may make the next one
-                    return "clip", gen, made
+                    return "clip", gen, made, tag
                 s = self.stream
                 if s is None:
                     self.cv.wait()
@@ -1923,7 +1995,7 @@ class Reader:
                     return "silence", s
                 self.cv.wait(min(0.25, ahead - STREAM_AHEAD + 0.005))
 
-    def _play(self, gen, made):
+    def _play(self, gen, made, tag=None):
         cfg = self.cfg or config.load()
         argv = None
         try:
@@ -1931,11 +2003,13 @@ class Reader:
         except Exception:  # noqa: BLE001
             argv = None
         if argv:
-            self._stream(cfg, argv, gen, made)
+            self._stream(cfg, argv, gen, made, tag)
         else:
-            self._clip(gen, made)
+            self._clip(gen, made, tag)
+        with self.cv:
+            self._heard(tag, None)              # a clip that never played
 
-    def _stream(self, cfg, argv, gen, made):
+    def _stream(self, cfg, argv, gen, made, tag=None):
         """A clip into the stream, opened first when there is none (or its
         rate differs): STREAM_WRITE at a time, so a cut lands between."""
         pcm, fs = made
@@ -1953,6 +2027,9 @@ class Reader:
                         s.stop()
                         return
                     self.stream = s
+            with self.cv:
+                if gen == self.gen:
+                    self._heard(tag, (max(s.until, time.monotonic()), len(pcm) / (2.0 * fs)))
             step = 2 * max(1, int(fs * STREAM_WRITE))
             for i in range(0, len(pcm), step):
                 if gen != self.gen or not s.write(pcm[i:i + step]):
@@ -1966,7 +2043,7 @@ class Reader:
                     self.sounding = s.until
                 self.cv.notify_all()
 
-    def _clip(self, gen, made):
+    def _clip(self, gen, made, tag=None):
         """A clip as its own wav through the OS's player (afplay): the
         lead-in when the card may be asleep (nothing played within
         WAKE_AFTER)."""
@@ -1980,6 +2057,9 @@ class Reader:
                 stale = gen != self.gen
                 self.starting = False
                 self.playing = None if stale else h
+                if h is not None and not stale:
+                    lead = 0.0 if awake else lead_ms() / 1000.0
+                    self._heard(tag, (time.monotonic() + lead, len(made[0]) / (2.0 * made[1])))
                 self.cv.notify_all()
         if h is None:
             return
@@ -2075,11 +2155,15 @@ class Sentences:
     inline code span. A ``` fence is one line, "a code block, N lines"
     (code=True: clear mode), or nothing (code=False: mode on). A run
     with no end is cut at a comma or a space near SENTENCE_MAX. The
-    reply's first sentence, once it is longer than FIRST_CUT, is handed
-    over at its first comma or semicolon before a space, so the first
-    sound starts sooner; the sentences after it stay whole. A decision
+    reply's first sentence is handed over at its first comma, semicolon
+    or colon before a space, or at the space after FIRST_WORDS words
+    with none, so the first sound starts sooner; the rest of it, and
+    the sentences after it, stay whole. A decision
     that needs the next character waits for it, so a stream split
-    anywhere gives the same sentences as the whole text."""
+    anywhere gives the same sentences as the whole text. ends() has
+    where each piece given since its last call ends in the text fed,
+    counted from the first character: the chat shows a sentence's text
+    as its sound starts."""
 
     def __init__(self, code=True):
         self.code = code
@@ -2091,6 +2175,13 @@ class Sentences:
         self.fence = None           # inside a fence: its lines so far
         self.skip = False           # a fence's line, skipped to its end
         self.tick = False           # inside an inline `code` span
+        self.taken = 0              # characters scanned and gone from buf
+        self.at = 0                 # where a piece given now ends, in the text fed
+        self.marks = []             # each piece's end, since ends() was last called
+
+    def ends(self):
+        out, self.marks = self.marks, []
+        return out
 
     def feed(self, delta):
         self.buf += delta or ""
@@ -2098,16 +2189,20 @@ class Sentences:
 
     def flush(self):
         out = self._scan(True)
+        self.at = self.taken
         if self.fence is not None:
             out += self._block(self.fence + (1 if self.skip else 0))
         out += self._end()
+        marks = self.marks
         self.__init__(self.code)
+        self.marks = marks
         return out
 
     def _scan(self, final):
         out, buf, i = [], self.buf, 0
         n = len(buf)
         while i < n:
+            self.at = self.taken + i + 1
             if self.skip:
                 j = buf.find("\n", i)
                 if j < 0:
@@ -2123,9 +2218,11 @@ class Sentences:
                     if nl < 0 and not final:
                         break               # the fence's line whole first
                     if self.fence is None:
+                        self.at = self.taken + i
                         out += self._end()
                         self.fence = 0
                     else:
+                        self.at = self.taken + (n if nl < 0 else nl + 1)
                         out += self._block(self.fence)
                         self.fence = None
                     i = n if nl < 0 else nl + 1
@@ -2152,6 +2249,7 @@ class Sentences:
                     break                   # the next character decides
                 run = buf[i:j]
                 kept = self._kept(run)
+                self.at = self.taken + j
                 out += self._add(run)
                 i = j
                 if (j >= n or buf[j].isspace()) and not kept:
@@ -2161,6 +2259,7 @@ class Sentences:
                 self.tick = not self.tick
             out += self._add(c)
             i += 1
+        self.taken += i
         self.buf = buf[i:]
         return out
 
@@ -2178,10 +2277,13 @@ class Sentences:
     def _add(self, s):
         self.cur += s
         self.line += s
-        if self.first and len(self.cur) > FIRST_CUT:
+        if self.first:
             m = _FIRST_PAUSE.search(self.cur)
             if m:
                 piece, self.cur = self.cur[:m.start() + 1], self.cur[m.end():]
+                return self._said(piece)
+            if s == " " and len(self.cur.split()) >= FIRST_WORDS:
+                piece, self.cur = self.cur, ""
                 return self._said(piece)
         if len(self.cur) < SENTENCE_MAX:
             return []
@@ -2202,17 +2304,19 @@ class Sentences:
         if not re.search(r"\w", piece):
             return []
         self.first = False
+        self.marks.append(self.at)
         return [piece]
 
     def _block(self, lines):
         if not (self.code and lines):
             return []
         self.first = False
+        self.marks.append(self.at)
         return ["a code block, %s" % _plural(lines, "line")]
 
 
 _FENCE = re.compile(r" {0,3}```")
-_FIRST_PAUSE = re.compile(r"[,;]\s")
+_FIRST_PAUSE = re.compile(r"[,;:]\s")
 _FENCE_START = re.compile(r" {0,3}`{0,2}$")
 
 

@@ -87,6 +87,18 @@ class Wrap:
             self.base = 1.0 / self.cps
             self.step = self.base * (reveal.BREATH_SCALE if self.living else 1.0)
 
+    def pace(self, cps):
+        """The reveal's pace from here on, characters a second (the
+        chat's voice sets it a sentence at a time); 0 writes as the
+        chunks come. Piped, nothing changes: the bytes are never paced."""
+        if not self.stream.isatty():
+            return
+        self.cps = cps
+        if cps:
+            from . import reveal
+            self.base = 1.0 / cps
+            self.step = self.base * (reveal.BREATH_SCALE if self.living else 1.0)
+
     def _emit(self, s, pause=0):
         """Every write goes through here: unpaced, one write; paced (cps),
         a character at a time with an escape sequence written free, then

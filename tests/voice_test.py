@@ -24,8 +24,8 @@ taking every control character out, what clear mode says for contract
 Reader's order, cut and hush, aloud_later() from a detached process, and
 `spark voice listen [--buffer]` and `spark voice stop`. v1.71: the
 splitter a streamed reply is spoken through (numbers, abbreviations,
-fences, list items, the long-run cut, a long first sentence at its
-first comma, any chunking the same), the lead-in, and the Reader's two
+fences, list items, the long-run cut, the first sentence at its
+first pause or its sixth word, any chunking the same), the lead-in, and the Reader's two
 stages timed against a slow engine: per clip (macOS) against a player
 that records what it got and when, and as one stream (Linux) against a
 stub that keeps every byte it was given at a sound card's pace -- one
@@ -1004,12 +1004,12 @@ check("Sentences: a sentence ends at . ! ? before a space or the end",
       split("One here. Two there! Three? Four") == ["One here.", "Two there!", "Three?", "Four"],
       split("One here. Two there! Three? Four"))
 check("Sentences: never inside a number (3.14, 2.718, v1.70)",
-      split("Pi is 3.14 and e is 2.718 in v1.70. Next.") == ["Pi is 3.14 and e is 2.718 in v1.70.", "Next."],
-      split("Pi is 3.14 and e is 2.718 in v1.70. Next."))
+      split("Ok. Pi is 3.14 and e is 2.718 in v1.70. Next.") == ["Ok.", "Pi is 3.14 and e is 2.718 in v1.70.", "Next."],
+      split("Ok. Pi is 3.14 and e is 2.718 in v1.70. Next."))
 check("Sentences: never after a kept abbreviation (e.g. i.e. Dr. Mr. Mrs. vs.)",
-      split("Use a tool, e.g. grep, i.e. a finder. Dr. Who and Mr. and Mrs. Smith, vs. them. End.")
-      == ["Use a tool, e.g. grep, i.e. a finder.", "Dr. Who and Mr. and Mrs. Smith, vs. them.", "End."],
-      split("Use a tool, e.g. grep, i.e. a finder. Dr. Who and Mr. and Mrs. Smith, vs. them. End."))
+      split("Ok. Use a tool, e.g. grep, i.e. a finder. Dr. Who and Mr. and Mrs. Smith, vs. them. End.")
+      == ["Ok.", "Use a tool, e.g. grep, i.e. a finder.", "Dr. Who and Mr. and Mrs. Smith, vs. them.", "End."],
+      split("Ok. Use a tool, e.g. grep, i.e. a finder. Dr. Who and Mr. and Mrs. Smith, vs. them. End."))
 check("Sentences: closing quotes and brackets stay with their sentence; a run of marks is one end",
       split('He said "stop." Then (once.) Wait... Really?! Ok') == ['He said "stop."', "Then (once.)", "Wait...",
                                                                 "Really?!", "Ok"])
@@ -1028,7 +1028,7 @@ check("Sentences: mode on skips a fence whole",
 check("Sentences: an unclosed fence at the end is still one line",
       split("Look:\n```\nx = 1\ny = 2") == ["Look:", "a code block, 2 lines"], split("Look:\n```\nx = 1\ny = 2"))
 LONG = "word " * 30 + "and then, " + "more " * 60 + "end"
-got = split(LONG)
+got = split("Ok. " + LONG)[1:]
 check("Sentences: a run with no end is cut near SENTENCE_MAX, at a comma when one is there, else at a space",
       len(got) >= 2 and got[0].endswith("and then,") and all(len(x) <= voice.SENTENCE_MAX for x in got)
       and " ".join(got).split() == LONG.split(), [len(x) for x in got])
@@ -1041,7 +1041,7 @@ REPLY = ("Pi is 3.14, e.g. close. The disk is full! Why?\n1. Free it.\n- `du -sh
 whole = split(REPLY)
 same = all(split_chunks(REPLY, sizes) == whole for sizes in ([1], [2], [3], [5, 1, 7], [4, 9, 2, 1], [11], [64]))
 check("Sentences: a stream split anywhere -- mid-word, mid-number, mid-fence -- gives the sentences one chunk does",
-      same and len(whole) == 8, whole)
+      same and len(whole) == 9 and whole[0] == "Pi is 3.14,", whole)
 s = voice.Sentences()
 first = s.feed("The first one is here. The sec")
 check("Sentences: a sentence goes the moment its end is seen; the rest waits",
@@ -1100,31 +1100,50 @@ voice.lead_in(eight, 10)
 check("lead-in: an 8-bit stereo wav keeps its format, its silence the 8-bit middle",
       frames(eight) == ((2, 1, 8000), b"\x80" * 160 + b"\x10\x20" * 10), frames(eight))
 
-# the first sentence of a reply, when it is long, goes at its first comma
-check("Sentences: a long first sentence goes at its first comma; the rest of it, and the next, whole",
+# the first sentence of a reply goes at its first pause, or after
+# FIRST_WORDS words with none: the first sound never waits for a whole
+# sentence to be shown
+check("Sentences: the first sentence goes at its first comma; the rest of it, and the next, whole",
       split("Well, the disk is nearly full and the logs grow by a gigabyte a day, so clean them. "
             "Then, once that is done, look again.")
       == ["Well,", "the disk is nearly full and the logs grow by a gigabyte a day, so clean them.",
           "Then, once that is done, look again."])
-check("Sentences: a semicolon is a first pause too; a comma inside 1,000 is not",
-      split("It holds 1,000 files and 2,000 links in all of its folders today; most are logs. Ok.")
-      == ["It holds 1,000 files and 2,000 links in all of its folders today;", "most are logs.", "Ok."])
-check("Sentences: a short first sentence (%d characters or fewer) is whole, commas and all" % voice.FIRST_CUT,
-      split("Yes, it is here, and it works. Next, the rest of it.")
-      == ["Yes, it is here, and it works.", "Next, the rest of it."])
-check("Sentences: a first sentence with no comma stays whole",
-      split("The disk holds a great many files and nearly all of them are logs today. Ok.")
-      == ["The disk holds a great many files and nearly all of them are logs today.", "Ok."])
-FIRST = ("So, here is what I found after reading the whole log file twice: three errors. "
+check("Sentences: a semicolon or a colon is a first pause too; a comma inside 1,000 is not",
+      split("It holds 1,000 files; most are logs. Ok.") == ["It holds 1,000 files;", "most are logs.", "Ok."]
+      and split("Three steps: copy, check, go. Ok.") == ["Three steps:", "copy, check, go.", "Ok."])
+check("Sentences: a short first sentence with no pause is whole",
+      split("Yes it works. Next, the rest of it.") == ["Yes it works.", "Next, the rest of it."])
+check("Sentences: a first sentence with no pause goes after %d words, the rest of it whole" % voice.FIRST_WORDS,
+      split("Runit is a lightweight init system and service manager for Linux. It is small, and fast.")
+      == ["Runit is a lightweight init system", "and service manager for Linux.", "It is small, and fast."])
+FIRST = ("So here is what I found after reading the whole log file twice: three errors. "
          "Two, maybe three, are the same one. Fine.")
 whole = split(FIRST)
-check("Sentences: the first comma's cut is the same whatever the chunking",
-      whole[0] == "So," and all(split_chunks(FIRST, sizes) == whole for sizes in ([1], [2], [3], [7, 1], [64])),
-      whole)
+def ended(text, sizes):
+    s, ends, i, k = voice.Sentences(), [], 0, 0
+    while i < len(text):
+        n = sizes[k % len(sizes)]
+        s.feed(text[i:i + n])
+        ends += s.ends()
+        i, k = i + n, k + 1
+    s.flush()
+    return ends + s.ends()
+
+
+ENDED = "Pi is 3.14, e.g. close. Is it \"full!\" Why?\n1. Free it.\n```sh\ndu -sh ~\n```\nAll done."
+cuts = ended(ENDED, [len(ENDED)])
+check("Sentences: ends() -- where each piece ends in the text fed, the same whatever the chunking",
+      [ENDED[a:b] for a, b in zip([0] + cuts, cuts)] == ["Pi is 3.14, ", "e.g. close.", ' Is it "full!"', " Why?",
+                                                          "\n1. Free it.", "\n```sh\ndu -sh ~\n```\n", "All done."]
+      and all(ended(ENDED, sizes) == cuts for sizes in ([1], [2], [3], [7, 1])), cuts)
+check("Sentences: the first cut is the same whatever the chunking",
+      whole[:2] == ["So here is what I found", "after reading the whole log file twice: three errors."]
+      and all(split_chunks(FIRST, sizes) == whole for sizes in ([1], [2], [3], [7, 1], [64])), whole)
 s = voice.Sentences()
-check("Sentences: the first cut goes the moment the pause is seen past %d characters" % voice.FIRST_CUT,
-      s.feed("Right, " + "word " * 12) == ["Right,"] and s.feed("and more. ") == ["word " * 11 + "word and more."]
-      and s.flush() == [])
+check("Sentences: the first cut goes the moment its pause or its word count is seen",
+      s.feed("Right, ") == ["Right,"] and s.feed("word " * 12) == [] and s.feed("and more. ") == ["word " * 11 + "word and more."]
+      and s.flush() == [] and voice.Sentences().feed("one two three four five six") == []
+      and voice.Sentences().feed("one two three four five six ") == ["one two three four five six"])
 
 # the Reader's two stages, against a slow stub engine: each clip it makes
 # is one value held (an id from its text), so the player's side can say
@@ -1292,7 +1311,7 @@ for line in ("alpha.", "beta.", "gamma.", "delta."):
 full = wait_for(lambda: len(r.ready) == voice.AHEAD and r.playing is not None and len(jsonl("plays.jsonl")) == 1)
 playing_dir = r.playing.tmp if r.playing is not None else ""
 check("Reader: bounded -- %d made ahead while one plays, the rest still text" % voice.AHEAD,
-      full and [t for _g, t in r.lines] == ["delta."], (full, r.lines, len(r.ready)))
+      full and [x[1] for x in r.lines] == ["delta."], (full, r.lines, len(r.ready)))
 cut = r.cut()
 gone = wait_for(lambda: not os.path.isdir(playing_dir) and not ours(), 5)
 check("Reader: cut drops the queued text and the ready clips and stops what plays (its wav removed)",
@@ -1400,6 +1419,113 @@ check("Reader at exit (stream): drain waits until the clip is written whole; the
       "every frame of it given", p.stdout.split() == ["True"] and eof and pid
       and [v for v, _n in runs(pid) if v] == [ident("last words.")]
       and sum(n for v, n in runs(pid) if v) == FRAMES, (p.stdout, p.stderr[-300:], eof))
+
+# the runtime's warnings (fprintf to the C library's stderr) go nowhere
+# once the engine is loaded; Python's own lines and a child's still show
+HUSH = """import ctypes, os, sys
+sys.path.insert(0, %r)
+from spark import voice
+libc = ctypes.CDLL(None)
+libc.fputs.argtypes = [ctypes.c_char_p, ctypes.c_void_p]
+cerr = lambda: ctypes.c_void_p.in_dll(libc, "__stderrp" if voice.IS_MAC else "stderr").value
+libc.fputs(b"c-before\\n", cerr()); libc.fflush(None)
+took = voice.hush_native()
+libc.fputs(b"c-after\\n", cerr()); libc.fflush(None)
+sys.stderr.write("python %%s\\n" %% took); sys.stderr.flush()
+os.system("echo child >&2")
+""" % os.path.join(REPO, "lib")
+p = subprocess.run([PY, "-c", HUSH], capture_output=True, text=True, timeout=30)
+check("hush_native: the C library's stderr goes nowhere; Python's lines and a child's still show",
+      p.stderr.split() == ["c-before", "python", "True", "child"], p.stderr)
+
+# the text follows the voice (forge._Spoken.begin): each sentence goes to
+# the reader as the model writes it, and its text is shown as its sound
+# starts, at the pace that ends it with the sound. A wrap that writes at
+# once and keeps when, so the waits are the follow's own
+from spark import forge  # noqa: E402
+
+
+class Shown:
+    def __init__(self, cps):
+        self.cps, self.got, self.paces = cps, [], []
+
+    def pace(self, cps):
+        self.paces.append(cps)
+
+    def feed(self, text):
+        self.got.append((time.monotonic(), text))
+
+
+class Busy:
+    def __init__(self):
+        self.stopped = None
+
+    def stop(self):
+        if self.stopped is None:
+            self.stopped = time.monotonic()
+
+
+def follow(reply, cfg, chunk=5, halt_after=None):
+    r = voice.Reader(cfg)
+    forge.VOICE.update(reader=r, mode="clear", aloud=True)
+    sp, wrap, busy = forge._Spoken(), Shown(100), Busy()
+    sp.begin(wrap, busy)
+    t0 = time.monotonic()
+    for i in range(0, len(reply), chunk):
+        sp.take(reply[i:i + chunk])
+    if halt_after is not None:
+        time.sleep(halt_after)
+        sp.stop()
+    else:
+        sp.end()
+    took = time.monotonic() - t0
+    r.cut()
+    return sp, wrap, busy, took, t0
+
+
+REPLY = "Void Linux is small, and it is fast. It boots with runit. Done."
+per_clip(False)
+reset_logs()
+os.environ.update(STUB_TTS="0.1", STUB_CLIP="0.6")
+sp, wrap, busy, took, t0 = follow(REPLY, Cfg(SPARK_VOICE="clear"))
+made = jsonl("tts.jsonl")
+text = "".join(t for _w, t in wrap.got)
+check("follow: every sentence to the voice as written, the text shown whole and in order",
+      [m["text"] for m in made] == ["Void Linux is small,", "and it is fast.", "It boots with runit.", "Done."]
+      and text == REPLY, ([m["text"] for m in made], text))
+check("follow: the first text waits for the first sound (the busy pulse until then)",
+      made and wrap.got and busy.stopped is not None and wrap.got[0][0] - t0 >= 0.1 + voice.LEAD_IN_MS / 1000.0 - forge.FOLLOW_EARLY - 0.05,
+      (wrap.got[:1], busy.stopped and busy.stopped - t0))
+check("follow: back only once the last sentence sounds, after three of 0.6 s (%.2f s)" % took,
+      took >= 3 * 0.6 - forge.FOLLOW_EARLY, took)
+want = [len(x) / (0.6 * forge.FOLLOW_SHARE) for x in ("Void Linux is small,", "and it is fast.",
+                                                      "It boots with runit.", "Done.")]
+check("follow: each sentence at the pace its sound sets, never the chosen one",
+      len(wrap.paces) == 4 and all(abs(a - max(b, 5)) < 2 for a, b in zip(wrap.paces, want)), (wrap.paces, want))
+
+reset_logs()
+sp, wrap, busy, took, t0 = follow(REPLY, Cfg(SPARK_VOICE="off"))
+check("follow: nothing sounds (the voice off) -- the text at the chosen pace, no wait",
+      took < 1.0 and "".join(t for _w, t in wrap.got) == REPLY and set(wrap.paces) == {100}, (took, wrap.paces))
+
+reset_logs()
+os.environ.update(STUB_TTS="1.5")
+forge.FOLLOW_WAIT, wait = 0.3, forge.FOLLOW_WAIT
+sp, wrap, busy, took, t0 = follow(REPLY, Cfg(SPARK_VOICE="clear"))
+forge.FOLLOW_WAIT = wait
+check("follow: a voice too slow -- after one wait the text goes on at the chosen pace, whole",
+      took < 1.5 and "".join(t for _w, t in wrap.got) == REPLY and sp.loose and set(wrap.paces) == {100},
+      (took, wrap.paces))
+
+reset_logs()
+os.environ.update(STUB_TTS="0.1", STUB_CLIP="2")
+sp, wrap, busy, took, t0 = follow(REPLY, Cfg(SPARK_VOICE="clear"), halt_after=0.8)
+shown = "".join(t for _w, t in wrap.got)
+check("follow: stopped (Ctrl-C) -- back at once, the text not yet sounded stays unshown",
+      took < 1.5 and not sp.thread.is_alive() and REPLY.startswith(shown) and len(shown) < len(REPLY), (took, shown))
+os.environ.pop("STUB_CLIP", None)
+forge.VOICE.update(reader=None, aloud=False)
+
 voice.stream_argv = _stream_argv
 for k in ("STUB_TTS", "STUB_PLAY"):
     os.environ.pop(k, None)

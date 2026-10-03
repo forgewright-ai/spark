@@ -1118,6 +1118,7 @@ def _voice_setup(cfg, tty):
         m = "off"
     if m != "off":
         VOICE.update(reader=voice.Reader(cfg), mode=m, aloud=m == "clear")
+        VOICE["reader"].warm()      # the engine loads while the person types
 
 
 def _aloud(text, cut=False):
@@ -1126,11 +1127,29 @@ def _aloud(text, cut=False):
         VOICE["reader"].put(text, cut=cut)
 
 
+# The text follows the voice (a reply read aloud, the reveal on, at a
+# terminal of this machine): a sentence's text is shown as its sound
+# starts, spread over FOLLOW_SHARE of its length -- FOLLOW_EARLY seconds
+# ahead, since a word is drawn once it is whole. A sentence whose sound
+# is not known within FOLLOW_WAIT seconds lets the text go on at the
+# chosen pace for the rest of the reply.
+FOLLOW_WAIT = 8.0
+FOLLOW_SHARE = 0.9
+FOLLOW_EARLY = 0.3
+
+
 class _Spoken:
     """A reply spoken sentence by sentence: voice.Sentences into the
     reader. The first sentence cuts what the reader still says, so a new
     reply never waits behind an old one. Clear mode says a code block as
-    "a code block, N lines"; mode on skips it."""
+    "a code block, N lines"; mode on skips it.
+
+    Two ways. feed() is handed the text once it is shown, so the voice
+    follows the screen. begin() (cli.stream_turn, the reveal on at a
+    terminal here) turns it around: take() hands each sentence to the
+    reader the moment the model wrote it, and a thread of its own shows
+    its text as its sound starts, at the voice's pace; end() waits until
+    the last is shown, stop() ends it."""
 
     def __init__(self):
         from . import voice
@@ -1144,10 +1163,117 @@ class _Spoken:
         self._put(self.split.flush())
 
     def _put(self, sentences):
+        tags = []
         for s in sentences:
+            tag = None
             if VOICE["reader"] is not None:
-                VOICE["reader"].put(s, cut=self.first)
+                tag = VOICE["reader"].put(s, cut=self.first)
                 self.first = False
+            tags.append(tag)
+        return tags
+
+    @staticmethod
+    def follows():
+        """The text may follow the voice: a session on this machine. Over
+        ssh the sound plays where spark runs, not where the person reads."""
+        return not (os.environ.get("SSH_CONNECTION") or os.environ.get("SSH_TTY"))
+
+    def begin(self, wrap, busy):
+        import threading
+        self.wrap, self.busy, self.cps = wrap, busy, wrap.cps
+        self.raw, self.marks, self.shown = "", [], 0
+        self.done = self.halt = self.loose = False
+        self.cv = threading.Condition()
+        self.thread = threading.Thread(target=self._show_all, name="spark-reply-follow", daemon=True)
+        self.thread.start()
+
+    def take(self, delta):
+        """(the stream's thread) A chunk of the reply: its sentences to
+        the reader now, its text to the screen as they sound."""
+        with self.cv:
+            self.raw += delta
+            self._mark(self.split.feed(delta))
+
+    def _mark(self, sentences):
+        """(the lock held) Each sentence queued, its end in the text kept
+        with its tag."""
+        ends = self.split.ends()
+        self.marks += zip(ends, self._put(sentences))
+        self.cv.notify_all()
+
+    def end(self):
+        """(the stream's thread) The reply is whole: the rest to the
+        reader, and back once its text is all shown."""
+        with self.cv:
+            self._mark(self.split.flush())
+            self.done = True
+            self.cv.notify_all()
+        while self.thread.is_alive():
+            self.thread.join(0.2)       # Ctrl-C lands between the waits
+        self._rest()
+
+    def stop(self, rest=False):
+        """The text stops following. Ctrl-C: what was not shown stays
+        unshown, as the reveal always did. The model gone mid-reply
+        (rest=True): what came is shown at once."""
+        with self.cv:
+            self.halt = True
+            self.cv.notify_all()
+        self.thread.join(2.0)
+        if rest:
+            self._rest()
+
+    def _rest(self):
+        if self.thread.is_alive() or self.shown >= len(self.raw):
+            return
+        self.busy.stop()
+        self.wrap.pace(0)
+        self.wrap.feed(self.raw[self.shown:])
+        self.shown = len(self.raw)
+
+    def _show_all(self):
+        try:
+            while True:
+                with self.cv:
+                    while not (self.halt or self.marks or self.done):
+                        self.cv.wait()
+                    if self.halt:
+                        return
+                    if self.marks:
+                        end, tag = self.marks.pop(0)
+                    elif self.shown < len(self.raw):
+                        end, tag = len(self.raw), None      # a tail that is no sentence (marks alone)
+                    else:
+                        return
+                    text = self.raw[self.shown:end]
+                self._show(text, tag)
+        except Exception:  # noqa: BLE001 -- the stream's thread shows the rest (end)
+            log_exc("forge: the text following the voice")
+
+    def _show(self, text, tag):
+        """One sentence's text: when its sound starts, at the pace that
+        ends it with FOLLOW_SHARE of its sound; at the chosen pace when it
+        has none, or the voice fell behind."""
+        from . import reveal
+        pace = 0
+        if tag is not None and not self.loose and VOICE["reader"] is not None:
+            got = VOICE["reader"].when(tag, FOLLOW_WAIT, halt=lambda: self.halt)
+            if got is False and not self.halt:
+                self.loose = True
+            elif got:
+                starts, secs = got
+                starts -= FOLLOW_EARLY
+                while not self.halt and time.monotonic() < starts:
+                    time.sleep(max(0.0, min(0.05, starts - time.monotonic())))
+                pace = len(text.strip()) / max(secs * FOLLOW_SHARE, 0.1)
+                pace = min(max(pace, reveal.CPS_MIN), reveal.CPS_MAX)
+        self.wrap.pace(pace or self.cps)
+        self.busy.stop()
+        for i in range(0, len(text), 8):
+            if self.halt:
+                return
+            self.wrap.feed(text[i:i + 8])
+            self.shown += len(text[i:i + 8])
 
 
 def _spoken():
@@ -2109,15 +2235,13 @@ def cmd_chat(args):
                     say()      # a blank line between turns; /clear starts clean
                 continue
             words, paths = refs(text.split())
-            # the voice follows the reveal: each sentence once it is on
-            # the screen, the rest when the reply ends
+            # a reply read aloud: its text follows the voice (the reveal
+            # on, here), else the voice follows the text as it is shown
             spoken = _spoken()
             try:
                 thread = cli.stream_turn(cfg, "chat", " ".join(words), paths, thread=thread, cps=REVEAL[0],
                                          lead=_face("idle") + " " if LIVING[0] else None, said=SAID,
-                                         on_shown=spoken.feed if spoken else None)
-                if spoken:
-                    spoken.flush()
+                                         voice=spoken)
             except (RefError, wire.BrainError) as e:
                 _refuse(e.hint)
             except KeyboardInterrupt as e:

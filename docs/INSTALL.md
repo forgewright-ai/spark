@@ -508,11 +508,18 @@ reads the choices once a
 run, the last 3 lines of each output and the end. It reads the chat's
 replies and the errors. Every line it speaks is printed too.
 
-A chat reply is spoken a sentence at a time while the model writes, so
-the voice keeps pace with the reply. A long first sentence is cut at
-its first comma, so the first sound comes sooner. The voice is loaded
-once for a chat: the first sentence waits about a second for it, and
-every sentence after it is made with no new start.
+A chat reply read aloud is shown as it is spoken. Each sentence goes
+to the voice as the model writes it, and its text appears as its sound
+starts, at the pace of the voice. `spark voice rate` sets both. The
+first sentence goes at its first comma, or after six words with none,
+so the first sound never waits for a whole sentence. The voice is
+loaded once, as the chat opens and while you type.
+
+The text follows the voice only with the reveal on, at a terminal of
+this machine. Over ssh the sound plays on the far machine, so the text
+keeps the reveal's pace. With the reveal off the text shows at once
+and the voice reads behind it. A sound late by 8 seconds lets the rest
+of the reply go at the reveal's pace.
 
 On Linux the voice is one stream to the sound card for each run of
 sentences. It opens with a quarter second of silence, so a sound card

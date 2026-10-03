@@ -214,6 +214,5 @@ card. What the box's headset says about it decides what comes next.
   the voice that answers follows the language that was heard.
 - The measure: how long a reply waits before it is heard, by mode, in
   `spark stats`, the way the first line is measured today. The first
-  sound now waits for the text up to the first comma and its
-  synthesis, so this number says whether the cut is in the right
-  place.
+  sound waits for the text up to the first comma or the sixth word,
+  then its synthesis. This number says whether the cut is right.

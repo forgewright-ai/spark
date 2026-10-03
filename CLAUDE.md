@@ -901,11 +901,18 @@ and may change freely.
    is clipped by its waking. macOS plays each clip with afplay, the
    lead-in before the first after `voice.WAKE_AFTER` of quiet. A cut
    drops the text that waits and the ready clips, and kills what plays,
-   the stream with what it held. The chat speaks a reply as it streams:
-   `cli.stream_turn`'s `on_shown` hands each chunk, once the wrap
-   printed it, to `voice.Sentences`, and each finished sentence goes to
-   the Reader at once. A reply's first sentence past `voice.FIRST_CUT`
-   characters goes at its first comma or semicolon. The shell widgets
+   the stream with what it held. The chat speaks a reply as it streams,
+   through `cli.stream_turn`'s `voice` (a `forge._Spoken`). With the
+   reveal on at a terminal of this machine (no `SSH_CONNECTION`), the
+   text follows the voice. Each chunk goes to `voice.Sentences` as it
+   comes, and each sentence to the Reader at once. `Reader.when(tag)`
+   says when its sound starts and how long it is. A thread of its own
+   shows the sentence's text from then, `forge.FOLLOW_EARLY` ahead, at
+   the pace that ends it with `forge.FOLLOW_SHARE` of its sound. A sound
+   not known within `forge.FOLLOW_WAIT` lets the rest go at the reveal's
+   pace. Otherwise the voice has each chunk once the wrap printed it. A
+   reply's first sentence goes at its first comma, semicolon or colon,
+   or after `voice.FIRST_WORDS` words with none. The shell widgets
    depend on nothing else.
 5. `spark brain --porcelain` prints `<url><TAB><model><TAB>forge|model`
    and exits 0, or exits 1. `<model>` is the spark role's model, the

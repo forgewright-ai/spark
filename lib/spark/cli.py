@@ -1108,16 +1108,17 @@ def reveal_word(word, refuse):
 
 
 def stream_turn(cfg, mode, text, files=(), context="", thread=None, line=None, mark=True, cps=0, lead=None,
-                said=None, on_shown=None):
+                said=None, voice=None):
     """One turn through forge.reply, wrapped to the terminal (80 when
     piped): the mark (mark=False keeps a conversation bare -- a dialog
     needs no mark), the answer as it streams, a trailing newline. `lead`
     (the awakened chat's face, a tty only) opens the reply in the mark's
     place, the lines hanging under it. `said` (a list) gains the turn's
-    two messages, as forge.reply keeps them. `on_shown(delta)`, when
-    given, has each chunk once the wrap wrote it -- at the reveal's pace,
-    so the chat's voice follows what the reader was shown, never ahead
-    of it. Returns the thread id. RefError,
+    two messages, as forge.reply keeps them. `voice` (the chat's
+    forge._Spoken, a reply read aloud): with the reveal on at a terminal
+    of this machine, the text follows the voice -- each sentence shown as
+    its sound starts, at its pace; else the voice has each chunk once the
+    wrap wrote it, never ahead of the screen. Returns the thread id. RefError,
     BrainError and KeyboardInterrupt pass through -- the wrap is closed
     first so a half-printed answer still ends in a newline (a lead that
     never opened stays unwritten: the caller says what went wrong);
@@ -1129,19 +1130,38 @@ def stream_turn(cfg, mode, text, files=(), context="", thread=None, line=None, m
     # the pulse on stderr from the request until the first chunk (a tty
     # only: piped, nothing is drawn); the wrap's mark takes over from it
     busy = textmod.Busy(sys.stderr).start()
+    follow = voice is not None and bool(wrap.cps) and voice.follows()
+    if follow:
+        voice.begin(wrap, busy)
 
     def feed(delta):
+        if follow:
+            voice.take(delta)
+            return
         busy.stop()
         wrap.feed(delta)
-        if on_shown is not None:
+        if voice is not None:
             try:
-                on_shown(delta)
+                voice.feed(delta)
             except Exception:  # noqa: BLE001 -- the voice never breaks the reply it speaks
                 pass
     try:
         thread, _, _ = forge.reply(cfg, thread, text, files, os.getcwd(), _shell_default(), mode, feed, context, line,
                                    said=said)
+        if follow:
+            try:
+                voice.end()
+            except KeyboardInterrupt as e:
+                e.thread = thread
+                raise
+        elif voice is not None:
+            try:
+                voice.flush()
+            except Exception:  # noqa: BLE001
+                pass
     except (wire.BrainError, KeyboardInterrupt) as e:
+        if follow:
+            voice.stop(rest=isinstance(e, wire.BrainError))
         busy.stop()
         if wrap.started or not wrap.lead:
             wrap.close()
