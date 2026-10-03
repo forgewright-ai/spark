@@ -1268,6 +1268,9 @@ and may change freely.
     The name is a basename, never a path, and no `[cwd]` line rides,
     ever. Output is raw streamed text: no mark, no wrap, a code fence
     around the answer removed, a rewrite ending the way the input ended.
+    Every chunk passes `text.Printable` first (`edit._printable_feed`):
+    no escape or control character reaches the terminal or the buffer.
+    A carriage return stays when the text on stdin has one.
     An empty text with words is written from nothing (a new file in the
     editor), the reply ending with a newline. Exit 0, 1 when `?` or
     `--at` find no text, or no model answers, 2 for the usage. No thread

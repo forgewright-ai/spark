@@ -129,6 +129,15 @@ def stanzas(text):
     return [s.strip() for s in re.split(r"\n\s*\n", text) if s.strip()]
 
 
+def _printable_feed(feed, data):
+    """The model's chunks through text.Printable before `feed`: an escape
+    or a control character never reaches the terminal or the editor's
+    buffer, a rewrite and a completion included. A carriage return stays
+    when the text on stdin has one (a file with CRLF line ends)."""
+    p = textmod.Printable(keep="\t\n\r" if "\r" in (data or "") else "\t\n")
+    return lambda chunk: feed(p.feed(chunk))
+
+
 def _comment(cfg, shell, whole, piece, name, words):
     """One grounded comment: on `piece` (a fresh stanza) if given, else a
     review of `whole` (the idle pass). The comment's quotes are checked
@@ -140,9 +149,10 @@ def _comment(cfg, shell, whole, piece, name, words):
     context = _review_context(cfg, shell, data, name, "", label)
     anchors = textmod.Anchors(sys.stdout, data)
     fence = textmod.Fence(anchors, newline=None)
+    feed = _printable_feed(fence.feed, data)
 
     def run(s):
-        return s.ask_stream(question, context, fence.feed, max_tokens=600, timeout=EDIT_TIMEOUT)
+        return s.ask_stream(question, context, feed, max_tokens=600, timeout=EDIT_TIMEOUT)
 
     ok, _res = session.once(lambda: session.Session(cfg, "edit-answer", shell, "", role="ember"), run)
     fence.close()
@@ -362,7 +372,7 @@ def cmd_edit(args):
     try:
         s = session.Session(cfg, mode, shell, "", role=role,
                             history=history if kind == "answer" else None)
-        out, ms = s.ask_stream(text, context, fence.feed, max_tokens=max_tokens, timeout=EDIT_TIMEOUT)
+        out, ms = s.ask_stream(text, context, _printable_feed(fence.feed, data), max_tokens=max_tokens, timeout=EDIT_TIMEOUT)
     except wire.BrainError as e:
         done()
         die(e.hint)

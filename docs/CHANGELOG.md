@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.76
+
+- `spark edit` drops escapes and control characters from the model's
+  text too: a rewrite, a completion and an answer. A file's CRLF line
+  ends stay.
+
 ## v1.75
 
 Security fixes from an audit, and docs that say less.

@@ -4292,6 +4292,20 @@ def main():
         t.ok("Output:" not in umsg, "edit: the editor's block carries its own label", repr(umsg[:80]))
         rc, out, _ = spark("edit", "keep", "it", stdin="one\n  two\n\nthree")
         t.ok(rc == 0 and out == "one\n  two\n\nthree", "edit: an unchanged rewrite comes back byte for byte", repr(out))
+        # a rewrite is the model's text too: an escape in it (a clipboard
+        # write, OSC 52) never reaches the terminal or the buffer, and a
+        # file's CRLF line ends stay
+        rc, out, _ = spark("edit", "keep", "it", stdin="a\x1b]52;c;eA==\x07b\r\nc\x9b2J\r\n")
+        t.ok(rc == 0 and out.replace("\r", "") == "ab\nc\n", "edit: a rewrite's escapes are dropped", repr(out))
+        from spark import edit as editmod
+        got = []
+        feed = editmod._printable_feed(got.append, "x\r\ny\r\n")
+        feed("a\r\n\x1b[2Jb\r")
+        feed("\n")
+        t.ok("".join(got) == "a\r\nb\r\n", "edit: a file's CRLF line ends stay through the scrub", repr(got))
+        got = []
+        editmod._printable_feed(got.append, "x\ny\n")("a\r\nb")
+        t.ok("".join(got) == "a\nb", "edit: a carriage return goes when the file has none", repr(got))
         # an empty buffer (a new file in micro): words write from nothing,
         # the reply ends with a newline; ? and --at say what is missing
         rc, out, err = spark("edit", "write", "a", "haiku", stdin="")
