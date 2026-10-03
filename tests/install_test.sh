@@ -148,7 +148,7 @@ printf '%s\n' "$out" | grep -qE "^skip +handback +nothing of an older spark's lo
 printf '%s\n' "$out" | grep -qE '^skip +hostname +SITE_SET_HOSTNAME=no' && ok "the hostname row is core (identity), its skip names its key" || bad "hostname row: $(printf '%s\n' "$out" | grep -E ' hostname ' | head -1)"
 printf '%s\n' "$out" | grep -qE ' micro-aspell ' && bad "a micro-aspell row survives (spark ships no app)" || ok "no micro-aspell row: spark installs no editor"
 printf '%s\n' "$out" | grep -qE "^would +dir +mkdir .*/projects" && bad "the workspace folder would be made" || ok "no workspace folder for a new user"
-[ "$(uname -s)" = Darwin ] && { printf '%s\n' "$out" | grep -qE '^ok +packages +nothing required' && ok "macOS: packages row is ok, nothing required" || bad "macOS packages row"; }
+[ "$(uname -s)" = Darwin ] && { printf '%s\n' "$out" | grep -qE '^ok +packages +nothing to install' && ok "macOS: packages row is ok, nothing to install" || bad "macOS packages row"; }
 [ -z "$(sh "$REPO/bootstrap.sh" --list-packages | grep -E '^(tmux|starship|bat|eza|fzf|btop)$')" ] && ok "--list-packages has no shell tool (spark installs none)" || bad "--list-packages lists a shell tool"
 [ -z "$(sh "$REPO/bootstrap.sh" --list-packages | grep -E '^(micro|aspell|aspell-en|shellcheck)$')" ] && ok "no editor, no contributor tool in --list-packages" || bad "--list-packages still lists micro/aspell/shellcheck"
 # the sh twin's precedence matches python: a key in BOTH files -- the
@@ -230,7 +230,7 @@ printf '%s\n' "$out" | grep -qx 'ember: qwen3-4b' && ok "18 GB vulkan: ember is 
 printf 'SITE_AI_MODEL=auto\nSITE_EMBER_MODEL=none\n' > "$HOME/.config/spark/site.env"
 out=$(lm SPARK_MEM_TOTAL_GB=18 SITE_AI_BUILD=cpu) || bad "--list-models failed"
 printf '%s\n' "$out" | grep -qx 'spark: gemma4-e4b' && ok "18 GB cpu: gemma4-e4b, its 4B working parameters pass the 3 GB cap" || bad "18 GB cpu spark line: $(printf '%s\n' "$out" | grep '^spark')"
-printf '%s\n' "$out" | grep -q '^auto stops' && bad "18 GB cpu: a cap note with nothing held back" || ok "18 GB cpu: nothing held back, no cap note"
+printf '%s\n' "$out" | grep -q '^auto picks files under' && bad "18 GB cpu: a cap note with nothing held back" || ok "18 GB cpu: nothing held back, no cap note"
 printf '%s\n' "$out" | head -2 | awk 'length > 80 { bad = 1 } END { exit bad }' && ok "the header fits 80 columns" || bad "a header line is wider than 80"
 printf '%s\n' "$out" | head -1 | grep -q ', cpu$' && ok "the header names the cpu build" || bad "header: $(printf '%s\n' "$out" | head -1)"
 # a client (none + a peer): the rows, no budget, never this machine's RAM
@@ -245,7 +245,7 @@ printf 'SITE_AI_MODEL=auto\nSITE_EMBER_MODEL=none\n' > "$HOME/.config/spark/site
 # 6 GB vulkan cap, and nothing was held back, so no note.
 out=$(lm SPARK_MEM_TOTAL_GB=19 SITE_AI_BUILD=vulkan) || bad "--list-models failed"
 printf '%s\n' "$out" | grep -qx 'spark: gemma4-e4b' && ok "19 GB vulkan: the first in the list that fits (gemma4-e4b)" || bad "19 GB vulkan spark line"
-printf '%s\n' "$out" | grep -q '^auto stops' && bad "19 GB vulkan: a cap note with nothing held back" || ok "19 GB vulkan: nothing held back, no cap note"
+printf '%s\n' "$out" | grep -q '^auto picks files under' && bad "19 GB vulkan: a cap note with nothing held back" || ok "19 GB vulkan: nothing held back, no cap note"
 out=$(lm SPARK_MEM_TOTAL_GB=18 SPARK_SYSFS_DRM="$T/drm") || bad "--list-models failed"
 printf '%s\n' "$out" | head -1 | grep -q ', vulkan$' && ok "SITE_AI_BUILD=auto: vulkan when a DRM device reports VRAM" || bad "auto with a GPU: $(printf '%s\n' "$out" | head -1)"
 printf '%s\n' "$out" | grep -qx 'spark: gemma4-e4b' && ok "auto with a GPU picks as vulkan" || bad "auto with a GPU spark line"
@@ -260,7 +260,7 @@ printf '%s\n' "$out" | head -1 | grep -q ', cpu$' && ok "SITE_AI_BUILD=auto: cpu
 printf '%s\n' "$out" | grep -qx 'spark: gemma4-e4b' && ok "auto without a GPU picks as cpu" || bad "auto without a GPU spark line"
 out=$(lm SPARK_MEM_TOTAL_GB=18 SITE_AI_BUILD=cpu SITE_AI_MODEL=qwen3-14b) || bad "--list-models failed"
 printf '%s\n' "$out" | grep -qx 'spark: qwen3-14b' && ok "a named model is never second-guessed" || bad "named model line"
-printf '%s\n' "$out" | grep -q '^auto stops' && bad "a name printed the cap note" || ok "a name: no cap note"
+printf '%s\n' "$out" | grep -q '^auto picks files under' && bad "a name printed the cap note" || ok "a name: no cap note"
 # a name is looked up in the whole list, tested or not: an untested row
 # and a non-open-license row, picked by name for the spark role
 out=$(lm SPARK_MEM_TOTAL_GB=18 SITE_AI_BUILD=cpu SITE_AI_MODEL=gemma4-e2b) || bad "--list-models failed"
@@ -272,7 +272,7 @@ rm -f "$HOME/.config/spark/models.env"
 out=$(lm SPARK_MEM_TOTAL_GB=6 SITE_AI_BUILD=cpu) || bad "--list-models failed"
 printf '%s\n' "$out" | grep -qx 'spark: qwen3-5-2b' && ok "6 GB: the smallest row alone" || bad "6 GB spark line"
 printf '%s\n' "$out" | grep -qx 'ember: none' && ok "6 GB: no ember" || bad "6 GB ember line"
-printf '%s\n' "$out" | grep -q '^auto stops' && bad "6 GB: a cap note with nothing held back" || ok "6 GB: nothing held back, no cap note"
+printf '%s\n' "$out" | grep -q '^auto picks files under' && bad "6 GB: a cap note with nothing held back" || ok "6 GB: nothing held back, no cap note"
 # the package family is read from os-release, pinned like the kernel line:
 # on a macOS dev box the uname stub says Linux and the family must be said too
 printf 'ID=ubuntu\nID_LIKE=debian\nPRETTY_NAME="Ubuntu fixture"\n' > "$T/os-release-debian"
@@ -388,7 +388,7 @@ printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "hand-back dry run called su
 out=$(hb python3 -m spark.handback 2>&1) || bad "handback apply failed: $out"
 printf '%s\n' "$out" | grep -q "the look is off this machine now" && bad "hand-back said the look is off with a todo left" || ok "hand-back with a todo left: no closing line"
 [ "$(printf '%s\n' "$out" | grep -c '^todo')" = 2 ] && printf '%s\n' "$out" | grep -qE '^todo +handback +.*rc.local still paints' \
-    && printf '%s\n' "$out" | grep -qE "^todo +handback +the boot menu's wait stays as spark set it" \
+    && printf '%s\n' "$out" | grep -qE "^todo +handback +the boot menu's wait stays 0" \
     && ok "hand-back: your rc.local line and the loader's wait are said, never guessed (2 todo rows)" || bad "hand-back todo rows: $(printf '%s\n' "$out" | grep '^todo' | tr '\n' ' ')"
 [ ! -e "$H/home/.config/spark/console-colors" ] && [ ! -e "$H/home/.config/spark/console-colors.rgb" ] && [ ! -e "$H/etc/spark-console.service" ] \
     && grep -q '^setvtrgb vga$' "$H/log" && grep -q '^systemctl disable spark-console.service$' "$H/log" \

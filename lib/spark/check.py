@@ -1,7 +1,8 @@
 # spark.check -- is this machine still what its repository says it is?
 #
-# A report, not a monitor: `spark check` prints every row once and exits 0
-# iff nothing reproducible is broken. Rows are small functions registered
+# A report, not a monitor: `spark check` runs every row once, prints the
+# ones that need the user (`--all`: every row) and exits 0 iff nothing
+# reproducible is broken. Rows are small functions registered
 # with @row; each returns ok / warn / fail / na. CAPABILITY rows never fail
 # (they describe what the world offers, not what the repo promises), so the
 # exit code keeps one meaning.
@@ -131,20 +132,20 @@ class Ctx:
 @row("SOFTWARE", fixture=not IS_MAC, reason="the mac core installs no package; the Linux gates prove the row")
 def row_packages(ctx):
     if IS_MAC:
-        return ok("nothing required")
+        return ok("nothing to install")
     rc, out = ctx.sh(["sh", os.path.join(ctx.repo, "bootstrap.sh"), "--list-packages"], 30)
     if rc != 0:
-        return fail("bootstrap.sh --list-packages failed", "sh %s --list-packages" % ctx.short(os.path.join(ctx.repo, "bootstrap.sh")))
+        return fail("could not list the packages", "spark update")
     pkgs = out.split()
     if not pkgs:
-        return ok("nothing required")
+        return ok("nothing to install")
     have = packages.installed(pkgs)
     if have is None:
-        return fail("no package manager spark knows here (%s)" % (packages.manager() or "distro/*.env know debian, arch and void"), "./bootstrap.sh")
+        return fail("no package manager spark knows (%s)" % (packages.manager() or "apt, pacman or xbps"))
     missing = [p for p in pkgs if p not in have]
     if missing:
-        return fail("%d/%d missing: %s" % (len(missing), len(pkgs), " ".join(missing[:6])), "./bootstrap.sh")
-    return ok("%d/%d installed" % (len(pkgs), len(pkgs)))
+        return fail("%d of %d missing: %s" % (len(missing), len(pkgs), " ".join(missing[:6])), "spark update")
+    return ok("all %d installed" % len(pkgs))
 
 
 @row("SOFTWARE")
@@ -153,20 +154,21 @@ def row_configs(ctx):
     rc, out = ctx.sh(["sh", script, "--dry-run"], 60)
     lines = out.splitlines()
     if rc != 0:
-        return fail("install.sh --dry-run failed: %s" % (lines[-1] if lines else "no output"), "sh %s --dry-run" % ctx.short(script))
+        return fail("could not check the files: %s" % (lines[-1] if lines else "no output"), "spark update")
     would = [re.match(r"^would (?:link|render|back up)\s+(.*)$", l) for l in lines if l.startswith("would")]
     done = [l for l in lines if l.startswith("ok ")]
     if would:
-        names = sorted({ctx.short(m.group(1)) for m in would if m})
-        return fail("%d not in place: %s" % (len(would), ", ".join(names[:3])), "sh %s" % ctx.short(script))
-    return ok("%d files linked or rendered" % len(done))
+        names = sorted({os.path.basename(m.group(1)) for m in would if m})
+        more = ", and %d more" % (len(names) - 2) if len(names) > 2 else ""
+        return fail("%d not in place: %s%s" % (len(would), ", ".join(names[:2]), more), "spark update")
+    return ok("%d files in place" % len(done))
 
 
 @row("SOFTWARE")
 def row_tools(ctx):
     rc, out = ctx.sh(["sh", os.path.join(ctx.repo, "bootstrap.sh"), "--list-tools"], 30)
     if rc != 0:
-        return fail("bootstrap.sh --list-tools failed", "./bootstrap.sh")
+        return fail("could not list the tools", "spark update")
     bad, names = [], []
     for line in out.splitlines():
         if "\t" not in line:
@@ -177,11 +179,11 @@ def row_tools(ctx):
         if not os.path.islink(link) or os.path.realpath(link) != os.path.realpath(os.path.join(ctx.repo, rel)):
             bad.append(name)
     if bad:
-        return fail("not linked into ~/.local/bin: %s" % " ".join(bad), "./bootstrap.sh")
+        return fail("not in ~/.local/bin: %s" % " ".join(bad), "spark update")
     found = shutil.which("spark")
     if found and os.path.realpath(found) != os.path.realpath(os.path.join(BIN_DIR, "spark")):
-        return warn("another spark shadows ~/.local/bin/spark: %s" % found, "put ~/.local/bin first on PATH")
-    return ok("%s linked into ~/.local/bin" % " ".join(names))
+        return warn("another spark comes first on PATH: %s" % found, "put ~/.local/bin first on PATH")
+    return ok("%s in ~/.local/bin" % " and ".join(names))
 
 
 ENGINE_FLAVOURS = ("macos-arm64", "macos-x64", "ubuntu-vulkan-x64", "ubuntu-x64", "ubuntu-vulkan-arm64", "ubuntu-arm64")
@@ -197,8 +199,8 @@ def row_engine(ctx):
     d = engine.engine_dir(ctx.cfg)
     if not os.access(os.path.join(d, "llama-server"), os.X_OK):
         if ctx.cfg.model_choice.strip().lower() == "none":
-            return na("no model chosen -- spark model NAME brings the engine with it")
-        return fail("no llama-server in %s" % ctx.short(d), "./bootstrap.sh   (row engine)")
+            return na("no model chosen", "spark model NAME")
+        return fail("missing", "spark update")
     flavour = ""
     try:
         with open(os.path.join(d, "flavour"), encoding="utf-8") as f:
@@ -211,15 +213,15 @@ def row_engine(ctx):
     elif IS_MAC and d in ("/opt/homebrew/bin", "/usr/local/bin"):
         name, where = d, "Homebrew"
     elif os.path.dirname(d) == ENGINE_DIR:
-        name, where = os.path.basename(d), ctx.short(ENGINE_DIR)
+        name, where = os.path.basename(d), ""
     else:
         # a llama-server this machine already had (facts probed PATH and
         # the system dirs): spark has no pin here, so it serves with yours
         name, where = ctx.short(d), "your build"
     build = engine.backend(ctx.cfg)
     if not ctx.cfg.engine_dir and flavour.startswith("ubuntu-") and ("vulkan" in flavour) != (build == "vulkan"):
-        return warn("%s is the %s build, but the build here is %s now" % (name, "vulkan" if "vulkan" in flavour else "cpu", build),
-                    "./bootstrap.sh   (replaces the engine)")
+        return warn("the %s build is here, this machine wants %s" % ("vulkan" if "vulkan" in flavour else "cpu", build),
+                    "spark update")
     return ok(" ".join(x for x in (name, flavour, "(%s)" % where if where else "") if x))
 
 
@@ -230,7 +232,7 @@ def row_git(ctx):
         ctx.sh(g + ["fetch", "-q"], 30)
     rc, out = ctx.sh(g + ["status", "--porcelain"], 20)
     if rc != 0:
-        return fail("not a git repository: %s" % ctx.short(ctx.repo), "git clone it again")
+        return fail("not a git checkout: %s" % ctx.short(ctx.repo), "run the install line again")
     rc, _ = ctx.sh(g + ["symbolic-ref", "-q", "HEAD"], 10)
     if rc != 0:
         # detached: a release clone. Currency is against the newest tag,
@@ -240,10 +242,10 @@ def row_git(ctx):
         rc3, cur = ctx.sh(g + ["describe", "--tags", "--exact-match"], 10)
         cur = cur.strip() if rc3 == 0 else ""
         if not cur:
-            return warn("detached, no tag found", "spark update")
+            return warn("not on a release", "spark update")
         if not newest or cur == newest:
-            return ok("at %s (the newest release)" % cur)
-        return warn("at %s, %s is out -- spark update" % (cur, newest), "spark update")
+            return ok("%s, the newest" % cur)
+        return warn("%s; %s is out" % (cur, newest), "spark update")
     dirty = len(out.splitlines())
     rc, out = ctx.sh(g + ["rev-list", "--left-right", "--count", "HEAD...@{upstream}"], 20)
     problems = []
@@ -258,8 +260,9 @@ def row_git(ctx):
         if behind:
             problems.append("%d behind origin" % behind)
     if problems:
-        return warn(", ".join(problems), "commit and push, or spark update" + ("" if ctx.fetch else "   (--fetch to ask origin)"))
-    return ok("clean and level with origin")
+        mine = dirty or rc != 0 or ahead
+        return warn(", ".join(problems), "commit and push" if mine else "spark update")
+    return ok("clean and pushed")
 
 
 @row("SOFTWARE", fixture=False,
@@ -271,22 +274,21 @@ def row_signed(ctx):
     g = ["git", "-C", ctx.repo]
     rc, _ = ctx.sh(g + ["rev-parse", "--git-dir"], 10)
     if rc != 0:
-        return na("not a git repository: no tag to verify")
+        return na("not a git checkout")
     rc, branch = ctx.sh(g + ["symbolic-ref", "-q", "--short", "HEAD"], 10)
     if rc == 0:
-        return na("on %s: a developer clone, no tag to verify" % branch.strip())
+        return na("on branch %s, not a release" % branch.strip())
     rc, cur = ctx.sh(g + ["describe", "--tags", "--exact-match"], 10)
     if rc != 0:
-        return na("detached at an untagged commit: no tag to verify")
+        return na("not on a release")
     cur = cur.strip()
     from .update import verified
     who, why = verified(cur, ctx.repo)
     if who:
         return ok("%s signed by %s" % (cur, who))
     if why.startswith("not signed"):
-        return warn("%s is not signed: spark update refuses unsigned tags" % cur,
-                    "release it signed: git tag -s   (CLAUDE.md, Releasing)")
-    return warn("%s %s" % (cur, why), "openssh and git >= 2.34 verify a release tag")
+        return warn("%s is not signed" % cur, "spark update")
+    return warn("%s %s" % (cur, why), "install openssh and git 2.34 or newer")
 
 
 @row("SOFTWARE")
@@ -296,8 +298,9 @@ def row_hooks(ctx):
     want = os.path.join(ctx.repo, ".githooks")
     got = out.strip()
     if rc == 0 and (got == ".githooks" or os.path.abspath(os.path.join(ctx.repo, got)) == want):
-        return ok("commits gated by .githooks")
-    return fail("core.hooksPath is not .githooks", "./bootstrap.sh   (or: git -C %s config core.hooksPath .githooks)" % ctx.short(ctx.repo))
+        return ok("commit hooks on")
+    return fail("commit hooks off", "spark update")
+
 
 
 def _systemd_user(ctx, unit):
@@ -315,7 +318,7 @@ def _systemd_user(ctx, unit):
 
 # runit without a booted /var/service (a container): bootstrap's `skip
 # runit` row says the same words
-RUNIT_NOT_LIVE = "runit is not running here (a container): the services wait for a machine that boots"
+RUNIT_NOT_LIVE = "runit is not running here (a container)"
 
 
 def _runit_user(ctx, unit):
@@ -337,6 +340,16 @@ def _runit_user(ctx, unit):
     return en, {"run": "active", "finish": "restarting"}.get(st, "inactive")
 
 
+def _unit_word(en, ac):
+    """A unit's state as a person says it: on, restarting, else the
+    manager's own two words (they name what to look at)."""
+    if en == "enabled" and ac == "active":
+        return "on"
+    if en == "enabled" and ac == "restarting":
+        return "restarting"
+    return "%s, %s" % (en, ac)
+
+
 @row("SOFTWARE")
 def row_services(ctx):
     if IS_MAC:
@@ -356,21 +369,23 @@ def row_services(ctx):
             if rc == 0:
                 return "loaded"
             return "installed" if os.path.exists(os.path.join(agents, label + ".plist")) else "absent"
+        words = {"loaded": "on", "daemon": "on from boot", "disabled": "off", "absent": "on demand",
+                 "installed": "not loaded"}
         s = state("spark.check")
-        parts.append("check %s" % {"daemon": "loaded (daemon)"}.get(s, s))
+        parts.append("check %s" % words.get(s, s))
         if s not in ("loaded", "daemon"):
             worst = FAIL
         s = state("spark.serve")
-        parts.append("serve %s" % {"loaded": "loaded", "daemon": "loaded (daemon)", "disabled": "disabled on purpose", "absent": "on demand", "installed": "installed, not loaded"}[s])
+        parts.append("serve %s" % words[s])
         if s == "installed":
             worst = FAIL
         # the FORGE: absent or disabled is "off" (SPARK_FORGE=off, or auto
         # with nothing served); a plist that sits there unloaded is broken
         s = state("spark.forge")
-        parts.append("forge %s" % {"loaded": "loaded", "daemon": "loaded (daemon)", "installed": "installed, not loaded"}.get(s, "off"))
+        parts.append("forge %s" % (words[s] if s in ("loaded", "daemon", "installed") else "off"))
         if s == "installed":
             worst = FAIL
-        remedy = "./bootstrap.sh" if worst == FAIL else ""
+        remedy = "spark update" if worst == FAIL else ""
         return Row(worst, SEP.join(parts), remedy)
     from . import engine
     runit = init_shape() == "runit"
@@ -380,14 +395,14 @@ def row_services(ctx):
         if not runit_live():
             return na(RUNIT_NOT_LIVE)
         en, ac = _runit_user(ctx, "check")
-        parts = ["check service %s, %s" % (en, ac)]
+        parts = ["check %s" % _unit_word(en, ac)]
     else:
         en, ac = _systemd_user(ctx, "spark-check.timer")
         if not en:
             if is_wsl():
-                return na("no user systemd session (WSL 2)", "[boot] systemd=true in /etc/wsl.conf; wsl --shutdown from Windows; ./bootstrap.sh")
-            return na("no user systemd session (headless or container)")
-        parts = ["check timer %s, %s" % (en, ac)]
+                return na("no user systemd (WSL 2)", "[boot] systemd=true in /etc/wsl.conf; wsl --shutdown; spark update")
+            return na("no user systemd here")
+        parts = ["check %s" % _unit_word(en, ac)]
     worst, remedies = OK, []
     if en != "enabled" or ac not in ("active", "restarting"):
         worst = FAIL
@@ -399,28 +414,28 @@ def row_services(ctx):
     if sen == "enabled":
         if sac != "active":
             if engine.server_pids(ctx.cfg.port):
-                parts.append("serve unit inactive; a hand-started server answers")
-                remedies.append("spark serve off; spark serve on   (to hand it back to the unit)")
+                parts.append("serve started by hand")
+                remedies.append("spark serve off; spark serve on")
             else:
                 parts.append("serve %s" % sac)
                 remedies.append(engine.restart_line("serve"))
             worst = WARN if worst == OK else worst
         else:
-            parts.append("serve active")
+            parts.append("serve on")
     elif sen == "disabled":
-        parts.append("serve disabled on purpose")
+        parts.append("serve off")
     else:
         parts.append("serve on demand")
     # the FORGE: enabled and running, enabled but down (warn), or off
     fen, fac = _runit_user(ctx, "forge") if runit else _systemd_user(ctx, "spark-forge.service")
     if fen == "enabled":
-        parts.append("forge %s" % ("active" if fac == "active" else fac))
+        parts.append("forge %s" % ("on" if fac == "active" else fac))
         if fac != "active":
             remedies.append(engine.restart_line("forge"))
             worst = WARN if worst == OK else worst
     else:
         parts.append("forge off")
-    remedy = "./bootstrap.sh" if worst == FAIL else "; ".join(remedies) if worst == WARN else ""
+    remedy = "spark update" if worst == FAIL else "; ".join(remedies) if worst == WARN else ""
     return Row(worst, SEP.join(parts), remedy)
 
 
@@ -431,27 +446,23 @@ def row_services(ctx):
 def row_ai(ctx):
     from . import engine
     parts, missing = [], []
-    b = engine.engine_bin(ctx.cfg)
-    if b:
-        parts.append("engine %s" % ctx.short(os.path.dirname(b)))
-    else:
-        missing.append("llama-server")
+    if not engine.engine_bin(ctx.cfg):
+        missing.append("the engine")
     m = engine.model_file(ctx.cfg)
     e = engine.model_file(ctx.cfg, "ember")
-    if m and e:
-        parts.append("spark %s %.1f GB, chat model %s %.1f GB" % (
-            engine.model_stem(m), os.path.getsize(m) / 2**30, engine.model_stem(e), os.path.getsize(e) / 2**30))
-    elif m:
-        parts.append("model %s (%.1f GB)" % (engine.model_stem(m), os.path.getsize(m) / 2**30))
+    if m:
+        parts.append("%s %.1f GB" % (config.model_name(m), os.path.getsize(m) / 2**30))
     else:
-        missing.append("a model in %s" % ctx.short(ctx.cfg.models_dir))
+        missing.append("a model")
+    if m and e:
+        parts.append("chat %s %.1f GB" % (config.model_name(e), os.path.getsize(e) / 2**30))
     if m and not e and engine.chosen_model_name(ctx.cfg, "ember"):
-        missing.append("the chat model %s" % engine.chosen_model_name(ctx.cfg, "ember").replace(".gguf", ""))
+        missing.append("the chat model %s" % config.model_name(engine.chosen_model_name(ctx.cfg, "ember")))
     if not which("spark"):
         missing.append("spark on PATH")
     if missing:
-        return warn("missing: %s" % ", ".join(missing), "./bootstrap.sh   (or SITE_AI_MODEL / SPARK_ENGINE_DIR in your config)")
-    return ok(SEP.join(parts))
+        return warn("missing: %s" % ", ".join(missing), "spark update")
+    return ok(", ".join(parts))
 
 
 def which(name):
@@ -493,9 +504,9 @@ def row_models(ctx):
     bad = [r for r in rows if r["status"] == "bad"]
     if bad:
         names = ", ".join(r["name"] for r in bad)
-        return warn("sha256 mismatch: %s -- spark model rm %s; spark model %s" % (names, bad[0]["name"], bad[0]["name"]))
+        return warn("damaged: %s" % names, "spark model rm %s; spark model %s" % (bad[0]["name"], bad[0]["name"]))
     age = _short_age(time.time() - min(r["at"] for r in rows))
-    return ok("%d files, sha256 ok (checked %s)" % (len(rows), age))
+    return ok("%d file%s intact, checked %s ago" % (len(rows), "" if len(rows) == 1 else "s", age))
 
 
 def _brain(ctx):
@@ -516,27 +527,26 @@ def row_prompt(ctx):
     files = [os.path.join(ctx.home, ".config", "spark", "widget." + sh) for sh in ("bash", "zsh")]
     absent = [os.path.basename(f) for f in files if not os.path.isfile(f)]
     if absent:
-        return warn("missing: %s" % " ".join(absent), "sh install.sh")
+        return warn("missing: %s" % " ".join(absent), "spark update")
     # the rc hook: the one marked line in the rc file, or not
     shell = site.login_shell()
     state, rc = site.rc_hook_state(shell)
     if state == "missing":
         if rc is None:
-            return warn("shell %s: no prompt line for it" % shell, "bash 4+ or zsh hosts one (chsh -s /bin/zsh)")
-        return warn("%s lacks the spark line" % ctx.short(rc), "./bootstrap.sh   (row rc), or paste: " + site.RC_LINE[shell])
-    via = "%s (hook)" % ctx.short(rc)
+            return warn("%s has no prompt line (bash 4+ or zsh do)" % shell, "chsh -s /bin/zsh")
+        return warn("%s lacks the spark line" % ctx.short(rc), "spark update")
     live = cli.live_widgets()
     if os.path.exists(OFF_FLAG):
-        return na("switched off on purpose (spark on)")
+        return na("switched off", "spark on")
     if not live:
         if ctx.cfg.headless:
-            return na("headless: no interactive shell open (the prompt works when one is)")
-        return warn("no shell has sourced the prompt line", "open a new shell (the rc file sources ~/.config/spark/widget.*)")
+            return na("no shell open")
+        return warn("no shell has it yet", "exec $SHELL")
     url, model = _brain(ctx)
     who = ", ".join("%s %d" % (s, p) for s, p in live[:3])
     if not url:
-        return na("prompt line in %s -- %s" % (who, model), model)
-    return ok("%s; prompt line in %s -- %s at %s" % (via, who, model, url.split("//")[-1]))
+        return na("in %s, no model answers" % who, model)
+    return ok("in %s, %s answers" % (who, config.model_name(model)))
 
 
 @row("CAPABILITY")
@@ -556,9 +566,9 @@ def row_failure(ctx):
         except OSError:
             stale.append("widget." + sh)
     if stale:
-        return warn("no exit-code hook in: %s" % ", ".join(stale), "sh install.sh")
+        return warn("old widget: %s" % ", ".join(stale), "spark update")
     if os.path.exists(OFF_FLAG):
-        return na("switched off on purpose (spark on)")
+        return na("switched off", "spark on")
     armed, old = [], 0
     try:
         names = os.listdir(WIDGETS_DIR)
@@ -576,12 +586,12 @@ def row_failure(ctx):
         else:
             old += 1
     if old:
-        return warn("%d shell(s) predate the exit-code hook" % old, "exec $SHELL there")
+        return warn("%d old shell%s open" % (old, "" if old == 1 else "s"), "exec $SHELL in each")
     if not armed:
         if ctx.cfg.headless:
-            return na("headless: no interactive shell open (armed when one is)")
-        return warn("no shell has sourced the prompt line", "open a new shell")
-    return ok("armed in %s -- a nonzero exit offers explain (Esc s)" % ", ".join(armed[:3]))
+            return na("no shell open")
+        return warn("no shell has it yet", "exec $SHELL")
+    return ok("on in %s (Esc s explains a failure)" % ", ".join(armed[:3]))
 
 
 @row("CAPABILITY")
@@ -603,8 +613,9 @@ def row_completion(ctx):
         except OSError:
             missing.append("hook." + sh)
     if missing:
-        return warn("missing: %s" % ", ".join(missing), "sh install.sh")
-    return ok("bash and zsh: the verbs, their words, model names")
+        return warn("missing: %s" % ", ".join(missing), "spark update")
+    return ok("bash and zsh")
+
 
 
 @row("CAPABILITY")
@@ -612,39 +623,40 @@ def row_serve(ctx):
     from . import SERVE_URL_FILE, engine, lan_ip, wire
     tok = ctx.cfg.token_file
     if os.path.exists(tok) and os.stat(tok).st_mode & 0o077:
-        return warn("token file is not 0600", "chmod 600 %s" % ctx.short(tok))
+        return warn("its token is not private", "chmod 600 %s" % ctx.short(tok))
     st = engine.service_state(ctx.cfg)
     url = wire.serve_url()
     if not url:
-        return na({"loaded": "managed, but has not written serve-url yet", "disabled": "off on purpose",
-                   "absent": "on demand, not running"}[st], "spark serve on" if st != "disabled" else "")
+        return na({"loaded": "starting", "disabled": "off", "absent": "not running"}[st],
+                  "spark serve on" if st != "disabled" else "")
     h = wire.health(url)
     host = url.split("//")[-1].split(":")[0]
     if h == "ok":
         ip = lan_ip()
         if ip and host not in (ip, "127.0.0.1", "localhost"):
-            return warn("moved: serving on %s but the LAN address is now %s (DHCP)" % (host, ip),
+            return warn("serving on %s, but this machine is %s now" % (host, ip),
                         "spark serve off; spark serve on" if st == "absent" else engine.restart_line("serve"))
         try:
             served = wire.models(ctx.cfg, url)
         except wire.BrainError:
             served = []
-        stem = next((s for a, s, _l in served if a == "spark"), served[0][1] if served else "?")
-        shape = "router, %d models" % len(served) if len(served) > 1 else "single"
-        where = "serving at %s (%s, %s" % (url.split("//")[-1], stem, shape)
+        names = []
+        for a, s, _l in sorted(served, key=lambda x: x[0] != "spark"):
+            n = config.model_name(s)
+            if n not in names:
+                names.append(n)
+        where = "at %s, %s" % (url.split("//")[-1], " and ".join(names) or "no model listed")
         argv = engine.live_args(ctx.cfg)
         if argv is None:
-            return ok(where + ")")
+            return ok(where)
         cache = engine.host_cache(argv)
-        if cache == "0":
-            return ok(where + ", no host cache)")
-        if cache and "--cache-ram" in ctx.cfg.extra_args:
-            return ok(where + ", host cache %s MiB from SPARK_EXTRA_ARGS)" % cache)
-        return warn(where + ") but the prompt cache in RAM is on: an older start",
+        if cache == "0" or (cache and "--cache-ram" in ctx.cfg.extra_args):
+            return ok(where)
+        return warn(where + ", started with old settings",
                     "spark serve off; spark serve on" if st == "absent" else engine.restart_line("serve"))
     if h == "loading":
         return warn("loading the model at %s" % url.split("//")[-1])
-    return warn("serve-url says %s but nothing answers" % url.split("//")[-1], "spark serve off   (clears it)")
+    return warn("nothing answers at %s" % url.split("//")[-1], "spark serve off")
 
 
 def _page_restart(ctx):
@@ -663,17 +675,17 @@ def row_forge(ctx):
     url = forge_url()
     if not url:
         if ctx.cfg.forge == "off":
-            return na("off on purpose (spark serve on)")
-        return na("not started (spark serve on)")
+            return na("off", "spark serve on")
+        return na("not started", "spark serve on")
     problems, loose = [], []
     tok = ctx.cfg.forge_token_file
     if not os.path.exists(tok) or os.stat(tok).st_mode & 0o077:
-        problems.append("forge-token is not 0600")
+        problems.append("its token is not private")
         loose.append(ctx.short(tok))
     if "0.0.0.0" in url:
-        problems.append("bound to 0.0.0.0")
+        problems.append("open on every address")
     if problems:
-        return warn("; ".join(problems), "chmod 600 %s; %s   (SPARK_FORGE_HOST picks the address)"
+        return warn("; ".join(problems), "chmod 600 %s; %s"
                     % (" ".join(loose or [ctx.short(ctx.cfg.forge_token_file)]), _page_restart(ctx)))
     where = url.split("//")[-1]
     host = where.split(":")[0]
@@ -681,21 +693,19 @@ def row_forge(ctx):
     if isinstance(fh, dict):
         ip = lan_ip()
         if ip and host not in (ip, "127.0.0.1", "localhost"):
-            return warn("moved: serving on %s but the LAN address is now %s (DHCP)" % (host, ip), _page_restart(ctx))
+            return warn("serving on %s, but this machine is %s now" % (host, ip), _page_restart(ctx))
         up = fh.get("upstream") or "down"
-        model = os.path.basename(str(fh.get("model") or "-")).replace(".gguf", "")
-        value = "at %s, model %s, upstream %s" % (where, model, up)
         if up != "ok":
-            return warn(value, "spark serve on")
+            return warn("at %s, but the engine is %s" % (where, up), "spark serve on")
         # a converge that moved the tree leaves the unit serving the OLD
         # code with every row green: the health's version must match
         ver, mine = str(fh.get("version") or ""), version.version()
         if ver and mine and ver != mine:
-            return warn("the page's server runs %s, the tree is %s" % (ver, mine), _page_restart(ctx))
-        return ok(value)
+            return warn("the page runs %s, spark is %s" % (ver, mine), _page_restart(ctx))
+        return ok("at %s, %s" % (where, config.model_name(str(fh.get("model") or "-"))))
     if fh is None:
-        return warn("forge-url says %s but what answers is not the page's server" % where, _page_restart(ctx))
-    return warn("forge-url says %s but nothing answers" % where, "spark serve on   (or spark serve off to forget it)")
+        return warn("something else answers at %s" % where, _page_restart(ctx))
+    return warn("nothing answers at %s" % where, "spark serve on")
 
 
 @row("CAPABILITY")
@@ -704,29 +714,29 @@ def row_ember(ctx):
     pair = engine.chosen_rows(ctx.cfg)
     er = pair.get("ember")
     if ctx.cfg.ember_model == "none" or not er:
-        return na("spark answers everything (spark model --chat NAME adds one)")
+        return na("no chat model", "spark model --chat NAME")
     budget = mem_total_gb() * ctx.cfg.ai_budget / 100.0
     need = er[5] + (pair["spark"][5] if pair.get("spark") else 0.0)
-    stem = er[1].replace(".gguf", "")
+    name = er[0]
     if need > budget:
-        return warn("spark and the chat model %.0f GB > budget %.0f GB" % (need, budget),
-                    "spark model --chat list   (a pair that fits)")
+        return warn("the two models need %.0f GB, the budget is %.0f GB" % (need, budget),
+                    "spark model --chat list")
     if not engine.model_file(ctx.cfg, "ember"):
-        return warn("%s not downloaded" % stem, "./bootstrap.sh   (downloads it)")
+        return warn("%s not downloaded" % name, "spark update")
     url = wire.serve_url()
     if url and wire.health(url) == "ok":
         st = engine.models_status(ctx.cfg, url).get("ember")
         if st and st != "loaded":
-            return warn("%s not warm" % stem, "spark serve on   (warms it)")
+            return warn("%s not loaded" % name, "spark serve on")
         if st == "loaded":
-            return ok("%s, loaded" % stem)
-    return ok(stem)
+            return ok("%s, loaded" % name)
+    return ok(name)
 
 
 @row("CAPABILITY")
 def row_peer(ctx):
     from . import wire
-    parts, worst, remedy = [], OK, "off the LAN, or the other machine is down"
+    parts, worst, remedy = [], OK, ""
     if ctx.cfg.peer_ai_url:
         # a FORGE answers /api/health (and 404 to /health); a raw llama-server the reverse
         host = ctx.cfg.peer_ai_url.split("//")[-1]
@@ -734,7 +744,7 @@ def row_peer(ctx):
         if isinstance(fh, dict):
             up = fh.get("upstream", "down")
             h = "ok" if up == "ok" else "up, its model %s" % up
-            parts.append("page's server %s %s" % (host, h))
+            parts.append("%s %s" % (host, h))
         else:
             h = "down" if fh == "down" else wire.health(ctx.cfg.peer_ai_url)
             parts.append("engine %s %s" % (host, h))
@@ -747,12 +757,12 @@ def row_peer(ctx):
             me = users.account()[0]
             if not me:
                 parts.append("no login")
-                worst, remedy = WARN, "spark user add NAME on %s (the token shows once), then spark user login NAME here" % host
+                worst, remedy = WARN, "spark user add NAME on %s, then spark user login NAME" % host
             else:
                 st = ctx.cached("peer-login", 300, lambda: _peer_status(ctx.cfg, "/api/threads?n=1"))
                 if st in (401, 403):
-                    parts.append("login %s rejected" % me)
-                    worst, remedy = WARN, "spark user add %s on %s (the token shows once), then spark user login %s here" % (me, host, me)
+                    parts.append("login %s refused" % me)
+                    worst, remedy = WARN, "spark user add %s on %s, then spark user login %s" % (me, host, me)
                 elif st == 200:
                     parts.append("login %s accepted" % me)
     if ctx.cfg.peer_ssh:
@@ -764,7 +774,7 @@ def row_peer(ctx):
         if rc != 0:
             worst = WARN
     if not parts:
-        return na("no peer configured (SITE_PEER_AI_URL / SITE_PEER_SSH)")
+        return na("no other machine named")
     return Row(worst, SEP.join(parts), remedy if worst == WARN else "")
 
 
@@ -800,10 +810,10 @@ def row_hardening(ctx):
     if not url:
         url = ctx.cfg.peer_ai_url
     if not url:
-        return na("no page served here and no other machine named (spark serve on, or spark client URL)")
+        return na("no page served here")
     where = url.split("//")[-1].rstrip("/")
     if not isinstance(wire.forge_health(url), dict):
-        return na("%s is not up as the page's server (the forge and peer rows say why)" % where)
+        return na("no page answers at %s" % where)
     v = ctx.cached("hardening", 3600, lambda: {"url": url, "gates": wire.probe_gates(url)})
     if not isinstance(v, dict) or v.get("url") != url:     # a moved forge: ask it now, cached next run
         v = {"url": url, "gates": wire.probe_gates(url)}
@@ -811,10 +821,10 @@ def row_hardening(ctx):
     held = [g for g in gates if g[1]]
     if len(held) != len(gates) or not gates:
         broken = [g for g in gates if not g[1]] or [("probe", False, "no gates answered")]
-        return warn("%d of %d gates hold at %s -- %s" % (len(held), len(gates), where,
-                                                          "; ".join("%s: %s" % (g[0], g[2]) for g in broken[:3])),
-                    _page_restart(ctx) + "   (the page's server must be this tree's; spark update)")
-    return ok("%d of %d gates hold at %s" % (len(held), len(gates), where))
+        return warn("%d of %d safety checks pass at %s: %s" % (len(held), len(gates), where,
+                                                                "; ".join("%s: %s" % (g[0], g[2]) for g in broken[:3])),
+                    _page_restart(ctx))
+    return ok("%d of %d safety checks pass at %s" % (len(held), len(gates), where))
 
 
 @row("CAPABILITY", fixture=False, reason="runs one real sandboxed step (bwrap or sandbox-exec); tests/sandbox_test.py proves it")
@@ -844,22 +854,21 @@ def row_voice(ctx):
     s = voice.status(ctx.cfg, ctx.repo)
     m = s["mode"]
     if m == "off":
-        return na("off", "spark voice clear  (reads aloud; spark voice on speaks in its own voice)")
+        return na("off", "spark voice clear   (reads aloud)")
     if not s["pinned"]:
-        return warn("%s, but no voice runtime is pinned for this machine" % m)
+        return warn("%s, but there is no voice download for this machine" % m)
     if s["missing"]:
-        return warn("%s, but the engine is not here or not its pin: %s (%d MB)"
-                    % (m, ", ".join(s["missing"]), s["missing_mb"]), "spark voice %s" % m)
+        return warn("%s, but parts are missing: %s (%d MB)" % (m, ", ".join(s["missing"]), s["missing_mb"]),
+                    "spark voice %s" % m)
     if not s["player"]:
-        return warn("%s, but no player on PATH: nothing can be heard" % m,
-                    "%s (aplay)" % packages.install_line(["alsa-utils"]))
+        return warn("%s, but nothing here can play sound" % m, packages.install_line(["alsa-utils"]))
     if m == "on" and not s["recipe"]:
-        return warn("on, but this machine has no voice of its own yet", "spark awaken")
-    said = "%s -- the engine, %s, the listener" % (m, s["player"])
+        return warn("on, but no voice of its own yet", "spark awaken")
+    said = "%s, plays with %s" % (m, s["player"])
     if not IS_MAC and not s["capture"]:
-        said += ", no capture device"
+        said += ", no microphone"
     if s["reader"] and m == "clear":
-        said += "; %s runs, so clear %s" % (s["reader"], "speaks too (--anyway)" if s["anyway"] else "stays silent")
+        said += "; %s reads, so spark %s" % (s["reader"], "speaks too" if s["anyway"] else "stays silent")
     elif s["reader"]:
         said += "; %s runs too" % s["reader"]
     return ok(said)
@@ -883,12 +892,12 @@ def row_throughput(ctx):
     # the prompt line's pace, when spark bench --line measured one: said
     # beside the tok/s, never judged -- the status stays the tok/s one's
     lp = bench.line_pace()
-    tail = ("; the line: %s (spark bench --line)" % bench.line_words(lp)) if lp else ""
+    tail = ("; the line in %.1f s" % (lp.get("ready_ms", 0) / 1000.0)) if lp else ""
     if not live:
-        return na("no model served here" + tail)
+        return na("no model served here")
     base = bench.baseline(ctx.cfg)
     if not base:
-        return na("no bench yet (spark bench)" + tail)
+        return na("not measured yet", "spark bench")
     # recent turns only for a live model -- a turn naming a model no
     # longer served says nothing about the throughput now, and is
     # dropped; a turn with no model field (an old record) counts toward
@@ -900,22 +909,23 @@ def row_throughput(ctx):
         groups.setdefault(t.get("model") or live[0], []).append(t)
     parts, slow = [], []
     for stem in live:
+        name = config.model_name(stem)
         b = bench.baseline_stem(stem)
         if b is None or not b.get("tg"):
-            parts.append("%s no bench (spark bench)" % stem)
+            parts.append("%s not measured" % name)
             continue
         ts = groups.get(stem, [])
         if len(ts) < 3:
-            parts.append("%s bench %.1f tok/s, no recent turns yet" % (stem, b["tg"]))
+            parts.append("%s %.1f tok/s" % (name, b["tg"]))
             continue
         mean = sum(t["tg_tps"] for t in ts) / len(ts)
-        parts.append("%s %.1f vs %.1f recent vs bench" % (stem, mean, b["tg"]))
+        parts.append("%s %.1f tok/s, measured %.1f" % (name, mean, b["tg"]))
         if mean < 0.7 * b["tg"]:
             slow.append(stem)
     if slow:
-        return warn("%s -- below 70%% of the bench; on the CPU? (spark stats)%s" % ("; ".join(parts), tail),
+        return warn("%s: slower than measured" % "; ".join(parts),
                     "spark bench tune show; spark bench --tune")
-    return ok("; ".join(parts) + (" tok/s" if any("vs" in p for p in parts) else "") + tail)
+    return ok("; ".join(parts) + tail)
 
 
 @row("CAPABILITY")
@@ -925,10 +935,10 @@ def row_gpu(ctx):
     build = engine.backend(ctx.cfg)
     if not g:
         if IS_MAC:
-            return na("%s build; no root-free GPU counter on macOS" % build)
+            return na("%s; macOS shows no GPU numbers" % build)
         if is_wsl():
-            return na("%s build; the GPU is not reached through WSL 2 today" % build)
-        return na("%s build: no GPU counters in sysfs" % build)
+            return na("%s; WSL 2 does not reach the GPU" % build)
+        return na("%s; no GPU numbers here" % build)
     node = "/dev/dri/renderD128"
     if not IS_MAC and os.path.exists(node) and not os.access(node, os.R_OK | os.W_OK):
         # runit: the services take their groups from runsvdir-USER when it
@@ -937,20 +947,20 @@ def row_gpu(ctx):
         again = ("sudo sv restart runsvdir-%s" % (os.environ.get("USER") or ctx.cfg.user)
                  if runit else "log out of every session and in again")
         if engine.render_wrap(["x"])[0] == "sg":
-            return ok("card present; in the render group since the services started -- they use sg render until runsvdir restarts"
-                      if runit else "card present; in the render group since this login -- servers use sg render until you log in again")
-        return warn("GPU present but %s is not readable: new servers fall back to the CPU" % node,
-                    "./bootstrap.sh adds you to the render group; then " + again)
+            return ok("GPU in use")
+        return warn("the GPU is not yours to use: new servers use the CPU",
+                    "spark update; then " + again)
     files = [f for f in engine.roles(ctx.cfg).values() if f and os.path.isfile(f)]
     size = sum(os.path.getsize(f) for f in files)
-    vram, gtt = g.get("vram_total", 0), g.get("gtt_total", 0)
+    vram = g.get("vram_total", 0)
     if size and vram and size > vram:
-        word = "both models" if len(files) > 1 else "model"
-        return warn("%s %.1f GB > VRAM %.1f GB: it spills to GTT (%.1f GB) -- raise the BIOS UMA frame buffer" % (word, size / 2**30, vram / 2**30, gtt / 2**30),
-                    "docs/INSTALL.md, per-OS notes; then spark bench")
+        word = "the models" if len(files) > 1 else "the model"
+        return warn("%s %.1f GB, the GPU %.1f GB: it spills to slower memory" % (word, size / 2**30, vram / 2**30),
+                    "raise the UMA frame buffer in the BIOS, then spark bench")
     chosen = " (SITE_AI_BUILD=%s)" % ctx.cfg.ai_build if ctx.cfg.ai_build in ("cpu", "vulkan") else ""
-    return ok("%s: %.1f GB VRAM, %.1f GB GTT, %d%% busy; %s build%s" % (
-        g.get("name", "gpu"), vram / 2**30, gtt / 2**30, g.get("busy", 0), build, chosen))
+    return ok("%s, %.1f GB, %d%% busy, %s%s" % (
+        g.get("name", "gpu"), vram / 2**30, g.get("busy", 0), build, chosen))
+
 
 
 @row("CAPABILITY")
@@ -962,7 +972,7 @@ def row_soul(ctx):
     except OSError:
         st = None
     if st is None and not ctx.cfg.persona_extra.strip():
-        return na("built-in -- spark soul edit makes it yours")
+        return na("built in", "spark soul edit")
     if st is not None and st.st_mode & 0o044:
         problems.append("readable by others")
     n = 0
@@ -988,20 +998,19 @@ def row_look(ctx):
     every line of the words and faces files one spark would print."""
     from . import look
     if not look.awake():
-        return na("not awakened -- spark awaken gives this machine a personality and a look")
+        return na("not awake", "spark awaken")
     bad = look.refused()
     if bad:
         name, n = bad[0]
         more = " and %d more" % (len(bad) - 1) if len(bad) > 1 else ""
-        return warn("line %d of the %s file%s will never print (an escape, a secret, or too long)" % (n, name, more),
-                    "spark words edit")
+        return warn("line %d of the %s file%s cannot print" % (n, name, more), "spark words edit")
     try:
         with open(look.LOOK_FILE, encoding="utf-8") as f:
             have = f.read()
     except OSError:
         have = ""
     if have != look.content(ctx.cfg, True):
-        return warn("the look file is older than spark.env or the faces file", "spark look")
+        return warn("out of date", "spark look")
     return ok("awake: look %s, height %d" % (look.setting(ctx.cfg), look.height(ctx.cfg)))
 
 
@@ -1009,19 +1018,19 @@ def row_look(ctx):
 def row_memory(ctx):
     from . import MEMORY_FILE, memory
     if not ctx.cfg.memory:
-        return na("off (spark memory on)")
+        return na("off", "spark memory on")
     sealed = memory.sealed_exists()
     try:
         st = os.stat(MEMORY_FILE)
     except OSError:
         st = None
     if st is None and not sealed:
-        return ok("nothing kept yet (spark memory add ...)")
+        return ok("empty")
     problems = []
     if st is not None and st.st_mode & 0o044:
         problems.append("readable by others")
     if st is not None and sealed:
-        problems.append("pre-v1.4 plaintext beside the sealed memory")
+        problems.append("an old plain copy beside it")
     facts = memory._all_facts()
     if len(facts) > memory.FACTS_MAX:
         problems.append("%d facts, %d are sent" % (len(facts), memory.FACTS_MAX))
@@ -1043,7 +1052,7 @@ def row_ledger(ctx):
     from . import ledger, vault
     path = ledger.path()
     if not path or not os.path.exists(path):
-        return ok("nothing weighed yet (%s)" % ", ".join(sorted(ledger.RULES)))
+        return ok("empty")
     st = os.stat(path)
     problems = []
     if st.st_mode & 0o077:
@@ -1062,25 +1071,25 @@ def row_ledger(ctx):
         return warn("%d records, %d are kept" % (total, ledger.TOTAL_MAX),
                     "spark edit --ledger clear; spark ask --ledger clear; spark read --ledger clear")
     if not total:
-        return ok("sealed, empty (%s)" % ", ".join(sorted(ledger.RULES)))
-    return ok("sealed, %s (%d of %d)" % (", ".join("%d %s" % (n, k) for k, n in sorted(counts.items())),
-                                         total, ledger.TOTAL_MAX))
+        return ok("empty, sealed")
+    return ok("%d note%s, sealed" % (total, "" if total == 1 else "s"))
 
 
 def _read_ago(seconds):
-    """read 5 minutes ago / read 3 hours ago / read 2 days ago -- an age in
+    """read 5 min ago / read 3 hours ago / read 2 days ago -- an age in
     whole units, as a person says it (the knowledge row)."""
     m = max(0, int(seconds)) // 60
     if m < 1:
         return "read just now"
-    for n, one in ((m // 1440, "day"), (m // 60, "hour"), (m, "minute")):
+    if m < 60:
+        return "read %d min ago" % m
+    for n, one in ((m // 1440, "day"), (m // 60, "hour")):
         if n >= 1:
             return "read %d %s%s ago" % (n, one, "" if n == 1 else "s")
 
 
-# the kinds intake counts, in the words the row says them
-KNOWLEDGE_KINDS = (("program", "program"), ("manual", "manual"), ("app", "app"), ("service", "service"),
-                   ("spark", "spark verb"))
+# the kinds the row names, in its words: what a person recognises
+KNOWLEDGE_KINDS = (("program", "program"), ("manual", "manual"))
 
 
 @row("CAPABILITY")
@@ -1094,23 +1103,20 @@ def row_knowledge(ctx):
     command), and a missing index is never built here -- bootstrap builds
     it -- so --porcelain stays fast."""
     if not ctx.cfg.knowledge:
-        return na("switched off in spark.env (SPARK_KNOWLEDGE=off)")
+        return na("off (SPARK_KNOWLEDGE=off)")
     from . import intake
-    fix = "./bootstrap.sh   (row knowledge)"
-    counts, built, stale, skipped = intake.status()
+    fix = "spark update"
+    counts, built, stale, _skipped = intake.status()
     if built is not None and ctx.unattended:
-        counts, built, stale, skipped = intake.refresh(deadline=5)
+        counts, built, stale, _skipped = intake.refresh(deadline=5)
     if built is None:
-        return warn("no index yet, so the prompt line answers from the model alone", fix)
+        return warn("not built yet", fix)
     ago = _read_ago(time.time() - built)
     if stale:
-        return warn("%s, and the newest programs are not in it yet" % ago, fix)
+        return warn("%s, new programs missing" % ago, fix)
     parts = ["%d %s%s" % (counts[k], word, "" if counts[k] == 1 else "s")
              for k, word in KNOWLEDGE_KINDS if isinstance(counts.get(k), int)]
-    said = (", ".join(parts[:-1]) + " and " + parts[-1]) if len(parts) > 1 else (parts[0] if parts else "an empty index")
-    tail = (", and %d program%s left out because spark could not read %s safely"
-            % (skipped, " was" if skipped == 1 else "s were", "it" if skipped == 1 else "them")) if skipped else ""
-    return ok("%s, %s%s" % (said, ago, tail))
+    return ok("%s, %s" % (", ".join(parts) or "empty", ago))
 
 
 @row("CAPABILITY", fixture=False, reason="reads the live battery")
@@ -1209,11 +1215,9 @@ def row_privacy(ctx):
     if problems:
         fix = "chmod 700 %s; chmod 600 %s %s%s" % (ctx.short(STATE_DIR), ctx.short(tok), ctx.short(SITE_ENV), loose)
         return warn("; ".join(problems), fix)
-    # a word list is the maintainer's tool, not a promise to a new user: none
-    # is fine, and the row says where one would go
-    words = ("no banned words (%d watched)" % len(terms)) if terms else \
-        ("no word list (optional: %s)" % ctx.short(privacy_terms_file(ctx.cfg)))
-    return ok("state 0700, token 0600, site.env private, %s, one address" % words)
+    # a word list is the maintainer's tool, not a promise to a new user:
+    # none is fine, and the row says nothing of it
+    return ok("files private" + (", %d words watched" % len(terms) if terms else ""))
 
 
 @row("NONFUNCTIONAL")
@@ -1235,7 +1239,7 @@ def row_sends(ctx):
     if strange:
         dest, b = strange[0]
         return warn("%s went to %s today, not the address you configured" % (stats.kb(b), dest),
-                    "spark stats --sends; spark status   (SPARK_BASE_URL / SITE_PEER_AI_URL name the destination)")
+                    "spark stats --sends")
     return ok(", ".join("%s to %s" % (stats.kb(b), dest) for _day, dest, b, _n in rows) + " today")
 
 
@@ -1249,9 +1253,9 @@ def row_users(ctx):
     names = users.list_users()
     me = users.account()[0]
     if not names and not me:
-        return na("no users yet (spark user add NAME)")
+        return na("no users yet", "spark user add NAME")
     if not names:
-        return ok("no store here; this machine is %s" % me)
+        return ok("logged in as %s" % me)
     problems, unsealed = [], 0
     if os.stat(USERS_DIR).st_mode & 0o077:
         problems.append("users dir not 0700")
@@ -1285,7 +1289,7 @@ def row_users(ctx):
         problems.append("%d pre-v1.4 plaintext thread%s" % (legacy, "" if legacy == 1 else "s"))
     from . import EMBER_TOKEN_FILE
     if os.path.exists(EMBER_TOKEN_FILE):
-        problems.append("the v1.3 shared ember-token survives (no longer accepted)")
+        problems.append("an old shared token is left")
     for p in (ACCOUNT_FILE, ACCOUNT_KEY_FILE):
         if os.path.exists(p) and os.stat(p).st_mode & 0o077:
             problems.append("%s not 0600" % os.path.basename(p))
@@ -1295,12 +1299,12 @@ def row_users(ctx):
         if legacy:
             fix = "spark user claim"
         elif os.path.exists(EMBER_TOKEN_FILE):
-            fix = "rm %s -- personal tokens replace it (spark user)" % ctx.short(EMBER_TOKEN_FILE)
+            fix = "rm %s" % ctx.short(EMBER_TOKEN_FILE)
         else:
-            fix = "chmod 700 %s and its dirs, 600 the files; spark user list" % ctx.short(USERS_DIR)
+            fix = "chmod -R go-rwx %s" % ctx.short(USERS_DIR)
         return warn("; ".join(problems[:4]), fix)
-    who = ("this machine is %s" % me) if me else "no login here"
-    return ok("%d user%s, sealed, keys wrapped; %s" % (len(names), "" if len(names) == 1 else "s", who))
+    who = ("logged in as %s" % me) if me else "not logged in"
+    return ok("%d user%s, sealed; %s" % (len(names), "" if len(names) == 1 else "s", who))
 
 
 @row("NONFUNCTIONAL", fixture=False, reason="reads live swap use")
@@ -1325,7 +1329,7 @@ def row_swap(ctx):
         return na("no swap")
     pct = 100 * (total - free) // total
     if pct > 50:
-        return warn("%d%% of %d MB in use" % (pct, total // 1024), "the model may not fit; spark serve off")
+        return warn("%d%% of %d MB in use" % (pct, total // 1024), "spark serve off")
     return ok("%d%% of %d MB in use" % (pct, total // 1024))
 
 
@@ -1335,13 +1339,13 @@ def row_encryption(ctx):
         rc, out = ctx.sh(["fdesetup", "status"], 5)
         if rc == 0 and "On" in out:
             return ok("FileVault on")
-        return warn("FileVault off -- the disk reads in plain text if the machine walks", "System Settings > Privacy & Security > FileVault")
+        return warn("FileVault off", "System Settings > Privacy & Security > FileVault")
     if is_wsl():
-        return na("WSL 2: the disk is a Windows file -- BitLocker is Windows's to turn on")
+        return na("WSL 2: BitLocker is Windows's to turn on")
     rc, out = ctx.sh(["lsblk", "-rno", "TYPE"], 5)
     if rc == 0 and "crypt" in out.split():
-        return ok("LUKS volume present")
-    return warn("no encrypted volume -- the disk reads in plain text if the machine walks", "reinstall with LUKS when this stops being a test bench")
+        return ok("disk encrypted (LUKS)")
+    return warn("disk not encrypted", "reinstall with disk encryption")
 
 
 @row("NONFUNCTIONAL", fixture=False, reason="reads live power and login settings")
@@ -1351,17 +1355,17 @@ def row_headless(ctx):
     if not ctx.cfg.headless:
         if not IS_MAC and init_shape() == "runit":
             # runsvdir-USER is a root service: from boot, login or not
-            return na("the services run from boot on runit, headless or not")
-        return na("under your login; spark serve boot on keeps it up from boot")
+            return na("runs from boot (runit)")
+        return na("off", "spark serve boot on")
     from . import site
     missing = [piece for piece, good, _ in site.headless_facts(ctx.cfg) if not good]
     if missing:
-        return warn("missing: " + ", ".join(missing), "./bootstrap.sh   (sudo)")
+        return warn("missing: " + ", ".join(missing), "spark update")
     if IS_MAC:
-        return ok("daemons loaded, never sleeps, wake on LAN")
+        return ok("up from boot, never sleeps, wakes on LAN")
     if init_shape() == "runit":
-        return ok("the supervisor runs from boot; nothing here sleeps on its own")
-    return ok("linger, sleep masked, lid ignored")
+        return ok("up from boot")
+    return ok("up from boot, never sleeps")
 
 
 @row("CAPABILITY", fixture=False, reason="reads the real spark group and the shared token; the group needs root to create")
@@ -1373,11 +1377,11 @@ def row_share(ctx):
     if site.no_share():                                # macOS, WSL 2: not this machine's to share
         return na(site.no_share())
     if not ctx.cfg.share:
-        return na("not shared; spark serve share on lets this machine's OS users in")
+        return na("off", "spark serve share on")
     facts = site.share_facts(ctx.cfg)
     bad = [piece for piece, good, _ in facts if not good]
     if bad:
-        return warn("check: " + ", ".join(bad), "spark serve share on   (re-syncs the token; sudo)")
+        return warn("not right: " + ", ".join(bad), "spark serve share on")
     return ok(next((d for piece, _g, d in facts if piece == "spark group"), "shared with the spark group"))
 
 
@@ -1400,7 +1404,7 @@ def row_pending(ctx):
         elif sec:
             return warn("%s, %d security" % (text, sec), packages.upgrade_line())
         else:
-            text += ", no security upgrades pending"
+            text += ", none for security"
     if n > 30:
         return warn(text, packages.upgrade_line())
     return ok(text)
@@ -1412,10 +1416,10 @@ def row_watchdog(ctx):
         with open(CHECK_JSON, encoding="utf-8") as f:
             age = time.time() - json.load(f)["ts"]
     except (OSError, ValueError, KeyError):
-        return na("no snapshot yet (the timer writes one every 5 min)")
+        return na("not run yet")
     if age > 3 * 300:
-        return warn("last snapshot %d min ago -- the timer is not running" % (age / 60), "./bootstrap.sh   (services)")
-    return ok("snapshot %d s ago" % age)
+        return warn("last run %d min ago: the timer is not running" % (age / 60), "spark update")
+    return ok("last run %d s ago" % age)
 
 
 @row("NONFUNCTIONAL", fixture=False, reason="measures this very run")
@@ -1444,7 +1448,7 @@ CLIENT_ROWS = ("engine", "services", "watchdog", "ai", "serve", "forge", "ember"
 
 
 def client_of(cfg):
-    return "a client of %s (spark client off serves here again)" % cfg.peer_ai_url.split("//")[-1]
+    return "a client of %s (spark client off ends it)" % cfg.peer_ai_url.split("//")[-1]
 
 
 def run_rows(ctx, names=None, tick=None):
@@ -1465,7 +1469,8 @@ def run_rows(ctx, names=None, tick=None):
             raise
         except Exception as e:   # a crashed row is a red row, never a missing one
             log_exc("check row " + spec.name)
-            r = fail("crashed: %s" % (str(e).splitlines() or ["?"])[0], "SPARK_DEBUG=1 spark check; see state/debug.log")
+            r = fail("crashed: %s" % (str(e).splitlines() or ["?"])[0], "SPARK_DEBUG=1 spark check")
+
         if spec.category == "CAPABILITY" and r.status == FAIL:
             r.status = WARN
         r.name, r.category = spec.name, spec.category
@@ -1536,11 +1541,27 @@ def write_snapshot(ctx, rows):
         pass
 
 
-def render(ctx, rows, color, roles=False):
-    """The report. color paints it at a terminal: the fixed 32/33/31/2
-    unawakened; roles=True (awakened, the colour part active) through the
-    six roles instead -- ok, warn, trouble for a failed row, muted for na
-    and the remedy's arrow -- the remedy's words in the normal colour."""
+# the rows that need the user: what bare `spark check` prints. An ok row
+# needs nothing, and an na row is a capability this machine does not
+# have or does not use -- `spark check --all` shows both
+NEEDS_YOU = (WARN, FAIL)
+
+
+def needs_you(rows):
+    """The rows a person has to act on, in the report's order."""
+    return [r for r in rows if r.status in NEEDS_YOU]
+
+
+def render(ctx, rows, color, roles=False, every=False, named=False):
+    """The report. Bare (every=False), the rows that need the user with
+    their remedies, then the totals line: a machine with nothing to fix
+    prints the totals alone. every=True is the whole report, the header
+    and every row by category (`--all`). named=True (rows named on the
+    line) shows each of those rows, ok or not, and the totals. color paints it at a terminal:
+    the fixed 32/33/31/2 unawakened; roles=True (awakened, the colour part
+    active) through the six roles instead -- ok, warn, trouble for a
+    failed row, muted for na and the remedy's arrow -- the remedy's words
+    in the normal colour."""
     c = counts(rows)
 
     def paint(code, s):
@@ -1551,17 +1572,26 @@ def render(ctx, rows, color, roles=False):
         from . import sgr
         code = {OK: sgr("ok"), WARN: sgr("warn"), FAIL: sgr("trouble"), NA: sgr("muted")}
         arrow = sgr("muted")
-    where = ctx.cfg.name + (SEP + "WSL 2" if is_wsl() else "")
-    out = ["%s check %s%son %s%s%s" % (paint("1", MARK), version.version(), SEP, where, SEP, time.strftime("%Y-%m-%d %H:%M"))]
-    for cat in CATEGORIES:
-        rs = [r for r in rows if r.category == cat]
-        if not rs:
-            continue
-        out.append(paint("1", cat))
-        for r in rs:
-            out.append("  %s %-11s %s" % (paint(code[r.status], GLYPH[r.status]), r.name, r.value))
-            if r.remedy and r.status != OK:
-                out.append("    %s %s" % (paint(arrow, glyph("arrow")), r.remedy))
+
+    def line(r):
+        out.append("  %s %-11s %s" % (paint(code[r.status], GLYPH[r.status]), r.name, r.value))
+        if r.remedy and r.status != OK:
+            out.append("    %s %s" % (paint(arrow, glyph("arrow")), r.remedy))
+    out = []
+    if every:
+        where = ctx.cfg.name + (SEP + "WSL 2" if is_wsl() else "")
+        out.append("%s check %s%son %s%s%s" % (paint("1", MARK), version.version(), SEP, where, SEP,
+                                              time.strftime("%Y-%m-%d %H:%M")))
+        for cat in CATEGORIES:
+            rs = [r for r in rows if r.category == cat]
+            if not rs:
+                continue
+            out.append(paint("1", cat))
+            for r in rs:
+                line(r)
+    else:
+        for r in (rows if named else needs_you(rows)):
+            line(r)
     out.append("%s %d  %s %d  %s %d  %s %d" % (paint(code[OK], GLYPH[OK]), c[OK], paint(code[FAIL], GLYPH[FAIL]), c[FAIL],
                                                 paint(code[WARN], "!"), c[WARN], paint(code[NA], GLYPH[NA]), c[NA]))
     return "\n".join(out)
@@ -2255,31 +2285,34 @@ def unattended(porcelain_out, fresh, watch, stdin, environ=None):
     return bool(porcelain_out and not fresh and not watch and not tty)
 
 
-USAGE = """%s check -- this machine against what its repository says
+USAGE = """%s check -- is this machine as it should be
 
-  spark check              every row; exit 0 when no row failed
-  spark check --watch N    redraw every N seconds
+  spark check              what needs you, and the totals
+  spark check --all        every row
+  spark check NAME...      those rows
+  spark check --watch N    show it again every N seconds
   spark check --porcelain  category<TAB>status<TAB>name<TAB>value<TAB>remedy
-  spark check --report     a block to paste into an issue: version, OS,
-                           backend, model stems and every row's status --
-                           never a value, a path, a name
-  spark check --fresh      ignore cached answers (brew, git fetch results)
-  spark check --fetch      ask origin before judging the git row
-  spark check --selftest   prove every fixture-testable row can flip
-  spark check --chaos      break a throwaway machine one known way at a
-                           time; the right row must say so and its remedy
-                           must heal it
+  spark check --report     a block to paste into an issue (no names, no paths)
+  spark check --fresh      ask again, not from the cache
+  spark check --fetch      ask origin before the git row
+  spark check --selftest   prove every row can turn red
+  spark check --chaos      break a test machine, then prove each fix
+
+  exit 0 when no row failed
 """ % MARK
 
 
 def main(argv):
     watch, porcelain_out, report_out, fresh, fetch, names = 0, False, False, False, False, []
+    every = False
     it = iter(argv)
     for a in it:
         if a in ("-h", "--help", "help"):
             say(USAGE.rstrip())
             return 0
-        if a == "--watch":
+        if a == "--all":
+            every = True
+        elif a == "--watch":
             watch = int(next(it, "5"))
         elif a == "--report":
             report_out = True
@@ -2316,7 +2349,9 @@ def main(argv):
         if report_out:
             page(report(ctx, rows))
             return 1 if any(r.status == FAIL for r in rows) else 0
-        text = porcelain(rows) if porcelain_out else render(ctx, rows, color, roles)
+        # rows named on the line are asked for: each one shows
+        text = porcelain(rows) if porcelain_out else render(ctx, rows, color, roles, every, named=bool(names))
+
         if watch:
             sys.stdout.write("\033[2J\033[H" + text + "\n")
             sys.stdout.flush()

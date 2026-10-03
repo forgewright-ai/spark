@@ -28,20 +28,18 @@ from . import (BIN_DIR, CONFIG_DIR, DATA_DIR, FORGE_PID, FORGE_URL_FILE, HOME, I
 from . import handback
 from . import packages as pkg
 
-USAGE = """%s uninstall -- remove spark from this machine: shows first, then asks yes
+USAGE = """%s uninstall -- remove spark: shows the plan, then asks
 
-  spark uninstall              the plan, then: remove all of it? type yes
-  spark uninstall --dry-run    the plan only, nothing changes
-  spark uninstall --yes        no question (SPARK_YES=1 too); a script's form
-  --purge                      your soul, memory, sealed users, models.env,
-                               themes and privacy-terms go too (kept otherwise)
-  --packages | --keep-packages the installed packages: answer up front
-                               (asked at a terminal; kept when nobody answers)
+  spark uninstall              show the plan, then ask you to type yes
+  spark uninstall --dry-run    show the plan, change nothing
+  spark uninstall --yes        no question (or SPARK_YES=1)
+  --purge                      also your soul, memory, users and word list
+  --packages | --keep-packages remove or keep the packages spark installed
+                               (asked at a terminal, else kept)
 
-  What stays, always: what spark could not record before it changed it --
-  the hostname it set, macOS's pmset, a console font set before v1.12 --
-  each named with the line that puts it back. The clone goes only when it
-  is the one `get` made (~/.spark, or SPARK_HOME) and clean.
+  A few things stay, each named with the line that puts it back, like
+  the hostname spark set. The clone goes only when it is ~/.spark and
+  has no changes.
 """ % MARK
 
 KEEP_CONFIG = ("soul", "personality", "memory", "models.env", "themes", "privacy-terms")
@@ -114,21 +112,20 @@ def step_bootstrap_undo(ctx):
         ctx.row("skip", "undo", "headless was never on")
         return
     if ctx.dry:
-        ctx.row("would", "undo", "set SITE_HEADLESS to no and run bootstrap once (sudo for sleep and the lid)")
+        ctx.row("would", "undo", "headless off (sudo)")
         return
     site.set_keys(_quiet=True, SITE_HEADLESS="no")
     os.environ["SPARK_HEADLESS_UNDO"] = "1"
     rc = site.apply(["handback", "sleep", "lid", "daemons", r"spark\.(serve|forge|check)"], stream=True)
     if rc == 0:
-        ctx.row("ok", "undo", "headless off through bootstrap")
+        ctx.row("ok", "undo", "headless off")
         return
     # The undo is the one root step that runs bootstrap rather than a
     # command of its own -- it is bootstrap that knows how to unmask sleep
     # and drop the lid file. So the remedy has to be "run ./bootstrap.sh",
     # and the clone has to still be there to run: step_clone reads this.
     ctx.undo_pending = True
-    ctx.row("todo", "undo", "bootstrap.sh could not finish (sudo): sleep and the lid "
-                            "are still spark's -- ./bootstrap.sh in the clone undoes them")
+    ctx.row("todo", "undo", "headless is still on (no sudo) -- cd %s && ./bootstrap.sh" % _tilde(REPO))
 
 
 def step_services(ctx):
@@ -142,14 +139,14 @@ def step_services(ctx):
         for unit in ("forge", "serve", "check"):
             name = engine.unit_name(unit)
             if engine.service_domain(cfg, unit) == "system":
-                ctx.root(unit, ["launchctl", "bootout", "system/" + name], "LaunchDaemon %s booted out" % name)
+                ctx.root(unit, ["launchctl", "bootout", "system/" + name], "%s stopped" % name)
                 ctx.root(unit, ["rm", "-f", "/Library/LaunchDaemons/%s.plist" % name], "/Library/LaunchDaemons/%s.plist removed" % name)
             target = "gui/%d/%s" % (os.getuid(), name)
             plist = os.path.join(HOME, "Library", "LaunchAgents", name + ".plist")
             if not ctx.dry:
                 run(["launchctl", "bootout", target], timeout=20)
             if os.path.exists(plist):
-                ctx.remove(unit, plist, "%s booted out, %s removed" % (name, _tilde(plist)))
+                ctx.remove(unit, plist, "%s stopped, %s removed" % (name, _tilde(plist)))
             elif not ctx.dry:
                 ctx.row("ok", unit, "%s not loaded" % name)
     elif init_shape() == "runit":
@@ -180,7 +177,7 @@ def step_services(ctx):
                 run(["systemctl", "--user", "disable", "--now", name], timeout=30)
             link = os.path.join(HOME, ".config", "systemd", "user", name)
             if _spark_link(link) or os.path.lexists(link):
-                ctx.remove("units", link, "%s disabled, %s removed" % (name, _tilde(link)))
+                ctx.remove("units", link, "%s stopped, %s removed" % (name, _tilde(link)))
         if not ctx.dry:
             run(["systemctl", "--user", "daemon-reload"], timeout=30)
             run(["systemctl", "--user", "reset-failed"], timeout=30)
@@ -206,7 +203,7 @@ def step_services(ctx):
             except OSError:
                 pass
         engine.forget()
-        ctx.row("ok", "processes", "the page's server and the engine are down")
+        ctx.row("ok", "processes", "the page and the engine stopped")
     launchd = os.path.join(CONFIG_DIR, "launchd")
     ctx.remove("launchd", launchd)
 
@@ -248,7 +245,7 @@ def _runit_root(ctx):
                  "runsvdir-%s stopped and removed (%s, %s)" % (user, link, root_sv),
                  "sudo rm -f %s; sudo rm -rf %s" % (link, root_sv))
     else:
-        ctx.row("todo", "supervisor", "%s is spark's and spark did not record writing it -- yours to decide: sudo rm -f %s; sudo rm -rf %s"
+        ctx.row("todo", "supervisor", "spark did not record writing %s -- yours to decide: sudo rm -f %s; sudo rm -rf %s"
                 % (root_sv, link, root_sv))
 
 
@@ -325,8 +322,7 @@ def step_handback(ctx):
     setup = handback.CONSOLE_SETUP
     if (face and not IS_MAC and not os.path.exists(setup + ".spark-orig")
             and re.search(r'^FONTFACE="?%s"?$' % re.escape(face), handback._read(setup) or "", re.M)):
-        ctx.row("todo", "console", "the font stays %s (no original kept before v1.12): sudo dpkg-reconfigure console-setup"
-                % face)
+        ctx.row("todo", "console", "the font stays %s -- sudo dpkg-reconfigure console-setup" % face)
 
 
 def _made():
@@ -350,23 +346,23 @@ def step_headless_leftovers(ctx):
             rc, out = run(["loginctl", "show-user", user, "-p", "Linger"], timeout=5)
             if rc == 0 and "Linger=yes" in out:
                 if "linger" in made:
-                    ctx.root("linger", ["loginctl", "disable-linger", user], "linger off: the units end with the login")
+                    ctx.root("linger", ["loginctl", "disable-linger", user], "linger off")
                 else:
-                    ctx.row("todo", "linger", "linger is on and spark did not record enabling it -- yours to decide: loginctl disable-linger %s" % user)
+                    ctx.row("todo", "linger", "spark did not turn linger on -- yours to decide: loginctl disable-linger %s" % user)
         rc, out = run(["id", "-nG", user], timeout=5)
         if rc == 0 and "render" in out.split():
             if "render" in made:
-                ctx.root("render", ["gpasswd", "-d", user, "render"], "%s left the render group (takes effect at the next login)" % user)
+                ctx.root("render", ["gpasswd", "-d", user, "render"], "%s leaves the render group at the next login" % user)
             else:
-                ctx.row("todo", "render", "%s is in the render group and spark did not record adding them -- yours to decide: sudo gpasswd -d %s render" % (user, user))
+                ctx.row("todo", "render", "spark did not add %s to render -- yours to decide: sudo gpasswd -d %s render" % (user, user))
     elif IS_MAC and cfg.headless:
-        ctx.row("todo", "pmset", "spark set sleep 0, disksleep 0, womp 1, autorestart 1: sudo pmset -a sleep 1 disksleep 10 womp 0 autorestart 0 puts Apple's defaults back")
+        ctx.row("todo", "pmset", "Apple's defaults: sudo pmset -a sleep 1 disksleep 10 womp 0 autorestart 0")
     if cfg.get("SITE_SET_HOSTNAME", "no") == "yes":
         # by presence, as bootstrap set it: hostnamectl where there is one, else the file and the kernel
         line = ("sudo scutil --set LocalHostName NAME (ComputerName, HostName likewise)" if IS_MAC
                 else "sudo hostnamectl set-hostname NAME" if shutil.which("hostnamectl")
                 else "echo NAME | sudo tee /etc/hostname; sudo sysctl -qw kernel.hostname=NAME")
-        ctx.row("todo", "hostname", "spark set it to %s; the name before is not recorded: %s" % (cfg.name, line))
+        ctx.row("todo", "hostname", "spark named it %s -- to rename: %s" % (cfg.name, line))
 
 
 def step_bin(ctx):
@@ -429,7 +425,7 @@ def step_packages(ctx):
     if IS_MAC:
         for p in pkgs:
             run(["brew", "uninstall", p], timeout=300)
-        ctx.row("ok", "packages", "brew uninstall %s (a formula another package needs stays)" % " ".join(pkgs))
+        ctx.row("ok", "packages", "brew uninstall %s" % " ".join(pkgs))
     else:
         ctx.root("packages", pkg.remove_argv(pkgs), " ".join(pkg.remove_argv(pkgs)), timeout=1800)
 
@@ -484,15 +480,14 @@ def clone_status():
 def step_clone(ctx):
     st = clone_status()
     if st == "foreign":
-        ctx.row("skip", "clone", "%s is yours (a developer checkout): rm -rf it if you like" % _tilde(REPO))
+        ctx.row("skip", "clone", "%s is yours (a developer clone)" % _tilde(REPO))
         return
     if st == "dirty":
-        ctx.row("skip", "clone", "%s has uncommitted changes: commit or discard them, then rm -rf it" % _tilde(REPO))
+        ctx.row("skip", "clone", "%s has changes: commit or drop them, then rm -rf it" % _tilde(REPO))
         return
     if getattr(ctx, "undo_pending", False):
         # never delete the script the report just told them to run
-        ctx.row("todo", "clone", "%s stays: ./bootstrap.sh there finishes the undo above, "
-                                 "then rm -rf it" % _tilde(REPO))
+        ctx.row("todo", "clone", "%s stays: run ./bootstrap.sh there, then rm -rf it" % _tilde(REPO))
         return
     if ctx.dry:
         ctx.row("would", "clone", "%s removed" % _tilde(REPO))
@@ -554,8 +549,9 @@ def main(argv):
         except EOFError:
             answer = ""
         if answer != "yes":
-            say("%s uninstall -- kept" % MARK)
+            say("%s uninstall -- nothing removed" % MARK)
             return 0
+
     if packages is None and tty and pkg.removable():
         from . import confirm
         packages = confirm("remove the packages spark installed too")

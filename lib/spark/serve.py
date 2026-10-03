@@ -16,24 +16,17 @@ from . import engine, wire
 
 USAGE = """%s serve -- the engine and the page, served on this LAN
 
-  spark serve                 what answers (this machine or the other), the
-                              model and the chat model, the page, the units,
-                              boot, share
-  spark serve on              the engine and the page up through their units,
-                              and kept (SPARK_SERVICE, SPARK_FORGE); one line
-                              each when ready
-  spark serve off             both stopped, and kept down
-  spark serve off --force     also a llama-server spark did not start
+  spark serve                 what answers, the models, the page
+  spark serve on              start the engine and the page, keep them up
+  spark serve off             stop both, keep them down
+  spark serve off --force     also stop a llama-server spark did not start
   spark serve boot [on|off]   up from boot, nobody logged in, never asleep
-  spark serve share [on|off]  one engine for every OS user here (Linux)
-  spark serve --login         the page's URL; at a terminal the admin token
-                              and its QR (--no-qr; --show-token when piped);
-                              how another machine joins
-  spark serve --login --new   rotate the admin token; its logins die
-  spark serve --audit [N]     the newest N admin actions (50), sealed
-                              (--porcelain: tab-separated)
-  spark serve --foreground    become the engine (what its unit runs;
-                              --host ADDR binds ADDR)
+  spark serve share [on|off]  one model for every user here (Linux)
+  spark serve --login         the page's address and the admin login
+                              (--no-qr; --show-token when piped)
+  spark serve --login --new   a new admin token; old logins end
+  spark serve --audit [N]     the last N admin actions (50; --porcelain)
+  spark serve --foreground    be the engine (what its unit runs; --host ADDR)
 """ % MARK
 # the bootstrap rows `spark serve on|off` shows: the two units, per init
 UNIT_ROWS = ["spark-serve", "spark-forge", r"spark\.(serve|forge)", "daemons", "supervisor", "runit", "systemd", "launchd"]
@@ -78,9 +71,8 @@ def _warming(cfg, url):
 def _warm(cfg, url):
     """Load every served role now (the router loads on first use) and say
     which answered: `warm   spark, ember`."""
-    say("warm   loading the served models now (up to ~30 s each) ...")
     warmed = _warming(cfg, url)
-    say("warm   " + (", ".join(warmed) if warmed else "nothing answered (the first request loads the model)"))
+    say("warm   " + (", ".join(warmed) if warmed else "none loaded yet"))
 
 
 def _warm_when_up(cfg, server):
@@ -146,7 +138,7 @@ def _take_over(cfg, url):
     mine = engine.pidfile_pid()
     if not mine or mine not in engine.server_pids(cfg.port):
         return
-    say("%s serve -- pid %d, a server spark started by hand, holds %s: the unit takes over" % (MARK, mine, url))
+    say("%s serve -- the unit takes over %s from pid %d" % (MARK, url, mine))
     engine.terminate([mine])
     if engine.wait_gone([mine], 20):
         engine.terminate([mine], force=True)
@@ -181,9 +173,9 @@ def _through_unit(cfg, url):
     try:
         up = engine.wait_load(cfg, "", probe, 180, 1)
     except StoodDown:
-        return _die("the unit stood down -- to start it again and read why: %s" % engine.restart_line())
+        return _die("the unit stopped -- %s" % engine.restart_line())
     if not up:
-        return _die("no answer from the unit's server in 180 s -- %s" % engine.restart_line())
+        return _die("no answer in 180 s -- %s" % engine.restart_line())
     url = wire.serve_url() or url
     pid = engine.pidfile_pid()
     at = " (pid %d)" % pid if pid else ""
@@ -260,11 +252,11 @@ def cmd_serve(args, by_hand=False, wait_unit=False, start_disabled=False):
         # fail to bind and then forget() the RUNNING server's pidfile and
         # serve-url -- refuse, the way cmd_stop refuses while the unit
         # owns the port
-        return _refuse("the unit's server is loading at %s -- it answers when ready" % url)
+        return _refuse("still loading at %s -- it answers when ready" % url)
     others = engine.server_pids(cfg.port)
     mine = engine.pidfile_pid()
     if others and mine not in others:
-        return _die("port %d is held by llama-server pid %s that spark did not start -- `spark serve off --force` first"
+        return _die("port %d: a llama-server spark did not start (pid %s) -- spark serve off --force"
                     % (cfg.port, ",".join(str(p) for p in others)))
     unit = "" if fg or by_hand else engine.service_state(cfg)
 
@@ -272,7 +264,8 @@ def cmd_serve(args, by_hand=False, wait_unit=False, start_disabled=False):
     need = engine.mem_needed_gb(cfg, served)
     avail = engine.mem_available_gb()
     if avail >= 0 and need > avail:
-        say("%s serve -- %s needs ~%.1f GB, %.1f GB free (%s)" % (MARK, " + ".join(os.path.basename(f) for f in served), need, avail, engine.top_consumers()))
+        say("! %s needs ~%.1f GB, %.1f GB free (%s)" % (" + ".join(config.model_name(f) for f in served), need, avail,
+                                                       engine.top_consumers()))
     if unit == "loaded" or (unit == "disabled" and start_disabled):
         rc = _through_unit(cfg, url)
         if rc is not None:
@@ -308,7 +301,7 @@ def cmd_serve(args, by_hand=False, wait_unit=False, start_disabled=False):
     if not up:
         engine.terminate([pid])
         engine.forget()
-        return _die("no answer from llama-server in 180 s -- stopped; the log tail:\n" + engine.log_tail())
+        return _die("no answer in 180 s, stopped:\n" + engine.log_tail())
     say("%s serve -- ready (pid %d) at %s" % (MARK, pid, url))
     _warming(cfg, url)
     from . import check
@@ -340,18 +333,18 @@ def cmd_stop(args):
             if engine.wait_gone([mine], 20):
                 engine.terminate([mine], force=True)
             engine.forget()
-            say("%s serve -- stopped pid %d, a server spark started by hand" % (MARK, mine))
+            say("%s serve -- stopped pid %d (started by hand)" % (MARK, mine))
             mine, pids = 0, engine.server_pids(cfg.port)
     if st == "loaded":
         if IS_MAC and engine.service_domain(cfg) == "system":
-            return _die("the server is a LaunchDaemon (spark serve boot on) -- sudo launchctl bootout %s stops it; "
-                        "spark serve boot off puts it back under your login" % engine.service_target(cfg))
+            return _die("it runs from boot -- sudo launchctl bootout %s, or spark serve boot off"
+                        % engine.service_target(cfg))
         engine.service_stop(True)
         left = engine.wait_gone(engine.server_pids(cfg.port), 20)
         if left:
             engine.terminate(left, force=True)
         engine.forget()
-        say("%s serve -- the engine stopped, and kept down (spark serve on brings it back)" % MARK)
+        say("%s serve -- the engine stopped" % MARK)
         return 0
     if mine and mine in pids:
         engine.terminate([mine])
@@ -360,13 +353,13 @@ def cmd_stop(args):
             engine.terminate(left, force=True)
             left = engine.wait_gone(left, 5)
         if left:
-            return _die("pid %d survived SIGTERM -- `spark serve off --force` sends SIGKILL" % mine)
+            return _die("pid %d did not stop -- spark serve off --force" % mine)
         engine.forget()
         say("%s serve -- stopped pid %d" % (MARK, mine))
         return 0
     if pids:
         if not force:
-            return _die("llama-server on port %d (pid %s) was not started by spark -- left alone; `spark serve off --force` kills it"
+            return _die("the llama-server on port %d (pid %s) was not started by spark -- spark serve off --force"
                         % (cfg.port, ",".join(str(p) for p in pids)))
         engine.terminate(pids)
         left = engine.wait_gone(pids, 10)
@@ -376,11 +369,11 @@ def cmd_stop(args):
         say("%s serve -- killed pid %s" % (MARK, ",".join(str(p) for p in pids)))
         return 0
     engine.forget()
-    say("%s serve -- the engine not running" % MARK)
+    say("%s serve -- the engine is not running" % MARK)
     return 0
 
 
-UNIT_WORD = {"loaded": "unit always-on", "disabled": "unit off on purpose", "absent": "no unit"}
+UNIT_WORD = {"loaded": "kept up", "disabled": "kept down", "absent": "by hand"}
 
 
 def _kept(cfg):
@@ -410,11 +403,11 @@ def cmd_show():
         here = wire.dest_of(brain.url)
         mine = {wire.dest_of(u) for u in (forge_url(), wire.serve_url(), cfg.loopback_url()) if u}
         where = "this machine" if here in mine or here == "local" else "the other machine"
-        rows.append(("answers", "%s, %s (%s)" % (brain.url, "the page's server" if brain.forge else "the engine", where)))
+        rows.append(("answers", "%s (%s)" % (brain.url, where)))
         roles = dict((r, s) for r, s, _l in cli._role_rows(cfg, brain.url, brain.forge))
         chat = roles.get("ember")
-        rows.append(("model", "%s, chat model %s" % (roles.get("spark", brain.model), chat) if chat
-                     else "%s (it answers chat too)" % brain.model))
+        rows.append(("model", "%s, chat %s" % (config.model_name(roles.get("spark", brain.model)), config.model_name(chat))
+                     if chat else config.model_name(brain.model)))
     if cfg.base_url:
         say("%s serve -- a client of %s (SPARK_BASE_URL): nothing serves here" % (MARK, cfg.base_url))
     elif cfg.client:
@@ -437,25 +430,25 @@ def cmd_show():
         say("  %-8s %s" % (label, value))
     if cfg.base_url or cfg.client:
         return 0
-    engine_is = {"ok": "serving at %s" % url, "loading": "loading its model at %s" % url}.get(st, "not running")
+    engine_is = {"ok": "serving at %s" % url, "loading": "loading at %s" % url}.get(st, "not running")
     say("  %-8s %s (%s)" % ("engine", engine_is, UNIT_WORD[units[0]]))
     page_is = ("%s/login" % furl) if isinstance(fh, dict) else "not running"
     say("  %-8s %s (%s)" % ("page", page_is, UNIT_WORD[units[1]]))
     tok = cfg.forge_token_file
     if os.path.exists(tok):
         mode = os.stat(tok).st_mode & 0o777
-        login = "admin token %s%s" % (_short(tok), "" if mode == 0o600 else " %04o -- chmod 600 it" % mode)
+        login = "admin token ready (spark serve --login)" if mode == 0o600 else "admin token %04o -- chmod 600 %s" % (mode, _short(tok))
     else:
-        login = "no admin token yet (the page's first start writes it)"
+        login = "no admin token yet"
     from . import users
     n = len(users.list_users())
-    say("  %-8s %s; %s (spark serve --login)" % ("login", login, "%d user%s" % (n, "" if n == 1 else "s") if n else "no users yet"))
-    say("  %-8s %s" % ("boot", "up from boot, never asleep (SITE_HEADLESS=yes)" if cfg.headless
-                       else "from boot on runit, headless or not" if not IS_MAC and _runit()
-                       else "under your login (spark serve boot on)"))
+    say("  %-8s %s; %s" % ("login", login, "%d user%s" % (n, "" if n == 1 else "s") if n else "no users yet"))
+    say("  %-8s %s" % ("boot", "on: up from boot, never asleep" if cfg.headless
+                       else "from boot (runit)" if not IS_MAC and _runit()
+                       else "off (spark serve boot on)"))
     why = site.no_share()
-    say("  %-8s %s" % ("share", why if why else "shared with the spark group (SITE_SHARE=yes)" if cfg.share
-                       else "not shared (spark serve share on)"))
+    say("  %-8s %s" % ("share", why if why else "on: the other users here use it" if cfg.share
+                       else "off (spark serve share on)"))
     return 0
 
 
@@ -507,7 +500,8 @@ def cmd_off(args):
         return cmd_stop(args)                 # a client by SPARK_BASE_URL: nothing kept here to switch
     if cfg.client:
         from .check import client_of
-        say("%s serve -- %s: nothing serves here" % (MARK, client_of(cfg)))
+        say("%s serve -- nothing serves here: %s" % (MARK, client_of(cfg)))
+
         return 0
     from . import check, forgeserve, site
     site.set_keys(_file=SPARK_ENV, SPARK_SERVICE="none", SPARK_FORGE="off")

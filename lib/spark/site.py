@@ -66,7 +66,7 @@ def apply(rows, stream=False):
     cmd = ["sh", os.path.join(REPO, "bootstrap.sh")]
     if stream and sys.stdout.isatty():
         if subprocess.run(cmd).returncode != 0:
-            say("spark: bootstrap.sh failed (the output above says where)")
+            say("! bootstrap.sh failed (see above)")
             return 1
     else:
         p = subprocess.run(cmd, capture_output=True, text=True)
@@ -80,7 +80,7 @@ def apply(rows, stream=False):
                 if not re.match(r"^ok\s", line):
                     say(line)
         if p.returncode != 0:
-            say("spark: bootstrap.sh failed:\n" + (p.stderr or p.stdout)[-800:])
+            say("! bootstrap.sh failed:\n" + (p.stderr or p.stdout)[-800:])
             return 1
     from . import check
     check.refresh()
@@ -88,15 +88,11 @@ def apply(rows, stream=False):
 
 
 # --------------------------------------------------------------- headless
-HEADLESS_USAGE = """%s serve boot -- the machine that stays on and answers
+HEADLESS_USAGE = """%s serve boot -- keep this machine on and answering
 
-  spark serve boot              what is set, and what is in effect here
-  spark serve boot on           the engine and the page up from boot, nobody
-                                logged in, never asleep. Linux: linger, the
-                                render group, sleep masked, the lid ignored.
-                                macOS: LaunchDaemons in system/, pmset never
-                                sleeps, wake on LAN
-  spark serve boot off          under your login again (macOS: pmset untouched)
+  spark serve boot        what is set, and what is in effect
+  spark serve boot on     up from boot, nobody logged in, never asleep
+  spark serve boot off    up only while you are logged in
 """ % MARK
 HEADLESS_ROWS = ["headless", "linger", "render", "sleep", "lid", "daemons", "runit", "supervisor", r"spark\.(serve|forge|check)"]
 SLEEP_TARGETS = ("sleep.target", "suspend.target", "hibernate.target", "hybrid-sleep.target")
@@ -114,7 +110,7 @@ def render_fact(node):
     st = os.stat(node)
     name = os.path.basename(node)
     if st.st_mode & 0o006 == 0o006:
-        return ("render node", True, "%s is open to every user: the units see the GPU from boot" % name)
+        return ("render node", True, "%s is open to every user" % name)
     try:
         group = grp.getgrgid(st.st_gid).gr_name
     except KeyError:
@@ -122,7 +118,7 @@ def render_fact(node):
     rc, out = run(["id", "-nG"], timeout=10)
     member = group in out.split()
     return ("%s group" % group, member,
-            "the units see the GPU from boot" if member else "the GPU needs a login session")
+            "the GPU works from boot" if member else "the GPU needs a login")
 
 
 def headless_facts(cfg):
@@ -134,7 +130,7 @@ def headless_facts(cfg):
         for unit, wanted in (("serve", cfg.service == "auto"), ("forge", cfg.forge != "off"), ("check", True)):
             dom = engine.service_domain(cfg, unit)
             facts.append(("%s daemon" % unit, dom == "system" or not wanted,
-                          "system/ (from boot)" if dom == "system" else ("gui/ (a login agent)" if engine.service_state(cfg, unit) == "loaded" else "absent")))
+                          "from boot" if dom == "system" else ("at login" if engine.service_state(cfg, unit) == "loaded" else "absent")))
         rc, out = run(["pmset", "-g"], timeout=10)
         pm = {}
         for line in out.splitlines():
@@ -162,7 +158,7 @@ def headless_facts(cfg):
         if linked:
             detail = "runsvdir-%s linked in %s" % (user, VAR_SERVICE)
         elif runit_live():
-            detail = "no runsvdir-%s in %s (./bootstrap.sh)" % (user, VAR_SERVICE)
+            detail = "no runsvdir-%s in %s (spark update)" % (user, VAR_SERVICE)
         else:
             detail = "runit is not running here (a container)"
         return [("supervisor from boot", linked, detail)] + render
@@ -190,11 +186,10 @@ def cmd_headless(args):
         say(HEADLESS_USAGE.rstrip())
         return 0
     if not args or args[0] == "status":
-        say("%s serve boot -- SITE_HEADLESS=%s: %s" % (MARK, "yes" if cfg.headless else "no",
-                                                      "stays on and answers (the engine and the page up from boot, never asleep)" if cfg.headless
-                                                      # runit: runsvdir-USER is a root service, from boot either way
-                                                      else "the services run from boot on runit, headless or not" if not IS_MAC and init_shape() == "runit"
-                                                      else "under your login (spark serve boot on makes it stay on and answer)"))
+        say("%s serve boot -- %s" % (MARK, "on: up from boot, never asleep" if cfg.headless
+                                     # runit: runsvdir-USER is a root service, from boot either way
+                                     else "off, but runit runs it from boot" if not IS_MAC and init_shape() == "runit"
+                                     else "off: up while you are logged in"))
         for piece, good, detail in headless_facts(cfg):
             say("  %s %-26s %s" % (glyph("ok") if good else ("!" if cfg.headless else glyph("na")), piece, detail))
         return 0
@@ -211,17 +206,14 @@ def cmd_headless(args):
 
 
 # ------------------------------------------------------------------ share
-SHARE_USAGE = """%s serve share -- one engine, shared with this machine's other OS users
+SHARE_USAGE = """%s serve share -- one model for every user of this machine
 
-  spark serve share           what is set, and what is in effect here
-  spark serve share on        let a `spark` OS group read the api-token, so a
-                              group member's spark answers from this
-                              machine's engine as a client -- their own soul
-                              and memory, one model loaded once for everyone
-  spark serve share off       the shared token goes; the engine is yours again
+  spark serve share       what is set, and what is in effect
+  spark serve share on    the other users here use this machine's model
+  spark serve share off   only you again
 
-  another OS user joins once, then logs in again:  sudo gpasswd -a NAME spark
-  then, as them:  spark client URL   (spark serve share prints the URL)
+  a user joins once:  sudo gpasswd -a NAME spark   (then logs in again)
+  then, as them:      spark client URL   (spark serve share shows the URL)
 """ % MARK
 SHARE_ROWS = ["share"]
 
@@ -231,7 +223,7 @@ def no_share():
     is): macOS keeps one user per machine in this version, and WSL 2
     cannot stay on and answer."""
     if IS_MAC:
-        return "one user per machine on macOS in this version -- a shared engine is a Linux story"
+        return "macOS has one user per machine"
     if is_wsl():
         return WSL_NO_BRAIN
     return ""
@@ -277,7 +269,7 @@ def share_facts(cfg):
         facts.append(("spark group", True, "%d member%s%s" % (len(mem), "" if len(mem) == 1 else "s",
                                                               (": " + ", ".join(mem)) if mem else "")))
     except KeyError:
-        facts.append(("spark group", not cfg.share, "not created (spark serve share on)"))
+        facts.append(("spark group", not cfg.share, "none yet (spark serve share on)"))
     if os.path.exists(SHARE_TOKEN):
         try:
             st = os.stat(SHARE_TOKEN)
@@ -288,7 +280,7 @@ def share_facts(cfg):
         perms = mode == "640" and gname == "spark"
         stale = not _token_fresh(SHARE_TOKEN, TOKEN_FILE)
         facts.append(("shared token", perms and not stale, "%s (%s %s)%s" % (SHARE_TOKEN, mode, gname,
-                      " -- STALE, spark serve share on re-syncs" if stale else "")))
+                      " -- out of date: spark serve share on" if stale else "")))
     else:
         facts.append(("shared token", not cfg.share, "%s absent" % SHARE_TOKEN))
     if os.path.exists(SHARE_URL):
@@ -298,7 +290,7 @@ def share_facts(cfg):
             url = "?"
         facts.append(("engine url", bool(url), "%s (%s)" % (SHARE_URL, url or "empty")))
     else:
-        facts.append(("engine url", not cfg.share, "%s absent (spark serve on, then spark serve share on)" % SHARE_URL))
+        facts.append(("engine url", not cfg.share, "%s absent (spark serve on first)" % SHARE_URL))
     return facts
 
 
@@ -308,13 +300,12 @@ def cmd_share(args):
         say(SHARE_USAGE.rstrip())
         return 0
     if not args or args[0] == "status":
-        say("%s serve share -- SITE_SHARE=%s: %s" % (MARK, "yes" if cfg.share else "no",
-            "this machine's engine is shared with its other OS users" if cfg.share
-            else "not shared (spark serve share on lets the spark group in)"))
+        say("%s serve share -- %s" % (MARK, "on: the other users here use this model" if cfg.share
+                                      else "off (spark serve share on)"))
         for piece, good, detail in share_facts(cfg):
             say("  %s %-14s %s" % (glyph("ok") if good else ("!" if cfg.share else glyph("na")), piece, detail))
         if cfg.share and not no_share():
-            say("  a user joins:  sudo gpasswd -a NAME spark  (log in again), then  spark client %s" % _share_url())
+            say("  a user joins: sudo gpasswd -a NAME spark, logs in again, then spark client %s" % _share_url())
         return 0
     if args[0] not in ("on", "off"):
         say(SHARE_USAGE.rstrip())
@@ -328,22 +319,13 @@ def cmd_share(args):
 
 
 # ----------------------------------------------------------------- client
-CLIENT_USAGE = """%s client -- a client of another machine's server
+CLIENT_USAGE = """%s client -- use another machine's model
 
-  spark client                  what is set here, and whether the other
-                                machine answers
-  spark client URL              answer from the server at URL: no model, no
-                                engine, nothing runs here; the prompt, chat and
-                                explain do (spark user add NAME on the other
-                                machine mints your token, spark user login
-                                NAME here presents it)
-  spark client off              off for good: the other machine is not asked
-                                again until spark client URL; spark model
-                                auto picks a model to serve here
+  spark client          what is set, and whether the other machine answers
+  spark client URL      use the model at URL; nothing runs here
+  spark client off      stop; spark model auto picks a model for here
 
-  the URL may be this same machine's engine (spark serve share on there):
-  a group member reads its shared token and answers from it, keeping their
-  own soul and memory -- no second model loaded.
+  to log in: spark user add NAME there, then spark user login NAME here
 """ % MARK
 
 
@@ -355,15 +337,13 @@ def cmd_client(args):
         return 0
     if not args or args[0] == "status":
         if not cfg.client:
-            say("%s client -- not a client: SITE_AI_MODEL=%s, SITE_PEER_AI_URL=%s" % (
-                MARK, cfg.model_choice, cfg.peer_ai_url or "unset"))
-            say("  spark client URL answers from another machine's server, nothing served here")
+            say("%s client -- off: this machine runs its own model" % MARK)
             return 0
-        say("%s client -- of %s (SITE_AI_MODEL=none: nothing runs here)" % (MARK, cfg.peer_ai_url))
+        say("%s client -- of %s, nothing runs here" % (MARK, cfg.peer_ai_url))
         fh = wire.forge_health(cfg.peer_ai_url)
         if isinstance(fh, dict):
             up = fh.get("upstream", "down")
-            peer = "page's server %s%s" % ("ok, " + fh.get("model", "?") if up == "ok" else "up, its model " + up, "")
+            peer = "ok, " + config.model_name(str(fh.get("model", "?"))) if up == "ok" else "up, its model " + up
         else:
             peer = "down" if fh == "down" else "engine " + wire.health(cfg.peer_ai_url)
         say("  %s %-12s %s" % (glyph("ok") if "ok" in peer else "!", "peer", peer))
@@ -377,7 +357,7 @@ def cmd_client(args):
         # choice while the shape holds). Off means off: SITE_PEER_AI_URL
         # goes too, so the other machine is never a candidate again (the
         # brain's order, wire.candidates) until `spark client URL`
-        say("the other machine is not asked again until spark client URL; this machine serves its own model")
+        say("* this machine runs its own model now")
         set_keys(SITE_AI_MODEL="auto", SITE_PEER_AI_URL="")
         # a joiner's shared token and a preference for the other machine
         # go too: either would still send this machine there
@@ -393,18 +373,18 @@ def cmd_client(args):
         return model.cmd_model(["auto"])
     url = args[0].rstrip("/")
     if not re.match(r"^https?://[^/\s]+$", url):
-        say("%s client -- URL is http://host:port, the other machine's server (spark serve --login there)" % MARK)
+        say("%s client -- URL is http://host:port (spark serve --login there shows it)" % MARK)
         return 2
     set_keys(SITE_PEER_AI_URL=url, SITE_AI_MODEL="none")
     if not cfg.get("SPARK_API_KEY_FILE", "") and os.access(SHARE_TOKEN, os.R_OK):
         # a shared engine on this box: use its group-readable token rather
         # than mint one of our own (which the engine would not accept)
         set_keys(_file=SPARK_ENV, SPARK_API_KEY_FILE=SHARE_TOKEN)
-        say("using this machine's shared engine token (%s)" % SHARE_TOKEN)
+        say("* using this machine's shared model")
     rc = apply(["configs", "rc", "engine", "model", "services", "token"])
     if rc == 0:
         if not users.account()[0]:
-            say("then log in as yourself: " + _login_hint(url))
+            say("then log in: " + _login_hint(url))
         from . import engine
         # a machine that served: the unit would bring the engine back at
         # boot -- stop and disable it here, remove its links, and say so
@@ -445,7 +425,8 @@ def cmd_client(args):
 
 def _login_hint(url):
     host = urlsplit(url).hostname or url
-    return "spark user add NAME on %s (the token shows once), then spark user login NAME here" % host
+    return "spark user add NAME on %s, then spark user login NAME here" % host
+
 
 
 # --------------------------------------------------------------------- rc

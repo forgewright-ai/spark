@@ -35,7 +35,7 @@ main() {
         esac
     done
     case $dir in "$HOME"/*) show="~${dir#"$HOME"}" ;; *) show=$dir ;; esac
-    printf 'spark get -- clone %s to %s, then spark setup (no sudo)\n' "$url" "$show"
+    printf 'spark get -- installs spark in %s (no sudo)\n' "$show"
 
     os=$(uname -s)
     case $os in
@@ -59,7 +59,7 @@ main() {
             done
             case $(uname -m) in
                 x86_64|aarch64) ;;
-                *) notice "no prebuilt engine for $(uname -m): bootstrap skips it (SPARK_ENGINE_DIR names a build of your own)" ;;
+                *) notice "no engine download for $(uname -m) (SPARK_ENGINE_DIR names your own)" ;;
             esac
             ;;
         *) refuse "$os: Linux (Debian, Arch or Void family) or macOS only" ;;
@@ -77,13 +77,11 @@ main() {
         [ "$os" != Darwin ] || fix="xcode-select --install"
         refuse "missing:$missing -- $fix, then run this again"
     fi
-    # for bootstrap's brew row when it is there, a NOTICE when it is not
+    # for bootstrap's brew row when it is there
     if [ "$os" = Darwin ]; then
         for d in /opt/homebrew/bin /usr/local/bin; do
             if [ -x "$d/brew" ]; then PATH="$d:$PATH"; export PATH; break; fi
         done
-        command -v brew >/dev/null 2>&1 \
-            || notice "no Homebrew: fine for the AI"
     fi
 
     if [ -x "$dir/bin/spark" ] && [ -d "$dir/.git" ]; then

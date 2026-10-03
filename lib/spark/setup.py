@@ -24,15 +24,12 @@ from . import model as modeltab      # `model` is a local name here: the chosen 
 SIGN = "%s setup -- choose the model this machine can run" % MARK
 USAGE = SIGN + """
 
-  spark setup                   ask this machine's name, yours and the
-                                model; apply
-  spark setup --yes             every default, no questions (stdin not a tty
-                                implies it); SITE_NAME SITE_USER SITE_AI_MODEL
-                                in the environment pre-answer them
-  spark setup --model NAME      a name from the table, auto, or none
-  spark setup --name NAME       this machine's display name (SITE_NAME)
-  spark setup --user NAME       your name (SITE_USER)
-  spark setup --no-serve        write and apply; leave the engine down
+  spark setup                 a few questions, then it sets spark up
+  spark setup --yes           no questions, every default
+  spark setup --model NAME    a model from the list, auto, or none
+  spark setup --name NAME     this machine's name
+  spark setup --user NAME     your name
+  spark setup --no-serve      set up, but leave the model off
 """
 # the bootstrap rows that are the AI layer, by their names in bootstrap.sh
 # (the filter apply() uses when its output is captured; at a terminal the
@@ -90,7 +87,7 @@ def _ask(label, default, yes):
             return default
         if VALUE.match(val):
             return val
-        say("spark setup: no shell syntax in a value (; ` $ ( ) | & < >)")
+        say("! a value cannot hold ; ` $ ( ) | & < >")
 
 
 def _decide(cfg, key, flag, cfg_value, label, yes):
@@ -112,7 +109,7 @@ def _table(cfg):
     the table, not printed: a first run is no place for twenty rows, and
     naming any of them with --model still works."""
     budget = mem_total_gb() * cfg.ai_budget / 100.0
-    say("%.0f GB for models (RAM + GPU), budget %.0f GB (%d%%), %s" % (mem_total_gb(), budget, cfg.ai_budget, engine.backend(cfg)))
+    say("%.0f GB for models, %.0f GB to use (%d%%), %s" % (mem_total_gb(), budget, cfg.ai_budget, engine.backend(cfg)))
     note = engine.cap_note(cfg)
     if note:
         say(note)
@@ -128,7 +125,7 @@ def _table(cfg):
     if rest:
         # the table stays the proven few -- a first run is no place for
         # twenty rows -- but nobody should read it as the whole list
-        say("     %d more: spark model list (unproven, or a licence that asks)" % rest)
+        say("     %d more: spark model list" % rest)
     return default
 
 
@@ -159,7 +156,7 @@ def _model(cfg, opts, default, yes):
         if name in valid:
             _announce_license(rows, name)
             return name
-        say("spark setup: no model named %s -- %s" % (name, choices))
+        say("! no model named %s -- %s" % (name, choices))
 
 
 def _write(name, user, model):
@@ -194,7 +191,7 @@ def _sudo(pkgs, yes):
     if not pkgs:
         return ""
     if not yes:
-        say("%s needs sudo once, for: %s" % (packages.manager() or "the package manager", pkgs))
+        say("sudo once, to install: %s" % pkgs)
         if subprocess.run(["sudo", "-v"]).returncode != 0:
             raise Abort("no sudo -- %s, then spark setup again" % packages.install_line(pkgs.split()))
         return ""
@@ -211,9 +208,9 @@ def _rc_line():
     if state in ("link", "hook"):
         return
     if path:
-        say("todo   rc           ~%s does not source the hook -- ./bootstrap.sh --dry-run says why" % path[len(HOME):])
+        say("todo   rc           ~%s lacks the spark line -- spark update" % path[len(HOME):])
     else:
-        say("todo   rc           shell %s: no prompt line for it -- bash 4+ or zsh hosts one (chsh -s /bin/zsh)" % shell)
+        say("todo   rc           %s has no prompt line -- chsh -s /bin/zsh" % shell)
 
 
 def _serve(cfg):
@@ -226,7 +223,7 @@ def _serve(cfg):
                         lambda: wire.health(wire.serve_url() or cfg.loopback_url()) == "ok", 180, 5):
         sys.stdout.write(" ready\n")
         return 0
-    say("todo   server       not ready yet -- spark check --watch 5 follows it")
+    say("todo   server       not ready yet -- spark check")
     return 1
 
 
@@ -247,7 +244,7 @@ def _first_question(cfg):
         with textmod.Busy(sys.stderr):
             p = subprocess.run(cmd, input="? " + QUESTION, capture_output=True, text=True, timeout=300, env=env)
     except subprocess.TimeoutExpired:
-        say("spark: no answer in 300 s -- spark check says why")
+        say("! no answer in 300 s -- spark check")
         return
     lines = p.stdout.splitlines()
     head = lines[0] if lines else "error"
@@ -259,18 +256,18 @@ def _first_question(cfg):
     elif kind == "answer":
         say("* " + body)
     else:
-        say("spark: " + (body or p.stderr.strip() or "no answer"))
+        say("! " + (body or p.stderr.strip() or "no answer"))
         return
     say()
     t = session.last_turn() or {}
     if t.get("tg_tps"):
-        say("%.1f tok/s on your first question (spark bench for the full number)" % t["tg_tps"])
+        say("%.1f tok/s on your first question" % t["tg_tps"])
         return
     row = engine.chosen_rows(cfg).get("spark")
     if row:
         speed, kind = engine.speed_of(cfg, row)
-        say("%s%d tok/s on this machine, %s (spark bench for the full number)" % (
-            "~" if kind == "estimate" else "", speed, "an estimate" if kind == "estimate" else "measured"))
+        say("%s%d tok/s on this machine%s" % ("~" if kind == "estimate" else "", speed,
+                                              " (a guess)" if kind == "estimate" else ""))
 
 
 def _account(user):
@@ -288,23 +285,21 @@ def _account(user):
         name, n = "%s-%d" % (base, n), n + 1
     token = users.add(name)
     users.write_login(name, token, users.unlock(name, token))
-    say("ok     account      %s -- the token, shown once; it logs you in elsewhere:" % name)
+    say("ok     account      %s -- your token, shown once:" % name)
     say("                    %s" % token)
     left = users.legacy_threads()
     if left and sys.stdin.isatty():
         from . import confirm
-        if confirm("claim the %d existing plaintext thread%s into %s -- sealed, then removed"
-                   % (left, "" if left == 1 else "s", name)):
+        if confirm("seal the %d old thread%s into %s" % (left, "" if left == 1 else "s", name)):
             users.cmd_claim()
 
 
 def _closing():
     say()
-    say("open a new shell (exec $SHELL), then:")
-    say("  spark chat                      a conversation")
-    say("  ? how big is this dir           a command in your line, a hint above it")
-    say("  cmd 2>&1 | explain              what went wrong, and the fix")
-    say("spark model --chat NAME adds a chat model: a bigger one, just for conversation")
+    say("open a new shell (exec $SHELL), then try:")
+    say("  spark chat               talk with the model")
+    say("  ? how big is this dir    get a command for it")
+    say("  cmd 2>&1 | explain       why it failed, and the fix")
     door()
 
 
@@ -336,7 +331,7 @@ def door(once=False):
     return True
 
 
-VOICE_QUESTION = "spark can read aloud for you (clear voice, for low vision) -- turn it on? [y/N]: "
+VOICE_QUESTION = "read aloud to you (for low vision)? [y/N]: "
 
 
 def _voice_question(cfg, yes):
@@ -368,9 +363,9 @@ def _joining(yes):
     shared box, and running your own would need root a joining user lacks)."""
     if yes:
         return True
-    say("%s this machine already runs a shared spark engine." % MARK)
+    say("* this machine shares its model")
     try:
-        ans = input("   join it? -- your own soul and memory, no model to download [Y/n]: ").strip().lower()
+        ans = input("   use it? nothing to download [Y/n]: ").strip().lower()
     except EOFError:
         return True
     return ans in ("", "y", "yes")
@@ -387,13 +382,13 @@ def _join(name, user, opts, yes, voice=False):
     except OSError:
         pass
     if not url:
-        url = "" if yes else input("   the shared engine's URL [http://127.0.0.1:8080]: ").strip()
+        url = "" if yes else input("   its address [http://127.0.0.1:8080]: ").strip()
         url = url or "http://127.0.0.1:8080"
     say()
     _write(name, user, "none")                              # SITE_AI_MODEL=none
     site.set_keys(_quiet=True, SITE_PEER_AI_URL=url)
     site.set_keys(_file=SPARK_ENV, _quiet=True, SPARK_API_KEY_FILE=SHARE_TOKEN)
-    say("ok     join         %s -- this machine's shared engine (no model to download)" % url)
+    say("ok     join         %s, the shared model" % url)
     _account(user)                                          # this user's own sealed store, no root
     rc = site.apply(CORE_ROWS, stream=True)
     if rc != 0:
@@ -431,8 +426,7 @@ def _run(opts):
         # first thread write (spark model NAME), and a client of a FORGE
         # logs in with a token minted THERE -- a client never mints, the
         # FORGE it answers from is the account authority
-        say("skip   account      no model here -- spark model NAME mints one on first use; a client logs in")
-        say("                    (spark user add NAME on the other machine, then spark user login NAME here)")
+        say("skip   account      no model here -- on a client: spark user login NAME")
     else:
         _account(user)
     cfg = config.load()
@@ -443,12 +437,11 @@ def _run(opts):
     if waiting:
         say("todo   packages     still to install: %s -- %s, then spark setup again"
             % (waiting, packages.install_line(waiting.split())))
-        say("                    (without %s, llama-server will not start)" % (packages.groups()["PKG_ENGINE"] or ["the engine's library"])[0])
     if rc != 0:
         return rc
     _rc_line()
     if model == "none":
-        say("no model chosen -- spark model NAME later, or SITE_PEER_AI_URL for another machine's model")
+        say("no model chosen -- spark model NAME, or spark client URL")
     if opts["serve"] and (model != "none" or cfg.prefer_url):
         cfg = config.load()
         # SPARK_NO_APPLY (tests): no server here, but the question still
@@ -469,11 +462,12 @@ def main(args):
     try:
         return _run(_parse(args))
     except Abort as e:
-        say("spark setup: %s" % e)
+        say("%s setup -- %s" % (MARK, e))
         return e.code
     except wire.BrainError as e:
-        say("spark setup: %s" % e.hint)
+        say("%s setup -- %s" % (MARK, e.hint))
         return 1
+
     except KeyboardInterrupt:
         say()
         return 130
