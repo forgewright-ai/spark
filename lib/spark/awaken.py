@@ -41,14 +41,12 @@ from . import words as wordsmod
 
 USAGE = """%s awaken -- give this machine a personality and a look
 
-  spark awaken                  a temperament, the lines it says, its face,
-                                the pace of a reply, its voice where sound
-                                plays; then the look on auto (run it again
-                                to start over)
+  spark awaken                  you pick a temperament; the model writes a
+                                personality and picks a face; then the
+                                reply pace and a voice. Run it again to
+                                start over.
 
-  The model writes the lines and picks the face, once, here. Every line is
-  checked, and a shipped line stands in for one it refuses. A soul file of
-  your own is kept. spark words shows the lines, spark look the look.
+  A soul file of your own is kept.
 """ % MARK
 
 TEMPER_DESC = {
@@ -57,6 +55,7 @@ TEMPER_DESC = {
     "playful": "light, with a little humour that never hides the answer",
     "terse": "as few words as possible",
 }
+NO_PACE = "! the model did not answer -- the pace stays as it is"
 PERSONALITY_CAP = 480          # the birth's paragraph; soul.PERSONALITY_MAX is the file's cap
 BIRTH_TOKENS = 700
 BIRTH_TIMEOUT = 180
@@ -270,13 +269,13 @@ def pace(s, cfg, temper, ask):
         s.record(kind="awaken", ms=ms)
     except wire.BrainError:
         busy.stop()
-        say("The model did not answer, so the pace stays as it is.")
+        say(NO_PACE)
         return None
     finally:
         busy.stop()
     text = _printable("".join(chunks)).strip()
     if not text:
-        say("The model did not answer, so the pace stays as it is.")
+        say(NO_PACE)
         return None
     auto = cps = reveal.auto_cps(cfg)
     for _ in range(12):
@@ -306,9 +305,9 @@ def offer_voice(cfg, temper, lines, ask=None):
     line = look.clean((lines.get("hello") or "").replace("{name}", cfg.name or "this machine")) or "I am awake."
     kept = voice.audition(cfg, temper, _seed(cfg), line, ask or _Ask())
     if kept:
-        say("Its voice is kept: %s. spark voice says more." % voice.describe(kept))
+        say("* its voice: %s" % voice.describe(kept))
         if voice.mode(cfg) == "clear":
-            say("The clear voice stays on: spark voice on speaks in this one.")
+            say("* the clear voice stays on -- spark voice on uses this one")
     say("")
     return kept
 
@@ -320,11 +319,6 @@ def _seed(cfg):
     except OSError:
         host = ""
     return host or cfg.name
-
-
-def _faces_rows(fs):
-    row = ["%s %s" % (m, fs[m]) for m in look.MOODS if m in fs]
-    return ["  " + "   ".join(row[i:i + 4]) for i in range(0, len(row), 4)]
 
 
 def _wrapped(t, width=70):
@@ -340,11 +334,6 @@ def _wrapped(t, width=70):
     return ["  " + x for x in out]
 
 
-def _hello(lines, name, fs):
-    c = look.clean((lines.get("hello") or "").replace("{name}", name or "this machine"))
-    return "* %s %s" % (fs["idle"], c or "I am awake.")
-
-
 def run(cfg, ask):
     from . import soul
     temper = ask_temper(ask)
@@ -352,32 +341,28 @@ def run(cfg, ask):
     s, hint = _wake(cfg)
     reply = {}
     if s is None:
-        say("The model is not answering, so the shipped lines are used.")
+        say("! the model is not answering -- the shipped lines stand in")
         if hint:
             say("  " + hint)
     else:
         reply = ask_birth(s, temper, k)
         if not reply:
-            say("The model gave no usable lines, so the shipped lines are used.")
+            say("! the model gave no usable lines -- the shipped ones stand in")
     lines, personality, fs, refused = birth_lines(reply, temper, k, _seed(cfg))
     if reply and refused:
-        say("%d of its lines did not pass the check. The shipped line stands in for each."
-            % refused if refused > 1 else "1 of its lines did not pass the check. The shipped line stands in.")
-    say(_hello(lines, cfg.name, fs))
-    for row in _faces_rows(fs):
-        say(row)
-    say("")
+        say("! %d of its lines failed the check -- the shipped ones stand in" % refused)
+    say("* its face: %s" % fs["idle"])
     own = soul.read(cfg)[1] in ("file", "env")
     if own:
-        say("Your own soul is kept.")
+        say("* your soul is kept")
     else:
-        say("Its personality, after spark's own rules:")
+        say("* its personality:")
         for row in _wrapped(personality):
             say(row)
     say("")
     pace_word = None
     if s is None:
-        say("No model can show the pace now, so spark reveal sets it later.")
+        say("! no model to show the pace -- spark reveal sets it later")
     else:
         pace_word = pace(s, cfg, temper, ask)
     kept = offer_voice(cfg, temper, lines, ask)
@@ -397,8 +382,8 @@ def run(cfg, ask):
             keys["SPARK_VOICE"] = "on"
     site.set_keys(_file=SPARK_ENV, _quiet=True, **keys)
     look.render(config.load(), awake_now=True)
-    say("* %s Awake. The look is on auto: motion, colour and words. spark look shows it." % fs["pleased"])
-    say("Your next prompt is awake. If spark's line sits on your prompt, press Esc k.")
+    say("* awake -- the look is on auto")
+    say("* if spark's line covers your prompt, press Esc k")
     return 0
 
 
@@ -407,10 +392,10 @@ def main(args):
         say(USAGE.rstrip())
         return 0
     if args:
-        say("%s awaken -- it takes no words -- spark awaken -h says what it does" % MARK)
+        say("%s awaken -- it takes no words: spark awaken -h says what it does" % MARK)
         return 2
     if not os.environ.get("SPARK_AWAKEN_TTY") and not (sys.stdin.isatty() and sys.stdout.isatty()):
-        say("%s awaken -- it asks you questions, so it needs a terminal" % MARK)
+        say("%s awaken -- it asks questions, so it needs a terminal" % MARK)
         return 2
     try:
         with look.assume_awake():

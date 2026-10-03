@@ -8,10 +8,11 @@
 #              On an empty line after a failure it puts the failed command
 #              back, piped to explain; after the fix works, it offers to
 #              keep what happened (spark memory add). You press Enter.
-#   * failed   a nonzero exit prints that one line above the next prompt.
-#              No model call, no fork, nothing written: the command you
-#              typed on one line and its exit code live in this pane's
-#              variables and die with it.
+#   * failed   a nonzero exit says so in the row above the next prompt;
+#              the next thing spark says there replaces it. No model
+#              call, no fork, nothing written: the command you typed on
+#              one line and its exit code live in this pane's variables
+#              and die with it.
 #   Esc k      moves spark's row: 1, 2 or 3 rows above the line you type
 #              on (`spark height N` keeps it). A two-line prompt needs 2.
 #   Esc v      listens (spark voice on or clear): a pause ends it, and the
@@ -28,8 +29,7 @@
 # The look file ($STATE_DIR/look, written by `spark awaken`, `spark look`
 # and `spark height`) is read line by line when it changes -- never
 # sourced. Until the machine is awake it only moves the row; awake, it
-# adds the built-in colours, the news once, a greeting after an absence
-# and how long a failed command ran.
+# adds the built-in colours and how long a failed command ran.
 
 [[ -o interactive ]] || return 0
 [[ -n ${_SPARK_WIDGET_LOADED:-} ]] && return 0
@@ -63,11 +63,11 @@ add-zsh-hook zshexit _spark_gone
 # only when it is newer than the marker, then the marker is written anew.
 # SPARK_HEIGHT in the environment wins over the file's HEIGHT.
 typeset -g _spark_height=1 _spark_lk_had='' _spark_lk_awake='' _spark_lk_colour=''
-typeset -g _spark_lk_words='' _spark_lk_acc='' _spark_lk_warn='' _spark_lk_face='' _spark_lk_ear=''
+typeset -g _spark_lk_acc='' _spark_lk_warn=''
 _spark_look_read() {
     local f=$SPARK_DIR/look line k v n=0
     _spark_height=1 _spark_lk_had='' _spark_lk_awake='' _spark_lk_colour=''
-    _spark_lk_words='' _spark_lk_acc='' _spark_lk_warn='' _spark_lk_face='' _spark_lk_ear=''
+    _spark_lk_acc='' _spark_lk_warn=''
     if [[ -r $f ]]; then
         _spark_lk_had=1
         while (( n++ < 64 )) && { IFS= read -r line || [[ -n $line ]]; }; do
@@ -77,12 +77,9 @@ _spark_look_read() {
             case $k in
                 AWAKE) _spark_lk_awake=$v ;;
                 COLOUR) _spark_lk_colour=$v ;;
-                WORDS) _spark_lk_words=$v ;;
                 HEIGHT) [[ $v == [1-5] ]] && _spark_height=$v ;;
                 SGR_ACCENT) _spark_lk_acc=$v ;;
                 SGR_WARN) _spark_lk_warn=$v ;;
-                FACE_IDLE) _spark_lk_face=$v ;;
-                FACE_LISTENING) _spark_lk_ear=$v ;;
             esac
         done < "$f"
     fi
@@ -194,7 +191,7 @@ _spark_ask() {
         *)
             IFS= read -r -u $fd hint
             [[ -n $kind && $kind != error ]] && hint=$kind    # not contract 4: say what came
-            _spark_say "$_spark_h ${hint:-no engine is awake}"
+            _spark_say "$_spark_h ${hint:-no model answers}"
             BUFFER=$line; CURSOR=$#BUFFER ;;      # the question stays yours
     esac
     exec {fd}<&-
@@ -276,15 +273,19 @@ _spark_kind_of() {
 # the test surface: _spark_offer_kind CMD RC prints ask | danger | none
 _spark_offer_kind() { _spark_kind_of "$1" "$2"; print -r -- "$_spark_kind"; }
 
-# the failure line: ordinary output above the coming prompt, never the
-# hint row -- at precmd time the prompt (and its blank row) is not drawn
-# yet, so _spark_say would eat the last row of the command's own output
-_spark_note() {
-    local t=$1
-    (( ${#t} > COLUMNS - 1 )) && t=${t[1,COLUMNS-5]}$_spark_d
-    _spark_paint "$t"
-    print -r -- "$_spark_out"
+# the failure line goes in the hint row, like every line spark says at
+# the prompt, so the next one there replaces it. At precmd time the
+# prompt (and its blank row) is not drawn yet: the line waits here, and
+# the line editor's start draws it (zle-line-init, after the prompt)
+typeset -g _spark_pending=''
+_spark_note() { _spark_pending=$1; }
+_spark_line_init() {
+    [[ -n $_spark_pending ]] || return 0
+    _spark_say "$_spark_pending"
+    _spark_pending=''
 }
+zle -N _spark_line_init
+autoload -Uz add-zle-hook-widget && add-zle-hook-widget line-init _spark_line_init
 
 # a capture still here means no prompt came between: a PS2 continuation
 _spark_capture() {
@@ -292,53 +293,13 @@ _spark_capture() {
     else _spark_cmd=$1; fi
 }
 
-# --- the living layer: the news once, a greeting after an absence ----------
-# Only on an awake machine whose look is on (or auto, TERM not dumb),
-# with spark not off: the look switch alone. A prompt costs one stat of
-# the news file; the last-seen stamp (the epoch of a prompt in any shell)
-# is read and written at most every _SPARK_SEEN_EVERY seconds.
-# Absent, or older than _SPARK_ABSENT, the next prompt runs `spark words
-# greet` once and prints what it says, control characters stripped. The
-# news file is one line, ID<TAB>line: shown once per id, in any shell.
-typeset -g _SPARK_LONG=30 _SPARK_ABSENT=14400 _SPARK_SEEN_EVERY=300
-typeset -g _spark_seen_at=0 _spark_t0=''
-_spark_living() {
-    local now t line id seen out greet='' nf=$SPARK_DIR/news ns=$SPARK_DIR/news-seen ls=$SPARK_DIR/last-seen
-    [[ $_spark_lk_awake == yes ]] || return 0
-    [[ $_spark_lk_words == on || ( $_spark_lk_words == auto && $TERM != dumb ) ]] || return 0
-    [[ -e $SPARK_DIR/off ]] && return 0
-    now=${EPOCHSECONDS:-0}
-    if (( now - _spark_seen_at >= _SPARK_SEEN_EVERY )); then
-        t=''
-        [[ -r $ls ]] && IFS= read -r t < "$ls"
-        [[ $t == [0-9]* && -z ${t//[0-9]/} ]] && (( now - t <= _SPARK_ABSENT )) || greet=1
-        print -r -- "$now" > "$ls" 2>/dev/null
-        _spark_seen_at=$now
-    fi
-    if [[ -n $greet ]]; then
-        out=$("$SPARK_BIN" words greet </dev/null 2>/dev/null) || out=''
-        for line in "${(@f)out}"; do
-            line=${line//[[:cntrl:]]/}
-            [[ -n $line ]] && print -r -- "$line"
-        done
-    fi
-    [[ -r $nf ]] && [[ ! -e $ns || $nf -nt $ns ]] || return 0
-    line='' seen=''
-    IFS= read -r line < "$nf"
-    [[ -r $ns ]] && IFS= read -r seen < "$ns"
-    id=${line%%$'\t'*}
-    [[ $line == *$'\t'* ]] || id=''
-    print -r -- "$id" > "$ns" 2>/dev/null
-    [[ -n $id && $id != "$seen" ]] || return 0
-    line=${line#*$'\t'}
-    [[ -n $line && $line != *[[:cntrl:]]* ]] || return 0
-    _spark_note "$_spark_h ${_spark_lk_face:+$_spark_lk_face }$line"
-}
+# how long a command ran, for a failure on an awake machine
+typeset -g _SPARK_LONG=30 _spark_t0=''
 
 # $? is read first and handed back last, so a later precmd (a git
 # prompt, starship) still sees the command's own status. The look file is
 # checked first (one stat while it has not changed); then the failure
-# moment; then, on an awake machine, what the living layer has to say.
+# moment.
 _spark_failed() {
     local rc=$? took='' d
     _spark_look_check
@@ -350,14 +311,13 @@ _spark_failed() {
     fi
     _spark_t0=''
     _spark_failure $rc "$took"
-    _spark_living
     return $rc
 }
 
 # the failure moment: RC and, for a long command, " after N s|min"
 _spark_failure() {
     local rc=$1 took=$2 cmd=$_spark_cmd
-    _spark_cmd='' _spark_hinted=''       # a new prompt: the row above is not spark's
+    _spark_cmd='' _spark_hinted='' _spark_pending=''   # a new prompt: the row above is not spark's
     unset SPARK_EXPLAIN_CMD SPARK_EXPLAIN_RC
     _spark_offer_fix=''
     # no capture: an empty Enter, Ctrl-C at the prompt, or a key spark
@@ -398,7 +358,7 @@ _spark_failure() {
     fi
     if [[ $_spark_kind == danger ]]; then
         _spark_fail=''
-        _spark_note "$_spark_h failed ($rc)$took -- $_spark_head: not re-run; ? words asks about it"
+        _spark_note "$_spark_h failed ($rc)$took -- $_spark_head is not re-run; ? words asks about it"
     else
         _spark_fail=$cmd _spark_fail_rc=$rc _spark_explained='' _spark_explained_rc='' _spark_fix=''
         # failure memory: the ONE file this hook may read -- the
@@ -410,11 +370,11 @@ _spark_failure() {
             done < "$SPARK_DIR/fails"
         fi
         if [[ -n $_fk ]]; then
-            _spark_note "$_spark_h failed ($rc)$took -- last time the fix was: $_fk"
+            _spark_note "$_spark_h failed ($rc)$took -- last time this fixed it: $_fk"
         elif (( rc == 127 )); then
-            _spark_note "$_spark_h failed (127)$took -- $_spark_head not found; Esc s offers the install line"
+            _spark_note "$_spark_h failed (127)$took -- $_spark_head not found; Esc s gets the install line"
         else
-            _spark_note "$_spark_h failed ($rc)$took -- press Esc s to ask why"
+            _spark_note "$_spark_h failed ($rc)$took -- Esc s asks why"
         fi
     fi
     return 0
@@ -481,13 +441,13 @@ spark-ask() {
         export SPARK_EXPLAIN_CMD=$fact SPARK_EXPLAIN_RC=$_spark_fail_rc
         BUFFER="{ $fact; } 2>&1 | explain"
         CURSOR=$#BUFFER
-        _spark_say "$_spark_h Enter re-runs it: the failure, explained"
+        _spark_say "$_spark_h Enter explains the error"
     elif [[ -n $_spark_offer_proof ]]; then
         # the proof the line proposed: lands ready to run, read-only
         BUFFER=$_spark_offer_proof
         CURSOR=$#BUFFER
         _spark_offer_proof=''
-        _spark_say "$_spark_h Enter runs the proof"
+        _spark_say "$_spark_h Enter runs the check"
         zle -R
     elif [[ -n $_spark_offer_fix ]]; then
         # the second Esc s, right after the explain: the corrected command
@@ -501,9 +461,9 @@ spark-ask() {
         fact="$_spark_explained failed until: $_spark_fix"
         BUFFER="spark memory add ${(qq)fact}"
         CURSOR=$#BUFFER
-        _spark_say "$_spark_h the fix, as a fact -- edit it, then Enter"
+        _spark_say "$_spark_h Enter remembers the fix"
     else
-        _spark_say "$_spark_h type something first, then Esc s  (or end the line with ?)"
+        _spark_say "$_spark_h type a question, then Esc s"
     fi
     zle -R
 }
@@ -526,7 +486,7 @@ _spark_recall_show() {
     BUFFER=$cand
     CURSOR=$#BUFFER
     _spark_recall_for=$cand
-    _spark_say "$mark $_spark_recall_i/${#_spark_recall_cands[@]}$note -- Esc r: next"
+    _spark_say "$mark $_spark_recall_i/${#_spark_recall_cands[@]}$note -- Esc r for the next"
     zle -R
 }
 spark-recall() {
@@ -546,7 +506,7 @@ spark-recall() {
     local out
     out=$(fc -ln -400 2>/dev/null | "$SPARK_BIN" recall "$intent" 2>/dev/null)
     if [[ -z $out ]]; then
-        _spark_say "$_spark_h nothing in your history matches that"
+        _spark_say "$_spark_h nothing in your history matches"
         zle -R
         return
     fi
@@ -571,7 +531,7 @@ spark-height() {
     _spark_height=$n
     [[ -n ${SPARK_HEIGHT:-} ]] && SPARK_HEIGHT=$n
     "$SPARK_BIN" height $n </dev/null >/dev/null 2>&1
-    _spark_say "$_spark_h spark writes here. Esc k moves this line."
+    _spark_say "$_spark_h spark writes here -- Esc k moves it"
     zle -R
 }
 zle -N spark-height
@@ -581,13 +541,12 @@ bindkey '\ek' spark-height
 # Esc v hands the hearing to `spark voice listen --buffer` (the words on
 # stdout and nothing else; a pause ends them) and lands the words at the
 # cursor -- on an empty line as a `? ` question, so Enter asks spark and
-# never runs what was heard. While it listens the row says so, with the
-# listening face on an awake machine. Esc x is `spark voice stop`.
+# never runs what was heard. While it listens the row says so. Esc x is
+# `spark voice stop`.
 spark-listen() {
-    local words rc face=''
+    local words rc
     [[ -e $SPARK_DIR/off ]] && return
-    [[ $_spark_lk_awake == yes && -n $_spark_lk_ear ]] && face="$_spark_lk_ear "
-    _spark_say "$_spark_h ${face}listening -- speak, a pause ends it"
+    _spark_say "$_spark_h listening -- a pause ends it"
     zle -R
     words=$("$SPARK_BIN" voice listen --buffer </dev/null 2>/dev/null)
     rc=$?
@@ -604,7 +563,7 @@ spark-listen() {
     elif (( rc == 1 || rc == 130 )); then
         _spark_say "$_spark_h nothing heard"
     else
-        _spark_say "$_spark_h Esc v needs the voice -- spark voice on or clear"
+        _spark_say "$_spark_h Esc v needs the voice -- spark voice on"
     fi
     zle -R
 }

@@ -1018,40 +1018,21 @@ def _write_chat_history(readline):
 
 
 # ------------------------------------------------------------------- chat
-CHAT_USAGE = """%s chat -- a conversation
+CHAT_USAGE = """%s chat -- talk with the model
 
-  spark chat <words>             one more turn on the newest thread, streamed
-  spark chat --thread N [words]  an older thread instead: N from the /resume
-                                 or spark history list (1 = newest), or a
-                                 literal thread id
-  spark chat                     a conversation at the `chat> ` prompt; it
-                                 goes on with the newest thread and says so
+  spark chat                     a conversation that goes on with the
+                                 newest thread
+  spark chat <words>             one more turn on the newest thread
+  spark chat --thread N [words]  an older thread: N from spark history
+                                 (1 is the newest), or its id
   spark chat --reveal [N|auto|off]
-                                 the pace of a reply at a terminal: N
-                                 characters a second, auto (the measured
-                                 threshold: under the model's own speed,
-                                 a reader's 40 at most), off (as the chunks
-                                 come, the default); /reveal inside shows
-                                 the numbers, /reveal N|auto|off sets it;
-                                 SPARK_REVEAL in spark.env is the standing
-                                 choice
+                                 the reply pace: N characters a second,
+                                 auto, or off (as it comes)
 
-  Inside it: @FILE words asks about a file; /help lists the verbs (/new,
-  /resume, /clear, /keep, /last, /model, /reveal, /copy, /save, /read,
-  /do, /aloud, /again); Esc on an empty line, Ctrl-D or /q (or /quit,
-  /exit, :q, quit, exit, bye) ends it, with a goodbye on an awakened
-  machine; Ctrl-C clears the line at the prompt and cancels a reply in
-  progress, and neither ends the chat. With spark voice on or clear, Esc v
-  listens and puts the words on the line (Enter sends them), Esc x stops
-  the speaking, /aloud speaks every reply (clear does from the start) and
-  /again says the last one again. Every turn is
-  kept as a thread (spark history) for SPARK_HISTORY days; /keep keeps
-  this one past that and past
-  spark clear --history, and /keep off lets it go.
-
-  /copy puts a reply on the clipboard, /save writes the conversation to a
-  file, /read @FILE answers from the file and only from it, and /do GOAL
-  runs spark do here, each step confirmed.
+  Inside: @FILE asks about a file, /help lists the commands, and Esc,
+  Ctrl-D or /q ends it. Ctrl-C stops a reply. With the voice on, Esc v
+  listens and Esc x stops the speaking. A chat is kept for SPARK_HISTORY
+  days; /keep keeps it longer.
 """
 
 # Any of these alone ends the conversation. Generous on purpose: a quit
@@ -1059,38 +1040,25 @@ CHAT_USAGE = """%s chat -- a conversation
 # exit while the prompt lives on -- a first-session trap.
 QUIT_WORDS = ("/q", "/quit", "/exit", ":q", ":quit", ":wq", "quit", "exit", "bye")
 
-# The awakened chat (look.active("words") at a terminal): the face leads
-# each reply and each of the chat's own lines, a refusal is the puzzled
-# face on stdout instead of `spark: <hint>` on stderr, and the end says
-# goodbye. Unawakened (or piped) it stays False and every byte is today's.
-LIVING = [False]
 # This chat's own turns since it began (or since /new), in memory only:
 # what /copy and /save take when no thread keeps them (SPARK_HISTORY=0)
 # -- the replies on the screen this session, gone when the chat ends.
 SAID = []
-CONTINUING_COLS = 79    # the continuing line fits 80 columns
+CONTINUING_COLS = 79    # the opening line fits 80 columns
 SAVE_MAX = 99           # ~/spark-chat-DATE.txt, then -2 .. -99
 # The chat's voice (SPARK_VOICE, at a terminal): `reader` is a
 # voice.Reader while the mode is on or clear, None while off. Mode on
-# speaks the greeting and the goodbye in the machine's own voice and,
-# after /aloud, every reply; clear speaks them all from the start, and
-# the refusals too. Every spoken line is printed as well. A reply is
+# speaks every reply after /aloud; clear speaks them from the start, and
+# the opening and the refusals too. Every spoken line is printed as well. A reply is
 # spoken as it streams, a sentence at a time (_Spoken, voice.Sentences),
 # each one once the reveal printed it.
 VOICE = {"reader": None, "mode": "off", "aloud": False}
-GOODBYE_WAIT = 8        # seconds the goodbye may take to begin playing before the chat exits
 
 
-def _face(mood):
-    """The machine's face for `mood`, in the accent (plain when piped)."""
-    from . import words
-    return paint(words.face(mood), "accent")
-
-
-def _tell(line, mood="idle"):
-    """One line of the chat's own: face-led when awake, plain otherwise."""
+def _tell(line):
+    """One line of the chat's own, after the mark."""
     from . import say
-    say(_face(mood) + " " + line if LIVING[0] else line)
+    say(paint("*", "accent") + " " + line)
 
 
 def _land(cfg, thread, asked, said, user=None, assistant=None):
@@ -1303,16 +1271,16 @@ def _hear():
     what to say when there are none, or '')."""
     from . import voice
     if VOICE["reader"] is None:
-        return "", "the voice is off -- spark voice on or clear, then Esc v listens"
+        return "", "! the voice is off -- spark voice on, then Esc v"
     VOICE["reader"].hush()          # spark does not hear itself
     try:
         text, _lang = voice.listen(VOICE["reader"].cfg)
     except voice.VoiceError as e:
-        return "", str(e)
+        return "", "! " + str(e)
     except KeyboardInterrupt:
         return "", ""
     text = voice.heard_line(text)
-    return text, ("" if text else "nothing heard")
+    return text, ("" if text else "* nothing heard")
 
 
 def _ended(e):
@@ -1332,51 +1300,27 @@ def _ended(e):
 
 
 def _listening():
-    """The line Esc v shows while it listens: the listening face when awake."""
-    from . import words
-    face = (paint(words.face("listening"), "accent") + " ") if LIVING[0] else ""
-    return face + "listening -- speak, a pause ends it"
+    """The line Esc v shows while it listens."""
+    return "* listening -- a pause ends it"
 
 
-def _refuse(hint, head=""):
-    """A refusal inside the chat: `spark: <hint>` on stderr, as always;
-    awake, the puzzled face and the hint as a whole sentence on stdout
-    (`head`, a program's name that opens the hint, keeps its case).
-    Clear mode reads it aloud too."""
+def _refuse(hint):
+    """A refusal inside the chat: `! <hint>` on stderr, so a piped chat's
+    stdout keeps the replies alone. Clear mode reads it aloud too."""
     if VOICE["mode"] == "clear":
         _aloud(hint)
-    if LIVING[0]:
-        from . import cli, say
-        say(_face("puzzled") + " " + cli._tidy(hint, head=head))
-    else:
-        print("spark: " + hint, file=sys.stderr, flush=True)
+    print("! " + hint, file=sys.stderr, flush=True)
 
 
-def ago(ts, now=None):
-    """`N min ago`, `N h ago` or `N d ago` for a thread's stamp; '' when
-    it does not read."""
-    try:
-        then = time.mktime(time.strptime(ts, "%Y-%m-%d %H:%M:%S"))
-    except (TypeError, ValueError, OverflowError):
-        return ""
-    secs = max(0, (time.time() if now is None else now) - then)
-    if secs < 3600:
-        return "%d min ago" % max(1, secs // 60)
-    if secs < 86400:
-        return "%d h ago" % (secs // 3600)
-    return "%d d ago" % (secs // 86400)
-
-
-def continuing(msgs, now=None):
-    """The line that says this chat goes on with a thread: its first user
-    message's first words, cut at a word to fit 80 columns, and how long
-    ago it was last written. '' for a thread with no user message."""
+def continuing(msgs):
+    """The opening line of a chat that goes on with a thread: its first
+    user message's first words, cut at a word so the line fits 80
+    columns. '' for a thread with no user message."""
     from . import glyph
     first = next((m for m in msgs if m.get("role") == "user"), None)
     if first is None:
         return ""
-    when = ago(msgs[-1].get("ts", ""), now)
-    head, tail = '  continuing "', '"%s -- /new starts fresh' % (" (%s)" % when if when else "")
+    head, tail = '* continuing "', '" -- /new starts fresh, Esc ends'
     room = CONTINUING_COLS - len(head) - textmod.cols(tail)
     words = " ".join(textmod.scrub(first.get("text", "")).split())
     # a turn's own tags ([explain], [cwd /x]) are not the user's words:
@@ -1394,38 +1338,36 @@ def continuing(msgs, now=None):
     return head + words + tail
 
 
-def _opening(thread):
-    """The chat's first lines at a terminal. Awake: the face and a greet
-    line, the continuing line, the hint (muted). Unawakened: today's
-    banner and the continuing line."""
-    from . import glyph, say, words
-    cont = continuing(load(thread)) if thread else ""
-    if LIVING[0]:
-        hello = words.greeting()
-        say(paint(glyph("hammer") + " " + words.face("idle"), "accent") + " " + hello)
-        _aloud(hello)
-        if cont:
-            say(cont)
-        say(paint("  /help lists the commands; Esc or Ctrl-D ends", "muted"))
-        return
-    say("chat -- /help, Esc, Ctrl-D or /q ends")
+def chat_model(cfg):
+    """The chat model's name from what spark already knows -- the cached
+    brain's roles, else this machine's own model files -- never a
+    request, so the opening waits on nothing. '' when nothing says."""
+    from . import config, engine, wire
+    roles = wire.brain_roles(cfg)
+    stem = roles.get("ember") or roles.get("spark") or ""
+    if not stem and not cfg.client:
+        stem = engine.model_file(cfg, "ember") or engine.model_file(cfg)
+    return config.model_name(stem) if stem else ""
+
+
+def opening(cfg, thread):
+    """The chat's one opening line: the thread it goes on with, else the
+    model it talks to."""
+    msgs = load(thread) if thread else []
+    if msgs:
+        line = continuing(msgs)
+        if line:
+            return line
+    name = chat_model(cfg)
+    return "* chat%s -- Esc ends, /help lists commands" % (" with " + name if name else "")
+
+
+def _opening(cfg, thread):
+    """The opening at a terminal; clear mode reads it aloud."""
+    from . import say
+    say(opening(cfg, thread))
     if VOICE["mode"] == "clear":
-        _aloud("chat. slash help lists the commands; Escape ends it.")
-    if cont:
-        say(cont)
-
-
-def _goodbye():
-    """Awake, the end of the chat: the pleased face and the done line --
-    spoken too, waited for (GOODBYE_WAIT at most) until it plays: the
-    player outlives the chat, the words are never cut off."""
-    from . import words
-    if LIVING[0]:
-        done = words.load().get("done") or "That is everything for now."
-        _tell(done, "pleased")
-        if VOICE["reader"] is not None:
-            _aloud(done, cut=True)
-            VOICE["reader"].drain(GOODBYE_WAIT)
+        _aloud("chat. Escape ends it; slash help lists the commands.")
 
 
 def _last_reply(thread):
@@ -1457,61 +1399,59 @@ def resolve_thread(tok, threads=None):
     return tok if exists(tok) else None
 
 
+HELP = ("/new      start a new thread",
+        "/resume   list older threads; /resume N goes back to one",
+        "/clear    clear the screen",
+        "/keep     keep this thread; /keep off lets it go",
+        "/last     the last turn and its speed",
+        "/model    the model answering",
+        "/reveal   the reply pace: /reveal N, auto or off",
+        "/copy     copy the last reply; /copy N an older one",
+        "/save     save the chat to a file: /save [FILE]",
+        "/read     /read @FILE [question]: an answer from the file",
+        "/do       /do GOAL: a task here, step by step",
+        "/aloud    speak every reply, or stop",
+        "/again    the last reply again",
+        "/q        end the chat (Esc or Ctrl-D too)",
+        "Esc v     listen; Esc x stops the speaking")
+
+
 def _slash_help(cfg, thread, args):
     from . import say
-    say("/help    this list")
-    say("/new     a fresh thread")
-    say("/resume  an older thread: bare lists the newest 5, /resume N picks")
-    say("/clear   wipe the screen; the thread goes on")
-    say("/keep    keep this thread past SPARK_HISTORY; /keep off lets it go")
-    say("/last    the last turn, with its tok/s")
-    say("/model   which model is answering")
-    say("/reveal  bare: the model's measured pace and the threshold under it;")
-    say("         N | auto | off sets the pace of the replies (off = as they come)")
-    say("/copy    the last reply to the clipboard; /copy N the Nth from the end")
-    say("/save    the conversation to ~/spark-chat-DATE.txt, or /save FILE")
-    say("/read    /read @FILE [question]: an answer that quotes the file")
-    say("/do      /do GOAL: spark do here, each step confirmed; /do --sandbox GOAL")
-    say("/aloud   speak every reply, or stop (spark voice on or clear)")
-    say("/again   the last reply again, printed and spoken")
-    say("/q       end the conversation (Esc on an empty line, Ctrl-D too)")
-    say("Esc v    listen: the words land on the line; Esc x stops the speaking")
+    for line in HELP:
+        say(line)
     return thread
 
 
 def _slash_aloud(cfg, thread, args):
     if args not in ([], ["on"], ["off"]):
-        _refuse("/aloud takes nothing, on or off")
+        _refuse("/aloud takes on or off")
         return thread
     if VOICE["reader"] is None:
-        _refuse("the voice is off -- spark voice on or clear, then /aloud")
+        _refuse("the voice is off -- spark voice on turns it on")
         return thread
     VOICE["aloud"] = (not VOICE["aloud"]) if not args else args == ["on"]
     if VOICE["aloud"]:
-        _tell("Every reply aloud now -- /aloud again stops it.")
+        _tell("replies aloud -- /aloud stops")
     else:
         VOICE["reader"].hush()
-        _tell("Replies are quiet now -- /aloud speaks them again.")
+        _tell("replies quiet -- /aloud speaks them")
     return thread
 
 
 def _slash_again(cfg, thread, args):
-    from . import say
     last = _last_reply(thread)
     if not last:
-        _refuse("no reply yet to say again")
+        _refuse("no reply yet")
         return thread
-    say(_face("idle") + " " + last if LIVING[0] else last)
-    if VOICE["reader"] is None:
-        _tell("The voice is off -- spark voice on or clear speaks it.")
-    else:
+    _tell(last)
+    if VOICE["reader"] is not None:
         _aloud_reply(last)
     return thread
 
 
 def _slash_new(cfg, thread, args):
-    from . import MARK, say
-    say("%s: a fresh thread" % MARK)
+    _tell("new thread")
     del SAID[:]
     return None
 
@@ -1524,7 +1464,7 @@ def _slash_resume(cfg, thread, args):
     threads = list_threads(5)
     if not args:
         if not threads:
-            say("(no threads yet)")
+            _tell("no threads yet")
         for i, th in enumerate(threads, 1):
             say("%d) %d turn%s  %s" % (i, th["turns"], "" if th["turns"] == 1 else "s", th["title"]))
         return thread
@@ -1534,7 +1474,7 @@ def _slash_resume(cfg, thread, args):
         return thread
     users = [m for m in load(tid) if m["role"] == "user"]
     title = _title(users[0]["text"]) if users else tid
-    say("* resuming: %s (%d turn%s)" % (title, len(users), "" if len(users) == 1 else "s"))
+    _tell('continuing "%s" (%d turn%s)' % (title, len(users), "" if len(users) == 1 else "s"))
     return tid
 
 
@@ -1553,28 +1493,22 @@ def _slash_keep(cfg, thread, args):
     # /keep moves the current thread into kept/ (pruning and a clear never
     # look there), /keep off moves it back to age like any other. The
     # thread goes on either way: only where its file lives changes.
-    from . import say
     if args not in ([], ["off"]):
         _refuse("/keep takes nothing, or off")
         return thread
     if not thread:
-        if cfg.history <= 0:
-            _refuse("history is off (SPARK_HISTORY) and nothing is kept, so this chat has no thread to keep")
-        else:
-            _refuse("this chat has no thread yet, and its first turn makes the one /keep keeps")
+        _refuse("history is off -- no thread to keep" if cfg.history <= 0 else "no thread yet -- ask something first")
         return thread
     try:
         if args == ["off"]:
             if unkeep(thread):
-                say("let go: this thread lives SPARK_HISTORY days like any other")
-            else:
-                say("this thread is not kept, so there is nothing to let go")
+                _tell("let go -- it ages out like the rest")
             return thread
         keep(thread)
     except KeepError as e:
         _refuse(e.hint)
         return thread
-    say("kept: this thread stays past SPARK_HISTORY and spark clear --history")
+    _tell("kept -- /keep off lets it go")
     return thread
 
 
@@ -1585,7 +1519,7 @@ def _slash_last(cfg, thread, args):
 
 
 def _slash_model(cfg, thread, args):
-    from . import cli, say, wire
+    from . import cli, config, wire
     try:
         url, model, is_forge = wire.resolve_brain(cfg)
     except wire.BrainError as e:
@@ -1593,12 +1527,8 @@ def _slash_model(cfg, thread, args):
         return thread
     # `ember:` only when an ember role is actually served; a one-model
     # machine (_role_rows says []) answers with that model, unlabelled.
-    stem, label = model, "model"
-    for role, s, _loaded in cli._role_rows(cfg, url, is_forge):
-        if role == "ember":
-            stem, label = s, "ember"
-            break
-    say("%s: %s via %s" % (label, stem, url))
+    stem = next((s for role, s, _loaded in cli._role_rows(cfg, url, is_forge) if role == "ember"), model)
+    _tell("%s at %s" % (config.model_name(stem), url))
     return thread
 
 
@@ -1608,31 +1538,25 @@ REVEAL = [0]           # the chat's pace: 0 (as the chunks come, the default) | 
 
 
 def _slash_reveal(cfg, thread, args):
-    from . import MARK, reveal, say
+    from . import reveal
     if not args:
         # the benchmark: what the model writes, the threshold under it,
         # and what this chat does now -- the choice stays yours
         for ln in reveal.pace_report(cfg, REVEAL[0]):
-            say("%s: %s" % (MARK, ln))
+            _tell(ln)
         return thread
     word = args[0]
-    if word == "off":
-        REVEAL[0] = 0
-        say("%s: the replies come as they are made" % MARK)
-        return thread
-    if word == "auto":
-        REVEAL[0] = "auto"
-        say("%s: the replies at the measured threshold (%d a second now; /reveal shows the numbers)" % (MARK, reveal.auto_cps(cfg)))
-        return thread
-    try:
-        n = int(word)
-    except ValueError:
-        n = -1
-    if not reveal.CPS_MIN <= n <= reveal.CPS_MAX:
-        say("%s: /reveal takes a number, %d..%d characters a second, auto, or off" % (MARK, reveal.CPS_MIN, reveal.CPS_MAX))
-        return thread
-    REVEAL[0] = n
-    say("%s: the replies at %d characters a second (/reveal auto or off)" % (MARK, n))
+    if word not in ("off", "auto"):
+        try:
+            n = int(word)
+        except ValueError:
+            n = -1
+        if not reveal.CPS_MIN <= n <= reveal.CPS_MAX:
+            _refuse("/reveal takes N (%d to %d), auto or off" % (reveal.CPS_MIN, reveal.CPS_MAX))
+            return thread
+        word = n
+    REVEAL[0] = 0 if word == "off" else word
+    _tell(reveal.pace_said(cfg, REVEAL[0]))
     return thread
 
 
@@ -1643,10 +1567,7 @@ def _turns(cfg, thread, verb):
     msgs = [m for m in load(thread) if m.get("role") in ("user", "assistant")] if thread else list(SAID)
     if msgs:
         return msgs
-    if not thread and cfg.history <= 0:
-        _refuse("history is off (SPARK_HISTORY) and this chat has no turns yet, so %s has nothing to take" % verb)
-    else:
-        _refuse("this chat has no turns yet, so %s has nothing to take" % verb)
+    _refuse("nothing to %s yet" % verb.lstrip("/"))
     return None
 
 
@@ -1672,7 +1593,7 @@ def _slash_copy(cfg, thread, args):
     # own output goes nowhere (xclip and wl-copy stay behind to serve it)
     import subprocess
     if len(args) > 1 or (args and not (number(args[0]) and int(args[0]) >= 1)):
-        _refuse("/copy takes a number: /copy N copies the Nth reply from the end")
+        _refuse("/copy N copies the Nth reply from the end")
         return thread
     n = int(args[0]) if args else 1
     msgs = _turns(cfg, thread, "/copy")
@@ -1680,15 +1601,15 @@ def _slash_copy(cfg, thread, args):
         return thread
     replies = [m["text"] for m in msgs if m["role"] == "assistant"]
     if not replies:
-        _refuse("this chat has no reply yet, so /copy has nothing to take")
+        _refuse("nothing to copy yet")
         return thread
     if n > len(replies):
-        _refuse("this chat has %d repl%s: /copy %d is the oldest"
+        _refuse("only %d repl%s -- /copy %d is the oldest"
                 % (len(replies), "y" if len(replies) == 1 else "ies", len(replies)))
         return thread
     tool = clipboard()
     if tool is None:
-        _tell("No clipboard here: /save writes the conversation to a file.", "puzzled")
+        _refuse("no clipboard here -- /save writes a file")
         return thread
     # no control character leaves (ESC[201~ would end a bracketed paste
     # early); tabs and newlines stay
@@ -1699,10 +1620,10 @@ def _slash_copy(cfg, thread, args):
     except (OSError, subprocess.SubprocessError):
         rc = -1
     if rc != 0:
-        _refuse("%s did not take the reply -- /save writes the conversation to a file" % tool[0], head=tool[0])
+        _refuse("the clipboard (%s) failed -- /save writes a file" % tool[0])
         return thread
-    what = "The last reply" if n == 1 else "The reply %d from the end" % n
-    _tell("%s is on the clipboard (%d characters)." % (what, len(text)))
+    what = "the last reply" if n == 1 else "reply %d from the end" % n
+    _tell("copied %s (%d characters)" % (what, len(text)))
     return thread
 
 
@@ -1756,11 +1677,10 @@ def _slash_save(cfg, thread, args):
             _refuse("%s: %s" % (cli._short(path), e.strerror or e))
             return thread
     else:
-        _refuse("%s is there already, and /save never writes over a file -- name another: /save FILE"
-                % cli._short(names[0]))
+        _refuse("%s is already there -- /save FILE names another" % cli._short(names[0]))
         return thread
     turns = sum(1 for m in msgs if m["role"] == "user")
-    _tell("Saved to %s (%d turn%s)." % (cli._short(path), turns, "" if turns == 1 else "s"))
+    _tell("saved to %s (%d turn%s)" % (cli._short(path), turns, "" if turns == 1 else "s"))
     return thread
 
 
@@ -1796,14 +1716,14 @@ def _slash_read(cfg, thread, args):
     # is the one law (held back, parts, the reading, the gate, the
     # opening-words refusal); the kept lines are the reply and the
     # exchange lands on this chat's thread like any turn
-    from . import glyph, read as readmod, reveal, say, wire
+    from . import read as readmod, reveal, wire
     want, rest = None, list(args)
     if "--part" in rest:
         i = rest.index("--part")
         want = int(rest[i + 1]) if rest[i + 1:i + 2] and number(rest[i + 1]) else 0
         del rest[i:i + 2]
         if want < 1:
-            _refuse("--part N is a part number, 1 up")
+            _refuse("--part takes a number, 1 or more")
             return thread
     words, paths = refs(rest)
     if len(paths) != 1:
@@ -1815,10 +1735,10 @@ def _slash_read(cfg, thread, args):
         _refuse(e.hint)
         return thread
     if not data.strip():
-        _refuse("@%s is empty -- there is nothing to read" % paths[0])
+        _refuse("@%s is empty" % paths[0])
         return thread
     cps = reveal.auto_cps(cfg) if REVEAL[0] == "auto" else REVEAL[0]
-    wrap = textmod.Wrap(sys.stdout, cps=cps, lead=_face("idle") + " " if LIVING[0] else None)
+    wrap = textmod.Wrap(sys.stdout, cps=cps)
     busy = textmod.Busy(sys.stderr)
     out = _Kept(wrap, busy)
     if thread is None:
@@ -1835,7 +1755,7 @@ def _slash_read(cfg, thread, args):
         busy.stop()
         if wrap.started:
             wrap.close()
-        say("%s (stopped)" % glyph("hammer"))
+        _tell("stopped")
         return thread
     finally:
         busy.stop()
@@ -1853,7 +1773,7 @@ def _slash_do(cfg, thread, args):
     boxed = args[:1] == ["--sandbox"]
     goal = args[1:] if boxed else list(args)
     if not goal:
-        _refuse("/do takes a goal: /do GOAL, or /do --sandbox GOAL")
+        _refuse("/do takes a goal: /do GOAL")
         return thread
     term = signal.getsignal(signal.SIGTERM)
     domod.END[0] = None
@@ -1874,7 +1794,7 @@ def _slash_do(cfg, thread, args):
     # it, so the chat's stays the newest (`??` and the next spark chat go
     # on with the chat), and /save and /copy see it
     thread = _land(cfg, thread, " ".join(["/do"] + list(args)), said, {"mode": "do", "cwd": os.getcwd()}, {"kind": "do"})
-    _tell("Back in the chat.")
+    _tell("back in the chat")
     return thread
 
 
@@ -2130,12 +2050,11 @@ def _prompts_only(readline):
 
 
 def cmd_chat(args):
-    from . import MARK, glyph, config, look, say, wire
+    from . import MARK, config, say, wire
     from . import cli
     if args and args[0] in ("-h", "--help", "help"):
         say(CHAT_USAGE.rstrip() % MARK)
         return 0
-    LIVING[0] = False
     del SAID[:]
     picked = None
     args, cps = cli.reveal_flag(args)
@@ -2152,7 +2071,7 @@ def cmd_chat(args):
             return 2
         thread = resolve_thread(picked)
         if thread is None:
-            say("%s chat -- no thread %s (spark history lists them)" % (MARK, picked))
+            say("%s chat -- no thread %s: spark history lists them" % (MARK, picked))
             return 2
     else:
         # `more`: go on with the newest -- with history off, the newest
@@ -2174,18 +2093,13 @@ def cmd_chat(args):
             readline.set_history_length(500)
             for ln in _chat_history_lines():
                 readline.add_history(ln)
-        try:
-            LIVING[0] = look.active("words", sys.stdout)
-        except Exception:       # noqa: BLE001 -- a look file is never a reason to fail
-            LIVING[0] = False
         _voice_setup(cfg, tty)
-        # piped, stdout carries the replies alone: no banner, no prompt
-        _opening(thread)
+        # piped, stdout carries the replies alone: no opening, no prompt
+        _opening(cfg, thread)
     else:
         _voice_setup(cfg, False)
     prompt = (paint("chat>", "accent", sys.stdout, readline=True) + " ") if tty else ""
     keys = _Keys(readline) if tty else None
-    bye = False
     try:
         while True:
             try:
@@ -2201,7 +2115,6 @@ def cmd_chat(args):
             except EOFError:
                 if tty:
                     say()
-                bye = True
                 break
             except KeyboardInterrupt:
                 # Ctrl-C at the prompt clears the line, as a shell does:
@@ -2215,7 +2128,6 @@ def cmd_chat(args):
             if not text:
                 continue
             if text in QUIT_WORDS:
-                bye = True
                 break
             if text.startswith("/"):
                 parts = text.split()
@@ -2230,7 +2142,7 @@ def cmd_chat(args):
                     if verb == "/read" and VOICE["aloud"] and len(SAID) > heard:
                         _aloud_reply(SAID[-1]["text"])
                 else:
-                    _refuse("no %s -- /help lists them" % verb)
+                    _refuse("no command %s -- /help lists them" % verb)
                 if verb != "/clear":
                     say()      # a blank line between turns; /clear starts clean
                 continue
@@ -2240,8 +2152,7 @@ def cmd_chat(args):
             spoken = _spoken()
             try:
                 thread = cli.stream_turn(cfg, "chat", " ".join(words), paths, thread=thread, cps=REVEAL[0],
-                                         lead=_face("idle") + " " if LIVING[0] else None, said=SAID,
-                                         voice=spoken)
+                                         said=SAID, voice=spoken)
             except (RefError, wire.BrainError) as e:
                 _refuse(e.hint)
             except KeyboardInterrupt as e:
@@ -2249,13 +2160,11 @@ def cmd_chat(args):
                     VOICE["reader"].cut()       # the reply stopped, and its voice with it
                 thread = getattr(e, "thread", thread)
                 say()
-                say("%s (stopped)" % glyph("hammer"))
+                _tell("stopped")
             say()              # a blank line between turns
     finally:
         if keys:
             keys.close()
         if readline and hist_on:
             _write_chat_history(readline)
-    if bye:
-        _goodbye()
     return 0

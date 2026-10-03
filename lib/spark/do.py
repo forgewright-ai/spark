@@ -99,19 +99,21 @@ REFUSED_SIZE = "the model's step was too long (%s) -- refused"
 STDIN_HOOK = "SPARK_DO_STDIN"   # =1: confirmations come from stdin lines (tests)
 # said once on stderr when the hook is on, before any step is offered: a
 # transcript must show the confirmations were a harness's, not a person's
-STDIN_BANNER = "spark do: confirmations come from stdin (SPARK_DO_STDIN) -- a harness, not a person"
+STDIN_BANNER = "! the answers come from stdin (SPARK_DO_STDIN), not a person"
 # said once on stderr by --porcelain: stdout is the program's (contract 15)
-PORCELAIN_BANNER = "spark do: a program drives this run (--porcelain) -- its answers are a program's, not a person's"
+PORCELAIN_BANNER = "! a program drives this run (--porcelain), not a person"
 # the goal of a sandboxed run says where it runs (the system prompt stays
 # byte-identical to plain do's: the served prefix is shared)
 SANDBOX_NOTE = "[sandbox: no network; only this directory is writable; changes are reviewed at the end]"
 # no `yes` word exists over a pipe: outside the sandbox such a step is
 # refused, the model hears it was skipped, and the run goes on
-REFUSED_DANGER = "`%s` can destroy data -- refused over --porcelain; a person runs it at a terminal (spark do)"
+REFUSED_DANGER = "`%s` can destroy data -- refused over --porcelain; run it at a terminal"
 # ... and so is a step whose effect cannot be read from the line
-REFUSED_OPAQUE = ("`%s` -- %s: what it does cannot be read from the line -- refused over --porcelain;"
-                  " a person runs it at a terminal, or --sandbox holds it")
+REFUSED_OPAQUE = ("`%s` -- %s: what it does is not on the line -- refused over --porcelain;"
+                  " run it at a terminal, or use --sandbox")
 OVER_CAP = "the run wrote more than %d MB -- stopped; review what it did"
+CAPPED = "stopped at %d steps -- spark do again to go on" % DO_MAX_STEPS
+UNCHECKED = "unchecked: no step printed %s -- trust the outputs above"
 OPTIONS = ("-h", "--help", "--sandbox", "--detach", "--porcelain", "--review", "--accept", "--discard")
 # a checksum tool's line -- `DIGEST  NAME`, or `DIGEST *NAME` in binary
 # mode -- keeps its digest: a hash a step was asked to print is not a
@@ -182,32 +184,28 @@ DO_SCHEMA = dict(persona.LINE_SCHEMA, properties=dict(
 
 DO_USAGE = """%s do -- a task, step by step
 
-  spark do <words>             the goal; one command at a time, you confirm each
-  spark do --sandbox <words>   every step runs in a copy of this directory --
-                               no network, nothing else writable -- without
-                               asking; the changes once at the end: the diff,
-                               then type yes to apply them
+  spark do <words>             the model proposes one command at a time;
+                               you confirm each
+  spark do --sandbox <words>   the steps run in a copy of this directory,
+                               offline; at the end you see the changes
+                               and type yes to apply them
   spark do --sandbox --detach <words>
-                               the same with nobody there (a timer, cron):
-                               prints the run's id; its changes wait
-  spark do --review [ID]       the runs waiting; with an ID its diff, then yes
-  spark do --accept ID         apply a waiting run without asking (a script)
+                               the same with nobody there: the changes
+                               wait for spark do --review
+  spark do --review [ID]       list the waiting runs, or review one
+  spark do --accept ID         apply a waiting run without asking
   spark do --discard ID        drop a waiting run
   spark do --porcelain [--sandbox] <words>
-                               JSON Lines, for a program (contract 15)
-  spark do -- <words>          a goal that starts with - or is the word help
+                               JSON lines, for a program
+  spark do -- <words>          a goal that starts with - or is help
 
-  Every step:  Enter runs it, e edits it first, s skips it, q quits;
-  r reads a step of several lines again, every line (aloud too in
-  clear mode). A step that can destroy data (sudo too) runs only when
-  you type yes.
-  After a step, its proof -- one read-only check -- is offered the same
-  way; only its exit code goes back to the model, never its output.
-  Sandboxed, steps (%d s at most each) and their proofs run on their own.
-  At most %d steps per run; the output of each (last 4 kB) goes back
-  to the model, a span that looks like a secret held back; a step
-  refused for an option brings back those lines of its own man page.
-  Every step is recorded as it ran (spark last, history).
+  At each step: Enter runs it, e edits it, s skips it, q quits, and r
+  reads a long step again. A step that can destroy data runs only when
+  you type yes. After a step, a check that it worked is offered too.
+  In the sandbox, steps run on their own, %d seconds each at most.
+  A run is %d steps at most. Each step's output goes back to the model,
+  a secret held back; a step refused for an option sends lines of its
+  man page too.
 """
 
 
@@ -768,7 +766,7 @@ def _edit_block(command):
     from .soul import _editor
     ed = _editor()
     if not ed:
-        say("  %s no editor found -- set $EDITOR; the step is unchanged" % glyph("warn"))
+        say("  %s no editor -- set $EDITOR" % glyph("warn"))
         return None
     fd, path = tempfile.mkstemp(prefix="spark-do-", suffix=".sh")
     try:
@@ -777,7 +775,7 @@ def _edit_block(command):
         try:
             rc = subprocess.call(ed + [path])
         except OSError as e:
-            say("  %s cannot run %s: %s -- the step is unchanged" % (glyph("warn"), ed[0], e.strerror or e))
+            say("  %s cannot run %s: %s" % (glyph("warn"), ed[0], e.strerror or e))
             return None
         with open(path, encoding="utf-8", errors="replace") as f:
             new = step_text(f.read())
@@ -787,7 +785,7 @@ def _edit_block(command):
         except OSError:
             pass
     if rc != 0 or not new:
-        say("  %s %s -- the step is unchanged" % (glyph("warn"), "the editor exited %d" % rc if rc else "the edit is empty"))
+        say("  %s %s -- the step stays as it was" % (glyph("warn"), "the editor exited %d" % rc if rc else "the edit is empty"))
         return None
     return new
 
@@ -807,6 +805,13 @@ def _head(command):
     if "\n" not in command:
         return command
     return "%s   (%d lines)" % (command.split("\n", 1)[0], line_count(command))
+
+
+def man_said(man):
+    """What leaves with a man excerpt, said: its line count and its page."""
+    head = man.splitlines()[0]
+    page = head[len("From man "):].rstrip(":") if head.startswith("From man ") else head
+    return "%d lines of man %s go to the model" % (len(man.splitlines()) - 1, page)
 
 
 def _mark():
@@ -877,9 +882,10 @@ class _Terminal:
         return 2
 
     def begin(self, driver, box, cwd, thread):
-        say("%s driving with %s (a silence is the model thinking)" % (_mark(), driver))
+        # the pulse shows the wait and the model's name is bare spark's:
+        # a sandboxed run says where it runs, a plain one nothing
         if box is not None:
-            say("%s sandbox %s: a copy of %s, no network -- nothing there changes until you apply it"
+            say("%s sandbox %s: a copy of %s, offline -- nothing changes until you apply"
                 % (_mark(), box["id"], _short(cwd)))
 
     def think(self, fn):
@@ -887,12 +893,12 @@ class _Terminal:
             return fn()
 
     def brain(self, hint):
-        print("spark: " + hint, file=sys.stderr, flush=True)
+        print("%s %s" % (glyph("warn"), hint), file=sys.stderr, flush=True)
 
     def done(self, hint, bad):
-        say("%s done  %s" % (glyph("warn" if bad else "ok"), hint))
+        say("%s done  %s" % (glyph("warn") if bad else _mark(), hint))
         if bad:
-            say("  unchecked: no command produced %s -- believe the outputs above" % ", ".join(bad))
+            say("  " + UNCHECKED % ", ".join(bad))
 
     def warn(self, text):
         say("%s %s" % (glyph("warn"), text))
@@ -962,7 +968,7 @@ class _Terminal:
 
     def man(self, man):
         # what leaves is said: the page's lines ride the next request
-        say("%s    %s %d lines go back with the output" % (_mark(), man.splitlines()[0], len(man.splitlines()) - 1))
+        say("%s    %s" % (_mark(), man_said(man)))
 
     def proof(self, proof, cwd, contained):
         """(run|skip|quit, the proof) -- offered like a step; sandboxed it
@@ -979,7 +985,7 @@ class _Terminal:
                 proof = _edit(proof)
                 choice = "run"
                 if CONTROL.search(proof) or not persona.proof_ok(proof):
-                    say("  %s not a read-only proof -- skipped" % glyph("warn"))
+                    say("  %s that check could change something -- skipped" % glyph("warn"))
                     choice = "skip"
         except EOFError:
             choice = "quit"        # nobody there; the step still lands
@@ -989,7 +995,7 @@ class _Terminal:
         say("%s    proof -> %s" % (_mark(), "ok" if prc == 0 else "exit %d" % prc))
 
     def cap(self):
-        say("%s step limit (%d) reached -- spark do again to continue" % (glyph("warn"), DO_MAX_STEPS))
+        say("%s %s" % (glyph("warn"), CAPPED))
 
     def eof(self):
         say()
@@ -1011,7 +1017,7 @@ class _Terminal:
         return "yes" if answer == "yes" else "keep"
 
     def nothing(self, box):
-        say("%s nothing changed in the copy -- nothing to apply" % _mark())
+        say("%s nothing changed" % _mark())
 
     def applied(self, box, n, problems):
         say("%s applied %s to %s" % (_mark(), _plural(n, "change"), _short(box["cwd"])))
@@ -1019,13 +1025,13 @@ class _Terminal:
             say("  %s %s" % (glyph("warn"), p))
 
     def unapplied(self, box, text, paths):
-        print("%s do -- %s" % (MARK, text), file=sys.stderr)
+        print("%s %s" % (glyph("warn"), text), file=sys.stderr)
         for p in paths:
             print("  " + p, file=sys.stderr)
         print("  the run waits: spark do --review %s" % box["id"], file=sys.stderr, flush=True)
 
     def discarded(self, box):
-        say("%s run %s discarded; nothing was applied" % (_mark(), box["id"]))
+        say("%s run %s discarded" % (_mark(), box["id"]))
 
     def waits(self, box, n):
         say("%s run %s waits: %s -- spark do --review %s" % (_mark(), box["id"], _plural(n, "change"), box["id"]))
@@ -1067,7 +1073,7 @@ class _Porcelain:
     def begin(self, driver, box, cwd, thread):
         self.box = box is not None
         self.emit(ev="start", thread=thread, sandbox=self.box, run=box["id"] if box else None)
-        self.note("driving with %s" % driver)
+        self.note("driving with %s" % config.model_name(driver))
 
     def think(self, fn):
         return fn()
@@ -1077,7 +1083,7 @@ class _Porcelain:
 
     def done(self, hint, bad):
         if bad:
-            self.note("unchecked: no command produced %s -- believe the outputs above" % ", ".join(bad))
+            self.note(UNCHECKED % ", ".join(bad))
         if self.box:
             self.note("done -- " + hint)      # the end event is the review's
 
@@ -1144,7 +1150,7 @@ class _Porcelain:
         self.emit(ev="rc", n=self.k, rc=rc)
 
     def man(self, man):
-        self.note("%s %d lines go back with the output" % (man.splitlines()[0], len(man.splitlines()) - 1))
+        self.note(man_said(man))
 
     def proof(self, proof, cwd, contained):
         self._step(proof, "proof of step %d" % self.step_n, False, None)
@@ -1157,7 +1163,7 @@ class _Porcelain:
 
     def cap(self):
         if self.box:
-            self.note("step limit (%d) reached" % DO_MAX_STEPS)
+            self.note(CAPPED)
 
     def eof(self):
         pass
@@ -1185,7 +1191,7 @@ class _Porcelain:
         return {"accept": "yes", "discard": "discard"}.get(choice, "keep")
 
     def nothing(self, box):
-        self.note("nothing changed in the copy -- nothing to apply")
+        self.note("nothing changed")
 
     def applied(self, box, n, problems):
         self.note("applied %s to %s" % (_plural(n, "change"), box["cwd"]))
@@ -1281,7 +1287,7 @@ def _drive(face, cfg, thread, goal, text, shell, cwd, box=None, timeout=None):
                 # the repair guard of a run: a step the user skipped comes
                 # back verbatim -- once it is re-asked, twice it is the end
                 if command.strip() in reasked:
-                    msg = "the same step again after a skip -- stopped (say the goal another way)"
+                    msg = "the same step again after a skip -- stopped; say the goal another way"
                     face.warn(msg)
                     record(s, kind="stopped", answer="the same skipped step twice", ms=ms)
                     return 1, "stopped", msg
@@ -1346,7 +1352,7 @@ def _drive(face, cfg, thread, goal, text, shell, cwd, box=None, timeout=None):
                 break
         else:
             face.cap()
-            return 1, "cap", "step limit (%d) reached -- spark do again to continue" % DO_MAX_STEPS
+            return 1, "cap", CAPPED
     except EOFError:
         face.eof()
     face.stopped(steps)
@@ -1376,7 +1382,7 @@ def _settle(face, box):
     if answer == "discard":
         sandbox.discard(box)
         face.discarded(box)
-        return 0, "done", "discarded run %s; nothing was applied" % box["id"]
+        return 0, "done", "discarded run %s" % box["id"]
     _wait(box)
     face.waits(box, n)
     return 0, "quit", "the run waits: spark do --review %s" % box["id"]
@@ -1448,13 +1454,12 @@ def cmd_do(args):
     face = _Porcelain() if porcelain else _Terminal()
     bad = next((f for f in flags if f not in OPTIONS), "")
     if bad:
-        return face.refuse("no option %s: spark do -h lists them; spark do -- <words> for a goal that starts with -"
-                           % bad)
+        return face.refuse("no option %s -- spark do -h lists them" % bad)
     if "-h" in flags or "--help" in flags:
         return _usage(0)
     verbs = [f for f in flags if f in ("--review", "--accept", "--discard")]
     if verbs and porcelain:
-        return face.refuse("%s is not a run: spark do %s without --porcelain" % (verbs[0], verbs[0]))
+        return face.refuse("%s is not a run -- use it without --porcelain" % verbs[0])
     if verbs:
         return _runs_verb(flags, verbs, words)
     goal = textmod.utf8(" ".join(words).strip())
@@ -1465,17 +1470,17 @@ def cmd_do(args):
         return face.refuse(GOAL_TOO_LONG % (DO_GOAL_MAX >> 10, (size + 1023) >> 10))
     boxed, detach = "--sandbox" in flags, "--detach" in flags
     if detach and not boxed:
-        return face.refuse("--detach runs sandboxed only: spark do --sandbox --detach <words>")
+        return face.refuse("--detach needs --sandbox: spark do --sandbox --detach <words>")
     if detach and porcelain:
-        return face.refuse("--detach and --porcelain do not mix: a detached run has no program to answer")
+        return face.refuse("--detach and --porcelain do not go together")
     if porcelain:
         sys.stderr.write(PORCELAIN_BANNER + "\n")
         sys.stderr.flush()
         return _porcelain(face, goal, boxed)
     if not detach and not sys.stdin.isatty() and os.environ.get(STDIN_HOOK) != "1":
         if boxed:
-            die("spark do --sandbox asks yes before it applies -- run it in a terminal, or add --detach")
-        die("spark do confirms every step -- run it in a terminal")
+            die("spark do --sandbox asks before it applies -- run it in a terminal, or add --detach")
+        die("spark do asks before every step -- run it in a terminal")
     if os.environ.get(STDIN_HOOK) == "1":
         sys.stderr.write(STDIN_BANNER + "\n")
         sys.stderr.flush()
@@ -1601,7 +1606,7 @@ def _runs_verb(flags, verbs, words):
     running is refused) and let go at the end."""
     verb = verbs[0]
     if len(verbs) > 1 or len(flags) > 1 or len(words) > 1 or (verb != "--review" and len(words) != 1):
-        say("%s do -- %s takes one run's id (spark do --review lists them)" % (MARK, verb))
+        say("%s do -- %s takes one run's id: spark do --review lists them" % (MARK, verb))
         return 2
     if verb == "--review" and not words:
         return _list_runs()
@@ -1619,7 +1624,7 @@ def _runs_verb(flags, verbs, words):
         if verb == "--accept":
             return _apply(face, box)[0]
         if not sys.stdin.isatty() and os.environ.get(STDIN_HOOK) != "1":
-            say("%s do -- --review asks yes at a terminal; spark do --accept %s applies without asking"
+            say("%s do -- --review asks at a terminal; spark do --accept %s applies without asking"
                 % (MARK, box["id"]))
             return 2
         return _settle(face, box)[0]
@@ -1630,7 +1635,7 @@ def _runs_verb(flags, verbs, words):
 def _list_runs():
     listed = sandbox.runs()
     if not listed:
-        say("no sandboxed run waits for review")
+        say("%s no run waits" % _mark())
         return 0
     for r in listed:
         if r["running"]:
@@ -1641,7 +1646,7 @@ def _list_runs():
             except sandbox.SandboxError:
                 what = "?"
         say("%s  %4s  %-11s %s" % (r["id"], _age(r["start"]), what, _goal_words(r)))
-    say("spark do --review ID shows one and asks yes; --accept ID applies it, --discard ID drops it")
+    say("spark do --review ID shows one; --accept ID applies it, --discard ID drops it")
     return 0
 
 

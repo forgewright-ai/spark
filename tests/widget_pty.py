@@ -17,14 +17,15 @@
 # in the row above an intact prompt, and stays whole on screen while
 # spark thinks. Then the living prompt (v1.59): a two-line prompt at
 # height 2 gets its hint on the blank row, Esc k moves the row, an awake
-# look file brings the greeting and the news once, the built-in colour and
-# a long failure's duration; one text per fallback; bash chains an EXIT
-# trap it found. Then the voice keys (v1.70): Esc v lands what a stub
-# `spark voice listen --buffer` heard -- a `? ` question on an empty line,
-# beside the words at the cursor otherwise -- and runs nothing; the row
-# says it listens (the listening face when awake), nothing heard is one
-# quiet line, a voice that cannot listen says how to turn it on; Esc x
-# is `spark voice stop`.
+# look file brings the built-in colour and a long failure's duration and
+# never a greeting, a news line or a face (v1.72); one text per fallback;
+# bash chains an EXIT trap it found. On a rendered screen the failure
+# line sits in the hint row and Esc s replaces it there (v1.72). Then the
+# voice keys (v1.70): Esc v lands what a stub `spark voice listen
+# --buffer` heard -- a `? ` question on an empty line, beside the words
+# at the cursor otherwise -- and runs nothing; the row says it listens,
+# nothing heard is one quiet line, a voice that cannot listen says how
+# to turn it on; Esc x is `spark voice stop`.
 #
 #   widget_pty.py bash home/.config/spark/widget.bash
 #   widget_pty.py zsh  home/.config/spark/widget.zsh
@@ -84,11 +85,11 @@ if [ "$1" = height ]; then
     printf '%s\n' "$2" >> "${STUB_HEIGHT:-/dev/null}"
     exit 0
 fi
-# the greeting after an absence (v1.59): one line with an escape in it --
-# the widget prints it with the control characters stripped
+# the greeting an older widget asked for: a widget that still asks is
+# caught by the log (v1.72: nothing is greeted)
 if [ "$1" = words ] && [ "$2" = greet ]; then
     printf 'greet\n' >> "${STUB_GREET:-/dev/null}"
-    printf 'Good evening. \033[31mThe engine is warm.\n'
+    printf 'Good evening.\n'
     exit 0
 fi
 if [ "$1" = recall ]; then
@@ -295,9 +296,10 @@ LOOK_AWAKE = ("AWAKE=yes\nMOTION=on\nCOLOUR=on\nWORDS=on\nHEIGHT=2\nSGR_ACCENT=1
 
 def living(shell, widget, tmp, env, ok):
     """v1.59, the living prompt: the row's height with a two-line prompt,
-    Esc k, then an awake look file -- the greeting once, the news once, the
-    built-in colour, a failed command's duration -- and the fallback texts,
-    the same in both shells; bash chains an EXIT trap it found."""
+    Esc k, then an awake look file -- the built-in colour, a failed
+    command's duration, and no greeting, news line or face (v1.72) -- and
+    the fallback texts, the same in both shells; bash chains an EXIT trap
+    it found."""
     state = os.path.join(tmp, "living-state")
     sd = os.path.join(state, "spark")
     os.makedirs(sd)
@@ -345,27 +347,32 @@ def living(shell, widget, tmp, env, ok):
     for n in (3, 1, 2):
         since = sh.mark()
         sh.send("\x1bk")
-        ok(sh.expect("\x1b7\x1b[%dA\r\x1b[2K* spark writes here. Esc k moves this line.\x1b8" % n),
+        ok(sh.expect("\x1b7\x1b[%dA\r\x1b[2K* spark writes here -- Esc k moves it\x1b8" % n),
            "Esc k: the test line moves to height %d" % n, since()[-300:])
         sh.settle()
     ok(lines(hlog) == ["3", "1", "2"], "Esc k: spark height ran with 3, 1, 2", lines(hlog))
 
-    # asleep: no greeting, no news, no stamp, no duration
+    # asleep: no duration
     sh.send("_SPARK_LONG=1\r")
     sh.expect(prompt)
     since = sh.mark()
     sh.send("sleep 2; sh -c 'exit 3'\r")
-    ok(sh.expect("failed (3) -- press Esc s to ask why", 10), "asleep: a failure line says no duration", since()[-300:])
+    ok(sh.expect("failed (3) -- Esc s asks why", 10), "asleep: a failure line says no duration", since()[-300:])
     sh.expect(prompt)
     sh.settle()
-    ok(not lines(glog) and "not while asleep" not in since() and not os.path.exists(os.path.join(sd, "last-seen")),
-       "asleep: no greeting, no news, no last-seen stamp", since()[-300:])
+    if shell == "zsh":
+        # the failure line is the hint row's: drawn two rows up, at height 2
+        ok("\x1b7\x1b[2A\r\x1b[2K* failed (3) -- Esc s asks why\x1b8" in since(),
+           "height 2: the failure line is drawn in the hint row", since()[-300:])
+    else:
+        # bash: the line, then the prompt's own opening newline ends it
+        ok(re.search(r"\* failed \(3\) -- Esc s asks why\r?\nINFO-LINE", since()) is not None,
+           "height 2: the failure line is the prompt's blank row", since()[-300:])
 
-    # awake: the look file changes -- read at the next prompt, never sourced
+    # awake, after an absence, a news file there: the next prompt says
+    # nothing -- no greeting, no news, no face, no fork, no stamp
     with open(look, "w") as f:
         f.write(LOOK_AWAKE)
-    with open(os.path.join(sd, "news"), "w") as f:
-        f.write("n1\tThe engine is asleep. Ask, and it wakes.\n")
     with open(os.path.join(sd, "last-seen"), "w") as f:
         f.write("1000\n")                      # an absence of decades
     old = time.time() - 60
@@ -373,78 +380,24 @@ def living(shell, widget, tmp, env, ok):
         os.utime(os.path.join(sd, "widgets", m), (old, old))
     since = sh.mark()
     sh.send("\r")
-    ok(sh.expect("Good evening. [31mThe engine is warm."), "awake: the greeting after an absence", since()[-300:])
-    ok(sh.expect("\x1b[1m*\x1b[0m (o.o) The engine is asleep. Ask, and it wakes."),
-       "awake: the news once, with the face and the built-in accent", since()[-300:])
     sh.expect(prompt)
     sh.settle()
     seen = since()
-    ok("\x1b[31mThe engine" not in seen and "(x.x)" not in seen and "\x1b[2J" not in seen,
-       "awake: no escape from the greeting or the look file reaches the screen", seen[-300:])
-    ok(lines(glog) == ["greet"], "awake: spark words greet ran once", lines(glog))
-    ok(lines(os.path.join(sd, "news-seen")) == ["n1"], "awake: the news id is kept", lines(os.path.join(sd, "news-seen")))
-    since = sh.mark()
-    sh.send("\r")
-    sh.expect(prompt)
-    sh.settle()
-    ok("Good evening" not in since() and "The engine is asleep" not in since() and lines(glog) == ["greet"],
-       "awake: the next prompt says neither again", since()[-300:])
-
-    # news: the same id again is not news; a new one shows once
-    with open(os.path.join(sd, "news"), "w") as f:
-        f.write("n1\tThe engine is asleep. Ask, and it wakes.\n")
-    os.utime(os.path.join(sd, "news"), (time.time() + 2, time.time() + 2))
-    since = sh.mark()
-    sh.send("\r")
-    sh.expect(prompt)
-    sh.settle()
-    ok("The engine is asleep" not in since(), "news: the same id is shown once only", since()[-300:])
-    with open(os.path.join(sd, "news"), "w") as f:
-        f.write("n2\tThree runs wait for review.\n")
-    os.utime(os.path.join(sd, "news"), (time.time() + 4, time.time() + 4))
-    # the look switch alone governs it (v1.69): an old site.env that still
-    # holds SITE_QUIET_START=yes holds nothing back
-    cfg = os.path.join(env["HOME"], ".config", "spark")
-    os.makedirs(cfg, exist_ok=True)
-    with open(os.path.join(cfg, "site.env"), "w") as f:
-        f.write("SITE_QUIET_START=yes\n")
-    since = sh.mark()
-    sh.send("\r")
-    ok(sh.expect("(o.o) Three runs wait for review."),
-       "news: an old SITE_QUIET_START=yes holds nothing back, the look switch alone", since()[-300:])
-    sh.expect(prompt)
-    sh.settle()
-    ok(lines(os.path.join(sd, "news-seen")) == ["n2"], "news: the id shown counts as seen",
-       lines(os.path.join(sd, "news-seen")))
-    os.remove(os.path.join(cfg, "site.env"))
-    # spark off holds it back
-    with open(os.path.join(sd, "news"), "w") as f:
-        f.write("n3\tThree runs wait for review.\n")
-    os.utime(os.path.join(sd, "news"), (time.time() + 6, time.time() + 6))
-    open(os.path.join(sd, "off"), "w").close()
-    since = sh.mark()
-    sh.send("\r")
-    sh.expect(prompt)
-    sh.settle()
-    ok("Three runs wait" not in since(), "news: spark off holds it back", since()[-300:])
-    os.remove(os.path.join(sd, "off"))
-    since = sh.mark()
-    sh.send("\r")
-    ok(sh.expect("(o.o) Three runs wait for review."), "news: a new id shows once, spark off gone", since()[-300:])
-    sh.expect(prompt)
-    sh.settle()
+    ok("Good evening" not in seen and "not while asleep" not in seen and "(o.o)" not in seen and not lines(glog)
+       and lines(os.path.join(sd, "last-seen")) == ["1000"] and not os.path.exists(os.path.join(sd, "news-seen")),
+       "awake: no greeting, no news, no face; spark words greet never runs", seen[-300:])
 
     # awake: a failed command that ran long says how long; a quick one not
     since = sh.mark()
     sh.send("sleep 2; sh -c 'exit 3'\r")
     ok(sh.expect("failed (3) after ", 10), "awake: a long failure says how long", since()[-300:])
-    ok(re.search(r"failed \(3\) after [23] s -- press Esc s to ask why", since()) is not None,
+    ok(re.search(r"failed \(3\) after [23] s -- Esc s asks why", since()) is not None,
        "awake: the duration reads N s", since()[-300:])
     sh.expect(prompt)
     sh.settle()
     since = sh.mark()
     sh.send("sh -c 'exit 4'\r")
-    ok(sh.expect("failed (4) -- press Esc s to ask why"), "awake: a quick failure says no duration", since()[-300:])
+    ok(sh.expect("failed (4) -- Esc s asks why"), "awake: a quick failure says no duration", since()[-300:])
     sh.expect(prompt)
     sh.settle()
 
@@ -455,10 +408,10 @@ def living(shell, widget, tmp, env, ok):
        "awake: the built-in accent, at height 2", since()[-300:])
     sh.send("\r")
     sh.expect(prompt)
-    # awake, Esc v: the row shows the listening face while it listens
+    # awake, Esc v: the row says it listens, with no face
     since = sh.mark()
     sh.send("\x1bv")
-    ok(sh.expect("(o.o)~ listening -- speak, a pause ends it"), "awake: Esc v shows the listening face",
+    ok(sh.expect("listening -- a pause ends it") and "(o.o)" not in since(), "awake: Esc v says it listens, no face",
        since()[-300:])
     ok(sh.expect("heard -- Enter asks it"), "awake: Esc v lands what it heard", since()[-300:])
     sh.send("\x15")
@@ -485,7 +438,7 @@ def living(shell, widget, tmp, env, ok):
     sh.expect(prompt)
     since = sh.mark()
     sh.send("hostile-empty?\r")
-    ok(sh.expect("* no engine is awake"), "fallback: nothing at all says: no engine is awake", since()[-300:])
+    ok(sh.expect("* no model answers"), "fallback: nothing at all says: no model answers", since()[-300:])
     sh.send("\x15")
     sh.settle()
     ok("no brain awake" not in sh.buf.decode("utf-8", "replace"), "fallback: the old text is gone")
@@ -499,6 +452,67 @@ def living(shell, widget, tmp, env, ok):
         ok(lines(tlog) == ["it's the old trap 7"], "bash: the EXIT trap the rc set first still runs, and sees the exit status",
            lines(tlog))
     rendered_height(shell, widget, tmp, env, ok)
+    failure_row(shell, widget, tmp, env, ok)
+
+
+def failure_row(shell, widget, tmp, env, ok):
+    """A real screen (v1.72): a failure says so in the hint row, the blank
+    row above a plain prompt, and Esc s replaces it there -- one row,
+    never one line above another."""
+    if not shutil.which("tmux"):
+        print("  skip failure row: no tmux")
+        return
+    # a state of its own: no look file, so the row is the one above
+    env = dict(env, TERM="screen-256color", XDG_STATE_HOME=os.path.join(tmp, "failure-state"))
+    env.pop("SPARK_HEIGHT", None)
+    t = ["tmux", "-S", os.path.join(tmp, "tmux-f.sock"), "-f", "/dev/null"]
+    argv = "bash --norc --noprofile -i" if shell == "bash" else "zsh -f -i"
+    cmd = "env -i HISTFILE=/dev/null " + " ".join(shlex.quote("%s=%s" % kv) for kv in env.items()) + " " + argv
+    subprocess.run(t + ["new-session", "-d", "-x", "70", "-y", "14", "-c", os.path.join(tmp, "work"), cmd], check=True)
+
+    def screen():
+        return [r.rstrip() for r in subprocess.run(t + ["capture-pane", "-p"], capture_output=True, text=True).stdout.splitlines()]
+
+    def until(want, timeout=8):
+        end = time.time() + timeout
+        while time.time() < end:
+            s = screen()
+            if want(s):
+                return s
+            time.sleep(0.2)
+        return screen()
+
+    def keys(s, enter=True):
+        subprocess.run(t + ["send-keys", "-l", s], check=True)
+        if enter:
+            subprocess.run(t + ["send-keys", "Enter"], check=True)
+
+    try:
+        if shell == "bash":
+            keys("PS1='\\nF> '; source %s; clear" % widget)
+        else:
+            keys("PROMPT=$'\\nF> '; source %s; clear" % widget)
+        until(lambda s: s[:2] == ["", "F>"], 20)
+        time.sleep(0.5)
+        keys("echo OUT-LINE; sh -c 'exit 3'")
+        rows = until(lambda s: any("failed (3)" in r for r in s))
+        at = next((i for i, r in enumerate(rows) if "failed (3)" in r), -1)
+        good = (0 < at < len(rows) - 1 and rows[at] == "* failed (3) -- Esc s asks why"
+                and rows[at - 1] == "OUT-LINE" and rows[at + 1] == "F>")
+        ok(good, "failure row: the failure line is the hint row, right above the prompt")
+        if not good:
+            print("       screen:\n" + "\n".join("       |%s|" % r for r in rows))
+        time.sleep(0.3)
+        subprocess.run(t + ["send-keys", "Escape", "s"], check=True)
+        rows = until(lambda s: any("Enter explains the error" in r for r in s))
+        at = next((i for i, r in enumerate(rows) if "Enter explains the error" in r), -1)
+        good = (0 < at < len(rows) - 1 and rows[at - 1] == "OUT-LINE" and rows[at + 1].startswith("F> { echo OUT-LINE")
+                and not any("failed (3)" in r for r in rows))
+        ok(good, "failure row: Esc s replaces the failure line in the same row")
+        if not good:
+            print("       screen:\n" + "\n".join("       |%s|" % r for r in rows))
+    finally:
+        subprocess.run(t + ["kill-server"], stderr=subprocess.DEVNULL)
 
 
 def voice_keys(shell, widget, tmp, env, ok):
@@ -944,16 +958,16 @@ def main(shell, widget):
         # command that destroys lands with its ! before it shows
         since = sh.mark()
         sh.send("? knowslow show processes by memory\r")
-        first, full = seen_then("ps aux -m", "checked against the ps manual", 15)
-        ok("the ps manual has no --sort, so spark asks again" in first,
+        first, full = seen_then("ps aux -m", "Every process, the biggest memory first.", 15)
+        ok("the ps manual has no --sort -- asking again" in first,
            "judged: the pulse row says why spark asks again", first[-400:])
-        ok("--sort=" not in full and "ps aux -m" in full and "checked against the ps manual" in full,
-           "judged: the wrong command never reaches the line; the re-ask's lands, checked", full[-400:])
+        ok("--sort=" not in full and "ps aux -m" in full and "checked against" not in full,
+           "judged: the wrong command never reaches the line; the re-ask's lands, its hint plain", full[-400:])
         sh.send("\x15")
         sh.settle()
         since = sh.mark()
         sh.send("? knowrisk show processes by memory\r")
-        first, full = seen_then("rm -rf build", "checked against the ps manual -- read it before Enter", 15)
+        first, full = seen_then("rm -rf build", "Removes the build. -- read it before Enter", 15)
         at_mark = first.find("-- read it before Enter")
         ok("--sort=" not in full and 0 <= at_mark < first.find("rm -rf build"),
            "judged: a re-ask's command that destroys never shows before its ! mark", first[-400:])
@@ -1000,14 +1014,14 @@ def main(shell, widget):
         n = asked()
         sh.mark()
         sh.send("\x1bs")
-        ok(sh.expect("type something first"), "Esc s on an empty line explains itself")
+        ok(sh.expect("type a question, then Esc s"), "Esc s on an empty line explains itself")
         ok(asked() == n, "and does not ask")
 
         # 10. the failure moment: a nonzero exit prints one line, no model call
         n = asked()
         since = sh.mark()
         sh.send("sh -c 'exit 3'\r")
-        ok(sh.expect("failed (3) -- press Esc s to ask why"), "a nonzero exit prints the failure line", since())
+        ok(sh.expect("failed (3) -- Esc s asks why"), "a nonzero exit prints the failure line", since())
         ok(asked() == n, "the failure line costs no spark call")
         sh.expect(prompt)
 
@@ -1041,7 +1055,7 @@ def main(shell, widget):
         sh.expect(prompt)
         since = sh.mark()
         sh.send("\x1bs")
-        ok(sh.expect("type something first"), "and Esc s stays the nag", since())
+        ok(sh.expect("type a question, then Esc s"), "and Esc s stays the nag", since())
         time.sleep(0.2)
 
         # 10f. the first success after the explain is the fix: Esc s offers
@@ -1060,7 +1074,7 @@ def main(shell, widget):
         # an install line in the buffer
         since = sh.mark()
         sh.send("this-command-does-not-exist-xyz\r")
-        ok(sh.expect("not found; Esc s offers the install line"), "127 prints the install note", since())
+        ok(sh.expect("not found; Esc s gets the install line"), "127 prints the install note", since())
         sh.expect(prompt)
         since = sh.mark()
         sh.send("\x1bs")
@@ -1144,7 +1158,7 @@ def main(shell, widget):
         ok(sh.expect("Esc s checks it: test -d ."), "after the run, the hint row offers the proof", since())
         since = sh.mark()
         sh.send("\x1bs")
-        got_p = sh.expect("test -d .") and sh.expect("runs the proof")
+        got_p = sh.expect("test -d .") and sh.expect("runs the check")
         ok(got_p, "Esc s lands the read-only proof, ready to run", since())
         sh.send("\x15")
         sh.expect(prompt)
@@ -1155,7 +1169,7 @@ def main(shell, widget):
             f.write("abcdefabcdefabcd sh 3 echo mended\n")
         since = sh.mark()
         sh.send("sh -c 'exit 3'\r")
-        ok(sh.expect("last time the fix was: echo mended"),
+        ok(sh.expect("last time this fixed it: echo mended"),
            "a known failure shape offers its remembered fix", since())
         os.remove(os.path.join(state, "spark", "fails"))
         sh.expect(prompt)
@@ -1217,7 +1231,7 @@ def main(shell, widget):
         n = asked()
         since = sh.mark()
         sh.send("\x1bv")
-        ok(sh.expect("* listening -- speak, a pause ends it"), "Esc v: the row says it listens", since())
+        ok(sh.expect("* listening -- a pause ends it"), "Esc v: the row says it listens", since())
         ok(sh.expect("heard -- Enter asks it") and sh.expect("? list the big files"),
            "Esc v: the heard words land in the line as a ? question", since())
         time.sleep(0.4)
@@ -1259,7 +1273,7 @@ def main(shell, widget):
         sh.settle()
         since = sh.mark()
         sh.send("\x1bv")
-        ok(sh.expect("Esc v needs the voice -- spark voice on or clear"), "Esc v, no voice: says how to turn it on",
+        ok(sh.expect("Esc v needs the voice -- spark voice on"), "Esc v, no voice: says how to turn it on",
            since())
         sh.send("unset STUB_NOVOICE; export STUB_HEARD='list the big files'\r")
         sh.expect(prompt)
