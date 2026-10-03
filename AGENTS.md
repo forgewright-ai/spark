@@ -193,9 +193,10 @@ whole of it.
   look file, again only when it is newer than the shell's marker, line
   by line and never sourced. Its other state is per pane and in
   memory: never exported.
-- Print a canned line: a greeting, a goodbye, a news line. `spark words
-  greet` prints nothing, and nothing reads `state/news`, `news-seen` or
-  `last-seen`. The face shows only while spark waits.
+- Print a canned line: a greeting, a goodbye, a news line. Awaken
+  writes no lines, an older shell's `spark words greet` prints nothing,
+  and nothing reads `state/news`, `news-seen` or `last-seen`. The face
+  shows only while spark waits, and in `spark look`.
 - Write non-ASCII into a doc: the pre-commit hook refuses it.
 - Name a private repository or tool in any doc: `tests/docs_test.py`
   refuses it.

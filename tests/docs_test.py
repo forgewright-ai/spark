@@ -432,7 +432,9 @@ def spoken():
             check(re.search(r"\bEsc %s\b" % k, text) is not None, "%s names Esc %s (the widgets bind it)" % (name, k))
     # the sizes the docs state are voice.env's: the mouth's row in
     # INSTALL's engine table, and the total per OS (the runtime of that
-    # OS and the three models) in INSTALL, the cheatsheet and the CHANGELOG
+    # OS and the three models) in INSTALL, the cheatsheet and somewhere in
+    # the CHANGELOG (new sizes need a new line there; the top section may
+    # be about something else)
     mb = {k: int(round(int(w[1]) / 1e6)) for k, w in rows.items()}
     models = sum(int(rows[k][1]) for k in ("VOICE_MOUTH", "VOICE_EARS", "VOICE_VAD") if k in rows)
     linux = int(round((int(rows["VOICE_RUNTIME_LINUX_X64"][1]) + models) / 1e6)) if rows else 0
@@ -442,7 +444,7 @@ def spoken():
           "docs/INSTALL.md's engine table gives the mouth's size, %d MB (voice.env)" % mb.get("VOICE_MOUTH", -1))
     pair = "%d MB on Linux" % linux, "%d MB on macOS" % mac
     for name, text in (("docs/INSTALL.md", inst), ("docs/CHEATSHEET.txt", cheat),
-                       ("docs/CHANGELOG.md", read("docs/CHANGELOG.md").split("\n## v", 2)[1])):
+                       ("docs/CHANGELOG.md", read("docs/CHANGELOG.md"))):
         check(all(p in flat(text) for p in pair), "%s states the engine as %s and %s (voice.env)" % ((name,) + pair))
     table = set(re.findall(r"(?m)^\| `([A-Z_]+)`", inst))
     keys = [k for k in config.SPARK_KEYS if k.startswith("SPARK_VOICE")]

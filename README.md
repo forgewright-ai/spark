@@ -160,8 +160,8 @@ another machine of yours (`spark client URL`). What each verb sends:
   with what you said the command did.
 - `paste`: a multi-line paste into an empty prompt, 8 kB at most. A
   bigger paste is not sent. A paste shaped like a secret is not sent.
-- `awaken`: the temperament you chose, once, for the lines spark says.
-  Then one short hello, with your soul and remembered facts, as a
+- `awaken`: the temperament you chose, once, for a personality and a
+  face. Then one short hello, with your soul and remembered facts, as a
   question sends them.
 
 Before a source, a step's output or an editor's question about a source

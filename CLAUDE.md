@@ -122,19 +122,20 @@ it, and no verb carries the word.
   awaken` gives the machine a personality and a look. Until it runs
   nothing living happens: `look.part` answers `off` for every part, so
   every caller keeps its old bytes. Awaken is the one place spark asks
-  the model for its own lines, never unasked. It sets the look, one
+  the model about itself, never unasked. It makes only what shows: a
+  personality and a face. Every mood of the face is made and kept, the
+  ones nothing draws yet too, for later uses. It sets the look, one
   switch (`SPARK_LOOK`), to `auto` and writes the look file with
   `AWAKE=yes`. Motion, colour and words follow the switch. Words is
-  the face in the wait. spark prints no canned line: no greeting, no
-  goodbye, no news. Awaken still writes its lines, and `spark words`
-  shows them. Four fixes
+  the face in the wait, and `spark look` shows the face. spark prints
+  no canned line: no greeting, no goodbye, no news. Four fixes
   reach every machine: setup's one suggestion line, the height (`spark
   height N`, `Esc k`), one text for every line, and the bugs.
   Precedence, strongest first: a pipe, `spark off`, the look `off`,
   `on`, then `auto`. A pipe never sees a frame or an escape. `on` wins
   over `NO_COLOR`. `auto` needs a tty, not `TERM=dumb`, and for colour
-  `NO_COLOR` unset. The machine's own lines never claim where data goes:
-  awaken's brief forbids it, and `README.md` says what leaves. The
+  `NO_COLOR` unset. The machine's personality never claims where data
+  goes: awaken's brief forbids it, and `README.md` says what leaves. The
   voice follows the same door. Awaken offers the machine's own voice
   (`SPARK_VOICE=on`) where a player is. The clear voice, for low
   vision, is accessibility, not a look: it works before awaken, and
@@ -306,11 +307,13 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 look.clean for every line spark says, the look file the
                 widgets read; spark look, spark height)
                 awaken (spark awaken: the temperament, the birth -- one JSON
-                object, `why` first, each line through look.clean -- the
-                personality paragraph, the pace, its voice where a player
-                is: keep, again or none)
-                words (spark words: the lines by id and the faces awaken
-                made; `spark words greet` stays, silent, for an older widget)
+                object, `why` first, then the personality paragraph and
+                the face's eyes and mouth -- the pace, its voice where a
+                player is: keep, again or none)
+                words (the temperament and the faces: the kit, every mood
+                made from its parts, the faces file, the shipped
+                personality; no verb. bin/spark answers an older shell's
+                `spark words greet`, silent)
                 voice (spark voice: the engine's fetch, size and sha256 before
                 a byte unpacks; speak, the 4 characters, play and stop;
                 Engine, Kokoro loaded once through the runtime's C API;
@@ -329,9 +332,9 @@ home/           the shared $HOME mirror, linked. .config/spark/ holds the two
                 (completion.bash completion.zsh: TAB completes the verbs and
                 their names, offline), the banner, spark.env.example, tale
                 (a text of the maintainer's own, credited in CREDITS.md),
-                words.d/ (the shipped lines, one file per temperament: plain,
-                warm, playful, terse) and faces.kit (the parts a face is made
-                of: eyes, mouth, body)
+                words.d/ (the shipped personality, one file per temperament:
+                plain, warm, playful, terse) and faces.kit (the parts a face
+                is made of: eyes, mouth, body)
 linux/home/     the systemd user units (.config/systemd/user: spark-serve spark-forge
                 spark-check.service + spark-check.timer)
 templates/      rendered, not linked: .config/spark/launchd/spark.{serve,forge,check}.plist
@@ -410,15 +413,16 @@ docs/           every document but the 4 at the root. With a release (the
 
 Runtime paths. Config is `~/.config/spark/`: `site.env`, `spark.env`,
 `theme.env`, `models.env` (yours), `privacy-terms`, `soul`,
-`personality`, `words`, `faces`, `voice` and `memory` (the pre-v1.4
-facts file, read until the first write). `voice` (0600) is the
+`personality`, `faces`, `voice` and `memory` (the pre-v1.4 facts file,
+read until the first write). `voice` (0600) is the
 machine's own voice, `KEY=value`: `FAMILY`, `SID`, `SID_PT` and its
 chain's numbers. Awaken writes it, or `spark voice on` on an awake
 machine that has none. `personality` (0600) is the paragraph
-`spark awaken` writes after the soul's fixed core. `words` (0600) is
-`ID<TAB>line` per line, and `faces` (0600) is `MOOD=frame` per line
-plus `RATE=` and `TEMPER=`. Awaken writes both, and every line passes
-`look.clean` when it is stored and again when `spark words` shows it.
+`spark awaken` writes after the soul's fixed core. `faces` (0600) is
+`MOOD=frame` per line, every mood, plus `RATE=` and `TEMPER=`. Awaken
+writes it, and every face passes `look.clean` when it is stored and
+again when it is drawn. An older awaken's `words` file is read by
+nothing.
 `theme.env` is a palette a look layer may write, never spark (contract
 3). `soul` is prose, 0600, yours, never linked from `home/`. `memory`
 there is the pre-v1.4 fallback: the facts live sealed in your store
@@ -466,8 +470,9 @@ State is `~/.local/state/spark/`, 0700:
 Data is `~/.local/share/spark/{engine,models,voice}`, `voice` only
 once the voice was turned on. Tools are linked into `~/.local/bin`.
 `spark uninstall` (`lib/spark/uninstall.py`) removes all of it but the
-sealed stores, the account keys and your prose: the soul and its
-personality stay, and the words, faces and voice files go.
+sealed stores, the account keys and your prose. The soul and its
+personality stay. The faces and voice files go, and an older awaken's
+words file.
 `--purge` takes those too. It runs bootstrap once first, headless
 undone through its row. It gives back a look an older spark set, as
 the `handback` row does (contract 1). It never runs `site.apply` or

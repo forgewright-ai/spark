@@ -2662,9 +2662,12 @@ def _flag(on):
 
 
 # ---------------------------------------------------------------- awaken
-def audition(cfg, temper, seed, line, ask, out=say):
+HELLO = "Hello. This is how I sound."   # what the audition says, the same everywhere
+
+
+def audition(cfg, temper, seed, ask, out=say):
     """spark awaken's offer: a recipe from the temperament and the seed,
-    the line spoken in it, then keep / again / none (again takes the next
+    HELLO spoken in it, then keep / again / none (again takes the next
     seed). What is missing of the engine is downloaded first, its size
     said and asked. The recipe kept, or None; nothing is written here."""
     gone = missing()
@@ -2680,7 +2683,7 @@ def audition(cfg, temper, seed, line, ask, out=say):
     for n in range(12):
         r = mint(temper, seed if n == 0 else "%s:%d" % (seed, n))
         try:
-            wav = speak(cfg, line, "on", recipe=r)
+            wav = speak(cfg, HELLO, "on", recipe=r)
             try:
                 play(cfg, wav, wait=True)
             finally:

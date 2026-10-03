@@ -1624,7 +1624,7 @@ def chat_awake_cases(t):
             raise OSError("no fd")
 
     tmp = tempfile.mkdtemp(prefix="spark-chat-")
-    paths = {n: getattr(look, n) for n in ("LOOK_FILE", "WORDS_FILE", "FACES_FILE")}
+    paths = {n: getattr(look, n) for n in ("LOOK_FILE", "FACES_FILE")}
     for n in paths:
         setattr(look, n, os.path.join(tmp, n.lower()))
     look.forget()
@@ -2221,7 +2221,7 @@ def living_core_cases(t):
             raise OSError("no fd")
 
     tmp = tempfile.mkdtemp(prefix="spark-living-")
-    paths = {n: getattr(look, n) for n in ("LOOK_FILE", "WORDS_FILE", "FACES_FILE")}
+    paths = {n: getattr(look, n) for n in ("LOOK_FILE", "FACES_FILE")}
     keys = ("TERM", "NO_COLOR", "SSH_CONNECTION", "SSH_TTY", "TMUX", "SPARK_HINT_ROW", "SPARK_ASCII",
             "SPARK_LOOK", "SPARK_HEIGHT") + tuple(_sp._SGR_VARS.values())
     saved = {k: os.environ.get(k) for k in keys}
@@ -2425,7 +2425,7 @@ def living_core_cases(t):
         with open(look.FACES_FILE, "w") as f:
             f.write("RATE=5\nIDLE=(o\x1b[31m.o)\n")
         r = _ck.row_look(_Ctx2)
-        t.ok(r.status == "warn" and r.remedy == "spark words edit" and look.faces()["idle"] == "(o.o)",
+        t.ok(r.status == "warn" and r.remedy == "spark awaken" and look.faces()["idle"] == "(o.o)",
              "living: a faces line with an escape warns, and is never drawn", r.value)
         with open(look.FACES_FILE, "w") as f:
             f.write("RATE=5\nTEMPER=warm\n")
@@ -2518,7 +2518,10 @@ def living_core_cases(t):
          and "SPARK_REVEAL" not in senv,
          "living: spark look off writes SPARK_LOOK=off, leaves the reveal; again, nothing changed, says nothing", senv)
     rcg, greet = sp("words", "greet")
+    rcw, words_out = sp("words")
     t.ok(rcg == 0 and greet == "", "living: the greeting is silent on an unawakened machine")
+    t.ok(rcw == 2 and words_out.startswith("spark -- no command named words"),
+         "living: spark words is gone (v1.73), an unknown word like any other", words_out)
     env["SPARK_BASE_URL"] = "http://127.0.0.1:9"     # a question here reaches no model
     rcq, q1 = sp("look", "for", "big", "files", "in", "downloads")
     rcq2, q2 = sp("height", "of", "the", "row?")
@@ -2570,17 +2573,17 @@ def living_core_cases(t):
     _shutil.rmtree(tmp, ignore_errors=True)
 def living_awaken_cases(t):
     """v1.59 awaken: the door to the living layer. No model means the
-    shipped lines; a garbage birth is refused line by line and the shipped
-    line stands in; a soul file of yours is kept; nothing is greeted,
-    awake or not (v1.72)."""
+    shipped personality; a garbage birth is refused and the shipped
+    paragraph stands in; a soul file of yours is kept; nothing is greeted,
+    awake or not (v1.72); awaken makes only what shows, no lines (v1.73)."""
     from spark import look as _look
     from spark import awaken as _aw
     t.ok(_aw._sentences("i speak directly. i avoid fluff") == "I speak directly. I avoid fluff."
          and _aw._sentences("Hello again.") == "Hello again.",
          "awaken: a model's lowercase line becomes whole sentences", _aw._sentences("i speak directly. i avoid fluff"))
     _k = {"EYES": ["o"], "MOUTH": ["."], "BODY": ["()"]}
-    _, _p1, _, _r1 = _aw.birth_lines({"personality": "i speak plainly. i avoid fluff."}, "plain", _k, "x")
-    _, _p2, _, _r2 = _aw.birth_lines({"personality": "You speak warmly and briefly."}, "plain", _k, "x")
+    _p1, _, _r1 = _aw.birth_parts({"personality": "i speak plainly. i avoid fluff."}, "plain", _k, "x")
+    _p2, _, _r2 = _aw.birth_parts({"personality": "You speak warmly and briefly."}, "plain", _k, "x")
     t.ok(_r1 == 1 and _p1.startswith("You speak plainly") and _r2 == 0 and _p2 == "You speak warmly and briefly.",
          "awaken: a personality in the first person is refused, the shipped one stands in", _p1 + " | " + _p2)
     from spark import persona as _pe
@@ -2594,23 +2597,24 @@ def living_awaken_cases(t):
     from spark import awaken as _awk
     esc = "\x1b"
     token = "sk-" + "Q7" * 12                 # a secret's shape, built so no file holds one
-    garbage = {"why": "because", "greet": [esc + "[31mHello, red." + esc + "[0m", "A" * 200, "Here: " + token],
-               "awake": "Awake and glad.", "asleep": "Café is closed.", "runs": "Runs wait.",
-               "done": "", "personality": "You speak " + esc + "]0;x" + "\x07 in riddles.", "eyes": "Z", "mouth": "_"}
+    # an older model may still send the lines awaken asked for once: they are ignored
+    garbage = {"why": "because", "greet": [esc + "[31mHello, red." + esc + "[0m", "Here: " + token],
+               "awake": "Awake and glad.",
+               "personality": "You speak " + esc + "]0;x" + "\x07 in riddles.", "eyes": "Z", "mouth": "_"}
 
     # the parts, in-process (pure: no file of this machine is touched)
     k = _words.kit()
-    lines, pers, fs, refused = _awk.birth_lines(garbage, "playful", k, "host-a")
-    ship = _words.shipped("playful")
-    t.ok(lines["greet.1"] == ship["greet.1"] and lines["greet.2"] == ship["greet.2"] and lines["greet.3"] == ship["greet.3"]
-         and lines["asleep"] == ship["asleep"] and lines["done"] == ship["done"],
-         "awaken: an escape, 200 columns, a token shape, non-ASCII and an empty line each keep the shipped line", str(lines))
-    t.ok(lines["awake"] == "Awake and glad." and lines["runs"] == "Runs wait." and refused == 6,
-         "awaken: the lines that pass the check are the model's own, the refused ones counted", "%r %d" % (lines, refused))
-    t.ok(esc not in pers and pers == " ".join(ship[x] for x in sorted(ship) if x.startswith("personality.")),
+    pers, fs, refused = _awk.birth_parts(garbage, "playful", k, "host-a")
+    t.ok(esc not in pers and pers == _words.personality("playful") and pers.startswith("You speak lightly")
+         and refused == 1,
          "awaken: a personality with an escape is refused whole, the shipped paragraph stands in", pers)
-    t.ok(fs["idle"][1] in k["EYES"] and fs["idle"][2] == "_" and fs == _awk.birth_lines(garbage, "playful", k, "host-a")[2],
+    t.ok(fs["idle"][1] in k["EYES"] and fs["idle"][2] == "_" and fs == _awk.birth_parts(garbage, "playful", k, "host-a")[1],
          "awaken: eyes off the kit are picked by the machine's name, a kit mouth is kept, the same every time", str(fs))
+    t.ok(set(fs) == set(_words.FACE_ORDER) and len(_words.FACE_ORDER) == 10,
+         "awaken: every mood of the face is made, the ones not drawn yet too", str(sorted(fs)))
+    _sch = _awk._schema(k)
+    t.ok(_sch["required"] == ["why", "personality", "eyes", "mouth"] and set(_sch["properties"]) == set(_sch["required"]),
+         "awaken: the birth asks for why, the personality, the eyes and the mouth, nothing more", str(_sch["required"]))
     every = [_words.make_faces(e, m, b) for e in k["EYES"] for m in k["MOUTH"] for b in k["BODY"]]
     t.ok(every and all(len(f) <= 8 and _look.clean(f) == f for faces in every for f in faces.values())
          and all(len(set(faces[m] for m in _look.MOODS)) == len(_look.MOODS) == 8 and faces["blink"] != faces["asleep"]
@@ -2620,8 +2624,9 @@ def living_awaken_cases(t):
     for temper in _words.TEMPERS:
         path = os.path.join(REPO, "home", ".config", "spark", "words.d", temper)
         got, bad = _words.parse(path)
-        t.ok(not bad and set(_words.IDS) <= set(got) and "{name}" in got["hello"] and open(path).read().isascii(),
-             "words.d/%s: every shipped line passes the check, every id there" % temper, str(bad))
+        t.ok(not bad and got and all(x.startswith("personality.") for x in got) and open(path).read().isascii()
+             and _words.personality(temper).startswith("You speak"),
+             "words.d/%s: the shipped personality alone, every line passes the check" % temper, str((bad, got)))
     # inside awaken the process acts awake, the look on auto; nothing written
     before = (_look.awake(), _look.part("motion"))
     with _look.assume_awake():
@@ -2632,14 +2637,14 @@ def living_awaken_cases(t):
     # one rule for an id, and a face over FACE_MAX is refused where it is drawn and where it is checked
     with tempfile.TemporaryDirectory(prefix="spark-ids-") as d:
         with open(d + "/words", "w", encoding="utf-8") as f:
-            f.write("greet.1\tHello.\nbad id\tHello.\ncaf\u00e9\tHello.\n")
+            f.write("personality.1\tHello.\nbad id\tHello.\ncaf\u00e9\tHello.\n")
         with open(d + "/faces", "w") as f:
             f.write("IDLE=(o.o)\nPLEASED=(^......^)\n")
-        got_w = _look.refused(words=d + "/words", faces_path=d + "/faces")
+        got_w = _look.refused(faces_path=d + "/faces")
         parsed, bad = _words.parse(d + "/words")
-        t.ok(got_w == [("words", 2), ("words", 3), ("faces", 2)] and list(parsed) == ["greet.1"]
-             and [n for n, _k, _w in bad] == [2, 3] and _look.faces(d + "/faces")["pleased"] == "(^.^)",
-             "look.refused and words.parse agree on an id; a face over FACE_MAX is reported and never drawn",
+        t.ok(got_w == [("faces", 2)] and list(parsed) == ["personality.1"]
+             and [n for n, _k in bad] == [2, 3] and _look.faces(d + "/faces")["pleased"] == "(^.^)",
+             "words.parse refuses a bad id; a face over FACE_MAX is reported and never drawn",
              repr((got_w, bad)))
     # the birth asks a FORGE for the chat model bare: identity false
     import io
@@ -2735,32 +2740,37 @@ def living_awaken_cases(t):
             return ""
 
     with tempfile.TemporaryDirectory(prefix="spark-awaken-") as root:
-        # no model: the shipped lines of the temperament, every file written 0600
+        # no model: the shipped personality of the temperament, every file written 0600
         home = root + "/a"
         env = home_env(home, "http://127.0.0.1:9")
         cfgd, std = home + "/.config/spark", home + "/.local/state/spark"
         rc, out, _ = run(env, "awaken")
-        t.ok(rc == 2 and out.startswith("spark awaken -- ") and not os.path.exists(cfgd + "/words"),
+        t.ok(rc == 2 and out.startswith("spark awaken -- ") and not os.path.exists(cfgd + "/faces"),
              "awaken: no terminal is one signed line, exit 2, nothing written", out)
         rc, out, _ = run(env, "words", "greet")
         t.ok(rc == 0 and out == "", "words greet: silent on a machine that was never awakened", repr(out))
         rc, out, err = run(env, "awaken", answers="wistful\nwarm\n")
-        warm = _words.shipped("warm")
+        warm = _words.personality("warm")
         wf, ff, pf = cfgd + "/words", cfgd + "/faces", cfgd + "/personality"
         t.ok(rc == 0 and "not answering" in out and out.count("temperament [plain]") == 2
              and "* awake -- the look is on auto" in out and "(^.^)" not in out and "I am awake" not in out,
-             "awaken with no model: asked again once, the shipped lines said so, the closing line", out + err)
-        t.ok("\t" + warm["greet.1"] + "\n" in read(wf) and "TEMPER=warm" in read(ff) and "RATE=28" in read(ff)
-             and all(oct(os.stat(p).st_mode & 0o777) == "0o600" for p in (wf, ff, pf) if os.path.exists(p))
-             and os.path.exists(pf),
-             "awaken with no model: the warm lines, the faces with RATE and TEMPER, each file 0600", read(wf) + read(ff))
+             "awaken with no model: asked again once, said so, the closing line", out + err)
+        t.ok(not os.path.exists(wf) and "TEMPER=warm" in read(ff) and "RATE=28" in read(ff)
+             and all("%s=" % m.upper() in read(ff) for m in _words.FACE_ORDER)
+             and all(oct(os.stat(p).st_mode & 0o777) == "0o600" for p in (ff, pf)),
+             "awaken with no model: no words file (v1.73), every mood in the faces file with RATE and TEMPER, "
+             "each file 0600", read(ff))
+        rc, out, _ = run(env, "look")
+        idle = [ln.split("=", 1)[1] for ln in read(ff).splitlines() if ln.startswith("IDLE=")]
+        t.ok(rc == 0 and idle and "\nface    %s\n" % idle[0] in out and "not awake" not in out,
+             "spark look, awake: the face is a row (v1.73)", out)
         senv = read(cfgd + "/spark.env")
         t.ok("SPARK_LOOK=auto\n" in senv and "SPARK_LOOK_" not in senv
              and "SPARK_REVEAL" not in senv and "AWAKE=yes" in read(std + "/look"),
              "awaken: SPARK_LOOK on auto, the pace untouched with no model, the look file awake", senv)
         rc, out, _ = run(env, "soul")
         t.ok(rc == 0 and out.startswith("soul  built-in core + personality") and _soul.DEFAULT in out
-             and warm["personality.1"] in out,
+             and warm[:40] in out,
              "spark soul: the fixed core kept, the personality after it", out)
         rc, out, _ = run(env, "soul", "edit", extra={"EDITOR": "true"})
         t.ok(rc == 0 and "personality" in out and not os.path.exists(cfgd + "/soul"),
@@ -2786,8 +2796,9 @@ def living_awaken_cases(t):
         rc, out, _ = run(env, "soul")
         t.ok(rc == 0 and esc not in out and "lighthouse keeper.[31m" in out,
              "spark soul: a control character in the personality file is never shown", repr(out))
-        # an older widget still asks `spark words greet`: awake, with a
-        # fact remembered and old keys in the files, it says nothing
+        # a shell started before v1.73 still asks `spark words greet`:
+        # awake, with a fact remembered and old keys in the files, it says
+        # nothing
         run(env, "memory", "add", "backups", "run", "on", "Fridays")
         with open(cfgd + "/site.env", "a") as f:
             f.write("SITE_QUIET_START=yes\nSITE_QUIET_AUDIO=yes\n")
@@ -2798,25 +2809,28 @@ def living_awaken_cases(t):
              "words greet: silent awake too (v1.72), old keys loading, the fact in no plain file", repr(out))
         with open(cfgd + "/site.env", "w") as f:
             f.write("")
-        with open(wf, "a") as f:
-            f.write("greet.1\t" + esc + "[2Jcleared\nnot a line\n")
+        # an older awaken's words file is read by nothing: an escape in it never prints
+        with open(wf, "w") as f:
+            f.write("greet.1\t" + esc + "[2Jcleared\n")
         rc, out, _ = run(env, "words")
-        t.ok(rc == 0 and esc not in out and "refused" in out and "not ID<TAB>line" in out and "faces" in out,
-             "spark words: an escape in the file is refused by name, never printed", repr(out))
+        rc2, out2, _ = run(env, "check", "look")
+        t.ok(rc == 2 and out.startswith("spark -- no command named words") and esc not in out + out2
+             and "words" not in out2,
+             "spark words: gone (v1.73); an old words file is read by nothing, not even the look row", repr(out + out2))
 
         # a garbage birth through a model: refused line by line; faster, then yes
         home = root + "/b"
         env = home_env(home, burl)
         cfgd = home + "/.config/spark"
         rc, out, err = run(env, "awaken", answers="playful\nfaster\nyes\n")
-        body = read(cfgd + "/words")
         t.ok(rc == 0 and esc not in out and "Hello there. Nice to meet you." in out and "failed the check" not in out
-             and "its face" not in out,
-             "awaken, a garbage birth: nothing said of its lines or its face, the pace shown, not one escape printed",
+             and "its face" not in out and "Awake and glad" not in out,
+             "awaken, a garbage birth: nothing said of its face, the pace shown, not one escape printed",
              out + err)
-        t.ok("\tAwake and glad.\n" in body and "\t" + ship["greet.1"] + "\n" in body and esc not in body and token not in body
-             and all(len(ln.split("\t", 1)[1]) <= 72 for ln in body.splitlines()),
-             "awaken, a garbage birth: the words file holds the good line and the shipped ones, nothing refused", body)
+        body = "".join(read(cfgd + "/" + n) for n in ("faces", "personality", "spark.env"))
+        t.ok(not os.path.exists(cfgd + "/words") and esc not in body and token not in body
+             and "Awake and glad" not in body and _words.personality("playful") in read(cfgd + "/personality"),
+             "awaken, a garbage birth: no words file, the old line kinds ignored, the shipped personality", body)
         t.ok("SPARK_REVEAL=38" in read(cfgd + "/spark.env") and "TEMPER=playful" in read(cfgd + "/faces"),
              "awaken: faster is a quarter up (30 -> 38), yes keeps it in spark.env", read(cfgd + "/spark.env"))
         tdir = home + "/.local/state/spark/turns"
@@ -3720,8 +3734,8 @@ def main():
         t.ok(rc == 0 and out.startswith("* "), "one word ending in ? is still a question, marked", out)
         rc, out, _ = spark("modle", "list")
         t.ok(rc == 2 and "try: spark model" in out, "a misspelled verb with arguments is a typo, not a question", out)
-        rc, out, _ = spark("wrods")
-        t.ok(rc == 2 and "try: spark words" in out, "a misspelled verb alone points at the right spelling", out)
+        rc, out, _ = spark("awakn")
+        t.ok(rc == 2 and "try: spark awaken" in out, "a misspelled verb alone points at the right spelling", out)
         # spark quiet left in v1.69: an unknown word like any other
         rc, out, _ = spark("quiet")
         t.ok(rc == 2 and out.startswith("spark -- no command named quiet") and "try:" not in out,

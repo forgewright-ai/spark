@@ -852,6 +852,8 @@ check("awaken: the voice offered, spoken twice (again), kept: the recipe 0600, S
       rc == 0 and out.count("keep it? (keep, again, none)") == 2 and kept and kept["FAMILY"] == "choir"
       and stat.S_IMODE(os.stat(voice.RECIPE_FILE).st_mode) == 0o600 and "SPARK_VOICE=on\n" in senv()
       and len(open(os.path.join(LOG, "player")).read().splitlines()) == 2, out[-900:])
+argv = json.load(open(os.path.join(LOG, "tts.json")))["argv"]
+check("awaken: the audition says the one fixed sentence (v1.73)", argv[-1:] == [voice.HELLO], argv[-2:])
 os.remove(voice.RECIPE_FILE)
 with open(spark_env, "w") as f:
     f.write("SPARK_VOICE=clear\n")

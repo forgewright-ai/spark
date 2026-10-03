@@ -420,7 +420,7 @@ it nothing changes. Step by step:
 Nothing is written until the end, so `Ctrl-C` leaves the machine as it
 was. An engine already downloaded stays for the next run. Run it
 again to start over. The look is one switch, and 3 parts follow it.
-`spark look` shows it, with the height and the reveal:
+`spark look` shows it, with the height, the reveal and the face:
 
 - Motion: while a reply comes, a scanner with a face,
   `* (o.O) [  =     ]`. While a model loads, a bar with an estimate
@@ -456,12 +456,9 @@ the terminal's profile, a quiet boot. A tool of your choice may write a
 palette to `~/.config/spark/theme.env`. When it is there, `spark ver`
 draws its logo in it and the status line takes its accent.
 
-`spark words` shows the faces and lines awaken made. `spark words
-edit` changes the lines in your editor: one `ID<TAB>line` a line,
-ASCII, at most 72 characters. A line that fails the check is replaced
-by the shipped one. After awaken, `spark soul
-edit` changes the personality paragraph alone, and `spark soul edit
---core` the whole soul.
+Awaken makes only what shows: the personality and the face. After
+awaken, `spark soul edit` changes the personality paragraph alone, and
+`spark soul edit --core` the whole soul.
 
 The voice. `spark voice` reads aloud and hears a question, all on this
 machine. It has 3 modes, the key `SPARK_VOICE`:

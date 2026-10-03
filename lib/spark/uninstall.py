@@ -43,9 +43,9 @@ USAGE = """%s uninstall -- remove spark: shows the plan, then asks
 
 KEEP_CONFIG = ("soul", "personality", "memory", "models.env", "themes", "privacy-terms")
 KEEP_STATE = ("users", "account", "account-key")
-# words, faces and voice (the voice it kept) are spark awaken's (the
-# state's look, news, news-seen and loads.json go with the whole state
-# dir); the personality is the soul's
+# faces and voice (the voice it kept) are spark awaken's, and words the
+# file an older awaken wrote (the state's look, news, news-seen and
+# loads.json go with the whole state dir); the personality is the soul's
 SPARK_CONFIG = ("site.env", "spark.env", "theme.env", "console-colors", "console-colors.rgb", "check.log",
                 "words", "faces", "voice")
 UNITS_LINUX = ("spark-serve.service", "spark-forge.service", "spark-check.timer", "spark-check.service")

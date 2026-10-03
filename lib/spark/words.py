@@ -1,69 +1,38 @@
-# spark.words -- the lines an awakened machine says, and its faces.
+# spark.words -- an awakened machine's temperament and its faces.
 #
-# ~/.config/spark/words is `ID<TAB>line`, one a line, written by `spark
-# awaken` (the model's lines, each checked) and yours to change with
-# `spark words edit`. ~/.config/spark/faces is `MOOD=frame`, plus the
-# blink rate and the temperament. The shipped lines are
-# home/.config/spark/words.d/<temperament> and the parts of a face
-# home/.config/spark/faces.kit, both in this tree.
+# ~/.config/spark/faces is `MOOD=frame`, one a line, plus the blink rate
+# and the temperament, written by `spark awaken`. Every mood is made and
+# kept (asleep, waking, idle, thinking, pleased, puzzled, alarmed,
+# listening, blink, glance), though only some are drawn today: the rest
+# wait for later uses. The parts of a face are
+# home/.config/spark/faces.kit, and the personality a temperament keeps
+# when the model's is refused is home/.config/spark/words.d/<temperament>,
+# both in this tree.
 #
-# Every line passes look.clean() when it is read, so a line a person or a
-# model wrote with an escape, a character outside ASCII, more than 72
-# columns or a secret's shape is never printed: it is refused, and the
-# shipped line stands in.
-#
-#   spark words           the lines by id, and the faces
-#   spark words edit      change them in $VISUAL / $EDITOR, then the check
-#
-# spark prints none of the lines at the prompt or in a chat (v1.72): the
-# face shows only in the wait. `spark words greet` is kept, silent, for a
-# shell that loaded an older widget.
+# Since v1.73 awaken writes no lines to say and there is no `spark words`:
+# the face shows in the wait and in `spark look`. A shell started before
+# the update may still run `spark words greet`; bin/spark answers it,
+# silent.
 
 import hashlib
 import os
-import sys
 
-from . import MARK, REPO, look, say
+from . import REPO, look
 
 SHIPPED_DIR = os.path.join(REPO, "home", ".config", "spark", "words.d")
 KIT_FILE = os.path.join(REPO, "home", ".config", "spark", "faces.kit")
 TEMPERS = ("plain", "warm", "playful", "terse")
 DEFAULT_TEMPER = "plain"
-# the ids every temperament ships; `hello` carries {name}, the machine's
-IDS = ("greet.1", "greet.2", "greet.3", "awake", "asleep", "runs", "done", "hello")
 # frames between blinks by temperament (0: never); look reads RATE=
 BLINK_RATE = {"playful": 14, "warm": 28, "plain": 50, "terse": 0}
-# the order the faces are shown in
+# the order the faces are written in
 FACE_ORDER = look.MOODS + ("blink", "glance")
-
-USAGE = """%s words -- the faces and lines spark awaken made
-
-  spark words                   show the lines and the faces
-  spark words edit              edit the lines in your editor
-
-  Each line is ID, a tab, then the line: ASCII, 72 characters at most.
-  A line that fails the check is replaced by the shipped one.
-""" % MARK
-
-
-def why_refused(line):
-    """Why look.clean() refuses `line`, in a few words ('' when it does not)."""
-    s = (line or "").strip()
-    if not s:
-        return "empty"
-    if len(s) > look.LINE_MAX:
-        return "over %d characters" % look.LINE_MAX
-    if any(not (" " <= c <= "~") for c in s):
-        return "an escape or a character outside ASCII"
-    if look.clean(s) is None:
-        return "it looks like a secret"
-    return ""
 
 
 def parse(path):
-    """({id: line}, [(n, id, why)]) from an `ID<TAB>line` file: every line
+    """({id: line}, [(n, id)]) from an `ID<TAB>line` file: every line
     through look.clean(); comments and blanks skipped; a refused line
-    named with its number and the reason. A missing file is ({}, [])."""
+    named with its number. A missing file is ({}, [])."""
     lines, refused = {}, []
     try:
         with open(path, encoding="utf-8", errors="replace") as f:
@@ -75,35 +44,26 @@ def parse(path):
             continue
         key, sep, body = text.partition("\t")
         key = key.strip()
-        if not sep or not look.valid_id(key):
-            refused.append((n, key[:20] or "?", "not ID<TAB>line"))
-            continue
-        c = look.clean(body)
+        c = look.clean(body) if sep and look.valid_id(key) else None
         if c is None:
-            refused.append((n, key, why_refused(body)))
+            refused.append((n, key[:20] or "?"))
             continue
         lines[key] = c
     return lines, refused
 
 
-def shipped(temper):
-    """The shipped lines of a temperament (plain for an unknown one)."""
+def personality(temper):
+    """The shipped personality paragraph of a temperament (plain for an
+    unknown one): its personality.N lines in order, joined."""
     t = temper if temper in TEMPERS else DEFAULT_TEMPER
-    return parse(os.path.join(SHIPPED_DIR, t))[0]
+    got = parse(os.path.join(SHIPPED_DIR, t))[0]
+    return " ".join(got[k] for k in sorted(got) if k.startswith("personality."))
 
 
 def temper():
     """This machine's temperament: TEMPER= in the faces file, else plain."""
     t = look._read_kv(look.FACES_FILE).get("TEMPER", "").strip()
     return t if t in TEMPERS else DEFAULT_TEMPER
-
-
-def load():
-    """The machine's lines: the words file over its temperament's shipped
-    lines, so a refused or missing line always has one to stand in."""
-    out = shipped(temper())
-    out.update(parse(look.WORDS_FILE)[0])
-    return out
 
 
 def kit():
@@ -144,55 +104,6 @@ def make_faces(eyes, mouth, body):
             "listening": f(eyes, mouth, eyes, "~")}
 
 
-def _show():
-    have = os.path.isfile(look.WORDS_FILE)
-    lines = load()
-    say("words  %s  %s" % (temper(), look.WORDS_FILE if have else "shipped"))
-    for key in IDS + tuple(sorted(k for k in lines if k not in IDS and not k.startswith("personality."))):
-        if key in lines:
-            say("  %-10s %s" % (key, lines[key]))
-    _, refused = parse(look.WORDS_FILE)
-    for n, key, why in refused:
-        say("  refused    line %d (%s): %s" % (n, key, why))
-    fs = look.faces()
-    say("faces  %s" % (look.FACES_FILE if os.path.isfile(look.FACES_FILE) else "shipped"))
-    row = ["%s %s" % (m, fs[m]) for m in FACE_ORDER if m in fs]
-    for i in range(0, len(row), 4):
-        say("  " + "   ".join(row[i:i + 4]))
-    return 0
-
-
-def _edit():
-    from . import soul
-    ed = soul._editor()
-    if not ed:
-        say("spark words -- no editor: set $EDITOR")
-        return 1
-    if not os.path.isfile(look.WORDS_FILE):
-        write_words(shipped(temper()))
-    else:
-        os.chmod(look.WORDS_FILE, 0o600)
-    import subprocess
-    try:
-        rc = subprocess.call(ed + [look.WORDS_FILE])
-    except OSError as e:
-        say("spark words -- cannot run %s: %s" % (ed[0], e))
-        return 1
-    if rc != 0:
-        say("! %s exited %d" % (ed[0], rc))
-    lines, refused = parse(look.WORDS_FILE)
-    for n, key, why in refused:
-        say("! line %d (%s) refused: %s" % (n, key, why))
-    return 0
-
-
-def write_words(lines):
-    """The words file, `ID<TAB>line`, 0600, atomically; every line checked."""
-    body = "".join("%s\t%s\n" % (k, look.clean(v)) for k, v in lines.items()
-                   if not k.startswith("personality.") and look.clean(v))
-    _atomic(look.WORDS_FILE, body)
-
-
 def write_faces(faces, temper_name):
     """The faces file: MOOD=frame each, then RATE= and TEMPER=, 0600."""
     body = "".join("%s=%s\n" % (m.upper(), faces[m]) for m in FACE_ORDER if m in faces and look.clean(faces[m]))
@@ -208,25 +119,3 @@ def _atomic(path, body):
         f.write(body)
     os.chmod(tmp, 0o600)
     os.replace(tmp, path)
-
-
-def main(args):
-    if args and args[0] in ("-h", "--help", "help"):
-        say(USAGE.rstrip())
-        return 0
-    if not args or args[0] in ("show", "status"):
-        return _show()
-    if args[0] == "edit":
-        return _edit()
-    if args[0] == "greet":
-        return 0        # an older widget's greeting: nothing is said now
-    if len(args) > 1 or args[0].endswith("?"):
-        # `spark words that rhyme with moon?` is a question, not a sub-word
-        from . import cli
-        return cli.main(["words"] + list(args))
-    say("%s words -- no word %s; spark words -h lists them" % (MARK, args[0]))
-    return 2
-
-
-if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))

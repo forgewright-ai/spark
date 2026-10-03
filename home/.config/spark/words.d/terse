@@ -1,13 +1,5 @@
-# words.d/terse -- the lines spark says, shipped: ID<TAB>line, at most 72
-# columns, ASCII. spark awaken copies a temperament into ~/.config/spark/words
-# and lets the model rewrite them; a line it refuses keeps the one here.
-greet.1	Welcome back.
-greet.2	Ready when you are.
-greet.3	Hello.
-awake	Awake.
-asleep	The model is not answering.
-runs	Runs wait for review.
-done	Done.
-hello	Awake. This machine is {name}.
+# words.d/terse -- the personality spark awaken keeps when the model's
+# paragraph is refused or no model answers: ID<TAB>line, ASCII, at most
+# 72 columns a line, read in order and joined.
 personality.1	You speak in as few words as the answer allows. No greetings, no
 personality.2	filler, no apologies.

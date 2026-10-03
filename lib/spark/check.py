@@ -995,7 +995,7 @@ def row_soul(ctx):
 def row_look(ctx):
     """The living prompt: na until spark awaken; awake, the look file the
     hooks read must be what spark.env and the faces file say now, and
-    every line of the words and faces files one spark would print."""
+    every line of the faces file one spark would draw."""
     from . import look
     if not look.awake():
         return na("not awake", "spark awaken")
@@ -1003,7 +1003,7 @@ def row_look(ctx):
     if bad:
         name, n = bad[0]
         more = " and %d more" % (len(bad) - 1) if len(bad) > 1 else ""
-        return warn("line %d of the %s file%s cannot print" % (n, name, more), "spark words edit")
+        return warn("line %d of the %s file%s cannot print" % (n, name, more), "spark awaken")
     try:
         with open(look.LOOK_FILE, encoding="utf-8") as f:
             have = f.read()
