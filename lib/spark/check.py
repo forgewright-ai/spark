@@ -281,13 +281,16 @@ def row_signed(ctx):
     rc, cur = ctx.sh(g + ["describe", "--tags", "--exact-match"], 10)
     if rc != 0:
         return na("not on a release")
-    cur = cur.strip()
-    from .update import verified
+    from .update import here, verified
+    # the tag whose object names it, when two names sit on HEAD
+    cur = here(ctx.repo) or cur.strip()
     who, why = verified(cur, ctx.repo)
     if who:
         return ok("%s signed by %s" % (cur, who))
     if why.startswith("not signed"):
         return warn("%s is not signed" % cur, "spark update")
+    if why.startswith("named"):
+        return warn("%s is %s" % (cur, why), "spark update")
     return warn("%s %s" % (cur, why), "install openssh and git 2.34 or newer")
 
 

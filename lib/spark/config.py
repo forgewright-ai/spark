@@ -390,9 +390,9 @@ def is_open(license_):
 def _parse_model_file(path, source):
     """[(name, file, url, bytes, sha256, ram_gb, source, tested, license,
     note, ground)] from one KEY=value model file. Every MODEL_<NAME> row
-    is exactly 5 fields (file url bytes sha256 ram_gb); anything else
-    dies, naming the file (config is data, wrong data is refused). The
-    side-keys are not rows: MODEL_<NAME>_LICENSE ("<name> <url>",
+    is exactly 5 fields (file url bytes sha256 ram_gb), the sha256 64
+    lowercase hex digits; anything else dies, naming the file (config
+    is data, wrong data is refused). The side-keys are not rows: MODEL_<NAME>_LICENSE ("<name> <url>",
     required for every row), MODEL_<NAME>_TESTED ("line": the row was
     proven on the line, so auto may pick it; absent otherwise),
     MODEL_<NAME>_NOTE (one line, optional) and MODEL_<NAME>_GROUND
@@ -409,6 +409,10 @@ def _parse_model_file(path, source):
         parts = v.split()
         if len(parts) != 5:
             die("%s: %s needs 5 fields: file url bytes sha256 ram_gb" % (base, k), 2)
+        # the pin is what a download is checked against: anything but 64
+        # lowercase hex digits would make that check a pattern or a no-op
+        if not re.match(r"^[0-9a-f]{64}$", parts[3]):
+            die("%s: %s's sha256 is not 64 lowercase hex digits" % (base, k), 2)
         stem = k[6:]
         name = stem.lower().replace("_", "-")
         license_ = kv.get(k + "_LICENSE", "")

@@ -1,7 +1,8 @@
 # spark release -- a v* tag on a green commit becomes a GitHub Release whose
-# notes are that version's CHANGELOG section. The tag must be signed by a
-# key in the tree's allowed-signers (what spark update and get verify
-# before they move), and must agree with the code: the `## vX.Y` heading,
+# notes are that version's CHANGELOG section. The tag must be on main,
+# named as its object says, and signed by a key in the PREVIOUS release's
+# allowed-signers (what spark update and get verify before they move),
+# and must agree with the code: the `## vX.Y` heading,
 # and `spark ver` (which derives the version from the tag itself, via git
 # describe -- lib/spark/version.py) saying the same thing. The release
 # carries `get` as an asset, so releases/latest/download/get is the
@@ -13,25 +14,47 @@ name: release
 on:
   push:
     tags: ['v*']
-permissions:
-  contents: write
+permissions: {}
 jobs:
   release:
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: write   # gh release create, this job alone
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
         with:
-          fetch-depth: 0   # spark ver needs the tag reachable to describe it
+          fetch-depth: 0   # spark ver needs the tag reachable to describe it; main and the earlier tags too
           persist-credentials: false   # the fetch below reads a public repository; gh has its own token
-      - name: the tag is signed by a key in allowed-signers
+      - name: the tag is signed by a key the release before it trusted
         # actions/checkout peels an annotated tag into a lightweight one on
         # the runner; the signature lives on the tag object, so fetch that
-        # object back (forced: the peeled ref must give way) before verifying
+        # object back (forced: the peeled ref must give way) before verifying.
+        # A tag never vouches for itself: the keys are the previous
+        # release's allowed-signers (the nearest v* tag behind this one, on
+        # main, so its tree is main's), and the tag's own file only when no
+        # earlier release exists. A rotation is a release signed by the old
+        # key that adds the new one. The object's own `tag` header must name
+        # the tag: an old signed release pushed again under a new name is no
+        # new release.
         run: |
           git fetch --force origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
-          git -c gpg.ssh.allowedSignersFile=allowed-signers verify-tag "$GITHUB_REF_NAME" \
-            || { echo "release: $GITHUB_REF_NAME is not signed by a key in allowed-signers (CLAUDE.md, Releasing)"; exit 1; }
+          git merge-base --is-ancestor "$GITHUB_REF_NAME^{commit}" origin/main \
+            || { echo "release: $GITHUB_REF_NAME is not on main (CLAUDE.md, Releasing)"; exit 1; }
+          keys="$RUNNER_TEMP/allowed-signers"
+          if prev=$(git describe --abbrev=0 --match 'v[0-9]*' "$GITHUB_REF_NAME^{commit}^" 2>/dev/null); then
+            git show "$prev:allowed-signers" > "$keys"
+            from="$prev's allowed-signers"
+          else
+            cp allowed-signers "$keys"
+            from="its own allowed-signers (no earlier release)"
+          fi
+          git -c gpg.ssh.allowedSignersFile="$keys" verify-tag "$GITHUB_REF_NAME" \
+            || { echo "release: $GITHUB_REF_NAME is not signed by a key in $from (CLAUDE.md, Releasing)"; exit 1; }
+          name=$(git cat-file tag "$GITHUB_REF_NAME" | sed -n '/^$/q; s/^tag //p')
+          [ "$name" = "$GITHUB_REF_NAME" ] \
+            || { echo "release: the tag object $GITHUB_REF_NAME points to is named '$name'"; exit 1; }
+          echo "release: $GITHUB_REF_NAME signed by a key in $from"
       - name: the tag agrees with the CHANGELOG
         run: |
           v=${GITHUB_REF_NAME#v}

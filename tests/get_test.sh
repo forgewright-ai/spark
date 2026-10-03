@@ -4,8 +4,11 @@
 # shouts. Proves: a fresh clone with no SPARK_REF lands detached on the
 # newest tag on origin, SPARK_REF=main lands attached to main, the second
 # run on an attached clone pulls, a detached clone moves to a newer SIGNED
-# tag on origin and stays put at an unsigned one (a fresh clone of which is
-# refused and removed), the refusals (a foreign directory, no git, an old
+# tag on origin, a fresh clone is verified with the key get embeds (not
+# the clone's own file; SPARK_SIGNERS is the seam), an unsigned tag, an
+# old signed release under a new name and a tag behind the clone are each
+# skipped in one line naming why (never a freeze), a fresh clone no tag
+# passes is refused and removed, the refusals (a foreign directory, no git, an old
 # python3), the pipe form, and the hand-off to `spark setup` in its non-interactive mode
 # (SPARK_NO_APPLY=1: site.env is written, nothing is applied).
 set -eu
@@ -61,7 +64,24 @@ git -C "$T/origin.git" update-ref "$head" "$tip"
 sign() { git -C "$T/origin.git" -c gpg.format=ssh -c user.signingkey="$T/key" tag -s -m "$1" "$1" "$2"; }
 sign v1.0 "$tip"
 export SPARK_URL="file://$T/origin.git"
+# SPARK_SIGNERS is get's test seam: a fresh clone is verified against the
+# release key get itself carries, never the clone's own file -- this
+# fixture's tags are signed by the throwaway key, so the seam points get
+# at its public half. Step 0 runs without it.
+export SPARK_SIGNERS="$T/allowed-signers"
 newest_tag=$(git -C "$T/origin.git" tag -l 'v[0-9]*' --sort=-v:refname | head -1)
+
+# 0. the key get carries, not the clone's: the fixture's clone brings an
+#    allowed-signers holding the throwaway key, and its tag verifies
+#    against that file -- yet without the seam get checks the release key
+#    it embeds, so the fresh clone is refused and removed
+rc=0; out=$(unset SPARK_SIGNERS; SPARK_HOME="$T/embedded" sh "$REPO/get" --clone-only 2>&1) || rc=$?; note "$out"
+[ "$rc" -eq 1 ] && printf '%s\n' "$out" | grep -q 'spark get: no tag signed by a known key: refused -- nothing installed' \
+    && ok "get verifies a fresh clone with its own embedded key, not the clone's file" || bad "embedded key: rc $rc: $out"
+printf '%s\n' "$out" | grep -qx '!      clone        skipped v1.0 (not signed by a known key)' \
+    && ok "the embedded key: the refused tag is named with why" || bad "embedded key skip line: $out"
+[ ! -e "$T/embedded" ] && ok "the embedded key: the refused clone is gone" || bad "embedded key: the refused clone stayed"
+printf '%s\n' "$out" | grep -q 'a test seam' && bad "the seam spoke without being set: $out" || ok "no seam set: no seam line"
 
 # 1. --clone-only, no ref: a full clone at ~/.spark, detached at the newest tag
 out=$(sh "$REPO/get" --clone-only 2>&1) || bad "get --clone-only failed: $out"; note "$out"
@@ -108,20 +128,56 @@ if [ -n "$newest_tag" ]; then
     printf '%s\n' "$out" | grep -q "moved to $newer_tag" && ok "detached clone moves to the newer signed tag" || bad "moved run: $out"
     [ "$(git -C "$HOME/.spark" describe --tags --exact-match 2>/dev/null)" = "$newer_tag" ] && ok "landed on $newer_tag" || bad "not on $newer_tag"
 
-    # 4b. an unsigned tag on origin is no release: the detached clone stays
-    #     put, and a fresh clone is refused and removed -- exit 1, before
-    #     spark setup
+    # 4b. an unsigned tag on origin is no release: skipped in one line,
+    #     never a freeze -- the detached clone stays at the newest signed
+    #     tag (exit 0), and a fresh clone lands there
     unsigned="${newer_tag%.*}.$((${newer_tag##*.} + 1))"
     c3=$(git -C "$T/origin.git" commit-tree "$rtree" -p "$newer" -m "get_test: $unsigned, unsigned")
     git -C "$T/origin.git" tag "$unsigned" "$c3"
     rc=0; out=$(sh "$REPO/get" --clone-only 2>&1) || rc=$?; note "$out"
-    [ "$rc" -eq 1 ] && ok "unsigned tag: the re-run refuses, exit 1" || bad "unsigned tag re-run: rc $rc: $out"
-    printf '%s\n' "$out" | grep -q "spark get: $unsigned is not signed by a known key: refused" && ok "unsigned tag: the refusal names it" || bad "unsigned tag: $out"
-    [ "$(git -C "$HOME/.spark" describe --tags --exact-match 2>/dev/null)" = "$newer_tag" ] && ok "unsigned tag: still at $newer_tag" || bad "unsigned tag: moved"
-    rc=0; out=$(SPARK_HOME="$T/refused" sh "$REPO/get" 2>&1 < /dev/null) || rc=$?; note "$out"
-    [ "$rc" -eq 1 ] && printf '%s\n' "$out" | grep -q "$unsigned is not signed by a known key: refused" && ok "unsigned tag: a fresh clone is refused before setup" || bad "unsigned tag fresh clone: rc $rc: $out"
-    [ ! -e "$T/refused" ] && ok "unsigned tag: the refused clone is gone" || bad "unsigned tag: the refused clone stayed"
-    git -C "$T/origin.git" tag -d "$unsigned" >/dev/null   # the runs below land on $newer_tag again
+    [ "$rc" -eq 0 ] && ok "unsigned tag: the re-run skips it, exit 0 (no freeze)" || bad "unsigned tag re-run: rc $rc: $out"
+    printf '%s\n' "$out" | grep -qx "!      clone        skipped $unsigned (not signed by a known key)" && ok "unsigned tag: one line names it and why" || bad "unsigned tag: $out"
+    printf '%s\n' "$out" | grep -q "is spark already: at $newer_tag" && [ "$(git -C "$HOME/.spark" describe --tags --exact-match 2>/dev/null)" = "$newer_tag" ] \
+        && ok "unsigned tag: still at $newer_tag" || bad "unsigned tag: $out"
+    rc=0; out=$(SPARK_HOME="$T/fresh-unsigned" sh "$REPO/get" --clone-only 2>&1) || rc=$?; note "$out"
+    [ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -qx "!      clone        skipped $unsigned (not signed by a known key)" \
+        && [ "$(git -C "$T/fresh-unsigned" describe --tags --exact-match 2>/dev/null)" = "$newer_tag" ] \
+        && ok "unsigned tag: a fresh clone skips it and lands on $newer_tag" || bad "unsigned tag fresh clone: rc $rc: $out"
+    git -C "$T/origin.git" tag -d "$unsigned" >/dev/null
+
+    # 4c. an old signed release pushed again under a higher name: the
+    #     signature covers the tag object, not the ref, so v9.9 carrying
+    #     $newest_tag's object verifies -- its object names $newest_tag,
+    #     and get skips it, on a re-run and on a fresh clone alike (the
+    #     re-run's clone keeps the tags deleted on origin above: fetch
+    #     --tags never prunes, so the skip line names them too)
+    git -C "$T/origin.git" update-ref refs/tags/v9.9 "$(git -C "$T/origin.git" rev-parse "refs/tags/$newest_tag")"
+    rc=0; out=$(sh "$REPO/get" --clone-only 2>&1) || rc=$?; note "$out"
+    [ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -q "^!      clone        skipped .*v9.9 (named $newest_tag inside)" \
+        && [ "$(git -C "$HOME/.spark" rev-parse HEAD)" = "$newer" ] \
+        && ok "a renamed old release: skipped on a re-run, the clone stays at $newer_tag" || bad "renamed re-run: rc $rc: $out"
+    rc=0; out=$(SPARK_HOME="$T/fresh-renamed" sh "$REPO/get" --clone-only 2>&1) || rc=$?; note "$out"
+    [ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -q "^!      clone        skipped .*v9.9 (named $newest_tag inside)" \
+        && [ "$(git -C "$T/fresh-renamed" rev-parse HEAD)" = "$newer" ] \
+        && ok "a renamed old release: a fresh clone skips it and lands on $newer_tag" || bad "renamed fresh clone: rc $rc: $out"
+    git -C "$T/origin.git" tag -d v9.9 >/dev/null
+
+    # 4d. forward only on a re-run: a signed tag named as it says, but
+    #     behind the clone (on $newest_tag's commit), is skipped
+    sign v8.0 "$base"
+    rc=0; out=$(sh "$REPO/get" --clone-only 2>&1) || rc=$?; note "$out"
+    [ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -q "^!      clone        skipped .*v8.0 (behind this checkout)" \
+        && [ "$(git -C "$HOME/.spark" rev-parse HEAD)" = "$newer" ] \
+        && ok "a signed tag behind the clone: skipped, never moved back" || bad "behind: rc $rc: $out"
+    git -C "$T/origin.git" tag -d v8.0 >/dev/null
+
+    # 4e. no tag passes (the seam names a key nobody signed with): a fresh
+    #     clone is refused and removed -- exit 1, before spark setup
+    ssh-keygen -q -t ed25519 -N '' -f "$T/otherkey"
+    printf 'spark-release namespaces="git" %s\n' "$(cut -d' ' -f1,2 "$T/otherkey.pub")" > "$T/other-signers"
+    rc=0; out=$(SPARK_SIGNERS="$T/other-signers" SPARK_HOME="$T/refused" sh "$REPO/get" 2>&1 < /dev/null) || rc=$?; note "$out"
+    [ "$rc" -eq 1 ] && printf '%s\n' "$out" | grep -q "no tag signed by a known key: refused -- nothing installed" && ok "no known key: a fresh clone is refused before setup" || bad "no known key fresh clone: rc $rc: $out"
+    [ ! -e "$T/refused" ] && ok "no known key: the refused clone is gone" || bad "no known key: the refused clone stayed"
 fi
 
 # 5. a non-empty directory that is not spark is refused, untouched
@@ -152,7 +208,7 @@ printf '%s\n' "$out" | grep -q 'missing: git' && ok "no git: the refusal names g
 #     points refuses in one line (the pinned engine is a glibc build)
 tools() {   # tools DIR -- what get runs after the probe, and a uname that says Linux x86_64
     mkdir -p "$1"
-    for t in sh ls python3 git ssh-keygen head rm find cut; do p=$(command -v "$t" 2>/dev/null || true); [ -z "$p" ] || ln -s "$p" "$1/$t"; done
+    for t in sh ls python3 git ssh-keygen head rm find cut sed tr mktemp cat; do p=$(command -v "$t" 2>/dev/null || true); [ -z "$p" ] || ln -s "$p" "$1/$t"; done
     printf '#!/bin/sh\ncase ${1:-} in -s) echo Linux ;; -m) echo x86_64 ;; *) exec /usr/bin/uname "$@" ;; esac\n' > "$1/uname"; chmod +x "$1/uname"
 }
 tools "$T/nopm"
