@@ -81,7 +81,6 @@ USAGE_INTERFACE = """the interface
 USAGE_LIVING = """the living prompt
  spark awaken                 give this machine a personality and a look
  spark look [on|off|auto]     the look: motion, colour and the face (-h)
- spark words [edit]           the faces and lines spark awaken made
  spark height [N]             the row above your prompt spark writes in
  Esc k                        move that row
 """
@@ -105,7 +104,7 @@ version %s
 
 def usage():
     """The help: the bar line and the voice are the interface;
-    awaken, look, words and height the living prompt.
+    awaken, look and height the living prompt.
     The version is formatted here, not at import: nothing on the `spark
     line` path may call git, and version() does, on a cache miss."""
     from spark import version
@@ -126,6 +125,8 @@ def main(argv):
         mod = importlib.import_module("spark." + spec[0])
         fn = getattr(mod, spec[1])
         return fn(sub, rest) if spec[2] else fn(rest)
+    if argv == ["words", "greet"]:
+        return 0    # a shell started before v1.73 may still ask: silent, as since v1.72
     if sub in KNOWN_GONE:
         # a verb that once existed, or a word people reach for: refused
         # whatever follows -- `spark shell on` is not a question
@@ -157,7 +158,7 @@ VERBS = {"setup": ("setup", "main", False), "check": ("check", "main", False),
          "reveal": ("reveal", "cmd_reveal", False),
          "look": ("look", "cmd_look", False), "height": ("look", "cmd_height", False),
          "voice": ("voice", "cmd_voice", False),
-         "awaken": ("awaken", "main", False), "words": ("words", "main", False),
+         "awaken": ("awaken", "main", False),
          "update": ("update", "cmd_update", False), "bar": ("bar", "main", False),
          "bench": ("bench", "main", True), "stats": ("stats", "main", False),
          "headless": ("site", "cmd_headless", False), "client": ("site", "cmd_client", False),

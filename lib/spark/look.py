@@ -28,7 +28,6 @@ from . import CONFIG_DIR, SPARK_ENV, STATE_DIR
 
 LOOK_FILE = os.path.join(STATE_DIR, "look")
 LOADS_FILE = os.path.join(STATE_DIR, "loads.json")
-WORDS_FILE = os.path.join(CONFIG_DIR, "words")
 FACES_FILE = os.path.join(CONFIG_DIR, "faces")
 
 PARTS = ("motion", "colour", "words")
@@ -184,10 +183,10 @@ def default_sgr(role, stream=None):
 
 def clean(line):
     """A line fit to print: ASCII, printable, at most LINE_MAX columns,
-    no secret shape. None when it is not -- every line the model or a
-    person writes into the words or faces file passes here before it is
-    stored and again before it is printed (an escape in a file is a way
-    to drive the terminal)."""
+    no secret shape. None when it is not -- every face the model or a
+    person writes into the faces file passes here before it is stored
+    and again before it is drawn (an escape in a file is a way to drive
+    the terminal)."""
     if not isinstance(line, str):
         return None
     line = line.strip()
@@ -202,7 +201,7 @@ def clean(line):
 
 
 def valid_id(key):
-    """One rule for an id (a words line's, a news line's): ASCII letters,
+    """One rule for an id (a shipped temperament line's): ASCII letters,
     digits, `.`, `_` and `-`, nothing else."""
     return bool(key) and key.isascii() and all(c.isalnum() or c in "._-" for c in key)
 
@@ -251,32 +250,27 @@ def blink():
         return BLINK_DEFAULT
 
 
-def refused(words=None, faces_path=None):
-    """[(file, line number)] for every line of the words or faces file
-    that clean() refuses: a line spark will never print. A comment and a
-    blank line are not lines; a faces setting (RATE=, TEMPER=) is not a
-    face."""
+def refused(faces_path=None):
+    """[(file, line number)] for every line of the faces file that
+    clean() refuses: a face spark will never draw. A comment and a blank
+    line are not lines; a faces setting (RATE=, TEMPER=) is not a face."""
     out = []
-    for path, shape in ((words or WORDS_FILE, "words"), (faces_path or FACES_FILE, "faces")):
-        try:
-            with open(path, encoding="utf-8", errors="replace") as f:
-                lines = f.read().split("\n")
-        except OSError:
+    path = faces_path or FACES_FILE
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            lines = f.read().split("\n")
+    except OSError:
+        return out
+    for n, line in enumerate(lines, 1):
+        if not line.strip() or line.lstrip().startswith("#"):
             continue
-        for n, line in enumerate(lines, 1):
-            if not line.strip() or line.lstrip().startswith("#"):
-                continue
-            if shape == "words":
-                _id, tab, text = line.partition("\t")
-                good = bool(tab) and valid_id(_id.strip()) and clean(text) is not None
-            else:
-                key, eq, frame = line.partition("=")
-                if eq and key.strip().upper() in FACE_SETTINGS:
-                    good = clean(frame) is not None
-                else:
-                    good = bool(eq) and clean(key) is not None and face_ok(frame)
-            if not good:
-                out.append((os.path.basename(path), n))
+        key, eq, frame = line.partition("=")
+        if eq and key.strip().upper() in FACE_SETTINGS:
+            good = clean(frame) is not None
+        else:
+            good = bool(eq) and clean(key) is not None and face_ok(frame)
+        if not good:
+            out.append((os.path.basename(path), n))
     return out
 
 
@@ -331,7 +325,8 @@ def render(cfg=None, awake_now=None):
 # ------------------------------------------------------------------- verbs
 USAGE = """spark look -- spark's own look: motion, colour and the face
 
-  spark look                    show the look, the height and the pace
+  spark look                    show the look, the height, the pace and
+                                the face
   spark look on|off|auto        turn the look on or off; auto is on at a
                                 terminal, and colour only without NO_COLOR
 
@@ -391,7 +386,9 @@ def show(cfg=None):
     say(("%-7s %-5s %s" % ("look", v, here)).rstrip())
     say("%-7s %-5d %s" % ("height", height(cfg), _rows(height(cfg))))
     say("%-7s %s" % ("reveal", stored("reveal", cfg)))
-    if not awake():
+    if awake():
+        say("%-7s %s" % ("face", faces()["idle"]))
+    else:
         say("* not awake yet -- spark awaken turns the look on")
     return 0
 

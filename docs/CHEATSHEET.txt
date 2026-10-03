@@ -157,8 +157,7 @@ THE INTERFACE
 THE LIVING PROMPT
   spark awaken                    give this machine a personality and a look
   spark look [on|off|auto]        motion, colour and the face, one switch.
-                                  Bare: the look, the height, the reveal
-  spark words [edit]              the faces and lines spark awaken made
+                                  Bare: the look, height, reveal and face
   spark height [N]                the row spark writes in: 1..5 above your line
   Esc k                           at the prompt: move spark's row (1, 2, 3)
 

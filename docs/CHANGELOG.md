@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.73
+
+- `spark awaken` makes only what shows: a personality and a face. It
+  writes no lines to say, and no words file.
+- Every mood of the face is still made and kept, for later uses.
+- `spark words` is gone. `spark look` shows the face. A shell started
+  before the update may still ask for its greeting: it gets nothing.
+- The voice's audition says one fixed sentence: "Hello. This is how I
+  sound."
+
 ## v1.72
 
 One voice and one way of looking: spark says less, in short plain

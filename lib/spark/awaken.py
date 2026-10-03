@@ -1,21 +1,23 @@
 # spark.awaken -- `spark awaken`: give this machine a personality and a look.
 #
 # The door to the living layer. Nothing living happens before it runs,
-# and it is the one place spark asks the model for its own lines: never
-# unasked, never anywhere else. Seven steps, each short:
+# and it is the one place spark asks the model about itself: never
+# unasked, never anywhere else. It makes only what shows: a personality
+# and a face. Seven steps, each short:
 #
 #   1 ask    the temperament (plain, warm, playful, terse); Enter keeps plain
 #   2 wake   the model, when it is loading (the waking wait)
-#   3 birth  one JSON object, `why` first: the lines it says, a personality
-#            paragraph, its eyes and mouth from the kit. Every line passes
-#            look.clean(); a refused or missing one keeps the shipped line
-#            (words.d/<temperament>). No model: the shipped lines, said so.
+#   3 birth  one JSON object, `why` first: a personality paragraph, its
+#            eyes and mouth from the kit. A refused or missing paragraph
+#            keeps the shipped one (words.d/<temperament>), and a part off
+#            the kit is picked by the machine's name. Every mood of the
+#            face is made and written, the ones not drawn yet too.
 #   4 soul   the personality paragraph, after the fixed core -- or, with a
 #            soul file of your own, "Your own soul is kept."
 #   5 pace   one reply revealed at the measured pace; yes, faster, slower
 #            or off (faster and slower replay the same text, no new call)
 #   6 voice  where a player is: its own voice, from the temperament and the
-#            seed the face's body uses, the hello line spoken in it; keep,
+#            seed the face's body uses, voice.HELLO spoken in it; keep,
 #            again (the next seed) or none. What the engine lacks is
 #            downloaded first, its size said and asked (voice.audition)
 #   7 done   the look on auto, the look file rendered; a voice kept is
@@ -69,30 +71,22 @@ def _schema(k):
         "type": "object",
         "properties": {
             "why": {"type": "string"},
-            "greet": {"type": "array", "items": {"type": "string"}},
-            "awake": {"type": "string"},
-            "asleep": {"type": "string"},
-            "runs": {"type": "string"},
-            "done": {"type": "string"},
             "personality": {"type": "string"},
             "eyes": {"type": "string", "enum": list(k["EYES"])},
             "mouth": {"type": "string", "enum": list(k["MOUTH"])},
         },
-        "required": ["why", "greet", "awake", "asleep", "runs", "done", "personality", "eyes", "mouth"],
+        "required": ["why", "personality", "eyes", "mouth"],
     }
 
 
 def _brief(temper, k):
     return (
-        "You are writing the few lines a local assistant called spark says at a person's shell "
-        "prompt, in one temperament: %s (%s). Write plain English, ASCII only. Each line is one "
-        "or two whole sentences of 4 to 10 words, with a subject and a verb, under 60 characters. No emoji, no quotation marks, no commands, and "
-        "no claim about privacy or where anything is sent. Reply with one JSON object. `why` comes "
-        "first: one sentence on how the temperament shapes the lines. Then `greet`: 3 different "
-        "greetings for a person coming back to the terminal. `awake`: the model answers again. "
-        "`asleep`: the model is not answering right now. `runs`: some tasks wait for the person's "
-        "review. `done`: a closing line. `personality`: 2 or 3 sentences, addressed as you, on how "
-        "you speak (tone only, no rules). `eyes`: one of %s. `mouth`: one of %s."
+        "You are shaping a local assistant called spark that answers at a person's shell prompt, "
+        "in one temperament: %s (%s). Write plain English, ASCII only. No emoji, no quotation "
+        "marks, no commands, and no claim about privacy or where anything is sent. Reply with one "
+        "JSON object. `why` comes first: one sentence on how the temperament shapes the voice. "
+        "`personality`: 2 or 3 sentences, addressed as you, on how you speak (tone only, no "
+        "rules). `eyes`: one of %s. `mouth`: one of %s."
         % (temper, TEMPER_DESC[temper], " ".join(k["EYES"]), " ".join(k["MOUTH"])))
 
 
@@ -164,10 +158,10 @@ def _wake(cfg):
 def ask_birth(s, temper, k):
     """The model's one JSON object for this temperament, or {} on any
     failure. The request goes bare (identity false): no soul and no
-    remembered fact rides it, so none can be echoed into the plain words
-    file. It is a turn record, as every request is."""
+    remembered fact rides it, so none can be echoed into the plain
+    personality file. It is a turn record, as every request is."""
     msgs = [{"role": "system", "content": _brief(temper, k)},
-            {"role": "user", "content": "Write the lines for the %s temperament." % temper}]
+            {"role": "user", "content": "Shape spark for the %s temperament." % temper}]
     busy = textmod.Busy(sys.stderr).start()
     t0 = time.time()
     try:
@@ -199,7 +193,7 @@ FIRST_PERSON = re.compile(r"\b(?:I|I'm|me|my|myself)\b")
 
 
 def _sentences(t):
-    """A model's line as whole sentences: each one's first letter a
+    """A model's paragraph as whole sentences: each one's first letter a
     capital, a lone `i` a capital I, a full stop at the end when it has
     no end mark. A small model writes lowercase under a terse brief."""
     t = re.sub(r"(^|[.!?] +)([a-z])", lambda m: m.group(1) + m.group(2).upper(), t)
@@ -207,28 +201,14 @@ def _sentences(t):
     return t if t.endswith((".", "?", "!")) else t + "."
 
 
-def birth_lines(reply, temper, k, seed):
-    """(lines, personality, faces, refused) from the model's reply: every
-    line through look.clean(), a refused or missing one the shipped line;
+def birth_parts(reply, temper, k, seed):
+    """(personality, faces, refused) from the model's reply: the
+    paragraph checked, a refused or missing one the shipped paragraph;
     the eyes and mouth from the kit, else picked by `seed`; the body by
-    `seed` always. `refused` counts the lines the check turned away."""
+    `seed` always. Every mood of the face is made. `refused` is 1 when
+    the check turned the paragraph away."""
     reply = reply if isinstance(reply, dict) else {}
-    ship = wordsmod.shipped(temper)
-    lines, refused = dict(ship), 0
-    greet = reply.get("greet")
-    got = {}
-    if isinstance(greet, list):
-        for i, g in enumerate(greet[:3], 1):
-            got["greet.%d" % i] = g
-    for key in ("awake", "asleep", "runs", "done"):
-        if key in reply:
-            got[key] = reply.get(key)
-    for key, val in got.items():
-        c = look.clean(_sentences(val.strip())) if isinstance(val, str) and val.strip() else None
-        if c:
-            lines[key] = c
-        else:
-            refused += 1
+    refused = 0
     p = _paragraph(reply.get("personality"))
     if p is not None:
         p = _sentences(p)
@@ -239,11 +219,11 @@ def birth_lines(reply, temper, k, seed):
     if p is None:
         if "personality" in reply:
             refused += 1
-        p = " ".join(ship[key] for key in sorted(ship) if key.startswith("personality."))
+        p = wordsmod.personality(temper)
     eyes = reply.get("eyes") if reply.get("eyes") in k["EYES"] else wordsmod.pick(k["EYES"], seed, "eyes")
     mouth = reply.get("mouth") if reply.get("mouth") in k["MOUTH"] else wordsmod.pick(k["MOUTH"], seed, "mouth")
     body = wordsmod.pick(k["BODY"], seed, "body")
-    return lines, p, wordsmod.make_faces(eyes, mouth, body), refused
+    return p, wordsmod.make_faces(eyes, mouth, body), refused
 
 
 # ------------------------------------------------------------------ the pace
@@ -295,15 +275,14 @@ def pace(s, cfg, temper, ask):
 
 
 # ----------------------------------------------------------------- the voice
-def offer_voice(cfg, temper, lines, ask=None):
+def offer_voice(cfg, temper, ask=None):
     """Step 6: the voice, offered where a player is and a person answers
     (never under SPARK_NO_APPLY). The recipe kept, or None: Enter, none,
     no player or a failure leave SPARK_VOICE as it is."""
     from . import voice
     if os.environ.get("SPARK_NO_APPLY") or not voice.player(cfg):
         return None
-    line = look.clean((lines.get("hello") or "").replace("{name}", cfg.name or "this machine")) or "I am awake."
-    kept = voice.audition(cfg, temper, _seed(cfg), line, ask or _Ask())
+    kept = voice.audition(cfg, temper, _seed(cfg), ask or _Ask())
     if kept:
         say("* its voice: %s" % voice.describe(kept))
         if voice.mode(cfg) == "clear":
@@ -346,7 +325,7 @@ def run(cfg, ask):
             say("  " + hint)
     else:
         reply = ask_birth(s, temper, k)
-    lines, personality, fs, _refused = birth_lines(reply, temper, k, _seed(cfg))
+    personality, fs, _refused = birth_parts(reply, temper, k, _seed(cfg))
     own = soul.read(cfg)[1] in ("file", "env")
     if own:
         say("* your soul is kept")
@@ -360,9 +339,8 @@ def run(cfg, ask):
         say("! no model to show the pace -- spark reveal sets it later")
     else:
         pace_word = pace(s, cfg, temper, ask)
-    kept = offer_voice(cfg, temper, lines, ask)
+    kept = offer_voice(cfg, temper, ask)
     # the end: every file at once, each atomically
-    wordsmod.write_words(lines)
     wordsmod.write_faces(fs, temper)
     if not own:
         soul.write_personality(personality)

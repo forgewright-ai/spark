@@ -41,7 +41,7 @@ _spark_complete() {
                ver last status history stats clear bench model
                soul memory bar look height off
                on user explain edit ask read drill watch reveal help uninstall
-               awaken words voice"
+               awaken voice"
         COMPREPLY=($(compgen -W "$words" -- "$cur"))
         return 0
     fi
@@ -60,7 +60,6 @@ _spark_complete() {
         chat)    words="--thread" ;;
         do)      words="--sandbox --detach --porcelain --review --accept --discard" ;;
         soul)    words="show edit reset" ;;
-        words)   words="edit" ;;
         bench)   words="--line" ;;
         clear)   words="--history" ;;
         client)  words="off status" ;;

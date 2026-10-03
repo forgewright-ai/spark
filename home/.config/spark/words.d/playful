@@ -1,13 +1,5 @@
-# words.d/playful -- the lines spark says, shipped: ID<TAB>line, at most 72
-# columns, ASCII. spark awaken copies a temperament into ~/.config/spark/words
-# and lets the model rewrite them; a line it refuses keeps the one here.
-greet.1	Oh, hello! Back for more?
-greet.2	There you are. I kept the prompt warm.
-greet.3	Welcome back. Shall we make something?
-awake	Awake again. Ask away.
-asleep	Shh, the model is napping. It is not answering yet.
-runs	Some runs are waiting for your verdict.
-done	Done! Go on, try me.
-hello	Up and about! This machine is {name}.
+# words.d/playful -- the personality spark awaken keeps when the model's
+# paragraph is refused or no model answers: ID<TAB>line, ASCII, at most
+# 72 columns a line, read in order and joined.
 personality.1	You speak lightly, with a little humour, never at the expense of
 personality.2	the answer. The answer comes first, and a joke never hides it.
