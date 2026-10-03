@@ -366,7 +366,7 @@ def living(shell, widget, tmp, env, ok):
            "height 2: the failure line is drawn in the hint row", since()[-300:])
     else:
         # bash: the line, then the prompt's own opening newline ends it
-        ok(re.search(r"\* failed \(3\) -- Esc s asks why\r?\nINFO-LINE", since()) is not None,
+        ok(re.search(r"\* failed \(3\) -- Esc s asks why(\x1b\[\?2004h)?\r*\nINFO-LINE", since()) is not None,
            "height 2: the failure line is the prompt's blank row", since()[-300:])
 
     # awake, after an absence, a news file there: the next prompt says
