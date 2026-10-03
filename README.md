@@ -2,23 +2,21 @@
 
 <img src="assets/banner.svg" alt="spark" width="400">
 
-Your own AI, on a machine you own: no account, no cloud, nothing leaves.
-One line installs it. Then ask at the prompt line:
+A local AI for your shell. It runs on your own machine, with no account
+and no cloud.
 
 ```
 ~ > files bigger than 1G modified this week?          <- type it, press Enter
-* Finds files >1G modified in last 7 days.              <- the hint, above the prompt
+* Finds files >1G modified in last 7 days.              <- the hint
 ~ > find . -type f -size +1G -mtime -7                  <- the command, in your line
 ```
 
-Nothing runs until you press `Enter` again. A command that deletes comes
-back marked `!`. A recursive `rm` says how many files and bytes it would
-clear, and how many of them git tracks. spark works that out from the
-command itself and runs nothing.
+Nothing runs until you press `Enter` again. A command that deletes is
+marked `!`.
 
 ## Install
 
-1. Once, on a bare machine:
+1. Install the basics:
 
    ```sh
    # Debian 13 / Ubuntu 24.04 or newer
@@ -31,167 +29,115 @@ command itself and runs nothing.
    xcode-select --install
    ```
 
-   Windows: `wsl --install -d Ubuntu-24.04` in PowerShell, then the
+   Windows: run `wsl --install -d Ubuntu-24.04` in PowerShell, then the
    Debian line inside Ubuntu.
 
-2. One line, any OS:
+2. Install spark:
 
    ```sh
    curl -fsSL https://github.com/forgewright-ai/spark/releases/latest/download/get | sh
    ```
 
-   It asks 3 things: this machine's name, yours and the model, and
-   whether spark should read aloud. Then it asks the first question
-   for you. About 10 minutes, most of it
-   one model download. To read the script first:
+   It asks three questions, then downloads a model. This takes about
+   10 minutes. To read the script first:
 
    ```sh
    curl -fsSLO https://github.com/forgewright-ai/spark/releases/latest/download/get
    sh get
    ```
 
-3. Open a new shell:
+3. Open a new shell and check:
 
    ```sh
    exec $SHELL
    spark check
    ```
 
-   `spark check` prints what needs you, then the totals. Nothing to
-   fix is the totals line alone.
-
-One line goes into your rc file, nothing else. Your shell, your colours
-and your editor stay yours. `docs/INSTALL.md` has every step and every
-key.
+spark adds one line to your rc file. `docs/INSTALL.md` has the details.
 
 ## Use it
 
-The first 3 things to type:
-
 ```
-? how big is this dir           a command in your line, a hint above it
+? how big is this dir           a command for your line
 cmd 2>&1 | explain              what went wrong, and the fix
-spark chat                      talk with the model; /help lists commands
+spark chat                      talk with the model
 ```
 
-Then the rest, one line each in `docs/CHEATSHEET.txt`, and a first
-hour in `docs/TOUR.md`:
-
-- `spark do <words>`: a task, one confirmed command at a time. With
-  `--sandbox` it runs in a copy, and you apply the diff with `yes`.
-- `spark ask`, `spark read`, `spark drill`, `spark watch`: questions a
-  text does not answer, what a source says, practice from a source,
-  and a live stream watched for one thing. Every line quotes the
-  source.
-- `spark model list`: 11 models, each with its license. `spark model
-  --chat NAME` chooses a second, bigger model for chat.
-- `spark serve on`, then `spark serve --login`: the same model, soul
-  and memory in a browser on the LAN, and on a phone that scans the
-  QR. `spark client URL` lets another machine of yours use this one's
-  model.
-- `spark awaken`: give this machine a personality and a look. Until
-  you run it, spark stays as it is. `spark look` shows the look, and
-  `spark look off` turns motion, colour and the face off at once.
-- `spark voice clear`: spark reads aloud in a plain clear voice, for
-  low vision. `spark voice on` speaks in the machine's own voice, and
-  `Esc v` listens to a question. Nothing leaves the machine.
-- `Esc k` at the prompt: when spark's line sits on a prompt of two
-  lines, it moves spark's line up a row. `spark height N` keeps it.
-- `spark check`: what needs you. `--all` shows every promise this
-  machine makes, one row each. It exits 0 when no row fails. `spark
-  uninstall` takes it all off.
+- `spark do WORDS`: a task, one confirmed command at a time.
+- `spark ask`, `spark read`, `spark drill`, `spark watch`: work with a
+  text.
+- `spark model list`: the models and their licenses.
+- `spark serve on`: use this machine's model from a browser or another
+  machine.
+- `spark voice on`: spark reads aloud.
+- `spark awaken`: give spark a personality and a look.
+- `spark check`: what needs you. `spark uninstall` removes spark.
 
 ## Documents
 
-Four files sit at the root: this one, `CREDITS.md`, `CLAUDE.md` and
-`AGENTS.md`. The rest live in `docs/`. Five move with each release:
-
-- `docs/INSTALL.md`: every step and every key.
-- `docs/CHEATSHEET.txt`: one page (`lp ~/.spark/docs/CHEATSHEET.txt`).
+- `docs/INSTALL.md`: install, models, other machines, updates.
+- `docs/CHEATSHEET.txt`: every command on one page.
+- `docs/TOUR.md`: things to try in your first hour.
+- `docs/APPS.md`: editors and tools that use spark.
+- `docs/TROUBLESHOOTING.md`: when the Wi-Fi does not come up.
 - `docs/CHANGELOG.md`: what each release changed.
 - `docs/ROADMAP.md`: what comes next.
-- `docs/CONTRIBUTING.md`: how to send a change, and the voice.
-
-Four are kept true as things change, outside a release:
-
-- `docs/TOUR.md`: a first hour, 13 small things to try.
-- `docs/APPS.md`: editors and tools that speak to spark.
-- `docs/IDEAS.md`: the field the roadmap is picked from.
-- `docs/TROUBLESHOOTING.md`: a machine that will not join the Wi-Fi.
-
-The project site, spark.forgewright.ai, shows the docs and the model
-list at the newest release.
+- `docs/IDEAS.md`: ideas for later.
+- `docs/CONTRIBUTING.md`: how to send a change.
 
 ## What leaves this machine
 
-Your words go to one place: the server on this machine, or the one on
-another machine of yours (`spark client URL`). What each verb sends:
+Your words go to the model's server. It runs on this machine, or on
+another machine of yours (`spark client URL`). What each command sends:
 
-- `line` (the prompt line): the line you typed, with the shell and OS
-  name, and the directory's path. Never the directory's contents.
-- `line`, with the question: the programs and apps on this machine that
-  match it, with the lines of their manual or help that match, 600
-  characters at most. When this machine is a client, they come from its
-  own manuals and go to the other machine.
-- `line`, after a command spark found wrong: the lines of that
-  command's manual about it, 600 characters at most. The question and
-  the first request's lines go with them again.
-- `chat`: your soul, your remembered facts and the thread's earlier
-  turns. A chat sends no path.
-- `do`: each step's output, the last 4 kB, and the directory's path.
-  After a step refused for an option, the lines of that command's man
-  page about it, 1.5 kB at most. spark reads the page itself, and the
-  command never runs for it.
-- `explain`: the piped text, the last 6 kB, and the directory's path.
-- `@FILE`: the file's first 4 kB and last 12 kB, under the name you
-  typed.
-- `edit` (from an editor): the file's name and its text: 6 kB around
-  the cursor for a completion, 12 kB for a rewrite, 16 kB for a
-  question. Never its path. `--watch` sends each saved stanza the same
-  way.
-- `ask`: the text, 12 kB, with the `--name` and `--about` hints you
-  gave.
-- `read`: the source, 16 kB a part. `--name` stays here, in the ledger.
-- `drill`: the source, 16 kB. Your answers are graded here, against the
-  source, and never sent.
-- `watch`: each window of the stream, up to 40 lines or 10 seconds,
-  8 kB at most. Never the whole stream at once.
-- `recall` (`Esc r`): the last 400 lines of this shell's own history,
-  with what you said the command did.
-- `paste`: a multi-line paste into an empty prompt, 8 kB at most. A
-  bigger paste is not sent. A paste shaped like a secret is not sent.
-- `awaken`: the temperament you chose, once, for a personality and a
-  face. Then one short hello, with your soul and remembered facts, as a
-  question sends them.
+- `line`: the line you typed, your shell, your OS and the folder's
+  path. With a question, the matching lines of your manuals, 600
+  characters at most.
+- `chat`: your soul, your remembered facts and the conversation.
+- `do`: each step's output (the last 4 kB) and the folder's path. After
+  a refused option, a few lines of that command's man page.
+- `explain`: the piped text, the last 6 kB.
+- `@FILE`: the file's first 4 kB and last 12 kB.
+- `edit`: the file's name and up to 16 kB of its text.
+- `ask`: the text, up to 12 kB.
+- `read` and `drill`: the source, 16 kB at a time.
+- `watch`: the stream, 8 kB at a time.
+- `recall` (`Esc r`): the last 400 lines of your shell history.
+- `paste`: a paste of several lines, up to 8 kB. A paste that looks
+  like a secret is not sent.
+- `awaken`: the temperament you chose, once.
 
-Before a source, a step's output or an editor's question about a source
-leaves, spark holds back every span that looks like a secret. It holds
-back a private key, an AWS access key, a GitHub token, a Slack token
-and an API key. It also holds back a credential line, a long base64
-run, a one-time code and a link token. The model sees `[held]` in its
-place. spark's own tokens are held back the same way.
+`read`, `do` and `edit ? --source` replace secrets with `[held]`. They
+catch a private key, an AWS access key, a GitHub token, a Slack token
+and an API key. They also catch a credential line, a long base64 run, a
+one-time code and a link token. The other commands send the text as it
+is.
 
-No telemetry, no analytics, no crash reports, no account. Downloads:
-`get` and the clone from github.com, one pinned llama.cpp release from
-github.com with its sha256, and the model you chose from huggingface.co.
-Its size and sha256 are in `models.env`. With `spark voice` on, its
-engine comes from github.com, pinned in `voice.env`. Nothing else. The
-voice speaks and listens here, and a recording is deleted once it is
-written out.
+Between machines, the traffic is plain HTTP. Anyone on your network can
+read it.
 
-On this machine: the server binds one LAN address, never `0.0.0.0`,
-behind tokens kept at 0600. A token is shown once, when you ask
-(`spark serve --login`, `spark user add`). Turns and threads live
-30 days under `~/.local/state/spark/` (`SPARK_HISTORY=off` keeps none).
-A thread you keep (`/keep` in `spark chat`, or a program through the
-page's server API) stays until you let it go.
-A turn record holds numbers, never words. Each named user
-(`spark user add NAME`) has a sealed store. Its cipher is
-ChaCha20-Poly1305, written from RFC 8439, under a key only that user's
-token opens. The admin cannot read it. A stolen disk is ciphertext. A
-lost token is lost history. There is no reset.
+spark downloads itself, the llama.cpp engine and the voice from
+github.com, and your model from huggingface.co. The engine, the voice
+and the model are checked by sha256. Your package manager installs the
+basics and checks for updates. There is no telemetry.
+
+A first install trusts the signing key it downloads. Each update is
+checked against the key already installed. A clone on `main` is not
+checked.
+
+## On this machine
+
+- The server listens on one LAN address and needs a token.
+- The admin token can run commands on this machine. With passwordless
+  sudo, that means root.
+- Conversations are kept for 30 days in `~/.local/state/spark/`.
+  `SPARK_HISTORY=off` keeps none.
+- Each user (`spark user add NAME`) has an encrypted store that only
+  their token opens. A lost token cannot be recovered.
+- Your own login keeps its key next to its store. Encrypt the disk to
+  protect it.
 
 ## License
 
-MIT, in `LICENSE`. Everything spark downloads is pinned and named in
-`CREDITS.md` with its license. Built with Claude.
+MIT, in `LICENSE`. What spark downloads, and each license, is in
+`CREDITS.md`. Built with Claude.

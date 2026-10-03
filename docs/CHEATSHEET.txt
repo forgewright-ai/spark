@@ -1,200 +1,133 @@
 SPARK CHEATSHEET                                 lp ~/.spark/docs/CHEATSHEET.txt
 
-SPARK
-  spark                           one line: what answers, the model
-  spark status                    the model, the prompt line, the server,
-                                  soul, memory, last answer
-  spark off | on                  silence / restore the prompt line, every pane
-  spark soul [edit|reset]         who it is: the default, or your own
-  spark memory add <words>        a fact it keeps  memory forget N  drops it
-  spark memory [on|off|clear]     the facts it recalls on every answer
-  spark ver                       the logo and the version
-  spark ver --credits             who made spark and what it uses
-  spark ver --sbom                what it depends on, as CycloneDX JSON
-  spark chat [words]              talk with the model. One line says the
-                                  thread it goes on with. /help lists its
-                                  commands. Esc on an empty line, Ctrl-D or
-                                  /q ends it
-  spark chat --thread N [words]   go on with an older thread (spark history)
-  /resume [N] /clear /new /keep   in the chat: older thread, wipe, fresh, keep
-  /last /model                    in the chat: the last turn, which model
-  /copy [N]                       the last reply (or the Nth) to the clipboard
-  /save [FILE]                    the chat to ~/spark-chat-<date>.txt, 0600
-  /read @FILE [question]          an answer that quotes the file, in the chat
-  /do [--sandbox] <goal>          a task as spark do runs it, then back to chat
-  /aloud /again                   in the chat: read aloud or stop; say it again
-  spark <words>                   one answer, streamed     spark last  again
-  spark do <words>                a task, one confirmed command at a time
-                                  A step of several lines (a here-document)
-                                  is shown whole, numbered. e: $EDITOR
-  spark do --sandbox <words>      the same in a copy, no network: it runs on
-                                  its own, then the diff. yes applies exactly
-                                  what it showed
-  spark do --sandbox --detach ... nobody there (a timer): its changes wait
-  spark do --review [ID]          the runs waiting. --accept ID applies one
-                                  unseen (a script), --discard ID drops it
-  spark do -- <words>             a goal that starts with - (8 kB at most)
-  spark @FILE words               ask about a file (first 4 kB, last 12 kB)
-  spark edit [?] words < FILE     rewrite / complete (--at N) / ask (?) stdin
-  spark ask < FILE                3 questions that text does not answer
-  spark read <words> < FILE       what a source says, every line quoting it
-                                  (16 kB a part; --part N reads one). What
-                                  looks like a secret is held back: [held]
-  spark drill < FILE              the source becomes questions it answers.
-                                  --name keeps a widening schedule
-  <stream> | spark watch <words>  silent until a line matches, then one line
-                                  quoting it (tail -f, journalctl -f)
-  spark reveal [N|auto|off]       keep a reply's pace at a terminal: N a
-                                  second, auto (the measured threshold), off
-                                  (as it comes). Bare: the numbers and the pace
-  ... | spark reveal [N]          the answer letter by letter at that pace
-  spark chat --reveal [N|auto|off]  the pace for one chat. /reveal in chat too
-  spark edit --watch FILE         comment on a draft as you save it
-  spark history                   the threads on this machine
-  spark clear --history           remove turns and threads, kept ones stay
-  ~/.local/bin/spark ...          the full path a script, cron or ssh uses
-  try:
-  ? words   or   words?   Enter   the command lands in your line, hint above
-  Enter again                     runs it (! = read it first. A recursive
-                                  rm says how many files and bytes it clears)
-  ?? words                        follow up on the last answer (same thread)
-  ?? how do I change the model    spark knows itself: it names its own verbs
-  [a multi-line paste]            2+ lines on an empty prompt: one line about
-                                  it. Nothing runs until your own Enter. One
-                                  that looks like a secret is not sent
-  Esc s                           ask about the line you are on, no ?
-  Esc s on an empty line          the failed command, piped to explain.
-                                  Again for the fix. Then the fix, as a fact
-  command not found -> Esc s      the line that installs it
-  Esc r                           describe a past command. It lands in
-                                  your line (Esc r cycles). Ctrl-R stays
+AT THE PROMPT
+  ? words   or   words?   Enter   the command lands in your line
+  Enter again                     runs it. ! means read it first
+  ?? words                        follow up on the last answer
+  Esc s                           ask about the line you are on
+  Esc s on an empty line          explain the failed command. Again: the fix
+  Esc r                           describe a past command to find it again
   cmd 2>&1 | explain              what went wrong, and the fix
-  spark <TAB>                     completes the verbs. Second word too
+  spark <TAB>                     complete commands and names
+  a paste of 2 or more lines      one line about it. Nothing runs
 
-ON THE LAN (server / client)
-  spark model [NAME|auto|none]    choose one. model list = the table
-                                  (--porcelain: data. grounded = audition)
-  spark model --chat NAME         a second model for chat (auto|none|list)
-  spark model budget [N]          the share of memory models may use (10-95)
-  spark model add URL             add your own (--sha256, --license required)
-  spark model verify              check every downloaded model is intact.
-                                  exit 1 when one is damaged
-  spark serve [on|off]            the engine and the page on the LAN, kept.
-                                  On: one line each. Bare: what answers, the
-                                  models, the units
-  spark serve boot [on|off]       up from boot, never asleep (the machine
-                                  that stays on)
-  spark serve share [on|off]      one model for every user here (Linux).
-                                  Each keeps their own soul and memory
-  spark serve --login             the page's URL. At a terminal the admin
-                                  token and a QR to scan (--no-qr; piped,
-                                  --show-token adds the token)
-  spark serve --login --new       rotate the admin token
-  spark serve --audit [N]         every admin action, sealed (--porcelain)
-  spark serve off --force         also an engine spark did not start
-  spark user [list]               the named users, each a sealed store
-  spark user add NAME             mint an account. The token and its QR
-                                  show once (--no-qr)
-  spark user remove NAME          delete the account and its sealed data
-                                  (asks. SPARK_YES=1 answers for a script)
-  spark user login [NAME] | logout  act as NAME here / forget the login
-  spark user token --new          rotate your token. Old logins die
-  spark client [URL|off]          use another machine's model. None here.
-                                  Bare: what is set, and whether it answers.
-                                  off: never asked again until client URL
+SPARK
+  spark                           what answers
+  spark status                    the model, the server, soul, memory
+  spark off | on                  turn the prompt line off or on
+  spark <words>                   one answer       spark last   again
+  spark @FILE <words>             ask about a file
+  spark soul [edit|reset]         who spark is
+  spark memory add <words>        keep a fact.  memory forget N  drops it
+  spark memory [on|off|clear]     use the facts, or forget them all
+  spark ver                       the version
+  spark ver --credits             who made spark and what it uses
+  spark ver --sbom                what spark depends on, as CycloneDX JSON
+  spark history                   past threads
+  spark clear --history           forget past threads (kept ones stay)
 
-THE PAGE (spark serve --login)  chat first. Keys when no input has focus
+CHAT
+  spark chat [words]              talk with the model. Esc, Ctrl-D or /q ends
+  spark chat --thread N [words]   an older thread (N from spark history)
+  /help                           the commands
+  /resume [N] /new /clear /keep   older thread, fresh, wipe, keep longer
+  /last /model                    the last turn, which model
+  /copy [N]                       a reply to the clipboard
+  /save [FILE]                    the chat to a file
+  /read @FILE [question]          an answer that quotes the file
+  /do [--sandbox] <goal>          a task, as spark do runs it
+  /aloud /again /reveal           read aloud or stop, say it again, the pace
+
+TASKS AND TEXT
+  spark do <words>                a task, one command at a time. You confirm
+                                  each: Enter runs, e edits, s skips, q quits
+  spark do --sandbox <words>      the steps run in a copy, offline. Then the
+                                  diff. yes applies it. Weaker on macOS
+  spark do --sandbox --detach ... the same with nobody there
+  spark do --review [ID]          the waiting runs (--accept ID, --discard ID)
+  spark edit [?] <words> < FILE   rewrite the text, or ask about it (?)
+  spark edit --watch FILE         comments on a draft each time you save
+  spark ask < FILE                what the text does not answer
+  spark read <words> < FILE       an answer, every line quoting the text
+  spark drill < FILE              practice questions from the text
+  cmd | spark watch <words>       one line when the stream matches
+  spark reveal [N|auto|off]       how fast replies appear
+
+THE MODEL AND THE SERVER
+  spark model                     the list of models and their licences
+  spark model NAME | auto | none  choose one
+  spark model --chat NAME         a second model for chat
+  spark model budget [N]          the share of memory models may use
+  spark model add URL             your own (--license, --sha256)
+  spark model rm NAME             delete a downloaded model
+  spark model verify              check the downloaded models
+  spark serve [on|off]            serve the model and the page on your network
+  spark serve boot [on|off]       start at boot
+  spark serve share [on|off]      one model for every user here (Linux)
+  spark serve --login             the page's address and the admin login
+  spark serve --login --new       a new admin token
+  spark serve --audit [N]         what the admin did
+  spark user [list]               the users here
+  spark user add NAME             add a user. The token shows once
+  spark user remove NAME          delete a user and their data (asks)
+  spark user login [NAME] | logout
+  spark user token --new          a new token. Other logins end
+  spark client [URL|off]          use another machine's model
+  Traffic between machines is plain HTTP. The admin token can run any
+  command on the machine.
+
+THE PAGE (open the address spark serve --login prints)
   1..5                            chat, activity, do, settings, help
-  r  refresh                      ?  help
-  /                               focus the input (Esc leaves it)
-  Enter | Shift+Enter             send | a new line
-  n                               a new thread  j / k  next / prev thread
-  Esc                             stop the answer, else leave, else close
-  share -> add to home screen     an app on iOS. A browser shortcut on Android
+  /   Enter   Shift+Enter         the input, send, a new line
+  n   j / k   Esc                 new thread, next / previous, stop
 
 THE MACHINE
-  spark setup                     first run: name, user, model, then apply.
-                                  One more question: read aloud? (default no)
-  spark check                     what needs you, then the totals. exit 0 =
-                                  no row failed
-  spark check --all               every row: each promise this machine makes
-  spark check NAME...             those rows, ok or not (knowledge: the
-                                  manuals and apps the prompt line reads)
-  spark check --watch 5           redraw every 5 seconds  --selftest  prove
-  spark check --fresh | --fetch   no cached answers / ask origin (git row)
-  spark check --porcelain         one tab-separated row per line
-  spark check --chaos             rehearse the failures: break, red, remedy
-  spark check --report            a paste-safe block for an issue: statuses
-                                  only. No value, no path, no name
-  spark update [--dry-run]        newest release tag. main on a developer clone
-  spark uninstall [--purge]       remove spark: shows, asks yes. Keeps yours
-  spark bar line                  the one-line status (a bar runs it, 15 s)
-  ./bootstrap.sh --dry-run        what a rebuild would change (never sudo)
-  ~/.config/spark/site.env        name, user, model, budget, the other
-                                  machine's URL ...
+  spark setup                     name, user, model and voice
+  spark check                     what needs you. exit 0 = nothing failed
+  spark check --all               every row
+  spark check NAME...             those rows
+  spark check --report            a block to paste into an issue
+  spark update [--dry-run]        the newest signed release
+  spark uninstall [--purge]       remove spark (asks first)
+  spark stats [--week|--sends]    speed, and what left this machine
+  spark bench [--line|tune]       measure this machine's speed
+  spark bar line                  the status in one line, for a bar
+  ~/.config/spark/site.env        name, user, model, the other machine
   ~/.config/spark/spark.env       ports, engine, history, memory
-  long output (help, check, lists) pages via $PAGER (less). Piped stays plain
 
-THE INTERFACE
-  ~/.config/spark/theme.env       a palette a tool may write: spark ver and
-                                  the status line follow it
-  spark voice                     show the voice settings
-  spark voice clear [--anyway]    read aloud in a plain clear voice, for low
-                                  vision. No awaken needed. A screen reader
-                                  running keeps it silent (--anyway speaks)
-  spark voice on                  this machine's own voice, from spark awaken
-  spark voice off [--remove]      silent. --remove deletes the engine
-  spark voice rate N              set the speed (50 to 300, default 100)
-  spark voice test                one line aloud
-  spark voice listen | stop       one spoken question, written out / hush
-  Esc v                           listen, at the prompt and in the chat: the
-                                  words land in your line. Enter sends
-  Esc x                           stop speaking
-  the first time                  spark downloads 586 MB on Linux, 602 MB on
-                                  macOS
-  SPARK_VOICE_DEVICE=plughw:1,0   Linux: a headset on the second card
-
-THE LIVING PROMPT
+VOICE AND LOOK
+  spark voice                     the voice settings
+  spark voice clear [--anyway]    read aloud in a clear voice
+  spark voice on | off [--remove] this machine's own voice, or none
+  spark voice rate N              the speed, 50 to 300
+  spark voice test                say one line
+  spark voice listen | stop       ask by voice (Esc v), stop (Esc x)
+  first use                       586 MB on Linux, 602 MB on macOS
   spark awaken                    give this machine a personality and a look
-  spark look [on|off|auto]        motion, colour and the face, one switch.
-                                  Bare: the look, height, reveal and face
-  spark height [N]                the row spark writes in: 1..5 above your line
-  Esc k                           at the prompt: move spark's row (1, 2, 3)
-
-LESS OFTEN USED
-  spark stats [--week]            tok/s, latency, cache hits by mode, baseline
-  spark stats --sends             what left, in bytes: by destination and day
-  spark bench [tune]              this machine's speed. tune finds the fastest
-  spark bench tune show | apply   the winner. apply writes spark.env, restarts
-  spark bench --line [N]          the prompt line's pace. spark stats shows it
+  spark look [on|off|auto]        motion, colour and the face
+  spark height [N]                the row spark writes in, 1 to 5
+  Esc k                           move that row
 
 LINUX
-  systemctl --user status spark-serve spark-forge spark-check.timer
-  journalctl --user -u spark-serve -n 50     (spark-forge likewise)
-  ~/.local/state/spark/forge.log             one line per request (both OSes)
-  arch: sudo pacman -S --needed PKG. Never -Sy alone (sudo pacman -Syu first)
-  void: sudo xbps-install -Sy PKG. If xbps refuses, sudo xbps-install -Su first
-  void: sv status ~/.config/spark/sv/*        (sv restart DIR after a change)
-  void: tail ~/.local/state/spark/log/spark-serve/current   (spark-forge too)
+  systemctl --user status spark-serve spark-forge
+  journalctl --user -u spark-serve -n 50
+  void: sv status ~/.config/spark/sv/*
 
 MACOS
-  launchctl print gui/$UID/spark.serve         is the agent loaded? (.forge too)
-  launchctl kickstart -k gui/$UID/spark.serve  restart it
-  spark serve boot on: all 3 agents live in system/. Restart and stop
-                       need sudo launchctl
-  Alt is Option: Option-s, not Cmd-s
+  launchctl print gui/$UID/spark.serve
+  launchctl kickstart -k gui/$UID/spark.serve     restart it
+  Alt is Option: Option-s
 
-WINDOWS (Ubuntu 24.04 on WSL 2 -- Linux to spark)
-  wsl --install -d Ubuntu-24.04    then docs/INSTALL.md section 1 (Linux)
-  the CPU build. No serve boot: the distro stops with its last window
-  units: [boot] systemd=true in /etc/wsl.conf, then wsl --shutdown
+WINDOWS
+  wsl --install -d Ubuntu-24.04   then install as on Linux
 
-DOCUMENTS (4 at the root: README, CREDITS, CLAUDE, AGENTS. The rest: docs/)
-  with a release: docs/INSTALL.md  docs/CHEATSHEET.txt  docs/CHANGELOG.md
-                  docs/ROADMAP.md  docs/CONTRIBUTING.md
-  not tied to a release:
+DOCUMENTS
+  docs/INSTALL.md                 install, models, other machines, updates
+  docs/CHEATSHEET.txt             this page
   docs/TOUR.md                    a first hour: 13 small things to try
-  docs/APPS.md                    editors and tools that speak to spark
-  docs/IDEAS.md                   the field the roadmap is picked from
-  docs/TROUBLESHOOTING.md         a machine that will not join the Wi-Fi:
-                                  one Wi-Fi daemon per card, then the logs
+  docs/APPS.md                    editors and tools that use spark
+  docs/TROUBLESHOOTING.md         when the Wi-Fi does not come up
+  docs/CHANGELOG.md               what each release changed
+  docs/ROADMAP.md                 what comes next
+  docs/IDEAS.md                   ideas for later
+  docs/CONTRIBUTING.md            how to send a change

@@ -1,144 +1,102 @@
 # The tour
 
-spark is installed, `spark check` finds nothing to fix, and the
-prompt line answers. This is the fun part: 13 small things to try, in
-4 acts. Each one is a habit worth keeping.
+This document is not tied to a spark release. It is kept up to date
+as spark changes.
 
-This document is not tied to a spark release. It is kept true as
-things change, and no release waits on it.
+13 small things to try in your first hour. Some use a spark app or
+another tool. Skip those you have not installed. `Alt-s` is Option-s
+on a Mac.
 
-Most of the tour needs only spark. A few stops use a spark app or a
-tool, such as micro with spark-micro, tmux or btop, and say so. Skip
-what you have not installed yet. `Alt-s` is Option-s on a Mac.
+## The prompt line
 
-## Act 1, the prompt line
+1. Ask the shell:
 
-Ask the shell itself. Type:
+   ```
+   ? what is eating my disk
+   ```
 
-    ? what is eating my disk
+   The command lands in your line, with a hint above it. `Enter` runs
+   it. A `!` in the hint means read it first.
 
-The command lands in your line, with a hint above it. `Enter` runs it.
-A `!` in the hint means read it first. A recursive `rm` says how many
-files and bytes it clears, before you commit to it, not after.
+2. Run a command with a typo, such as `git pushh`. Then press `Esc s`
+   on the empty line. spark explains the error. Press `Esc s` again
+   for the fix.
 
-Ask about this machine. On Linux, ask for a service. On a Mac, ask for
-an app:
+3. Follow up on the last answer with `??`:
 
-    ? restart the ssh service
-    ? open report.pdf
+   ```
+   ?? how do I change the model
+   ```
 
-The answer is checked against this machine's own manuals and apps, so
-the command is one this machine has. When a flag is not in its manual,
-the hint says so before you press `Enter`.
+## The editor
 
-Break something on purpose. Run a command with a typo, `sl` or `git
-pushh`, then press `Esc s` on the empty line. The failed command is
-explained. `Esc s` again offers the fix.
+These use micro with spark-micro (see `docs/APPS.md`).
 
-Ask a follow-up:
+4. Open an empty file with `micro poem.md`. Press `Alt-s` and type:
 
-    ?? how do I change the model
+   ```
+   spark> a short poem about this machine
+   ```
 
-spark knows itself: it names its own verbs.
+5. Press `Alt-s`, then `?` alone. A review opens in a pane on the
+   right. A quote that is not in your text is marked
+   `[not in the text]`.
 
-## Act 2, the editor
+6. Select a stanza, press `Alt-s` and type `make it rhyme`. The new
+   text comes back selected. `Ctrl-Z` undoes it.
 
-This act uses micro with spark-micro. Make it write. Open an empty
-file with `micro poem.md`, press `Alt-s` and give it words:
+7. In a second terminal, run `spark edit --watch poem.md`. Each time
+   you save, a comment appears.
 
-    spark> a short poem about this machine
+## Reading
 
-An empty text with words is written from nothing. Now ask about what
-it wrote: `Alt-s`, then `?` alone. The review lands in a pane on the
-right. Every quote in it is checked against your text. A claim the
-text does not back is marked `[not in the text]` where it stands.
+8. Ask a man page:
 
-The rewrite. Select one stanza, press `Alt-s`, and say what you want:
+   ```
+   man ls | spark read how do I sort by size
+   ```
 
-    spark> make it rhyme
+   Each line of the answer quotes the page. When the page has no
+   answer, spark says so.
 
-The new text comes back selected: a proposal, never applied on its
-own. micro's undo, `Ctrl-Z`, puts it back.
+9. Practise the commands:
 
-Write with a companion, in tmux. In one pane:
+   ```
+   spark drill --name spark < ~/.spark/docs/CHEATSHEET.txt
+   ```
 
-    spark edit --watch poem.md
+   You get one question at a time. A question you miss comes back on
+   a later day.
 
-micro sits in the other. Save a stanza, and a comment appears. Go
-quiet for 90 seconds, and it reads the whole draft. Answer it back
-with `Alt-s`.
+10. On Linux, watch a log:
 
-## Act 3, the machine reads
-
-Man pages read themselves:
-
-    man zoxide | spark read how do I jump to a folder
-
-Every line of the answer quotes the page. A line that cannot quote it
-never reaches you. When the page does not say, the reply is one line
-with the page's opening words, and exit 1. A long page is read in
-parts, and `--part N` picks one.
-
-Let spark teach you spark:
-
-    spark drill --name spark < ~/.spark/docs/CHEATSHEET.txt
-
-The cheatsheet becomes questions it answers. You say whether you had
-each one. `--name` keeps the schedule: a miss comes back tomorrow, then
-in 3 days, then 7. The tour revises itself.
-
-Set a watch, in a pane you can forget:
-
+    ```
     journalctl -f | spark watch anything that fails
+    ```
 
-Silence is the healthy state. The one line that ever appears quotes
-the log, so "a failure appeared" cannot fire when none did.
+    spark stays quiet until a line matches. Then it prints one line
+    that quotes it.
 
-## Act 4, yours on the LAN
+## Make it yours
 
-Give it a voice of its own:
+11. Run `spark awaken` and pick a temperament. spark gets a
+    personality and a face. `spark look off` turns the look off.
 
-    spark awaken
+12. Give spark a fact, then chat:
 
-Pick a temperament. The model writes a personality and picks a face,
-and your next prompt is awake. `spark look off` puts the quiet
-back. To say more yourself:
-
-    spark soul edit
-
-Two sentences are plenty. Then teach it one fact:
-
+    ```
     spark memory add "short answers, and call me by name"
+    spark chat
+    ```
 
-Chat once with `spark chat` and feel the difference. Inside it, ask
-about a file with its words quoted back:
+    In the chat, `/read @notes.txt what is due this week` answers from
+    the file. `/copy` puts the reply on your clipboard.
 
-    /read @notes.txt what is due this week
+13. Run `spark serve --login`. Open the address it prints on your
+    phone, on the same network, and log in. Your chats are there. The
+    traffic is plain HTTP, so use a network you trust.
 
-Then `/copy` puts that reply on your clipboard, where there is one.
-The soul and the facts ride on every answer. The soul is a file under
-`~/.config/spark/`. The facts live sealed in your store. Both go to the
-one server you chose: this machine's, or the one machine of yours a
-client points at.
+## Next
 
-The pocket test:
-
-    spark serve --login
-
-Open that address in your phone's browser, log in, and go on with the
-thread you started at the terminal. Same voice, same facts, another
-door. Share, then add to home screen, makes it an app.
-
-Watch it think, with tmux and btop. btop in one pane, `spark chat` in
-the other: memory fills as the model loads, and the cores light up as
-it answers. It is just a good show.
-
-## When you want more
-
-`spark <TAB>` completes every verb. `spark check --all` shows what
-this machine promises. `lp ~/.spark/docs/CHEATSHEET.txt` prints the
-one-page reference. And
-
-    ? what should I try next with spark
-
-is a fair question.
+`spark <TAB>` completes commands. `docs/CHEATSHEET.txt` lists every
+command on one page.
