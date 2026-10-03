@@ -2686,7 +2686,7 @@ def audition(cfg, temper, seed, line, ask, out=say):
             finally:
                 cleanup(wav)
         except VoiceError as e:
-            out("! the voice did not play: %s" % e)
+            out("! %s" % e)
             return None
         a = ask("its voice: %s. keep it? (keep, again, none): " % describe(r))
         if a in ("keep", "k", "yes", "y"):
