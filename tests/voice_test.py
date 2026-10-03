@@ -1592,7 +1592,7 @@ with look.assume_awake():
     w.close()
     face.add([1])
     face.start()
-    sound(r, 1, 0.15, 0.4)
+    sound(r, 1, 0.6, 0.4)          # a wide gap: a slow runner's sleep overshoots
     time.sleep(0.08)
     before = redraws(out)
     until(lambda: len(redraws(out)) >= 3)
