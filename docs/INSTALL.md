@@ -300,7 +300,9 @@ again, and speaks it while the voice is on. "The voice" below has the
 rest.
 
 Awake, the face shows while a reply is on its way, and goes when the
-reply comes. A reply is plain text, with no face.
+reply comes. A reply is plain text, with no face. A reply read aloud
+is the one exception: the face leads it and talks while the voice
+plays.
 
 `spark <words>` streams one answer. `spark @FILE words` sends a text
 file's first 4 kB and last 12 kB with the question.
@@ -496,6 +498,12 @@ starts, at the pace of the voice. `spark voice rate` sets both. The
 first sentence goes at its first comma, or after six words with none,
 so the first sound never waits for a whole sentence. The voice is
 loaded once, as the chat opens and while you type.
+
+Awake, a reply read aloud starts with the face, and its lines hang
+under it. While a sentence plays, the mouth opens and closes, `(o.o)`
+and `(oOo)`. Between sentences, after the last one and after `Esc x`,
+it rests. It rests too once you type at `chat> `, or once the reply
+has scrolled its first line off the screen.
 
 The text follows the voice only with the reveal on, at a terminal of
 this machine. Over ssh the sound plays on the far machine, so the text

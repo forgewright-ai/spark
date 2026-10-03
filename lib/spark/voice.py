@@ -1783,7 +1783,8 @@ class Reader:
     player outlives the process, so a goodbye is never cut off by the
     exit. A wav (macOS) never outlives its line. put() returns the
     line's tag; when(tag) has when that line starts to sound and for how
-    long -- the chat's text follows it."""
+    long -- the chat's text follows it; sounds(tags) whether one of
+    those lines sounds now -- the chat's face talks while it does."""
 
     def __init__(self, cfg=None):
         self.cfg = cfg
@@ -1791,6 +1792,7 @@ class Reader:
         self.ready = []             # (gen, (pcm, rate), tag): made, waiting for the player
         self.tag = 0                # the last line's tag
         self.heard = {}             # tag -> (starts, seconds) on the monotonic clock; None: never sounds
+        self.spans = {}             # tag -> (starts, ends), kept for sounds(); None: never sounds
         self.gen = 0
         self.making = False         # a text in the engine now
         self.starting = False       # a clip being handed to the player now
@@ -1862,11 +1864,45 @@ class Reader:
                 self.cv.wait(min(0.1, left))
             return self.heard.pop(tag)
 
+    def sounds(self, tags, wait=0.0):
+        """Whether one of the lines `tags` sounds now: "now"; "later" while
+        one may still sound (waiting, being made, or starting later); ""
+        once none will. Waits up to `wait` seconds first, woken at once by
+        any change -- a cut ends every line's sound there and then."""
+        with self.cv:
+            if wait > 0:
+                self.cv.wait(wait)
+            now = time.monotonic()
+            later = False
+            for t in tags:
+                if t not in self.spans:
+                    later = True
+                elif self.spans[t] is not None:
+                    starts, ends = self.spans[t]
+                    if starts <= now < ends:
+                        return "now"
+                    later = later or now < starts
+            return "later" if later else ""
+
     def _heard(self, tag, value):
-        """(the lock held) What when(tag) answers, once."""
+        """(the lock held) What when(tag) answers, once; its span kept for
+        sounds() (an hour, then forgotten)."""
         if tag is not None and tag not in self.heard:
             self.heard[tag] = value
+            if tag not in self.spans:
+                now = time.monotonic()
+                for t in [t for t, v in self.spans.items() if v is not None and v[1] < now - 3600]:
+                    del self.spans[t]
+                self.spans[tag] = (value[0], value[0] + value[1]) if value else None
             self.cv.notify_all()
+
+    def _silent(self):
+        """(the lock held) Every line's sound ends now: sounds() sees
+        nothing play from here on."""
+        now = time.monotonic()
+        for t, v in self.spans.items():
+            if v is not None and v[1] > now:
+                self.spans[t] = (v[0], now) if v[0] < now else None
 
     def _drop(self):
         """(the lock held) What waits goes, every ready clip, and what
@@ -1875,6 +1911,7 @@ class Reader:
         (its generation is gone)."""
         for item in self.lines + self.ready:
             self._heard(item[2], None)
+        self._silent()
         del self.lines[:]
         self.gen += 1
         del self.ready[:]
@@ -1981,6 +2018,7 @@ class Reader:
                 now = time.monotonic()
                 if s.done():                        # stopped from outside (spark voice stop)
                     self.stream = None
+                    self._silent()
                     _forget(s)
                     continue
                 if not (self.lines or self.making) and now - max(self.sounding, s.opened) >= STREAM_IDLE:

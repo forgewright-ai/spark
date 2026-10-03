@@ -1104,6 +1104,153 @@ FOLLOW_WAIT = 8.0
 FOLLOW_SHARE = 0.9
 FOLLOW_EARLY = 0.3
 
+# The face talks (a reply read aloud, at a terminal where the look's
+# motion and words are active): the reply opens with the idle face in the
+# mark's place, and while one of its sentences sounds the mouth opens and
+# closes every MOUTH_STEP seconds. Between sentences, after the last, on
+# a cut (Esc x) and once a key is typed at `chat>`, it rests on idle.
+MOUTH_STEP = 0.15
+FACE = [None]           # the talking face of the newest reply, while it may move
+
+
+def _face_rest():
+    """The face rests on idle and moves no more: a key typed, a reply
+    stopped, the chat about to print a line of its own."""
+    f, FACE[0] = FACE[0], None
+    if f is not None:
+        f.rest()
+
+
+class _Face:
+    """The talking face of one spoken reply, and the stream the wrap
+    writes it through: every write is counted in rows (a line feed, a line
+    the terminal wrapped), under one lock with the mouth's redraw. The
+    redraw saves the cursor, goes up the rows the reply has taken to its
+    first row, writes the frame there and restores -- only while that row
+    is on screen (rows < the terminal's height - 1) and the terminal has
+    kept its size. The thread ends resting on idle, once no line of the
+    reply will sound again or rest() is called."""
+
+    def __init__(self, stream, idle, talk, reader):
+        import threading
+        self.stream, self.reader = stream, reader
+        self.frames = (paint(idle, "accent", stream), paint(talk, "accent", stream))
+        self.lead = self.frames[0] + " "
+        self.lock = threading.Lock()
+        self.rows = self.col = 0
+        self.size = self._size()
+        self.started = False        # the lead is written: the row exists
+        self.open = False           # the talking frame is the one drawn
+        self.tags = []
+        self.closed = self.halt = False
+        self.thread = threading.Thread(target=self._run, name="spark-face", daemon=True)
+
+    def _size(self):
+        try:
+            return tuple(os.get_terminal_size(self.stream.fileno()))
+        except (AttributeError, OSError, ValueError):
+            return (80, 24)
+
+    # --- the stream the wrap writes through
+    def isatty(self):
+        return self.stream.isatty()
+
+    def fileno(self):
+        return self.stream.fileno()
+
+    def flush(self):
+        self.stream.flush()
+
+    def write(self, s):
+        with self.lock:
+            self.started = self.started or bool(s)
+            self._count(s)
+            self.stream.write(s)
+
+    def line(self):
+        """A blank line of the chat's own after the reply, counted."""
+        self.write("\n")
+        self.flush()
+
+    def _count(self, s):
+        """(the lock held) The cursor's row below the lead and its column
+        after `s`: a line feed, or a character past the last column, is
+        a row more (a wide character two columns, an escape none)."""
+        import unicodedata
+        width = self.size[0]
+        for ch in textmod.SGR_RE.sub("", s):
+            if ch == "\n":
+                self.rows, self.col = self.rows + 1, 0
+            elif ch == "\r":
+                self.col = 0
+            elif ch == "\t":
+                self.col = min(width, (self.col // 8 + 1) * 8)
+            elif ch >= " " and not unicodedata.combining(ch):
+                w = 2 if unicodedata.east_asian_width(ch) in "WF" else 1
+                if self.col + w > width:
+                    self.rows, self.col = self.rows + 1, 0
+                self.col += w
+
+    # --- the mouth
+    def add(self, tags):
+        with self.lock:
+            self.tags.extend(t for t in tags if t is not None)
+
+    def close(self):
+        """No more lines come: the thread ends once none sounds."""
+        self.closed = True
+
+    def start(self):
+        self.thread.start()
+        return self
+
+    def rest(self):
+        """Idle now, and no redraw after it."""
+        with self.lock:
+            if self.open:
+                self._draw(False)
+            self.halt = True
+
+    def _draw(self, talking):
+        """(the lock held) The frame on the lead's row. Skipped while the
+        cursor waits at the last column (a restore there may lose the
+        wrap); False when that row is out of reach -- scrolled off, the
+        terminal resized -- and the face moves no more."""
+        if not self.started or self.col >= self.size[0]:
+            return True
+        if self.rows >= self.size[1] - 1 or self._size() != self.size:
+            self.halt = True
+            return False
+        up = "\033[%dA" % self.rows if self.rows else ""
+        self.stream.write("\x1b7" + up + "\r" + self.frames[talking] + "\x1b8")
+        self.stream.flush()
+        self.open = talking
+        return True
+
+    def _run(self):
+        flip = 0.0
+        try:
+            while True:
+                with self.lock:
+                    tags = list(self.tags)
+                    closed = self.closed
+                now_ = self.reader.sounds(tags, MOUTH_STEP)
+                with self.lock:
+                    if self.halt:
+                        return
+                    now = time.monotonic()
+                    if now_ == "now":
+                        if now >= flip:
+                            self._draw(not self.open)
+                            flip = now + MOUTH_STEP
+                    elif self.open:
+                        self._draw(False)
+                    if closed and not now_ and not self.open:
+                        self.halt = True
+                        return
+        except Exception:   # noqa: BLE001 -- a face is never a reason to fail
+            log_exc("forge: the talking face")
+
 
 class _Spoken:
     """A reply spoken sentence by sentence: voice.Sentences into the
@@ -1116,18 +1263,47 @@ class _Spoken:
     terminal here) turns it around: take() hands each sentence to the
     reader the moment the model wrote it, and a thread of its own shows
     its text as its sound starts, at the voice's pace; end() waits until
-    the last is shown, stop() ends it."""
+    the last is shown, stop() ends it. face=True (the chat's reply):
+    screen() gives the wrap its stream and its lead, the talking face
+    where the look draws one."""
 
-    def __init__(self):
+    def __init__(self, face=False):
         from . import voice
         self.split = voice.Sentences(code=VOICE["mode"] == "clear")
         self.first = True
+        self.want_face = face
+        self.face = None
+
+    def screen(self):
+        """(stream, lead) for the reply's wrap: the talking face's own
+        stream and the idle face as the lead at a terminal where the
+        look's motion and words are active; else stdout and no lead, the
+        bytes as they were."""
+        from . import look
+        _face_rest()
+        out = sys.stdout
+        try:
+            if not (self.want_face and VOICE["reader"] is not None and look.active("motion", out)
+                    and look.active("words", out)):
+                return out, None
+            idle = look.faces()["idle"]
+            self.face = _Face(out, idle, look.talking(idle) or idle, VOICE["reader"]).start()
+        except Exception:   # noqa: BLE001 -- a face is never a reason to fail
+            log_exc("forge: the talking face")
+            return out, None
+        FACE[0] = self.face
+        return self.face, self.face.lead
 
     def feed(self, delta):
         self._put(self.split.feed(delta))
 
     def flush(self):
         self._put(self.split.flush())
+        self._closed()
+
+    def _closed(self):
+        if self.face is not None:
+            self.face.close()
 
     def _put(self, sentences):
         tags = []
@@ -1137,6 +1313,8 @@ class _Spoken:
                 tag = VOICE["reader"].put(s, cut=self.first)
                 self.first = False
             tags.append(tag)
+        if self.face is not None:
+            self.face.add(tags)
         return tags
 
     @staticmethod
@@ -1175,6 +1353,7 @@ class _Spoken:
             self._mark(self.split.flush())
             self.done = True
             self.cv.notify_all()
+        self._closed()
         while self.thread.is_alive():
             self.thread.join(0.2)       # Ctrl-C lands between the waits
         self._rest()
@@ -1186,6 +1365,7 @@ class _Spoken:
         with self.cv:
             self.halt = True
             self.cv.notify_all()
+        self._closed()
         self.thread.join(2.0)
         if rest:
             self._rest()
@@ -1245,8 +1425,8 @@ class _Spoken:
 
 def _spoken():
     """A _Spoken for the reply about to stream, or None: the voice off,
-    or mode on without /aloud."""
-    return _Spoken() if VOICE["reader"] is not None and VOICE["aloud"] else None
+    or mode on without /aloud. Its face talks where the look draws one."""
+    return _Spoken(face=True) if VOICE["reader"] is not None and VOICE["aloud"] else None
 
 
 def _aloud_reply(text):
@@ -1887,6 +2067,10 @@ class _Keys:
 
     def _getc(self, stream):
         c = self.orig(stream)
+        try:
+            _face_rest()                        # a key typed: the face rests
+        except Exception:   # noqa: BLE001 -- a key is never lost to the face
+            pass
         if c != 27 or not self.active:
             return c
         try:
@@ -1979,6 +2163,7 @@ class _Keys:
             try:
                 select.select([self.fd], [], [])
                 got = os.read(self.fd, 1024)
+                _face_rest()                    # a key typed: the face rests
                 if got == b"\x1b":
                     if not select.select([self.fd], [], [], self.wait)[0]:
                         raise EOFError          # a lone Esc: as Ctrl-D
@@ -2110,7 +2295,10 @@ def cmd_chat(args):
                         pass    # scrolled-in escape codes must not become input
                 # the prompt in the accent at a tty (readline-bracketed
                 # escapes; the plain text stays exactly `chat> `)
-                text = keys.read(prompt) if keys else input(prompt)
+                try:
+                    text = keys.read(prompt) if keys else input(prompt)
+                finally:
+                    _face_rest()
             except EOFError:
                 if tty:
                     say()
@@ -2153,15 +2341,21 @@ def cmd_chat(args):
                 thread = cli.stream_turn(cfg, "chat", " ".join(words), paths, thread=thread, cps=REVEAL[0],
                                          said=SAID, voice=spoken)
             except (RefError, wire.BrainError) as e:
+                _face_rest()
                 _refuse(e.hint)
             except KeyboardInterrupt as e:
+                _face_rest()
                 if spoken and VOICE["reader"] is not None:
                     VOICE["reader"].cut()       # the reply stopped, and its voice with it
                 thread = getattr(e, "thread", thread)
                 say()
                 _tell("stopped")
-            say()              # a blank line between turns
+            if FACE[0] is not None:
+                FACE[0].line()  # the blank line, counted: the face still finds its row
+            else:
+                say()          # a blank line between turns
     finally:
+        _face_rest()
         if keys:
             keys.close()
         if readline and hist_on:

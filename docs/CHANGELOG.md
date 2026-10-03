@@ -2,13 +2,21 @@
 
 ## v1.73
 
+The face talks, and awaken makes only what shows.
+
+- The face talks. On an awake machine, a chat reply read aloud starts
+  with the face. While a sentence plays, its mouth opens and closes:
+  `(o.o)`, `(oOo)`. It rests between sentences, after the last one,
+  after `Esc x` and once you type. A reply that is not spoken still
+  starts with `*`.
 - `spark awaken` makes only what shows: a personality and a face. It
-  writes no lines to say, and no words file.
+  no longer writes lines for spark to say.
 - Every mood of the face is still made and kept, for later uses.
-- `spark words` is gone. `spark look` shows the face. A shell started
-  before the update may still ask for its greeting: it gets nothing.
-- The voice's audition says one fixed sentence: "Hello. This is how I
-  sound."
+- `spark words` is gone. `spark look` shows the face.
+- When awaken offers a voice, the sample says one fixed sentence:
+  "Hello. This is how I sound."
+- The project's checks run on newer GitHub tools (checkout 7, CodeQL
+  4).
 
 ## v1.72
 

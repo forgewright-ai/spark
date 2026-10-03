@@ -1092,7 +1092,10 @@ def stream_turn(cfg, mode, text, files=(), context="", thread=None, line=None, m
     if cps == "auto":
         from . import reveal
         cps = reveal.auto_cps(cfg)
-    wrap = textmod.Wrap(sys.stdout, mark=mark, cps=cps)
+    # a spoken reply in the chat opens with the talking face where the
+    # look draws one (forge._Spoken.screen): its stream and its lead
+    out, lead = voice.screen() if voice is not None else (sys.stdout, None)
+    wrap = textmod.Wrap(out, mark=mark, cps=cps, lead=lead)
     # the pulse on stderr from the request until the first chunk (a tty
     # only: piped, nothing is drawn); the wrap's mark takes over from it
     busy = textmod.Busy(sys.stderr).start()

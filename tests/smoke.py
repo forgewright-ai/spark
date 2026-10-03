@@ -1609,7 +1609,7 @@ def server_pids_cases(t):
 
 def chat_awake_cases(t):
     """v1.65, the chat in process: the wrap's lead and its hanging indent
-    (piped, today's bytes); v1.72, one UI -- the opening is one line, the
+    (piped, today's bytes), back in v1.73 for a reply read aloud; v1.72, one UI -- the opening is one line, the
     model by name or the thread it goes on with; a refusal is `! hint` on
     stderr, awake or not; no goodbye; /do handed to spark do's driver. The
     look state is pinned to a throwaway dir: the real one is never read."""
@@ -1639,6 +1639,39 @@ def chat_awake_cases(t):
             sys.stdout, sys.stderr = real_out, real_err
         return got
     try:
+        # --- the lead (v1.73: a reply read aloud): the face opens the
+        # reply, the lines hang under it
+        w = _tx.Wrap(Tty(), lead="\033[1m(o.o)\033[0m ")
+        w.width = 30
+        w.feed("one two three four five six seven eight nine ten eleven\n\nnext one")
+        w.close()
+        lines = w.stream.getvalue().split("\n")
+        body = [ln for ln in lines[1:] if ln]
+        t.ok(lines[0].startswith("\033[1m(o.o)\033[0m one ") and len(_tx.SGR_RE.sub("", lines[0])) <= 29
+             and body and all(ln.startswith(" " * 6) and ln[6] != " " for ln in body) and "" in lines[1:-1]
+             and "      next one" in lines,
+             "chat: the lead opens the reply; wrapped and later lines hang 6 columns (the face's width, "
+             "the escapes not counted); a blank line stays blank", repr(w.stream.getvalue()))
+        src = "Some **bold** words here.\n\n    code stays\n- a bullet\n" + "word " * 30
+        piped = []
+        for lead in ("(o.o) ", None):
+            s = io.StringIO()
+            w = _tx.Wrap(s, lead=lead)
+            w.feed(src)
+            w.close()
+            piped.append(s.getvalue())
+        t.ok(piped[0] == piped[1] and piped[0].startswith("* Some **bold**"),
+             "chat: piped, the lead is ignored -- the bytes are today's, byte for byte", repr(piped[0][:60]))
+        ticked = []
+        w = _tx.Wrap(Tty(), lead="(o.o) ", cps=5000)
+        w._tick = lambda ch, step: (ticked.append(ch), w.stream.write(ch))
+        w.width = 30
+        w.feed("one two three four five six seven eight nine ten eleven twelve")
+        w.close()
+        paced = "".join(ticked)
+        t.ok("\n      " in w.stream.getvalue() and "\n" in paced and "\n " not in paced and "      " not in paced,
+             "chat: the reveal paces the words; the hanging indent is written free", repr((w.stream.getvalue(), paced)))
+
         # --- the opening: one line -- the thread it goes on with, cut at a
         # word to 80 columns, else the model it talks to, by name
         now = time.time()
@@ -1931,8 +1964,9 @@ PROMPT_AT = re.compile(rb"\n(?:\x1b\[[0-9;?]*[A-Za-z])*chat>")
 
 def chat_pty_cases(t, env, home):
     """v1.72 at a pty, one UI awake or not: the opening is one line (the
-    thread it goes on with), a reply is `* ` and never a face, a refusal
-    is `! `, and the end -- /q or Ctrl-D -- says nothing."""
+    thread it goes on with), a reply is `* ` (v1.73: awake, a reply read
+    aloud is led by the face instead), a refusal is `! `, and the end --
+    /q or Ctrl-D -- says nothing."""
     import pty
     h = os.path.join(home, "pty-chat")
     os.makedirs(os.path.join(h, ".config", "spark"), exist_ok=True)
@@ -2147,7 +2181,9 @@ def chat_voice_pty_cases(t, env, home):
              text[-300:])
 
     # awake, mode on: a reply spoken only after /aloud; no greeting, no
-    # goodbye, and Esc on the empty line ends in silence
+    # goodbye, and Esc on the empty line ends in silence. v1.73: the reply
+    # not spoken starts with `* `, the spoken one with the face (the test
+    # seam plays nothing, so its mouth never moves: no redraw)
     state = os.path.join(h, ".local", "state", "spark")
     os.makedirs(state, exist_ok=True)
     with open(os.path.join(state, "look"), "w") as f:
@@ -2157,8 +2193,10 @@ def chat_voice_pty_cases(t, env, home):
                              ("\nchat>", b"\x1b", 3.0)])
     said = spoken()
     t.ok(ended(st) and "everything for now" not in text and len(said) == 1 and re.fullmatch(r"\d+", said[0])
-         and "* replies aloud -- /aloud stops" in text and "(o.o)" not in text,
-         "chat pty (%s): mode on -- a reply spoken only after /aloud; no greeting, no goodbye, no face"
+         and "* replies aloud -- /aloud stops" in text and "* 2\r\n" in text and "(o.o) 4\r\n" in text
+         and text.count("(o.o)") == 1 and "\x1b7" not in text,
+         "chat pty (%s): mode on -- a reply spoken only after /aloud, led by the face; the one before it "
+         "starts with `* `; no greeting, no goodbye; nothing sounds, so the mouth stays"
          % lib, repr((said, text[-300:])))
 
     # clear mode: Esc v lands the heard words, Enter sends them, the reply

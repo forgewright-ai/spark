@@ -1530,6 +1530,232 @@ check("follow: stopped (Ctrl-C) -- back at once, the text not yet sounded stays 
 os.environ.pop("STUB_CLIP", None)
 forge.VOICE.update(reader=None, aloud=False)
 
+# v1.73, the face talks (forge._Face): a spoken reply opens with the idle
+# face, and while one of its sentences sounds the mouth opens and closes
+# in place on that first row -- save the cursor, up the rows the reply
+# took, the frame, restore. A stub timeline first: a Reader with no
+# threads, its spans set by hand through _heard, as the player sets them
+import re  # noqa: E402
+from spark import look, text as textmod  # noqa: E402
+
+
+class Tty(io.StringIO):
+    def isatty(self):
+        return True
+
+    def fileno(self):
+        raise OSError("no fd")
+
+
+def redraws(out):
+    """The frames drawn in place, in order: (rows up, the frame)."""
+    return [(int(m.group(1) or 0), textmod.SGR_RE.sub("", m.group(2)))
+            for m in re.finditer(r"\x1b7(?:\x1b\[(\d+)A)?\r(.*?)\x1b8", out.getvalue())]
+
+
+def sound(r, tag, after, secs):
+    """The line `tag` sounds `after` seconds from now, for `secs`."""
+    with r.cv:
+        r.tag = max(r.tag, tag)
+        r._heard(tag, (time.monotonic() + after, secs))
+
+
+def sized(face, cols, rows):
+    """The terminal the face sees: `cols` by `rows`, now and at each redraw."""
+    face.size = (cols, rows)
+    face._size = lambda: (cols, rows)
+
+
+def until(cond, secs=2.0):
+    end = time.monotonic() + secs
+    while time.monotonic() < end and not cond():
+        time.sleep(0.01)
+    return cond()
+
+
+IDLE, TALK = "(o.o)", "(oOo)"
+step, forge.MOUTH_STEP = forge.MOUTH_STEP, 0.05
+check("face: the talking frame is the idle face with its mouth open, every kit face ASCII and the same width",
+      look.talking("(o.o)") == TALK and look.talking("[*_*]") == "[*o*]" and look.talking("<u-u>") == "<uou>"
+      and look.talking("(oo)") is None and look.talking("") is None
+      and all(len(look.talking(f)) == len(f) and look.talking(f).isascii()
+              for f in ("(o.o)", "{u v u}", "|*.*|")), look.talking("(o.o)"))
+
+with look.assume_awake():
+    r = voice.Reader(Cfg(SPARK_VOICE="clear"))
+    out = Tty()
+    face = forge._Face(out, IDLE, TALK, r)
+    sized(face, 40, 24)
+    w = textmod.Wrap(face, lead=face.lead)
+    w.width = 40
+    w.feed("one two three four five six seven eight nine ten eleven twelve thirteen\n")
+    w.close()
+    face.add([1])
+    face.start()
+    sound(r, 1, 0.15, 0.4)
+    time.sleep(0.08)
+    before = redraws(out)
+    until(lambda: len(redraws(out)) >= 3)
+    playing = redraws(out)
+    face.close()
+    ended = until(lambda: not face.thread.is_alive(), 2.0)
+    after = redraws(out)
+check("face: the reply opens with the idle face in the mark's place, its lines hanging under it",
+      textmod.SGR_RE.sub("", out.getvalue()).startswith(IDLE + " one two") and face.rows == 4, repr(out.getvalue()[:120]))
+check("face: nothing drawn before the sentence sounds; while it plays the mouth moves on the lead's row "
+      "(4 rows up), talking and idle in turn", before == [] and len(playing) >= 3
+      and all(up == 4 for up, _f in playing) and playing[0][1] == TALK and playing[1][1] == IDLE
+      and playing[2][1] == TALK, (before, playing))
+check("face: after the sentence it rests on idle, and the thread ends once no line will sound",
+      ended and after[-1][1] == IDLE and len(after) <= 2 + int(0.4 / forge.MOUTH_STEP), after)
+
+# a cut (Esc x): idle at once, then still
+with look.assume_awake():
+    r = voice.Reader(Cfg(SPARK_VOICE="clear"))
+    out = Tty()
+    face = forge._Face(out, IDLE, TALK, r)
+    sized(face, 40, 24)
+    w = textmod.Wrap(face, lead=face.lead)
+    w.feed("A short one.")
+    face.add([1, 2])
+    face.start()
+    sound(r, 1, 0.0, 5.0)
+    with r.cv:
+        r.tag = 2
+        r.lines.append((r.gen, "Two.", 2))      # waiting for the engine: the cut drops it
+    talked = until(lambda: any(f == TALK for _u, f in redraws(out)))
+    until(lambda: redraws(out)[-1][1] == TALK)
+    t0 = time.monotonic()
+    r.cut()
+    rested = until(lambda: redraws(out)[-1][1] == IDLE, 1.0)
+    took = time.monotonic() - t0
+    n = len(redraws(out))
+    time.sleep(0.3)
+    still = len(redraws(out)) == n
+    face.close()
+    until(lambda: not face.thread.is_alive())
+check("face: a cut (Esc x) rests it on idle at once (%.3f s) and it moves no more -- the line not yet "
+      "sounding never will" % took, talked and rested and took < forge.MOUTH_STEP + 0.1 and still
+      and not face.thread.is_alive() and redraws(out)[-1] == (0, IDLE), redraws(out)[-4:])
+
+# rest(): a key typed at chat> -- idle now, nothing after it
+with look.assume_awake():
+    r = voice.Reader(Cfg(SPARK_VOICE="clear"))
+    out = Tty()
+    face = forge._Face(out, IDLE, TALK, r)
+    w = textmod.Wrap(face, lead=face.lead)
+    w.feed("Hello there.")
+    face.add([1])
+    face.start()
+    sound(r, 1, 0.0, 5.0)
+    until(lambda: redraws(out) and redraws(out)[-1][1] == TALK)
+    forge.FACE[0] = face
+    forge._face_rest()
+    n = len(redraws(out))
+    time.sleep(0.2)
+check("face: rest() (a key typed) draws idle at once and nothing after it",
+      forge.FACE[0] is None and redraws(out)[-1][1] == IDLE and len(redraws(out)) == n
+      and until(lambda: not face.thread.is_alive()), redraws(out)[-3:])
+
+# scrolled off: once the reply's rows reach the terminal's height - 1, the
+# lead's row is gone from the screen -- no redraw after that
+with look.assume_awake():
+    r = voice.Reader(Cfg(SPARK_VOICE="clear"))
+    out = Tty()
+    face = forge._Face(out, IDLE, TALK, r)
+    sized(face, 40, 6)
+    w = textmod.Wrap(face, lead=face.lead)
+    w.feed("One.\n")
+    face.add([1])
+    face.start()
+    sound(r, 1, 0.0, 5.0)
+    until(lambda: len(redraws(out)) >= 2)
+    w.feed("two\nthree\nfour\nfive\n")
+    mark = len(out.getvalue())
+    time.sleep(0.3)
+    tail = out.getvalue()[mark:]
+    face.close()
+    r.cut()
+    gone = until(lambda: not face.thread.is_alive())
+check("face: the lead's row scrolled off (rows %d, height 6) -- no redraw after, the thread gone" % face.rows,
+      face.rows == 5 and "\x1b7" not in tail and gone and face.halt, repr(tail))
+# a line the terminal wrapped is a row too (the cursor's row, not the line feeds)
+out = Tty()
+face = forge._Face(out, IDLE, TALK, voice.Reader(Cfg()))
+face.size = (10, 24)
+face.write("x" * 10)
+at_edge = (face.rows, face.col)
+face.write("y\n" + "漢" * 6 + "\n")
+check("face: rows counted as the terminal draws them -- a full row waits at the edge, the next character "
+      "wraps, a wide character is two columns", at_edge == (0, 10) and face.rows == 4, (at_edge, face.rows))
+
+# no face: piped, unawakened, or the voice off -- stdout and no lead, the
+# bytes v1.72's
+real_out = sys.stdout
+forge.VOICE.update(reader=voice.Reader(Cfg(SPARK_VOICE="clear")), mode="clear", aloud=True)
+try:
+    sys.stdout = io.StringIO()
+    with look.assume_awake():
+        piped = forge._Spoken(face=True).screen()
+    sys.stdout = Tty()
+    saved = look.LOOK_FILE
+    look.LOOK_FILE = os.path.join(ROOT, "no-look")       # awaken ran above: this one is not
+    look.forget()
+    try:
+        unawake = forge._Spoken(face=True).screen()
+    finally:
+        look.LOOK_FILE = saved
+        look.forget()
+    with look.assume_awake():
+        plain_reply = forge._Spoken().screen()
+        live = forge._Spoken(face=True)
+        got = live.screen()
+        made = forge.FACE[0]
+        forge._face_rest()
+finally:
+    sys.stdout = real_out
+check("face: none piped, none unawakened, none for a reply not spoken in the chat -- stdout and no lead",
+      piped[1] is None and unawake[1] is None and plain_reply[1] is None
+      and not isinstance(piped[0], forge._Face) and not isinstance(unawake[0], forge._Face), (piped, unawake))
+check("face: awake at a terminal, the spoken reply's wrap writes through the face, the idle face its lead",
+      got[0] is live.face and made is live.face and textmod.SGR_RE.sub("", got[1]) == look.faces()["idle"] + " "
+      and forge.FACE[0] is None, got)
+
+# end to end: the Reader's own timeline (the stream stub at a sound
+# card's pace), the voice following the text (the reveal off)
+per_clip(False)
+reset_logs()
+os.environ.update(STUB_TTS="0.05", STUB_CLIP="0.5")
+real_out = sys.stdout
+r = voice.Reader(Cfg(SPARK_VOICE="clear"))
+forge.VOICE.update(reader=r, mode="clear", aloud=True)
+try:
+    sys.stdout = Tty()
+    with look.assume_awake():
+        sp = forge._Spoken(face=True)
+        stream_, lead = sp.screen()
+        w = textmod.Wrap(stream_, lead=lead)
+        for i in range(0, len(REPLY), 7):
+            w.feed(REPLY[i:i + 7])
+            sp.feed(REPLY[i:i + 7])
+        sp.flush()
+        w.close()
+        quiet = until(lambda: not sp.face.thread.is_alive(), 8.0)
+    shown = sys.stdout
+finally:
+    sys.stdout = real_out
+    forge._face_rest()
+    r.cut()
+frames_ = redraws(shown)
+idle_, talk_ = look.faces()["idle"], look.talking(look.faces()["idle"])
+check("face: with the Reader's own clock, the mouth moves while the sentences play and rests on idle "
+      "after the last; the thread ends by itself", quiet and len(frames_) >= 6
+      and frames_[-1][1] == idle_ and {f for _u, f in frames_} == {idle_, talk_} and all(u == 1 for u, _f in frames_)
+      and textmod.SGR_RE.sub("", shown.getvalue()).startswith(idle_ + " Void Linux"), (idle_, frames_[-8:]))
+os.environ.pop("STUB_CLIP", None)
+forge.MOUTH_STEP = step
+forge.VOICE.update(reader=None, aloud=False)
+
 voice.stream_argv = _stream_argv
 for k in ("STUB_TTS", "STUB_PLAY"):
     os.environ.pop(k, None)
