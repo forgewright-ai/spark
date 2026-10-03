@@ -8,7 +8,9 @@
 #   spark forget N | <words>   drop one, by number or by substring
 #   spark memory               list them; on | off | clear
 
+import fcntl
 import os
+from contextlib import contextmanager
 
 from . import MARK, MEMORY_FILE, SPARK_ENV, config, log_exc, say, vault
 
@@ -149,6 +151,27 @@ class Refused(Exception):
         self.reason, self.hint = reason, hint
 
 
+@contextmanager
+def _locked(st=None):
+    """An exclusive flock on `memory.lock` beside the sealed file, around
+    every load-modify-save (ledger._locked's pattern): two writers at once
+    -- the page's threads, a prompt beside it -- must both survive, never
+    one fact lost under the other's save. No store yet means nobody to
+    race with: the first write provisions it."""
+    st = st or _store()
+    if st is None:
+        yield
+        return
+    from . import users
+    users.make_dirs(st[2])
+    fd = os.open(os.path.join(os.path.dirname(st[0]), "memory.lock"), os.O_WRONLY | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        os.close(fd)
+
+
 def remember(text, st=None):
     """Keep one fact (whitespace folded); returns it as written. Raises
     Refused. The prompt and the page share this; `st` names whose memory."""
@@ -159,12 +182,14 @@ def remember(text, st=None):
         raise Refused("long", "%d characters -- a fact is at most %d" % (len(fact), FACT_MAX))
     if fact.startswith("#"):
         raise Refused("comment", "a fact cannot start with # -- that is a comment")
-    have = _all_facts(st, strict=True)
-    if fact.lower() in (h.lower() for h in have):
-        raise Refused("duplicate", "already kept: %s" % fact)
-    if len(have) >= FACTS_MAX:
-        raise Refused("full", "%d facts already -- spark forget one first" % FACTS_MAX)
-    _write(_lines(st, strict=True) + [fact], st)
+    with _locked(st):
+        lines = _lines(st, strict=True)
+        have = [ln.strip() for ln in lines if ln.strip() and not ln.lstrip().startswith("#")]
+        if fact.lower() in (h.lower() for h in have):
+            raise Refused("duplicate", "already kept: %s" % fact)
+        if len(have) >= FACTS_MAX:
+            raise Refused("full", "%d facts already -- spark forget one first" % FACTS_MAX)
+        _write(lines + [fact], st)
     _refresh()
     return fact
 
@@ -172,13 +197,14 @@ def remember(text, st=None):
 def forget_n(n, st=None):
     """Drop fact N as `spark memory` numbers them; the fact, or None when
     there is no such number. Raises Refused when the file does not open."""
-    lines = _lines(st, strict=True)
-    idx = [i for i, ln in enumerate(lines) if ln.strip() and not ln.lstrip().startswith("#")]
-    if not 1 <= n <= len(idx):
-        return None
-    fact = lines[idx[n - 1]].strip()
-    del lines[idx[n - 1]]
-    _write(lines, st)
+    with _locked(st):
+        lines = _lines(st, strict=True)
+        idx = [i for i, ln in enumerate(lines) if ln.strip() and not ln.lstrip().startswith("#")]
+        if not 1 <= n <= len(idx):
+            return None
+        fact = lines[idx[n - 1]].strip()
+        del lines[idx[n - 1]]
+        _write(lines, st)
     _refresh()
     return fact
 

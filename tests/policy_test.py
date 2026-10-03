@@ -83,6 +83,20 @@ def probe(url, method, path, bearer="", body=None):
         c.close()
 
 
+def raw(url, method, path, data=None, headers=None):
+    """(status, headers, bytes) for a body sent as given, never re-encoded."""
+    u = urllib.parse.urlsplit(url)
+    c = http.client.HTTPConnection(u.hostname, u.port, timeout=30)
+    h = {"X-Spark": "1", "Content-Type": "application/json"} if method == "POST" else {}
+    h.update(headers or {})
+    try:
+        c.request(method, path, data, h)
+        r = c.getresponse()
+        return r.status, dict(r.getheaders()), r.read()
+    finally:
+        c.close()
+
+
 def main():
     fails = 0
 
@@ -197,6 +211,82 @@ def main():
                                  ("POST", "/api/threads/x"), ("GET", "/nope")):
                 sts = [probe(url, method, path, cred)[0] for cred in ("", user, admin)]
                 ok(sts == [404, 404, 404], "%s %s is off the table: 404 to all three" % (method, path), sts)
+
+            # no login, no 500: a lone surrogate in the token is a wrong
+            # token (the 1 s cost, counted), and a body nested past the
+            # parser's stack is a 400 -- neither skips the gates as a crash
+            def failed_logins():
+                with open(os.path.join(state, "forge.log"), encoding="utf-8", errors="replace") as f:
+                    return f.read().count(" login failed")
+            before = failed_logins()
+            t0 = time.time()
+            st, _, body = raw(url, "POST", "/api/login", b'{"token": "\\ud800"}')
+            took = time.time() - t0
+            time.sleep(0.2)
+            ok(st == 401 and took >= 1.0 and failed_logins() == before + 1,
+               "a lone surrogate token -> 401 after >= 1 s, counted as a wrong login (not a 500)",
+               (st, round(took, 2), body[:80]))
+            for path, hdr in (("/api/login", {}), ("/api/memory", {"Authorization": "Bearer " + user})):
+                st, _, body = raw(url, "POST", path, b"[" * 200000, hdr)
+                ok(st == 400 and json.loads(body)["error"]["kind"] == "bad",
+                   "POST %s with 200k nested [ -> 400 the body is not JSON (not a 500)" % path, (st, body[:80]))
+
+            # a name holds SESSIONS_PER_NAME logins: the oldest goes past it
+            cookies = []
+            for _ in range(forgeserve.SESSIONS_PER_NAME + 1):
+                st, h, _ = raw(url, "POST", "/api/login", json.dumps({"token": user}).encode())
+                cookies.append((h.get("Set-Cookie") or "").split(";")[0])
+            alive = [raw(url, "GET", "/api/me", headers={"Cookie": c})[0] for c in cookies]
+            ok(alive == [401] + [200] * forgeserve.SESSIONS_PER_NAME,
+               "%d logins of one name: the oldest session dropped, the newest %d open"
+               % (len(cookies), forgeserve.SESSIONS_PER_NAME), alive)
+
+            # MAX_CONNECTIONS at once: one more is a 503 at once, and the
+            # slots come back when the idle sockets go
+            idle = []
+            for _ in range(forgeserve.MAX_CONNECTIONS):
+                s = socket.create_connection(("127.0.0.1", port), timeout=10)
+                idle.append(s)
+            time.sleep(0.5)
+            try:
+                st, h, body = raw(url, "GET", "/api/health")
+            except OSError as e:
+                st, h, body = 0, {}, repr(e).encode()
+            ok(st == 503 and json.loads(body)["error"]["kind"] == "busy" and h.get("Retry-After") == "5",
+               "%d idle connections held: one more -> 503 busy, answered at once" % forgeserve.MAX_CONNECTIONS,
+               (st, body[:80]))
+            for s in idle:
+                s.close()
+            end = time.time() + 20
+            while time.time() < end:
+                try:
+                    st = raw(url, "GET", "/api/health")[0]
+                except OSError:
+                    st = 0
+                if st == 200:
+                    break
+                time.sleep(0.2)
+            ok(st == 200, "the idle connections gone, the server answers again", st)
+
+            # EVENTS_PER_USER live streams for one requester: one more is 429
+            rc, out, _ = spark("user", "add", "ustream", "--show-token")
+            stream_tok = next((l.strip() for l in out.splitlines() if len(l.strip()) >= 40 and " " not in l.strip()), "")
+            u = urllib.parse.urlsplit(url)
+            streams, sts, kind = [], [], ""
+            for _ in range(forgeserve.EVENTS_PER_USER + 1):
+                c = http.client.HTTPConnection(u.hostname, u.port, timeout=10)
+                c.request("GET", "/api/events", None, {"Authorization": "Bearer " + stream_tok})
+                r = c.getresponse()
+                sts.append(r.status)
+                if r.status != 200:
+                    kind = json.loads(r.read())["error"]["kind"]
+                streams.append((c, r))      # the response owns the socket: keep both
+            ok(sts == [200] * forgeserve.EVENTS_PER_USER + [429] and kind == "busy",
+               "%d live /api/events streams for one user, one more -> 429 busy" % forgeserve.EVENTS_PER_USER, sts)
+            ok(probe(url, "GET", "/api/me", stream_tok)[0] == 200, "the user's other routes still answer")
+            for c, r in streams:
+                r.close()
+                c.close()
         finally:
             p.send_signal(signal.SIGTERM)
             try:

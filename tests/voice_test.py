@@ -3,9 +3,15 @@
 engine, no sound.
 
 The runtime is a stub: small scripts named like sherpa-onnx's tools in
-a throwaway voice dir (SPARK_VOICE_DIR). The speaking one writes a known
-wav and keeps its argv; the listening one saves a segment and says so
-the way the real one does; the ears print sherpa's JSON line. The player
+a throwaway voice dir (SPARK_VOICE_DIR). The engine is a fake in
+Python (tests' spark_fake_engine: voice.load_engine replaced here and,
+through a sitecustomize on PYTHONPATH, in a child that speaks): it
+makes a known tone and keeps what it was asked. The speaking tool is a
+stub that records any start: it must never be started, since a text on
+a command line is readable by any local user (v1.75), and no process
+spark starts carries a spoken text on its argv. The listening one saves
+a segment and says so the way the real one does; the ears print
+sherpa's JSON line. The player
 and `defaults` are stubs on PATH. Covered: voice.env's pins; fetch()
 refusing a size or sha256 mismatch and a tarball with `..`, an absolute
 path or a link pointing out, and installing a good one (its top
@@ -31,7 +37,7 @@ that records what it got and when, and as one stream (Linux) against a
 stub that keeps every byte it was given at a sound card's pace -- one
 process a burst, the lead-in once, silence between, closed when idle,
 killed by a cut. v1.70's int8 mouth fetched again and removed; spark
-update's voice step; the engine's fallback to the tool. On this Mac
+update's voice step; an engine that does not load: silent, one line. On this Mac
 only, never in CI, the engine against the real runtime when a voice is
 here (SPARK_VOICE_REAL_DIR, else ~/.local/share/spark/voice): the
 structs, one load, two sentences, the language per call, the timings.
@@ -117,12 +123,116 @@ PY = sys.executable
 
 # the stub runtime: the tools sherpa-onnx ships, by name
 TTS = '''#!%s
-import json, os, shutil, sys
-out = [a.split("=", 1)[1] for a in sys.argv if a.startswith("--output-filename=")][0]
-with open(os.path.join(os.environ["STUB_LOG"], "tts.json"), "w") as f:
-    json.dump({"argv": sys.argv[1:], "cwd": os.getcwd()}, f)
-shutil.copyfile(%r, out)
-''' % (PY, TONE)
+import json, os, sys
+with open(os.path.join(os.environ["STUB_LOG"], "tool.jsonl"), "a") as f:
+    f.write(json.dumps({"argv": sys.argv[1:]}) + "\\n")
+sys.exit(1)
+''' % PY
+TOOL_LOG = os.path.join(LOG, "tool.jsonl")
+
+
+def tool_calls():
+    """Every start of the speaking tool: none is ever expected."""
+    try:
+        with open(TOOL_LOG) as f:
+            return [json.loads(l) for l in f if l.strip()]
+    except OSError:
+        return []
+
+
+# the engine: a fake in Python, kept in a module of its own so a child
+# that speaks (spark awaken, a Reader at exit) loads it too, through a
+# sitecustomize on PYTHONPATH. It makes the fixed tone (or, with
+# STUB_IDENT, STUB_CLIP seconds of one value from its text), sleeps
+# STUB_TTS first, and logs each call: engine.json the last, tts.jsonl
+# every one with when it ran. STUB_NO_ENGINE: none loads.
+CLIP_S = 0.2
+FAKE = os.path.join(ROOT, "fake")
+os.makedirs(FAKE)
+FAKE_SRC = '''import array, json, os, sys, time, wave
+TONE, CLIP_S = %r, %r
+SPOKEN = []
+
+
+def _tone():
+    with wave.open(TONE) as w:
+        data = w.readframes(w.getnframes())
+    a = array.array("h")
+    a.frombytes(data)
+    if sys.byteorder == "big":
+        a.byteswap()
+    return array.array("f", (v / 32767.0 for v in a))
+
+
+class Engine:
+    per_call = True
+
+    def __init__(self):
+        self.loads, self.handles = 1, {}
+
+    def load(self, lang="en-us"):
+        return 24000
+
+    def say(self, text, sid, speed=1.0, lang="en-us"):
+        t0 = time.time()
+        time.sleep(float(os.environ.get("STUB_TTS", "0")))
+        SPOKEN.append(text)
+        if os.environ.get("STUB_IDENT"):
+            n = int(24000 * float(os.environ.get("STUB_CLIP", CLIP_S)))
+            x = array.array("f", [(1000 + sum(text.encode()) %% 20000) / 32767.0] * n)
+        else:
+            x = _tone()
+        rec = {"text": text, "sid": sid, "speed": round(speed, 3), "lang": lang}
+        log = os.environ["STUB_LOG"]
+        with open(os.path.join(log, "engine.json"), "w") as f:
+            json.dump(rec, f)
+        with open(os.path.join(log, "tts.jsonl"), "a") as f:
+            f.write(json.dumps(dict(rec, t0=t0, t1=time.time())) + "\\n")
+        return x, 24000
+
+    def close(self):
+        pass
+
+
+def load_engine():
+    return None if os.environ.get("STUB_NO_ENGINE") else Engine()
+
+
+def install():
+    from spark import voice
+    voice.load_engine = load_engine
+    del voice._ENGINE[:]
+''' % (TONE, CLIP_S)
+with open(os.path.join(FAKE, "spark_fake_engine.py"), "w") as f:
+    f.write(FAKE_SRC)
+with open(os.path.join(FAKE, "sitecustomize.py"), "w") as f:
+    f.write("import sys\nsys.path.insert(0, %r)\nimport spark_fake_engine\nspark_fake_engine.install()\n"
+            % os.path.join(REPO, "lib"))
+FAKE_ENV = {"PYTHONPATH": FAKE}
+sys.path.insert(0, FAKE)
+import spark_fake_engine as fake  # noqa: E402
+REAL_LOAD = voice.load_engine
+fake.install()
+
+
+def engine_said():
+    with open(os.path.join(LOG, "engine.json")) as f:
+        return json.load(f)
+
+
+# every process started in this one, its argv kept: no spoken text may
+# ride any of them (subprocess.run starts through Popen too)
+ARGVS = []
+_Popen = subprocess.Popen
+
+
+class RecordedPopen(_Popen):
+    def __init__(self, args, *a, **kw):
+        ARGVS.append([args] if isinstance(args, (str, bytes)) else [str(x) for x in args])
+        _Popen.__init__(self, args, *a, **kw)
+
+
+subprocess.Popen = RecordedPopen
 VAD = '''#!%s
 import os, shutil, sys, time
 with open(os.path.join(os.environ["STUB_LOG"], "vad.json"), "w") as f:
@@ -433,50 +543,53 @@ check("spark update: the voice on or clear fetches a part whose pin changed (sai
       asked == ["clear"], asked)
 
 # ------------------------------------------------------------ 3. speaking
+# every text goes through the engine loaded in this process: no tool is
+# started, so no text rides a command line (/proc/PID/cmdline is
+# readable by any local user)
 stub_engine()
 cfg = Cfg(SPARK_VOICE_RATE="125")
 w = voice.speak(cfg, "This is how spark reads aloud.", "clear")
-argv = json.load(open(os.path.join(LOG, "tts.json")))["argv"]
+said = engine_said()
 check("speak clear: a wav 0600 in a private 0700 dir",
       os.path.isfile(w) and stat.S_IMODE(os.stat(w).st_mode) == 0o600
       and stat.S_IMODE(os.stat(os.path.dirname(w)).st_mode) == 0o700, w)
-check("speak clear: Kokoro's flags, af_heart, en-us, the rate as the length scale, the text after --",
-      "--sid=3" in argv and "--kokoro-lang=en-us" in argv and "--kokoro-length-scale=0.800" in argv
-      and "--kokoro-model=model.onnx" in argv and "--kokoro-lexicon=lexicon-us-en.txt,lexicon-zh.txt" in argv
-      and "--num-threads=%d" % voice.THREADS in argv and argv[-2:] == ["--", "This is how spark reads aloud."], argv)
+check("speak clear: the engine in this process -- af_heart, en-us, the rate as the speed, the text whole",
+      said == {"text": "This is how spark reads aloud.", "sid": 3, "speed": 1.25, "lang": "en-us"}, said)
+check("speak: the speaking tool is never started (no text on any argv)", tool_calls() == [], tool_calls())
 d = os.path.dirname(w)
 voice.cleanup(w)
 check("cleanup: the private dir goes", not os.path.exists(d))
-w = voice.speak(cfg, "Bom dia, você está bem? Não sei.", "clear")
-argv = json.load(open(os.path.join(LOG, "tts.json")))["argv"]
-check("speak clear, Portuguese: pf_dora, pt-br", "--sid=42" in argv and "--kokoro-lang=pt-br" in argv, argv)
-voice.cleanup(w)
-INT8 = os.path.join(VDIR, "mouth", "model.int8.onnx")
-open(INT8, "w").close()
-voice.cleanup(voice.speak(cfg, "Hello.", "clear"))
-argv = json.load(open(os.path.join(LOG, "tts.json")))["argv"]
-os.remove(INT8)
-check("speak: a mouth an older pin left (model.int8.onnx alone) still speaks until the fetch replaces it",
-      "--kokoro-model=model.int8.onnx" in argv, argv)
-check("load_engine: no runtime library here (the stub runtime) -- None, the tool speaks", voice.load_engine() is None)
+voice.cleanup(voice.speak(cfg, "Bom dia, você está bem? Não sei.", "clear"))
+said = engine_said()
+check("speak clear, Portuguese: pf_dora, pt-br", said["sid"] == 42 and said["lang"] == "pt-br", said)
+check("load_engine: no runtime library here (the stub runtime) -- None", REAL_LOAD() is None)
 LIBF = voice._lib_file()
 with open(LIBF, "wb") as f:
     f.write(b"not a library")
-check("load_engine: a library that does not load -- None, never a raise", voice.load_engine() is None)
+check("load_engine: a library that does not load -- None, never a raise", REAL_LOAD() is None)
 os.remove(LIBF)
-w = voice.speak(cfg, "-rf is a flag\x1b[31m", "clear")
-argv = json.load(open(os.path.join(LOG, "tts.json")))["argv"]
-check("speak: a text starting with a dash rides after --, a control character is a space",
-      argv[-2:] == ["--", "-rf is a flag [31m"], argv[-2:])
-voice.cleanup(w)
+voice.load_engine = REAL_LOAD
+del voice._ENGINE[:]
+try:
+    voice.speak(cfg, "a secret said aloud", "clear")
+    refused = ""
+except voice.VoiceError as e:
+    refused = str(e)
+check("speak with an engine that does not load: refused in one line naming the remedy, no tool started",
+      refused == voice.no_engine("clear") and refused.startswith("the voice engine does not load -- spark voice ")
+      and tool_calls() == [], (refused, tool_calls()))
+fake.install()
+voice.cleanup(voice.speak(cfg, "-rf is a flag\x1b[31m", "clear"))
+check("speak: a control character is a space, a dash is words",
+      engine_said()["text"] == "-rf is a flag [31m", engine_said())
 r = voice.mint("terse", "fixture-seed")
 w = voice.speak(cfg, "Hello.", "on", recipe=r)
-argv = json.load(open(os.path.join(LOG, "tts.json")))["argv"]
+said = engine_said()
 with wave.open(w) as wv:
     shape = (wv.getnchannels(), wv.getsampwidth(), wv.getframerate())
-check("speak on: the recipe's speaker at length scale 1, the character over it, 16-bit mono 24 kHz",
-      "--sid=%s" % r["SID"] in argv and "--kokoro-length-scale=1.000" in argv and shape == (1, 2, 24000)
-      and sha(w) != sha(TONE) and os.listdir(os.path.dirname(w)) == ["character.wav"], (argv, shape))
+check("speak on: the recipe's speaker at speed 1, the character over it, 16-bit mono 24 kHz",
+      said["sid"] == int(r["SID"]) and said["speed"] == 1.0 and shape == (1, 2, 24000)
+      and sha(w) != sha(TONE) and os.listdir(os.path.dirname(w)) == ["character.wav"], (said, shape))
 voice.cleanup(w)
 try:
     voice.speak(cfg, "Hello.", "on")
@@ -716,13 +829,16 @@ check("say_aloud clear --anyway: speaks beside it", h is not None)
 os.remove(voice.ANYWAY_FILE)
 shutil.rmtree(os.path.join(proc, "4444"))
 stub("defaults", "#!/bin/sh\necho 0\n")
-os.remove(os.path.join(VDIR, "runtime", "bin", "sherpa-onnx-offline-tts"))
+os.environ["STUB_NO_ENGINE"] = "1"
+del voice._ENGINE[:]
 try:
     h = voice.say_aloud(Cfg(SPARK_VOICE="clear"), "hello")
     raised = False
 except Exception:  # noqa: BLE001
     raised = True
-check("say_aloud with the engine gone: None, never a raise", h is None and not raised)
+check("say_aloud with an engine that does not load: None, never a raise, no tool started",
+      h is None and not raised and tool_calls() == [], tool_calls())
+del os.environ["STUB_NO_ENGINE"]
 check("say_aloud on with no voice kept: None", voice.say_aloud(Cfg(SPARK_VOICE="on"), "hello") is None)
 check("mode: off, on, clear; anything else off",
       [voice.mode(Cfg(SPARK_VOICE=v)) for v in ("off", "on", "CLEAR", "loud", "")] == ["off", "on", "clear", "off", "off"])
@@ -838,7 +954,7 @@ def awaken(answers, extra=None):
     with open(path, "w") as f:
         f.write(answers)
     env = dict(os.environ, SPARK_AWAKEN_TTY=path, SPARK_BASE_URL="http://127.0.0.1:9", SPARK_API_KEY="t",
-               SPARK_TIMEOUT="3", STUB_PLAY="0")
+               SPARK_TIMEOUT="3", STUB_PLAY="0", **FAKE_ENV)
     env.pop("SPARK_NO_APPLY", None)
     env.update(extra or {})
     p = subprocess.run([PY, SPARK, "awaken"], capture_output=True, text=True, env=env, timeout=120)
@@ -852,9 +968,13 @@ check("awaken: the voice offered, spoken twice (again), kept: the recipe 0600, S
       rc == 0 and out.count("keep it? (keep, again, none)") == 2 and kept and kept["FAMILY"] == "choir"
       and stat.S_IMODE(os.stat(voice.RECIPE_FILE).st_mode) == 0o600 and "SPARK_VOICE=on\n" in senv()
       and len(open(os.path.join(LOG, "player")).read().splitlines()) == 2, out[-900:])
-argv = json.load(open(os.path.join(LOG, "tts.json")))["argv"]
-check("awaken: the audition says the one fixed sentence (v1.73)", argv[-1:] == [voice.HELLO], argv[-2:])
+check("awaken: the audition says the one fixed sentence (v1.73), through the engine, no tool started",
+      engine_said()["text"] == voice.HELLO and tool_calls() == [], (engine_said(), tool_calls()))
 os.remove(voice.RECIPE_FILE)
+rc, out = awaken("warm\n", extra={"STUB_NO_ENGINE": "1"})
+check("awaken with an engine that does not load: one line naming the remedy, nothing kept, no tool started",
+      rc == 0 and "! " + voice.no_engine("on") in out and "keep it?" not in out and voice.read_recipe() is None
+      and tool_calls() == [], out[-600:])
 with open(spark_env, "w") as f:
     f.write("SPARK_VOICE=clear\n")
 rc, out = awaken("plain\nkeep\n")
@@ -1148,31 +1268,15 @@ check("Sentences: the first cut goes the moment its pause or its word count is s
       and s.flush() == [] and voice.Sentences().feed("one two three four five six") == []
       and voice.Sentences().feed("one two three four five six ") == ["one two three four five six"])
 
-# the Reader's two stages, against a slow stub engine: each clip it makes
-# is one value held (an id from its text), so the player's side can say
-# which clip it got, and where silence was
-CLIP_S = 0.2
+# the Reader's two stages, against a slow fake engine (STUB_TTS): each
+# clip it makes is one value held (an id from its text, STUB_IDENT), so
+# the player's side can say which clip it got, and where silence was
 
 
 def ident(text):
     return 1000 + sum(text.encode()) % 20000
 
 
-SLOW_TTS = '''#!%s
-import array, json, os, sys, time, wave
-out = [a.split("=", 1)[1] for a in sys.argv if a.startswith("--output-filename=")][0]
-t0 = time.time()
-time.sleep(float(os.environ.get("STUB_TTS", "0")))
-text = sys.argv[-1]
-n = int(24000 * float(os.environ.get("STUB_CLIP", "%s")))
-a = array.array("h", [1000 + sum(text.encode()) %% 20000] * n)
-if sys.byteorder == "big":
-    a.byteswap()
-w = wave.open(out, "wb")
-w.setnchannels(1); w.setsampwidth(2); w.setframerate(24000); w.writeframes(a.tobytes()); w.close()
-with open(os.path.join(os.environ["STUB_LOG"], "tts.jsonl"), "a") as f:
-    f.write(json.dumps({"text": text, "t0": t0, "t1": time.time()}) + "\\n")
-''' % (PY, CLIP_S)
 # the player of a file (afplay on macOS): what it got -- the clip's id,
 # the silence before it -- and when it started and ended
 TIMED_PLAYER = '''#!%s
@@ -1210,7 +1314,7 @@ with open(os.path.join(log, "stream-%%d.raw" %% pid), "wb") as raw:
         time.sleep(len(b) / (2.0 * rate))           # a sound card's pace
 note(eof=time.time())
 ''' % PY
-stub("sherpa-onnx-offline-tts", SLOW_TTS, os.path.join(VDIR, "runtime", "bin"))
+os.environ["STUB_IDENT"] = "1"
 stub(PLAYER, TIMED_PLAYER)
 STREAM_STUB = stub("spark-test-stream", STREAM)
 TMP = os.path.join(ROOT, "tmp")
@@ -1403,7 +1507,7 @@ code = ("import sys, time; sys.path.insert(0, %r); from spark import voice\n"
         "    time.sleep(0.02)\n"
         "print(len(r.ready), r.playing is not None)\n" % os.path.join(REPO, "lib"))
 p = subprocess.run([PY, "-c", code], capture_output=True, text=True, timeout=60,
-                   env=dict(os.environ, TMPDIR=TMP, SPARK_VOICE="clear", STUB_TTS="0.2", STUB_PLAY="1.5"))
+                   env=dict(os.environ, TMPDIR=TMP, SPARK_VOICE="clear", STUB_TTS="0.2", STUB_PLAY="1.5", **FAKE_ENV))
 left = ours()
 check("Reader at exit (per clip): the clips made ahead go with the process; only the one playing is left",
       p.stdout.split() == ["2", "True"] and len(left) <= 1, (p.stdout, p.stderr[-300:], left))
@@ -1415,7 +1519,7 @@ code = ("import sys, time; sys.path.insert(0, %r); from spark import voice\n"
         "r.put('last words.')\n"
         "print(r.drain(15))\n" % (os.path.join(REPO, "lib"), STREAM_STUB))
 p = subprocess.run([PY, "-c", code], capture_output=True, text=True, timeout=60,
-                   env=dict(os.environ, TMPDIR=TMP, SPARK_VOICE="clear", STUB_TTS="0.1"))
+                   env=dict(os.environ, TMPDIR=TMP, SPARK_VOICE="clear", STUB_TTS="0.1", **FAKE_ENV))
 wait_for(lambda: any("start" in x for x in jsonl("streams.jsonl")), 8)     # it may start after the exit
 pid = next((x["pid"] for x in jsonl("streams.jsonl") if "start" in x), 0)
 eof = wait_for(lambda: any("eof" in x and x["pid"] == pid for x in jsonl("streams.jsonl")), 8)
@@ -1756,10 +1860,31 @@ os.environ.pop("STUB_CLIP", None)
 forge.MOUTH_STEP = step
 forge.VOICE.update(reader=None, aloud=False)
 
+# a Reader whose engine does not load: silent, the one line said once,
+# no tool started with a line on its argv
+reset_logs()
+os.environ["STUB_NO_ENGINE"] = "1"
+r = voice.Reader(Cfg(SPARK_VOICE="clear"))
+for line in ("never said.", "nor this."):
+    r.put(line)
+r.drain(5)
+check("Reader with an engine that does not load: nothing made or played, NO_ENGINE once, no tool started",
+      r.engine is False and r.told and not jsonl("tts.jsonl") and not jsonl("plays.jsonl")
+      and not jsonl("streams.jsonl") and tool_calls() == [], (r.engine, r.told, tool_calls()))
+del os.environ["STUB_NO_ENGINE"]
+
 voice.stream_argv = _stream_argv
-for k in ("STUB_TTS", "STUB_PLAY"):
+for k in ("STUB_TTS", "STUB_PLAY", "STUB_IDENT"):
     os.environ.pop(k, None)
 tempfile.tempdir = None
+
+# no process this test started carried a spoken text on its argv, and the
+# speaking tool was never started by anyone
+said_texts = [t for t in fake.SPOKEN if len(t) >= 4]
+leaks = [a for argv in ARGVS for a in argv for t in said_texts if t in a]
+check("no argv: %d processes started, %d texts spoken, none on a command line; the tool never ran"
+      % (len(ARGVS), len(said_texts)), ARGVS and said_texts and not leaks and tool_calls() == [],
+      (leaks[:3], tool_calls()[:3]))
 
 # the engine against the real runtime: on this Mac only, when a voice is
 # here (SPARK_VOICE_REAL_DIR, else ~/.local/share/spark/voice); never in CI
@@ -1817,6 +1942,7 @@ else:
           "the chain and the PCM over it: %s" % (load_s, g1, len(x1) / fs1, g2, len(x2) / fs2, ", ".join(costs)))
     e.close()
     # the Reader end to end: the real engine, the stream stub; loaded once
+    voice.load_engine = REAL_LOAD
     per_clip(False)
     reset_logs()
     os.environ["SPARK_VOICE_DIR"] = REAL_VOICE
