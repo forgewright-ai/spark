@@ -137,27 +137,11 @@ def _stages(line):
     return stages
 
 
-# a wrapper runs the command after its own options: the options that
-# take a value (the next word, unless glued on), and how many plain
-# words it takes before the command (timeout's duration)
-WRAPPERS = {
-    "sudo": (("-u", "-g", "-h", "-p", "-C", "-D", "-r", "-t", "-U", "-T", "-R", "--user",
-              "--group", "--host", "--prompt", "--close-from", "--chdir", "--role", "--type",
-              "--other-user", "--command-timeout", "--chroot"), 0),
-    "doas": (("-u", "-C"), 0),
-    "env": (("-u", "-C", "-S", "--unset", "--chdir", "--split-string"), 0),
-    "nice": (("-n", "--adjustment"), 0),
-    "nohup": ((), 0),
-    "timeout": (("-s", "-k", "--signal", "--kill-after"), 1),
-    "xargs": (("-I", "-L", "-n", "-P", "-s", "-d", "-E", "-a", "--arg-file", "--delimiter",
-               "--eof", "--max-lines", "--max-args", "--max-procs", "--max-chars", "--replace",
-               "--process-slot-var"), 0),
-    "watch": (("-n", "--interval", "-q", "--equexit"), 0),
-    "stdbuf": (("-i", "-o", "-e", "--input", "--output", "--error"), 0),
-    "ionice": (("-c", "-n", "-p", "-P", "-u", "--class", "--classdata"), 0),
-}
-# the shell's own words that run the command after them
-KEYWORDS = frozenset(("!", "time", "if", "then", "elif", "else", "while", "until", "do", "{"))
+# a wrapper runs the command after its own options, and the shell's
+# keywords run the one after them: persona's tables, the one list the
+# danger reading unwraps with too (persona.WRAPPERS, SH_KEYWORDS)
+WRAPPERS = persona.WRAPPERS
+KEYWORDS = persona.SH_KEYWORDS
 # words the shell answers itself, beyond persona's list: a stage whose
 # head is one needs no program on PATH
 BUILTINS = persona.SH_BUILTINS | frozenset((
