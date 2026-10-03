@@ -454,6 +454,23 @@ def model_tables(repo=REPO):
     return out
 
 
+def model_name(stem):
+    """The name a person chose a model by (its row in the list), for a
+    file stem or a path: gemma4-26b-a4b, not google_gemma-4-26B-A4B-it-
+    Q4_K_M. A file no row names keeps its stem."""
+    stem = os.path.basename(stem or "")
+    if stem.endswith(".gguf"):
+        stem = stem[:-5]
+    try:
+        tables = model_tables()
+    except SystemExit:
+        return stem
+    for row in tables:
+        if row[1] == stem + ".gguf" or row[1] == stem:
+            return row[0]
+    return stem
+
+
 _PINS = []
 
 
