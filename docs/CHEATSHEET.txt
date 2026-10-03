@@ -22,7 +22,7 @@ SPARK
   /save [FILE]                    the chat to ~/spark-chat-<date>.txt, 0600
   /read @FILE [question]          an answer that quotes the file, in the chat
   /do [--sandbox] <goal>          a task as spark do runs it, then back to chat
-  /aloud /again                   in the chat: every reply aloud, the last again
+  /aloud /again                   in the chat: read aloud or stop; say it again
   spark <words>                   one answer, streamed     spark last  again
   spark do <words>                a task, one confirmed command at a time
                                   A step of several lines (a here-document)

@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.74
+
+The voice in the chat works the way it reads.
+
+- With `spark voice on`, the chat reads every reply aloud from the
+  start. Before, it waited for `/aloud`. `/aloud` now stops it.
+- With the voice off, `/aloud` makes the chat read its replies aloud,
+  until the chat ends: in the machine's own voice, or the clear one
+  when awaken kept none. `/aloud on` and `/aloud off` work too.
+
 ## v1.73
 
 The face talks, and awaken makes only what shows.

@@ -279,7 +279,9 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 xclip, xsel), /save (0600, never overwrites), /read @FILE
                 (contract 11 on the file, onto the chat's thread), /do
                 [--sandbox] (spark do's terminal loop; the chat runs
-                nothing), /aloud /again (the voice: a reply spoken a
+                nothing), /aloud /again (the voice: with it on or
+                clear every reply is spoken, /aloud stops it; with it off
+                /aloud speaks for that chat, voice.for_now; a reply spoken a
                 sentence at a time as the reveal prints it; awake, a
                 spoken reply is led by the face, which talks while the
                 voice plays -- _Face). Esc on an empty line,

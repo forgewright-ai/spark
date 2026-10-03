@@ -268,7 +268,7 @@ The commands:
 | `/read @FILE [question]` | an answer about the file, every line quoting it |
 | `/do GOAL` | a task, one confirmed step at a time, as `spark do` runs it |
 | `/do --sandbox GOAL` | the same task in a copy, as `spark do --sandbox` runs it |
-| `/aloud` | speaks every reply, or stops: `spark voice on` or `clear` first |
+| `/aloud` | reads the replies aloud, or stops; `/aloud on` and `/aloud off` too |
 | `/again` | the last reply again, printed and spoken |
 | `/q` | ends the chat |
 
@@ -294,8 +294,9 @@ at `chat> `. The chat itself runs nothing.
 
 With the voice on or clear, `Esc v` at `chat> ` listens. A pause ends
 it, and the words land on the line: `Enter` sends them. `Esc x` stops
-the speaking. In clear mode every reply is read aloud from the start.
-In mode on, `/aloud` reads the replies. `/again` prints the last reply
+the speaking. With the voice on or clear, every reply is read aloud,
+and `/aloud` stops it. With the voice off, `/aloud` reads this chat's
+replies aloud until it ends. `/again` prints the last reply
 again, and speaks it while the voice is on. "The voice" below has the
 rest.
 
@@ -515,7 +516,7 @@ The voice starts with a quarter second of silence, so a sound card
 that sleeps never loses the first word. `SPARK_VOICE_LEAD_MS`, 0 to
 1000 in the environment, changes that silence.
 
-Mode on speaks the chat's replies after `/aloud`. It never reads the
+Mode on reads the chat's replies aloud. It never reads the
 prompt line. The voice comes from the
 temperament: plain is a radio, warm a soft robot choir, playful eight
 bit and terse a robot. The machine's seed picks a speaker and tunes the

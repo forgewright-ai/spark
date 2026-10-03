@@ -1046,8 +1046,8 @@ SAID = []
 CONTINUING_COLS = 79    # the opening line fits 80 columns
 SAVE_MAX = 99           # ~/spark-chat-DATE.txt, then -2 .. -99
 # The chat's voice (SPARK_VOICE, at a terminal): `reader` is a
-# voice.Reader while the mode is on or clear, None while off. Mode on
-# speaks every reply after /aloud; clear speaks them from the start, and
+# voice.Reader while the mode is on or clear, None while off. Both speak
+# every reply from the start (/aloud turns that off and on); clear speaks
 # the opening and the refusals too. Every spoken line is printed as well. A reply is
 # spoken as it streams, a sentence at a time (_Spoken, voice.Sentences),
 # each one once the reveal printed it.
@@ -1084,7 +1084,7 @@ def _voice_setup(cfg, tty):
     except Exception:       # noqa: BLE001 -- the voice never breaks the chat
         m = "off"
     if m != "off":
-        VOICE.update(reader=voice.Reader(cfg), mode=m, aloud=m == "clear")
+        VOICE.update(reader=voice.Reader(cfg), mode=m, aloud=True)
         VOICE["reader"].warm()      # the engine loads while the person types
 
 
@@ -1589,7 +1589,7 @@ HELP = ("/new      start a new thread",
         "/save     save the chat to a file: /save [FILE]",
         "/read     /read @FILE [question]: an answer from the file",
         "/do       /do GOAL: a task here, step by step",
-        "/aloud    speak every reply, or stop",
+        "/aloud    read replies aloud, or stop",
         "/again    the last reply again",
         "/q        end the chat (Esc or Ctrl-D too)",
         "Esc v     listen; Esc x stops the speaking")
@@ -1606,14 +1606,22 @@ def _slash_aloud(cfg, thread, args):
     if args not in ([], ["on"], ["off"]):
         _refuse("/aloud takes on or off")
         return thread
-    if VOICE["reader"] is None:
-        _refuse("the voice is off -- spark voice on turns it on")
-        return thread
-    VOICE["aloud"] = (not VOICE["aloud"]) if not args else args == ["on"]
-    if VOICE["aloud"]:
+    want = (not VOICE["aloud"]) if not args else args == ["on"]
+    if want and VOICE["reader"] is None:
+        # the voice is off: this chat speaks anyway, until it ends
+        from . import voice
+        now = voice.for_now(cfg)
+        if now is None:
+            _refuse("no voice here yet -- spark voice on downloads it")
+            return thread
+        VOICE.update(reader=voice.Reader(now), mode=voice.mode(now))
+        VOICE["reader"].warm()
+    VOICE["aloud"] = want
+    if want:
         _tell("replies aloud -- /aloud stops")
     else:
-        VOICE["reader"].hush()
+        if VOICE["reader"] is not None:
+            VOICE["reader"].hush()
         _tell("replies quiet -- /aloud speaks them")
     return thread
 

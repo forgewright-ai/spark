@@ -2180,10 +2180,10 @@ def chat_voice_pty_cases(t, env, home):
              "chat pty (%s): a Ctrl-C inside the Esc wait clears the line as Ctrl-C does; nothing sent" % lib,
              text[-300:])
 
-    # awake, mode on: a reply spoken only after /aloud; no greeting, no
-    # goodbye, and Esc on the empty line ends in silence. v1.73: the reply
-    # not spoken starts with `* `, the spoken one with the face (the test
-    # seam plays nothing, so its mouth never moves: no redraw)
+    # awake, mode on: every reply spoken from the start, /aloud stops it
+    # (v1.74); no greeting, no goodbye, and Esc on the empty line ends in
+    # silence. The spoken reply starts with the face, the one not spoken
+    # with `* ` (the test seam plays nothing, so the mouth never moves)
     state = os.path.join(h, ".local", "state", "spark")
     os.makedirs(state, exist_ok=True)
     with open(os.path.join(state, "look"), "w") as f:
@@ -2193,10 +2193,22 @@ def chat_voice_pty_cases(t, env, home):
                              ("\nchat>", b"\x1b", 3.0)])
     said = spoken()
     t.ok(ended(st) and "everything for now" not in text and len(said) == 1 and re.fullmatch(r"\d+", said[0])
-         and "* replies aloud -- /aloud stops" in text and "* 2\r\n" in text and "(o.o) 4\r\n" in text
+         and "* replies quiet -- /aloud speaks them" in text and "(o.o) 2\r\n" in text and "* 4\r\n" in text
          and text.count("(o.o)") == 1 and "\x1b7" not in text,
-         "chat pty (%s): mode on -- a reply spoken only after /aloud, led by the face; the one before it "
-         "starts with `* `; no greeting, no goodbye; nothing sounds, so the mouth stays"
+         "chat pty (%s): mode on -- every reply spoken from the start, led by the face; /aloud stops it "
+         "and the next starts with `* `; no greeting, no goodbye; nothing sounds, so the mouth stays"
+         % lib, repr((said, text[-300:])))
+
+    # awake, the voice off: /aloud makes this chat speak, in the clear
+    # voice when awaken kept none (v1.74)
+    off = dict(e, SPARK_LOOK="on", SPARK_VOICE="off")
+    st, text, _ = drive(off, [("\nchat>", b"count\r", 0.2), ("\nchat>", b"/aloud\r", 0.2), ("\nchat>", b"count\r", 0.2),
+                              ("\nchat>", b"\x1b", 3.0)])
+    said = spoken()
+    t.ok(ended(st) and len(said) >= 1 and re.fullmatch(r"\d+", said[-1])
+         and "* replies aloud -- /aloud stops" in text and re.search(r"\* \d+\r\n", text)
+         and re.search(r"\(o\.o\) \d+\r\n", text),
+         "chat pty (%s): the voice off -- /aloud makes the chat speak; the reply before it is quiet"
          % lib, repr((said, text[-300:])))
 
     # clear mode: Esc v lands the heard words, Enter sends them, the reply
@@ -2228,11 +2240,10 @@ def chat_voice_pty_cases(t, env, home):
          "chat pty (%s): clear -- the reply spoken sentence by sentence as it streams: the first said before the "
          "stream ended, 3.14 and e.g. never a sentence's end, the rest at the end" % lib,
          repr((said, early, text[-300:])))
-    st, text, alive = drive(e, [("\nchat>", b"\x1bv", 1.5), (None, b"/aloud\r", 0.5), ("\nchat>", b"\x04", 2.0)])
+    st, text, alive = drive(e, [("\nchat>", b"\x1bv", 1.5), ("\nchat>", b"\x04", 2.0)])
     t.ok(ended(st) and "! the voice is off -- spark voice on, then Esc v" in text
-         and "chat> how many" not in text and "! the voice is off -- spark voice on turns it on" in text
-         and not spoken(),
-         "chat pty (%s): voice off -- Esc v and /aloud say how to turn it on, nothing heard or said" % lib,
+         and "chat> how many" not in text and not spoken(),
+         "chat pty (%s): voice off -- Esc v says how to turn it on, nothing heard or said" % lib,
          text[-400:])
 
 

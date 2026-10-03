@@ -1420,6 +1420,29 @@ def say_aloud(cfg, text, wait=False):
         return None
 
 
+class _Mode:
+    """A config with SPARK_VOICE set for one use: the chat's /aloud while
+    the voice is off speaks in it, and nothing is written."""
+
+    def __init__(self, cfg, m):
+        self._cfg, self._m = cfg, m
+
+    def get(self, key, default=""):
+        return self._m if key == "SPARK_VOICE" else self._cfg.get(key, default)
+
+    def __getattr__(self, name):
+        return getattr(self._cfg, name)
+
+
+def for_now(cfg):
+    """A config that speaks for one chat while the voice is off: the
+    machine's own voice when awaken kept one, else the clear voice. None
+    when the engine is not here (spark voice on downloads it)."""
+    if missing() and not os.environ.get("SPARK_VOICE_STUB"):
+        return None
+    return _Mode(cfg, "on" if read_recipe() else "clear")
+
+
 def _sayable(cfg, text, reader=None):
     """The mode a text is spoken in, or None: off, nothing to say, or a
     screen reader running in clear mode (unless --anyway). `reader`, a
