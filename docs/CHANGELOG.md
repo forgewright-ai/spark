@@ -1,5 +1,53 @@
 # Changelog
 
+## v1.72
+
+One voice and one way of looking: spark says less, in short plain
+English, and says it in one place.
+
+- Every help text and message is rewritten short. A help line says
+  what the command does and what to type, not how it works.
+- One mark starts a line spark says: `*` when spark speaks, `!` for a
+  warning or a failure. An error is `! ...`, never `spark: ...`. A
+  mistake you typed is `spark VERB -- no word X; spark VERB -h lists
+  them`.
+- The face shows only while spark waits. A reply, a refusal and the
+  chat carry no face.
+- No canned lines. spark prints no greeting, no goodbye and no news at
+  the prompt or in the chat, and the voice no longer speaks them.
+  `spark words greet` prints nothing.
+- `spark chat` opens with one line, `* chat with NAME -- Esc ends,
+  /help lists commands`, or `* continuing "TITLE" -- /new starts
+  fresh, Esc ends`. It ends with nothing printed.
+- At the prompt, spark writes in one row above your line, and each
+  new line replaces the last. A failure says `* failed (1) -- Esc s
+  asks why`, and `Esc s` then says `* Enter explains the error`. A
+  hint no longer ends with the manual it was checked against.
+- `spark check` prints only the rows that need you, with their remedy,
+  then the totals. Nothing to fix prints the totals alone. `spark
+  check --all` prints every row, as before. `--porcelain`, `--report`
+  and the exit code do not change.
+- A remedy that said `./bootstrap.sh` or `sh install.sh` now says
+  `spark update`.
+- `spark ver` prints the logo and the version, as a login shows them.
+  The credits moved to `spark ver --credits`.
+- `spark do` no longer prints a `driving with` line, and the end is
+  `* done` with the summary. A check after a step is called a check.
+- A model is named by its name in the list, such as `gemma4-26b-a4b`,
+  never by its file name: in `spark`, `spark status`, `spark check`,
+  `spark do`, the chat and the page. `--porcelain` output keeps the
+  file name for programs.
+- A command that changes nothing prints nothing: `spark look`,
+  `spark height`, `spark reveal`, `spark on` and `spark off` set to
+  what they already are. A question you answer no prints `* nothing
+  changed`.
+- `spark voice -h` ends in one line: the first time, spark downloads
+  about 600 MB, 586 MB on Linux and 602 MB on macOS.
+- `spark setup` asks `read aloud to you (for low vision)? [y/N]` and
+  ends with `open a new shell (exec $SHELL), then try:` and 3 lines.
+- `/api/health` adds `names`, each role's model by its list name,
+  beside `roles`. The page's header shows them.
+
 ## v1.71
 
 The voice keeps pace with the reply.

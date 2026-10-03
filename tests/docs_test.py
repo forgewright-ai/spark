@@ -451,6 +451,28 @@ def spoken():
         check(k in table, "docs/INSTALL.md's key table has a row for %s" % k)
 
 
+def quiet():
+    """v1.72, less noise, as the docs state it: `spark ver` prints the
+    logo and the version and no credits line, `spark ver --credits`
+    adds them; `spark check`'s usage names --all, and the cheatsheet and
+    INSTALL name `spark check --all` and `spark ver --credits`."""
+    import subprocess
+    spark = [sys.executable, os.path.join(ROOT, "bin", "spark")]
+    ver = subprocess.run(spark + ["ver"], capture_output=True, text=True).stdout
+    cred = subprocess.run(spark + ["ver", "--credits"], capture_output=True, text=True).stdout
+    last = [l for l in ver.split("\n") if l.strip()][-1:] or [""]
+    check(re.match(r"^spark \S+$", last[0]) is not None and "CREDITS.md" not in ver,
+          "spark ver ends with spark X.Y and prints no credits line")
+    check("CREDITS.md" in cred, "spark ver --credits names CREDITS.md")
+    from spark import check as checkmod
+    check(re.search(r"(?m)^  spark check --all\b", checkmod.USAGE) is not None,
+          "spark check's usage names --all")
+    for name in ("docs/CHEATSHEET.txt", "docs/INSTALL.md"):
+        text = " ".join(read(name).split())
+        for cmd in ("spark check --all", "spark ver --credits"):
+            check(cmd in text, "%s names %s (v1.72)" % (name, cmd))
+
+
 def main():
     tests_named()
     credits = read("CREDITS.md")
@@ -770,6 +792,8 @@ def main():
     chat_commands()
     # the voice: its credits, its pins in the SBOM, its words and keys
     spoken()
+    # v1.72: spark ver without credits, spark check --all
+    quiet()
     # the voice's mechanical half, and the two nouns in what spark prints
     voice()
     measures()

@@ -57,6 +57,9 @@ command itself and runs nothing.
    spark check
    ```
 
+   `spark check` prints what needs you, then the totals. Nothing to
+   fix is the totals line alone.
+
 One line goes into your rc file, nothing else. Your shell, your colours
 and your editor stay yours. `docs/INSTALL.md` has every step and every
 key.
@@ -68,7 +71,7 @@ The first 3 things to type:
 ```
 ? how big is this dir           a command in your line, a hint above it
 cmd 2>&1 | explain              what went wrong, and the fix
-spark chat                      a conversation; /help lists its commands
+spark chat                      talk with the model; /help lists commands
 ```
 
 Then the rest, one line each in `docs/CHEATSHEET.txt`, and a first
@@ -81,21 +84,22 @@ hour in `docs/TOUR.md`:
   and a live stream watched for one thing. Every line quotes the
   source.
 - `spark model list`: 11 models, each with its license. `spark model
-  --chat NAME` adds the chat model, a bigger second one.
+  --chat NAME` chooses a second, bigger model for chat.
 - `spark serve on`, then `spark serve --login`: the same model, soul
   and memory in a browser on the LAN, and on a phone that scans the
   QR. `spark client URL` lets another machine of yours use this one's
   model.
 - `spark awaken`: give this machine a personality and a look. Until
   you run it, spark stays as it is. `spark look` shows the look, and
-  `spark look off` turns motion, colour and words off at once.
+  `spark look off` turns motion, colour and the face off at once.
 - `spark voice clear`: spark reads aloud in a plain clear voice, for
   low vision. `spark voice on` speaks in the machine's own voice, and
   `Esc v` listens to a question. Nothing leaves the machine.
 - `Esc k` at the prompt: when spark's line sits on a prompt of two
   lines, it moves spark's line up a row. `spark height N` keeps it.
-- `spark check`: every promise this machine makes, one row each. It
-  exits 0 when no row fails. `spark uninstall` takes it all off.
+- `spark check`: what needs you. `--all` shows every promise this
+  machine makes, one row each. It exits 0 when no row fails. `spark
+  uninstall` takes it all off.
 
 ## Documents
 
@@ -133,7 +137,7 @@ another machine of yours (`spark client URL`). What each verb sends:
   command's manual about it, 600 characters at most. The question and
   the first request's lines go with them again.
 - `chat`: your soul, your remembered facts and the thread's earlier
-  turns. A conversation sends no path.
+  turns. A chat sends no path.
 - `do`: each step's output, the last 4 kB, and the directory's path.
   After a step refused for an option, the lines of that command's man
   page about it, 1.5 kB at most. spark reads the page itself, and the

@@ -124,7 +124,7 @@ Open Ubuntu, then do Debian's step 3.
 
    ```sh
    exec $SHELL      # the prompt line goes live
-   spark check      # exit 0 when no row fails
+   spark check      # what needs you; exit 0 when no row fails
    ```
 
 What `get` does first. It checks the ground: the command line tools on
@@ -152,11 +152,10 @@ for low vision? "The voice" in section 3 says what that is. Then it:
    runit services, and the first run writes one root service with
    `sudo`.
 4. Brings the engine up and waits for it.
-5. Asks `? how big is this dir` for you, its dots showing while the
-   model answers, and prints the tok/s it measured.
+5. Asks `? how big is this dir` for you and prints the speed.
 6. With a yes to reading aloud, runs `spark voice clear`: the engine's
    download, its size said first.
-7. Prints the 3 things to try.
+7. Prints 3 things to try, after `open a new shell (exec $SHELL)`.
 8. Suggests the next step in one line: `next: spark awaken -- give this
    machine a personality and a look`. Nothing changes until you run it.
 
@@ -181,11 +180,10 @@ keeps a blank row above the prompt for the hint, and loads `TAB`
 completion. Completion is offline: the verbs, then each verb's words.
 The line goes last, after fzf, because the prompt line wraps `Enter`.
 If `spark setup` prints a `todo rc` row, the login shell cannot host
-the prompt line. The row reads `no prompt line for it -- bash 4+ or
-zsh hosts one` for another shell, or `bash 3 cannot host the prompt
-line -- zsh can` for macOS's bash 3.2. Run `chsh -s /bin/zsh`, then
-`spark setup` again. A bare zsh needs your own `autoload -Uz compinit
-&& compinit` in `~/.zshrc` for completion.
+the prompt line: bash 4 or newer and zsh can, macOS's bash 3.2 cannot.
+Run `chsh -s /bin/zsh`, then `spark setup` again. A bare zsh needs
+your own `autoload -Uz compinit && compinit` in `~/.zshrc` for
+completion.
 
 ## 3. Use it
 
@@ -205,12 +203,13 @@ pulses in that row. The marks are plain unless your rc exports
 `SPARK_ACCENT_SGR`, `SPARK_MUTED_SGR` and `SPARK_WARN_SGR`, SGR codes
 such as `1;94`. A pipe never sees an escape.
 
-The failure line. When a command fails, one line appears above the next
-prompt: `* failed (1) -- press Esc s to ask why`. `Esc s` on the empty
-line puts the command back, piped to `explain`, and nothing runs until
-you press `Enter`. A second `Esc s` proposes the corrected command.
-When a command is not found, exit 127, `Esc s` offers the line that
-installs it. A command that deletes or destroys is never offered a
+The failure line. When a command fails, the row above the next prompt
+says `* failed (1) -- Esc s asks why`. The next thing spark says there
+replaces it. `Esc s` on the empty line puts the command back, piped to
+`explain`, and the row says `* Enter explains the error`. Nothing runs
+until you press `Enter`. A second `Esc s` proposes the corrected
+command. When a command is not found, exit 127, `Esc s` gets the line
+that installs it. A command that deletes or destroys is never offered a
 re-run. After the fix works, `Esc s` offers to keep it as a `spark
 memory add` fact. `Ctrl-C` and a no-match from `grep` or `diff` stay
 quiet.
@@ -234,15 +233,15 @@ A script, a cron job and `ssh HOST 'spark ...'` name
 spark's hook in a shell that is not interactive, so `~/.local/bin` is
 not on `PATH`.
 
-`spark chat` is a conversation at a `chat> ` prompt. It goes on with
-your newest thread and says so in its opening lines:
+`spark chat` talks with the model at a `chat> ` prompt. It goes on
+with your newest thread and opens with one line:
 
-    continuing "how do I resize a partition" (12 min ago) -- /new starts fresh
+```
+* continuing "how do I resize a partition" -- /new starts fresh, Esc ends
+```
 
-On a machine that is not awake, the opening is `chat -- /help, Esc,
-Ctrl-D or /q ends` and that line. Awake, it opens with the face and a
-greeting from the machine's own words, then the continuing line, then
-`/help lists the commands; Esc or Ctrl-D ends`.
+With no thread to go on with, the line is `* chat with NAME -- Esc
+ends, /help lists commands`. The chat ends with nothing printed.
 
 `Esc` on an empty line, `/q` or `Ctrl-D` ends. On a line with text,
 `Esc` does nothing. On macOS the system's line editor reads that `Esc`
@@ -265,7 +264,7 @@ The commands:
 | `/model` | which model answers |
 | `/reveal [N\|auto\|off]` | the pace of the replies. Bare, the measured numbers |
 | `/copy [N]` | the last reply, or the Nth from the end, to the clipboard |
-| `/save [FILE]` | the conversation as a text file |
+| `/save [FILE]` | the thread as a text file |
 | `/read @FILE [question]` | an answer about the file, every line quoting it |
 | `/do GOAL` | a task, one confirmed step at a time, as `spark do` runs it |
 | `/do --sandbox GOAL` | the same task in a copy, as `spark do --sandbox` runs it |
@@ -275,10 +274,9 @@ The commands:
 
 `/copy` uses the clipboard tool it finds: `pbcopy` on macOS, `wl-copy`
 on Wayland, `xclip` or `xsel` on X11. On the console or over ssh there
-is none, and it says `No clipboard here: /save writes the conversation
-to a file.`
+is none, and it says `! no clipboard here -- /save writes a file`.
 
-`/save` writes the conversation as plain text to FILE, by default
+`/save` writes the thread as plain text to FILE, by default
 `~/spark-chat-YYYY-MM-DD.txt`. It never overwrites a file: a second
 save that day gets `-2`, then `-3`. The file is 0600, and the chat says
 its path and how many turns it holds. The thread stays sealed, and the
@@ -297,19 +295,12 @@ at `chat> `. The chat itself runs nothing.
 With the voice on or clear, `Esc v` at `chat> ` listens. A pause ends
 it, and the words land on the line: `Enter` sends them. `Esc x` stops
 the speaking. In clear mode every reply is read aloud from the start.
-In mode on the machine speaks its greeting and its goodbye, and
-`/aloud` reads the replies too. `/again` prints the last reply again,
-and speaks it while the voice is on. "The voice" below has the rest.
+In mode on, `/aloud` reads the replies. `/again` prints the last reply
+again, and speaks it while the voice is on. "The voice" below has the
+rest.
 
-Awake, each reply starts with the face, and its lines wrap under the
-text, clear of it. The face shows the mood: thinking while a reply is
-on its way, idle on a reply, puzzled on an error or a refusal. A
-puzzled face says its hint as a whole sentence. `Esc`, `/q`, `Ctrl-D`
-and the quit words end with the machine's goodbye line and its pleased
-face.
-`spark words` shows the faces. Unawakened, the replies are bare text
-and the chat ends in silence. `/copy` and `/save` work on every
-machine.
+Awake, the face shows while a reply is on its way, and goes when the
+reply comes. A reply is plain text, with no face.
 
 `spark <words>` streams one answer. `spark @FILE words` sends a text
 file's first 4 kB and last 12 kB with the question.
@@ -317,7 +308,7 @@ file's first 4 kB and last 12 kB with the question.
 `spark do <words>` proposes one command at a time. `Enter` runs it, `e`
 edits it, `s` skips it, `q` quits. On a block, `r` reads it again. A
 step that can destroy data runs only when you type `yes`. After a step,
-its proof, one read-only check, is offered the same way, and only its
+a read-only check that it worked is offered the same way, and only its
 exit code goes back. Each step's output, the last 4 kB, goes back to the
 model until it says done, or after 8 steps. A goal is at most 8 kB, and
 one that starts with `-` goes after `--`.
@@ -398,7 +389,7 @@ personality paragraph: see "The living prompt" below.
 
 `spark memory add <words>` adds a fact it keeps: 40 facts of 200
 characters. `spark memory forget N` drops one, and `spark memory off`
-stops sending them. Soul and facts ride on every conversation, so keep
+stops sending them. Soul and facts ride on every question, so keep
 the facts that change answers. The model never writes them.
 
 `spark bar line` prints the machine's status in one line: load, memory,
@@ -411,20 +402,20 @@ it nothing changes. Step by step:
 
 1. It asks one question, the temperament: plain, warm, playful or
    terse. `Enter` keeps plain.
-2. The model writes the lines spark says and picks its face. Every
-   line is checked, and a shipped line stands in for one it refuses.
-   With no model answering, the shipped lines are used, and it says so.
+2. The model picks its face. With no model answering, the shipped
+   face is used.
 3. It shows the personality paragraph it wrote, addressed to the model
    as "you". A paragraph in the first person is refused, and the
    shipped one stands in. A soul file of your own is kept.
 4. One reply plays at a measured pace. Answer `yes`, `faster`,
    `slower` or `off`.
 5. Where a player is, it offers a voice of its own, made from the
-   temperament. It asks before the engine downloads, plays the hello
-   line in that voice, and asks `keep`, `again` or `none`. "The voice"
-   below has the rest.
-6. The look turns to `auto`: motion, colour and words. Your next
-   prompt, in every open shell, is awake. A voice you kept is on.
+   temperament. It asks before the engine downloads, plays a line in
+   that voice, and asks `keep`, `again` or `none`. "The voice" below
+   has the rest.
+6. The look turns to `auto` and it says `* awake -- the look is on
+   auto`. Your next prompt, in every open shell, is awake. A voice you
+   kept is on.
 
 Nothing is written until the end, so `Ctrl-C` leaves the machine as it
 was. An engine already downloaded stays for the next run. Run it
@@ -437,15 +428,11 @@ again to start over. The look is one switch, and 3 parts follow it.
   on every terminal, ssh and the console too.
 - Colour: a built-in palette of bold, dim, red, bold red and green,
   where you export no colour of your own. Dim is only for decoration.
-- Words: a greeting at the first prompt after 4 hours away, a change
-  shown once (the model asleep or awake again, runs waiting) and the
-  faces. A greeting may say a fact you asked it to remember. It shows
-  the fact and writes it nowhere. In `spark chat` the words greet you,
-  the faces lead the replies and a goodbye ends it, as the chat says
-  above.
+- Words: the face in the wait. spark prints no greeting, no goodbye
+  and no news.
 
 Awake, a failed command that ran over 30 seconds says how long:
-`* failed (1) after 4 min -- press Esc s to ask why`.
+`* failed (1) after 4 min -- Esc s asks why`.
 
 The reveal is the pace a reply appears at, as `spark reveal` sets it.
 On an awake machine it breathes at the punctuation.
@@ -457,8 +444,7 @@ for colour `NO_COLOR` unset. `on` draws at any terminal, over
 the reveal. A pipe never sees a frame or a colour.
 
 What wins, strongest first: a pipe, then `spark off`, which silences
-the prompt line with the greeting and the news. Then the look `off`,
-then `on`, then `auto`.
+the prompt line. Then the look `off`, then `on`, then `auto`.
 
 Your own colours win over the built-in ones. `SPARK_OK_SGR` and
 `SPARK_TROUBLE_SGR` join the 3 exports above, the same SGR codes.
@@ -470,10 +456,10 @@ the terminal's profile, a quiet boot. A tool of your choice may write a
 palette to `~/.config/spark/theme.env`. When it is there, `spark ver`
 draws its logo in it and the status line takes its accent.
 
-`spark words` shows the lines by id and the faces. `spark words edit`
-changes the lines in your editor: one `ID<TAB>line` a line, ASCII, at
-most 72 characters. A line with an escape or the shape of a secret is
-never said, and the shipped line stands in. After awaken, `spark soul
+`spark words` shows the faces and lines awaken made. `spark words
+edit` changes the lines in your editor: one `ID<TAB>line` a line,
+ASCII, at most 72 characters. A line that fails the check is replaced
+by the shipped one. After awaken, `spark soul
 edit` changes the personality paragraph alone, and `spark soul edit
 --core` the whole soul.
 
@@ -487,15 +473,14 @@ machine. It has 3 modes, the key `SPARK_VOICE`:
   It is never a plain human voice.
 
 ```
-spark voice                    the mode, the engine, its own voice, the
-                               player, the mic, a screen reader
-spark voice clear [--anyway]   read aloud in the clear voice
-spark voice on                 speak in this machine's own voice
-spark voice off [--remove]     silent; --remove deletes the engine too
-spark voice rate [N]           the clear voice's speed, 50 to 300
-spark voice test               one line aloud, in the current mode
-spark voice listen             one spoken question, written out
-spark voice stop               stop speaking now
+spark voice                   show the voice settings
+spark voice clear [--anyway]  read aloud in a clear voice
+spark voice on                use this machine's own voice
+spark voice off [--remove]    turn the voice off (--remove frees 600 MB)
+spark voice rate N            set the speed (50 to 300, default 100)
+spark voice test              say one line
+spark voice listen            ask a question by voice (Esc v)
+spark voice stop              stop speaking (Esc x)
 ```
 
 Clear mode reads the prompt line's command with its symbols. `du -ah
@@ -521,16 +506,12 @@ keeps the reveal's pace. With the reveal off the text shows at once
 and the voice reads behind it. A sound late by 8 seconds lets the rest
 of the reply go at the reveal's pace.
 
-On Linux the voice is one stream to the sound card for each run of
-sentences. It opens with a quarter second of silence, so a sound card
-that sleeps never loses the first word. Between sentences it plays
-silence, so the card stays awake. It closes after a second and a half
-with nothing to say. On macOS each sentence plays on its own, with the
-quarter second after a quiet moment. `SPARK_VOICE_LEAD_MS`, 0 to 1000
-in the environment, changes that silence.
+The voice starts with a quarter second of silence, so a sound card
+that sleeps never loses the first word. `SPARK_VOICE_LEAD_MS`, 0 to
+1000 in the environment, changes that silence.
 
-Mode on speaks the chat's greeting and goodbye, and the replies after
-`/aloud`. It never reads the prompt line. The voice comes from the
+Mode on speaks the chat's replies after `/aloud`. It never reads the
+prompt line. The voice comes from the
 temperament: plain is a radio, warm a soft robot choir, playful eight
 bit and terse a robot. The machine's seed picks a speaker and tunes the
 sound, so two machines rarely sound alike. `spark voice` names it, such
@@ -647,10 +628,10 @@ When nothing under the cap fits, it takes the smallest row that fits.
    table.
 3. A `.gguf` of your own in `~/.local/share/spark/models` is served
    with `SPARK_MODEL=<file>` in `spark.env`.
-4. `spark model --chat NAME` adds the chat model: a second, larger model
-   for conversations. The prompt line stays with the small one, at
+4. `spark model --chat NAME` chooses a second model for chat, a larger
+   one. The prompt line stays with the small one, at
    context 4096 with reasoning off and a thinking budget of 0, so a
-   thinking model answers fast. Every conversation goes to the chat
+   thinking model answers fast. Everything else goes to the chat
    model: `spark <words>`, `chat`, `do`, the page, and any `/v1` client
    naming no model. One engine, one port, one token: the request's
    `model` field picks. `spark model --chat auto` pairs the smallest
@@ -662,9 +643,9 @@ When nothing under the cap fits, it takes the smallest row that fits.
    and any other URL needs `--sha256 HEX`. `--license "NAME URL"` is
    required. The row lands in `~/.config/spark/models.env`, then it is
    downloaded and served like any row.
-6. `spark model verify` hashes every downloaded file again. It prints
-   `ok` per file, or `sha256 mismatch -- spark model rm NAME; spark
-   model NAME`, and exits 1 on a mismatch. Nothing is deleted for you.
+6. `spark model verify` checks every downloaded file again. It prints
+   `intact` per file, or `damaged -- spark model rm NAME; spark model
+   NAME`, and exits 1 on a damaged one. Nothing is deleted for you.
    The `models` row of `spark check` is the daily, cached version.
 
 Speed. `spark bench` measures with llama-bench, prompt 512 and generate
@@ -1005,6 +986,7 @@ spark uninstall
 ```
 
 1. It prints the plan, one row per thing, then asks for the word `yes`.
+   Anything else prints `* nothing changed`.
 2. Everything spark made goes: the units, the hook line from your rc
    file, `~/.local/bin/spark`, the engine, every model and the voice,
    `~/.config/spark` and `~/.local/state/spark`. The clone at `~/.spark`
@@ -1052,7 +1034,7 @@ Runtime keys live in `~/.config/spark/spark.env`, and
 | `SPARK_HISTORY` | days a turn or a thread lives. `off` keeps none. A kept thread (`/keep` in `spark chat`) stays until you let it go | `30` |
 | `SPARK_NGL` `SPARK_FLASH_ATTN` `SPARK_KV` `SPARK_THREADS` | the engine's tuning -- `spark bench tune apply` | auto |
 | `SPARK_API_KEY_FILE` | a token file you already have | `~/.local/state/spark/api-token` |
-| `SPARK_LOOK` | `auto`, `on` or `off`: the look, once awake -- the scanner, the waking bar and a face that blinks; the built-in palette where you export no colour; the greeting, the news and the faces -- `spark look on\|off\|auto` | `off`, `auto` after `spark awaken` |
+| `SPARK_LOOK` | `auto`, `on` or `off`: the look, once awake -- the scanner, the waking bar and the face in the wait; the built-in palette where you export no colour -- `spark look on\|off\|auto` | `off`, `auto` after `spark awaken` |
 | `SPARK_HEIGHT` | 1 to 5: the row spark writes in, counted up from the line you type on -- `spark height N`, or `Esc k` at the prompt | `1` |
 | `SPARK_VOICE` | `off`, `clear` or `on`: read aloud in the clear voice for low vision, or in this machine's own voice -- `spark voice clear\|on\|off` | `off` |
 | `SPARK_VOICE_RATE` | 50 to 300: the clear voice's speed, 100 as made -- `spark voice rate N` | `100` |
@@ -1073,7 +1055,10 @@ is yours to decide: `echo 'you ALL=(ALL) NOPASSWD:ALL' | sudo tee
 /etc/sudoers.d/you` is fine for a test bench.
 
 The check. `spark check` has 39 rows, one per promise this machine
-makes, and exits 0 when no row fails. `--watch N` redraws every N
+makes, and exits 0 when no row fails. Bare, it prints only the rows
+that need you, each with its remedy, then the totals. With nothing to
+fix it prints the totals alone. `--all` prints every row, and `spark
+check NAME...` the rows you name. `--watch N` redraws every N
 seconds. `--porcelain` prints one tab-separated row per line, for a
 program. `--fresh` ignores cached answers, and `--fetch` asks origin
 before judging the `git` row. `--selftest` proves every fixture-tested
@@ -1085,13 +1070,15 @@ value, a path or a name.
 
 When something stops working:
 
-1. `spark check` names the row and the remedy. Long output pages
-   through `$PAGER`, plain when piped.
+1. `spark check` names the row and the remedy. `spark check --all`
+   shows every row. Long output pages through `$PAGER`, plain when
+   piped.
 2. `./bootstrap.sh --dry-run` says what a rebuild would change.
-3. `spark` says which engine answers and which shells have the prompt
-   line.
-4. A stale server after a DHCP move shows as `moved` on the `serve`
-   or the `forge` row: `spark serve off; spark serve on`.
+3. `spark` says which model answers, and `spark status` whether the
+   prompt line is on.
+4. A stale server after a DHCP move shows on the `serve` or the
+   `forge` row as `serving on ADDRESS, but this machine is ADDRESS
+   now`: `spark serve off; spark serve on`.
 5. `spark serve` says whether the page is up and at which address. One
    line per request lands in `~/.local/state/spark/forge.log`, never a
    body.
@@ -1151,9 +1138,10 @@ addresses you gave it and nothing else.
 - What spark depends on is one command. `spark ver --sbom` prints a
   software bill of materials as CycloneDX 1.5 JSON: every component
   this tree pins, with versions and sha256s. Every release carries it
-  as `sbom.cdx.json`. The `pending` row of `spark check` counts the
-  security upgrades your package manager holds back and warns while
-  any waits.
+  as `sbom.cdx.json`. `spark ver --credits` names who made spark and
+  what it uses, and `CREDITS.md` names the rest. The `pending` row of
+  `spark check` counts the security upgrades your package manager holds
+  back and warns while any waits.
 
 What leaves is counted, never read. Every request's size and
 destination ride its turn record, as a number and a host. `spark stats

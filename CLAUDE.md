@@ -70,8 +70,11 @@ it, and no verb carries the word.
   curses, keyboard only. Long output pages at a terminal (`$PAGER`, else
   `less`) and is plain when piped: `page()` and `paged()` in
   `lib/spark/__init__.py`. Every character spark prints draws on the
-  Linux console. The mark is the word `spark`. The answer and warn marks
-  are `*` and `!` on every OS and terminal. On the console, inside a
+  Linux console. The mark is the word `spark`. A line spark says
+  starts with one mark, on every OS and terminal: `* ` when spark
+  speaks, `! ` for a warning or a failure. No face, no `spark:` prefix
+  and no other glyph starts a line. `spark check` is a table and keeps
+  its row glyphs. On the console, inside a
   tmux running on it, or with `SPARK_ASCII=1`, the report and bar glyphs
   fall back to `+ x - | v ^ ->`. The docs are ASCII too, and the hook
   refuses anything else: they are read on that console as well. Colour
@@ -103,10 +106,10 @@ it, and no verb carries the word.
   that passes through whole until the closing fence. Awakened, it also
   draws `inline code` in the accent, its backticks dropped, and a `- `,
   `* ` or `N. ` line as a bullet whose wrapped lines hang under its
-  first word. In `spark chat`, awakened, a reply starts with the face,
-  a `text.Wrap` lead, and every wrapped line hangs the face's width in.
-  The face is ASCII like every frame: idle on a reply, puzzled on an
-  error or a refusal. Unawakened, a reply is bare text, byte for byte.
+  first word. The face is the wait, only: it shows inside the pulse,
+  the scanner and the waking bar (the hint row, chat, explain, `spark
+  do`) and is gone when the answer comes. No reply, greeting, goodbye
+  or refusal carries it, so a reply is bare text, awake or not.
   Piped, the bytes are the model's. Text in is strict UTF-8
   as well. stdin is decoded with the replacement mark
   (`text.stdin_text`). Every string bound for the wire or a store goes
@@ -121,7 +124,10 @@ it, and no verb carries the word.
   every caller keeps its old bytes. Awaken is the one place spark asks
   the model for its own lines, never unasked. It sets the look, one
   switch (`SPARK_LOOK`), to `auto` and writes the look file with
-  `AWAKE=yes`. Motion, colour and words follow the switch. Four fixes
+  `AWAKE=yes`. Motion, colour and words follow the switch. Words is
+  the face in the wait. spark prints no canned line: no greeting, no
+  goodbye, no news. Awaken still writes its lines, and `spark words`
+  shows them. Four fixes
   reach every machine: setup's one suggestion line, the height (`spark
   height N`, `Esc k`), one text for every line, and the bugs.
   Precedence, strongest first: a pipe, `spark off`, the look `off`,
@@ -249,10 +255,10 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 `text.Wrap(cps=)`, `cli.reveal_flag`)
                 forge (identity, threads and the kept ones, reply, the chat
                 loop, @FILE; the chat-history save skips a sealed file that
-                does not open. The loop's opening says the thread it goes on
-                with, for everyone; awake it adds the face, a greet.* line and
-                the done line at the end. SLASH_VERBS: /help /new /resume
-                /clear /keep /last /model /reveal, /copy (pbcopy, wl-copy,
+                does not open. The loop opens with one line, the thread it
+                goes on with (`forge.continuing`) or the model it talks to
+                (`forge.opening`), and closes with nothing. SLASH_VERBS:
+                /help /new /resume /clear /keep /last /model /reveal, /copy (pbcopy, wl-copy,
                 xclip, xsel), /save (0600, never overwrites), /read @FILE
                 (contract 11 on the file, onto the chat's thread), /do
                 [--sandbox] (spark do's terminal loop; the chat runs
@@ -298,13 +304,13 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 look (the living prompt's state: the one switch and the 3
                 parts that follow it, the height, the six colour roles,
                 look.clean for every line spark says, the look file the
-                widgets read, the news; spark look, spark height)
+                widgets read; spark look, spark height)
                 awaken (spark awaken: the temperament, the birth -- one JSON
                 object, `why` first, each line through look.clean -- the
                 personality paragraph, the pace, its voice where a player
                 is: keep, again or none)
-                words (spark words: the lines by id, the faces, the greeting
-                the widgets ask for)
+                words (spark words: the lines by id and the faces awaken
+                made; `spark words greet` stays, silent, for an older widget)
                 voice (spark voice: the engine's fetch, size and sha256 before
                 a byte unpacks; speak, the 4 characters, play and stop;
                 Engine, Kokoro loaded once through the runtime's C API;
@@ -412,7 +418,7 @@ machine that has none. `personality` (0600) is the paragraph
 `spark awaken` writes after the soul's fixed core. `words` (0600) is
 `ID<TAB>line` per line, and `faces` (0600) is `MOOD=frame` per line
 plus `RATE=` and `TEMPER=`. Awaken writes both, and every line passes
-`look.clean` when it is stored and again when it is printed.
+`look.clean` when it is stored and again when `spark words` shows it.
 `theme.env` is a palette a look layer may write, never spark (contract
 3). `soul` is prose, 0600, yours, never linked from `home/`. `memory`
 there is the pre-v1.4 fallback: the facts live sealed in your store
@@ -431,11 +437,11 @@ State is `~/.local/state/spark/`, 0700:
   the next `clear` or `off`. `voice-playing`: the pid of the player
   speaking now and its private directory, for `spark voice stop`.
 - `look`: the living prompt's state for the widgets (contract 6),
-  written by `look.render` alone. `news` is one `ID<TAB>line` the check
-  writes on an awakened machine, and `news-seen` the id a shell last
-  showed. `last-seen` is the epoch of a prompt in any shell, for the
-  greeting. `loads.json` maps a model file to its last load in seconds
-  (`engine.record_load`), for the waking bar's estimate.
+  written by `look.render` alone. `news`, `news-seen` and `last-seen`
+  are gone: nothing reads or writes them, and an older machine's copies
+  go with the state at `spark uninstall`. `loads.json` maps a model
+  file to its last load in seconds (`engine.record_load`), for the
+  waking bar's estimate.
 - `threads/`: pre-v1.4 plaintext threads only. `spark user claim` seals
   them away.
 - `runs/<id>/` 0700: a sandboxed run. `meta.json` 0600 holds numbers and
@@ -865,8 +871,19 @@ and may change freely.
    on `/dev/tty` while the model answers. The widgets set it on their
    two calls, N the height. Each frame saves the cursor, goes up N rows,
    clears that row, draws the mark and the dots, and restores. The
-   widgets' own lines (`_spark_say`) go to the same row. A hand-run
-   `spark line` never touches that row, and stdout stays the two lines
+   widgets' own lines (`_spark_say`) go to the same row. It is the one
+   place for spark's lines at the prompt. Each replaces the one before,
+   never one above another. The failure line waits for the
+   prompt and is drawn there by the line editor's start (zsh's
+   `zle-line-init`, bash's next prompt), so a command's last output row
+   is never eaten. The failure line is `* failed (N) -- Esc s asks
+   why`, or `HEAD not found; Esc s gets the install line` for exit 127,
+   or `last time this fixed it: FIX` from the failure memory. The
+   others are `* Enter explains the error`, `* Enter runs the check`
+   (the proof), `* Enter remembers the fix`, `* type a question, then
+   Esc s` and `* spark writes here -- Esc k moves it`. A hint no longer
+   names the manual it was checked against. A hand-run `spark line`
+   never touches that row, and stdout stays the two lines
    either way. With `SPARK_VOICE=clear`, `spark line` reads its lines
    aloud once they are written, from a detached process
    (`voice.aloud_later`, `voice.line_words`). stdout stays this
@@ -933,14 +950,25 @@ and may change freely.
    environment wins over `HEIGHT`. The `look` row compares the file with
    what `spark.env` and the faces file say now.
 7. `spark check` exits 0 when no row is `fail`, else 1. A `CAPABILITY`
-   row never fails. `--porcelain` prints
-   `category<TAB>status<TAB>name<TAB>value<TAB>remedy`. Every run writes
-   `~/.local/state/spark/check.json` for the bar.
+   row never fails. Bare, it prints only the rows that need you, `warn`
+   and `fail`, each with its remedy, then the totals line. No header, no
+   categories, and `na` rows stay hidden. A machine with nothing to fix
+   prints the totals line alone. `--all` prints every row by category
+   under the header. `spark check NAME...` prints those rows, ok or
+   not, then the totals. A name that is no row is `spark check -- no
+   row named NAME`, exit 2. `--porcelain` prints
+   `category<TAB>status<TAB>name<TAB>value<TAB>remedy`, every row. Every
+   run writes `~/.local/state/spark/check.json` for the bar.
 8. Signing. The first line of `spark --help` and of every subcommand's
    help is `spark <sub> -- <one line>`, plain ASCII, so every terminal
-   can draw it. A refusal signs the same way. `spark setup --` is the
-   offer bare `spark` prints after the banner, on a clone with no
-   `site.env` at a terminal. `spark bar` is core: it answers
+   can draw it. A refusal signs the same way. An invocation mistake is
+   `spark <verb> -- no word X; spark <verb> -h lists them`, exit 2, and
+   an unknown verb `spark -- no command named X; spark help lists
+   them`. A failure at run time (`die()`) is `! ` and the line on
+   stderr, never a `spark:` prefix, and bootstrap's errors are the same
+   `! `. A declined yes/no prints `* nothing changed`. `spark setup
+   --` is the offer bare `spark` prints after the banner, on a clone
+   with no `site.env` at a terminal. `spark bar` is core: it answers
    everywhere. `spark uninstall -- not a terminal: spark
    uninstall --yes runs it` is the refusal of a non-terminal without
    `--yes`: the plan printed, exit 2. On WSL 2 the same shape: `spark
@@ -954,16 +982,19 @@ and may change freely.
    address neither private nor loopback is bound with a warning, said
    and logged. `spark serve` shares the check. `GET /api/health` answers
    without a token: `{status, forge: true, name, version, model,
-   upstream, models, roles}`, where `models` is `{role:
-   loaded|unloaded}` and `roles` is `{role: model file stem}` per served
-   role. It is the client's `FORGE` detector and the `forge` row's
-   probe. `GET /`, `/login`, `/static/<f>`, `/manifest.webmanifest` and
-   `/apple-touch-icon.png` (a 180x180 PNG the server draws) are the
-   page, no token. The page is chat-first, and both roles land in the
-   chat view. The hash routes are chat, monitor, do, config and help,
-   chat the default, and navigation is one header menu button. For a
-   user only chat, config and help exist. Monitor and do redirect to
-   chat. The login link `/login#t=<token>` signs in by itself: `spark
+   upstream, models, roles, names}`, where `models` is `{role:
+   loaded|unloaded}`, `roles` is `{role: model file stem}` per served
+   role and `names` the same roles by the list's name
+   (`config.model_name`). A program reads `roles`. The page's header
+   shows `names`: `line NAME`, then `chat NAME`. It is the client's
+   `FORGE` detector and the `forge` row's probe. `GET /`, `/login`,
+   `/static/<f>`, `/manifest.webmanifest` and `/apple-touch-icon.png`
+   (a 180x180 PNG the server draws) are the page, no token. The page
+   is chat-first, and both roles land in the chat view. The hash
+   routes are chat, monitor, do, config and help, chat the default,
+   and navigation is one header menu button. For a user only chat,
+   config and help exist. Monitor and do redirect to chat. The login
+   link `/login#t=<token>` signs in by itself: `spark
    serve --login` and `spark user add` draw it as a QR at a
    terminal. The page reads the fragment before routing, strips it with
    history.replaceState, and posts it to `/api/login` once. A stale link
@@ -1152,7 +1183,8 @@ and may change freely.
    over. `GET /api/config` returns no key matching `KEY|TOKEN|SECRET`,
    whatever spark.env holds. Streams are SSE. `/api/chat` (mode
    `chat|answer`) emits `queued` when the model is busy, `delta {t}`,
-   `done {thread, ms, model}` and `error {kind, hint, thread?}`. `talk`
+   `done {thread, ms, model}`, `model` the list's name, and `error
+   {kind, hint, thread?}`. `talk`
    and `ask` are still accepted as aliases of `chat` and `answer`, and
    records write the new names. `thread` rides a `cut`, whose partial
    already landed, so the page continues that thread instead of opening
