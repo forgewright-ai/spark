@@ -59,9 +59,10 @@
 #
 # Engine is Kokoro loaded once into this process through the runtime's
 # C API (ctypes, the structs mirrored from the pinned c-api.h): a
-# sentence per call, no tool started, no model read again. A runtime it
-# cannot load leaves the Reader on the tool, sherpa-onnx-offline-tts, in
-# silence.
+# sentence per call, no tool started, no model read again. Every text
+# spoken goes through it (speak, clip, the Reader): the text never rides a
+# command line, where any local user reads it. A runtime it cannot load
+# leaves the voice silent, and NO_ENGINE is said once, with its remedy.
 #
 # The surfaces (the chat, the prompt line, spark do) read through these:
 # Reader, the lines one after another in two threads of its own -- the
@@ -126,7 +127,9 @@ MODES = ("off", "on", "clear")
 VERB_WORDS = ("status", "on", "clear", "off", "rate", "test", "listen", "stop")
 RATE_MIN, RATE_MAX, RATE_DEFAULT = 50, 300, 100
 SPEAK_MAX = 2000            # characters one speak() reads; the rest is cut at a word
-SPEAK_TIMEOUT = 120         # seconds the engine may take for one text
+# a runtime that does not load: the voice stays silent and says this once,
+# never a tool with the text on its command line (any local user reads argv)
+NO_ENGINE = "the voice engine does not load -- spark voice off --remove, then spark voice %s"
 LISTEN_TIMEOUT = 60         # seconds Whisper may take for one question
 SILENCE = 0.8               # seconds of quiet that end a spoken question
 
@@ -826,8 +829,7 @@ def lang_of(text):
 
 def _speakable(text):
     """The text as one line the engine may read: controls out, spaces
-    folded, cut at a word near SPEAK_MAX. It rides after `--`, the end
-    of the engine's options, so a text starting with a dash is words."""
+    folded, cut at a word near SPEAK_MAX."""
     t = "".join(c if (c >= " " and not ("\x7f" <= c <= "\x9f")) else " " for c in text or "")
     t = " ".join(t.split())
     if len(t) > SPEAK_MAX:
@@ -902,46 +904,32 @@ def _mouth_model(mouth):
     return MOUTH_MODELS[0]
 
 
-def speak(cfg, text, mode_="clear", lang=None, recipe=None, d=None, lead=None):
+def no_engine(mode_):
+    """The one line a voice whose engine does not load says, with its
+    remedy: the runtime fetched again."""
+    return NO_ENGINE % ("on" if mode_ == "on" else "clear")
+
+
+def speak(cfg, text, mode_="clear", lang=None, recipe=None, d=None, lead=None, engine=None):
     """The text as a wav (its path, 0600, in a private 0700 directory the
     caller removes with cleanup(); `d`, one _private_dir() made, is used
-    instead of a new one): Kokoro through the runtime. "on" runs the
-    machine's character over it (recipe, else the one kept); "clear" is
-    the plain voice at SPARK_VOICE_RATE. Either way the final wav opens
-    with the lead-in (lead_in; `lead` ms, lead_ms() when None): a Reader
-    passes 0, its player adds the lead-in where the card may sleep."""
+    instead of a new one): Kokoro through the engine loaded in this
+    process (clip; `engine`, else the process's own). The text never
+    rides a command line: no tool is started. "on" runs the machine's
+    character over it (recipe, else the one kept); "clear" is the plain
+    voice at SPARK_VOICE_RATE. Either way the final wav opens with the
+    lead-in (lead_in; `lead` ms, lead_ms() when None): a Reader passes
+    0, its player adds the lead-in where the card may sleep."""
     cfg = cfg or config.load()
-    t, pt, sid, scale, recipe = _voice_of(cfg, text, mode_, lang, recipe)
-    tts = _bin("sherpa-onnx-offline-tts")
-    mouth = os.path.join(voice_dir(), "mouth")
-    if not (os.access(tts, os.X_OK) and os.path.isdir(mouth)):
-        raise VoiceError("the voice is not downloaded -- spark voice %s" % ("on" if mode_ == "on" else "clear"))
+    pcm, fs = clip(cfg, text, mode_, engine=engine, lang=lang, recipe=recipe)
     d = d if d and _ours(d) and os.path.isdir(d) else _private_dir()
-    raw = os.path.join(d, "voice.wav")
-    cmd = [tts, "--kokoro-model=" + _mouth_model(mouth), "--kokoro-voices=voices.bin", "--kokoro-tokens=tokens.txt",
-           "--kokoro-data-dir=espeak-ng-data", "--kokoro-dict-dir=dict",
-           "--kokoro-lexicon=lexicon-us-en.txt,lexicon-zh.txt", "--kokoro-lang=" + ("pt-br" if pt else "en-us"),
-           "--kokoro-length-scale=%.3f" % scale, "--num-threads=%d" % THREADS, "--sid=%d" % sid,
-           "--output-filename=" + raw, "--", t]
+    path = os.path.join(d, "character.wav" if mode_ == "on" else "voice.wav")
     try:
-        p = subprocess.run(cmd, cwd=mouth, env=_lib_env(), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
-                           stderr=subprocess.PIPE, timeout=SPEAK_TIMEOUT, preexec_fn=_umask)
-    except (OSError, subprocess.TimeoutExpired) as e:
-        cleanup(d)
-        raise VoiceError("the voice did not answer (%s)" % e.__class__.__name__)
-    if p.returncode != 0 or not os.path.isfile(raw):
-        cleanup(d)
-        raise VoiceError("the voice did not speak (exit %d)" % p.returncode)
-    os.chmod(raw, 0o600)
-    if mode_ != "on":
-        return lead_in(raw, lead)
-    try:
-        out = character(raw, recipe, os.path.join(d, "character.wav"))
-    except (VoiceError, OSError, EOFError, wave.Error) as e:
+        _write_pcm(path, pcm, fs)
+    except OSError as e:
         cleanup(d)
         raise VoiceError("the voice did not play (%s)" % e)
-    os.remove(raw)
-    return lead_in(out, lead)
+    return lead_in(path, lead)
 
 
 # ------------------------------------------------------------ the engine
@@ -1128,13 +1116,14 @@ class Engine:
 def load_engine():
     """An Engine with English loaded, or None: no runtime library here,
     a runtime without these symbols, a mouth that does not load. The
-    caller then uses the tool, in silence."""
+    caller then stays silent (NO_ENGINE), never a tool with the text on
+    its argv."""
     if not os.path.isfile(_lib_file()) or not os.path.isdir(os.path.join(voice_dir(), "mouth")):
         return None
     try:
         e = Engine()
         e.load()
-    except Exception:  # noqa: BLE001 -- any failure here is the tool's turn, never the verb's
+    except Exception:  # noqa: BLE001 -- any failure here is silence, never the verb's
         return None
     hush_native()
     return e
@@ -1160,35 +1149,38 @@ def hush_native():
         return False
 
 
+_ENGINE = []                # the process's own engine, loaded once it is asked for
+_ENGINE_LOCK = threading.Lock()
+
+
+def process_engine(mode_="clear"):
+    """The engine this process speaks through, loaded at the first ask
+    and kept: say_aloud, `spark voice test` and awaken's audition share
+    it. VoiceError, the remedy named, when the voice is not here or its
+    runtime does not load -- never a tool with the text on its argv."""
+    with _ENGINE_LOCK:
+        if _ENGINE:
+            return _ENGINE[0]
+        if not os.path.isdir(os.path.join(voice_dir(), "mouth")):
+            raise VoiceError("the voice is not downloaded -- spark voice %s" % ("on" if mode_ == "on" else "clear"))
+        e = load_engine()
+        if e is None:
+            raise VoiceError(no_engine(mode_))
+        _ENGINE.append(e)
+        return e
+
+
 def clip(cfg, text, mode_="clear", engine=None, lang=None, recipe=None):
     """One text as (16-bit little-endian mono PCM bytes, rate): through
-    the loaded engine when there is one, else the tool. Mode on runs the
-    character's chain over the samples, the peak at 0.89 of full scale.
-    No lead-in: the player adds it where the card may sleep."""
-    if engine is not None:
-        t, pt, sid, scale, recipe = _voice_of(cfg, text, mode_, lang, recipe)
-        try:
-            x, fs = engine.say(t, sid, 1.0 / scale, "pt-br" if pt else "en-us")
-        except VoiceError:
-            x, fs = None, 0
-        if x is not None and fs > 0:
-            return (_pcm(chain(x, fs, recipe), 0.89) if mode_ == "on" else _pcm(x)), fs
-    wav = speak(cfg, text, mode_, lang=lang, recipe=recipe, lead=0)
-    try:
-        return _read_pcm(wav)
-    finally:
-        cleanup(wav)
-
-
-def _read_pcm(path):
-    """A wav as (16-bit little-endian mono PCM bytes, rate)."""
-    with wave.open(path, "rb") as w:
-        ch, width, fs = w.getnchannels(), w.getsampwidth(), w.getframerate()
-        data = w.readframes(w.getnframes())
-    if (ch, width) == (1, 2):
-        return data, fs
-    x, fs = _read_wav(path)
-    return _pcm(x), fs
+    the loaded engine (`engine`, else process_engine()). Mode on runs
+    the character's chain over the samples, the peak at 0.89 of full
+    scale. No lead-in: the player adds it where the card may sleep."""
+    t, pt, sid, scale, recipe = _voice_of(cfg, text, mode_, lang, recipe)
+    engine = engine or process_engine(mode_)
+    x, fs = engine.say(t, sid, 1.0 / scale, "pt-br" if pt else "en-us")
+    if fs <= 0:
+        raise VoiceError("the voice did not speak")
+    return (_pcm(chain(x, fs, recipe), 0.89) if mode_ == "on" else _pcm(x)), fs
 
 
 # ---------------------------------------------------------------- playing
@@ -1792,8 +1784,9 @@ class Reader:
     thread turns the queued text into clips (PCM in memory), at most
     AHEAD ahead of the player, and the player's thread plays them in
     order. The engine is loaded once, at the first line, in the engine's
-    thread (load_engine; the tool when it cannot be), and kept for the
-    reader's life: a chat pays the load once. On Linux the player is one
+    thread (load_engine), and kept for the reader's life: a chat pays the
+    load once. One that cannot load says NO_ENGINE once and the reader
+    stays silent: no tool is started with a line on its argv. On Linux the player is one
     Stream a burst: opened at the first clip with the lead-in, fed
     silence while the next clip is made, closed STREAM_IDLE after the
     last clip ends with nothing to come. macOS plays each clip with
@@ -1824,9 +1817,9 @@ class Reader:
         self.sounding = 0.0         # when the clips written into the stream end (monotonic)
         self.quiet = 0.0            # when the last clip stopped playing (0: never played)
         self.sr = (0.0, "")         # (when, screen_reader()): asked once per SR_EVERY
-        self.engine = None          # the loaded engine; False: the tool, for this reader's life
+        self.engine = None          # the loaded engine; False: none loads, silent for this reader's life
+        self.told = False           # NO_ENGINE said once
         self.loading = threading.Lock()     # one load, whether warm() or the first line starts it
-        self.owned = set()          # private dirs made here, not yet removed
         self.cv = threading.Condition()
         self.threads = None
         _READERS.append(self)
@@ -1849,7 +1842,7 @@ class Reader:
                 with self.loading:
                     if self.engine is None:
                         self.engine = load_engine() or False
-            except Exception:   # noqa: BLE001 -- the first line loads it, or the tool speaks
+            except Exception:   # noqa: BLE001 -- the first line loads it, or says why not
                 pass
         threading.Thread(target=go, name="spark-voice-warm", daemon=True).start()
 
@@ -1982,8 +1975,8 @@ class Reader:
 
     def _make(self, text):
         """One line as a clip, or None: off, a screen reader in clear
-        mode, the stub seam, a failure (said in one line, never a raise)."""
-        d = None
+        mode, the stub seam, a failure (said in one line, never a raise),
+        an engine that does not load (NO_ENGINE said once)."""
         try:
             cfg = self.cfg or config.load()
             now = time.time()
@@ -1998,20 +1991,15 @@ class Reader:
             with self.loading:
                 if self.engine is None:
                     self.engine = load_engine() or False
-            if self.engine:
-                return clip(cfg, text, m, engine=self.engine)
-            d = _private_dir()
-            with self.cv:
-                self.owned.add(d)
-            return _read_pcm_gone(speak(cfg, text, m, d=d, lead=0))
+            if not self.engine:
+                if not self.told:
+                    self.told = True
+                    _complain(VoiceError(no_engine(m)))
+                return None
+            return clip(cfg, text, m, engine=self.engine)
         except Exception as e:  # noqa: BLE001 -- the voice never breaks the verb it speaks for
             _complain(e)
             return None
-        finally:
-            if d:
-                with self.cv:
-                    self.owned.discard(d)
-                shutil.rmtree(d, ignore_errors=True)
 
     def _player(self):
         while True:
@@ -2166,7 +2154,7 @@ class Reader:
 
     def _exit(self):
         """At the process's exit: the text that waits goes, the clips made
-        ready too, every private dir is removed, and the stream gets its
+        ready too, and the stream gets its
         end of input -- what it holds plays out, then its player exits
         (what plays per clip runs on: its sh removes its own)."""
         if not self.cv.acquire(timeout=1.0):
@@ -2175,22 +2163,11 @@ class Reader:
             del self.lines[:]
             self.gen += 1
             del self.ready[:]
-            dirs, self.owned = list(self.owned), set()
             s, self.stream = self.stream, None
         finally:
             self.cv.release()
-        for d in dirs:
-            shutil.rmtree(d, ignore_errors=True)
         if s is not None:
             s.close()
-
-
-def _read_pcm_gone(wav):
-    """A wav speak() made as PCM, its private directory removed."""
-    try:
-        return _read_pcm(wav)
-    finally:
-        cleanup(wav)
 
 
 _READERS = []

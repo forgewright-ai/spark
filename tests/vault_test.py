@@ -318,6 +318,60 @@ def test_stores_never_write_over():
     check("a corrupted memory reads as empty", memory._all_facts(), [])
 
 
+def test_concurrent_writers():
+    # the server is threaded: two threads of one process writing one path
+    # once shared a pid-named temp, and the second one's O_EXCL raised. And
+    # the memory's load-modify-save holds a lock, so writers at once lose
+    # no fact under another's save
+    import threading
+    from spark import memory, users
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "key")
+        errors = []
+
+        def write(n):
+            try:
+                for i in range(20):
+                    vault.write_private(path, ("writer %d pass %d\n" % (n, i)).encode())
+            except Exception as e:  # noqa: BLE001
+                errors.append(repr(e))
+        ts = [threading.Thread(target=write, args=(n,)) for n in range(16)]
+        for t in ts:
+            t.start()
+        for t in ts:
+            t.join()
+        check("16 threads writing one path through write_private: none collides", errors, [])
+        check("the file is one writer's whole bytes, 0600", (read_bytes(path).startswith(b"writer ")
+                                                            and read_bytes(path).endswith(b"\n"),
+                                                            os.stat(path).st_mode & 0o777), (True, 0o600))
+        check("no temp is left beside it", sorted(os.listdir(d)), ["key"])
+    token = users.add("carol")
+    st = memory.store_of("carol", users.unlock("carol", token))
+    errors = []
+
+    def keep(n):
+        try:
+            memory.remember("fact number %d" % n, st)
+        except Exception as e:  # noqa: BLE001
+            errors.append(repr(e))
+    ts = [threading.Thread(target=keep, args=(n,)) for n in range(12)]
+    for t in ts:
+        t.start()
+    for t in ts:
+        t.join()
+    check("12 threads remembering at once: no error", errors, [])
+    check("12 threads remembering at once: every fact kept", sorted(memory._all_facts(st)),
+          sorted("fact number %d" % n for n in range(12)))
+    gone = []
+    ts = [threading.Thread(target=lambda: gone.append(memory.forget_n(1, st))) for _ in range(5)]
+    for t in ts:
+        t.start()
+    for t in ts:
+        t.join()
+    check("5 threads forgetting fact 1 at once: 5 different facts gone, 7 left",
+          (len(set(gone)), None in gone, len(memory._all_facts(st))), (5, False, 7))
+
+
 def test_audit_store():
     # the trail in the throwaway HOME (alice logged in by the test before):
     # a record lands and reads back newest last, the reader's lines, a
@@ -444,6 +498,7 @@ def main():
     test_key_file_iterations()
     test_append_expects_the_header()
     test_stores_never_write_over()
+    test_concurrent_writers()
     test_audit_store()
     test_chat_history_never_written_over()
     test_remove_validates_the_name()

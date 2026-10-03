@@ -20,6 +20,7 @@ DK, no plaintext: a lost token is lost history, by design.
 import base64
 import hashlib
 import os
+import tempfile
 
 from . import chacha
 from .chacha import SealError  # noqa: F401  -- the vault's error is the cipher's
@@ -177,9 +178,11 @@ def read_sealed_tail(path, dk, max_chars, kind=None, name=None):
 
 def write_private(path, data):
     """A 0600 file that was never world-readable: private temp beside the
-    target, then an atomic replace."""
-    tmp = path + ".tmp.%d" % os.getpid()
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    target, then an atomic replace. The temp's name is mkstemp's, unique
+    per call: two threads of one process (the threaded server) writing
+    the same path no longer collide on one pid-named temp."""
+    fd, tmp = tempfile.mkstemp(prefix=os.path.basename(path) + ".tmp.", dir=os.path.dirname(path) or ".")
+    os.fchmod(fd, 0o600)
     try:
         with os.fdopen(fd, "wb") as f:
             f.write(data)

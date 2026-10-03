@@ -60,6 +60,11 @@ DO_COMMAND_MAX = 4096           # /api/do/run: a longer line is 400 before any p
                                 # (a 100 kB line pinned a thread for seconds in is_dangerous);
                                 # a block (several lines) has do.DO_BLOCK_MAX
 LOG_MAX = 1_000_000             # forge.log rotates here, like serve.log
+MAX_CONNECTIONS = 64            # connections handled at once; one more is a 503 and closed at once,
+                                # so a flood of idle sockets cannot spawn a thread each without end
+EVENTS_PER_USER = 4             # /api/events streams one requester holds open; one more is 429
+SESSIONS_PER_NAME = 20          # logins kept per name (the admin's one name too); the oldest drops past it
+NO_STORE = {"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"}   # every API answer's headers
 STATIC = {"index.html": "text/html; charset=utf-8", "spark.css": "text/css; charset=utf-8",
           "spark.js": "text/javascript; charset=utf-8",
           "manifest.webmanifest": "application/manifest+json; charset=utf-8",
@@ -180,8 +185,12 @@ def same_token(a, b):
     """Constant-time equality over the UTF-8 bytes: hmac.compare_digest
     on str raises for non-ASCII, which made such a login a 500 that
     skipped the 1 s cost and the failure counter -- a non-ASCII token is
-    simply a wrong one."""
-    return hmac.compare_digest(a.encode("utf-8"), b.encode("utf-8"))
+    simply a wrong one. A lone surrogate (the JSON escape \\ud800) has no UTF-8:
+    a wrong token too, never a raise."""
+    try:
+        return hmac.compare_digest(a.encode("utf-8"), b.encode("utf-8"))
+    except UnicodeEncodeError:
+        return False
 
 
 def set_cookie(sid):
@@ -400,8 +409,60 @@ class ForgeServer(ThreadingHTTPServer):
         self._models = (0.0, [])               # (epoch, [(alias, stem, loaded)])
         self._fails = {}                        # ip -> [epoch of wrong login]
         self._fails_lock = threading.Lock()
+        self._conns = threading.BoundedSemaphore(MAX_CONNECTIONS)
+        self._refused_t = 0.0                   # the last "too many connections" log line
+        self._streams = {}                      # (role, user) -> /api/events streams open
         names = {self.host, "127.0.0.1", "localhost"} | own_hostnames() | {lan_ip()}
         self.hosts = {n for n in names if n} | {"%s:%d" % (n, self.port) for n in names if n}
+
+    def process_request(self, request, client_address):
+        """A thread per connection, at most MAX_CONNECTIONS at once: one
+        more is answered 503 here, on the accept loop, and closed -- no
+        thread, no read of its request."""
+        if not self._conns.acquire(blocking=False):
+            body = b'{"error": {"kind": "busy", "hint": "too many connections; try again"}}'
+            try:
+                request.settimeout(1)
+                request.sendall(b"HTTP/1.0 503 Service Unavailable\r\nContent-Type: application/json\r\n"
+                                b"Cache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\n"
+                                b"Retry-After: 5\r\nContent-Length: %d\r\n\r\n" % len(body) + body)
+            except OSError:
+                pass
+            now = time.time()
+            if now - self._refused_t > 10:      # one line per 10 s of a flood, never one a socket
+                self._refused_t = now
+                log("%s refused: %d connections at once" % (client_address[0], MAX_CONNECTIONS))
+            self.shutdown_request(request)
+            return
+        try:
+            ThreadingHTTPServer.process_request(self, request, client_address)
+        except Exception:
+            self._conns.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            ThreadingHTTPServer.process_request_thread(self, request, client_address)
+        finally:
+            self._conns.release()
+
+    def stream_open(self, who):
+        """True, counted, when `who` holds fewer than EVENTS_PER_USER
+        /api/events streams; stream_close gives it back."""
+        with self._auth_lock:
+            n = self._streams.get(who, 0)
+            if n >= EVENTS_PER_USER:
+                return False
+            self._streams[who] = n + 1
+            return True
+
+    def stream_close(self, who):
+        with self._auth_lock:
+            n = self._streams.get(who, 0) - 1
+            if n > 0:
+                self._streams[who] = n
+            else:
+                self._streams.pop(who, None)
 
     @staticmethod
     def _config_stamp():
@@ -449,7 +510,10 @@ class ForgeServer(ThreadingHTTPServer):
         token pays one KDF unwrap; after that it is a hash lookup, and a
         rotation invalidates the cache because the stored hash changed."""
         from . import users, vault
-        h = vault.token_hash(tok)
+        try:
+            h = vault.token_hash(tok)
+        except UnicodeEncodeError:              # a lone surrogate is no token anyone holds
+            return None
         with self._auth_lock:
             hit = self._user_keys.get(h)
         if hit and _hash_current(hit[0], h):
@@ -492,12 +556,16 @@ class ForgeServer(ThreadingHTTPServer):
     def new_session(self, role, token, name, dk):
         """Mint a session for a login: the id is random, never derived
         from the token, so no two logins share one and none can be
-        computed from a captured token. Expired ones are swept here."""
+        computed from a captured token. Expired ones are swept here, and
+        a name holds SESSIONS_PER_NAME at most: the oldest goes first."""
         from . import vault
         sid = secrets.token_urlsafe(32)
         now = time.time()
         with self._auth_lock:
             for k in [k for k, v in self.sessions.items() if v[4] < now]:
+                del self.sessions[k]
+            mine = sorted((v[4], k) for k, v in self.sessions.items() if (v[0], v[1]) == (role, name))
+            for _exp, k in mine[:max(0, len(mine) - SESSIONS_PER_NAME + 1)]:
                 del self.sessions[k]
             self.sessions[sid] = (role, name, dk, vault.token_hash(token), now + COOKIE_AGE)
         return sid
@@ -576,7 +644,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def _json(self, code, obj, extra=None):
         data = json.dumps(obj).encode()
-        h = {"Cache-Control": "no-store"}
+        h = dict(NO_STORE)
         h.update(extra or {})
         self._start(code, "application/json", h, len(data))
         if self.command != "HEAD":
@@ -604,7 +672,7 @@ class Handler(BaseHTTPRequestHandler):
         raw = self.rfile.read(n) if n else b""
         try:
             d = json.loads(raw.decode("utf-8") or "{}")
-        except (ValueError, UnicodeDecodeError):
+        except (ValueError, UnicodeDecodeError, RecursionError):   # 200k `[` nest past the parser's stack
             self._error(400, "bad", "the body is not JSON")
             return None
         if not isinstance(d, dict):
@@ -613,7 +681,7 @@ class Handler(BaseHTTPRequestHandler):
         return d
 
     def _sse(self):
-        self._start(200, "text/event-stream", {"Cache-Control": "no-store"})
+        self._start(200, "text/event-stream", NO_STORE)
         self._status = 200
 
     def _emit(self, event, obj):
@@ -907,7 +975,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._error(502, "bad", "upstream answered HTTP %d" % e.code)
         except (urllib.error.URLError, OSError) as e:
             return self._error(502, "down", str(e))
-        self._start(200, "application/json", {"Cache-Control": "no-store"}, len(data))
+        self._start(200, "application/json", NO_STORE, len(data))
         self.wfile.write(data)
         self._status = 200
         return None
@@ -958,11 +1026,11 @@ class Handler(BaseHTTPRequestHandler):
             with r:
                 if not stream:
                     data = r.read()
-                    self._start(200, r.headers.get("Content-Type") or "application/json", {"Cache-Control": "no-store"}, len(data))
+                    self._start(200, r.headers.get("Content-Type") or "application/json", NO_STORE, len(data))
                     self.wfile.write(data)
                     self._status = 200
                     return None
-                self._start(200, "text/event-stream", {"Cache-Control": "no-store"})
+                self._start(200, "text/event-stream", NO_STORE)
                 self._status = 200
                 while True:
                     chunk = r.readline()
@@ -981,6 +1049,9 @@ class Handler(BaseHTTPRequestHandler):
                          "name": self.server.cfg.name, "version": VERSION})
 
     def api_check(self):
+        """check.json plus its age: whole to the admin; to a named user the
+        counts alone, as /api/events gives them -- the rows name the box
+        account, the other users, the sends and the peer."""
         try:
             with open(CHECK_JSON, encoding="utf-8") as f:
                 d = json.load(f)
@@ -988,6 +1059,8 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError
         except (OSError, ValueError):
             d = {"ts": 0, "counts": {}, "rows": []}
+        if self.role != "admin":
+            d = {"ts": d.get("ts", 0), "counts": d.get("counts", {})}
         d["age"] = int(time.time() - d.get("ts", 0)) if d.get("ts") else None
         self._json(200, d)
 
@@ -1082,7 +1155,17 @@ class Handler(BaseHTTPRequestHandler):
     def api_events(self):
         """SSE until the client goes: check / bar / serve on change -- and
         the log line too for an admin, never for a user -- plus a comment
-        every 15 s so proxies and phones keep the line open."""
+        every 15 s so proxies and phones keep the line open. One requester
+        holds EVENTS_PER_USER streams at most: one more is 429 busy."""
+        who = (self.role, self.user)
+        if not self.server.stream_open(who):
+            return self._error(429, "busy", "%d live streams already open for you; close a tab" % EVENTS_PER_USER)
+        try:
+            return self._events()
+        finally:
+            self.server.stream_close(who)
+
+    def _events(self):
         self._sse()
         watched = (CHECK_JSON, BAR_CACHE, SERVE_URL_FILE) + ((FORGE_LOG,) if self.role == "admin" else ())
 
@@ -1389,6 +1472,7 @@ class Handler(BaseHTTPRequestHandler):
         if part is None:
             return self._error(409, "core", "the text changes the core -- send core: true to replace it")
         n = len(text.strip())
+        self._audit("soul", part=part, chars=min(n, soul.SOUL_MAX))
         check.refresh()
         return self._json(200, {"chars": min(n, soul.SOUL_MAX), "cut": n > soul.SOUL_MAX, "part": part})
 
@@ -1489,7 +1573,8 @@ class Handler(BaseHTTPRequestHandler):
         is a cwd that is not an absolute directory. Nobody
         watches it at a terminal: do.STEP_TIMEOUT is its leash (rc 124,
         the whole process group killed). The log carries a sha256 prefix
-        and the truncated text, then the rc. `man` rides the answer when
+        and the length, never the text (the sealed audit keeps the digest
+        and the rc), then the rc. `man` rides the answer when
         the step was refused for an option (do.man_excerpt): the lines of
         its own man page, which the page's next proposal carries."""
         from . import do
@@ -1519,7 +1604,7 @@ class Handler(BaseHTTPRequestHandler):
         if do.danger(command, cwd) and body.get("confirmed") is not True:
             return self._error(400, "confirm", "a dangerous command runs only with confirmed: true")
         digest = hashlib.sha256(command.encode("utf-8")).hexdigest()[:12]
-        log("%s do/run %s %s" % (self._ip(), digest, " ".join(command.split())[:200]))
+        log("%s do/run %s %d chars" % (self._ip(), digest, len(command)))
         rc, tail = do.run(command, _shell(), cwd, echo=False, timeout=do.STEP_TIMEOUT)
         log("%s do/run %s rc %d" % (self._ip(), digest, rc))
         self._audit("do/run", digest=digest, rc=rc)

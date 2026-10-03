@@ -4,6 +4,7 @@
 # managers. The forge's upstream resolves through a serve-url file that
 # names the stub, so no engine and no model are needed.
 
+import hashlib
 import http.client
 import io
 import json
@@ -317,6 +318,13 @@ def main():
             st, h, raw = req(url, "GET", "/api/check", headers=cookie)
             d = json.loads(raw)
             ok(st == 200 and d["counts"]["ok"] == 1 and isinstance(d.get("age"), int), "cookie reads /api/check (with age)", (st, raw[:100]))
+            ok(d.get("rows") and d.get("name") == "fixture" and h.get("X-Content-Type-Options") == "nosniff",
+               "the admin's /api/check is check.json whole (rows, name), nosniff", (raw[:120], h))
+            st, h, raw = req(url, "GET", "/api/check", headers=ubearer)
+            d = json.loads(raw)
+            ok(st == 200 and sorted(d) == ["age", "counts", "ts"] and d["counts"]["ok"] == 1
+               and isinstance(d["age"], int) and h.get("X-Content-Type-Options") == "nosniff",
+               "a user's /api/check: the counts alone -- no rows, no names, no sends", (st, raw[:120]))
             st, _, raw = req(url, "GET", "/api/stats?days=7", headers=bearer)
             d = json.loads(raw)
             ok(st == 200 and "tg_mean" in d and "baseline" in d and "running" in d, "bearer reads /api/stats", raw[:100])
@@ -762,6 +770,10 @@ def main():
             ok("New soul." in sys0 and "Fixture" not in sys0, "the next /v1 request carries the new soul", sys0[:200])
             st, _, _ = req(url, "POST", "/api/soul", {"text": "Call yourself Fixture."}, headers=post)
             ok(st == 200 and open(soulf).read() == "Call yourself Fixture.\n", "and back to the fixture soul")
+            rc, out, _ = spark("serve", "--audit", "--porcelain")
+            souls = [l.split("\t") for l in out.splitlines() if l.split("\t")[2:3] == ["soul"]]
+            ok(rc == 0 and len(souls) == 2 and souls[0][3] == "chars=9 part=soul",
+               "POST /api/soul writes an audit record each time: the part and its length, never the text", out[-300:])
 
             st, _, raw = req(url, "GET", "/api/memory", headers=bearer)
             ok(st == 200 and json.loads(raw) == {"facts": [], "on": True}, "/api/memory: nothing yet, on", raw[:100])
@@ -813,6 +825,13 @@ def main():
                "/api/do/propose records its turn: mode do, pp_n/cache_n, the ember's stem", dturns)
             st, _, raw = req(url, "POST", "/api/do/run", {"command": "echo hi"}, headers=post)
             ok(st == 200 and json.loads(raw) == {"rc": 0, "tail": "hi\n"}, "/api/do/run echo hi -> rc 0, tail", raw[:100])
+            st, _, raw = req(url, "POST", "/api/do/run", {"command": "echo do-run-marker-words"}, headers=post)
+            lg = [l for l in open(state + "/forge.log").read().splitlines() if " do/run " in l]
+            digest = hashlib.sha256(b"echo do-run-marker-words").hexdigest()[:12]
+            ok(st == 200 and any(l.endswith(" do/run %s 24 chars" % digest) for l in lg)
+               and any(l.endswith(" do/run %s rc 0" % digest) for l in lg)
+               and not any("marker" in l or "echo" in l for l in lg),
+               "forge.log keeps a do/run's digest and length, never its text", lg[-4:])
             st, _, raw = req(url, "POST", "/api/do/run", {"command": "false"}, headers=post)
             ok(st == 200 and json.loads(raw)["rc"] == 1, "/api/do/run false -> rc 1 (run as clicked, not re-judged)", raw[:100])
             st, _, raw = req(url, "POST", "/api/do/run", {"command": "fakeflag --frob"}, headers=post)
@@ -924,9 +943,11 @@ def main():
             ok(st == 200 and d["reply"]["kind"] == "done" and d.get("unchecked") == ["96"],
                "/api/do/propose: a done number no output backs comes back unchecked", raw[:300])
             lg = open(state + "/forge.log").read()
-            ok(re.search(r"do/run [0-9a-f]{12} echo hi$", lg, re.M) and re.search(r"do/run [0-9a-f]{12} false$", lg, re.M)
-               and re.search(r"do/run [0-9a-f]{12} rc 1$", lg, re.M),
-               "forge.log names the commands run with a sha256 prefix, and the rc after", lg[-300:])
+            ok(re.search(r"do/run [0-9a-f]{12} 7 chars$", lg, re.M) and re.search(r"do/run [0-9a-f]{12} 5 chars$", lg, re.M)
+               and re.search(r"do/run [0-9a-f]{12} rc 1$", lg, re.M)
+               and not re.search(r"do/run [0-9a-f]{12} (echo hi|false)$", lg, re.M),
+               "forge.log names the commands run by a sha256 prefix and a length, never the text; the rc after",
+               lg[-300:])
             # the audit trail: one sealed record per admin action in the box
             # account's store, numbers and names only, never the command
             import base64 as _b64
@@ -941,11 +962,11 @@ def main():
             hi = [r for r in runs if r.get("digest") == _hl.sha256(b"echo hi").hexdigest()[:12]]
             ok(len(hi) == 1 and set(hi[0]) == {"ts", "ip", "action", "digest", "rc"} and hi[0]["rc"] == 0
                and hi[0]["ip"] == "127.0.0.1", "do/run echo hi landed one audit record: {ts, ip, action, digest, rc}", hi)
-            # 10: the 4096-character run, the two blocks, the confirmed
-            # one-line redirect and the line with its trailing newline
-            # count; the refused 90 kB one and the refused blocks do not
-            ok(len(runs) == 10 and all(isinstance(r["rc"], int) and re.match(r"^[0-9a-f]{12}$", r["digest"]) for r in runs),
-               "every do/run that ran (10) has its record: rc a number, digest 12 hex", runs)
+            # 11: the marker run, the 4096-character run, the two blocks,
+            # the confirmed one-line redirect and the line with its trailing
+            # newline count; the refused 90 kB one and the refused blocks do not
+            ok(len(runs) == 11 and all(isinstance(r["rc"], int) and re.match(r"^[0-9a-f]{12}$", r["digest"]) for r in runs),
+               "every do/run that ran (11) has its record: rc a number, digest 12 hex", runs)
             blob = json.dumps(arecs)
             ok("echo hi" not in blob and "rm -rf" not in blob and "pwd" not in blob and tmp not in blob,
                "no command text, no path in the trail", blob[:200])
