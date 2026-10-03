@@ -30,16 +30,9 @@ class Wrap:
     next word) are kept apart so the mark's own trailing space is never
     doubled."""
 
-    def __init__(self, stream=sys.stdout, mark=True, cps=0, lead=None):
+    def __init__(self, stream=sys.stdout, mark=True, cps=0):
         self.stream = stream
         self.mark = mark
-        # lead (a tty only): a string that opens the reply in the mark's
-        # place -- the chat's face -- and every later line hangs under
-        # it, indented by its visible width (the escapes not counted).
-        # Piped, the lead is ignored: the bytes are today's.
-        self.lead = lead if lead and stream.isatty() else ""
-        self.indent = len(SGR_RE.sub("", self.lead))
-        self.owed = False         # a new line's indent, written before its first char
         # the reveal: cps > 0 at a tty paces every visible character (the
         # same clock as spark reveal: a stall is never repaid as a burst);
         # 0, or piped, writes as the chunks come
@@ -103,13 +96,6 @@ class Wrap:
         """Every write goes through here: unpaced, one write; paced (cps),
         a character at a time with an escape sequence written free, then
         `pause` more steps of breath after the last one (living only)."""
-        if self.owed and s and s[0] != "\n":
-            # a line under the lead: its indent comes before its first
-            # char, so a blank line stays blank (no trailing spaces);
-            # written free, like an escape -- the reveal paces words, not
-            # the margin
-            self.owed = False
-            self.stream.write(" " * self.indent)
         if not self.cps or not s:
             self.stream.write(s)
             return
@@ -153,12 +139,7 @@ class Wrap:
     def _start(self):
         if not self.started:
             self.started = True
-            if self.lead:
-                # the lead (the chat's face) in the mark's place; the
-                # caller paints it, col counts what is visible
-                self._emit(self.lead)
-                self.col += self.indent
-            elif self.mark:
+            if self.mark:
                 # the mark in the accent at a tty (paint: plain when piped
                 # or unset); col counts what is visible, never the escape
                 self._emit(paint(glyph("hammer"), "accent", self.stream) + " ")
@@ -173,12 +154,10 @@ class Wrap:
             if self.col + 1 + n > self.width - 1:
                 self._emit("\n")
                 self.col = 0
-                if self.hang or self.indent:
-                    # a bullet's hang counts from the lead's indent
-                    # already; written free, never paced
-                    self.owed = False
-                    self.stream.write(" " * max(self.hang, self.indent))
-                    self.col = max(self.hang, self.indent)
+                if self.hang:
+                    # a bullet's hang, written free, never paced
+                    self.stream.write(" " * self.hang)
+                    self.col = self.hang
             else:
                 self._emit(" ")
                 self.col += 1
@@ -266,7 +245,7 @@ class Wrap:
         if self.word:
             self._word_out(self.word)
             self.word = ""
-        blank = self.col <= (self.indent if self.started else 0) and not self.verbatim and not self.fenced
+        blank = self.col == 0 and not self.verbatim and not self.fenced
         self._start()
         self._reset_marks()
         # a blank line between paragraphs breathes like a sentence's end
@@ -274,8 +253,7 @@ class Wrap:
         self.stream.flush()
         # under a lead, the next line starts at its indent: owed, and
         # written with that line's first char
-        self.col = self.indent
-        self.owed = bool(self.indent)
+        self.col = 0
         self.hang = 0
         self.need_space = False
         self.verbatim = False

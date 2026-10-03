@@ -1639,29 +1639,6 @@ def chat_awake_cases(t):
             sys.stdout, sys.stderr = real_out, real_err
         return got
     try:
-        # --- the lead: the face opens the reply, the lines hang under it
-        w = _tx.Wrap(Tty(), lead="\033[1m(o.o)\033[0m ")
-        w.width = 30
-        w.feed("one two three four five six seven eight nine ten eleven\n\nnext one")
-        w.close()
-        lines = w.stream.getvalue().split("\n")
-        body = [ln for ln in lines[1:] if ln]
-        t.ok(lines[0].startswith("\033[1m(o.o)\033[0m one ") and len(_tx.SGR_RE.sub("", lines[0])) <= 29
-             and body and all(ln.startswith(" " * 6) and ln[6] != " " for ln in body) and "" in lines[1:-1]
-             and "      next one" in lines,
-             "chat: the lead opens the reply; wrapped and later lines hang 6 columns (the face's width, "
-             "the escapes not counted); a blank line stays blank", repr(w.stream.getvalue()))
-        src = "Some **bold** words here.\n\n    code stays\n- a bullet\n" + "word " * 30
-        piped = []
-        for lead in ("(o.o) ", None):
-            s = io.StringIO()
-            w = _tx.Wrap(s, lead=lead)
-            w.feed(src)
-            w.close()
-            piped.append(s.getvalue())
-        t.ok(piped[0] == piped[1] and piped[0].startswith("* Some **bold**"),
-             "chat: piped, the lead is ignored -- the bytes are today's, byte for byte", repr(piped[0][:60]))
-
         # --- the opening: one line -- the thread it goes on with, cut at a
         # word to 80 columns, else the model it talks to, by name
         now = time.time()
@@ -1803,17 +1780,7 @@ def chat_awake_cases(t):
             t.ok(kept == ["/do tidy the logs"],
                  "chat: the lines spark do read inside /do leave the chat's readline history", repr(kept))
 
-        # --- the reveal never paces the hanging indent; the continuing
-        # line is cut by columns, a wide character two
-        ticked = []
-        w = _tx.Wrap(Tty(), lead="(o.o) ", cps=5000)
-        w._tick = lambda ch, step: (ticked.append(ch), w.stream.write(ch))
-        w.width = 30
-        w.feed("one two three four five six seven eight nine ten eleven twelve")
-        w.close()
-        paced = "".join(ticked)
-        t.ok("\n      " in w.stream.getvalue() and "\n" in paced and "\n " not in paced and "      " not in paced,
-             "chat: the reveal paces the words; the hanging indent is written free", repr((w.stream.getvalue(), paced)))
+        # --- the continuing line is cut by columns, a wide character two
         wide = _fg.continuing([{"role": "user", "text": "漢字 " * 40, "ts": stamp(65)}])
         t.ok(_tx.cols(wide) <= 79 and _tx.cols(wide) > len(wide) and wide.endswith('" -- /new starts fresh, Esc ends')
              and _tx.cols("漢á") == 3,
@@ -2254,7 +2221,7 @@ def living_core_cases(t):
             raise OSError("no fd")
 
     tmp = tempfile.mkdtemp(prefix="spark-living-")
-    paths = {n: getattr(look, n) for n in ("LOOK_FILE", "NEWS_FILE", "WORDS_FILE", "FACES_FILE")}
+    paths = {n: getattr(look, n) for n in ("LOOK_FILE", "WORDS_FILE", "FACES_FILE")}
     keys = ("TERM", "NO_COLOR", "SSH_CONNECTION", "SSH_TTY", "TMUX", "SPARK_HINT_ROW", "SPARK_ASCII",
             "SPARK_LOOK", "SPARK_HEIGHT") + tuple(_sp._SGR_VARS.values())
     saved = {k: os.environ.get(k) for k in keys}
@@ -2467,9 +2434,6 @@ def living_core_cases(t):
         look.render(_cf.load())
         t.ok("BLINK=5\nTEMPER=warm\n" in open(look.LOOK_FILE).read() and "rate" not in look.faces()
              and _ck.row_look(_Ctx2).status == "ok", "living: render takes RATE and TEMPER; faces() ignores them")
-        t.ok(look.news("engine-up-1", "The model is awake again.") and open(look.NEWS_FILE).read() == "engine-up-1\tThe model is awake again.\n"
-             and not look.news("x", "a\x1b[2Jb") and not look.news("bad id", "fine."),
-             "living: the news file is one id and one clean line")
 
         # --- the hint as a sentence, for everyone
         t.ok(_cl._tidy("lists the files") == "Lists the files." and _cl._tidy("ls lists them", head="ls") == "ls lists them."
@@ -2610,7 +2574,6 @@ def living_awaken_cases(t):
     line stands in; a soul file of yours is kept; nothing is greeted,
     awake or not (v1.72)."""
     from spark import look as _look
-    from spark import memory as _mem
     from spark import awaken as _aw
     t.ok(_aw._sentences("i speak directly. i avoid fluff") == "I speak directly. I avoid fluff."
          and _aw._sentences("Hello again.") == "Hello again.",
@@ -2701,9 +2664,6 @@ def living_awaken_cases(t):
     t.ok([b.get("identity", "none") for b in sent] == [False, "none", "none"],
          "wire.chat_json: identity false reaches a FORGE only when asked, the default sends no field",
          str([b.get("identity", "none") for b in sent]))
-    # one_fact never raises: a config that is not one, memory off
-    t.ok(_mem.one_fact("not a config") is None and _mem.one_fact(type("Off", (), {"memory": False})()) is None,
-         "memory.one_fact: None on anything it cannot read, never an exception")
 
     class Birth(BaseHTTPRequestHandler):
         mode = {"slow": 0}
@@ -3617,7 +3577,7 @@ def main():
                            ("off", "spark off -- turn the prompt line off, in every shell"),
                            ("on", "spark on -- turn the prompt line back on"),
                            ("history", "spark history -- the threads kept on this machine"),
-                           ("ver", "spark ver -- logo, version, credits")):
+                           ("ver", "spark ver -- the version")):
             rc, out, _ = spark(sub, "-h")
             t.ok(rc == 0 and out.splitlines()[0] == first, "spark %s -h signs (contract 8)" % sub, out)
 
@@ -3649,14 +3609,14 @@ def main():
         rc, out, _ = spark("line", stdin="x?", extra={"SPARK_BASE_URL": "http://127.0.0.1:9"})
         t.ok(rc == 1 and "no answer from SPARK_BASE_URL" in out, "down -> hint names the URL", out)
 
-        rc, out, _ = spark("ver")
+        rc, out, _ = spark("ver", "--credits")
         t.ok(rc == 0 and re.search(r"^spark (\d+\.\d+(\+\d+)?|0\+[0-9a-f]+|dev)$", out, re.M)
              and re.search(r"by \S+ [·|] github\.com/\S+/\S+", out),
-             "spark ver still answers, credited", out)
-        rc, out2, _ = spark("ver", "--banner")
+             "spark ver --credits: the version, credited", out)
+        rc, out2, _ = spark("ver")
         t.ok(rc == 0 and re.search(r"^spark (\d+\.\d+(\+\d+)?|0\+[0-9a-f]+|dev)$", out2, re.M)
              and "github.com" not in out2 and "CREDITS.md" not in out2 and out.startswith(out2),
-             "spark ver --banner (the login's lines): the logo and the version, no credits", out2)
+             "spark ver (a login's lines): the logo and the version, no credits", out2)
 
         # spark ver --sbom (v1.36, lib/spark/sbom.py): the JSON and one
         # newline, nothing else -- CycloneDX 1.5 with its four top-level
@@ -3742,7 +3702,7 @@ def main():
         subprocess.run(["git", "clone", "-q", bare, fork], env=genv, check=True, timeout=30)
         subprocess.run(["git", "-C", fork, "remote", "set-url", "origin", "https://github.com/someone/sparkfork.git"],
                         env=genv, check=True, timeout=10)
-        rc, out, _ = spark("ver", exe=os.path.join(fork, "bin", "spark"))
+        rc, out, _ = spark("ver", "--credits", exe=os.path.join(fork, "bin", "spark"))
         t.ok(rc == 0 and "by someone" in out and "github.com/someone/sparkfork" in out,
              "a fork's origin remote names itself in spark ver's credits line", out)
 
@@ -5042,7 +5002,7 @@ def main():
         t.ok(rc == 0 and err == "" and re.search(r"^spark %s$" % re.escape(version), out, re.M),
              "ver: the version line matches git describe", out + err)
         t.ok("\u2588" in out and "\033" not in out and "\\033" not in out, "ver: the logo is drawn, without escapes, when piped", out)
-        t.ok("CREDITS.md" in out, "ver: names CREDITS.md for the rest of the licenses", out)
+        t.ok("CREDITS.md" in spark("ver", "--credits")[1], "ver --credits: names CREDITS.md for the rest of the licenses", out)
         rc, out, _ = spark("memory", "add", "-h")
         t.ok(rc == 0 and out.startswith("spark memory -- "), "remember -h is help, not a fact", out)
         rc, out, _ = spark("memory", "forget", "-h")

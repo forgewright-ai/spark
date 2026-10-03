@@ -1482,57 +1482,11 @@ def counts(rows):
     return {s: sum(1 for r in rows if r.status == s) for s in (OK, FAIL, WARN, NA)}
 
 
-def _waiting():
-    """The sandboxed runs waiting for review now (bar.waiting's count)."""
-    try:
-        from . import sandbox
-        return sum(1 for r in sandbox.runs() if not r["running"])
-    except Exception:       # noqa: BLE001 -- a count for the news, never a reason to fail
-        return 0
-
-
-def news(prev, rows, waiting):
-    """An awakened machine's state changes, told once through look.news:
-    the ai row between ok and not ok since the last snapshot (`prev`, the
-    check.json before this run), and sandboxed runs starting to wait."""
-    from . import look
-    if not look.awake() or not isinstance(prev, dict):
-        return
-    stamp = time.strftime("%Y%m%d%H%M%S")
-    was = {r.get("name"): r.get("status") for r in prev.get("rows", []) if isinstance(r, dict)}
-    now = {r.name: r.status for r in rows}
-    if "ai" in was and "ai" in now and (was["ai"] == OK) != (now["ai"] == OK):
-        if now["ai"] == OK:
-            look.news("engine-up-" + stamp, "The model is awake again.")
-        else:
-            look.news("engine-down-" + stamp, "The model is not answering. spark check says why.")
-    try:
-        before = int(prev.get("waiting", 0))
-    except (TypeError, ValueError):
-        before = 0
-    if waiting and not before:
-        look.news("runs-waiting-" + stamp, "%d run%s wait%s for review. spark do --review shows them."
-                  % (waiting, "" if waiting == 1 else "s", "s" if waiting == 1 else ""))
-
-
 def write_snapshot(ctx, rows):
-    try:
-        with open(CHECK_JSON, encoding="utf-8") as f:
-            prev = json.load(f)
-    except (OSError, ValueError):
-        prev = None
     snap = {"ts": int(time.time()), "name": ctx.cfg.name, "version": version.version(),
             "counts": counts(rows),
             "rows": [{"category": r.category, "status": r.status, "name": r.name,
                       "value": r.value, "remedy": r.remedy} for r in rows]}
-    from . import look
-    if look.awake():
-        # the runs waiting, so the next run tells the change once (news)
-        snap["waiting"] = _waiting()
-        try:
-            news(prev, rows, snap["waiting"])
-        except Exception:   # noqa: BLE001 -- the news is never a reason to lose the snapshot
-            log_exc("check news")
     try:
         state_dir()
         with open(CHECK_JSON, "w", encoding="utf-8") as f:

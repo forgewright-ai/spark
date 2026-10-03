@@ -64,10 +64,10 @@ CLEAR_USAGE = """spark clear -- remove the history this machine keeps
   spark clear --history       remove every turn and thread but the kept
                               ones (/keep in spark chat)
 """
-VER_USAGE = """spark ver -- logo, version, credits
+VER_USAGE = """spark ver -- the version
 
-  spark ver                   the logo, the version and the credits
-  spark ver --banner          the logo and the version, for a login
+  spark ver                   the logo and the version
+  spark ver --credits         who made spark and what it uses
   spark ver --sbom            what spark depends on, as CycloneDX JSON
 """
 
@@ -1543,7 +1543,7 @@ def logo_names():
 
 
 def cmd_ver(args):
-    """logo, version, credits; --banner the first two, for a login"""
+    """the logo and the version; --credits adds who made it"""
     if _help(args, VER_USAGE):
         return 0
     if args[:1] == ["--sbom"]:
@@ -1553,7 +1553,7 @@ def cmd_ver(args):
         sys.stdout.flush()
         return 0
     banner()
-    if args[:1] != ["--banner"]:
+    if args[:1] == ["--credits"]:
         say(credits())
         say("engine llama.cpp %s (MIT) -- CREDITS.md names the rest" % engine.pinned_version())
     return 0

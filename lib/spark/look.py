@@ -27,7 +27,6 @@ from contextlib import contextmanager
 from . import CONFIG_DIR, SPARK_ENV, STATE_DIR
 
 LOOK_FILE = os.path.join(STATE_DIR, "look")
-NEWS_FILE = os.path.join(STATE_DIR, "news")
 LOADS_FILE = os.path.join(STATE_DIR, "loads.json")
 WORDS_FILE = os.path.join(CONFIG_DIR, "words")
 FACES_FILE = os.path.join(CONFIG_DIR, "faces")
@@ -327,21 +326,6 @@ def render(cfg=None, awake_now=None):
     on = state().get("AWAKE") == "yes" if awake_now is None else awake_now
     _atomic(LOOK_FILE, content(cfg, on))
     forget()
-
-
-def news(nid, line):
-    """One state change worth one showing: `ID<TAB>line` in the news file,
-    atomic, the line through clean(). The hook shows each id once. A line
-    clean() refuses, or an id that is not one plain word, writes nothing."""
-    line = clean(line)
-    nid = (nid or "").strip()
-    if line is None or not valid_id(nid):
-        return False
-    try:
-        _atomic(NEWS_FILE, "%s\t%s\n" % (nid, line))
-    except OSError:
-        return False
-    return True
 
 
 # ------------------------------------------------------------------- verbs

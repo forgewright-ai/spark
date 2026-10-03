@@ -97,39 +97,15 @@ an issue away.
 
 ## Voice
 
-Every document, help text and usage text speaks with one voice: simple
-and direct English. The rules below are the whole of it. A pull request
-that follows them lands faster. The lines spark says once awakened are
-the machine's own voice, not this sheet's.
+Every document, help text and message follows five rules:
 
-One word per thing:
+- Write short, plain English, the way you would say it.
+- Say what happens and what to type. Leave out how it works.
+- Name a model by its name in the list, not its file name.
+- Print nothing when nothing changed.
+- Keep a line under 80 characters.
 
-| word | means |
-|---|---|
-| "you" | the reader, in the customer docs |
-| "the admin" | the machine's own account |
-| "a user" | a named account |
-| "a new user" | a person meeting spark for the first time |
-| "mint" | make an account, `spark user add NAME`, and nothing else |
-| "a row" | one line of `spark check`, and "every row ok" when all pass |
-| "a client" | another machine using this one's model |
-| "a spark app" | an editor or tool that talks to spark |
-| "awake" | a machine `spark awaken` gave a personality and a look (motion, colour and words, one switch) |
+`tests/docs_test.py` checks what a program can: ASCII, the widths, no
+contractions, sentences of 30 words at most. The CHANGELOG is history
+and stays as written.
 
-Form:
-
-- ASCII only, and " -- " is the only dash.
-- Capitals only for acronyms. No contractions and no "we".
-- A line an awakened machine says makes no claim about where data goes.
-- Short sentences, never over 30 words.
-- Say what it does. A sentence about what it does not do stays only when
-  a reader needs the promise, such as what leaves the machine.
-- One home per topic. The full explanation lives in one file, and every
-  other mention is one sentence and a pointer to that file and section.
-- Prose wraps at 72 columns, and the cheatsheet stays under 80.
-
-`tests/docs_test.py` holds the mechanical half of these rules: the words
-that are out, the capitals, the contractions, the widths, the sentence
-length, the counts. It measures prose only. A fence, an indented block,
-a table row, a heading and a line holding a URL are exempt, and a code
-span counts as one word. The CHANGELOG is history and stays as written.
