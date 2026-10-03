@@ -191,7 +191,7 @@ git clone -q "$T/origin.git" "$T/rel"
 git -C "$T/rel" checkout -q --detach v1.0
 RELSPARK="$T/rel/bin/spark"
 r=$(row "$RELSPARK")
-[ "$r" = "warn: v1.0 is not signed: spark update refuses unsigned tags" ] && ok "signed row: warns at an unsigned tag" || bad "signed row at v1.0: $r"
+[ "$r" = "warn: v1.0 is not signed" ] && ok "signed row: warns at an unsigned tag" || bad "signed row at v1.0: $r"
 
 out=$("$RELSPARK" update --dry-run 2>&1) && ok "detached --dry-run exits 0" || bad "detached --dry-run: rc $? $out"
 printf '%s\n' "$out" | grep -q 'would move to v1.1 (signed by spark-release; was v1.0)' && ok "detached --dry-run says it would move, signed" || bad "detached --dry-run: $out"

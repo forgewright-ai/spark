@@ -1,21 +1,18 @@
 #!/bin/sh
-# spark bootstrap.sh -- a fresh Debian-family, Arch or Void Linux, or macOS,
-# to a spark workstation, idempotently. Run it again after any change to
-# site.env. An apply run prints what it CHANGED and what needs you, and
-# nothing else: a converged machine says only "Nothing to do".
+# spark bootstrap.sh -- set this machine up for spark. Safe to run again:
+# an apply run prints only what it changed and what needs you.
 #
-#   ./bootstrap.sh                 apply (sudo only for the packages, runit's root service and the headless rows)
-#   ./bootstrap.sh --dry-run       print what would change; never sudo
+#   ./bootstrap.sh                 apply (sudo only when a step needs root)
+#   ./bootstrap.sh --dry-run       show what would change; never sudo
 #   ./bootstrap.sh --verbose       every row, not only what changed
-#   ./bootstrap.sh --list-packages one package per line, as this site wants them
-#   ./bootstrap.sh --list-tools    repo-path<TAB>name of every tool linked on PATH
-#   ./bootstrap.sh --list-models   the model table with a RAM verdict per row
-#   ./bootstrap.sh --fetch U D S   download U to D, verify sha256 S, or die
-#                                  cleanly (the download primitive, alone)
+#   ./bootstrap.sh --list-packages the packages this machine needs
+#   ./bootstrap.sh --list-tools    path<TAB>name of each tool on PATH
+#   ./bootstrap.sh --list-models   the models, and which ones fit
+#   ./bootstrap.sh --fetch U D S   download U to D, check its sha256 S
 #
 # Rows (contract 1):  ok | would | skip | todo   <what>   <why>
-#   ok     already true, or just applied        would   dry-run: would apply
-#   skip   not applicable here, with the reason todo    needs you (edit site.env)
+#   ok     done                     would  a dry run: would do it
+#   skip   not for this machine     todo   needs you
 set -eu
 REPO=$(cd "$(dirname "$0")" && pwd)
 . "$REPO/lib/env.sh"
@@ -23,7 +20,7 @@ OS=$(uname -s)
 ARCH=$(uname -m)
 MODE=apply
 VERBOSE=0
-usage() { sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+usage() { sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 case ${1:-} in
     --dry-run) MODE=dry ;;
     --verbose|-v) VERBOSE=1 ;;
@@ -83,7 +80,7 @@ MODELS_DIR=${SPARK_MODELS_DIR:-$SPARK_DATA_DIR/models}
 # SITE_PEER_AI_URL; spark client URL). No engine and no units here -- the
 # widget, the hook and the tokens are all a client needs
 client=0; [ "$SITE_AI_MODEL" = none ] && [ -n "$SITE_PEER_AI_URL" ] && client=1
-CLIENT_OF="a client of $SITE_PEER_AI_URL (spark client off serves here again)"
+CLIENT_OF="a client of $SITE_PEER_AI_URL (spark client off ends it)"
 
 # ------------------------------------------------------------- the lists
 list_packages() {
@@ -99,7 +96,7 @@ list_models() {
         # a client: never this machine's RAM as a budget; the rows alone
         # (spark model asks the peer's FORGE for its table)
         printf 'this machine is %s\n' "$CLIENT_OF"
-        echo "nothing is served here; what fits is the other machine's (spark model there)"
+        echo "nothing runs here (spark model on that machine)"
         model_rows_all | while read -r name file _url _bytes _sha ram src; do
             [ "$src" = - ] && src=' '
             printf ' %s %-20s %6s GB  %s\n' "$src" "$name" "$ram" "$file"
@@ -110,7 +107,7 @@ list_models() {
     total=$MEM_GB; budget=$(( total * ${SITE_AI_BUDGET:-60} / 100 ))
     spick=$(model_pick spark | awk '{ print $1 }')
     epick=$(model_pick ember | awk '{ print $1 }')
-    printf 'this machine: %s GB for models (RAM + GPU), budget %s GB (%s%%), %s\n' "$total" "$budget" "${SITE_AI_BUDGET:-60}" "$AI_BUILD"
+    printf 'this machine: %s GB for models, budget %s GB (%s%%), %s\n' "$total" "$budget" "${SITE_AI_BUDGET:-60}" "$AI_BUILD"
     printf 'SITE_AI_MODEL=%s, SITE_EMBER_MODEL=%s\n' "$SITE_AI_MODEL" "$SITE_EMBER_MODEL"
     [ -z "$CAP_NOTE" ] || printf '%s\n' "$CAP_NOTE"
     model_rows_all | while read -r name file _url _bytes _sha ram src; do
@@ -122,11 +119,11 @@ list_models() {
     printf 'spark: %s\n' "${spick:-none}"
     printf 'ember: %s\n' "${epick:-none}"
     if [ -n "$spick" ]; then
-        echo "* = spark (the prompt line), + = the chat model (conversations)"
+        echo "* the prompt line's model, + the chat model"
     else
         echo "no model chosen (none, or nothing fits)"
     fi
-    echo "u = yours; auto: the first tested row that fits, in this order (Apache-2.0, MIT)"
+    echo "u = yours; auto takes the first that fits"
 }
 
 case $MODE in
@@ -176,15 +173,14 @@ sudo_upfront() {
     [ "$(id -u)" -ne 0 ] || return 0
     [ "$client" = 1 ] && return 0               # a client of a shared engine needs no root
     if ! command -v sudo >/dev/null 2>&1; then
-        echo "bootstrap: no sudo here, and the packages and the units need root." >&2
-        echo "bootstrap: run it as root, or install sudo first. Nothing was changed." >&2
+        echo "bootstrap: this needs sudo, and there is none here -- nothing changed" >&2
         exit 1
     fi
     sudo -n true 2>/dev/null && return 0        # passwordless, or already cached
     [ -t 0 ] || return 0                        # nobody to ask: let the root step speak
-    printf 'spark needs sudo once, now: the packages and the units.\n'
+    printf 'spark needs sudo once, now.\n'
     if ! sudo -v; then
-        echo "bootstrap: sudo refused. Nothing was changed." >&2
+        echo "bootstrap: no sudo -- nothing changed" >&2
         exit 1
     fi
 }
@@ -241,7 +237,7 @@ if [ ! -f "$SPARK_CONFIG_DIR/site.env" ]; then
         mkdir -p "$SPARK_CONFIG_DIR"
         cp "$REPO/site.env.example" "$SPARK_CONFIG_DIR/site.env"
         chmod 0600 "$SPARK_CONFIG_DIR/site.env"
-        ok site "created; edit it and run again"
+        ok site "created"
     fi
 else
     # yours to edit, but never world-readable: it names you and your peers
@@ -250,7 +246,7 @@ else
 fi
 # spark.env: optional, every key a default -- but a documented file beats an empty one
 if [ ! -f "$SPARK_CONFIG_DIR/spark.env" ]; then
-    if need spark.env "create $SPARK_CONFIG_DIR/spark.env from spark.env.example (all defaults)"; then
+    if need spark.env "create $SPARK_CONFIG_DIR/spark.env from spark.env.example"; then
         cp "$REPO/home/.config/spark/spark.env.example" "$SPARK_CONFIG_DIR/spark.env"
         chmod 0600 "$SPARK_CONFIG_DIR/spark.env"
         ok spark.env "created"
@@ -259,21 +255,21 @@ fi
 ok name "$SITE_NAME  (user $SITE_USER)"
 pick=$(model_pick spark | awk '{ print $1 " (" $6 " GB)" }')
 case $SITE_AI_MODEL in
-    none) ok model "none: no download; bring your own .gguf or set SITE_AI_MODEL" ;;
-    *) [ -n "$pick" ] && ok model "$SITE_AI_MODEL -> $pick" || row todo model "SITE_AI_MODEL=$SITE_AI_MODEL: nothing fits $MEM_GB GB / not in models.env or yours" ;;
+    none) ok model "none (spark model NAME picks one)" ;;
+    *) [ -n "$pick" ] && ok model "$SITE_AI_MODEL -> $pick" || row todo model "no model $SITE_AI_MODEL that fits $MEM_GB GB -- spark model list" ;;
 esac
 epick=$(model_pick ember | awk '{ print $1 " (" $6 " GB)" }')
-if [ -z "$pick" ] && [ "$SITE_EMBER_MODEL" != none ]; then ok ember "no spark model here: nothing is served, no chat model"
+if [ -z "$pick" ] && [ "$SITE_EMBER_MODEL" != none ]; then ok ember "no chat model without a model"
 else case $SITE_EMBER_MODEL in
-    none) ok ember "none: the spark model answers everything" ;;
-    auto) [ -n "$epick" ] && ok ember "auto -> $epick" || ok ember "auto: nothing fits beside the spark model" ;;
-    *) [ -n "$epick" ] && ok ember "$SITE_EMBER_MODEL -> $epick" || row todo ember "SITE_EMBER_MODEL=$SITE_EMBER_MODEL: not in models.env, or it is the spark model (--list-models)" ;;
+    none) ok ember "none" ;;
+    auto) [ -n "$epick" ] && ok ember "auto -> $epick" || ok ember "auto: none fits beside the model" ;;
+    *) [ -n "$epick" ] && ok ember "$SITE_EMBER_MODEL -> $epick" || row todo ember "no chat model $SITE_EMBER_MODEL -- spark model --chat list" ;;
 esac; fi
 
 # ============================================================ 2. identity
 section identity
 if [ "$client" = 1 ] && [ "$SITE_SET_HOSTNAME" = yes ]; then
-    skip hostname "a client: the name is left as it is (the machine that serves owns its own)"
+    skip hostname "a client: the name stays"
 elif [ "$SITE_SET_HOSTNAME" = yes ]; then
     # read and set by what is present, never by family: hostname is not in
     # every base (uname -n is POSIX), hostnamectl is systemd's -- without it
@@ -292,7 +288,7 @@ elif [ "$SITE_SET_HOSTNAME" = yes ]; then
         ok hostname "$SITE_NAME"
     fi
 else
-    skip hostname "SITE_SET_HOSTNAME=no (display name only: $SITE_NAME)"
+    skip hostname "SITE_SET_HOSTNAME=no"
 fi
 
 # ============================================================ 3. packages
@@ -325,11 +321,11 @@ pkg_install() {   # pkg_install NAME... -- as root, the manager's own way
 }
 section packages
 if [ "$client" = 1 ]; then
-    skip packages "a client: nothing to install here (python3 and curl already run this)"
+    skip packages "a client: nothing to install"
 elif [ "$OS" = Darwin ]; then
-    ok packages "nothing required"
+    ok packages "nothing to install"
 elif [ -z "$PM" ]; then
-    row todo packages "no package list for this Linux ($(sed -n 's/^PRETTY_NAME=//p' "${SPARK_OS_RELEASE:-/etc/os-release}" 2>/dev/null | tr -d '"')): distro/*.env know debian, arch and void -- install git curl python3 and libgomp by hand"
+    row todo packages "no package list for $(sed -n 's/^PRETTY_NAME=//p' "${SPARK_OS_RELEASE:-/etc/os-release}" 2>/dev/null | tr -d '"') -- install git curl python3 and libgomp by hand"
 else
     missing=''; absent=''
     for p in $(list_packages); do
@@ -346,11 +342,11 @@ else
         elif [ "$PM" = pacman ]; then
             # the sync database is stale, most often: the fix is the full
             # upgrade, the user's to run (spark never -Sy's alone)
-            row todo packages "pacman could not install:$missing -- sudo pacman -Syu (a rolling distro: spark never refreshes the database without upgrading), then run again"
+            row todo packages "pacman could not install:$missing -- sudo pacman -Syu, then spark update"
         elif [ "$PM" = xbps ]; then
             # xbps itself is behind, most often (a rolling distro refuses
             # every install until it is current): the full upgrade is the fix
-            row todo packages "xbps could not install:$missing -- sudo xbps-install -Su (a rolling distro: xbps itself must be current), then run again"
+            row todo packages "xbps could not install:$missing -- sudo xbps-install -Su, then spark update"
         else
             tail -20 "$TMP/pkg.log"; echo "bootstrap: $PM install failed" >&2; exit 1
         fi
@@ -381,9 +377,9 @@ if [ "$client" = 1 ]; then
 elif [ "$SITE_AI_MODEL" = none ]; then
     # no model chosen, no peer either: nothing to run the engine for --
     # spark model NAME brings it (a client never gets one, see above)
-    skip engine "no model chosen -- spark model NAME brings the engine with it"
+    skip engine "no model chosen -- spark model NAME"
 elif [ -n "${SPARK_ENGINE_DIR:-}" ] && [ -x "$SPARK_ENGINE_DIR/llama-server" ]; then
-    ok engine "your build in $SPARK_ENGINE_DIR (SPARK_ENGINE_DIR)"
+    ok engine "your build in $SPARK_ENGINE_DIR"
 elif [ -x "$ENGINE_DIR/llama-server" ] && { [ -z "$ENGINE_SHA" ] || [ "$have" = "$ENGINE_FLAVOUR" ]; }; then
     ok engine "llama.cpp $LLAMA_VERSION $have"
 elif [ -z "$ENGINE_SHA" ]; then
@@ -394,9 +390,9 @@ elif [ -z "$ENGINE_SHA" ]; then
     if [ -x "$ENGINE_HOME/llama-server" ]; then
         ok engine "your llama-server ($ENGINE_HOME)"
     else
-        skip engine "no pin for llama.cpp $LLAMA_VERSION $OS/$ARCH ($AI_BUILD) -- set SPARK_ENGINE_DIR to a build of your own"
+        skip engine "no engine download for $OS/$ARCH ($AI_BUILD) -- SPARK_ENGINE_DIR names your own"
     fi
-elif need engine "install llama.cpp $LLAMA_VERSION $ENGINE_FLAVOUR$([ -z "$have" ] || echo " (replaces $have: the build here is $AI_BUILD now)")"; then
+elif need engine "install llama.cpp $LLAMA_VERSION $ENGINE_FLAVOUR$([ -z "$have" ] || echo " (replaces $have)")"; then
     fetch "https://github.com/ggml-org/llama.cpp/releases/download/$LLAMA_VERSION/llama-$LLAMA_VERSION-bin-$ENGINE_FLAVOUR.tar.gz" "$TMP/llama.tgz" "$ENGINE_SHA"
     rm -rf "$ENGINE_DIR"
     mkdir -p "$ENGINE_DIR"
@@ -430,16 +426,16 @@ for role in spark ember; do
     if [ "$choice" = none ]; then
         [ "$role" = spark ] && skip model "SITE_AI_MODEL=none" || skip ember "SITE_EMBER_MODEL=none"
     elif [ "$role" = ember ] && [ -z "$(model_pick spark)" ]; then
-        skip ember "no spark model here: nothing is served, no chat model"
+        skip ember "no chat model without a model"
     elif [ $# -lt 6 ]; then
         skip "$rname" "nothing chosen"
     elif [ -f "$MODELS_DIR/$2" ]; then
-        ok "$rname" "$1: $2"
-    elif need "$rname" "download $1 ($6 GB RAM, $(( $4 / 1048576 )) MB): $2"; then
+        ok "$rname" "$1"
+    elif need "$rname" "download $1 ($(( $4 / 1048576 )) MB)"; then
         mkdir -p "$MODELS_DIR"
         fetch "$3" "$MODELS_DIR/$2.part" "$5"
         mv "$MODELS_DIR/$2.part" "$MODELS_DIR/$2"
-        ok "$rname" "$1: $2"
+        ok "$rname" "$1"
     fi
 done
 
@@ -448,7 +444,7 @@ section token
 tok=${SPARK_API_KEY_FILE:-$SPARK_STATE_DIR/api-token}
 if [ -s "$tok" ]; then
     ok token "$tok"
-elif need token "create $tok (0600; the value is never printed)"; then
+elif need token "create $tok"; then
     mkdir -p "$(dirname "$tok")"; chmod 0700 "$SPARK_STATE_DIR" 2>/dev/null || true
     umask 077
     python3 -c 'import secrets; print(secrets.token_urlsafe(32))' > "$tok"
@@ -502,9 +498,9 @@ case $rc_shell in
     *)    rc=; rc_line= ;;
 esac
 if [ -z "$rc" ]; then
-    row todo rc "shell $rc_shell: no prompt line for it -- bash 4+ or zsh hosts one (chsh -s /bin/zsh)"
+    row todo rc "shell $rc_shell has no prompt line -- chsh -s /bin/zsh"
 elif [ "$rc_shell" = bash ] && [ "${rc_major:-0}" -lt 4 ]; then
-    row todo rc "bash ${rc_major:-3} cannot host the prompt line -- zsh can (chsh -s /bin/zsh)"
+    row todo rc "bash ${rc_major:-3} is too old for the prompt line -- chsh -s /bin/zsh"
 elif grep -qF 'config/spark/hook.' "$rc" 2>/dev/null; then
     ok rc "~${rc#"$HOME"} sources the hook"
 elif need rc "add one line to ~${rc#"$HOME"}"; then
@@ -520,9 +516,9 @@ rc_prof="$HOME/.bash_profile"
 if [ "$rc_shell" = bash ] && [ "${rc_major:-0}" -ge 4 ] && [ -f "$rc_prof" ] && [ ! -L "$rc_prof" ] \
    && ! grep -qF 'config/spark/hook.' "$rc_prof" 2>/dev/null \
    && ! grep -qE '\.bashrc|\.profile' "$rc_prof" 2>/dev/null; then
-    if need rc-login "add one line to ~${rc_prof#"$HOME"} (it shadows ~/.profile)"; then
+    if need rc-login "add one line to ~${rc_prof#"$HOME"}"; then
         printf '\n%s\n' "$rc_line" >> "$rc_prof"
-        ok rc-login "~${rc_prof#"$HOME"} sources the hook (it shadowed ~/.profile)"
+        ok rc-login "~${rc_prof#"$HOME"} sources the hook"
     fi
 fi
 
@@ -534,7 +530,7 @@ section tools
     elif need "$name" "link $link -> $REPO/$rel"; then ln -sfn "$REPO/$rel" "$link"; ok "$name" "$link"; fi
 done
 found=$(command -v spark 2>/dev/null || true)
-[ -z "$found" ] || [ "$found" = "$HOME/.local/bin/spark" ] || skip PATH "another spark shadows ~/.local/bin/spark: $found (put ~/.local/bin first)"
+[ -z "$found" ] || [ "$found" = "$HOME/.local/bin/spark" ] || skip PATH "another spark comes first on PATH: $found"
 
 # =============================================================== 9. hooks
 section hooks
@@ -550,11 +546,17 @@ have_model=0; ls "$MODELS_DIR"/*.gguf >/dev/null 2>&1 && have_model=1
 engine_bin=$ENGINE_HOME
 serve_ready=0
 [ -x "$engine_bin/llama-server" ] && [ "$have_model" = 1 ] && [ -s "$tok" ] && [ "${SPARK_SERVICE:-auto}" = auto ] && serve_ready=1
-serve_why="engine $([ -x "$engine_bin/llama-server" ] && echo yes || echo no), model $([ "$have_model" = 1 ] && echo yes || echo no), token $([ -s "$tok" ] && echo yes || echo no), SPARK_SERVICE=${SPARK_SERVICE:-auto}"
+# why the engine's unit is not wanted, in a few words: what is missing
+serve_why=
+[ -x "$engine_bin/llama-server" ] || serve_why="$serve_why, no engine"
+[ "$have_model" = 1 ] || serve_why="$serve_why, no model"
+[ -s "$tok" ] || serve_why="$serve_why, no token"
+[ "${SPARK_SERVICE:-auto}" = auto ] || serve_why="$serve_why, SPARK_SERVICE=${SPARK_SERVICE}"
+serve_why=${serve_why#, }; [ -n "$serve_why" ] || serve_why=ready
 # the FORGE (the served agent): on, or auto = wherever the model server is
 forge_ready=0
 case ${SPARK_FORGE:-auto} in on) forge_ready=1 ;; auto) forge_ready=$serve_ready ;; esac
-forge_why="SPARK_FORGE=${SPARK_FORGE:-auto}, server $([ "$serve_ready" = 1 ] && echo yes || echo no)"
+case ${SPARK_FORGE:-auto} in off) forge_why="SPARK_FORGE=off" ;; *) forge_why="the engine is off" ;; esac
 # a box that is the brain: the units run from boot with nobody logged in
 # and the box never sleeps (SITE_HEADLESS=yes; `spark serve boot on`)
 headless=0; [ "$SITE_HEADLESS" = yes ] && headless=1
@@ -594,16 +596,16 @@ elif [ "$OS" = Darwin ]; then
             if [ ! -f "$src/$1.plist" ]; then skip daemons "$1 not rendered yet (install.sh runs first)"; return 0; fi
             cp "$src/$1.plist" "$TMP/$1.plist"
             plutil -insert UserName -string "$me" "$TMP/$1.plist"
-            if [ "$dloaded" = 1 ] && [ "$gone" = 1 ] && cmp -s "$TMP/$1.plist" "$dplist"; then ok daemons "$1 loaded in system/ (runs as $me from boot)"
-            elif need daemons "install $1 as a LaunchDaemon in system/, boot out its login agent (sudo)"; then
+            if [ "$dloaded" = 1 ] && [ "$gone" = 1 ] && cmp -s "$TMP/$1.plist" "$dplist"; then ok daemons "$1 runs from boot"
+            elif need daemons "run $1 from boot (sudo)"; then
                 launchctl bootout "$dom/$1" 2>/dev/null || true; rm -f "$agents/$1.plist"
                 [ "$dloaded" = 0 ] || as_root launchctl bootout "system/$1" 2>/dev/null || true
                 as_root install -o root -g wheel -m 0644 "$TMP/$1.plist" "$dplist"
                 as_root launchctl bootstrap system "$dplist"
-                ok daemons "$1 loaded in system/ (runs as $me from boot)"
+                ok daemons "$1 runs from boot"
             fi
         elif [ "$dloaded" = 0 ] && [ ! -f "$dplist" ] && [ "$gone" = 1 ]; then skip daemons "$1 not installed ($why)"
-        elif need daemons "boot out and remove $1 ($why) (sudo)"; then
+        elif need daemons "remove $1 ($why) (sudo)"; then
             launchctl bootout "$dom/$1" 2>/dev/null || true; rm -f "$agents/$1.plist"
             [ "$dloaded" = 0 ] || as_root launchctl bootout "system/$1" 2>/dev/null || true
             as_root rm -f "$dplist"; ok daemons "$1 removed"
@@ -612,7 +614,7 @@ elif [ "$OS" = Darwin ]; then
     unit() {   # unit LABEL WANTED [WHY] -- a daemon when headless, else a login agent; never both
         if [ "$headless" = 1 ]; then daemon "$@"; return 0; fi
         if launchctl print "system/$1" >/dev/null 2>&1 || [ -f "$daemons/$1.plist" ]; then
-            if need daemons "boot out and remove the $1 daemon: a login agent again (SITE_HEADLESS=no) (sudo)"; then
+            if need daemons "run $1 at login again (sudo)"; then
                 as_root launchctl bootout "system/$1" 2>/dev/null || true; as_root rm -f "$daemons/$1.plist"; ok daemons "$1 removed"
             fi
         fi
@@ -623,12 +625,12 @@ elif [ "$OS" = Darwin ]; then
     # the rows skip -- the systemd block's guard, in launchd's terms (a
     # daemon of SITE_HEADLESS=yes is in system/ and needs no session)
     if [ "$headless" = 0 ] && ! launchctl print "$dom" >/dev/null 2>&1; then
-        skip launchd "no gui launchd domain (ssh or CI): the login agents need a logged-in session"
+        skip launchd "no login session here (ssh or CI)"
     else
         unit spark.check 1
         if [ "$serve_ready" = 1 ] && ! launchctl print "$dom/spark.serve" >/dev/null 2>&1 && ! launchctl print system/spark.serve >/dev/null 2>&1 \
            && curl -fs -m 2 "http://127.0.0.1:${SPARK_PORT:-8080}/health" >/dev/null 2>&1; then
-            skip spark.serve "port ${SPARK_PORT:-8080} already answers /health (another server); not installing"
+            skip spark.serve "port ${SPARK_PORT:-8080} already answers: another server"
         else
             unit spark.serve "$serve_ready"
         fi
@@ -643,7 +645,7 @@ elif [ "$OS" = Darwin ]; then
         cur=$(printf '%s\n' "$pm" | awk -v k="$k" '$1 == k { print $2; exit }')
         [ -z "$cur" ] || [ "$cur" = "$v" ] || { pm_set="$pm_set $k $v"; pm_now="$pm_now $k=$cur"; }
     done
-    if [ "$headless" = 0 ]; then skip sleep "left as is (pmset -g); SITE_HEADLESS=no sets nothing"
+    if [ "$headless" = 0 ]; then skip sleep "left as it is"
     elif [ -z "$pm_set" ]; then ok sleep "never sleeps, wake on LAN (pmset)"
     elif need sleep "pmset -a$pm_set (now:$pm_now) (sudo)"; then
         # shellcheck disable=SC2086
@@ -658,11 +660,11 @@ else
     if [ -e /dev/dri/renderD128 ] && getent group render >/dev/null 2>&1 && { [ "$headless" = 1 ] || [ "$AI_BUILD" = vulkan ]; }; then
         # runit: the services take their groups from runsvdir-USER when it
         # starts, never from a login (until then the servers use sg render)
-        if [ "$INIT" = runit ]; then again="sudo sv restart runsvdir-$(id -un)"; seen="once runsvdir-$(id -un) restarts ($again, or a reboot); until then the servers use sg render"
-        else again="log in again"; seen="once you log out of every session and in again"; fi
+        if [ "$INIT" = runit ]; then again="sudo sv restart runsvdir-$(id -un)"; seen="after $again"
+        else again="log in again"; seen="once you log in again"; fi
         if id -nG | tr " " "\n" | grep -qx render; then ok render "in the render group"
         elif need render "usermod -aG render $(id -un) (sudo; then $again)"; then
-            as_root usermod -aG render "$(id -un)"; made render; ok render "added -- the units see the GPU $seen"; fi
+            as_root usermod -aG render "$(id -un)"; made render; ok render "added -- the GPU works $seen"; fi
     fi
     if [ "$INIT" = runit ]; then
         # runit (Void): no user manager and no timer, so the user's services
@@ -680,9 +682,9 @@ else
         sv_units="spark-check spark-serve spark-forge"
         sv_show() { printf '~%s' "${1#"$HOME"}"; }
         sv_first() { sv status "$1" 2>/dev/null | awk '{ print $1; exit }'; }
-        skip linger "runit: the supervisor runs from boot, login or not"
+        skip linger "runit: runs from boot"
         if [ "$RUNIT_LIVE" != 1 ]; then
-            skip runit "runit is not running here (a container): the services wait for a machine that boots"
+            skip runit "runit is not running here (a container)"
         else
             # the svlogd dirs first: a log service starts with its runsv,
             # `down` file or not, and dies without its directory
@@ -778,7 +780,7 @@ EOF
                             # finish: its run exited and runsv brings it back --
                             # enabled, not running; the svlogd tail says why
                             finish:) row todo "$1" "enabled, not running: its run exited and runsv restarts it -- tail $(sv_show "$logs/$1/current")" ;;
-                            *) row todo "$1" "sv up $(sv_show "$d"): no runsv answers for it yet (runsvdir scans every 5 s) -- run again in a minute" ;;
+                            *) row todo "$1" "sv up $(sv_show "$d"): not supervised yet -- spark update in a minute" ;;
                         esac
                     fi
                 elif [ ! -f "$d/down" ]; then
@@ -796,7 +798,7 @@ EOF
         DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=$XDG_RUNTIME_DIR/bus}"
         export DBUS_SESSION_BUS_ADDRESS
         if ! systemctl --user show-environment >/dev/null 2>&1; then
-            skip systemd "no user systemd session (headless or container)"
+            skip systemd "no user systemd here"
         else
             [ "$MODE" = dry ] || systemctl --user daemon-reload
             # first, before a unit starts a server: linger. headless: nobody
@@ -804,7 +806,7 @@ EOF
             # user's units run from boot, not from login). A workstation keeps
             # linger from its login session; SITE_HEADLESS=no sets nothing there.
             if [ "$headless" = 0 ]; then
-                skip linger "a workstation (SITE_HEADLESS=no): units run from login"
+                skip linger "a workstation: units run from login"
             elif [ "$(loginctl show-user "$(id -un)" -p Linger --value 2>/dev/null)" = yes ]; then ok linger "units run from boot"
             elif need linger "loginctl enable-linger $(id -un) (sudo)"; then
                 as_root loginctl enable-linger "$(id -un)"; made linger; ok linger "units run from boot"; fi
@@ -837,8 +839,8 @@ EOF
         # no sleep targets and no logind on runit: a Void box that is a brain
         # needs no mask, and its lid is elogind's or acpid's; a hand-set
         # SITE_HEADLESS=yes stands (the services run from boot by construction)
-        skip sleep "runit: no sleep targets here; nothing puts this machine to sleep on its own"
-        skip lid "runit: the lid is elogind's or acpid's here; left alone"
+        skip sleep "runit: nothing here sleeps on its own"
+        skip lid "runit: left to elogind or acpid"
     else
         # sleep: a brain never sleeps (the four sleep targets masked) and a laptop
         # as the box keeps running with its lid shut (a logind drop-in, HUP to
@@ -851,7 +853,7 @@ EOF
         lid=$(printf '[Login]\nHandleLidSwitch=ignore\nHandleLidSwitchExternalPower=ignore\n')
         # WSL 2 stops with its last window: a hand-set SITE_HEADLESS=yes there is a
         # todo, never a systemctl mask (spark serve boot on refuses it first)
-        if [ "$headless" = 1 ] && is_wsl; then row todo headless "WSL 2 stops with its last window: not a brain (a Linux machine is)"; headless=0; fi
+        if [ "$headless" = 1 ] && is_wsl; then row todo headless "WSL 2 stops with its last window -- use a Linux machine"; headless=0; fi
         if [ "$headless" = 1 ]; then
             if [ "$nmasked" = 4 ]; then ok sleep "sleep, suspend, hibernate masked"
             elif need sleep "systemctl mask $targets (sudo)"; then
@@ -864,9 +866,9 @@ EOF
                 as_root systemctl kill -s HUP systemd-logind.service 2>/dev/null || true
                 ok lid "ignored ($dropin)"; fi
         elif [ "$nmasked" = 0 ] && [ ! -f "$dropin" ]; then
-            skip sleep "a workstation (SITE_HEADLESS=no)"
+            skip sleep "a workstation"
         elif [ "${SPARK_HEADLESS_UNDO:-}" != 1 ]; then
-            skip sleep "masked by a brain on this machine (spark serve boot off undoes it)"
+            skip sleep "masked (spark serve boot off undoes it)"
         else
             if [ "$nmasked" != 0 ] && need sleep "systemctl unmask $targets (SITE_HEADLESS=no) (sudo)"; then
                 # shellcheck disable=SC2086
@@ -894,12 +896,12 @@ if [ "$client" = 1 ]; then
     # no sudo). This is what lets a second OS user set up in userspace.
     skip share "$CLIENT_OF"
 elif [ "$OS" = Darwin ] || is_wsl; then
-    if [ "$SITE_SHARE" = yes ]; then row todo share "one user per machine here (macOS/WSL): a shared engine is for a Linux machine"
-    else skip share "not shared (one user per machine on macOS/WSL)"; fi
+    if [ "$SITE_SHARE" = yes ]; then row todo share "macOS and WSL have one user per machine -- spark serve share off"
+    else skip share "not shared"; fi
 elif [ "$SITE_SHARE" != yes ]; then
     if { [ -f "$share_tok" ] || [ -f "$share_url" ]; } && need share "remove $share_tok, $share_url (SITE_SHARE=no) (sudo)"; then
         as_root rm -f "$share_tok" "$share_url"; ok share "not shared"
-    else skip share "not shared (SITE_SHARE=no; spark serve share on)"; fi
+    else skip share "not shared"; fi
 elif [ ! -s "$tok" ]; then
     row todo share "no api-token yet: spark serve on first, then spark serve share on"
 else
@@ -964,7 +966,8 @@ section knowledge
 knowledge() { PYTHONPATH="$REPO/lib" python3 -m spark.intake "$@"; }
 if knowledge fresh 2>/dev/null; then
     skip knowledge "fresh"
-elif need knowledge "read the programs, manuals and apps on this machine"; then
+elif need knowledge "read this machine's programs and manuals"; then
+
     ok knowledge "$(knowledge build 2>/dev/null || true)"
 fi
 

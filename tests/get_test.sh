@@ -65,7 +65,7 @@ newest_tag=$(git -C "$T/origin.git" tag -l 'v[0-9]*' --sort=-v:refname | head -1
 
 # 1. --clone-only, no ref: a full clone at ~/.spark, detached at the newest tag
 out=$(sh "$REPO/get" --clone-only 2>&1) || bad "get --clone-only failed: $out"; note "$out"
-printf '%s\n' "$out" | head -1 | grep -q '^spark get -- clone .* to ~/.spark, then spark setup (no sudo)$' \
+printf '%s\n' "$out" | head -1 | grep -q '^spark get -- installs spark in ~/.spark (no sudo)$' \
     && ok "the first line says what it does" || bad "first line: $(printf '%s\n' "$out" | head -1)"
 [ -x "$HOME/.spark/bin/spark" ] && ok "cloned to ~/.spark, bin/spark present" || bad "no bin/spark in the clone"
 # a full clone: get passes no --depth; a CI checkout is itself shallow, so the

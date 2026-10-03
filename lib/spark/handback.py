@@ -207,7 +207,7 @@ def palette(ctx, tmp):
                             "spark-console.service is disabled and removed",
                             "sudo systemctl disable spark-console.service; sudo rm -f %s" % CONSOLE_UNIT) and held
         if any(PALETTE_ROWS in l for l in _lines(_read(RC_LOCAL) or "")):
-            ctx.row("todo", WHAT, "%s still paints spark's old palette at boot: its setvtrgb line is yours to delete" % RC_LOCAL)
+            ctx.row("todo", WHAT, "%s still paints spark's old palette: delete its setvtrgb line" % RC_LOCAL)
     if ctx.dry:
         ctx.row("would", WHAT, "spark's palette files leave ~/.config/spark (console-colors)")
     elif held:
@@ -341,12 +341,12 @@ def boot(ctx, tmp):
             left.add(kind)
     if any(k == "uki" for k, _, _, _ in steps):
         # spark set systemd-boot's wait to 0 and never kept the value before
-        ctx.row("todo", WHAT, "the boot menu's wait stays as spark set it (timeout 0 in /boot/loader/loader.conf): "
-                              "the value before was not recorded, so set it back by hand if you want the menu")
+        ctx.row("todo", WHAT, "the boot menu's wait stays 0 (/boot/loader/loader.conf): "
+                              "set it by hand if you want the menu")
     for kind in sorted(kinds - left):
         argv, done = REBUILDS[kind]
         if kind in pending:
-            done += " (a retry: the last run's failed)"
+            done += " (again: the last one failed)"
         if ctx.root(WHAT, argv, done, timeout=600):
             kinds.discard(kind)
     if not ctx.dry:
@@ -395,7 +395,7 @@ def terminal(ctx, tmp):
     gone = sorted(k for k in ws if k in names) if isinstance(ws, dict) else []
     if not gone and not files:
         return False
-    done = "the spark profiles left Terminal.app; open windows keep their look until closed"
+    done = "the spark profiles left Terminal.app"
     if ctx.dry:
         ctx.row("would", WHAT, done)
         return True

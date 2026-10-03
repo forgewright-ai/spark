@@ -346,12 +346,12 @@ def chaos_tags_behind(m):
     return ""
 
 
-@scenario(row="models", expect=WARN, want="sha256 mismatch", heal=None,
+@scenario(row="models", expect=WARN, want="damaged", heal=None,
           unhealed="the remedy re-downloads the file: a network this "
                    "fixture does not have")
 def chaos_truncated_model(m):
-    """A model file truncated on disk: the models row says sha256
-    mismatch, and `spark model verify` names the file."""
+    """A model file truncated on disk: the models row says it is
+    damaged, and `spark model verify` names the file."""
     path = os.path.join(m.models, "fixture.gguf")
     with open(path, "r+") as f:
         f.truncate(100)

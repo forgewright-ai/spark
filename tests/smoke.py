@@ -2283,7 +2283,24 @@ def living_core_cases(t):
         t.ok("\033[32m" in plain and "\033[33m!" in plain and "\033[31m" in plain and "\033[2m" in plain
              and "\033[1;31m" not in plain and _ck.render(_Ctx, rows, True, roles=False) == plain,
              "living: unawakened, the check keeps its fixed 32/33/31/2", repr(plain[-120:]))
-        t.ok(_ck.row_look(_Ctx).status == "na" and "spark awaken" in _ck.row_look(_Ctx).value,
+        # v1.72: bare, the rows that need you and the totals; every=True
+        # (spark check --all) the header and every row by category
+        bare, every = _ck.render(_Ctx, rows, False), _ck.render(_Ctx, rows, False, every=True)
+        arrow = _sp.glyph("arrow")
+        t.ok(bare.splitlines()[:4] == ["  ! b           hm", "    %s do x" % arrow,
+                                       "  %s c           bad" % _ck.GLYPH["fail"], "    %s do y" % arrow]
+             and len(bare.splitlines()) == 5 and "fine" not in bare and "none" not in bare
+             and "CAPABILITY" not in bare and bare.splitlines()[-1] == every.splitlines()[-1],
+             "check: bare prints the warn and fail rows with their remedies, then the totals", bare)
+        t.ok(every.startswith("spark check ") and "\nCAPABILITY\n" in every and "  %s a           fine" % _ck.GLYPH["ok"] in every
+             and "  %s d           none" % _ck.GLYPH["na"] in every,
+             "check --all: the header, the category, every row", every)
+        calm = [_ck.ok("fine"), _ck.na("none")]
+        for r, n in zip(calm, ("a", "d")):
+            r.name, r.category = n, "CAPABILITY"
+        t.ok(len(_ck.render(_Ctx, calm, False).splitlines()) == 1,
+             "check: a machine with nothing to fix prints the totals alone", _ck.render(_Ctx, calm, False))
+        t.ok(_ck.row_look(_Ctx).status == "na" and _ck.row_look(_Ctx).remedy == "spark awaken",
              "living: the look row is na until spark awaken", _ck.row_look(_Ctx).value)
 
         # --- clean(): what a words or faces line may hold
@@ -4871,7 +4888,7 @@ def main():
         rc, out2, _ = spark("share", "-h")
         t.ok(rc == 0 and out2 == out, "share -h, the older spelling: the same help", out2[:40])
         rc, out, _ = spark("serve", "share")
-        t.ok(rc == 0 and "SITE_SHARE=no" in out, "serve share: status shows not-shared by default", out[:80])
+        t.ok(rc == 0 and out.startswith("spark serve share -- off"), "serve share: status shows not-shared by default", out[:80])
         rc, out2, _ = spark("share")
         t.ok(rc == 0 and out2 == out, "share, the older spelling: the same status", out2[:80])
         from spark import site as sitemod, config as configmod
@@ -5139,7 +5156,7 @@ def main():
         rc, out, _ = spark("check", "hardening", "--porcelain", "--fresh")
         rc2, out2, _ = spark("check", "hardening", "--porcelain")
         os.remove(home + "/.local/state/spark/forge-url")
-        want = "\tok\thardening\t%d of %d gates hold at %s\t" % (len(_wire.GATES), len(_wire.GATES), hurl.split("//")[-1])
+        want = "\tok\thardening\t%d of %d safety checks pass at %s\t" % (len(_wire.GATES), len(_wire.GATES), hurl.split("//")[-1])
         t.ok(rc == 0 and want in out and rc2 == 0 and want in out2,
              "check hardening: the served FORGE holds every gate -- ok, fresh and from the cache", out + out2)
         hs.shutdown()
@@ -6140,7 +6157,7 @@ def main():
             "config.model_tables = lambda *a, **k: [%s] + _t(*a, **k); " % dense)],
             capture_output=True, text=True, timeout=30,
             env=dict(env, SPARK_NO_APPLY="1", SPARK_SYSFS_DRM=home + "/nodrm", SPARK_MEM_TOTAL_GB="18", SITE_AI_BUILD="cpu"))
-        t.ok(p.stdout.strip() == "gemma4-e4b none cpu auto stops at 3 GB files on cpu (bigger fits, slower than 8 tok/s)",
+        t.ok(p.stdout.strip() == "gemma4-e4b none cpu auto picks files under 3 GB on cpu: bigger ones are slow",
              "twin: a dense row over the cpu cap is held back, the note says so", p.stdout + p.stderr)
         t.ok(linux_pick(SITE_AI_BUILD="vulkan", SPARK_MEM_TOTAL_GB="19") == "gemma4-e4b none vulkan -",
              "twin: 19 GB vulkan -> gemma4-e4b, the first in the list that fits (qwen3-14b fits too), no note",
@@ -6305,6 +6322,24 @@ def main():
         rc, outp2, _ = spark("check", "--porcelain")
         t.ok(re.search(r"^CAPABILITY\twarn\tmodels\t", outp2, re.M),
              "spark check --porcelain: models row warn once the file is corrupted", outp2)
+        # v1.72: bare `spark check` prints the rows that need you (warn,
+        # fail) with their remedies, then the totals; --all is every row
+        rc, outd, _ = spark("check")
+        rc2, outa, _ = spark("check", "--all")
+        _need = [l.split("\t") for l in outp2.splitlines() if l.split("\t")[1:2] in (["warn"], ["fail"])]
+        _drows = [l for l in outd.splitlines() if re.match(r"^  \S \S", l)]
+        t.ok([r.split()[1] for r in _drows] == [n[2] for n in _need] and "models" in outd and "damaged" in outd
+             and "CAPABILITY" not in outd and "SOFTWARE" not in outd and not outd.startswith("spark check")
+             and re.match(r"^\S \d+  \S \d+  ! \d+  \S \d+$", outd.splitlines()[-1]),
+             "spark check: only the rows that need you, each with its remedy, then the totals", outd)
+        _arows = [l for l in outa.splitlines() if re.match(r"^  \S \S", l)]
+        t.ok(outa.startswith("spark check ") and "CAPABILITY" in outa and "NONFUNCTIONAL" in outa
+             and len(_arows) == len(outp2.splitlines()) and outa.splitlines()[-1] == outd.splitlines()[-1],
+             "spark check --all: the header, every row by category, the same totals", outa[:300])
+        rc, outn, _ = spark("check", "users")
+        t.ok(len([l for l in outn.splitlines() if re.match(r"^  \S \S", l)]) == 1
+             and re.search(r"(?m)^  \S users ", outn) is not None and not outn.startswith("spark check"),
+             "spark check NAME: the row asked for shows, ok or not", outn)
         os.remove(model_path)
         os.remove(user_models_file)
         del STATE["head_body"]
@@ -6374,14 +6409,14 @@ def main():
         os.write(_fd, b"t\n")
         os.close(_fd)
         rc, outf, _ = spark("check", "--porcelain")
-        t.ok(re.search(r"^CAPABILITY\twarn\tforge\tthe page's server runs 0\.0, the tree is [^\t]+\tspark serve off; spark serve on", outf, re.M) is not None,
+        t.ok(re.search(r"^CAPABILITY\twarn\tforge\tthe page runs 0\.0, spark is [^\t]+\tspark serve off; spark serve on", outf, re.M) is not None,
              "check: the forge row warns when the FORGE runs an older version than the tree",
              "\n".join(l for l in outf.splitlines() if "\tforge\t" in l))
         # with a unit, the remedy restarts the page alone by its init's own
         # line -- never serve off; on (the engine bounced, spark.env rewritten)
         rc, outf, _ = spark("check", "--porcelain", "--fresh", extra={"SPARK_SERVICE_STATE": "loaded"})
         _frow = "\n".join(l for l in outf.splitlines() if "\tforge\t" in l)
-        t.ok("the page's server runs 0.0" in _frow and "spark serve off" not in _frow
+        t.ok("the page runs 0.0" in _frow and "spark serve off" not in _frow
              and re.search(r"restart spark-forge|kickstart -k \S*spark\.forge|sv restart \S*spark-forge", _frow) is not None,
              "check: a page unit's stale server -- the remedy restarts the page's unit alone", _frow)
         os.remove(_stdir + "/forge-url")
@@ -6472,7 +6507,7 @@ def main():
                  "pending row: a security upgrade waiting is a warn with apt's upgrade line", str((r.status, r.value, r.remedy)))
             _pkgmod.security = lambda: 0
             r = _chk.row_pending(_Ctx())
-            t.ok((r.status, r.value) == ("ok", "5 updates pending, no security upgrades pending"),
+            t.ok((r.status, r.value) == ("ok", "5 updates pending, none for security"),
                  "pending row: none waiting keeps the ok text and says so", str((r.status, r.value)))
             _pkgmod.manager, _pkgmod.security = (lambda: "pacman"), (lambda: None)
             r = _chk.row_pending(_Ctx())
@@ -6511,38 +6546,34 @@ def main():
                 return _kstate["s"]
             _intake.refresh = _krefresh
             r = _chk.row_knowledge(_KCtx())
-            t.ok((r.status, r.value, r.remedy) == ("warn", "no index yet, so the prompt line answers from the model alone",
-                                                   "./bootstrap.sh   (row knowledge)") and _kcalls == [],
+            t.ok((r.status, r.value, r.remedy) == ("warn", "not built yet", "spark update") and _kcalls == [],
                  "knowledge row: no index is a warn naming bootstrap, and the row builds nothing", str((r.status, r.value, _kcalls)))
             _kstate["s"] = ({"program": 412, "manual": 380, "app": 12, "spark": 45}, _now - 180, False, 0)
             r = _chk.row_knowledge(_KCtx())
-            t.ok((r.status, r.value) == ("ok", "412 programs, 380 manuals, 12 apps and 45 spark verbs, read 3 minutes ago")
+            t.ok((r.status, r.value) == ("ok", "412 programs, 380 manuals, read 3 min ago")
                  and _kcalls == [5], "knowledge row: the counts in words and the age, after a 5-second refresh", str((r.value, _kcalls)))
             _kstate["s"] = ({"program": 1, "manual": 1, "app": 1, "spark": 1}, _now - 3 * 86400, False, 1)
             r = _chk.row_knowledge(_KCtx())
-            t.ok((r.status, r.value) == ("ok", "1 program, 1 manual, 1 app and 1 spark verb, read 3 days ago, and 1 program "
-                                               "was left out because spark could not read it safely"),
-                 "knowledge row: one of each is singular, and the skipped programs are said", r.value)
+            t.ok((r.status, r.value) == ("ok", "1 program, 1 manual, read 3 days ago"),
+                 "knowledge row: one of each is singular; the skipped programs are not the user's to read", r.value)
             _kstate["s"] = ({"program": 9}, _now - 2 * 3600 - 59, True, 7)
             r = _chk.row_knowledge(_KCtx())
-            t.ok((r.status, r.value, r.remedy) == ("warn", "read 2 hours ago, and the newest programs are not in it yet",
-                                                   "./bootstrap.sh   (row knowledge)"),
+            t.ok((r.status, r.value, r.remedy) == ("warn", "read 2 hours ago, new programs missing", "spark update"),
                  "knowledge row: a stale index warns, in whole hours, and names bootstrap", str((r.status, r.value)))
             _kstate["s"] = ({}, _now - 5, False, 3)
             r = _chk.row_knowledge(_KCtx())
-            t.ok((r.status, r.value) == ("ok", "an empty index, read just now, and 3 programs were left out because spark "
-                                               "could not read them safely"),
+            t.ok((r.status, r.value) == ("ok", "empty, read just now"),
                  "knowledge row: an empty index is said, never a blank", r.value)
             # G0 M7: a check a person typed only reports, never refreshes
             _KCtx.unattended = False
             _kcalls[:] = []
             _kstate["s"] = ({"program": 9}, _now - 600, False, 0)
             r = _chk.row_knowledge(_KCtx())
-            t.ok((r.status, r.value) == ("ok", "9 programs, read 10 minutes ago") and _kcalls == [],
+            t.ok((r.status, r.value) == ("ok", "9 programs, read 10 min ago") and _kcalls == [],
                  "knowledge row: a check a person typed reports and never refreshes", str((r.value, _kcalls)))
             _KCfg.knowledge = False
             r = _chk.row_knowledge(_KCtx())
-            t.ok((r.status, r.value) == ("na", "switched off in spark.env (SPARK_KNOWLEDGE=off)") and _kcalls == [],
+            t.ok((r.status, r.value) == ("na", "off (SPARK_KNOWLEDGE=off)") and _kcalls == [],
                  "knowledge row: SPARK_KNOWLEDGE=off is na, and intake is not asked", str((r.status, r.value)))
         finally:
             _intake.status, _intake.refresh = _ksaved
@@ -6575,7 +6606,7 @@ def main():
         rc, out, err = spark("check", "knowledge", "--porcelain", extra={"SPARK_KNOWLEDGE": "maybe"})
         t.ok(rc == 2 and "SPARK_KNOWLEDGE must be on or off" in out + err, "SPARK_KNOWLEDGE=maybe is refused by name", repr(out + err))
         rc, out, err = spark("check", "knowledge", "--porcelain", extra={"SPARK_KNOWLEDGE": "off"})
-        t.ok(out.strip("\n") == "CAPABILITY\tna\tknowledge\tswitched off in spark.env (SPARK_KNOWLEDGE=off)\t",
+        t.ok(out.strip("\n") == "CAPABILITY\tna\tknowledge\toff (SPARK_KNOWLEDGE=off)\t",
              "spark check knowledge with SPARK_KNOWLEDGE=off: the row is na", repr(out + err))
         rc, out, err = spark("check", "knowledge", "--porcelain")
         t.ok(out.startswith("CAPABILITY\t") and "\tknowledge\t" in out and "\tfail\t" not in out,
@@ -6774,8 +6805,8 @@ def main():
         rc, out, _ = spark("help", extra={"PAGER": "/bin/false"})
         t.ok(rc == 0 and "your own AI, on a machine you own" in out,
              "spark help piped with PAGER=/bin/false: rc 0, the usage prints", out)
-        rc, out, _ = spark("check", "memory", extra={"PAGER": "/bin/false"})
-        t.ok(rc == 0 and out.startswith("spark check ") and "memory" in out,
+        rc, out, _ = spark("check", "--all", extra={"PAGER": "/bin/false"})
+        t.ok(rc in (0, 1) and out.startswith("spark check ") and "memory" in out,
              "spark check piped with PAGER=/bin/false: the report prints", out)
         rc, out, _ = spark("bar", "line", extra=off)
         t.ok(rc == 0 and out.strip() and "#[fg=#" not in out,
@@ -6795,7 +6826,7 @@ def main():
 
         # the client shape: spark client (state, URL, off); the check's client rows
         rc, out, _ = spark("client", extra=off)
-        t.ok(rc == 0 and "not a client" in out and "SITE_PEER_AI_URL=unset" in out, "spark client: not a client", out)
+        t.ok(rc == 0 and "off: this machine runs its own model" in out, "spark client: not a client", out)
         rc, out, _ = spark("client", "192.0.2.10:8081", extra=off)
         t.ok(rc == 2 and out.startswith("spark client -- URL is http://"), "spark client without a scheme is refused", out)
         rc, out, _ = spark("client", "http://192.0.2.10:8081/", extra=off)
@@ -6842,7 +6873,7 @@ def main():
         with open(_senv, "w") as f:
             f.write(_keep)
         site_env = open(home + "/.config/spark/site.env").read()
-        t.ok(rc == 0 and "SITE_AI_MODEL=auto\n" in site_env and "not asked again until spark client URL" in out,
+        t.ok(rc == 0 and "SITE_AI_MODEL=auto\n" in site_env and "this machine runs its own model now" in out,
              "spark client off hands the model choice back to auto", out)
         # off means off: the peer goes with it, so the other machine is
         # never a candidate again -- not first, not a fallback -- until
@@ -6858,7 +6889,7 @@ def main():
         rc, cands, _ = spark(extra=dict(off, SPARK_BASE_URL="http://192.0.2.11:8081"), exe=_cand)
         t.ok(rc == 0 and cands.strip() == "http://192.0.2.11:8081", "SPARK_BASE_URL keeps its meaning: it alone", cands)
         rc, out, _ = spark("client", "-h")
-        t.ok(rc == 0 and out.splitlines()[0] == "spark client -- a client of another machine's server",
+        t.ok(rc == 0 and out.splitlines()[0] == "spark client -- use another machine's model",
              "spark client -h signs (contract 8)", out)
 
         # spark setup: the guided first run, non-interactive, nothing applied
@@ -6881,7 +6912,7 @@ def main():
         t.ok(rc == 2 and "no option --theme" in out, "setup --theme: no option any more (v1.62), exit 2", out)
         rc, out, _ = spark("setup", "--yes", "--no-serve", "--model", "none", extra=off)
         t.ok("\u2588" in out and "GB for models" in out and "SITE_AI_MODEL=none" in out and "open a new shell" in out
-             and "spark model --chat NAME adds a chat model" in out,
+             and "spark chat" in out,
              "setup printed the logo, the table header, the model line and the closing block", out)
         t.ok("no model chosen" in out, "setup with none says how to choose later", out)
         t.ok("skip   account      no model here" in out and "the token, shown once" not in out
@@ -6961,7 +6992,7 @@ def main():
         rc, out, _ = spark("setup", "--yes", "--model", "qwen3-5-2b", extra=off)
         t.ok(rc == 0 and "? how big is this dir\n* Files over 1G changed this week.\n  find . -type f -size +1G -mtime -7\n" in out,
              "setup asks the first question and shows the hint above the command", out)
-        t.ok("12.3 tok/s on your first question (spark bench for the full number)" in out,
+        t.ok("12.3 tok/s on your first question\n" in out,
              "setup prints the measured tok/s of that question", out)
         t.ok("SITE_AI_MODEL=qwen3-5-2b\n" in open(home + "/.config/spark/site.env").read(),
              "setup --model NAME writes the name", out)
@@ -6969,7 +7000,7 @@ def main():
         # spark uninstall: signed, shows and never mutates without the word;
         # SPARK_NO_APPLY = the plan only (the real run is tests/uninstall_test.sh)
         rc, out, _ = spark("uninstall", "-h")
-        t.ok(rc == 0 and out.splitlines()[0] == "spark uninstall -- remove spark from this machine: shows first, then asks yes",
+        t.ok(rc == 0 and out.splitlines()[0] == "spark uninstall -- remove spark: shows the plan, then asks",
              "spark uninstall -h signs (contract 8)", out)
         snap = sorted(os.listdir(home + "/.config/spark"))
         rc, out, _ = spark("uninstall", extra={"SPARK_NO_APPLY": "1"})
@@ -7269,8 +7300,8 @@ site.cmd_headless([])
              "runit finish: enabled, not running -- the services row warns and names the restart line", got)
         # runit runs the services from boot, headless or not: the row and
         # `spark serve boot` never say "under your login" there
-        t.ok(len(lines) > 3 and lines[2] == "na | the services run from boot on runit, headless or not"
-             and lines[3] == "spark serve boot -- SITE_HEADLESS=no: the services run from boot on runit, headless or not",
+        t.ok(len(lines) > 3 and lines[2] == "na | runs from boot (runit)"
+             and lines[3] == "spark serve boot -- off, but runit runs it from boot",
              "runit, not headless: the headless row and spark serve boot say the services run from boot anyway", got)
         if sys.platform != "darwin":
             wsl = dict(SPARK_PROC_VERSION=home + "/version-wsl", SPARK_NO_APPLY="1")

@@ -23,13 +23,10 @@ from .text import pulse as _pulse   # the fetch, the pull, the move
 UPDATE_LOCK = os.path.join(STATE_DIR, "update.lock")
 SIGNERS = "allowed-signers"     # at the repo root: `spark-release namespaces="git" <keytype> <base64>`
 
-USAGE = """%s update -- move this checkout to the newest tag or main, then converge
+USAGE = """%s update -- get the newest spark and set it up
 
-  spark update             pull main (a branch), or move to the newest tag
-                            (a detached checkout; a tag signed by a key in
-                            allowed-signers, any other is refused); then
-                            applies and rechecks
-  spark update --dry-run   say what would happen, change nothing
+  spark update             the newest signed release, or main on a branch
+  spark update --dry-run   say what it would do; nothing changes
 """ % MARK
 
 
@@ -158,27 +155,27 @@ def cmd_update(args):
                     pass
                 _door()
             return rc
-        say("spark update: no option %s -- spark update -h" % a)
+        say("%s update -- no option %s (spark update -h)" % (MARK, a))
         return 2
     moved = False
 
     lock = None if dry else _lock()
     if not dry and lock is None:
-        say("%s update -- another spark update is running (%s)" % (MARK, UPDATE_LOCK))
+        say("%s update -- another spark update is running" % MARK)
         return 2
 
     rc, out = _git(["status", "--porcelain"])
     if rc != 0:
-        say("spark update: not a git repository: %s" % REPO)
+        say("%s update -- not a git checkout: %s" % (MARK, REPO))
         return 1
     if out.strip():
-        say("spark update: the tree is dirty -- commit or stash first (git -C %s status)" % REPO)
+        say("%s update -- the clone is dirty: commit or stash first (git -C %s status)" % (MARK, REPO))
         return 1
 
     with _pulse():
         rc, _ = _git(["fetch", "-q", "--tags", "origin"], timeout=30)
     if rc != 0:
-        say("spark update: git fetch --tags origin failed")
+        say("%s update -- could not reach origin (git fetch failed)" % MARK)
         return 1
     # a fetched tag can land on the sha already cached: drop the version
     # cache so `spark ver` says the release, not <old>+N (the box said
@@ -193,7 +190,7 @@ def cmd_update(args):
     if rc == 0:
         rc, _ = _git(["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"])
         if rc != 0:
-            say("spark update: no upstream set -- git -C %s branch --set-upstream-to=origin/<branch>" % REPO)
+            say("%s update -- no upstream: git -C %s branch --set-upstream-to=origin/<branch>" % (MARK, REPO))
             return 1
         _, branch = _git(["symbolic-ref", "--short", "HEAD"])
         branch = branch.strip()
@@ -207,7 +204,7 @@ def cmd_update(args):
             with _pulse():
                 rc, _ = _git(["pull", "-q", "--ff-only"])
             if rc != 0:
-                say("spark update: git pull --ff-only failed -- git -C %s status says why" % REPO)
+                say("%s update -- git pull failed: git -C %s status" % (MARK, REPO))
                 return 1
             say("%s update -- %s: %d new commit%s" % (MARK, branch, n, "" if n == 1 else "s"))
             moved = True
@@ -217,7 +214,7 @@ def cmd_update(args):
         rc, tags = _git(["tag", "-l", "v[0-9]*", "--sort=-v:refname"])
         newest = tags.split()[0] if rc == 0 and tags.split() else ""
         if not newest:
-            say("spark update: no v* tag found -- git -C %s checkout main" % REPO)
+            say("%s update -- no release found: git -C %s checkout main" % (MARK, REPO))
             return 1
         if cur == newest:
             say("%s update -- already at %s" % (MARK, cur))
@@ -235,7 +232,7 @@ def cmd_update(args):
                 with _pulse():
                     rc, _ = _git(["checkout", "-q", "--detach", newest])
                 if rc != 0:
-                    say("spark update: git checkout --detach %s failed" % newest)
+                    say("%s update -- could not move to %s (git checkout failed)" % (MARK, newest))
                     return 1
                 say("%s update -- %s (signed by %s; was %s)" % (MARK, newest, who, cur or "an untagged commit"))
                 moved = True
@@ -260,7 +257,8 @@ def cmd_update(args):
             _restart_units(cfg)
             if engine.service_state(cfg, "forge") != "loaded":
                 # a page started by hand is nobody's to restart here
-                say("%s update -- the page's server here runs another version, started by hand: "
-                    "spark serve off; spark serve on puts it on this tree" % MARK)
+                say("%s update -- the page runs an older spark, started by hand: "
+                    "spark serve off; spark serve on" % MARK)
+
         _door()
     return rc

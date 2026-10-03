@@ -190,7 +190,7 @@ def cap_note(cfg):
     auto pick back (facts.py hands it to bootstrap), else ""."""
     if _choose(cfg, None) == chosen_rows(cfg):
         return ""
-    return "auto stops at %d GB files on %s (bigger fits, slower than 8 tok/s)" % (speed_cap_gb(cfg), backend(cfg))
+    return "auto picks files under %d GB on %s: bigger ones are slow" % (speed_cap_gb(cfg), backend(cfg))
 
 
 def chosen_model_name(cfg, role="spark"):
@@ -238,13 +238,13 @@ def resolve_for_spawn(cfg):
     misconfiguration too: say so rather than serve one model quietly."""
     b = engine_bin(cfg)
     if not b:
-        raise EngineError("no llama-server in %s -- ./bootstrap.sh installs it (or set SPARK_ENGINE_DIR)" % engine_dir(cfg), EX_CONFIG)
+        raise EngineError("the engine is missing -- spark update (or ./bootstrap.sh)", EX_CONFIG)
     m = model_file(cfg)
     if not m:
-        raise EngineError("no model in %s -- ./bootstrap.sh downloads one (or set SPARK_MODEL)" % cfg.models_dir, EX_CONFIG)
+        raise EngineError("no model downloaded -- spark update (or ./bootstrap.sh)", EX_CONFIG)
     ec = cfg.ember_model
     if ec not in ("auto", "none") and not chosen_model_name(cfg, "ember"):
-        raise EngineError("SITE_EMBER_MODEL=%s: no such row in models.env (./bootstrap.sh --list-models; spark model --chat none)" % ec, EX_CONFIG)
+        raise EngineError("no chat model named %s -- spark model --chat list" % ec, EX_CONFIG)
     return b, m
 
 
@@ -964,8 +964,7 @@ def service_target(cfg, unit="serve"):
 
 def daemon_note(cfg, unit="serve", verb="kickstart -k"):
     """The one honest line when a unit is a LaunchDaemon: the user must sudo."""
-    return "todo   %-12s the %s runs as a daemon (spark serve boot): sudo launchctl %s %s" % (
-        unit, "page's server" if unit == "forge" else "engine", verb, service_target(cfg, unit))
+    return "todo   %-12s it runs from boot: sudo launchctl %s %s" % (unit, verb, service_target(cfg, unit))
 
 
 def user_bus_env():
