@@ -771,6 +771,13 @@ def main():
     off = sorted(k for k in set(doc_routes) | set(forgeserve.ROUTES) if doc_routes.get(k) != forgeserve.ROUTES.get(k))
     check(not off, "CLAUDE.md's route table is forgeserve.ROUTES, entry for entry%s"
           % ("" if not off else " (differs at %s)" % ", ".join("%s %s" % k for k in off[:3])))
+    # the release key get carries is allowed-signers, byte for byte: a
+    # fresh install verifies against the key in get, never the clone's
+    # file, so a key rotation changes both in one commit
+    m = re.search(r"^SIGNERS='([^']*)'$", read("get"), re.M)
+    check(m is not None, "get embeds the release key as SIGNERS='...'")
+    check(m is not None and m.group(1) + "\n" == read("allowed-signers"),
+          "get's embedded release key is allowed-signers, byte for byte")
     # the living prompt: its verbs, keys and temperaments in the docs
     living()
     # one server: the old spellings nowhere, the group in the cheatsheet

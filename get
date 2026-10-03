@@ -11,17 +11,52 @@
 # default branch when there is none. An existing spark clone: fetch tags,
 # then pull --ff-only on a branch, or move to the newest tag when detached
 # -- so this line is also the updater (`spark update` is the same, from
-# inside a checkout). A tag moves a clone only when a key in the clone's
-# own allowed-signers signed it (git >= 2.34 reads the ssh signature,
-# ssh-keygen checks it); any other tag is refused with nothing moved. Any
-# other non-empty directory is refused. It never runs sudo: the package
-# manager is spark setup's, asked once. The whole body is one function
-# called on the last line, so a download cut short runs nothing.
+# inside a checkout). A tag is a release only when a known key signed it
+# (git >= 2.34 reads the ssh signature, ssh-keygen checks it) and the
+# name inside the tag object is the tag's own name; an update also moves
+# forward only. A fresh clone is checked against the release key below,
+# in this file, never against the allowed-signers the clone brought; an
+# existing clone against its own allowed-signers, the tree it already
+# trusts. The newest tag that passes is taken, and the newer ones passed
+# over are named in one line with the reason. Any other non-empty
+# directory is refused. It never runs sudo: the package manager is spark
+# setup's, asked once. The whole body is one function called on the last
+# line, so a download cut short runs nothing.
 set -eu
+
+# the release key(s): exactly the lines of allowed-signers at this
+# release, byte for byte (tests/docs_test.py holds the two equal, so a
+# key rotation changes both in one commit)
+SIGNERS='spark-release namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPxyUnv3kjSao3vcdPBrkrKvt5HkEc1UPJmUHO3kuzRo'
 
 notice() { printf 'NOTICE: %s\n' "$*"; }
 refuse() { printf 'spark get: %s\n' "$*" >&2; exit 1; }
-signed() { git -C "$1" -c "gpg.ssh.allowedSignersFile=$1/allowed-signers" verify-tag "$2" >/dev/null 2>&1; }
+# why DIR TAG SIGNERS [forward]: nothing when TAG is a release to land on,
+# else one short reason. The signature covers the tag object, not the ref
+# naming it: an old signed release pushed again as v99.0 verifies, so the
+# object's own `tag` header must say TAG; with `forward` (an update) TAG
+# must be at or ahead of HEAD
+why() {
+    [ "$(git -C "$1" cat-file -t "refs/tags/$2" 2>/dev/null)" = tag ] || { echo "not signed by a known key"; return 0; }
+    n=$(git -C "$1" cat-file tag "refs/tags/$2" 2>/dev/null | sed -n '/^$/q; s/^tag //p')
+    [ "$n" = "$2" ] || { echo "named $(printf '%s' "${n:-nothing}" | tr -c 'A-Za-z0-9._+-' '?' | cut -c1-40) inside"; return 0; }
+    if [ -n "${4:-}" ] && ! git -C "$1" merge-base --is-ancestor HEAD "$2" 2>/dev/null; then
+        echo "behind this checkout"; return 0
+    fi
+    git -C "$1" -c "gpg.ssh.allowedSignersFile=$3" verify-tag "$2" >/dev/null 2>&1 || echo "not signed by a known key"
+}
+# pick DIR SIGNERS [forward]: $found is the newest v* tag that passes
+# (empty: none), $skipped the newer ones passed over, three named at most
+pick() {
+    found='' skipped='' n_skipped=0
+    for t in $(git -C "$1" tag -l 'v[0-9]*' --sort=-v:refname); do
+        w=$(why "$1" "$t" "$2" "${3:-}")
+        if [ -z "$w" ]; then found=$t; break; fi
+        n_skipped=$((n_skipped + 1))
+        [ "$n_skipped" -gt 3 ] || skipped="${skipped:+$skipped, }$t ($w)"
+    done
+    [ "$n_skipped" -le 3 ] || skipped="$skipped and $((n_skipped - 3)) more"
+}
 
 main() {
     dir=${SPARK_HOME:-$HOME/.spark}
@@ -90,14 +125,20 @@ main() {
             git -C "$dir" pull -q --ff-only || refuse "git pull --ff-only failed in $show -- git -C $show status says why"
             printf 'ok     clone        %s is spark already: pulled\n' "$show"
         else
-            newest=$(git -C "$dir" tag -l 'v[0-9]*' --sort=-v:refname | head -1)
             cur=$(git -C "$dir" describe --tags --exact-match 2>/dev/null) || cur=""
-            if [ -n "$newest" ] && [ "$newest" != "$cur" ]; then
-                signed "$dir" "$newest" || refuse "$newest is not signed by a known key: refused -- $show stays at ${cur:-an untagged commit}"
-                git -C "$dir" checkout -q --detach "$newest" || refuse "git checkout --detach $newest failed in $show"
-                printf 'ok     clone        %s is spark already: moved to %s\n' "$show" "$newest"
-            else
+            if [ -z "$(git -C "$dir" tag -l 'v[0-9]*')" ]; then
                 printf 'ok     clone        %s is spark already: at %s\n' "$show" "${cur:-no tag}"
+            else
+                # an update: the clone's own allowed-signers, forward only
+                pick "$dir" "$dir/allowed-signers" forward
+                [ -z "$skipped" ] || printf '!      clone        skipped %s\n' "$skipped"
+                [ -n "$found" ] || refuse "no signed release ahead of $show: refused -- it stays at ${cur:-an untagged commit}"
+                if [ "$(git -C "$dir" rev-parse "$found^{commit}")" = "$(git -C "$dir" rev-parse HEAD)" ]; then
+                    printf 'ok     clone        %s is spark already: at %s\n' "$show" "$found"
+                else
+                    git -C "$dir" checkout -q --detach "$found" || refuse "git checkout --detach $found failed in $show"
+                    printf 'ok     clone        %s is spark already: moved to %s\n' "$show" "$found"
+                fi
             fi
         fi
     elif [ -e "$dir" ] && [ -n "$(ls -A "$dir" 2>/dev/null)" ]; then
@@ -107,17 +148,28 @@ main() {
         if [ -n "$ref" ]; then
             git -C "$dir" checkout -q "$ref" || refuse "git checkout $ref failed in $show"
             printf 'ok     clone        %s at %s\n' "$show" "$ref"
-        else
-            newest=$(git -C "$dir" tag -l 'v[0-9]*' --sort=-v:refname | head -1)
-            if [ -n "$newest" ]; then
-                # the clone this line made goes with the refusal: a second
-                # run must not find it and run main as if it were a release
-                signed "$dir" "$newest" || { rm -rf "$dir"; refuse "$newest is not signed by a known key: refused -- nothing installed"; }
-                git -C "$dir" checkout -q --detach "$newest" || refuse "git checkout --detach $newest failed in $show"
-                printf 'ok     clone        %s at %s\n' "$show" "$newest"
+        elif [ -n "$(git -C "$dir" tag -l 'v[0-9]*')" ]; then
+            # the key this file carries, never the clone's own file: the
+            # clone came from the network a moment ago. SPARK_SIGNERS is a
+            # test seam (tests/get_test.sh): a file read in place of it
+            keys=$(mktemp)
+            trap 'rm -f "$keys"' EXIT
+            if [ -n "${SPARK_SIGNERS:-}" ]; then
+                notice "SPARK_SIGNERS=$SPARK_SIGNERS -- a test seam: the release key comes from that file"
+                cat "$SPARK_SIGNERS" > "$keys"
             else
-                printf 'ok     clone        %s\n' "$show"
+                printf '%s\n' "$SIGNERS" > "$keys"
             fi
+            pick "$dir" "$keys"
+            rm -f "$keys"
+            [ -z "$skipped" ] || printf '!      clone        skipped %s\n' "$skipped"
+            # the clone this line made goes with the refusal: a second
+            # run must not find it and run main as if it were a release
+            [ -n "$found" ] || { rm -rf "$dir"; refuse "no tag signed by a known key: refused -- nothing installed"; }
+            git -C "$dir" checkout -q --detach "$found" || refuse "git checkout --detach $found failed in $show"
+            printf 'ok     clone        %s at %s\n' "$show" "$found"
+        else
+            printf 'ok     clone        %s\n' "$show"
         fi
     fi
     if [ "$clone_only" = 1 ]; then

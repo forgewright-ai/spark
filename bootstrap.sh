@@ -186,8 +186,8 @@ sudo_upfront() {
 }
 section() { if loud; then printf '\n== %s\n' "$1"; fi; }
 sha_ok() {   # sha_ok FILE SHA
-    if [ "$OS" = Darwin ]; then shasum -a 256 "$1" | awk '{print $1}' | grep -qx "$2"
-    else sha256sum "$1" | awk '{print $1}' | grep -qx "$2"; fi
+    if [ "$OS" = Darwin ]; then shasum -a 256 "$1" | awk '{print $1}' | grep -qxF "$2"
+    else sha256sum "$1" | awk '{print $1}' | grep -qxF "$2"; fi
 }
 fetch() {   # fetch URL DEST SHA  -- download, verify, or die
     # at a terminal: curl draws its progress bar
@@ -901,6 +901,9 @@ elif [ "$SITE_SHARE" != yes ]; then
     if { [ -f "$share_tok" ] || [ -f "$share_url" ]; } && need share "remove $share_tok, $share_url (SITE_SHARE=no) (sudo)"; then
         as_root rm -f "$share_tok" "$share_url"; ok share "not shared"
     else skip share "not shared"; fi
+elif [ -L "$tok" ]; then
+    # root copies this file: a link would have root read wherever it points
+    row todo share "$tok is a symbolic link: refused -- remove it, then spark serve on"
 elif [ ! -s "$tok" ]; then
     row todo share "no api-token yet: spark serve on first, then spark serve share on"
 else
@@ -914,10 +917,14 @@ else
        && [ "$(stat -c '%a %G' "$share_tok" 2>/dev/null)" = "640 spark" ]; then
         ok share "$share_tok (0640 root:spark)"
     elif need share "copy the api-token to $share_tok (0640 root:spark) (sudo)"; then
+        # the copy is read as this user, never as root (a path swapped for
+        # a link after the test above still reads only what this user can);
+        # root installs that private copy, mode and group in one step
+        staged=$(mktemp)
+        cp "$tok" "$staged"
         as_root mkdir -p "$(dirname "$share_tok")"
-        as_root cp "$tok" "$share_tok"
-        as_root chgrp spark "$share_tok"
-        as_root chmod 0640 "$share_tok"
+        as_root install -m 0640 -g spark "$staged" "$share_tok" || { rm -f "$staged"; exit 1; }
+        rm -f "$staged"
         ok share "$share_tok (0640 root:spark)"
     fi
     # the engine's address, so a joining user finds it without reading the

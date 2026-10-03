@@ -4,10 +4,13 @@
 # SPARK_NO_APPLY=1 so bootstrap.sh never runs. Proves: up to date on a
 # branch, one new commit pulled and named, a dirty tree refused with
 # nothing changed, a detached clone moved to a newer SIGNED tag, an
-# unsigned tag and a tag signed by an unknown key refused with HEAD
-# unmoved, the signed row flipping with the tag, --dry-run changing
-# nothing in every case, and a run that moved nothing restarting the
-# units only when the page runs another version.
+# unsigned tag, a tag signed by an unknown key, an old signed release
+# under a new name and a signed tag behind HEAD each skipped in one line
+# naming why (never a freeze: the newest tag that passes is taken), an
+# untagged HEAD past every release refused with HEAD unmoved, the signed
+# row flipping with the tag, --dry-run changing nothing in every case,
+# and a run that moved nothing restarting the units only when the page
+# runs another version.
 set -eu
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 T=$(mktemp -d)
@@ -206,29 +209,76 @@ r=$(row "$RELSPARK")
 out=$("$RELSPARK" update 2>&1) && ok "at the newest tag: exits 0" || bad "at newest: rc $? $out"
 printf '%s\n' "$out" | grep -q 'already at v1.1' && ok "at the newest tag: says so" || bad "at newest: $out"
 
-# 6. an unsigned tag on origin is no release: refused in one line, exit 1,
-#    HEAD unmoved -- and --dry-run says the same
+# 6. an unsigned tag on origin is no release: skipped in one line, never a
+#    freeze -- the walk goes on to the newest tag that passes (here the
+#    one the clone is on), exit 0, HEAD unmoved; --dry-run says the same
+at() { git -C "$T/rel" describe --tags --exact-match 2>&1; }
 c3=$(git -C "$T/origin.git" commit-tree "$rtree" -p "$c2" -m "update_test: v1.2, unsigned")
 git -C "$T/origin.git" tag v1.2 "$c3"
 rc=0; out=$("$RELSPARK" update 2>&1) || rc=$?
-[ "$rc" -eq 1 ] && ok "unsigned tag: refused, exit 1" || bad "unsigned tag: rc $rc: $out"
-printf '%s\n' "$out" | grep -q 'update -- v1.2 is not signed by a known key: refused' && ok "unsigned tag: the refusal names it" || bad "unsigned tag: $out"
-[ "$(git -C "$T/rel" describe --tags --exact-match)" = v1.1 ] && ok "unsigned tag: HEAD unmoved" || bad "unsigned tag: HEAD moved to $(git -C "$T/rel" describe --tags --exact-match 2>&1)"
+[ "$rc" -eq 0 ] && ok "unsigned tag: skipped, not a freeze (exit 0)" || bad "unsigned tag: rc $rc: $out"
+printf '%s\n' "$out" | grep -qx '! skipped v1.2 (not signed by a known key)' && ok "unsigned tag: one line names it and why" || bad "unsigned tag: $out"
+printf '%s\n' "$out" | grep -q 'update -- already at v1.1' && ok "unsigned tag: the walk lands on v1.1, where it is" || bad "unsigned tag: $out"
+[ "$(at)" = v1.1 ] && ok "unsigned tag: HEAD unmoved" || bad "unsigned tag: HEAD moved to $(at)"
 rc=0; out=$("$RELSPARK" update --dry-run 2>&1) || rc=$?
-[ "$rc" -eq 1 ] && printf '%s\n' "$out" | grep -q 'v1.2 is not signed by a known key: refused' && ok "unsigned tag: --dry-run refuses the same way" || bad "unsigned tag --dry-run: rc $rc: $out"
+[ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -qx '! skipped v1.2 (not signed by a known key)' && ok "unsigned tag: --dry-run says the same" || bad "unsigned tag --dry-run: rc $rc: $out"
 
 # 7. a tag signed by a key the tree does not know is no release either
 ssh-keygen -q -t ed25519 -N '' -f "$T/other"
 c4=$(git -C "$T/origin.git" commit-tree "$rtree" -p "$c3" -m "update_test: v1.3, another key")
 sign v1.3 "$c4" "$T/other"
 rc=0; out=$("$RELSPARK" update 2>&1) || rc=$?
-[ "$rc" -eq 1 ] && printf '%s\n' "$out" | grep -q 'v1.3 is not signed by a known key: refused' && ok "unknown key: refused" || bad "unknown key: rc $rc: $out"
-[ "$(git -C "$T/rel" describe --tags --exact-match)" = v1.1 ] && ok "unknown key: HEAD unmoved" || bad "unknown key: HEAD moved"
+[ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -qx '! skipped v1.3 (not signed by a known key), v1.2 (not signed by a known key)' \
+    && ok "unknown key: skipped, both newer tags named" || bad "unknown key: rc $rc: $out"
+[ "$(at)" = v1.1 ] && ok "unknown key: HEAD unmoved" || bad "unknown key: HEAD moved"
 
-# 8. the next signed tag moves it again
+# 8. the next signed tag moves it again, past the two bad ones
 c5=$(git -C "$T/origin.git" commit-tree "$rtree" -p "$c4" -m "update_test: v1.4")
 sign v1.4 "$c5"
 out=$("$RELSPARK" update 2>&1) && ok "a signed tag after the refusals: exits 0" || bad "v1.4: rc $? $out"
-[ "$(git -C "$T/rel" describe --tags --exact-match)" = v1.4 ] && ok "landed on v1.4" || bad "not on v1.4: $out"
+[ "$(at)" = v1.4 ] && ok "landed on v1.4" || bad "not on v1.4: $out"
+printf '%s\n' "$out" | grep -q 'skipped' && bad "v1.4 is the newest, yet a skip: $out" || ok "the newest tag passes: no skip line"
+
+# 9. an old signed release pushed again under a higher name: the signature
+#    covers the tag object, not the ref, so `v9.9` carrying v1.1's object
+#    verifies -- its object says `tag v1.1`, and the walk skips it
+git -C "$T/origin.git" update-ref refs/tags/v9.9 "$(git -C "$T/origin.git" rev-parse refs/tags/v1.1)"
+rc=0; out=$("$RELSPARK" update 2>&1) || rc=$?
+[ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -qx '! skipped v9.9 (named v1.1 inside)' \
+    && ok "a renamed old release: skipped, its inner name said" || bad "renamed tag: rc $rc: $out"
+printf '%s\n' "$out" | grep -q 'update -- already at v1.4' && [ "$(at)" = v1.4 ] \
+    && ok "a renamed old release: the clone stays at v1.4, never moved back" || bad "renamed tag: at $(at): $out"
+r=$(row "$RELSPARK")
+[ "$r" = "ok: v1.4 signed by spark-release" ] && ok "signed row: still ok beside a renamed tag" || bad "signed row beside v9.9: $r"
+
+# 10. forward only: a tag signed by the real key and named as it says, but
+#     behind HEAD (v2.0 on v1.1's commit), is skipped; the walk lands
+#     where it is
+sign v2.0 "$c2"
+rc=0; out=$("$RELSPARK" update 2>&1) || rc=$?
+[ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -qx '! skipped v9.9 (named v1.1 inside), v2.0 (behind this checkout)' \
+    && ok "a signed tag behind HEAD: skipped, behind this checkout" || bad "behind: rc $rc: $out"
+[ "$(at)" = v1.4 ] && ok "a signed tag behind HEAD: HEAD unmoved" || bad "behind: HEAD moved to $(at)"
+rc=0; out=$("$RELSPARK" update --dry-run 2>&1) || rc=$?
+printf '%s\n' "$out" | grep -q 'v2.0 (behind this checkout)' && ! printf '%s\n' "$out" | grep -q 'would move' \
+    && ok "a signed tag behind HEAD: --dry-run would not move" || bad "behind --dry-run: $out"
+
+# 11. the newest good tag below the bad ones is taken, the bad ones named
+c6=$(git -C "$T/origin.git" commit-tree "$rtree" -p "$c5" -m "update_test: v1.5")
+sign v1.5 "$c6"
+out=$("$RELSPARK" update 2>&1) && ok "past the bad tags to v1.5: exits 0" || bad "v1.5: rc $? $out"
+printf '%s\n' "$out" | grep -qx '! skipped v9.9 (named v1.1 inside), v2.0 (behind this checkout)' \
+    && printf '%s\n' "$out" | grep -q 'update -- v1.5 (signed by spark-release; was v1.4)' \
+    && [ "$(at)" = v1.5 ] && ok "past the bad tags: moved to v1.5, the skipped ones named" || bad "v1.5: at $(at): $out"
+
+# 12. a detached clone ahead of every signed tag (an untagged commit past
+#     v1.5): nothing ahead of it, refused in one line, HEAD unmoved
+git -C "$T/rel" checkout -q --detach "$c6"
+c7=$(git -C "$T/rel" commit-tree "$rtree" -p "$c6" -m "update_test: past every tag")
+git -C "$T/rel" checkout -q --detach "$c7"
+rc=0; out=$("$RELSPARK" update 2>&1) || rc=$?
+[ "$rc" -eq 1 ] && printf '%s\n' "$out" | grep -q 'update -- no signed release ahead of this checkout' \
+    && ok "past every tag: refused, nothing moved back" || bad "past every tag: rc $rc: $out"
+[ "$(git -C "$T/rel" rev-parse HEAD)" = "$c7" ] && ok "past every tag: HEAD unmoved" || bad "past every tag: HEAD moved"
 
 [ "$fail" -eq 0 ] && echo "update_test: all ok" || { echo "update_test: FAILED"; exit 1; }

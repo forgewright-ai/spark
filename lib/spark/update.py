@@ -9,6 +9,12 @@
 # line per key, principal `spark-release`), and a tag nobody known
 # signed is refused with nothing moved. Whoever can push a tag does not
 # thereby run code on every install; whoever holds a key in that file does.
+# The signature covers the tag object, not the ref that names it: an old
+# signed release pushed again as `v99.0` verifies. So the name inside the
+# object must be the ref's name, the tag must be at or ahead of HEAD
+# (forward only), and the walk takes the newest tag that passes all
+# three, saying which newer ones it passed over and why -- a bad tag is
+# skipped, never a freeze.
 
 import fcntl
 import os
@@ -34,15 +40,45 @@ def _git(args, timeout=15):
     return run(["git", "-C", REPO] + list(args), timeout=timeout)
 
 
+NOT_SIGNED = "not signed by a known key"
+BEHIND = "behind this checkout"
+
+
+def _named(tag, repo=None):
+    """"" when `tag` is an annotated tag whose object says `tag <tag>`,
+    else one short reason. A lightweight tag carries no signature; an
+    object named otherwise is another release under a new name."""
+    repo = repo or REPO
+    ref = "refs/tags/" + tag
+    rc, kind = run(["git", "-C", repo, "cat-file", "-t", ref], timeout=15)
+    if rc != 0 or kind.strip() != "tag":
+        return NOT_SIGNED
+    rc, body = run(["git", "-C", repo, "cat-file", "tag", ref], timeout=15)
+    name = ""
+    for line in body.splitlines():
+        if not line:
+            break               # the headers end at the first blank line
+        if line.startswith("tag "):
+            name = line[4:]
+            break
+    if rc == 0 and name == tag:
+        return ""
+    return "named %s inside" % (re.sub(r"[^A-Za-z0-9._+-]", "?", name)[:40] or "nothing")
+
+
 def verified(tag, repo=None):
     """(principal, why): who signed `tag` per the tree's allowed-signers
     ("spark-release", ""), or ("", one short reason) when nobody known
-    did. `git verify-tag` reads the ssh signature itself (git >= 2.34)
-    and hands it to ssh-keygen; its verdict comes back on stderr, so
-    this is the one git call here that does not go through run()."""
+    did or the object inside names another tag (_named). `git
+    verify-tag` reads the ssh signature itself (git >= 2.34) and hands
+    it to ssh-keygen; its verdict comes back on stderr, so this is the
+    one git call here that does not go through run()."""
     repo = repo or REPO
     if not shutil.which("ssh-keygen"):
         return "", "unverifiable: no ssh-keygen here (openssh)"
+    why = _named(tag, repo)
+    if why:
+        return "", why
     cmd = ["git", "-C", repo, "-c", "gpg.ssh.allowedSignersFile=" + os.path.join(repo, SIGNERS),
            "verify-tag", tag]
     try:
@@ -56,7 +92,54 @@ def verified(tag, repo=None):
     m = re.search(r"(\d+)\.(\d+)", v)
     if m and (int(m.group(1)), int(m.group(2))) < (2, 34):
         return "", "unverifiable by git %s.%s: an ssh signature needs git >= 2.34" % m.groups()
-    return "", "not signed by a known key"
+    return "", NOT_SIGNED
+
+
+def here(repo=None):
+    """The release tag HEAD sits on: the newest v* tag at HEAD whose
+    object names it, else what `git describe --exact-match` says (a
+    lightweight tag, put there by hand), else ""."""
+    repo = repo or REPO
+    rc, out = run(["git", "-C", repo, "tag", "--points-at", "HEAD", "-l", "v[0-9]*",
+                   "--sort=-v:refname"], timeout=15)
+    for t in out.split() if rc == 0 else []:
+        if not _named(t, repo):
+            return t
+    rc, out = run(["git", "-C", repo, "describe", "--tags", "--exact-match"], timeout=15)
+    return out.strip() if rc == 0 else ""
+
+
+def pick(tags, repo=None, forward=True):
+    """(tag, principal, skipped): the first of `tags` (newest first) that
+    is a release to land on -- named as its object says, at or ahead of
+    HEAD when `forward` (an update; a fresh clone has nothing to be
+    ahead of), signed by a known key -- and [(tag, why)] for each one
+    passed over on the way. ("", "", skipped) when none passes. An
+    unverifiable signature (no ssh-keygen, an old git) ends the walk:
+    no other tag would fare better."""
+    repo = repo or REPO
+    skipped = []
+    for t in tags:
+        why = _named(t, repo)
+        if not why and forward:
+            rc, _ = run(["git", "-C", repo, "merge-base", "--is-ancestor", "HEAD", t], timeout=15)
+            why = "" if rc == 0 else BEHIND
+        who = ""
+        if not why:
+            who, why = verified(t, repo)
+        if who:
+            return t, who, skipped
+        skipped.append((t, why))
+        if why.startswith("unverifiable"):
+            break
+    return "", "", skipped
+
+
+def skipped_line(skipped):
+    """The tags a walk passed over, each with its reason, three at most."""
+    shown = ", ".join("%s (%s)" % tw for tw in skipped[:3])
+    more = len(skipped) - 3
+    return shown + (" and %d more" % more if more > 0 else "")
 
 
 def _door():
@@ -209,22 +292,31 @@ def cmd_update(args):
             say("%s update -- %s: %d new commit%s" % (MARK, branch, n, "" if n == 1 else "s"))
             moved = True
     else:
-        rc, cur = _git(["describe", "--tags", "--exact-match"])
-        cur = cur.strip() if rc == 0 else ""
+        cur = here()
         rc, tags = _git(["tag", "-l", "v[0-9]*", "--sort=-v:refname"])
-        newest = tags.split()[0] if rc == 0 and tags.split() else ""
-        if not newest:
+        tags = tags.split() if rc == 0 else []
+        if not tags:
             say("%s update -- no release found: git -C %s checkout main" % (MARK, REPO))
             return 1
-        if cur == newest:
-            say("%s update -- already at %s" % (MARK, cur))
+        # the name, the direction and the signature, --dry-run or not: a
+        # tag that fails one moves nothing and the walk goes on to the
+        # next newest, so a bad tag is skipped, never a freeze; a dry run
+        # says the same
+        newest, who, skipped = pick(tags)
+        if skipped and skipped[-1][1].startswith("unverifiable"):
+            say("%s update -- %s is %s: refused" % ((MARK,) + skipped[-1]))
+            return 1
+        if skipped:
+            say("! skipped %s" % skipped_line(skipped))
+        if not newest:
+            say("%s update -- no signed release ahead of this checkout: it stays at %s"
+                % (MARK, cur or "an untagged commit"))
+            return 1
+        _, at = _git(["rev-parse", "HEAD"])
+        _, there = _git(["rev-parse", newest + "^{commit}"])
+        if at.strip() == there.strip():
+            say("%s update -- already at %s" % (MARK, newest))
         else:
-            # the signature first, --dry-run or not: a tag nobody known
-            # signed moves nothing, and a dry run says so the same way
-            who, why = verified(newest)
-            if not who:
-                say("%s update -- %s is %s: refused" % (MARK, newest, why))
-                return 1
             if dry:
                 say("%s update -- would move to %s (signed by %s; was %s)"
                     % (MARK, newest, who, cur or "an untagged commit"))
