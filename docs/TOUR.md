@@ -1,8 +1,8 @@
 # The tour
 
-spark is installed, `spark check` says every row is ok, and the prompt
-line answers. This is the fun part: 13 small things to try, in 4 acts.
-Each one is a habit worth keeping.
+spark is installed, `spark check` finds nothing to fix, and the
+prompt line answers. This is the fun part: 13 small things to try, in
+4 acts. Each one is a habit worth keeping.
 
 This document is not tied to a spark release. It is kept true as
 things change, and no release waits on it.
@@ -100,8 +100,8 @@ Give it a voice of its own:
 
     spark awaken
 
-Pick a temperament. The model writes the lines spark says and picks its
-face, and your next prompt is awake. `spark look off` puts the quiet
+Pick a temperament. The model writes a personality and picks a face,
+and your next prompt is awake. `spark look off` puts the quiet
 back. To say more yourself:
 
     spark soul edit
@@ -135,9 +135,9 @@ it answers. It is just a good show.
 
 ## When you want more
 
-`spark <TAB>` completes every verb. `spark check` says what this
-machine promises. `lp ~/.spark/docs/CHEATSHEET.txt` prints the one-page
-reference. And
+`spark <TAB>` completes every verb. `spark check --all` shows what
+this machine promises. `lp ~/.spark/docs/CHEATSHEET.txt` prints the
+one-page reference. And
 
     ? what should I try next with spark
 

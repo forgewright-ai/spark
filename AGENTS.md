@@ -186,16 +186,16 @@ whole of it.
   proof: `spark line` answers valid JSON for it.
 - Call `git` on `spark line`'s path. The widgets depend on nothing but
   the line contract, and it must never block.
-- Call a model in the widgets' prompt hook, or fork there beyond the
-  one greeting. It runs before every prompt: a `$?` test, a few
-  variable writes and at most a few `printf`s. Its reads, with shell
-  builtins: `state/fails`, the plain hash-to-fix index the ledger
-  writes, and on a failure only. The look file, again only when it is
-  newer than the shell's marker, line by line and never sourced. On an
-  awakened machine, one stat of `state/news`, and `state/last-seen`
-  read and written at most every 5 minutes. The one fork is `spark
-  words greet`, at the first prompt after 4 hours away. Its other state
-  is per pane and in memory: never exported.
+- Call a model in the widgets' prompt hook, or fork there. It runs
+  before every prompt: a `$?` test, a few variable writes and at most a
+  few `printf`s. Its reads, with shell builtins: `state/fails`, the
+  plain hash-to-fix index the ledger writes, and on a failure only. The
+  look file, again only when it is newer than the shell's marker, line
+  by line and never sourced. Its other state is per pane and in
+  memory: never exported.
+- Print a canned line: a greeting, a goodbye, a news line. `spark words
+  greet` prints nothing, and nothing reads `state/news`, `news-seen` or
+  `last-seen`. The face shows only while spark waits.
 - Write non-ASCII into a doc: the pre-commit hook refuses it.
 - Name a private repository or tool in any doc: `tests/docs_test.py`
   refuses it.
@@ -206,5 +206,5 @@ whole of it.
 
 Every document, help text and usage text speaks with one voice.
 `docs/CONTRIBUTING.md`, "Voice", is the style sheet. Messages are
-lowercase, with one mark (`*` answer, `!` warn, both OSes) and `--`
-before the remedy when there is one.
+lowercase, with one mark (`*` spark speaking, `!` a warning or a
+failure, both OSes) and `--` before the remedy when there is one.

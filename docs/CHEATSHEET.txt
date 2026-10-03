@@ -8,11 +8,13 @@ SPARK
   spark soul [edit|reset]         who it is: the default, or your own
   spark memory add <words>        a fact it keeps  memory forget N  drops it
   spark memory [on|off|clear]     the facts it recalls on every answer
-  spark ver                       about, version, credits
+  spark ver                       the logo and the version
+  spark ver --credits             who made spark and what it uses
   spark ver --sbom                what it depends on, as CycloneDX JSON
-  spark chat [words]              a conversation. It says which one it goes on
-                                  with. /help lists its commands. Esc on an
-                                  empty line, Ctrl-D or /q ends it
+  spark chat [words]              talk with the model. One line says the
+                                  thread it goes on with. /help lists its
+                                  commands. Esc on an empty line, Ctrl-D or
+                                  /q ends it
   spark chat --thread N [words]   go on with an older thread (spark history)
   /resume [N] /clear /new /keep   in the chat: older thread, wipe, fresh, keep
   /last /model                    in the chat: the last turn, which model
@@ -72,16 +74,17 @@ SPARK
 ON THE LAN (server / client)
   spark model [NAME|auto|none]    choose one. model list = the table
                                   (--porcelain: data. grounded = audition)
-  spark model --chat NAME         the chat model, a second one (auto|none|list)
-  spark model budget [N]          percent of RAM+GPU auto may use (10-95)
+  spark model --chat NAME         a second model for chat (auto|none|list)
+  spark model budget [N]          the share of memory models may use (10-95)
   spark model add URL             add your own (--sha256, --license required)
-  spark model verify              sha256 every downloaded file now. exit 1 bad
+  spark model verify              check every downloaded model is intact.
+                                  exit 1 when one is damaged
   spark serve [on|off]            the engine and the page on the LAN, kept.
                                   On: one line each. Bare: what answers, the
                                   models, the units
   spark serve boot [on|off]       up from boot, never asleep (the machine
                                   that stays on)
-  spark serve share [on|off]      one engine for every OS user here (Linux).
+  spark serve share [on|off]      one model for every user here (Linux).
                                   Each keeps their own soul and memory
   spark serve --login             the page's URL. At a terminal the admin
                                   token and a QR to scan (--no-qr; piped,
@@ -96,7 +99,7 @@ ON THE LAN (server / client)
                                   (asks. SPARK_YES=1 answers for a script)
   spark user login [NAME] | logout  act as NAME here / forget the login
   spark user token --new          rotate your token. Old logins die
-  spark client [URL|off]          use another machine's server. None here.
+  spark client [URL|off]          use another machine's model. None here.
                                   Bare: what is set, and whether it answers.
                                   off: never asked again until client URL
 
@@ -112,8 +115,11 @@ THE PAGE (spark serve --login)  chat first. Keys when no input has focus
 THE MACHINE
   spark setup                     first run: name, user, model, then apply.
                                   One more question: read aloud? (default no)
-  spark check                     every promise, one row. exit 0 = no row failed
-  spark check knowledge           the manuals and apps the prompt line reads
+  spark check                     what needs you, then the totals. exit 0 =
+                                  no row failed
+  spark check --all               every row: each promise this machine makes
+  spark check NAME...             those rows, ok or not (knowledge: the
+                                  manuals and apps the prompt line reads)
   spark check --watch 5           redraw every 5 seconds  --selftest  prove
   spark check --fresh | --fetch   no cached answers / ask origin (git row)
   spark check --porcelain         one tab-separated row per line
@@ -132,34 +138,34 @@ THE MACHINE
 THE INTERFACE
   ~/.config/spark/theme.env       a palette a tool may write: spark ver and
                                   the status line follow it
-  spark voice                     the voice: mode, engine, player, mic
+  spark voice                     show the voice settings
   spark voice clear [--anyway]    read aloud in a plain clear voice, for low
                                   vision. No awaken needed. A screen reader
                                   running keeps it silent (--anyway speaks)
   spark voice on                  this machine's own voice, from spark awaken
   spark voice off [--remove]      silent. --remove deletes the engine
-  spark voice rate [N]            the clear voice's speed, 50..300 (100)
+  spark voice rate N              set the speed (50 to 300, default 100)
   spark voice test                one line aloud
   spark voice listen | stop       one spoken question, written out / hush
   Esc v                           listen, at the prompt and in the chat: the
                                   words land in your line. Enter sends
   Esc x                           stop speaking
-  the first on or clear           downloads the engine: about 586 MB on Linux,
-                                  602 MB on macOS (~/.local/share/spark/voice)
+  the first time                  spark downloads 586 MB on Linux, 602 MB on
+                                  macOS
   SPARK_VOICE_DEVICE=plughw:1,0   Linux: a headset on the second card
 
 THE LIVING PROMPT
   spark awaken                    give this machine a personality and a look
-  spark look [on|off|auto]        motion, colour and words, one switch.
+  spark look [on|off|auto]        motion, colour and the face, one switch.
                                   Bare: the look, the height, the reveal
-  spark words [edit]              the lines it says, and its faces
+  spark words [edit]              the faces and lines spark awaken made
   spark height [N]                the row spark writes in: 1..5 above your line
   Esc k                           at the prompt: move spark's row (1, 2, 3)
 
 LESS OFTEN USED
   spark stats [--week]            tok/s, latency, cache hits by mode, baseline
   spark stats --sends             what left, in bytes: by destination and day
-  spark bench [tune]              llama-bench. tune finds the best settings
+  spark bench [tune]              this machine's speed. tune finds the fastest
   spark bench tune show | apply   the winner. apply writes spark.env, restarts
   spark bench --line [N]          the prompt line's pace. spark stats shows it
 
