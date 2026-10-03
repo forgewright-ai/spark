@@ -1361,13 +1361,14 @@ check("stream: closed (its end of input, not a kill) about %.1f s after the last
 check("stream: the stream's player is gone after its close", wait_for(lambda: not alive(pid), 5))
 r.put("four.")
 r.drain(10, played=True)
+# the stub reads at a card's pace: its EOF says it read all it was given
+wait_for(lambda: len([x for x in jsonl("streams.jsonl") if "eof" in x]) == 2, 8)
 opened = [x for x in jsonl("streams.jsonl") if "start" in x]
 check("stream: the next burst opens a new player, the lead-in first again",
       len(opened) == 2 and runs(opened[1]["pid"])[:2] == [(0, LEAD), (ident("four."), FRAMES)],
       runs(opened[1]["pid"])[:3] if len(opened) == 2 else opened)
 wait_for(lambda: r.stream is None, 5)
 
-wait_for(lambda: len([x for x in jsonl("streams.jsonl") if "eof" in x]) == 2, 8)
 reset_logs()
 os.environ.update(STUB_TTS="0.1", STUB_CLIP="3")
 r = voice.Reader(Cfg(SPARK_VOICE="clear"))
