@@ -40,9 +40,8 @@ fails = []
 # new user reads (the voice checks below); and every doc
 ROOT_DOCS = ("README.md", "CREDITS.md", "CLAUDE.md", "AGENTS.md")
 CORE_IN_DOCS = ("INSTALL.md", "CHEATSHEET.txt", "CHANGELOG.md", "ROADMAP.md", "CONTRIBUTING.md")
-BESIDE = ("TOUR.md", "APPS.md", "IDEAS.md", "TROUBLESHOOTING.md")
-DOCS_DIR = CORE_IN_DOCS + BESIDE
-CUSTOMER_DOCS = ("README.md", "docs/INSTALL.md", "docs/CHEATSHEET.txt", "docs/TOUR.md", "docs/TROUBLESHOOTING.md")
+DOCS_DIR = CORE_IN_DOCS
+CUSTOMER_DOCS = ("README.md", "docs/INSTALL.md", "docs/CHEATSHEET.txt")
 ALL_DOCS = ROOT_DOCS + tuple("docs/" + f for f in DOCS_DIR) + ("site.env.example",)
 # the voice (docs/CONTRIBUTING.md "## Voice"), its mechanical half: an
 # ALL-CAPS word of four or more letters is an acronym or a constant, never
@@ -290,10 +289,6 @@ def living():
     m = re.search(r"(?m)^the living prompt\n(.*?)(?:\n\n|\Z)", out, re.S)
     verbs = sorted(set(re.findall(r"(?m)^ spark ([a-z]+)", m.group(1)))) if m else []
     check(bool(verbs), "spark help has a living prompt block with verbs")
-    tour = re.search(r"(\d+) small things", read("docs/TOUR.md"))
-    said = re.search(r"TOUR\.md .*?(\d+) small things", out)
-    check(tour is not None and said is not None and said.group(1) == tour.group(1),
-          "spark help counts the tour's small things as docs/TOUR.md does")
     cheat, inst = read("docs/CHEATSHEET.txt"), read("docs/INSTALL.md")
     for v in verbs + ["Esc k"]:
         word = v if v == "Esc k" else "spark " + v
@@ -544,8 +539,6 @@ def main():
     for doc in ("CLAUDE.md", "docs/INSTALL.md"):
         for m in re.finditer(r"spark check`?\s+(?:has )?(\d+) rows", read(doc)):
             check(int(m.group(1)) == n_rows, "%s: '%s' is check.py's count (%d)" % (doc, m.group(0), n_rows))
-    for m in re.finditer(r"spark check` answers (\d+)", read("docs/IDEAS.md")):
-        check(int(m.group(1)) == n_rows, "docs/IDEAS.md: '%s' is check.py's count (%d)" % (m.group(0), n_rows))
     # the threat model: the section exists and names the one remedy
     inst = read("docs/INSTALL.md")
     m = re.search(r"## 8\. What an attacker can and cannot do\n(.*?)(?:\n## )", inst, re.S)
@@ -665,30 +658,22 @@ def main():
     # what is private is named nowhere in the tree's docs
     for doc in ALL_DOCS:
         check(not re.search(r"\bfactor(y|ies)\b", read(doc), re.I), "%s: no factory" % doc)
-    # docs/APPS.md is where the apps live now: the customer docs a new user
-    # reads are the core, and the apps are beside it, in their own file,
-    # outside the landing rule. Every app it names
-    # still has to be credited -- that one is not optional; the page front
-    # checks itself the same way where the page is rendered.
-    apps = sorted(set(re.findall(r"github\.com/forgewright-ai/(spark-[a-z0-9]+)", read("docs/APPS.md"))))
-    check(bool(apps), "docs/APPS.md names at least one spark app repo")
+    # the README's Apps section lists the apps: every app it names is
+    # credited, and the page front checks itself the same way where the
+    # page is rendered
+    m = re.search(r"## Apps\n(.*?)(?:\n## |\Z)", read("README.md"), re.S)
+    apps = sorted(set(re.findall(r"github\.com/forgewright-ai/(spark-[a-z0-9]+)", m.group(1) if m else "")))
+    check(bool(apps), "README.md's Apps section names at least one spark app repo")
     for app in apps:
-        for doc in ("CREDITS.md",):
-            check(app in read(doc), "%s names %s (docs/APPS.md does)" % (doc, app))
-    # docs/ holds exactly the nine: the five core docs that moved there with
-    # v1.38 and the four beside the core. A beside doc says it is not tied
-    # to a release (so nobody files it back under the landing rule); a core
-    # doc there does NOT (it is still release-gated); every one is in
-    # CLAUDE.md's Layout and is pointed to -- a doc nobody is sent to is dead
+        check(app in read("CREDITS.md"), "CREDITS.md names %s (README.md's Apps does)" % app)
+    # docs/ holds exactly the five core docs that moved there with v1.38.
+    # (release-gated, so none carries the "not tied to a release" line);
+    # every one is in CLAUDE.md's Layout and is pointed to from the README
     have = sorted(f for f in os.listdir(os.path.join(ROOT, "docs")) if not f.startswith("."))
     check(have == sorted(DOCS_DIR), "docs/ holds exactly %s%s"
           % (", ".join(DOCS_DIR), "" if have == sorted(DOCS_DIR) else " (found %s)" % ", ".join(have)))
     m = re.search(r"## Layout\n\n```\n(.*?)\n```", claude, re.S)
     layout = m.group(1) if m else ""
-    pointing = "".join(read(d) for d in ("README.md", "docs/INSTALL.md", "docs/CHEATSHEET.txt", "docs/ROADMAP.md"))
-    for name in BESIDE:
-        check("This document is not tied to a spark release" in read("docs/" + name), "docs/%s says it is not release-gated" % name)
-        check("docs/" + name in pointing, "README, INSTALL, CHEATSHEET or ROADMAP points to docs/%s" % name)
     for name in CORE_IN_DOCS:
         check("This document is not tied to a spark release" not in read("docs/" + name),
               "docs/%s is core (the landing rule): it does not carry the beside-the-core line" % name)

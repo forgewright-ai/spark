@@ -1,8 +1,7 @@
 # Roadmap
 
-What comes after v1.74, in rough order. Nothing here is a promise.
-`docs/CHANGELOG.md` says what shipped. `docs/IDEAS.md` holds ideas
-for later.
+What comes after v1.75, in rough order. Nothing here is a promise.
+`docs/CHANGELOG.md` says what shipped.
 
 No new verb until items 1 and 2 are done.
 

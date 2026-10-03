@@ -56,8 +56,6 @@ macOS: run `xcode-select --install`. It brings `git`, `curl` and
 Windows: in PowerShell, run `wsl --install -d Ubuntu-24.04` and reboot
 when asked. Open Ubuntu and run Debian's step 3.
 
-No Wi-Fi after the install: see `docs/TROUBLESHOOTING.md`.
-
 ## 2. Install spark
 
 1. Check what spark needs: `sudo`, `git`, `curl`, `python3` 3.9 or
@@ -121,7 +119,7 @@ newest signed release and runs `spark setup`. It never runs `sudo`.
 `spark setup`:
 
 1. Asks this machine's name, your name and the model. The model marked
-   `*` fits this machine.
+   `*` is the one `auto` picks here.
 2. Asks whether spark should read aloud in a clear voice, for low
    vision. The default is no.
 3. On Linux, may ask for `sudo` once for a package: `libgomp1` on
@@ -146,7 +144,7 @@ a cron job or `ssh HOST 'spark ...'`, call `~/.local/bin/spark` in full.
 ## 3. Use it
 
 Every command has `-h`. `docs/CHEATSHEET.txt` lists every command on
-one page. `docs/TOUR.md` has things to try in your first hour.
+one page. `README.md` has things to try in your first hour.
 
 The prompt line:
 
@@ -189,7 +187,8 @@ reply. The commands:
 | `/q` | ends the chat |
 
 `spark do <words>` does a task, one command at a time. At each step,
-`Enter` runs it, `e` edits it, `s` skips it and `q` quits. A step that
+`Enter` runs it, `e` edits it, `s` skips it, `q` quits and `r` shows a
+long step again. A step that
 can destroy data runs only when you type `yes`. A run is 8 steps at
 most.
 
@@ -206,11 +205,15 @@ These work on a text on stdin:
 - `spark drill < notes.md`: practice questions from the text.
 - `tail -f app.log | spark watch "a 500 appears"`: one line when a line
   matches.
-- `spark edit`: for editors. `docs/APPS.md` lists the apps that use it.
+- `spark edit`: for editors. `README.md` lists the apps that use it.
 
 `spark soul edit` changes who spark is, in 4000 characters at most.
 `spark soul reset` goes back to the default. `spark memory add <words>`
 keeps a fact, up to 40. The soul and the facts go with every question.
+
+`spark history` lists past threads. `spark clear --history` forgets
+them, except the ones you kept. `spark user claim` moves chats from an
+older spark into your account.
 
 `spark awaken` gives this machine a personality and a look. Nothing
 changes until you run it. It asks for a temperament: plain, warm,
@@ -280,8 +283,8 @@ All are under Apache-2.0.
 
 `auto` takes the first tested model that fits the budget, 60 percent of
 RAM plus GPU memory. It skips a file over the speed cap: 3 GB on `cpu`,
-6 GB on `vulkan`, 20 GB on `metal`. A model with 4B working parameters
-or fewer counts as small.
+6 GB on `vulkan`, 20 GB on `metal`. A model with 4B or fewer working
+parameters, such as `gemma4-26b-a4b`, is not held to the cap.
 
 - `spark model NAME` downloads a model, checks it and serves it.
 - `spark model auto` goes back to the rule above.
@@ -365,8 +368,6 @@ macOS:
 
 - macOS asks once whether `python3` may find devices on the local
   network. Allow it, or the page answers only this machine.
-- If Gatekeeper blocks the engine, run `xattr -dr
-  com.apple.quarantine ~/.local/share/spark/engine`.
 - Services: `launchctl print gui/$UID/spark.serve`, and `.forge` and
   `.check` likewise. `launchctl kickstart -k gui/$UID/spark.serve`
   restarts one.
@@ -419,7 +420,7 @@ Windows, as Ubuntu 24.04 on WSL 2:
 - The engine is the CPU build.
 - If the `services` row reads `na`, put `[boot] systemd=true` in
   `/etc/wsl.conf`. Run `wsl --shutdown` in PowerShell, reopen Ubuntu,
-  then run `~/.spark/bootstrap.sh`.
+  then run `spark update`.
 - WSL 2 stops with its last window, so it cannot serve your network.
   `spark serve boot on` refuses.
 
@@ -447,8 +448,9 @@ spark uninstall
 
 It shows the plan and asks you to type `yes`. Everything spark made
 goes. Your soul, your memory and the users' stores stay, and `--purge`
-takes them too. `--dry-run` shows the plan only. spark prints how to
-undo what it cannot remove, such as a hostname it set.
+takes them too. `--dry-run` shows the plan only. At a terminal it asks
+whether to remove the packages it installed. spark prints how to undo
+what it cannot remove, such as a hostname it set.
 
 The settings. `~/.config/spark/site.env` holds the machine's choices.
 Each has a command:
@@ -482,8 +484,9 @@ every key. The common ones:
 | `SPARK_VOICE_DEVICE` | the sound card on Linux, such as `plughw:1,0` | ALSA's default |
 | `SPARK_KNOWLEDGE` | `off`: the prompt line skips the manuals | `on` |
 
-Root. spark uses `sudo` for the package manager, for the hostname, for
-Void's one service and for `spark serve boot on`.
+Root. spark uses `sudo` for the package manager, the hostname, the
+`render` group, Void's one service, `spark serve boot on` and `spark
+serve share on`.
 `~/.spark/bootstrap.sh --dry-run` lists what it would do, without
 `sudo`.
 

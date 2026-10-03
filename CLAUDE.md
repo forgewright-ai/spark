@@ -422,13 +422,8 @@ docs/           every document but the 4 at the root. With a release (the
                 CHEATSHEET.txt (one page, 80 columns, what `lp` prints),
                 CHANGELOG.md (release.yml reads its top section as the notes),
                 ROADMAP.md (what comes after the current release, in order),
-                CONTRIBUTING.md (how a change lands, and the voice). Beside the
-                core -- outside the landing rule, kept true continuously, not
-                tied to a release, each saying so in its first lines: TOUR.md
-                (a first hour: 13 small things to try), APPS.md (the apps
-                and how each one connects), IDEAS.md (the field ROADMAP.md is
-                picked from), TROUBLESHOOTING.md (a machine that will not join
-                the Wi-Fi: one Wi-Fi daemon per card, then the logs)
+                CONTRIBUTING.md (how a change lands, and the voice). The first
+                hour and the apps are sections of README.md
 ```
 
 Runtime paths. Config is `~/.config/spark/`: `site.env`, `spark.env`,
@@ -1529,8 +1524,8 @@ and may change freely.
     the run is one `end`, reason `error`, rc 1. Outside the sandbox the
     steps run on `do.STEP_TIMEOUT`. `SIGTERM` ends the run and its step.
     The exit code is the `end` event's rc. Its first app is spark-acp
-    (`docs/APPS.md`), an Agent Client Protocol agent: a step is a Run or
-    a Skip, a review one Accept or Discard.
+    (README.md, Apps), an Agent Client Protocol agent: a step is a
+    Run or a Skip, a review one Accept or Discard.
 
 ## The grammar
 
@@ -1599,7 +1594,7 @@ One grammar for every verb. A verb that breaks a rule is a bug.
   main:
   `docs/INSTALL.md`, `docs/CHEATSHEET.txt`, `models.env`,
   `docs/CHANGELOG.md`, `docs/ROADMAP.md`, `docs/CONTRIBUTING.md`,
-  `CREDITS.md` and `docs/TOUR.md`. A change here reaches it with the
+  and `CREDITS.md`. A change here reaches it with the
   next release, nothing to do, and nothing in this tree builds or
   publishes it (Releasing, step 3). Its look mirrors the colour tokens
   of `lib/spark/forge/spark.css`. That lockstep is checked where the
@@ -1615,9 +1610,8 @@ One grammar for every verb. A verb that breaks a rule is a bug.
   nothing private named anywhere in the tree's docs. docs_test holds the
   word list. This file and `AGENTS.md` keep the contracts' names. Every
   document but `README.md`, `CREDITS.md`, this file and `AGENTS.md`
-  lives in `docs/`. One beside the core says it is not tied to a
-  release, and a core one does not. Each is in the Layout and is pointed
-  to, because a doc nobody is sent to is dead. `docs/CONTRIBUTING.md`,
+  lives in `docs/`. Each is in the Layout and is pointed to, because a
+  doc nobody is sent to is dead. `docs/CONTRIBUTING.md`,
   "Voice", is the style sheet every document, help and usage text
   follows.
 - **A package.** Linux: the right `PKG_*` group in every
@@ -1650,15 +1644,7 @@ One grammar for every verb. A verb that breaks a rule is a bug.
   documentation, and core documentation moves with a release:
   `README.md`, `docs/INSTALL.md`, `docs/CHEATSHEET.txt`, `spark help`,
   this file and `docs/CHANGELOG.md` are updated as a version ships,
-  together. The four beside them in `docs/` (TOUR, APPS, IDEAS,
-  TROUBLESHOOTING) are outside it. They are kept true continuously, and
-  no release waits on them. Nothing in them has to appear in help, the
-  cheatsheet or a changelog entry. Each of those says so in its own
-  first lines. `tests/docs_test.py` checks that it does and that the
-  Layout above names it. It also checks that `README.md`,
-  `docs/INSTALL.md`, `docs/CHEATSHEET.txt` or `docs/ROADMAP.md` points
-  to it. So none drifts back under the rule by accident, and none goes
-  unread.
+  together.
 - **A check row.** A function `row_<name>(ctx)` in `lib/spark/check.py`
   decorated `@row(CATEGORY, fixture=True)` or `@row(CATEGORY,
   fixture=False, reason="...")`. If it is fixture-testable, extend
@@ -1772,11 +1758,11 @@ One grammar for every verb. A verb that breaks a rule is a bug.
   spark-acp is the task verb's client (contract 15, `spark do
   --porcelain`). It is an Agent Client Protocol agent for Toad or Zed.
   It starts nothing but spark, never speaks HTTP, and has no `yes` to
-  give. `docs/APPS.md` lists the known apps, and every one of them is
-  in `CREDITS.md` and on the site's front. docs_test reads the app
-  names out of `docs/APPS.md` and looks them up in `CREDITS.md`. The
-  site's front is checked the same way where it is rendered. A new one
-  is one line in each. The core docs do not name them. A pull request
+  give. The README's Apps section lists the known apps, and every
+  one of them is in `CREDITS.md` and on the site's front. docs_test
+  reads the app names out of that section and looks them up in
+  `CREDITS.md`. The site's front is checked the same way where it is
+  rendered. A new one is one line in each. A pull request
   that adds an app, an app package or an app check row here is turned
   into a pointer to the app's repository.
 - **The client shape.** `SITE_AI_MODEL=none` beside `SITE_PEER_AI_URL`

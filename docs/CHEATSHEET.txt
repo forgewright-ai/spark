@@ -1,5 +1,7 @@
 SPARK CHEATSHEET                                 lp ~/.spark/docs/CHEATSHEET.txt
 
+Every command has -h.
+
 AT THE PROMPT
   ? words   or   words?   Enter   the command lands in your line
   Enter again                     runs it. ! means read it first
@@ -7,6 +9,8 @@ AT THE PROMPT
   Esc s                           ask about the line you are on
   Esc s on an empty line          explain the failed command. Again: the fix
   Esc r                           describe a past command to find it again
+  Esc v | Esc x                   ask by voice, stop the speaking (voice on)
+  Esc k                           move spark's row up or down
   cmd 2>&1 | explain              what went wrong, and the fix
   spark <TAB>                     complete commands and names
   a paste of 2 or more lines      one line about it. Nothing runs
@@ -15,20 +19,27 @@ SPARK
   spark                           what answers
   spark status                    the model, the server, soul, memory
   spark off | on                  turn the prompt line off or on
-  spark <words>                   one answer       spark last   again
+  spark <words>                   one answer
   spark @FILE <words>             ask about a file
-  spark soul [edit|reset]         who spark is
-  spark memory add <words>        keep a fact.  memory forget N  drops it
-  spark memory [on|off|clear]     use the facts, or forget them all
+  spark last                      the last answer again
+  spark soul                      who spark is
+  spark soul edit [--core]        change it (--core: all of it)
+  spark soul reset                back to the default
+  spark memory                    the facts, numbered
+  spark memory add <words>        keep a fact (40 at most)
+  spark memory forget N|<words>   forget one
+  spark memory on|off|clear       use the facts, or forget them all
+  spark history                   past threads and remembered fixes
+  spark clear --history           forget past threads (kept ones stay)
   spark ver                       the version
   spark ver --credits             who made spark and what it uses
   spark ver --sbom                what spark depends on, as CycloneDX JSON
-  spark history                   past threads
-  spark clear --history           forget past threads (kept ones stay)
 
 CHAT
   spark chat [words]              talk with the model. Esc, Ctrl-D or /q ends
   spark chat --thread N [words]   an older thread (N from spark history)
+  spark chat --reveal N|auto|off  how fast the reply appears
+  Ctrl-C                          stop a reply
   /help                           the commands
   /resume [N] /new /clear /keep   older thread, fresh, wipe, keep longer
   /last /model                    the last turn, which model
@@ -38,40 +49,60 @@ CHAT
   /do [--sandbox] <goal>          a task, as spark do runs it
   /aloud /again /reveal           read aloud or stop, say it again, the pace
 
-TASKS AND TEXT
-  spark do <words>                a task, one command at a time. You confirm
-                                  each: Enter runs, e edits, s skips, q quits
+TASKS
+  spark do <words>                a task, one command at a time. At each step:
+                                  Enter runs, e edits, s skips, q quits,
+                                  r reads it again. Danger needs yes typed
   spark do --sandbox <words>      the steps run in a copy, offline. Then the
                                   diff. yes applies it. Weaker on macOS
   spark do --sandbox --detach ... the same with nobody there
-  spark do --review [ID]          the waiting runs (--accept ID, --discard ID)
-  spark edit [?] <words> < FILE   rewrite the text, or ask about it (?)
-  spark edit --watch FILE         comments on a draft each time you save
-  spark ask < FILE                what the text does not answer
-  spark read <words> < FILE       an answer, every line quoting the text
-  spark drill < FILE              practice questions from the text
-  cmd | spark watch <words>       one line when the stream matches
-  spark reveal [N|auto|off]       how fast replies appear
+  spark do --review [ID]          the waiting runs, or one of them
+  spark do --accept ID            apply a waiting run without showing it
+  spark do --discard ID           drop a waiting run
+  spark do --porcelain <words>    JSON lines, for a program
+  spark do -- <words>             a goal that starts with -
 
-THE MODEL AND THE SERVER
-  spark model                     the list of models and their licences
+READING AND WRITING
+  the text comes on stdin: < FILE or a pipe
+  spark edit <words>              rewrite the text
+  spark edit ? [words]            ask about it. ? alone reviews it
+  spark edit ? --source [words]   discuss someone else's text. Secrets held
+  spark edit --at N               what comes next at byte N
+  spark edit --watch FILE         comments on a draft each time you save
+  spark ask [words]               what the text does not answer
+  spark read [words]              an answer, every line quoting the text
+  spark read --part N             part N of a long text
+  spark drill [--name NAME]       practice questions. --name keeps a schedule
+  cmd | spark watch <words>       one line when the stream matches
+  cmd | spark reveal [N]          show piped text at N characters a second
+  spark reveal [N|auto|off]       how fast replies appear
+  --name NAME  --about WORDS      hints: the text's name and what it is
+  --thread ID                     edit ? and ask: keep the exchange
+  --ledger [clear] --name NAME    what was declined, asked or scheduled
+
+THE MODEL
+  spark model                     the models and their licences
   spark model NAME | auto | none  choose one
-  spark model --chat NAME         a second model for chat
+  spark model --chat [NAME|auto|none|list]  a second model for chat
   spark model budget [N]          the share of memory models may use
   spark model add URL             your own (--license, --sha256)
   spark model rm NAME             delete a downloaded model
   spark model verify              check the downloaded models
-  spark serve [on|off]            serve the model and the page on your network
+
+THE SERVER AND OTHER MACHINES
+  spark serve                     what answers, the models, the page
+  spark serve on | off [--force]  start or stop the engine and the page
   spark serve boot [on|off]       start at boot
   spark serve share [on|off]      one model for every user here (Linux)
   spark serve --login             the page's address and the admin login
-  spark serve --login --new       a new admin token
+  spark serve --login --new       a new admin token. Old logins end
   spark serve --audit [N]         what the admin did
   spark user [list]               the users here
   spark user add NAME             add a user. The token shows once
   spark user remove NAME          delete a user and their data (asks)
   spark user login [NAME] | logout
   spark user token --new          a new token. Other logins end
+  spark user claim                move older chats into your account
   spark client [URL|off]          use another machine's model
   Traffic between machines is plain HTTP. The admin token can run any
   command on the machine.
@@ -79,39 +110,44 @@ THE MODEL AND THE SERVER
 THE PAGE (open the address spark serve --login prints)
   1..5                            chat, activity, do, settings, help
   /   Enter   Shift+Enter         the input, send, a new line
-  n   j / k   Esc                 new thread, next / previous, stop
+  n   j / k                       new chat, next / previous chat
+  r   ?   Esc                     refresh, the help page, stop
 
 THE MACHINE
-  spark setup                     name, user, model and voice
+  spark setup [--yes]             name, user, model and voice
   spark check                     what needs you. exit 0 = nothing failed
-  spark check --all               every row
-  spark check NAME...             those rows
+  spark check --all | NAME...     every row, or those rows
+  spark check --fresh | --watch N ask again now, or every N seconds
   spark check --report            a block to paste into an issue
+  spark check --porcelain         every row, tab separated
   spark update [--dry-run]        the newest signed release
-  spark uninstall [--purge]       remove spark (asks first)
-  spark stats [--week|--sends]    speed, and what left this machine
-  spark bench [--line|tune]       measure this machine's speed
-  spark bar line                  the status in one line, for a bar
+  spark uninstall [--dry-run]     remove spark (asks first). --purge: yours too
+  spark stats [--week|--all]      speed, waits and cache hits
+  spark stats --sends             what left this machine, by day
+  spark bench [--spark|--chat]    measure the model's speed
+  spark bench --line [N]          time N prompt-line questions
+  spark bench tune [show|apply]   find the fastest settings, then use them
+  spark bar [line]                the status in one line, for a bar
   ~/.config/spark/site.env        name, user, model, the other machine
   ~/.config/spark/spark.env       ports, engine, history, memory
 
 VOICE AND LOOK
   spark voice                     the voice settings
   spark voice clear [--anyway]    read aloud in a clear voice
-  spark voice on | off [--remove] this machine's own voice, or none
+  spark voice on                  this machine's own voice
+  spark voice off [--remove]      no voice (--remove frees the space)
   spark voice rate N              the speed, 50 to 300
   spark voice test                say one line
-  spark voice listen | stop       ask by voice (Esc v), stop (Esc x)
+  spark voice listen | stop       ask by voice, stop speaking
   first use                       586 MB on Linux, 602 MB on macOS
   spark awaken                    give this machine a personality and a look
   spark look [on|off|auto]        motion, colour and the face
   spark height [N]                the row spark writes in, 1 to 5
-  Esc k                           move that row
 
 LINUX
   systemctl --user status spark-serve spark-forge
   journalctl --user -u spark-serve -n 50
-  void: sv status ~/.config/spark/sv/*
+  Void: sv status ~/.config/spark/sv/*
 
 MACOS
   launchctl print gui/$UID/spark.serve
@@ -124,10 +160,6 @@ WINDOWS
 DOCUMENTS
   docs/INSTALL.md                 install, models, other machines, updates
   docs/CHEATSHEET.txt             this page
-  docs/TOUR.md                    a first hour: 13 small things to try
-  docs/APPS.md                    editors and tools that use spark
-  docs/TROUBLESHOOTING.md         when the Wi-Fi does not come up
   docs/CHANGELOG.md               what each release changed
   docs/ROADMAP.md                 what comes next
-  docs/IDEAS.md                   ideas for later
   docs/CONTRIBUTING.md            how to send a change

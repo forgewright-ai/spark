@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.75
+
+The docs say less, and nothing more than spark does.
+
+- Every document is shorter and plainer. The README, INSTALL and the
+  cheatsheet state each limit: plain HTTP between machines, what the
+  admin token can do, and which commands hold secrets back.
+- `docs/TROUBLESHOOTING.md` and `docs/IDEAS.md` are gone. The tour
+  and the apps are now sections of the README: A first hour, and Apps.
+
 ## v1.74
 
 The voice in the chat works the way it reads.

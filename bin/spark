@@ -95,8 +95,6 @@ USAGE_TAIL = """less often used (each has -h)
 docs/
  docs/INSTALL.md              every step and every setting
  docs/CHEATSHEET.txt          every command on one page
- docs/TOUR.md                 a first hour: 13 small things to try
- docs/APPS.md                 editors and tools that work with spark
 
 version %s
 """
