@@ -1298,8 +1298,10 @@ def line_knowledge_cases(t, spark, home):
          and "| commands: status up down once exit start stop restart" in bodies[-1]["messages"][-1]["content"],
          "line knowledge: a command word sv's manual does not list is asked again, its commands on the card",
          repr(lines) + repr(bodies[-1]["messages"][-1]["content"][-300:] if bodies else ""))
+    # (v1.75: and it is danger -- sv reads its command's first letter,
+    # so `sv enable` is `sv exit`: sshd's runsv gone)
     rc, lines, took, bodies, err = ask("? knowsvstuck enable sshd at boot")
-    t.ok(rc == 0 and len(bodies) == 2 and lines[0] == "cmd\tsv enable sshd" and len(lines[1]) <= 80
+    t.ok(rc == 0 and len(bodies) == 2 and lines[0] == "danger\tsv enable sshd" and len(lines[1]) <= 80
          and lines[1] == "The sv manual has no command enable -- check it before Enter.",
          "line knowledge: a command word still unlisted after the re-ask lands, the note names the manual"
          " (the hint it would cut to a fragment is dropped)", repr(lines))
@@ -3322,6 +3324,111 @@ def main():
             if time.time() - _t0 >= 0.5:
                 _slow.append((_w[:12], round(time.time() - _t0, 2)))
         t.ok(not _slow, "danger: the v1.56 lines read 100 kB of their worst shape in under 0.5 s", str(_slow))
+        # v1.75: the reading of the commands (persona._read). A command
+        # word the shell rewrites is opaque and dangerous; so is a
+        # carrier; a wrapper is read past for the patterns. Each with
+        # the counterparts that stay plain
+        _rw = ['cd . && "rm" -rf ~', "cd . && r''m -rf ~", "x=rm; $x -rf ~", "cd . && rm$IFS-rf ~/proj",
+               "cd . && {rm,-rf,build}", 'cd . && "git" push --force', 'cd . && "python3" -c "print(1)"',
+               'cd . && "bash" -c "rm x"', "cd . && ba''sh -s < x", "case $x in a) \"rm\" -rf ~;; esac",
+               'echo $("rm" -rf ~)', 'diff <("rm" x) b', 'cat <<EOF\n$("rm" -rf ~)\nEOF', 'timeout 5 "rm" x',
+               "find . -exec \"rm\" {} +", "if \"$cond\"; then ls; fi", "cd . && *.sh", "cd . && ~x/rm y",
+               "case x in a) ( true\n\"rm\" -rf ~ ) ;; esac", "case x in a) (\"rm\" x);; esac"]
+        # (opaque() names an older line first where one holds: $(...) is
+        # "a command substitution" -- the reading still finds the word)
+        _bad = [c for c in _rw if _pers._read(c) != (_pers.REWRITTEN, True) or not _pers.opaque(c)
+                or not _pers.is_dangerous(c)]
+        t.ok(not _bad, "danger: a command word the shell rewrites (a quote, $, {a,b}, a glob) is opaque and danger",
+             str([(c, _pers.opaque(c)) for c in _bad]))
+        _wrapped = ["timeout 5 rm x", "doas rm x", "pkexec rm x", "runuser -u w -- rm x", "setsid rm x", "exec rm x",
+                    "stdbuf -o0 rm x", "chroot / rm x", "flock f rm x", "watch rm x", "busybox rm x", "env X=1 rm x",
+                    "nice -n 5 rm x", "ionice -c3 rm x", "nohup rm x", "command rm x", "xargs -0 rm",
+                    "sudo -Eu root timeout -s KILL 5 truncate -s0 f", "watch 'rm -rf x'", "sh -c 'timeout 1 rm x'",
+                    "/bin/rm x", "doas ls", "pkexec ls", "su", "su - root", "run0 ls",
+                    "eval \"r\"\"m -rf x\"", "trap '\"rm\" -rf x' EXIT", "builtin eval \"r\"\"m x\""]
+        _plainw = ["timeout 5 ls", "env X=1 ls", "nice -n 5 make", "watch -n 1 df -h", "watch 'df -h'",
+                   "command -v rm", "xargs -0 echo", "stdbuf -oL tail -n 5 f", "flock f make", "exec 3>&1",
+                   "sh -c 'echo hi'", "trap - EXIT", "trap 'echo bye' EXIT", "eval echo hi"]
+        _bad = [c for c in _wrapped if not _pers.is_dangerous(c)] + \
+               ["!" + c for c in _plainw if _pers.is_dangerous(c)]
+        t.ok(not _bad, "danger: a wrapper is read past (timeout, doas, pkexec, runuser, setsid, exec, stdbuf, chroot, "
+             "flock, watch, busybox, env, nice ...) and root by another door is danger; their plain forms stay plain",
+             str(_bad))
+        _carried = (
+            (_pers.ON_ANOTHER, ["ssh host rm x", "ssh -p 22 host ls", "ssh -o ProxyCommand='rm x' h",
+                                "ssh -oLocalCommand=x -oPermitLocalCommand=yes h", "scp -o ProxyCommand=x a h:b",
+                                "ssh host -v ls"]),
+            (_pers.IN_SESSION, ["swaymsg exec foot -e rm x", "swaymsg 'workspace 2; exec foot'",
+                                "i3-msg exec xterm", "tmux send-keys 'rm x' Enter", "tmux -L s send -t 0 x Enter",
+                                "tmux new-window 'rm x'", "tmux new -d 'rm x'", "tmux run-shell 'rm x'",
+                                "tmux -c 'rm x'", "screen -X stuff 'rm x'", "screen -dm rm x"]),
+            (_pers.LATER, ["echo 'rm x' | at now", "at now + 1 minute", "batch", "systemd-run --user rm x",
+                           "launchctl submit -l x -- rm x", "echo x | crontab -", "crontab mycron",
+                           "git config alias.x '!rm x'", "git config core.sshCommand 'rm x'"]),
+            (_pers.IN_OPTION, ["git -c core.sshCommand=touch fetch", "git -c alias.x='!rm x' x",
+                               "git --config-env=core.pager=X log", "git --exec-path=. status",
+                               "tar --to-command='rm x' -xf a", "tar --checkpoint-action=exec='rm x' -xf a",
+                               "tar -I 'rm x;' -xf a", "env -S 'rm x'", "flock f -c 'rm x'", "flock -c 'rm x' f",
+                               "runuser w -c 'rm x'", "su -c 'rm x'", "su root -c x",
+                               "GIT_SSH_COMMAND='rm x' git fetch", "LD_PRELOAD=./x.so ls",
+                               "export LD_PRELOAD=./x.so", "env GIT_EXTERNAL_DIFF=./x git diff",
+                               "PAGER='rm x;' git log"]),
+            (_pers.IN_SCRIPT, ["awk 'BEGIN{system(\"rm x\")}'", "awk '{print | \"sh\"}' f",
+                               "awk 'BEGIN{\"date\" | getline d}'", "awk -f prog.awk f", "gawk -e '@load \"x\"'",
+                               "sed '1e rm x' f", "sed 's/x/date/e' f", "sed -n '/a/,$e ls' f", "sed -f s.sed f",
+                               "vim -c 'q' f", "vim +q f", "nvim --cmd 'x' f", "vim -S s.vim", "emacs --eval '(x)'"]),
+        )
+        _bad = [(w, c, _pers.opaque(c)) for w, cs in _carried for c in cs
+                if _pers.opaque(c) != w or not _pers.is_dangerous(c)]
+        t.ok(not _bad, "danger: every carrier line names its shape -- ssh's command, a session's, later, inside an "
+             "option or a variable, a tool's own script -- and is danger", str(_bad))
+        _plainc = ["ssh host", "ssh -p 22 host", "ssh -t host", "ssh -J jump host", "scp a host:b", "tmux",
+                   "tmux attach -t x", "tmux new -s work", "tmux ls", "screen -r", "screen -S work",
+                   "swaymsg -t get_tree", "at -l", "crontab -l", "crontab -e", "launchctl list",
+                   "git status", "git -C d log --oneline", "git config user.name x", "git log --pretty='%h|%s'",
+                   "awk '{print $1}'", "awk -F'|' '{print $2}' f", "awk '/a|b/' f", "awk 'NR == 1 || /x/' f",
+                   "sed 's/a/b/'", "sed -n '1p' f", "sed -E 's/(e)x/\\1/g' f", "sed --sandbox 's/x/y/e' f",
+                   "tar -xf a", "tar -I zstd -xf a.tar.zst", "tar -czf a.tgz d", "find . -name x",
+                   "find . -exec grep -l foo {} +", "vim f", "vim +10 f", "nvim +/pat f", "emacs f",
+                   "PAGER=cat git log", "EDITOR=vim make", "env -i PATH=/bin ls", "systemctl --user status x"]
+        _bad = [(c, _pers.opaque(c)) for c in _plainc if _pers.opaque(c) or _pers.is_dangerous(c)]
+        t.ok(not _bad, "danger: the carriers' plain forms stay plain -- ssh HOST, tmux, git status, awk print, "
+             "sed s///, tar -xf, find -exec grep, vim FILE", str(_bad))
+        _small = (["cp /dev/null ~/.bashrc", "cp /dev/null f", "mv a ~/.bashrc", "cp key.pub ~/.ssh/authorized_keys",
+                   "cp x \"$HOME/.zshrc\"", "ln -sf a b", "ln --force a b", "truncate -s 10 f", "nice truncate -s 1 f",
+                   "rsync -a --remove-source-files a b", "sv d x", "sv k x", "sv x x", "sv e x", "sv stop x",
+                   "sv shutdown x", "sv -w 5 down x", "sv pause x", "sv -v D x", "cd s && sv d x"],
+                  ["cp a b", "mv a b", "cp -r ~/.config/nvim ~/backup", "ln -s a b", "rsync -a src/ dst/",
+                   "sv status x", "sv up x", "sv restart x", "sv check x", "sv once x", "grep truncate notes"])
+        _bad = [c for c in _small[0] if not _pers.is_dangerous(c)] + ["!" + c for c in _small[1] if _pers.is_dangerous(c)]
+        t.ok(not _bad, "danger: cp /dev/null, cp/mv/ln onto a home dot path, ln -f, truncate, rsync "
+             "--remove-source-files and runit's sv d/k/x/e/p/stop/shutdown; their plain forms stay plain", str(_bad))
+        # a here-document's body and a case arm's pattern are no commands
+        _nocmd = ["cat > new.txt <<'EOF'\n\"quoted\" line\n$x {a,b}\nEOF", "cat <<-EOF\n\t\"x\" y\n\tEOF",
+                  "case $x in *.txt) echo t;; *) echo o;; esac", "case $x in\n  *.py) echo py ;;\nesac",
+                  "case x in (*.a) ls;; esac", "if true; then case $x in *.py) echo p;; esac; fi",
+                  "for f in *.txt; do echo \"$f\"; done", "[ -f x ] && echo y", "[[ $a == \"b\" ]]",
+                  "echo a#b # \"rm", "f() { echo hi; }", "diff <(ls a) <(ls b)", "x=1; echo $x"]
+        _bad = [(c, _pers.opaque(c)) for c in _nocmd if _pers._read(c)[0] or _pers._read(c)[1]]
+        t.ok(not _bad, "danger: a here-document's body, a case pattern, a loop's list, a test and a comment are "
+             "not read as command words", str(_bad))
+        # the reading stays linear and bounded: 100 kB of its worst shapes
+        _worst = ["ls;" * 33000, "$(" * 3000, "`" * 3000, "a=b " * 25000, "'" * 100000, "\"$(" * 10000,
+                  "<<E\n" * 20000, "nice " * 20000 + "rm x", "case x in " + "a) ;; " * 15000 + "esac",
+                  "ssh " * 25000, "tmux " * 20000, "awk " + "-v x=1 " * 14000, "sed " + "-e x " * 20000]
+        _slow = []
+        for _w in _worst:
+            _t0 = time.time()
+            _pers.is_dangerous(_w[:100000] + " ")
+            _pers.opaque(_w[:100000] + " ")
+            if time.time() - _t0 >= 1.0:
+                _slow.append((_w[:12], round(time.time() - _t0, 2)))
+        t.ok(not _slow and _pers._read("$(" * 40 + "x") == (_pers.TOO_DEEP, True)
+             and _pers.opaque("nice " * 9 + "ls") == _pers.TOO_DEEP and _pers.opaque("nice " * 8 + "ls") == "",
+             "danger: the reading reads 100 kB of its worst shapes in under 1 s; past its caps it is TOO_DEEP", str(_slow))
+        from spark import judge as _jd
+        t.ok(_jd.WRAPPERS is _pers.WRAPPERS and _jd.KEYWORDS is _pers.SH_KEYWORDS,
+             "danger: judge unwraps with persona's one wrapper table")
         # blast: only the rm segment is counted, a leading cd moves the
         # base, and ~ expands -- `cd X && rm -rf build` counts X/build
         f_cd = _pers.blast("cd %s && rm -rf build" % btree)
@@ -3569,6 +3676,15 @@ def main():
              and not _pp.proof_ok("sv down ~/.config/spark/sv/spark-serve") and not _pp.proof_ok("sv up x")
              and not _pp.proof_ok("sv") and not _pp.proof_ok("xbps-remove -ny x"),
              "proof_ok: sv status and sv check are proofs; sv down, sv up, a bare sv and xbps-remove are not")
+        # v1.75: getopt_long (and git) take any unambiguous prefix of a long
+        # option, so every --word that starts a denied one is denied
+        _abbr = ["file --comp -m magic", "file --compile=x -m m", "tail --foll x", "tail --f x", "dmesg --clea",
+                 "dmesg --follow-n", "git diff --out=x", "git diff --ext", "git show --textc HEAD"]
+        _fine = ["dmesg --color", "dmesg --ctime", "file -b x", "git log --oneline", "tail -n 5 f", "ls --color=auto",
+                 "du --exclude=x d"]
+        _bad = ["!" + c for c in _abbr if _pp.proof_ok(c)] + [c for c in _fine if not _pp.proof_ok(c)]
+        t.ok(not _bad, "proof_ok: an abbreviated long option (file --comp, tail --foll, dmesg --clea, git diff --out=) "
+             "is denied like the option; --color and --oneline stay proofs", str(_bad))
         rc, out, _ = spark("line", stdin="titletest?")
         t.ok(rc == 0 and out.splitlines() == ["answer", "Paris"] and "\x1b" not in out,
              "line: escape sequences in an answer are scrubbed (title-set, colour)", repr(out))
@@ -5410,6 +5526,18 @@ def main():
                           ("python3 -m venv .venv", False)):
             t.ok(bool(_do._opaque(_c)) is _want,
                  "do._opaque: a step that runs a file it writes is opaque over --porcelain -> %s" % _want, _c)
+        # v1.75: the reading of a block's commands -- a word the shell
+        # rewrites or a carrier on any line; a here-document's body is no
+        # command, so a quote that opens one of its lines is text
+        from spark import persona as _pr
+        for _c, _want, _danger in (("echo hi\n\"rm\" -rf x", _pr.REWRITTEN, True),
+                                   ("echo hi\nssh host rm x", _pr.ON_ANOTHER, True),
+                                   ("ls\ntimeout 5 rm x", "", True),
+                                   ("cat <<'EOF'\n\"quoted\" text\n{a,b} $x\nEOF", "", False),
+                                   ("cd sub\ntar -xf a.tar\nfind . -name x", "", False)):
+            t.ok(_do._opaque(_c) == _want and _do.danger(_c, work) is _danger,
+                 "do: a block's commands are read -> %r, danger %s" % (_want, _danger),
+                 repr((_c, _do._opaque(_c), _do.danger(_c, work))))
         os.remove(work + "/linkdir")
         os.rmdir(work + "/realdir")
         os.remove(work + "/there.txt")
@@ -5841,6 +5969,15 @@ def main():
             t.ok(rc == 0 and any(e["ev"] == "note" and ("-- %s:" % _w) in e["text"] for e in evs or [])
                  and "output" not in kinds(evs) and os.path.isdir(work + "/junk3"),
                  "spark do --porcelain: an edit to %s is refused (persona.OPAQUE)" % _w, out + err)
+        # v1.75: a word the shell rewrites and a carrier are refused by
+        # their name, though each is danger too: the name says why
+        for _w, _c in ((_pers.REWRITTEN, 'cd . && "rm" -rf junk3'), (_pers.ON_ANOTHER, "ssh host rm -rf junk3"),
+                       (_pers.IN_SCRIPT, "awk 'BEGIN{system(\"rm -rf junk3\")}'")):
+            rc, out, err = spark("do", "--porcelain", "forever", stdin="edit %s\nquit\n" % _c, cwd=work)
+            evs = events(out)
+            t.ok(rc == 0 and any(e["ev"] == "note" and ("-- %s:" % _w) in e["text"] for e in evs or [])
+                 and "output" not in kinds(evs) and os.path.isdir(work + "/junk3"),
+                 "spark do --porcelain: an edit to %s is refused by its name" % _w, out + err)
         # a lone surrogate in the model's JSON is the replacement mark
         # everywhere: the events, the terminal, the thread
         rc, out, err = spark("do", "--porcelain", "surrogate", stdin="run\n", cwd=work)

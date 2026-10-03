@@ -53,6 +53,12 @@ SENDS = (
                "then one hello turn with the soul and remembered facts, as chat sends them"),
 )
 
+# "as the command": the line's start, or after ; & | ( -- a path before
+# the name allowed (/bin/rm). And a dot path in a home: ~/.x, $HOME/.x,
+# one in a user's directory under /home or /Users, /root/.x -- the last
+# word of the line
+_CMD = r"(?:^|[;&|(]\s*)(?:[^\s;&|()]*/)?"
+_HOME_DOT = (r"[\"']?(?:~|\$HOME|\$\{HOME\}|/(?:home|Users)/[^/\s;&|]+|/root)/\.[^\s;&|)]*\s*(?=$|[;&|)\n])")
 _DANGER = [
     r"\brm\s+.*\s/\s*$", r"\brm\s+-[a-zA-Z]*\s+/(\s|$)",
     r"\bdd\s+.*\bof=/dev/",
@@ -118,6 +124,23 @@ _DANGER = [
     r"\bnpm\s+(?:-\S+\s+)*(?:uninstall|remove|rm|un)\b",   # npm uninstall/remove/rm/un, -g or not
     r"\bkill\s+(?:-9|-KILL|-SIGKILL|-s\s+(?:KILL|SIGKILL|9)|-n\s+9)(?:\s+--)?(?:\s+\d+)*?\s+-?1(?![\w.])",
                                                   # kill -9 1 or -1 (-KILL, -s KILL, -n 9, --): init, or every process you own
+    # v1.75: what the security audit found unmarked -- a named line each.
+    # _CMD is "as the command": at the start, or after ; & | ( -- and the
+    # reading below (_read) hands every stage's command, past its
+    # wrappers, to these lines that way, so `timeout 5 truncate x` is
+    # read as `truncate x`. Anchored there, each line starts only at a
+    # separator, so it stays linear on a 100 kB line
+    _CMD + r"(?:doas|pkexec|run0|su|runuser)(?=\s|$)",   # root by another door: sudo's blast radius
+    _CMD + r"cp\s+(?:-\S+\s+)*/dev/(?:null|zero)\s+\S",   # cp /dev/null F: F emptied, like > F
+    _CMD + r"(?:cp|mv|ln|install|rsync)\s(?:[^;&|\n]*\s)?" + _HOME_DOT,
+                                                  # cp/mv/ln onto a dot path in a home (~/.bashrc,
+                                                  # ~/.ssh/...): a startup file or a config replaced, -f or not
+    _CMD + r"ln\s+(?:-\S+\s+)*?(?:-[a-zA-Z]*f[a-zA-Z]*|--force)(?=\s|$)",   # ln -f / -sf: the name it lands on is replaced
+    _CMD + r"truncate\s",                         # truncate, any size: the bytes past it are gone
+    _CMD + r"rsync\s[^;&|\n]*?--remove-source-files\b",   # rsync --remove-source-files: the source goes
+    _CMD + r"sv\s+(?:-v\s+|-w\s*\d+\s+)*(?:[dDxXeEkp]\S*|stop|shutdown)(?=\s|$)",
+                                                  # runit's sv reads its first letter: d(own) x/e(xit)
+                                                  # k(ill) p(ause) D X E, and stop, shutdown
 ]
 # rm with a recursive (or force) flag, short or long -- ONE pattern pair,
 # shared by is_dangerous and blast, so the danger mark and the blast count
@@ -128,8 +151,16 @@ RM_FORCE = re.compile(r"\brm\s+(?:%s\s+)*(?:-[a-zA-Z]*f[a-zA-Z]*|--force)(?=\s|$
 DANGER = [re.compile(p) for p in _DANGER] + [RM_RECURSIVE, RM_FORCE]
 
 
+def danger_shape(text):
+    """The DANGER patterns alone, over the text as written."""
+    return any(p.search(text) for p in DANGER)
+
+
 def is_dangerous(command):
-    return any(p.search(command) for p in DANGER)
+    """Can this line destroy data: a DANGER pattern over the text as
+    written, or the reading of its commands (_read: a word the shell
+    rewrites, a carrier, a pattern once a wrapper is unwrapped)."""
+    return danger_shape(command) or _read(command)[1]
 
 
 # A command whose effect cannot be read from the line: what it does is
@@ -142,7 +173,9 @@ def is_dangerous(command):
 # A named line each, so any one can be argued with. The patterns read
 # the line as the shell does (_shell_text): the inside of '...' is
 # plain text and never matches.
-_INTERP = (r"(?:^|(?<=[\s;&|(]))(?:\S*/)?"
+# (a path before the name stops at ; & | ( ), as the shell's word does:
+# an \S* there read a separator-dense 100 kB line in seconds)
+_INTERP = (r"(?:^|(?<=[\s;&|(]))(?:[^\s;&|()]*/)?"
            r"(?:sh|bash|zsh|dash|ksh|fish|python[\d.]*|perl|ruby|node|php|lua|osascript)(?=$|[\s;&|)<])")
 _OPTS = r"(?:\s+-\S*)*"             # the interpreter's options before what it runs
 OPAQUE = (
@@ -196,14 +229,674 @@ def _shell_text(line):
     return "".join(out)
 
 
-def opaque(command):
-    """The OPAQUE line `command` matches (its name), or '' when its
-    effect can be read from the line."""
+def opaque_shape(command):
+    """The OPAQUE pattern `command` matches (its name), or ''."""
     text = _shell_text(command or "")
     return next((what for what, p in _OPAQUE if p.search(text)), "")
 
 
+def opaque(command):
+    """The OPAQUE line `command` matches (its name), or '' when its
+    effect can be read from the line: the patterns first, then the
+    reading of its commands (_read: REWRITTEN, CARRIERS, TOO_DEEP)."""
+    return opaque_shape(command) or _read(command or "")[0]
+
+
 import shlex as _shlex
+from functools import lru_cache as _lru_cache
+
+
+# ------------------------------------------------------------ the reading
+# v1.75: the patterns above read the text; this reads the commands. A
+# small lexer (_Lex) cuts a line or a block into stages as the shell
+# does -- at | || && ; & ( ) and the line feed, a here-document's body
+# skipped, a $(...), a `...` and a <(...) read as stages of their own --
+# and keeps every word as written, quotes and all. Each stage's command
+# word is read past its assignments, the shell's keywords and the
+# WRAPPERS, and three things are asked of it (_read_stage):
+#   - is it a plain word (PLAIN_WORD)? Anything else is a word the shell
+#     rewrites before it runs -- "rm", r''m, $x, rm$IFS-rf, {rm,-rf,x} --
+#     which no pattern can read: REWRITTEN;
+#   - is it a carrier (CARRIERS): a program handed a command it runs
+#     where the line does not show it -- another machine, a session
+#     already running, later, inside an option, in its own script;
+#   - does a DANGER pattern hold for it as the command, at each wrapper
+#     (`timeout 5 rm x` is read as `rm x` too)?
+# A rewritten word and a carrier are opaque (refused over --porcelain
+# outside the sandbox) and dangerous (the typed yes, the line's `!`).
+# A pattern that holds once unwrapped is dangerous.
+REWRITTEN = "a command word the shell rewrites"
+TOO_DEEP = "a command nested too deep to read"
+# a command word as it is read: letters, digits and _ . / + - (a path
+# allowed, and a leading ~/). Not a quote, $, {, a backslash or a glob
+PLAIN_WORD = re.compile(r"(?:~/)?[A-Za-z0-9_./+-]+\Z")
+# the shell's keywords that run the command after them (judge reads the
+# same set), and the words whose stage holds no command to read (a
+# loop's list, a case word, a test, the no-op)
+SH_KEYWORDS = frozenset(("!", "time", "if", "then", "elif", "else", "while", "until", "do", "{",
+                         "}", "fi", "done", "esac"))
+NO_COMMAND = frozenset(("for", "select", "case", "function", "coproc", "[", "[[", "]]", ":"))
+# words that set variables: their assignments are read like a prefix's
+SETTERS = frozenset(("export", "declare", "typeset", "local", "readonly"))
+# a wrapper runs the command after its own options: the options that
+# take a value (the next word, unless glued on), and how many plain
+# words it takes before the command (timeout's duration, chroot's root,
+# flock's lock file). judge.py unwraps with this same table.
+WRAPPERS = {
+    "sudo": (("-u", "-g", "-h", "-p", "-C", "-D", "-r", "-t", "-U", "-T", "-R", "--user",
+              "--group", "--host", "--prompt", "--close-from", "--chdir", "--role", "--type",
+              "--other-user", "--command-timeout", "--chroot"), 0),
+    "doas": (("-u", "-C"), 0),
+    "pkexec": (("--user",), 0),
+    "runuser": (("-u", "-g", "-G", "-w", "-s", "--user", "--group", "--supp-group",
+                 "--whitelist-environment", "--shell"), 0),
+    "env": (("-u", "-C", "-S", "--unset", "--chdir", "--split-string"), 0),
+    "exec": (("-a",), 0),
+    "setsid": ((), 0),
+    "nice": (("-n", "--adjustment"), 0),
+    "nohup": ((), 0),
+    "timeout": (("-s", "-k", "--signal", "--kill-after"), 1),
+    "chroot": (("--userspec", "--groups"), 1),
+    "flock": (("-w", "-E", "--timeout", "--wait", "--conflict-exit-code"), 1),
+    "busybox": ((), 0),
+    "xargs": (("-I", "-L", "-n", "-P", "-s", "-d", "-E", "-a", "--arg-file", "--delimiter",
+               "--eof", "--max-lines", "--max-args", "--max-procs", "--max-chars", "--replace",
+               "--process-slot-var"), 0),
+    "watch": (("-n", "--interval", "-q", "--equexit"), 0),
+    "stdbuf": (("-i", "-o", "-e", "--input", "--output", "--error"), 0),
+    "ionice": (("-c", "-n", "-p", "-P", "-u", "--class", "--classdata"), 0),
+    "caffeinate": (("-t", "-w"), 0),
+}
+# command and builtin run the word after them, unless -v/-V asks about it
+RUNS_NEXT = frozenset(("command", "builtin"))
+SHELLS = frozenset(("sh", "bash", "zsh", "dash", "ksh", "mksh", "fish"))
+MAX_WRAPS = 8               # wrappers in one stage spark reads past; more is TOO_DEEP
+MAX_NEST = 16               # $( ) and ` ` inside each other; deeper is TOO_DEEP
+MAX_REREAD = 3              # a string read again as shell (sh -c, watch); deeper is TOO_DEEP
+_ASSIGN = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:\[[^\]]*\])?\+?=")
+
+
+def _is_case(words):
+    """Does this stage open a case: `case` after the keywords, if any."""
+    return next((w for w in words if w not in SH_KEYWORDS), "") == "case"
+
+
+class _Lex:
+    """The shell's cut of `text` into stages: [[raw word, ...], ...]. A
+    redirection and its target are dropped; a here-document's body is
+    skipped (an unquoted one's $(...) and `...` are read, they run); a
+    case pattern is no stage; a comment runs to the line's end. An
+    unclosed quote runs to the end as one word, read like any other.
+    `deep` is set past MAX_NEST."""
+
+    _OPS = ("<<<", ";;&", "&>>", "<<-", "&&", "||", ";;", ";&", "|&", "&>", ">>", ">|", ">&",
+            "<<", "<>", "<&", "|", "&", ";", "(", ")", "<", ">")
+    _ENDS = frozenset(("&&", "||", ";;", ";&", ";;&", "|&", "|", "&", ";", "(", ")", "\n"))
+    _ARMS = frozenset(("\n", ";;", ";&", ";;&"))
+
+    def __init__(self, text):
+        self.s, self.n = text, len(text)
+        self.stages, self.deep = [], False
+
+    def run(self, i=0, nest=0, closing=False):
+        """Lex from i to the end, or (closing) to the ")" that closes a
+        $( -- the index after it."""
+        if nest > MAX_NEST:
+            self.deep = True
+            return self.n
+        s, n = self.s, self.n
+        # cases: the paren depth each open `case` stands at. A `)` at that
+        # depth after `in`, `;;` or a line feed closes an arm's pattern
+        # (`*.txt)`), which is no command; one inside a ( ) is not
+        words, opener, skip, docs, parens, cases, last_end = [], None, False, [], 0, [], -1
+
+        def end(closer):
+            nonlocal words, opener
+            if words:
+                self.stages.append(words)
+            words, opener = [], closer
+
+        while i < n:
+            ch = s[i]
+            if ch in " \t":
+                i += 1
+            elif ch == "\\" and s.startswith("\n", i + 1):
+                i += 2                                  # a line continued
+            elif ch == "\n":
+                end("\n")
+                i = self._bodies(i + 1, docs, nest)
+                docs = []
+            elif ch == "#":
+                j = s.find("\n", i)
+                i = n if j < 0 else j
+            elif ch == "(" and cases and parens == cases[-1] and not s.startswith("((", i) \
+                    and (opener in self._ARMS or _is_case(words)) and (not words or _is_case(words)):
+                i += 1                                  # `(PATTERN)`: a pattern's optional opening paren
+            elif ch == ")" and cases and parens == cases[-1] and (opener in self._ARMS or _is_case(words)):
+                if _is_case(words):
+                    end(")")                            # `case W in PATTERN)`: the case's own stage
+                words, opener, skip = [], ")", False    # a pattern: dropped, no paren closed
+                i += 1
+            elif closing and ch == ")" and parens == 0:
+                end(")")
+                return i + 1
+            elif ch in "<>" and s.startswith("(", i + 1):
+                raw, i = self.word(i, nest)             # <(cmd): a word whose inside runs
+                last_end = i
+                if skip:
+                    skip = False
+                else:
+                    words.append(raw)
+            elif ch in "|&;()<>":
+                op = next(o for o in self._OPS if s.startswith(o, i))
+                if op in self._ENDS:
+                    parens += {"(": 1, ")": -1}.get(op, 0)
+                    end(op)
+                    skip = False
+                    i += len(op)
+                    continue
+                if op[0] in "<>" and last_end == i and words and words[-1].isdigit():
+                    words.pop()                         # 2> : the 2 is the stream
+                i += len(op)
+                if op in ("<<", "<<-"):
+                    while i < n and s[i] in " \t":
+                        i += 1
+                    raw, i = self.word(i, nest)
+                    docs.append((re.sub(r"[\"'\\]", "", raw), op == "<<-", bool(re.search(r"[\"'\\]", raw))))
+                else:
+                    skip = True
+            else:
+                raw, i = self.word(i, nest)
+                last_end = i
+                if skip:
+                    skip = False
+                    continue
+                if raw in ("case", "esac") and all(w in SH_KEYWORDS for w in words):
+                    if raw == "case":
+                        cases.append(parens)
+                    elif cases:
+                        cases.pop()
+                words.append(raw)
+        end(None)
+        return n
+
+    def _bodies(self, i, docs, nest):
+        """Skip the here-documents' bodies that start at i; an unquoted
+        one's substitutions are read (they run)."""
+        s, n = self.s, self.n
+        for delim, tabs, quoted in docs:
+            while i < n:
+                j = s.find("\n", i)
+                line = s[i:] if j < 0 else s[i:j]
+                start, i = i, (n if j < 0 else j + 1)
+                if (line.lstrip("\t") if tabs else line) == delim:
+                    break
+                if not quoted and ("$(" in line or "`" in line):
+                    k = start
+                    while k < start + len(line):
+                        if s.startswith("$(", k) or s[k] == "`":
+                            _, k = self.word(k, nest, body=True)
+                        else:
+                            k += 1
+        return i
+
+    def word(self, i, nest, body=False):
+        """One word from i, as written: (raw, the index after it). Its
+        $(...), `...` and <(...) are read as stages of their own."""
+        s, n, start = self.s, self.n, i
+        while i < n:
+            ch = s[i]
+            if not body and (ch in " \t\n" or (ch in "|&;()<>" and not (ch in "<>" and s.startswith("(", i + 1)
+                                                                  and i == start))):
+                break
+            if ch == "\\":
+                i += 2
+            elif ch == "'" and not body:
+                j = s.find("'", i + 1)
+                i = n if j < 0 else j + 1
+            elif ch == "$" and s.startswith("'", i + 1) and not body:
+                i += 2                                  # $'...': a backslash escapes there
+                while i < n and s[i] != "'":
+                    i += 2 if s[i] == "\\" else 1
+                i += 1
+            elif ch == '"' and not body:
+                i += 1
+                while i < n and s[i] != '"':
+                    if s[i] == "\\":
+                        i += 2
+                    elif s.startswith("$(", i) or s[i] == "`":
+                        i = self._inner(i, nest)
+                    else:
+                        i += 1
+                i += 1
+            elif s.startswith("$((", i):
+                depth, i = 0, i + 1                     # arithmetic: no command inside
+                while i < n:
+                    depth += {"(": 1, ")": -1}.get(s[i], 0)
+                    i += 1
+                    if depth == 0:
+                        break
+            elif s.startswith("$(", i) or ch == "`" or (ch in "<>" and s.startswith("(", i + 1)):
+                i = self._inner(i, nest)
+            else:
+                i += 1
+            if body:
+                return s[start:i], i
+        return s[start:min(i, n)], min(i, n)
+
+    def _inner(self, i, nest):
+        """A $(...), <(...) or `...` at i, lexed as stages: the index after it."""
+        s = self.s
+        if s[i] == "`":
+            j = i + 1
+            while j < self.n and s[j] != "`":
+                j += 2 if s[j] == "\\" else 1
+            if nest + 1 > MAX_NEST:
+                self.deep = True
+            else:
+                sub = _Lex(s[i + 1:j].replace("\\`", "`"))
+                sub.run(0, nest + 1)
+                self.stages.extend(sub.stages)
+                self.deep = self.deep or sub.deep
+            return j + 1
+        return self.run(i + 2, nest + 1, closing=True)
+
+
+def _deq(raw):
+    """A raw word as the program receives it: quotes and escapes gone,
+    a $ left as it is."""
+    if not any(c in raw for c in "'\"\\"):
+        return raw
+    try:
+        return " ".join(_shlex.split(raw))
+    except ValueError:
+        return raw
+
+
+def _getopt(args, valued, stop=True):
+    """getopt over raw `args`: ([(option, value)], operands). `valued`
+    names the short letters and the --long names that take a value (the
+    rest of a cluster, the next word, or =VALUE). `--` ends the options;
+    with `stop` the first operand does too (POSIX), else options are
+    read anywhere (GNU). Values are dequoted, operands kept raw."""
+    opts, ops, i = [], [], 0
+    while i < len(args):
+        a = _deq(args[i])
+        i += 1
+        if a == "--":
+            ops.extend(args[i:])
+            break
+        if a.startswith("--"):
+            name, eq, val = a[2:].partition("=")
+            if not eq and name in valued and i < len(args):
+                val, i = _deq(args[i]), i + 1
+            opts.append(("--" + name, val))
+        elif a.startswith("-") and len(a) > 1:
+            for k in range(1, len(a)):
+                if a[k] in valued:
+                    val = a[k + 1:]
+                    if not val and i < len(args):
+                        val, i = _deq(args[i]), i + 1
+                    opts.append(("-" + a[k], val))
+                    break
+                opts.append(("-" + a[k], ""))
+        else:
+            ops.append(args[i - 1])
+            if stop:
+                ops.extend(args[i:])
+                break
+    return opts, ops
+
+
+def _has(opts, *names):
+    return any(o in names for o, _v in opts)
+
+
+# --- the carriers: a named line each, so any one can be argued with ---
+ON_ANOTHER = "a command ssh runs (on the other machine, or as its proxy)"
+IN_SESSION = "a command handed to a session already running"
+LATER = "a command left to run later"
+IN_OPTION = "a command inside an option or a variable"
+IN_SCRIPT = "a command in a tool's own script"
+# ssh's options that take a value; -o's that name a command
+_SSH_VALUED = frozenset("BbcDEeFIiJLlmOoPpQRSWw")
+_SSH_COMMAND_OPT = re.compile(r"(?i)\s*(?:proxycommand|localcommand|remotecommand|knownhostscommand"
+                              r"|permitlocalcommand)\b")
+
+
+def _ssh(head, args):
+    # ssh HOST CMD runs CMD there; -o ProxyCommand/LocalCommand runs one
+    # here. scp and sftp take -o and -S PROGRAM. ssh HOST alone is a login
+    if head not in ("ssh", "scp", "sftp"):
+        return False
+    opts, ops = _getopt(args, _SSH_VALUED)
+    if head == "ssh" and len(ops) > 1 and _deq(ops[1]).startswith("-"):
+        more, ops2 = _getopt(ops[1:], _SSH_VALUED)    # OpenSSH reads options after the host too
+        opts, ops = opts + more, ops[:1] + ops2
+    if any(o == "-o" and _SSH_COMMAND_OPT.match(v) for o, v in opts):
+        return True
+    if head != "ssh":
+        return _has(opts, "-S")
+    return len(ops) > 1
+
+
+# tmux's commands that run a shell command, or a key sequence typed into
+# a pane; and those that run one only when given it (new -d alone does not)
+_TMUX_RUNS = frozenset(("send-keys", "send", "run-shell", "run", "if-shell", "if", "pipe-pane", "pipep",
+                        "respawn-pane", "respawnp", "respawn-window", "respawnw", "display-popup", "popup",
+                        "source-file", "source", "command-prompt", "confirm-before", "confirm", "set-hook",
+                        "bind-key", "bind"))
+_TMUX_MAYBE = frozenset(("new-session", "new", "new-window", "neww", "split-window", "splitw"))
+
+
+def _session(head, args):
+    # swaymsg/i3-msg/hyprctl exec, tmux send-keys and the rest above,
+    # tmux -c CMD, screen -X CMD and screen -dm CMD: the command runs in
+    # the session, outside this step's reach
+    words = [_deq(a) for a in args]
+    if head in ("swaymsg", "i3-msg", "hyprctl"):
+        return bool(re.search(r"(?:^|[\s;,])exec(?:_always)?(?=\s|$)", " ".join(words)))
+    if head == "tmux":
+        opts, ops = _getopt(args, "cfLST")
+        if _has(opts, "-c"):
+            return True
+        cmd = []
+        for w in [_deq(a) for a in ops] + [";"]:       # tmux A ';' B: two commands
+            if w not in (";", "\\;"):
+                cmd.append(w)
+                continue
+            if cmd and cmd[0] in _TMUX_RUNS:
+                return True
+            if cmd and cmd[0] in _TMUX_MAYBE and _getopt(cmd[1:], "cefFlnpstTxy")[1]:
+                return True
+            cmd = []
+        return False
+    if head == "screen":
+        clusters = [w for w in words if w.startswith("-") and not w.startswith("--")]
+        if any("X" in c for c in clusters):
+            return True
+        return any("m" in c for c in clusters) and bool(_getopt(args, "SceHhpTtsl", stop=False)[1])
+    return False
+
+
+_GIT_CMD_KEY = re.compile(r"(?i)(?:core\.(?:sshcommand|pager|editor|fsmonitor|hookspath|askpass)|sequence\.editor"
+                          r"|diff\.external|gpg\.(?:\w+\.)?program|credential\..*helper|filter\..*"
+                          r"|.*\.(?:textconv|command|driver|cmd|clean|smudge|process)|core\.gitproxy)\Z")
+
+
+def _later(head, args):
+    # at/batch read their job from stdin; systemd-run makes a unit;
+    # launchctl submit/asuser/bsexec; crontab FILE or - replaces the
+    # table with text the line does not hold; git config KEY CMD keeps a
+    # command git runs later (core.sshCommand, alias.x '!cmd', a filter)
+    if head in ("at", "batch"):
+        return head == "batch" or not any(_deq(a) in ("-l", "-c", "-V", "-r", "-d") for a in args)
+    if head == "systemd-run":
+        return True
+    if head == "launchctl":
+        ops = _getopt(args, "")[1]
+        return bool(ops) and _deq(ops[0]) in ("submit", "asuser", "bsexec")
+    if head == "crontab":
+        opts, ops = _getopt(args, "u")
+        return bool(ops) and not _has(opts, "-l", "-e", "-r")
+    if head == "git":
+        sub = _git_sub(args)
+        if sub is None or sub[0] != "config":
+            return False
+        rest = [_deq(a) for a in sub[1]]
+        words = [w for w in rest if not w.startswith("-")]
+        if words and _GIT_CMD_KEY.match(words[0]) and len(words) > 1:
+            return True
+        return len(words) > 1 and words[0].lower().startswith("alias.") and words[1].lstrip().startswith("!")
+    return False
+
+
+def _git_sub(args):
+    """git's subcommand and its words past the global options, or None
+    when a global option carries a command (-c, --config-env,
+    --exec-path=)."""
+    i = 0
+    while i < len(args):
+        a = _deq(args[i])
+        if a in ("-c", "--config-env") or a.startswith(("-c", "--config-env=", "--exec-path=")):
+            return None
+        if a in ("-C", "--git-dir", "--work-tree", "--namespace", "--super-prefix"):
+            i += 2
+            continue
+        if a.startswith("-"):
+            i += 1
+            continue
+        return a, args[i + 1:]
+    return "", []
+
+
+# a variable naming a program another program runs: set before a
+# command, through env, or by export -- the command is in the value.
+# The PAGER/EDITOR family only when the value is no plain word
+CARRIER_VARS = frozenset(("GIT_SSH_COMMAND", "GIT_SSH", "GIT_EXTERNAL_DIFF", "GIT_ASKPASS", "SSH_ASKPASS",
+                          "GIT_PROXY_COMMAND", "GIT_CONFIG_PARAMETERS", "GIT_CONFIG_COUNT", "LD_PRELOAD",
+                          "LD_AUDIT", "DYLD_INSERT_LIBRARIES", "BASH_ENV", "ENV", "PROMPT_COMMAND"))
+PROGRAM_VARS = frozenset(("PAGER", "GIT_PAGER", "MANPAGER", "EDITOR", "VISUAL", "GIT_EDITOR",
+                          "GIT_SEQUENCE_EDITOR"))
+
+
+def _carrier_var(word):
+    name, _, value = word.partition("=")
+    name = name.rstrip("+")
+    if name in CARRIER_VARS:
+        return True
+    return name in PROGRAM_VARS and not PLAIN_WORD.match(_deq(value) or "x")
+
+
+_TAR_RUNS = ("--to-command", "--info-script", "--new-volume-script", "--rsh-command")
+
+
+def _option(head, args):
+    # git -c / --config-env / --exec-path=; tar --to-command and the
+    # scripts it runs, --checkpoint-action=exec, -I/--use-compress-program
+    # with more than a program's name; su -c STRING, su USER ARGS (the
+    # shell takes ARGS). env -S, flock -c and runuser -c are read where
+    # their wrappers are (_past_wrapper)
+    if head == "git":
+        return _git_sub(args) is None
+    if head in ("tar", "gtar", "bsdtar"):
+        words = [_deq(a) for a in args]
+        for k, w in enumerate(words):
+            if w.startswith(_TAR_RUNS) or w == "-F" or (w.startswith("--checkpoint-action") and "exec" in w):
+                return True
+            if w in ("-I", "--use-compress-program") or w.startswith(("--use-compress-program=", "-I")):
+                v = w.partition("=")[2] if "=" in w else (w[2:] if w.startswith("-I") and len(w) > 2
+                                                          else (words[k + 1] if k + 1 < len(words) else ""))
+                if v and not PLAIN_WORD.match(v):
+                    return True
+        return False
+    if head == "su":
+        opts, ops = _getopt(args, "cgGsw")
+        if _has(opts, "-c", "--command", "--session-command"):
+            return True
+        ops = ops[1:] if ops and _deq(ops[0]) == "-" else ops
+        return len(ops) > 1
+    return False
+
+
+_AWK_RUNS = re.compile(r"\bsystem\s*\(|\|\s*&?\s*getline\b|\|&|\bprintf?\b[^;{}\n]*?(?<!\|)\|(?!\|)|@load\b")
+_SED_E_CMD = re.compile(r"(?:^|[;\n{}])\s*(?:(?:\d+|\$|/(?:\\.|[^/\\\n])*/[IM]*)"
+                        r"(?:\s*[,~]\s*(?:\d+|\$|/(?:\\.|[^/\\\n])*/[IM]*))?)?\s*!?\s*e(?=\s|;|}|$)")
+_SED_E_FLAG = re.compile(r"(?:^|[;\n{}]|\d|\$|/)\s*s(?P<d>[^\\\n\w\s])(?:\\.|(?!(?P=d)).)*(?P=d)"
+                         r"(?:\\.|(?!(?P=d)).)*(?P=d)[gpiImM0-9]*e")
+_VIM = frozenset(("vi", "vim", "nvim", "view", "ex", "vimdiff", "gvim", "mvim", "rview"))
+
+
+def _script(head, args):
+    # awk handed system(), a pipe to or from a command, @load, or its
+    # program from a file (-f); sed's e command and s///e flag, or its
+    # script from a file (-f) -- GNU sed --sandbox refuses both; vim and
+    # emacs handed commands to run (-c, +cmd, --cmd, -S, --eval, -l)
+    if head in ("awk", "gawk", "mawk", "nawk"):
+        opts, ops = _getopt(args, ("F", "v", "f", "e", "i", "l", "E", "field-separator", "assign", "file",
+                                   "source", "include", "load", "exec"))
+        if _has(opts, "-f", "--file", "-i", "--include", "-l", "--load", "-E", "--exec"):
+            return True
+        progs = [v for o, v in opts if o in ("-e", "--source")] or [_deq(o) for o in ops[:1]]
+        return any(_AWK_RUNS.search(p) for p in progs)
+    if head in ("sed", "gsed"):
+        opts, ops = _getopt(args, ("e", "f", "l", "expression", "file", "line-length"), stop=False)
+        if _has(opts, "--sandbox"):
+            return False
+        if _has(opts, "-f", "--file"):
+            return True
+        progs = [v for o, v in opts if o in ("-e", "--expression")] or [_deq(o) for o in ops[:1]]
+        return any(_SED_E_CMD.search(p) or _SED_E_FLAG.search(p) for p in progs)
+    if head in _VIM:
+        words = [_deq(a) for a in args]
+        ex = head == "ex" or any(re.match(r"-[a-zA-Z]*[eE]", w) for w in words if not w.startswith("--"))
+        return any(w in ("-c", "--cmd", "-S") or (w == "-s" and not ex)
+                   or (w.startswith("+") and not re.match(r"\+(?:\d*|[/?].*)\Z", w)) for w in words)
+    if head in ("emacs", "emacsclient"):
+        return any(_deq(a).partition("=")[0] in ("--eval", "-eval", "--execute", "-l", "--load", "-f",
+                                                   "--funcall", "--script", "-e", "-x") for a in args)
+    return False
+
+
+CARRIERS = (
+    (ON_ANOTHER, _ssh),
+    (IN_SESSION, _session),
+    (LATER, _later),
+    (IN_OPTION, _option),
+    (IN_SCRIPT, _script),
+)
+_FIND_EXEC = frozenset(("-exec", "-execdir", "-ok", "-okdir"))
+
+
+@_lru_cache(maxsize=16)
+def _read(text, reread=0):
+    """(the opaque line's name or '', dangerous) for the commands in
+    `text` -- the reading above. Never raises. Kept for the last few
+    lines: opaque() and is_dangerous() each ask it of the same line."""
+    try:
+        lex = _Lex(text or "")
+        lex.run()
+    except (RecursionError, ValueError, IndexError):
+        return TOO_DEEP, True
+    if lex.deep:
+        return TOO_DEEP, True
+    what, danger, levels = "", False, []
+    for words in lex.stages:
+        w, d = _read_stage(words, reread, levels)
+        what, danger = what or w, danger or d
+        if what and danger:
+            return what, danger
+    # every command as the command, wrapper by wrapper, for the patterns
+    return what, danger or (bool(levels) and danger_shape(" ; ".join(levels)))
+
+
+def _read_stage(words, reread, levels):
+    """One stage: (name or '', dangerous). Appends each command it reads,
+    from its head on, to `levels` for the DANGER patterns."""
+    if reread > MAX_REREAD:
+        return TOO_DEEP, True
+    i, wraps, what = 0, 0, ""
+    while i < len(words):
+        w = words[i]
+        if _ASSIGN.match(w):
+            what = what or (IN_OPTION if _carrier_var(w) else "")
+            i += 1
+            continue
+        if w in SH_KEYWORDS:
+            i += 1
+            continue
+        if w in NO_COMMAND:
+            break
+        if not PLAIN_WORD.match(w):
+            return REWRITTEN, True
+        head, args = w.rsplit("/", 1)[-1] or w, words[i + 1:]
+        levels.append(" ".join([head] + args))
+        if head in SETTERS:
+            if any(_carrier_var(a) for a in args if _ASSIGN.match(a)):
+                return IN_OPTION, True
+            break
+        if head in RUNS_NEXT:
+            opts, ops = _getopt(args, "")
+            if _has(opts, "-v", "-V") or not ops:
+                break
+            i = len(words) - len(ops)
+            continue
+        if head in WRAPPERS:
+            wraps += 1
+            if wraps > MAX_WRAPS:
+                return TOO_DEEP, True
+            j = _past_wrapper(head, args)
+            if j < 0:
+                return IN_OPTION, True
+            if head == "watch":                     # watch runs its words through sh -c
+                w2, d2 = _read(" ".join(_deq(a) for a in args[j:]), reread + 1)
+                return what or w2, bool(what) or d2
+            i += 1 + j
+            continue
+        for name, fn in CARRIERS:
+            if fn(head, args):
+                return name, True
+        if what:
+            return what, True
+        if head in SHELLS:                          # sh -c STRING: the string is shell, read it
+            opts, ops = _getopt(args, "oO")
+            if any(o == "-c" for o, _v in opts) and ops:
+                return _read(_deq(ops[0]), reread + 1)
+        if head == "eval":                          # eval WORDS: their join is shell, read it
+            return _read(" ".join(_deq(a) for a in args), reread + 1)
+        if head == "trap":                          # trap STRING SIGNAL: the string runs later, read it
+            opts, ops = _getopt(args, "")
+            if ops and not _has(opts, "-l", "-p") and _deq(ops[0]) != "-":
+                return _read(_deq(ops[0]), reread + 1)
+        if head == "find":                          # find -exec CMD ;: read CMD as a stage
+            out = ("", False)
+            for k, a in enumerate(args):
+                if _deq(a) in _FIND_EXEC:
+                    inner = []
+                    for b in args[k + 1:]:
+                        if _deq(b) == ";" or (_deq(b) == "+" and inner and _deq(inner[-1]) == "{}"):
+                            break
+                        inner.append(b)
+                    w2, d2 = _read_stage(inner, reread + 1, levels)
+                    out = (out[0] or w2, out[1] or d2)
+            return out
+        return "", False
+    return what, bool(what)
+
+
+def _past_wrapper(head, args):
+    """How many of `args` belong to the wrapper `head` -- its options
+    and plain words -- so args[n:] is the command it runs; -1 when the
+    wrapper carries the command in an option (env -S, flock -c,
+    runuser -c)."""
+    valued, plain = WRAPPERS[head]
+    i = 0
+    while i < len(args):
+        a = _deq(args[i])
+        if a == "--":
+            i += 1
+            break
+        if not a.startswith("-") or a == "-":
+            break
+        if head == "env" and (a in ("-S", "--split-string") or a.startswith(("-S", "--split-string="))):
+            return -1
+        if head in ("flock", "runuser") and (a in ("-c", "--command", "--session-command")
+                                             or a.startswith("--command=")):
+            return -1
+        i += 1
+        name = a.split("=", 1)[0]
+        if "=" not in a and (name in valued or (not a.startswith("--") and len(a) > 2
+                                                and "-" + a[-1] in valued)) and i < len(args):
+            i += 1                                  # its value: the next word (-u root, -Eu root)
+    if head == "env" and i < len(args) and _deq(args[i]) == "-":
+        i += 1                                      # env -: -i's old spelling
+    if head == "runuser" and not any(_deq(a) in ("-u", "--user") or _deq(a).startswith("--user=")
+                                     for a in args[:i]):
+        return -1 if len(args) - i > 1 else len(args)   # runuser USER ARGS: the shell's, like su
+    i += plain
+    if head == "flock" and i < len(args) and _deq(args[i]) in ("-c", "--command"):
+        return -1                                   # flock FILE -c CMD
+    return min(i, len(args))
 
 
 def _human_bytes(n):
@@ -774,10 +1467,16 @@ PROOF_DENIED = (
 
 def _denied(opt, arg):
     """Does this argv word carry the denied option: the option itself,
-    `--long=value`, or a one-letter option inside a cluster, a value
-    glued on or not (`-fn`, `-fn1`, `-n1`, `+r1`)."""
+    `--long=value`, an abbreviation of `--long` (getopt_long and git
+    take any unambiguous prefix: `tail --f`, `file --comp`, `dmesg
+    --clea`, `git diff --out=x` -- so any `--word` that starts it is
+    denied, an ambiguous one with it), or a one-letter option inside a
+    cluster, a value glued on or not (`-fn`, `-fn1`, `-n1`, `+r1`)."""
     if arg == opt or (opt.startswith("--") and arg.startswith(opt + "=")):
         return True
+    if opt.startswith("--") and arg.startswith("--"):
+        word = arg[2:].split("=", 1)[0]
+        return bool(word) and opt[2:].startswith(word)
     if len(opt) != 2 or opt[0] not in "-+":
         return False
     m = re.match(re.escape(opt[0]) + r"([A-Za-z]+)", arg)

@@ -357,12 +357,15 @@ def refused(command):
 
 
 def _dangerous(text):
-    """persona.is_dangerous over the whole text and over each of its
+    """persona.is_dangerous over the whole text (the patterns, and the
+    reading of every command in it), then the patterns over each of its
     lines (a line continued with a backslash read as one): a pattern
-    anchored at a line's start must see every line's start."""
+    anchored at a line's start must see every line's start. The reading
+    is the whole text's alone -- it cuts the lines itself, and skips a
+    here-document's body, which is no command."""
     if persona.is_dangerous(text):
         return True
-    return "\n" in text and any(persona.is_dangerous(l) for l in text.replace("\\\n", " ").split("\n"))
+    return "\n" in text and any(persona.danger_shape(l) for l in text.replace("\\\n", " ").split("\n"))
 
 
 def heredoc_file(command, cwd=""):
@@ -433,12 +436,12 @@ def _written_run(command):
 
 
 def _opaque(command):
-    """persona.opaque for a step: a block's text whole, then each line
-    alone -- a quote on one line cannot hide the next from the reading;
-    and a step that runs a file it writes itself (_written_run)."""
+    """persona.opaque for a step: a block's text whole, then its patterns
+    over each line alone -- a quote on one line cannot hide the next from
+    them; and a step that runs a file it writes itself (_written_run)."""
     what = persona.opaque(command)
     if not what and "\n" in command:
-        what = next((w for w in map(persona.opaque, command.split("\n")) if w), "")
+        what = next((w for w in map(persona.opaque_shape, command.split("\n")) if w), "")
     if not what and _written_run(command):
         what = "a file the same step writes, then runs"
     return what
@@ -1117,14 +1120,16 @@ class _Porcelain:
 
     def _refused(self, command, danger):
         """True, said in a note, when `command` may not run over a pipe:
-        it can destroy data, or its effect cannot be read from the line."""
-        if danger:
-            self.note(REFUSED_DANGER % command)
-            return True
+        its effect cannot be read from the line, or it can destroy data.
+        The opaque line is named first: a word the shell rewrites or a
+        carrier is dangerous too, and its name says why."""
         what = _opaque(command)
         if what:
             self.note(REFUSED_OPAQUE % (command, what))
-        return bool(what)
+            return True
+        if danger:
+            self.note(REFUSED_DANGER % command)
+        return bool(danger)
 
     def confirm(self, reply, cwd):
         command = reply["command"]
