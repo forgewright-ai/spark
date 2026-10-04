@@ -278,6 +278,9 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 chaos (spark check --chaos: the rehearsed failures on a throwaway
                 machine; a llama-server with a mood, as a real process)
                 setup (spark setup: the guided first run)
+                keys (spark keys: the keys the widgets add to the shell --
+                the list, what each replaced, a key moved through keys.env,
+                the whole set off or on through SITE_KEYS)
                 stats (turns -> numbers; --sends: bytes out by destination and day)
                 bench (llama-bench, bench tune [show|apply])
                 soul memory (the identity files; memory's writers refuse a
@@ -475,7 +478,7 @@ docs/           every document but the 4 at the root. With a release (the
 ```
 
 Runtime paths. Config is `~/.config/spark/`: `site.env`, `spark.env`,
-`theme.env`, `models.env` (yours), `privacy-terms`, `soul`,
+`theme.env`, `keys.env`, `models.env` (yours), `privacy-terms`, `soul`,
 `personality`, `faces`, `voice` and `memory` (the pre-v1.4 facts file,
 read until the first write). `voice` (0600) is the
 machine's own voice, `KEY=value`: `SID` and `SID_PT`, its two
@@ -520,6 +523,10 @@ State is `~/.local/state/spark/`, 0700:
 - `voice-anyway`: `spark voice clear --anyway` was chosen, kept until
   the next `clear` or `off`. `voice-playing`: the pid of the player
   speaking now and its private directory, for `spark voice stop`.
+- `replaced.bash` and `replaced.zsh`: what each key did in that shell
+  before the widget bound it, `NAME<TAB>KEY<TAB>binding` a line, `-` for
+  nothing. The widget writes it only when it differs, and `spark keys`
+  reads it.
 - `look` 0600: the living prompt's state for the widgets (contract 6),
   written by `look.render` alone. `news`, `news-seen` and `last-seen`
   are gone: nothing reads or writes them, and an older machine's copies
@@ -607,7 +614,12 @@ and may change freely.
    appended. Another shell, or a bash older than 4, is a `todo` naming
    the fix. On bash, a regular `~/.bash_profile` that neither sources
    `~/.bashrc` nor holds the marker shadows the hook on a console login.
-   The `rc-login` row appends the same marked line there. Two hand-back
+   The `rc-login` row appends the same marked line there. With
+   `SITE_KEYS=off` both rows are a `skip`, `the keys are off -- spark
+   keys on`, and the rc file is left as it is. `spark setup` asks at a
+   terminal before the first line goes in (`setup._keys`): a no writes
+   `SITE_KEYS=off`. `spark keys off` removes the line, through a
+   symlink too (`uninstall.strip_rc_line`). Two hand-back
    rows cover what older sparks made. The `micro` row removes the plugin
    links a pre-v1.10 install left under `~/.config/micro` and names the
    app's own repository. The `handback` row, run by `spark update`,
@@ -628,7 +640,9 @@ and may change freely.
    keys:
    - `site.env`: `SITE_NAME SITE_USER SITE_SET_HOSTNAME SITE_PEER_AI_URL
      SITE_PEER_SSH SITE_AI_MODEL SITE_EMBER_MODEL SITE_AI_BUDGET
-     SITE_AI_BUILD SITE_HEADLESS SITE_SHARE`. A key an older spark
+     SITE_AI_BUILD SITE_HEADLESS SITE_SHARE SITE_KEYS`. `SITE_KEYS` is
+     `on` or `off`, default `on` (`spark keys on|off`): `off`, the `rc`
+     and `rc-login` rows add nothing. A key an older spark
      wrote, such as `SITE_THEME` or `SITE_QUIET_START`, still loads: a
      well-formed key spark does not know is not refused, and nothing
      reads it.
@@ -703,6 +717,11 @@ and may change freely.
      per banner row, `bright-` allowed. `spark ver` draws the logo in
      them (`cli.recolour`), and the bar line takes its accent slot from
      the file (`bar._accent`). Without the file both keep their own.
+   - `~/.config/spark/keys.env`: the keys the widgets bind, written by
+     `spark keys` alone: `KEYS_ASK KEYS_RECALL KEYS_HEIGHT KEYS_LISTEN
+     KEYS_STOP`, each `Esc a`, `Ctrl-g` or `none` (`keys.NAMES`,
+     `keys.CTRL_OK`). Both widgets read it line by line as the shell
+     starts, never sourced. A value of another shape keeps the default.
    Precedence: environment, then file, then default.
 4. `spark line --cwd D --shell S` reads the prompt buffer on stdin and
    prints two lines. Line 1 is `cmd<TAB>command`, `danger<TAB>command`,
@@ -1005,6 +1024,9 @@ and may change freely.
    is never eaten. The failure line is `* failed (N) -- Esc s asks
    why`, or `HEAD not found; Esc s gets the install line` for exit 127,
    or `last time this fixed it: FIX` from the failure memory. The
+   A key `spark keys` moved is named in these lines in place of `Esc
+   s`, `Esc r`, `Esc k` and `Esc v`. With `ask` set to `none` the
+   failure line ends `? words asks about it`. The
    others are `* Enter explains the error`, `* Enter runs the check`
    (the proof), `* Enter remembers the fix`, `* type a question, then
    Esc s` and `* spark writes here -- Esc k moves it`. A hint no longer

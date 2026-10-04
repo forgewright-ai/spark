@@ -143,6 +143,10 @@ prompt line and `TAB` completion. If setup prints a `todo rc` row, run
 `chsh -s /bin/zsh`, then `spark setup` again. A bare zsh needs `autoload
 -Uz compinit && compinit` in `~/.zshrc` for completion.
 
+Setup asks before it adds the rc line. It lists the keys the line
+adds to your shell and what each one replaces there. Answer `n` and
+spark adds no line and no key. `spark keys on` adds them later.
+
 A shell that is not interactive does not load the rc line. In a script,
 a cron job or `ssh HOST 'spark ...'`, call `~/.local/bin/spark` in full.
 
@@ -165,9 +169,37 @@ The prompt line:
 - `Esc k` moves the row spark writes in, for a prompt of two lines.
   `spark height N` sets it, 1 to 5.
 - `spark off` turns the prompt line off. `spark on` turns it back on.
+- `spark keys` lists the keys spark added, and moves them.
 - `cmd 2>&1 | explain` says what went wrong, and the fix.
 - `spark <words>` answers in the terminal. `spark @FILE words` asks
   about a file.
+
+The keys spark adds to your shell, each with a name:
+
+| name | key | what it does |
+|---|---|---|
+| `ask` | `Esc s` | asks about the line you are on |
+| `recall` | `Esc r` | finds a past command |
+| `height` | `Esc k` | moves the row spark writes in |
+| `listen` | `Esc v` | listens, with the voice on |
+| `stop` | `Esc x` | stops the speaking, with the voice on |
+
+A lone `Esc` waits up to 1 second for the next key. `Enter`, `Ctrl-U`,
+`Ctrl-L` and a paste keep what they did, and they do not move.
+
+- `spark keys` lists each key and what it replaced in your shell.
+- `spark keys ask Esc a` moves a key. `Alt-a` is the same key, and
+  `Ctrl-g` works too.
+- `spark keys ask none` leaves that key to your shell.
+- `spark keys reset` brings back the keys in the table.
+- `spark keys off` takes the line out of your rc file. `spark update`
+  then leaves the file alone. The prompt line and `TAB` completion go
+  with it.
+- `spark keys on` adds the line again.
+- `SPARK_OFF=1` in the environment starts one shell without the keys.
+
+A change shows in the next shell you open. Your choice of keys is kept
+in `~/.config/spark/keys.env`.
 
 `spark chat` talks with the model. It goes on with your newest thread.
 `Esc` on an empty line, `/q` or `Ctrl-D` ends it. `Ctrl-C` cancels a
@@ -501,6 +533,7 @@ Each has a command:
 | `SITE_PEER_SSH` | an ssh target `spark check` should reach | unset |
 | `SITE_HEADLESS` | `yes`: up from boot: `spark serve boot on` | `no` |
 | `SITE_SHARE` | `yes`: one engine for every user: `spark serve share on` | `no` |
+| `SITE_KEYS` | `off`: no rc line and no keys: `spark keys off` | `on` |
 
 `~/.config/spark/spark.env` holds the rest. `spark.env.example` lists
 every key. The common ones:

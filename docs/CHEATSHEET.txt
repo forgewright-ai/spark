@@ -11,6 +11,8 @@ AT THE PROMPT
   Esc r                           describe a past command to find it again
   Esc v | Esc x                   ask by voice, stop the speaking (voice on)
   Esc k                           move spark's row up or down
+  spark keys                      the keys spark added to your shell
+  spark keys NAME KEY | off | on  move one (ask Esc a), or all off or on
   cmd 2>&1 | explain              what went wrong, and the fix
   spark <TAB>                     complete commands and names
   a paste of 2 or more lines      one line about it. Nothing runs

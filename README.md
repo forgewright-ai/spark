@@ -53,7 +53,9 @@ marked `!`.
    spark check
    ```
 
-spark adds one line to your rc file. `docs/INSTALL.md` has the details.
+spark asks first, then adds one line to your rc file. `spark keys`
+lists the keys that line adds, moves one, or takes them all back.
+`docs/INSTALL.md` has the details.
 
 ## Use it
 

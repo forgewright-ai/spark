@@ -46,7 +46,7 @@ KEEP_STATE = ("users", "account", "account-key")
 # faces and voice (the voice it kept) are spark awaken's, and words the
 # file an older awaken wrote (the state's look, news, news-seen and
 # loads.json go with the whole state dir); the personality is the soul's
-SPARK_CONFIG = ("site.env", "spark.env", "theme.env", "console-colors", "console-colors.rgb", "check.log",
+SPARK_CONFIG = ("site.env", "spark.env", "keys.env", "theme.env", "console-colors", "console-colors.rgb", "check.log",
                 "words", "faces", "voice")
 UNITS_LINUX = ("spark-serve.service", "spark-forge.service", "spark-check.timer", "spark-check.service")
 SV_UNITS = ("forge", "serve", "check")            # runit: ~/.config/spark/sv/spark-<unit>, the same three
@@ -272,10 +272,14 @@ def step_look(ctx):
 
 def strip_rc_line(path):
     """Remove the marked spark line (and the blank line bootstrap put before
-    it) from a regular rc file; True when a line went."""
+    it) from an rc file; True when a line went. A symlinked rc file is
+    followed, as bootstrap's append follows it: the file it points at
+    loses the line and the link stays. A link into the repository is
+    spark's own file, never edited."""
     from . import site
-    if os.path.islink(path) or not os.path.isfile(path):
+    if site._spark_link(path) or not os.path.isfile(path):
         return False
+    path = os.path.realpath(path)
     with open(path, encoding="utf-8", errors="replace") as f:
         lines = f.read().split("\n")
     keep = []
@@ -296,7 +300,7 @@ def step_rc_lines(ctx):
     from . import site
     for name in RC_CANDIDATES:
         path = os.path.join(HOME, name)
-        if os.path.islink(path) or not os.path.isfile(path):
+        if site._spark_link(path) or not os.path.isfile(path):
             continue
         try:
             with open(path, encoding="utf-8", errors="replace") as f:

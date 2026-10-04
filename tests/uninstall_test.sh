@@ -52,6 +52,11 @@ build_home() {
     printf '# my tmux\n' > "$HOME/.tmux.conf"
     printf '[user]\n\tname = me\n' > "$HOME/.gitconfig"
     printf 'export MINE=1\n\n[ -r ~/.config/spark/hook.bash ] && . ~/.config/spark/hook.bash   # spark: the AI at the prompt\n' > "$HOME/$other"
+    # an rc file that is a symlink of yours (a dotfiles folder), with the
+    # line bootstrap appended through the link
+    mkdir -p "$HOME/dotfiles"
+    printf '# my profile\n\n[ -r ~/.config/spark/hook.bash ] && . ~/.config/spark/hook.bash   # spark: the AI at the prompt\n' > "$HOME/dotfiles/profile"
+    ln -sfn "$HOME/dotfiles/profile" "$HOME/.bash_profile"
     printf '{"colorscheme": "spark", "tabsize": 2}\n' > "$HOME/.config/micro/settings.json"
     sh "$HOME/.spark/install.sh" >/dev/null
     for f in spark explain; do ln -s "$HOME/.spark/bin/$f" "$HOME/.local/bin/$f"; done
@@ -131,6 +136,7 @@ out=$(spark uninstall --yes --keep-packages 2>&1) || bad "uninstall --yes failed
 grep -q 'name = me' "$HOME/.gitconfig" && ok ".gitconfig is not spark's, left alone" || bad ".gitconfig: $(cat "$HOME/.gitconfig" 2>&1)"
 grep -q 'config/spark/hook' "$HOME/$other" && bad "the marker line survived in $other" || ok "the spark line is gone from $other"
 grep -q 'MINE=1' "$HOME/$other" && ok "$other kept its own lines" || bad "$other lost its content"
+[ -L "$HOME/.bash_profile" ] && [ "$(cat "$HOME/dotfiles/profile")" = "# my profile" ] && ok "a symlinked rc file: the spark line is gone from the file it points at, the link stays" || bad "symlinked rc: $(ls -l "$HOME/.bash_profile" 2>&1) $(cat "$HOME/dotfiles/profile" 2>&1)"
 grep -q tabsize "$HOME/.config/micro/settings.json" && grep -q colorscheme "$HOME/.config/micro/settings.json" && ok "micro's settings.json is not spark's, left alone" || bad "settings.json: $(cat "$HOME/.config/micro/settings.json")"
 [ ! -e "$HOME/.local/bin/spark" ] && [ ! -e "$HOME/.local/bin/explain" ] && ok "~/.local/bin/spark and explain are gone" || bad "bin links survived"
 [ ! -e "$HOME/.local/share/spark" ] && ok "the data dir (engine, models, .part) is gone" || bad "data dir survived: $(ls -R "$HOME/.local/share/spark")"
