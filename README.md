@@ -200,5 +200,7 @@ moves forward. A clone on `main` is not checked.
 
 ## License
 
-MIT, in `LICENSE`. What spark downloads, and each license, is in
-`CREDITS.md`. Built with Claude.
+MIT, in `LICENSE`. spark comes with no warranty. A model can be wrong,
+so what you run or accept is your own risk. What spark downloads, and
+each license, is in `CREDITS.md`. It also names the one file here
+under another license. Built with Claude.

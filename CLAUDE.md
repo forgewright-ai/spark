@@ -504,6 +504,19 @@ State is `~/.local/state/spark/`, 0700:
 - `proof.<pid>` 0600: the bash widget's proof for the next prompt. The
   prompt empties it, and the next question and the shell's exit remove
   it.
+- `notice-shown`: the notice was shown on this machine, an empty
+  marker (`setup.NOTICED`). The notice is `setup.NOTICE`, 3 lines: the
+  licence, no warranty, and that a model can be wrong and the risk is
+  yours. `get` prints the same lines before it clones, and
+  `tests/smoke.py` holds the two texts equal. `spark setup` prints them
+  after the banner, before its first question and before any write. At
+  a terminal without `--yes` it asks `go on? yes/NO: ` once
+  (`confirm()`): a no prints `* nothing changed` and ends setup, exit
+  0, with no marker. With no terminal, `--yes` or `SPARK_YES=1` it
+  prints the lines, asks nothing and goes on. Either way the marker is
+  written, and a later setup says nothing. `spark update` prints the
+  lines once on a machine that has no marker, a terminal or not, with
+  no question. `spark ver --credits` prints them every time.
 - `voice-anyway`: `spark voice clear --anyway` was chosen, kept until
   the next `clear` or `off`. `voice-playing`: the pid of the player
   speaking now and its private directory, for `spark voice stop`.

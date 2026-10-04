@@ -3608,7 +3608,7 @@ def living_waits_cases(t):
 
     tmp = tempfile.mkdtemp(prefix="spark-waits-")
     paths = {n: getattr(look, n) for n in ("LOOK_FILE", "LOADS_FILE", "FACES_FILE")}
-    offered = _su.OFFERED
+    offered, noticed = _su.OFFERED, _su.NOTICED
     keys = ("TERM", "SSH_CONNECTION", "SSH_TTY", "SPARK_ASCII", "SPARK_LOOK", "SPARK_API_KEY")
     saved = {k: os.environ.get(k) for k in keys}
     real = {"measured_file": _en.measured_file, "roles": _en.roles}
@@ -3616,6 +3616,7 @@ def living_waits_cases(t):
     for n in paths:
         setattr(look, n, os.path.join(tmp, n.lower()))
     _su.OFFERED = os.path.join(tmp, "awaken-offered")
+    _su.NOTICED = os.path.join(tmp, "notice-shown")
     for k in keys:
         os.environ.pop(k, None)
     os.environ["TERM"] = "xterm"
@@ -3744,6 +3745,30 @@ def living_waits_cases(t):
         t.ok(piped == "" and first_ == _su.DOOR + "\n" and again == "",
              "door: update says it once ever, at a terminal only", repr((piped, first_, again)))
 
+        # --- the notice: one text, get's copy equal byte for byte; update
+        # says it once ever, a terminal or not, and asks nothing
+        with open(os.path.join(REPO, "get"), encoding="utf-8") as f:
+            got = re.findall(r"(?m)^ +'(\* [^']*)'(?: \\)?$", f.read())
+        mine = "".join(l + "\n" for l in _su.NOTICE)
+        t.ok(tuple(got) == _su.NOTICE and len(_su.NOTICE) == 3,
+             "notice: get's three lines are setup.NOTICE, byte for byte", repr(got))
+        t.ok(all(l.startswith("* ") and len(l) <= 80 and l == l.strip() for l in _su.NOTICE)
+             and "licence" not in mine and "license " not in mine and "no warranty" in mine,
+             "notice: three marked lines under 80 columns, no warranty in lower case", mine)
+
+        def notice_once(stream):
+            sys.stdout = stream
+            try:
+                _up._notice()
+                return stream.getvalue()
+            finally:
+                sys.stdout = out
+        first_, again, at_tty = notice_once(io.StringIO()), notice_once(io.StringIO()), notice_once(Tty())
+        t.ok(first_ == mine + "\n" and again == "" and at_tty == "" and os.path.exists(_su.NOTICED)
+             and "?" not in first_,
+             "notice: update prints it once ever, with no question, and marks it shown", repr((first_, again, at_tty)))
+        os.remove(_su.NOTICED)
+
         # --- awakened: the door is shut, the bar draws, the pulses show
         os.remove(_su.OFFERED)
         os.environ["SPARK_LOOK"] = "on"
@@ -3787,7 +3812,7 @@ def living_waits_cases(t):
         _en.measured_file, _en.roles = real["measured_file"], real["roles"]
         for n, p in paths.items():
             setattr(look, n, p)
-        _su.OFFERED = offered
+        _su.OFFERED, _su.NOTICED = offered, noticed
         for k, v in saved.items():
             if v is None:
                 os.environ.pop(k, None)
@@ -4503,6 +4528,10 @@ def main():
         t.ok(rc == 0 and re.search(r"^spark (\d+\.\d+(\+\d+)?|0\+[0-9a-f]+|dev)$", out2, re.M)
              and "github.com" not in out2 and "CREDITS.md" not in out2 and out.startswith(out2),
              "spark ver (a login's lines): the logo and the version, no credits", out2)
+        from spark import setup as _nsu
+        t.ok(out.endswith("".join(l + "\n" for l in _nsu.NOTICE)) and "no warranty" not in out2
+             and not os.path.exists(home + "/.local/state/spark/notice-shown"),
+             "spark ver --credits ends with the notice; bare spark ver has none, and neither marks it shown", out)
 
         # spark ver --sbom (v1.36, lib/spark/sbom.py): the JSON and one
         # newline, nothing else -- CycloneDX 1.5 with its four top-level
@@ -7790,7 +7819,68 @@ def main():
         rc, out, _ = spark(extra=off)
         t.ok(rc == 0 and out.startswith(("* ", "! ")) and len(out.splitlines()) == 1,
              "bare spark with no site.env, not a tty: the one-line status (the offer is tty-only)", out)
+        # the notice (setup.NOTICE): at a terminal without --yes, the three
+        # lines and one question before anything is asked or written -- a
+        # no ends setup, exit 0, nothing written; a yes goes on and is
+        # never asked again; with no terminal the lines print once, no
+        # question, and setup runs as before
+        from spark import setup as _nsu
+        _noticed = home + "/.local/state/spark/notice-shown"
+        _site = home + "/.config/spark/site.env"
+        _nwords = ("setup", "--no-serve", "--model", "none", "--name", "box", "--user", "me")
+
+        def _setup_tty(answer):
+            import pty as _npty
+            m, s = _npty.openpty()
+            q = subprocess.Popen([sys.executable, SPARK] + list(_nwords), stdin=s, stdout=s, stderr=s,
+                                 env=dict(env, SPARK_VOICE="off", **off), start_new_session=True)
+            os.close(s)
+            data, end, sent = b"", time.time() + 60, False
+            while time.time() < end:
+                r, _, _ = select.select([m], [], [], 0.2)
+                if r:
+                    try:
+                        chunk = os.read(m, 4096)
+                    except OSError:
+                        break
+                    if not chunk:
+                        break
+                    data += chunk
+                elif q.poll() is not None:
+                    break
+                if not sent and b"yes/NO: " in data:
+                    os.write(m, answer)
+                    sent = True
+            try:
+                rc = q.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                q.kill()
+                rc = None
+            os.close(m)
+            return rc, data.decode("utf-8", "replace").replace("\r\n", "\n")
+
+        _nlines = "".join(l + "\n" for l in _nsu.NOTICE)
+        if os.path.exists(_noticed):
+            os.remove(_noticed)
+        rc, out = _setup_tty(b"\n")
+        t.ok(rc == 0 and _nlines + "go on? yes/NO: " in out and out.rstrip().endswith("* nothing changed")
+             and "machine's name" not in out and "GB for models" not in out,
+             "setup at a terminal: the notice, one question, and Enter is no -- nothing changed, exit 0", out)
+        t.ok(not os.path.exists(_site) and not os.path.exists(_noticed),
+             "setup declined: no site.env written, the notice not marked shown")
+        rc, out = _setup_tty(b"yes\n")
+        t.ok(rc == 0 and out.count("go on? yes/NO: ") == 1 and out.count(_nsu.NOTICE[0]) == 1
+             and "open a new shell" in out and os.path.exists(_site) and os.path.exists(_noticed),
+             "setup at a terminal: a yes goes on, writes site.env and marks the notice shown", out)
+        rc, out = _setup_tty(b"n\n")
+        t.ok(rc == 0 and "yes/NO" not in out and _nsu.NOTICE[0] not in out and "open a new shell" in out,
+             "setup again: the notice is not printed and nothing is asked", out)
+        os.remove(_noticed)
+        os.remove(_site)
         rc, out, err = spark("setup", "--yes", "--no-serve", "--model", "none", extra=off)
+        t.ok(out.count(_nlines) == 1 and "yes/NO" not in out and out.index(_nlines) < out.index("GB for models")
+             and os.path.exists(_noticed),
+             "setup with no terminal: the notice once, no question, marked shown", out)
         site_env = open(home + "/.config/spark/site.env").read()
         t.ok(rc == 0 and err == "", "spark setup --yes --no-serve --model none exits 0", out + err)
         t.ok(re.search(r"^SITE_NAME=\S", site_env, re.M) and re.search(r"^SITE_USER=\S", site_env, re.M)
@@ -7801,6 +7891,7 @@ def main():
         rc, out, _ = spark("setup", "--yes", "--no-serve", "--model", "none", "--theme", "none", extra=off)
         t.ok(rc == 2 and "no word --theme" in out, "setup --theme: no option any more (v1.62), exit 2", out)
         rc, out, _ = spark("setup", "--yes", "--no-serve", "--model", "none", extra=off)
+        t.ok(_nsu.NOTICE[0] not in out, "setup a second time with no terminal: the notice stays silent", out)
         t.ok("\u2588" in out and "GB for models" in out and "SITE_AI_MODEL=none" in out and "open a new shell" in out
              and "spark chat" in out,
              "setup printed the logo, the table header, the model line and the closing block", out)

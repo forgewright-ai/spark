@@ -87,6 +87,13 @@ printf '%s\n' "$out" | grep -q 'a test seam' && bad "the seam spoke without bein
 out=$(sh "$REPO/get" --clone-only 2>&1) || bad "get --clone-only failed: $out"; note "$out"
 printf '%s\n' "$out" | head -1 | grep -q '^spark get -- installs spark in ~/.spark (no sudo)$' \
     && ok "the first line says what it does" || bad "first line: $(printf '%s\n' "$out" | head -1)"
+# the notice: three lines right after the first, before the clone's row
+# (tests/smoke.py holds them equal to setup.NOTICE, byte for byte)
+[ "$(printf '%s\n' "$out" | sed -n '2,4p')" = "* spark is MIT licensed and comes with no warranty -- see LICENSE
+* a model can be wrong -- read a command before you run it
+* what you run or accept is your own risk" ] \
+    && [ "$(printf '%s\n' "$out" | grep -n '^ok     clone' | head -1 | cut -d: -f1)" -gt 4 ] \
+    && ok "the notice comes next, before the clone" || bad "notice: $(printf '%s\n' "$out" | sed -n '2,6p')"
 [ -x "$HOME/.spark/bin/spark" ] && ok "cloned to ~/.spark, bin/spark present" || bad "no bin/spark in the clone"
 # a full clone: get passes no --depth; a CI checkout is itself shallow, so the
 # clone can only be as deep as its source
@@ -184,6 +191,7 @@ fi
 mkdir -p "$T/other"; echo keep > "$T/other/file"
 if out=$(SPARK_HOME="$T/other" sh "$REPO/get" --clone-only 2>&1); then bad "a foreign directory was not refused"; else ok "a foreign directory is refused"; fi
 note "$out"
+printf '%s\n' "$out" | grep -qx '\* what you run or accept is your own risk' && ok "the notice shows before a refusal too" || bad "no notice before the refusal: $out"
 printf '%s\n' "$out" | grep -q 'exists and is not spark -- move it or set SPARK_HOME' && ok "the refusal names the remedy" || bad "refusal text: $out"
 [ "$(cat "$T/other/file")" = keep ] && [ ! -e "$T/other/.git" ] && ok "the directory is untouched" || bad "the directory was touched"
 

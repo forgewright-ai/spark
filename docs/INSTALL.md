@@ -116,6 +116,11 @@ when asked. Open Ubuntu and run Debian's step 3.
 `get` checks the tools above, clones spark to `~/.spark`, moves to the
 newest signed release and runs `spark setup`. It never runs `sudo`.
 
+`get` prints a short notice first: the license, no warranty, and that
+a model can be wrong. `spark setup` shows it once. At a terminal it
+asks `go on? yes/NO:` before it changes anything. `spark ver --credits`
+shows the notice again.
+
 `spark setup`:
 
 1. Asks this machine's name, your name and the model. The model marked
@@ -564,8 +569,8 @@ is the trust boundary.
 - The microphone opens only on `Esc v` or `spark voice listen`.
 
 `spark ver --sbom` lists what spark depends on. `spark ver --credits`
-names who made spark and what it uses. `spark stats --sends` shows
-what left this machine, by destination and day.
+names who made spark and what it uses, with the notice. `spark stats
+--sends` shows what left this machine, by destination and day.
 
 ## How it fits together
 

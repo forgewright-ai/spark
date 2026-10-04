@@ -67,7 +67,7 @@ CLEAR_USAGE = """spark clear -- remove the history this machine keeps
 VER_USAGE = """spark ver -- the version
 
   spark ver                   the logo and the version
-  spark ver --credits         who made spark and what it uses
+  spark ver --credits         who made spark, what it uses, the notice
   spark ver --sbom            what spark depends on, as CycloneDX JSON
 """
 
@@ -1634,7 +1634,7 @@ def logo_names():
 
 
 def cmd_ver(args):
-    """the logo and the version; --credits adds who made it"""
+    """the logo and the version; --credits adds who made it and the notice"""
     if _help(args, VER_USAGE):
         return 0
     if args[:1] == ["--sbom"]:
@@ -1647,6 +1647,9 @@ def cmd_ver(args):
     if args[:1] == ["--credits"]:
         say(credits())
         say("engine llama.cpp %s (MIT) -- CREDITS.md names the rest" % engine.pinned_version())
+        from . import setup
+        for line in setup.NOTICE:
+            say(line)
     return 0
 
 

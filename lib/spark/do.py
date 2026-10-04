@@ -202,6 +202,7 @@ DO_USAGE = """%s do -- a task, step by step
   At each step: Enter runs it, e edits it, s skips it, q quits, and r
   reads a long step again. A step that can destroy data runs only when
   you type yes. After a step, a check that it worked is offered too.
+  The model can be wrong: read each command before you run it.
   In the sandbox, steps run on their own, %d seconds each at most.
   A run is %d steps at most.
 """

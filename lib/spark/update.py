@@ -151,6 +151,16 @@ def _door():
         pass
 
 
+def _notice():
+    """The notice, once ever on a machine installed before it: the three
+    lines, no question, a terminal or not (setup.notice marks it shown)."""
+    try:
+        from . import setup
+        setup.notice()
+    except Exception:       # noqa: BLE001 -- the notice is never a reason to fail
+        pass
+
+
 def _voice_pins(cfg):
     """The voice follows its pins: with it on or clear, a part whose pin
     changed (its sha file differs) is fetched again, the old one removed
@@ -236,6 +246,7 @@ def cmd_update(args):
                     look.fresh(cfg)
                 except Exception:       # noqa: BLE001 -- derived state, rebuilt at the next look
                     pass
+                _notice()
                 _door()
             return rc
         say("%s update -- no word %s; spark update -h lists them" % (MARK, a))
@@ -352,5 +363,6 @@ def cmd_update(args):
                 say("%s update -- the page runs an older spark, started by hand: "
                     "spark serve off; spark serve on" % MARK)
 
+        _notice()
         _door()
     return rc

@@ -1,4 +1,5 @@
-# spark.setup -- `spark setup`: the guided first run. Greet, ask three
+# spark.setup -- `spark setup`: the guided first run. Greet, show the
+# notice (once, with one question at a terminal), ask three
 # things (this machine's name, yours, the model) and whether spark should
 # read aloud (the clear voice, default no, acted on last), write
 # site.env, sudo once when the package manager has something to install, run bootstrap on
@@ -331,6 +332,43 @@ def door(once=False):
     return True
 
 
+# the notice: the licence, no warranty, and whose risk a command is. One
+# text, said before anything changes: `get` prints the same three lines
+# (tests/smoke.py holds the two equal, byte for byte), `spark setup`
+# shows them and asks once at a terminal, `spark update` shows them once
+# on a machine installed before them, `spark ver --credits` any time
+NOTICE = ("* spark is MIT licensed and comes with no warranty -- see LICENSE",
+          "* a model can be wrong -- read a command before you run it",
+          "* what you run or accept is your own risk")
+NOTICE_QUESTION = "go on"
+NOTICED = os.path.join(STATE_DIR, "notice-shown")
+
+
+def notice(ask=False):
+    """The notice, once ever on this machine: the three lines, then with
+    ask (setup at a terminal, no --yes) the one question -- a no prints
+    `* nothing changed` and returns False, nothing written. Shown
+    without a question, or answered yes, it is marked in the state dir
+    and never printed again. spark update calls it bare."""
+    if os.path.exists(NOTICED):
+        return True
+    for line in NOTICE:
+        say(line)
+    if ask:
+        from . import confirm
+        if not confirm(NOTICE_QUESTION):
+            say("* nothing changed")
+            return False
+    say()
+    try:
+        os.makedirs(os.path.dirname(NOTICED), mode=0o700, exist_ok=True)
+        with open(NOTICED, "a", encoding="utf-8"):
+            pass
+    except OSError:
+        pass
+    return True
+
+
 VOICE_QUESTION = "read aloud to you (for low vision)? [y/N]: "
 
 
@@ -408,6 +446,8 @@ def _run(opts):
     cfg = config.load()
     cli.cmd_ver([])
     say()
+    if not notice(ask=not yes):
+        return 0
     name = _decide(cfg, "SITE_NAME", opts["name"], cfg.name, "this machine's name", yes)
     user = _decide(cfg, "SITE_USER", opts["user"], cfg.user, "your name", yes)
     # a shared engine already runs on this box (spark serve share on) and this user

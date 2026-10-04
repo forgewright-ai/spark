@@ -32,7 +32,7 @@ SPARK
   spark history                   past threads and remembered fixes
   spark clear --history           forget past threads (kept ones stay)
   spark ver                       the version
-  spark ver --credits             who made spark and what it uses
+  spark ver --credits             who made spark, what it uses, the notice
   spark ver --sbom                what spark depends on, as CycloneDX JSON
 
 CHAT
