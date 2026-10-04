@@ -732,6 +732,7 @@ n=$(grep -c '^down-first ' "$D/cp.log" 2>/dev/null || true)
 printf 'ID=fedora\nPRETTY_NAME="Fedora Linux 44 (Workstation Edition)"\n' > "$T/os-release-fedora"
 printf 'ID="rocky"\nID_LIKE="rhel centos fedora"\nPRETTY_NAME="Rocky Linux 9.5 (Blue Onyx)"\n' > "$T/os-release-rocky"
 out=$(lp "$T/os-release-fedora")
+printf '%s\n' "$out" | grep -qx tar && ok "Fedora: tar is asked for (a minimal install has none, and it unpacks the engine)" || bad "Fedora --list-packages lacks tar"
 printf '%s\n' "$out" | grep -qx libgomp && printf '%s\n' "$out" | grep -qx python3 \
     && ! printf '%s\n' "$out" | grep -qxE 'gcc-libs|libgomp1|python|vulkan-loader' \
     && ok "Fedora: --list-packages speaks dnf's names (libgomp, python3; no vulkan without a GPU)" || bad "Fedora --list-packages: $(printf '%s' "$out" | tr '\n' ' ')"
@@ -768,6 +769,7 @@ fi
 printf 'ID="opensuse-tumbleweed"\nID_LIKE="opensuse suse"\nPRETTY_NAME="openSUSE Tumbleweed"\n' > "$T/os-release-tumbleweed"
 printf 'ID="opensuse-leap"\nID_LIKE="suse opensuse"\nPRETTY_NAME="openSUSE Leap 16.0"\n' > "$T/os-release-leap"
 out=$(lp "$T/os-release-tumbleweed")
+printf '%s\n' "$out" | grep -qx tar && ok "openSUSE: tar is asked for (a minimal install has none, and it unpacks the engine)" || bad "openSUSE --list-packages lacks tar"
 printf '%s\n' "$out" | grep -qx libgomp1 && printf '%s\n' "$out" | grep -qx python3 \
     && ! printf '%s\n' "$out" | grep -qxE 'gcc-libs|libgomp|python|libvulkan1' \
     && ok "openSUSE: --list-packages speaks zypper's names (libgomp1, python3; no vulkan without a GPU)" || bad "openSUSE --list-packages: $(printf '%s' "$out" | tr '\n' ' ')"

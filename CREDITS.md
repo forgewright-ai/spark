@@ -59,6 +59,8 @@ Where the families name one project differently, every name is here.
 - ca-certificates -- MPL-2.0, Mozilla's bundle as the distro ships it.
 - python3 -- PSF-2.0, on Debian, Void, Fedora and openSUSE.
 - python -- PSF-2.0, Arch's name for python3.
+- tar -- GPL-3.0-or-later, GNU tar, on Fedora and openSUSE. It unpacks
+  the engine, and a minimal install there has none.
 - libgomp1 -- GPL-3.0-or-later, with the GCC runtime exception. The
   name on Debian and openSUSE.
 - gcc-libs -- GPL-3.0-or-later, with the GCC runtime exception. Arch's

@@ -431,6 +431,9 @@ sudo firewall-cmd --permanent --add-port=8081/tcp
 sudo firewall-cmd --reload
 ```
 
+With a cable and Wi-Fi both connected, spark serves at one address: the
+one your default route uses. `spark serve` prints it.
+
 Another machine of yours:
 
 1. Here: `spark user add NAME`. The token is shown once.
@@ -555,8 +558,9 @@ Fedora:
 
 - Packages come through `dnf install -y`. `sudo dnf upgrade` upgrades
   the system.
-- CI proves the install line in a Fedora container. On a real machine
-  Fedora is not proven: the engine, the GPU and the services.
+- CI proves the install line in a Fedora container. On one real
+  machine, a minimal Fedora 44 with SELinux enforcing ran the install
+  line, the engine on its GPU and the services.
 - Fedora Silverblue, Kinoite and the other atomic systems are not
   supported in this version.
 - Rocky Linux and AlmaLinux are treated as Fedora. They are not
@@ -567,8 +571,9 @@ openSUSE:
 
 - Tumbleweed and Leap are one family. Packages come through `zypper
   install -y`. On Tumbleweed, `sudo zypper dup` upgrades the system.
-- CI proves the install line in a Tumbleweed container. On a real
-  machine openSUSE is not proven: the engine, the GPU and the services.
+- CI proves the install line in a Tumbleweed container. On one real
+  machine, a minimal Tumbleweed ran the install line, the engine on its
+  GPU and the services.
 - MicroOS, Aeon and the other atomic systems are not supported in this
   version.
 - The firewall is on: see section 5.

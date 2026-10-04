@@ -6,6 +6,15 @@
   a moment while they restart and the model loads. Your prompt now
   says so only when they are still red 3 minutes later. `spark check
   --history` still lists the change.
+- Fedora and openSUSE install on a minimal system. Setup stopped there
+  with `tar: command not found`. spark now installs `tar` with its
+  other packages.
+- Fedora and openSUSE are proven on a real machine: a minimal Fedora 44
+  with SELinux enforcing, and a minimal Tumbleweed. Each ran the
+  install line, the engine on its GPU, the services and the firewall
+  step.
+- With a cable and Wi-Fi both connected, spark serves at the address
+  your default route uses. `docs/INSTALL.md`, section 5, says so.
 
 ## v1.83
 
