@@ -31,6 +31,7 @@ SPARK
   spark memory on|off|clear       use the facts, or forget them all
   spark history                   past threads and remembered fixes
   spark clear --history           forget past threads (kept ones stay)
+                                  and what spark check --history shows
   spark ver                       the version
   spark ver --credits             who made spark and what it uses
   spark ver --sbom                what spark depends on, as CycloneDX JSON
@@ -117,6 +118,7 @@ THE MACHINE
   spark setup [--yes]             name, user, model and voice
   spark check                     what needs you. exit 0 = nothing failed
   spark check --all | NAME...     every row, or those rows
+  spark check --history [NAME]    what changed and when, newest first
   spark check --fresh | --watch N ask again now, or every N seconds
   spark check --report            a block to paste into an issue
   spark check --porcelain         every row, tab separated

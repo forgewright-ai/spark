@@ -10,7 +10,10 @@ trap 'kill $! 2>/dev/null; exit 0' TERM INT
 sleep 120 & wait $!
 while :; do
     # the rows go nowhere (check.json keeps them); stderr stays on the
-    # log pipe, so a check that cannot run says why in svlogd's tail
-    @HOME@/.local/bin/spark check --porcelain >/dev/null
+    # log pipe, so a check that cannot run says why in svlogd's tail.
+    # stdin is /dev/null: runsv hands its own down, and that may be the
+    # console, a terminal -- and a check at a terminal is a person's run
+    # (check.unattended), which never refreshes the knowledge index
+    @HOME@/.local/bin/spark check --porcelain </dev/null >/dev/null
     sleep 300 & wait $!
 done

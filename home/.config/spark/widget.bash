@@ -40,7 +40,17 @@
 # row's height, or starship draws it. In bash the face is still:
 # readline has no idle timer, and nothing runs in the background for
 # it (zsh blinks). The face says nothing. With the face off every byte
-# is what it was.
+# is what it was. Ctrl-C at a prompt can leave one resting face behind:
+# bash has no safe hook for it, and no INT trap is set here.
+#
+# The alert file ($STATE_DIR/alert, written by `spark check`): when a
+# check row turns worse, the next prompt says so in spark's row, once in
+# each pane -- `! serve: nothing answers -- spark serve on` -- and once
+# more when it heals, where the warning was shown. Awake or not; the
+# face only where it is on. A failure line goes first and the warning
+# waits one prompt; `spark off` keeps it for after `spark on`. The file
+# is read line by line when it changes, never sourced, and no pane
+# writes it.
 #
 # How Enter works: it is a two-key macro. The first key runs _spark_enter,
 # which looks at the line and rebinds the second key -- to accept-line for a
@@ -139,6 +149,69 @@ _spark_look_check() {
     printf 'bash %d %d hook\n' "$$" "$_spark_born" > "$m" 2>/dev/null
 }
 _spark_look_read
+
+# --- the alert: a check row turned worse, said once in this pane ------------
+# $SPARK_DIR/alert is `spark check`'s, rewritten whole by a rename: at
+# most 8 lines, oldest first, `<seq> <epoch> <mark> <mood> <row> <text>`.
+# The prompt hook pays one -nt test for it, against the same marker the
+# look file uses, taken before _spark_look_check may write the marker
+# anew; _spark_al_due carries the answer, so neither file hides the
+# other. It starts set: a new shell reads the standing file once. It
+# stays set while a line still waits (a note took this prompt, `spark
+# off`, a second line), and the marker is then left as it is. Once
+# nothing waits the marker is written anew -- after one more look at the
+# look file, should it have changed meanwhile.
+# A line is read with `read -r`, never sourced or eval'd, and dropped
+# unless its seq is 1 to 12 digits, its mark ! or *, its row a-z, and its
+# text printable ASCII, 200 characters at most. The mark and the mood
+# shown are this widget's own, chosen by the file's mark; the file's
+# mood and epoch are not used (read into _). Said once per pane, in
+# memory alone: _spark_al_seen is the highest seq shown, _spark_al_rows
+# the rows whose warning this pane showed. A ! line shows when its seq
+# is past the seen one (or equal to it for a row not shown yet: two rows
+# of one run). A * line shows only for a row in the list, and takes it
+# off: a pane that never showed the warning says no heal. One line a
+# prompt, through _spark_note: the width and the face are the row's own.
+_spark_al_due=1 _spark_al_rows=' ' _spark_al_seen=0
+_spark_alert() {
+    local f=$SPARK_DIR/alert m=$SPARK_DIR/widgets/$$ s k row text shown='' more='' n=0
+    [[ -n $_spark_al_due ]] || return 0
+    [[ -z $_spark_hinted ]] || return 0   # a note took this prompt: the warning waits one
+    [[ ! -e $SPARK_DIR/off ]] || return 0 # spark off: silent, and nothing is marked seen
+    if [[ -r $f ]]; then
+        while (( n++ < 8 )) && { IFS=' ' read -r s _ k _ row text || [[ -n $s ]]; }; do
+            [[ $s == [1-9]* && -z ${s//[0-9]/} && ${#s} -le 12 ]] || continue
+            [[ -n $row && -z ${row//[a-z]/} && ${#row} -le 32 ]] || continue
+            [[ -n $text && ${#text} -le 200 && $text != *[[:cntrl:]]* && $text != *[![:ascii:]]* ]] || continue
+            if [[ $k == "$_spark_w" ]]; then
+                (( s > _spark_al_seen )) || { (( s == _spark_al_seen )) && [[ $_spark_al_rows != *" $row "* ]]; } || continue
+            elif [[ $k == "$_spark_h" ]]; then
+                if [[ $_spark_al_rows != *" $row "* ]]; then
+                    # a heal this pane has no warning for: passed over, and seen
+                    [[ -z $shown ]] && (( s > _spark_al_seen )) && _spark_al_seen=$s
+                    continue
+                fi
+            else
+                continue
+            fi
+            if [[ -n $shown ]]; then more=1; break; fi
+            shown=1
+            (( s > _spark_al_seen )) && _spark_al_seen=$s
+            if [[ $k == "$_spark_w" ]]; then
+                [[ $_spark_al_rows == *" $row "* ]] || _spark_al_rows+="$row "
+                _spark_note "$_spark_w $text" alarmed
+            else
+                _spark_al_rows=${_spark_al_rows/" $row "/ }
+                _spark_note "$_spark_h $text" pleased
+            fi
+        done < "$f"
+    fi
+    [[ -z $more ]] || return 0            # one more line waits: the next prompt reads again
+    _spark_al_due=''
+    [[ -e $f ]] || return 0
+    [[ $SPARK_DIR/look -nt $m ]] && _spark_look_read
+    printf 'bash %d %d hook\n' "$$" "$_spark_born" > "$m" 2>/dev/null
+}
 
 # --- is this line a question? ----------------------------------------------
 # `? ...` always is. `...?` is, unless the last word is a glob that matches
@@ -521,11 +594,13 @@ _SPARK_LONG=30 _spark_t0=''
 # PROMPT_COMMAND (nor between the elements of the 5.1+ array form): only
 # the FIRST part sees the command's status. spark goes first, and hands
 # the status back with `return`, so starship -- or anything else behind
-# it -- still sees the truth. The look file is checked first (one stat
-# while it has not changed); then the failure moment; then, in a row
+# it -- still sees the truth. The alert file's one test comes first,
+# then the look file (one stat while it has not changed); then the
+# failure moment; then the alert, in a row no note took; then, in a row
 # no line took, the resting face.
 _spark_failed() {
     local rc=$? took='' d
+    [[ -n $_spark_al_due || $SPARK_DIR/alert -nt $SPARK_DIR/widgets/$$ ]] && _spark_al_due=1
     _spark_look_check
     if [[ -n $_spark_t0 && $_spark_lk_awake == yes ]]; then
         d=$(( SECONDS - _spark_t0 ))
@@ -536,6 +611,7 @@ _spark_failed() {
     _spark_t0=''
     _spark_faced=''                       # a new prompt: the row above holds no face yet
     _spark_failure "$rc" "$took"
+    _spark_alert
     [[ -n $_spark_hinted ]] || _spark_idle
     return $rc
 }
@@ -878,7 +954,7 @@ _spark_paste() {
         text=${text%%$'\n'*}
         case $kind in
             danger) _spark_mood=alarmed; _spark_say "$_spark_w $text -- pasted, not run" ;;
-            answer) _spark_say "$_spark_h $text -- pasted, not run" ;;
+            answer) _spark_mood=pleased; _spark_say "$_spark_h $text -- pasted, not run" ;;
         esac
     fi
 }

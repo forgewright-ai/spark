@@ -121,7 +121,7 @@ exit 1 when any does not hold.
 
 `--selftest` proves every fixture-testable row can flip. `--chaos`
 proves the sentence a row prints under a real failure is true, and that
-the remedy it names heals it: ten scenarios in `lib/spark/chaos.py`.
+the remedy it names heals it: eleven scenarios in `lib/spark/chaos.py`.
 
 ## The audition
 
@@ -224,11 +224,14 @@ whole of it.
   the line contract, and it must never block.
 - Call a model in the widgets' prompt hook, or fork there. It runs
   before every prompt: a `$?` test, a few variable writes and at most a
-  few `printf`s. One of them may print the resting face. Its reads,
+  few `printf`s. One of them may print the resting face. In zsh one
+  may erase a resting face a `Ctrl-C` left. Its reads,
   with shell builtins: `state/fails`, the
   plain hash-to-fix index the ledger writes, and on a failure only. The
   look file, again only when it is newer than the shell's marker, line
-  by line and never sourced. One stat of `state/off`, where the face
+  by line and never sourced. `state/alert`, the check's changes: one
+  `-nt` test a prompt, then line by line, a bad line dropped, never
+  sourced and never written. One stat of `state/off`, where the face
   is on. Its other state is per pane and in
   memory: never exported.
 - Start a process for the resting face. The zsh idle timer is `sched`
@@ -236,7 +239,9 @@ whole of it.
   bash the face is still.
 - Print a canned line: a greeting, a goodbye, a news line. Awaken
   writes no lines, an older shell's `spark words greet` prints nothing,
-  and nothing reads `state/news`, `news-seen` or `last-seen`. The face
+  and nothing reads `state/news`, `news-seen` or `last-seen`. A check
+  row's change is not one: `state/alert` carries the row's own words,
+  said once. The face
   says nothing. It shows in a wait, leads a reply, follows the mark
   in spark's row, rests above an idle prompt, and is in `spark look`.
 - Store a frame of the face. `look.Anim` derives every frame from the

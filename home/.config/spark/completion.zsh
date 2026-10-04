@@ -50,7 +50,7 @@ _spark() {
             voice)   comp=(clear on off rate test listen stop status) ;;
             height)  comp=(1 2 3 4 5) ;;
             bar)     comp=(line) ;;
-            check)   comp=(--watch --porcelain --report --fresh --fetch --selftest --chaos) ;;
+            check)   comp=(--all --history --watch --porcelain --report --fresh --fetch --selftest --chaos) ;;
             uninstall) comp=(--dry-run --yes --purge --packages --keep-packages) ;;
             serve)   comp=(on off boot share status --login --audit) ;;
             chat)    comp=(--thread) ;;

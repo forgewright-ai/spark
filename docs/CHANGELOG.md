@@ -1,5 +1,37 @@
 # Changelog
 
+## v1.82
+
+Your prompt tells you when something breaks, and when it works again.
+`spark check --history` shows what changed and when.
+
+- A warning at your prompt. When a `spark check` row turns worse, your
+  next prompt says so on the line spark writes, with the fix: `! serve:
+  nothing answers at 127.0.0.1:8080 -- spark serve on`. When it heals:
+  `* serve: ok again, after 21 min`. Each is said once in each shell.
+  A shell you open later shows a warning that still stands. `spark off`
+  keeps both quiet. After `spark awaken` the face is alarmed, then
+  pleased.
+- `spark check --history` lists every change, newest first, and `spark
+  check --history NAME` those of one row. It keeps the row's name, its
+  state and the time, never its text. Changes are kept `SPARK_HISTORY`
+  days, none when it is `off`. `spark clear --history` forgets them.
+- `spark check NAME` no longer hides the other rows. Before, the bar
+  and the page showed only the rows you named, for up to 5 minutes.
+- The knowledge row asked for `spark update`, and the update did
+  nothing. There were two faults. The row warned while programs still
+  waited to be read, which is normal after an install. That is ok now,
+  and the row says how many wait: `37 waiting their turn`. On Void the
+  5-minute check took itself for a person's run, so it never read
+  them. It does now.
+- The knowledge row warns only when this machine changed since the
+  last read, and `spark update` heals it. An update no longer reads
+  every program again. On a machine that uses another machine's model,
+  `spark update` reads until nothing waits.
+- Small fixes. A pasted answer shows the pleased face. `spark awaken`
+  shows a moving bar while a model loads. In zsh, `Ctrl-C` at a prompt
+  no longer leaves a face on the screen. In bash it still can.
+
 ## v1.81
 
 Two more Linux families: Fedora and openSUSE. The install line is the

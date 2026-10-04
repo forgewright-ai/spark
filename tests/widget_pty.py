@@ -31,7 +31,12 @@
 # --buffer` heard -- a `? ` question on an empty line, beside the words
 # at the cursor otherwise -- and runs nothing; the row says it listens,
 # nothing heard is one quiet line, a voice that cannot listen says how
-# to turn it on; Esc x is `spark voice stop`.
+# to turn it on; Esc x is `spark voice stop`. Then the alert (v1.81): a
+# check row that turned worse is said at the next prompt, once in each
+# pane, and its heal only where the warning was shown; a failure line
+# goes first, `spark off` is silent, a line that is not clean is
+# dropped, the look file is still read; an answer to a paste is
+# pleased; and in zsh Ctrl-C at a prompt leaves no resting face.
 #
 #   widget_pty.py bash home/.config/spark/widget.bash
 #   widget_pty.py zsh  home/.config/spark/widget.zsh
@@ -809,6 +814,342 @@ def idle_motion(widget, tmp, env, ok):
         sh.send("exit\r")
         sh.read(0.5)
         sh.close()
+
+
+ALERT_SEQ = 1791099000
+
+
+def alert_line(n, mark, row, text, mood=None):
+    """One line of the alert file as `spark check` writes it: seq, epoch,
+    mark, mood, row, then the text."""
+    return "%d %d %s %s %s %s\n" % (ALERT_SEQ + n, ALERT_SEQ + n, mark,
+                                    mood or ("alarmed" if mark == "!" else "pleased"), row, text)
+
+
+def alert_row(shell, widget, tmp, env, ok):
+    """v1.81: a check row that turned worse is said at the next prompt,
+    once in each pane, and once more when it heals -- only where the
+    warning was shown. The alert file is a fixture written by hand here,
+    whole and by a rename, as `spark check` writes it. A failure line
+    goes first and the warning waits one prompt; `spark off` is silent
+    and keeps it; a line that is not printable ASCII, or whose seq, mark
+    or row is off, is dropped; two lines take two prompts, oldest first.
+    The look file and the alert file share the shell's marker, and
+    neither hides the other. Awake, the line carries the face its mark
+    chooses, whatever mood the file names; not awake, no face. An
+    answer to a paste is pleased."""
+    state = os.path.join(tmp, "alert-state")
+    sd = os.path.join(state, "spark")
+    os.makedirs(sd)
+    alert, look, off = (os.path.join(sd, n) for n in ("alert", "look", "off"))
+    env = dict(env, XDG_STATE_HOME=state)
+    env.pop("SPARK_HEIGHT", None)
+    prompt = "AL> "
+
+    def put(path, text):
+        # a second later than the shell's marker, whatever the clock's
+        # grain; whole and by a rename, 0600
+        time.sleep(1.1)
+        data = text if isinstance(text, bytes) else text.encode()
+        with open(path + ".tmp", "wb") as f:
+            f.write(data)
+        os.chmod(path + ".tmp", 0o600)
+        os.replace(path + ".tmp", path)
+
+    def start(ps, extra=None):
+        e = dict(env, **(extra or {}))
+        if shell == "bash":
+            sh = Shell(["bash", "--norc", "--noprofile", "-i"], e, os.path.join(tmp, "work"))
+            sh.send("PS1='%s'; source %s; echo SOURCED\n" % (ps, widget))
+        else:
+            sh = Shell(["zsh", "-f", "-i"], e, os.path.join(tmp, "work"))
+            sh.send("PROMPT=$'%s'; source %s; echo SOURCED\n" % (ps, widget))
+        since = sh.mark()
+        sh.expect("SOURCED\r\n")
+        sh.expect(prompt)
+        sh.settle()
+        return sh, since()
+
+    def enter(sh, keys=""):
+        """Enter, the next prompt, and everything written until the
+        terminal is quiet (zsh draws its row after the prompt)."""
+        since = sh.mark()
+        sh.send(keys + "\r")
+        sh.expect(prompt)
+        sh.settle()
+        return since()
+
+    def said(seen, text, height=1, top=""):
+        """the note in spark's row: zsh's frame, `height` rows up; in bash
+        the line the prompt's own opening newline ends"""
+        if shell == "zsh":
+            return (ROW % (height, text)) in seen
+        return re.search(re.escape(text) + r"(\x1b\[\?2004h)?\r*\n" + re.escape(top or prompt), seen) is not None
+
+    down = "serve: nothing answers on 127.0.0.1:8080 -- spark serve on"
+    put(alert, alert_line(-10, "*", "forge", "forge: ok again, after 3 min") + alert_line(0, "!", "serve", down))
+    sh, seen = start("\\n" + prompt)
+    try:
+        ok(said(seen, "! " + down) and seen.count(down) == 1,
+           "alert: a new shell says the standing warning once, at its first prompt", seen[-300:])
+        ok("forge: ok again" not in seen, "alert: a new shell says no heal", seen[-300:])
+        ok(not any(f in seen for f in EVERY_FACE), "alert, not awake: the plain line, no face", seen[-300:])
+        ok(os.stat(alert).st_mode & 0o777 == 0o600 and open(alert).read().count("\n") == 2,
+           "alert: no pane writes the file")
+        seen = enter(sh)
+        ok(down not in seen, "alert: said once -- not at the prompt after", seen[-300:])
+        put(alert, alert_line(-10, "*", "forge", "forge: ok again, after 3 min") + alert_line(0, "!", "serve", down))
+        seen = enter(sh) + enter(sh)
+        ok(down not in seen and "ok again" not in seen,
+           "alert: the same line in a file written anew is not said again", seen[-300:])
+
+        # the heal: only for a row whose warning this pane showed
+        put(alert, alert_line(20, "*", "git", "git: ok again, after 2 min")
+            + alert_line(21, "*", "serve", "serve: ok again, after 21 min"))
+        seen = enter(sh)
+        ok(said(seen, "* serve: ok again, after 21 min") and "git: ok again" not in seen,
+           "alert: a heal is said where its warning was shown, and only that one", seen[-300:])
+        seen = enter(sh) + enter(sh)
+        ok("ok again" not in seen, "alert: the heal is said once", seen[-300:])
+
+        # a failure line goes first; the warning waits one prompt
+        put(alert, alert_line(30, "!", "git", "git: 2 files changed -- git status"))
+        seen = enter(sh, "sh -c 'exit 3'")
+        ok("failed (3) -- Esc s asks why" in seen and "git: 2 files changed" not in seen,
+           "alert: a failed command says its own line first", seen[-300:])
+        seen = enter(sh)
+        ok(said(seen, "! git: 2 files changed -- git status"), "alert: the warning waited one prompt", seen[-300:])
+        seen = enter(sh)
+        ok("git: 2 files" not in seen, "alert: and is said once", seen[-300:])
+
+        # spark off: silent, nothing marked seen; after spark on it shows
+        open(off, "w").close()
+        put(alert, alert_line(40, "!", "serve", "serve: down again -- spark serve on"))
+        seen = enter(sh) + enter(sh)
+        ok("down again" not in seen, "alert: spark off is silent", seen[-300:])
+        os.remove(off)
+        seen = enter(sh)
+        ok(said(seen, "! serve: down again -- spark serve on"), "alert: after spark on the standing line shows",
+           seen[-300:])
+        seen = enter(sh)
+        ok("down again" not in seen, "alert: once", seen[-300:])
+
+        # what is not a clean line is dropped: an escape, a byte beyond
+        # ASCII, a seq that is not 1 to 12 digits, another mark, a row
+        # that is not a-z, a text past 200 characters. The eighth line
+        # is clean, and the ninth is never read
+        bad = (alert_line(50, "!", "aaa", "bad-escape \x1b[2J here").encode()
+               + alert_line(51, "!", "bbb", "bad-latin caf").encode()[:-1] + b"\xc3\xa9\n"
+               + b"17x1 17 ! alarmed ccc bad-seq-letters\n"
+               + b"1234567890123 17 ! alarmed ddd bad-seq-long\n"
+               + alert_line(52, "?", "eee", "bad-mark").encode()
+               + alert_line(53, "!", "x9", "bad-row").encode()
+               + alert_line(54, "!", "ggg", "bad-long-" + "x" * 192).encode()
+               + alert_line(55, "!", "disk", "disk: 97 % full -- spark clear --history").encode()
+               + alert_line(56, "!", "hhh", "bad-ninth-line").encode())
+        put(alert, bad)
+        seen = enter(sh)
+        ok(said(seen, "! disk: 97 % full -- spark clear --history"), "alert: a clean line among bad ones is said",
+           seen[-300:])
+        seen += enter(sh) + enter(sh)
+        ok("bad-" not in seen and "\x1b[2J" not in seen,
+           "alert: an escape, a byte beyond ASCII, a bad seq, mark or row, a long text and a ninth line are dropped",
+           seen[-400:])
+
+        # two warnings take two prompts, oldest first; two rows of one
+        # run (one seq) too
+        put(alert, alert_line(60, "!", "aaa", "aaa: first of two -- one")
+            + alert_line(61, "!", "bbb", "bbb: second of two -- two"))
+        seen = enter(sh)
+        ok(said(seen, "! aaa: first of two -- one") and "second of two" not in seen,
+           "alert: two lines, one a prompt, the oldest first", seen[-300:])
+        seen = enter(sh)
+        ok(said(seen, "! bbb: second of two -- two") and "first of two" not in seen,
+           "alert: the second line at the next prompt", seen[-300:])
+        seen = enter(sh)
+        ok("of two" not in seen, "alert: then neither", seen[-300:])
+        put(alert, alert_line(70, "!", "ccc", "ccc: one run -- three") + alert_line(70, "!", "ddd", "ddd: one run -- four"))
+        first, second, third = enter(sh), enter(sh), enter(sh)
+        ok(said(first, "! ccc: one run -- three") and said(second, "! ddd: one run -- four")
+           and "one run" not in third, "alert: two rows with one seq are each said once",
+           (first + second + third)[-400:])
+
+        # one marker, two files: the alert written first, the look after
+        # it -- the look's read writes the marker anew, and the warning
+        # is still said at that prompt, with the face the look brought
+        put(alert, alert_line(80, "!", "eee", "eee: both at once -- x"))
+        put(look, LOOK_AWAKE.replace("HEIGHT=2", "HEIGHT=1").replace("COLOUR=on", "COLOUR=off"))
+        seen = enter(sh)
+        ok(said(seen, "! (O.O) eee: both at once -- x"),
+           "alert and look changed together: both are read, the warning carries the face", seen[-300:])
+        # the alert's read wrote the marker: a look changed after it is
+        # still read
+        put(look, "AWAKE=no\nMOTION=off\nCOLOUR=off\nWORDS=off\nHEIGHT=1\n")
+        seen = enter(sh, "sh -c 'exit 4'")
+        ok("* failed (4) -- Esc s asks why" in seen and not any(f in seen for f in EVERY_FACE),
+           "look changed after an alert was read: it is read again", seen[-300:])
+        # both changed, and a failure took the prompt: the warning waits
+        # past the marker the look's read wrote
+        put(alert, alert_line(90, "!", "fff", "fff: waited for the failure -- y"))
+        put(look, LOOK_AWAKE.replace("HEIGHT=2", "HEIGHT=1").replace("COLOUR=on", "COLOUR=off"))
+        seen = enter(sh, "sh -c 'exit 5'")
+        ok("* (O.O) failed (5) -- Esc s asks why" in seen and "waited for the failure" not in seen,
+           "alert and look changed, a command failed: the failure line first, by the new look", seen[-300:])
+        seen = enter(sh)
+        ok(said(seen, "! (O.O) fff: waited for the failure -- y"),
+           "alert: the warning that waited is said, though the marker is newer now", seen[-300:])
+        seen = enter(sh)
+        ok("waited for the failure" not in seen, "alert: and once", seen[-300:])
+        ok(open(alert).read() == alert_line(90, "!", "fff", "fff: waited for the failure -- y"),
+           "alert: the file is as it was written -- no pane writes it")
+    finally:
+        sh.send("\x15exit\r")
+        sh.read(0.5)
+        sh.close()
+
+    # a new pane, awake, the row two up: the standing warning once, with
+    # the alarmed face -- the widget's own, whatever mood the file names
+    # -- and no heal; then the heal, pleased; then a paste's answer
+    put(look, LOOK_AWAKE.replace("COLOUR=on", "COLOUR=off"))
+    put(alert, alert_line(100, "*", "git", "git: ok again, after 2 min", mood="alarmed")
+        + alert_line(101, "!", "serve", "serve: still down -- spark serve on", mood="pleased"))
+    sh, seen = start("\\nINFO-LINE\\n" + prompt, {"SPARK_HEIGHT": "2"})
+    try:
+        ok(said(seen, "! (O.O) serve: still down -- spark serve on", 2, "INFO-LINE") and "ok again" not in seen,
+           "alert, awake: the alarmed face after the mark, two rows up; a new pane says no heal", seen[-300:])
+        ok("(o.o)" not in seen and "(^.^)" not in seen,
+           "alert, awake: the note keeps the row -- no resting face over it, and no face the file named", seen[-300:])
+        seen = enter(sh)
+        ok("still down" not in seen and "(o.o)" in seen, "alert, awake: the next prompt has its resting face again",
+           seen[-300:])
+        put(alert, alert_line(102, "*", "serve", "serve: ok again, after 9 min", mood="alarmed"))
+        seen = enter(sh)
+        ok(said(seen, "* (^.^) serve: ok again, after 9 min", 2, "INFO-LINE"),
+           "alert, awake: the heal carries the pleased face", seen[-300:])
+        since = sh.mark()
+        sh.send("\x1b[200~echo P-ONE\necho P-TWO\x1b[201~")
+        ok(sh.expect(ROW % (2, "* (^.^) two echo lines, harmless -- pasted, not run")),
+           "paste, awake: an answer carries the pleased face", since()[-300:])
+        sh.settle()
+    finally:
+        sh.send("\x03")
+        sh.settle()
+        sh.send("exit\r")
+        sh.read(0.5)
+        sh.close()
+    time.sleep(0.3)
+    ok(not os.listdir(os.path.join(sd, "widgets")), "alert: markers removed on exit")
+
+
+def interrupt_row(widget, tmp, env, ok):
+    """v1.81, zsh alone: Ctrl-C at a prompt leaves no resting face in the
+    scrollback, on a real screen. zsh fires no hook at a Ctrl-C, and a
+    TRAPINT function would stop precmd from running after one: the
+    widget defines none, and the next prompt's hook erases the face
+    still standing. $? is 130 as it was, precmd runs as it did, a
+    TRAPINT of the user's is theirs; a line accepted by a widget that
+    is not spark's loses its face too."""
+    env = dict(env, XDG_STATE_HOME=awake_state(tmp, "interrupt-state"))
+    env.pop("SPARK_HEIGHT", None)
+    sh = Shell(["zsh", "-f", "-i"], env, os.path.join(tmp, "work"))
+    try:
+        sh.send("TRAPINT() { print -n MINE-INT; return $(( 128 + $1 )) }; PROMPT=$'\\nIN> '; source %s; echo SOURCED\n"
+                % widget)
+        sh.expect("SOURCED\r\n")
+        sh.expect("IN> ")
+        sh.settle()
+        since = sh.mark()
+        sh.send("functions TRAPINT; echo TRAP-$((6*7))\r")
+        sh.expect("TRAP-42\r\n")
+        ok("MINE-INT" in since() and "_spark" not in since(), "zsh: a TRAPINT of the user's is left as it was",
+           since()[-300:])
+    finally:
+        sh.send("exit\r")
+        sh.read(0.5)
+        sh.close()
+    sh = Shell(["zsh", "-f", "-i"], env, os.path.join(tmp, "work"))
+    try:
+        sh.send("PROMPT=$'\\nIN> '; n=0; precmd() { (( ++n )) }; source %s; echo SOURCED\n" % widget)
+        sh.expect("SOURCED\r\n")
+        ok(sh.expect(ROW % (1, "(o.o)")), "zsh: the resting face above the prompt")
+        sh.settle()
+        since = sh.mark()
+        sh.send("\x03")
+        ok(sh.expect("\x1b7\x1b[2A\r\x1b[2K\x1b8") and sh.expect(ROW % (1, "(o.o)")),
+           "zsh: after Ctrl-C the face left standing is erased, and the new prompt has its own", since()[-300:])
+        sh.settle()
+        since = sh.mark()
+        sh.send("echo RC-$? TRAP-${+functions[TRAPINT]} N-$n\r")
+        ok(sh.expect("RC-130 TRAP-0 N-2\r\n"),
+           "zsh: after Ctrl-C $? is 130, precmd ran, and the widget defined no TRAPINT", since()[-300:])
+        sh.expect("IN> ")
+        sh.settle()
+    finally:
+        sh.send("exit\r")
+        sh.read(0.5)
+        sh.close()
+    if not shutil.which("tmux"):
+        print("  skip interrupt row: no tmux")
+        return
+    env = dict(env, TERM="screen-256color")
+    t = ["tmux", "-S", os.path.join(tmp, "tmux-c.sock"), "-f", "/dev/null"]
+    cmd = "env -i HISTFILE=/dev/null " + " ".join(shlex.quote("%s=%s" % kv) for kv in env.items()) + " zsh -f -i"
+    subprocess.run(t + ["new-session", "-d", "-x", "70", "-y", "20", "-c", os.path.join(tmp, "work"), cmd], check=True)
+
+    def screen():
+        rows = [r.rstrip() for r in subprocess.run(t + ["capture-pane", "-p"], capture_output=True, text=True).stdout.splitlines()]
+        while rows and not rows[-1]:
+            rows.pop()
+        return rows
+
+    def until(want, timeout=8):
+        end = time.time() + timeout
+        while time.time() < end:
+            s = screen()
+            if s == want:
+                return s
+            time.sleep(0.2)
+        return screen()
+
+    def check(want, what):
+        rows = until(want)
+        ok(rows == want, what)
+        if rows != want:
+            print("       screen:\n" + "\n".join("       |%s|" % r for r in rows))
+
+    def keys(*k, literal=""):
+        if literal:
+            subprocess.run(t + ["send-keys", "-l", literal], check=True)
+        if k:
+            subprocess.run(t + ["send-keys"] + list(k), check=True)
+
+    try:
+        keys("Enter", literal="PROMPT=$'\\nF> '; w() { zle .accept-line }; zle -N w; bindkey '^T' w; source %s; clear"
+             % widget)
+        check(["(o.o)", "F>"], "interrupt row: the resting face above the prompt")
+        keys("C-c", literal="abc")
+        check(["", "F> abc", "(o.o)", "F>"], "interrupt row: Ctrl-C on a typed line leaves no face above it")
+        keys("C-c")
+        check(["", "F> abc", "", "F>", "(o.o)", "F>"], "interrupt row: Ctrl-C at an empty prompt leaves no face")
+        keys("Enter", literal="echo RC-$?-")
+        check(["", "F> abc", "", "F>", "", "F> echo RC-$?-", "RC-130-", "(o.o)", "F>"],
+              "interrupt row: $? is 130 after it, and the scrollback holds one face, the resting one")
+        keys("C-t", literal="echo OTHER-ENTER")
+        check(["", "F> abc", "", "F>", "", "F> echo RC-$?-", "RC-130-", "", "F> echo OTHER-ENTER", "OTHER-ENTER",
+               "(o.o)", "F>"], "interrupt row: a line accepted by another widget loses its face too")
+        # a command that is interrupted while it runs: Enter erased the
+        # face already, and nothing is erased twice
+        keys("Enter", literal="echo KEPT-LINE; sleep 30")
+        until(None, 1)
+        keys("C-c")
+        rows = until(None, 1.5)
+        good = (rows[-2:] == ["(o.o)", "F>"] and "KEPT-LINE" in rows and rows.count("(o.o)") == 1
+                and any(r.startswith("F> echo KEPT-LINE; sleep 30") for r in rows))
+        ok(good, "interrupt row: Ctrl-C in a running command erases no row of its output")
+        if not good:
+            print("       screen:\n" + "\n".join("       |%s|" % r for r in rows))
+    finally:
+        subprocess.run(t + ["kill-server"], stderr=subprocess.DEVNULL)
 
 
 def failure_row(shell, widget, tmp, env, ok):
@@ -1669,6 +2010,12 @@ def main(shell, widget):
 
         # 9b. the living prompt (v1.59): height, Esc k, awake, the fallbacks
         living(shell, widget, tmp, env, ok)
+
+        # 9b2. the alert (v1.81): a check row that turned worse, said once
+        # in each pane; zsh's Ctrl-C leaves no face
+        alert_row(shell, widget, tmp, env, ok)
+        if shell == "zsh":
+            interrupt_row(widget, tmp, env, ok)
 
         # 9c. the voice keys are bound only where the voice is on or clear
         voice_keys(shell, widget, tmp, env, ok)

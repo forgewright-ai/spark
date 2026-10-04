@@ -2126,8 +2126,11 @@ def presence_pty_cases(t, env, home):
     t.ok(rc == 0 and rc2 == 0 and pulse_out(off) == pulse_out(plain) == pulse_out(dumb),
          "presence pty: awake with the look off, or TERM=dumb under auto, the bytes are the unawakened ones",
          repr((off, dumb)))
-    p = subprocess.run([py, SPARK, "count", "please"], env=awake, cwd=h, capture_output=True, timeout=30)
-    p2 = subprocess.run([py, SPARK, "count", "please"], env=e, cwd=h, capture_output=True, timeout=30)
+    # stdin closed: a bare question reads a pipe on stdin as its context
+    p = subprocess.run([py, SPARK, "count", "please"], env=awake, cwd=h, capture_output=True, timeout=30,
+                       stdin=subprocess.DEVNULL)
+    p2 = subprocess.run([py, SPARK, "count", "please"], env=e, cwd=h, capture_output=True, timeout=30,
+                        stdin=subprocess.DEVNULL)
     t.ok(p.returncode == 0 and re.fullmatch(rb"\* \d+\n", p.stdout) and p.stderr == b""
          and (p.stdout, p.stderr) == (p2.stdout, p2.stderr),
          "presence: piped, awake -- no face, no escape, the unawakened bytes", repr((p.stdout, p.stderr)))
@@ -2158,7 +2161,8 @@ def presence_pty_cases(t, env, home):
     STATE["mode"] = "garbage"
     try:
         rc, raw = run(awake, "hello", "there")
-        p = subprocess.run([py, SPARK, "hello", "there"], env=awake, cwd=h, capture_output=True, timeout=30)
+        p = subprocess.run([py, SPARK, "hello", "there"], env=awake, cwd=h, capture_output=True, timeout=30,
+                           stdin=subprocess.DEVNULL)
         rcn, rawn = run(e, "hello", "there")
     finally:
         STATE["mode"] = "ok"
@@ -3519,7 +3523,10 @@ def living_widget_cases(t):
     face: both widgets read FACE_ values from the look file line by line,
     the row's height reaches spark recall too, and everything the prompt
     hook, the resting face and zsh's tick run is shell builtins -- no
-    spark, no fork, no outside command; bash starts no timer."""
+    spark, no fork, no outside command; bash starts no timer. v1.81, the
+    alert: both read $SPARK_DIR/alert in the prompt hook with read -r,
+    cleaned and never sourced, with builtins alone; an answer to a paste
+    is pleased; neither sets an INT trap."""
     wz = open(os.path.join(REPO, "home", ".config", "spark", "widget.zsh")).read()
     wb = open(os.path.join(REPO, "home", ".config", "spark", "widget.bash")).read()
 
@@ -3561,10 +3568,10 @@ def living_widget_cases(t):
         # the resting face and, in zsh, the line editor's start, the tick
         # and the key hook
         names = ["_spark_failed", "_spark_failure", "_spark_look_check", "_spark_look_read", "_spark_note",
-                 "_spark_paint", "_spark_face", "_spark_face_on", "_spark_idle", "_spark_unface"]
+                 "_spark_paint", "_spark_face", "_spark_face_on", "_spark_idle", "_spark_unface", "_spark_alert"]
         if name == "widget.zsh":
             names += ["_spark_line_init", "_spark_say", "_spark_idle_draw", "_spark_arm", "_spark_tick",
-                      "spark-tick", "_spark_keyed_hook"]
+                      "spark-tick", "_spark_keyed_hook", "_spark_line_finish"]
         bodies = [body(text, f) for f in names]
         hot = "\n".join(re.sub(r"(^|\s)#[^\n]*", "", b) for b in bodies)
         t.ok(all(bodies) and "$SPARK_BIN" not in hot and not re.search(r"\$\((?!\()|`|<\(|(?<![&|])&\s*$", hot, re.M),
@@ -3573,6 +3580,47 @@ def living_widget_cases(t):
         outside = re.findall(r"(?<![\w$-])(sed|awk|grep|cat|date|tput|sleep|stty|tmux|head|tail|tr|cut|wc|ps|sh|env)(?![\w=-])",
                              hot)
         t.ok(not outside, "%s: nothing a prompt runs unasked is an outside command" % name, outside)
+        # v1.81, the alert: a check row that turned worse, read from
+        # $SPARK_DIR/alert by the prompt hook -- line by line, cleaned,
+        # never sourced, never written, said through _spark_note
+        al = re.sub(r"(^|\s)#[^\n]*", "", body(text, "_spark_alert"))
+        hook = body(text, "_spark_failed")
+        t.ok("f=$SPARK_DIR/alert" in al and re.search(r"read -r s \S+ k \S+ row text", al) and 'done < "$f"' in al
+             and "(( n++ < 8 ))" in al,
+             "%s reads $SPARK_DIR/alert with read -r, 8 lines at most (v1.81)" % name, al)
+        t.ok(not re.search(r"(^|[;&|\s])(source|\.|eval)\s[^\n]*alert", text, re.M) and "eval" not in al
+             and "source" not in al, "%s never sources or evals the alert file" % name)
+        t.ok(all(k in al for k in ("[[:cntrl:]]", "[![:ascii:]]", "${#text} -le 200", "${#s} -le 12", "[1-9]*",
+                                   "${s//[0-9]/}", "${row//[a-z]/}")),
+             "%s drops an alert line with a control character, a byte beyond ASCII, a bad seq or row, a long text"
+             % name, al)
+        t.ok('_spark_note "$_spark_w $text" alarmed' in al and '_spark_note "$_spark_h $text" pleased' in al
+             and "$mood" not in al and '$k == "$_spark_w"' in al and '$k == "$_spark_h"' in al
+             and "_spark_say" not in al,
+             "%s: an alert's mark and mood are the widget's own, and it goes through _spark_note" % name, al)
+        t.ok(not re.search(r'>+\s*"?\$f\b', al) and re.search(r'> "\$m" 2>/dev/null', al)
+             and "-nt $m ]] && _spark_look_read" in al,
+             "%s: the alert file is never written; the marker is, after one more look at the look file" % name, al)
+        t.ok("$SPARK_DIR/off" in al and "_spark_al_due" in al and "_spark_al_seen" in al and "_spark_al_rows" in al
+             and not re.search(r"export[^\n]*_spark_al_", text)
+             and ("$_spark_pending" in al if name == "widget.zsh" else "$_spark_hinted" in al),
+             "%s: an alert waits behind a note and behind spark off; what was said is in memory, never exported"
+             % name, al)
+        nt = hook.find("$SPARK_DIR/alert -nt $SPARK_DIR/widgets/$$")
+        order = [nt, hook.find("_spark_look_check"), hook.find("_spark_failure "), hook.find("_spark_alert\n")]
+        if name == "widget.bash":
+            order.append(hook.find("_spark_idle"))
+        t.ok(min(order) >= 0 and order == sorted(order) and hook.count("-nt ") == 1,
+             "%s: the hook tests the alert file once, before the look check, and says it after the failure note"
+             % name, order)
+        t.ok("answer) _spark_mood=pleased; _spark_say " in text,
+             "%s: an answer to a paste is pleased (contract 4)" % name)
+        t.ok(not re.search(r"^\s*(function\s+)?TRAPINT\s*\(\)|^[^#\n]*\btrap\b[^\n#]*\bINT\b", text, re.M),
+             "%s defines no TRAPINT and sets no INT trap" % name)
+    t.ok("_spark_faced" in body(wz, "_spark_failed") and "_spark_bl == 1" in body(wz, "_spark_failed")
+         and "_spark_unface" in body(wz, "_spark_line_finish") and "line-finish _spark_line_finish" in wz
+         and "_spark_bl=$BUFFERLINES" in body(wz, "_spark_keyed_hook"),
+         "widget.zsh: a resting face left by Ctrl-C is erased by the next prompt's hook, one-row lines only")
     t.ok("sched +" in wz and "zselect " in wz and "zmodload zsh/sched" in wz and "SPARK_IDLE_SLEEP" in wz,
          "widget.zsh: the idle face moves on a sched event, a zselect beat, and has its test seam")
     t.ok("sched" not in wb and "_spark_tick" not in wb and "SPARK_IDLE_SLEEP" not in wb,
@@ -3797,6 +3845,460 @@ def living_waits_cases(t):
                 os.environ[k] = v
         look.forget()
         _shutil.rmtree(tmp, ignore_errors=True)
+
+
+def check_history_cases(t):
+    """v1.81, the check core: one merged snapshot under a lock, a history
+    of status changes (names, statuses, numbers only), the alert file the
+    prompt hook reads, and `spark check --history`. In-process against a
+    throwaway state directory and a clock the test moves; the verb itself
+    as a subprocess."""
+    import stat
+    from spark import bar as _bar
+    from spark import check as _c
+
+    class _Clock:
+        """check.py's `time`, with a `time()` the test sets."""
+        def __init__(self):
+            self.now = float(int(time.time()))
+
+        def time(self):
+            return self.now
+
+        def __getattr__(self, name):
+            return getattr(time, name)
+
+    class _Cfg:
+        name = "fixture"
+        history = 30
+
+    class _Ctx:
+        def __init__(self, started):
+            self.cfg = _Cfg()
+            self.started = started
+
+    paths = ("CHECK_JSON", "CHECK_LOCK", "CHECK_HISTORY", "ALERT_FILE")
+    saved = {k: getattr(_c, k) for k in paths}
+    saved_bar, saved_time, saved_wait = _bar.CHECK_JSON, _c.time, _c.LOCK_WAIT
+    clock = _Clock()
+    base = tempfile.mkdtemp(prefix="spark-check-history-")
+    where = {"n": 0, "dir": ""}
+
+    def fresh():
+        where["n"] += 1
+        d = os.path.join(base, "s%d" % where["n"])
+        os.makedirs(d)
+        where["dir"] = d
+        _c.CHECK_JSON = _bar.CHECK_JSON = os.path.join(d, "check.json")
+        _c.CHECK_LOCK = os.path.join(d, "check.lock")
+        _c.CHECK_HISTORY = os.path.join(d, "check-history.jsonl")
+        _c.ALERT_FILE = os.path.join(d, "alert")
+        return d
+
+    def R(name, status, value="fine", remedy=""):
+        r = _c.Row(status, value, remedy)
+        r.name, r.category = name, "CAPABILITY"
+        return r
+
+    def go(rows, full=True, started=None, history=30):
+        ctx = _Ctx(clock.now if started is None else started)
+        ctx.cfg.history = history
+        return _c.write_snapshot(ctx, rows, full)
+
+    def snap():
+        with open(_c.CHECK_JSON) as f:
+            return json.load(f)
+
+    def stored(name):
+        return {r["name"]: r for r in snap()["rows"]}.get(name)
+
+    def hist():
+        try:
+            with open(_c.CHECK_HISTORY) as f:
+                return [json.loads(line) for line in f]
+        except OSError:
+            return None
+
+    def alert():
+        try:
+            with open(_c.ALERT_FILE) as f:
+                return f.read().splitlines()
+        except OSError:
+            return None
+
+    def said(name):
+        return [ln for ln in (alert() or []) if ln.split(" ", 5)[4] == name]
+
+    shape = re.compile(r"[0-9]{1,12} [0-9]{1,12} (! alarmed|\* pleased) [a-z]+ [ -~]{1,160}\Z")
+    try:
+        _c.time = clock
+        # ---- no snapshot yet: the baseline says nothing
+        d = fresh()
+        t.ok(go([R("serve", "fail", "down", "spark serve on")], full=False) is False and os.listdir(d) == ["check.lock"],
+             "check: a named run with no snapshot writes nothing", str(os.listdir(d)))
+        t0 = clock.now
+        before = [R("serve", "ok"), R("git", "ok"), R("peer", "na"), R("look", "warn", "old", "spark look"),
+                  R("models", "fail", "gone", "spark model verify"), R("forge", "warn", "stale", "spark serve on"),
+                  R("ember", "fail", "gone"), R("disk", "ok"), R("swap", "na"), R("prompt", "ok"), R("failure", "ok")]
+        t.ok(go(before) is True and hist() is None and alert() is None,
+             "check: the first run is the baseline -- no record, no alert, red rows included", str((hist(), alert())))
+        s = snap()
+        t.ok(stat.S_IMODE(os.stat(_c.CHECK_JSON).st_mode) == 0o600 and sorted(os.listdir(d)) == ["check.json", "check.lock"],
+             "check: check.json is 0600 and no temp file is left", str(sorted(os.listdir(d))))
+        t.ok(s["ts"] == t0 and s["counts"] == {"ok": 5, "fail": 2, "warn": 2, "na": 2} and s["name"] == "fixture"
+             and all(r["at"] == t0 and r["since"] == t0 for r in s["rows"])
+             and [r["name"] for r in s["rows"] if "red" in r] == ["look", "models", "forge", "ember"]
+             and stored("look")["red"] == t0,
+             "check: every stored row carries at and since, a red one red, an ok or na one none", str(s["rows"][:4]))
+        t.ok(_bar._check().startswith(_c.glyph("ok") + "5") and "?" not in _bar._check(),
+             "check: the bar reads the merged snapshot", _bar._check())
+
+        # ---- every transition of the table, in one run
+        clock.now = t0 + 300
+        after = [R("serve", "fail", "nothing answers on 127.0.0.1:8080", "spark serve on"),
+                 R("git", "warn", "2 files changed", "commit and push"), R("peer", "warn", "no answer"),
+                 R("look", "fail", "the look file is gone", "spark look   (writes it again)"),
+                 R("models", "warn", "1 file not verified", "spark model verify"), R("forge", "ok"),
+                 R("ember", "na", "not used"), R("disk", "na"), R("swap", "ok"), R("prompt", "warn", "no shell"),
+                 R("failure", "ok")]
+        go(after)
+        t1 = int(clock.now)
+        t.ok(hist() == [
+            {"ts": t1, "row": "serve", "from": "ok", "to": "fail"},
+            {"ts": t1, "row": "git", "from": "ok", "to": "warn"},
+            {"ts": t1, "row": "peer", "from": "na", "to": "warn"},
+            {"ts": t1, "row": "look", "from": "warn", "to": "fail"},
+            {"ts": t1, "row": "models", "from": "fail", "to": "warn"},
+            {"ts": t1, "row": "forge", "from": "warn", "to": "ok", "red": 300},
+            {"ts": t1, "row": "ember", "from": "fail", "to": "na", "red": 300},
+            {"ts": t1, "row": "prompt", "from": "ok", "to": "warn"}],
+            "check history: each change of the table is one record; ok <-> na is none", str(hist()))
+        t.ok(all(sorted(r) in (["from", "row", "to", "ts"], ["from", "red", "row", "to", "ts"]) for r in hist())
+             and "127.0.0.1" not in open(_c.CHECK_HISTORY).read() and "spark serve" not in open(_c.CHECK_HISTORY).read()
+             and stat.S_IMODE(os.stat(_c.CHECK_HISTORY).st_mode) == 0o600,
+             "check history: names, statuses and numbers only -- never a value or a remedy; 0600")
+        lines = alert()
+        t.ok(lines == [
+            "%d %d ! alarmed serve serve: nothing answers on 127.0.0.1:8080 -- spark serve on" % (t1, t1),
+            "%d %d ! alarmed git git: 2 files changed -- commit and push" % (t1 + 1, t1),
+            "%d %d ! alarmed peer peer: no answer -- spark check peer" % (t1 + 2, t1),
+            "%d %d ! alarmed look look: the look file is gone -- spark look" % (t1 + 3, t1),
+            "%d %d * pleased forge forge: ok again, after 5 min" % (t1 + 4, t1)],
+            "check alert: a worse line a row that turned worse, a heal line, the remedy's aside cut, "
+            "`spark check ROW` with no remedy; fail -> warn with no standing line, -> na and the quiet rows say nothing",
+            str(lines))
+        t.ok(all(shape.match(ln) for ln in lines) and stat.S_IMODE(os.stat(_c.ALERT_FILE).st_mode) == 0o600
+             and sorted(os.listdir(d)) == ["alert", "check-history.jsonl", "check.json", "check.lock"],
+             "check alert: six fields a line, 0600, no temp file left", str(sorted(os.listdir(d))))
+        t.ok(stored("serve")["red"] == t1 and stored("serve")["since"] == t1 and stored("look")["red"] == t0
+             and stored("look")["since"] == t1 and "red" not in stored("forge") and "red" not in stored("ember")
+             and stored("failure")["since"] == t0,
+             "check: since moves with the status, red stays from the moment the row left ok", str(stored("look")))
+
+        # ---- the same again: nothing new, the file rewritten whole
+        os.utime(_c.ALERT_FILE, (t1 - 500, t1 - 500))
+        old_mtime = os.stat(_c.ALERT_FILE).st_mtime
+        clock.now = t1 + 10
+        go(after)
+        t.ok(len(hist()) == 8 and alert() == lines and os.stat(_c.ALERT_FILE).st_mtime > old_mtime,
+             "check alert: a full run with nothing changed records nothing and writes the same lines again")
+
+        # ---- fail -> warn refreshes the standing text, same seq
+        clock.now = t1 + 60
+        after[0] = R("serve", "warn", "127.0.0.1:8080, started with old settings", "spark serve off   (clears it)")
+        go(after)
+        t.ok(said("serve") == ["%d %d ! alarmed serve serve: 127.0.0.1:8080, started with old settings -- spark serve off"
+                               % (t1, t1)]
+             and hist()[-1] == {"ts": t1 + 60, "row": "serve", "from": "fail", "to": "warn"},
+             "check alert: fail -> warn is recorded and refreshes the standing text, its seq kept", str(said("serve")))
+
+        # ---- a heal replaces the worse line; the red seconds are the whole red time
+        clock.now = t1 + 1260
+        after[0] = R("serve", "ok")
+        go(after)
+        heal_seq = int(said("serve")[0].split()[0])
+        t.ok(said("serve") == ["%d %d * pleased serve serve: ok again, after 21 min" % (heal_seq, t1 + 1260)]
+             and heal_seq == t1 + 1260 and hist()[-1] == {"ts": t1 + 1260, "row": "serve", "from": "warn", "to": "ok", "red": 1260},
+             "check alert: a heal replaces the row's worse line and says how long it was red", str(said("serve")))
+        # ---- a new worse replaces the heal; -> na withdraws; seq only grows, a clock set back too
+        big = t1 + 5000                         # a seq from a clock that ran ahead once
+        with open(_c.ALERT_FILE) as f:
+            body = f.read().replace("%d %d * pleased serve" % (heal_seq, t1 + 1260), "%d %d * pleased serve" % (big, t1 + 1260))
+        with open(_c.ALERT_FILE, "w") as f:
+            f.write(body)
+        clock.now = t1 + 1270
+        after[0] = R("serve", "fail", "down again", "spark serve on")
+        after[1] = R("git", "na", "not a clone")
+        go(after)
+        t.ok(said("serve") == ["%d %d ! alarmed serve serve: down again -- spark serve on" % (big + 1, t1 + 1270)]
+             and said("git") == [] and hist()[-1]["row"] == "git" and hist()[-1]["to"] == "na" and "red" in hist()[-1],
+             "check alert: a new worse replaces the heal, warn -> na withdraws the line, a seq only grows",
+             str(alert()))
+        seqs = [int(ln.split()[0]) for ln in alert()]
+        t.ok(seqs == sorted(seqs) and len(set(seqs)) == len(seqs), "check alert: oldest first, one seq a line", str(seqs))
+
+        # ---- a row gone: its line dropped, nothing recorded
+        n = len(hist())
+        clock.now = t1 + 1300
+        go([r for r in after if r.name != "peer"])
+        t.ok(said("peer") == [] and len(hist()) == n and stored("peer") is None,
+             "check: a row gone leaves the snapshot and the alert file, and is no change", str(alert()))
+
+        # ---- 24 hours: both kinds expire, an empty file is removed
+        clock.now = t1 + 1270 + 24 * 3600 - 5
+        go([r for r in after if r.name != "peer"])
+        t.ok(said("serve") != [] and said("look") == [] and said("forge") == [],
+             "check alert: a line is gone 24 hours after it was said, a worse one and a heal alike", str(alert()))
+        clock.now += 10
+        go([r for r in after if r.name != "peer"])
+        t.ok(alert() is None and not os.path.exists(_c.ALERT_FILE), "check alert: with no line left the file is removed")
+        # a clock set back: a stored row stamped ahead of the clock does not shut every later run out
+        clock.now = t1 + 600
+        after[0] = R("serve", "ok")
+        go([r for r in after if r.name != "peer"])
+        t.ok(stored("serve")["status"] == "ok" and stored("serve")["at"] == t1 + 600
+             and [ln.split(" ", 2)[2] for ln in said("serve")] == ["* pleased serve serve: ok again, after 0 s"],
+             "check: after the clock is set back a run still lands", str(alert()))
+
+        # ---- a named run merges and keeps ts
+        d = fresh()
+        clock.now = t0
+        go([R("git", "ok"), R("serve", "ok"), R("disk", "warn", "low")])
+        clock.now = t0 + 100
+        t.ok(go([R("git", "warn", "ahead", "commit and push")], full=False) is True
+             and snap()["ts"] == t0 and [r["name"] for r in snap()["rows"]] == ["git", "serve", "disk"]
+             and snap()["counts"] == {"ok": 1, "fail": 0, "warn": 2, "na": 0} and stored("serve")["at"] == t0
+             and stored("git")["at"] == t0 + 100
+             and hist() == [{"ts": t0 + 100, "row": "git", "from": "ok", "to": "warn"}]
+             and said("git") == ["%d %d ! alarmed git git: ahead -- commit and push" % (t0 + 100, t0 + 100)],
+             "check: a named run replaces only its rows, counts again, keeps ts, and records its change",
+             str(snap()))
+        t.ok(_bar._check().startswith(_c.glyph("ok") + "1") and "!2" in _bar._check(),
+             "check: the bar reads a snapshot a named run merged into", _bar._check())
+
+        # ---- two runs that both saw one break record it once, in either order
+        for order in ("first", "second"):
+            fresh()
+            clock.now = t0
+            go([R("serve", "ok")])
+            clock.now = t0 + 20
+            a, b = (t0 + 10, t0 + 11) if order == "first" else (t0 + 11, t0 + 10)
+            go([R("serve", "fail", "down", "spark serve on")], started=a)
+            go([R("serve", "fail", "down", "spark serve on")], started=b)
+            t.ok(len(hist()) == 1 and len(alert()) == 1 and stored("serve")["at"] == t0 + 11,
+                 "check: two runs that both saw one break record it once (the older start merged %s)" % order,
+                 str(hist()))
+        # ---- a slow run that started before a break records no false heal
+        fresh()
+        clock.now = t0
+        go([R("serve", "fail", "down", "spark serve on"), R("git", "ok")])
+        clock.now = t0 + 30
+        go([R("serve", "ok"), R("git", "ok")], started=t0 + 5)                      # healed, seen at +5
+        go([R("serve", "fail", "down", "spark serve on")], full=False, started=t0 + 20)     # broke, seen at +20
+        go([R("serve", "ok"), R("git", "warn", "ahead")], started=t0 + 10)          # the slow run: saw ok at +10
+        t.ok([(r["from"], r["to"]) for r in hist() if r["row"] == "serve"] == [("fail", "ok"), ("ok", "fail")]
+             and stored("serve")["status"] == "fail" and said("serve")[0].split()[2] == "!"
+             and stored("git")["status"] == "warn" and snap()["counts"]["fail"] == 1,
+             "check: a run that started before a break and finished after records no false heal; "
+             "its newer rows still land", str(hist()))
+
+        # ---- a snapshot from before v1.81: the red time is its ts
+        fresh()
+        clock.now = t0
+        with open(_c.CHECK_JSON, "w") as f:
+            json.dump({"ts": int(t0) - 600, "counts": {}, "rows": [
+                {"category": "CAPABILITY", "status": "fail", "name": "serve", "value": "x", "remedy": ""},
+                {"category": "CAPABILITY", "status": "bogus", "name": "git", "value": "x", "remedy": ""}, "junk"]}, f)
+        go([R("serve", "ok"), R("git", "warn", "ahead")])
+        t.ok(hist() == [{"ts": int(t0), "row": "serve", "from": "fail", "to": "ok", "red": 600}]
+             and said("serve")[0].endswith("serve: ok again, after 10 min") and said("git") == [],
+             "check: an older snapshot's red row heals with its ts as the red time; a malformed row is a baseline",
+             str(hist()))
+
+        # ---- the lock: held elsewhere, nothing is written
+        _c.LOCK_WAIT = 0.3
+        fd = _c._take_lock()
+        clock.now = t0 + 50
+        began = time.time()
+        wrote = go([R("serve", "fail", "down")])
+        took = time.time() - began
+        os.close(fd)
+        t.ok(wrote is False and len(hist()) == 1 and stored("serve")["status"] == "ok" and took < 5,
+             "check: while another run holds the lock a run writes nothing, and waits a bounded time", "%.1f s" % took)
+        _c.LOCK_WAIT = saved_wait
+        t.ok(go([R("serve", "fail", "down")]) is True and len(hist()) == 2, "check: the lock free again, the run lands")
+
+        # ---- pruning: the days, the cap, history off
+        fresh()
+        clock.now = t0
+        day = 86400
+        with open(_c.CHECK_HISTORY, "w") as f:
+            for age in (40, 31, 10, 1):
+                f.write(json.dumps({"ts": int(t0) - age * day, "row": "serve", "from": "ok", "to": "fail"}) + "\n")
+        go([R("serve", "ok")], full=False)
+        t.ok(hist() is not None and len(hist()) == 4, "check history: a named run prunes nothing")
+        go([R("serve", "ok")])
+        t.ok([int(t0) - r["ts"] for r in hist()] == [10 * day, day]
+             and stat.S_IMODE(os.stat(_c.CHECK_HISTORY).st_mode) == 0o600
+             and sorted(os.listdir(where["dir"])) == ["check-history.jsonl", "check.json", "check.lock"],
+             "check history: a full run drops the records older than the days kept; 0600, no temp file", str(hist()))
+        with open(_c.CHECK_HISTORY, "w") as f:
+            for i in range(_c.HISTORY_MAX + 100):
+                f.write(json.dumps({"ts": int(t0) - 5000 + i, "row": "git", "from": "ok", "to": "warn"}) + "\n")
+        go([R("serve", "fail", "down", "spark serve on")])
+        h = hist()
+        t.ok(_c.HISTORY_MAX == 2000 and len(h) == 2000 and h[-1] == {"ts": int(t0), "row": "serve", "from": "ok", "to": "fail"}
+             and h[0]["ts"] == int(t0) - 5000 + 101,
+             "check history: at most 2000 records, the newest kept", "%d records" % len(h))
+        clock.now = t0 + 5
+        go([R("serve", "ok")], history=0)
+        t.ok(hist() is None and said("serve") == ["%d %d * pleased serve serve: ok again, after 5 s" % (t0 + 5, t0 + 5)],
+             "check history: SPARK_HISTORY=0 removes the file at the next full run, and the alert is still written",
+             str(alert()))
+        clock.now = t0 + 9
+        go([R("serve", "warn", "slow")], history=0)
+        t.ok(hist() is None and said("serve")[0].split()[2] == "!", "check history: off records nothing; a worse line still lands")
+
+        # ---- the alert's text
+        token = "sk-" + "Q7" * 12                 # a secret's shape, built so no file holds one
+        long_value = " ".join(["word%d" % i for i in range(80)])
+        texts = {
+            "plain": _c.worse_text(R("voice", "warn", "off", "spark voice clear   (reads aloud)")),
+            "bare": _c.worse_text(R("voice", "warn", "off")),
+            "folded": _c.worse_text(R("voice", "warn", "one\ttwo\n three   four", "spark  voice\ton")),
+            "glyph": _c.worse_text(R("peer", "warn", "192.0.2.7:8081 ok · login refused …", "spark user")),
+            "escape": _c.worse_text(R("voice", "warn", "bad \x1b[31mred\x1b[0m thing", "spark voice on")),
+            "bell": _c.worse_text(R("voice", "warn", "ok", "spark voice on\x07")),
+            "accent": _c.worse_text(R("voice", "warn", "café is closed", "spark voice on")),
+            "secret": _c.worse_text(R("voice", "warn", "the key is " + token, "spark voice on")),
+            "long": _c.worse_text(R("voice", "warn", long_value, "spark update   (--fetch to ask origin)")),
+            "chain": _c.worse_text(R("privacy", "warn", "site.env readable by others",
+                                     "chmod 700 ~/.local/state/spark; " + "chmod 600 ~/.config/spark/site.env; " * 3)),
+        }
+        fallback = "voice needs you -- spark check voice"
+        t.ok(texts["plain"] == "voice: off -- spark voice clear" and texts["bare"] == "voice: off -- spark check voice"
+             and texts["folded"] == "voice: one two three four -- spark voice on"
+             and texts["glyph"] == "peer: 192.0.2.7:8081 ok | login refused ... -- spark user",
+             "check alert text: ROW: VALUE -- REMEDY, the aside cut, whitespace folded, spark's own glyphs as ASCII",
+             str(texts))
+        t.ok(texts["escape"] == fallback and texts["bell"] == fallback and texts["accent"] == fallback
+             and texts["secret"] == fallback and token not in str(texts),
+             "check alert text: a control character, non-ASCII or a secret shape becomes `ROW needs you`", str(texts))
+        t.ok(140 < len(texts["long"]) <= 160
+             and texts["long"] in ["voice: " + long_value[:i] + "... -- spark update" for i in range(len(long_value))
+                                   if long_value[i] == " "],
+             "check alert text: a long value is cut at a word within 160 characters, the remedy kept whole", texts["long"])
+        t.ok(texts["chain"] == "privacy: site.env readable by others -- spark check privacy",
+             "check alert text: a remedy too long to say whole is never cut -- `spark check ROW` shows it", texts["chain"])
+        t.ok(_c.alert_text("git", "ab " * 200) == "ab " * 51 + "ab..." and _c.alert_text("git", " \n ") == "git needs you -- spark check git"
+             and _c.alert_text("git", "x" * 400) == "git needs you -- spark check git"
+             and _c.heal_text("git", 7300) == "git: ok again, after 2 h" and _c.heal_text("git", 3 * day) == "git: ok again, after 3 days",
+             "check alert text: alert_text never returns an empty or an over-long text; a heal counts s, min, h, days")
+        # the texts land in the file as cleaned, and a line someone else wrote badly is dropped on the next read
+        fresh()
+        clock.now = t0
+        names = ["row" + c for c in "abcdefghij"]
+        go([R(nm, "ok") for nm in names] + [R("voice", "ok"), R("bad-name", "ok")])
+        clock.now = t0 + 1
+        go([R(nm, "warn", "v " + nm) for nm in names] + [R("voice", "warn", "bad \x1b]0;x\x07 title " + token),
+                                                         R("bad-name", "warn", "x")])
+        lines = alert()
+        t.ok(len(lines) == 8 and all(shape.match(ln) for ln in lines) and lines[-1].endswith(" voice " + fallback)
+             and [ln.split()[4] for ln in lines] == names[3:] + ["voice"] and token not in "\n".join(lines)
+             and "\x1b" not in "\n".join(lines) and len(hist()) == 12,
+             "check alert: at most 8 lines, the newest kept; a text that fails lands as `ROW needs you`; "
+             "a name that is not [a-z]+ is recorded, never said", str(lines))
+        with open(_c.ALERT_FILE, "a") as f:
+            f.write("%d %d ! alarmed rowa evil \x1b[2J\n%d %d ! pleased rowb mixed\nshort line\n" % (t0 + 99, t0, t0 + 98, t0))
+        t.ok(_c.read_alert() and [e["row"] for e in _c.read_alert()] == names[3:] + ["voice"],
+             "check alert: a line with a control character, a mark that does not match its mood or too few fields is dropped")
+        clock.now = t0 + 2
+        go([R(nm, "warn", "v " + nm) for nm in names] + [R("voice", "warn", "x"), R("bad-name", "warn", "x")])
+        t.ok(alert() == lines, "check alert: the next full run writes the file whole again, the bad lines gone", str(alert()))
+    finally:
+        for k, v in saved.items():
+            setattr(_c, k, v)
+        _bar.CHECK_JSON, _c.time, _c.LOCK_WAIT = saved_bar, saved_time, saved_wait
+
+    # ---- spark check --history, the verb: it reads, runs no row, writes nothing
+    state = os.path.join(base, "verb", "spark")
+    os.makedirs(state)
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("SPARK_", "SITE_", "GIT_"))}
+    env.update({"XDG_STATE_HOME": os.path.dirname(state), "SPARK_NO_REFRESH": "1", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8"})
+
+    def spark(*args, extra=None):
+        e = dict(env)
+        e.update(extra or {})
+        p = subprocess.run([sys.executable, SPARK] + list(args), capture_output=True, text=True, env=e, timeout=60)
+        return p.returncode, p.stdout, p.stderr
+
+    def stamp(ts):
+        return time.strftime("%Y-%m-%d %H:%M", time.localtime(ts))
+    now = int(time.time())
+    rc, out, err = spark("check", "--history")
+    t.ok(rc == 0 and out == "* no changes kept in 30 days\n" and os.listdir(state) == [],
+         "check --history: with nothing kept it says so, and writes nothing", repr((rc, out, err, os.listdir(state))))
+    recs = [{"ts": now - 40 * 86400, "row": "serve", "from": "ok", "to": "warn"},
+            {"ts": now - 36000, "row": "knowledge", "from": "ok", "to": "warn"},
+            {"ts": now - 1300, "row": "serve", "from": "ok", "to": "fail"},
+            {"ts": now - 40, "row": "serve", "from": "fail", "to": "ok", "red": 1260}]
+    with open(os.path.join(state, "check-history.jsonl"), "w") as f:
+        f.write("".join(json.dumps(r) + "\n" for r in recs))
+        f.write("not json\n" + json.dumps({"ts": now, "row": "x\x1b[2J", "from": "ok", "to": "fail"}) + "\n")
+        f.write(json.dumps({"ts": now, "row": "serve", "from": "ok", "to": "192.0.2.9 is down"}) + "\n")
+    with open(os.path.join(state, "check.json"), "w") as f:
+        json.dump({"ts": now - 10, "counts": {}, "rows": [
+            {"category": "CAPABILITY", "status": "warn", "name": "knowledge", "value": "v", "remedy": "",
+             "at": now - 10, "since": now - 36000, "red": now - 36000},
+            {"category": "CAPABILITY", "status": "ok", "name": "serve", "value": "v", "remedy": "", "at": now - 10,
+             "since": now - 40}]}, f)
+    files = sorted(os.listdir(state))
+    rc, out, err = spark("check", "--history")
+    want = ["%s  serve      fail -> ok    red 21 min" % stamp(now - 40),
+            "%s  serve      ok -> fail" % stamp(now - 1300),
+            "%s  knowledge  ok -> warn    still red, 10 h" % stamp(now - 36000),
+            "* 3 changes in 30 days"]
+    t.ok(rc == 0 and out.splitlines() == want and sorted(os.listdir(state)) == files,
+         "check --history: newest first in local time, a heal's red time, `still red` on a red row's newest record, "
+         "the total; a record past the days kept or malformed is hidden", repr(out))
+    rc, out, _ = spark("check", "--history", "serve")
+    t.ok(rc == 0 and out.splitlines() == want[:2] + ["* 2 changes in 30 days"], "check --history NAME: that row's changes", repr(out))
+    rc, out, _ = spark("check", "--history", "disk")
+    t.ok(rc == 0 and out == "* no changes kept in 30 days\n", "check --history NAME: a row with none says so", repr(out))
+    rc, out, _ = spark("check", "--porcelain", "--history")
+    t.ok(rc == 0 and out == "%d\tserve\tfail\tok\t1260\n%d\tserve\tok\tfail\t\n%d\tknowledge\tok\twarn\t\n"
+         % (now - 40, now - 1300, now - 36000),
+         "check --history --porcelain: epoch, row, from, to, red; the same order, no totals", repr(out))
+    rc, out, _ = spark("check", "--history", "nosuchrow")
+    t.ok(rc == 2 and out == "spark check -- no row named nosuchrow\n", "check --history: an unknown row is refused, exit 2", repr(out))
+    for bad in (["--history", "--all"], ["--history", "--fresh", "serve"], ["--history", "serve", "git"],
+                ["--selftest", "--history"]):
+        rc, out, _ = spark("check", *bad)
+        t.ok(rc == 2 and out == "spark check -- --history takes a row name and --porcelain\n",
+             "check %s: refused in one signed line, exit 2" % " ".join(bad), repr((rc, out[:200])))
+    rc, out, err = spark("check", "--history", extra={"SPARK_HISTORY": "0"})
+    t.ok(rc == 0 and out == "spark check -- history is off (SPARK_HISTORY)\n", "check --history: history off says so, exit 0", repr((rc, out)))
+    rc, out, err = spark("check", "--history", "--porcelain", extra={"SPARK_HISTORY": "off"})
+    t.ok(rc == 0 and out == "" and err == "spark check -- history is off (SPARK_HISTORY)\n",
+         "check --history --porcelain: history off keeps stdout empty, the line on stderr", repr((rc, out, err)))
+    rc, out, _ = spark("check", "-h")
+    line = [ln for ln in out.splitlines() if "--history" in ln]
+    t.ok(rc == 0 and line == ["  spark check --history    what changed and when (--history NAME: one row)"]
+         and all(len(ln) <= 80 for ln in out.splitlines()),
+         "check -h: one line for --history, every line within 80 columns", str(line))
+    rc, out, _ = spark("check", "--history", "-h")
+    t.ok(rc == 0 and out.startswith("spark check -- "), "check --history -h: the usage", out[:60])
+    for name in ("completion.bash", "completion.zsh"):
+        text = open(os.path.join(REPO, "home", ".config", "spark", name)).read()
+        m = re.search(r"check\)\s+\w+=[\"(]([^\")]*)[\")]", text)
+        t.ok(bool(m) and {"--all", "--history", "--watch", "--porcelain", "--report", "--fresh", "--fetch",
+                          "--selftest", "--chaos"} == set(m.group(1).split()),
+             "%s completes every flag of spark check, --all and --history too" % name, m.group(1) if m else "")
+    rc, out, _ = spark("clear", "--history")
+    t.ok(rc == 0 and not os.path.exists(os.path.join(state, "check-history.jsonl"))
+         and os.path.exists(os.path.join(state, "check.json")),
+         "clear --history: the check's history goes too, the snapshot stays", repr((rc, out, sorted(os.listdir(state)))))
+    shutil.rmtree(base, True)
 
 
 def main():
@@ -7443,10 +7945,12 @@ def main():
         finally:
             _pkgmod.manager, _pkgmod.pending, _pkgmod.security = _saved
 
-        # the knowledge row (v1.53): intake's status() and refresh() stubbed,
-        # so each answer is pinned. A missing index is never built here and
-        # never refreshed; an index that exists is refreshed in a 5-second
-        # slice; off in spark.env is na before intake is asked at all
+        # the knowledge row (v1.53): intake's status(), refresh() and
+        # waiting() stubbed, so each answer is pinned. A missing index is
+        # never built here and never refreshed; an index that exists is
+        # refreshed in a 5-second slice; off in spark.env is na before
+        # intake is asked at all. v1.81: stale is bootstrap's own question
+        # (the machine changed since), and what waits its turn is ok
         from spark import intake as _intake
 
         class _KCfg:
@@ -7455,12 +7959,13 @@ def main():
         class _KCtx:
             cfg = _KCfg()
             unattended = True
-        _ksaved = (_intake.status, _intake.refresh)
+        _ksaved = (_intake.status, _intake.refresh, _intake.waiting)
         _kcalls = []
         try:
             _now = time.time()
-            _kstate = {"s": ({}, None, False, 0)}
+            _kstate = {"s": ({}, None, False, 0), "w": (0, False)}
             _intake.status = lambda: _kstate["s"]
+            _intake.waiting = lambda: _kstate["w"]
 
             def _krefresh(deadline=None):
                 _kcalls.append(deadline)
@@ -7479,8 +7984,30 @@ def main():
                  "knowledge row: one of each is singular; the skipped programs are not the user's to read", r.value)
             _kstate["s"] = ({"program": 9}, _now - 2 * 3600 - 59, True, 7)
             r = _chk.row_knowledge(_KCtx())
-            t.ok((r.status, r.value, r.remedy) == ("warn", "read 2 hours ago, new programs missing", "spark update"),
-                 "knowledge row: a stale index warns, in whole hours, and names bootstrap", str((r.status, r.value)))
+            t.ok((r.status, r.value, r.remedy) == ("warn", "read 2 hours ago, this machine changed since", "spark update"),
+                 "knowledge row: a stale index warns, in whole hours, says the machine changed and names the update",
+                 str((r.status, r.value)))
+            # v1.81: programs waiting their turn are ok, in words -- the
+            # timer reads them, and `spark update` would find nothing to do
+            _kstate["s"] = ({"program": 412, "manual": 380}, _now - 180, False, 0)
+            _kstate["w"] = (37, True)
+            r = _chk.row_knowledge(_KCtx())
+            t.ok((r.status, r.value, r.remedy) == ("ok", "412 programs, 380 manuals, 37 waiting their turn, read 3 min ago", ""),
+                 "knowledge row: programs waiting their turn are ok, counted, with no remedy", str((r.status, r.value, r.remedy)))
+            _kstate["w"] = (0, True)
+            r = _chk.row_knowledge(_KCtx())
+            t.ok((r.status, r.value) == ("ok", "412 programs, 380 manuals, still reading, read 3 min ago"),
+                 "knowledge row: a build the deadline cut, with nothing counted, is ok and still reading", str((r.status, r.value)))
+            _kstate["s"] = ({"program": 9}, _now - 2 * 3600 - 59, True, 7)
+            _kstate["w"] = (37, True)
+            r = _chk.row_knowledge(_KCtx())
+            t.ok((r.status, r.value) == ("warn", "read 2 hours ago, this machine changed since"),
+                 "knowledge row: stale wins over waiting -- the update reads both", str((r.status, r.value)))
+            _kstate["w"] = (0, False)
+            t.ok(all(32 <= ord(c) < 127 for v in ("read 2 hours ago, this machine changed since",
+                                                    "412 programs, 380 manuals, 37 waiting their turn, read 3 min ago",
+                                                    "412 programs, 380 manuals, still reading, read 3 min ago") for c in v),
+                 "knowledge row: its words are printable ASCII")
             _kstate["s"] = ({}, _now - 5, False, 3)
             r = _chk.row_knowledge(_KCtx())
             t.ok((r.status, r.value) == ("ok", "empty, read just now"),
@@ -7497,7 +8024,25 @@ def main():
             t.ok((r.status, r.value) == ("na", "off (SPARK_KNOWLEDGE=off)") and _kcalls == [],
                  "knowledge row: SPARK_KNOWLEDGE=off is na, and intake is not asked", str((r.status, r.value)))
         finally:
-            _intake.status, _intake.refresh = _ksaved
+            _intake.status, _intake.refresh, _intake.waiting = _ksaved
+        # the row and bootstrap ask one question: status()'s stale is
+        # `not fresh()`, whatever a build left waiting
+        _ksaved = (_intake.summary, _intake.fingerprint)
+        try:
+            _intake.fingerprint = lambda meta=None, stamped=None: "fp"
+            _one = []
+            for _meta in ({}, {"built": 5, "v": _intake.INDEX_V, "fingerprint": "fp"},
+                          {"built": 5, "v": _intake.INDEX_V, "fingerprint": "fp", "partial": True, "pending": 163},
+                          {"built": 5, "v": _intake.INDEX_V, "fingerprint": "moved", "partial": True, "pending": 3},
+                          {"built": 5, "v": _intake.INDEX_V - 1, "fingerprint": "fp"}):
+                _intake.summary = lambda root=None, _m=_meta: _m
+                _one.append((_intake.status()[2], not _intake.fresh(), _intake.waiting()))
+            t.ok(_one == [(True, True, (0, False)), (False, False, (0, False)), (False, False, (163, True)),
+                          (True, True, (3, True)), (True, True, (0, False))],
+                 "knowledge: status()'s stale is not fresh() in every state -- 163 programs waiting are not stale "
+                 "(the box's v1.80 row said `new programs missing` while bootstrap said fresh)", repr(_one))
+        finally:
+            _intake.summary, _intake.fingerprint = _ksaved
         class _Tty:
             def __init__(self, tty):
                 self.tty = tty
@@ -7523,6 +8068,17 @@ def main():
         t.ok(all(_flag[u] in open(u).read() for u in _units) and _chk.TIMER_ENV == "SPARK_CHECK_TIMER",
              "check: every unit that runs the check every 5 minutes sets SPARK_CHECK_TIMER=1 (systemd, runit, launchd)",
              str([u for u in _units if _flag[u] not in open(u).read()]))
+        # v1.81: runsv hands its own stdin down, and on the box that is
+        # /dev/console, a terminal -- so the loop's check was never
+        # unattended and the index was never refreshed. The loop reads
+        # /dev/null; systemd and launchd give a service no terminal
+        _calls = [l.strip() for l in open(_units[1]).read().splitlines()
+                  if "spark check" in l and not l.lstrip().startswith("#")]
+        t.ok(_calls == ["@HOME@/.local/bin/spark check --porcelain </dev/null >/dev/null"],
+             "check: the runit loop's check reads </dev/null, so it is unattended whatever stdin runsv inherited",
+             repr(_calls))
+        t.ok("StandardInput" not in open(_units[0]).read() and "StandardInPath" not in open(_units[2]).read(),
+             "check: the systemd unit and the launchd agent name no stdin -- each gives /dev/null, never a terminal")
         t.ok("knowledge" not in _chk.CLIENT_ROWS, "knowledge row: a client keeps its own index, so the row is not a client row")
         rc, out, err = spark("check", "knowledge", "--porcelain", extra={"SPARK_KNOWLEDGE": "maybe"})
         t.ok(rc == 2 and "SPARK_KNOWLEDGE must be on or off" in out + err, "SPARK_KNOWLEDGE=maybe is refused by name", repr(out + err))
@@ -8898,6 +9454,7 @@ site.cmd_headless([])
     living_waits_cases(t)
     lan_wait_cases(t)
     handback_cases(t)
+    check_history_cases(t)
     srv.shutdown()
     print("smoke: %s" % ("all ok" if not t.fail else "%d FAILED" % t.fail))
     return 1 if t.fail else 0

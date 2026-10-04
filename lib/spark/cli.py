@@ -62,7 +62,8 @@ HISTORY_USAGE = """spark history -- the threads kept on this machine
 CLEAR_USAGE = """spark clear -- remove the history this machine keeps
 
   spark clear --history       remove every turn and thread but the kept
-                              ones (/keep in spark chat)
+                              ones (/keep in spark chat), and what
+                              spark check --history shows
 """
 VER_USAGE = """spark ver -- the version
 
@@ -1556,6 +1557,8 @@ def cmd_clear(args):
 
 
 def _clear_history():
+    from . import check
+    check.clear_history()       # what spark check --history shows goes too
     n = session.clear()
     m = forge.clear()
     k = forge.kept_count()

@@ -168,7 +168,10 @@ for it, and no verb carries the word.
   `AWAKE=yes`. Motion, colour and words follow the switch. Words is
   the face, wherever it shows (Text-first), and motion is what moves
   it. spark prints
-  no canned line: no greeting, no goodbye, no news. Four fixes
+  no canned line: no greeting, no goodbye, no news. A check row that
+  turned worse is not one. The line is the row's own name, value and
+  remedy, said once in each pane, and once more when it heals
+  (contract 6). Four fixes
   reach every machine: setup's one suggestion line, the height (`spark
   height N`, `Esc k`), one text for every line, and the bugs.
   Precedence, strongest first: a pipe, `spark off`, the look `off`,
@@ -510,8 +513,13 @@ State is `~/.local/state/spark/`, 0700:
 - `router/` (`spark.gguf`, `ember.gguf`, `presets.ini`): the router's
   models dir, written by `spark serve`.
 - `off`, `widgets/`, `turns/`, `chat-history` 0600, `brain` 0600,
-  `check.json`, `bar` 0600, `bench.jsonl`, `tune.json` 0600. The 0600
-  files here are written by `vault.write_private`, after `state_dir()`.
+  `check.json` 0600, `bar` 0600, `bench.jsonl`, `tune.json` 0600. The
+  0600 files here are written by `vault.write_private`, after
+  `state_dir()`.
+- `check.lock` 0600: the flock a check holds while it merges its rows
+  into `check.json`. `check-history.jsonl` 0600: one line per status
+  change of a check row (contract 7). `alert` 0600: the rows that
+  turned worse or healed, for the prompt to say once (contract 6).
 - `proof.<pid>` 0600: the bash widget's proof for the next prompt. The
   prompt empties it, and the next question and the shell's exit remove
   it.
@@ -981,17 +989,23 @@ and may change freely.
    (`cli._Pulse`). The
    widgets' own lines (`_spark_say`) go to the same row. Where the
    face is on, each carries a face after its mark. It is pleased on an
-   answer and on the done line, and alarmed on a danger and on the
-   failure line. It is puzzled when nothing came, listening on `Esc
-   v`, and thinking before `spark line` and `spark recall`. Any other
-   line carries the idle face. The face is on when the look file says
-   `AWAKE=yes`, `MOTION` and `WORDS` are each `on`, or `auto` with
+   answer, a paste's too, and on the done line. It is alarmed on a
+   danger and on the failure line. A check row's warning is alarmed
+   and its heal pleased. It is puzzled when nothing came, listening
+   on `Esc v`, and thinking before `spark line` and `spark recall`.
+   Any other line carries the idle face. The face is on when the
+   look file says `AWAKE=yes`, `MOTION` and `WORDS` are each `on`,
+   or `auto` with
    `TERM` not `dumb`, and `spark off` is not set. At an idle prompt
    the resting face sits alone in that row. Enter erases it, so the
-   scrollback keeps none. It is drawn only where the blank row is
-   known: the prompt opens with a newline and has as many lines as the
-   height, or starship draws the row. In zsh it blinks at the
-   temperament's rate, sleeps after 5 minutes without a key and wakes
+   scrollback keeps none. In zsh a `Ctrl-C` at a prompt leaves none
+   either: the next prompt's hook erases the face still standing,
+   when the line took one row. In bash a `Ctrl-C` can leave one,
+   because bash has no safe hook for it. The face is drawn only where
+   the blank row is known: the prompt opens with a newline and has as
+   many lines as the height, or starship draws the row. In zsh it
+   blinks at the temperament's rate, sleeps after 5 minutes without
+   a key and wakes
    on the next one. That is zsh's own `sched` and `zselect`: no
    process is started, and it moves only at an empty line with no note
    in the row. In bash the face is still, because readline has no idle
@@ -1006,10 +1020,13 @@ and may change freely.
    or `last time this fixed it: FIX` from the failure memory. The
    others are `* Enter explains the error`, `* Enter runs the check`
    (the proof), `* Enter remembers the fix`, `* type a question, then
-   Esc s` and `* spark writes here -- Esc k moves it`. A hint no longer
-   names the manual it was checked against. A hand-run `spark line`
-   never touches that row, and stdout stays the two lines
-   either way. With `SPARK_VOICE=clear`, `spark line` reads its lines
+   Esc s` and `* spark writes here -- Esc k moves it`. A check row
+   that turned worse is `! ROW: VALUE -- REMEDY`, and its heal `* ROW:
+   ok again, after N` (contract 6). Not awake, each is the same line
+   with no face. A hint no longer names the manual it was checked
+   against. A hand-run `spark line` never touches that row, and
+   stdout stays the two lines either way. With `SPARK_VOICE=clear`,
+   `spark line` reads its lines
    aloud once they are written, from a detached process
    (`voice.aloud_later`, `voice.line_words`). stdout stays this
    contract byte for byte, and the widget waits for no speech. Mode
@@ -1081,7 +1098,37 @@ and may change freely.
    characters at most. Where the face is on, a shell also stats `off`
    at each prompt and each line it draws. `SPARK_HEIGHT` in the
    environment wins over `HEIGHT`. The `look` row compares the file with
-   what `spark.env` and the faces file say now.
+   what `spark.env` and the faces file say now. The marker is the
+   stamp for `~/.local/state/spark/alert` too, the file `spark check`
+   writes when a row changes (contract 7). A prompt pays one `-nt`
+   test of it against the marker. A newer file is read with `read
+   -r`, line by line, 8 lines at most, never sourced or eval'd. No
+   pane writes it. A line is `<seq> <epoch> <mark> <mood> <row>
+   <text>`, one a row, 8 at most (`check.ALERT_MAX`). A row that
+   turned worse is the mark `!` and the mood `alarmed`: ok or na to
+   warn or fail, or warn to fail. Its text is `ROW: VALUE -- REMEDY`,
+   the remedy's command, or `spark check ROW` when the row names
+   none. A heal is `*` and `pleased`, in the row's place: `ROW: ok
+   again, after N`. A row that goes from warn or fail to na loses its
+   line. One that goes from fail to warn has its text written again
+   under the same seq, so nothing new is said. The text is one line
+   of printable ASCII with no secret shape, 160 characters at most
+   (`check.ALERT_CHARS`). One that is not becomes `ROW needs you --
+   spark check ROW`. A seq only grows. A check's run drops a line 24
+   hours after its change (`check.ALERT_HOURS`). The rows `prompt`
+   and `failure` are recorded and never said (`check.ALERT_QUIET`):
+   both turn warn when the last shell closes. A widget cleans each
+   line. It keeps one whose seq is 1 to 12 digits, whose mark is `!`
+   or `*` and whose row is a-z. The text must be printable ASCII, 200
+   characters at most. Any other line is dropped. It uses
+   neither the mood nor the epoch: the mark picks the face. It shows
+   one line a prompt in spark's row (contract 4), once in each pane.
+   What a pane has said lives in memory alone: the highest seq shown
+   and the rows whose warning it showed. A heal shows only in a pane
+   that showed its warning. A new shell reads the standing file once,
+   so it shows a standing warning once. A failure line or the proof
+   line goes first, and the warning waits one prompt. `spark off` is
+   silent, and the lines wait for `spark on`.
 7. `spark check` exits 0 when no row is `fail`, else 1. A `CAPABILITY`
    row never fails. Bare, it prints only the rows that need you, `warn`
    and `fail`, each with its remedy, then the totals line. No header, no
@@ -1090,8 +1137,41 @@ and may change freely.
    under the header. `spark check NAME...` prints those rows, ok or
    not, then the totals. A name that is no row is `spark check -- no
    row named NAME`, exit 2. `--porcelain` prints
-   `category<TAB>status<TAB>name<TAB>value<TAB>remedy`, every row. Every
-   run writes `~/.local/state/spark/check.json` for the bar.
+   `category<TAB>status<TAB>name<TAB>value<TAB>remedy`, every row. A
+   run merges its rows into `~/.local/state/spark/check.json` for the
+   bar (`check.write_snapshot`). The merge holds the flock
+   `check.lock`, and the file is replaced whole. Each row there
+   carries `at`, the start of the run that saw it, `since`, its last
+   status change, and `red`, when it left ok. An ok or na row has no
+   `red`. The newest observation of a row wins, so a slow run records
+   no false heal. A full run sets `ts`. A named run replaces only its
+   rows and keeps `ts`: the bar's age and the watchdog row go on
+   meaning the last full run. With no snapshot yet, a named run
+   writes none. The same step records each status change in
+   `check-history.jsonl`, one JSON object a line:
+   `{"ts","row","from","to"}`, and on a heal `red`, the seconds the
+   row was red. It holds names, statuses and numbers, never a row's
+   value. A change is read by row name, on the status alone. ok to na
+   and back is none, and a row never seen before is the baseline.
+   Every full run prunes the file to `SPARK_HISTORY` days and
+   `check.HISTORY_MAX` (2000) records. With `SPARK_HISTORY` off none
+   is kept, and `spark clear --history` removes the file. The step
+   also rewrites `alert` (contract 6). `spark check --history [NAME]
+   [--porcelain]` prints the changes kept, newest first, and runs no
+   row. A line is the local date and time, the row, the two statuses
+   as `ok -> fail`, and a note. The note is `red N` on a heal, and
+   `still red, N` on the newest change of a row that is red now. The
+   last line is `* N changes in D days`, or `* no changes kept in D
+   days`. `--porcelain` there prints
+   `epoch<TAB>row<TAB>from<TAB>to<TAB>red`, the last field empty when
+   there is none. Any other option is `spark check -- --history takes
+   a row name and --porcelain`, exit 2. A name that is no row is
+   refused as above. With history off it prints `spark check --
+   history is off (SPARK_HISTORY)` and exits 0. The `knowledge` row
+   asks bootstrap's own question (`intake.fresh`), so its remedy,
+   `spark update`, heals it. It warns `read N ago, this machine
+   changed since`. Programs that wait their turn are ok, said in
+   words: `37 waiting their turn`, or `still reading`.
 8. Signing. The first line of `spark --help` and of every subcommand's
    help is `spark <sub> -- <one line>`, plain ASCII, so every terminal
    can draw it. A refusal signs the same way. An invocation mistake is
@@ -1726,9 +1806,10 @@ One grammar for every verb. A verb that breaks a rule is a bug.
    an arrow that crosses: `spark edit`, `read` and `drill`, a paste
    and `/read`. `steps` is one step after another: `spark do`'s
    proposal. `swell` is a bar that grows and shrinks: a model loading
-   with no estimate. `march` is marks that move right: `spark update`
-   and `spark model verify`. A frame is 0.12 seconds, 0.10 for the
-   playful temperament and 0.15 for the warm one (`look.STEPS`).
+   with no estimate, in `spark awaken` too. `march` is marks that
+   move right: `spark update` and `spark model verify`. A frame is
+   0.12 seconds, 0.10 for the playful temperament and 0.15 for the
+   warm one (`look.STEPS`).
    `spark edit`, `read` and `drill` pulse on stderr only when stdout
    and stderr are both terminals (`text.wait`). It runs on every
    terminal:
@@ -1847,7 +1928,9 @@ One grammar for every verb. A verb that breaks a rule is a bug.
   the sealed threads. A thread lives `SPARK_HISTORY` days, unless it is
   kept. A kept thread sits in `kept/` beside `threads/`, and pruning and
   `spark clear --history` never touch it (`/keep` in `spark chat`, `POST
-  /api/threads` for a program, contract 9). What a request weighed and
+  /api/threads` for a program, contract 9). `spark clear --history`
+  also removes the check's history, `check-history.jsonl` (contract
+  7). What a request weighed and
   where it went do ride the record: `out_bytes` and `dest` (`host:port`,
   or `local` for loopback), `wire._sent`'s pair on every chat shape's
   timings. So the `sends` row and `spark stats --sends` count what left
@@ -1949,7 +2032,12 @@ One grammar for every verb. A verb that breaks a rule is a bug.
   `SPARK_API_KEY_FILE=$SHARE_TOKEN` when that group-readable token is
   present, rather than minting one the engine would reject.
   `config.token_file` also falls back to it for a user with none of
-  their own.
+  their own. A client has no check timer, so a row's change is
+  recorded, and said at the prompt, when a check runs there. Its
+  `spark update` reads the knowledge until nothing waits: bootstrap
+  asks `python3 -m spark.intake fresh whole` there. A server's build
+  runs `--help` for 30 seconds (`intake.HELP_BUILD_SECONDS`), and its
+  timer reads the programs left, 16 a run.
 - **A shared engine.** `spark serve share on` (`SITE_SHARE=yes`,
   `site.cmd_share`) lets a machine's other OS users answer from its one
   engine instead of each loading the model. Bootstrap's `share` row
@@ -2017,7 +2105,8 @@ sh tests/land.sh --passed SHA   # ci.yml passed for that commit: what main and a
 `spark check` has 39 rows today, by category `8 SOFTWARE, 22
 CAPABILITY, 9 NONFUNCTIONAL` (`grep -c '^@row' lib/spark/check.py`
 counts them). `--selftest` runs 8 passes. The first two prove every
-fixture-testable row flips between a good and a bad fixture. The third
+fixture-testable row flips between a good and a bad fixture. The good
+one also proves a healed row is recorded once and said once. The third
 is the client shape: the 7 rows in `check.CLIENT_ROWS` answer `na`. On
 Linux the fourth runs under a WSL 2 kernel line, where the 1 row in
 `check.WSL_ROWS` says so and never fails. The fifth runs under

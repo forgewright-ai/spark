@@ -75,7 +75,8 @@ spark chat                      talk with the model
   machine.
 - `spark voice on`: spark reads aloud.
 - `spark awaken`: give spark a personality and a look.
-- `spark check`: what needs you. `spark uninstall` removes spark.
+- `spark check`: what needs you. Your prompt says when something
+  breaks. `spark uninstall` removes spark.
 
 Every command is in `docs/CHEATSHEET.txt`.
 
@@ -196,7 +197,7 @@ moves forward. A clone on `main` is not checked.
 - The admin token can run commands on this machine. With passwordless
   sudo, that means root.
 - Conversations are kept for 30 days in `~/.local/state/spark/`.
-  `SPARK_HISTORY=off` keeps none.
+  `SPARK_HISTORY=off` keeps none, and none of the check's changes.
 - Each user (`spark user add NAME`) has an encrypted store that only
   their token opens. A lost token cannot be recovered.
 - Your own login keeps its key next to its store. Encrypt the disk to

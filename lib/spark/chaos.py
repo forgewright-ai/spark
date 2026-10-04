@@ -7,8 +7,9 @@
 # that row must reach, and the heal. The heal is the row's OWN remedy
 # string wherever the remedy is a command -- so a remedy that names a
 # renamed verb or a stale path stops being prose nobody executes. Where
-# the remedy is prose (./bootstrap.sh, a doc reference), the scenario
-# supplies the command and the report says it did.
+# the remedy is prose (./bootstrap.sh, a doc reference), or a command
+# this machine stubs (it never applies a bootstrap), the scenario supplies
+# the command and the report says it did.
 #
 # The machine is check's good fixture: a throwaway HOME, a stub
 # repository, stub commands and a stub llama-server on loopback. Nothing
@@ -20,6 +21,7 @@
 
 import os
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -560,6 +562,38 @@ def chaos_hostile_line_answer(m):
     return ""
 
 
+# what bootstrap's knowledge row runs when the store is not fresh
+KNOWLEDGE_BUILD = "PYTHONPATH=%s %s -m spark.intake" % (
+    shlex.quote(os.path.join(REPO, "lib")), shlex.quote(sys.executable))
+
+
+@scenario(row="knowledge", expect=WARN, want="changed since", heal=KNOWLEDGE_BUILD + " build")
+def chaos_knowledge_moved(m):
+    """A new program after the index was read: the knowledge row says the
+    machine changed since, bootstrap's own question says not fresh, and
+    the build bootstrap runs heals it. The row's remedy is `spark
+    update`, whose bootstrap this machine stubs (SPARK_NO_APPLY), so the
+    heal is the command bootstrap's row runs."""
+    from . import check
+    check.knowledge_fixture(m.env)  # the selftest's tiny machine: one program, its manual, built
+    bindir = m.env.get("SPARK_KNOWLEDGE_PATH", "")
+    if not os.path.isdir(bindir):
+        return "the fixture has no knowledge PATH dir"
+    rc, out = m.sh(KNOWLEDGE_BUILD + " fresh")
+    if rc != 0:
+        return "the fixture's index was not fresh to begin with: %s" % out.strip()[-200:]
+    time.sleep(0.05)                # the dir's stamp is its mtime
+    tool = os.path.join(bindir, "newcomer")
+    with open(tool, "w") as f:
+        f.write("#!/bin/sh\nexit 0\n")
+    os.chmod(tool, 0o755)
+    rc, out = m.sh(KNOWLEDGE_BUILD + " fresh")
+    if rc != 1:
+        return "`spark.intake fresh` exited %d, not 1, after a new program: %r" % (rc, out.strip()[-200:])
+    m.note("bootstrap's question agrees: `python3 -m spark.intake fresh` exits 1")
+    return ""
+
+
 # ---------------------------------------------------------------- runner
 def _command_of(remedy):
     """The runnable half of a remedy. Rows end a remedy with an aside --
@@ -603,7 +637,7 @@ def _judge(m, sc):
             return False, lines + ["the row prints no remedy to run"]
         cmd, how = _command_of(remedy), "its own remedy"
     else:
-        cmd, how = sc.heal, "the scenario's heal (the row's remedy is prose)"
+        cmd, how = sc.heal, "the scenario's heal (the row's remedy cannot run here)"
     rc, out = m.sh(cmd)
     lines.append("heal, %s: %s" % (how, cmd))
     if rc != 0:

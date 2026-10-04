@@ -23,7 +23,7 @@ import tempfile
 import time
 
 from . import distro, init_shape, is_wsl, runit_live  # noqa: E402  (the OS facts, beside os_pretty)
-from . import (BIN_DIR, CACHE_DIR, CHECK_JSON, HOME, IS_MAC, MARK, OS, REPO,
+from . import (ALERT_FILE, BIN_DIR, CACHE_DIR, CHECK_HISTORY, CHECK_JSON, CHECK_LOCK, HOME, IS_MAC, MARK, OS, REPO,
                STATE_DIR, config, glyph, log_exc, packages, page, run, say, state_dir, version)
 
 OK, WARN, FAIL, NA = "ok", "warn", "fail", "na"
@@ -1104,7 +1104,9 @@ def row_knowledge(ctx):
     held by another refresh only reports. A check a person typed only
     reports (G0 M7: no manual is read and no --help runs on a person's own
     command), and a missing index is never built here -- bootstrap builds
-    it -- so --porcelain stays fast."""
+    it -- so --porcelain stays fast. Stale is the question bootstrap's
+    row asks (intake.fresh), so the remedy heals it. What a build left
+    for the timer (intake.waiting) is ok, in words."""
     if not ctx.cfg.knowledge:
         return na("off (SPARK_KNOWLEDGE=off)")
     from . import intake
@@ -1116,9 +1118,14 @@ def row_knowledge(ctx):
         return warn("not built yet", fix)
     ago = _read_ago(time.time() - built)
     if stale:
-        return warn("%s, new programs missing" % ago, fix)
+        return warn("%s, this machine changed since" % ago, fix)
     parts = ["%d %s%s" % (counts[k], word, "" if counts[k] == 1 else "s")
              for k, word in KNOWLEDGE_KINDS if isinstance(counts.get(k), int)]
+    pending, partial = intake.waiting()
+    if pending:
+        parts.append("%d waiting their turn" % pending)
+    elif partial:
+        parts.append("still reading")
     return ok("%s, %s" % (", ".join(parts) or "empty", ago))
 
 
@@ -1489,21 +1496,469 @@ def run_rows(ctx, names=None, tick=None):
     return rows
 
 
+def _tally(statuses):
+    statuses = list(statuses)
+    return {s: statuses.count(s) for s in (OK, FAIL, WARN, NA)}
+
+
 def counts(rows):
-    return {s: sum(1 for r in rows if r.status == s) for s in (OK, FAIL, WARN, NA)}
+    return _tally(r.status for r in rows)
 
 
-def write_snapshot(ctx, rows):
-    snap = {"ts": int(time.time()), "name": ctx.cfg.name, "version": version.version(),
-            "counts": counts(rows),
-            "rows": [{"category": r.category, "status": r.status, "name": r.name,
-                      "value": r.value, "remedy": r.remedy} for r in rows]}
+# ------------------------------------------- the snapshot, history, alert
+# One merge, under one flock, writes three files: check.json (every row's
+# newest observation), check-history.jsonl (one line a status change) and
+# alert (what the prompt says once). A change is read by row name on the
+# STATUS alone, the stored row against the merged one: a value holds
+# volatile numbers, and it may name a person or a host, so history keeps
+# names, statuses and numbers only.
+SEVERITY = {OK: 0, NA: 0, WARN: 1, FAIL: 2}
+LOCK_WAIT = 2.0             # seconds a run waits for another run's merge
+HISTORY_MAX = 2000          # records kept, whatever SPARK_HISTORY says
+ALERT_MAX = 8               # lines in the alert file, one a row
+ALERT_HOURS = 24            # a line is said for a day, then it is gone
+ALERT_CHARS = 160           # a line's text, after cleaning
+ALERT_REMEDY = 90           # a remedy longer than this is not said: `spark check ROW` shows it whole
+# recorded, never said: both turn warn when the last shell closes
+ALERT_QUIET = ("prompt", "failure")
+_ALERT_ROW = re.compile(r"[a-z]+\Z")
+_ALERT_NUM = re.compile(r"[0-9]{1,12}\Z")
+_ALERT_KINDS = {"!": "alarmed", "*": "pleased"}
+_HISTORY_ROW = re.compile(r"[a-z][a-z-]{0,31}\Z")
+
+
+def _int(v):
+    """v as a whole number of seconds, or 0."""
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return 0
+    try:
+        return int(v)
+    except (ValueError, OverflowError):
+        return 0
+
+
+def _take_lock(wait=None):
+    """The check's flock (sandbox._open_lock: 0600, O_NOFOLLOW), or None
+    when another run still holds it after `wait` seconds. The kernel lets
+    go when the holder dies, so no stale lock outlives a killed run."""
+    import fcntl
+    from . import sandbox
     try:
         state_dir()
-        with open(CHECK_JSON, "w", encoding="utf-8") as f:
-            json.dump(snap, f)
+        fd = sandbox._open_lock(CHECK_LOCK)
+    except OSError:
+        return None
+    end = time.monotonic() + (LOCK_WAIT if wait is None else wait)
+    while True:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return fd
+        except OSError:
+            if time.monotonic() >= end:
+                os.close(fd)
+                return None
+            time.sleep(0.05)
+
+
+def read_snapshot():
+    """check.json as a dict with a `rows` list, or None."""
+    try:
+        with open(CHECK_JSON, encoding="utf-8") as f:
+            d = json.load(f)
+    except (OSError, ValueError):
+        return None
+    if not isinstance(d, dict) or not isinstance(d.get("rows"), list):
+        return None
+    return d
+
+
+def _stored(snap):
+    """{name: row} of a snapshot's well-formed rows."""
+    out = {}
+    for r in snap.get("rows", []):
+        if isinstance(r, dict) and isinstance(r.get("name"), str) and r.get("status") in SEVERITY:
+            out[r["name"]] = r
+    return out
+
+
+def _history_days(cfg):
+    """SPARK_HISTORY in days; 0 is off. A value that is no number is the
+    default here: the check never dies of it."""
+    try:
+        return max(0, int(cfg.history))
+    except (SystemExit, ValueError, TypeError):
+        return 30
+
+
+def write_snapshot(ctx, rows, full=True):
+    """Merge this run's rows into check.json, record what changed and
+    rewrite the alert file: one step under the check's flock, each file
+    through its own atomic write. False when nothing was written (another
+    run holds the lock, or a named run found no snapshot to merge into).
+
+    Each stored row carries `at` (the start of the run that observed it),
+    `since` (when its status last changed) and `red` (when it left ok or
+    na; absent while it is ok or na). The newest observation of a row
+    wins: a stored row observed after this run started is kept, so a slow
+    run records no false heal and no stale break. A full run takes every
+    row, drops the rows it did not run and sets `ts`. A named run replaces
+    only its rows, counts again and keeps `ts`: the bar's age and the
+    watchdog row go on meaning the last full run."""
+    fd = _take_lock()
+    if fd is None:
+        return False
+    try:
+        return _merge(ctx, rows, full)
+    except (OSError, ValueError, TypeError):
+        log_exc("check snapshot")
+        return False
+    finally:
+        os.close(fd)
+
+
+def _merge(ctx, rows, full):
+    from . import vault
+    now = int(time.time())
+    at = round(float(getattr(ctx, "started", now)), 3)
+    prev = read_snapshot()
+    if prev is None and not full:
+        return False
+    prev_ts = _int(prev.get("ts")) if prev else 0
+    old = _stored(prev) if prev else {}
+    merged = {} if full else dict(old)
+    changes = []            # (name, from, to, red seconds or None, the Row)
+    for r in rows:
+        was = old.get(r.name)
+        # observed after this run started: it knows better. An `at` ahead
+        # of the clock itself (the clock was set back) is no observation
+        if was is not None and isinstance(was.get("at"), (int, float)) and at < was["at"] <= now + 1:
+            merged[r.name] = was
+            continue
+        e = {"category": r.category, "status": r.status, "name": r.name,
+             "value": r.value, "remedy": r.remedy, "at": at}
+        same = was is not None and was["status"] == r.status
+        # a row stored before v1.81 has no since and no red: its snapshot's ts
+        e["since"] = (_int(was.get("since")) or prev_ts or now) if same else now
+        was_red = was is not None and SEVERITY[was["status"]] > 0
+        red_at = (_int(was.get("red")) or prev_ts or now) if was_red else now
+        if SEVERITY[r.status]:
+            e["red"] = red_at
+        merged[r.name] = e
+        if was is None or same:
+            continue                    # a row never seen is the baseline
+        a, b = SEVERITY[was["status"]], SEVERITY[r.status]
+        if a or b:                      # ok <-> na is no change
+            changes.append((r.name, was["status"], r.status, max(0, now - red_at) if a and not b else None, r))
+    if full:
+        out = list(merged.values())
+    else:
+        order = {s.name: i for i, s in enumerate(SPECS)}
+        out = sorted(merged.values(), key=lambda e: order.get(e["name"], len(order)))
+    if full or prev is None:
+        snap = {"ts": now, "name": ctx.cfg.name, "version": version.version()}
+    else:
+        snap = dict(prev)
+    snap["counts"] = _tally(e["status"] for e in out)
+    snap["rows"] = out
+    # history and the alert first, the snapshot last: a run killed between
+    # them says a change twice, never loses one
+    days = _history_days(ctx.cfg)
+    try:
+        if days > 0 and changes:
+            _history_append(changes, now)
+        if full:
+            _history_prune(days, now)
+    except OSError:
+        log_exc("check history")
+    try:
+        _alert_update(changes, set(merged), now, full)
+    except OSError:
+        log_exc("check alert")
+    vault.write_private(CHECK_JSON, json.dumps(snap).encode("utf-8"))
+    return True
+
+
+# ---- history
+def _record(d):
+    """A history line as its checked fields, or None: a row name, two
+    statuses and whole numbers, whatever else the line holds."""
+    if not isinstance(d, dict):
+        return None
+    ts, name, a, b = _int(d.get("ts")), d.get("row"), d.get("from"), d.get("to")
+    if ts <= 0 or not isinstance(name, str) or not _HISTORY_ROW.match(name):
+        return None
+    if not isinstance(a, str) or not isinstance(b, str) or a not in SEVERITY or b not in SEVERITY:
+        return None
+    rec = {"ts": ts, "row": name, "from": a, "to": b}
+    if "red" in d:
+        rec["red"] = max(0, _int(d["red"]))
+    return rec
+
+
+def _history_read():
+    """(records in file order, lines in the file)."""
+    out, n = [], 0
+    try:
+        with open(CHECK_HISTORY, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                n += 1
+                try:
+                    rec = _record(json.loads(line))
+                except ValueError:
+                    continue
+                if rec:
+                    out.append(rec)
     except OSError:
         pass
+    return out, n
+
+
+def read_history():
+    """Every kept status change, oldest first."""
+    return _history_read()[0]
+
+
+def _history_lines(records):
+    return "".join(json.dumps(r, separators=(",", ":")) + "\n" for r in records).encode("ascii")
+
+
+def _history_append(changes, now):
+    recs = []
+    for name, a, b, red, _r in changes:
+        rec = {"ts": now, "row": name, "from": a, "to": b}
+        if red is not None:
+            rec["red"] = int(red)
+        if _record(rec):
+            recs.append(rec)
+    if not recs:
+        return
+    fd = os.open(CHECK_HISTORY, os.O_WRONLY | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW | getattr(os, "O_CLOEXEC", 0), 0o600)
+    try:
+        os.fchmod(fd, 0o600)
+        os.write(fd, _history_lines(recs))
+    finally:
+        os.close(fd)
+
+
+def _remove(path):
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
+def _history_prune(days, now):
+    """A full run's upkeep: history off removes the file; else a file
+    whose first record is past the days kept, or that holds more than
+    HISTORY_MAX lines, is written again without them."""
+    if days <= 0:
+        _remove(CHECK_HISTORY)
+        return
+    recs, n = _history_read()
+    if not n:
+        return
+    cutoff = now - days * 86400
+    if recs and recs[0]["ts"] >= cutoff and n <= HISTORY_MAX and n == len(recs):
+        return
+    keep = [r for r in recs if r["ts"] >= cutoff][-HISTORY_MAX:]
+    if keep:
+        from . import vault
+        vault.write_private(CHECK_HISTORY, _history_lines(keep))
+    else:
+        _remove(CHECK_HISTORY)
+
+
+def clear_history():
+    """`spark clear --history`: the kept changes go. The snapshot and the
+    alert file stay: they are the machine's state now, not its past."""
+    fd = _take_lock()
+    try:
+        had = os.path.lexists(CHECK_HISTORY)
+        _remove(CHECK_HISTORY)
+        return had
+    finally:
+        if fd is not None:
+            os.close(fd)
+
+
+def _span(seconds):
+    """21 min / 10 h / 3 days: how long, in the words the prompt says."""
+    s = max(0, int(seconds))
+    if s < 120:
+        return "%d s" % s
+    if s < 2 * 3600:
+        return "%d min" % (s // 60)
+    if s < 48 * 3600:
+        return "%d h" % (s // 3600)
+    return "%d days" % (s // 86400)
+
+
+# ---- the alert file
+def _fold(s):
+    """One line: spark's own glyphs as their ASCII twins, whitespace runs
+    as one space."""
+    from . import _GLYPHS
+    s = str(s)
+    for uni, plain in _GLYPHS.values():
+        if uni != plain:
+            s = s.replace(uni, plain)
+    return " ".join(s.split())
+
+
+def _cut(s, n):
+    """s within n characters, cut at a word."""
+    if len(s) <= n:
+        return s
+    return s[:max(0, n - 3)].rsplit(" ", 1)[0].rstrip() + "..."
+
+
+def _sayable(s):
+    """look.clean's two rules at the alert's own length (its 72 columns
+    are a face line's): printable ASCII and no secret shape."""
+    if not s or s != s.strip() or len(s) > ALERT_CHARS or any(not (" " <= c <= "~") for c in s):
+        return False
+    from . import look
+    if len(s) <= look.LINE_MAX:
+        return look.clean(s) == s
+    from . import text
+    return not text.held_spans(s)[0]
+
+
+def alert_text(name, text):
+    """A text fit for the alert file: folded, cut at a word to ALERT_CHARS,
+    printable ASCII with no secret shape. One that is not becomes `ROW
+    needs you -- spark check ROW`, which names nothing."""
+    s = _cut(_fold(text), ALERT_CHARS)
+    # the row's name leads, not spark's: this is no signed line (contract 8)
+    return s if _sayable(s) else "%s needs you" % name + " -- spark check %s" % name
+
+
+def worse_text(r):
+    """`ROW: VALUE -- REMEDY`: the remedy's command without its aside
+    (chaos._command_of), or `spark check ROW` when the row names none or
+    one past ALERT_REMEDY characters. A long value is cut, never the
+    command: half a command is worse than none."""
+    from . import chaos
+    cmd = _fold(chaos._command_of(r.remedy or ""))
+    if not cmd or len(cmd) > ALERT_REMEDY:
+        cmd = "spark check %s" % r.name
+    tail = " -- " + cmd
+    return alert_text(r.name, _cut(_fold("%s: %s" % (r.name, r.value)), ALERT_CHARS - len(tail)) + tail)
+
+
+def heal_text(name, red):
+    return alert_text(name, "%s: ok again, after %s" % (name, _span(red)))
+
+
+def read_alert():
+    """The alert file's well-formed lines as dicts (seq, epoch, mark, mood,
+    row, text), one a row, oldest first. A line that is not exactly the
+    six fields, or whose text is not fit to say, is dropped."""
+    try:
+        with open(ALERT_FILE, encoding="ascii", errors="replace") as f:
+            raw = f.read(1 << 14)
+    except OSError:
+        return []
+    by = {}
+    for line in raw.split("\n")[:4 * ALERT_MAX]:
+        p = line.split(" ", 5)
+        if len(p) != 6:
+            continue
+        seq, epoch, mark, mood, name, text = p
+        if not _ALERT_NUM.match(seq) or not _ALERT_NUM.match(epoch) or _ALERT_KINDS.get(mark) != mood:
+            continue
+        if not _ALERT_ROW.match(name) or not _sayable(text):
+            continue
+        e = {"seq": int(seq), "epoch": int(epoch), "mark": mark, "mood": mood, "row": name, "text": text}
+        if name not in by or by[name]["seq"] < e["seq"]:
+            by[name] = e
+    return sorted(by.values(), key=lambda e: e["seq"])
+
+
+def _alert_body(lines):
+    return "".join("%d %d %s %s %s %s\n" % (e["seq"], e["epoch"], e["mark"], e["mood"], e["row"], e["text"])
+                   for e in lines)
+
+
+def _alert_update(changes, names, now, full):
+    """Apply a run's changes to the alert file. Worse (ok/na -> warn/fail,
+    warn -> fail) is a new `!` line; a heal a new `*` line in its place;
+    warn/fail -> na withdraws the row's line; fail -> warn refreshes the
+    standing text and keeps its seq, since nothing new is said. Lines past
+    ALERT_HOURS and lines of rows gone go. A seq only grows."""
+    lines = read_alert()
+    before = _alert_body(lines)
+    exists = os.path.lexists(ALERT_FILE)
+    by = {e["row"]: e for e in lines}
+    top = max([e["seq"] for e in lines] or [0])
+    for name, was, to, red, r in changes:
+        if name in ALERT_QUIET or not _ALERT_ROW.match(name):
+            continue
+        a, b = SEVERITY[was], SEVERITY[to]
+        if b > a:
+            top = max(top + 1, now)
+            by[name] = {"seq": top, "epoch": now, "mark": "!", "mood": "alarmed", "row": name, "text": worse_text(r)}
+        elif to == OK:
+            top = max(top + 1, now)
+            by[name] = {"seq": top, "epoch": now, "mark": "*", "mood": "pleased", "row": name,
+                        "text": heal_text(name, red or 0)}
+        elif b == 0:
+            by.pop(name, None)
+        elif name in by and by[name]["mark"] == "!":
+            by[name]["text"] = worse_text(r)
+    keep = [e for e in by.values()
+            if e["row"] in names and e["row"] not in ALERT_QUIET and abs(now - e["epoch"]) < ALERT_HOURS * 3600]
+    keep = sorted(keep, key=lambda e: e["seq"])[-ALERT_MAX:]
+    keep = [e for e in keep if e["seq"] < 10 ** 12]
+    if not keep:
+        if exists:
+            _remove(ALERT_FILE)
+        return
+    body = _alert_body(keep)
+    if full or body != before:
+        from . import vault
+        vault.write_private(ALERT_FILE, body.encode("ascii"))
+
+
+# ---- spark check --history
+def show_history(name="", porcelain_out=False):
+    """`spark check --history [NAME] [--porcelain]`: the kept changes,
+    newest first. It runs no row and writes nothing."""
+    days = _history_days(config.load())
+    if days <= 0:
+        # porcelain keeps stdout for records alone
+        print("%s check -- history is off (SPARK_HISTORY)" % MARK, file=sys.stderr if porcelain_out else sys.stdout,
+              flush=True)
+        return 0
+    now = time.time()
+    recs = [r for r in read_history() if r["ts"] >= now - days * 86400 and (not name or r["row"] == name)]
+    recs = sorted(recs, key=lambda r: r["ts"])[::-1]
+    if porcelain_out:
+        if recs:
+            say("\n".join("%d\t%s\t%s\t%s\t%s" % (r["ts"], r["row"], r["from"], r["to"], r.get("red", ""))
+                          for r in recs))
+        return 0
+    snap = read_snapshot()
+    red_now = {n: _int(e.get("red")) for n, e in (_stored(snap) if snap else {}).items()
+               if SEVERITY[e["status"]] and _int(e.get("red"))}
+    wide = max([9] + [len(r["row"]) for r in recs])
+    out, seen = [], set()
+    for r in recs:
+        note = ""
+        if "red" in r:
+            note = "red %s" % _span(r["red"])
+        elif r["row"] not in seen and SEVERITY[r["to"]] and r["row"] in red_now:
+            note = "still red, %s" % _span(now - red_now[r["row"]])
+        seen.add(r["row"])
+        out.append(("%s  %-*s  %-12s  %s" % (time.strftime("%Y-%m-%d %H:%M", time.localtime(r["ts"])), wide, r["row"],
+                                             "%s -> %s" % (r["from"], r["to"]), note)).rstrip())
+    if recs:
+        out.append("%s %d change%s in %d day%s" % (glyph("hammer"), len(recs), "" if len(recs) == 1 else "s",
+                                                   days, "" if days == 1 else "s"))
+    else:
+        out.append("%s no changes kept in %d day%s" % (glyph("hammer"), days, "" if days == 1 else "s"))
+    page("\n".join(out))
+    return 0
 
 
 # the rows that need the user: what bare `spark check` prints. An ok row
@@ -1761,8 +2216,14 @@ def make_fixture(root, good, stub_url="", real_spark=False):
     # hook is armed); the bad one is a pre-hook shell -- the failure row
     with open(os.path.join(state, "widgets", str(os.getpid())), "w") as f:
         f.write("bash %d %d%s\n" % (os.getpid(), int(time.time()), " hook" if good else ""))
+    # the good fixture's snapshot is a second one: an older run, from before
+    # v1.81 (no at, since or red), saw the hooks row red. The good run heals
+    # it, so the selftest reads one change in history and one line in the
+    # alert file, inside this throwaway state
     with open(os.path.join(state, "check.json"), "w") as f:
-        json.dump({"ts": int(time.time()) - (10 if good else 3600), "counts": {}, "rows": []}, f)
+        json.dump({"ts": int(time.time()) - (10 if good else 3600), "counts": {},
+                   "rows": [{"category": "SOFTWARE", "status": "fail", "name": "hooks",
+                             "value": "fixture", "remedy": ""}] if good else []}, f)
     # throughput: a baseline and three turns near it (good) or at 30 % of it (bad)
     with open(os.path.join(state, "bench.jsonl"), "w") as f:
         f.write(json.dumps({"ts": "2000-01-01 00:00:00", "model": "fixture.gguf", "engine": engine,
@@ -2073,6 +2534,32 @@ def _stub_server():
     return srv, "http://127.0.0.1:%d" % srv.server_address[1]
 
 
+def _selftest_change(state):
+    """The good fixture's one change, read from its throwaway state: the
+    hooks row the older snapshot held red is ok now. '' when history
+    holds exactly that record, the alert file exactly that heal and the
+    snapshot the three new keys; else what is wrong."""
+    try:
+        with open(os.path.join(state, "check-history.jsonl"), encoding="utf-8") as f:
+            recs = [json.loads(line) for line in f]
+        with open(os.path.join(state, "alert"), encoding="utf-8") as f:
+            said = f.read().splitlines()
+        with open(os.path.join(state, "check.json"), encoding="utf-8") as f:
+            rows = {r["name"]: r for r in json.load(f)["rows"]}
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        return "the good run left no readable history, alert or snapshot (%s)" % type(e).__name__
+    if len(recs) != 1 or [recs[0].get(k) for k in ("row", "from", "to")] != ["hooks", FAIL, OK] \
+            or not isinstance(recs[0].get("red"), int) or sorted(recs[0]) != ["from", "red", "row", "to", "ts"]:
+        return "history is not the one heal of hooks: %d records" % len(recs)
+    if len(said) != 1 or said[0].split(" ", 5)[2:5] != ["*", "pleased", "hooks"] \
+            or not said[0].split(" ", 5)[5].startswith("hooks: ok again, after "):
+        return "the alert file is not the one heal line of hooks: %d lines" % len(said)
+    hooks = rows.get("hooks", {})
+    if "red" in hooks or not all(k in hooks for k in ("at", "since")):
+        return "the snapshot's hooks row lacks at and since, or still carries red"
+    return ""
+
+
 def selftest():
     """Run the check against a good and a bad fixture; every fixture-testable
     row must be ok in the good one and not ok in the bad one. A third
@@ -2107,6 +2594,8 @@ def selftest():
                 srv.shutdown()
                 return 1
             results[tag] = got
+            if tag == "good":
+                changed = _selftest_change(os.path.join(env["XDG_STATE_HOME"], "spark"))
         # the third pass: the good fixture as a client of the stub -- the
         # engine, the units, the snapshot, the local AI and its servers answer na
         root = os.path.join(tmp, "client")
@@ -2220,6 +2709,9 @@ def selftest():
                                               len(CLIENT_ROWS) - len(not_na), peer,
                                               "" if not not_na else "   not na: " + " ".join(not_na)))
     bad += bool(not_na) or peer != OK
+    say("  %s change: %s" % (GLYPH[FAIL] if changed else GLYPH[OK],
+                           changed or "a healed row is recorded once and said once"))
+    bad += bool(changed)
     if IS_MAC:
         say("  %s wsl: skipped on macOS (a Linux gate proves it)" % GLYPH[NA])
     else:
@@ -2305,6 +2797,7 @@ USAGE = """%s check -- is this machine as it should be
   spark check              what needs you, and the totals
   spark check --all        every row
   spark check NAME...      those rows
+  spark check --history    what changed and when (--history NAME: one row)
   spark check --watch N    show it again every N seconds
   spark check --porcelain  category<TAB>status<TAB>name<TAB>value<TAB>remedy
   spark check --report     a block to paste into an issue (no names, no paths)
@@ -2320,6 +2813,19 @@ USAGE = """%s check -- is this machine as it should be
 def main(argv):
     watch, porcelain_out, report_out, fresh, fetch, names = 0, False, False, False, False, []
     every = False
+    if "--history" in argv:
+        if any(a in ("-h", "--help", "help") for a in argv):
+            say(USAGE.rstrip())
+            return 0
+        rest = [a for a in argv if a != "--history"]
+        hist = [a for a in rest if not a.startswith("-")]
+        if len(rest) != len(argv) - 1 or len(hist) > 1 or any(a.startswith("-") and a != "--porcelain" for a in rest):
+            say("%s check -- --history takes a row name and --porcelain" % MARK)
+            return 2
+        if hist and hist[0] not in {s.name for s in SPECS}:
+            say("%s check -- no row named %s" % (MARK, hist[0]))
+            return 2
+        return show_history(hist[0] if hist else "", "--porcelain" in rest)
     it = iter(argv)
     for a in it:
         if a in ("-h", "--help", "help"):
@@ -2365,7 +2871,7 @@ def main(argv):
         finally:            # Ctrl-C too: `checking N/M` never stays on the line
             if counter is not None:
                 counter.clear()
-        write_snapshot(ctx, rows)
+        write_snapshot(ctx, rows, full=not names)
         if report_out:
             page(report(ctx, rows))
             return 1 if any(r.status == FAIL for r in rows) else 0

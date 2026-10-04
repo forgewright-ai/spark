@@ -263,7 +263,8 @@ These work on a text on stdin:
 keeps a fact, up to 40. The soul and the facts go with every question.
 
 `spark history` lists past threads. `spark clear --history` forgets
-them, except the ones you kept. `spark user claim` moves chats from an
+them, except the ones you kept. It also forgets what `spark check
+--history` shows. `spark user claim` moves chats from an
 older spark into your account.
 
 `spark awaken` gives this machine a personality and a look. Nothing
@@ -281,8 +282,9 @@ empty prompt. `Enter` erases the resting face.
 In zsh the resting face blinks, falls asleep after 5 minutes without a
 key and wakes on the next key. In bash it stays still. It shows only
 where your prompt starts with a blank line and the height matches the
-prompt's lines: press `Esc k`, or run `spark height N`. `Ctrl-C` at a
-prompt can leave one face in the scrollback.
+prompt's lines: press `Esc k`, or run `spark height N`. In bash,
+`Ctrl-C` at a prompt can leave one face in the scrollback. In zsh the
+next prompt erases it.
 
 `spark look on|off|auto` turns the face and the colours on or off.
 `auto` draws only at a terminal, and colour only without `NO_COLOR`.
@@ -567,7 +569,7 @@ every key. The common ones:
 
 | key | what | default |
 |---|---|---|
-| `SPARK_HISTORY` | days a thread is kept. `off` keeps none | `30` |
+| `SPARK_HISTORY` | days threads and check changes are kept, or `off` | `30` |
 | `SPARK_MEMORY` | send the facts: `spark memory on\|off` | `on` |
 | `SPARK_REVEAL` | how fast replies appear: `spark reveal N\|auto\|off` | `off` |
 | `SPARK_LOOK` | the look: `spark look on\|off\|auto` | `off`, `auto` after awaken |
@@ -591,6 +593,14 @@ The check. `spark check` has 39 rows and exits 0 when no row fails.
 Bare, it shows only the rows that need you, each with its fix. `spark
 check --all` shows every row. `spark check --report` prints a block for
 an issue, with no names or paths.
+
+When a row turns worse, your next prompt says so on the line spark
+writes, with the fix: `! serve: nothing answers at 127.0.0.1:8080 --
+spark serve on`. When it heals, the prompt says that too: `* serve: ok
+again, after 21 min`. Each is said once in each shell, and `spark off`
+keeps both quiet. `spark check --history` lists the changes, newest
+first, and `spark check --history NAME` those of one row. They are
+kept `SPARK_HISTORY` days.
 
 When something stops working:
 

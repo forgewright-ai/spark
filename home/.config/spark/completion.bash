@@ -54,7 +54,7 @@ _spark_complete() {
         look)    words="on off auto status" ;;
         voice)   words="clear on off rate test listen stop status" ;;
         height)  words="1 2 3 4 5" ;;
-        check)   words="--watch --porcelain --report --fresh --fetch --selftest --chaos" ;;
+        check)   words="--all --history --watch --porcelain --report --fresh --fetch --selftest --chaos" ;;
         uninstall) words="--dry-run --yes --purge --packages --keep-packages" ;;
         serve)   words="on off boot share status --login --audit" ;;
         chat)    words="--thread" ;;

@@ -982,10 +982,17 @@ fi
 # verbs -- read into the store the prompt line's knowledge comes from
 # (lib/spark/intake.py, STATE/knowledge/). Last, so every package above is
 # in it. Rebuilt only when the machine's fingerprint moved (a package, a
-# PATH or man dir, spark's tree); the check timer keeps it fresh after.
+# PATH or man dir, spark's tree): the question the check row asks too.
+# The build runs the --help of programs with no manual for 30 seconds,
+# and the check timer reads the ones left, 16 a run. A client has no
+# timer, so there the row also wants nothing waiting (`fresh whole`) and
+# each `spark update` reads on.
 section knowledge
 knowledge() { PYTHONPATH="$REPO/lib" python3 -m spark.intake "$@"; }
-if knowledge fresh 2>/dev/null; then
+knowledge_fresh() {
+    if [ "$client" = 1 ]; then knowledge fresh whole; else knowledge fresh; fi
+}
+if knowledge_fresh 2>/dev/null; then
     skip knowledge "fresh"
 elif need knowledge "read this machine's programs and manuals"; then
 
