@@ -1194,7 +1194,11 @@ class _Face(textmod.FaceLead):
         "" once none will. Waits a mouth's step first, woken by a cut."""
         with self.lock:
             tags = list(self.tags)
-        return self.reader.sounds(tags, MOUTH_STEP)
+            closed = self.closed
+        state = self.reader.sounds(tags, MOUTH_STEP)
+        # "" ends the thread only for the tags a closed reply had: a
+        # sentence added while this waited is asked about on the next turn
+        return state if state or closed else "later"
 
 
 class _Spoken:
