@@ -37,7 +37,9 @@
 # --help: only for a program with no manual, only inside sandbox.contained
 # (no sandbox here: skipped and counted), never as root, never an Xcode
 # stub, every attempt stamped so it never runs again until the program
-# changes, HELP_PER_SLICE a 5-second slice.
+# changes, HELP_PER_SLICE a 5-second slice (the timer's), and for
+# HELP_BUILD_SECONDS in a build with no deadline (bootstrap's). The ones
+# left wait their turn: meta's `pending`, run by the next refresh.
 # Apps: .desktop files (the program in Exec, its basename only; Name and
 # Comment) and macOS .app bundles (Info.plist: CFBundleName,
 # CFBundleExecutable, CFBundleIdentifier), keyed by the executable's name.
@@ -47,7 +49,9 @@
 # drift guard holds equal to bin/spark; the models its helpers fill,
 # read from the tree), their slots from bin/spark's
 # USAGE_* text, and each verb's `spark VERB -h`, run with an empty home.
-# A new spark tree rebuilds every entry: the parsers may have changed.
+# A new spark tree reads spark's own verbs again and nothing else. A new
+# reader -- this file changed (reader_stamp) -- reads every entry again:
+# the parsers may have changed.
 # Services: the init's own dirs (runit, systemd, launchd; see "services"
 # below), one entry "service NAME" each -- the name the init knows it by,
 # so the prompt line can say sshd where a habit says ssh.
@@ -141,6 +145,7 @@ MACOS_DIRS = ("/bin/", "/sbin/", "/usr/bin/", "/usr/sbin/", "/usr/libexec/", "/S
               "/Library/Apple/", "/Library/Developer/CommandLineTools/")
 MAC_APP_DIRS = ("/Applications", "/Applications/Utilities", "/System/Applications",
                 "/System/Applications/Utilities", "~/Applications")
+STANDARD_DATA = ("/usr/local/share", "/usr/share")      # XDG_DATA_DIRS' own default
 FLATPAK_APPS = ("/var/lib/flatpak/exports/share/applications", "~/.local/share/flatpak/exports/share/applications")
 DESKTOP_CODES = re.compile(r"%[fFuUdDnNickvm]")
 
@@ -155,6 +160,7 @@ OPTION_LINES = 60            # option lines an entry keeps
 OPTION_CHARS = 100           # characters each
 OPTION_SET_MAX = 500         # flags of each shape an entry keeps
 HELP_PER_SLICE = 16          # --help runs a 5-second slice may make
+HELP_BUILD_SECONDS = 30      # seconds of --help runs in a build with no deadline
 SLICE = 5
 SPARK_SECONDS = 5            # a verb's -h
 BUILD_CAP = 180              # seconds one refresh may take at most
@@ -1025,19 +1031,26 @@ def man_dirs(prog_dirs, env=True):
     return out
 
 
-def app_dirs():
+def app_dirs(remembered=(), env=True):
     """Where .desktop files and .app bundles live: SPARK_KNOWLEDGE_APPS
-    alone when set (tests), else the XDG data dirs' applications/, the
-    flatpak exports and, on macOS, the Applications folders."""
+    alone when set (tests), else the XDG data dirs' applications/ as
+    the environment names them (unless `env` is False), the standard
+    ones, the flatpak exports, on macOS the Applications folders, and
+    the dirs an earlier build saw -- a timer's XDG_DATA_DIRS is not the
+    shell's."""
     seam = _seam("SPARK_KNOWLEDGE_APPS")
     if seam is not None:
         cands = seam.split(os.pathsep)
     else:
-        data = [os.environ.get("XDG_DATA_HOME") or os.path.join(HOME, ".local", "share")]
-        data += (os.environ.get("XDG_DATA_DIRS") or "/usr/local/share:/usr/share").split(os.pathsep)
-        cands = [os.path.join(d, "applications") for d in data] + [_tilde(d) for d in FLATPAK_APPS]
+        data = []
+        if env:
+            data += [os.environ.get("XDG_DATA_HOME") or ""]
+            data += (os.environ.get("XDG_DATA_DIRS") or "").split(os.pathsep)
+        data += [os.path.join(HOME, ".local", "share")] + list(STANDARD_DATA)
+        cands = [os.path.join(d, "applications") for d in data if d] + [_tilde(d) for d in FLATPAK_APPS]
         if IS_MAC:
             cands += [_tilde(d) for d in MAC_APP_DIRS]
+        cands += [d for d in remembered if isinstance(d, str)]
     return [d for d in dict.fromkeys(cands) if d and os.path.isabs(d) and os.path.isdir(d)]
 
 
@@ -1269,7 +1282,11 @@ def _db_paths():
 
 def tree_stamp():
     """spark's own tree, as a stamp: bin/spark, completion.bash and every
-    lib/spark/*.py (mtime, size). A new one rebuilds every entry."""
+    lib/spark/*.py (mtime, size). A new one moves the fingerprint, and
+    the next build reads spark's own verbs again -- they are keyed by
+    it. Every other entry keeps its own key: a program is read again
+    when it or its manual changed, or when the reader did
+    (reader_stamp)."""
     files = [os.path.join(REPO, "bin", "spark"), os.path.join(REPO, "home", ".config", "spark", "completion.bash")]
     files += sorted(glob.glob(os.path.join(REPO, "lib", "spark", "*.py")))
     h = hashlib.sha256()
@@ -1282,10 +1299,21 @@ def tree_stamp():
     return h.hexdigest()[:24]
 
 
+def reader_stamp():
+    """The reader itself, as a stamp: this file's mtime and size. A new
+    one reads every entry again, because a parser here may have
+    changed. Any other file of spark's tree moving does not."""
+    try:
+        st = os.stat(os.path.join(REPO, "lib", "spark", "intake.py"))
+        return "%d %d" % (st.st_mtime_ns, st.st_size)
+    except OSError:
+        return "-"
+
+
 def _places(meta, env=True):
     progs = program_dirs(meta.get("path") or (), env)
     mans = man_dirs(progs, env)
-    return progs, mans, app_dirs()
+    return progs, mans, app_dirs(meta.get("app_dirs") or (), env)
 
 
 def stamps(meta=None):
@@ -1293,8 +1321,9 @@ def stamps(meta=None):
     program dirs, the man dirs (and their sections), the app dirs --
     each one's "mtime size" (or "-" when absent), and spark's tree. A
     cheap stat each; fingerprint() hashes it, changed() compares it.
-    Once a build recorded its dirs, those are the ones stamped, whatever
-    PATH and MANPATH the asker has: the login and the timer agree."""
+    Once a build recorded its dirs (meta's `path` and `app_dirs`), those
+    are the ones stamped, whatever PATH, MANPATH and XDG_DATA_DIRS the
+    asker has: the login and the timer agree."""
     meta = meta or {}
     progs, mans, apps = _places(meta, env=not meta.get("path"))
     paths = list(progs) + list(apps) + _db_paths()
@@ -2001,31 +2030,44 @@ class LocalStore(Store):
 def summary(root=None):
     """meta.json as the last build wrote it ({} when none): built, seconds,
     counts by kind, programs, manuals, apps, verbs, skipped, held,
-    partial, fingerprint, path."""
+    partial, pending, fingerprint, reader, path, app_dirs."""
     d = _load(os.path.join(_know_dir(root), META_FILE), 1 << 20)
     return d if isinstance(d, dict) else {}
 
 
 def status():
     """(counts by kind, built epoch or None, stale bool, skipped count) --
-    what the check row and the bootstrap row say. Stale: never built, a
-    build cut short, or the machine's fingerprint moved since."""
+    what the check row says. Stale is `not fresh()`, the one question
+    the bootstrap row asks too: never built, an older index shape, or
+    the machine's fingerprint moved since. What a build left for the
+    next one is not stale: waiting() says it."""
     meta = summary()
-    built = meta.get("built")
     counts = dict(meta.get("counts") or {})
-    stale = (not built or bool(meta.get("partial")) or meta.get("v") != INDEX_V
-             or meta.get("fingerprint") != fingerprint(meta))
-    return counts, built, bool(stale), int(meta.get("skipped") or 0)
+    return counts, meta.get("built"), not fresh(meta), int(meta.get("skipped") or 0)
 
 
-def fresh():
-    """Built, and the machine's fingerprint unchanged since: what the
-    bootstrap row asks. --help runs a build left to the timer (meta's
-    `pending`) do not make it stale there, so a converged machine stays
-    `Nothing to do`."""
-    meta = summary()
+def fresh(meta=None):
+    """Built, in this index shape, and the machine's fingerprint
+    unchanged since: what the bootstrap row asks, and what status()
+    calls not stale. What a build left for the next one (waiting()) does
+    not make it stale, so a converged machine stays `Nothing to do`."""
+    meta = summary() if meta is None else meta
     return (bool(meta.get("built")) and meta.get("v") == INDEX_V
             and meta.get("fingerprint") == fingerprint(meta))
+
+
+def waiting(meta=None):
+    """(pending, partial): what the last build left for the next one.
+    `pending` counts the programs whose --help has not run yet. `partial`
+    is True for those, and for a build the deadline cut: a manual not
+    rendered, a spark verb whose -h did not come. The timer's next
+    refresh reads them; none of it makes the store stale."""
+    meta = summary() if meta is None else meta
+    try:
+        pending = max(0, int(meta.get("pending") or 0))
+    except (TypeError, ValueError):
+        pending = 0
+    return pending, bool(meta.get("partial"))
 
 
 def row_words(meta=None):
@@ -2073,7 +2115,9 @@ def _take_lock(root, wait):
 
 def refresh(deadline=None, wait=False):
     """Rebuild what changed since the last fingerprint, within `deadline`
-    seconds when given (BUILD_CAP at most); never raises. A refresh that
+    seconds when given (BUILD_CAP at most); never raises. With none, the
+    --help runs take HELP_BUILD_SECONDS; with one, HELP_PER_SLICE for
+    each 5 seconds of it. A refresh that
     finds the store's lock held returns at once (`wait` True -- bootstrap
     -- waits up to LOCK_WAIT). Nothing runs as root. Returns status()."""
     try:
@@ -2106,11 +2150,15 @@ class _Build:
         self.t0 = time.monotonic()
         budget = BUILD_CAP if deadline is None else max(0.0, min(float(deadline), BUILD_CAP))
         self.end = self.t0 + budget
-        # --help runs: HELP_PER_SLICE for each 5 seconds of a deadline, one
-        # slice's worth without one (bootstrap) -- the timer's refreshes
-        # run the rest, so a first build stays a few seconds
-        self.help_left = HELP_PER_SLICE * (max(1, int(-(-budget // SLICE))) if deadline is not None else 1)
+        # --help runs: HELP_PER_SLICE for each 5 seconds of a deadline
+        # (the timer's slice). Without one (bootstrap) they are not
+        # counted: they run for HELP_BUILD_SECONDS from the first of them
+        # (help_end, set in _read), and the timer runs what is left
+        self.help_left = HELP_PER_SLICE * max(1, int(-(-budget // SLICE))) if deadline is not None else None
+        self.help_end = self.end
         self.pending = 0
+        self.prev = {}
+        self.apps_dirs = []
         self.prev_meta = summary(root)
         self.docs = {}              # name -> {"key", "file", "kind", "source", "tf"}
         self.skipped = 0
@@ -2125,14 +2173,16 @@ class _Build:
     def run(self):
         tree = tree_stamp()
         prev = _load(os.path.join(self.root, DOCS_FILE), 32 << 20) or {}
-        if not isinstance(prev, dict) or self.prev_meta.get("tree") != tree \
+        if not isinstance(prev, dict) or self.prev_meta.get("reader") != reader_stamp() \
                 or self.prev_meta.get("v") != INDEX_V:
-            prev = {}               # a new spark tree, or index shape, reads everything again
+            prev = {}               # a new reader, or index shape, reads everything again
+        self.prev = prev            # a new tree alone: spark's verbs, keyed by it, and nothing else
         progs_dirs, man_roots, apps_dirs = _places(self.prev_meta)
+        self.apps_dirs = apps_dirs
         # stamped from exactly the dirs this build stores (fresh() asks the
         # same question later); read again at the end: a machine that moved
         # during the build is partial, so the next refresh reads it again
-        self.stamped = stamps({"path": progs_dirs})
+        self.stamped = stamps({"path": progs_dirs, "app_dirs": apps_dirs})
         fp = fingerprint(stamped=self.stamped)
         src = _sources()
         progs, self.skipped = scan_programs(progs_dirs) if "programs" in src else ({}, 0)
@@ -2337,6 +2387,8 @@ class _Build:
                 self._spark(key, spark_out, verbs)
         helps = [(name, key) + tuple(arg) for name, key, kind, arg in todo if kind == "help"]
         if helps:
+            if self.help_left is None:
+                self.help_end = min(self.end, time.monotonic() + HELP_BUILD_SECONDS)
             with ThreadPoolExecutor(max_workers=RENDERERS) as pool:
                 list(pool.map(lambda h: self._help(h[0], h[1], h[2], h[3], owners, h[4]), helps))
 
@@ -2376,16 +2428,18 @@ class _Build:
     def _help(self, name, key, prog, state, owners, app):
         """One program with no manual: its --help, contained, or its
         package's words. Every attempt is stamped (key): run again only
-        when the program changes -- or, past this slice's HELP_PER_SLICE
-        or the deadline, in the next refresh."""
+        when the program changes -- or, past this slice's HELP_PER_SLICE,
+        a build's HELP_BUILD_SECONDS or the deadline, in the next refresh
+        (counted in meta's `pending`)."""
         origin, summ = owners.of(prog.path, prog.real)
         if state != "ok":
             self._bare(name, key, prog, origin, summ, app, skipped=1)
             return
         with self.lock:
-            go = self.help_left > 0 and not self.late()
+            go = (self.help_left is None or self.help_left > 0) and time.monotonic() < self.help_end
             if go:
-                self.help_left -= 1
+                if self.help_left is not None:
+                    self.help_left -= 1
             else:
                 self.partial = True
                 self.pending += 1
@@ -2431,14 +2485,24 @@ class _Build:
     def _spark(self, key, out, verbs):
         subs, _v = spark_words()
         slots = spark_slots()
+        again = ["pending"] + key
+        short = False
         for verb in [None] + verbs:
             text = out.get(verb)
-            if text is None:
-                self.partial = True
+            if text is None:                    # past the deadline: the entry an earlier read made stays
+                self.partial = short = True
+                name = "spark" if verb is None else "spark " + verb
+                old = self.prev.get(name)
+                if old and old.get("key") in (key, again) and self._kept(old):
+                    self.docs[name] = old
                 continue
             clean = _Clean()
             name, what, synopsis, opts, lines = spark_entry(verb, clean(text), subs, slots)
             self._save(name, key, "spark", "tree", clean(what), synopsis, opts, lines, "spark", [], clean.held)
+        if short and "spark" in self.docs:
+            # the verbs ride the `spark` entry's one stamp: a key that never
+            # matches, so the next refresh reads the verbs that did not come
+            self.docs["spark"] = dict(self.docs["spark"], key=again)
 
     def _save(self, name, key, kind, source, what, synopsis, opts, lines, origin, stamp, held, skipped=0,
               commands=()):
@@ -2489,7 +2553,8 @@ class _Build:
 
     def _write_meta(self, fp, tree, dirs, programs):
         built = int(time.time())
-        if stamps({"path": [d for d in dirs if os.path.isabs(d)]}) != self.stamped:
+        path = [d for d in dirs if os.path.isabs(d)]
+        if stamps({"path": path, "app_dirs": self.apps_dirs}) != self.stamped:
             self.partial = True
         vals = list(self.docs.values())
         counts = {"program": sum(1 for d in vals if d["kind"] == "program"),
@@ -2502,8 +2567,8 @@ class _Build:
                 "apps": counts["app"], "verbs": counts["spark"], "executables": programs,
                 "skipped": self.skipped + sum(d.get("skipped", 0) for d in vals),
                 "held": sum(d.get("held", 0) for d in vals),
-                "partial": self.partial, "pending": self.pending, "path": [d for d in dirs if os.path.isabs(d)],
-                "stamps": self.stamped}
+                "partial": self.partial, "pending": self.pending, "reader": reader_stamp(),
+                "path": path, "app_dirs": list(self.apps_dirs), "stamps": self.stamped}
         _write(os.path.join(self.root, META_FILE), meta)
 
 
@@ -2519,19 +2584,25 @@ def _newest(path, n=3):
 # ------------------------------------------------------------ bootstrap
 def _main(argv):
     """`python3 -m spark.intake fresh` exits 0 when the store is fresh;
-    `build` refreshes it (waiting for the lock) and prints the row's
-    words."""
-    if argv[:1] == ["fresh"]:
-        if fresh():
-            return 0
-        for p in changed()[:20]:
-            print("changed since the build: %s%s" % (p, _newest(p)), file=sys.stderr)
-        return 1
+    `fresh whole` also wants nothing waiting (a client's question: no
+    timer reads on there); `build` refreshes it (waiting for the lock)
+    and prints the row's words."""
+    if argv[:1] == ["fresh"] and argv[1:] in ([], ["whole"]):
+        if not fresh():
+            for p in changed()[:20]:
+                print("changed since the build: %s%s" % (p, _newest(p)), file=sys.stderr)
+            return 1
+        pending, partial = waiting()
+        if argv[1:] and (pending or partial):
+            print("not whole yet: %s" % ("%d waiting their turn" % pending if pending else "still reading"),
+                  file=sys.stderr)
+            return 1
+        return 0
     if argv[:1] == ["build"]:
         refresh(wait=True)
         print(row_words())
         return 0
-    print("usage: python3 -m spark.intake fresh|build", file=sys.stderr)
+    print("usage: python3 -m spark.intake fresh [whole]|build", file=sys.stderr)
     return 2
 
 

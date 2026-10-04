@@ -2,57 +2,35 @@
 
 ## v1.82
 
-For a machine that is already yours: spark asks before it adds keys,
-uses a `llama-server` you already run, and says its terms first.
+Your prompt tells you when something breaks, and when it works again.
+`spark check --history` shows what changed and when.
 
-- `spark setup` asks before it adds its line to your rc file. It lists
-  the keys the line adds to your shell, what each replaces there, and
-  the 1 second your shell waits after Esc. A no is kept as
-  `SITE_KEYS=off`.
-  `--yes`, or no terminal, asks nothing, as before.
-- `spark keys`, new. It lists the keys spark added, what each does and
-  what it replaced. `spark keys ask Esc a` moves one, and `Alt-a` and
-  `Ctrl-g` work too. `spark keys ask none` leaves the key to your
-  shell. `spark keys reset` brings the defaults back. The names are
-  ask, recall, height, listen and stop.
-- `spark keys off` takes spark's line out of the rc file, and
-  `spark update` no longer puts it back. `spark keys on` adds it again.
-  An rc file that links into a git repository is left as it is, and
-  spark names the file.
-- The rc line also puts spark on your `PATH`. With the keys off,
-  spark's messages spell `~/.local/bin/spark` when it is not there.
-- `SPARK_OFF=1` in the environment starts one shell without the keys.
-  It is now in the docs.
-- Your own llama-server. `spark client URL` uses a `llama-server` you
-  already run, and `spark setup --engine URL` does it on a new install.
-  At a terminal, setup offers one it finds on `SPARK_PORT`. spark
-  downloads nothing for it. `--engine` refuses a spark machine's
-  address, and one that does not answer.
-- spark never stops a server it did not start. `spark client URL`,
-  `spark uninstall` and `spark serve off` end spark's own engine
-  alone. `spark client off` refuses while another server holds the
-  port.
-- `spark client URL --key-file FILE` names the file with the server's
-  key. A client no longer makes a key of its own.
-- A client of your own server keeps its threads and memory here, from
-  the first chat. A client of another spark machine still logs in
-  there.
-- `spark client`, `spark model`, `spark status`, `spark serve` and the
-  `peer` row of `spark check` say whose engine it is.
-- The context size comes from your server unless `SPARK_CTX` is set.
-  The chat names the model when the server gives it no alias.
-- Ollama is not supported in this version.
-- The notice. `get` and `spark setup` say three lines before anything
-  changes: spark is MIT licensed with no warranty, a model can be
-  wrong, and what you run or accept is your own risk.
-- At a terminal `spark setup` asks `go on? yes/NO:` once. A no changes
-  nothing. With `--yes`, `SPARK_YES=1` or no terminal it prints the
-  lines and goes on.
-- A machine already installed sees the lines once, at its next
-  `spark update`, with no question. `spark ver --credits` shows them
-  any time.
-- Fixed: `spark uninstall` left the spark line in an rc file that is a
-  symlink.
+- A warning at your prompt. When a `spark check` row turns worse, your
+  next prompt says so on the line spark writes, with the fix: `! serve:
+  nothing answers at 127.0.0.1:8080 -- spark serve on`. When it heals:
+  `* serve: ok again, after 21 min`. Each is said once in each shell.
+  A shell you open later shows a warning that still stands. `spark off`
+  keeps both quiet. After `spark awaken` the face is alarmed, then
+  pleased.
+- `spark check --history` lists every change, newest first, and `spark
+  check --history NAME` those of one row. It keeps the row's name, its
+  state and the time, never its text. Changes are kept `SPARK_HISTORY`
+  days, none when it is `off`. `spark clear --history` forgets them.
+- `spark check NAME` no longer hides the other rows. Before, the bar
+  and the page showed only the rows you named, for up to 5 minutes.
+- The knowledge row asked for `spark update`, and the update did
+  nothing. There were two faults. The row warned while programs still
+  waited to be read, which is normal after an install. That is ok now,
+  and the row says how many wait: `37 waiting their turn`. On Void the
+  5-minute check took itself for a person's run, so it never read
+  them. It does now.
+- The knowledge row warns only when this machine changed since the
+  last read, and `spark update` heals it. An update no longer reads
+  every program again. On a machine that uses another machine's model,
+  `spark update` reads until nothing waits.
+- Small fixes. A pasted answer shows the pleased face. `spark awaken`
+  shows a moving bar while a model loads. In zsh, `Ctrl-C` at a prompt
+  no longer leaves a face on the screen. In bash it still can.
 
 ## v1.81
 

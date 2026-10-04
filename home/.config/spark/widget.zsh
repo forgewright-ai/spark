@@ -45,7 +45,17 @@
 # row's height, or starship draws it. At an empty line it blinks, sleeps
 # after five minutes without a key and wakes on the next one -- a `sched`
 # timer, builtins only, nothing in the background. The face says nothing.
-# With the face off every byte is what it was.
+# With the face off every byte is what it was. Ctrl-C at a prompt leaves
+# no face behind either: the next prompt erases the one still standing.
+#
+# The alert file ($STATE_DIR/alert, written by `spark check`): when a
+# check row turns worse, the next prompt says so in spark's row, once in
+# each pane -- `! serve: nothing answers -- spark serve on` -- and once
+# more when it heals, where the warning was shown. Awake or not; the
+# face only where it is on. A failure line goes first and the warning
+# waits one prompt; `spark off` keeps it for after `spark on`. The file
+# is read line by line when it changes, never sourced, and no pane
+# writes it.
 
 [[ -o interactive ]] || return 0
 [[ -n ${_SPARK_WIDGET_LOADED:-} ]] && return 0
@@ -205,6 +215,70 @@ _spark_look_check() {
     print -r -- "zsh $$ $_spark_born hook" > "$m" 2>/dev/null
 }
 _spark_look_read
+
+# --- the alert: a check row turned worse, said once in this pane ------------
+# $SPARK_DIR/alert is `spark check`'s, rewritten whole by a rename: at
+# most 8 lines, oldest first, `<seq> <epoch> <mark> <mood> <row> <text>`.
+# The prompt hook pays one -nt test for it, against the same marker the
+# look file uses, taken before _spark_look_check may write the marker
+# anew; _spark_al_due carries the answer, so neither file hides the
+# other. It starts set: a new shell reads the standing file once. It
+# stays set while a line still waits (a note took this prompt, `spark
+# off`, a second line), and the marker is then left as it is. Once
+# nothing waits the marker is written anew -- after one more look at the
+# look file, should it have changed meanwhile.
+# A line is read with `read -r`, never sourced or eval'd, and dropped
+# unless its seq is 1 to 12 digits, its mark ! or *, its row a-z, and its
+# text printable ASCII, 200 characters at most. The mark and the mood
+# shown are this widget's own, chosen by the file's mark; the file's
+# mood and epoch are not used. Said once per pane, in memory alone:
+# _spark_al_seen is the highest seq shown, _spark_al_rows the rows whose
+# warning this pane showed. A ! line shows when its seq is past the seen
+# one (or equal to it for a row not shown yet: two rows of one run). A *
+# line shows only for a row in the list, and takes it off: a pane that
+# never showed the warning says no heal. One line a prompt, through
+# _spark_note: the width, the height and the face are the row's own.
+typeset -g _spark_al_due=1 _spark_al_rows=' '
+typeset -gi _spark_al_seen=0
+_spark_alert() {
+    local f=$SPARK_DIR/alert m=$SPARK_DIR/widgets/$$ s e k mood row text shown='' more='' n=0
+    [[ -n $_spark_al_due ]] || return 0
+    [[ -z $_spark_pending ]] || return 0  # a note took this prompt: the warning waits one
+    [[ ! -e $SPARK_DIR/off ]] || return 0 # spark off: silent, and nothing is marked seen
+    if [[ -r $f ]]; then
+        while (( n++ < 8 )) && { IFS=' ' read -r s e k mood row text || [[ -n $s ]]; }; do
+            [[ $s == [1-9]* && -z ${s//[0-9]/} && ${#s} -le 12 ]] || continue
+            [[ -n $row && -z ${row//[a-z]/} && ${#row} -le 32 ]] || continue
+            [[ -n $text && ${#text} -le 200 && $text != *[[:cntrl:]]* && $text != *[![:ascii:]]* ]] || continue
+            if [[ $k == "$_spark_w" ]]; then
+                (( s > _spark_al_seen )) || { (( s == _spark_al_seen )) && [[ $_spark_al_rows != *" $row "* ]]; } || continue
+            elif [[ $k == "$_spark_h" ]]; then
+                if [[ $_spark_al_rows != *" $row "* ]]; then
+                    # a heal this pane has no warning for: passed over, and seen
+                    [[ -z $shown ]] && (( s > _spark_al_seen )) && _spark_al_seen=$s
+                    continue
+                fi
+            else
+                continue
+            fi
+            if [[ -n $shown ]]; then more=1; break; fi
+            shown=1
+            (( s > _spark_al_seen )) && _spark_al_seen=$s
+            if [[ $k == "$_spark_w" ]]; then
+                [[ $_spark_al_rows == *" $row "* ]] || _spark_al_rows+="$row "
+                _spark_note "$_spark_w $text" alarmed
+            else
+                _spark_al_rows=${_spark_al_rows/" $row "/ }
+                _spark_note "$_spark_h $text" pleased
+            fi
+        done < "$f"
+    fi
+    [[ -z $more ]] || return 0            # one more line waits: the next prompt reads again
+    _spark_al_due=''
+    [[ -e $f ]] || return 0
+    [[ $SPARK_DIR/look -nt $m ]] && _spark_look_read
+    print -r -- "zsh $$ $_spark_born hook" > "$m" 2>/dev/null
+}
 
 # --- is this line a question? -----------------------------------------------
 _spark_is_question() {
@@ -455,7 +529,7 @@ typeset -g _spark_pending='' _spark_pending_mood='' _spark_fresh=''
 _spark_note() { _spark_pending=$1 _spark_pending_mood=${2:-}; }
 _spark_line_init() {
     local fresh=$_spark_fresh
-    _spark_fresh=''
+    _spark_fresh='' _spark_bl=$BUFFERLINES
     (( ++_spark_gen ))                    # a tick from an earlier line is stale
     if [[ -n $_spark_pending ]]; then
         _spark_mood=$_spark_pending_mood
@@ -561,9 +635,11 @@ spark-tick() {
     _spark_arm
 }
 zle -N spark-tick
-# a key came: the one variable this tests is _spark_asleep
+# a key came: the one variable this tests is _spark_asleep. It also
+# keeps how many rows the line takes (_spark_bl), for a prompt that ends
+# with no Enter.
 _spark_keyed_hook() {
-    _spark_keyed=${EPOCHSECONDS:-${SECONDS%.*}}
+    _spark_keyed=${EPOCHSECONDS:-${SECONDS%.*}} _spark_bl=$BUFFERLINES
     [[ -n $_spark_asleep ]] || return 0
     _spark_asleep='' _spark_zz=''
     [[ -n $_spark_faced && -z $_spark_hinted && -n $_spark_fc_waking ]] || return 0
@@ -572,7 +648,26 @@ _spark_keyed_hook() {
     _spark_arm 1
 }
 zle -N _spark_keyed_hook
-[[ -n $_spark_can_tick ]] && add-zle-hook-widget line-pre-redraw _spark_keyed_hook
+add-zle-hook-widget line-pre-redraw _spark_keyed_hook
+# The resting face and a prompt that ends some other way than spark's
+# Enter. A line accepted by a widget that is not spark's ends in
+# zle-line-finish, with the cursor still in the line: the face goes
+# there, as at Enter. Ctrl-C ends in no hook at all (zsh 5.9:
+# zle-line-finish does not fire). A TRAPINT function would see it, but
+# with one that returns 128+INT zsh runs no precmd after a Ctrl-C at
+# the prompt, the user's own hooks included: spark defines none. So
+# the face is still marked when the next prompt's hook runs
+# (_spark_failed), and it erases it from there: the line took one row
+# (_spark_bl) and zsh ended it with one newline, so the face stands its
+# height and one row up. A line of more rows keeps its face.
+typeset -gi _spark_bl=1
+_spark_line_finish() {
+    [[ -n $_spark_faced ]] || return 0
+    (( BUFFERLINES == 1 )) && _spark_unface
+    _spark_faced=''
+}
+zle -N _spark_line_finish
+add-zle-hook-widget line-finish _spark_line_finish
 # Ctrl-L keeps whatever it was, and the tick stops: the screen is new
 _spark_orig_clear=${_spark_was[Ctrl-l]:-}
 [[ -z $_spark_orig_clear || $_spark_orig_clear == (undefined-key|spark-clear-screen|\"*) ]] && _spark_orig_clear=clear-screen
@@ -594,12 +689,19 @@ _spark_capture() {
 typeset -g _SPARK_LONG=30 _spark_t0=''
 
 # $? is read first and handed back last, so a later precmd (a git
-# prompt, starship) still sees the command's own status. The look file is
-# checked first (one stat while it has not changed); then the failure
-# moment.
+# prompt, starship) still sees the command's own status. A resting face
+# the last prompt left standing (Ctrl-C) is erased first. Then the alert
+# file's one test, the look file (one stat while it has not changed),
+# the failure moment, and the alert in a row no note took.
 _spark_failed() {
     local rc=$? took='' d
+    if [[ -n $_spark_faced ]]; then       # no Enter ended the last prompt: its face still stands
+        _spark_faced=''
+        (( _spark_bl == 1 && _spark_height + 1 < ${LINES:-0} )) \
+            && print -n -- $'\e7\e['"$(( _spark_height + 1 ))"$'A\r\e[2K\e8'
+    fi
     _spark_fresh=1                        # a prompt is coming: the resting face may go above it
+    [[ -n $_spark_al_due || $SPARK_DIR/alert -nt $SPARK_DIR/widgets/$$ ]] && _spark_al_due=1
     _spark_look_check
     if [[ -n $_spark_t0 && $_spark_lk_awake == yes ]]; then
         d=$(( ${EPOCHSECONDS:-${SECONDS%.*}} - _spark_t0 ))
@@ -609,6 +711,7 @@ _spark_failed() {
     fi
     _spark_t0=''
     _spark_failure $rc "$took"
+    _spark_alert
     return $rc
 }
 
@@ -932,7 +1035,7 @@ spark-bracketed-paste() {
         text=${text%%$'\n'*}
         case $kind in
             danger) _spark_mood=alarmed; _spark_say "$_spark_w $text -- pasted, not run" ;;
-            answer) _spark_say "$_spark_h $text -- pasted, not run" ;;
+            answer) _spark_mood=pleased; _spark_say "$_spark_h $text -- pasted, not run" ;;
         esac
         zle -R
     fi

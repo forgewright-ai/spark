@@ -27,6 +27,12 @@ run in the clean environment, each SPARK_KNOWLEDGE_* seam said once on
 stderr, the services source (runit, systemd, launchd under the
 SPARK_KNOWLEDGE_SERVICES root) and its evidence, and -- where probe()
 says this machine has a sandbox -- the real containment of a --help run.
+Since v1.81: one question (status()'s stale is `not fresh()` in every
+state), the programs waiting their turn (waiting(): 16 a 5-second slice,
+ok and never stale), a build with no deadline not capped at 16, a moved
+spark tree keeping every program entry while a changed reader reads
+again, a spark verb the deadline cut read by the next refresh, and the
+app dirs remembered so two XDG_DATA_DIRS give one fingerprint.
 """
 import fcntl
 import gzip
@@ -603,6 +609,184 @@ def test_help_contained():
         sandbox.contained, sandbox.probe = saved
 
 
+class _Env:
+    """os.environ with these keys set (None: unset), put back on exit."""
+
+    def __init__(self, **kv):
+        self.kv = kv
+
+    def __enter__(self):
+        self.keep = {k: os.environ.get(k) for k in self.kv}
+        for k, v in self.kv.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+    def __exit__(self, *a):
+        for k, v in self.keep.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+def _agree():
+    """status()'s stale is `not fresh()`: the row and bootstrap ask one question."""
+    return intake.status()[2] == (not intake.fresh())
+
+
+def _asks(env, *words):
+    return subprocess.run([sys.executable, "-m", "spark.intake", "fresh"] + list(words),
+                          env=dict(env, PYTHONPATH=LIB), capture_output=True, text=True, timeout=60).returncode
+
+
+def test_waiting():
+    """v1.81: programs with no manual wait their turn, and that is not
+    stale; the tree moving keeps their entries; the reader moving reads
+    them again; a build with no deadline is not capped at 16."""
+    tbin, store = os.path.join(T, "turn", "bin"), os.path.join(T, "store-turn")
+    empty = os.path.join(T, "turn", "none")
+    os.makedirs(empty)
+    for i in range(20):
+        prog(os.path.join(tbin, "p%02d" % i))
+    calls = []
+
+    def fake(argv, **kw):
+        calls.append(os.path.basename(argv[0]))
+        return 0, "usage: %s [-q]\n  -q  quiet\n" % os.path.basename(argv[0])
+    saved = (sandbox.contained, sandbox.probe, intake.tree_stamp, intake.reader_stamp, intake.HELP_BUILD_SECONDS)
+    sandbox.contained = fake
+    sandbox.probe = lambda fresh=False, platform=None: (True, "the test")
+    try:
+        with _Env(SPARK_KNOWLEDGE_PATH=tbin, SPARK_KNOWLEDGE_MANPATH=empty, SPARK_KNOWLEDGE_APPS=empty,
+                  SPARK_KNOWLEDGE_DIR=store, SPARK_KNOWLEDGE_SOURCES="programs"):
+            env = dict(os.environ)
+            check("one question: never built is stale, and not fresh",
+                  _agree() and intake.status()[2] and intake.waiting() == (0, False))
+            intake.refresh(deadline=5)
+            meta = intake.summary()
+            check("a 5-second slice runs 16 --help, and 4 of 20 programs wait their turn",
+                  len(calls) == intake.HELP_PER_SLICE == 16 and intake.waiting() == (4, True)
+                  and meta.get("pending") == 4 and meta.get("partial") is True, (len(calls), intake.waiting()))
+            check("waiting is not stale: fresh() is true and status() agrees",
+                  intake.fresh() and not intake.status()[2] and _agree(), intake.status())
+            check("`spark.intake fresh` exits 0 with programs waiting; `fresh whole` exits 1 (a client's question)",
+                  _asks(env) == 0 and _asks(env, "whole") == 1)
+            check("a waiting program is in the store meanwhile, by its name",
+                  all(intake.LocalStore().entry("p%02d" % i) is not None for i in range(20)))
+            intake.refresh(deadline=5)
+            check("the next slice runs the 4 left, each program once, and nothing waits",
+                  len(calls) == 20 and len(set(calls)) == 20 and intake.waiting() == (0, False) and _agree()
+                  and intake.fresh(), (len(calls), intake.waiting()))
+            check("`fresh whole` exits 0 once nothing waits", _asks(env, "whole") == 0)
+            # spark's tree moved (an update), the reader did not: stale, and
+            # the build keeps every program entry -- no --help runs again
+            intake.tree_stamp = lambda: "a tree that moved"
+            check("one question: a moved spark tree is stale, and not fresh", intake.status()[2] and _agree())
+            intake.refresh(deadline=5)
+            check("a moved tree with the same reader keeps the program entries: zero --help runs",
+                  len(calls) == 20 and intake.fresh() and _agree() and intake.waiting() == (0, False)
+                  and intake.summary().get("counts", {}).get("program") == 20, len(calls))
+            # the reader itself changed: every entry is read again, and a
+            # build with no deadline is not capped at 16
+            intake.reader_stamp = lambda: "a reader that changed"
+            intake.refresh()
+            check("a changed reader reads every program again, all 20 in one build with no deadline",
+                  len(calls) == 40 and intake.waiting() == (0, False)
+                  and intake.summary().get("reader") == "a reader that changed", (len(calls), intake.waiting()))
+            intake.refresh()
+            check("the reader's stamp is kept: the next build runs nothing", len(calls) == 40, len(calls))
+            # a PATH change
+            time.sleep(0.02)
+            prog(os.path.join(tbin, "p20"))
+            check("one question: a PATH dir that gained a program is stale, and not fresh",
+                  intake.status()[2] and _agree())
+            # the no-deadline build's --help runs are bounded by seconds, not a count
+            shutil.rmtree(store)
+            intake.HELP_BUILD_SECONDS = 0
+            intake.refresh()
+            check("a build with no deadline stops its --help runs at HELP_BUILD_SECONDS: all 21 wait, fresh",
+                  len(calls) == 40 and intake.waiting() == (21, True) and intake.fresh() and _agree(),
+                  (len(calls), intake.waiting()))
+            intake.HELP_BUILD_SECONDS = saved[4]
+            intake.refresh()
+            check("the next build with no deadline runs all 21, past 16", len(calls) == 61
+                  and intake.waiting() == (0, False), (len(calls), intake.waiting()))
+    finally:
+        sandbox.contained, sandbox.probe, intake.tree_stamp, intake.reader_stamp, intake.HELP_BUILD_SECONDS = saved
+
+
+def test_spark_cut():
+    """v1.81: a spark verb whose -h the deadline cut is read by the next
+    refresh, and the verbs already read are kept."""
+    store = os.path.join(T, "store-cut")
+    _subs, verbs = intake.spark_words()
+    verbs = [v for v in verbs if intake.NAME_SHAPE.match(v) and v != "help"]
+    asked = []
+    state = {"cut": 6}
+
+    def fake_help(verb, scratch):
+        asked.append(verb)
+        return "spark%s -- words for it\n" % ("" if verb is None else " " + verb)
+    saved = (intake.spark_help, intake._Build.late)
+    intake.spark_help = fake_help
+    intake._Build.late = lambda self: len(asked) >= state["cut"]
+    try:
+        with _Env(SPARK_KNOWLEDGE_DIR=store, SPARK_KNOWLEDGE_SOURCES="spark"):
+            intake.refresh(deadline=5)
+            got = intake.summary().get("verbs", 0)
+            check("a build the deadline cut: some spark verbs read, the rest still to read, fresh",
+                  0 < got < len(verbs) and intake.waiting() == (0, True) and intake.fresh() and _agree(),
+                  (got, len(verbs), intake.waiting()))
+            first = len(asked)
+            state["cut"] = 10 ** 9
+            intake.refresh(deadline=5)
+            check("the next refresh reads the verbs that did not come, and nothing is left",
+                  intake.summary().get("verbs") == len(verbs) and intake.waiting() == (0, False) and len(asked) > first,
+                  (intake.summary().get("verbs"), len(verbs), intake.waiting()))
+            n = len(asked)
+            intake.refresh(deadline=5)
+            check("whole, the verbs ride the tree's stamp again: no -h runs", len(asked) == n, len(asked) - n)
+    finally:
+        intake.spark_help, intake._Build.late = saved
+
+
+def test_app_dirs():
+    """v1.81: the app dirs a build saw are remembered (meta's app_dirs),
+    so a timer and a login shell with different XDG_DATA_DIRS stamp the
+    same ones."""
+    store = os.path.join(T, "store-xdg")
+    one, two, three = (os.path.join(T, "xdg", n) for n in ("one", "two", "three"))
+    for d in (one, two, three):
+        os.makedirs(os.path.join(d, "applications"))
+    with _Env(SPARK_KNOWLEDGE_APPS=None, SPARK_KNOWLEDGE_DIR=store, SPARK_KNOWLEDGE_SOURCES="programs",
+              XDG_DATA_DIRS=one, XDG_DATA_HOME=os.environ.get("XDG_DATA_HOME")):
+        build()
+        meta = intake.summary()
+        fp = meta.get("fingerprint")
+        check("a build remembers its app dirs (meta's app_dirs), beside the count in meta's apps",
+              os.path.join(one, "applications") in (meta.get("app_dirs") or []) and meta.get("apps") == 0,
+              meta.get("app_dirs"))
+        os.environ["XDG_DATA_DIRS"] = two
+        os.environ["XDG_DATA_HOME"] = three
+        st = intake.stamps(intake.summary())
+        check("two different XDG_DATA_DIRS give the same fingerprint after a build",
+              intake.fingerprint(intake.summary()) == fp and intake.fresh() and _agree()
+              and os.path.join(one, "applications") in st and os.path.join(two, "applications") not in st
+              and os.path.join(three, "applications") not in st, intake.changed())
+        time.sleep(0.02)
+        write(os.path.join(one, "applications", "new.desktop"), "[Desktop Entry]\nName=New\nExec=new\n")
+        check("a remembered app dir that gains an app is stale, whatever XDG_DATA_DIRS says now",
+              not intake.fresh() and _agree() and os.path.join(one, "applications") in intake.changed(),
+              intake.changed())
+        build()
+        dirs = intake.summary().get("app_dirs") or []
+        check("the next build keeps the remembered dir and adds this environment's",
+              os.path.join(one, "applications") in dirs and os.path.join(two, "applications") in dirs
+              and intake.fresh(), dirs)
+
+
 def test_lock():
     fd = os.open(os.path.join(STORE, ".lock"), os.O_RDWR | os.O_CREAT, 0o600)
     fcntl.flock(fd, fcntl.LOCK_EX)
@@ -926,7 +1110,8 @@ def test_services():
 
 def main():
     fixture()
-    for t in (test_words, test_parsers, test_commands, test_owners, test_build, test_fingerprint, test_help_contained, test_lock,
+    for t in (test_words, test_parsers, test_commands, test_owners, test_build, test_fingerprint, test_help_contained, test_waiting,
+              test_spark_cut, test_app_dirs, test_lock,
               test_missing_store, test_spark_and_row, test_real_contained, test_includes, test_owners_clean,
               test_seam_banner, test_services):
         try:

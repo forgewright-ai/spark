@@ -27,7 +27,10 @@
 # (v1.80): no doc but the CHANGELOG names a removed voice character,
 # CLAUDE.md's voice file entry holds the keys voice.mint writes, both
 # widgets read FACE_IDLE, and grammar rule 6 names every kind in
-# look.PROGRESS; one test list (v1.79): every
+# look.PROGRESS; the prompt warns (v1.82): every flag of `spark check`
+# completes, the docs name `spark check --history`, the state files and
+# state/alert, and bootstrap's knowledge row asks before it builds;
+# one test list (v1.79): every
 # tests/ file is run by tests/gate.sh or named in NOT_IN_GATE, and the
 # hooks and the workflows name no test file themselves.
 # Hermetic, stdlib, fast.
@@ -507,7 +510,7 @@ def spoken():
 
 
 def shell_keys():
-    """`spark keys` (v1.82) as the tree holds it: the names and default
+    """`spark keys` (v1.83) as the tree holds it: the names and default
     keys of keys.NAMES are the two widgets' own, every name is in INSTALL
     and in the verb's usage and both completion files, the verb is in the
     cheatsheet, SITE_KEYS is a key of config, site.env.example, env.sh,
@@ -639,6 +642,70 @@ def presence():
         check("`%s`" % kind in rule, "CLAUDE.md's grammar rule 6 names the progress kind %s (look.PROGRESS)" % kind)
     for step in sorted(set(look.STEPS.values())):
         check("%.2f" % step in rule, "CLAUDE.md's grammar rule 6 states the pace %.2f (look.STEPS)" % step)
+
+
+COMPLETIONS = ("home/.config/spark/completion.bash", "home/.config/spark/completion.zsh")
+# v1.82: words that named what the code no longer does
+GONE_WORDS = ("TRAPINT", "new programs missing")
+
+
+def warns():
+    """v1.82, the prompt warns and the check remembers, as the tree holds
+    them: every --flag of check.USAGE is in both completion files; the
+    cheatsheet and INSTALL name `spark check --history`, and help's line
+    for `spark clear --history` names it too; CLAUDE.md's runtime paths
+    name the three files the merge writes beside check.json, by the
+    names in lib/spark/__init__.py; AGENTS.md's hook rule names
+    state/alert, and neither widget sources or writes that file;
+    bootstrap's knowledge row asks `fresh` (`fresh whole` on a client)
+    and then runs `build`; the knowledge row's remedy is spark update;
+    no doc names a word that is gone."""
+    import spark
+    from spark import check as checkmod, cli
+    flags = sorted(set(re.findall(r"(?m)^  spark check (--[a-z]+)", checkmod.USAGE)))
+    check(len(flags) > 1, "check.USAGE names its flags (%s)" % " ".join(flags))
+    for f in COMPLETIONS:
+        m = re.search(r'(?m)^\s*check\)\s+(?:words="([^"]*)"|comp=\(([^)]*)\))', read(f))
+        words = (m.group(1) or m.group(2) or "").split() if m else []
+        lost = [x for x in flags if x not in words]
+        check(bool(words) and not lost, "%s completes every flag of spark check%s"
+              % (f, "" if not lost else " (lacks %s)" % " ".join(lost)))
+    check("--history" in flags, "check.USAGE names --history")
+    for name in ("docs/CHEATSHEET.txt", "docs/INSTALL.md"):
+        check("spark check --history" in " ".join(read(name).split()), "%s names spark check --history" % name)
+    check("spark check --history" in " ".join(cli.CLEAR_USAGE.split()),
+          "cli.CLEAR_USAGE says spark clear --history drops what spark check --history shows")
+    claude = read("CLAUDE.md")
+    m = re.search(r"(?ms)^State is `~/\.local/state/spark/`.*?^Data is ", claude)
+    paths = m.group(0) if m else ""
+    check(bool(paths), "CLAUDE.md has the runtime paths of the state directory")
+    for const in ("CHECK_JSON", "CHECK_LOCK", "CHECK_HISTORY", "ALERT_FILE"):
+        base = os.path.basename(getattr(spark, const, "") or "?")
+        check("`%s`" % base in paths, "CLAUDE.md's runtime paths name %s (spark.%s)" % (base, const))
+    alert = "state/" + os.path.basename(spark.ALERT_FILE)
+    check("`%s`" % alert in read("AGENTS.md"), "AGENTS.md names %s among the hook's reads" % alert)
+    for f in WIDGETS:
+        src = "\n".join(line for line in read(f).split("\n") if not line.lstrip().startswith("#"))
+        check(re.search(r"\$SPARK_DIR/alert\b", src) is not None, "%s reads the alert file" % f)
+        check(re.search(r"(?:^|[;&|]\s*|\s)(?:\.|source|eval)\s+[^\n]*/alert\b", src) is None
+              and re.search(r">>?\s*\"?\$(?:f|SPARK_DIR/alert)\b", src) is None,
+              "%s never sources and never writes the alert file" % f)
+    # bootstrap: the question first, the build only when it says no
+    boot = read("bootstrap.sh")
+    m = re.search(r"(?ms)^knowledge_fresh\(\) \{\n(.*?)^\}\n(.*?)^fi$", boot)
+    body, row = (m.group(1), m.group(2)) if m else ("", "")
+    check("knowledge fresh whole" in body and re.search(r"else knowledge fresh;", body) is not None,
+          "bootstrap.sh's knowledge_fresh asks `fresh`, and `fresh whole` on a client")
+    ask, build = row.find("if knowledge_fresh"), row.find("knowledge build")
+    check(0 <= ask < build, "bootstrap.sh's knowledge row asks knowledge_fresh, then runs `knowledge build`")
+    src = read(os.path.join("lib", "spark", "check.py"))
+    m = re.search(r"(?ms)^def row_knowledge\(ctx\):(.*?)^(?:def |@row)", src)
+    check(m is not None and re.search(r'fix = "spark update"', m.group(1)) is not None,
+          "the knowledge row's remedy is spark update, the command that runs bootstrap's row")
+    for doc in ALL_DOCS:
+        text = " ".join(read(doc).split())
+        for word in GONE_WORDS:
+            check(word not in text, "%s does not say '%s'" % (doc, word))
 
 
 def main():
@@ -963,6 +1030,8 @@ def main():
     shell_keys()
     # v1.80: a plain voice, the face's presence, the progress kinds
     presence()
+    # v1.82: the prompt warns, the check remembers, the knowledge row
+    warns()
     # the voice's mechanical half, and the two nouns in what spark prints
     voice()
     measures()

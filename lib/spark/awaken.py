@@ -139,7 +139,7 @@ def _wake(cfg):
         if e.kind != "loading":
             return None, e.hint
     expected = engine.last_load(engine.model_file(cfg, "ember") or engine.model_file(cfg))
-    bar = textmod.Estimate("waking", expected) if expected else textmod.Busy(sys.stderr)
+    bar = textmod.Estimate("waking", expected) if expected else textmod.Busy(sys.stderr, kind="swell")
     bar.start()
     t0 = time.time()
     try:
