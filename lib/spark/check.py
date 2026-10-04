@@ -1528,6 +1528,13 @@ ALERT_CHARS = 160           # a line's text, after cleaning
 ALERT_REMEDY = 90           # a remedy longer than this is not said: `spark check ROW` shows it whole
 # recorded, never said: both turn warn when the last shell closes
 ALERT_QUIET = ("prompt", "failure")
+# Rows that are red for a moment whenever a server starts or a model
+# loads: after spark update, spark serve on, spark model NAME, a reboot.
+# Their turn for the worse is held, and said only if the row is still red
+# ALERT_SETTLE_SECONDS later. One that heals inside that time is never
+# said. The history records both changes at once, as for any row.
+ALERT_SETTLE = ("serve", "forge", "ember", "peer")
+ALERT_SETTLE_SECONDS = 180
 _ALERT_ROW = re.compile(r"[a-z]+\Z")
 _ALERT_NUM = re.compile(r"[0-9]{1,12}\Z")
 _ALERT_KINDS = {"!": "alarmed", "*": "pleased"}
@@ -1634,6 +1641,7 @@ def _merge(ctx, rows, full):
     old = _stored(prev) if prev else {}
     merged = {} if full else dict(old)
     changes = []            # (name, from, to, red seconds or None, the Row)
+    said, late = [], []     # the changes the prompt hears now; held ones whose time came
     for r in rows:
         was = old.get(r.name)
         # observed after this run started: it knows better. An `at` ahead
@@ -1651,11 +1659,24 @@ def _merge(ctx, rows, full):
         if SEVERITY[r.status]:
             e["red"] = red_at
         merged[r.name] = e
+        # a settling row's held turn for the worse (ALERT_SETTLE): kept
+        # while the row stays red, said once it has stayed red long enough
+        held = _int(was.get("held")) if was is not None else 0
+        if held and SEVERITY[r.status]:
+            if now - held >= ALERT_SETTLE_SECONDS:
+                late.append((r.name, OK, r.status, None, r))
+            else:
+                e["held"] = held
         if was is None or same:
             continue                    # a row never seen is the baseline
         a, b = SEVERITY[was["status"]], SEVERITY[r.status]
         if a or b:                      # ok <-> na is no change
-            changes.append((r.name, was["status"], r.status, max(0, now - red_at) if a and not b else None, r))
+            change = (r.name, was["status"], r.status, max(0, now - red_at) if a and not b else None, r)
+            changes.append(change)
+            if r.name in ALERT_SETTLE and not a and b:
+                e["held"] = now         # red just now: wait and see
+            elif not held:
+                said.append(change)     # a held row's later changes are not said: its break never was
     if full:
         out = list(merged.values())
     else:
@@ -1678,7 +1699,7 @@ def _merge(ctx, rows, full):
     except OSError:
         log_exc("check history")
     try:
-        _alert_update(changes, set(merged), now, full)
+        _alert_update(said + late, set(merged), now, full)
     except OSError:
         log_exc("check alert")
     vault.write_private(CHECK_JSON, json.dumps(snap).encode("utf-8"))

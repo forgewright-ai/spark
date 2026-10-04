@@ -661,9 +661,11 @@ When a row turns worse, your next prompt says so on the line spark
 writes, with the fix: `! serve: nothing answers at 127.0.0.1:8080 --
 spark serve on`. When it heals, the prompt says that too: `* serve: ok
 again, after 21 min`. Each is said once in each shell, and `spark off`
-keeps both quiet. `spark check --history` lists the changes, newest
-first, and `spark check --history NAME` those of one row. They are
-kept `SPARK_HISTORY` days.
+keeps both quiet. The engine and the page are red for a moment after an
+update or a restart, while the model loads. The prompt says so only when
+they are still red 3 minutes later. `spark check --history` lists the
+changes, newest first, and `spark check --history NAME` those of one
+row. They are kept `SPARK_HISTORY` days.
 
 When something stops working:
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.84
+
+- No false alarm after an update. The engine and the page are red for
+  a moment while they restart and the model loads. Your prompt now
+  says so only when they are still red 3 minutes later. `spark check
+  --history` still lists the change.
+
 ## v1.83
 
 For a machine that is already yours: spark asks before it adds keys,

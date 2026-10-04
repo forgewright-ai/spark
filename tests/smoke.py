@@ -4393,6 +4393,7 @@ def check_history_cases(t):
     paths = ("CHECK_JSON", "CHECK_LOCK", "CHECK_HISTORY", "ALERT_FILE")
     saved = {k: getattr(_c, k) for k in paths}
     saved_bar, saved_time, saved_wait = _bar.CHECK_JSON, _c.time, _c.LOCK_WAIT
+    saved_settle = _c.ALERT_SETTLE
     clock = _Clock()
     base = tempfile.mkdtemp(prefix="spark-check-history-")
     where = {"n": 0, "dir": ""}
@@ -4445,6 +4446,8 @@ def check_history_cases(t):
     shape = re.compile(r"[0-9]{1,12} [0-9]{1,12} (! alarmed|\* pleased) [a-z]+ [ -~]{1,160}\Z")
     try:
         _c.time = clock
+        settle = _c.ALERT_SETTLE
+        _c.ALERT_SETTLE = ()            # the cases below use serve as any row; the settling rows have their own
         # ---- no snapshot yet: the baseline says nothing
         d = fresh()
         t.ok(go([R("serve", "fail", "down", "spark serve on")], full=False) is False and os.listdir(d) == ["check.lock"],
@@ -4728,10 +4731,51 @@ def check_history_cases(t):
         clock.now = t0 + 2
         go([R(nm, "warn", "v " + nm) for nm in names] + [R("voice", "warn", "x"), R("bad-name", "warn", "x")])
         t.ok(alert() == lines, "check alert: the next full run writes the file whole again, the bad lines gone", str(alert()))
+        # ---- the settling rows: red while a server starts or a model loads
+        _c.ALERT_SETTLE = settle
+        t.ok(settle == ("serve", "forge", "ember", "peer") and _c.ALERT_SETTLE_SECONDS == 180,
+             "check: the rows that settle are the servers' and the peer's, 3 minutes", str(settle))
+        fresh()
+        go([R("serve", "ok"), R("privacy", "ok")])
+        clock.now += 300
+        go([R("serve", "warn", "loading the model -- ask again in a moment"),
+            R("privacy", "warn", "state dir not 0700", "chmod 700 ~/.local/state/spark")])
+        t.ok(said("serve") == [] and len(said("privacy")) == 1 and stored("serve").get("held") == clock.now
+             and [(h["row"], h["to"]) for h in hist()] == [("serve", "warn"), ("privacy", "warn")],
+             "check: a settling row's turn for the worse is recorded and held, not said; any other row is said at once",
+             str((alert(), hist())))
+        clock.now += 120
+        go([R("serve", "ok"), R("privacy", "warn", "state dir not 0700", "chmod 700 ~/.local/state/spark")])
+        t.ok(said("serve") == [] and "held" not in stored("serve") and hist()[-1] == {
+            "ts": int(clock.now), "row": "serve", "from": "warn", "to": "ok", "red": 120},
+             "check: healed inside the 3 minutes, it is never said, break or heal; the history has both",
+             str((alert(), hist())))
+        clock.now += 300
+        go([R("serve", "warn", "nothing answers at 192.0.2.7:8080", "spark serve on"), R("privacy", "ok")])
+        held_at = clock.now
+        clock.now += 100
+        go([R("serve", "fail", "nothing answers at 192.0.2.7:8080", "spark serve on")], full=False)
+        t.ok(said("serve") == [] and stored("serve").get("held") == held_at,
+             "check: still inside the 3 minutes, a held row that turns to fail stays held", str(alert()))
+        clock.now += 200
+        go([R("serve", "fail", "nothing answers at 192.0.2.7:8080", "spark serve on"), R("privacy", "ok")])
+        line = said("serve")
+        t.ok(len(line) == 1 and shape.match(line[0]) and " ! alarmed serve serve: nothing answers at 192.0.2.7:8080 "
+             "-- spark serve on" in line[0] and "held" not in stored("serve"),
+             "check: still red after the 3 minutes, it is said once, with the row's value and remedy as they are now",
+             str(alert()))
+        clock.now += 300
+        go([R("serve", "fail", "nothing answers at 192.0.2.7:8080", "spark serve on"), R("privacy", "ok")])
+        t.ok(said("serve") == line, "check: a held row that was said is not said again while it stays red", str(alert()))
+        clock.now += 300
+        go([R("serve", "ok"), R("privacy", "ok")])
+        t.ok(len(said("serve")) == 1 and " * pleased serve serve: ok again, after " in said("serve")[0],
+             "check: once said, its heal is said too", str(alert()))
     finally:
         for k, v in saved.items():
             setattr(_c, k, v)
         _bar.CHECK_JSON, _c.time, _c.LOCK_WAIT = saved_bar, saved_time, saved_wait
+        _c.ALERT_SETTLE = saved_settle
 
     # ---- spark check --history, the verb: it reads, runs no row, writes nothing
     state = os.path.join(base, "verb", "spark")

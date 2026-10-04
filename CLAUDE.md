@@ -1174,7 +1174,13 @@ and may change freely.
    spark check ROW`. A seq only grows. A check's run drops a line 24
    hours after its change (`check.ALERT_HOURS`). The rows `prompt`
    and `failure` are recorded and never said (`check.ALERT_QUIET`):
-   both turn warn when the last shell closes. A widget cleans each
+   both turn warn when the last shell closes. The rows `serve`,
+   `forge`, `ember` and `peer` settle (`check.ALERT_SETTLE`): they
+   are red while a server starts or a model loads. Their turn for the
+   worse is held in the row's `held` key, and said only when the row
+   is still red 180 seconds later (`check.ALERT_SETTLE_SECONDS`). One
+   that heals before that is never said. The history records both
+   changes at once. A widget cleans each
    line. It keeps one whose seq is 1 to 12 digits, whose mark is `!`
    or `*` and whose row is a-z. The text must be printable ASCII, 200
    characters at most. Any other line is dropped. It uses
