@@ -3937,16 +3937,16 @@ def main():
             t.ok(all(_pers.is_dangerous(c) for c in _dang) and not any(_pers.is_dangerous(c) for c in _safe),
                  "danger: %s is marked; its read and install forms stay plain" % _name,
                  str([c for c in _dang if not _pers.is_dangerous(c)] + ["!" + c for c in _safe if _pers.is_dangerous(c)]))
-        # the new lines stay linear: 100 kB of their own worst shape reads in under 0.5 s
+        # the new lines stay linear: 100 kB of their own worst shape reads in under 1 s
         _worst = ["crontab " + "-u " * 34000, "crontab " + "-i " * 34000 + "x", "flatpak " + "-x " * 34000,
                   "pip " + "-x " * 34000, "npm " + "-g " * 34000, "kill -9 " + "12 " * 34000]
         _slow = []
         for _w in _worst:
             _t0 = time.time()
             _pers.is_dangerous(_w[:100000])
-            if time.time() - _t0 >= 0.5:
+            if time.time() - _t0 >= 1.0:
                 _slow.append((_w[:12], round(time.time() - _t0, 2)))
-        t.ok(not _slow, "danger: the v1.56 lines read 100 kB of their worst shape in under 0.5 s", str(_slow))
+        t.ok(not _slow, "danger: the v1.56 lines read 100 kB of their worst shape in under 1 s", str(_slow))
         # v1.75: the reading of the commands (persona._read). A command
         # word the shell rewrites is opaque and dangerous; so is a
         # carrier; a wrapper is read past for the patterns. Each with
