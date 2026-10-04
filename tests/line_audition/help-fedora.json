@@ -4107,85 +4107,168 @@
      "Automatically answer yes for all questions."
     ],
     [
-     "--color=COLOR",
-     "Control whether color is used."
+     "--allowerasing",
+     "Allow removing of installed packages to resolve any potential dependency problems."
     ],
     [
-     "-x package,..., --exclude=package,...",
-     "exclude packages by name or glob"
+     "--skip-broken",
+     "Resolve any dependency problems by removing packages that are causing problems from the transaction."
     ],
     [
-     "--forcearch=FORCEARCH",
-     "Force the use of a different architecture."
+     "--skip-unavailable",
+     "Allow skipping packages that are not available in repositories."
     ],
     [
-     "-c CONFIG_FILE_PATH",
-     "Alias for '--config'"
+     "--allow-downgrade",
+     "Enable downgrade of dependencies when resolving the requested operation."
     ],
     [
-     "--nobest",
-     "Alias for '--no-best'"
+     "--no-allow-downgrade",
+     "Disable downgrade of dependencies when resolving the requested operation."
     ],
     [
-     "--nodocs",
-     "Alias for '--no-docs'"
+     "--from-repo=REPO_ID,...",
+     "Packages (or their provides) explicitly specified on the command line will only be looked up in t..."
     ],
     [
-     "--enablerepo=REPO_ID,...",
-     "Alias for '--enable-repo'"
+     "--from-vendor=VENDOR,...",
+     "List of vendors separated by commas or spaces."
     ],
     [
-     "--disablerepo=REPO_ID,...",
-     "Alias for '--disable-repo'"
+     "--downloadonly",
+     "Download the resolved package set without executing an RPM transaction."
     ],
     [
-     "--repoid=REPO_ID,...",
-     "Alias for '--repo'"
+     "--offline",
+     "Store the transaction to be performed offline."
     ],
     [
-     "--nogpgcheck",
-     "Alias for '--no-gpgchecks'"
+     "--transient",
+     "Applicable only on bootc (bootable containers) systems."
     ],
     [
-     "--noplugins",
-     "Alias for '--no-plugins'"
+     "--store=PATH",
+     "Store the current transaction in a directory at the specified PATH instead of running it."
     ],
     [
-     "--enableplugin=PLUGIN_NAME,...",
-     "Alias for '--enable-plugin'"
+     "--advisories=ADVISORY_NAME,...",
+     "Include content contained in advisories with specified name."
     ],
     [
-     "--disableplugin=PLUGIN_NAME,...",
-     "Alias for '--disable-plugin'"
+     "--advisory-severities=ADVISORY_SEVERITY,...",
+     "Include content contained in advisories with specified severity."
+    ],
+    [
+     "--bzs=BUGZILLA_ID,...",
+     "Include content contained in advisories that fix a ticket of the given Bugzilla ID."
+    ],
+    [
+     "--cves=CVE_ID,...",
+     "Include content contained in advisories that fix a ticket of the given CVE (Common Vulnerabilitie..."
+    ],
+    [
+     "--security",
+     "Include content contained in security advisories."
+    ],
+    [
+     "--bugfix",
+     "Include content contained in bugfix advisories."
+    ],
+    [
+     "--enhancement",
+     "Include content contained in enhancement advisories."
+    ],
+    [
+     "--newpackage",
+     "Include content contained in newpackage advisories."
+    ],
+    [
+     "--installed-from-repo=REPO_ID,...",
+     "Filters installed packages by the ID of the repository they were installed from."
+    ],
+    [
+     "--no-autoremove",
+     "Disable removal of dependencies that are no longer used."
+    ],
+    [
+     "--oldinstallonly",
+     "Remove old installonly packages that exceed the installonly_limit configuration value."
+    ],
+    [
+     "--limit=<LIMIT>",
+     "Override the installonly_limit configuration value."
     ]
    ],
    "long": [
+    "--advisories",
+    "--advisory",
+    "--advisory-severities",
+    "--all",
+    "--allow-downgrade",
     "--allow-vendor-change",
+    "--allowerasing",
+    "--arch",
     "--assumeno",
     "--assumeyes",
+    "--autoremove",
+    "--available",
     "--best",
+    "--bugfix",
+    "--bzs",
     "--cacheonly",
+    "--changelogs",
     "--color",
     "--comment",
     "--config",
+    "--conflicts",
+    "--contains-pkgs",
+    "--cves",
     "--debugsolver",
+    "--depends",
+    "--destdir",
+    "--disable-modular-filtering",
     "--disable-plugin",
     "--disable-repo",
     "--disableplugin",
     "--disablerepo",
+    "--downloadonly",
     "--dump-main-config",
     "--dump-repo-config",
     "--dump-variables",
+    "--duplicates",
     "--enable-plugin",
     "--enable-repo",
     "--enableplugin",
     "--enablerepo",
+    "--enhancement",
+    "--enhances",
+    "--exactdeps",
     "--exclude",
+    "--extras",
+    "--file",
+    "--files",
     "--forcearch",
+    "--from-repo",
+    "--from-vendor",
     "--help",
+    "--ignore-extras",
+    "--ignore-installed",
+    "--info",
+    "--installed",
+    "--installed-from-repo",
+    "--installonly",
     "--installroot",
+    "--json",
+    "--latest-limit",
+    "--leaves",
+    "--limit",
+    "--location",
     "--minimal",
+    "--name",
+    "--newpackage",
+    "--no-allow-downgrade",
     "--no-allow-vendor-change",
+    "--no-autoremove",
     "--no-best",
     "--no-docs",
     "--no-gpgchecks",
@@ -4194,7 +4277,18 @@
     "--nodocs",
     "--nogpgcheck",
     "--noplugins",
+    "--obsoletes",
+    "--offline",
+    "--oldinstallonly",
+    "--providers-of",
+    "--provides",
+    "--qf",
+    "--queryformat",
+    "--querytags",
     "--quiet",
+    "--recent",
+    "--recommends",
+    "--recursive",
     "--refresh",
     "--releasever",
     "--releasever-major",
@@ -4202,17 +4296,43 @@
     "--repo",
     "--repofrompath",
     "--repoid",
+    "--requires",
+    "--requires-pre",
+    "--reverse",
     "--se",
+    "--security",
     "--setopt",
     "--setvar",
     "--show-new-leaves",
+    "--showduplicates",
+    "--skip-broken",
     "--skip-file-locks",
+    "--skip-unavailable",
+    "--sourcerpm",
+    "--srpm",
+    "--store",
+    "--suggests",
+    "--summary",
+    "--supplements",
+    "--transient",
+    "--unneeded",
+    "--upgrades",
     "--use-host-config",
-    "--version"
+    "--userinstalled",
+    "--version",
+    "--whatconflicts",
+    "--whatdepends",
+    "--whatenhances",
+    "--whatobsoletes",
+    "--whatprovides",
+    "--whatrecommends",
+    "--whatrequires",
+    "--whatsuggests",
+    "--whatsupplements"
    ],
    "man": true,
    "path": "/usr/sbin/dnf",
-   "short": "Cchqxy",
+   "short": "Ccfhiqxy",
    "synopsis": [
     "dnf5 <command> [options] [<args>...]"
    ],
@@ -4220,7 +4340,9 @@
    "words": [
     "-C",
     "-c",
+    "-f",
     "-h",
+    "-i",
     "-q",
     "-x",
     "-y"

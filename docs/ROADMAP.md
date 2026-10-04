@@ -1,6 +1,6 @@
 # Roadmap
 
-What comes after v1.84, in rough order. Nothing here is a promise.
+What comes after v1.85, in rough order. Nothing here is a promise.
 `docs/CHANGELOG.md` says what shipped.
 
 No new verb until items 1 and 2 are done.

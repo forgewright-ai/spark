@@ -353,6 +353,18 @@
      "git-log",
      "git-status",
      "git-diff"
+    ],
+    "dnf": [
+     "dnf5-install",
+     "dnf5-remove",
+     "dnf5-upgrade",
+     "dnf5-list",
+     "dnf5-info",
+     "dnf5-search",
+     "dnf5-repoquery",
+     "dnf5-provides",
+     "dnf5-check-upgrade",
+     "dnf5-history"
     ]
    }
   },

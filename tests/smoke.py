@@ -9489,6 +9489,27 @@ def main():
         t.ok(distro_fact(home + "/os-release-leap") == "'opensuse' openSUSE Leap 16.0",
              "distro: ID=opensuse-leap ID_LIKE=\"suse opensuse\" is opensuse, whatever the order", distro_fact(home + "/os-release-leap"))
         t.ok(distro_fact(home + "/os-release-alpine") == "'' Alpine Linux v3.22", "distro: an unknown family is '', never a guess", distro_fact(home + "/os-release-alpine"))
+        # the prompt names the family's own manager, not the first one on
+        # PATH: every manager is a stub here, and the fixture decides
+        pm_dir = os.path.join(home, "pm-stubs")
+        os.makedirs(pm_dir, exist_ok=True)
+        for pm in ("apt-get", "dnf", "pacman", "xbps-install", "zypper"):
+            with open(os.path.join(pm_dir, pm), "w") as f:
+                f.write("#!/bin/sh\nexit 0\n")
+            os.chmod(os.path.join(pm_dir, pm), 0o755)
+        pm_twin = ("import sys; sys.path.insert(0, %r); import spark; spark.IS_MAC = False; "
+                   "print(spark.package_manager())" % os.path.join(REPO, "lib"))
+
+        def pm_fact(name, path):
+            p = subprocess.run([sys.executable, "-c", pm_twin], capture_output=True, text=True, timeout=30,
+                               env=dict(env, PATH=path, SPARK_OS_RELEASE=home + "/os-release-" + name,
+                                        SPARK_PROC_VERSION=home + "/version-plain"))
+            return p.stdout.strip() or p.stderr.strip()
+        all_pm = pm_dir + os.pathsep + "/usr/bin:/bin"
+        got = [pm_fact(n, all_pm) for n in ("ubuntu", "arch", "fedora", "rocky", "tumbleweed", "leap")]
+        t.ok(got == ["apt-get", "pacman", "dnf", "dnf", "zypper", "zypper"],
+             "package_manager: the family's own manager is named, whatever else is installed", got)
+        t.ok(pm_fact("alpine", all_pm) == "apt-get", "package_manager: an unknown family takes the first one found, as before", pm_fact("alpine", all_pm))
         t.ok(distro_fact(home + "/os-release-none").startswith("'' Linux "), "distro: no file at all is '', and os_pretty falls back to the kernel", distro_fact(home + "/os-release-none"))
         # bootstrap asks the same code through lib/spark/facts.py (the one
         # home, no sh twin): its DISTRO line honours the same fixture

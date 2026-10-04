@@ -408,7 +408,16 @@ def is_musl():
     return bool(glob.glob(LD_MUSL))
 
 
+FAMILY_PM = {"debian": "apt-get", "arch": "pacman", "void": "xbps-install", "fedora": "dnf", "opensuse": "zypper"}
+
+
 def package_manager():
+    """The package manager the prompt names. The family's own comes first
+    when it is on PATH: an openSUSE that also has dnf installed is still
+    zypper's machine. Else the first one found, as before."""
+    own = FAMILY_PM.get(distro())
+    if own and shutil.which(own):
+        return own
     for pm in ("apt-get", "dnf", "pacman", "xbps-install", "zypper", "apk", "brew"):
         if shutil.which(pm):
             return pm

@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.85
+
+- The prompt line names your system's own package manager. On a
+  machine with 2 installed, an openSUSE that also has `dnf`, spark
+  named the first one it found. It now names the one your system uses.
+- The prompt line is measured on Fedora and openSUSE: 58 questions
+  each, graded against each system's own help. Fedora 55 of 58,
+  openSUSE 53 of 58, and all 18 dangerous commands flagged. The model
+  was `gemma4-26b-a4b`.
+
 ## v1.84
 
 - No false alarm after an update. The engine and the page are red for
