@@ -23,7 +23,9 @@
 # mechanical half (docs/CONTRIBUTING.md
 # "## Voice") holds over every doc, its two measures included (a sentence
 # of 30 words at most, prose within 72 columns), and the two nouns hold
-# in `spark help` and every usage text too.
+# in `spark help` and every usage text too; one test list (v1.79): every
+# tests/ file is run by tests/gate.sh or named in NOT_IN_GATE, and the
+# hooks and the workflows name no test file themselves.
 # Hermetic, stdlib, fast.
 import os
 import re
@@ -102,6 +104,58 @@ def tests_named():
     for name in sorted(os.listdir(os.path.join(ROOT, "tests"))):
         if name.endswith((".py", ".sh")):
             check(name in agents, "AGENTS.md names tests/%s" % name)
+
+
+# the tests/ files tests/gate.sh does not run, each with its reason
+NOT_IN_GATE = (
+    ("gate.sh", "the gate itself"),
+    ("land.sh", "the landing command, not a test: land_test.sh proves it"),
+    ("audition.py", "needs a live model"),
+    ("line_audition.py", "needs a live model; smoke.py runs its selftest"),
+    ("forge_probe.py", "asks a live server"),
+    ("check_selftest.py", "an entry to spark check --selftest, which the gate runs"),
+)
+# who may name a test file: nobody but the gate. The hooks and ci.yml
+# call tests/gate.sh (and tests/land.sh, the one check "ci.yml passed")
+GATE_CALLERS = (".githooks/pre-commit", ".githooks/pre-push", ".githooks/commit-msg",
+                ".github/workflows/ci.yml", ".github/workflows/release.yml")
+
+
+def tests_gated():
+    """One test list (v1.79): every tests/*.py and tests/*.sh is on a `run`
+    line of tests/gate.sh or in NOT_IN_GATE with its reason, never both;
+    the hooks and the workflows name no test file but gate.sh and land.sh,
+    and each calls the gate the way the docs say."""
+    names = sorted(n for n in os.listdir(os.path.join(ROOT, "tests")) if n.endswith((".py", ".sh")))
+    lines = [ln for ln in read("tests/gate.sh").splitlines() if not ln.lstrip().startswith("#")]
+    ran = set()
+    for ln in lines:
+        m = re.search(r"(?:^|[\s)])run\s+\S.*?\btests/(\w+\.(?:py|sh))(?=\s|$)", ln)
+        if m:
+            ran.add(m.group(1))
+    out = dict(NOT_IN_GATE)
+    for name in names:
+        check((name in ran) != (name in out),
+              "tests/%s is run by tests/gate.sh or named in NOT_IN_GATE, one of the two" % name)
+    for name in sorted(out):
+        check(name in names, "NOT_IN_GATE names a file tests/ holds (%s)" % name)
+    for name in sorted(ran):
+        check(name in names, "tests/gate.sh runs a file tests/ holds (%s)" % name)
+    for f in GATE_CALLERS:
+        named = sorted(set(re.findall(r"tests/(\w+\.(?:py|sh))\b", read(f))) - {"gate.sh", "land.sh"})
+        check(not named, "%s names no test file but tests/gate.sh and tests/land.sh%s"
+              % (f, "" if not named else " (found %s)" % ", ".join(named)))
+    check("tests/gate.sh\" fast" in read(".githooks/pre-commit"), ".githooks/pre-commit runs tests/gate.sh fast")
+    check("tests/gate.sh" not in read(".githooks/pre-push") and "tests/land.sh\" --passed" in read(".githooks/pre-push"),
+          ".githooks/pre-push runs no test: it asks tests/land.sh --passed")
+    ci = read(".github/workflows/ci.yml")
+    check(ci.count('run: sh tests/gate.sh full "$GROUP"') == 2 and ci.count("group: [smoke, serve, rest]") == 2,
+          "ci.yml: linux and macos run tests/gate.sh full, one job per group (smoke, serve, rest)")
+    groups = set(re.findall(r"(?m)^\s+(\w+)\)\s+group_\w+ ;;$", read("tests/gate.sh")))
+    check(groups == {"smoke", "serve", "rest"}, "tests/gate.sh full takes the groups ci.yml names (smoke, serve, rest)")
+    check("tags:" not in ci.split("\njobs:")[0], "ci.yml runs on no tag push: the tag's commit already passed")
+    check("sh tests/land.sh --passed" in read(".github/workflows/release.yml"),
+          "release.yml asks tests/land.sh --passed before it releases")
 
 
 FENCE = re.compile(r"(?ms)^[ \t]*```.*?^[ \t]*```[ \t]*$")
@@ -472,6 +526,7 @@ def quiet():
 
 def main():
     tests_named()
+    tests_gated()
     credits = read("CREDITS.md")
     # models: every row's license upstream is credited
     rows = [r for r in config.model_tables(ROOT) if r[6] == "repo"]

@@ -1,29 +1,40 @@
 #!/bin/sh
-# spark pre-push gate: the slower proofs (~30 s). NOTICE-skip when a
-# prerequisite is missing; never silently pass.
+# spark pre-push guard. It runs no test: CI is where the full gate runs,
+# once per commit. A push to main, or of a v* tag, is refused
+# unless ci.yml already passed for that exact commit; `sh tests/land.sh`
+# is the way there. Any other ref passes untouched. Without gh, or to a
+# remote that is not on github.com, the guard cannot ask: a NOTICE, and
+# the push goes on -- release.yml asks the same question on the server.
 set -eu
-cd "$(git rev-parse --show-toplevel)"
-# git hands a hook GIT_DIR; the clone-based tests below must see the
-# tree as a user does (from a linked worktree GIT_DIR names the worktree
-# git dir, and every git -C in them would answer for that instead)
-unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE
-fail=0
-if [ -f tests/install_test.sh ]; then
-    sh tests/install_test.sh >/dev/null || { echo "pre-push: tests/install_test.sh failed"; fail=1; }
-fi
-if [ -f tests/get_test.sh ]; then
-    sh tests/get_test.sh >/dev/null || { echo "pre-push: tests/get_test.sh failed"; fail=1; }
-fi
-if [ -f tests/update_test.sh ]; then
-    sh tests/update_test.sh >/dev/null || { echo "pre-push: tests/update_test.sh failed"; fail=1; }
-fi
-if [ -f tests/uninstall_test.sh ]; then
-    sh tests/uninstall_test.sh >/dev/null || { echo "pre-push: tests/uninstall_test.sh failed"; fail=1; }
-fi
-if [ -f bin/spark ] && [ -f lib/spark/check.py ]; then
-    python3 bin/spark check --selftest || { echo "pre-push: spark check --selftest failed"; fail=1; }
-fi
-if [ -f lib/spark/chaos.py ]; then
-    python3 bin/spark check --chaos || { echo "pre-push: spark check --chaos failed"; fail=1; }
-fi
-[ "$fail" -eq 0 ] || { echo "pre-push: refused"; exit 1; }
+remote=${1:-}
+url=${2:-}
+GH=${SPARK_GH:-gh}
+top=$(git rev-parse --show-toplevel)
+# a rewritten URL (insteadOf, pushurl) is still the remote it was
+case $url in
+    *github.com[:/]*) ;;
+    *) url=$(git config --get "remote.$remote.url" 2>/dev/null || true) ;;
+esac
+while read -r _ lsha rref _; do
+    case $rref in refs/heads/main|refs/tags/v*) ;; *) continue ;; esac
+    # a deletion lands nothing
+    case $lsha in *[!0]*) ;; *) continue ;; esac
+    case $url in
+        *github.com[:/]*) ;;
+        *) echo "NOTICE: pre-push: not a github.com remote; ci.yml not asked for ${rref#refs/*/}"; continue ;;
+    esac
+    if ! command -v "$GH" >/dev/null 2>&1; then
+        echo "NOTICE: pre-push: gh not found; ci.yml not asked for ${rref#refs/*/}"
+        continue
+    fi
+    # an annotated tag: the commit it points at
+    commit=$(git rev-parse --verify -q "$lsha^{commit}") \
+        || { echo "! pre-push: ${rref#refs/*/} names no commit"; exit 1; }
+    sh "$top/tests/land.sh" --passed "$commit" "$url" >/dev/null 2>&1 && continue
+    case $? in
+        1) echo "! pre-push: ci.yml has not passed for $(printf '%s' "$commit" | cut -c1-7) (${rref#refs/*/}) -- sh tests/land.sh" ;;
+        *) echo "! pre-push: could not ask GitHub whether ci.yml passed for ${rref#refs/*/} -- gh auth status, then sh tests/land.sh" ;;
+    esac
+    exit 1
+done
+exit 0

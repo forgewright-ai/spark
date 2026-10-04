@@ -1,7 +1,13 @@
-# spark CI -- the second net. The first is .githooks on the workstation.
-# linux: every hermetic test, then a REAL bootstrap on the runner (a fresh
-# Ubuntu with sudo), which must converge to "Nothing to do" and pass
-# `spark check`.
+# spark CI -- where the full gate runs, once per commit. The workstation
+# runs the fast half (.githooks/pre-commit); a commit comes here on a try/
+# branch (tests/land.sh), and main is fast-forwarded to it only when every
+# job is green. release.yml refuses a tag whose commit has no green run.
+# linux, macos: `tests/gate.sh full`, the one test list, one job per group
+# (smoke, serve, rest) -- the two long suites on runners of their own,
+# never side by side on one. The rest job then runs a REAL bootstrap on
+# the runner (a fresh Ubuntu with sudo; on macOS the core, and not on a
+# pull request), which must converge to "Nothing to do" and pass `spark
+# check`. macOS runs under Apple's python 3.9.
 # debian: the README's first-named platform, as a new user meets it -- a
 # Debian 13 container, a user made for the run, the one-liner in pipe form
 # from the tree under test, the AI layer only; converges the same way.
@@ -10,78 +16,54 @@
 # void: the third family, the same new user in a Void container -- packages
 # through xbps, the services under runit: a runsvdir started by root stands
 # in for the booted machine's, so spark-check runs supervised there.
-# macos: syntax, the selftest and the zsh pty test under Apple's python
-# 3.9; then (not on a pull request) the real core bootstrap.
 # workflows: zizmor, a pinned version in a venv, over these workflows
 # themselves -- an unpinned action, a template expanded into a shell, a
 # permission nobody uses; medium and above fails.
-# No job downloads a model: SITE_AI_MODEL=none everywhere; the engine
-# tarball is the one real download.
+# No job downloads a model or the engine: SITE_AI_MODEL=none everywhere,
+# and without a model bootstrap skips the engine. The distro's packages
+# are the only download.
+# A tag push runs nothing here: the tag's commit already passed. A newer
+# push cancels an older run on a try/ branch or a pull request, never on
+# main -- every commit main receives keeps its own finished run.
 name: ci
-on: [push, pull_request, workflow_dispatch]
+on:
+  push:
+    branches: [main, 'try/**']
+  pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 jobs:
   linux:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [smoke, serve, rest]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
         with:
           fetch-depth: 0   # spark ver derives from git describe: get_test and update_test need real tags
           persist-credentials: false
-      - name: syntax
-        # one file per call: `sh -n A B` parses A and hands B to it as $1
-        run: |
-          for f in bootstrap.sh install.sh lib/env.sh get .githooks/pre-commit .githooks/pre-push tests/install_test.sh tests/finish_test.sh; do sh -n "$f"; done
-          for f in home/.config/spark/completion.bash home/.config/spark/hook.bash home/.config/spark/widget.bash; do bash -n "$f"; done
-          python3 -m py_compile bin/spark lib/spark/*.py tests/*.py
-          sudo apt-get install -y -qq shellcheck >/dev/null && shellcheck -S warning bootstrap.sh install.sh lib/env.sh get .githooks/pre-commit .githooks/pre-push
-      - name: privacy gate over the whole tree
-        # the personal word list is a repository secret (one word per line);
-        # each word escaped for grep -E, and -l: a hit names the file, never
-        # the line -- this log is public
-        # a fork without it gets a NOTICE and the generic patterns only
+      - name: shellcheck
+        if: matrix.group == 'rest'
+        run: sudo apt-get install -y -qq shellcheck >/dev/null
+      - name: the gate
+        # the personal word list is a repository secret (one word per
+        # line), read by the whole-tree privacy gate in the rest group; a
+        # hit names the file, never the line -- this log is public. A fork
+        # without it gets a NOTICE and the generic patterns only. The
+        # group goes through env, never into the script's text.
         env:
-          SPARK_PRIVACY_TERMS_SECRET: ${{ secrets.SPARK_PRIVACY_TERMS }}
-        run: |
-          # each check is an if/exit 1: a negated pipeline (`! git grep ...`)
-          # is exempt from errexit under bash -e, so only the last one ever
-          # decided this step -- the first two could fail in silence
-          printf '%s\n' "$SPARK_PRIVACY_TERMS_SECRET" > "$RUNNER_TEMP/privacy-terms"
-          terms=$(cat .privacy-terms "$RUNNER_TEMP/privacy-terms" | grep -v '^#' | grep -v '^[[:space:]]*$' | sort -u | sed 's,[][\.*^$+?(){}|/],\\&,g' | paste -sd'|' -)
-          if [ -z "$terms" ]; then echo "NOTICE: no privacy word list -- generic patterns only"; else
-            if git grep -l -i -w -E "$terms" -- . ':(exclude).privacy-terms'; then
-              echo "privacy: a listed word is in the tree"; exit 1; fi; fi
-          hits=$(git grep -n -E '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' -- . | grep -v 'you@example.com' || true)
-          if [ -n "$hits" ]; then
-            printf '%s\n' "$hits"; echo "privacy: an e-mail address is in the tree"; exit 1; fi
-          if git grep -n -E '\b(10\.[0-9]+\.[0-9]+\.[0-9]+|192\.168\.[0-9]+\.[0-9]+|172\.(1[6-9]|2[0-9]|3[01])\.[0-9]+\.[0-9]+)\b' -- .; then
-            echo "privacy: a private IPv4 is in the tree"; exit 1; fi
-      - name: hermetic tests
-        run: |
-          sh tests/install_test.sh
-          sh tests/get_test.sh
-          sh tests/update_test.sh
-          sh tests/uninstall_test.sh
-          sh tests/finish_test.sh
-          python3 tests/smoke.py
-          python3 tests/serve_smoke.py
-          python3 tests/forge_smoke.py
-          python3 tests/bench_smoke.py
-          python3 tests/vault_test.py
-          python3 tests/sandbox_test.py
-          python3 tests/knowledge_test.py
-          python3 tests/qr_test.py
-          python3 tests/voice_test.py
-          python3 tests/docs_test.py
-          python3 tests/policy_test.py
-          python3 tests/widget_pty.py bash home/.config/spark/widget.bash
-          python3 tests/widget_pty.py completion bash home/.config/spark/completion.bash
-          python3 tests/widget_pty.py pager
-          python3 bin/spark check --selftest
-          python3 bin/spark check --chaos
+          GROUP: ${{ matrix.group }}
+          SPARK_PRIVACY_TERMS_SECRET: ${{ matrix.group == 'rest' && secrets.SPARK_PRIVACY_TERMS || '' }}
+        run: sh tests/gate.sh full "$GROUP"
       - name: real bootstrap on the runner
+        if: matrix.group == 'rest'
         env:
           SITE_AI_MODEL: none
         run: |
@@ -242,46 +224,27 @@ jobs:
   macos:
     runs-on: macos-latest
     timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        group: [smoke, serve, rest]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
         with:
           fetch-depth: 0   # spark ver derives from git describe: get_test and update_test need real tags
           persist-credentials: false
-      - name: syntax under Apple's python
-        run: |
-          /usr/bin/python3 --version
-          # one file per call: `zsh -n A B` parses A and hands B to it as $1
-          for f in home/.config/spark/completion.zsh home/.config/spark/hook.zsh home/.config/spark/widget.zsh; do zsh -n "$f"; done
-          /usr/bin/python3 -m py_compile bin/spark lib/spark/*.py tests/*.py
-      - name: hermetic tests
-        run: |
-          sh tests/install_test.sh
-          sh tests/get_test.sh
-          sh tests/update_test.sh
-          sh tests/uninstall_test.sh
-          sh tests/finish_test.sh
-          /usr/bin/python3 tests/smoke.py
-          /usr/bin/python3 tests/serve_smoke.py
-          /usr/bin/python3 tests/forge_smoke.py
-          /usr/bin/python3 tests/bench_smoke.py
-          /usr/bin/python3 tests/docs_test.py
-          /usr/bin/python3 tests/policy_test.py
-          /usr/bin/python3 tests/vault_test.py
-          /usr/bin/python3 tests/sandbox_test.py
-          /usr/bin/python3 tests/knowledge_test.py
-          /usr/bin/python3 tests/qr_test.py
-          /usr/bin/python3 tests/voice_test.py
-          /usr/bin/python3 tests/widget_pty.py zsh home/.config/spark/widget.zsh
-          /usr/bin/python3 tests/widget_pty.py completion zsh home/.config/spark/completion.zsh
-          /usr/bin/python3 tests/widget_pty.py pager
-          /usr/bin/python3 bin/spark check --selftest
-          /usr/bin/python3 bin/spark check --chaos
+      - name: the gate, under Apple's python
+        env:
+          GROUP: ${{ matrix.group }}
+          SPARK_GATE_PYTHON: /usr/bin/python3
+        run: sh tests/gate.sh full "$GROUP"
       - name: real core bootstrap on the runner
-        # the AI layer as a Mac user gets it: the engine tarball, the token,
-        # the tools, one line in ~/.zshrc, no Homebrew, no model. Not on a
-        # pull request. SHELL names the Mac user's login shell; the runner's
-        # own is bash 3, which cannot host the widget (a todo row, by design).
-        if: github.event_name != 'pull_request'
+        # the AI layer as a Mac user gets it without a model: the token,
+        # the tools, one line in ~/.zshrc, no Homebrew, no engine (it comes
+        # with a model). Not on a pull request. SHELL names the Mac user's
+        # login shell; the runner's own is bash 3, which cannot host the
+        # widget (a todo row, by design).
+        if: matrix.group == 'rest' && github.event_name != 'pull_request'
         env:
           HOMEBREW_NO_AUTO_UPDATE: '1'
           SHELL: /bin/zsh

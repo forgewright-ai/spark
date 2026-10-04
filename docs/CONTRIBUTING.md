@@ -14,12 +14,24 @@ cd spark
 git config core.hooksPath .githooks
 ```
 
-The pre-commit and pre-push hooks together run the gate. `AGENTS.md`,
-"The gate", lists every step. CI runs the gate on Ubuntu and macOS, and
-the one-liner in Debian 13, Arch and Void containers. shellcheck is a
-contributor's tool, not a user's package: `apt-get install shellcheck`,
-`pacman -S shellcheck`, `xbps-install shellcheck` or `brew install
-shellcheck`. The hook skips it with a notice when absent.
+A commit runs the fast half of the gate, in seconds: privacy, secrets,
+syntax, shellcheck and the docs. The full gate runs in CI, once for
+each commit, on Ubuntu and macOS. CI also runs the one-liner in Debian
+13, Arch and Void containers. `sh tests/gate.sh full` runs the full
+gate on your own machine, in about 10 minutes. `AGENTS.md`, "The gate",
+lists every step.
+
+A pull request runs CI for you. With push rights, `sh tests/land.sh`
+sends your commit to a `try/` branch and waits for CI. On green it
+moves `main` to the same commit. On red `main` is untouched: fix the
+commit, amend it and run it again. A push to `main` that CI has not
+passed is refused.
+
+shellcheck is a contributor's tool, not a user's package: `apt-get
+install shellcheck`, `pacman -S shellcheck`, `xbps-install shellcheck`
+or `brew install shellcheck`. The gate skips it with a notice when
+absent. `gh`, GitHub's command line, is what `tests/land.sh` asks CI
+with.
 
 A change to one of the editor's briefs (`persona.MODE_EDIT_*`) needs
 more. Run `tests/audition.py` against a live model and put its before
@@ -62,7 +74,7 @@ signed moves nothing.
 
 Follow the landing rule in `AGENTS.md`. A feature is not done until it
 is in `spark help`, a `spark <verb>`, a `spark check` row when it is a
-promise, and every doc. Run the gate before you open a pull request.
+promise, and every doc. CI runs the full gate on your pull request.
 
 Commit messages: a lowercase title line, and a body that says why, not
 only what. Trailers are optional.

@@ -389,6 +389,14 @@ tests/          smoke.py serve_smoke.py forge_smoke.py bench_smoke.py
                 check_selftest.py (a standalone entry to spark check --selftest)
                 install_test.sh get_test.sh update_test.sh uninstall_test.sh
                 finish_test.sh (the runit finish scripts, sv and sleep stubbed)
+                gate.sh (the one test list: `fast` is what a commit runs,
+                `full [smoke|serve|rest]` what CI runs, one job per group;
+                the hooks and ci.yml name no test themselves)
+                land.sh (lands a commit: a try/ branch, CI, then main moved
+                forward to the same commit; `--passed SHA` is the one check
+                "ci.yml passed", asked by the pre-push hook and release.yml)
+                land_test.sh (the pre-push hook and land.sh, against a stub gh
+                and a bare repository)
                 audition.py + audition/ (the editor's briefs against a live
                 model, lints as the judge; audition/ground/ holds the grounded
                 contracts' set of 10 cases, scored the same blind way, the
@@ -399,19 +407,21 @@ tests/          smoke.py serve_smoke.py forge_smoke.py bench_smoke.py
                 forge_probe.py URL (the page's server's gates asked from the wire --
                 wire.probe_gates, the hardening row's probes -- one line per
                 gate, exit 1 when any does not hold; against a real server)
-.githooks/      pre-commit (the privacy gate, syntax one file per call, the
-                hermetic suites, the widget pty tests, the selftest, the
-                cheatsheet's 80 columns, ASCII, shellcheck), commit-msg (the
-                privacy patterns over the message -- history is public too),
-                pre-push (the install, get, update and uninstall tests, the
-                selftest, chaos)
-.github/        workflows/ci.yml: linux and macos run the hermetic tests, then
-                a real bootstrap; debian, arch and void containers run the
-                one-liner as a new user (void under a runsvdir started for the
-                job: the supervised spark-check is proven there); workflows
-                runs zizmor over the workflows
+.githooks/      pre-commit (tests/gate.sh fast: the privacy gate, syntax one
+                file per call, the cheatsheet's 80 columns, ASCII,
+                shellcheck, docs_test), commit-msg (the privacy patterns
+                over the message -- history is public too), pre-push (no
+                test: main and a v* tag are refused unless ci.yml passed
+                for that commit)
+.github/        workflows/ci.yml: on a push to main or a try/ branch, a pull
+                request, by hand, never a tag; linux and macos run
+                tests/gate.sh full, one job per group (smoke, serve, rest),
+                then a real bootstrap in the rest job; debian, arch and void
+                containers run the one-liner as a new user (void under a
+                runsvdir started for the job: the supervised spark-check is
+                proven there); workflows runs zizmor over the workflows
                 workflows/release.yml: the GitHub Release from the CHANGELOG
-                section, on a signed v* tag
+                section, on a signed v* tag whose commit ci.yml passed
                 workflows/codeql.yml: GitHub's static analysis over the python
                 and the javascript, on a push to main, a pull request and weekly
                 workflows/advisories.yml: weekly, one job per pin: one issue
@@ -1914,6 +1924,9 @@ git status -sb                  # clean, not ahead of origin
 spark check --porcelain | grep privacy   # the tree contains no banned word
 sh tests/get_test.sh            # the one-liner: clone, pull, refusals, the hand-off to setup
 sh tests/update_test.sh         # spark update: pull, move to a signed tag, unsigned and dirty refused, --dry-run
+sh tests/gate.sh fast           # what a commit runs: privacy, syntax, shellcheck, the docs
+sh tests/gate.sh full           # every suite for this OS, about 10 minutes; CI runs it per commit
+sh tests/land.sh --passed SHA   # ci.yml passed for that commit: what main and a tag need
 ```
 
 `spark check` has 39 rows today, by category `8 SOFTWARE, 22
@@ -1962,13 +1975,18 @@ ssh-keygen (openssh). `get` asks for both before it clones.
    the tag exists, because it renders the newest release tag.
    `tests/docs_test.py` refuses a heading more than one release ahead
    of that tag.
-   Run the full gate: the pre-commit and pre-push hooks. Commit, push,
-   `gh run watch` until green.
-2. `git tag -s vX.Y -m 'spark vX.Y' && git push origin vX.Y`. The tag
-   push runs `release.yml`. It verifies the signature against
-   `allowed-signers`. It checks the CHANGELOG heading, and that `spark
-   ver` says `spark X.Y` at the tag. Then it creates the GitHub Release
-   with that CHANGELOG section as its notes and two assets. The assets
+   Commit: the pre-commit hook runs the fast gate. Land it with `sh
+   tests/land.sh`. That pushes the commit to a `try/` branch, waits for
+   `ci.yml`, and on green moves `main` forward to the same commit. On
+   red `main` is untouched: amend and run it again. The pre-push hook
+   refuses `main` and a `v*` tag for a commit CI has not passed.
+2. Tag only what CI passed: `git tag -s vX.Y -m 'spark vX.Y' && git
+   push origin vX.Y`. The tag push runs `release.yml` and no test. Its
+   first step refuses a tag whose commit has no green `ci.yml` run. It
+   verifies the signature against `allowed-signers`. It checks the
+   CHANGELOG heading, and that `spark ver` says `spark X.Y` at the tag.
+   Then it creates the GitHub Release with that CHANGELOG section as
+   its notes and two assets. The assets
    are `get` (`releases/latest/download/get`, the one-liner) and
    `sbom.cdx.json` (`spark ver --sbom` at the tag: what the tree depends
    on, CycloneDX 1.5, `lib/spark/sbom.py`). Nothing is rerun.

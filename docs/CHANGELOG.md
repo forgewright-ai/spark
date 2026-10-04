@@ -1,5 +1,22 @@
 # Changelog
 
+## v1.79
+
+Each test runs once, in the right place. Nothing is tested less. This
+release changes how a commit lands, not what spark does.
+
+- A commit takes seconds. The pre-commit hook runs the fast checks:
+  privacy, secrets, syntax, shellcheck and the docs.
+- The full tests run in CI, once for each commit. `sh tests/land.sh`
+  sends your commit to a `try/` branch and waits. On green it moves
+  `main` to the same commit. On red `main` is untouched.
+- A push to `main`, or of a release tag, is refused until CI passed
+  for that commit. A release refuses such a tag too.
+- `tests/gate.sh` holds the one test list. `sh tests/gate.sh full`
+  runs all of it on your own machine.
+- CI answers sooner. The two long suites run side by side, and a tag
+  push no longer runs the tests a second time.
+
 ## v1.78
 
 Six more fixes from the audit.

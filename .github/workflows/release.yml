@@ -8,8 +8,10 @@
 # carries `get` as an asset, so releases/latest/download/get is the
 # one-liner, and sbom.cdx.json beside it: `spark ver --sbom`, the
 # CycloneDX bill of what this tree pins, read from the tree at the tag
-# so the bill and the code cannot disagree. Nothing is rerun here; the
-# Releasing section of CLAUDE.md says to tag only after ci is green.
+# so the bill and the code cannot disagree. Nothing is rerun here: the
+# first step refuses a tag whose commit ci.yml has not passed (the one
+# check in tests/land.sh, asked on the server whatever a workstation's
+# hook did).
 name: release
 on:
   push:
@@ -21,11 +23,20 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: write   # gh release create, this job alone
+      actions: read     # the first step asks whether ci.yml passed
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
         with:
           fetch-depth: 0   # spark ver needs the tag reachable to describe it; main and the earlier tags too
           persist-credentials: false   # the fetch below reads a public repository; gh has its own token
+      - name: ci.yml passed for the tagged commit
+        # the hard gate: a successful ci.yml run must exist for this exact
+        # commit (an annotated tag: the commit it points at), else one
+        # line and nothing is released. tests/land.sh puts a commit
+        # through ci.yml before main, so a tag on main finds its run.
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: sh tests/land.sh --passed "$(git rev-parse 'HEAD^{commit}')" "$GITHUB_REPOSITORY"
       - name: the tag is signed by a key the release before it trusted
         # actions/checkout peels an annotated tag into a lightweight one on
         # the runner; the signature lives on the tag object, so fetch that

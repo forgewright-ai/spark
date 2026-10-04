@@ -23,17 +23,37 @@ choice", is the full text.
 
 ## The gate
 
-The pre-commit hook runs the fast half and the pre-push hook the slow
-half. Together they are the gate. `git config core.hooksPath
-.githooks` turns them on.
+`tests/gate.sh` holds the one test list. The hooks and CI call it and
+name no test themselves. `git config core.hooksPath .githooks` turns
+the hooks on.
 
-pre-commit:
+A commit runs the fast half, in seconds:
 
 ```sh
+sh tests/gate.sh fast
 # the privacy gate: the staged diff, the staged names and the branch
 # syntax, one file per call: sh -n, bash -n, zsh -n, py_compile -W error
+# docs/CHEATSHEET.txt within 80 columns; the docs and the page ASCII; shellcheck
+python3 tests/docs_test.py
+```
+
+CI runs the full gate once per commit, in 3 groups side by side:
+
+```sh
+sh tests/gate.sh full smoke
 python3 tests/smoke.py
+
+sh tests/gate.sh full serve
 python3 tests/serve_smoke.py
+
+sh tests/gate.sh full rest
+# every fast check, and the privacy gate over the whole tree
+sh tests/install_test.sh
+sh tests/get_test.sh
+sh tests/update_test.sh
+sh tests/uninstall_test.sh
+sh tests/finish_test.sh
+sh tests/land_test.sh
 python3 tests/forge_smoke.py
 python3 tests/bench_smoke.py
 python3 tests/vault_test.py
@@ -43,36 +63,49 @@ python3 tests/qr_test.py
 python3 tests/voice_test.py
 python3 tests/docs_test.py
 python3 tests/policy_test.py
-sh tests/finish_test.sh
 python3 tests/widget_pty.py zsh home/.config/spark/widget.zsh          # bash on Linux
 python3 tests/widget_pty.py completion zsh home/.config/spark/completion.zsh
 python3 tests/widget_pty.py pager
 python3 bin/spark check --selftest
-# docs/CHEATSHEET.txt within 80 columns; the docs and the page ASCII; shellcheck
-```
-
-pre-push:
-
-```sh
-sh tests/install_test.sh
-sh tests/get_test.sh
-sh tests/update_test.sh
-sh tests/uninstall_test.sh
-python3 bin/spark check --selftest
 python3 bin/spark check --chaos
 ```
 
-The hooks call `bin/spark` directly. `tests/check_selftest.py` is a
+`sh tests/gate.sh full` runs the 3 groups in order on your own machine.
+It takes about 10 minutes, and nothing asks for it. `SPARK_GATE_PYTHON`
+names the python, and CI on macOS sets it to Apple's.
+
+`sh tests/land.sh` lands a commit. It pushes the commit to a `try/`
+branch and waits for CI. On green it moves `main` forward to the same
+commit and deletes the branch. On red it prints the failed step and
+leaves `main` alone. Fix the commit, amend it and run it again.
+`--dry-run` prints the steps.
+
+The pre-push hook runs no test. It refuses a push to `main`, or of a
+`v*` tag, unless `ci.yml` passed for that exact commit. Without `gh`,
+or on a remote that is not GitHub, it prints a notice and lets the push
+go. `sh tests/land.sh --passed SHA` is that one check, and
+`release.yml` asks it again on the server. `tests/land_test.sh` proves
+the hook and `tests/land.sh` against a stub `gh`.
+
+`tests/docs_test.py` holds the list whole. Every file in `tests/` is
+run by `tests/gate.sh` or named in `NOT_IN_GATE` with its reason. The
+hooks and the workflows name no test file.
+
+The gate calls `bin/spark` directly. `tests/check_selftest.py` is a
 standalone entry to `spark check --selftest`. The privacy gate also
 reads the staged diff for secret shapes: `SOURCE_SHAPES` in
 `lib/spark/text.py`, minus the two tuned for a paste and the two tuned
 for a source. It names the shape, never the line, and skips a line
 marked `spark:allow-secret`. shellcheck is the contributor's tool, not
-a user's package, and the hook skips it with a notice when absent.
+a user's package, and the gate skips it with a notice when absent.
 
-CI is the second net, `.github/workflows/`. In `ci.yml` the `linux` and
-`macos` jobs run the hermetic tests, then a real bootstrap on the
-runner. The `debian`, `arch` and `void` jobs run the one-liner as a new
+CI is where the full gate runs, `.github/workflows/`. `ci.yml` runs on
+a push to `main` or to a `try/` branch, on a pull request and by hand.
+A tag push runs `release.yml` alone. A newer push cancels an older run
+on a `try/` branch or a pull request, never on `main`. The `linux` and
+`macos` jobs run `tests/gate.sh full`, one job per group. The `rest`
+job then runs a real bootstrap on the runner. The `debian`, `arch` and
+`void` jobs run the one-liner as a new
 user in a container. The `void` job starts a runsvdir first, so it
 proves `spark-check` running supervised. The `workflows` job runs
 zizmor over the workflows, medium and above failing. `codeql.yml` is
