@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # line_audition.py -- the prompt line, judged by outcomes. Plain words a
 # person types after `? ` go through the real `spark line` (contract 4)
-# for four OSes (debian, arch, void, macos) and for spark itself, and a
+# for six OSes (debian, arch, void, fedora, opensuse, macos) and for spark
+# itself, and a
 # mechanical grader decides each answer: line 1 is contract 4's shape,
 # the head command exists on that OS, every option it passes appears in
 # that OS's own help, the case's must-nots hold, and danger is right.
@@ -69,7 +70,7 @@ CASES = os.path.join(DATA, "cases.json")
 LIB = os.path.join(REPO, "lib")
 sys.path.insert(0, LIB)
 
-OSES = ("debian", "arch", "void", "macos")
+OSES = ("debian", "arch", "void", "fedora", "opensuse", "macos")
 SUBJECTS = ("tools", "spark")
 ARMS = ("off", "judge", "full")
 ROLES = ("spark", "ember")         # --role: which model answers the line (SPARK_LINE_ROLE)
@@ -162,7 +163,7 @@ def cases_for(data, os_name, subject=None, only=None):
 
 
 def this_os():
-    """The OS this machine is, in the audition's four names, or ""."""
+    """The OS this machine is, in the audition's six names, or ""."""
     if sys.platform == "darwin":
         return "macos"
     from spark import distro

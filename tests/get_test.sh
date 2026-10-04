@@ -201,7 +201,7 @@ out=$(SPARK_HOME="$T/piped" sh -s -- --clone-only < "$REPO/get" 2>&1) && ok "pip
 
 # 7. no git on PATH: a PATH of only the other tools get needs
 mkdir "$T/nogit"
-for t in sh uname ls python3 apt-get pacman xbps-install xcode-select; do
+for t in sh uname ls python3 apt-get pacman xbps-install dnf zypper xcode-select; do
     p=$(command -v "$t" 2>/dev/null || true); [ -z "$p" ] || ln -s "$p" "$T/nogit/$t"
 done
 if out=$(PATH="$T/nogit" SPARK_HOME="$T/nogit-home" /bin/sh "$REPO/get" --clone-only 2>&1); then bad "no git: not refused"; else ok "no git: refused"; fi
@@ -210,10 +210,14 @@ printf '%s\n' "$out" | grep -q 'missing: git' && ok "no git: the refusal names g
 [ ! -e "$T/nogit-home" ] && ok "no git: nothing cloned" || bad "no git: a clone appeared"
 
 # 7b. the family probe (get's Linux arm; a uname stub says Linux, so both
-#     OSes prove it): a PATH with none of apt-get, pacman or xbps-install is
-#     refused naming the three, before any clone; an xbps-install alone
-#     passes it (Void) and the clone lands; a musl loader where SPARK_LD_MUSL
-#     points refuses in one line (the pinned engine is a glibc build)
+#     OSes prove it): a PATH with none of apt-get, pacman, xbps-install,
+#     dnf or zypper is refused naming the five, before any clone; an
+#     xbps-install alone passes it (Void) and the clone lands; a musl loader
+#     where SPARK_LD_MUSL points refuses in one line (the pinned engine is
+#     a glibc build); a dnf alone passes (Fedora) and its fix line names
+#     dnf's packages, a zypper alone the same (openSUSE); an atomic system
+#     (rpm-ostree's boot mark where SPARK_OSTREE_BOOTED points, or a
+#     transactional-update on PATH) refuses in one line, nothing cloned
 tools() {   # tools DIR -- what get runs after the probe, and a uname that says Linux x86_64
     mkdir -p "$1"
     for t in sh ls python3 git ssh-keygen head rm find cut sed tr mktemp cat; do p=$(command -v "$t" 2>/dev/null || true); [ -z "$p" ] || ln -s "$p" "$1/$t"; done
@@ -221,9 +225,9 @@ tools() {   # tools DIR -- what get runs after the probe, and a uname that says 
 }
 tools "$T/nopm"
 rc=0; out=$(PATH="$T/nopm" SPARK_HOME="$T/nopm-home" /bin/sh "$REPO/get" --clone-only 2>&1) || rc=$?; note "$out"
-[ "$rc" -eq 1 ] && ok "no apt-get, pacman or xbps-install: refused, exit 1" || bad "no package manager: rc $rc: $out"
-printf '%s\n' "$out" | grep -qF 'spark get: no apt-get, pacman or xbps-install -- a Debian-family, Arch or Void Linux in this version' \
-    && ok "the refusal names the three managers and the three families" || bad "no package manager: $out"
+[ "$rc" -eq 1 ] && ok "no apt-get, pacman, xbps-install, dnf or zypper: refused, exit 1" || bad "no package manager: rc $rc: $out"
+printf '%s\n' "$out" | grep -qF 'spark get: no apt-get, pacman, xbps-install, dnf or zypper -- a Debian-family, Arch, Void, Fedora or openSUSE Linux in this version' \
+    && ok "the refusal names the five managers and the five families" || bad "no package manager: $out"
 [ ! -e "$T/nopm-home" ] && ok "no package manager: nothing cloned" || bad "no package manager: a clone appeared"
 tools "$T/xbps"; printf '#!/bin/sh\nexit 0\n' > "$T/xbps/xbps-install"; chmod +x "$T/xbps/xbps-install"
 out=$(PATH="$T/xbps" SPARK_LD_MUSL="$T/no-ld-musl-*.so.1" SPARK_HOME="$T/xbps-home" /bin/sh "$REPO/get" --clone-only 2>&1) \
@@ -234,6 +238,28 @@ rc=0; out=$(PATH="$T/xbps" SPARK_LD_MUSL="$T/ld-musl-x86_64.so.1" SPARK_HOME="$T
 [ "$rc" -eq 1 ] && printf '%s\n' "$out" | grep -qF "spark get: musl libc: the pinned engine is a glibc build -- Void's glibc flavour runs spark" \
     && ok "a musl loader: refused in one line, exit 1" || bad "musl: rc $rc: $out"
 [ ! -e "$T/musl-home" ] && ok "a musl loader: nothing cloned" || bad "musl: a clone appeared"
+# dnf alone (Fedora), zypper alone (openSUSE): the probe passes and the
+# clone lands; without a git on PATH the fix line is that manager's own
+for pm in dnf zypper; do
+    tools "$T/$pm"; printf '#!/bin/sh\nexit 0\n' > "$T/$pm/$pm"; chmod +x "$T/$pm/$pm"
+    out=$(PATH="$T/$pm" SPARK_LD_MUSL="$T/no-ld-musl-*.so.1" SPARK_OSTREE_BOOTED="$T/no-ostree-booted" SPARK_HOME="$T/$pm-home" /bin/sh "$REPO/get" --clone-only 2>&1) \
+        && ok "$pm alone: the probe passes, get runs on" || bad "$pm alone: $out"; note "$out"
+    [ -x "$T/$pm-home/bin/spark" ] && ok "$pm alone: the clone landed" || bad "$pm alone: no clone"
+    rm -f "$T/$pm/git"
+    rc=0; out=$(PATH="$T/$pm" SPARK_LD_MUSL="$T/no-ld-musl-*.so.1" SPARK_OSTREE_BOOTED="$T/no-ostree-booted" SPARK_HOME="$T/$pm-nogit" /bin/sh "$REPO/get" --clone-only 2>&1) || rc=$?; note "$out"
+    [ "$rc" -eq 1 ] && printf '%s\n' "$out" | grep -qF "spark get: missing: git -- sudo $pm install -y git openssh-clients python3 curl, then run this again" \
+        && ok "$pm, no git: the fix line is $pm's own" || bad "$pm fix line: rc $rc: $out"
+done
+: > "$T/ostree-booted"
+rc=0; out=$(PATH="$T/dnf" SPARK_LD_MUSL="$T/no-ld-musl-*.so.1" SPARK_OSTREE_BOOTED="$T/ostree-booted" SPARK_HOME="$T/ostree-home" /bin/sh "$REPO/get" --clone-only 2>&1) || rc=$?; note "$out"
+[ "$rc" -eq 1 ] && printf '%s\n' "$out" | grep -qF 'spark get: an atomic system (rpm-ostree): no package manager to install with -- Fedora Workstation or Server runs spark' \
+    && ok "rpm-ostree's boot mark: refused in one line, exit 1" || bad "ostree: rc $rc: $out"
+[ ! -e "$T/ostree-home" ] && ok "rpm-ostree's boot mark: nothing cloned" || bad "ostree: a clone appeared"
+printf '#!/bin/sh\nexit 0\n' > "$T/zypper/transactional-update"; chmod +x "$T/zypper/transactional-update"
+rc=0; out=$(PATH="$T/zypper" SPARK_LD_MUSL="$T/no-ld-musl-*.so.1" SPARK_OSTREE_BOOTED="$T/no-ostree-booted" SPARK_HOME="$T/microos-home" /bin/sh "$REPO/get" --clone-only 2>&1) || rc=$?; note "$out"
+[ "$rc" -eq 1 ] && printf '%s\n' "$out" | grep -qF 'spark get: an atomic system (transactional-update): no package manager to install with -- openSUSE Tumbleweed runs spark' \
+    && ok "transactional-update on PATH: refused in one line, exit 1" || bad "transactional-update: rc $rc: $out"
+[ ! -e "$T/microos-home" ] && ok "transactional-update on PATH: nothing cloned" || bad "transactional-update: a clone appeared"
 
 # 8. an old python3: the version check fails
 mkdir "$T/oldpy"; printf '#!/bin/sh\nexit 1\n' > "$T/oldpy/python3"; chmod +x "$T/oldpy/python3"

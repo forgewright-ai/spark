@@ -319,6 +319,11 @@ def test_parsers():
           intake.parse_xbps_list("ii runit-2.1.2_18      A UNIX init scheme\nii xbps-0.60.3_1  The package system\n")
           == {"runit": "A UNIX init scheme", "xbps": "The package system"}
           and intake.parse_xbps_owners("runit-2.1.2_18: /usr/bin/sv (regular file)\n") == {"/usr/bin/sv": "runit"})
+    check("parse_rpm_list and parse_rpm_owners",
+          intake.parse_rpm_list("curl\tA utility for getting files from remote servers\ngpg-pubkey\t\nnot a row\n")
+          == {"curl": "A utility for getting files from remote servers", "gpg-pubkey": ""}
+          and intake.parse_rpm_owners("curl\t/usr/bin/curl\ncurl\t/usr/share/man/man1/curl.1.gz\nrpm\t/usr/bin/rpm\n",
+                                      {"/usr/bin/curl", "/usr/bin/ls"}) == {"/usr/bin/curl": "curl"})
     check("parse_desktop: the [Desktop Entry] group, unlocalised keys",
           intake.parse_desktop("[Desktop Entry]\nName=A\nName[de]=B\nExec=a %U\n[Desktop Action x]\nExec=evil\n")
           == {"Name": "A", "Exec": "a %U"})
@@ -724,9 +729,9 @@ def test_includes():
 
 
 def test_owners_clean():
-    """Owners._xbps and _Build._xcode find their program on the absolute
-    PATH (a relative entry is someone else's directory) and run it in the
-    one clean environment, never the caller's."""
+    """Owners._xbps, Owners._rpm and _Build._xcode find their program on
+    the absolute PATH (a relative entry is someone else's directory) and
+    run it in the one clean environment, never the caller's."""
     good = os.path.join(T, "own-bin")
     rel = os.path.join(T, "own-rel")
     target = os.path.join(BIN, "nomanual")
@@ -740,7 +745,13 @@ def test_owners_clean():
     prog(os.path.join(rel, "xbps-query"), "#!/bin/sh\necho 'ii planted-1_1  planted'\n"
          "echo 'planted-1_1: %s (regular file)'\n" % target)
     prog(os.path.join(rel, "xcode-select"), "#!/bin/sh\nexit 0\n")
+    # rpm the same way: -qa's two transcripts, by the query format asked
+    prog(os.path.join(good, "rpm"),
+         "#!/bin/sh\n[ -n \"$SPARK_OWNERS_LEAK\" ] && exit 3\n"
+         "case \"$3\" in '['*) printf 'fxrpm\\t%s\\n' ;; *) printf 'fxrpm\\tThe rpm fixture package\\n' ;; esac\n" % target)
+    prog(os.path.join(rel, "rpm"), "#!/bin/sh\nprintf 'planted\\t%s\\n'\n" % target)
     saved = (intake.DPKG_INFO, intake.PACMAN_LOCAL, intake.XBPS_DB, os.environ.get("PATH", ""), os.getcwd())
+    saved_rpm = (intake.RPM_DB, intake.RPM_DB_OLD)
     intake.DPKG_INFO, intake.PACMAN_LOCAL, intake.XBPS_DB = (os.path.join(T, "no-dpkg"), os.path.join(T, "no-pacman"),
                                                              os.path.join(T, "own-xbps"))
     os.makedirs(intake.XBPS_DB, exist_ok=True)
@@ -756,14 +767,26 @@ def test_owners_clean():
         os.environ["PATH"] = "own-rel" + os.pathsep + empty
         got_rel = intake.Owners({target}).of(target)
         xc_rel = intake._Build(os.path.join(T, "store-own"), 5)._xcode()
+        # no xbps database, an rpm one: the rpm arm answers, the same two ways
+        intake.XBPS_DB = os.path.join(T, "no-xbps")
+        intake.RPM_DB, intake.RPM_DB_OLD = os.path.join(T, "own-rpm"), os.path.join(T, "no-rpm")
+        os.makedirs(intake.RPM_DB, exist_ok=True)
+        os.environ["PATH"] = "own-rel" + os.pathsep + good
+        got_rpm = intake.Owners({target}).of(target)
+        os.environ["PATH"] = "own-rel" + os.pathsep + empty
+        got_rpm_rel = intake.Owners({target}).of(target)
     finally:
         intake.DPKG_INFO, intake.PACMAN_LOCAL, intake.XBPS_DB = saved[:3]
+        intake.RPM_DB, intake.RPM_DB_OLD = saved_rpm
         os.environ["PATH"] = saved[3]
         os.environ.pop("SPARK_OWNERS_LEAK", None)
         os.chdir(saved[4])
     check("Owners._xbps: xbps-query from the absolute PATH, in the clean environment (the caller's variable never "
           "reaches it)", got == ("xbps:fxpkg", "The fixture package"), got)
     check("Owners._xbps: an xbps-query on a relative PATH entry is never run", got_rel == ("local", ""), got_rel)
+    check("Owners._rpm: rpm from the absolute PATH, in the clean environment, names the owner and its summary",
+          got_rpm == ("rpm:fxrpm", "The rpm fixture package"), got_rpm)
+    check("Owners._rpm: an rpm on a relative PATH entry is never run", got_rpm_rel == ("local", ""), got_rpm_rel)
     check("_Build._xcode: xcode-select from the absolute PATH, in the clean environment; a relative entry's is not run",
           xc is True and xc_rel is False, (xc, xc_rel))
 

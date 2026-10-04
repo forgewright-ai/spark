@@ -16,6 +16,10 @@
 # void: the third family, the same new user in a Void container -- packages
 # through xbps, the services under runit: a runsvdir started by root stands
 # in for the booted machine's, so spark-check runs supervised there.
+# fedora: the fourth family, the same new user in a Fedora container --
+# packages through dnf, "is it installed" asked of rpm by provider.
+# opensuse: the fifth family, the same new user in a Tumbleweed container
+# -- packages through zypper, the same rpm underneath.
 # workflows: zizmor, a pinned version in a venv, over these workflows
 # themselves -- an unpinned action, a template expanded into a shell, a
 # permission nobody uses; medium and above fails.
@@ -220,6 +224,98 @@ jobs:
           awk -F'\t' '$1=="SOFTWARE" && $2=="fail" { bad=1; print } END { exit bad }' /tmp/porcelain.txt
           # the services row is REAL here (runit live), never na
           awk -F'\t' '$3=="services" { print; found=1; if ($2!="ok") bad=1 } END { exit bad || !found }' /tmp/porcelain.txt
+          sudo -u newuser -H sh -c 'grep -q "config/spark/hook\." ~/.bashrc'
+  fedora:
+    # the fourth family: the same new user, the same one-liner, in a Fedora
+    # container -- packages through dnf, and "is it installed" asked of rpm
+    # by provider (libgomp proves the install path when the image lacks it).
+    runs-on: ubuntu-latest
+    # fedora:44 pinned by its multi-arch index digest, as debian:13 is: a
+    # versioned release, so a tag can move and a digest is the image. Moved
+    # by hand (Docker Hub: the manifest of fedora:44)
+    container: fedora:44@sha256:43b29f65a41eb9c35e1cd5323e3bdf3b655c2357a9f4f1ff2f9c2798e5045d80
+    timeout-minutes: 20
+    steps:
+      # git first, as in the debian job
+      - run: dnf install -y git ca-certificates >/dev/null
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: a new user with sudo
+        run: |
+          # what the image lacks and an installed Fedora has: ps (procps-ng),
+          # cmp (diffutils), hostname; sudo and useradd are named to be sure
+          dnf install -y sudo curl python3 procps-ng diffutils hostname shadow-utils >/dev/null
+          useradd -m -s /bin/bash newuser
+          echo 'newuser ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/newuser && chmod 440 /etc/sudoers.d/newuser
+          git config --system safe.directory '*'
+          git -C "$GITHUB_WORKSPACE" symbolic-ref -q HEAD >/dev/null || git -C "$GITHUB_WORKSPACE" checkout -q -B ci
+      - name: the one-liner, pipe form, from the tree under test
+        run: |
+          ref=$(git -C "$GITHUB_WORKSPACE" symbolic-ref -q --short HEAD || echo ci)
+          sudo -u newuser -H env SITE_AI_MODEL=none SPARK_URL="file://$GITHUB_WORKSPACE" SPARK_REF="$ref" \
+            sh -c 'cat "$1" | sh' _ "$GITHUB_WORKSPACE/get"
+      - name: converged, checked, hooked
+        run: |
+          sudo -u newuser -H sh -c '~/.spark/bootstrap.sh --dry-run' | tee /tmp/dry.txt
+          grep -q '^Nothing to do$' /tmp/dry.txt
+          grep -qE '^skip +systemd ' /tmp/dry.txt
+          grep -qE '^ok +packages ' /tmp/dry.txt
+          # every name the row counts has a provider in rpm's database
+          for p in $(sudo -u newuser -H sh -c '~/.spark/bootstrap.sh --list-packages'); do rpm -q --whatprovides "$p"; done
+          sudo -u newuser -H sh -c '~/.local/bin/spark check --fresh' || true
+          sudo -u newuser -H sh -c '~/.local/bin/spark check --porcelain --fresh' > /tmp/porcelain.txt
+          awk -F'\t' '$1=="SOFTWARE" && $2=="fail" && $3!="services" { bad=1; print } END { exit bad }' /tmp/porcelain.txt
+          awk -F'\t' '$3=="packages" { print; found=1; if ($2!="ok") bad=1 } END { exit bad || !found }' /tmp/porcelain.txt
+          awk -F'\t' '$3=="services" { print; found=1; if ($2!="na") bad=1 } END { exit bad || !found }' /tmp/porcelain.txt
+          sudo -u newuser -H sh -c 'grep -q "config/spark/hook\." ~/.bashrc'
+  opensuse:
+    # the fifth family: the same new user, the same one-liner, in a
+    # Tumbleweed container -- packages through zypper, and "is it
+    # installed" asked of rpm by provider (python3 is python313's
+    # capability there, no package of its own).
+    runs-on: ubuntu-latest
+    container: opensuse/tumbleweed:latest   # zizmor: ignore[unpinned-images] a rolling distro: latest is the only Tumbleweed there is, and dup moves it to today anyway
+    timeout-minutes: 20
+    steps:
+      # git first, as in the debian job; dup is the image's own rule (a
+      # rolling distro: the full upgrade, never up)
+      - run: zypper --non-interactive dup --no-recommends >/dev/null; zypper --non-interactive install --no-recommends git ca-certificates >/dev/null
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: a new user with sudo
+        run: |
+          # what the image lacks and an installed Tumbleweed has: find
+          # (findutils), cmp (diffutils), hostname; useradd (shadow) is
+          # named to be sure. awk is busybox-gawk's by now, and gawk
+          # conflicts with it. --quiet prints a problem and nothing else
+          zypper --quiet --non-interactive install --no-recommends sudo curl python3 findutils diffutils hostname shadow
+          useradd -m -s /bin/bash newuser
+          mkdir -p /etc/sudoers.d
+          echo 'newuser ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/newuser && chmod 440 /etc/sudoers.d/newuser
+          git config --system safe.directory '*'
+          git -C "$GITHUB_WORKSPACE" symbolic-ref -q HEAD >/dev/null || git -C "$GITHUB_WORKSPACE" checkout -q -B ci
+      - name: the one-liner, pipe form, from the tree under test
+        run: |
+          ref=$(git -C "$GITHUB_WORKSPACE" symbolic-ref -q --short HEAD || echo ci)
+          sudo -u newuser -H env SITE_AI_MODEL=none SPARK_URL="file://$GITHUB_WORKSPACE" SPARK_REF="$ref" \
+            sh -c 'cat "$1" | sh' _ "$GITHUB_WORKSPACE/get"
+      - name: converged, checked, hooked
+        run: |
+          sudo -u newuser -H sh -c '~/.spark/bootstrap.sh --dry-run' | tee /tmp/dry.txt
+          grep -q '^Nothing to do$' /tmp/dry.txt
+          grep -qE '^skip +systemd ' /tmp/dry.txt
+          grep -qE '^ok +packages ' /tmp/dry.txt
+          # every name the row counts has a provider in rpm's database
+          for p in $(sudo -u newuser -H sh -c '~/.spark/bootstrap.sh --list-packages'); do rpm -q --whatprovides "$p"; done
+          sudo -u newuser -H sh -c '~/.local/bin/spark check --fresh' || true
+          sudo -u newuser -H sh -c '~/.local/bin/spark check --porcelain --fresh' > /tmp/porcelain.txt
+          awk -F'\t' '$1=="SOFTWARE" && $2=="fail" && $3!="services" { bad=1; print } END { exit bad }' /tmp/porcelain.txt
+          awk -F'\t' '$3=="packages" { print; found=1; if ($2!="ok") bad=1 } END { exit bad || !found }' /tmp/porcelain.txt
+          awk -F'\t' '$3=="services" { print; found=1; if ($2!="na") bad=1 } END { exit bad || !found }' /tmp/porcelain.txt
           sudo -u newuser -H sh -c 'grep -q "config/spark/hook\." ~/.bashrc'
   macos:
     runs-on: macos-latest

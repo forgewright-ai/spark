@@ -141,7 +141,7 @@ def row_packages(ctx):
         return ok("nothing to install")
     have = packages.installed(pkgs)
     if have is None:
-        return fail("no package manager spark knows (%s)" % (packages.manager() or "apt, pacman or xbps"))
+        return fail("no package manager spark knows (%s)" % (packages.manager() or "apt, pacman, xbps, dnf or zypper"))
     missing = [p for p in pkgs if p not in have]
     if missing:
         return fail("%d of %d missing: %s" % (len(missing), len(pkgs), " ".join(missing[:6])), "spark update")
@@ -1449,6 +1449,14 @@ ARCH_ROWS = ()
 # that the packages row answers through xbps and the services row
 # through sv
 VOID_ROWS = ()
+# the rows Fedora answers differently (na or a Fedora note, never a
+# fault): none today. The selftest's seventh pass, on Linux, proves each
+# says so and that the packages row answers through dnf's rpm
+FEDORA_ROWS = ()
+# the rows openSUSE answers differently (na or an openSUSE note, never a
+# fault): none today. The selftest's eighth pass, on Linux, proves each
+# says so and that the packages row answers through zypper's rpm
+OPENSUSE_ROWS = ()
 # a client's rows: nothing runs here (SITE_AI_MODEL=none + SITE_PEER_AI_URL),
 # so the engine, the units, their snapshot, the local AI, its two servers and
 # a second model of its own are na before they look; the peer row is where a
@@ -1977,6 +1985,11 @@ def make_fixture(root, good, stub_url="", real_spark=False):
           "#!/bin/sh\n" + ("case $1 in -l) for p in %s; do echo \"ii $p-1.0_1 fixture\"; done ;; -p|-R) exit 0 ;; *) exit 1 ;; esac\n"
                             % " ".join(void_names) if good else "exit 1\n"))
     _stub(os.path.join(bin_, "xbps-install"), "#!/bin/sh\n" + ("exit 0\n" if good else "exit 1\n"))
+    # rpm for the Fedora and openSUSE passes: -q --whatprovides says a
+    # package provides the name (good), or none does (bad)
+    _stub(os.path.join(bin_, "rpm"),
+          "#!/bin/sh\n" + ("case \"$1 $2\" in '-q --whatprovides') echo \"$3-1.0-1.fixture\" ;; *) exit 1 ;; esac\n" if good
+                            else "echo \"no package provides $3\"; exit 1\n"))
     # sv for the Void pass: the dir asked about is supervised and running
     # (good), or no runsv watches it (bad)
     _stub(os.path.join(bin_, "sv"),
@@ -2086,7 +2099,9 @@ def selftest():
     client row na; a fourth, on Linux, the good fixture under WSL 2:
     every WSL row says so; a fifth under ID=arch, where the packages row
     answers through pacman; a sixth under ID=void, where the packages row
-    answers through xbps and the services row through sv."""
+    answers through xbps and the services row through sv; a seventh under
+    ID=fedora and an eighth under openSUSE's ID_LIKE, where the packages
+    row answers through rpm, dnf's and zypper's database."""
     base = {k: v for k, v in os.environ.items()
             if not k.startswith(("GIT_", "SPARK_", "XDG_", "SITE_"))}
     results = {}
@@ -2197,6 +2212,28 @@ def selftest():
                 parts = line.split("\t")
                 if len(parts) == 5:
                     results["void"][parts[2]] = (parts[1], parts[3])
+        # the seventh and eighth passes, Linux only: the good fixture as
+        # Fedora (ID=fedora) and as openSUSE (Tumbleweed's own os-release:
+        # the family is the ID_LIKE word), an rpm stub -- the packages row
+        # answers through rpm, the one database under dnf and zypper
+        for tag, body in (("fedora", 'ID=fedora\nPRETTY_NAME="Fedora Linux"\n'),
+                          ("opensuse", 'ID="opensuse-tumbleweed"\nID_LIKE="opensuse suse"\n'
+                                       'PRETTY_NAME="openSUSE Tumbleweed"\n')):
+            results[tag] = {}
+            if IS_MAC:
+                continue
+            root = os.path.join(tmp, tag)
+            os.makedirs(root)
+            env = dict(base)
+            env.update(make_fixture(root, True, stub_url))
+            with open(os.path.join(root, "os-release"), "w") as f:
+                f.write(body)
+            p = subprocess.run([sys.executable, os.path.join(REPO, "bin", "spark"), "check", "--porcelain", "--fresh"],
+                               env=env, capture_output=True, text=True, timeout=180)
+            for line in p.stdout.splitlines():
+                parts = line.split("\t")
+                if len(parts) == 5:
+                    results[tag][parts[2]] = (parts[1], parts[3])
     srv.shutdown()
     bad = 0
     say("%s check --selftest" % MARK)
@@ -2255,6 +2292,17 @@ def selftest():
             % (GLYPH[OK] if not off and pk == OK and svc == OK else GLYPH[FAIL], len(VOID_ROWS) - len(off), pk, svc,
                "" if not off else "   not so: " + " ".join(off)))
         bad += bool(off) or pk != OK or svc != OK
+    for tag, name, rows, pm in (("fedora", "Fedora", FEDORA_ROWS, "dnf"), ("opensuse", "openSUSE", OPENSUSE_ROWS, "zypper")):
+        if IS_MAC:
+            say("  %s %s: skipped on macOS (a Linux gate proves it)" % (GLYPH[NA], tag))
+            continue
+        off = [n for n in rows
+               if results[tag].get(n, ("missing", ""))[0] not in (NA, OK) or name not in results[tag].get(n, ("", ""))[1]]
+        pk = results[tag].get("packages", ("missing", ""))[0]
+        say("  %s %s: %d rows say %s, packages %s via %s%s"
+            % (GLYPH[OK] if not off and pk == OK else GLYPH[FAIL], tag, len(rows) - len(off), name, pk, pm,
+               "" if not off else "   not so: " + " ".join(off)))
+        bad += bool(off) or pk != OK
     say("  %d row%s failed to flip" % (bad, "" if bad == 1 else "s") if bad else "  every fixture-testable row flips")
     return 1 if bad else 0
 

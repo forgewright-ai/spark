@@ -50,6 +50,53 @@ Void:
    sudo xbps-install -Sy git curl python3
    ```
 
+Fedora:
+
+1. Get the Fedora Everything network installer from fedoraproject.org,
+   `x86_64`. It is the only image with a minimal system. Write it to a
+   USB stick and boot it.
+2. On a machine with Wi-Fi only, use the graphical installer. The text
+   installer cannot join a WPA network.
+3. Leave Installation Source on the closest mirror: the image holds no
+   packages. `Failed to download metadata` means the network is not up
+   yet.
+4. In Software Selection choose `Fedora Custom Operating System`. The
+   text installer calls it `Minimal Install`.
+5. In Installation Destination pick the disk, then Automatic and Done.
+   Then choose Reclaim space, Delete all and Reclaim.
+6. Make your user an administrator, for `sudo`.
+7. Reboot, log in and run:
+
+   ```sh
+   sudo dnf install -y git openssh-clients python3 curl
+   ```
+
+Warning: a minimal Fedora installed over Wi-Fi boots with no Wi-Fi. It
+lacks the drivers, in `kernel-modules`, and `NetworkManager-wifi` and
+`wpa_supplicant`. Add them in Software Selection if you can. Otherwise
+plug in a cable for the first boot, then run:
+
+```sh
+sudo dnf install -y NetworkManager-wifi wpa_supplicant kernel-modules
+sudo reboot
+```
+
+A wired machine needs none of this.
+
+openSUSE:
+
+1. Get the openSUSE Tumbleweed network installer from
+   get.opensuse.org. Write it to a USB stick and boot it.
+2. Choose a minimal or server system role, and a user who can use
+   `sudo`.
+3. Reboot, log in and run:
+
+   ```sh
+   sudo zypper install -y git openssh-clients python3 curl
+   ```
+
+These openSUSE steps were not run on a real machine.
+
 macOS: run `xcode-select --install`. It brings `git`, `curl` and
 `python3`.
 
@@ -79,6 +126,9 @@ when asked. Open Ubuntu and run Debian's step 3.
      a package is not found, run `sudo pacman -Syu` first.
    - Void Linux: `sudo xbps-install -Sy git curl python3`. If xbps
      refuses, run `sudo xbps-install -Su` first.
+   - Fedora: `sudo dnf install -y git openssh-clients python3 curl`.
+   - openSUSE Tumbleweed:
+     `sudo zypper install -y git openssh-clients python3 curl`.
    - macOS: `xcode-select --install`.
 
    Your login shell must be zsh, or bash 4 or newer. macOS's bash is
@@ -128,7 +178,8 @@ shows the notice again.
 2. Asks whether spark should read aloud in a clear voice, for low
    vision. The default is no.
 3. On Linux, may ask for `sudo` once for a package: `libgomp1` on
-   Debian, `libgomp` on Void, and the Vulkan drivers with a GPU.
+   Debian and openSUSE, `libgomp` on Void and Fedora, and the Vulkan
+   drivers with a GPU.
 4. Downloads the engine and the model, and checks both by sha256.
 5. Writes a token, adds one line to your rc file and starts the
    services: the engine, the page's server and a check every 5 minutes.
@@ -365,6 +416,14 @@ network can read it.
 - `spark serve` shows what runs and where.
 - `spark serve boot on` keeps them up from boot, with nobody logged in.
 
+Fedora and openSUSE turn a firewall on, firewalld, and spark does not
+change it. Other machines reach this one only after you open the port:
+
+```sh
+sudo firewall-cmd --permanent --add-port=8081/tcp
+sudo firewall-cmd --reload
+```
+
 Another machine of yours:
 
 1. Here: `spark user add NAME`. The token is shown once.
@@ -479,6 +538,28 @@ Void:
   run from boot.
 - Void has no `hostname` command. With `SITE_SET_HOSTNAME=yes`, spark
   writes `/etc/hostname`.
+
+Fedora:
+
+- Packages come through `dnf install -y`. `sudo dnf upgrade` upgrades
+  the system.
+- CI proves the install line in a Fedora container. On a real machine
+  Fedora is not proven: the engine, the GPU and the services.
+- Fedora Silverblue, Kinoite and the other atomic systems are not
+  supported in this version.
+- Rocky Linux and AlmaLinux are treated as Fedora. They are not
+  proven, and their older system library may not run the engine.
+- The firewall is on: see section 5.
+
+openSUSE:
+
+- Tumbleweed and Leap are one family. Packages come through `zypper
+  install -y`. On Tumbleweed, `sudo zypper dup` upgrades the system.
+- CI proves the install line in a Tumbleweed container. On a real
+  machine openSUSE is not proven: the engine, the GPU and the services.
+- MicroOS, Aeon and the other atomic systems are not supported in this
+  version.
+- The firewall is on: see section 5.
 
 Windows, as Ubuntu 24.04 on WSL 2:
 

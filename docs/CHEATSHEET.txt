@@ -152,6 +152,9 @@ LINUX
   systemctl --user status spark-serve spark-forge
   journalctl --user -u spark-serve -n 50
   Void: sv status ~/.config/spark/sv/*
+  Fedora, openSUSE: open the page's port for other machines
+    sudo firewall-cmd --permanent --add-port=8081/tcp
+    sudo firewall-cmd --reload
 
 MACOS
   launchctl print gui/$UID/spark.serve

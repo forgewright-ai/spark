@@ -106,6 +106,61 @@ jobs:
           name: help-void
           path: help-void.json
           if-no-files-found: error
+  fedora:
+    runs-on: ubuntu-latest
+    # fedora:44 pinned by its multi-arch index digest, as in ci.yml
+    container: fedora:44@sha256:43b29f65a41eb9c35e1cd5323e3bdf3b655c2357a9f4f1ff2f9c2798e5045d80
+    timeout-minutes: 20
+    steps:
+      - run: dnf install -y git ca-certificates python3 >/dev/null
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
+        with:
+          persist-credentials: false
+      - name: the tools the cases name, with their man pages
+        run: |
+          # the image's dnf.conf installs no documentation: drop that
+          # line, then reinstall what the base already holds so its man
+          # pages land too (--allowerasing: coreutils replaces the image's
+          # coreutils-single)
+          sed -i '/^tsflags=nodocs/d' /etc/dnf/dnf.conf
+          for p in $(python3 tests/line_audition.py packages --os fedora); do
+            if rpm -q "$p" >/dev/null 2>&1; then dnf reinstall -y "$p" >/dev/null 2>&1 || echo "not reinstalled: $p"
+            else dnf install -y --allowerasing "$p" >/dev/null 2>&1 || echo "not installed: $p"; fi
+          done
+          ls /usr/share/man/man8/dnf*.8* /usr/share/man/man1 2>/dev/null | wc -l
+      - name: collect
+        run: python3 tests/line_audition.py collect --os fedora --out help-fedora.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a   # v7.0.1
+        with:
+          name: help-fedora
+          path: help-fedora.json
+          if-no-files-found: error
+  opensuse:
+    runs-on: ubuntu-latest
+    container: opensuse/tumbleweed:latest   # zizmor: ignore[unpinned-images] a rolling distro: latest is the only Tumbleweed there is, and dup moves it to today anyway
+    timeout-minutes: 20
+    steps:
+      - run: zypper --non-interactive dup --no-recommends >/dev/null; zypper --non-interactive install --no-recommends git ca-certificates python3 >/dev/null
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1   # v7.0.1
+        with:
+          persist-credentials: false
+      - name: the tools the cases name, with their man pages
+        run: |
+          # the image's zypp.conf installs no documentation: turn that
+          # off, then --force reinstalls what the base already holds so
+          # its man pages land too
+          sed -i 's/^[# ]*rpm\.install\.excludedocs.*/rpm.install.excludedocs = no/' /etc/zypp/zypp.conf
+          for p in $(python3 tests/line_audition.py packages --os opensuse); do
+            zypper --non-interactive install --no-recommends --force "$p" >/dev/null 2>&1 || echo "not installed: $p"
+          done
+          ls /usr/share/man/man8/zypper.8* /usr/share/man/man1 2>/dev/null | wc -l
+      - name: collect
+        run: python3 tests/line_audition.py collect --os opensuse --out help-opensuse.json
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a   # v7.0.1
+        with:
+          name: help-opensuse
+          path: help-opensuse.json
+          if-no-files-found: error
   macos:
     # a stock runner, nothing installed: the system's own tools first on
     # the PATH collect uses, Homebrew's after

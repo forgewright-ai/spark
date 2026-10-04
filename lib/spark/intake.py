@@ -87,7 +87,7 @@ OptionSet = namedtuple("OptionSet", "long short words")
 # app | tree | runit | systemd | launchd; what: one line, what it is; synopsis: how it is called, 3 lines at
 # most; lines: its option lines, each with its first sentence (a spark
 # verb's: its -h lines); origin: who installed it (dpkg:coreutils,
-# xbps:runit, brew:jq, macos, flatpak, local); stamp: (mtime, size) of
+# xbps:runit, rpm:curl, brew:jq, macos, flatpak, local); stamp: (mtime, size) of
 # what it was read from; commands: a CommandSet, or () when its manual
 # lists none
 Entry = namedtuple("Entry", "name kind source what synopsis options lines origin stamp commands",
@@ -132,6 +132,8 @@ DPKG_STATUS = "/var/lib/dpkg/status"
 DPKG_INFO = "/var/lib/dpkg/info"
 PACMAN_LOCAL = "/var/lib/pacman/local"
 XBPS_DB = "/var/db/xbps"
+RPM_DB = "/usr/lib/sysimage/rpm"        # Fedora's and openSUSE's; /var/lib/rpm before them
+RPM_DB_OLD = "/var/lib/rpm"
 BREW_ROOTS = ("/opt/homebrew", "/usr/local", os.path.join("/home", "linuxbrew", ".linuxbrew"))
 MACOS_VERSION = "/System/Library/CoreServices/SystemVersion.plist"
 # a program in one of these (by real path) is the OS's own on macOS
@@ -1332,7 +1334,7 @@ def changed(meta=None):
 # ------------------------------------------------------------ owners
 class Owners:
     """Who installed a file, and the package's one-line summary: dpkg,
-    pacman, xbps or Homebrew, asked once per build and only for the paths
+    pacman, xbps, rpm or Homebrew, asked once per build and only for the paths
     a rebuilt entry needs; the OS's own dirs on macOS are "macos". The
     database roots are module names, so a test can point them anywhere."""
 
@@ -1346,6 +1348,8 @@ class Owners:
                 self._pacman()
             elif os.path.isdir(XBPS_DB):
                 self._xbps()
+            elif os.path.isdir(RPM_DB) or os.path.isdir(RPM_DB_OLD):
+                self._rpm()
         except Exception:
             log_exc("intake.Owners")
 
@@ -1401,6 +1405,22 @@ class Owners:
                 for p, pkg in parse_xbps_owners(out).items():
                     if p in self.paths:
                         self.owner[p] = "xbps:" + pkg
+
+    def _rpm(self):
+        # found on the absolute PATH and run in the one clean environment,
+        # as _xbps asks xbps-query. Two passes over the whole database, no
+        # question per path: every package's summary, then every file each
+        # one owns (the = repeats the name beside each file name)
+        rq = shutil.which("rpm", path=abs_path())
+        if not rq:
+            return
+        rc, out = run([rq, "-qa", "--qf", "%{NAME}\t%{SUMMARY}\n"], timeout=60, env=_man_env())
+        if rc == 0:
+            self.summary.update(parse_rpm_list(out))
+        rc, out = run([rq, "-qa", "--qf", "[%{=NAME}\t%{FILENAMES}\n]"], timeout=120, env=_man_env())
+        if rc == 0:
+            for p, pkg in parse_rpm_owners(out, self.paths).items():
+                self.owner[p] = "rpm:" + pkg
 
     def _brew_desc(self, cellar, pkg, ver):
         k = (cellar, pkg)
@@ -1479,6 +1499,27 @@ def parse_xbps_owners(text):
         m = re.match(r"^(\S+):\s+(/\S+)", line)
         if m:
             out[m.group(2)] = _pkgname(m.group(1))
+    return out
+
+
+def parse_rpm_list(text):
+    """{package: summary} from `rpm -qa --qf '%{NAME}\\t%{SUMMARY}\\n'`."""
+    out = {}
+    for line in text.splitlines():
+        name, tab, summary = line.partition("\t")
+        if tab and name:
+            out[name] = summary.strip()
+    return out
+
+
+def parse_rpm_owners(text, paths):
+    """{path: package} from `rpm -qa --qf '[%{=NAME}\\t%{FILENAMES}\\n]'`,
+    cut to the paths asked about."""
+    out = {}
+    for line in text.splitlines():
+        name, tab, path = line.partition("\t")
+        if tab and path in paths:
+            out[path] = name
     return out
 
 

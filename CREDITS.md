@@ -3,9 +3,10 @@
 spark vendors none of the projects below. `bootstrap.sh` downloads each
 one, pinned by version and sha256, from its own upstream to your
 machine at install time. `spark voice` downloads the voice the same
-way, only when you turn it on. apt, pacman and xbps install the rest
-from their own repositories. spark's own code is MIT (`LICENSE`). The
-banner in `home/.config/spark/banner` is spark's own artwork.
+way, only when you turn it on. apt, pacman, xbps, dnf and zypper
+install the rest from their own repositories. spark's own code is MIT
+(`LICENSE`). The banner in `home/.config/spark/banner` is spark's own
+artwork.
 
 ## The engine
 
@@ -46,29 +47,32 @@ BY-NC-ND 4.0.
 
 ## The packages
 
-apt, pacman or xbps installs these from the distro's own repositories,
-unpinned. macOS needs none. The names are the distro's own, as
-`distro/debian.env`, `distro/arch.env` and `distro/void.env` list
-them, and `tests/docs_test.py` checks that every name there is
-credited here. Where the families name one project differently, every
-name is here.
+apt, pacman, xbps, dnf or zypper installs these from the distro's own
+repositories, unpinned. macOS needs none. The names are the distro's
+own, as `distro/debian.env`, `distro/arch.env`, `distro/void.env`,
+`distro/fedora.env` and `distro/opensuse.env` list them.
+`tests/docs_test.py` checks that every name there is credited here.
+Where the families name one project differently, every name is here.
 
 - git -- GPL-2.0-only.
 - curl -- the curl license.
 - ca-certificates -- MPL-2.0, Mozilla's bundle as the distro ships it.
-- python3 -- PSF-2.0, on Debian and Void.
+- python3 -- PSF-2.0, on Debian, Void, Fedora and openSUSE.
 - python -- PSF-2.0, Arch's name for python3.
-- libgomp1 -- GPL-3.0-or-later, with the GCC runtime exception.
+- libgomp1 -- GPL-3.0-or-later, with the GCC runtime exception. The
+  name on Debian and openSUSE.
 - gcc-libs -- GPL-3.0-or-later, with the GCC runtime exception. Arch's
   libgomp, in `base` there.
-- libgomp -- GPL-3.0-or-later, with the GCC runtime exception. Void's
-  libgomp, its own package there.
-- libvulkan1 -- Apache-2.0, the vulkan build only.
+- libgomp -- GPL-3.0-or-later, with the GCC runtime exception. The
+  libgomp1 of Void and Fedora, its own package there.
+- libvulkan1 -- Apache-2.0, the vulkan build only. The name on Debian
+  and openSUSE.
 - vulkan-icd-loader -- Apache-2.0, Arch's libvulkan1, the vulkan build
   only.
-- vulkan-loader -- Apache-2.0, Void's libvulkan1, the vulkan build
-  only.
-- mesa-vulkan-drivers -- MIT and others, the vulkan build only.
+- vulkan-loader -- Apache-2.0, the libvulkan1 of Void and Fedora, the
+  vulkan build only.
+- mesa-vulkan-drivers -- MIT and others, the vulkan build only. The
+  name on Debian and Fedora.
 - vulkan-radeon -- MIT and others, Mesa's AMD driver on Arch, the vulkan
   build only.
 - vulkan-intel -- MIT and others, Mesa's Intel driver on Arch, the
@@ -77,6 +81,10 @@ name is here.
   vulkan build only.
 - mesa-vulkan-intel -- MIT and others, Mesa's Intel driver on Void, the
   vulkan build only.
+- libvulkan_radeon -- MIT and others, Mesa's AMD driver on openSUSE,
+  the vulkan build only.
+- libvulkan_intel -- MIT and others, Mesa's Intel driver on openSUSE,
+  the vulkan build only.
 
 ## The apps
 

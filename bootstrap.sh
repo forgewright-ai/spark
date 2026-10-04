@@ -299,6 +299,9 @@ pkg_installed() {
         apt) dpkg-query -W -f='${Status}' "$1" 2>/dev/null | grep -q 'install ok installed' ;;
         pacman) pacman -Qq "$1" >/dev/null 2>&1 ;;
         xbps) xbps-query -p pkgver "$1" >/dev/null 2>&1 ;;
+        # rpm counts a provider: python3 is python313's capability on
+        # Tumbleweed, curl another package's on some Fedora images
+        dnf|zypper) rpm -q --whatprovides "$1" >/dev/null 2>&1 ;;
         *) return 1 ;;
     esac
 }
@@ -307,6 +310,8 @@ pkg_available() {
         apt) apt-cache policy "$1" 2>/dev/null | grep -q 'Candidate: [^(]' ;;
         pacman) pacman -Sp "$1" >/dev/null 2>&1 ;;
         xbps) xbps-query -R -p pkgver "$1" >/dev/null 2>&1 ;;
+        dnf) dnf -q repoquery --whatprovides "$1" 2>/dev/null | grep -q . ;;
+        zypper) zypper --non-interactive --no-refresh search --match-exact --provides "$1" >/dev/null 2>&1 ;;
         *) return 1 ;;
     esac
 }
@@ -315,6 +320,8 @@ pkg_install() {   # pkg_install NAME... -- as root, the manager's own way
         apt) as_root apt-get update -qq && as_root env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "$@" ;;
         pacman) as_root pacman -S --needed --noconfirm "$@" ;;      # never -Sy alone: a rolling distro forbids the partial upgrade
         xbps) as_root xbps-install -Sy "$@" ;;                     # -S syncs the index; a stale xbps refuses (the todo below)
+        dnf) as_root dnf install -y "$@" ;;                        # dnf refreshes its own index when it is old
+        zypper) as_root zypper --non-interactive install "$@" ;;   # the same: zypper refreshes first
         *) return 1 ;;
     esac
 }
@@ -346,6 +353,14 @@ else
             # xbps itself is behind, most often (a rolling distro refuses
             # every install until it is current): the full upgrade is the fix
             row todo packages "xbps could not install:$missing -- sudo xbps-install -Su, then spark update"
+        elif [ "$PM" = dnf ]; then
+            # a mirror's index moved under the cached one, most often: the
+            # refreshed upgrade is the fix, the user's to run
+            row todo packages "dnf could not install:$missing -- sudo dnf upgrade --refresh, then spark update"
+        elif [ "$PM" = zypper ]; then
+            # a rolling distro: the repositories moved past this machine,
+            # most often, and the full upgrade (dup, never up) is the fix
+            row todo packages "zypper could not install:$missing -- sudo zypper dup, then spark update"
         else
             tail -20 "$TMP/pkg.log"; echo "! $PM install failed" >&2; exit 1
         fi

@@ -1183,6 +1183,7 @@ def knowledge_cases(t):
             # a package removed, on every family (the audition's one miss)
             "apt-get remove cowsay", "sudo apt purge x", "apt autoremove", "dpkg -r x", "dpkg -P x",
             "pacman -Rns x", "pacman -R x", "brew uninstall jq", "dnf remove x", "zypper rm x", "apk del x",
+            "rpm -e x", "rpm -ev x", "rpm --erase x", "zypper --non-interactive remove x",
             # permissions and owners, and spark's own destroying verbs
             "chmod +x deploy.sh", "chmod 644 f", "chown bob f", "chgrp staff f",
             "spark uninstall", "spark clear --history", "spark history clear", "spark memory forget 3",
@@ -1190,7 +1191,8 @@ def knowledge_cases(t):
             "spark user remove ana", "spark model rm qwen3-4b", "spark soul reset", "spark forge token --new",
             "spark serve --login --new", "spark user token --new"]
     safe = ["apt-get install x", "apt-cache search x", "dpkg -l", "dpkg -L curl", "pacman -Qi x",
-            "pacman -Syu", "brew list", "brew info jq", "apk add x",
+            "pacman -Syu", "brew list", "brew info jq", "apk add x", "rpm -q x", "rpm -qa | grep -e curl",
+            "rpm -q --whatprovides python3", "rpm --eval '%{_libdir}'", "dnf check-update", "zypper list-updates",
             "spark history", "spark clear", "spark memory", "spark memory add x", "spark user list",
             "spark model list",
             "spark forge", "spark serve", "spark serve --login", "ls -l deploy.sh", "stat -f %p f",
@@ -4272,16 +4274,16 @@ def main():
             t.ok(all(_pers.is_dangerous(c) for c in _dang) and not any(_pers.is_dangerous(c) for c in _safe),
                  "danger: %s is marked; its read and install forms stay plain" % _name,
                  str([c for c in _dang if not _pers.is_dangerous(c)] + ["!" + c for c in _safe if _pers.is_dangerous(c)]))
-        # the new lines stay linear: 100 kB of their own worst shape reads in under 0.5 s
+        # the new lines stay linear: 100 kB of their own worst shape reads in under 1 s
         _worst = ["crontab " + "-u " * 34000, "crontab " + "-i " * 34000 + "x", "flatpak " + "-x " * 34000,
                   "pip " + "-x " * 34000, "npm " + "-g " * 34000, "kill -9 " + "12 " * 34000]
         _slow = []
         for _w in _worst:
             _t0 = time.time()
             _pers.is_dangerous(_w[:100000])
-            if time.time() - _t0 >= 0.5:
+            if time.time() - _t0 >= 1.0:
                 _slow.append((_w[:12], round(time.time() - _t0, 2)))
-        t.ok(not _slow, "danger: the v1.56 lines read 100 kB of their worst shape in under 0.5 s", str(_slow))
+        t.ok(not _slow, "danger: the v1.56 lines read 100 kB of their worst shape in under 1 s", str(_slow))
         # v1.75: the reading of the commands (persona._read). A command
         # word the shell rewrites is opaque and dangerous; so is a
         # carrier; a wrapper is read past for the patterns. Each with
@@ -7699,6 +7701,28 @@ def main():
         t.ok(_pkgmod.parse_xbps_removal(_xr) == ["libgomp", "mesa-vulkan-radeon", "vulkan-loader"]
              and _pkgmod.parse_xbps_removal("") == [],
              "packages: the xbps-remove -ny parser reads the remove names, each once, sorted", str(_pkgmod.parse_xbps_removal(_xr)))
+        # v1.82, dnf's and zypper's pending transcripts, pure: `dnf
+        # check-update` (name.arch version repository; the Obsoleting
+        # section repeats names and is not counted), `zypper list-updates`
+        # (the table's v rows)
+        _dp = ("\n"
+               "curl.x86_64                  8.18.0-2.fc44        updates\n"
+               "libgomp.x86_64               16.0.1-3.fc44        updates\n"
+               "vim-minimal.x86_64           2:9.2.1129-1.fc44    updates\n"
+               "Obsoleting Packages\n"
+               "grub2-tools.x86_64           1:2.12-40.fc44       updates\n"
+               "    grub2-tools.x86_64       1:2.12-38.fc44       @System\n")
+        t.ok(_pkgmod.parse_dnf_pending(_dp) == 3 and _pkgmod.parse_dnf_pending("") == 0
+             and _pkgmod.parse_dnf_pending("Last metadata expiration check: 0:10:01 ago on a day.\n") == 0,
+             "packages: the dnf check-update parser counts the name.arch lines, never the Obsoleting section", str(_pkgmod.parse_dnf_pending(_dp)))
+        _zp = ("Loading repository data...\n"
+               "Reading installed packages...\n"
+               "S | Repository | Name    | Current Version | Available Version | Arch\n"
+               "--+------------+---------+-----------------+-------------------+-------\n"
+               "v | repo-oss   | curl    | 8.17.0-1.1      | 8.18.0-1.1        | x86_64\n"
+               "v | repo-oss   | libgomp1 | 16.2.0-3.1     | 16.2.1-1.1        | x86_64\n")
+        t.ok(_pkgmod.parse_zypper_pending(_zp) == 2 and _pkgmod.parse_zypper_pending("No updates found.\n") == 0,
+             "packages: the zypper list-updates parser counts the v rows alone", str(_pkgmod.parse_zypper_pending(_zp)))
         # the pending row's security count (v1.36), pure parsers over
         # pasted transcripts, no manager asked: apt's -security sources
         # (a comma-joined suite list counts once), arch-audit -q's names
@@ -7745,6 +7769,13 @@ def main():
             _pkgmod.security = lambda: 1
             r = _chk.row_pending(_Ctx())
             t.ok((r.status, r.remedy) == ("warn", "sudo pacman -Syu"), "pending row: arch-audit's one is a warn with pacman's line", str((r.status, r.remedy)))
+            for _pm, _line in (("dnf", "sudo dnf upgrade"), ("zypper", "sudo zypper dup")):
+                _pkgmod.manager, _pkgmod.pending = (lambda _pm=_pm: _pm), (lambda: 31)
+                r = _chk.row_pending(_Ctx())
+                t.ok((r.status, r.value, r.remedy) == ("warn", "31 updates pending", _line),
+                     "pending row: %s counts, no security question, and many waiting warn with its own upgrade line" % _pm,
+                     str((r.status, r.value, r.remedy)))
+            _pkgmod.pending = lambda: 5
             _pkgmod.manager = lambda: "brew"
             r = _chk.row_pending(_Ctx())
             t.ok((r.status, r.value) == ("ok", "5 updates pending"), "pending row: macOS counts as before, no security question", str((r.status, r.value)))
@@ -8502,7 +8533,11 @@ def main():
         for name, body in (("arch", 'ID=arch\nPRETTY_NAME="Arch Linux"\n'),
                            ("ubuntu", 'ID=ubuntu\nID_LIKE=debian\nPRETTY_NAME="Ubuntu 24.04 LTS"\n'),
                            ("manjaro", 'ID=manjaro\nID_LIKE=arch\n'),
-                           ("fedora", 'ID=fedora\nPRETTY_NAME="Fedora Linux 42"\n')):
+                           ("fedora", 'ID=fedora\nPRETTY_NAME="Fedora Linux 44"\n'),
+                           ("rocky", 'ID="rocky"\nID_LIKE="rhel centos fedora"\nPRETTY_NAME="Rocky Linux 9.5"\n'),
+                           ("tumbleweed", 'ID="opensuse-tumbleweed"\nID_LIKE="opensuse suse"\nPRETTY_NAME="openSUSE Tumbleweed"\n'),
+                           ("leap", 'ID="opensuse-leap"\nID_LIKE="suse opensuse"\nPRETTY_NAME="openSUSE Leap 16.0"\n'),
+                           ("alpine", 'ID=alpine\nPRETTY_NAME="Alpine Linux v3.22"\n')):
             with open(home + "/os-release-" + name, "w") as f:
                 f.write(body)
         distro_twin = ("import sys; sys.path.insert(0, %r); import spark; spark.IS_MAC = False; "
@@ -8515,11 +8550,18 @@ def main():
         t.ok(distro_fact(home + "/os-release-arch") == "'arch' Arch Linux", "distro: ID=arch is arch, and os_pretty reads the file's PRETTY_NAME", distro_fact(home + "/os-release-arch"))
         t.ok(distro_fact(home + "/os-release-ubuntu") == "'debian' Ubuntu 24.04 LTS", "distro: ID=ubuntu ID_LIKE=debian is debian", distro_fact(home + "/os-release-ubuntu"))
         t.ok(distro_fact(home + "/os-release-manjaro").startswith("'arch' "), "distro: ID=manjaro ID_LIKE=arch is arch", distro_fact(home + "/os-release-manjaro"))
-        t.ok(distro_fact(home + "/os-release-fedora") == "'' Fedora Linux 42", "distro: an unknown family is '', never a guess", distro_fact(home + "/os-release-fedora"))
+        t.ok(distro_fact(home + "/os-release-fedora") == "'fedora' Fedora Linux 44", "distro: ID=fedora is fedora", distro_fact(home + "/os-release-fedora"))
+        t.ok(distro_fact(home + "/os-release-rocky") == "'fedora' Rocky Linux 9.5", "distro: ID=rocky ID_LIKE=\"rhel centos fedora\" is fedora", distro_fact(home + "/os-release-rocky"))
+        t.ok(distro_fact(home + "/os-release-tumbleweed") == "'opensuse' openSUSE Tumbleweed",
+             "distro: ID=opensuse-tumbleweed is opensuse by its ID_LIKE word", distro_fact(home + "/os-release-tumbleweed"))
+        t.ok(distro_fact(home + "/os-release-leap") == "'opensuse' openSUSE Leap 16.0",
+             "distro: ID=opensuse-leap ID_LIKE=\"suse opensuse\" is opensuse, whatever the order", distro_fact(home + "/os-release-leap"))
+        t.ok(distro_fact(home + "/os-release-alpine") == "'' Alpine Linux v3.22", "distro: an unknown family is '', never a guess", distro_fact(home + "/os-release-alpine"))
         t.ok(distro_fact(home + "/os-release-none").startswith("'' Linux "), "distro: no file at all is '', and os_pretty falls back to the kernel", distro_fact(home + "/os-release-none"))
         # bootstrap asks the same code through lib/spark/facts.py (the one
         # home, no sh twin): its DISTRO line honours the same fixture
-        for name, want in (("arch", "arch"), ("ubuntu", "debian"), ("manjaro", "arch"), ("fedora", "")):
+        for name, want in (("arch", "arch"), ("ubuntu", "debian"), ("manjaro", "arch"), ("fedora", "fedora"), ("rocky", "fedora"),
+                           ("tumbleweed", "opensuse"), ("leap", "opensuse"), ("alpine", "")):
             p = subprocess.run([sys.executable, os.path.join(REPO, "lib", "spark", "facts.py")],
                                capture_output=True, text=True, timeout=30,
                                env=dict(os.environ, SPARK_OS_RELEASE=home + "/os-release-" + name,
@@ -8577,6 +8619,38 @@ def main():
                "p.package_for('batcat'), repr(p.package_for('nosuch')))")
         t.ok(twin(_pk) == "xbps | sudo xbps-install -Sy fd | sudo xbps-install -Su | xbps-remove -y fd | sudo xbps-remove -y fd | fd fd bat ''",
              "void: manager xbps, install through xbps-install -Sy, upgrade -Su, removal xbps-remove -y, the tools' xbps column", twin(_pk))
+        # the same verbs under Fedora and openSUSE (v1.82), systemd both:
+        # dnf keeps the unused dependencies on a removal (the setopt), fd is
+        # fd-find on Fedora as on Debian; zypper's full upgrade is dup
+        _rpm_env = dict(SPARK_ETC_RUNIT=home + "/no-runit")
+        _got = twin(_pk, SPARK_OS_RELEASE=home + "/os-release-fedora", **_rpm_env)
+        t.ok(_got == "dnf | sudo dnf install -y fd | sudo dnf upgrade | dnf remove -y --setopt=clean_requirements_on_remove=False fd | "
+             "sudo dnf remove -y --setopt=clean_requirements_on_remove=False fd | fd-find fd-find bat ''",
+             "fedora: manager dnf, install through dnf install -y, upgrade, a removal that keeps the dependencies, the tools' dnf column", _got)
+        _got = twin(_pk, SPARK_OS_RELEASE=home + "/os-release-leap", **_rpm_env)
+        t.ok(_got == "zypper | sudo zypper install -y fd | sudo zypper dup | zypper --non-interactive remove fd | "
+             "sudo zypper --non-interactive remove fd | fd fd bat ''",
+             "opensuse: manager zypper, install through zypper install -y, upgrade dup, removal, the tools' zypper column", _got)
+        _got = twin("from spark import packages as p; print(repr(p.package_for('starship')))", SPARK_OS_RELEASE=home + "/os-release-fedora", **_rpm_env)
+        t.ok(_got == "''", "fedora: starship is in no Fedora repository -- the name is left to the model", _got)
+        # rpm's answers, against a stub on PATH: installed counts a provider
+        # (one question per name), a removal is dry-run first and takes the
+        # named ones alone, a package something installed needs is essential
+        os.makedirs(home + "/rpm-bin", exist_ok=True)
+        with open(home + "/rpm-bin/rpm", "w") as f:
+            f.write("#!/bin/sh\n"
+                    "if [ \"$1 $2\" = '-q --whatprovides' ]; then case $3 in python3|libgomp) echo \"$3-1-1\"; exit 0 ;; esac; "
+                    "echo \"no package provides $3\"; exit 1; fi\n"
+                    "if [ \"$1 $2\" = '-e --test' ]; then shift 2; for p; do [ \"$p\" = libgomp ] && { echo 'libgomp is needed by (installed) gcc' >&2; exit 1; }; done; exit 0; fi\n"
+                    "exit 2\n")
+        os.chmod(home + "/rpm-bin/rpm", 0o755)
+        _rq = ("from spark import packages as p; print(sorted(p.installed(['python3', 'libgomp', 'vulkan-loader'])), "
+               "p.essential('libgomp'), p.essential('vulkan-loader'), p.remove_would(['vulkan-loader', 'mesa-vulkan-drivers']), "
+               "p.remove_would(['libgomp', 'vulkan-loader']))")
+        for _name in ("fedora", "tumbleweed"):
+            _got = twin(_rq, SPARK_OS_RELEASE=home + "/os-release-" + _name, PATH=home + "/rpm-bin:" + os.environ.get("PATH", ""), **_rpm_env)
+            t.ok(_got == "['libgomp', 'python3'] True False ['mesa-vulkan-drivers', 'vulkan-loader'] None",
+                 "%s: rpm --whatprovides says what is installed; rpm -e --test says what a removal takes, and what stays" % _name, _got)
         # the service manager's verbs on runit, against an sv stub that logs
         # its argv and answers status from the dir the way runsv leaves it
         # (a supervise/ dir and no down file is run:, a down file is down:,

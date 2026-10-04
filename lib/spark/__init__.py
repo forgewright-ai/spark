@@ -327,7 +327,7 @@ def is_wsl():
 
 
 OS_RELEASE = os.environ.get("SPARK_OS_RELEASE", "/etc/os-release")
-DISTROS = ("debian", "arch", "void")      # the package families distro/<id>.env know
+DISTROS = ("debian", "arch", "void", "fedora", "opensuse")      # the package families distro/<id>.env know
 
 
 def _os_release():
@@ -345,10 +345,12 @@ def _os_release():
 
 
 def distro():
-    """The package family this Linux belongs to: "debian", "arch", "void"
-    or "" -- ID first, then each ID_LIKE word in order, the first one a
-    distro/ file knows wins (ubuntu -> debian, manjaro -> arch). Unknown is "",
-    never a guess. Never on macOS unless SPARK_OS_RELEASE points at a
+    """The package family this Linux belongs to: "debian", "arch", "void",
+    "fedora", "opensuse" or "" -- ID first, then each ID_LIKE word in
+    order, the first one a distro/ file knows wins (ubuntu -> debian,
+    manjaro -> arch, rocky -> fedora; openSUSE's own ID is
+    opensuse-tumbleweed or opensuse-leap, so its ID_LIKE word answers).
+    Unknown is "", never a guess. Never on macOS unless SPARK_OS_RELEASE points at a
     file (tests, the way SPARK_PROC_VERSION does). bootstrap.sh eval's this
     through lib/spark/facts.py."""
     if IS_MAC and "SPARK_OS_RELEASE" not in os.environ:
