@@ -52,7 +52,7 @@ def set_keys(_file=None, _quiet=False, **kv):
     os.chmod(path, 0o600)
 
 
-def apply(rows, stream=False, said=None):
+def apply(rows, stream=False):
     """Run bootstrap.sh and show the rows that matter for this change.
     stream=True at a terminal hands bootstrap the terminal unfiltered, so
     a model download shows curl's progress bar live; captured output (a
@@ -60,8 +60,6 @@ def apply(rows, stream=False, said=None):
     every row that is not ok (the non-stream branch): a caller that does
     not know which rows changed, like `spark update`, wants everything
     bootstrap did.
-    `said`, a list, takes the rows shown, for a caller that must know
-    what bootstrap answered (spark keys on).
     SPARK_NO_APPLY=1 (tests) writes the key only."""
     if os.environ.get("SPARK_NO_APPLY"):
         return 0
@@ -77,8 +75,6 @@ def apply(rows, stream=False, said=None):
             for line in p.stdout.splitlines():
                 if re.match(pattern, line):
                     say(line)
-                    if said is not None:
-                        said.append(line)
         else:
             for line in p.stdout.splitlines():
                 if not re.match(r"^ok\s", line):
@@ -502,17 +498,6 @@ def _login_hint(url):
 RC_MARKER = "config/spark/hook."
 RC_LINE = {"bash": "[ -r ~/.config/spark/hook.bash ] && . ~/.config/spark/hook.bash   # spark: the AI at the prompt",
            "zsh": "[[ -r ~/.config/spark/hook.zsh ]] && source ~/.config/spark/hook.zsh   # spark: the AI at the prompt"}
-
-
-def spark_word(name="spark"):
-    """How to call spark (or explain) from this shell: the bare word
-    when ~/.local/bin is on PATH, else its place spelled out. The rc
-    line is what puts it on PATH, so with the keys off it may not be."""
-    here = os.path.join(HOME, ".local", "bin")
-    for d in os.environ.get("PATH", "").split(os.pathsep):
-        if d and os.path.normpath(os.path.expanduser(d)) == here:
-            return name
-    return "~/.local/bin/" + name
 
 
 def login_shell():

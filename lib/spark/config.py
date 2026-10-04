@@ -21,7 +21,7 @@ PLACEHOLDERS = {}
 SITE_KEYS = ("SITE_NAME", "SITE_USER", "SITE_SET_HOSTNAME",
              "SITE_PEER_AI_URL", "SITE_PEER_SSH",
              "SITE_AI_MODEL", "SITE_EMBER_MODEL", "SITE_AI_BUDGET", "SITE_AI_BUILD",
-             "SITE_HEADLESS", "SITE_SHARE", "SITE_KEYS")
+             "SITE_HEADLESS", "SITE_SHARE")
 SPARK_KEYS = ("SPARK_PORT", "SPARK_BASE_URL", "SPARK_PREFER_URL", "SPARK_SERVE_HOST", "SPARK_ENGINE_DIR",
               "SPARK_MODELS_DIR", "SPARK_MODEL", "SPARK_NGL", "SPARK_CTX", "SPARK_FLASH_ATTN", "SPARK_KV",
               "SPARK_THREADS", "SPARK_EXTRA_ARGS", "SPARK_MEM_NEEDED_GB", "SPARK_API_KEY_FILE",
@@ -165,13 +165,6 @@ class Config:
         """yes: this box's engine is shared with its other OS users -- a
         `spark` group may read the api-token (spark serve share on)."""
         return self.get("SITE_SHARE", "no") == "yes"
-
-    @property
-    def keys(self):
-        """on: spark adds its keys to the shell -- bootstrap's rc rows
-        keep the one line in the rc file. off (spark keys off): they add
-        nothing and leave the file alone. Anything but off is on."""
-        return self.get("SITE_KEYS", "on") != "off"
 
     @property
     def peer_ai_url(self):

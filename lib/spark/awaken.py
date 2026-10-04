@@ -356,7 +356,9 @@ def run(cfg, ask):
     site.set_keys(_file=SPARK_ENV, _quiet=True, **keys)
     look.render(config.load(), awake_now=True)
     say("* awake -- the look is on auto")
-    say("* if spark's line covers your prompt, press Esc k")
+    from . import keys as _keys
+    key = _keys.bound("height")
+    say("* if spark's line covers your prompt, %s" % ("press " + key if key else "run spark height 2"))
     return 0
 
 

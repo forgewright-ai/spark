@@ -1,8 +1,10 @@
 # spark.keys -- `spark keys`: the keys the widgets add to your shell.
 # The list (each key, what it does, what it replaced there), a key moved
-# or left to the shell (`~/.config/spark/keys.env`, read by both widgets
-# as a shell starts), and the whole set off or on (SITE_KEYS in site.env:
-# off, bootstrap's rc rows add no line and the rc file is left alone).
+# or left to the shell, and the whole set off or on. One file holds it
+# all, `~/.config/spark/keys.env`, read by both widgets as a shell
+# starts: KEYS_<NAME> lines, and KEYS=off -- the widgets then bind none
+# of the five and leave the Esc wait alone; the rc line, PATH, TAB, the
+# `? words` line and the row stay.
 # What a key replaced is the widget's own record (state/replaced.<shell>,
 # written when it changes), else the shell's stock binding from DEFAULTS.
 
@@ -19,12 +21,12 @@ USAGE = SIGN + """
   spark keys NAME KEY     move a key: spark keys ask Esc a (Alt-a, Ctrl-g)
   spark keys NAME none    leave that key to your shell
   spark keys reset        the keys as spark ships them
-  spark keys off          add no key: spark's line leaves your rc file
-  spark keys on           add them again
+  spark keys off          bind none of spark's keys; ? words and the row stay
+  spark keys on           bind them again
 
   the names: ask recall height listen stop
   Enter, Ctrl-U, Ctrl-L and paste stay as they are
-  SPARK_OFF=1 in the environment starts one shell without the keys
+  SPARK_OFF=1 in the environment starts one shell without the prompt line
 """
 
 # The keys that move: (name, the key spark ships, what it does). The two
@@ -155,40 +157,52 @@ def _tilde(path):
     return "~" + path[len(HOME):] if path.startswith(HOME + os.sep) else path
 
 
-def off_why(cfg):
-    """'' while the next shell has the keys, else why it has none:
-    SITE_KEYS is off, or the rc file lacks spark's line (a shell with no
-    prompt line, a bash too old for it, a line taken out by hand)."""
+def is_on():
+    """False after `spark keys off` (KEYS=off in keys.env): the widgets
+    bind none of spark's keys. Absent, or anything else, is on."""
+    return config.parse_env(KEYS_ENV).get("KEYS", "on") != "off"
+
+
+def bound(name):
+    """The key `name` has in the next shell, '' for none: the keys are
+    off, or that key is left to the shell."""
+    key = current()[name] if is_on() else "none"
+    return "" if key == "none" else key
+
+
+def no_line():
+    """'' while the next shell loads spark's line, else why it does not:
+    a shell with no prompt line, a bash too old for it, an rc file that
+    lacks the line."""
     from . import site
     shell = site.login_shell()
     state, path = site.rc_hook_state(shell)
-    if not cfg.keys:
-        if state == "hook":
-            return "off, but %s still has spark's line -- take it out there" % _tilde(path)
-        return "off: spark adds no key to your shell -- spark keys on adds them"
     if not path:
-        return "off: %s has no prompt line (bash 4+ or zsh do)" % shell
+        return "%s has no prompt line (bash 4+ or zsh do)" % shell
     if state != "hook":
-        return "off: %s lacks spark's line -- spark keys on adds it" % _tilde(path)
+        return "%s lacks spark's line -- spark update adds it" % _tilde(path)
     return ""
 
 
 def esc_wait(shell):
-    """The Esc-wait line, or '' when no key in use starts with Esc: the
-    widgets set the wait only then."""
-    return ESC_WAIT if any(key.startswith("Esc") for _, key, _, _ in rows(shell)) else ""
+    """The Esc-wait line, or '' when the keys are off or no key in use
+    starts with Esc: the widgets set the wait only then."""
+    return ESC_WAIT if is_on() and any(key.startswith("Esc") for _, key, _, _ in rows(shell)) else ""
 
 
-def _show(cfg):
+def _show():
     from . import site
     shell = site.login_shell()
-    say("%s keys -- %s" % (MARK, off_why(cfg) or "on, in %s" % shell))
+    why, on = no_line(), is_on()
+    say("%s keys -- %s" % (MARK, "off: " + why if why else "%s, in %s" % ("on" if on else "off", shell)))
     for name, key, does, old in rows(shell):
-        say(("%-7s %-7s %-36s %s" % (name, key, does, "was " + old if old else "")).rstrip())
+        say(("%-7s %-7s %-36s %s" % (name, key, does, "was " + old if old and on else "")).rstrip())
     for key, does in wrapped(shell):
         say("%-7s %-7s %s" % ("", key, does))
     if esc_wait(shell):
         say(esc_wait(shell))
+    if not on:
+        say("off: none of the five is bound -- spark keys on binds them")
     return 0
 
 
@@ -223,10 +237,11 @@ def _move(name, words):
         say("* nothing changed")
         return 0
     _write({"KEYS_" + name.upper(): key})
-    # with no line in the rc file no shell reads the choice yet: say it
-    # is kept
+    # off, or no line in the rc file: no shell reads the choice yet, so
+    # say it is kept and what brings it in
     shell = site.login_shell()
-    later = "" if site.rc_hook_state(shell)[0] == "hook" else "kept for when the keys are on: spark keys on"
+    later = ("it applies when the keys are on: spark keys on" if not is_on()
+             else "" if not no_line() else "kept for when your rc file has spark's line: spark update")
     if key == "none":
         say("* %s has no key now -- %s" % (name, later or "the next shell leaves it alone"))
         return 0
@@ -238,81 +253,45 @@ def _move(name, words):
 
 
 def _reset():
-    cur = current()
+    """The five keys as spark ships them; off stays off."""
+    cur, on = current(), is_on()
     try:
         os.remove(KEYS_ENV)
     except OSError:
         pass
+    if not on:
+        _write({"KEYS": "off"})
     if all(cur[name] == default for name, default, _ in NAMES):
         say("* nothing changed")
         return 0
-    say("* the keys are the defaults again -- the next shell has them")
+    say("* the keys are the defaults again -- %s"
+        % ("the next shell has them" if on else "they apply when the keys are on: spark keys on"))
     return 0
 
 
-def _off(cfg):
-    """SITE_KEYS=off, and spark's line out of the rc files. A link of
-    yours into a git work tree is another project's tracked file: left
-    as it is, with one `!` line naming where the line must go. The rc
-    line is also what gives a shell its PATH entry, `?` and TAB, so the
-    way back is spelled in full when ~/.local/bin is not on PATH."""
-    from . import site, uninstall
-    gone, there = [], []
-    for name in uninstall.RC_CANDIDATES:
-        path = os.path.join(HOME, name)
-        target = uninstall.rc_tracked(path)
-        if target:
-            there.append(uninstall.tracked_line(target))
-            continue
-        try:
-            if uninstall.strip_rc_line(path):
-                gone.append(_tilde(path))
-        except OSError as e:
-            say("! %s: %s" % (_tilde(path), e.strerror or e))
-            return 1
-    if not cfg.keys and not gone:
-        for line in there:
-            say(line)
-        if not there:
-            say("* nothing changed")
-        return 0
-    site.set_keys(_quiet=True, SITE_KEYS="off")
-    for line in there:
-        say(line)
-    if gone:
-        say("* spark's line is out of %s -- open a new shell" % " and ".join(gone))
-    elif not there:
-        say("* spark adds no key to your shell now")
-    if there:
-        say("* the keys stay until that line is out; spark adds no line again")
-    else:
-        say("  ? and TAB go with it -- %s keys on adds them again" % site.spark_word())
-    if not os.environ.get("SPARK_NO_APPLY"):
-        from . import check
-        check.refresh()
-    return 0
-
-
-def _on(cfg):
-    from . import site
-    shell = site.login_shell()
-    state, _ = site.rc_hook_state(shell)
-    if cfg.keys and state == "hook":
+def _off():
+    """KEYS=off: the next shell binds none of spark's keys and keeps its
+    own Esc wait. No rc file is touched: the line, PATH, TAB, the
+    `? words` line and the row stay. A per-key choice is kept."""
+    if not is_on():
         say("* nothing changed")
         return 0
-    site.set_keys(_quiet=True, SITE_KEYS="on")
-    said = []
-    rc = site.apply(["rc", "rc-login"], said=said)
-    if rc != 0:
-        return rc
-    state, path = site.rc_hook_state(shell)
-    if state == "hook":
-        say("* open a new shell (exec $SHELL): it has the keys")
-    elif not any(line.startswith("todo") for line in said):
-        # the rc row could not add the line and named no reason here
-        # (another shell, a bash too old): never promise the keys
-        say("! the keys are on, but %s -- spark update says why"
-            % ("%s lacks spark's line" % _tilde(path) if path else "%s has no prompt line" % shell))
+    _write({"KEYS": "off"})
+    say("* the next shell has no spark key -- ? words and the row stay")
+    return 0
+
+
+def _on():
+    if is_on():
+        say("* nothing changed")
+        return 0
+    _write({"KEYS": "on"})
+    why = no_line()
+    if why:
+        # no shell loads the widget: never promise the keys
+        say("! the keys are on, but %s" % why)
+    else:
+        say("* the next shell has the keys -- spark keys lists them")
     return 0
 
 
@@ -320,9 +299,8 @@ def main(args):
     if args and args[0] in ("-h", "--help", "help"):
         say(USAGE.rstrip())
         return 0
-    cfg = config.load()
     if not args or args == ["status"]:
-        return _show(cfg)
+        return _show()
     if len(args) == 1 and args[0] in ("off", "on", "reset"):
-        return {"off": _off, "on": _on}[args[0]](cfg) if args[0] != "reset" else _reset()
+        return {"off": _off, "on": _on, "reset": _reset}[args[0]]()
     return _move(args[0], args[1:])

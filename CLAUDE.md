@@ -293,7 +293,7 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 setup (spark setup: the guided first run)
                 keys (spark keys: the keys the widgets add to the shell --
                 the list, what each replaced, a key moved through keys.env,
-                the whole set off or on through SITE_KEYS)
+                the whole set off or on through its KEYS line)
                 stats (turns -> numbers; --sends: bytes out by destination and day)
                 bench (llama-bench, bench tune [show|apply])
                 soul memory (the identity files; memory's writers refuse a
@@ -540,12 +540,15 @@ State is `~/.local/state/spark/`, 0700:
   (`confirm()`): a no prints `* nothing changed` and ends setup, exit
   0, with no marker. With no terminal, `--yes` or `SPARK_YES=1` it
   prints the lines, asks nothing and goes on. Either way the marker is
-  written, and a later setup says nothing. `spark update` prints the
-  lines once on a machine that has no marker, a terminal or not, with
-  no question. `spark ver --credits` prints them every time.
-- `voice-anyway`: `spark voice clear --anyway` was chosen, kept until
-  the next `clear` or `off`. `voice-playing`: the pid of the player
-  speaking now and its private directory, for `spark voice stop`.
+  written, and a later setup says nothing. `get` runs setup with
+  `SPARK_NOTICE_SHOWN=1` in the environment, a seam and not a user
+  key: the lines were shown a moment ago. Setup then prints none of
+  them. It asks the question alone, or nothing where it would not ask.
+  A no there prints `* nothing set up -- ~/.spark/bin/spark setup when
+  you are ready`, the clone's own path, exit 0. `spark update` prints
+  the lines once on a machine that has no marker, a terminal or not,
+  with no question, and does not read the seam. `spark ver --credits`
+  prints them every time.
 - `replaced.bash` and `replaced.zsh`: what each key did in that shell
   before the widget bound it, `NAME<TAB>KEY<TAB>binding` a line, `-` for
   nothing. The widget writes it only when it differs, and `spark keys`
@@ -637,26 +640,22 @@ and may change freely.
    appended. Another shell, or a bash older than 4, is a `todo` naming
    the fix. On bash, a regular `~/.bash_profile` that neither sources
    `~/.bashrc` nor holds the marker shadows the hook on a console login.
-   The `rc-login` row appends the same marked line there. With
-   `SITE_KEYS=off` both rows are a `skip`, `the keys are off -- spark
-   keys on`, and the rc file is left as it is. `spark setup` asks at a
-   terminal before the first line goes in (`setup._keys`). A no is
-   written as `SITE_KEYS=off` with the other keys (`setup._write`),
-   never before. So a setup that stops at a question leaves no
-   `site.env`. `spark keys off` removes the line, through a symlink
+   The `rc-login` row appends the same marked line there. The line is
+   added whatever the keys are: it carries `PATH`, `TAB` completion,
+   the `? words` line and the row above the prompt. `spark setup` asks
+   at a terminal whether to add the keys too (`setup._keys`). A no is
+   written as `KEYS=off` in `keys.env` with the other writes
+   (`setup._write`), never before. So a setup that stops at a question
+   leaves no file. `spark keys off` writes the same line and touches no
+   rc file. `spark uninstall` removes the rc line, through a symlink
    too (`uninstall.strip_rc_line`). It reads and writes bytes, through
    a temp file renamed over the link's target. A link into a git work
    tree is another project's tracked file (`uninstall.rc_tracked`, a
-   `.git` above the target). It is left as it is, one `!` line names
-   the file, and `SITE_KEYS=off` is still kept. The rc line is also
-   what puts `~/.local/bin` on `PATH`. With the keys off, a message
-   spells `~/.local/bin/spark` when that directory is not on `PATH`
-   (`site.spark_word`). Those are setup's closing block, the line a
-   no gets, and `spark keys off`. `spark keys`
-   says `off` when `SITE_KEYS` is off or the rc file lacks the line,
-   and names which (`keys.off_why`). `spark keys on` reads the rc
-   file again after the rows ran, and never promises keys the row
-   could not add. Two hand-back
+   `.git` above the target). It is left as it is, and one `!` line
+   names the file. `spark keys` says `off` and why when the rc file
+   lacks the line or the shell has no prompt line (`keys.no_line`), and
+   `spark keys on` never promises keys such a shell cannot load. Two
+   hand-back
    rows cover what older sparks made. The `micro` row removes the plugin
    links a pre-v1.10 install left under `~/.config/micro` and names the
    app's own repository. The `handback` row, run by `spark update`,
@@ -677,9 +676,7 @@ and may change freely.
    keys:
    - `site.env`: `SITE_NAME SITE_USER SITE_SET_HOSTNAME SITE_PEER_AI_URL
      SITE_PEER_SSH SITE_AI_MODEL SITE_EMBER_MODEL SITE_AI_BUDGET
-     SITE_AI_BUILD SITE_HEADLESS SITE_SHARE SITE_KEYS`. `SITE_KEYS` is
-     `on` or `off`, default `on` (`spark keys on|off`): `off`, the `rc`
-     and `rc-login` rows add nothing. A key an older spark
+     SITE_AI_BUILD SITE_HEADLESS SITE_SHARE`. A key an older spark
      wrote, such as `SITE_THEME` or `SITE_QUIET_START`, still loads: a
      well-formed key spark does not know is not refused, and nothing
      reads it.
@@ -760,6 +757,11 @@ and may change freely.
      KEYS_STOP`, each `Esc a`, `Ctrl-g` or `none` (`keys.NAMES`,
      `keys.CTRL_OK`). Both widgets read it line by line as the shell
      starts, never sourced. A value of another shape keeps the default.
+     `KEYS` is `on` or `off`, absent is `on` (`spark keys on|off`,
+     `keys.is_on`). With `off` the widgets bind none of the 5 and leave
+     the Esc wait alone. Enter, Ctrl-U, Ctrl-L, paste, the `? words`
+     line and the row work as with the keys on. The per-key lines are
+     kept across off and on.
    Precedence: environment, then file, then default.
 4. `spark line --cwd D --shell S` reads the prompt buffer on stdin and
    prints two lines. Line 1 is `cmd<TAB>command`, `danger<TAB>command`,
@@ -1069,8 +1071,10 @@ and may change freely.
    why`, or `HEAD not found; Esc s gets the install line` for exit 127,
    or `last time this fixed it: FIX` from the failure memory.
    A key `spark keys` moved is named in these lines in place of `Esc
-   s`, `Esc r`, `Esc k` and `Esc v`. With `ask` set to `none` the
-   failure line ends `? words asks about it`. The
+   s`, `Esc r`, `Esc k` and `Esc v`. With `ask` set to `none`, or the
+   keys off, the failure line ends `? words asks about it` and the
+   proof line is `* done -- check it: PROOF`. No line names a key that
+   is not bound. The
    others are `* Enter explains the error`, `* Enter runs the check`
    (the proof), `* Enter remembers the fix`, `* type a question, then
    Esc s` and `* spark writes here -- Esc k moves it`. A check row

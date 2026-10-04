@@ -1368,6 +1368,79 @@ def moved_keys(shell, widget, tmp, env, ok):
        "the next shell finds the record as it is and does not write it again")
 
 
+def keys_off(shell, widget, tmp, env, ok):
+    """`spark keys off` writes KEYS=off in keys.env. The widget then
+    binds none of its five keys, the voice's two included, and leaves
+    the Esc wait as the shell has it. The rest works as with the keys
+    on: a `? words` line asks spark on Enter, and a failed command is
+    noted in the row -- with no key named. A per-key line in the same
+    file stays unread while off."""
+    khome = os.path.join(tmp, "offhome")
+    conf = os.path.join(khome, ".config", "spark")
+    state = os.path.join(khome, ".local", "state")
+    os.makedirs(conf, exist_ok=True)
+    os.makedirs(state, exist_ok=True)
+    with open(os.path.join(conf, "keys.env"), "w") as f:
+        f.write("KEYS_ASK=Ctrl-g\nKEYS=off\n")
+    log = os.path.join(tmp, "off-asked.log")
+    e = dict(env, HOME=khome, XDG_STATE_HOME=state, ZDOTDIR=khome, STUB_LOG=log, SPARK_VOICE="on")
+
+    def lines(path):
+        try:
+            with open(path) as f:
+                return f.read().splitlines()
+        except OSError:
+            return []
+
+    if shell == "bash":
+        argv = ["bash", "--norc", "--noprofile", "-i"]
+        bound = ("bind -X | grep -cE '_spark_(ask_line|recall|height_key|listen|hush)'; "
+                 "bind -v | grep keyseq-timeout; echo KEYS-$((6*7))")
+    else:
+        argv = ["zsh", "-f", "-i"]
+        bound = ("bindkey '\\es'; bindkey '\\er'; bindkey '\\ek'; bindkey '\\ev'; bindkey '\\ex'; bindkey '^G'; "
+                 "echo KT-$KEYTIMEOUT-; echo KEYS-$((6*7))")
+    sh = Shell(argv, e, os.path.join(tmp, "work"))
+    try:
+        sh.send("%s; source %s; echo SOURCED\n" % ("PS1='\\nOP> '" if shell == "bash" else "PROMPT=$'\\nOP> '", widget))
+        sh.expect("SOURCED")
+        sh.settle()
+        since = sh.mark()
+        sh.send(bound + "\n")
+        sh.expect("KEYS-42", 5)
+        sh.settle()
+        out = since()
+        if shell == "bash":
+            n = [l.strip() for l in out.splitlines() if l.strip().isdigit()]
+            free = n[-1:] == ["0"] and "keyseq-timeout 1000" not in out
+        else:
+            free = ('"^[s" spell-word' in out and '"^[r" spark' not in out and '"^[k" spark' not in out
+                    and '"^[v" spark' not in out and '"^[x" execute-named-cmd' in out and '"^G" spark' not in out
+                    and "KT-40-" in out)
+        ok(free, "KEYS=off: none of the five keys is spark's (a moved one neither), and the Esc wait is the shell's own",
+           out[-400:])
+        since = sh.mark()
+        sh.send("? keys off words\r")
+        got = sh.expect("A hint about it")
+        ok(got and any("keys off words" in l for l in lines(log)),
+           "KEYS=off: a ? words line still asks spark on Enter", since() + repr(lines(log)))
+        sh.send("\x15")
+        sh.settle()
+        since = sh.mark()
+        sh.send("sh -c 'exit 3'\r")
+        got = sh.expect("failed (3)")
+        sh.settle()
+        out = since()
+        ok(got and "? words asks about it" in out and "Esc s" not in out and "Ctrl-g" not in out,
+           "KEYS=off: the failed note still shows, and names no key", out[-300:])
+        rec = lines(os.path.join(state, "spark", "replaced." + shell))
+        ok(not rec, "KEYS=off: no key is recorded as replaced", rec)
+    finally:
+        sh.send("exit\n")
+        sh.read(0.5)
+        sh.close()
+
+
 def rendered_height(shell, widget, tmp, env, ok):
     """A real screen: tmux renders a two-line prompt at height 2 -- the
     hint sits on the blank row above INFO-LINE, and INFO-LINE is intact."""
@@ -2125,6 +2198,9 @@ def main(shell, widget):
 
         # 9d. the keys move (spark keys): keys.env read as the shell starts
         moved_keys(shell, widget, tmp, env, ok)
+
+        # 9e. the keys off (spark keys off): none bound, the rest works
+        keys_off(shell, widget, tmp, env, ok)
 
         # 10. nothing the widget started outlives its shell: a streamed
         #     answer's reader and its spark line stop with it

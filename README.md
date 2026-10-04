@@ -57,10 +57,10 @@ marked `!`.
    spark check
    ```
 
-spark asks first, then adds one line to your rc file. `spark keys`
-lists the keys that line adds, moves one, or takes them all back. The
-line also puts spark on your `PATH`: without it, call
-`~/.local/bin/spark`. `docs/INSTALL.md` has the details.
+spark adds one line to your rc file. Setup asks before it adds its
+keys. `spark keys` lists them, moves one, or turns them all off. With
+the keys off, `? words` still works. `docs/INSTALL.md` has the
+details.
 
 ## Use it
 
@@ -211,6 +211,6 @@ moves forward. A clone on `main` is not checked.
 ## License
 
 MIT, in `LICENSE`. spark comes with no warranty. A model can be wrong,
-so what you run or accept is your own risk. What spark downloads, and
+so what you run or accept is at your own risk. What spark downloads, and
 each license, is in `CREDITS.md`. It also names the one file here
 under another license. Built with Claude.

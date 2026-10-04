@@ -513,8 +513,9 @@ def shell_keys():
     """`spark keys` (v1.83) as the tree holds it: the names and default
     keys of keys.NAMES are the two widgets' own, every name is in INSTALL
     and in the verb's usage and both completion files, the verb is in the
-    cheatsheet, SITE_KEYS is a key of config, site.env.example, env.sh,
-    INSTALL's table and CLAUDE.md's contract 3, and SPARK_OFF is told."""
+    cheatsheet, both widgets read the KEYS=off line of keys.env, the old
+    site.env switch is gone, CLAUDE.md's contract 3 lists site.env's keys,
+    and SPARK_OFF is told."""
     from spark import keys as keysmod
     inst, cheat, claude = read("docs/INSTALL.md"), read("docs/CHEATSHEET.txt"), read("CLAUDE.md")
     want = sorted((n, k) for n, k, _ in keysmod.NAMES)
@@ -537,10 +538,14 @@ def shell_keys():
         check(word in inst, "docs/INSTALL.md says %s" % word)
     check(re.search(r"(?m)^\s*spark keys\b", cheat) is not None, "docs/CHEATSHEET.txt has a spark keys line")
     check("spark keys" in read("README.md"), "README.md names spark keys where it says spark adds one rc line")
-    check("SITE_KEYS" in config.SITE_KEYS, "config.SITE_KEYS holds SITE_KEYS")
-    check(re.search(r"(?m)^SITE_KEYS=on$", read("site.env.example")) is not None, "site.env.example: SITE_KEYS=on")
-    check(re.search(r"(?m)^\| `SITE_KEYS`", inst) is not None, "docs/INSTALL.md's key table has a SITE_KEYS row")
-    check('"${SITE_KEYS:=on}"' in read("lib/env.sh"), "lib/env.sh defaults SITE_KEYS to on")
+    for f in WIDGETS:
+        check("KEYS=*" in read(f) and "=none _spark_k_recall=none" in read(f),
+              "%s reads keys.env's KEYS line and binds none of the keys when it is off" % f)
+    for f in ("lib/spark/config.py", "site.env.example", "lib/env.sh", "bootstrap.sh", "docs/INSTALL.md",
+              "CLAUDE.md", "README.md", "lib/spark/keys.py", "lib/spark/setup.py"):
+        check("SITE_" + "KEYS=" not in read(f) and '"SITE_' + 'KEYS"' not in read(f) and "`SITE_" + "KEYS`" not in read(f),
+              "%s holds no SITE_" "KEYS: keys.env's KEYS line is the one switch" % f)
+    check("`KEYS` is `on` or `off`" in claude, "CLAUDE.md contract 3 says keys.env's KEYS line")
     m = re.search(r"- `site\.env`: `([A-Z_\s]+)`", claude)
     check(m is not None and m.group(1).split() == list(config.SITE_KEYS),
           "CLAUDE.md contract 3 lists site.env's keys as config.SITE_KEYS holds them")

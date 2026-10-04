@@ -5,24 +5,25 @@
 For a machine that is already yours: spark asks before it adds keys,
 uses a `llama-server` you already run, and says its terms first.
 
-- `spark setup` asks before it adds its line to your rc file. It lists
-  the keys the line adds to your shell, what each replaces there, and
-  the 1 second your shell waits after Esc. A no is kept as
-  `SITE_KEYS=off`.
-  `--yes`, or no terminal, asks nothing, as before.
+- `spark setup` asks before it adds its keys to your shell. It lists
+  each key, what it replaces there, and the 1 second your shell waits
+  after Esc. A no adds no key. `--yes`, or no terminal, asks nothing,
+  as before.
+- The one line in your rc file is added either way. With no key,
+  `? words`, `TAB` completion and the row above your prompt work the
+  same.
 - `spark keys`, new. It lists the keys spark added, what each does and
   what it replaced. `spark keys ask Esc a` moves one, and `Alt-a` and
   `Ctrl-g` work too. `spark keys ask none` leaves the key to your
   shell. `spark keys reset` brings the defaults back. The names are
   ask, recall, height, listen and stop.
-- `spark keys off` takes spark's line out of the rc file, and
-  `spark update` no longer puts it back. `spark keys on` adds it again.
-  An rc file that links into a git repository is left as it is, and
-  spark names the file.
-- The rc line also puts spark on your `PATH`. With the keys off,
-  spark's messages spell `~/.local/bin/spark` when it is not there.
-- `SPARK_OFF=1` in the environment starts one shell without the keys.
-  It is now in the docs.
+- `spark keys off` binds none of the 5 keys. Your shell keeps its own
+  keys there, and its own wait after Esc. `spark keys on` binds them
+  again. The choice is kept as `KEYS=off` in
+  `~/.config/spark/keys.env`.
+- A hint at your prompt never names a key that is not bound.
+- `SPARK_OFF=1` in the environment starts one shell without the prompt
+  line. It is now in the docs.
 - Your own llama-server. `spark client URL` uses a `llama-server` you
   already run, and `spark setup --engine URL` does it on a new install.
   At a terminal, setup offers one it finds on `SPARK_PORT`. spark
@@ -44,10 +45,12 @@ uses a `llama-server` you already run, and says its terms first.
 - Ollama is not supported in this version.
 - The notice. `get` and `spark setup` say three lines before anything
   changes: spark is MIT licensed with no warranty, a model can be
-  wrong, and what you run or accept is your own risk.
+  wrong, and what you run or accept is at your own risk.
 - At a terminal `spark setup` asks `go on? yes/NO:` once. A no changes
-  nothing. With `--yes`, `SPARK_YES=1` or no terminal it prints the
-  lines and goes on.
+  nothing. With `--yes`, `SPARK_YES=1` or no terminal it asks nothing
+  and goes on.
+- On a new install the three lines print once. `get` shows them, and
+  the setup it starts asks only the question.
 - A machine already installed sees the lines once, at its next
   `spark update`, with no question. `spark ver --credits` shows them
   any time.

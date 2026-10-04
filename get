@@ -77,7 +77,7 @@ main() {
     printf '%s\n' \
         '* spark is MIT licensed and comes with no warranty -- see LICENSE' \
         '* a model can be wrong -- read a command before you run it' \
-        '* what you run or accept is your own risk'
+        '* what you run or accept is at your own risk'
 
     os=$(uname -s)
     case $os in
@@ -193,6 +193,10 @@ main() {
         printf 'next: %s/bin/spark setup\n' "$show"
         exit 0
     fi
+    # the notice was shown above: setup asks its one question and does
+    # not print the three lines again
+    SPARK_NOTICE_SHOWN=1
+    export SPARK_NOTICE_SHOWN
     # under `curl | sh` stdin is this script: the questions read the terminal
     if [ -t 1 ] && [ -c /dev/tty ] && (: < /dev/tty) 2>/dev/null; then
         exec "$dir/bin/spark" setup < /dev/tty

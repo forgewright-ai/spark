@@ -4291,6 +4291,21 @@ def living_waits_cases(t):
              and "?" not in first_,
              "notice: update prints it once ever, with no question, and marks it shown", repr((first_, again, at_tty)))
         os.remove(_su.NOTICED)
+        # the no after get showed the lines: the clone's own path, the
+        # default one spelled ~/.spark/bin/spark, under 80 columns
+        import spark as _pkg
+        _conf, _repo = _pkg.confirm, _su.REPO
+        _pkg.confirm, _su.REPO = (lambda q: False), os.path.join(_su.HOME, ".spark")
+        sys.stdout = io.StringIO()
+        try:
+            went = _su.notice(ask=True, shown=True)
+            said = sys.stdout.getvalue()
+        finally:
+            sys.stdout = out
+            _pkg.confirm, _su.REPO = _conf, _repo
+        t.ok(went is False and said == "* nothing set up -- ~/.spark/bin/spark setup when you are ready\n"
+             and len(said) <= 81 and not os.path.exists(_su.NOTICED),
+             "notice: a no after get showed it prints one line naming the clone's spark, nothing marked", said)
 
         # --- awakened: the door is shut, the bar draws, the pulses show
         os.remove(_su.OFFERED)
@@ -8889,13 +8904,13 @@ def main():
         _site = home + "/.config/spark/site.env"
         _nwords = ("setup", "--no-serve", "--model", "none", "--name", "box", "--user", "me")
 
-        def _setup_tty(answer):
+        def _setup_tty(answer, **more):
             import pty as _npty
             m, s = _npty.openpty()
             q = subprocess.Popen([sys.executable, SPARK] + list(_nwords), stdin=s, stdout=s, stderr=s,
-                                 env=dict(env, SPARK_VOICE="off", SITE_KEYS="on", **off), start_new_session=True)
+                                 env=dict(env, SPARK_VOICE="off", **dict(off, **more)), start_new_session=True)
             os.close(s)
-            data, end, sent = b"", time.time() + 60, False
+            data, end, sent, keyed = b"", time.time() + 60, False, False
             while time.time() < end:
                 r, _, _ = select.select([m], [], [], 0.2)
                 if r:
@@ -8911,6 +8926,9 @@ def main():
                 if not sent and b"yes/NO: " in data:
                     os.write(m, answer)
                     sent = True
+                if not keyed and b"add the keys? [Y/n]: " in data:
+                    os.write(m, b"\n")              # the keys question, where this shell gets one
+                    keyed = True
             try:
                 rc = q.wait(timeout=5)
             except subprocess.TimeoutExpired:
@@ -8935,6 +8953,27 @@ def main():
         rc, out = _setup_tty(b"n\n")
         t.ok(rc == 0 and "yes/NO" not in out and _nsu.NOTICE[0] not in out and "open a new shell" in out,
              "setup again: the notice is not printed and nothing is asked", out)
+        # get showed the three lines a moment ago (SPARK_NOTICE_SHOWN=1,
+        # set on the setup it starts): the question alone; a no names how
+        # to come back to the clone; a yes goes on; with no terminal the
+        # notice prints nothing at all, and it is marked shown
+        os.remove(_noticed)
+        os.remove(_site)
+        rc, out = _setup_tty(b"\n", SPARK_NOTICE_SHOWN="1")
+        t.ok(rc == 0 and out.count("go on? yes/NO: ") == 1 and not any(l in out for l in _nsu.NOTICE)
+             and out.rstrip().splitlines()[-1] == "* nothing set up -- %s/bin/spark setup when you are ready" % REPO
+             and "nothing changed" not in out and not os.path.exists(_site) and not os.path.exists(_noticed),
+             "setup after get, at a terminal: the question alone, and a no says how to come back -- nothing written", out)
+        rc, out = _setup_tty(b"yes\n", SPARK_NOTICE_SHOWN="1")
+        t.ok(rc == 0 and out.count("go on? yes/NO: ") == 1 and not any(l in out for l in _nsu.NOTICE)
+             and "open a new shell" in out and os.path.exists(_site) and os.path.exists(_noticed),
+             "setup after get, at a terminal: a yes goes on and marks the notice shown, the lines not printed again", out)
+        os.remove(_noticed)
+        os.remove(_site)
+        rc, out, err = spark("setup", "--yes", "--no-serve", "--model", "none", extra=dict(off, SPARK_NOTICE_SHOWN="1"))
+        t.ok(rc == 0 and not any(l in out for l in _nsu.NOTICE) and "yes/NO" not in out and "GB for models" in out
+             and os.path.exists(_noticed),
+             "setup after get, no terminal: nothing printed for the notice, no question, marked shown", out + err)
         os.remove(_noticed)
         os.remove(_site)
         rc, out, err = spark("setup", "--yes", "--no-serve", "--model", "none", extra=off)
@@ -9088,7 +9127,7 @@ def main():
         rc, out, _ = spark("keys", "status", extra=dict(kx, SHELL="/bin/bash"))
         t.ok(rc == 0 and re.search(r"^recall +Esc r .* was revert-line$", out, re.M) and "Ctrl-L" not in out
              and not re.search(r"^ask .* was ", out, re.M)
-             and out.splitlines()[0] == "spark keys -- off: ~/.bashrc lacks spark's line -- spark keys on adds it",
+             and out.splitlines()[0] == "spark keys -- off: ~/.bashrc lacks spark's line -- spark update adds it",
              "spark keys in bash: Esc r replaced revert-line, Esc s nothing, no Ctrl-L row; no line in ~/.bashrc is off, "
              "naming the file", out)
         rc, out, _ = spark("keys", extra=dict(kx, SHELL="/bin/fish"))
@@ -9145,94 +9184,100 @@ def main():
         t.ok(rc == 0 and out == "* the keys are the defaults again -- the next shell has them\n" and not os.path.exists(kenv)
              and rc2 == 0 and out2 == "* nothing changed\n",
              "spark keys reset: keys.env gone, the defaults back; again, nothing changed", out + out2)
-        # off: the marked line leaves the rc file -- through a symlink of
-        # yours too, the link kept, every other byte as it was -- and
-        # SITE_KEYS=off is written with the way back spelled in full
-        # (~/.local/bin is not on PATH here); the prompt row and spark
-        # status then say so; on writes the key back
+        # off: KEYS=off in keys.env, one line, and no rc file is touched
+        # -- the line carries PATH, TAB, the ? words line and the row.
+        # The list then says off, shows the key each would have and no
+        # "was", no Esc wait, and a closing line; the prompt row of check
+        # and of spark status are as with the keys on
+        rcfile = open(kh + "/dotfiles/zshrc", "rb").read()
+        with open(kenv, "w") as f:
+            f.write("KEYS_ASK=Esc a\n")
         rc, out, _ = spark("keys", "off", extra=kx)
-        t.ok(rc == 0 and out == "* spark's line is out of ~/.zshrc -- open a new shell\n"
-             "  ? and TAB go with it -- ~/.local/bin/spark keys on adds them again\n"
-             and open(kh + "/dotfiles/zshrc", "rb").read() == b"# mine \xff\nalias l=ls\n" and os.path.islink(kh + "/.zshrc")
-             and oct(os.stat(kh + "/dotfiles/zshrc").st_mode & 0o777) == "0o640"
-             and not [n for n in os.listdir(kh + "/dotfiles") if n != "zshrc"] and "SITE_KEYS=off\n" in kread(ksite),
-             "spark keys off: the line leaves a symlinked rc file, the link, the mode and a byte that is not UTF-8 stay, "
-             "SITE_KEYS=off, the way back named in full", out + repr(open(kh + "/dotfiles/zshrc", "rb").read()))
+        t.ok(rc == 0 and out == "* the next shell has no spark key -- ? words and the row stay\n"
+             and kread(kenv) == "KEYS_ASK=Esc a\nKEYS=off\n"
+             and open(kh + "/dotfiles/zshrc", "rb").read() == rcfile and os.path.islink(kh + "/.zshrc")
+             and "KEYS" not in kread(ksite),
+             "spark keys off: KEYS=off in keys.env, a moved key kept, one line, the rc file byte for byte, site.env untouched",
+             out + kread(kenv))
         rc, out, _ = spark("keys", "off", extra=kx)
         rc2, shown, _ = spark("keys", extra=kx)
-        t.ok(rc == 0 and out == "* nothing changed\n"
-             and shown.splitlines()[0] == "spark keys -- off: spark adds no key to your shell -- spark keys on adds them",
-             "spark keys off again: nothing changed; bare says off and how to turn it on", out + shown)
+        rows = shown.splitlines()
+        t.ok(rc == 0 and out == "* nothing changed\n" and rows[0] == "spark keys -- off, in zsh"
+             and re.search(r"^ask +Esc a +ask about the line you are on$", shown, re.M)
+             and re.search(r"^stop +Esc x +stop the speaking, with the voice on$", shown, re.M)
+             and " was " not in shown and "waits up to 1 s" not in shown
+             and re.search(r"^ +Enter ", shown, re.M) and re.search(r"^ +Ctrl-L ", shown, re.M)
+             and rows[-1] == "off: none of the five is bound -- spark keys on binds them"
+             and all(len(l) <= 80 for l in rows),
+             "spark keys off again: nothing changed; the list says off, shows each key it would have, the wrapped rows, "
+             "no Esc wait, and that none is bound", out + shown)
         rc, out, _ = spark("keys", "ask", "Esc", "b", extra=kx)
         rc2, out2, _ = spark("keys", "stop", "none", extra=kx)
-        t.ok(rc == 0 and out == "* ask is Esc b now -- kept for when the keys are on: spark keys on\n"
-             and rc2 == 0 and out2 == "* stop has no key now -- kept for when the keys are on: spark keys on\n"
-             and "KEYS_ASK=Esc b\n" in kread(kenv),
-             "spark keys NAME KEY with the keys off: kept, and said to wait for spark keys on", out + out2)
-        os.remove(kenv)
+        t.ok(rc == 0 and out == "* ask is Esc b now -- it applies when the keys are on: spark keys on\n"
+             and rc2 == 0 and out2 == "* stop has no key now -- it applies when the keys are on: spark keys on\n"
+             and "KEYS_ASK=Esc b\n" in kread(kenv) and "KEYS=off\n" in kread(kenv),
+             "spark keys NAME KEY with the keys off: kept, and said to apply with spark keys on", out + out2)
+        rc, out, _ = spark("keys", "reset", extra=kx)
+        t.ok(rc == 0 and out == "* the keys are the defaults again -- they apply when the keys are on: spark keys on\n"
+             and kread(kenv) == "KEYS=off\n", "spark keys reset with the keys off: the defaults, and off stays off", out + kread(kenv))
         rc, out, _ = spark("status", extra=kx)
-        t.ok(rc == 0 and "  prompt   off -- spark keys on\n" in out and "no shell loaded yet" not in out,
-             "spark status with the keys off: the prompt row says off and names spark keys on", out)
+        t.ok(rc == 0 and "  prompt   on, no shell loaded yet\n" in out,
+             "spark status with the keys off: the prompt row as with the keys on", out)
         for sh_ in ("bash", "zsh"):
             _w = kh + "/.config/spark/widget." + sh_
             if not os.path.exists(_w):
                 open(_w, "w").close()
         rc, out, _ = spark("check", "--porcelain", extra=kx)
         prow = [l.split("\t") for l in out.splitlines() if l.split("\t")[2:3] == ["prompt"]]
-        t.ok(prow and prow[0][1] == "na" and prow[0][3] == "the keys are off" and prow[0][4] == "spark keys on",
-             "check: with the keys off the prompt row is na, its remedy spark keys on", repr(prow))
-        # on: SITE_KEYS=on. The rc rows are bootstrap's and nothing is
-        # applied here, so the rc file still lacks the line: spark keys on
-        # must not say the next shell has the keys, and the list says off
+        t.ok(prow and prow[0][1] == "warn" and prow[0][3] == "no shell has it yet",
+             "check: with the keys off the prompt row is as with the keys on (no shell has it yet)", repr(prow))
+        import importlib as _il
+        _kmod = _il.import_module("spark.keys")
+        _kwas = _kmod.KEYS_ENV
+        _kmod.KEYS_ENV = kenv
+        try:
+            b_off = (_kmod.is_on(), _kmod.bound("height"), _kmod.bound("ask"))
+            with open(kenv, "w") as f:
+                f.write("KEYS_HEIGHT=none\nKEYS_ASK=Ctrl-g\n")
+            b_on = (_kmod.is_on(), _kmod.bound("height"), _kmod.bound("ask"), _kmod.bound("recall"))
+            with open(kenv, "w") as f:
+                f.write("KEYS=off\n")
+        finally:
+            _kmod.KEYS_ENV = _kwas
+        t.ok(b_off == (False, "", "") and b_on == (True, "", "Ctrl-g", "Esc r"),
+             "keys.bound: no key while off or set to none, else the key in use (what a hint may name)", repr((b_off, b_on)))
+        # on: KEYS=on, one line; again, nothing changed
         rc, out, _ = spark("keys", "on", extra=kx)
-        rc2, shown, _ = spark("keys", extra=kx)
-        t.ok(rc == 0 and "SITE_KEYS=on\n" in kread(ksite) and "SITE_KEYS=off" not in kread(ksite)
-             and out == "! the keys are on, but ~/.zshrc lacks spark's line -- spark update says why\n"
-             and shown.splitlines()[0] == "spark keys -- off: ~/.zshrc lacks spark's line -- spark keys on adds it",
-             "spark keys on where the rc row added no line: SITE_KEYS=on, no promise of keys, and the list says off "
-             "naming the file", out + shown + kread(ksite))
-        rc, out, _ = spark("status", extra=kx)
-        t.ok(rc == 0 and "  prompt   on, no shell loaded yet\n" in out, "spark status with the keys on: the row as before", out)
-        # an rc file that is a link into a git work tree is another
-        # project's tracked file: spark keys off leaves it byte for byte,
-        # says where the line is, and still keeps SITE_KEYS=off; with
-        # ~/.local/bin on PATH the plain word is enough
-        os.remove(kh + "/.zshrc")
-        os.makedirs(kh + "/tracked/.git")
-        os.makedirs(kh + "/tracked/shell")
-        tracked = b"# theirs \xfe\n\n" + hookline.encode() + b"\n"
-        with open(kh + "/tracked/shell/zshrc", "wb") as f:
-            f.write(tracked)
-        os.symlink(kh + "/tracked/shell/zshrc", kh + "/.zshrc")
-        rc, shown, _ = spark("keys", extra=kx)
-        rc, out, _ = spark("keys", "off", extra=kx)
-        rc2, shown2, _ = spark("keys", extra=kx)
-        rc3, out3, _ = spark("keys", "off", extra=kx)
-        t.ok(rc == 0 and shown.splitlines()[0] == "spark keys -- on, in zsh"
-             and out == "! ~/tracked/shell/zshrc is in a git repository -- take spark's line out there\n"
-             "* the keys stay until that line is out; spark adds no line again\n"
-             and open(kh + "/tracked/shell/zshrc", "rb").read() == tracked and os.path.islink(kh + "/.zshrc")
-             and sorted(os.listdir(kh + "/tracked/shell")) == ["zshrc"] and "SITE_KEYS=off\n" in kread(ksite)
-             and shown2.splitlines()[0] == "spark keys -- off, but ~/.zshrc still has spark's line -- take it out there"
-             and rc3 == 0 and out3 == out.splitlines()[0] + "\n",
-             "spark keys off, the rc file a link into a git work tree: untouched, one ! line names the file, "
-             "SITE_KEYS=off, and the truth is told", out + shown2 + out3)
-        rc, out, _ = spark("keys", "on", extra=kx)
-        t.ok(rc == 0 and out == "* open a new shell (exec $SHELL): it has the keys\n" and "SITE_KEYS=on\n" in kread(ksite),
-             "spark keys on with the line in the rc file: the next shell has the keys", out)
+        rc2, out2, _ = spark("keys", "on", extra=kx)
+        rc3, shown, _ = spark("keys", extra=kx)
+        t.ok(rc == 0 and out == "* the next shell has the keys -- spark keys lists them\n" and kread(kenv) == "KEYS=on\n"
+             and rc2 == 0 and out2 == "* nothing changed\n" and shown.splitlines()[0] == "spark keys -- on, in zsh"
+             and open(kh + "/dotfiles/zshrc", "rb").read() == rcfile,
+             "spark keys on: KEYS=on, one line; again, nothing changed; the rc file byte for byte", out + out2 + shown)
+        # an rc file that lacks the line: on never promises the keys,
+        # and the list says off, naming the file and spark update
         os.remove(kh + "/.zshrc")
         with open(kh + "/.zshrc", "w") as f:
-            f.write("# a plain file\n\n%s\n" % hookline)
-        rc, out, _ = spark("keys", "off", extra=dict(kx, PATH=kh + "/.local/bin" + os.pathsep + env["PATH"]))
-        t.ok(rc == 0 and out == "* spark's line is out of ~/.zshrc -- open a new shell\n"
-             "  ? and TAB go with it -- spark keys on adds them again\n" and kread(kh + "/.zshrc") == "# a plain file\n",
-             "spark keys off, a plain rc file, ~/.local/bin on PATH: the line goes, the way back is the plain word", out)
+            f.write("# a plain file\n")
+        spark("keys", "off", extra=kx)
         rc, out, _ = spark("keys", "on", extra=kx)
+        rc2, shown, _ = spark("keys", extra=kx)
+        rc3, out3, _ = spark("keys", "ask", "Esc", "b", extra=kx)
+        t.ok(rc == 0 and out == "! the keys are on, but ~/.zshrc lacks spark's line -- spark update adds it\n"
+             and shown.splitlines()[0] == "spark keys -- off: ~/.zshrc lacks spark's line -- spark update adds it"
+             and kread(kh + "/.zshrc") == "# a plain file\n"
+             and out3 == "* ask is Esc b now -- kept for when your rc file has spark's line: spark update\n",
+             "spark keys on where the rc file lacks the line: no promise of keys, the list says off naming the file "
+             "and spark update, the file untouched", out + shown + out3)
+        rc, out, _ = spark("keys", "on", extra=dict(kx, SHELL="/bin/fish"))
+        t.ok(rc == 0 and out == "* nothing changed\n", "spark keys on, already on: nothing changed in any shell", out)
+        os.remove(kenv)
         rc, out, _ = spark("keys", "what", "are", "these?", extra=kx)
         t.ok(rc == 2 and out.startswith("spark keys -- no word what"), "spark keys with other words: refused, exit 2", out)
 
-        # setup asks before the rc line, at a terminal only: a no is
-        # SITE_KEYS=off and one line; --yes, or no terminal, asks nothing
+        # setup asks about the keys, at a terminal only: a no is KEYS=off
+        # in keys.env and one line; --yes, or no terminal, asks nothing.
+        # The rc line is never part of the answer
         import pty as _pty
         import select as _select
 
@@ -9263,7 +9308,7 @@ def main():
                     if not went and b"go on? yes/NO: " in got:
                         os.write(m, b"yes\n")       # the notice comes first
                         went = True
-                    if not sent and b"add them? [Y/n]: " in got:
+                    if not sent and b"add the keys? [Y/n]: " in got:
                         os.write(m, answer.encode())
                         sent = True
                     if stop_at and not cut and stop_at in got:
@@ -9281,55 +9326,62 @@ def main():
 
         sh1 = os.path.join(home, "setup-no")
         rc, out = setup_tty("n\n", sh1)
-        senv = kread(sh1 + "/.config/spark/site.env")
-        t.ok(rc == 0 and "* spark adds one line to ~/.zshrc, and these keys to zsh:" in out
+        senv, skeys = kread(sh1 + "/.config/spark/site.env"), kread(sh1 + "/.config/spark/keys.env")
+        t.ok(rc == 0 and "* spark adds one line to ~/.zshrc: PATH, TAB completion, ? words\n"
+             "   and the row above the prompt. It can also add these keys to zsh:\n" in out
              and re.search(r"^   Esc s +ask about the line you are on +was spell-word$", out, re.M)
              and "   Enter, Ctrl-U, Ctrl-L and paste stay as they are\n" in out
-             and "   after Esc, your shell waits up to 1 s for the next key\n" in out
-             and "spark keys moves one, or takes them all back" in out
-             and "* no line and no key added: ? and TAB stay off too -- ~/.local/bin/spark keys on\n" in out
-             and "SITE_KEYS=off\n" in senv
-             and "SITE_KEYS=on" not in senv and "SITE_NAME=box\n" in senv and "# --- the shell" in senv
-             and "todo   rc" not in out and all(len(l) <= 80 for l in out.splitlines() if l.startswith(("*", "  "))),
-             "setup at a terminal lists the keys and asks; a no writes SITE_KEYS=off beside the other keys, one line, no rc todo",
-             out + senv)
-        # the closing block after a no: the rc line is what gives a new
-        # shell its PATH and the ? line, so neither is promised -- no ?
-        # row, no new shell, each command with its place
-        tail = out[out.rindex("* try:"):] if "* try:" in out else out
-        t.ok("* try:\n  %-31s   talk with the model\n  %-31s   why it failed, and the fix\n"
-             % ("~/.local/bin/spark chat", "cmd 2>&1 | ~/.local/bin/explain") in tail
-             and "open a new shell" not in out and "? how big" not in out,
-             "setup, the keys declined: the closing block has no ? row and no new shell, the commands spelled in full", tail)
+             and "   with the keys, after Esc, your shell waits up to 1 s for the next key\n" in out
+             and "   spark keys moves one, or turns them all off\n" in out
+             and "* no key added -- spark keys on adds them\n" in out
+             and skeys == "KEYS=off\n" and oct(os.stat(sh1 + "/.config/spark/keys.env").st_mode & 0o777) == "0o600"
+             and "KEYS=o" not in senv and "SITE_NAME=box\n" in senv
+             and all(len(l) <= 80 for l in out.splitlines() if l.startswith(("*", "  "))),
+             "setup at a terminal lists the keys and asks; a no writes KEYS=off in keys.env, one line", out + senv + skeys)
+        # the closing block is the same after a no: the rc line gives the
+        # next shell its PATH and the ? line whatever the keys are
+        t.ok("* open a new shell (exec $SHELL), then try:\n  spark chat               talk with the model\n"
+             "  ? how big is this dir    get a command for it\n  cmd 2>&1 | explain       why it failed, and the fix\n" in out
+             and ".local/bin/spark" not in out and "* try:" not in out,
+             "setup, the keys declined: the closing block is the one with the keys on, the ? row included", out[-500:])
         # a no, then setup interrupted at the model question: nothing is
         # written, so the next run asks the model (and the keys) again
         sh4 = os.path.join(home, "setup-cut")
         rc, out = setup_tty("n\n", sh4, model=(), stop_at=b"model [")
-        t.ok(rc == 130 and "no line and no key added" in out and not os.path.exists(sh4 + "/.config/spark/site.env"),
-             "setup, a no to the keys then Ctrl-C at the model question: no site.env is left", "%r %s" % (rc, out[-300:]))
+        t.ok(rc == 130 and "no key added" in out and not os.path.exists(sh4 + "/.config/spark/site.env")
+             and not os.path.exists(sh4 + "/.config/spark/keys.env"),
+             "setup, a no to the keys then Ctrl-C at the model question: no site.env and no keys.env is left",
+             "%r %s" % (rc, out[-300:]))
         rc, out = setup_tty("n\n", sh4, model=(), stop_at=b"model [")
-        t.ok(rc == 130 and "add them? [Y/n]: " in out and "model [" in out,
+        t.ok(rc == 130 and "add the keys? [Y/n]: " in out and "model [" in out,
              "setup again after that: the keys and the model are asked again", "%r %s" % (rc, out[-300:]))
-        sh5 = os.path.join(home, "setup-no-path")
-        rc, out = setup_tty("n\n", sh5, more={"PATH": sh5 + "/.local/bin" + os.pathsep + env["PATH"]})
-        t.ok(rc == 0 and "* no line and no key added: ? and TAB stay off too -- spark keys on\n" in out
-             and "* try:\n  spark chat           talk with the model\n  cmd 2>&1 | explain   why it failed, and the fix\n" in out,
-             "setup, the keys declined with ~/.local/bin on PATH: the plain words", out)
         rc, out = setup_tty("n\n", sh1)
-        t.ok(rc == 0 and "add them?" not in out, "setup again: SITE_KEYS is set, so nothing is asked", out)
+        t.ok(rc == 0 and "add the keys?" not in out and "these keys" not in out
+             and kread(sh1 + "/.config/spark/keys.env") == "KEYS=off\n",
+             "setup again: keys.env has a KEYS line, so nothing is asked and off stays", out)
         sh2 = os.path.join(home, "setup-yes")
         rc, out = setup_tty("\n", sh2)
-        senv = kread(sh2 + "/.config/spark/site.env")
-        t.ok(rc == 0 and "add them? [Y/n]: " in out and "no key added" not in out and "SITE_KEYS=on\n" in senv,
-             "setup at a terminal: Enter is yes, the keys stay on", out + senv)
+        rc2, out2 = setup_tty("\n", sh2)
+        t.ok(rc == 0 and "add the keys? [Y/n]: " in out and "no key added" not in out
+             and kread(sh2 + "/.config/spark/keys.env") == "KEYS=on\n"
+             and rc2 == 0 and "add the keys?" not in out2,
+             "setup at a terminal: Enter is yes, the keys on; again, not asked", out + out2)
+        # the rc file already has the line: an installed machine is not asked
+        sh6 = os.path.join(home, "setup-hooked")
+        os.makedirs(sh6)
+        with open(sh6 + "/.zshrc", "w") as f:
+            f.write(hookline + "\n")
+        rc, out = setup_tty("n\n", sh6)
+        t.ok(rc == 0 and "add the keys?" not in out and not os.path.exists(sh6 + "/.config/spark/keys.env"),
+             "setup where the rc file has spark's line: no question, no keys.env", out)
         sh3 = os.path.join(home, "setup-pipe")
         os.makedirs(sh3 + "/.config/spark")
         rc, out, _ = spark("setup", "--yes", "--no-serve", "--model", "none",
                            extra=dict(off, HOME=sh3, XDG_CONFIG_HOME=sh3 + "/.config", XDG_STATE_HOME=sh3 + "/.local/state",
                                       XDG_DATA_HOME=sh3 + "/.local/share", SHELL="/bin/zsh"))
-        senv = kread(sh3 + "/.config/spark/site.env")
-        t.ok(rc == 0 and "add them?" not in out and "these keys" not in out and "SITE_KEYS=on\n" in senv,
-             "setup --yes, no terminal: no key list, no question, the keys on as before", out + senv)
+        t.ok(rc == 0 and "add the keys?" not in out and "these keys" not in out
+             and not os.path.exists(sh3 + "/.config/spark/keys.env"),
+             "setup --yes, no terminal: no key list, no question, no keys.env -- the keys on as before", out)
 
         # spark uninstall: signed, shows and never mutates without the word;
         # SPARK_NO_APPLY = the plan only (the real run is tests/uninstall_test.sh)

@@ -91,7 +91,7 @@ printf '%s\n' "$out" | head -1 | grep -q '^spark get -- installs spark in ~/.spa
 # (tests/smoke.py holds them equal to setup.NOTICE, byte for byte)
 [ "$(printf '%s\n' "$out" | sed -n '2,4p')" = "* spark is MIT licensed and comes with no warranty -- see LICENSE
 * a model can be wrong -- read a command before you run it
-* what you run or accept is your own risk" ] \
+* what you run or accept is at your own risk" ] \
     && [ "$(printf '%s\n' "$out" | grep -n '^ok     clone' | head -1 | cut -d: -f1)" -gt 4 ] \
     && ok "the notice comes next, before the clone" || bad "notice: $(printf '%s\n' "$out" | sed -n '2,6p')"
 [ -x "$HOME/.spark/bin/spark" ] && ok "cloned to ~/.spark, bin/spark present" || bad "no bin/spark in the clone"
@@ -191,7 +191,7 @@ fi
 mkdir -p "$T/other"; echo keep > "$T/other/file"
 if out=$(SPARK_HOME="$T/other" sh "$REPO/get" --clone-only 2>&1); then bad "a foreign directory was not refused"; else ok "a foreign directory is refused"; fi
 note "$out"
-printf '%s\n' "$out" | grep -qx '\* what you run or accept is your own risk' && ok "the notice shows before a refusal too" || bad "no notice before the refusal: $out"
+printf '%s\n' "$out" | grep -qx '\* what you run or accept is at your own risk' && ok "the notice shows before a refusal too" || bad "no notice before the refusal: $out"
 printf '%s\n' "$out" | grep -q 'exists and is not spark -- move it or set SPARK_HOME' && ok "the refusal names the remedy" || bad "refusal text: $out"
 [ "$(cat "$T/other/file")" = keep ] && [ ! -e "$T/other/.git" ] && ok "the directory is untouched" || bad "the directory was touched"
 
@@ -272,13 +272,23 @@ printf '%s\n' "$out" | grep -q 'python3>=3.9' && ok "old python3: the refusal na
 #    SPARK_NO_APPLY=1 keep it from downloading or applying anything.
 #    SPARK_REF=main: today's code under test, not whatever the newest
 #    release tag happens to be
-out=$(SPARK_HOME="$T/handoff" SPARK_REF=main SPARK_NO_APPLY=1 SITE_AI_MODEL=none sh "$REPO/get" < /dev/null 2>&1) && ok "get -> spark setup (non-interactive) exits 0" || bad "get -> setup: rc $? $(printf '%s\n' "$out" | tail -5)"
+#    (the fixture's HEAD: the working tree's commit when there is one).
+#    The notice: get printed the three lines, so the setup it starts
+#    (SPARK_NOTICE_SHOWN=1) prints none of them again
+ref=$(git -C "$T/origin.git" symbolic-ref --short HEAD)
+out=$(SPARK_HOME="$T/handoff" SPARK_REF="$ref" SPARK_NO_APPLY=1 SITE_AI_MODEL=none sh "$REPO/get" < /dev/null 2>&1) && ok "get -> spark setup (non-interactive) exits 0" || bad "get -> setup: rc $? $(printf '%s\n' "$out" | tail -5)"
 note "$out"
 site="$HOME/.config/spark/site.env"
 [ -f "$site" ] && grep -q '^SITE_AI_MODEL=none$' "$site" && ok "setup wrote SITE_AI_MODEL=none" || bad "site.env: $(cat "$site" 2>/dev/null | grep SITE_AI_MODEL)"
 grep -q 'SITE_SHELL' "$site" 2>/dev/null && bad "setup wrote a shell key (there is none)" || ok "setup writes no shell key"
 printf '%s\n' "$out" | grep -q 'GB for models' && ok "setup printed the table header" || bad "no table header"
 printf '%s\n' "$out" | grep -q 'open a new shell' && ok "setup printed the closing block" || bad "no closing block"
+[ "$(printf '%s\n' "$out" | grep -c '^\* spark is MIT licensed and comes with no warranty -- see LICENSE$')" -eq 1 ] \
+    && [ "$(printf '%s\n' "$out" | grep -c '^\* a model can be wrong -- read a command before you run it$')" -eq 1 ] \
+    && [ "$(printf '%s\n' "$out" | grep -c '^\* what you run or accept is at your own risk$')" -eq 1 ] \
+    && ok "get -> setup: the notice's three lines print exactly once" || bad "the notice, get -> setup: $(printf '%s\n' "$out" | grep -n '^\* ' | head -8)"
+[ -e "$HOME/.local/state/spark/notice-shown" ] && ok "get -> setup: the notice is marked shown" || bad "no notice-shown marker after get -> setup"
+printf '%s\n' "$out" | grep -q 'yes/NO' && bad "get -> setup with no terminal asked a question" || ok "get -> setup with no terminal asks nothing"
 printf '%s\n' "$out" | grep -q 'no model chosen' && ok "setup said no model was chosen" || bad "no 'no model chosen' line"
 
 # 10. sudo was never called, anywhere above

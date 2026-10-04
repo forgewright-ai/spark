@@ -25,6 +25,9 @@
 #              every Enter and on the failing path, so one `spark off`
 #              reaches every pane at once)
 #   SPARK_OFF=1                 in the environment: bind nothing at all
+#   spark keys off | on         bind none of the five keys below / bind
+#              them again (KEYS=off in keys.env). The ? line, the row,
+#              Enter, Ctrl-U, Ctrl-L and paste stay as they are.
 #   spark keys                  lists the keys; `spark keys NAME KEY` moves
 #              one (ask, recall, height, listen, stop), `none` leaves it to
 #              the shell. ~/.config/spark/keys.env holds the choice, read
@@ -108,8 +111,13 @@ _spark_k_ask='Esc s' _spark_k_recall='Esc r' _spark_k_height='Esc k'
 _spark_k_listen='Esc v' _spark_k_stop='Esc x' _spark_rec='' _spark_esc='' _spark_sq=''
 _spark_kf=${XDG_CONFIG_HOME:-$HOME/.config}/spark/keys.env
 if [[ -r $_spark_kf ]]; then
-    _spark_kn=0
+    _spark_kn=0 _spark_ko=0
     while (( _spark_kn++ < 32 )) && { IFS= read -r _spark_kl || [[ -n $_spark_kl ]]; }; do
+        if [[ $_spark_kl == KEYS=* ]]; then
+            _spark_kv=${_spark_kl#*=}; _spark_kv=${_spark_kv#\"}; _spark_kv=${_spark_kv%\"}
+            if [[ $_spark_kv == off ]]; then _spark_ko=1; else _spark_ko=0; fi
+            continue
+        fi
         [[ $_spark_kl == KEYS_[A-Z]*=* ]] || continue
         _spark_kv=${_spark_kl#*=}; _spark_kv=${_spark_kv#\"}; _spark_kv=${_spark_kv%\"}
         [[ $_spark_kv == Alt-? ]] && _spark_kv="Esc ${_spark_kv#Alt-}"
@@ -122,8 +130,13 @@ if [[ -r $_spark_kf ]]; then
             KEYS_STOP) _spark_k_stop=$_spark_kv ;;
         esac
     done < "$_spark_kf"
+    # KEYS=off (spark keys off): none of the five is bound, so the Esc
+    # wait stays readline's own and no hint names a key
+    if (( _spark_ko )); then
+        _spark_k_ask=none _spark_k_recall=none _spark_k_height=none _spark_k_listen=none _spark_k_stop=none
+    fi
 fi
-unset _spark_kf _spark_kn _spark_kl _spark_kv
+unset _spark_kf _spark_kn _spark_kl _spark_kv _spark_ko
 # the sequence bind takes for a key's name: sets _spark_sq ('' for none)
 _spark_seq() {
     case $1 in

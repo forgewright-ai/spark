@@ -176,17 +176,20 @@ def _model(cfg, opts, default, yes):
         say("! no model named %s -- %s" % (name, choices))
 
 
-def _write(name, user, model, keys_off=False):
+def _write(name, user, model, keys_off=None):
     """site.env: the documented example first when there is none, then
-    the keys decided here -- SITE_KEYS=off with them after a no to the
-    keys. Nothing is written before this, so a setup that stops at a
-    question leaves no site.env and asks again."""
+    the keys decided here; and a no to the keys, KEYS=off in keys.env.
+    Nothing is written before this, so a setup that stops at a question
+    leaves no file and asks again."""
     if not os.path.exists(SITE_ENV):
         os.makedirs(os.path.dirname(SITE_ENV), exist_ok=True)
         shutil.copy(os.path.join(REPO, "site.env.example"), SITE_ENV)
         os.chmod(SITE_ENV, 0o600)
     keys = {"SITE_NAME": name, "SITE_USER": user, "SITE_AI_MODEL": model}
-    site.set_keys(_quiet=True, **dict(keys, SITE_KEYS="off") if keys_off else keys)
+    site.set_keys(_quiet=True, **keys)
+    if keys_off is not None:
+        from . import keys as _keys_mod
+        site.set_keys(_file=_keys_mod.KEYS_ENV, _quiet=True, KEYS="off" if keys_off else "on")
     # one row, not one per key: bootstrap's own `site` row names the file
     say("ok     site         " + " ".join("%s=%s" % kv for kv in keys.items()))
 
@@ -224,7 +227,7 @@ def _rc_line():
     is a todo: bootstrap already showed the ok."""
     shell = site.login_shell()
     state, path = site.rc_hook_state(shell)
-    if state in ("link", "hook") or not config.load().keys:
+    if state in ("link", "hook"):
         return
     if path:
         say("todo   rc           ~%s lacks the spark line -- spark update" % path[len(HOME):])
@@ -314,23 +317,11 @@ def _account(user):
 
 
 def _closing():
-    """What to try next. With the keys on, the rc line gives the next
-    shell its PATH and the `?` line. With them off there is no such
-    line: no `?` row, no new shell, and a command is spelled with its
-    place when ~/.local/bin is not on PATH."""
     say()
-    if config.load().keys:
-        say("* open a new shell (exec $SHELL), then try:")
-        say("  spark chat               talk with the model")
-        say("  ? how big is this dir    get a command for it")
-        say("  cmd 2>&1 | explain       why it failed, and the fix")
-    else:
-        rows = (("%s chat" % site.spark_word(), "talk with the model"),
-                ("cmd 2>&1 | %s" % site.spark_word("explain"), "why it failed, and the fix"))
-        width = max(len(c) for c, _ in rows)
-        say("* try:")
-        for cmd, does in rows:
-            say("  %-*s   %s" % (width, cmd, does))
+    say("* open a new shell (exec $SHELL), then try:")
+    say("  spark chat               talk with the model")
+    say("  ? how big is this dir    get a command for it")
+    say("  cmd 2>&1 | explain       why it failed, and the fix")
     door()
 
 
@@ -369,27 +360,32 @@ def door(once=False):
 # on a machine installed before them, `spark ver --credits` any time
 NOTICE = ("* spark is MIT licensed and comes with no warranty -- see LICENSE",
           "* a model can be wrong -- read a command before you run it",
-          "* what you run or accept is your own risk")
+          "* what you run or accept is at your own risk")
 NOTICE_QUESTION = "go on"
 NOTICED = os.path.join(STATE_DIR, "notice-shown")
 
 
-def notice(ask=False):
+def notice(ask=False, shown=False):
     """The notice, once ever on this machine: the three lines, then with
     ask (setup at a terminal, no --yes) the one question -- a no prints
     `* nothing changed` and returns False, nothing written. Shown
     without a question, or answered yes, it is marked in the state dir
-    and never printed again. spark update calls it bare."""
+    and never printed again. spark update calls it bare. shown: `get`
+    printed the lines a moment ago (SPARK_NOTICE_SHOWN), so setup asks
+    only the question, and a no names how to come back to the clone."""
     if os.path.exists(NOTICED):
         return True
-    for line in NOTICE:
-        say(line)
+    if not shown:
+        for line in NOTICE:
+            say(line)
     if ask:
         from . import confirm
         if not confirm(NOTICE_QUESTION):
-            say("* nothing changed")
+            say("* nothing set up -- %s setup when you are ready" % _tilde(os.path.join(REPO, "bin", "spark"))
+                if shown else "* nothing changed")
             return False
-    say()
+    if ask or not shown:
+        say()
     try:
         os.makedirs(os.path.dirname(NOTICED), mode=0o700, exist_ok=True)
         with open(NOTICED, "a", encoding="utf-8"):
@@ -397,6 +393,10 @@ def notice(ask=False):
     except OSError:
         pass
     return True
+
+
+def _tilde(path):
+    return "~" + path[len(HOME):] if path.startswith(HOME + os.sep) else path
 
 
 VOICE_QUESTION = "read aloud to you (for low vision)? [y/N]: "
@@ -426,48 +426,43 @@ def _voice(want):
         voice.cmd_voice(["clear"])
 
 
-KEYS_QUESTION = "   add them? [Y/n]: "
-
-
-def keys_no():
-    """The line a no to the keys gets: with no rc line, `?`, TAB and the
-    PATH entry stay off too, so the way back is spelled in full when
-    ~/.local/bin is not on PATH."""
-    return "* no line and no key added: ? and TAB stay off too -- %s keys on" % site.spark_word()
+KEYS_QUESTION = "   add the keys? [Y/n]: "
+KEYS_NO = "* no key added -- spark keys on adds them"
 
 
 def _keys(cfg, yes):
-    """Before the rc line: the keys spark adds to this user's shell, what
-    each replaces there, then one question, default yes. Not asked when
-    SITE_KEYS is already set, the rc file already has the line, the shell
-    has no prompt line, or nobody is there to answer. Returns False for
-    a no, else True; nothing is written here -- _write keeps a no as
-    SITE_KEYS=off with the other keys, so bootstrap's rc rows add
-    nothing."""
+    """The keys spark can add to this user's shell, what each replaces
+    there, then one question, default yes. The rc line is added either
+    way. Not asked when keys.env already has a KEYS= line, the rc file
+    already has the line, the shell has no prompt line, or nobody is
+    there to answer. Returns None when not asked, else True for a no:
+    nothing is written here -- _write records the answer in keys.env
+    with the other writes."""
     global ASKED
     from . import keys
     shell = site.login_shell()
     state, path = site.rc_hook_state(shell)
-    if yes or "SITE_KEYS" in os.environ or "SITE_KEYS" in cfg.site_file or state == "hook" or not path:
-        return True
+    if yes or "KEYS" in config.parse_env(keys.KEYS_ENV) or state == "hook" or not path:
+        return None
     ASKED = True
-    say("* spark adds one line to ~%s, and these keys to %s:" % (path[len(HOME):], shell))
+    say("* spark adds one line to ~%s: PATH, TAB completion, ? words" % path[len(HOME):])
+    say("   and the row above the prompt. It can also add these keys to %s:" % shell)
     for _, key, does, old in keys.rows(shell):
         say(("   %-7s %-36s %s" % (key, does, "was " + old if old else "")).rstrip())
     held = [k for k, _ in keys.wrapped(shell)]
     say("   %s and %s stay as they are" % (", ".join(held[:-1]), held[-1]))
-    if keys.esc_wait(shell):
-        say("   " + keys.esc_wait(shell))
-    say("   spark keys moves one, or takes them all back")
+    if any(key.startswith("Esc") for _, key, _, _ in keys.rows(shell)):
+        say("   with the keys, " + keys.ESC_WAIT)
+    say("   spark keys moves one, or turns them all off")
     try:
         ans = input(KEYS_QUESTION).strip().lower()
     except EOFError:
         say()
-        return True
+        return None
     if ans in ("", "y", "yes"):
-        return True
-    say(keys_no())
-    return False
+        return False
+    say(KEYS_NO)
+    return True
 
 
 USE_IT = "   use it, and download no model? [Y/n]: "
@@ -497,7 +492,7 @@ def _engine_probe(cfg, url):
         raise Abort("no answer from %s -- start your llama-server first" % url, 2)
 
 
-def _own_engine(cfg, name, user, opts, yes, voice, keys_off=False):
+def _own_engine(cfg, name, user, opts, yes, voice, keys_off=None):
     """The user's own llama-server: `--engine URL` (_parse checked its
     shape, _run probed it), or at a terminal one that answers on this
     machine's SPARK_PORT and is not spark's, with no model chosen yet
@@ -523,7 +518,7 @@ def _own_engine(cfg, name, user, opts, yes, voice, keys_off=False):
     return _join(name, user, opts, yes, voice, url, keys_off)
 
 
-def _join(name, user, opts, yes, voice=False, own="", keys_off=False):
+def _join(name, user, opts, yes, voice=False, own="", keys_off=None):
     """The userspace join: a client of this box's shared engine. No model,
     no console, no units, no sudo -- only this user's ~/.config and
     ~/.local/state, and their own sealed account. Mirrors spark client.
@@ -571,14 +566,14 @@ def _run(opts):
         _engine_probe(cfg, opts["engine"])
     cli.cmd_ver([])
     say()
-    if not notice(ask=not yes):
+    if not notice(ask=not yes, shown=bool(os.environ.get("SPARK_NOTICE_SHOWN"))):
         return 0
     name = _decide(cfg, "SITE_NAME", opts["name"], cfg.name, "this machine's name", yes)
     user = _decide(cfg, "SITE_USER", opts["user"], cfg.user, "your name", yes)
     # a shared engine already runs on this box (spark serve share on) and this user
     # has no server of their own: join it -- no model to download, no root
     voice = _voice_question(cfg, yes)
-    keys_off = not _keys(cfg, yes)
+    keys_off = _keys(cfg, yes)
     own = _own_engine(cfg, name, user, opts, yes, voice, keys_off)
     if own is not None:
         return own
