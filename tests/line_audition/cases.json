@@ -404,6 +404,13 @@
     "fd",
     "ripgrep",
     "xdg-utils",
+    "diffutils",
+    "which",
+    "util-linux-systemd",
+    "coreutils-doc",
+    "coreutils-systemd",
+    "unzip-doc",
+    "wtmpdb",
     "nano"
    ],
    "also": [

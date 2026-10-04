@@ -141,13 +141,14 @@ number, never by taste.
 
 `tests/line_audition.py` is the prompt line's audition, not in the
 gate either. `tests/line_audition/cases.json` holds about 58 questions
-per OS (debian, arch, void, macos) and 39 about spark itself. A case
-names what makes an answer right: the head commands, the must-nots, the
-danger flag. A case with `then` is a `??` pair: the follow-up must keep
-the tool. `run --os OS --model NAME` sends each case through the real
-`spark line`. The OS comes from spark's own seams, so one Linux speaks
-as another family too. macOS runs on a Mac. The grader trusts outcomes
-and shares no code with the line's own judge. The head command must
+per OS (debian, arch, void, fedora, opensuse, macos) and 39 about spark
+itself. A case names what makes an answer right: the head commands, the
+must-nots, the danger flag. A case with `then` is a `??` pair: the
+follow-up must keep the tool. `run --os OS --model NAME` sends each
+case through the real `spark line`. The OS comes from spark's own
+seams, so one Linux speaks as another family too. macOS runs on a Mac.
+The grader trusts outcomes and shares no code with the line's own
+judge. The head command must
 exist in that OS's help snapshot, `help-<os>.json`, and every option
 must appear in its help. A spark verb must appear in the TAB completion
 files or the cheatsheet's command column. `collect` writes a snapshot

@@ -119,14 +119,17 @@ jobs:
       - name: the tools the cases name, with their man pages
         run: |
           # the image's dnf.conf installs no documentation: drop that
-          # line, then reinstall what the base already holds so its man
-          # pages land too (--allowerasing: coreutils replaces the image's
-          # coreutils-single)
+          # line and bring the image to today, so every package it holds
+          # can be reinstalled. Install the tools (--allowerasing:
+          # coreutils replaces the image's coreutils-single), then
+          # reinstall everything, so the man pages of what the base
+          # already held land too (ls's are in coreutils-common)
           sed -i '/^tsflags=nodocs/d' /etc/dnf/dnf.conf
+          dnf upgrade -y >/dev/null 2>&1 || echo "not upgraded"
           for p in $(python3 tests/line_audition.py packages --os fedora); do
-            if rpm -q "$p" >/dev/null 2>&1; then dnf reinstall -y "$p" >/dev/null 2>&1 || echo "not reinstalled: $p"
-            else dnf install -y --allowerasing "$p" >/dev/null 2>&1 || echo "not installed: $p"; fi
+            rpm -q "$p" >/dev/null 2>&1 || dnf install -y --allowerasing "$p" >/dev/null 2>&1 || echo "not installed: $p"
           done
+          dnf reinstall -y --skip-unavailable '*' >/dev/null 2>&1 || echo "not reinstalled: the base"
           ls /usr/share/man/man8/dnf*.8* /usr/share/man/man1 2>/dev/null | wc -l
       - name: collect
         run: python3 tests/line_audition.py collect --os fedora --out help-fedora.json
@@ -146,13 +149,16 @@ jobs:
           persist-credentials: false
       - name: the tools the cases name, with their man pages
         run: |
-          # the image's zypp.conf installs no documentation: turn that
-          # off, then --force reinstalls what the base already holds so
-          # its man pages land too
-          sed -i 's/^[# ]*rpm\.install\.excludedocs.*/rpm.install.excludedocs = no/' /etc/zypp/zypp.conf
+          # the image installs no documentation: its zypp.conf.d drop-in
+          # says so, and goes. Install the tools, then --force reinstalls
+          # everything, so the man pages of what the base already held
+          # land too. --force-resolution: man, gawk and less replace the
+          # image's busybox ones, as on an installed Tumbleweed
+          rm -f /usr/etc/zypp/zypp.conf.d/excludedocs.conf /etc/zypp/zypp.conf.d/excludedocs.conf
           for p in $(python3 tests/line_audition.py packages --os opensuse); do
-            zypper --non-interactive install --no-recommends --force "$p" >/dev/null 2>&1 || echo "not installed: $p"
+            zypper --non-interactive install --no-recommends --force-resolution "$p" >/dev/null 2>&1 || echo "not installed: $p"
           done
+          rpm -qa --qf '%{NAME}\n' | grep -v '^gpg-pubkey' | xargs zypper --non-interactive install --no-recommends --force >/dev/null 2>&1 || echo "not reinstalled: the base"
           ls /usr/share/man/man8/zypper.8* /usr/share/man/man1 2>/dev/null | wc -l
       - name: collect
         run: python3 tests/line_audition.py collect --os opensuse --out help-opensuse.json
