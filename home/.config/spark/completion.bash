@@ -63,7 +63,8 @@ _spark_complete() {
         soul)    words="show edit reset" ;;
         bench)   words="--line" ;;
         clear)   words="--history" ;;
-        client)  words="off status" ;;
+        client)  words="off status --key-file" ;;
+        setup)   words="--yes --model --engine --name --user --no-serve" ;;
         user)    words="list add remove login logout token claim status" ;;
         *)       return 0 ;;
     esac

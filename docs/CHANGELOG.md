@@ -7,7 +7,8 @@ uses a `llama-server` you already run, and says its terms first.
 
 - `spark setup` asks before it adds its line to your rc file. It lists
   the keys the line adds to your shell, what each replaces there, and
-  the 1 second a lone Esc waits. A no is kept as `SITE_KEYS=off`.
+  the 1 second your shell waits after Esc. A no is kept as
+  `SITE_KEYS=off`.
   `--yes`, or no terminal, asks nothing, as before.
 - `spark keys`, new. It lists the keys spark added, what each does and
   what it replaced. `spark keys ask Esc a` moves one, and `Alt-a` and
@@ -16,15 +17,21 @@ uses a `llama-server` you already run, and says its terms first.
   ask, recall, height, listen and stop.
 - `spark keys off` takes spark's line out of the rc file, and
   `spark update` no longer puts it back. `spark keys on` adds it again.
+  An rc file that links into a git repository is left as it is, and
+  spark names the file.
+- The rc line also puts spark on your `PATH`. With the keys off,
+  spark's messages spell `~/.local/bin/spark` when it is not there.
 - `SPARK_OFF=1` in the environment starts one shell without the keys.
   It is now in the docs.
 - Your own llama-server. `spark client URL` uses a `llama-server` you
   already run, and `spark setup --engine URL` does it on a new install.
   At a terminal, setup offers one it finds on `SPARK_PORT`. spark
-  downloads nothing for it.
-- spark never stops a server it did not start. `spark client URL` and
-  `spark uninstall` end spark's own engine alone. `spark client off`
-  refuses while another server holds the port.
+  downloads nothing for it. `--engine` refuses a spark machine's
+  address, and one that does not answer.
+- spark never stops a server it did not start. `spark client URL`,
+  `spark uninstall` and `spark serve off` end spark's own engine
+  alone. `spark client off` refuses while another server holds the
+  port.
 - `spark client URL --key-file FILE` names the file with the server's
   key. A client no longer makes a key of its own.
 - A client of your own server keeps its threads and memory here, from

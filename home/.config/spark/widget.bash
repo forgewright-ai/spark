@@ -29,7 +29,7 @@
 #              one (ask, recall, height, listen, stop), `none` leaves it to
 #              the shell. ~/.config/spark/keys.env holds the choice, read
 #              here as the shell starts; the hints name the key you chose.
-#              Enter, Ctrl-U and paste are wrapped and do not move.
+#              Enter, Ctrl-U and paste stay as they are.
 #
 # The look file ($STATE_DIR/look, written by `spark awaken`, `spark look`
 # and `spark height`) is read line by line when it changes -- never
@@ -89,7 +89,8 @@ unset _spark_exit
 # --- the keys: today's defaults, moved by ~/.config/spark/keys.env -----------
 # `spark keys` writes that file: KEYS_<NAME>=Esc a | Ctrl-g | none (Alt-a
 # reads as Esc a). Read line by line, never sourced; a value of any other
-# shape keeps the default. _spark_key NAME FUNCTION binds it: nothing for
+# shape keeps the default (the letters are spelled out: a range such as
+# a-z follows the locale's collation in bash 4). _spark_key NAME FUNCTION binds it: nothing for
 # none, else the sequence -- and notes what the key did before, a line of
 # _spark_rec. _spark_binds is readline's own list, asked once for every
 # key spark takes (one fork, builtins only).
@@ -102,7 +103,7 @@ if [[ -r $_spark_kf ]]; then
         [[ $_spark_kl == KEYS_[A-Z]*=* ]] || continue
         _spark_kv=${_spark_kl#*=}; _spark_kv=${_spark_kv#\"}; _spark_kv=${_spark_kv%\"}
         [[ $_spark_kv == Alt-? ]] && _spark_kv="Esc ${_spark_kv#Alt-}"
-        [[ $_spark_kv == none || $_spark_kv == 'Esc '[a-z0-9] || $_spark_kv == Ctrl-[abefgknoprtvwy] ]] || continue
+        [[ $_spark_kv == none || $_spark_kv == 'Esc '[abcdefghijklmnopqrstuvwxyz0123456789] || $_spark_kv == Ctrl-[abefgknoprtvwy] ]] || continue
         case ${_spark_kl%%=*} in
             KEYS_ASK) _spark_k_ask=$_spark_kv ;;
             KEYS_RECALL) _spark_k_recall=$_spark_kv ;;

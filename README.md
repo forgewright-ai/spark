@@ -58,8 +58,9 @@ marked `!`.
    ```
 
 spark asks first, then adds one line to your rc file. `spark keys`
-lists the keys that line adds, moves one, or takes them all back.
-`docs/INSTALL.md` has the details.
+lists the keys that line adds, moves one, or takes them all back. The
+line also puts spark on your `PATH`: without it, call
+`~/.local/bin/spark`. `docs/INSTALL.md` has the details.
 
 ## Use it
 
@@ -154,7 +155,8 @@ Tasks:
 
 Your words go to the model's server. It runs on this machine, or on
 another machine of yours (`spark client URL`). The same command uses
-a `llama-server` you already run. What each command sends:
+a `llama-server` you already run, and `spark setup --engine URL` does
+it on a new install. What each command sends:
 
 - `line`: the line you typed, your shell, your OS and the folder's
   path. With a question, the matching lines of your manuals, 600

@@ -29,7 +29,7 @@
 #              one (ask, recall, height, listen, stop), `none` leaves it to
 #              the shell. ~/.config/spark/keys.env holds the choice, read
 #              here as the shell starts; the hints name the key you chose.
-#              Enter, Ctrl-U, Ctrl-L and paste are wrapped and do not move.
+#              Enter, Ctrl-U, Ctrl-L and paste stay as they are.
 #
 # The look file ($STATE_DIR/look, written by `spark awaken`, `spark look`
 # and `spark height`) is read line by line when it changes -- never
@@ -76,7 +76,8 @@ add-zsh-hook zshexit _spark_gone
 # --- the keys: today's defaults, moved by ~/.config/spark/keys.env -----------
 # `spark keys` writes that file: KEYS_<NAME>=Esc a | Ctrl-g | none (Alt-a
 # reads as Esc a). Read line by line, never sourced; a value of any other
-# shape keeps the default. _spark_key NAME WIDGET binds it: nothing for
+# shape keeps the default (the letters are spelled out: a range such as
+# a-z follows the locale's collation in bash 4). _spark_key NAME WIDGET binds it: nothing for
 # none, else the sequence -- and notes what the key did before, a line of
 # _spark_rec. _spark_was holds the shell's own bindings, asked once for
 # every key spark takes (one fork, builtins only).
@@ -90,7 +91,7 @@ typeset -gA _spark_was
         [[ $line == KEYS_[A-Z]*=* ]] || continue
         v=${line#*=}; v=${${v#\"}%\"}
         [[ $v == Alt-? ]] && v="Esc ${v#Alt-}"
-        [[ $v == (none|Esc\ [a-z0-9]|Ctrl-[abefgknoprtvwy]) ]] || continue
+        [[ $v == (none|Esc\ [abcdefghijklmnopqrstuvwxyz0123456789]|Ctrl-[abefgknoprtvwy]) ]] || continue
         case ${line%%=*} in
             KEYS_ASK) _spark_k_ask=$v ;;
             KEYS_RECALL) _spark_k_recall=$v ;;

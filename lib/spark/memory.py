@@ -116,7 +116,7 @@ def _write(lines, st=None):
         log_exc("memory store")
         from . import config, wire
         if wire.plain(config.load()):
-            raise OSError("no account to hold the memory -- spark check says why")
+            raise OSError("no account to hold the memory -- spark chat makes one")
         raise OSError("no account to hold the memory -- a client logs in first: spark user login NAME")
     path, dk, name = st
     from . import users

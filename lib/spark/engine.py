@@ -9,7 +9,7 @@ import signal
 import subprocess
 import time
 
-from . import (CONFIG_DIR, HOME, IS_MAC, LOCK_FILE, PID_FILE, REPO, SERVE_LOG, SERVE_URL_FILE, STATE_DIR, config,
+from . import (CONFIG_DIR, HOME, IS_MAC, LOCK_FILE, PID_FILE, REPO, SERVE_LOG, SERVE_URL_FILE, STATE_DIR, TOKEN_FILE, config,
                init_shape, is_musl, run, state_dir)
 
 EX_CONFIG = 78          # sysexits: a missing engine, model or token -- not a crash
@@ -614,20 +614,23 @@ def server_pids(port):
 def own_pids(cfg):
     """The pids on SPARK_PORT that are spark's own engine: the one
     serve.pid names (a server spark spawned, or the unit's), and any
-    whose command line runs the llama-server in spark's engine dir. A
-    llama-server from anywhere else is the user's own: spark never
-    signals it."""
+    whose command line carries what only spark passes, `--api-key-file`
+    with this user's token file (server_cmd; under `sg render` the child
+    is the one counted, pids_in_ps takes no wrapper). A client's key file
+    is another server's key, so there only the token spark mints counts.
+    Any other llama-server is the user's own, wherever its binary lives:
+    spark never signals it."""
     rc, out = run(["ps", "-axo", "pid=,command="])
     mine = pidfile_pid()
-    d = engine_dir(cfg)
-    bins = {os.path.join(p, "llama-server") + " " for p in (d, os.path.realpath(d))}
+    files = {TOKEN_FILE} if cfg.client else {TOKEN_FILE, cfg.token_file}
+    marks = [" --api-key-file %s " % f for f in files if f]
     lines = {}
     for line in out.splitlines():
         p = line.split(None, 1)
         if len(p) == 2:
-            lines[p[0]] = p[1] + " "
+            lines[p[0]] = " ".join(p[1].split()) + " "
     return [pid for pid in pids_in_ps(out, cfg.port)
-            if pid == mine or any(b in lines.get(str(pid), "") for b in bins)]
+            if pid == mine or any(m in lines.get(str(pid), "") for m in marks)]
 
 
 def pids_in_ps(out, port):

@@ -508,6 +508,10 @@ since v1.4, and the file is read until the first write.
 State is `~/.local/state/spark/`, 0700:
 
 - `api-token` 0600, `serve-url`, `serve.pid`, `serve.log`, `serve.lock`.
+- `peer` 0600: what a client's other machine is, one JSON object
+  `{url, kind, n_ctx}`, `kind` `spark` or `engine` (`wire.PEER_FILE`).
+  The probes write it, and again when the kind they see differs.
+  `spark client URL|off` removes it.
 - `forge-token` 0600, `ember-token` 0600, `forge-url`, `forge.pid`,
   `forge.log`, `forge.lock`.
 - `router/` (`spark.gguf`, `ember.gguf`, `presets.ini`): the router's
@@ -628,9 +632,23 @@ and may change freely.
    The `rc-login` row appends the same marked line there. With
    `SITE_KEYS=off` both rows are a `skip`, `the keys are off -- spark
    keys on`, and the rc file is left as it is. `spark setup` asks at a
-   terminal before the first line goes in (`setup._keys`): a no writes
-   `SITE_KEYS=off`. `spark keys off` removes the line, through a
-   symlink too (`uninstall.strip_rc_line`). Two hand-back
+   terminal before the first line goes in (`setup._keys`). A no is
+   written as `SITE_KEYS=off` with the other keys (`setup._write`),
+   never before. So a setup that stops at a question leaves no
+   `site.env`. `spark keys off` removes the line, through a symlink
+   too (`uninstall.strip_rc_line`). It reads and writes bytes, through
+   a temp file renamed over the link's target. A link into a git work
+   tree is another project's tracked file (`uninstall.rc_tracked`, a
+   `.git` above the target). It is left as it is, one `!` line names
+   the file, and `SITE_KEYS=off` is still kept. The rc line is also
+   what puts `~/.local/bin` on `PATH`. With the keys off, a message
+   spells `~/.local/bin/spark` when that directory is not on `PATH`
+   (`site.spark_word`). Those are setup's closing block, the line a
+   no gets, and `spark keys off`. `spark keys`
+   says `off` when `SITE_KEYS` is off or the rc file lacks the line,
+   and names which (`keys.off_why`). `spark keys on` reads the rc
+   file again after the rows ran, and never promises keys the row
+   could not add. Two hand-back
    rows cover what older sparks made. The `micro` row removes the plugin
    links a pre-v1.10 install left under `~/.config/micro` and names the
    app's own repository. The `handback` row, run by `spark update`,
@@ -1035,7 +1053,7 @@ and may change freely.
    `zle-line-init`, bash's next prompt), so a command's last output row
    is never eaten. The failure line is `* failed (N) -- Esc s asks
    why`, or `HEAD not found; Esc s gets the install line` for exit 127,
-   or `last time this fixed it: FIX` from the failure memory. The
+   or `last time this fixed it: FIX` from the failure memory.
    A key `spark keys` moved is named in these lines in place of `Esc
    s`, `Esc r`, `Esc k` and `Esc v`. With `ask` set to `none` the
    failure line ends `? words asks about it`. The
@@ -1994,22 +2012,38 @@ One grammar for every verb. A verb that breaks a rule is a bug.
   true on a client of a plain engine that is not this machine's shared
   engine. Four rules hold there. spark never signals a server it did
   not start. `engine.own_pids` is the pid in `serve.pid` and any
-  process running the `llama-server` in spark's engine dir. `spark
-  client URL` and `spark uninstall` stop those alone. `spark
-  client off` refuses, exit 2, while another server holds `SPARK_PORT`.
-  The client keeps its own sealed store, minted at the first write as
-  on a machine that serves (`forge.local_store`), and its token never
-  goes to the engine (`forge._peer_req`). The key is a file the user
+  `llama-server` on the port whose command line carries what only
+  spark passes: `--api-key-file` with this user's token file
+  (`engine.server_cmd`). Where the binary lives says nothing: with no
+  engine of its own, spark's engine dir is the system's. On a client
+  only the token spark mints counts, never a key file the user named.
+  `spark client URL`, `spark uninstall` and `spark serve off` stop
+  those alone. `spark serve off --force` is the one way to stop
+  another. `spark client off` refuses, exit 2, while another server
+  holds `SPARK_PORT`. That is a `llama-server` in `ps` that is not
+  spark's, or anything that answers `/health` there when spark runs
+  none. A joiner of the shared engine is not refused. The client keeps
+  its own sealed store, minted at the first write as on a machine that
+  serves (`forge.local_store`). Its token never goes to the engine:
+  `forge._peer_req` and `model.peer_models` ask `wire.plain` with a
+  probe when there is no record. The key is a file the user
   names: `spark client URL --key-file FILE` writes
-  `SPARK_API_KEY_FILE`, and `spark client off` empties it. The context
+  `SPARK_API_KEY_FILE`, and `spark client off` empties whatever key
+  file `spark.env` names. The context
   size is the engine's own: `n_ctx` from `GET /props`, kept in the
   record, read by `wire.ctx` unless `SPARK_CTX` is set. Every message
   says `your engine`: no login line, no `run it there`, and `spark
   model` names the model the engine serves instead of printing the
-  list. `spark setup --engine URL` writes the shape. At a terminal,
+  list. `spark setup --engine URL` writes the shape, and records the
+  kind before it makes the account. It probes the URL before anything
+  is written (`setup._engine_probe`). A spark machine there is
+  refused in one line naming `spark client URL`, exit 2. So is a URL
+  nothing answers at. At a terminal,
   setup offers it once when such a server answers on `SPARK_PORT` and
   no model is chosen. One model per server: router mode and Ollama are
-  not supported.
+  not supported. A raw engine on another spark machine cannot be told
+  from the user's own `llama-server`, and that is accepted: both are a
+  plain engine, local store and `--key-file` hint.
 - **A shared engine.** `spark serve share on` (`SITE_SHARE=yes`,
   `site.cmd_share`) lets a machine's other OS users answer from its one
   engine instead of each loading the model. Bootstrap's `share` row

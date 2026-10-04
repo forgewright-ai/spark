@@ -339,8 +339,11 @@ def cmd_stop(args):
         if IS_MAC and engine.service_domain(cfg) == "system":
             return _die("it runs from boot -- sudo launchctl bootout %s, or spark serve boot off"
                         % engine.service_target(cfg))
+        # spark's own engine alone is waited for and, at 20 s, killed: a
+        # llama-server spark did not start on this port is never signalled
+        own = engine.own_pids(cfg)
         engine.service_stop(True)
-        left = engine.wait_gone(engine.server_pids(cfg.port), 20)
+        left = engine.wait_gone(sorted(set(own) | set(engine.own_pids(cfg))), 20)
         if left:
             engine.terminate(left, force=True)
         engine.forget()

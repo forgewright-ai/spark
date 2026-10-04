@@ -270,29 +270,82 @@ def step_look(ctx):
             ctx.row("ok", "micro", "spark's old plugin links removed")
 
 
+def rc_tracked(path):
+    """The file a symlinked rc path points at when that file holds the
+    spark line and sits inside a git work tree (a `.git` in a directory
+    above it): another project's tracked file, never rewritten from
+    here. '' for anything else."""
+    from . import site
+    if not os.path.islink(path) or site._spark_link(path) or not os.path.isfile(path):
+        return ""
+    real = os.path.realpath(path)
+    try:
+        with open(real, "rb") as f:
+            if site.RC_MARKER.encode() not in f.read():
+                return ""
+    except OSError:
+        return ""
+    d = os.path.dirname(real)
+    while True:
+        if os.path.lexists(os.path.join(d, ".git")):
+            return real
+        up = os.path.dirname(d)
+        if up == d:
+            return ""
+        d = up
+
+
+def tracked_line(target):
+    """The one line said for an rc link left alone (rc_tracked): the
+    file it points at, by name."""
+    return "! %s is in a git repository -- take spark's line out there" % _tilde(target)
+
+
 def strip_rc_line(path):
     """Remove the marked spark line (and the blank line bootstrap put before
     it) from an rc file; True when a line went. A symlinked rc file is
     followed, as bootstrap's append follows it: the file it points at
-    loses the line and the link stays. A link into the repository is
-    spark's own file, never edited."""
+    loses the line and the link stays. Two links are never followed: one
+    into the repository (spark's own file), and one into a git work tree
+    (rc_tracked: the caller says where the line is). Bytes in, bytes
+    out: every other byte of the file stays as it was, through a temp
+    file renamed over the target."""
     from . import site
-    if site._spark_link(path) or not os.path.isfile(path):
+    if site._spark_link(path) or not os.path.isfile(path) or rc_tracked(path):
         return False
     path = os.path.realpath(path)
-    with open(path, encoding="utf-8", errors="replace") as f:
-        lines = f.read().split("\n")
+    with open(path, "rb") as f:
+        lines = f.read().split(b"\n")
+    marker = site.RC_MARKER.encode()
     keep = []
     for line in lines:
-        if site.RC_MARKER in line:
-            if keep and keep[-1] == "":
+        if marker in line:
+            if keep and keep[-1] == b"":
                 keep.pop()
             continue
         keep.append(line)
     if keep == lines:
         return False
-    with open(path, "w", encoding="utf-8") as f:
-        f.write("\n".join(keep))
+    data = b"\n".join(keep)
+    import tempfile
+    try:
+        fd, tmp = tempfile.mkstemp(prefix=".spark-rc-", dir=os.path.dirname(path))
+    except OSError:
+        # a directory this user cannot write in: the file itself, in place
+        with open(path, "wb") as f:
+            f.write(data)
+        return True
+    try:
+        with os.fdopen(fd, "wb") as f:
+            f.write(data)
+        os.chmod(tmp, os.stat(path).st_mode & 0o7777)
+        os.replace(tmp, path)
+    except OSError:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+        raise
     return True
 
 
@@ -302,17 +355,25 @@ def step_rc_lines(ctx):
         path = os.path.join(HOME, name)
         if site._spark_link(path) or not os.path.isfile(path):
             continue
+        target = rc_tracked(path)
+        if target:
+            say(tracked_line(target))
+            continue
         try:
-            with open(path, encoding="utf-8", errors="replace") as f:
-                has = site.RC_MARKER in f.read()
+            with open(path, "rb") as f:
+                has = site.RC_MARKER.encode() in f.read()
         except OSError:
             continue
         if not has:
             continue
         if ctx.dry:
             ctx.row("would", "rc", "%s: the spark line removed" % _tilde(path))
-        elif strip_rc_line(path):
-            ctx.row("ok", "rc", "%s: the spark line removed" % _tilde(path))
+            continue
+        try:
+            if strip_rc_line(path):
+                ctx.row("ok", "rc", "%s: the spark line removed" % _tilde(path))
+        except OSError as e:
+            ctx.row("todo", "rc", "%s: %s -- take the spark line out by hand" % (_tilde(path), e.strerror or e))
 
 
 def step_handback(ctx):

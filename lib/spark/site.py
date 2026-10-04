@@ -52,7 +52,7 @@ def set_keys(_file=None, _quiet=False, **kv):
     os.chmod(path, 0o600)
 
 
-def apply(rows, stream=False):
+def apply(rows, stream=False, said=None):
     """Run bootstrap.sh and show the rows that matter for this change.
     stream=True at a terminal hands bootstrap the terminal unfiltered, so
     a model download shows curl's progress bar live; captured output (a
@@ -60,6 +60,8 @@ def apply(rows, stream=False):
     every row that is not ok (the non-stream branch): a caller that does
     not know which rows changed, like `spark update`, wants everything
     bootstrap did.
+    `said`, a list, takes the rows shown, for a caller that must know
+    what bootstrap answered (spark keys on).
     SPARK_NO_APPLY=1 (tests) writes the key only."""
     if os.environ.get("SPARK_NO_APPLY"):
         return 0
@@ -75,6 +77,8 @@ def apply(rows, stream=False):
             for line in p.stdout.splitlines():
                 if re.match(pattern, line):
                     say(line)
+                    if said is not None:
+                        said.append(line)
         else:
             for line in p.stdout.splitlines():
                 if not re.match(r"^ok\s", line):
@@ -378,12 +382,16 @@ def cmd_client(args):
         # brain's order, wire.candidates) until `spark client URL`
         from . import engine
         own = engine.own_pids(cfg)
-        if [p for p in engine.server_pids(cfg.port) if p not in own]:
-            # a llama-server spark did not start holds the port: spark's
-            # own engine would collide with it, and spark never stops it
-            say("%s client -- your engine holds port %d -- stop it, or set SPARK_PORT" % (MARK, cfg.port))
+        joiner = cfg.token_file == SHARE_TOKEN
+        if not joiner and ([p for p in engine.server_pids(cfg.port) if p not in own]
+                           or (not own and wire.health(cfg.loopback_url()) in ("ok", "loading"))):
+            # a server spark did not start holds the port (one started
+            # with no --port in its command line answers there all the
+            # same): spark's own engine would collide with it, and spark
+            # never stops it. A joiner of this machine's shared engine
+            # goes through, as before: that engine is the owner's
+            say("%s client -- another server holds port %d -- stop it, or set SPARK_PORT" % (MARK, cfg.port))
             return 2
-        was_plain = wire.plain(cfg)
         say("* this machine runs its own model now")
         set_keys(SITE_AI_MODEL="auto", SITE_PEER_AI_URL="")
         wire.forget_peer()
@@ -391,7 +399,9 @@ def cmd_client(args):
         # and a preference for the other machine go too: each would still
         # send this machine there, or hand its key to spark's own engine
         gone = {}
-        if cfg.get("SPARK_API_KEY_FILE", "") == SHARE_TOKEN or (was_plain and cfg.spark_file.get("SPARK_API_KEY_FILE")):
+        # (by value, whatever the peer record says or lacks: any key file
+        # spark.env names was the other server's)
+        if cfg.get("SPARK_API_KEY_FILE", "") == SHARE_TOKEN or cfg.spark_file.get("SPARK_API_KEY_FILE"):
             gone["SPARK_API_KEY_FILE"] = ""
         prefer = cfg.get("SPARK_PREFER_URL", "")
         if prefer and urlsplit(prefer).hostname == urlsplit(cfg.peer_ai_url or "").hostname:
@@ -403,11 +413,12 @@ def cmd_client(args):
     key_file = None
     if "--key-file" in args:
         i = args.index("--key-file")
-        key_file = os.path.abspath(os.path.expanduser(args[i + 1])) if i + 1 < len(args) else ""
+        given = args[i + 1] if i + 1 < len(args) else ""
+        key_file = os.path.abspath(os.path.expanduser(given)) if given else ""
         args = args[:i] + args[i + 2:]
         if (not key_file or not os.path.isfile(key_file) or not os.access(key_file, os.R_OK)
                 or re.search(r"[;`$()|&<>]", key_file)):
-            say("%s client -- --key-file names a file this user can read" % MARK)
+            say("%s client -- no file to read at %s -- --key-file FILE holds the key" % (MARK, given or "FILE"))
             return 2
     if len(args) != 1:
         say(CLIENT_USAGE.rstrip())
@@ -416,6 +427,10 @@ def cmd_client(args):
     if not CLIENT_URL.match(url):
         say("%s client -- URL is http://host:port (spark serve --login there shows it)" % MARK)
         return 2
+    from . import engine
+    # spark's own engine as this machine ran it, read before the keys
+    # change (a machine that served under a key file of its own)
+    ran = engine.own_pids(cfg)
     set_keys(SITE_PEER_AI_URL=url, SITE_AI_MODEL="none")
     wire.forget_peer()
     wire.drop_cache()
@@ -434,7 +449,6 @@ def cmd_client(args):
             say("* using your engine at %s -- spark never starts or stops it" % url)
         elif not users.account()[0]:
             say("* then log in: " + _login_hint(url))
-        from . import engine
         # a machine that served: the unit would bring the engine back at
         # boot -- stop and disable it here, remove its links, and say so
         stopped = False
@@ -461,7 +475,8 @@ def cmd_client(args):
                 engine.sysctl(["daemon-reload"])
         # spark's own engine alone: a llama-server spark did not start
         # on this port (the user's own) is never signalled
-        pids = engine.own_pids(cfg)
+        now = engine.own_pids(cfg)
+        pids = now + [p for p in ran if p not in now and p in engine.server_pids(cfg.port)]
         if pids:
             engine.terminate(pids)
             left = engine.wait_gone(pids, 15)
@@ -487,6 +502,17 @@ def _login_hint(url):
 RC_MARKER = "config/spark/hook."
 RC_LINE = {"bash": "[ -r ~/.config/spark/hook.bash ] && . ~/.config/spark/hook.bash   # spark: the AI at the prompt",
            "zsh": "[[ -r ~/.config/spark/hook.zsh ]] && source ~/.config/spark/hook.zsh   # spark: the AI at the prompt"}
+
+
+def spark_word(name="spark"):
+    """How to call spark (or explain) from this shell: the bare word
+    when ~/.local/bin is on PATH, else its place spelled out. The rc
+    line is what puts it on PATH, so with the keys off it may not be."""
+    here = os.path.join(HOME, ".local", "bin")
+    for d in os.environ.get("PATH", "").split(os.pathsep):
+        if d and os.path.normpath(os.path.expanduser(d)) == here:
+            return name
+    return "~/.local/bin/" + name
 
 
 def login_shell():

@@ -1606,14 +1606,15 @@ def model_name_cases(t):
 # reads `python3 DIR/llama-server --port N`, so ps shows what spark looks
 # for. One model with no alias, /props with its context size, no
 # /api/health; --api-key K asks for the key. Every request's
-# Authorization lands in --log.
+# Authorization lands in --log (or $STUB_LOG). With no --port the port is
+# LLAMA_ARG_PORT's, as llama-server reads it: nothing in ps names it.
 OWN_ENGINE = r"""
-import json, sys
+import json, os, sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 a = sys.argv
-port = int(a[a.index("--port") + 1])
+port = int(a[a.index("--port") + 1]) if "--port" in a else int(os.environ["LLAMA_ARG_PORT"])
 key = a[a.index("--api-key") + 1] if "--api-key" in a else ""
-log = a[a.index("--log") + 1]
+log = a[a.index("--log") + 1] if "--log" in a else os.environ["STUB_LOG"]
 
 
 class H(BaseHTTPRequestHandler):
@@ -1672,6 +1673,35 @@ ThreadingHTTPServer(("127.0.0.1", port), H).serve_forever()
 """
 
 
+def forge_stub():
+    """A live spark machine as a client sees it: /api/health says
+    `forge: true`, anything else is 404. (server, url, paths asked)."""
+    asked = []
+
+    class F(BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_GET(self):
+            asked.append("%s %s" % (self.path, self.headers.get("Authorization") or "-"))
+            body = json.dumps({"status": "ok", "forge": True, "name": "t", "version": "1", "model": "stub-7b-q4",
+                               "upstream": "ok", "models": {}, "roles": {}, "names": {}}).encode()
+            if self.path != "/api/health":
+                self.send_error(404)
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        do_POST = do_GET
+
+    srv = HTTPServer(("127.0.0.1", 0), F)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return srv, "http://127.0.0.1:%d" % srv.server_address[1], asked
+
+
 def own_engine_cases(t):
     """Your own llama-server: spark is its client and never touches it.
     It survives `spark client URL`, `spark client off` refuses while it
@@ -1690,13 +1720,16 @@ def own_engine_cases(t):
         f.write(OWN_ENGINE)
     procs = []
 
-    def serve(*more):
+    def serve(*more, named=True):
         with socket.socket() as sk:
             sk.bind(("127.0.0.1", 0))
             port = sk.getsockname()[1]
         log = os.path.join(tmp, "seen-%d" % port)
         open(log, "w").close()
-        p = subprocess.Popen([sys.executable, script, "--port", str(port), "--log", log] + list(more),
+        # named=False: the port and the log ride the environment, so the
+        # command line is `llama-server` alone
+        argv = [sys.executable, script] + (["--port", str(port), "--log", log] if named else []) + list(more)
+        p = subprocess.Popen(argv, env=dict(os.environ, LLAMA_ARG_PORT=str(port), STUB_LOG=log),
                              stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         procs.append(p)
         url = "http://127.0.0.1:%d" % port
@@ -1743,7 +1776,7 @@ def own_engine_cases(t):
              "own engine: spark client names the engine and its model, no login", out)
         rc, out, _ = spark("model")
         t.ok(rc == 0 and out.splitlines() == ["spark model -- your engine at %s serves my-own-7b-q4" % url,
-                                             "  its models are yours to manage: spark downloads and serves none here"],
+                                             "  spark downloads and serves no model here"],
              "own engine: spark model names the model it serves, and prints no list of spark's", out)
         rc, out, _ = spark("model", "auto")
         t.ok(rc == 2 and out.strip() == "spark model -- the model is your engine's: change it there, or spark client off",
@@ -1794,9 +1827,18 @@ def own_engine_cases(t):
 
         # spark client off never starts an engine into the user's port
         rc, out, _ = spark("client", "off")
-        t.ok(rc == 2 and out.strip() == "spark client -- your engine holds port %d -- stop it, or set SPARK_PORT" % port
+        t.ok(rc == 2 and out.strip() == "spark client -- another server holds port %d -- stop it, or set SPARK_PORT" % port
              and "SITE_AI_MODEL=none\n" in open(site_env).read() and eng.poll() is None,
              "own engine: spark client off refuses while the user's server holds SPARK_PORT, nothing written", out)
+
+        # the peer record follows what answers: one that says `spark` for
+        # this plain engine is written again by the next fresh probe
+        with open(state + "/peer", "w") as f:
+            json.dump({"url": url, "kind": "spark", "n_ctx": 0}, f)
+        rc, out, _ = spark("status")
+        rec = json.load(open(state + "/peer"))
+        t.ok(rc == 0 and rec.get("kind") == "engine" and rec.get("n_ctx") == 4096,
+             "own engine: a record of another kind is rewritten by the next fresh probe", repr(rec))
 
         # a server that asks for a key: the 401 names the remedy, the file is recorded, the probes carry it
         keyed, kport, kurl, klog = serve("--api-key", "their-engine-key")
@@ -1805,8 +1847,8 @@ def own_engine_cases(t):
         t.ok(rc == 1 and "the engine refused the key -- spark client URL --key-file FILE" in err
              and "machine that serves" not in err, "own engine: a refused key names --key-file", out + err)
         rc, out, _ = spark("client", kurl, "--key-file", tmp + "/no-such-file")
-        t.ok(rc == 2 and out.strip() == "spark client -- --key-file names a file this user can read",
-             "own engine: --key-file refuses a file that is not there", out)
+        t.ok(rc == 2 and out.strip() == "spark client -- no file to read at %s/no-such-file -- --key-file FILE holds the key" % tmp,
+             "own engine: --key-file refuses a file that is not there, naming it", out)
         keyfile = os.path.join(tmp, "engine-key")
         with open(keyfile, "w") as f:
             f.write("their-engine-key\n")
@@ -1827,25 +1869,106 @@ def own_engine_cases(t):
         rc, out, _ = spark(exe=os.path.join(tmp, "ctx.py"))
         t.ok(out.split()[0] == "4096", "own engine: /props is read with the key", out)
 
-        # the servers gone, spark client off goes back; the key file's line goes too
+        # the servers gone, spark client off goes back; the key file's
+        # line goes too, with no peer record left to say whose it was
         for p in (eng, keyed):
             p.terminate()
             p.wait(timeout=10)
+        os.remove(state + "/peer")
         rc, out, _ = spark("client", "off")
         t.ok(rc == 0 and "SITE_AI_MODEL=auto\n" in open(site_env).read() and "SPARK_API_KEY_FILE=\n" in open(spark_env).read()
              and not os.path.exists(state + "/peer"),
-             "own engine: spark client off goes back once the port is free, and drops the key file's line", out)
+             "own engine: spark client off goes back once the port is free, and drops the key file's line "
+             "with no peer record", out)
 
-        # ours or not: the same process under spark's engine dir IS spark's, and spark client URL stops it
-        mine, mport, murl, _mlog = serve()
-        rc, out, _ = spark("client", murl, extra={"SPARK_PORT": str(mport), "SPARK_ENGINE_DIR": theirs})
+        # a server started with no --port in its command line (the port is
+        # LLAMA_ARG_PORT's): nothing in ps names it, and spark client off
+        # still refuses while it answers on SPARK_PORT
+        bare, bport, burl, _blog = serve(named=False)
+        bx = {"SPARK_PORT": str(bport)}
+        rc, out, _ = spark("client", burl, extra=bx)
+        rc2, out2, _ = spark("client", "off", extra=bx)
+        t.ok(rc == 0 and rc2 == 2 and bare.poll() is None
+             and out2.strip() == "spark client -- another server holds port %d -- stop it, or set SPARK_PORT" % bport
+             and "SITE_AI_MODEL=none\n" in open(site_env).read(),
+             "own engine: a server with no --port in its command line is still refused at spark client off", out + out2)
+        bare.terminate()
+        bare.wait(timeout=10)
+        rc, out, _ = spark("client", "off", extra=bx)
+        t.ok(rc == 0 and "SITE_AI_MODEL=auto\n" in open(site_env).read(), "own engine: and off goes through once it is gone", out)
+
+        # ours or not, by what only spark passes: a llama-server from
+        # spark's own engine dir with no key file of spark's is the
+        # user's and survives; one carrying --api-key-file with this
+        # user's token file is spark's own, and spark client URL stops it
+        same, sport, surl, _slog = serve()
+        rc, out, _ = spark("client", surl, extra={"SPARK_PORT": str(sport), "SPARK_ENGINE_DIR": theirs})
+        time.sleep(1)
+        t.ok(rc == 0 and same.poll() is None and "the engine that ran here is stopped" not in out,
+             "ours: a llama-server in spark's engine dir without spark's key file is the user's, and survives", out)
+        mine, mport, murl, _mlog = serve("--api-key-file", state + "/api-token")
+        rc, out, _ = spark("client", murl, extra={"SPARK_PORT": str(mport)})
         gone = True
         try:
             mine.wait(timeout=20)
         except subprocess.TimeoutExpired:
             gone = False
         t.ok(rc == 0 and gone and "the engine that ran here is stopped" in out,
-             "ours: a llama-server run from spark's engine dir is spark's own, and is stopped", out)
+             "ours: a llama-server that carries spark's --api-key-file is spark's own, and is stopped", out)
+        rc, out, _ = spark("client", "off", extra={"SPARK_PORT": str(mport)})
+
+        # spark serve off, the unit loaded (pinned) and its stop a no-op:
+        # spark's own engine that outlives the wait is killed, and a
+        # llama-server spark did not start on the same port is not
+        other, oport, _ourl, _olog = serve()
+        hscript = os.path.join(tmp, "llama-server")
+        with open(hscript, "w") as f:
+            f.write("import signal, time\nsignal.signal(signal.SIGTERM, signal.SIG_IGN)\ntime.sleep(120)\n")
+        hung = subprocess.Popen([sys.executable, hscript, "--port", str(oport), "--api-key-file", state + "/api-token"],
+                                stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        procs.append(hung)
+        time.sleep(0.5)
+        stop = os.path.join(tmp, "stop.py")
+        with open(stop, "w") as f:
+            f.write("import sys\nsys.path.insert(0, %r)\nfrom spark import config, engine, serve\n"
+                    "engine.service_stop = lambda *a, **k: ''\n"
+                    "engine.wait_gone = lambda pids, t, _w=engine.wait_gone: _w(pids, min(t, 2))\n"
+                    "print(sorted(engine.own_pids(config.load())))\n"
+                    "sys.exit(serve.cmd_stop([]))\n" % os.path.join(REPO, "lib"))
+        rc, out, err = spark(exe=stop, extra={"SPARK_PORT": str(oport), "SPARK_SERVICE_STATE": "loaded", "SITE_AI_MODEL": "auto"})
+        dead = True
+        try:
+            hung.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            dead = False
+        t.ok(rc == 0 and out.splitlines()[0] == "[%d]" % hung.pid and dead and other.poll() is None
+             and "the engine stopped" in out,
+             "serve off: spark's own engine is killed after the wait, another llama-server on the port is never signalled",
+             out + err)
+        other.terminate()
+        other.wait(timeout=10)
+
+        # a joiner of this machine's shared engine: the owner's engine
+        # holds the port and is not the joiner's -- spark client off goes
+        # through as before, and the engine is untouched
+        home6 = os.path.join(tmp, "home6")
+        os.makedirs(home6 + "/.config/spark")
+        shared, shport, shurl, _shlog = serve()
+        with open(tmp + "/share-token", "w") as f:
+            f.write("the-shared-token\n")
+        with open(home6 + "/.config/spark/site.env", "w") as f:
+            f.write("SITE_AI_MODEL=none\nSITE_PEER_AI_URL=%s\n" % shurl)
+        with open(home6 + "/.config/spark/spark.env", "w") as f:
+            f.write("SPARK_API_KEY_FILE=%s/share-token\n" % tmp)
+        e6 = {"HOME": home6, "XDG_CONFIG_HOME": home6 + "/.config", "XDG_STATE_HOME": home6 + "/.local/state",
+              "XDG_DATA_HOME": home6 + "/.local/share", "SPARK_PORT": str(shport), "SPARK_SHARE_TOKEN": tmp + "/share-token"}
+        rc, out, _ = spark("client", "off", extra=e6)
+        t.ok(rc == 0 and "this machine runs its own model now" in out and shared.poll() is None
+             and "SITE_AI_MODEL=auto\n" in open(home6 + "/.config/spark/site.env").read()
+             and "SPARK_API_KEY_FILE=\n" in open(home6 + "/.config/spark/spark.env").read(),
+             "a joiner of the shared engine: spark client off goes through while the owner's engine holds the port", out)
+        shared.terminate()
+        shared.wait(timeout=10)
 
         # spark setup --engine URL, with nobody to ask
         home2 = os.path.join(tmp, "home2")
@@ -1857,6 +1980,25 @@ def own_engine_cases(t):
         t.ok(rc == 2 and out.strip().endswith("spark setup -- --engine URL is http://host:port")
              and not os.path.exists(home2 + "/.config/spark/site.env"),
              "setup --engine: an address with no scheme is refused, nothing written", out)
+        t.ok(len(out.splitlines()) == 1, "setup --engine: a bad word is refused before the banner and any question", out)
+        # the URL is asked before anything is written: a spark machine
+        # there is spark client's to join, and a dead one is no engine
+        fsrv, furl, _fasked = forge_stub()
+        rc, out, _ = spark("setup", "--engine", furl, extra=e2)
+        left = [n for n in ("account", "users", "peer", "notice-shown") if os.path.exists(home2 + "/.local/state/spark/" + n)]
+        t.ok(rc == 2 and out.strip() == "spark setup -- %s is a spark machine -- spark client %s" % (furl, furl)
+             and not left and not os.path.exists(home2 + "/.config/spark/site.env"),
+             "setup --engine URL of a spark machine: refused in one line naming spark client, no account, nothing written",
+             out + repr(left))
+        fsrv.shutdown()
+        rc, out, _ = spark("setup", "--engine", "http://127.0.0.1:9", extra=e2)
+        left = [n for n in ("account", "users", "peer") if os.path.exists(home2 + "/.local/state/spark/" + n)]
+        t.ok(rc == 2 and out.strip() == "spark setup -- no answer from http://127.0.0.1:9 -- start your llama-server first"
+             and not left and not os.path.exists(home2 + "/.config/spark/site.env"),
+             "setup --engine URL nothing answers at: refused in one line, no account, nothing written", out + repr(left))
+        rc, out, _ = spark("setup", "--engine", url2, "--model", "auto", extra=e2)
+        t.ok(rc == 2 and out.strip() == "spark setup -- --engine uses your server's model: leave --model out",
+             "setup --engine with --model: refused before the banner", out)
         rc, out, err = spark("setup", "--engine", url2 + "/", extra=e2)
         site2 = open(home2 + "/.config/spark/site.env").read()
         try:
@@ -1870,6 +2012,23 @@ def own_engine_cases(t):
              out + err)
         t.ok("ok     account      " in out and re.search(r"^\* ok$", out, re.M) and os.path.isdir(home2 + "/.local/state/spark/users"),
              "setup --engine URL: this machine's own store is made, and the first question is answered", out)
+        # the account's token never reaches the user's server: the kind
+        # is recorded by setup itself, and with no record a probe says
+        tok2 = re.search(r"^token=(.*)$", open(home2 + "/.local/state/spark/account").read(), re.M).group(1)
+        rec2 = json.load(open(home2 + "/.local/state/spark/peer"))
+        open(log2, "w").close()
+        rc, out, _ = spark("model", extra=e2)
+        os.remove(home2 + "/.local/state/spark/peer")
+        rc2, out2, _ = spark("model", extra=e2)
+        rc3, out3, _ = spark("line", stdin="?? and again", extra=e2)
+        hits = seen(log2)
+        t.ok(rec2.get("kind") == "engine" and rc == 0 and rc2 == 0 and out == out2
+             and out.splitlines() == ["spark model -- your engine at %s serves my-own-7b-q4" % url2,
+                                      "  spark downloads and serves no model here"]
+             and hits and len(tok2) >= 16 and not any(tok2 in h or "Bearer" in h for h in hits)
+             and not any("/api/models" in h or "/api/threads" in h for h in hits),
+             "setup --engine URL: spark model right after it, and with no peer record, says your engine and sends "
+             "the account's token nowhere", out + out2 + out3 + "\n".join(h for h in hits if "Bearer" in h or "/api/" in h)[:300])
         rc, out, _ = spark("setup", "--yes", "--no-serve", "--model", "none",
                            extra={"HOME": tmp + "/home3", "XDG_CONFIG_HOME": tmp + "/home3/.config",
                                   "XDG_STATE_HOME": tmp + "/home3/.local/state", "SPARK_PORT": str(port2)})
@@ -1882,17 +2041,21 @@ def own_engine_cases(t):
         with open(ask, "w") as f:
             f.write("import builtins, sys\nsys.path.insert(0, %r)\nfrom spark import config, setup\n"
                     "asked = []\nbuiltins.input = lambda q='': asked.append(q) or sys.argv[1]\n"
-                    "setup._join = lambda *a: 'join ' + a[-1]\n"
+                    "setup._join = lambda *a: 'join ' + a[5]\n"
                     "opts = {'engine': None, 'model': sys.argv[2] or None}\n"
                     "print(setup._own_engine(config.load(), 'n', 'u', opts, False, False), asked)\n" % os.path.join(REPO, "lib"))
         e5 = {"HOME": tmp + "/home5", "XDG_CONFIG_HOME": tmp + "/home5/.config", "XDG_STATE_HOME": tmp + "/home5/.local/state",
               "SPARK_PORT": str(port2)}
+        ours5, oport5, _ourl5, _olog5 = serve("--api-key-file", tmp + "/home5/.local/state/spark/api-token")
         got = [spark("", "", exe=ask, extra=e5)[1], spark("n", "", exe=ask, extra=e5)[1],
-               spark("", "qwen3-4b", exe=ask, extra=e5)[1], spark("", "", exe=ask, extra=dict(e5, SPARK_ENGINE_DIR=theirs))[1],
+               spark("", "qwen3-4b", exe=ask, extra=e5)[1], spark("", "", exe=ask, extra=dict(e5, SPARK_PORT=str(oport5)))[1],
                spark("", "", exe=ask, extra=dict(e5, SPARK_PORT="9"))[1]]
+        got.append(spark("", "", exe=ask, extra=dict(e5, SPARK_ENGINE_DIR=theirs))[1])
         t.ok("* a llama-server of yours answers at %s" % url2 in got[0]
-             and got[0].splitlines()[-1] == "join %s ['   use it? nothing to download [Y/n]: ']" % url2,
+             and got[0].splitlines()[-1] == "join %s ['   use it, and download no model? [Y/n]: ']" % url2,
              "setup at a terminal: a server of the user's on SPARK_PORT is offered once, Enter takes it", got[0])
+        t.ok(got.pop().splitlines()[-1].startswith("join %s [" % url2),
+             "setup at a terminal: a system llama-server in spark's engine dir is still the user's, and is offered", repr(got))
         t.ok(got[1].splitlines()[-1].startswith("None [") and [g.strip() for g in got[2:]] == ["None []"] * 3,
              "setup at a terminal: n declines; a model named, spark's own engine or nothing on the port asks nothing", repr(got[1:]))
 
@@ -1902,7 +2065,7 @@ def own_engine_cases(t):
         os.makedirs(tmp + "/home4")
         p = subprocess.run(["sh", os.path.join(REPO, "bootstrap.sh"), "--dry-run"], capture_output=True, text=True, env=benv, timeout=60)
         rows = [ln for ln in p.stdout.splitlines() if re.match(r"^\w+\s+token\b", ln)]
-        t.ok(len(rows) == 1 and rows[0].startswith("skip") and "a client mints no key" in rows[0],
+        t.ok(len(rows) == 1 and rows[0].startswith("skip") and "a client needs no key of its own" in rows[0],
              "bootstrap: a client's token row mints nothing", "\n".join(rows) + p.stderr[-200:])
     finally:
         for p in procs:
@@ -8259,14 +8422,25 @@ def main():
              "SPARK_YES=1 answers the remove question, and the store goes whole, kept/ too", out)
         # a client with no login answers and keeps nothing: the FORGE it
         # answers from is the account authority, nothing is minted here.
-        # The peer named is not known to be a plain engine (nothing
-        # answers there), so the rule holds; SPARK_BASE_URL answers
-        _xdg6 = {"XDG_STATE_HOME": home + "/.local/state-client", "SITE_AI_MODEL": "none",
-                 "SITE_PEER_AI_URL": "http://127.0.0.1:9"}
+        # The peer is a live spark machine (/api/health says forge: true);
+        # the words go to SPARK_BASE_URL, the stub
+        _fsrv, _furl, _fasked = forge_stub()
+        _xdg6 = {"XDG_STATE_HOME": home + "/.local/state-client", "SITE_AI_MODEL": "none", "SITE_PEER_AI_URL": _furl}
         rc, out, err = spark("chat", "count", extra=_xdg6)
         t.ok(rc == 0 and out.strip() and not os.path.exists(home + "/.local/state-client/spark/users")
-             and not os.path.exists(home + "/.local/state-client/spark/account"),
-             "a client with no login answers and mints nothing (a client never mints)", out + err)
+             and not os.path.exists(home + "/.local/state-client/spark/account")
+             and any(a.startswith("/api/health ") for a in _fasked),
+             "a client of a live spark machine with no login answers and mints nothing (a client never mints)",
+             out + err + repr(_fasked))
+        _fsrv.shutdown()
+        # the same with nothing answering there: what the peer is stays
+        # unknown, and the rule holds
+        _xdg6 = {"XDG_STATE_HOME": home + "/.local/state-client9", "SITE_AI_MODEL": "none",
+                 "SITE_PEER_AI_URL": "http://127.0.0.1:9"}
+        rc, out, err = spark("chat", "count", extra=_xdg6)
+        t.ok(rc == 0 and out.strip() and not os.path.exists(home + "/.local/state-client9/spark/users")
+             and not os.path.exists(home + "/.local/state-client9/spark/account"),
+             "a client whose other machine is down mints nothing either", out + err)
         # the headless render fact reads the node itself: open to every user
         # (Void: 0666, group video, no render group) is the GPU from boot;
         # a node closed to others needs its owning group
@@ -8322,7 +8496,7 @@ def main():
         t.ok("SITE_AI_MODEL=qwen3-5-2b\n" in open(home + "/.config/spark/site.env").read(),
              "setup --model NAME writes the name", out)
 
-        # spark keys (v1.81): the list, a key moved, left to the shell or
+        # spark keys (v1.82): the list, a key moved, left to the shell or
         # reset, the refusals, off and on -- in a HOME of its own, nothing
         # applied; then setup's question at a terminal
         kh = os.path.join(home, "keys-home")
@@ -8333,6 +8507,14 @@ def main():
         def kread(path):
             return open(path).read() if os.path.exists(path) else ""
 
+        # the rc file is a symlink of the user's (a dotfiles folder, no
+        # git above it) that holds spark's line and a byte that is not UTF-8
+        hookline = "[[ -r ~/.config/spark/hook.zsh ]] && source ~/.config/spark/hook.zsh   # spark: the AI at the prompt"
+        os.makedirs(kh + "/dotfiles")
+        with open(kh + "/dotfiles/zshrc", "wb") as f:
+            f.write(b"# mine \xff\nalias l=ls\n\n" + hookline.encode() + b"\n")
+        os.chmod(kh + "/dotfiles/zshrc", 0o640)
+        os.symlink(kh + "/dotfiles/zshrc", kh + "/.zshrc")
         rc, out, _ = spark("keys", "-h")
         t.ok(rc == 0 and out.splitlines()[0] == "spark keys -- the keys spark adds to your shell"
              and all(len(l) <= 80 for l in out.splitlines()), "spark keys -h signs (contract 8), 80 columns", out)
@@ -8343,13 +8525,19 @@ def main():
              and re.search(r"^stop +Esc x .* was execute-named-cmd$", out, re.M)
              and re.search(r"^recall +Esc r +find a past command by what it did$", out, re.M)
              and re.search(r"^ +Enter ", out, re.M) and re.search(r"^ +Ctrl-L ", out, re.M)
-             and "a lone Esc waits up to 1 s" in rows[-1] and all(len(l) <= 80 for l in rows) and not os.path.exists(kenv),
+             and rows[-1] == "after Esc, your shell waits up to 1 s for the next key"
+             and all(len(l) <= 80 for l in rows) and not os.path.exists(kenv),
              "spark keys lists each key, what it does and what it replaced in zsh, the wrapped ones, the Esc wait; "
              "bare, it writes nothing", out)
         rc, out, _ = spark("keys", "status", extra=dict(kx, SHELL="/bin/bash"))
         t.ok(rc == 0 and re.search(r"^recall +Esc r .* was revert-line$", out, re.M) and "Ctrl-L" not in out
-             and not re.search(r"^ask .* was ", out, re.M),
-             "spark keys in bash: Esc r replaced revert-line, Esc s nothing, no Ctrl-L row", out)
+             and not re.search(r"^ask .* was ", out, re.M)
+             and out.splitlines()[0] == "spark keys -- off: ~/.bashrc lacks spark's line -- spark keys on adds it",
+             "spark keys in bash: Esc r replaced revert-line, Esc s nothing, no Ctrl-L row; no line in ~/.bashrc is off, "
+             "naming the file", out)
+        rc, out, _ = spark("keys", extra=dict(kx, SHELL="/bin/fish"))
+        t.ok(rc == 0 and out.splitlines()[0] == "spark keys -- off: fish has no prompt line (bash 4+ or zsh do)",
+             "spark keys in a shell with no prompt line: off, naming the shell", out)
         os.makedirs(kh + "/.local/state/spark")
         with open(kh + "/.local/state/spark/replaced.zsh", "w") as f:
             f.write("ask\tEsc s\tmy-own-widget\nstop\tEsc x\t-\n")
@@ -8375,44 +8563,60 @@ def main():
         t.ok(all(_cl.match(l) for l in kread(kenv).splitlines()), "keys.env: every line fits contract 3", kread(kenv))
         before = kread(kenv)
         for words, want in ((("recall", "Esc", "a"), "Esc a is ask's key; move ask first, or pick another"),
-                            (("ask", "Ctrl-c"), "Ctrl-c is not free; a key is Esc a, Alt-a or Ctrl-g"),
-                            (("ask", "Ctrl-x"), "Ctrl-x is not free"),
-                            (("ask", "F5"), "no key named F5; a key is Esc a, Alt-a or Ctrl-g"),
-                            (("ask", "Esc", "O"), "no key named Esc O"),
-                            (("ask", "Enter"), "Enter is wrapped: it keeps what it did, and no key moves there"),
-                            (("ask", "Ctrl-U"), "Ctrl-U is wrapped"),
-                            (("ask", "Ctrl-l"), "Ctrl-L is wrapped"),
-                            (("ask", "paste"), "paste is wrapped"),
-                            (("enter", "Esc", "b"), "Enter is wrapped: it keeps what it did, and it does not move"),
-                            (("paste", "none"), "paste is wrapped"),
+                            (("ask", "Ctrl-c"), "Ctrl-c is taken -- a key is Esc a, Alt-a or Ctrl-g"),
+                            (("ask", "Ctrl-x"), "Ctrl-x is taken -- "),
+                            (("ask", "F5"), "no key named F5 -- a key is Esc a, Alt-a or Ctrl-g"),
+                            (("ask", "Esc", "O"), "no key named Esc O -- "),
+                            (("ask", "Enter"), "Enter stays as it is -- pick another key"),
+                            (("ask", "Ctrl-U"), "Ctrl-U stays as it is -- pick another key"),
+                            (("ask", "Ctrl-l"), "Ctrl-L stays as it is -- pick another key"),
+                            (("ask", "paste"), "paste stays as it is -- pick another key"),
+                            (("enter", "Esc", "b"), "Enter stays as it is -- spark keys -h lists the names"),
+                            (("paste", "none"), "paste stays as it is -- spark keys -h lists the names"),
                             (("bogus", "Esc", "b"), "no word bogus; spark keys -h lists them"),
                             (("ask",), "ask needs a key: spark keys ask Esc a")):
             rc, out, _ = spark("keys", *words, extra=kx)
             t.ok(rc == 2 and out.startswith("spark keys -- " + want) and len(out.splitlines()) == 1 and len(out) <= 81
                  and kread(kenv) == before, "spark keys %s: refused in one line, exit 2, nothing written" % " ".join(words), out)
+        # the Esc wait is said only while a key in use starts with Esc
+        with open(kenv, "w") as f:
+            f.write("KEYS_ASK=Ctrl-g\nKEYS_RECALL=Ctrl-r\nKEYS_HEIGHT=none\nKEYS_LISTEN=Ctrl-t\nKEYS_STOP=none\n")
+        rc, out, _ = spark("keys", extra=kx)
+        t.ok(rc == 0 and "waits up to 1 s" not in out and re.search(r"^listen +Ctrl-t ", out, re.M),
+             "spark keys: with no key on Esc the Esc wait is not said", out)
         rc, out, _ = spark("keys", "reset", extra=kx)
         rc2, out2, _ = spark("keys", "reset", extra=kx)
-        t.ok(rc == 0 and "the keys are spark's own again -- the next shell has them" in out and not os.path.exists(kenv)
+        t.ok(rc == 0 and out == "* the keys are the defaults again -- the next shell has them\n" and not os.path.exists(kenv)
              and rc2 == 0 and out2 == "* nothing changed\n",
              "spark keys reset: keys.env gone, the defaults back; again, nothing changed", out + out2)
         # off: the marked line leaves the rc file -- through a symlink of
-        # yours too, the link kept -- and SITE_KEYS=off is written; the
-        # prompt row then says so; on writes the key back
-        hookline = "[[ -r ~/.config/spark/hook.zsh ]] && source ~/.config/spark/hook.zsh   # spark: the AI at the prompt"
-        os.makedirs(kh + "/dotfiles")
-        with open(kh + "/dotfiles/zshrc", "w") as f:
-            f.write("# mine\nalias l=ls\n\n%s\n" % hookline)
-        os.symlink(kh + "/dotfiles/zshrc", kh + "/.zshrc")
+        # yours too, the link kept, every other byte as it was -- and
+        # SITE_KEYS=off is written with the way back spelled in full
+        # (~/.local/bin is not on PATH here); the prompt row and spark
+        # status then say so; on writes the key back
         rc, out, _ = spark("keys", "off", extra=kx)
         t.ok(rc == 0 and out == "* spark's line is out of ~/.zshrc -- open a new shell\n"
-             and kread(kh + "/dotfiles/zshrc") == "# mine\nalias l=ls\n" and os.path.islink(kh + "/.zshrc")
-             and "SITE_KEYS=off\n" in kread(ksite),
-             "spark keys off: the line leaves a symlinked rc file, the link stays, SITE_KEYS=off", out + kread(kh + "/dotfiles/zshrc"))
+             "  ? and TAB go with it -- ~/.local/bin/spark keys on adds them again\n"
+             and open(kh + "/dotfiles/zshrc", "rb").read() == b"# mine \xff\nalias l=ls\n" and os.path.islink(kh + "/.zshrc")
+             and oct(os.stat(kh + "/dotfiles/zshrc").st_mode & 0o777) == "0o640"
+             and not [n for n in os.listdir(kh + "/dotfiles") if n != "zshrc"] and "SITE_KEYS=off\n" in kread(ksite),
+             "spark keys off: the line leaves a symlinked rc file, the link, the mode and a byte that is not UTF-8 stay, "
+             "SITE_KEYS=off, the way back named in full", out + repr(open(kh + "/dotfiles/zshrc", "rb").read()))
         rc, out, _ = spark("keys", "off", extra=kx)
         rc2, shown, _ = spark("keys", extra=kx)
         t.ok(rc == 0 and out == "* nothing changed\n"
              and shown.splitlines()[0] == "spark keys -- off: spark adds no key to your shell -- spark keys on adds them",
              "spark keys off again: nothing changed; bare says off and how to turn it on", out + shown)
+        rc, out, _ = spark("keys", "ask", "Esc", "b", extra=kx)
+        rc2, out2, _ = spark("keys", "stop", "none", extra=kx)
+        t.ok(rc == 0 and out == "* ask is Esc b now -- kept for when the keys are on: spark keys on\n"
+             and rc2 == 0 and out2 == "* stop has no key now -- kept for when the keys are on: spark keys on\n"
+             and "KEYS_ASK=Esc b\n" in kread(kenv),
+             "spark keys NAME KEY with the keys off: kept, and said to wait for spark keys on", out + out2)
+        os.remove(kenv)
+        rc, out, _ = spark("status", extra=kx)
+        t.ok(rc == 0 and "  prompt   off -- spark keys on\n" in out and "no shell loaded yet" not in out,
+             "spark status with the keys off: the prompt row says off and names spark keys on", out)
         for sh_ in ("bash", "zsh"):
             _w = kh + "/.config/spark/widget." + sh_
             if not os.path.exists(_w):
@@ -8421,9 +8625,53 @@ def main():
         prow = [l.split("\t") for l in out.splitlines() if l.split("\t")[2:3] == ["prompt"]]
         t.ok(prow and prow[0][1] == "na" and prow[0][3] == "the keys are off" and prow[0][4] == "spark keys on",
              "check: with the keys off the prompt row is na, its remedy spark keys on", repr(prow))
+        # on: SITE_KEYS=on. The rc rows are bootstrap's and nothing is
+        # applied here, so the rc file still lacks the line: spark keys on
+        # must not say the next shell has the keys, and the list says off
         rc, out, _ = spark("keys", "on", extra=kx)
-        t.ok(rc == 0 and "SITE_KEYS=on\n" in kread(ksite) and "SITE_KEYS=off" not in kread(ksite) and "open a new shell" in out,
-             "spark keys on: SITE_KEYS=on (the rc rows are bootstrap's: nothing applied here)", out + kread(ksite))
+        rc2, shown, _ = spark("keys", extra=kx)
+        t.ok(rc == 0 and "SITE_KEYS=on\n" in kread(ksite) and "SITE_KEYS=off" not in kread(ksite)
+             and out == "! the keys are on, but ~/.zshrc lacks spark's line -- spark update says why\n"
+             and shown.splitlines()[0] == "spark keys -- off: ~/.zshrc lacks spark's line -- spark keys on adds it",
+             "spark keys on where the rc row added no line: SITE_KEYS=on, no promise of keys, and the list says off "
+             "naming the file", out + shown + kread(ksite))
+        rc, out, _ = spark("status", extra=kx)
+        t.ok(rc == 0 and "  prompt   on, no shell loaded yet\n" in out, "spark status with the keys on: the row as before", out)
+        # an rc file that is a link into a git work tree is another
+        # project's tracked file: spark keys off leaves it byte for byte,
+        # says where the line is, and still keeps SITE_KEYS=off; with
+        # ~/.local/bin on PATH the plain word is enough
+        os.remove(kh + "/.zshrc")
+        os.makedirs(kh + "/tracked/.git")
+        os.makedirs(kh + "/tracked/shell")
+        tracked = b"# theirs \xfe\n\n" + hookline.encode() + b"\n"
+        with open(kh + "/tracked/shell/zshrc", "wb") as f:
+            f.write(tracked)
+        os.symlink(kh + "/tracked/shell/zshrc", kh + "/.zshrc")
+        rc, shown, _ = spark("keys", extra=kx)
+        rc, out, _ = spark("keys", "off", extra=kx)
+        rc2, shown2, _ = spark("keys", extra=kx)
+        rc3, out3, _ = spark("keys", "off", extra=kx)
+        t.ok(rc == 0 and shown.splitlines()[0] == "spark keys -- on, in zsh"
+             and out == "! ~/tracked/shell/zshrc is in a git repository -- take spark's line out there\n"
+             "* the keys stay until that line is out; spark adds no line again\n"
+             and open(kh + "/tracked/shell/zshrc", "rb").read() == tracked and os.path.islink(kh + "/.zshrc")
+             and sorted(os.listdir(kh + "/tracked/shell")) == ["zshrc"] and "SITE_KEYS=off\n" in kread(ksite)
+             and shown2.splitlines()[0] == "spark keys -- off, but ~/.zshrc still has spark's line -- take it out there"
+             and rc3 == 0 and out3 == out.splitlines()[0] + "\n",
+             "spark keys off, the rc file a link into a git work tree: untouched, one ! line names the file, "
+             "SITE_KEYS=off, and the truth is told", out + shown2 + out3)
+        rc, out, _ = spark("keys", "on", extra=kx)
+        t.ok(rc == 0 and out == "* open a new shell (exec $SHELL): it has the keys\n" and "SITE_KEYS=on\n" in kread(ksite),
+             "spark keys on with the line in the rc file: the next shell has the keys", out)
+        os.remove(kh + "/.zshrc")
+        with open(kh + "/.zshrc", "w") as f:
+            f.write("# a plain file\n\n%s\n" % hookline)
+        rc, out, _ = spark("keys", "off", extra=dict(kx, PATH=kh + "/.local/bin" + os.pathsep + env["PATH"]))
+        t.ok(rc == 0 and out == "* spark's line is out of ~/.zshrc -- open a new shell\n"
+             "  ? and TAB go with it -- spark keys on adds them again\n" and kread(kh + "/.zshrc") == "# a plain file\n",
+             "spark keys off, a plain rc file, ~/.local/bin on PATH: the line goes, the way back is the plain word", out)
+        rc, out, _ = spark("keys", "on", extra=kx)
         rc, out, _ = spark("keys", "what", "are", "these?", extra=kx)
         t.ok(rc == 2 and out.startswith("spark keys -- no word what"), "spark keys with other words: refused, exit 2", out)
 
@@ -8432,16 +8680,20 @@ def main():
         import pty as _pty
         import select as _select
 
-        def setup_tty(answer, home_):
+        def setup_tty(answer, home_, model=("--model", "none"), stop_at=None, more=None):
+            """spark setup at a pty in a HOME of its own: yes to the
+            notice, `answer` to the keys question. stop_at: the prompt at
+            which setup is interrupted (SIGINT), as a Ctrl-C would."""
             os.makedirs(home_ + "/.config/spark", exist_ok=True)
             e = dict(env, **off)
             e.update(HOME=home_, XDG_CONFIG_HOME=home_ + "/.config", XDG_STATE_HOME=home_ + "/.local/state",
-                     XDG_DATA_HOME=home_ + "/.local/share", SHELL="/bin/zsh", SPARK_VOICE="off")
+                     XDG_DATA_HOME=home_ + "/.local/share", SHELL="/bin/zsh", SPARK_VOICE="off", SPARK_PORT="9")
+            e.update(more or {})
             m, s = _pty.openpty()
-            q = subprocess.Popen([sys.executable, SPARK, "setup", "--no-serve", "--model", "none", "--name", "box",
-                                  "--user", "ana"], stdin=s, stdout=s, stderr=s, env=e)
+            q = subprocess.Popen([sys.executable, SPARK, "setup", "--no-serve", "--name", "box", "--user", "ana"] + list(model),
+                                 stdin=s, stdout=s, stderr=s, env=e)
             os.close(s)
-            got, end, sent, went = b"", time.time() + 30, False, False
+            got, end, sent, went, cut = b"", time.time() + 60, False, False, False
             while time.time() < end:
                 r, _, _ = _select.select([m], [], [], 0.2)
                 if r:
@@ -8458,6 +8710,9 @@ def main():
                     if not sent and b"add them? [Y/n]: " in got:
                         os.write(m, answer.encode())
                         sent = True
+                    if stop_at and not cut and stop_at in got:
+                        q.send_signal(signal.SIGINT)
+                        cut = True
                 elif q.poll() is not None:
                     break
             os.close(m)
@@ -8473,12 +8728,37 @@ def main():
         senv = kread(sh1 + "/.config/spark/site.env")
         t.ok(rc == 0 and "* spark adds one line to ~/.zshrc, and these keys to zsh:" in out
              and re.search(r"^   Esc s +ask about the line you are on +was spell-word$", out, re.M)
-             and "a lone Esc waits up to 1 s" in out and "spark keys moves one, or takes them all back" in out
-             and "* no key added -- spark keys on adds them later" in out and "SITE_KEYS=off\n" in senv
+             and "   Enter, Ctrl-U, Ctrl-L and paste stay as they are\n" in out
+             and "   after Esc, your shell waits up to 1 s for the next key\n" in out
+             and "spark keys moves one, or takes them all back" in out
+             and "* no line and no key added: ? and TAB stay off too -- ~/.local/bin/spark keys on\n" in out
+             and "SITE_KEYS=off\n" in senv
              and "SITE_KEYS=on" not in senv and "SITE_NAME=box\n" in senv and "# --- the shell" in senv
-             and "todo   rc" not in out,
+             and "todo   rc" not in out and all(len(l) <= 80 for l in out.splitlines() if l.startswith(("*", "  "))),
              "setup at a terminal lists the keys and asks; a no writes SITE_KEYS=off beside the other keys, one line, no rc todo",
              out + senv)
+        # the closing block after a no: the rc line is what gives a new
+        # shell its PATH and the ? line, so neither is promised -- no ?
+        # row, no new shell, each command with its place
+        tail = out[out.rindex("* try:"):] if "* try:" in out else out
+        t.ok("* try:\n  %-31s   talk with the model\n  %-31s   why it failed, and the fix\n"
+             % ("~/.local/bin/spark chat", "cmd 2>&1 | ~/.local/bin/explain") in tail
+             and "open a new shell" not in out and "? how big" not in out,
+             "setup, the keys declined: the closing block has no ? row and no new shell, the commands spelled in full", tail)
+        # a no, then setup interrupted at the model question: nothing is
+        # written, so the next run asks the model (and the keys) again
+        sh4 = os.path.join(home, "setup-cut")
+        rc, out = setup_tty("n\n", sh4, model=(), stop_at=b"model [")
+        t.ok(rc == 130 and "no line and no key added" in out and not os.path.exists(sh4 + "/.config/spark/site.env"),
+             "setup, a no to the keys then Ctrl-C at the model question: no site.env is left", "%r %s" % (rc, out[-300:]))
+        rc, out = setup_tty("n\n", sh4, model=(), stop_at=b"model [")
+        t.ok(rc == 130 and "add them? [Y/n]: " in out and "model [" in out,
+             "setup again after that: the keys and the model are asked again", "%r %s" % (rc, out[-300:]))
+        sh5 = os.path.join(home, "setup-no-path")
+        rc, out = setup_tty("n\n", sh5, more={"PATH": sh5 + "/.local/bin" + os.pathsep + env["PATH"]})
+        t.ok(rc == 0 and "* no line and no key added: ? and TAB stay off too -- spark keys on\n" in out
+             and "* try:\n  spark chat           talk with the model\n  cmd 2>&1 | explain   why it failed, and the fix\n" in out,
+             "setup, the keys declined with ~/.local/bin on PATH: the plain words", out)
         rc, out = setup_tty("n\n", sh1)
         t.ok(rc == 0 and "add them?" not in out, "setup again: SITE_KEYS is set, so nothing is asked", out)
         sh2 = os.path.join(home, "setup-yes")

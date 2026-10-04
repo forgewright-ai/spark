@@ -507,7 +507,7 @@ def spoken():
 
 
 def shell_keys():
-    """`spark keys` (v1.81) as the tree holds it: the names and default
+    """`spark keys` (v1.82) as the tree holds it: the names and default
     keys of keys.NAMES are the two widgets' own, every name is in INSTALL
     and in the verb's usage and both completion files, the verb is in the
     cheatsheet, SITE_KEYS is a key of config, site.env.example, env.sh,

@@ -685,8 +685,10 @@ def _peer_req(cfg, method, path, body=None):
     if not token or not cfg.peer_ai_url:
         return 0, None
     from . import wire
-    if wire.plain(cfg):
-        return 0, None          # the user's own llama-server: this machine's token never goes there
+    if wire.plain(cfg, probe=True):
+        # the user's own llama-server: this machine's token never goes
+        # there (with no record of what the peer is, one probe says)
+        return 0, None
     url = cfg.peer_ai_url.rstrip("/") + path
     headers = {"Authorization": "Bearer " + token}
     data = None

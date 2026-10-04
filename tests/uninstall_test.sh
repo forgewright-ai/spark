@@ -6,10 +6,14 @@
 # everything spark made and keeps what is yours; --purge keeps nothing; a
 # developer checkout is never removed. sudo is a stub that shouts and
 # refuses, so every root step must land as a `todo` row, never a failure.
+# An rc file that links into a git work tree is left as it is; a byte that
+# is not UTF-8 survives; a llama-server spark did not start is not stopped.
 set -eu
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 T=$(mktemp -d)
-trap 'rm -rf "$T"' EXIT
+fakes=
+# shellcheck disable=SC2086  # the pids, word by word
+trap 'kill $fakes 2>/dev/null || true; rm -rf "$T"' EXIT
 fail=0
 ok() { printf '  ok   %s\n' "$1"; }
 bad() { printf '  FAIL %s\n' "$1"; fail=1; }
@@ -151,6 +155,42 @@ printf '%s\n' "$out" | grep -qE "^(ok +handback +spark's palette files left|woul
 printf '%s\n' "$out" | grep -qE '^spark: |^! |^fail ' && bad "a step failed outright: $(printf '%s\n' "$out" | grep -E '^spark: |^! |^fail ' | head -2)" || ok "no step failed outright (a refusing sudo is a todo row)"
 printf '%s\n' "$out" | grep -q 'kept (yours): ' && printf '%s\n' "$out" | grep -q 'is gone from this machine' && ok "the summary names what stayed and says spark is gone" || bad "summary: $(printf '%s\n' "$out" | tail -6)"
 [ -e "$HOME/.local/bin/starship" ] && ok "starship is not spark's, left alone" || bad "starship removed"
+
+# 3b. whose file, whose server. An rc file that is a link into a git work
+# tree is another project's tracked file: left byte for byte, one ! line
+# names it. A byte that is not UTF-8 in an rc file of yours stays. A
+# llama-server on SPARK_PORT without spark's key file is yours and
+# survives; the one that carries --api-key-file with this user's token
+# is spark's own and stops.
+build_home threeb
+hook='[ -r ~/.config/spark/hook.bash ] && . ~/.config/spark/hook.bash   # spark: the AI at the prompt'
+printf 'export MINE=1 \377\n\n%s\n' "$hook" > "$HOME/$other"
+printf 'export MINE=1 \377\n' > "$T/want.rc"
+mkdir -p "$HOME/tracked/.git" "$HOME/tracked/shell"
+printf '# theirs \376\n\n%s\n' "$hook" > "$HOME/tracked/shell/zprofile"
+cp "$HOME/tracked/shell/zprofile" "$T/tracked.before"
+ln -sfn "$HOME/tracked/shell/zprofile" "$HOME/.zprofile"
+mkdir -p "$T/fake"
+printf 'import time\ntime.sleep(300)\n' > "$T/fake/llama-server"
+port=$((20000 + $$ % 20000))
+# started from a subshell, so neither is this shell's child: one that
+# stops is gone, not a zombie kill -0 still finds
+(python3 "$T/fake/llama-server" --port "$port" >/dev/null 2>&1 & echo $! > "$T/theirs.pid")
+(python3 "$T/fake/llama-server" --port "$port" --api-key-file "$XDG_STATE_HOME/spark/api-token" >/dev/null 2>&1 & echo $! > "$T/ours.pid")
+theirs=$(cat "$T/theirs.pid"); ours=$(cat "$T/ours.pid"); fakes="$theirs $ours"
+sleep 1
+out=$(SPARK_PORT=$port spark uninstall --yes --keep-packages 2>&1) || bad "uninstall --yes (3b) failed: $out"
+cmp -s "$HOME/$other" "$T/want.rc" && ok "an rc file with a byte that is not UTF-8: the spark line goes, every other byte stays" || bad "non-UTF-8 rc: $(od -c "$HOME/$other" | head -3)"
+cmp -s "$HOME/tracked/shell/zprofile" "$T/tracked.before" && [ -L "$HOME/.zprofile" ] && [ "$(ls "$HOME/tracked/shell")" = zprofile ] \
+    && ok "an rc link into a git work tree: the file is left byte for byte, the link stays" || bad "tracked rc changed: $(ls -la "$HOME/tracked/shell" 2>&1)"
+printf '%s\n' "$out" | grep -qx "! ~/tracked/shell/zprofile is in a git repository -- take spark's line out there" \
+    && ok "and one ! line names the file the line is in" || bad "no ! line for the tracked rc: $(printf '%s\n' "$out" | grep -E '^!|tracked' | head -3)"
+n=0; while kill -0 "$ours" 2>/dev/null && [ "$n" -lt 20 ]; do sleep 0.5; n=$((n + 1)); done
+kill -0 "$ours" 2>/dev/null && bad "spark's own llama-server (its --api-key-file) survived uninstall" || ok "a llama-server carrying spark's --api-key-file is spark's own: stopped"
+kill -0 "$theirs" 2>/dev/null && ok "a llama-server on the port without spark's key file is yours: never signalled" || bad "a llama-server spark did not start was stopped"
+# shellcheck disable=SC2086
+kill $fakes 2>/dev/null || true
+fakes=
 
 # 4. --purge on a fresh HOME: nothing of spark's remains
 build_home two

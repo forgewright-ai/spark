@@ -118,6 +118,7 @@ THE PAGE (open the address spark serve --login prints)
 
 THE MACHINE
   spark setup [--yes]             name, user, model and voice
+  spark setup --engine URL        set up with your own llama-server
   spark check                     what needs you. exit 0 = nothing failed
   spark check --all | NAME...     every row, or those rows
   spark check --fresh | --watch N ask again now, or every N seconds

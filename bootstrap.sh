@@ -461,7 +461,7 @@ if [ -s "$tok" ]; then
 elif [ "$client" = 1 ]; then
     # a client serves nothing, so it has no key to mint: a random one
     # would only ride to a server that never issued it
-    skip token "a client mints no key"
+    skip token "a client needs no key of its own"
 elif need token "create $tok"; then
     mkdir -p "$(dirname "$tok")"; chmod 0700 "$SPARK_STATE_DIR" 2>/dev/null || true
     umask 077

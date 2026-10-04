@@ -66,6 +66,21 @@ def _parse(args):
             opts[a[2:]] = val
         else:
             raise Abort("no word %s; spark setup -h lists them" % a, 2)
+    # every word is checked here, before the banner and any question
+    for flag, label in (("name", "this machine's name"), ("user", "your name")):
+        if opts[flag] is not None and not VALUE.match(opts[flag]):
+            raise Abort("%s: no shell syntax in a value" % label, 2)
+    if opts["engine"] is not None:
+        opts["engine"] = opts["engine"].rstrip("/")
+        if not site.CLIENT_URL.match(opts["engine"]):
+            raise Abort("--engine URL is http://host:port", 2)
+        if opts["model"] not in (None, "none"):
+            raise Abort("--engine uses your server's model: leave --model out", 2)
+    elif opts["model"] is not None:
+        rows = config.model_tables()
+        if opts["model"] not in ["auto", "none"] + [r[0] for r in rows]:
+            raise Abort("no model named %s -- one of: auto none %s"
+                        % (opts["model"], " ".join(r[0] for r in config.auto_rows(rows))), 2)
     return opts
 
 
@@ -161,15 +176,17 @@ def _model(cfg, opts, default, yes):
         say("! no model named %s -- %s" % (name, choices))
 
 
-def _write(name, user, model):
+def _write(name, user, model, keys_off=False):
     """site.env: the documented example first when there is none, then
-    the keys decided here."""
+    the keys decided here -- SITE_KEYS=off with them after a no to the
+    keys. Nothing is written before this, so a setup that stops at a
+    question leaves no site.env and asks again."""
     if not os.path.exists(SITE_ENV):
         os.makedirs(os.path.dirname(SITE_ENV), exist_ok=True)
         shutil.copy(os.path.join(REPO, "site.env.example"), SITE_ENV)
         os.chmod(SITE_ENV, 0o600)
     keys = {"SITE_NAME": name, "SITE_USER": user, "SITE_AI_MODEL": model}
-    site.set_keys(_quiet=True, **keys)
+    site.set_keys(_quiet=True, **dict(keys, SITE_KEYS="off") if keys_off else keys)
     # one row, not one per key: bootstrap's own `site` row names the file
     say("ok     site         " + " ".join("%s=%s" % kv for kv in keys.items()))
 
@@ -297,11 +314,23 @@ def _account(user):
 
 
 def _closing():
+    """What to try next. With the keys on, the rc line gives the next
+    shell its PATH and the `?` line. With them off there is no such
+    line: no `?` row, no new shell, and a command is spelled with its
+    place when ~/.local/bin is not on PATH."""
     say()
-    say("* open a new shell (exec $SHELL), then try:")
-    say("  spark chat               talk with the model")
-    say("  ? how big is this dir    get a command for it")
-    say("  cmd 2>&1 | explain       why it failed, and the fix")
+    if config.load().keys:
+        say("* open a new shell (exec $SHELL), then try:")
+        say("  spark chat               talk with the model")
+        say("  ? how big is this dir    get a command for it")
+        say("  cmd 2>&1 | explain       why it failed, and the fix")
+    else:
+        rows = (("%s chat" % site.spark_word(), "talk with the model"),
+                ("cmd 2>&1 | %s" % site.spark_word("explain"), "why it failed, and the fix"))
+        width = max(len(c) for c, _ in rows)
+        say("* try:")
+        for cmd, does in rows:
+            say("  %-*s   %s" % (width, cmd, does))
     door()
 
 
@@ -398,41 +427,50 @@ def _voice(want):
 
 
 KEYS_QUESTION = "   add them? [Y/n]: "
-KEYS_NO = "* no key added -- spark keys on adds them later"
+
+
+def keys_no():
+    """The line a no to the keys gets: with no rc line, `?`, TAB and the
+    PATH entry stay off too, so the way back is spelled in full when
+    ~/.local/bin is not on PATH."""
+    return "* no line and no key added: ? and TAB stay off too -- %s keys on" % site.spark_word()
 
 
 def _keys(cfg, yes):
     """Before the rc line: the keys spark adds to this user's shell, what
     each replaces there, then one question, default yes. Not asked when
     SITE_KEYS is already set, the rc file already has the line, the shell
-    has no prompt line, or nobody is there to answer. A no is kept as
-    SITE_KEYS=off, so bootstrap's rc rows add nothing."""
+    has no prompt line, or nobody is there to answer. Returns False for
+    a no, else True; nothing is written here -- _write keeps a no as
+    SITE_KEYS=off with the other keys, so bootstrap's rc rows add
+    nothing."""
     global ASKED
     from . import keys
     shell = site.login_shell()
     state, path = site.rc_hook_state(shell)
     if yes or "SITE_KEYS" in os.environ or "SITE_KEYS" in cfg.site_file or state == "hook" or not path:
-        return
+        return True
     ASKED = True
     say("* spark adds one line to ~%s, and these keys to %s:" % (path[len(HOME):], shell))
     for _, key, does, old in keys.rows(shell):
         say(("   %-7s %-36s %s" % (key, does, "was " + old if old else "")).rstrip())
-    say("   %s keep what they did" % ", ".join(k for k, _ in keys.wrapped(shell)))
-    say("   " + keys.ESC_WAIT)
+    held = [k for k, _ in keys.wrapped(shell)]
+    say("   %s and %s stay as they are" % (", ".join(held[:-1]), held[-1]))
+    if keys.esc_wait(shell):
+        say("   " + keys.esc_wait(shell))
     say("   spark keys moves one, or takes them all back")
     try:
         ans = input(KEYS_QUESTION).strip().lower()
     except EOFError:
         say()
-        return
+        return True
     if ans in ("", "y", "yes"):
-        return
-    if not os.path.exists(SITE_ENV):
-        os.makedirs(os.path.dirname(SITE_ENV), exist_ok=True)
-        shutil.copy(os.path.join(REPO, "site.env.example"), SITE_ENV)
-        os.chmod(SITE_ENV, 0o600)
-    site.set_keys(_quiet=True, SITE_KEYS="off")
-    say(KEYS_NO)
+        return True
+    say(keys_no())
+    return False
+
+
+USE_IT = "   use it, and download no model? [Y/n]: "
 
 
 def _joining(yes):
@@ -442,44 +480,50 @@ def _joining(yes):
         return True
     say("* this machine shares its model")
     try:
-        ans = input("   use it? nothing to download [Y/n]: ").strip().lower()
+        ans = input(USE_IT).strip().lower()
     except EOFError:
         return True
     return ans in ("", "y", "yes")
 
 
-def _own_engine(cfg, name, user, opts, yes, voice):
-    """The user's own llama-server: `--engine URL`, or at a terminal one
-    that answers on this machine's SPARK_PORT and is not spark's, with no
-    model chosen yet and no shared engine here -- asked once. The join's
-    rc when it is used, None when setup goes on as before."""
+def _engine_probe(cfg, url):
+    """`--engine URL` asked before anything is written: a spark machine
+    there is `spark client URL`'s to join (it holds the accounts, so
+    none is made here), and a URL nothing answers at is no engine."""
+    fh = wire.forge_health(url, cfg=cfg)
+    if isinstance(fh, dict):
+        raise Abort("%s is a spark machine -- spark client %s" % (url, url), 2)
+    if fh == "down" or wire.health(url) not in ("ok", "loading"):
+        raise Abort("no answer from %s -- start your llama-server first" % url, 2)
+
+
+def _own_engine(cfg, name, user, opts, yes, voice, keys_off=False):
+    """The user's own llama-server: `--engine URL` (_parse checked its
+    shape, _run probed it), or at a terminal one that answers on this
+    machine's SPARK_PORT and is not spark's, with no model chosen yet
+    and no shared engine here -- asked once. The join's rc when it is
+    used, None when setup goes on as before."""
+    global ASKED
     url = opts["engine"]
-    if url is not None:
-        url = url.rstrip("/")
-        if not site.CLIENT_URL.match(url):
-            raise Abort("--engine URL is http://host:port", 2)
-        if opts["model"] not in (None, "none"):
-            raise Abort("--engine uses your server's model: leave --model out", 2)
-    elif (yes or opts["model"] is not None or "SITE_AI_MODEL" in os.environ or "SITE_AI_MODEL" in cfg.site_file
-          or os.access(SHARE_TOKEN, os.R_OK)):
-        return None
-    else:
+    if url is None:
+        if (yes or opts["model"] is not None or "SITE_AI_MODEL" in os.environ or "SITE_AI_MODEL" in cfg.site_file
+                or os.access(SHARE_TOKEN, os.R_OK)):
+            return None
         url = "http://127.0.0.1:%d" % cfg.port
         if wire.health(url) != "ok" or wire.forge_health(url, cfg=cfg) is not None or engine.own_pids(cfg):
             return None
-        global ASKED
         ASKED = True
         say("* a llama-server of yours answers at %s" % url)
         try:
-            ans = input("   use it? nothing to download [Y/n]: ").strip().lower()
+            ans = input(USE_IT).strip().lower()
         except EOFError:
             ans = ""
         if ans not in ("", "y", "yes"):
             return None
-    return _join(name, user, opts, yes, voice, url)
+    return _join(name, user, opts, yes, voice, url, keys_off)
 
 
-def _join(name, user, opts, yes, voice=False, own=""):
+def _join(name, user, opts, yes, voice=False, own="", keys_off=False):
     """The userspace join: a client of this box's shared engine. No model,
     no console, no units, no sudo -- only this user's ~/.config and
     ~/.local/state, and their own sealed account. Mirrors spark client.
@@ -495,10 +539,13 @@ def _join(name, user, opts, yes, voice=False, own=""):
         url = "" if yes else input("   its address [http://127.0.0.1:8080]: ").strip()
         url = url or "http://127.0.0.1:8080"
     say()
-    _write(name, user, "none")                              # SITE_AI_MODEL=none
+    _write(name, user, "none", keys_off)                    # SITE_AI_MODEL=none
     site.set_keys(_quiet=True, SITE_PEER_AI_URL=url)
     if own:
+        # what the peer is, recorded before the account is made: its
+        # token must never ride a request to the user's own server
         wire.forget_peer()
+        wire.note_peer(config.load(), url, "engine")
         say("ok     engine       %s, your own llama-server" % url)
     else:
         site.set_keys(_file=SPARK_ENV, _quiet=True, SPARK_API_KEY_FILE=SHARE_TOKEN)
@@ -520,6 +567,8 @@ def _run(opts):
     from . import cli
     yes = opts["yes"] or not sys.stdin.isatty()
     cfg = config.load()
+    if opts["engine"] is not None:
+        _engine_probe(cfg, opts["engine"])
     cli.cmd_ver([])
     say()
     if not notice(ask=not yes):
@@ -529,18 +578,18 @@ def _run(opts):
     # a shared engine already runs on this box (spark serve share on) and this user
     # has no server of their own: join it -- no model to download, no root
     voice = _voice_question(cfg, yes)
-    _keys(cfg, yes)
-    own = _own_engine(cfg, name, user, opts, yes, voice)
+    keys_off = not _keys(cfg, yes)
+    own = _own_engine(cfg, name, user, opts, yes, voice, keys_off)
     if own is not None:
         return own
     if os.access(SHARE_TOKEN, os.R_OK) and not os.path.exists(TOKEN_FILE) and _joining(yes):
-        return _join(name, user, opts, yes, voice)
+        return _join(name, user, opts, yes, voice, keys_off=keys_off)
     if ASKED:
         say()          # one blank line after the questions; none when there were none
     default = _table(cfg)
     model = _model(cfg, opts, default, yes)
     say()
-    _write(name, user, model)
+    _write(name, user, model, keys_off)
     if model == "none":
         # no brain here yet, so no account yet: a box mints its own on the
         # first thread write (spark model NAME), and a client of a FORGE

@@ -196,7 +196,12 @@ prompt line and `TAB` completion. If setup prints a `todo rc` row, run
 
 Setup asks before it adds the rc line. It lists the keys the line
 adds to your shell and what each one replaces there. Answer `n` and
-spark adds no line and no key. `spark keys on` adds them later.
+spark adds no line and no key. The prompt line and `TAB` completion
+stay off too.
+
+The rc line also puts spark on your `PATH`. Without the line, call
+`~/.local/bin/spark` in full, or add `~/.local/bin` to your `PATH`
+yourself. `~/.local/bin/spark keys on` adds the line later.
 
 A shell that is not interactive does not load the rc line. In a script,
 a cron job or `ssh HOST 'spark ...'`, call `~/.local/bin/spark` in full.
@@ -235,8 +240,8 @@ The keys spark adds to your shell, each with a name:
 | `listen` | `Esc v` | listens, with the voice on |
 | `stop` | `Esc x` | stops the speaking, with the voice on |
 
-A lone `Esc` waits up to 1 second for the next key. `Enter`, `Ctrl-U`,
-`Ctrl-L` and a paste keep what they did, and they do not move.
+After `Esc`, your shell waits up to 1 second for the next key. `Enter`,
+`Ctrl-U`, `Ctrl-L` and paste stay as they are.
 
 - `spark keys` lists each key and what it replaced in your shell.
 - `spark keys ask Esc a` moves a key. `Alt-a` is the same key, and
@@ -245,8 +250,12 @@ A lone `Esc` waits up to 1 second for the next key. `Enter`, `Ctrl-U`,
 - `spark keys reset` brings back the keys in the table.
 - `spark keys off` takes the line out of your rc file. `spark update`
   then leaves the file alone. The prompt line and `TAB` completion go
-  with it.
-- `spark keys on` adds the line again.
+  with it, and so does spark's place on your `PATH`.
+- `spark keys on` adds the line again. Without the line, type
+  `~/.local/bin/spark keys on`.
+- An rc file that links into a git repository is left as it is. spark
+  names the file, and you take the line out there.
+- With the keys off, a key you move is kept for when they are on.
 - `SPARK_OFF=1` in the environment starts one shell without the keys.
 
 A change shows in the next shell you open. Your choice of keys is kept
@@ -443,12 +452,17 @@ Your own llama-server:
    `spark client URL --key-file FILE`.
 3. `spark client` says whether the server answers.
 
-spark uses the one model the server has loaded. Router mode is not
-supported. spark downloads no model for it, and never starts or stops
-it. Your threads and memory stay on this machine, encrypted. `spark
-client off` goes back to a model spark runs here. Stop your server
-first when it holds port 8080, or set `SPARK_PORT`. Ollama is not
-supported yet.
+spark uses the one model the server has loaded. A server that loads
+more than one model is not supported. spark downloads no model for it,
+and never starts or stops it. Your threads and memory stay on this
+machine, encrypted. `spark client off` goes back to a model spark runs
+here. Stop your server first when it holds port 8080, or set
+`SPARK_PORT`. Ollama is not supported yet.
+
+`spark setup --engine URL` needs the server to answer. It refuses the
+address of a spark machine: `spark client URL` is the command for that
+one. spark cannot tell a bare `llama-server` on another spark machine
+from your own, so it treats both the same way.
 
 A browser or a phone:
 

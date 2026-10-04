@@ -59,7 +59,8 @@ _spark() {
             soul)    comp=(show edit reset) ;;
             bench)   comp=(--line) ;;
             clear)   comp=(--history) ;;
-            client)  comp=(off status) ;;
+            client)  comp=(off status --key-file) ;;
+            setup)   comp=(--yes --model --engine --name --user --no-serve) ;;
             user)    comp=(list add remove login logout token claim status) ;;
         esac
     fi

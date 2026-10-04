@@ -1467,8 +1467,11 @@ def cmd_status(args, _bare=False):
     except wire.BrainError as e:
         say("  model    " + e.hint)
     w = live_widgets()
+    # the keys off (spark keys off) and no shell that still holds them:
+    # no rc line, so no prompt line -- never "no shell loaded yet"
     say("  prompt   %s" % ("off -- spark on turns it on" if os.path.exists(OFF_FLAG)
-                           else "on in %s" % ", ".join(sorted({x[0] for x in w})) if w else "on, no shell loaded yet"))
+                           else "on in %s" % ", ".join(sorted({x[0] for x in w})) if w
+                           else "on, no shell loaded yet" if cfg.keys else "off -- spark keys on"))
     st = engine.service_state(cfg)
     if wire.plain(cfg):
         say("  service  your engine -- spark never starts or stops it")

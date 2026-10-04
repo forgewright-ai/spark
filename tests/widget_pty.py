@@ -929,14 +929,19 @@ def moved_keys(shell, widget, tmp, env, ok):
     reads it as the shell starts. A moved key asks spark and the key it
     left does not; a key set to none is not bound; the hint names the key
     in use; and what each key did before is recorded once, in
-    state/replaced.<shell>, not written again by the next shell."""
+    state/replaced.<shell>, not written again by the next shell. A value
+    that holds shell syntax runs nothing and keeps the default key."""
     khome = os.path.join(tmp, "khome")
     conf = os.path.join(khome, ".config", "spark")
     state = os.path.join(khome, ".local", "state")
     os.makedirs(conf, exist_ok=True)
     os.makedirs(state, exist_ok=True)
+    ran = [os.path.join(tmp, "keys-ran-%d" % i) for i in (1, 2, 3)]
     with open(os.path.join(conf, "keys.env"), "w") as f:
         f.write("# spark keys\nKEYS_ASK=Ctrl-g\nKEYS_RECALL=Alt-b\nKEYS_HEIGHT=none\nKEYS_STOP=Ctrl-c\n")
+        # shell syntax in a value: the file is read, never sourced, so
+        # nothing runs, and a value of that shape keeps the default
+        f.write("KEYS_LISTEN=$(touch %s)\nKEYS_STOP=`touch %s`\nKEYS_LISTEN=Esc $(touch %s)\n" % tuple(ran))
     log, hlog = os.path.join(tmp, "keys-asked.log"), os.path.join(tmp, "keys-height.log")
     e = dict(env, HOME=khome, XDG_STATE_HOME=state, ZDOTDIR=khome, STUB_LOG=log, STUB_HEIGHT=hlog, STUB_RECALL=os.path.join(tmp, "keys-recall.log"))
     record = os.path.join(state, "spark", "replaced." + shell)
@@ -1009,6 +1014,9 @@ def moved_keys(shell, widget, tmp, env, ok):
             ok(any(l.startswith("ask\tCtrl-g\t") for l in rec) and any(l.startswith("recall\tEsc b\t") for l in rec)
                and not any(l.startswith("height\t") for l in rec),
                "what each key did before is recorded for spark keys (state/replaced.%s)" % shell, rec)
+            ok(not any(os.path.exists(r) for r in ran) and any(l.startswith("listen\tEsc v\t") for l in rec)
+               and any(l.startswith("stop\tEsc x\t") for l in rec),
+               "shell syntax in a keys.env value ($(...), backticks) runs nothing, and the key keeps its default", rec)
             stamp = os.stat(record).st_mtime_ns if os.path.exists(record) else None
             time.sleep(1.1)
         finally:
