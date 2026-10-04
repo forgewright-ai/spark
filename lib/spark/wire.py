@@ -10,7 +10,7 @@ import time
 import urllib.error
 import urllib.request
 
-from . import BRAIN_CACHE, EMBER_TOKEN_FILE, IS_MAC, SERVE_URL_FILE, debug, forge_url, run, state_dir
+from . import BRAIN_CACHE, EMBER_TOKEN_FILE, IS_MAC, SERVE_URL_FILE, SHARE_TOKEN, STATE_DIR, debug, forge_url, run, state_dir
 from . import text as textmod
 
 HEALTH_TIMEOUT = 2.0
@@ -108,6 +108,8 @@ def _headers(cfg, extra=None, forge=False):
 def _auth_hint(cfg, url, forge):
     if forge:
         return "token refused by %s -- spark user login NAME" % url
+    if plain(cfg):
+        return "the engine refused the key -- spark client URL --key-file FILE"
     return "token refused by %s -- copy %s from the machine that serves" % (url, cfg.token_file)
 
 
@@ -335,6 +337,110 @@ def brain_roles(cfg):
     return {}
 
 
+# ------------------------------------------------------------------- peer
+# What a client's other machine is, kept beside the brain cache: a spark
+# machine (a FORGE answers /api/health) or a plain engine (a llama-server
+# the user runs: /health alone). Written by the probes spark already
+# makes -- resolve_brain, spark client, the peer row -- and only when the
+# answer changed, so a message tells the truth with no request of its
+# own. A plain engine's context size (GET /props) rides with it.
+PEER_FILE = os.path.join(STATE_DIR, "peer")
+_KIND = {}
+
+
+def _peer_read(url):
+    try:
+        with open(PEER_FILE, encoding="utf-8") as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) and d.get("url") == url else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def props_ctx(cfg, url, timeout=HEALTH_TIMEOUT):
+    """n_ctx of a llama-server (GET /props, default_generation_settings),
+    0 when it does not say."""
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url + "/props", headers=_headers(cfg)), timeout=timeout) as r:
+            n = json.load(r)["default_generation_settings"]["n_ctx"]
+        return n if isinstance(n, int) and not isinstance(n, bool) and n > 0 else 0
+    except (urllib.error.URLError, OSError, ValueError, KeyError, TypeError):
+        return 0
+
+
+def note_peer(cfg, url, kind):
+    """Record what answered at the client's peer URL: kind is `spark` or
+    `engine`. Any other URL is not the peer and is not recorded."""
+    url = url.rstrip("/")
+    if not url or url != cfg.peer_ai_url.rstrip("/"):
+        return
+    _KIND[url] = kind
+    old = _peer_read(url)
+    n = 0
+    if kind == "engine":
+        n = props_ctx(cfg, url) or (old.get("n_ctx", 0) if old.get("kind") == kind else 0)
+    new = {"url": url, "kind": kind, "n_ctx": n}
+    if new == old:
+        return
+    try:
+        from . import vault
+        state_dir()
+        vault.write_private(PEER_FILE, json.dumps(new).encode("utf-8"))
+    except OSError:
+        pass
+
+
+def forget_peer():
+    _KIND.clear()
+    try:
+        os.remove(PEER_FILE)
+    except OSError:
+        pass
+
+
+def peer_kind(cfg, probe=True):
+    """`spark` | `engine` | '' (not known): what the client's peer is,
+    from the record; with none, one probe (probe=True), asked once."""
+    url = cfg.peer_ai_url.rstrip("/")
+    if not url:
+        return ""
+    if url in _KIND:
+        return _KIND[url]
+    kind = _peer_read(url).get("kind", "")
+    if kind not in ("spark", "engine"):
+        kind = ""
+        if probe:
+            fh = forge_health(url, cfg=cfg)
+            if isinstance(fh, dict):
+                kind = "spark"
+            elif fh is None and health(url) in ("ok", "loading"):
+                kind = "engine"
+            if kind:
+                note_peer(cfg, url, kind)
+    if kind or probe:
+        _KIND[url] = kind
+    return kind
+
+
+def plain(cfg, probe=False):
+    """True on a client of the user's own llama-server: the peer is a
+    plain engine, and it is not this machine's shared engine (that one
+    is a spark machine's, joined with its group token)."""
+    if not cfg.client or cfg.token_file == SHARE_TOKEN:
+        return False
+    return peer_kind(cfg, probe) == "engine"
+
+
+def ctx(cfg):
+    """The context size a budget counts with: SPARK_CTX when the user
+    set it, else what a plain engine said (/props), else the default."""
+    if not cfg.get("SPARK_CTX", "") and plain(cfg):
+        n = _peer_read(cfg.peer_ai_url.rstrip("/")).get("n_ctx", 0)
+        if isinstance(n, int) and n > 0:
+            return str(n)
+    return cfg.ctx
+
+
 def drop_cache():
     try:
         os.remove(BRAIN_CACHE)
@@ -389,6 +495,7 @@ def resolve_brain(cfg, fresh=False):
             if up == "ok":
                 b = Brain(url, str(fh.get("model") or "?"), True)
                 _write_cache(key, b.url, b.model, True, fh.get("roles"))
+                note_peer(cfg, url, "spark")
                 return b
             if up == "loading" and not loading:
                 loading = url
@@ -402,6 +509,7 @@ def resolve_brain(cfg, fresh=False):
             except (BrainError, Exception):
                 rs = {}
             _write_cache(key, url, model, False, rs)
+            note_peer(cfg, url, "engine")
             return Brain(url, model, False)
         if st == "loading" and not loading:
             loading = url

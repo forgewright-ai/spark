@@ -2017,7 +2017,11 @@ def cmd_login(args):
     if cfg.client:
         # nothing serves here: the login and the join steps are the other
         # machine's, never this one's
+        from . import wire
         from .check import client_of
+        if wire.plain(cfg):
+            say("%s serve -- %s: no page is served here" % (MARK, client_of(cfg)))
+            return 0
         say("%s serve -- %s: run spark serve --login there" % (MARK, client_of(cfg)))
         return 0
     rc = cmd_print_url(args)

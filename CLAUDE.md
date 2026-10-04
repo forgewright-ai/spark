@@ -1937,7 +1937,32 @@ One grammar for every verb. A verb that breaks a rule is a bug.
   `SPARK_API_KEY_FILE=$SHARE_TOKEN` when that group-readable token is
   present, rather than minting one the engine would reject.
   `config.token_file` also falls back to it for a user with none of
-  their own.
+  their own. Bootstrap's `token` row mints nothing on a client: a
+  client serves nothing, so it has no key to issue.
+- **Your own llama-server.** The other machine may be a `llama-server`
+  the user runs, on this machine or another. `wire.peer_kind` says what
+  the peer is, `spark` or `engine`. It reads the record in the state
+  dir (`wire.PEER_FILE`), which the probes spark already makes keep:
+  `resolve_brain`, `spark client` and the `peer` row. `wire.plain` is
+  true on a client of a plain engine that is not this machine's shared
+  engine. Four rules hold there. spark never signals a server it did
+  not start. `engine.own_pids` is the pid in `serve.pid` and any
+  process running the `llama-server` in spark's engine dir. `spark
+  client URL` and `spark uninstall` stop those alone. `spark
+  client off` refuses, exit 2, while another server holds `SPARK_PORT`.
+  The client keeps its own sealed store, minted at the first write as
+  on a machine that serves (`forge.local_store`), and its token never
+  goes to the engine (`forge._peer_req`). The key is a file the user
+  names: `spark client URL --key-file FILE` writes
+  `SPARK_API_KEY_FILE`, and `spark client off` empties it. The context
+  size is the engine's own: `n_ctx` from `GET /props`, kept in the
+  record, read by `wire.ctx` unless `SPARK_CTX` is set. Every message
+  says `your engine`: no login line, no `run it there`, and `spark
+  model` names the model the engine serves instead of printing the
+  list. `spark setup --engine URL` writes the shape. At a terminal,
+  setup offers it once when such a server answers on `SPARK_PORT` and
+  no model is chosen. One model per server: router mode and Ollama are
+  not supported.
 - **A shared engine.** `spark serve share on` (`SITE_SHARE=yes`,
   `site.cmd_share`) lets a machine's other OS users answer from its one
   engine instead of each loading the model. Bootstrap's `share` row
@@ -2006,7 +2031,9 @@ sh tests/land.sh --passed SHA   # ci.yml passed for that commit: what main and a
 CAPABILITY, 9 NONFUNCTIONAL` (`grep -c '^@row' lib/spark/check.py`
 counts them). `--selftest` runs 6 passes. The first two prove every
 fixture-testable row flips between a good and a bad fixture. The third
-is the client shape: the 7 rows in `check.CLIENT_ROWS` answer `na`. On
+is the client shape: the 7 rows in `check.CLIENT_ROWS` answer `na`. It
+runs twice, against a spark machine and against a plain `llama-server`,
+where the `peer` row says `your engine`. On
 Linux the fourth runs under a WSL 2 kernel line, where the 1 row in
 `check.WSL_ROWS` says so and never fails. The fifth runs under
 `ID=arch`: the packages row answers through a pacman stub. The sixth

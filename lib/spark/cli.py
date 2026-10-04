@@ -1470,8 +1470,11 @@ def cmd_status(args, _bare=False):
     say("  prompt   %s" % ("off -- spark on turns it on" if os.path.exists(OFF_FLAG)
                            else "on in %s" % ", ".join(sorted({x[0] for x in w})) if w else "on, no shell loaded yet"))
     st = engine.service_state(cfg)
-    say("  service  %s" % {"loaded": "always on", "disabled": "off -- spark serve on starts it",
-                           "absent": "starts when needed"}[st])
+    if wire.plain(cfg):
+        say("  service  your engine -- spark never starts or stops it")
+    else:
+        say("  service  %s" % {"loaded": "always on", "disabled": "off -- spark serve on starts it",
+                               "absent": "starts when needed"}[st])
     from . import memory, soul
     _, source = soul.read(cfg)
     if source == "file":

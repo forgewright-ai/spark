@@ -535,13 +535,16 @@ def local_store(provision=False, cfg=None):
     Store, or a _NullStore when there is none to be had. A CLIENT never
     mints (cfg.client, no login): the FORGE it answers from is the account
     authority -- spark user add NAME there, spark user login NAME here --
-    and until then the turn is answered, not kept."""
+    and until then the turn is answered, not kept. A client of the user's
+    own llama-server (wire.plain) has no such authority: it keeps its own
+    store, minted here as on a machine that serves."""
     from . import users
     try:
         name, token = users.account()
         if not name and provision:
-            from . import config
-            if (cfg if cfg is not None else config.load()).client:
+            from . import config, wire
+            cfg = cfg if cfg is not None else config.load()
+            if cfg.client and not wire.plain(cfg, probe=True):
                 return _NullStore()
         if name and not users.exists(name) and token:
             # a login without a store (a client, or a wiped users/): the
@@ -681,6 +684,9 @@ def _peer_req(cfg, method, path, body=None):
     token = users.account()[1]
     if not token or not cfg.peer_ai_url:
         return 0, None
+    from . import wire
+    if wire.plain(cfg):
+        return 0, None          # the user's own llama-server: this machine's token never goes there
     url = cfg.peer_ai_url.rstrip("/") + path
     headers = {"Authorization": "Bearer " + token}
     data = None
@@ -1474,7 +1480,9 @@ def chat_model(cfg):
     request, so the opening waits on nothing. '' when nothing says."""
     from . import config, engine, wire
     roles = wire.brain_roles(cfg)
-    stem = roles.get("ember") or roles.get("spark") or ""
+    # a server with no spark or ember alias (the user's own llama-server)
+    # names its one model by the file's stem in /v1/models
+    stem = roles.get("ember") or roles.get("spark") or next(iter(roles.values()), "")
     if not stem and not cfg.client:
         stem = engine.model_file(cfg, "ember") or engine.model_file(cfg)
     return config.model_name(stem) if stem else ""

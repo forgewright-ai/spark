@@ -25,3 +25,5 @@ No new verb until items 1 and 2 are done.
    prompt.
 9. The voice answers in the language it heard. `spark stats` shows
    the wait before the first sound.
+10. Ollama as a tested address for `spark client URL`. Today only
+    llama.cpp's `llama-server` is tested.

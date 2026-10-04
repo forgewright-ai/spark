@@ -281,7 +281,8 @@ def budget(cfg, system_chars):
     characters a token (reveal.CHARS_PER_TOKEN), a CTX_SHARE of that,
     less the system message."""
     try:
-        ctx = int(cfg.ctx)
+        from . import wire
+        ctx = int(wire.ctx(cfg))
     except (TypeError, ValueError):
         ctx = CTX_FALLBACK
     if ctx <= 0:

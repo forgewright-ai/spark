@@ -611,6 +611,25 @@ def server_pids(port):
     return pids_in_ps(out, port)
 
 
+def own_pids(cfg):
+    """The pids on SPARK_PORT that are spark's own engine: the one
+    serve.pid names (a server spark spawned, or the unit's), and any
+    whose command line runs the llama-server in spark's engine dir. A
+    llama-server from anywhere else is the user's own: spark never
+    signals it."""
+    rc, out = run(["ps", "-axo", "pid=,command="])
+    mine = pidfile_pid()
+    d = engine_dir(cfg)
+    bins = {os.path.join(p, "llama-server") + " " for p in (d, os.path.realpath(d))}
+    lines = {}
+    for line in out.splitlines():
+        p = line.split(None, 1)
+        if len(p) == 2:
+            lines[p[0]] = p[1] + " "
+    return [pid for pid in pids_in_ps(out, cfg.port)
+            if pid == mine or any(b in lines.get(str(pid), "") for b in bins)]
+
+
 def pids_in_ps(out, port):
     """The pids in `ps -o pid=,command=` output whose program IS
     llama-server (the first word's basename, or the second's after an

@@ -443,6 +443,10 @@ section token
 tok=${SPARK_API_KEY_FILE:-$SPARK_STATE_DIR/api-token}
 if [ -s "$tok" ]; then
     ok token "$tok"
+elif [ "$client" = 1 ]; then
+    # a client serves nothing, so it has no key to mint: a random one
+    # would only ride to a server that never issued it
+    skip token "a client mints no key"
 elif need token "create $tok"; then
     mkdir -p "$(dirname "$tok")"; chmod 0700 "$SPARK_STATE_DIR" 2>/dev/null || true
     umask 077

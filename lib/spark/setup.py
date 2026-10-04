@@ -27,6 +27,7 @@ USAGE = SIGN + """
   spark setup                 a few questions, then it sets spark up
   spark setup --yes           no questions, every default
   spark setup --model NAME    a model from the list, auto, or none
+  spark setup --engine URL    use your own llama-server at URL
   spark setup --name NAME     this machine's name
   spark setup --user NAME     your name
   spark setup --no-serve      set up, but leave the model off
@@ -50,14 +51,14 @@ class Abort(Exception):
 
 
 def _parse(args):
-    opts = {"yes": False, "model": None, "name": None, "user": None, "serve": True}
+    opts = {"yes": False, "model": None, "name": None, "user": None, "serve": True, "engine": None}
     it = iter(args)
     for a in it:
         if a == "--yes":
             opts["yes"] = True
         elif a == "--no-serve":
             opts["serve"] = False
-        elif a in ("--model", "--name", "--user"):
+        elif a in ("--model", "--name", "--user", "--engine"):
             val = next(it, None)
             if val is None:
                 raise Abort("%s needs a value (spark setup -h)" % a, 2)
@@ -371,14 +372,47 @@ def _joining(yes):
     return ans in ("", "y", "yes")
 
 
-def _join(name, user, opts, yes, voice=False):
+def _own_engine(cfg, name, user, opts, yes, voice):
+    """The user's own llama-server: `--engine URL`, or at a terminal one
+    that answers on this machine's SPARK_PORT and is not spark's, with no
+    model chosen yet and no shared engine here -- asked once. The join's
+    rc when it is used, None when setup goes on as before."""
+    url = opts["engine"]
+    if url is not None:
+        url = url.rstrip("/")
+        if not site.CLIENT_URL.match(url):
+            raise Abort("--engine URL is http://host:port", 2)
+        if opts["model"] not in (None, "none"):
+            raise Abort("--engine uses your server's model: leave --model out", 2)
+    elif (yes or opts["model"] is not None or "SITE_AI_MODEL" in os.environ or "SITE_AI_MODEL" in cfg.site_file
+          or os.access(SHARE_TOKEN, os.R_OK)):
+        return None
+    else:
+        url = "http://127.0.0.1:%d" % cfg.port
+        if wire.health(url) != "ok" or wire.forge_health(url, cfg=cfg) is not None or engine.own_pids(cfg):
+            return None
+        global ASKED
+        ASKED = True
+        say("* a llama-server of yours answers at %s" % url)
+        try:
+            ans = input("   use it? nothing to download [Y/n]: ").strip().lower()
+        except EOFError:
+            ans = ""
+        if ans not in ("", "y", "yes"):
+            return None
+    return _join(name, user, opts, yes, voice, url)
+
+
+def _join(name, user, opts, yes, voice=False, own=""):
     """The userspace join: a client of this box's shared engine. No model,
     no console, no units, no sudo -- only this user's ~/.config and
-    ~/.local/state, and their own sealed account. Mirrors spark client."""
-    url = ""
+    ~/.local/state, and their own sealed account. Mirrors spark client.
+    `own` is the user's own llama-server instead (_own_engine): the same
+    shape, with no shared token."""
+    url = own
     try:
         with open(SHARE_URL, encoding="utf-8") as f:
-            url = f.read().strip()
+            url = url or f.read().strip()
     except OSError:
         pass
     if not url:
@@ -387,8 +421,12 @@ def _join(name, user, opts, yes, voice=False):
     say()
     _write(name, user, "none")                              # SITE_AI_MODEL=none
     site.set_keys(_quiet=True, SITE_PEER_AI_URL=url)
-    site.set_keys(_file=SPARK_ENV, _quiet=True, SPARK_API_KEY_FILE=SHARE_TOKEN)
-    say("ok     join         %s, the shared model" % url)
+    if own:
+        wire.forget_peer()
+        say("ok     engine       %s, your own llama-server" % url)
+    else:
+        site.set_keys(_file=SPARK_ENV, _quiet=True, SPARK_API_KEY_FILE=SHARE_TOKEN)
+        say("ok     join         %s, the shared model" % url)
     _account(user)                                          # this user's own sealed store, no root
     rc = site.apply(CORE_ROWS, stream=True)
     if rc != 0:
@@ -413,6 +451,9 @@ def _run(opts):
     # a shared engine already runs on this box (spark serve share on) and this user
     # has no server of their own: join it -- no model to download, no root
     voice = _voice_question(cfg, yes)
+    own = _own_engine(cfg, name, user, opts, yes, voice)
+    if own is not None:
+        return own
     if os.access(SHARE_TOKEN, os.R_OK) and not os.path.exists(TOKEN_FILE) and _joining(yes):
         return _join(name, user, opts, yes, voice)
     if ASKED:
