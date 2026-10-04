@@ -11,14 +11,14 @@
 #            eyes and mouth from the kit. A refused or missing paragraph
 #            keeps the shipped one (words.d/<temperament>), and a part off
 #            the kit is picked by the machine's name. Every mood of the
-#            face is made and written, the ones not drawn yet too.
+#            face is made and written, one still each.
 #   4 soul   the personality paragraph, after the fixed core -- or, with a
 #            soul file of your own, "Your own soul is kept."
 #   5 pace   one reply revealed at the measured pace; yes, faster, slower
 #            or off (faster and slower replay the same text, no new call)
-#   6 voice  where a player is: its own voice, from the temperament and the
-#            seed the face's body uses, voice.HELLO spoken in it; keep,
-#            again (the next seed) or none. What the engine lacks is
+#   6 voice  where a player is: its own speaker, picked by the temperament
+#            and the seed the face's body uses, voice.HELLO spoken by it;
+#            keep, again (the next speaker) or none. What the engine lacks is
 #            downloaded first, its size said and asked (voice.audition)
 #   7 done   the look on auto, the look file rendered; a voice kept is
 #            written and SPARK_VOICE set to on (a clear voice stays clear:

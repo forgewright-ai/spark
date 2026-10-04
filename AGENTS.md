@@ -223,15 +223,24 @@ whole of it.
   the line contract, and it must never block.
 - Call a model in the widgets' prompt hook, or fork there. It runs
   before every prompt: a `$?` test, a few variable writes and at most a
-  few `printf`s. Its reads, with shell builtins: `state/fails`, the
+  few `printf`s. One of them may print the resting face. Its reads,
+  with shell builtins: `state/fails`, the
   plain hash-to-fix index the ledger writes, and on a failure only. The
   look file, again only when it is newer than the shell's marker, line
-  by line and never sourced. Its other state is per pane and in
+  by line and never sourced. One stat of `state/off`, where the face
+  is on. Its other state is per pane and in
   memory: never exported.
+- Start a process for the resting face. The zsh idle timer is `sched`
+  and `zselect`, builtins only, and it draws only at an empty line. In
+  bash the face is still.
 - Print a canned line: a greeting, a goodbye, a news line. Awaken
   writes no lines, an older shell's `spark words greet` prints nothing,
   and nothing reads `state/news`, `news-seen` or `last-seen`. The face
-  shows only while spark waits, and in `spark look`.
+  says nothing. It shows in a wait, leads a reply, follows the mark
+  in spark's row, rests above an idle prompt, and is in `spark look`.
+- Store a frame of the face. `look.Anim` derives every frame from the
+  stored idle face: the faces file and the look file keep one still a
+  mood.
 - Write non-ASCII into a doc: the pre-commit hook refuses it.
 - Name a private repository or tool in any doc: `tests/docs_test.py`
   refuses it.

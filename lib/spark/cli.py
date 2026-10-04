@@ -213,7 +213,7 @@ def _paste_verdict(shell):
     # then the patterns line by line, as do._dangerous reads a block
     local_danger = persona.is_dangerous(data) or any(persona.danger_shape(l) for l in data.splitlines())
     try:
-        with textmod.Busy.hint_row():
+        with textmod.Busy.hint_row(kind="read"):       # a text being read
             s = session.Session(cfg, "paste", shell, "", role="spark")
             reply, ms = s.ask_json(data, persona.PASTE_SCHEMA, max_tokens=120)
     except wire.BrainError as e:
@@ -349,11 +349,19 @@ class _Pulse(textmod.Busy):
     """The line's pulse: text.Busy in the hint row until line 1 is out,
     then the reply's own mark (`*`, or `!` whole in warn) until line 2 --
     and stop() then leaves the row as it is, for the widget paints it
-    next: the mark never blinks out while the command sits in the line."""
+    next: the mark never blinks out while the command sits in the line.
+    Where the look draws the face it stays beside the dots: thinking
+    after line 1 (`* (o.O) ..`), puzzled while a re-ask runs, alarmed on
+    a warn-marked row (`! (O.O) ..`)."""
 
     warn = False
     keep = False
     words = ""          # what the row says while a re-ask runs (tell)
+    _was = None         # (warn, words, keep) of the frame before: a mood's score starts at its change
+    _from = 0
+
+    def _faced(self):
+        return self.scan and self.face is not None
 
     def tell(self, words):
         """A whole sentence in the row, the dots after it, until line 1:
@@ -362,17 +370,28 @@ class _Pulse(textmod.Busy):
             cols = os.get_terminal_size(self.stream.fileno()).columns
         except (AttributeError, OSError, ValueError):
             cols = HINT_COLS
-        self.words = _one_line(words, max(20, min(HINT_COLS, cols - 6))) if words else ""
+        room = cols - 6 - (len(self._face(0, "puzzled")) + 1 if self._faced() else 0)
+        self.words = _one_line(words, max(20, min(HINT_COLS, room))) if words else ""
 
     def _body(self, i):
         # the mark and the words keep the dots in either motion: the row
         # is the reply's own now, and a scanner there would read as a wait
-        if not self.warn and not self.words:
+        if not self.warn and not self.words and not (self.keep and self._faced()):
             return super()._body(i)
         dots = self._dots(i)
+        face = ""
+        if self._faced():
+            now = (self.warn, bool(self.words), self.keep)
+            if now != self._was:
+                self._was, self._from = now, i
+            mood = "alarmed" if self.warn else "puzzled" if self.words else "thinking"
+            face = self._face(i - self._from, mood)
         if self.warn:
-            return paint(self.mark + " " + dots, "warn", self.stream)
-        return paint(self.mark, "accent", self.stream) + " " + self.words + paint(dots, "muted", self.stream)
+            return paint(self.mark + " " + (face + " " if face else "") + dots, "warn", self.stream)
+        head = paint(self.mark, "accent", self.stream) + " "
+        if face:
+            head += paint(face, "accent", self.stream) + " "
+        return head + self.words + paint(dots, "muted", self.stream)
 
     def _clear(self):
         return "" if self.keep else super()._clear()
@@ -1079,7 +1098,7 @@ def reveal_word(word, refuse):
 
 
 def stream_turn(cfg, mode, text, files=(), context="", thread=None, line=None, mark=True, cps=0,
-                said=None, voice=None):
+                said=None, voice=None, linger=False):
     """One turn through forge.reply, wrapped to the terminal (80 when
     piped): the mark (mark=False keeps a conversation bare -- a dialog
     needs no mark), the answer as it streams, a trailing newline. `said`
@@ -1087,7 +1106,14 @@ def stream_turn(cfg, mode, text, files=(), context="", thread=None, line=None, m
     forge._Spoken, a reply read aloud): with the reveal on at a terminal
     of this machine, the text follows the voice -- each sentence shown as
     its sound starts, at its pace; else the voice has each chunk once the
-    wrap wrote it, never ahead of the screen. Returns the thread id. RefError,
+    wrap wrote it, never ahead of the screen. Where the look's motion and
+    words are active the face leads the reply in the mark's place
+    (text.reply_face, or the voice's own): it talks while the text
+    flows, and rests on a mood's still when the reply ends -- pleased,
+    puzzled when the cap cut it, alarmed when the model failed. Nothing
+    is drawn after this returns, unless `linger` (the chat: a prompt
+    waits next, so the mood's score may play; forge.FACE holds the face
+    until a key rests it). Returns the thread id. RefError,
     BrainError and KeyboardInterrupt pass through -- the wrap is closed
     first so a half-printed answer still ends in a newline; forge.reply
     keeps the raw text for the thread record."""
@@ -1097,6 +1123,12 @@ def stream_turn(cfg, mode, text, files=(), context="", thread=None, line=None, m
     # a spoken reply in the chat opens with the talking face where the
     # look draws one (forge._Spoken.screen): its stream and its lead
     out, lead = voice.screen() if voice is not None else (sys.stdout, None)
+    if lead is None and mark:
+        # a reply not read aloud: the face leads it too, talking while
+        # its text flows (a pipe, an unawakened machine: stdout, no lead)
+        forge._face_rest()
+        out, lead = textmod.reply_face(sys.stdout)
+    face = out if lead else None
     wrap = textmod.Wrap(out, mark=mark, cps=cps, lead=lead)
     # the pulse on stderr from the request until the first chunk (a tty
     # only: piped, nothing is drawn); the wrap's mark takes over from it
@@ -1125,6 +1157,9 @@ def stream_turn(cfg, mode, text, files=(), context="", thread=None, line=None, m
     try:
         thread, _, _ = forge.reply(cfg, thread, text, files, os.getcwd(), _shell_default(), mode, feed, context, line,
                                    said=said)
+        mood = "puzzled" if forge.FINISH[0] == "length" else "pleased"
+        if face:
+            face.mood = mood        # known before the voice ends: its thread may finish first
         if follow:
             try:
                 voice.end()
@@ -1141,10 +1176,20 @@ def stream_turn(cfg, mode, text, files=(), context="", thread=None, line=None, m
             voice.stop(rest=isinstance(e, wire.BrainError))
         busy.stop()
         wrap.close()
+        if face:
+            face.settle("alarmed" if isinstance(e, wire.BrainError) else "idle")
+        raise
+    except BaseException:
+        if face:
+            face.rest()
         raise
     finally:
         busy.stop()
     wrap.close()
+    if face:
+        face.settle(mood, play=linger)
+        if linger:
+            forge.FACE[0] = face
     _prune(cfg)
     return thread
 
@@ -1153,8 +1198,11 @@ def _stream(mode, text, files=(), context="", thread=None, line=None, mark=True,
     """stream_turn as a command: a refusal or a dead brain ends with exit 1."""
     try:
         stream_turn(config.load(), mode, text, files, context, thread, line, mark, cps)
-    except (forge.RefError, wire.BrainError) as e:
+    except forge.RefError as e:
         die(e.hint)
+    except wire.BrainError as e:
+        print(textmod.faced("! " + e.hint, "alarmed", sys.stderr), file=sys.stderr, flush=True)
+        sys.exit(1)
     return 0
 
 
@@ -1283,10 +1331,13 @@ def cmd_recall(args):
         print(textmod.held_line(held, textmod.shape_order(names)), file=sys.stderr, flush=True)
     prompt = "What I am looking for: %s\n\nMy shell history:\n%s" % (intent, history)
     try:
-        s = session.Session(cfg, "recall", _shell_default(), "", role="spark")
-        reply, ms = s.ask_json(prompt, persona.RECALL_SCHEMA, max_tokens=300)
+        # the pulse in the hint row while the model looks (SPARK_HINT_ROW,
+        # the widgets' word on Esc r: contract 4's row); silent by hand
+        with textmod.Busy.hint_row():
+            s = session.Session(cfg, "recall", _shell_default(), "", role="spark")
+            reply, ms = s.ask_json(prompt, persona.RECALL_SCHEMA, max_tokens=300)
     except wire.BrainError as e:
-        print("! " + e.hint, file=sys.stderr)
+        print(textmod.faced("! " + e.hint, "alarmed", sys.stderr), file=sys.stderr)
         return 1
     raw = reply.get("candidates") or []
     # the promise is line-level: a candidate is kept only when it equals

@@ -5,9 +5,12 @@
 # machine answers "off" for every part, so every caller keeps today's
 # output. The switch (contract 3, spark.env) is SPARK_LOOK, auto|on|off,
 # and three parts follow it, each with its own auto rule:
-#   motion   the scanner, the waking bar, a face that blinks
+#   motion   the scanner, the waking bar, a face that moves
 #   colour   the built-in palette when no SGR is exported
-#   words    the face in the wait (no line is printed for it: v1.72)
+#   words    the face: in a wait, leading a reply, after the mark of a
+#            `!` line (no line is printed for it: v1.72). Its frames are
+#            derived here (Anim), never stored: the files keep one still
+#            a mood
 # auto = only where the terminal carries it: a tty, not TERM=dumb, and
 # for colour NO_COLOR unset. on = at any tty, NO_COLOR overridden. The
 # pace (SPARK_REVEAL, `spark reveal`) is its own.
@@ -224,6 +227,16 @@ def talking(idle):
     return f[:mid] + mouth + f[mid + 1:] if mouth else None
 
 
+def parts(idle):
+    """(left, eye, mouth, right) of an idle face of the kit's shape: five
+    characters, the two eyes alike. None for any other face: its moods
+    are drawn as they are stored, and nothing is derived from it."""
+    f = (idle or "").strip()
+    if len(f) == 5 and f[1] == f[3]:
+        return f[0], f[1], f[2], f[4]
+    return None
+
+
 def faces(path=None):
     """The machine's faces: the faces file over the shipped kit, each
     cleaned. RATE= and TEMPER= are settings, not faces."""
@@ -261,6 +274,171 @@ def blink():
         return max(0, int(state().get("BLINK", BLINK_DEFAULT)))
     except ValueError:
         return BLINK_DEFAULT
+
+
+# ------------------------------------------------------------ the animator
+# Every frame is DERIVED from the stored idle face (parts): the faces file
+# and the look file keep one still a mood, as they always did. A mood's
+# score is ((frame, ticks), ...), a tick Anim.step seconds; PLAYS says how
+# often it runs before the face rests (0: it loops).
+MOUTH_STEP = 0.15       # the talking face: the mouth opens or closes this often
+STEP_DEFAULT = 0.12     # a tick, seconds; a temperament changes the pace alone
+STEPS = {"playful": 0.10, "plain": 0.12, "terse": 0.12, "warm": 0.15}
+PLAYS = {"idle": 0, "thinking": 0, "asleep": 0, "listening": 0,
+         "waking": 1, "pleased": 1, "alarmed": 1, "puzzled": 2}
+BLINKING = ("idle", "thinking")     # the moods the blink and the glance cut into
+# The progress kinds: what moves inside `[ ]` says what spark is doing.
+#   think   a light bouncing: a reply on its way
+#   read    an arrow crossing left to right: a text being read
+#   steps   one step after another: spark do's proposal
+#   swell   a bar growing and shrinking: a model loading, no estimate
+#   march   marks moving right: update, model verify
+PROGRESS = ("think", "read", "steps", "swell", "march")
+CELLS = 8
+_STEPS = ("# . . . ", ". # . . ", ". . # . ", ". . . # ")
+_SWELL = ("   ==   ", "  ====  ", " ====== ", "========", " ====== ", "  ====  ")
+_MARCH = (">   >   ", " >   >  ", "  >   > ", "   >   >")
+
+
+def scores(faces):
+    """{mood: ((frame, ticks), ...)} for the faces `faces` (a mood ->
+    still dict). A mood moves only when its stored still is the one the
+    kit makes from the idle face's parts (words.make_faces): a still
+    edited by hand is drawn as written, one frame. A derived frame that
+    face_ok refuses drops its mood to the still too. The frames of a mood
+    are padded to its widest, so a redraw in place never leaves a cell."""
+    stills = dict(DEFAULT_FACES)
+    stills.update(faces or {})
+    out = {m: ((stills[m], 1),) for m in MOODS}
+    p = parts(stills["idle"])
+    if p is not None:
+        from . import words
+        left, eye, mouth, right = p
+        made = words.make_faces(eye, mouth, left + right)
+        wide = "o" if eye == "O" else "O"
+        smile = "u" if mouth == "v" else "v"
+        flat = "-" if mouth == "_" else "_"
+
+        def f(a, m, b, tail=""):
+            return left + a + m + b + right + tail
+        idle, shut, yawn = f(eye, mouth, eye), f("-", mouth, "-"), f("-", "o", "-")
+        derived = {
+            "idle": ((idle, 1),),
+            "thinking": ((f(eye, mouth, wide), 8), (idle, 2), (f(wide, mouth, eye), 8), (idle, 2)),
+            "waking": ((shut, 3), (yawn, 3), (f("-", "O", "-"), 4), (yawn, 2)),
+            "asleep": ((shut, 8), (shut + "z", 8), (shut + "zZ", 8)),
+            "pleased": ((f("^", mouth, "^"), 3), (f("^", smile, "^"), 3)) * 2,
+            "puzzled": ((f(eye, mouth, "?"), 6), (f(wide, mouth, "?"), 3),
+                        (f(eye, mouth, "?"), 6), (f("?", mouth, eye), 6)),
+            "alarmed": ((idle, 1), (f("O", mouth, "O"), 3), (f("O", flat, "O"), 2)),
+            "listening": ((idle + "~", 3), (idle + "-", 3)),
+        }
+        for mood, score in derived.items():
+            if stills[mood] == made[mood] and all(face_ok(fr) for fr, _n in score):
+                out[mood] = score
+    for mood, score in out.items():
+        # the still a once-score rests on, and the blink and the glance
+        # that cut into a looping one, share the mood's width
+        beside = [stills["idle"] if mood == "waking" and len(score) > 1 else stills[mood]]
+        if mood in BLINKING:
+            beside += [stills["blink"], stills["glance"]]
+        width = max(len(fr) for fr in [fr for fr, _n in score] + beside)
+        out[mood] = tuple((fr.ljust(width), n) for fr, n in score)
+    return out
+
+
+def _cells(kind, i):
+    if kind == "read":
+        # the arrow's head walks 10 places, 2 of them past the last cell
+        head = i % (CELLS + 2)
+        return "".join("-->"[c - head + 2] if head - 2 <= c <= head else " " for c in range(CELLS))
+    if kind == "steps":
+        return _STEPS[(i // 2) % len(_STEPS)]
+    if kind == "swell":
+        return _SWELL[i % len(_SWELL)]
+    if kind == "march":
+        return _MARCH[i % len(_MARCH)]
+    span = 2 * CELLS - 2
+    pos = i % span
+    pos = pos if pos < CELLS else span - pos
+    return " " * pos + "=" + " " * (CELLS - 1 - pos)
+
+
+_kit_faces, _kit_blink = faces, blink
+
+
+class Anim:
+    """The one animator: which frame a mood shows at tick `i`, and which
+    cells a progress kind does. Pure: it reads the faces once, draws
+    nothing and paints nothing -- text.Busy, text.Estimate, text.FaceLead
+    and the line's pulse place and paint what it answers.
+
+    faces   a mood -> still dict (default: this machine's, look.faces())
+    blink   ticks between two blinks, 0 never (default: look.blink())
+    temper  the temperament's name, for the pace alone (default: the look
+            file's TEMPER)"""
+
+    def __init__(self, faces=None, blink=None, temper=None):
+        self.faces = dict(DEFAULT_FACES)
+        self.faces.update(_kit_faces() if faces is None else faces)
+        self.blink = _kit_blink() if blink is None else max(0, int(blink))
+        temper = state().get("TEMPER", "") if temper is None else temper
+        self.step = STEPS.get(temper, STEP_DEFAULT)
+        self.scores = scores(self.faces)
+
+    def _width(self, mood):
+        return len(self.scores[mood][0][0])
+
+    def moves(self, mood):
+        """Whether the mood has more than its still to show."""
+        return len(self.scores.get(mood, ())) > 1
+
+    def rest(self, mood):
+        """The still a mood rests on, bare: its stored face -- and for
+        waking, once it has moved, the idle face it wakes into."""
+        if mood == "waking" and self.moves(mood):
+            return self.faces["idle"]
+        return self.faces.get(mood) or self.faces["idle"]
+
+    def length(self, mood):
+        """The ticks a mood plays before it rests; a loop's one round; 0
+        for a mood that plays once and has only its still."""
+        score = self.scores.get(mood) or self.scores["idle"]
+        plays = PLAYS.get(mood, 0)
+        if plays and not self.moves(mood):
+            return 0
+        return max(1, plays) * sum(n for _f, n in score)
+
+    def face(self, mood, i):
+        """The mood's frame at tick i, padded to the mood's width. A
+        looping mood with open eyes blinks every `blink` ticks and glances
+        every third blink, for two ticks. Deterministic."""
+        if mood not in self.scores:
+            mood = "idle"
+        width, b = self._width(mood), self.blink
+        if b and i and mood in BLINKING:
+            if i % (3 * b) == 0 or (b > 2 and i > 1 and (i - 1) % (3 * b) == 0):
+                return self.faces["glance"].ljust(width)
+            if i % b == 0:
+                return self.faces["blink"].ljust(width)
+        score = self.scores[mood]
+        if PLAYS.get(mood, 0) and i >= self.length(mood):
+            return self.rest(mood).ljust(width)
+        k = i % sum(n for _f, n in score)
+        for frame, n in score:
+            if k < n:
+                return frame
+            k -= n
+        return score[-1][0]
+
+    def talk(self, open):
+        """The talking face: the idle one, its mouth open or shut."""
+        idle = self.faces["idle"]
+        return (talking(idle) or idle) if open else idle
+
+    def cells(self, kind, i):
+        """The CELLS cells of a progress kind at tick i, bare."""
+        return _cells(kind if kind in PROGRESS else "think", i)
 
 
 def refused(faces_path=None):

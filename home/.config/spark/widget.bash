@@ -31,6 +31,17 @@
 # sourced. Until the machine is awake it only moves the row; awake, it
 # adds the built-in colours and how long a failed command ran.
 #
+# The face (awake, the look's motion and words active, no `spark off`):
+# every line spark says in its row carries the mood's face after the
+# mark -- `* (^.^) Forty-two`, `! (O.O) <- deletes 3 files`. At an idle
+# prompt the resting face sits alone in that row and is erased at Enter,
+# so scrollback keeps no face. It is drawn only where the blank row is
+# known: the prompt opens with a newline and has as many lines as the
+# row's height, or starship draws it. In bash the face is still:
+# readline has no idle timer, and nothing runs in the background for
+# it (zsh blinks). The face says nothing. With the face off every byte
+# is what it was.
+#
 # How Enter works: it is a two-key macro. The first key runs _spark_enter,
 # which looks at the line and rebinds the second key -- to accept-line for a
 # plain command, or to a redraw for a question -- before readline reads it.
@@ -75,12 +86,19 @@ unset _spark_exit
 # dropped. The marker above doubles as the stamp: the file is read again
 # only when it is newer than the marker, then the marker is written anew.
 # SPARK_HEIGHT in the environment wins over the file's HEIGHT.
+# A FACE_<MOOD> value is kept only as printable ASCII, 8 characters at
+# most. BLINK and the faces of motion (blink, glance, asleep, waking)
+# are zsh's: this face is still.
 _spark_height=1 _spark_lk_had='' _spark_lk_awake='' _spark_lk_colour=''
-_spark_lk_acc='' _spark_lk_warn=''
+_spark_lk_acc='' _spark_lk_warn='' _spark_lk_motion='' _spark_lk_words=''
+_spark_fc_idle='' _spark_fc_thinking='' _spark_fc_pleased='' _spark_fc_puzzled=''
+_spark_fc_alarmed='' _spark_fc_listening=''
 _spark_look_read() {
     local f=$SPARK_DIR/look line k v n=0
     _spark_height=1 _spark_lk_had='' _spark_lk_awake='' _spark_lk_colour=''
-    _spark_lk_acc='' _spark_lk_warn=''
+    _spark_lk_acc='' _spark_lk_warn='' _spark_lk_motion='' _spark_lk_words=''
+    _spark_fc_idle='' _spark_fc_thinking='' _spark_fc_pleased='' _spark_fc_puzzled=''
+    _spark_fc_alarmed='' _spark_fc_listening=''
     if [[ -r $f ]]; then
         _spark_lk_had=1
         while (( n++ < 64 )) && { IFS= read -r line || [[ -n $line ]]; }; do
@@ -89,10 +107,22 @@ _spark_look_read() {
             [[ $v == *[[:cntrl:]]* ]] && continue
             case $k in
                 AWAKE) _spark_lk_awake=$v ;;
+                MOTION) _spark_lk_motion=$v ;;
                 COLOUR) _spark_lk_colour=$v ;;
+                WORDS) _spark_lk_words=$v ;;
                 HEIGHT) [[ $v == [1-5] ]] && _spark_height=$v ;;
                 SGR_ACCENT) _spark_lk_acc=$v ;;
                 SGR_WARN) _spark_lk_warn=$v ;;
+                FACE_?*)
+                    [[ -n $v && ${#v} -le 8 && $v != *[![:ascii:]]* ]] || continue
+                    case $k in
+                        FACE_IDLE) _spark_fc_idle=$v ;;
+                        FACE_THINKING) _spark_fc_thinking=$v ;;
+                        FACE_PLEASED) _spark_fc_pleased=$v ;;
+                        FACE_PUZZLED) _spark_fc_puzzled=$v ;;
+                        FACE_ALARMED) _spark_fc_alarmed=$v ;;
+                        FACE_LISTENING) _spark_fc_listening=$v ;;
+                    esac ;;
             esac
         done < "$f"
     fi
@@ -137,8 +167,10 @@ _spark_is_question() {
 # whole in warn. Sets _spark_out. On an awake machine whose colour part
 # is auto (a terminal that is not dumb, NO_COLOR unset) or on, the look
 # file's built-in values stand in for an export that is not there.
+# _spark_paint TEXT [N]: N is how many leading characters the accent
+# takes -- the mark and its face, or a face alone; without it, the mark.
 _spark_paint() {
-    local t=$1 a=${SPARK_ACCENT_SGR:-} w=${SPARK_WARN_SGR:-}
+    local t=$1 n=${2:-} a=${SPARK_ACCENT_SGR:-} w=${SPARK_WARN_SGR:-}
     _spark_out=$t
     if [[ $_spark_lk_awake == yes ]] && [[ $_spark_lk_colour == on || ( $_spark_lk_colour == auto \
             && $TERM != dumb && -z ${NO_COLOR:-} ) ]]; then
@@ -146,21 +178,90 @@ _spark_paint() {
         [[ -n $w ]] || w=$_spark_lk_warn
     fi
     case $t in
-        "$_spark_h "*) [[ -n $a && -z ${a//[0-9;]/} ]] \
-            && _spark_out=$'\e['"$a"'m'"$_spark_h"$'\e[0m'"${t#"$_spark_h"}" ;;
         "$_spark_w "*) [[ -n $w && -z ${w//[0-9;]/} ]] \
             && _spark_out=$'\e['"$w"'m'"$t"$'\e[0m' ;;
+        *)  [[ -z $n && $t == "$_spark_h "* ]] && n=1
+            (( ${n:-0} > 0 )) && [[ -n $a && -z ${a//[0-9;]/} ]] \
+                && _spark_out=$'\e['"$a"'m'"${t:0:n}"$'\e[0m'"${t:n}" ;;
     esac
 }
 
+# --- the face: beside the mark, and alone at an idle prompt ------------------
+# On when the machine is awake, the look's words and motion are each on
+# (or auto at a terminal that is not dumb) and `spark off` is not set.
+# Off, nothing here writes a byte.
+_spark_mood='' _spark_ft='' _spark_fn='' _spark_faced=''
+_spark_face_on() {
+    [[ $_spark_lk_awake == yes ]] || return 1
+    [[ $_spark_lk_words == on || ( $_spark_lk_words == auto && $TERM != dumb ) ]] || return 1
+    [[ $_spark_lk_motion == on || ( $_spark_lk_motion == auto && $TERM != dumb ) ]] || return 1
+    [[ ! -e $SPARK_DIR/off ]]
+}
+# _spark_face TEXT: sets _spark_ft, TEXT with the face of _spark_mood
+# (idle unless the caller set one) after its mark, and _spark_fn, the
+# characters the accent then takes. The mood is spent: the next line is
+# idle again. A mood the look file lacks shows the idle face.
+_spark_face() {
+    local f=''
+    _spark_ft=$1 _spark_fn=''
+    if [[ $1 == "$_spark_h "* || $1 == "$_spark_w "* ]] && _spark_face_on; then
+        case $_spark_mood in
+            thinking) f=$_spark_fc_thinking ;;
+            pleased) f=$_spark_fc_pleased ;;
+            puzzled) f=$_spark_fc_puzzled ;;
+            alarmed) f=$_spark_fc_alarmed ;;
+            listening) f=$_spark_fc_listening ;;
+        esac
+        [[ -n $f ]] || f=$_spark_fc_idle
+        if [[ -n $f ]]; then
+            _spark_ft="${1:0:1} $f ${1:2}"
+            _spark_fn=$(( ${#f} + 2 ))
+        fi
+    fi
+    _spark_mood=''
+}
+# the resting face, alone in spark's row. bash has no hook after the
+# prompt is drawn, so, like the failure line, the face is printed before
+# it WITHOUT a newline, and the prompt's own opening newline ends it: it
+# IS the blank row. Only where that row is known: the prompt opens with
+# a newline and has as many lines as the row is high, or starship draws
+# it. A row of spaces goes first: at the left edge it fills the row and
+# the cursor comes back; after output that ended without a newline it
+# wraps, and the face starts a row of its own -- so clearing the face's
+# row at Enter never takes a line of output with it.
+_spark_idle() {
+    local p nl lf=$'\n' w=${COLUMNS:-80}
+    [[ -n $_spark_fc_idle ]] && (( w > 12 )) && _spark_face_on || return 0
+    if [[ -z ${STARSHIP_SHELL:-} ]]; then
+        [[ $PS1 == \\n* || $PS1 == "$lf"* ]] || return 0
+        p=${PS1//\\n/$lf}
+        nl=${p//[!$lf]/}
+        (( ${#nl} == _spark_height )) || return 0
+    fi
+    _spark_paint "$_spark_fc_idle" "${#_spark_fc_idle}"
+    printf '%*s\r%s' "$w" '' "$_spark_out"
+    _spark_faced=1
+}
+# and gone again: only a row the resting face stands in is cleared
+_spark_unface() {
+    [[ -n $_spark_faced ]] || return 0
+    _spark_faced=''
+    printf '\0337\033[%dA\r\033[2K\0338' "$_spark_height"
+}
+
 # The row is _spark_height rows up (1 unless the look file or SPARK_HEIGHT
-# says more: a two-line prompt takes 2).
+# says more: a two-line prompt takes 2). The face counts toward the
+# width. What it writes replaces the resting face: _spark_faced is spent.
 _spark_hinted=''          # spark drew in the row above since this prompt came
 _spark_say() {   # _spark_say TEXT  -- write into the row above, cursor untouched
     local t=$1 w=${COLUMNS:-80}
     [[ -n $t ]] && _spark_hinted=1
+    _spark_face "$t"
+    t=$_spark_ft
     (( ${#t} > w - 2 )) && t=${t:0:w-3}$_spark_d
-    _spark_paint "$t"
+    # shellcheck disable=SC2086  # empty means no count: the mark alone
+    _spark_paint "$t" $_spark_fn
+    _spark_faced=''
     printf '\0337\033[%dA\r\033[2K%s\0338' "$_spark_height" "$_spark_out"
 }
 
@@ -197,12 +298,14 @@ _spark_keep() {   # _spark_keep CMD LINE3  -- the reader's proof, for the next p
     esac
 }
 
-_spark_rest() {   # _spark_rest FD MARK TAIL CMD NONE  -- lines 2 and 3, in the background
-    local fd=$1 mark=$2 tail=$3 cmd=$4 none=$5 hint='' l3=''
+_spark_rest() {   # _spark_rest FD MARK TAIL CMD NONE MOOD  -- lines 2 and 3, in the background
+    local fd=$1 mark=$2 tail=$3 cmd=$4 none=$5 mood=$6 hint='' l3=''
     IFS= read -r hint <&"$fd"
+    [[ -n $hint || $mood == alarmed ]] || mood=puzzled
     # a proof already here is kept before the hint shows: an Enter on the
     # hint then finds it
     if read -t 0 -u "$fd"; then IFS= read -r l3 <&"$fd"; _spark_keep "$cmd" "$l3"; fi
+    _spark_mood=$mood
     _spark_say "$mark ${hint:-$none}$tail" > /dev/tty
     trap '' TERM          # drawn: nothing left that could land on a later screen
     [[ -z $l3 ]] && IFS= read -r l3 <&"$fd" && _spark_keep "$cmd" "$l3"
@@ -261,8 +364,9 @@ _spark_ask() {   # _spark_ask LINE  -- ask, then edit READLINE_LINE
 }
 
 _spark_asked() {
-    local line=$1 fd kind cmd='' hint line3 mark=$_spark_h tail='' none='no hint came'
+    local line=$1 fd kind cmd='' hint line3 mark=$_spark_h tail='' none='no hint came' mood=''
     _spark_reap
+    _spark_mood=thinking
     _spark_say "$_spark_h $_spark_d"
     _spark_proof='' _spark_proof_for='' _spark_pw=''
     rm -f -- "$_spark_pf"
@@ -277,22 +381,24 @@ _spark_asked() {
     case $kind in
         cmd$'\t'*|danger$'\t'*)
             cmd=${kind#*$'\t'}
-            [[ $kind == danger$'\t'* ]] && mark=$_spark_w tail=' -- read it before Enter'
+            [[ $kind == danger$'\t'* ]] && mark=$_spark_w tail=' -- read it before Enter' mood=alarmed
+            _spark_mood=${mood:-thinking}
             _spark_say "$mark $_spark_d$tail"
             READLINE_LINE=$cmd; READLINE_POINT=${#cmd} ;;
         answer)
-            none='no answer came'
+            none='no answer came' mood=pleased
             READLINE_LINE=''; READLINE_POINT=0 ;;
         *)
             IFS= read -r hint <&"$fd"
             exec {fd}<&-
             [[ -n $kind && $kind != error ]] && hint=$kind    # not contract 4: say what came
+            _spark_mood=alarmed
             _spark_say "$_spark_h ${hint:-no model answers}"
             return ;;
     esac
     if _spark_fits "$cmd"; then
         # the shell's own `[1] pid` notice goes to the group's stderr: nowhere
-        { _spark_rest "$fd" "$mark" "$tail" "$cmd" "$none" < /dev/null > /dev/null 2>&1 & } 2>/dev/null
+        { _spark_rest "$fd" "$mark" "$tail" "$cmd" "$none" "$mood" < /dev/null > /dev/null 2>&1 & } 2>/dev/null
         _spark_rd=$! _spark_pw=1
         disown "$_spark_rd" 2>/dev/null
         exec {fd}<&-
@@ -302,6 +408,8 @@ _spark_asked() {
     IFS= read -r line3 <&"$fd"
     exec {fd}<&-
     case $line3 in proof$'\t'*) _spark_proof=${line3#proof$'\t'} _spark_proof_for=$cmd ;; esac
+    [[ -n $hint || $mood == alarmed ]] || mood=puzzled
+    _spark_mood=$mood
     _spark_say "$mark ${hint:-$none}$tail"
 }
 
@@ -385,11 +493,16 @@ _spark_offer_kind() { _spark_kind_of "$1" "$2"; printf '%s\n' "$_spark_kind"; }
 # the prompt is not drawn yet, and bash has no hook after it: the line is
 # printed WITHOUT its newline, and the prompt's own opening newline (the
 # hook's blank row, starship's add_newline) ends it -- so it IS the blank
-# row. A prompt that opens otherwise gets the newline here.
+# row. A prompt that opens otherwise gets the newline here. The line
+# carries its mood's face (_spark_note TEXT [MOOD]).
 _spark_note() {
     local t=$1 w=${COLUMNS:-80}
+    _spark_mood=${2:-}
+    _spark_face "$t"
+    t=$_spark_ft
     (( ${#t} > w - 2 )) && t=${t:0:w-3}$_spark_d
-    _spark_paint "$t"
+    # shellcheck disable=SC2086  # empty means no count: the mark alone
+    _spark_paint "$t" $_spark_fn
     _spark_hinted=1
     if [[ -n ${STARSHIP_SHELL:-} || $PS1 == \\n* || $PS1 == $'\n'* ]]; then printf '%s' "$_spark_out"
     else printf '%s\n' "$_spark_out"; fi
@@ -409,7 +522,8 @@ _SPARK_LONG=30 _spark_t0=''
 # the FIRST part sees the command's status. spark goes first, and hands
 # the status back with `return`, so starship -- or anything else behind
 # it -- still sees the truth. The look file is checked first (one stat
-# while it has not changed); then the failure moment.
+# while it has not changed); then the failure moment; then, in a row
+# no line took, the resting face.
 _spark_failed() {
     local rc=$? took='' d
     _spark_look_check
@@ -420,7 +534,9 @@ _spark_failed() {
         fi
     fi
     _spark_t0=''
+    _spark_faced=''                       # a new prompt: the row above holds no face yet
     _spark_failure "$rc" "$took"
+    [[ -n $_spark_hinted ]] || _spark_idle
     return $rc
 }
 
@@ -459,7 +575,7 @@ _spark_failure() {
             # contract 4's proof line: the proposed command just ran --
             # the read-only check is one Esc s away
             _spark_offer_proof=$_spark_proof
-            _spark_note "$_spark_h done -- Esc s checks it: $_spark_proof"
+            _spark_note "$_spark_h done -- Esc s checks it: $_spark_proof" pleased
             _spark_proof='' _spark_proof_for=''
         fi
         _spark_fail=''
@@ -470,13 +586,15 @@ _spark_failure() {
     fi
     _spark_kind_of "$cmd" "$rc"
     [[ $_spark_kind == none ]] && return 0
-    if [[ -e $SPARK_DIR/off ]]; then      # only ever stat'd on a failing path
+    # stat'd on a failing path -- and, where the face is on, once a prompt
+    # (_spark_face_on)
+    if [[ -e $SPARK_DIR/off ]]; then
         _spark_fail=''
         return 0
     fi
     if [[ $_spark_kind == danger ]]; then
         _spark_fail=''
-        _spark_note "$_spark_h failed ($rc)$took -- $_spark_head is not re-run; ? words asks about it"
+        _spark_note "$_spark_h failed ($rc)$took -- $_spark_head is not re-run; ? words asks about it" alarmed
     else
         _spark_fail=$cmd _spark_fail_rc=$rc _spark_explained='' _spark_explained_rc='' _spark_fix=''
         # failure memory: the ONE file this hook may read -- the
@@ -488,11 +606,11 @@ _spark_failure() {
             done < "$SPARK_DIR/fails"
         fi
         if [[ -n $_fk ]]; then
-            _spark_note "$_spark_h failed ($rc)$took -- last time this fixed it: $_fk"
+            _spark_note "$_spark_h failed ($rc)$took -- last time this fixed it: $_fk" alarmed
         elif (( rc == 127 )); then
-            _spark_note "$_spark_h failed (127)$took -- $_spark_head not found; Esc s gets the install line"
+            _spark_note "$_spark_h failed (127)$took -- $_spark_head not found; Esc s gets the install line" alarmed
         else
-            _spark_note "$_spark_h failed ($rc)$took -- Esc s asks why"
+            _spark_note "$_spark_h failed ($rc)$took -- Esc s asks why" alarmed
         fi
     fi
     return 0
@@ -518,6 +636,7 @@ unset _spark_pc_array
 # --- Enter ------------------------------------------------------------------
 _spark_enter() {
     _spark_reap                           # a hint still on its way would land on the output
+    _spark_unface                         # the resting face goes before the line does
     if [[ -e $SPARK_DIR/off ]]; then
         bind '"\C-x\C-a": accept-line'
         _spark_cmd=''                     # off: nothing arms, nothing prints
@@ -604,6 +723,7 @@ _spark_ask_line() {
         READLINE_POINT=${#READLINE_LINE}
         _spark_say "$_spark_h Enter remembers the fix"
     else
+        _spark_mood=puzzled
         _spark_say "$_spark_h type a question, then Esc s"
     fi
 }
@@ -621,7 +741,7 @@ _spark_recall_show() {
     local cand=${_spark_recall_cands[_spark_recall_i]} mark=$_spark_h note=''
     if [[ $cand == $'!\t'* ]]; then
         cand=${cand#$'!\t'}
-        mark=$_spark_w note=' -- careful'
+        mark=$_spark_w note=' -- careful' _spark_mood=alarmed
     fi
     READLINE_LINE=$cand
     READLINE_POINT=${#cand}
@@ -639,15 +759,19 @@ _spark_recall() {
     fi
     local intent=$READLINE_LINE
     if [[ -z $intent ]]; then
+        _spark_mood=puzzled
         _spark_say "$_spark_h type what the command did, then Esc r"
         return
     fi
+    _spark_mood=thinking
     _spark_say "$_spark_h $_spark_d"
     local out
     _spark_hold "$READLINE_LINE"          # the words stay while the search runs
-    out=$(fc -ln -400 2>/dev/null | "$SPARK_BIN" recall "$intent" 2>/dev/null)
+    # SPARK_HINT_ROW=N: spark recall may pulse in that row while it asks
+    out=$(fc -ln -400 2>/dev/null | SPARK_HINT_ROW=$_spark_height "$SPARK_BIN" recall "$intent" 2>/dev/null)
     _spark_drop
     if [[ -z $out ]]; then
+        _spark_mood=puzzled
         _spark_say "$_spark_h nothing in your history matches"
         return
     fi
@@ -669,6 +793,7 @@ _spark_height_key() {
     [[ -e $SPARK_DIR/off ]] && return
     (( _spark_height < 3 )) && n=$(( _spark_height + 1 ))
     [[ -n $_spark_hinted ]] && _spark_say ''
+    _spark_unface                         # the resting face leaves the old row too
     _spark_height=$n
     [[ -n ${SPARK_HEIGHT:-} ]] && SPARK_HEIGHT=$n
     "$SPARK_BIN" height "$n" </dev/null >/dev/null 2>&1
@@ -686,6 +811,7 @@ _spark_listen() {
     local words rc
     _spark_reap
     [[ -e $SPARK_DIR/off ]] && return
+    _spark_mood=listening
     _spark_say "$_spark_h listening -- a pause ends it"
     _spark_hold "$READLINE_LINE"          # the line stays while it listens
     words=$("$SPARK_BIN" voice listen --buffer </dev/null 2>/dev/null)
@@ -703,6 +829,7 @@ _spark_listen() {
             _spark_say "$_spark_h heard -- in your line"
         fi
     elif (( rc == 1 || rc == 130 )); then
+        _spark_mood=puzzled
         _spark_say "$_spark_h nothing heard"
     else
         _spark_say "$_spark_h Esc v needs the voice -- spark voice on"
@@ -750,7 +877,7 @@ _spark_paste() {
         text=${out#*$'\n'}
         text=${text%%$'\n'*}
         case $kind in
-            danger) _spark_say "$_spark_w $text -- pasted, not run" ;;
+            danger) _spark_mood=alarmed; _spark_say "$_spark_w $text -- pasted, not run" ;;
             answer) _spark_say "$_spark_h $text -- pasted, not run" ;;
         esac
     fi

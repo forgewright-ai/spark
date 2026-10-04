@@ -1644,9 +1644,19 @@ def chat_awake_cases(t):
             sys.stdout, sys.stderr = real_out, real_err
         return got
     try:
-        # --- the lead (v1.73: a reply read aloud): the face opens the
-        # reply, the lines hang under it
+        # --- the lead (v1.80: the face leads a reply): it opens the reply
+        # in the mark's place, and every later line starts at column 0 --
+        # a wrapped line, a new paragraph, a fenced block: code copies clean
         w = _tx.Wrap(Tty(), lead="\033[1m(o.o)\033[0m ")
+        w.width = 30
+        w.feed("one two three four five six seven eight nine ten eleven\n\nnext one\n```\n  code\n```")
+        w.close()
+        lines = w.stream.getvalue().split("\n")
+        t.ok(lines == ["\033[1m(o.o)\033[0m one two three four five", "six seven eight nine ten", "eleven", "",
+                       "next one", "```", "  code", "```", ""],
+             "chat: the lead opens the reply; wrapped and later lines start at column 0, a fenced block too; "
+             "one trailing newline", repr(w.stream.getvalue()))
+        w = _tx.Wrap(Tty(), lead="\033[1m(o.o)\033[0m ", hang=True)
         w.width = 30
         w.feed("one two three four five six seven eight nine ten eleven\n\nnext one")
         w.close()
@@ -1655,8 +1665,8 @@ def chat_awake_cases(t):
         t.ok(lines[0].startswith("\033[1m(o.o)\033[0m one ") and len(_tx.SGR_RE.sub("", lines[0])) <= 29
              and body and all(ln.startswith(" " * 6) and ln[6] != " " for ln in body) and "" in lines[1:-1]
              and "      next one" in lines,
-             "chat: the lead opens the reply; wrapped and later lines hang 6 columns (the face's width, "
-             "the escapes not counted); a blank line stays blank", repr(w.stream.getvalue()))
+             "chat: hang=True keeps the lines under the lead, 6 columns in (the escapes not counted); a blank "
+             "line stays blank", repr(w.stream.getvalue()))
         src = "Some **bold** words here.\n\n    code stays\n- a bullet\n" + "word " * 30
         piped = []
         for lead in ("(o.o) ", None):
@@ -1674,8 +1684,10 @@ def chat_awake_cases(t):
         w.feed("one two three four five six seven eight nine ten eleven twelve")
         w.close()
         paced = "".join(ticked)
-        t.ok("\n      " in w.stream.getvalue() and "\n" in paced and "\n " not in paced and "      " not in paced,
-             "chat: the reveal paces the words; the hanging indent is written free", repr((w.stream.getvalue(), paced)))
+        t.ok(w.stream.getvalue() == "(o.o) one two three four five\nsix seven eight nine ten\neleven twelve\n"
+             and paced == w.stream.getvalue()[:-1],
+             "chat: the reveal paces the lead and the words; a later line starts at column 0",
+             repr((w.stream.getvalue(), paced)))
 
         # --- the opening: one line -- the thread it goes on with, cut at a
         # word to 80 columns, else the model it talks to, by name
@@ -1967,11 +1979,241 @@ def chat_tools_cases(t, spark, home):
 PROMPT_AT = re.compile(rb"\n(?:\x1b\[[0-9;?]*[A-Za-z])*chat>")
 
 
+def term_screen(raw, cols=80, rows=24):
+    """What a terminal of `cols` by `rows` shows after the bytes `raw`:
+    its rows, top first, trailing blanks gone. Enough of a terminal for
+    spark's own output: text, CR, LF, backspace, save and restore (ESC 7,
+    ESC 8), cursor up, down, left, right and column, erase in line; every
+    other escape is passed over (colour draws nothing)."""
+    text = raw.decode("utf-8", "replace") if isinstance(raw, bytes) else raw
+    grid = [[" "] * cols for _ in range(rows)]
+    r = c = 0
+    saved = (0, 0)
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if ch == "\x1b":
+            if text[i + 1:i + 2] in ("7", "8"):
+                if text[i + 1] == "7":
+                    saved = (r, c)
+                else:
+                    r, c = saved
+                i += 2
+                continue
+            m = re.match(r"\x1b\[([0-9;?]*)([A-Za-z])", text[i:])
+            if not m:
+                i += 1
+                continue
+            n = int(m.group(1)) if m.group(1).isdigit() else 1
+            k = m.group(2)
+            if k == "A":
+                r = max(0, r - n)
+            elif k == "B":
+                r = min(rows - 1, r + n)
+            elif k == "C":
+                c = min(cols - 1, c + n)
+            elif k == "D":
+                c = max(0, c - n)
+            elif k == "G":
+                c = min(cols - 1, max(0, n - 1))
+            elif k == "K":
+                lo, hi = (0, cols) if m.group(1) == "2" else (0, c + 1) if m.group(1) == "1" else (c, cols)
+                grid[r][lo:hi] = [" "] * (hi - lo)
+            i += m.end()
+            continue
+        if ch == "\n":
+            r += 1
+            if r >= rows:
+                grid.pop(0)
+                grid.append([" "] * cols)
+                r = rows - 1
+        elif ch == "\r":
+            c = 0
+        elif ch == "\x08":
+            c = max(0, c - 1)
+        elif ch >= " ":
+            if c >= cols:
+                c = 0
+                r += 1
+                if r >= rows:
+                    grid.pop(0)
+                    grid.append([" "] * cols)
+                    r = rows - 1
+            grid[r][c] = ch
+            c += 1
+        i += 1
+    return ["".join(row).rstrip() for row in grid]
+
+
+def pty_run(argv, env, cwd, size=(24, 80), secs=30):
+    """`argv` at a pty of `size` (rows, columns): (the exit code or None,
+    every byte it wrote). Reads until the child is gone AND the master is
+    quiet, so a last redraw is never missed."""
+    import fcntl
+    import pty
+    import struct
+    import termios
+    pid, fd = pty.fork()
+    if pid == 0:
+        os.chdir(cwd)
+        os.execve(argv[0], argv, env)
+    fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", size[0], size[1], 0, 0))
+    got, status, stop = b"", None, time.time() + secs
+    while time.time() < stop:
+        if status is None:
+            done, st = os.waitpid(pid, os.WNOHANG)
+            if done:
+                status = st
+        if select.select([fd], [], [], 0.3)[0]:
+            try:
+                chunk = os.read(fd, 4096)
+            except OSError:
+                chunk = b""
+            if chunk:
+                got += chunk
+                continue
+            if status is not None:
+                break
+        elif status is not None:
+            break               # the child is gone and the master is quiet
+    if status is None:
+        os.kill(pid, signal.SIGKILL)
+        os.waitpid(pid, 0)
+    os.close(fd)
+    return (os.WEXITSTATUS(status) if status is not None and os.WIFEXITED(status) else None), got
+
+
+def presence_pty_cases(t, env, home):
+    """v1.80 at a pty, the face answers: awake, a reply opens with the
+    face in the mark's place and rests on a mood's still -- pleased,
+    puzzled when the cap cut it, alarmed when the model failed -- its
+    later lines at column 0, and nothing drawn after the verb returns.
+    Not awake, the look off and TERM=dumb are today's bytes; a pipe sees
+    no face and no escape. spark recall draws its wait in the hint row
+    under SPARK_HINT_ROW; spark read and spark edit pulse only where
+    stdout and stderr are both terminals."""
+    h = os.path.join(home, "pty-presence")
+    state = os.path.join(h, ".local", "state", "spark")
+    os.makedirs(os.path.join(h, ".config", "spark"), exist_ok=True)
+    os.makedirs(state, exist_ok=True)
+    e = dict(env)
+    e.update({"HOME": h, "XDG_CONFIG_HOME": h + "/.config", "XDG_STATE_HOME": h + "/.local/state",
+              "XDG_DATA_HOME": h + "/.local/share", "TERM": "xterm", "SPARK_HISTORY": "off"})
+    for k in ("DISPLAY", "WAYLAND_DISPLAY", "NO_COLOR", "SPARK_HINT_ROW", "SPARK_LOOK", "SPARK_VOICE"):
+        e.pop(k, None)
+    py = sys.executable
+
+    def run(env2, *args, sh=None, size=(24, 80)):
+        argv = ["/bin/sh", "-c", sh] if sh else [py, SPARK] + list(args)
+        return pty_run(argv, dict(env2, T_PY=py, T_SPARK=SPARK), h, size)
+
+    def pulse_out(raw):
+        """The pulse's frames as one word: how many were drawn is timing."""
+        return re.sub(rb"(?:\r\x1b\[2K\* \.+)+", b"<pulse>", raw)
+
+    # --- not awake: today's bytes
+    rc, plain = run(e, "count", "please")
+    today = re.fullmatch(rb"<pulse>\r\x1b\[2K\* \d+\r\n", pulse_out(plain))
+    t.ok(rc == 0 and today, "presence pty: not awake, a reply is the pulse, then `* ` and the text -- today's bytes",
+         repr(plain))
+    with open(os.path.join(state, "look"), "w") as f:
+        f.write("AWAKE=yes\n")
+    awake = dict(e, SPARK_LOOK="on")
+    rc, off = run(dict(e, SPARK_LOOK="off"), "count", "please")
+    rc2, dumb = run(dict(e, SPARK_LOOK="auto", TERM="dumb"), "count", "please")
+    t.ok(rc == 0 and rc2 == 0 and pulse_out(off) == pulse_out(plain) == pulse_out(dumb),
+         "presence pty: awake with the look off, or TERM=dumb under auto, the bytes are the unawakened ones",
+         repr((off, dumb)))
+    p = subprocess.run([py, SPARK, "count", "please"], env=awake, cwd=h, capture_output=True, timeout=30)
+    p2 = subprocess.run([py, SPARK, "count", "please"], env=e, cwd=h, capture_output=True, timeout=30)
+    t.ok(p.returncode == 0 and re.fullmatch(rb"\* \d+\n", p.stdout) and p.stderr == b""
+         and (p.stdout, p.stderr) == (p2.stdout, p2.stderr),
+         "presence: piped, awake -- no face, no escape, the unawakened bytes", repr((p.stdout, p.stderr)))
+
+    # --- awake: the face leads the reply and rests on the pleased still
+    rc, raw = run(awake, "count", "please")
+    rows = term_screen(raw)
+    settle = b"\x1b7\x1b[1A\r\x1b[1m(^.^)\x1b[0m\x1b8"
+    t.ok(rc == 0 and re.fullmatch(r"\(\^\.\^\) \d+", rows[0]) and rows[1:] == [""] * 23
+         and re.search(rb"\r\x1b\[2K\x1b\[1m\(o\.o\)\x1b\[0m \d+", raw) and raw.endswith(settle)
+         and b"* " not in raw.split(b"\x1b[1m(o.o)")[-1],
+         "presence pty: awake, a reply opens with the bold face, one space, the text, one newline; it rests on "
+         "(^.^), drawn once, and nothing follows", repr(raw[-120:]))
+    rc, raw = run(awake, "wraptest", "please")
+    rows = term_screen(raw)
+    t.ok(rc == 0 and rows[0].startswith("(^.^) word01 word02") and rows[1].startswith("word")
+         and rows[2].startswith("word"),
+         "presence pty: a led reply's later lines start at column 0", repr(rows[:4]))
+    rc, raw = run(awake, "fencetest", "please")
+    rows = term_screen(raw)
+    t.ok(rc == 0 and rows[0] == "(^.^)" and rows[1] == "```sh" and rows[2].startswith("du -sh word")
+         and "```" in rows[3:6],
+         "presence pty: a fenced block under the face starts at column 0 too: it copies clean", repr(rows[:6]))
+    rc, raw = run(awake, "capped", "please")
+    rows = term_screen(raw)
+    t.ok(rc == 0 and rows[0] == "(o.?) Half an answer" and rows[1].startswith("! cut at the reply's length"),
+         "presence pty: a reply the cap cut rests on the puzzled face", repr(rows[:3]))
+    STATE["mode"] = "garbage"
+    try:
+        rc, raw = run(awake, "hello", "there")
+        p = subprocess.run([py, SPARK, "hello", "there"], env=awake, cwd=h, capture_output=True, timeout=30)
+        rcn, rawn = run(e, "hello", "there")
+    finally:
+        STATE["mode"] = "ok"
+    rows = term_screen(raw)
+    said = [r for r in rows if r.startswith("! ")]
+    t.ok(rc == 1 and len(said) == 1 and said[0].startswith("! (O.O) ") and rows[0] == "(O.O)"
+         and p.returncode == 1 and p.stderr.startswith(b"! ") and b"(O.O)" not in p.stderr and b"\x1b" not in p.stderr
+         and rcn == 1 and b"(O.O)" not in rawn and b"! " + said[0][8:].encode() in rawn,
+         "presence pty: a stub BrainError is `! (O.O) ...`, the lead resting alarmed; piped and unawakened it is "
+         "`! ...` as before", repr((rows[:3], p.stderr, rawn[-80:])))
+
+    # --- spark recall: the wait in the hint row under SPARK_HINT_ROW
+    hist = "ls -la\ndocker network rm $(docker network ls -q)\ngit status\nrm -rf /tmp/build\ncd /tmp\n"
+    with open(os.path.join(h, "hist"), "w") as f:
+        f.write(hist)
+    cmd = '"$T_PY" "$T_SPARK" recall the docker network thing < hist'
+    rc, raw = run(dict(awake, SPARK_HINT_ROW="2"), sh=cmd)
+    frames = re.findall(rb"\x1b7\x1b\[2A\r\x1b\[2K(.*?)\x1b8", raw)
+    t.ok(rc == 0 and frames and b"(o.O)" in frames[0] and frames[-1] == b"" and b"docker network rm" in raw
+         and b"\x1b[1A" not in raw,
+         "recall pty: SPARK_HINT_ROW=2 draws the wait two rows up -- the face and the scanner -- then clears it",
+         repr(raw[:160]))
+    rc, raw = run(dict(e, SPARK_HINT_ROW="2"), sh=cmd)
+    frames = re.findall(rb"\x1b7\x1b\[2A\r\x1b\[2K(.*?)\x1b8", raw)
+    t.ok(rc == 0 and frames and frames[0] == b"* ." and frames[-1] == b"" and b"(" not in b"".join(frames),
+         "recall pty: unawakened, the hint row holds the dots", repr(raw[:160]))
+    rc, raw = run(awake, sh=cmd)
+    t.ok(rc == 0 and b"\x1b" not in raw and raw.startswith(b"docker network rm"),
+         "recall pty: run by hand (no SPARK_HINT_ROW) it draws nothing: the lines alone", repr(raw[:160]))
+
+    # --- spark read, spark edit: a pulse only where stdout and stderr are both terminals
+    with open(os.path.join(h, "src"), "w") as f:
+        f.write("The gate opens at nine and closes at noon. Entry costs five dollars. It is free for children.\n")
+    read = '"$T_PY" "$T_SPARK" read when does it open < src'
+    rc, raw = run(awake, sh=read)
+    rc2, piped = run(awake, sh=read + " | cat")
+    rc3, quiet = run(e, sh=read)
+    arrow = rb"\r\x1b\[2K\x1b\[1m\*\x1b\[0m \x1b\[1m\(o\.O\)\x1b\[0m \x1b\[2m\[\x1b\[0m\x1b\[1m>\x1b\[0m       \x1b\[2m\]"
+    t.ok(rc == 0 and re.search(arrow, raw) and b'"at nine"' in raw
+         and rc2 == 0 and b"\x1b" not in piped and b'"at nine"' in piped
+         and rc3 == 0 and b"\x1b" not in quiet,
+         "read pty: awake at a terminal the wait is the reading arrow; stdout piped, or not awake, no frame at all",
+         repr((raw[:200], piped[:120], quiet[:120])))
+    edit = '"$T_PY" "$T_SPARK" edit "?" what is it < src'
+    rc, raw = run(awake, sh=edit)
+    rc2, piped = run(awake, sh=edit + " | cat")
+    rc3, quiet = run(e, sh=edit)
+    t.ok(rc == 0 and re.search(arrow, raw) and rc2 == 0 and b"\x1b" not in piped and rc3 == 0 and b"\x1b" not in quiet
+         and pulse_out(quiet) == quiet,
+         "edit pty: the same -- an editor's plugin pipes stdout and never sees a frame", repr((raw[:200], piped[:120])))
+
+
 def chat_pty_cases(t, env, home):
     """v1.72 at a pty, one UI awake or not: the opening is one line (the
-    thread it goes on with), a reply is `* ` (v1.73: awake, a reply read
-    aloud is led by the face instead), a refusal is `! `, and the end --
-    /q or Ctrl-D -- says nothing."""
+    thread it goes on with), a reply is `* ` (v1.80: awake, the face
+    leads it instead and rests on a mood's still), a refusal is `! `, and
+    the end -- /q or Ctrl-D -- says nothing."""
     import pty
     h = os.path.join(home, "pty-chat")
     os.makedirs(os.path.join(h, ".config", "spark"), exist_ok=True)
@@ -1986,10 +2228,14 @@ def chat_pty_cases(t, env, home):
         """Run `spark chat` at a pty: each step waits for one more
         `chat>` and types its line; then `end`. The output, escapes
         and carriage returns gone."""
+        import fcntl
+        import struct
+        import termios
         pid, fd = pty.fork()
         if pid == 0:
             os.chdir(h)
             os.execve(sys.executable, [sys.executable, SPARK, "chat"], env2)
+        fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", 40, 80, 0, 0))
         got = b""
 
         def upto(n, secs=20):
@@ -2031,9 +2277,12 @@ def chat_pty_cases(t, env, home):
         except OSError:
             pass
         os.close(fd)
+        RAW[0] = got
         text = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b[78]|[\x01\x02]", "", got.decode("utf-8", "replace"))
         text = "\n".join(ln.rstrip("\r").rsplit("\r", 1)[-1] for ln in text.split("\n"))
         return status is not None and os.WIFEXITED(status) and os.WEXITSTATUS(status) == 0, text
+
+    RAW = [b""]
 
     opening = '* continuing "which fonts can I use" -- /new starts fresh, Esc ends'
     ok, plain = drive(e, [])
@@ -2052,17 +2301,41 @@ def chat_pty_cases(t, env, home):
 
     def fine():
         STATE["mode"] = "ok"
+    ok, plain2 = drive(e, [(None, b"count\n")])
+    t.ok(ok and re.search(r"^\* 4$", plain2, re.M) and "(o.o)" not in plain2 and "(^.^)" not in plain2 and b"\x1b7" not in RAW[0],
+         "chat pty: unawakened, a reply is `* ` and the text -- no face, no redraw", plain2)
+    spark_chat_clear = [sys.executable, SPARK, "history", "clear"]
+    subprocess.run(spark_chat_clear, env=e, capture_output=True, timeout=30)
+    subprocess.run([sys.executable, SPARK, "chat", "which fonts can I use"], env=e, capture_output=True, timeout=30)
+    with open(os.path.join(h, "src.txt"), "w") as f:
+        f.write("The gate opens at nine and closes at noon. Entry costs five dollars. It is free for children.\n")
     try:
-        ok, lit = drive(awake, [(None, b"count\n"), (None, b"@nope.txt\n"), (garbage, b"hello\n"), (fine, b"/copy 9\n")])
+        ok, lit = drive(awake, [(None, b"count\n"), (None, b"@nope.txt\n"), (None, b"wraptest\n"),
+                                (garbage, b"hello\n"), (fine, b"/copy 9\n"),
+                                (None, b"/read @src.txt when does it open\n")])
     finally:
         STATE["mode"] = "ok"
-    t.ok(ok and lit.splitlines()[0] == opening and lit.count(opening) == 1
+    rows = term_screen(RAW[0], 80, 40)
+    t.ok(ok and lit.splitlines()[0] == opening and lit.count(opening) == 1 and rows[0] == opening
          and not re.search(r"Hello again|Welcome back|Good to see you|/help lists the commands", lit),
-         "chat pty: awakened, the same one opening line -- no greeting, no face", lit)
-    t.ok(re.search(r"^\* 4$", lit, re.M) and "! @nope.txt: no such file" in lit
-         and lit.count("! ") >= 3 and "(o." not in lit and "spark: " not in lit,
-         "chat pty: awakened, a reply is `* ` with no face; a missing @FILE, a stub error and a refusal are `! `", lit)
-    t.ok(lit.rstrip().endswith("chat> /q") and "everything for now" not in lit,
+         "chat pty: awakened, the same one opening line -- no greeting, no face on it", lit)
+    led = [i for i, r in enumerate(rows) if r.startswith("(^.^) word01 ")]
+    t.ok("(^.^) 4" in rows and "* 4" not in rows and b"(o.o)\x1b[0m 4" in RAW[0]
+         and led and rows[led[0] + 1].startswith("word") and "spark: " not in lit,
+         "chat pty: awakened, a reply opens with the face and rests on the pleased still, its later lines at "
+         "column 0", repr(rows[:14]))
+    said = [r for r in rows if r.startswith("! ")]
+    t.ok("! @nope.txt: no such file" in said and len(said) == 3 and sum(r.startswith("! (O.O) ") for r in said) == 1
+         and "(O.O)" in rows and sum("(" in r for r in said) == 1,
+         "chat pty: awakened, a stub BrainError is `! (O.O) ...` under a lead resting alarmed; a missing @FILE "
+         "and a refusal stay `! ` with no face", repr(said))
+    t.ok(any(r.startswith('(^.^) It opens "at nine"') for r in rows) and any(r.startswith("Entry costs") for r in rows)
+         and not any(r.startswith("* It opens") for r in rows),
+         "chat pty: awakened, /read's answer is led by the face too, its later lines at column 0", repr(rows[-12:]))
+    # the screen, not the stream: the face's nod may still be drawn (save,
+    # up, frame, restore) between the prompt and the typed /q
+    last = [r for r in rows if r.strip()][-1:]
+    t.ok(last == ["chat> /q"] and "everything for now" not in lit,
          "chat pty: awakened, /q ends with nothing said", lit[-200:])
     ok, lit = drive(awake, [], end=b"\x04")
     t.ok(ok and "(^.^)" not in lit and "everything for now" not in lit and lit.rstrip().splitlines()[-1].startswith("chat>"),
@@ -2152,8 +2425,11 @@ def chat_voice_pty_cases(t, env, home):
             os.kill(pid, signal.SIGKILL)
             os.waitpid(pid, 0)
         os.close(fd)
+        RAW[0] = got
         text = re.sub(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b[78]|[\x01\x02\x07]", "", got.decode("utf-8", "replace"))
         return status, text, alive
+
+    RAW = [b""]
 
     def ended(status):
         return status is not None and os.WIFEXITED(status) and os.WEXITSTATUS(status) == 0
@@ -2187,8 +2463,9 @@ def chat_voice_pty_cases(t, env, home):
 
     # awake, mode on: every reply spoken from the start, /aloud stops it
     # (v1.74); no greeting, no goodbye, and Esc on the empty line ends in
-    # silence. The spoken reply starts with the face, the one not spoken
-    # with `* ` (the test seam plays nothing, so the mouth never moves)
+    # silence. v1.80: the face leads both replies, the spoken one and the
+    # quiet one, and each rests on the pleased still (the test seam plays
+    # nothing, so the spoken one's mouth never moves)
     state = os.path.join(h, ".local", "state", "spark")
     os.makedirs(state, exist_ok=True)
     with open(os.path.join(state, "look"), "w") as f:
@@ -2197,12 +2474,13 @@ def chat_voice_pty_cases(t, env, home):
     st, text, _ = drive(on, [("\nchat>", b"count\r", 0.2), ("\nchat>", b"/aloud\r", 0.2), ("\nchat>", b"count\r", 0.2),
                              ("\nchat>", b"\x1b", 3.0)])
     said = spoken()
+    rows = term_screen(RAW[0], 100, 24)
     t.ok(ended(st) and "everything for now" not in text and len(said) == 1 and re.fullmatch(r"\d+", said[0])
-         and "* replies quiet -- /aloud speaks them" in text and "(o.o) 2\r\n" in text and "* 4\r\n" in text
-         and text.count("(o.o)") == 1 and "\x1b7" not in text,
+         and "* replies quiet -- /aloud speaks them" in text and "(^.^) 2" in rows and "(^.^) 4" in rows
+         and "* 4" not in rows and "(oOo)" not in text,
          "chat pty (%s): mode on -- every reply spoken from the start, led by the face; /aloud stops it "
-         "and the next starts with `* `; no greeting, no goodbye; nothing sounds, so the mouth stays"
-         % lib, repr((said, text[-300:])))
+         "and the next is led by the face too; both rest pleased; no greeting, no goodbye; nothing sounds, so "
+         "the mouth stays" % lib, repr((said, rows[:12])))
 
     # awake, the voice off: /aloud makes this chat speak, in the clear
     # voice when awaken kept none (v1.74)
@@ -2210,11 +2488,12 @@ def chat_voice_pty_cases(t, env, home):
     st, text, _ = drive(off, [("\nchat>", b"count\r", 0.2), ("\nchat>", b"/aloud\r", 0.2), ("\nchat>", b"count\r", 0.2),
                               ("\nchat>", b"\x1b", 3.0)])
     said = spoken()
+    rows = term_screen(RAW[0], 100, 24)
     t.ok(ended(st) and len(said) >= 1 and re.fullmatch(r"\d+", said[-1])
-         and "* replies aloud -- /aloud stops" in text and re.search(r"\* \d+\r\n", text)
-         and re.search(r"\(o\.o\) \d+\r\n", text),
-         "chat pty (%s): the voice off -- /aloud makes the chat speak; the reply before it is quiet"
-         % lib, repr((said, text[-300:])))
+         and "* replies aloud -- /aloud stops" in text and not re.search(r"\* \d+\r\n", text)
+         and sum(bool(re.fullmatch(r"\(\^\.\^\) \d+", r)) for r in rows) == 2,
+         "chat pty (%s): the voice off -- /aloud makes the chat speak; the reply before it is quiet, and the "
+         "face leads both" % lib, repr((said, rows[:12])))
 
     # clear mode: Esc v lands the heard words, Enter sends them, the reply
     # is spoken; /again prints and speaks it again; Esc x stops; the
@@ -2265,7 +2544,9 @@ def living_core_cases(t):
     import pty
     import shutil as _shutil
     import spark as _sp
-    from spark import bar as _bar, check as _ck, cli as _cl, config as _cf, look, reveal as _rv, text as _tx
+    import contextlib
+    from spark import bar as _bar, check as _ck, cli as _cl, config as _cf, do as _do, look, reveal as _rv, text as _tx
+    from spark import words as _wd
 
     class Tty(io.StringIO):
         def isatty(self):
@@ -2295,6 +2576,40 @@ def living_core_cases(t):
              "living: unawakened, the pulse is today's dots, byte for byte", repr(b._frame(0)))
         t.ok(_tx.Estimate("waking", 10, Tty())._frame(1) == "\r\x1b[2K* ..",
              "living: unawakened, the waking estimate is today's pulse", repr(_tx.Estimate("waking", 10, Tty())._frame(1)))
+        # v1.80: a kind and a mood change nothing until the machine is awake
+        kinds = [_tx.Busy(Tty(), above=True, kind=k, mood="pleased") for k in look.PROGRESS]
+        t.ok(look.PROGRESS == ("think", "read", "steps", "swell", "march")
+             and all(not k.scan and k.anim is None and k._frame(0) == b._frame(0) and k._frame(4) == b._frame(4)
+                     and k._clear() == b._clear() for k in kinds)
+             and isinstance(_tx.pulse(Tty()), type(contextlib.nullcontext())) and not _tx.wait("read", Tty()).live,
+             "living: unawakened, Busy(kind=...) is today's dots for every kind; pulse() and wait() draw nothing")
+        p = _cl._Pulse(Tty(), above=True)
+        p.warn, p.mark, p.keep = True, "!", True
+        q = _cl._Pulse(Tty(), above=True)
+        q.keep = True
+        q.tell("no such option -- asking again")
+        t.ok(p._frame(1) == "\x1b7\x1b[1A\r\x1b[2K! ..\x1b8" and q._frame(1) == "\x1b7\x1b[1A\r\x1b[2K* no such option -- asking again..\x1b8",
+             "living: unawakened, the line's pulse after line 1 and in a re-ask is today's, no face", repr((p._frame(1), q._frame(1))))
+        cn = _ck.Counter(Tty())
+        cn(3, 42)
+        cn.clear()
+        real_out, real_err = sys.stdout, sys.stderr
+        sys.stdout, sys.stderr = Tty(), Tty()
+        try:
+            term = _do._Terminal()
+            term.reader = False
+            term.done("all set", [])
+            term.brain("no model answers")
+            term.step(1, {"command": "rm -rf x", "hint": "Deletes x.", "danger": True}, False)
+            did = (sys.stdout.getvalue(), sys.stderr.getvalue())
+        finally:
+            sys.stdout, sys.stderr = real_out, real_err
+        t.ok(cn.stream.getvalue() == "\r\033[2Kchecking 3/42\r\033[2K"
+             and _tx.faced("! no model answers", "alarmed", Tty()) == "! no model answers"
+             and did == ("* done  all set\n! 1  rm -rf x   Deletes x.\n", "! no model answers\n")
+             and _tx.reply_face(sys.stdout)[1] is None and isinstance(_tx.reply_face(Tty())[0], Tty),
+             "living: unawakened, the check's counter, a `!` line, spark do's lines and a reply carry no face",
+             repr((cn.stream.getvalue(), did)))
         src = "Hi `ls -la` here.\n* one\n1. two\n"
         w = _tx.Wrap(Tty(), mark=True)
         w.feed(src)
@@ -2371,6 +2686,275 @@ def living_core_cases(t):
         b.started = time.monotonic() - 7
         t.ok(b.long_at == 6 and b._frame(0).endswith(" 7 s  Ctrl-C stops it."),
              "living: from three quarters of the timeout, one sentence says what to do", repr(b._frame(0)))
+
+        # --- v1.80, the one animator (look.Anim): every frame derived from
+        # the idle face's parts, never stored
+        def bare(s):
+            return _tx.SGR_RE.sub("", s)
+
+        def runs(a, mood, n):
+            """The mood's first n ticks as [(frame, how many ticks)]."""
+            out = []
+            for i in range(n):
+                f = a.face(mood, i)
+                if out and out[-1][0] == f:
+                    out[-1][1] += 1
+                else:
+                    out.append([f, 1])
+            return [tuple(x) for x in out]
+        b = _tx.Busy(Tty())
+        t.ok("(O.o)" in bare(b._frame(11)) and "(o.o)" in bare(b._frame(8)) and "(o.O)" in bare(b._frame(20))
+             and "(.o.)" in bare(b._frame(43)) and "(.o.)" not in bare(b._frame(44)),
+             "living: frame 11 of thinking holds the mirrored eye; the glance stays two ticks", bare(b._frame(11)))
+        cells = {k: _tx.Busy(Tty(), kind=k) for k in look.PROGRESS}
+        t.ok(bare(cells["think"]._frame(3)) == "\r\x1b[2K* (o.O) [   =    ]"
+             and bare(cells["read"]._frame(4)) == "\r\x1b[2K* (o.O) [  -->   ]"
+             and [bare(cells["read"]._frame(i))[-10:] for i in (0, 1, 4, 8, 9, 10)]
+             == ["[%s]" % c for c in (">       ", "->      ", "  -->   ", "      --", "       -", ">       ")]
+             and [bare(cells["steps"]._frame(i))[-10:] for i in (0, 1, 2, 4, 6, 8)]
+             == ["[# . . . ]", "[# . . . ]", "[. # . . ]", "[. . # . ]", "[. . . # ]", "[# . . . ]"]
+             and [bare(cells["swell"]._frame(i))[-10:] for i in range(7)]
+             == ["[   ==   ]", "[  ====  ]", "[ ====== ]", "[========]", "[ ====== ]", "[  ====  ]", "[   ==   ]"]
+             and [bare(cells["march"]._frame(i))[-10:] for i in range(5)]
+             == ["[>   >   ]", "[ >   >  ]", "[  >   > ]", "[   >   >]", "[>   >   ]"]
+             and all(len(look.Anim().cells(k, i)) == 8 and look.Anim().cells(k, i).isascii()
+                     for k in look.PROGRESS + ("nope",) for i in range(40))
+             and look.Anim().cells("nope", 3) == look.Anim().cells("think", 3),
+             "living: the five progress kinds -- think bounces, read is an arrow crossing, steps walk every second "
+             "tick, swell grows and shrinks, march moves right -- each 8 ASCII cells inside [ ]",
+             repr([bare(c._frame(2)) for c in cells.values()]))
+        t.ok([look.Anim(temper=x).step for x in ("playful", "plain", "terse", "warm", "", "odd")]
+             == [0.10, 0.12, 0.12, 0.15, 0.12, 0.12] and _tx.Busy(Tty()).step == 0.12,
+             "living: the temperament changes the pace alone -- playful 0.10, plain and terse 0.12, warm 0.15")
+        a = look.Anim(dict(look.DEFAULT_FACES), blink=0, temper="")
+        t.ok(look.parts("(o.o)") == ("(", "o", ".", ")") and look.parts("(o.O)") is None and look.parts("{u v u}") is None
+             and look.parts("(oo)") is None and look.parts("") is None and look.parts(None) is None
+             and runs(a, "thinking", 20) == [("(o.O)", 8), ("(o.o)", 2), ("(O.o)", 8), ("(o.o)", 2)]
+             and runs(a, "waking", 14) == [("(-.-)", 3), ("(-o-)", 3), ("(-O-)", 4), ("(-o-)", 2), ("(o.o)", 2)]
+             and runs(a, "asleep", 25) == [("(-.-)  ", 8), ("(-.-)z ", 8), ("(-.-)zZ", 8), ("(-.-)  ", 1)]
+             and runs(a, "pleased", 14) == [("(^.^)", 3), ("(^v^)", 3), ("(^.^)", 3), ("(^v^)", 3), ("(^.^)", 2)]
+             and runs(a, "puzzled", 44) == [("(o.?)", 6), ("(O.?)", 3), ("(o.?)", 6), ("(?.o)", 6)] * 2 + [("(o.?)", 2)]
+             and runs(a, "alarmed", 9) == [("(o.o)", 1), ("(O.O)", 3), ("(O_O)", 2), ("(O.O)", 3)]
+             and runs(a, "listening", 7) == [("(o.o)~", 3), ("(o.o)-", 3), ("(o.o)~", 1)]
+             and runs(a, "idle", 50) == [("(o.o)", 50)]
+             and [a.length(m) for m in ("waking", "pleased", "puzzled", "alarmed", "thinking", "asleep")] == [12, 12, 42, 6, 20, 24]
+             and [a.rest(m) for m in ("waking", "pleased", "puzzled", "alarmed", "idle")]
+             == ["(o.o)", "(^.^)", "(o.?)", "(O.O)", "(o.o)"]
+             and (a.talk(False), a.talk(True)) == ("(o.o)", "(oOo)"),
+             "living: every mood's score for (o.o), tick by tick -- the loops, the once-scores and where each rests",
+             repr([runs(a, m, 14) for m in ("waking", "alarmed")]))
+        a = look.Anim(dict(look.DEFAULT_FACES), blink=14, temper="")
+        t.ok([a.face("idle", i) for i in (0, 13, 14, 15, 28, 42, 43, 44)]
+             == ["(o.o)", "(o.o)", "(-.-)", "(o.o)", "(-.-)", "(.o.)", "(.o.)", "(o.o)"]
+             and a.face("thinking", 14) == "(-.-)" and a.face("pleased", 14) == "(^.^)" and a.face("alarmed", 42) == "(O.O)",
+             "living: the blink and the glance cut into idle and thinking alone, by the blink rate")
+        kit, n_faces, bad = _wd.kit(), 0, []
+        for body in kit["BODY"]:
+            for eyes in kit["EYES"]:
+                for mouth in kit["MOUTH"]:
+                    n_faces += 1
+                    made = _wd.make_faces(eyes, mouth, body)
+                    a = look.Anim(made, blink=14, temper="")
+                    for mood in look.MOODS:
+                        frames = [a.face(mood, i) for i in range(130)] + [a.talk(True), a.talk(False)] * (mood == "idle")
+                        if not (all(f.isascii() and len(f) <= look.FACE_MAX and look.face_ok(f) for f in frames)
+                                and len(set(len(f) for f in frames)) == 1 and frames[0].startswith(made[mood][:1])
+                                and (a.moves(mood) or mood == "idle") and a.rest(mood) in (made[mood], made["idle"])):
+                            bad.append((made["idle"], mood))
+        t.ok(n_faces == 60 and not bad,
+             "living: every derived frame of all 60 kit faces is ASCII, 8 characters at most, passes face_ok, "
+             "and a mood's frames share one width", repr(bad[:5]))
+        mine = dict(look.DEFAULT_FACES, thinking="(o.o)?", pleased="\\o/")
+        a = look.Anim(mine, blink=14, temper="")
+        odd = look.Anim(dict(look.DEFAULT_FACES, idle="{u v u}"), blink=14, temper="")
+        t.ok(not a.moves("thinking") and not a.moves("pleased") and a.moves("puzzled")
+             and [a.face("thinking", i) for i in (0, 11, 14, 42)] == ["(o.o)?", "(o.o)?", "(-.-) ", "(.o.) "]
+             and a.length("pleased") == 0 and a.face("pleased", 5) == "\\o/" and a.rest("pleased") == "\\o/"
+             and not any(odd.moves(m) for m in look.MOODS) and odd.face("alarmed", 3) == "(O.O)"
+             and odd.face("idle", 14) == "(-.-)  " and odd.talk(True) == look.talking("{u v u}"),
+             "living: a still edited by hand does not animate -- it is drawn as written, blink only; an idle face "
+             "of another shape derives nothing", repr([a.face("thinking", i) for i in (0, 11, 14)]))
+        golden = os.path.join(tmp, "golden-faces")
+        with open(golden, "w") as f:
+            f.write("ASLEEP=[-_-]z\nWAKING=[-o-]\nIDLE=[*_*]\nTHINKING=[*_O]\nPLEASED=[^_^]\nPUZZLED=[*_?]\n"
+                    "ALARMED=[O_O]\nLISTENING=[*_*]~\nBLINK=[-_-]\nGLANCE=[.*.]\nRATE=28\nTEMPER=warm\n")
+        gcfg = {"SPARK_LOOK": "on", "SPARK_HEIGHT": "2"}
+        was = ("AWAKE=yes\nMOTION=on\nCOLOUR=on\nWORDS=on\nHEIGHT=2\nSGR_ACCENT=1\nSGR_MUTED=2\nSGR_WARN=31\n"
+               "SGR_TROUBLE=1;31\nSGR_OK=32\nSGR_YOU=\nFACE_ALARMED=[O_O]\nFACE_ASLEEP=[-_-]z\nFACE_BLINK=[-_-]\n"
+               "FACE_GLANCE=[.*.]\nFACE_IDLE=[*_*]\nFACE_LISTENING=[*_*]~\nFACE_PLEASED=[^_^]\nFACE_PUZZLED=[*_?]\n"
+               "FACE_THINKING=[*_O]\nFACE_WAKING=[-o-]\nBLINK=28\nTEMPER=warm\n")
+        bare_was = ("AWAKE=yes\nMOTION=off\nCOLOUR=off\nWORDS=off\nHEIGHT=1\nSGR_ACCENT=\nSGR_MUTED=\nSGR_WARN=\n"
+                    "SGR_TROUBLE=\nSGR_OK=\nSGR_YOU=\nFACE_ALARMED=(O.O)\nFACE_ASLEEP=(-.-)z\nFACE_BLINK=(-.-)\n"
+                    "FACE_GLANCE=(.o.)\nFACE_IDLE=(o.o)\nFACE_LISTENING=(o.o)~\nFACE_PLEASED=(^.^)\nFACE_PUZZLED=(o.?)\n"
+                    "FACE_THINKING=(o.O)\nFACE_WAKING=(-o-)\nBLINK=14\nTEMPER=\n")
+        was_off = ("AWAKE=no\nMOTION=off\nCOLOUR=off\nWORDS=off\nHEIGHT=2\nSGR_ACCENT=\nSGR_MUTED=\nSGR_WARN=\n"
+                   "SGR_TROUBLE=\nSGR_OK=\nSGR_YOU=\nFACE_ALARMED=[O_O]\nFACE_ASLEEP=[-_-]z\nFACE_BLINK=[-_-]\n"
+                   "FACE_GLANCE=[.*.]\nFACE_IDLE=[*_*]\nFACE_LISTENING=[*_*]~\nFACE_PLEASED=[^_^]\nFACE_PUZZLED=[*_?]\n"
+                   "FACE_THINKING=[*_O]\nFACE_WAKING=[-o-]\nBLINK=28\nTEMPER=warm\n")
+        t.ok(look.content(gcfg, True, golden) == was and look.content({}, True, os.path.join(tmp, "none")) == bare_was
+             and look.content(gcfg, False, golden) == was_off
+             and sorted(look.faces(golden)) == sorted(look.DEFAULT_FACES),
+             "living: look.content() is byte for byte v1.79's (a golden made with main's code): one still a mood, "
+             "no frame stored -- no machine reads out of date", look.content(gcfg, True, golden))
+
+        # --- v1.80, the face in the waits and on the `!` lines
+        e = _tx.Estimate("waking", 9, Tty())
+        yawn = []
+        for secs in (0.2, 1.0, 1.6, 2.4, 2.9, 3.5):
+            e.started = time.monotonic() - secs
+            yawn.append(bare(e._frame(0)).split()[1])
+        t.ok(yawn == ["(-.-)", "(-o-)", "(-O-)", "(-O-)", "(-o-)", "(o.o)"],
+             "living: the waking bar's face yawns once over the first third, then idle", repr(yawn))
+        t.ok(bare(_tx.Estimate("waking", None, Tty())._frame(3)) == "\r\x1b[2K* (o.O) [========]"
+             and _tx.pulse(Tty()).kind == "march" and _tx.Busy(Tty()).kind == "think",
+             "living: a model loading with no estimate swells; update and verify march")
+        p = _cl._Pulse(Tty(), above=True)
+        row = "\x1b7\x1b[1A\r\x1b[2K%s\x1b8"
+        first = bare(p._frame(3))
+        p.keep = True
+        after = [bare(p._frame(i)) for i in (4, 7)]
+        p.tell("no such option -- asking again")
+        asking = [bare(p._frame(i)) for i in (8, 15)]
+        p.tell("")
+        p.warn, p.mark = True, "!"
+        danger = [bare(p._frame(i)) for i in (16, 17, 19, 30)]
+        t.ok(first == row % "* (o.O) [   =    ]" and after == [row % "* (o.O) ..", row % "* (o.O) ..."]
+             and asking == [row % "* (o.?) no such option -- asking again...", row % "* (O.?) no such option -- asking again..."]
+             and danger == [row % "! (o.o) ...", row % "! (O.O) ...", row % "! (O.O) .", row % "! (O.O) .."]
+             and p._frame(17) == row % "\x1b[31m! (O.O) ...\x1b[0m" and p._clear() == "",
+             "living: the line's pulse keeps the dots after line 1, the face beside them: thinking, puzzled in a "
+             "re-ask, alarmed on a warn-marked row, each score from its own start", repr((after, asking, danger)))
+        t.ok(_tx.faced("! no model answers", "alarmed", Tty()) == "! \x1b[1m(O.O)\x1b[0m no model answers"
+             and _tx.faced("! x", "alarmed", Tty(), plain=True) == "! (O.O) x"
+             and _tx.faced("\x1b[1m*\x1b[0m done  ok", "pleased", Tty()) == "\x1b[1m*\x1b[0m \x1b[1m(^.^)\x1b[0m done  ok"
+             and _tx.faced("* nothing came", "puzzled", Tty(), plain=True) == "* (o.?) nothing came"
+             and _tx.faced("no mark here", "alarmed", Tty()) == "no mark here"
+             and _tx.faced("! x", "alarmed", io.StringIO()) == "! x",
+             "living: faced() puts the mood's still after the mark at an awake terminal; a pipe and a line with "
+             "no mark come back unchanged")
+        os.environ["TERM"] = "dumb"
+        os.environ["SPARK_LOOK"] = "auto"
+        dumb = (_tx.faced("! x", "alarmed", Tty()), _tx.reply_face(Tty())[1], _tx.wait("read", Tty()).live)
+        os.environ["TERM"] = "xterm"
+        os.environ["SPARK_LOOK"] = "off"
+        off = (_tx.faced("! x", "alarmed", Tty()), _tx.reply_face(Tty())[1], _tx.wait("read", Tty()).live,
+               _tx.Busy(Tty(), kind="read")._frame(0), _ck.Counter(Tty()).anim)
+        os.environ["SPARK_LOOK"] = "on"
+        t.ok(dumb == ("! x", None, False) and off == ("! x", None, False, "\r\x1b[2K* .", None),
+             "living: TERM=dumb under auto, and the look off, draw no face and no frame anywhere", repr((dumb, off)))
+        real_out, real_err = sys.stdout, sys.stderr
+        sys.stdout, sys.stderr = Tty(), Tty()
+        try:
+            term = _do._Terminal()
+            term.reader = False
+            term.done("all set", [])
+            term.done("3 files", ["3"])
+            term.brain("no model answers")
+            term.step(1, {"command": "rm -rf x", "hint": "Deletes x.", "danger": True}, False)
+            term.step(2, {"command": "ls", "hint": "Lists.", "danger": False}, False)
+            steps = isinstance(_tx.wait("read"), _tx.Busy) and _tx.wait("read").kind == "read" and _tx.wait("read").scan
+            did = (sys.stdout.getvalue(), sys.stderr.getvalue())
+            sys.stdout = io.StringIO()
+            term.done("all set", [])
+            term.step(1, {"command": "rm -rf x", "hint": "Deletes x.", "danger": True}, False)
+            piped_do = (sys.stdout.getvalue(), _tx.wait("read").live)
+        finally:
+            sys.stdout, sys.stderr = real_out, real_err
+        t.ok(bare(did[0]).splitlines() == ["* (^.^) done  all set", "! (O.O) done  3 files",
+                                           "  " + _do.UNCHECKED % "3", "! (O.O) 1  rm -rf x   Deletes x.",
+                                           "* 2  ls   Lists."]
+             and "\x1b[31m! (O.O) 1  rm -rf x   Deletes x.\x1b[0m" in did[0]
+             and bare(did[1]) == "! (O.O) no model answers\n" and steps
+             and piped_do == ("* done  all set\n! 1  rm -rf x   Deletes x.\n", False),
+             "living: spark do's done line is pleased (alarmed when unchecked), a danger step and a dead model "
+             "alarmed; an ordinary step has no face; piped, today's lines and no pulse", repr((did, piped_do)))
+
+        # --- v1.80, the face leads a reply (text.FaceLead, text.reply_face)
+        def redraws(out):
+            return [(int(m.group(1) or 0), bare(m.group(2)))
+                    for m in re.finditer(r"\x1b7(?:\x1b\[(\d+)A)?\r(.*?)\x1b8", out.getvalue())]
+
+        def until(cond, secs=3.0):
+            end = time.monotonic() + secs
+            while time.monotonic() < end and not cond():
+                time.sleep(0.01)
+            return cond()
+        piped_face = _tx.reply_face(io.StringIO())
+        scr, lead = _tx.reply_face(Tty())
+        w = _tx.Wrap(scr, lead=lead)
+        w.width = 30
+        w.feed("one two three four five six seven\n```\ncode\n```\n")
+        w.close()
+        scr.settle()
+        rest = scr.stream.getvalue()
+        time.sleep(0.4)
+        t.ok(piped_face[1] is None and isinstance(piped_face[0], io.StringIO) and isinstance(scr, _tx.FaceLead)
+             and lead == "\x1b[1m(o.o)\x1b[0m " and scr.rows == 6 and not scr.thread.is_alive()
+             and rest.endswith("\n```\n\n\x1b7\x1b[6A\r\x1b[1m(^.^)\x1b[0m\x1b8") and scr.stream.getvalue() == rest
+             and term_screen(rest.replace("\n", "\r\n"), 30, 10)[:6]
+             == ["(^.^) one two three four five", "six seven", "```", "code", "```", ""],
+             "face lead: awake at a terminal a reply rests as the bold pleased face, one space, the text, later "
+             "lines at column 0; settle() draws once and nothing follows; a pipe has no lead", repr(rest[-60:]))
+        scr, lead = _tx.reply_face(Tty())
+        w = _tx.Wrap(scr, lead=lead)
+        end = time.monotonic() + 0.6
+        while time.monotonic() < end:
+            w.feed("ab ")
+            time.sleep(0.03)
+        flowing = redraws(scr.stream)
+        until(lambda: any(f == "(o.O)" for _u, f in redraws(scr.stream)[len(flowing):]))
+        paused = redraws(scr.stream)[len(flowing):]
+        w.feed("more ")
+        until(lambda: redraws(scr.stream)[-1][1] == "(oOo)")
+        again = redraws(scr.stream)[-1]
+        w.close()
+        scr.settle("puzzled")
+        n = len(redraws(scr.stream))
+        time.sleep(0.4)
+        t.ok(len(flowing) >= 2 and [f for _u, f in flowing[:3]] == ["(oOo)", "(o.o)", "(oOo)"][:len(flowing[:3])]
+             and set(f for _u, f in flowing) == {"(oOo)", "(o.o)"} and all(u == 0 for u, _f in flowing)
+             and paused and paused[-1][1] == "(o.O)" and again == (0, "(oOo)")
+             and redraws(scr.stream)[-1] == (1, "(o.?)") and len(redraws(scr.stream)) == n,
+             "face lead: it talks while the text flows, thinks when the stream pauses, talks again, and settles "
+             "on the mood named -- then still", repr((flowing[:4], paused[:3], redraws(scr.stream)[-2:])))
+        scr, lead = _tx.reply_face(Tty())
+        scr._going = True               # no thread: the frames below are set by hand
+        scr.size = (40, 6)
+        scr._size = lambda: (40, 6)
+        w = _tx.Wrap(scr, lead=lead)
+        w.feed("One.\ntwo\nthree\n")
+        early = (scr.halt, scr.rows)
+        scr.shown, scr.open = "(oOo)", True     # mid-word, the mouth open
+        w.feed("four\n")
+        settled = (scr.halt, scr.rows, redraws(scr.stream)[-1:])
+        mark = len(scr.stream.getvalue())
+        w.feed("five\nsix\nseven\n")
+        scr.settle()
+        tail = scr.stream.getvalue()[mark:]
+        scr2, lead2 = _tx.reply_face(Tty())
+        scr2._going = True
+        scr2.size = (40, 24)
+        w2 = _tx.Wrap(scr2, lead=lead2)
+        w2.feed("One.\n")
+        scr2._size = lambda: (50, 24)
+        scr2.settle()
+        t.ok(early == (False, 3) and settled == (True, 4, [(4, "(o.o)")]) and "\x1b7" not in tail
+             and scr2.lost and "\x1b7" not in scr2.stream.getvalue(),
+             "face lead: it settles before its row would scroll off (rows == height - 2) and draws no more; a "
+             "resized terminal stops it as it stands", repr((early, settled, tail)))
+        scr, lead = _tx.reply_face(Tty())
+        w = _tx.Wrap(scr, lead=lead)
+        w.feed("Fine.\n")
+        scr.settle("pleased", play=True)
+        until(lambda: any(f == "(^v^)" for _u, f in redraws(scr.stream)))
+        scr.rest()
+        n = len(redraws(scr.stream))
+        time.sleep(0.4)
+        played = [f for _u, f in redraws(scr.stream)]
+        t.ok("(^v^)" in played and played[-1] == "(^.^)" and len(played) == n and scr.halt
+             and until(lambda: not scr.thread.is_alive()),
+             "face lead: play=True (the chat) lets the pleased score play; rest() -- a key typed -- stops it on "
+             "the still", repr(played))
         os.environ["SSH_CONNECTION"] = "192.0.2.1 1 192.0.2.2 22"
         os.environ["SPARK_LOOK"] = "auto"
         t.ok(_tx.Busy(Tty()).scan and _tx.Busy(Tty()).face, "living: auto draws the scanner and the face over ssh too")
@@ -2422,7 +3006,8 @@ def living_core_cases(t):
              "living: SPARK_HINT_ROW=2 draws two rows up; a value outside 1..5 draws nothing", repr(h2._frame(0)))
         p = _cl._Pulse(Tty(), above=True)
         p.warn, p.mark = True, "!"
-        t.ok("! ." in _tx.SGR_RE.sub("", p._frame(0)), "living: the line's pulse keeps its warn mark in the scanner's motion")
+        t.ok("! (o.o) ." in _tx.SGR_RE.sub("", p._frame(0)) and "! (O.O) .." in _tx.SGR_RE.sub("", p._frame(3)),
+             "living: the line's pulse keeps its warn mark and its dots in the scanner's motion, the alarmed face beside them")
 
         w = _tx.Wrap(Tty(), mark=False)
         w.width = 30
@@ -2470,7 +3055,9 @@ def living_core_cases(t):
         cn = _ck.Counter(Tty())
         cn(3, 42)
         cn.clear()
-        t.ok(cn.stream.getvalue() == "\r\033[2Kchecking 3/42\r\033[2K", "living: the check's counter, cleared before the report")
+        t.ok(_tx.SGR_RE.sub("", cn.stream.getvalue()) == "\r\033[2K(o.O) checking 3/42\r\033[2K"
+             and "\x1b[1m(o.O)\x1b[0m" in cn.stream.getvalue(),
+             "living: the check's counter, the thinking face before it, cleared before the report", repr(cn.stream.getvalue()))
 
         class _Ctx2:
             cfg = _cf.load()
@@ -2926,7 +3513,11 @@ def living_widget_cases(t):
     """v1.59, the living prompt in the two widgets, read as text: the row's
     height reaches spark line, Esc k, one text per fallback and per
     failure line in both shells, the look file never sourced, the prompt
-    hook's own path pure shell, bash's EXIT trap chained."""
+    hook's own path pure shell, bash's EXIT trap chained. v1.80, the
+    face: both widgets read FACE_ values from the look file line by line,
+    the row's height reaches spark recall too, and everything the prompt
+    hook, the resting face and zsh's tick run is shell builtins -- no
+    spark, no fork, no outside command; bash starts no timer."""
     wz = open(os.path.join(REPO, "home", ".config", "spark", "widget.zsh")).read()
     wb = open(os.path.join(REPO, "home", ".config", "spark", "widget.bash")).read()
 
@@ -2934,8 +3525,9 @@ def living_widget_cases(t):
         m = re.search(r"^%s\(\) \{[^\n]*\n(.*?)^\}" % re.escape(name), text, re.M | re.S)
         return m.group(1) if m else ""
     for name, text in (("widget.zsh", wz), ("widget.bash", wb)):
-        t.ok(text.count("SPARK_HINT_ROW=$_spark_height") == 2 and "SPARK_HINT_ROW=1" not in text,
-             "%s passes its height to both spark line calls (SPARK_HINT_ROW=N)" % name)
+        t.ok(text.count("SPARK_HINT_ROW=$_spark_height") == 3 and "SPARK_HINT_ROW=1" not in text
+             and re.search(r'SPARK_HINT_ROW=\$_spark_height "\$SPARK_BIN" recall ', text),
+             "%s passes its height to both spark line calls and to spark recall (SPARK_HINT_ROW=N)" % name)
         say = body(text, "_spark_say")
         t.ok("_spark_height" in say and "[1A" not in say, "%s draws its row _spark_height rows up" % name, say)
         t.ok("spark writes here -- Esc k moves it" in text
@@ -2948,13 +3540,44 @@ def living_widget_cases(t):
              "%s never sources or evals the look file" % name)
         t.ok("[[:cntrl:]]" in body(text, "_spark_look_read"),
              "%s drops a look value holding a control character" % name)
-        t.ok("words greet" not in text and "news" not in text and "last-seen" not in text and "FACE_" not in text,
-             "%s says no greeting, no news and no face (v1.72)" % name)
+        t.ok("words greet" not in text and "news" not in text and "last-seen" not in text,
+             "%s says no greeting and no news (v1.72)" % name)
+        read = body(text, "_spark_look_read")
+        t.ok(all(k in read for k in ("FACE_IDLE)", "FACE_THINKING)", "FACE_PLEASED)", "FACE_PUZZLED)", "FACE_ALARMED)",
+                                     "FACE_LISTENING)", "MOTION)", "WORDS)"))
+             and "[![:ascii:]]" in read and "-le 8" in read,
+             "%s reads the faces, MOTION and WORDS from the look file: ASCII, 8 characters at most (v1.80)" % name)
+        on = body(text, "_spark_face_on")
+        t.ok(all(k in on for k in ("_spark_lk_awake == yes", "_spark_lk_words", "_spark_lk_motion", "$SPARK_DIR/off")),
+             "%s: the face is on only awake, with words and motion active and no spark off" % name, on)
+        t.ok("_spark_face " in body(text, "_spark_say") and "_spark_faced=''" in body(text, "_spark_say")
+             and "_spark_unface" in body(text, "spark-accept-line" if name == "widget.zsh" else "_spark_enter"),
+             "%s: a line in the row carries the face, and Enter erases the resting one" % name)
         t.ok("_spark_note" in body(text, "_spark_failure") and "_spark_say" not in body(text, "_spark_failure"),
              "%s: the failure line goes to the hint row through _spark_note" % name)
-        hot = "".join(body(text, f) for f in ("_spark_failed", "_spark_failure", "_spark_look_check", "_spark_look_read"))
-        t.ok(hot and "$SPARK_BIN" not in hot and not re.search(r"\$\((?!\()|`", hot),
-             "%s: the prompt hook's own path calls no spark and forks nothing" % name)
+        # everything a prompt runs unasked: the hook, the line it prints,
+        # the resting face and, in zsh, the line editor's start, the tick
+        # and the key hook
+        names = ["_spark_failed", "_spark_failure", "_spark_look_check", "_spark_look_read", "_spark_note",
+                 "_spark_paint", "_spark_face", "_spark_face_on", "_spark_idle", "_spark_unface"]
+        if name == "widget.zsh":
+            names += ["_spark_line_init", "_spark_say", "_spark_idle_draw", "_spark_arm", "_spark_tick",
+                      "spark-tick", "_spark_keyed_hook"]
+        bodies = [body(text, f) for f in names]
+        hot = "\n".join(re.sub(r"(^|\s)#[^\n]*", "", b) for b in bodies)
+        t.ok(all(bodies) and "$SPARK_BIN" not in hot and not re.search(r"\$\((?!\()|`|<\(|(?<![&|])&\s*$", hot, re.M),
+             "%s: the prompt hook, the resting face and the tick call no spark and fork nothing" % name,
+             [f for f, b in zip(names, bodies) if not b])
+        outside = re.findall(r"(?<![\w$-])(sed|awk|grep|cat|date|tput|sleep|stty|tmux|head|tail|tr|cut|wc|ps|sh|env)(?![\w=-])",
+                             hot)
+        t.ok(not outside, "%s: nothing a prompt runs unasked is an outside command" % name, outside)
+    t.ok("sched +" in wz and "zselect " in wz and "zmodload zsh/sched" in wz and "SPARK_IDLE_SLEEP" in wz,
+         "widget.zsh: the idle face moves on a sched event, a zselect beat, and has its test seam")
+    t.ok("sched" not in wb and "_spark_tick" not in wb and "SPARK_IDLE_SLEEP" not in wb,
+         "widget.bash: the face is still -- no timer, nothing in the background for it")
+    t.ok(all(("\n%s() {" % f) in wz and ("\n%s() {" % f) in wb
+             for f in ("_spark_face", "_spark_face_on", "_spark_idle", "_spark_unface")),
+         "the face's functions carry one name in both widgets")
     fails = [sorted(set(re.findall(r'"\$_spark_h (failed [^"]*)"', x))) for x in (wz, wb)]
     t.ok(fails[0] and fails[0] == fails[1] and all("$took --" in f for f in fails[0]),
          "the failure lines are one text in both widgets, each with room for the duration", fails)
@@ -4228,6 +4851,7 @@ def main():
         chat_tools_cases(t, spark, home)
         chat_pty_cases(t, env, home)
         chat_voice_pty_cases(t, env, home)
+        presence_pty_cases(t, env, home)
 
         # wrap at 80 columns when piped: a long canned answer breaks into
         # short lines

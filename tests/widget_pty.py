@@ -18,8 +18,14 @@
 # spark thinks. Then the living prompt (v1.59): a two-line prompt at
 # height 2 gets its hint on the blank row, Esc k moves the row, an awake
 # look file brings the built-in colour and a long failure's duration and
-# never a greeting, a news line or a face (v1.72); one text per fallback;
-# bash chains an EXIT trap it found. On a rendered screen the failure
+# never a greeting or a news line; one text per fallback; bash chains an
+# EXIT trap it found. The face (v1.80): awake, every line in the row
+# carries its mood's face after the mark, and the resting face stands
+# alone above an idle prompt -- only where the blank row is known -- and
+# is erased at Enter; Esc r hands the row's height to spark recall; the
+# look off, a machine not awake and `spark off` each give the bytes they
+# gave before; zsh blinks at an empty line, stands still with text in
+# it, sleeps and wakes, and bash's face is still. On a rendered screen the failure
 # line sits in the hint row and Esc s replaces it there (v1.72). Then the
 # voice keys (v1.70): Esc v lands what a stub `spark voice listen
 # --buffer` heard -- a `? ` question on an empty line, beside the words
@@ -96,7 +102,9 @@ fi
 if [ "$1" = recall ]; then
     # history arrives on stdin; grounding is cli's job, not the stub's --
     # here we hand back two plain lines and one danger-marked line (the
-    # `!<TAB>` prefix recall puts on a line that can destroy)
+    # `!<TAB>` prefix recall puts on a line that can destroy). The row's
+    # height reaches it too (v1.80), logged apart from spark line's
+    printf 'SPARK_HINT_ROW=%s\n' "${SPARK_HINT_ROW-}" >> "${STUB_RECALL:-/dev/null}"
     cat > /dev/null
     printf 'git commit --amend --no-edit\ndocker network prune -f\n!\trm -rf ./build\n'
     exit 0
@@ -290,26 +298,38 @@ def wrapped(shell, widget, tmp, env, prompt, ok):
 
 # the look file as look.content writes it: one switch, SPARK_LOOK, so the
 # three parts always carry the same value
+FACES = ("FACE_ASLEEP=(-.-)z\nFACE_WAKING=(-o-)\nFACE_IDLE=(o.o)\nFACE_THINKING=(o.O)\nFACE_PLEASED=(^.^)\n"
+         "FACE_PUZZLED=(o.?)\nFACE_ALARMED=(O.O)\nFACE_LISTENING=(o.o)~\nFACE_BLINK=(-.-)\nFACE_GLANCE=(.o.)\n")
 LOOK_AWAKE = ("AWAKE=yes\nMOTION=on\nCOLOUR=on\nWORDS=on\nHEIGHT=2\nSGR_ACCENT=1\nSGR_MUTED=2\n"
-              "SGR_WARN=31\nSGR_OK=32\nSGR_TROUBLE=1;31\nSGR_YOU=\nFACE_IDLE=(o.o)\nFACE_LISTENING=(o.o)~\n"
-              # a value with an escape in it is dropped whole: the face stays
-              "FACE_IDLE=\x1b[2J(x.x)\nFACE_ASLEEP=(-.-)z\n")
+              "SGR_WARN=31\nSGR_OK=32\nSGR_TROUBLE=1;31\nSGR_YOU=\n" + FACES +
+              # a value with an escape in it is dropped whole, and one too
+              # long or beyond ASCII: the face read before it stays
+              "FACE_IDLE=\x1b[2J(x.x)\nFACE_PLEASED=(^.^)(x.x)\nFACE_ALARMED=(Ø.Ø)\n"
+              "BLINK=14\nTEMPER=plain\n")
+# the frames the widgets draw: the row N up, cleared, then the text
+ROW = "\x1b7\x1b[%dA\r\x1b[2K%s\x1b8"
+EVERY_FACE = ("(o.o)", "(o.O)", "(^.^)", "(o.?)", "(O.O)", "(-.-)", "(.o.)", "(-o-)")
 
 
 def living(shell, widget, tmp, env, ok):
     """v1.59, the living prompt: the row's height with a two-line prompt,
     Esc k, then an awake look file -- the built-in colour, a failed
-    command's duration, and no greeting, news line or face (v1.72) -- and
-    the fallback texts, the same in both shells; bash chains an EXIT trap
-    it found."""
+    command's duration, no greeting or news line -- and the fallback
+    texts, the same in both shells; bash chains an EXIT trap it found.
+    v1.80, the face: beside the mark in every line of the row, alone
+    above an idle prompt and gone at Enter; not awake, the look off and
+    `spark off` each give the bytes they gave before."""
     state = os.path.join(tmp, "living-state")
     sd = os.path.join(state, "spark")
     os.makedirs(sd)
     look = os.path.join(sd, "look")
-    hlog, glog, elog, tlog = (os.path.join(tmp, n) for n in ("height.log", "greet.log", "living-env.log", "trap.log"))
-    env = dict(env, XDG_STATE_HOME=state, STUB_HEIGHT=hlog, STUB_GREET=glog, STUB_ENV=elog, TRAPLOG=tlog)
+    hlog, glog, elog, tlog, rlog = (os.path.join(tmp, n) for n in
+                                    ("height.log", "greet.log", "living-env.log", "trap.log", "recall-env.log"))
+    env = dict(env, XDG_STATE_HOME=state, STUB_HEIGHT=hlog, STUB_GREET=glog, STUB_ENV=elog, TRAPLOG=tlog,
+               STUB_RECALL=rlog)
     with open(look, "w") as f:
-        f.write("AWAKE=no\nMOTION=off\nCOLOUR=off\nWORDS=off\nHEIGHT=2\n")
+        # not awake: the faces are in the file, and none is drawn
+        f.write("AWAKE=no\nMOTION=off\nCOLOUR=off\nWORDS=off\nHEIGHT=2\n" + FACES + "BLINK=14\n")
     with open(os.path.join(sd, "news"), "w") as f:
         f.write("n0\tnot while asleep\n")
 
@@ -371,10 +391,32 @@ def living(shell, widget, tmp, env, ok):
         ok(re.search(r"\* failed \(3\) -- Esc s asks why(\x1b\[\?2004h)?\r*\nINFO-LINE", since()) is not None,
            "height 2: the failure line is the prompt's blank row", since()[-300:])
 
+    # not awake: every byte so far is what it was before the face
+    ok(not any(f in sh.buf.decode("utf-8", "replace") for f in EVERY_FACE),
+       "not awake: no face anywhere, the faces in the look file or not")
+
+    def put(text):
+        with open(look, "w", encoding="utf-8") as f:
+            f.write(text)
+        # newer than the shell's marker, whatever the clock's grain
+        stamp[0] += 6
+        os.utime(look, (stamp[0], stamp[0]))
+    stamp = [time.time()]
+    erase = ROW % (2, "")
+    if shell == "zsh":
+        idle = ROW % (2, "\x1b[1m(o.o)\x1b[0m")
+    else:
+        # bash: the face, then the prompt's own opening newline ends it
+        idle = None
+    idle_re = r"\x1b\[1m\(o\.o\)\x1b\[0m(\x1b\[\?2004h)?\r*\nINFO-LINE"
+
+    def idle_seen(text):
+        return idle in text if idle else re.search(idle_re, text) is not None
+
     # awake, after an absence, a news file there: the next prompt says
-    # nothing -- no greeting, no news, no face, no fork, no stamp
-    with open(look, "w") as f:
-        f.write(LOOK_AWAKE)
+    # nothing -- no greeting, no news, no fork, no stamp -- and the
+    # resting face stands alone in the blank row
+    put(LOOK_AWAKE)
     with open(os.path.join(sd, "last-seen"), "w") as f:
         f.write("1000\n")                      # an absence of decades
     old = time.time() - 60
@@ -385,11 +427,14 @@ def living(shell, widget, tmp, env, ok):
     sh.expect(prompt)
     sh.settle()
     seen = since()
-    ok("Good evening" not in seen and "not while asleep" not in seen and "(o.o)" not in seen and not lines(glog)
+    ok("Good evening" not in seen and "not while asleep" not in seen and not lines(glog)
        and lines(os.path.join(sd, "last-seen")) == ["1000"] and not os.path.exists(os.path.join(sd, "news-seen")),
-       "awake: no greeting, no news, no face; spark words greet never runs", seen[-300:])
+       "awake: no greeting, no news; spark words greet never runs", seen[-300:])
+    ok(idle_seen(seen), "awake: the resting face stands alone in the blank row above the prompt", seen[-300:])
+    ok("(x.x)" not in seen and "\x1b[2J" not in seen, "awake: a face with an escape in it is dropped", seen[-300:])
 
-    # awake: a failed command that ran long says how long; a quick one not
+    # awake: a failed command that ran long says how long; a quick one
+    # not. Enter erases the resting face first; the line has its own
     since = sh.mark()
     sh.send("sleep 2; sh -c 'exit 3'\r")
     ok(sh.expect("failed (3) after ", 10), "awake: a long failure says how long", since()[-300:])
@@ -397,53 +442,180 @@ def living(shell, widget, tmp, env, ok):
        "awake: the duration reads N s", since()[-300:])
     sh.expect(prompt)
     sh.settle()
+    seen = since()
+    ok(erase in seen and seen.index(erase) < seen.index("failed (3)"),
+       "awake: Enter erases the resting face, so scrollback keeps none", seen[-400:])
+    ok("\x1b[1m* (O.O)\x1b[0m failed (3) after " in seen, "awake: the failure line carries the alarmed face",
+       seen[-300:])
+    ok(not idle_seen(seen[seen.index("failed (3)"):]), "awake: a failure line keeps the row, no resting face over it",
+       seen[-300:])
     since = sh.mark()
     sh.send("sh -c 'exit 4'\r")
-    ok(sh.expect("failed (4) -- Esc s asks why"), "awake: a quick failure says no duration", since()[-300:])
+    ok(sh.expect("* (O.O)\x1b[0m failed (4) -- Esc s asks why"), "awake: a quick failure says no duration",
+       since()[-300:])
     sh.expect(prompt)
     sh.settle()
 
-    # the built-in accent paints the hint row; NO_COLOR under auto does not
+    # the built-in accent paints the mark and its face; an answer is pleased
     since = sh.mark()
     sh.send("answer-me?\r")
-    ok(sh.expect("\x1b7\x1b[2A\r\x1b[2K\x1b[1m*\x1b[0m Forty-two\x1b8"),
-       "awake: the built-in accent, at height 2", since()[-300:])
+    ok(sh.expect(ROW % (2, "\x1b[1m* (^.^)\x1b[0m Forty-two")),
+       "awake: an answer carries the pleased face, in the built-in accent, at height 2", since()[-300:])
+    ok("\x1b[1m* (o.O)\x1b[0m " in since(), "awake: the beat before spark line shows the thinking face",
+       since()[-300:])
+    ok("(^.^)(x.x)" not in since(), "awake: a face past 8 characters is dropped", since()[-300:])
     sh.send("\r")
     sh.expect(prompt)
-    # awake, Esc v: the row says it listens, with no face
+    sh.settle()
+    # a command's hint is the resting face beside the mark; a danger is alarmed
+    since = sh.mark()
+    sh.send("? list big files\r")
+    ok(sh.expect(ROW % (2, "\x1b[1m* (o.o)\x1b[0m A hint about it")), "awake: a hint carries the resting face",
+       since()[-300:])
+    sh.send("\x15")
+    sh.settle()
+    since = sh.mark()
+    sh.send("? delete it all\r")
+    ok(sh.expect(ROW % (2, "\x1b[31m! (O.O) Deletes things -- careful -- read it before Enter\x1b[0m")),
+       "awake: a danger line carries the alarmed face, whole in warn", since()[-300:])
+    sh.send("\x15")
+    sh.settle()
+    # awake, Esc v: the row says it listens, with the listening face
     since = sh.mark()
     sh.send("\x1bv")
-    ok(sh.expect("listening -- a pause ends it") and "(o.o)" not in since(), "awake: Esc v says it listens, no face",
+    ok(sh.expect("\x1b[1m* (o.o)~\x1b[0m listening -- a pause ends it"), "awake: Esc v listens with the listening face",
        since()[-300:])
     ok(sh.expect("heard -- Enter asks it"), "awake: Esc v lands what it heard", since()[-300:])
     sh.send("\x15")
     sh.settle()
-    with open(look, "w") as f:
-        f.write(LOOK_AWAKE.replace("MOTION=on", "MOTION=auto").replace("COLOUR=on", "COLOUR=auto")
-                .replace("WORDS=on", "WORDS=auto"))
-    os.utime(look, (time.time() + 6, time.time() + 6))
+    # Esc r: the row's height reaches spark recall
+    since = sh.mark()
+    sh.send("amend the commit\x1br")
+    ok(sh.expect("1/3 -- Esc r for the next"), "awake: Esc r lands a candidate", since()[-300:])
+    ok(lines(rlog)[-1:] == ["SPARK_HINT_ROW=2"], "Esc r: spark recall hears SPARK_HINT_ROW=2", lines(rlog))
+    sh.send("\x15")
+    sh.settle()
+    put(LOOK_AWAKE.replace("MOTION=on", "MOTION=auto").replace("COLOUR=on", "COLOUR=auto")
+        .replace("WORDS=on", "WORDS=auto"))
     sh.send("export NO_COLOR=1\r")
     sh.expect(prompt)
     sh.settle()
     since = sh.mark()
     sh.send("answer-me?\r")
-    ok(sh.expect("\x1b[2K* Forty-two") and "\x1b[1m*" not in since(), "awake: NO_COLOR under auto is plain",
+    ok(sh.expect("\x1b[2K* (^.^) Forty-two") and "\x1b[1m*" not in since(), "awake: NO_COLOR under auto is plain",
        since()[-300:])
     sh.send("\r")
     sh.expect(prompt)
 
-    # one text for each fallback, the same in both shells
+    # one text for each fallback, the same in both shells: puzzled when
+    # nothing came, alarmed when no model answers
     since = sh.mark()
     sh.send("answer-empty?\r")
-    ok(sh.expect("* no answer came"), "fallback: an empty answer says: no answer came", since()[-300:])
+    ok(sh.expect("* (o.?) no answer came"), "fallback: an empty answer says: no answer came", since()[-300:])
     sh.send("\r")
     sh.expect(prompt)
     since = sh.mark()
     sh.send("hostile-empty?\r")
-    ok(sh.expect("* no model answers"), "fallback: nothing at all says: no model answers", since()[-300:])
+    ok(sh.expect("* (O.O) no model answers"), "fallback: nothing at all says: no model answers", since()[-300:])
+    sh.send("\x15")
+    sh.settle()
+    since = sh.mark()
+    sh.send("\x1bs")
+    ok(sh.expect("* (o.?) type a question, then Esc s"), "fallback: Esc s on an empty line is puzzled",
+       since()[-300:])
     sh.send("\x15")
     sh.settle()
     ok("no brain awake" not in sh.buf.decode("utf-8", "replace"), "fallback: the old text is gone")
+
+    if shell == "zsh":
+        # motion, zsh alone: at an empty line the face blinks within its
+        # period (BLINK=14: about 5 s) and rests again; with text in the
+        # line it stands still; after `spark off` it is gone for good
+        plain_idle, blink = ROW % (2, "(o.o)"), ROW % (2, "(-.-)")
+        since = sh.mark()
+        sh.send("\r")
+        ok(sh.expect(plain_idle), "zsh: a fresh prompt draws the resting face", since()[-300:])
+        since = sh.mark()
+        ok(sh.expect(blink, 8) and sh.expect(blink + plain_idle, 2),
+           "zsh: at an empty line the face blinks within its period, one beat, and rests", since()[-300:])
+        sh.send("abc")
+        sh.settle()
+        since = sh.mark()
+        sh.read(7.0)
+        ok("\x1b7" not in since(), "zsh: with text in the line the face stands still", since()[-300:])
+        sh.send("\x15")
+        sh.settle()
+        open(os.path.join(sd, "off"), "w").close()
+        since = sh.mark()
+        sh.read(8.0)
+        seen = since()
+        ok(seen.count(erase) == 1 and not any(f in seen for f in EVERY_FACE),
+           "zsh: after spark off the tick erases the face once and draws no more", seen[-300:])
+    else:
+        # bash: the face is still -- nothing draws while the prompt waits
+        since = sh.mark()
+        sh.send("\r")
+        sh.expect(prompt)
+        sh.settle()
+        since = sh.mark()
+        sh.read(4.0)
+        ok(since() == "", "bash: the resting face is still: nothing is drawn while the prompt waits", since()[-300:])
+        open(os.path.join(sd, "off"), "w").close()
+
+    # spark off, awake look and all: the bytes are what they were -- no
+    # face at the prompt, no failure line, no frame of any kind
+    sh.send("\r")
+    sh.expect(prompt)
+    sh.settle()
+    since = sh.mark()
+    sh.send("\r")
+    sh.expect(prompt)
+    sh.send("sh -c 'exit 5'\r")
+    sh.expect(prompt)
+    sh.send("\r")
+    sh.expect(prompt)
+    sh.settle()
+    seen = since()
+    ok("\x1b7" not in seen and "failed" not in seen and not any(f in seen for f in EVERY_FACE),
+       "spark off: no face, no failure line, no frame -- the bytes it gave before", seen[-300:])
+    os.remove(os.path.join(sd, "off"))
+
+    # the look off on an awake machine (spark look off): the three parts
+    # off, the faces still in the file. Every line is the plain one it
+    # was, to the byte, and the prompt carries no face
+    put(LOOK_AWAKE.replace("MOTION=on", "MOTION=off").replace("COLOUR=on", "COLOUR=off")
+        .replace("WORDS=on", "WORDS=off"))
+    sh.send("unset NO_COLOR\r")
+    sh.expect(prompt)
+    sh.settle()
+    since = sh.mark()
+    sh.send("answer-me?\r")
+    ok(sh.expect(ROW % (2, "* Forty-two")), "look off: an answer is the plain line it was", since()[-300:])
+    sh.send("\r")
+    sh.expect(prompt)
+    sh.send("sh -c 'exit 6'\r")
+    ok(sh.expect("failed (6) -- Esc s asks why"), "look off: a failure still says so", since()[-300:])
+    sh.expect(prompt)
+    sh.settle()
+    seen = since()
+    if shell == "zsh":
+        ok(ROW % (2, "* failed (6) -- Esc s asks why") in seen, "look off: the failure line is the plain frame it was",
+           seen[-300:])
+    else:
+        ok(re.search(r"(?<!m)\* failed \(6\) -- Esc s asks why(\x1b\[\?2004h)?\r*\nINFO-LINE", seen) is not None,
+           "look off: the failure line is the plain line it was", seen[-300:])
+    since2 = sh.mark()
+    sh.send("\x1bv")
+    ok(sh.expect(ROW % (2, "* listening -- a pause ends it")), "look off: Esc v is the plain line it was",
+       since2()[-300:])
+    sh.expect("heard -- Enter asks it")
+    sh.send("\x15")
+    sh.settle()
+    if shell == "zsh":
+        sh.read(6.0)                           # a blink's period: nothing may come
+    seen = since()
+    ok(not any(f in seen for f in EVERY_FACE) and seen.count("\x1b7") == seen.count("\x1b7\x1b[2A\r\x1b[2K* ") + 1,
+       "look off: no face, and no frame but the lines spark says and the one Ctrl-U clears", seen[-400:])
 
     sh.send("exit 7\r")
     sh.read(1.0)
@@ -455,6 +627,188 @@ def living(shell, widget, tmp, env, ok):
            lines(tlog))
     rendered_height(shell, widget, tmp, env, ok)
     failure_row(shell, widget, tmp, env, ok)
+    no_blank_row(shell, widget, tmp, env, ok)
+    idle_row(shell, widget, tmp, env, ok)
+    if shell == "zsh":
+        idle_motion(widget, tmp, env, ok)
+
+
+def awake_state(tmp, name, height=1, colour="off"):
+    """A state dir of its own holding an awake look file: the face on,
+    the row `height` up."""
+    state = os.path.join(tmp, name)
+    os.makedirs(os.path.join(state, "spark"))
+    with open(os.path.join(state, "spark", "look"), "w", encoding="utf-8") as f:
+        f.write(LOOK_AWAKE.replace("HEIGHT=2", "HEIGHT=%d" % height).replace("COLOUR=on", "COLOUR=" + colour))
+    return state
+
+
+def no_blank_row(shell, widget, tmp, env, ok):
+    """v1.80: the resting face is drawn only where the blank row is known.
+    A prompt that opens with no newline has the last command's output in
+    the row above; a prompt with more lines than the row is high has its
+    own text there. Neither gets a face -- a line spark says still
+    carries one."""
+    env = dict(env, XDG_STATE_HOME=awake_state(tmp, "noblank-state"))
+    env.pop("SPARK_HEIGHT", None)
+    if shell == "bash":
+        sh = Shell(["bash", "--norc", "--noprofile", "-i"], env, os.path.join(tmp, "work"))
+        sh.send("PS1='NB> '; source %s; echo SOURCED\n" % widget)
+    else:
+        sh = Shell(["zsh", "-f", "-i"], env, os.path.join(tmp, "work"))
+        sh.send("PROMPT='NB> '; source %s; echo SOURCED\n" % widget)
+    try:
+        sh.expect("SOURCED")
+        sh.expect("NB> ")
+        sh.settle()
+        since = sh.mark()
+        sh.send("\r")
+        sh.expect("NB> ")
+        sh.send("echo OUT-$((6*7))\r")
+        sh.expect("OUT-42")
+        sh.expect("NB> ")
+        sh.settle()
+        if shell == "zsh":
+            sh.read(6.0)                       # a blink's period: no tick was armed
+        seen = since()
+        ok("(o.o)" not in seen and "(-.-)" not in seen and "\x1b7" not in seen,
+           "no blank row: a prompt with no opening newline gets no resting face", seen[-300:])
+        since = sh.mark()
+        sh.send("sh -c 'exit 3'\r")
+        ok(sh.expect("* (O.O) failed (3) -- Esc s asks why"), "no blank row: a failure line still carries its face",
+           since()[-300:])
+        sh.expect("NB> ")
+        sh.settle()
+        # two lines, the row one up: that row is the prompt's own text
+        if shell == "bash":
+            sh.send("PS1='\\nTOP-LINE\\nNB> '\r")
+        else:
+            sh.send("PROMPT=$'\\nTOP-LINE\\nNB> '\r")
+        sh.expect("TOP-LINE")
+        sh.expect("NB> ")
+        sh.settle()
+        since = sh.mark()
+        sh.send("\r")
+        sh.expect("TOP-LINE")
+        sh.expect("NB> ")
+        sh.settle()
+        seen = since()
+        ok("(o.o)" not in seen and "\x1b7" not in seen,
+           "no blank row: a two-line prompt at height 1 gets no resting face", seen[-300:])
+    finally:
+        sh.send("\x15exit\r")
+        sh.read(0.5)
+        sh.close()
+
+
+def idle_row(shell, widget, tmp, env, ok):
+    """A real screen (v1.80): the resting face sits alone in the blank row
+    above an idle prompt and is gone once Enter is pressed, so what
+    scrolls up is what scrolled up before; output that ended without a
+    newline keeps its last line."""
+    if not shutil.which("tmux"):
+        print("  skip idle row: no tmux")
+        return
+    env = dict(env, TERM="screen-256color", XDG_STATE_HOME=awake_state(tmp, "idle-state"))
+    env.pop("SPARK_HEIGHT", None)
+    t = ["tmux", "-S", os.path.join(tmp, "tmux-i.sock"), "-f", "/dev/null"]
+    argv = "bash --norc --noprofile -i" if shell == "bash" else "zsh -f -i"
+    cmd = "env -i HISTFILE=/dev/null " + " ".join(shlex.quote("%s=%s" % kv) for kv in env.items()) + " " + argv
+    subprocess.run(t + ["new-session", "-d", "-x", "70", "-y", "16", "-c", os.path.join(tmp, "work"), cmd], check=True)
+
+    def screen():
+        rows = [r.rstrip() for r in subprocess.run(t + ["capture-pane", "-p"], capture_output=True, text=True).stdout.splitlines()]
+        while rows and not rows[-1]:
+            rows.pop()
+        return rows
+
+    def until(want, timeout=8):
+        end = time.time() + timeout
+        while time.time() < end:
+            s = screen()
+            if want(s):
+                return s
+            time.sleep(0.2)
+        return screen()
+
+    def keys(s):
+        subprocess.run(t + ["send-keys", "-l", s], check=True)
+        subprocess.run(t + ["send-keys", "Enter"], check=True)
+
+    def show(good, rows):
+        if not good:
+            print("       screen:\n" + "\n".join("       |%s|" % r for r in rows))
+
+    try:
+        if shell == "bash":
+            keys("PS1='\\nF> '; source %s; clear" % widget)
+        else:
+            keys("PROMPT=$'\\nF> '; source %s; clear" % widget)
+        rows = until(lambda s: s == ["(o.o)", "F>"], 20)
+        good = rows == ["(o.o)", "F>"]
+        ok(good, "idle row: the resting face sits alone in the blank row above the prompt")
+        show(good, rows)
+        keys("echo OUT-LINE")
+        want = ["", "F> echo OUT-LINE", "OUT-LINE", "(o.o)", "F>"]
+        rows = until(lambda s: s == want)
+        good = rows == want
+        ok(good, "idle row: Enter erases the face; the next prompt has its own")
+        show(good, rows)
+        # output with no newline at its end: its last line stays, on screen
+        # and after the next Enter
+        keys("printf NO-EOL")
+        rows = until(lambda s: s[-2:] == ["(o.o)", "F>"] and any(r.startswith("NO-EOL") for r in s))
+        good = (rows[-2:] == ["(o.o)", "F>"] and len(rows) > 2 and rows[-3].startswith("NO-EOL")
+                and rows.count("(o.o)") == 1)
+        ok(good, "idle row: output with no final newline keeps its last line, the face in a row of its own")
+        show(good, rows)
+        keys("true")
+        rows = until(lambda s: s[-3:] == ["F> true", "(o.o)", "F>"])
+        good = (rows[-3:] == ["F> true", "(o.o)", "F>"] and rows.count("(o.o)") == 1
+                and any(r.startswith("NO-EOL") for r in rows))
+        ok(good, "idle row: scrollback keeps no face and loses no output")
+        show(good, rows)
+    finally:
+        subprocess.run(t + ["kill-server"], stderr=subprocess.DEVNULL)
+
+
+def idle_motion(widget, tmp, env, ok):
+    """v1.80, zsh alone: with no key for a while the face sleeps, two
+    frames in turn, and the next key wakes it -- the waking face at the
+    key, the resting one a tick later. SPARK_IDLE_SLEEP is the widget's
+    seam for the five minutes."""
+    env = dict(env, XDG_STATE_HOME=awake_state(tmp, "motion-state"), SPARK_IDLE_SLEEP="3")
+    env.pop("SPARK_HEIGHT", None)
+    sh = Shell(["zsh", "-f", "-i"], env, os.path.join(tmp, "work"))
+    try:
+        since = sh.mark()
+        sh.send("PROMPT=$'\\nMO> '; source %s; echo SOURCED\n" % widget)
+        sh.expect("SOURCED")
+        ok(sh.expect(ROW % (1, "(o.o)")), "zsh: the resting face at a one-line prompt, one row up", since()[-300:])
+        since = sh.mark()
+        ok(sh.expect(ROW % (1, "(-.-)z"), 8), "zsh: asleep after the delay with no key", since()[-300:])
+        ok(sh.expect(ROW % (1, "(-.-)"), 5) and sh.expect(ROW % (1, "(-.-)z"), 5),
+           "zsh: asleep, two frames in turn", since()[-300:])
+        ok(ROW % (1, "(o.o)") not in since(), "zsh: asleep, no blink", since()[-300:])
+        since = sh.mark()
+        sh.send("e")
+        ok(sh.expect(ROW % (1, "(-o-)"), 3), "zsh: the next key wakes the face", since()[-300:])
+        ok(sh.expect(ROW % (1, "(o.o)"), 4), "zsh: awake again, the resting face a tick later", since()[-300:])
+        sh.send("cho WOKE-$((6*7))\r")
+        ok(sh.expect("WOKE-42") and (ROW % (1, "")) in since(),
+           "zsh: the key that woke it is in the line, and Enter erases the face", since()[-300:])
+        # Ctrl-L: the screen is new, and the tick stops until the next prompt
+        sh.expect("MO> ")
+        sh.settle()
+        sh.send("\x0c")
+        sh.settle()
+        since = sh.mark()
+        sh.read(6.0)
+        ok("\x1b7" not in since(), "zsh: after Ctrl-L no tick draws until the next prompt", since()[-300:])
+    finally:
+        sh.send("exit\r")
+        sh.read(0.5)
+        sh.close()
 
 
 def failure_row(shell, widget, tmp, env, ok):

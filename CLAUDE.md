@@ -72,8 +72,10 @@ it, and no verb carries the word.
   `lib/spark/__init__.py`. Every character spark prints draws on the
   Linux console. The mark is the word `spark`. A line spark says
   starts with one mark, on every OS and terminal: `* ` when spark
-  speaks, `! ` for a warning or a failure. No face, no `spark:` prefix
-  and no other glyph starts a line. `spark check` is a table and keeps
+  speaks, `! ` for a warning or a failure. No `spark:` prefix and no
+  other glyph starts a line. Where the look draws the face, it comes
+  after the mark. A reply at a terminal is the one line a face opens:
+  it stands in the mark's place. `spark check` is a table and keeps
   its row glyphs. On the console, inside a
   tmux running on it, or with `SPARK_ASCII=1`, the report and bar glyphs
   fall back to `+ x - | v ^ ->`. The docs are ASCII too, and the hook
@@ -95,9 +97,10 @@ it, and no verb carries the word.
   input() prompt (`chat> `) is painted only under GNU readline,
   bracketed in `\001` and `\002`. libedit counts the escape bytes as
   columns, so there it stays plain. Every animation frame is ASCII:
-  `text.Busy`, the pulse while a reply is on its way, its scanner, the
-  waking bar (`text.Estimate`), the faces (`faces.kit`) and the
-  talking face (`look.talking`). A reply's
+  `text.Busy`, the pulse while a reply is on its way, its scanner and
+  the waking bar (`text.Estimate`). So are the 5 progress kinds
+  (`look.PROGRESS`), the faces (`faces.kit`) and every frame
+  `look.Anim` derives from them. A reply's
   Markdown
   is drawn at a terminal, never stripped blind. `text.Wrap` renders
   `**bold**` as bold and a `# heading` line as bold. It drops the `*`
@@ -107,25 +110,41 @@ it, and no verb carries the word.
   that passes through whole until the closing fence. Awakened, it also
   draws `inline code` in the accent, its backticks dropped, and a `- `,
   `* ` or `N. ` line as a bullet whose wrapped lines hang under its
-  first word. The face is the wait: it shows inside the pulse, the
-  scanner and the waking bar (the hint row, chat, explain, `spark do`)
-  and is gone when the answer comes. No greeting, goodbye or refusal
-  carries it, and a reply is bare text, awake or not. A reply the chat
-  reads aloud is the one exception, where the look's motion and words
-  are active. It opens with the idle face in the mark's place, its
-  lines hanging under it (`text.Wrap`'s `lead`). The face talks while
-  the voice plays. `forge._Face`, a thread of its own, redraws it in
-  place every `forge.MOUTH_STEP` (0.15 s), idle and talking in turn. It
-  does so while one of the reply's sentences sounds
-  (`voice.Reader.sounds`).
+  first word. The face is presence. It shows where the look's motion
+  and words are active on the stream, and it says nothing: no line is
+  printed for it, and no model is asked. In a wait it sits inside the
+  pulse, the scanner and the waking bar. It leads a reply at a
+  terminal: chat, explain, a bare question and `/read`. It follows the
+  mark on a `!` line for a model failure, on `spark do`'s danger step
+  and on its done line (`text.faced`). In the hint row it follows the
+  mark on spark's lines, and it rests alone above an idle prompt
+  (contract 4). `spark look` shows it too. No greeting or goodbye
+  carries it. Each mood has several frames. `look.Anim` derives them
+  from the stored idle face (`look.parts`, `look.scores`), and none is
+  stored: the faces file and the look file keep one still a mood. A
+  still edited by hand is drawn as written, one frame. A led reply
+  opens with the idle face in the mark's place (`text.reply_face`,
+  `text.Wrap`'s `lead`). Its later lines start at column 0, so a code
+  block copies clean. `text.FaceLead`, a thread of its own, redraws
+  the face on that first row. It talks while text flows, a write in
+  the last `FaceLead.FLOW` seconds, and thinks while the stream
+  pauses. A reply the chat reads aloud talks with the voice instead.
+  `forge._Face`, a subclass, moves the mouth every `look.MOUTH_STEP`
+  (0.15 s) while one of the reply's sentences sounds
+  (`voice.Reader.sounds`), and rests on idle between them.
   The talking frame is the idle one with its mouth open
   (`look.talking`). The redraw saves the cursor, goes up the rows the
   reply has taken, writes the frame and restores, under one lock with
-  the reply's writes, which count the rows. It rests on idle between
-  sentences, after the last, on a cut (`Esc x`), at the first key typed
-  at `chat>` and before the chat prints a line of its own. Once the
-  reply's rows reach the terminal's height less one, or the terminal
-  is resized, it moves no more.
+  the reply's writes, which count the rows. The reply ends on a mood's
+  still (`FaceLead.settle`): pleased, puzzled when the cap cut it,
+  alarmed when the model failed. Nothing is drawn after the verb
+  returns. In the chat the mood's frames may play while `chat>` waits.
+  There the face rests at the first key typed, on a cut (`Esc x`) and
+  before the chat prints a line of its own. Before its row would
+  scroll off, the reply's rows at the terminal's height less 2, the
+  face settles where it is. A resized terminal stops it as it stands.
+  A pipe, an unawakened machine and the look `off` keep the mark and
+  their bytes.
   A reply's escapes and control characters never print, at a
   terminal or piped. `text.Printable` drops ESC and 8-bit CSI
   sequences, OSC, DCS, SOS, PM and APC whole, a sequence split across
@@ -143,11 +162,12 @@ it, and no verb carries the word.
   nothing living happens: `look.part` answers `off` for every part, so
   every caller keeps its old bytes. Awaken is the one place spark asks
   the model about itself, never unasked. It makes only what shows: a
-  personality and a face. Every mood of the face is made and kept, the
-  ones nothing draws yet too, for later uses. It sets the look, one
+  personality and a face. Every mood of the face is made and kept, one
+  still each. It sets the look, one
   switch (`SPARK_LOOK`), to `auto` and writes the look file with
   `AWAKE=yes`. Motion, colour and words follow the switch. Words is
-  the face in the wait, and `spark look` shows the face. spark prints
+  the face, wherever it shows (Text-first), and motion is what moves
+  it. spark prints
   no canned line: no greeting, no goodbye, no news. Four fixes
   reach every machine: setup's one suggestion line, the height (`spark
   height N`, `Esc k`), one text for every line, and the bugs.
@@ -157,7 +177,9 @@ it, and no verb carries the word.
   `NO_COLOR` unset. The machine's personality never claims where data
   goes: awaken's brief forbids it, and `README.md` says what leaves. The
   voice follows the same door. Awaken offers the machine's own voice
-  (`SPARK_VOICE=on`) where a player is. The clear voice, for low
+  (`SPARK_VOICE=on`) where a player is. It is one of Kokoro's
+  speakers, picked by the temperament and the seed, with no effect
+  over it. The clear voice, for low
   vision, is accessibility, not a look: it works before awaken, and
   `spark setup` offers it.
 - **Symmetric.** Every feature exists on both OSes, through each OS's
@@ -260,7 +282,9 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 bench (llama-bench, bench tune [show|apply])
                 soul memory (the identity files; memory's writers refuse a
                 sealed file that does not open, never write over it)
-                text (the streams: wrap, fence, Busy; the grounding law: anchor,
+                text (the streams: wrap, fence, Busy and its progress kinds,
+                FaceLead, the face that leads a reply, faced, the face after
+                a mark; the grounding law: anchor,
                 Ground, Gate, shared by every contract that shows a text to a
                 model; what a source holds back: SECRET_SHAPES, SOURCE_SHAPES,
                 hold_secrets)
@@ -288,9 +312,9 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 nothing), /aloud /again (the voice: with it on or
                 clear every reply is spoken, /aloud stops it; with it off
                 /aloud speaks for that chat, voice.for_now; a reply spoken a
-                sentence at a time as the reveal prints it; awake, a
-                spoken reply is led by the face, which talks while the
-                voice plays -- _Face). Esc on an empty line,
+                sentence at a time as the reveal prints it; awake, every
+                reply is led by the face, and a spoken one talks while
+                the voice plays -- _Face). Esc on an empty line,
                 Ctrl-D or /q ends it; Esc v listens onto the line, Esc x
                 stops the speaking (_Keys: a getc hook under GNU readline,
                 the first key read raw under libedit))
@@ -336,7 +360,9 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 look (the living prompt's state: the one switch and the 3
                 parts that follow it, the height, the six colour roles,
                 look.clean for every line spark says, the look file the
-                widgets read; spark look, spark height)
+                widgets read; Anim, the one animator: each mood's frames,
+                derived from the stored face, and the 5 progress kinds,
+                PROGRESS; spark look, spark height)
                 awaken (spark awaken: the temperament, the birth -- one JSON
                 object, `why` first, then the personality paragraph and
                 the face's eyes and mouth -- the pace, its voice where a
@@ -346,7 +372,7 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 personality; no verb. bin/spark answers an older shell's
                 `spark words greet`, silent)
                 voice (spark voice: the engine's fetch, size and sha256 before
-                a byte unpacks; speak, the 4 characters, play and stop;
+                a byte unpacks; speak, the machine's own speaker, play and stop;
                 Engine, Kokoro loaded once through the runtime's C API;
                 Stream, one raw stream to the sound card a burst;
                 listen, the recording removed before it returns; the clear
@@ -381,7 +407,7 @@ tests/          smoke.py serve_smoke.py forge_smoke.py bench_smoke.py
                 this machine has a sandbox)
                 qr_test.py (ISO 18004 format table, the RS vector, a decode-back)
                 voice_test.py (the voice: a stub runtime, player and recorder;
-                the fetch's refusals, the characters' bytes, the clear reading;
+                the fetch's refusals, the speaker awaken picks, the clear reading;
                 the splitter, the lead-in, the Reader's two stages timed)
                 docs_test.py (the docs say what the tree holds: credits, counts,
                 the voice)
@@ -452,8 +478,8 @@ Runtime paths. Config is `~/.config/spark/`: `site.env`, `spark.env`,
 `theme.env`, `models.env` (yours), `privacy-terms`, `soul`,
 `personality`, `faces`, `voice` and `memory` (the pre-v1.4 facts file,
 read until the first write). `voice` (0600) is the
-machine's own voice, `KEY=value`: `FAMILY`, `SID`, `SID_PT` and its
-chain's numbers. Awaken writes it, or `spark voice on` on an awake
+machine's own voice, `KEY=value`: `SID` and `SID_PT`, its two
+speakers. Awaken writes it, or `spark voice on` on an awake
 machine that has none. `personality` (0600) is the paragraph
 `spark awaken` writes after the soul's fixed core. `faces` (0600) is
 `MOOD=frame` per line, every mood, plus `RATE=` and `TEMPER=`. Awaken
@@ -653,11 +679,11 @@ and may change freely.
      `VOICE_VAD_LICENSE`, each `"<name> <url>"`. `lib/spark/voice.py`
      and the SBOM read it, and `tests/docs_test.py` looks every licence
      up in `CREDITS.md`.
-   - `~/.config/spark/voice`: the machine's own voice, `FAMILY SID
-     SID_PT` and the family's numbers. Its reader takes its own keys
-     and ignores any other line. A family it does not know, or a
-     speaker out of Kokoro's table, reads as no voice, and a number out
-     of range is clamped to it.
+   - `~/.config/spark/voice`: the machine's own voice, `SID SID_PT`,
+     the English speaker and the Portuguese one. Its reader takes
+     these two keys and ignores any other line, so a file an older
+     spark wrote keeps its speaker. A speaker that is missing or out
+     of Kokoro's table reads as no voice.
    - `~/.config/spark/theme.env`: a palette a look layer may write,
      `THEME_BG THEME_FG THEME_ACCENT THEME_MUTED THEME_ANSI_0..15`.
      spark writes none. `THEME_LOGO` is optional: 6 colour names, one
@@ -933,11 +959,32 @@ and may change freely.
    (`forge.peer_newest`, the requester's own store over contract 9) and
    the turn lands there. Any trouble falls back to the local store.
    `SPARK_HINT_ROW=N` in the environment, a digit 1 to 5, lets `spark
-   line` draw the pulse (`text.Busy.hint_row`) N rows above the cursor
-   on `/dev/tty` while the model answers. The widgets set it on their
-   two calls, N the height. Each frame saves the cursor, goes up N rows,
-   clears that row, draws the mark and the dots, and restores. The
-   widgets' own lines (`_spark_say`) go to the same row. It is the one
+   line`, `spark line --paste` and `spark recall` draw the pulse
+   (`text.Busy.hint_row`) N rows above the cursor on `/dev/tty` while
+   the model answers. The widgets set it on those 3 calls, N the
+   height. Each frame saves the cursor, goes up N rows,
+   clears that row, draws the mark and the dots, and restores. Awake,
+   the dots are the scanner with the face (grammar rule 6). After line
+   1 the row keeps the mark, the face and the dots until line 2
+   (`cli._Pulse`). The
+   widgets' own lines (`_spark_say`) go to the same row. Where the
+   face is on, each carries a face after its mark. It is pleased on an
+   answer and on the done line, and alarmed on a danger and on the
+   failure line. It is puzzled when nothing came, listening on `Esc
+   v`, and thinking before `spark line` and `spark recall`. Any other
+   line carries the idle face. The face is on when the look file says
+   `AWAKE=yes`, `MOTION` and `WORDS` are each `on`, or `auto` with
+   `TERM` not `dumb`, and `spark off` is not set. At an idle prompt
+   the resting face sits alone in that row. Enter erases it, so the
+   scrollback keeps none. It is drawn only where the blank row is
+   known: the prompt opens with a newline and has as many lines as the
+   height, or starship draws the row. In zsh it blinks at the
+   temperament's rate, sleeps after 5 minutes without a key and wakes
+   on the next one. That is zsh's own `sched` and `zselect`: no
+   process is started, and it moves only at an empty line with no note
+   in the row. In bash the face is still, because readline has no idle
+   timer. Not awake, or with the look `off`, every byte is what it
+   was. The row is the one
    place for spark's lines at the prompt. Each replaces the one before,
    never one above another. The failure line waits for the
    prompt and is drawn there by the line editor's start (zsh's
@@ -975,8 +1022,8 @@ and may change freely.
    its language and speed riding the call. Every text is made in the
    spark process (`voice.process_engine`): no tool is started, so no
    spoken text is on a command line. A runtime it cannot load is one
-   line, `voice.NO_ENGINE`, and silence. Mode on runs the character's
-   chain over the samples (`voice.chain`). On Linux the player is one
+   line, `voice.NO_ENGINE`, and silence. Mode on is the kept speaker,
+   with no effect over it (`voice.clip`). On Linux the player is one
    `voice.Stream` a burst:
    `aplay -t raw`, or `paplay --raw`, reading PCM on its stdin. It
    opens at the first clip with `voice.LEAD_IN_MS` of silence. It is
@@ -1016,7 +1063,11 @@ and may change freely.
    control character. Its keys are `AWAKE`, `MOTION`, `COLOUR`,
    `WORDS` (each `SPARK_LOOK`'s value, `off` unawakened), `HEIGHT`,
    `SGR_<ROLE>` for the 6 roles, `FACE_<MOOD>`, `BLINK` and `TEMPER`
-   (`look.content`). `SPARK_HEIGHT` in the
+   (`look.content`). The widgets read `AWAKE`, `MOTION`, `COLOUR`,
+   `WORDS`, `HEIGHT`, `SGR_ACCENT`, `SGR_WARN` and `FACE_<MOOD>`, and
+   zsh reads `BLINK` too. A face is kept only as printable ASCII, 8
+   characters at most. Where the face is on, a shell also stats `off`
+   at each prompt and each line it draws. `SPARK_HEIGHT` in the
    environment wins over `HEIGHT`. The `look` row compares the file with
    what `spark.env` and the faces file say now.
 7. `spark check` exits 0 when no row is `fail`, else 1. A `CAPABILITY`
@@ -1324,7 +1375,10 @@ and may change freely.
     one line. So the seconds before the first answer line are something
     to read. When stderr is a pipe, nothing: an editor's job,
     spark-w3m's capture and the tests keep stdout and stderr as the
-    contract states them. A `?` answer streams line by line through
+    contract states them. Awake, with stdout and stderr both
+    terminals, a pulse runs on stderr until the first chunk
+    (`text.wait`, the `read` kind). An editor pipes stdout, so its
+    plugin never sees a frame. A `?` answer streams line by line through
     `text.Anchors`. Every quoted span (double quotes, curly quotes,
     backticks, 3 to 200 characters) is checked against the text on
     stdin: verbatim, then folded (whitespace, quote marks, case), then
@@ -1406,7 +1460,10 @@ and may change freely.
     the reply is one line on stderr, exit 1. That line shows the
     source's own opening words (`read.opening`), composed in code and
     never asked of the model. A client tells "no answer" from "an
-    answer" by the exit code. At most `READ_MAX` (16000) characters a
+    answer" by the exit code. Awake, with stdout and stderr both
+    terminals, a pulse runs on stderr from the request to the first
+    kept line (`text.wait`). A reader's wrapper pipes stdout and never
+    sees a frame. At most `READ_MAX` (16000) characters a
     part. A longer source is parts, each opening with the last
     `PART_OVERLAP` (400) characters of the one before. Without `--part
     N` it is refused in one line naming the count (exit 1, nothing
@@ -1477,7 +1534,9 @@ and may change freely.
     (`persona.DRILL_SCHEMA`, a JSON reply). `drill._ground` drops any
     item whose answer does not `text.anchor` in the source before it is
     ever asked: a drill built on an invented answer teaches the
-    invention. `DRILL_MAX` in, `ITEMS_MAX` a session. Too little to
+    invention. Awake, at a terminal, the same pulse runs on stderr
+    while the items are made. `DRILL_MAX` in, `ITEMS_MAX` a session.
+    Too little to
     drill is one line (the source's opening, `read.opening`) and exit 1,
     never padded from the model's own knowledge. It is self-graded: the
     learner sees the source's span and says whether they had it. Model
@@ -1646,9 +1705,21 @@ One grammar for every verb. A verb that breaks a rule is a bug.
    timeout, interval)` in `lib/spark/__init__.py`, plain dots that
    survive in a log. One pulse for every wait on a reply: `text.Busy`,
    the mark and `.` `..` `...` redrawn in place, a tty only (the hint
-   row, chat, explain, an answer, `spark do`). Awakened, with the look
-   active, the dots become the scanner, `* (o.O) [ = ]`: 8 cells, a
-   frame every 0.12 seconds, with the face. It runs on every terminal:
+   row, chat, explain, an answer, `spark do`, `spark recall`). Awakened,
+   with the look
+   active, the dots become the scanner, `* (o.O) [ = ]`: 8 cells with
+   the face. What moves in the cells says what spark is doing, one of
+   5 kinds (`look.PROGRESS`). `think` is a light that bounces: chat,
+   explain, a question, the prompt line and `spark recall`. `read` is
+   an arrow that crosses: `spark edit`, `read` and `drill`, a paste
+   and `/read`. `steps` is one step after another: `spark do`'s
+   proposal. `swell` is a bar that grows and shrinks: a model loading
+   with no estimate. `march` is marks that move right: `spark update`
+   and `spark model verify`. A frame is 0.12 seconds, 0.10 for the
+   playful temperament and 0.15 for the warm one (`look.STEPS`).
+   `spark edit`, `read` and `drill` pulse on stderr only when stdout
+   and stderr are both terminals (`text.wait`). It runs on every
+   terminal:
    ssh on a LAN and the console keep up with it, and every frame is
    ASCII. The look `off` keeps the dots. The wait
    escalates, never louder: from 2 seconds the elapsed seconds, from 15
@@ -1656,8 +1727,9 @@ One grammar for every verb. A verb that breaks a rule is a bug.
    model loading shows `text.Estimate`: a bar filled by the time over
    that model file's last load (`engine.last_load`), never past 95 %.
    Past the estimate it says `longer than last time (N s) -- spark check
-   says why`. With no measure it is the scanner and the seconds.
-   Awakened, `spark check` counts its rows on stderr while they run.
+   says why`. With no measure it is the `swell` and the seconds.
+   Awakened, `spark check` counts its rows on stderr while they run,
+   the thinking face first: `(o.O) checking 3/39`.
 7. Exit codes: 0 ok or show, 1 the world (stderr), 2 the invocation
    (stdout, signed), 78 misconfiguration, 130 `SIGINT`.
 
@@ -1784,7 +1856,8 @@ One grammar for every verb. A verb that breaks a rule is a bug.
   page features in this release or the next.
 - **A shell thing.** The look and the tools of a machine are not spark's
   business: the console's palette and font, a quiet boot, the prompt,
-  the desktop. `spark look` dresses spark's own lines, never the prompt.
+  the desktop. `spark look` dresses spark's own lines, never the
+  prompt's own text. The resting face sits in spark's row above it.
   spark's side of any renderer is 3 things. `theme.env` is a palette a
   look layer may write, a `KEY=value` file spark reads for its logo and
   its bar accent (contract 3). The 6 `SPARK_*_SGR` variables are what an

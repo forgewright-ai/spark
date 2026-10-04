@@ -185,16 +185,38 @@ def cmd_read(args):
         say(READ_USAGE.rstrip())
         say("\n  to ask spark: spark %s" % (" ".join(words) or "<words>"))
         return 2
+    # the wait at a terminal: a pulse from the request to the first kept
+    # line, only where a person watches (text.wait); a reader's wrapper
+    # pipes stdout and never sees a frame
+    busy = textmod.wait("read")
     try:
-        answer(config.load(), data, " ".join(words), sys.stdout, want, name)
+        answer(config.load(), data, " ".join(words), _Waited(sys.stdout, busy), want, name, on_ask=busy.start)
     except Refused as e:
+        busy.stop()
         if e.code == 2:
             say("%s read -- %s" % (MARK, e.hint))
             return 2
         die(e.hint)
     except wire.BrainError as e:
+        busy.stop()
         die(e.hint)
+    finally:
+        busy.stop()
     return 0
+
+
+class _Waited:
+    """A stream under a pulse: the pulse is gone before the first byte."""
+
+    def __init__(self, stream, busy):
+        self.stream, self.busy = stream, busy
+
+    def write(self, s):
+        self.busy.stop()
+        self.stream.write(s)
+
+    def flush(self):
+        self.stream.flush()
 
 
 class Refused(Exception):

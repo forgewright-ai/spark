@@ -23,7 +23,11 @@
 # mechanical half (docs/CONTRIBUTING.md
 # "## Voice") holds over every doc, its two measures included (a sentence
 # of 30 words at most, prose within 72 columns), and the two nouns hold
-# in `spark help` and every usage text too; one test list (v1.79): every
+# in `spark help` and every usage text too; a plain voice and the face
+# (v1.80): no doc but the CHANGELOG names a removed voice character,
+# CLAUDE.md's voice file entry holds the keys voice.mint writes, both
+# widgets read FACE_IDLE, and grammar rule 6 names every kind in
+# look.PROGRESS; one test list (v1.79): every
 # tests/ file is run by tests/gate.sh or named in NOT_IN_GATE, and the
 # hooks and the workflows name no test file themselves.
 # Hermetic, stdlib, fast.
@@ -524,6 +528,81 @@ def quiet():
             check(cmd in text, "%s names %s (v1.72)" % (name, cmd))
 
 
+# v1.80: the voice's four characters are gone. A name of one is stale
+# only where the voice is the subject: `radio` is a fair word in a line
+# about Wi-Fi, so a hit needs a voice word within NEAR characters
+GONE_VOICES = re.compile(r"\b(?:radio|choir|eightbit|eight[- ]bit|robot)\b", re.I)
+VOICE_WORD = re.compile(r"\b(?:voices?|characters?|speakers?|effects?|chains?|aloud|awaken)\b", re.I)
+NEAR = 200
+# what voice.py held for them: gone from the module, named by no doc
+GONE_VOICE_NAMES = ("CHAINS", "RECIPES", "TEMPER_FAMILY", "FAMILY_SIDS", "chain", "character")
+
+
+def presence():
+    """v1.80, a plain voice and a face with presence, as the tree holds
+    them: no doc but the CHANGELOG names a removed voice character where
+    the voice is the subject, and voice.py holds none; every `voice.NAME`
+    CLAUDE.md and AGENTS.md name is in voice.py; CLAUDE.md's voice file
+    entry names the keys voice.mint writes and never FAMILY; AGENTS.md no
+    longer says the face shows only while spark waits; both widgets read
+    FACE_IDLE, every FACE_<MOOD> they read is a mood look.py knows, and
+    CLAUDE.md states how many calls carry SPARK_HINT_ROW; grammar rule 6
+    names every kind in look.PROGRESS and every pace in look.STEPS."""
+    from spark import look, voice as voicemod
+    for doc in ALL_DOCS:
+        if doc == "docs/CHANGELOG.md":
+            continue
+        text = " ".join(read(doc).split())
+        hit = ""
+        for m in GONE_VOICES.finditer(text):
+            if VOICE_WORD.search(text[max(0, m.start() - NEAR):m.end() + NEAR]):
+                hit = m.group(0)
+                break
+        check(not hit, "%s: no removed voice character%s" % (doc, " (found '%s')" % hit if hit else ""))
+    held = [n for n in GONE_VOICE_NAMES if hasattr(voicemod, n)]
+    check(not held, "voice.py holds no character chain%s" % ("" if not held else " (found %s)" % ", ".join(held)))
+    claude, agents = read("CLAUDE.md"), read("AGENTS.md")
+    for doc, text in (("CLAUDE.md", claude), ("AGENTS.md", agents)):
+        names = sorted(set(re.findall(r"(?<![\w./-])voice\.([A-Za-z_]\w*)", text)) - {"env", "py", "wav"})
+        lost = [n for n in names if not hasattr(voicemod, n)]
+        check(not lost, "%s: every voice.NAME it names is in voice.py (%d names)%s"
+              % (doc, len(names), "" if not lost else " (lost %s)" % ", ".join(lost)))
+    # contract 3's entry for the voice file: the keys mint writes
+    keys = sorted(voicemod.mint("plain", "docs"))
+    m = re.search(r"(?ms)^   - `~/\.config/spark/voice`:(.*?)^   - ", claude)
+    entry = m.group(1) if m else ""
+    check(bool(keys) and bool(entry) and all(re.search(r"\b%s\b" % k, entry) for k in keys),
+          "CLAUDE.md's voice file entry names the keys voice.mint writes (%s)" % " ".join(keys))
+    check(re.search(r"\bFAMILY\b", claude) is None, "CLAUDE.md: the voice file has no FAMILY")
+    flat = " ".join(agents.split())
+    check("only while spark waits" not in flat, "AGENTS.md: the face is not only the wait")
+    check("rests above an idle prompt" in flat, "AGENTS.md: the face rests above an idle prompt")
+    # the widgets: the faces they read, and the calls that carry the row
+    moods = set(look.MOODS) | {"blink", "glance"}
+    calls = []
+    for f in WIDGETS:
+        src = read(f)
+        read_faces = set(re.findall(r"(?m)^\s*FACE_([A-Z]+)\) ", src))
+        check("IDLE" in read_faces, "%s reads FACE_IDLE from the look file" % f)
+        off = sorted(x for x in read_faces if x.lower() not in moods)
+        check(not off, "%s: every FACE_<MOOD> it reads is a mood look.py knows%s"
+              % (f, "" if not off else " (found %s)" % ", ".join(off)))
+        check(re.search(r"(?m)^\s*(?:\.|source)\s+\S*\$f\b|(?:\.|source)\s+\S*/look\b", src) is None,
+              "%s never sources the look file" % f)
+        calls.append(sum(1 for line in src.split("\n")
+                         if "SPARK_HINT_ROW=$_spark_height" in line and not line.lstrip().startswith("#")))
+    check(calls[0] == calls[1] and ("The widgets set it on those %d calls" % calls[0]) in " ".join(claude.split()),
+          "CLAUDE.md contract 4: the widgets set SPARK_HINT_ROW on %d calls, both alike" % calls[0])
+    # grammar rule 6: every progress kind by name, every pace
+    m = re.search(r"(?ms)^6\. One progress vocabulary\.(.*?)^7\. ", claude)
+    rule = m.group(1) if m else ""
+    check(bool(rule), "CLAUDE.md has grammar rule 6, one progress vocabulary")
+    for kind in look.PROGRESS:
+        check("`%s`" % kind in rule, "CLAUDE.md's grammar rule 6 names the progress kind %s (look.PROGRESS)" % kind)
+    for step in sorted(set(look.STEPS.values())):
+        check("%.2f" % step in rule, "CLAUDE.md's grammar rule 6 states the pace %.2f (look.STEPS)" % step)
+
+
 def main():
     tests_named()
     tests_gated()
@@ -843,6 +922,8 @@ def main():
     spoken()
     # v1.72: spark ver without credits, spark check --all
     quiet()
+    # v1.80: a plain voice, the face's presence, the progress kinds
+    presence()
     # the voice's mechanical half, and the two nouns in what spark prints
     voice()
     measures()

@@ -30,16 +30,18 @@ class Wrap:
     next word) are kept apart so the mark's own trailing space is never
     doubled."""
 
-    def __init__(self, stream=sys.stdout, mark=True, cps=0, lead=None):
+    def __init__(self, stream=sys.stdout, mark=True, cps=0, lead=None, hang=False):
         self.stream = stream
         self.mark = mark
         self.clean = Printable()  # what feed lets through of the model's text
         # lead (a tty only): a string that opens the reply in the mark's
-        # place -- the chat's face -- and every later line hangs under
-        # it, indented by its visible width (the escapes not counted).
-        # Piped, the lead is ignored: the bytes are today's.
+        # place -- the face. The reply's later lines start at column 0,
+        # so a code block copies clean; hang=True indents them by the
+        # lead's visible width instead (the escapes not counted). Piped,
+        # the lead is ignored: the bytes are today's.
         self.lead = lead if lead and stream.isatty() else ""
-        self.indent = len(SGR_RE.sub("", self.lead))
+        self.lead_cols = len(SGR_RE.sub("", self.lead))
+        self.indent = self.lead_cols if hang else 0
         self.owed = False         # a new line's indent, written before its first char
         # the reveal: cps > 0 at a tty paces every visible character (the
         # same clock as spark reveal: a stall is never repaid as a burst);
@@ -155,10 +157,10 @@ class Wrap:
         if not self.started:
             self.started = True
             if self.lead:
-                # the lead (the chat's face) in the mark's place; the
-                # caller paints it, col counts what is visible
+                # the lead (the face) in the mark's place; the caller
+                # paints it, col counts what is visible
                 self._emit(self.lead)
-                self.col += self.indent
+                self.col += self.lead_cols
             elif self.mark:
                 # the mark in the accent at a tty (paint: plain when piped
                 # or unset); col counts what is visible, never the escape
@@ -392,24 +394,31 @@ class Busy:
 
     Awakened, with the motion part active on the stream (look.active),
     the dots become the SCANNER on every terminal: `* FACE [  =     ]`,
-    8 cells, a frame every 0.12 s, the face blinking every look.blink()
-    frames and glancing every third blink (the face only while the words
-    part is active), ssh and the console included: every frame is ASCII.
+    8 cells, a frame every look.Anim.step seconds (0.12; a temperament
+    changes the pace alone), ssh and the console included: every frame
+    is ASCII. `kind` (look.PROGRESS) picks what moves in the cells, so
+    the motion says what spark is doing: think (a reply on its way, the
+    default), read, steps, swell, march. `mood` picks the face's score
+    (the face only while the words part is active): thinking by default,
+    blinking every look.blink() frames and glancing every third blink.
+    The frames are look.Anim's; this class places and paints them.
     Either way the wait escalates, never louder: from 2 seconds the
     elapsed seconds, from TIER_LONG seconds (or three quarters of
     `timeout`, whichever is sooner) one sentence saying what to do.
-    Unawakened, every byte is today's."""
+    Unawakened, every byte is today's, whatever the kind."""
 
     FRAMES = (".", "..", "...")
     STEP = 0.35
-    SCAN_STEP = 0.12
     CELLS = 8
     TIER_SECONDS = 2
     TIER_LONG = 15
     LONG = "Ctrl-C stops it."
 
-    def __init__(self, stream=sys.stderr, above=False, mark=None, close=False, timeout=None, row=1):
+    def __init__(self, stream=sys.stderr, above=False, mark=None, close=False, timeout=None, row=1,
+                 kind="think", mood="thinking"):
         self.stream = stream
+        self.kind, self.mood = kind, mood
+        self.anim = None
         self.above = above
         self.row = row if isinstance(row, int) and 1 <= row <= 5 else 1
         self.mark = glyph("hammer") if mark is None else mark
@@ -438,13 +447,15 @@ class Busy:
                 from . import look
                 self.moving = look.active("motion", stream)
                 self.scan = self.moving and look.scanner(stream)
-                if self.moving and look.active("words", stream):
-                    self.face = look.faces()
-                    self.blink = look.blink()
+                if self.moving:
+                    self.anim = look.Anim()
+                    if look.active("words", stream):
+                        self.face = self.anim.faces
+                        self.blink = self.anim.blink
             except Exception:       # noqa: BLE001 -- the pulse is never a reason to fail
                 self.moving = self.scan = False
-                self.face = None
-        self.step = self.SCAN_STEP if self.scan else self.STEP
+                self.face = self.anim = None
+        self.step = self.anim.step if self.scan else self.STEP
         self.cols = 80
         if self.moving:
             try:
@@ -453,16 +464,16 @@ class Busy:
                 self.cols = 80
 
     @classmethod
-    def hint_row(cls):
+    def hint_row(cls, kind="think", mood="thinking"):
         """The widgets' pulse: with SPARK_HINT_ROW=N in the environment (a
-        digit 1..5, the height: the widgets set it around `spark line`; a
-        hand-run spark line never touches the rows above), a Busy drawing
-        N rows above the cursor on /dev/tty; otherwise, or when /dev/tty
-        will not open, a silent one."""
+        digit 1..5, the height: the widgets set it around `spark line`
+        and `spark recall`; a hand-run one never touches the rows above),
+        a Busy drawing N rows above the cursor on /dev/tty; otherwise, or
+        when /dev/tty will not open, a silent one."""
         n = os.environ.get("SPARK_HINT_ROW", "")
         if len(n) == 1 and n in "12345":
             try:
-                return cls(open("/dev/tty", "w"), above=True, close=True, row=int(n))
+                return cls(open("/dev/tty", "w"), above=True, close=True, row=int(n), kind=kind, mood=mood)
             except OSError:
                 pass
         return cls(None)
@@ -473,25 +484,21 @@ class Busy:
         per = 3 if self.scan else 1
         return self.FRAMES[(i // per) % len(self.FRAMES)]
 
-    def _face(self, i, mood="thinking"):
-        """The face for frame i: a blink every `blink` frames, a glance
-        every third blink, else the mood's own. Deterministic."""
-        b = self.blink
-        if b and i:
-            if i % (3 * b) == 0:
-                return self.face["glance"]
-            if i % b == 0:
-                return self.face["blink"]
-        return self.face[mood]
+    def _face(self, i, mood=None):
+        """The face for frame i: the mood's score (look.Anim), a blink
+        every `blink` frames, a glance every third blink. Deterministic."""
+        return self.anim.face(mood or self.mood, i)
 
     def _scanner(self, i):
-        """The scanner for frame i, painted: the brackets muted, the light
-        in the accent, bouncing across CELLS cells."""
-        span = 2 * self.CELLS - 2
-        pos = i % span
-        pos = pos if pos < self.CELLS else span - pos
-        return (paint("[", "muted", self.stream) + " " * pos + paint("=", "accent", self.stream)
-                + " " * (self.CELLS - 1 - pos) + paint("]", "muted", self.stream))
+        """The scanner for frame i, painted: the brackets muted, what
+        moves in the accent (a resting dot muted), CELLS cells of the
+        wait's kind (look.Anim.cells)."""
+        out = paint("[", "muted", self.stream)
+        for run in re.split("( +)", self.anim.cells(self.kind, i)):
+            if run.strip():
+                run = paint(run, "muted" if run == "." else "accent", self.stream)
+            out += run
+        return out + paint("]", "muted", self.stream)
 
     def _piece(self, i):
         """The moving piece, painted: the dots, or the face and the scanner."""
@@ -593,14 +600,15 @@ class Busy:
 
 def pulse(stream=None):
     """Awakened, at a terminal: a Busy on `stream` (stderr) around a silent
-    step. Anywhere else a context that draws nothing, so an unawakened
-    machine and a log keep today's bytes."""
+    step, its cells marching (update, model verify). Anywhere else a
+    context that draws nothing, so an unawakened machine and a log keep
+    today's bytes."""
     import contextlib
     stream = sys.stderr if stream is None else stream
     try:
         from . import look
         if look.active("motion", stream):
-            return Busy(stream)
+            return Busy(stream, kind="march")
     except Exception:       # noqa: BLE001 -- the pulse is never a reason to fail
         pass
     return contextlib.nullcontext()
@@ -613,16 +621,17 @@ class Estimate(Busy):
     that model file, engine.last_load) and never past 95 % of the cells,
     so a gap always shows until the engine answers. Past the estimate the
     percent gives way to `longer than last time (N s) -- spark check says
-    why`. The face opens its eyes once over the first third (blink,
-    waking, idle). No estimate (None or 0) is a Busy with the elapsed
-    seconds. Unawakened it is today's pulse; piped it draws nothing.
-    start(), stop() and the context manager are Busy's."""
+    why`. The face wakes once over the first third: the waking score (a
+    yawn) stretched over it, then idle. No estimate (None or 0) is a Busy
+    whose cells swell, with the elapsed seconds. Unawakened it is today's
+    pulse; piped it draws nothing. start(), stop() and the context
+    manager are Busy's."""
 
     WIDTH = 20
     CAP = 0.95
 
     def __init__(self, label, expected_s, stream=sys.stderr):
-        Busy.__init__(self, stream)
+        Busy.__init__(self, stream, kind="swell")
         self.label = label or ""
         try:
             self.expected = max(0.0, float(expected_s or 0))
@@ -634,6 +643,10 @@ class Estimate(Busy):
 
     def _waking_face(self, t):
         third = self.expected / 3.0
+        n = self.anim.length("waking")
+        if n:
+            return self.anim.face("waking", int(n * t / third) if t < third else n)
+        # a waking face edited by hand: its still, between the blink and idle
         if t < third / 2:
             return self.face["blink"]
         if t < third:
@@ -674,6 +687,278 @@ class Estimate(Busy):
         if used - self.WIDTH - 2 + len(tail) <= room:
             return head + tail
         return head + bar
+
+
+def wait(kind="read", stream=None):
+    """A Busy on `stream` (stderr) for a verb that had no pulse (spark
+    edit, read, drill): only where a person watches -- stdout and the
+    stream both terminals, the look's motion active. Anywhere else a
+    silent one: an editor's plugin pipes stdout and never sees a frame,
+    and an unawakened machine keeps today's bytes."""
+    stream = sys.stderr if stream is None else stream
+    try:
+        from . import look
+        if sys.stdout.isatty() and look.active("motion", stream):
+            return Busy(stream, kind=kind)
+    except Exception:       # noqa: BLE001 -- the pulse is never a reason to fail
+        pass
+    return Busy(None)
+
+
+MARKED = re.compile(r"^((?:\x1b\[[0-9;]*m)*[*!](?:\x1b\[[0-9;]*m)*) ")
+
+
+def faced(line, mood, stream=None, plain=False):
+    """`line` with the mood's resting face after its leading mark, where
+    the look's motion and words are active on `stream` (stdout by
+    default): `! no model answers` -> `! (O.O) no model answers`. The
+    face is painted in the accent; plain=True leaves it bare, for a line
+    its caller paints whole. Anywhere else -- a pipe, an unawakened
+    machine, the look off, a line with no mark -- the line as it came."""
+    stream = sys.stdout if stream is None else stream
+    try:
+        from . import look
+        m = MARKED.match(line)
+        if m is None or not (look.active("motion", stream) and look.active("words", stream)):
+            return line
+        face = look.Anim().rest(mood)
+        return m.group(0) + (face if plain else paint(face, "accent", stream)) + " " + line[m.end():]
+    except Exception:       # noqa: BLE001 -- a face is never a reason to fail
+        return line
+
+
+class FaceLead:
+    """The face that leads a reply, and the stream the reply's wrap writes
+    through. The face stands in the mark's place (`lead`, the idle face
+    and a space). While the reply comes it moves on that first row: talk
+    frames while text flows (a write in the last FLOW seconds), thinking
+    frames when the stream pauses. settle(mood) ends it on the mood's
+    resting still.
+
+    Every write is counted in rows (a line feed, a line the terminal
+    wrapped), under one lock with the redraw. The redraw saves the
+    cursor, goes up the rows the reply has taken, writes the frame there
+    and restores. Before the lead's row would scroll off (the rows reach
+    the terminal's height - 2) the face settles where it is; a resized
+    terminal stops it as it stands. The frames are look.Anim's.
+
+    A subclass names its own source of "is it speaking" (_speaking):
+    forge._Face asks the voice."""
+
+    FLOW = 0.3          # text flows this long after a write
+    TICK = 0.05         # how often the redraw thread looks
+
+    def __init__(self, stream, anim=None):
+        from . import look
+        self.stream = stream
+        self.anim = anim or look.Anim()
+        idle = self.anim.talk(False)
+        frames = [idle, self.anim.talk(True), self.anim.faces["blink"], self.anim.faces["glance"]]
+        for mood in ("thinking", "pleased", "puzzled", "alarmed"):
+            frames += [self.anim.rest(mood)] + [f for f, _n in self.anim.scores[mood]]
+        self.width = max(len(f.rstrip()) for f in frames)
+        self.lead = self._paint(idle) + " "
+        self.lock = threading.Lock()
+        self.rows = self.col = 0
+        self.size = self._size()
+        self.started = False        # the lead is written: the row exists
+        self.shown = idle           # the frame on the lead's row
+        self.open = False           # the talking frame is the one drawn
+        self.mood = None            # what it settles on, once known
+        self.closed = self.halt = self.lost = False
+        self.last = 0.0             # the newest write
+        self._quit = threading.Event()
+        self._going = False
+        self.thread = threading.Thread(target=self._run, name="spark-face", daemon=True)
+
+    def _paint(self, frame):
+        f = frame.rstrip()
+        return paint(f, "accent", self.stream) + " " * (self.width - len(f))
+
+    def _size(self):
+        try:
+            cols, lines = os.get_terminal_size(self.stream.fileno())
+        except (AttributeError, OSError, ValueError):
+            return (80, 24)
+        return (cols or 80, lines or 24)        # a pty that was never sized answers 0 by 0
+
+    def _mouth(self):
+        from . import look
+        return look.MOUTH_STEP
+
+    # --- the stream the wrap writes through
+    def isatty(self):
+        return self.stream.isatty()
+
+    def fileno(self):
+        return self.stream.fileno()
+
+    def flush(self):
+        self.stream.flush()
+
+    def write(self, s):
+        with self.lock:
+            if s and not self.started:
+                self.started = True
+            self.last = time.monotonic()
+            self._count(s)
+            self.stream.write(s)
+            if self.started and not self.halt and self.rows >= self.size[1] - 2:
+                # the lead's row is about to leave the screen: the face
+                # settles while it can still be reached
+                if self._draw(self.anim.rest(self.mood) if self.mood else self.anim.talk(False), must=True):
+                    self.halt = True
+        if s and not self._going:
+            self.start()
+
+    def line(self):
+        """A blank line of the chat's own after the reply, counted."""
+        self.write("\n")
+        self.flush()
+
+    def _count(self, s):
+        """(the lock held) The cursor's row below the lead and its column
+        after `s`: a line feed, or a character past the last column, is
+        a row more (a wide character two columns, an escape none)."""
+        width = self.size[0]
+        for ch in SGR_RE.sub("", s):
+            if ch == "\n":
+                self.rows, self.col = self.rows + 1, 0
+            elif ch == "\r":
+                self.col = 0
+            elif ch == "\t":
+                self.col = min(width, (self.col // 8 + 1) * 8)
+            elif ch >= " " and not unicodedata.combining(ch):
+                w = 2 if unicodedata.east_asian_width(ch) in "WF" else 1
+                if self.col + w > width:
+                    self.rows, self.col = self.rows + 1, 0
+                self.col += w
+
+    # --- the face
+    def start(self):
+        if not self._going:
+            self._going = True
+            self.thread.start()
+        return self
+
+    def close(self):
+        """No more of the reply comes: the thread ends once nothing
+        speaks, resting on the mood settle() named, else idle."""
+        self.closed = True
+
+    def settle(self, mood="pleased", play=False):
+        """The reply is over: the face rests on the mood's still, drawn
+        once, and moves no more -- nothing is drawn after this returns.
+        play=True (the chat, where a prompt waits next) lets the mood's
+        score play first, on the thread; rest() stops it at the still."""
+        with self.lock:
+            self.mood = mood
+            self.closed = True
+            if not play:
+                if not self.lost:
+                    self._draw(self.anim.rest(mood))
+                self.halt = True
+        if not play:
+            self._quit.set()
+
+    def rest(self):
+        """At rest now, and no redraw after it: a key typed, a reply
+        stopped, a line of the caller's own about to print. The still is
+        the settled mood's, else idle."""
+        with self.lock:
+            if not self.halt and not self.lost:
+                self._draw(self.anim.rest(self.mood) if self.mood else self.anim.talk(False))
+            self.halt = True
+        self._quit.set()
+
+    def _draw(self, frame, must=False):
+        """(the lock held) The frame on the lead's row; True when it is
+        there. Skipped while the cursor waits at the last column (a
+        restore there may lose the wrap). Once that row is out of reach --
+        scrolled off, the terminal resized -- the face is lost and moves
+        no more."""
+        if not self.started:
+            return True
+        if self.rows > self.size[1] - 1 or self._size() != self.size:
+            self.halt = self.lost = True
+            return False
+        if self.col >= self.size[0]:
+            return not must
+        if frame != self.shown:
+            up = "\033[%dA" % self.rows if self.rows else ""
+            self.stream.write("\x1b7" + up + "\r" + self._paint(frame) + "\x1b8")
+            self.stream.flush()
+            self.shown = frame
+        self.open = frame == self.anim.talk(True) and frame != self.anim.talk(False)
+        return True
+
+    def _speaking(self):
+        """"now" while text flows, "pause" while the stream waits, "" once
+        the reply is over. Waits a tick first."""
+        self._quit.wait(self.TICK)
+        if self.closed:
+            return ""
+        return "now" if time.monotonic() - self.last < self.FLOW else "pause"
+
+    def _run(self):
+        flip, since = 0.0, None
+        try:
+            while True:
+                state = self._speaking()
+                with self.lock:
+                    if self.halt:
+                        return
+                    now = time.monotonic()
+                    if state == "now":
+                        since = None
+                        if now >= flip:
+                            self._draw(self.anim.talk(not self.open))
+                            flip = now + self._mouth()
+                    elif state == "pause":
+                        since = now if since is None else since
+                        self._draw(self.anim.face("thinking", int((now - since) / self.anim.step)))
+                    else:
+                        since = None
+                        self._draw(self.anim.talk(False))
+                        if state == "" and self.closed:
+                            break
+            self._finish()
+        except Exception:   # noqa: BLE001 -- a face is never a reason to fail
+            from . import log_exc
+            log_exc("text: the leading face")
+
+    def _finish(self):
+        """The settled mood's score, once, then its still; idle when no
+        mood was named."""
+        mood = self.mood
+        for k in range(self.anim.length(mood) if mood else 0):
+            with self.lock:
+                if self.halt:
+                    return
+                self._draw(self.anim.face(mood, k))
+            if self._quit.wait(self.anim.step):
+                return
+        with self.lock:
+            if not self.halt:
+                self._draw(self.anim.rest(mood) if mood else self.anim.talk(False))
+                self.halt = True
+
+
+def reply_face(stream=None):
+    """(the stream a reply's wrap writes through, its lead) for a reply
+    on `stream` (stdout by default): a FaceLead and its face where the
+    look's motion and words are active there, else the stream itself and
+    None -- a pipe, an unawakened machine and the look off keep their
+    bytes."""
+    stream = sys.stdout if stream is None else stream
+    try:
+        from . import look
+        if look.active("motion", stream) and look.active("words", stream):
+            face = FaceLead(stream)
+            return face, face.lead
+    except Exception:       # noqa: BLE001 -- a face is never a reason to fail
+        pass
+    return stream, None
 
 
 class Fence:

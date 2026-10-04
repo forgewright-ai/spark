@@ -16,24 +16,14 @@
 #
 # Three modes, SPARK_VOICE (contract 3, spark.env):
 #   off    silent (the default)
-#   clear  a plain clear voice for low vision, no character; works before
+#   clear  a plain clear voice for low vision; works before
 #          spark awaken. SPARK_VOICE_RATE is its speed (50..300, 100 as
 #          made: Kokoro's length scale is 100/rate). A screen reader
 #          running (VoiceOver, Orca, speakup) wins: clear stays silent and
 #          says why, unless `spark voice clear --anyway`.
-#   on     the machine's own voice: never a plain human voice, a
-#          character spark awaken makes from the temperament and the seed
-#          the face's body uses -- the recipe in ~/.config/spark/voice.
-#
-# The characters, one family per temperament, stdlib only:
-#   radio     plain    an RBJ band-pass near 1200 Hz (q 0.9), a tanh drive,
-#                      a faint hiss from a seeded Random
-#   choir     warm     a 3-voice chorus, then a 40 Hz ring at 0.5 wet
-#   eightbit  playful  resampled x1.15, each sample held 3, 5 bits
-#   robot     terse    a 55 Hz ring fully wet into a 4 ms comb, feedback 0.45
-# The recipe jitters each chain's numbers within a small range by the
-# seed, and picks the Kokoro speaker from a short list per family. The
-# chains are deterministic for a recipe: the same input, the same bytes.
+#   on     the machine's own speaker, picked by spark awaken from the
+#          temperament and the seed the face's body uses; no effect
+#          over it. The two speakers are kept in ~/.config/spark/voice.
 #
 # Listening: the runtime's own voice activity tool records until a pause
 # (sherpa-onnx-vad-microphone on macOS, through portaudio; -vad-alsa on
@@ -50,8 +40,8 @@
 #
 # The API the voice's surfaces call: mode(cfg), say_aloud(cfg, text,
 # wait=False), stop(), listen(cfg), spoken_command(command), lang_of(text),
-# screen_reader(); below them speak(), character(), play(), fetch(),
-# mint(), read_recipe() and write_recipe().
+# screen_reader(); below them speak(), play(), fetch(), mint(),
+# read_recipe() and write_recipe().
 #
 # Every wav speak() writes opens with a lead-in of silence (LEAD_IN_MS,
 # lead_in()), so a sound card that sleeps between sounds never eats the
@@ -90,10 +80,8 @@ import array
 import atexit
 import hashlib
 import json
-import math
 import os
 import platform
-import random
 import re
 import select
 import shutil
@@ -192,18 +180,10 @@ SID_MAX = 53
 PT_SIDS = {"f": 42, "m": 43}            # a Portuguese reply: the p* speaker of the same register
 CLEAR_SID, CLEAR_SID_PT = 3, 42         # the clear voice: af_heart, pf_dora
 
-# The four families: the temperament picks one, the seed a speaker from
-# its list and each number within base +- span.
-TEMPER_FAMILY = {"plain": "radio", "warm": "choir", "playful": "eightbit", "terse": "robot"}
-FAMILY_SIDS = {"radio": (3, 16, 21, 26), "choir": (2, 9, 1, 25),
-               "eightbit": (18, 5, 6, 7), "robot": (14, 17, 26, 11)}
-RECIPES = {
-    "radio": (("FREQ", 1200.0, 150.0), ("Q", 0.9, 0.1), ("DRIVE", 2.5, 0.5), ("HISS", 0.008, 0.003)),
-    "choir": (("DEPTH", 3.0, 0.8), ("RATE", 0.3, 0.1), ("RING", 40.0, 4.0), ("WET", 0.5, 0.06)),
-    "eightbit": (("SPEED", 1.15, 0.04), ("HOLD", 3, 0), ("BITS", 5, 0)),
-    "robot": (("RING", 55.0, 5.0), ("COMB", 4.0, 0.5), ("FEEDBACK", 0.45, 0.05)),
-}
-INT_KEYS = ("HOLD", "BITS")
+# The speakers a temperament may have: the seed picks where the list
+# starts, and each "again" at the audition takes the next one.
+TEMPER_SIDS = {"plain": (3, 16, 21, 26), "warm": (2, 9, 1, 25),
+               "playful": (18, 5, 6, 7), "terse": (14, 17, 26, 11)}
 
 # The symbols a clear reading says by name (spoken_command), the longest
 # first so `>>` is never `into, into`.
@@ -566,49 +546,34 @@ def _unit(seed, salt):
     return int.from_bytes(h[:8], "big") / float(1 << 64)
 
 
-def _fmt(key, v):
-    return str(int(round(v))) if key in INT_KEYS else ("%.4f" % v).rstrip("0").rstrip(".")
-
-
 def _register(sid):
     name = SPEAKERS.get(sid, "")
     return "m" if name[1:2] == "m" else "f"
 
 
-def mint(temper, seed):
-    """The machine's voice from its temperament and a seed: the family,
-    a Kokoro speaker from the family's list (and the Portuguese one of
-    the same register), and the chain's numbers jittered by the seed.
-    Strings, KEY=value-ready; the same (temper, seed), the same recipe."""
-    family = TEMPER_FAMILY.get(temper, "radio")
-    sids = FAMILY_SIDS[family]
-    sid = sids[int(_unit(seed, family + ":sid") * len(sids))]
-    r = {"FAMILY": family, "SID": str(sid), "SID_PT": str(PT_SIDS[_register(sid)])}
-    for key, base, span in RECIPES[family]:
-        r[key] = _fmt(key, base + span * (2 * _unit(seed, family + ":" + key) - 1))
-    return r
+def mint(temper, seed, n=0):
+    """The machine's voice from its temperament and a seed: a Kokoro
+    speaker from the temperament's list, and the Portuguese one of the
+    same register. `n` takes the nth speaker after the seed's own, so
+    the audition's "again" hears another. Strings, KEY=value-ready; the
+    same (temper, seed, n), the same recipe."""
+    temper = temper if temper in TEMPER_SIDS else "plain"
+    sids = TEMPER_SIDS[temper]
+    start = int(_unit(seed, temper + ":sid") * len(sids))
+    sid = sids[(start + n) % len(sids)]
+    return {"SID": str(sid), "SID_PT": str(PT_SIDS[_register(sid)])}
 
 
 def _checked(raw):
-    """A recipe fit to use: a known family, speakers in Kokoro's table,
-    every number of its chain, clamped to its range. None when not."""
-    family = raw.get("FAMILY", "")
-    if family not in RECIPES:
-        return None
-    out = {"FAMILY": family}
+    """A recipe fit to use: its two speakers, each in Kokoro's table.
+    Every other key is ignored, so a file an older spark wrote keeps
+    its speaker. None when a speaker is missing or out of the table."""
+    out = {}
     for key in ("SID", "SID_PT"):
         v = raw.get(key, "")
-        if not v.isdigit() or int(v) > SID_MAX:
+        if not isinstance(v, str) or not v.isascii() or not v.isdigit() or int(v) > SID_MAX:
             return None
         out[key] = str(int(v))
-    for key, base, span in RECIPES[family]:
-        try:
-            v = float(raw.get(key, ""))
-        except ValueError:
-            return None
-        if v != v:          # NaN
-            return None
-        out[key] = _fmt(key, min(base + span, max(base - span, v)))
     return out
 
 
@@ -628,53 +593,31 @@ def read_recipe(path=None):
 
 
 def write_recipe(recipe, path=None):
-    """The recipe as KEY=value lines, 0600, atomically."""
+    """The recipe's two speakers as KEY=value lines, 0600, atomically."""
     r = _checked(recipe)
     if r is None:
         raise VoiceError("not a voice recipe")
-    keys = ["FAMILY", "SID", "SID_PT"] + [k for k, _b, _s in RECIPES[r["FAMILY"]]]
     path = path or RECIPE_FILE
     os.makedirs(os.path.dirname(path), exist_ok=True)
     tmp = path + ".tmp"
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "w", encoding="utf-8") as f:
-        f.write("".join("%s=%s\n" % (k, r[k]) for k in keys))
+        f.write("".join("%s=%s\n" % (k, r[k]) for k in ("SID", "SID_PT")))
     os.chmod(tmp, 0o600)
     os.replace(tmp, path)
     return r
 
 
 def describe(recipe):
-    """`radio, heart` for a recipe: the family and the speaker's name."""
+    """`heart` for a recipe: the speaker's name."""
     sid = int(recipe["SID"])
-    return "%s, %s" % (recipe["FAMILY"], SPEAKERS.get(sid, "x_speaker %d" % sid).split("_", 1)[1])
+    return SPEAKERS.get(sid, "x_speaker %d" % sid).split("_", 1)[1]
 
 
-# -------------------------------------------------------------- the chains
-def _read_wav(path):
-    """(samples in [-1, 1], rate) from a 16-bit PCM wav; stereo is averaged."""
-    with wave.open(path, "rb") as w:
-        ch, width, rate, n = w.getnchannels(), w.getsampwidth(), w.getframerate(), w.getnframes()
-        data = w.readframes(n)
-    if width != 2:
-        raise VoiceError("a %d-bit wav: the characters read 16-bit" % (8 * width))
-    a = array.array("h")
-    a.frombytes(data)
-    if sys.byteorder == "big":
-        a.byteswap()
-    if ch > 1:
-        return [sum(a[i:i + ch]) / (ch * 32768.0) for i in range(0, len(a) - ch + 1, ch)], rate
-    return [v / 32768.0 for v in a], rate
-
-
-def _pcm(x, peak=None):
-    """Samples in [-1, 1] as 16-bit little-endian mono PCM bytes; with
-    `peak`, scaled first so the loudest is that much of full scale."""
-    k = 1.0
-    if peak:
-        top = max((abs(v) for v in x), default=0.0)
-        k = peak / top if top > 1e-9 else 1.0
-    a = array.array("h", (max(-32767, min(32767, int(round(v * k * 32767)))) for v in x))
+# ----------------------------------------------------------------- the pcm
+def _pcm(x):
+    """Samples in [-1, 1] as 16-bit little-endian mono PCM bytes."""
+    a = array.array("h", (max(-32767, min(32767, int(round(v * 32767)))) for v in x))
     if sys.byteorder == "big":
         a.byteswap()
     return a.tobytes()
@@ -691,112 +634,6 @@ def _write_pcm(path, pcm, rate):
         w.writeframes(pcm)
         w.close()
     return path
-
-
-def _write_wav(path, x, rate):
-    """16-bit mono PCM, the peak at 0.89 of full scale, 0600."""
-    return _write_pcm(path, _pcm(x, 0.89), rate)
-
-
-def _norm(x):
-    peak = max((abs(v) for v in x), default=0.0)
-    return [v / peak for v in x] if peak > 1e-9 else list(x)
-
-
-def _at(x, pos):
-    """x at a fractional position, linear between samples; 0 outside."""
-    i = int(math.floor(pos))
-    if i < 0 or i >= len(x):
-        return 0.0
-    f = pos - i
-    b = x[i + 1] if i + 1 < len(x) else 0.0
-    return x[i] + (b - x[i]) * f
-
-
-def _radio(x, fs, r, seed):
-    """RBJ band-pass (constant 0 dB peak), a tanh drive, a faint hiss."""
-    f0, q, drive, hiss = float(r["FREQ"]), float(r["Q"]), float(r["DRIVE"]), float(r["HISS"])
-    w0 = 2 * math.pi * f0 / fs
-    alpha = math.sin(w0) / (2 * q)
-    a0 = 1 + alpha
-    b0, b2 = alpha / a0, -alpha / a0
-    a1, a2 = -2 * math.cos(w0) / a0, (1 - alpha) / a0
-    y, x1, x2, y1, y2 = [], 0.0, 0.0, 0.0, 0.0
-    for v in x:
-        o = b0 * v + b2 * x2 - a1 * y1 - a2 * y2
-        x2, x1, y2, y1 = x1, v, y1, o
-        y.append(o)
-    y = _norm(y)
-    t = math.tanh(drive)
-    rng = random.Random(seed)
-    return [math.tanh(drive * v) / t + hiss * (2 * rng.random() - 1) for v in y]
-
-
-def _choir(x, fs, r, seed):
-    """Three voices -- the dry one and two that drift a few ms behind it
-    -- then a slow ring, half wet: a soft robot choir."""
-    depth, rate, ring, wet = float(r["DEPTH"]), float(r["RATE"]), float(r["RING"]), float(r["WET"])
-    voices = ((20.0, rate, 0.0), (28.0, rate * 1.37, 1.9))
-    ms = fs / 1000.0
-    w = 2 * math.pi / fs
-    y = []
-    for n, v in enumerate(x):
-        s = v
-        for base, hz, phase in voices:
-            s += _at(x, n - (base + depth * math.sin(w * hz * n + phase)) * ms)
-        y.append(s / 3.0 * ((1 - wet) + wet * math.sin(w * ring * n)))
-    return y
-
-
-def _eightbit(x, fs, r, seed):
-    """Faster and higher (resampled), each sample held, few bits."""
-    speed, hold, bits = float(r["SPEED"]), int(r["HOLD"]), int(r["BITS"])
-    n = int(len(x) / speed)
-    y = _norm([_at(x, i * speed) for i in range(n)])
-    levels = float(2 ** (bits - 1) - 1)
-    out, cur = [], 0.0
-    for i, v in enumerate(y):
-        if i % hold == 0:
-            cur = round(v * levels) / levels
-        out.append(cur)
-    return out
-
-
-def _robot(x, fs, r, seed):
-    """A ring fully wet into a short comb that feeds back on itself."""
-    ring, comb, fb = float(r["RING"]), float(r["COMB"]), float(r["FEEDBACK"])
-    d = max(1, int(round(comb * fs / 1000.0)))
-    w = 2 * math.pi * ring / fs
-    y = []
-    for n, v in enumerate(x):
-        o = v * math.sin(w * n)
-        if n >= d:
-            o += fb * y[n - d]
-        y.append(o)
-    return y
-
-
-CHAINS = {"radio": _radio, "choir": _choir, "eightbit": _eightbit, "robot": _robot}
-
-
-def chain(x, fs, recipe):
-    """The recipe's chain over samples in [-1, 1] at rate fs: the
-    character's samples, deterministic for a recipe."""
-    r = _checked(recipe)
-    if r is None:
-        raise VoiceError("not a voice recipe")
-    seed = int.from_bytes(hashlib.sha256(json.dumps(r, sort_keys=True).encode()).digest()[:8], "big")
-    return CHAINS[r["FAMILY"]](x, fs, r, seed)
-
-
-def character(wav_in, recipe, wav_out=None):
-    """The recipe's chain over a 16-bit wav: a new wav, 0600, the same rate."""
-    if _checked(recipe) is None:
-        raise VoiceError("not a voice recipe")
-    x, fs = _read_wav(wav_in)
-    y = chain(x, fs, recipe)
-    out = wav_out or re.sub(r"(\.wav)?$", "-character.wav", wav_in, count=1)
-    return _write_wav(out, y, fs)
 
 
 # --------------------------------------------------------------- speaking
@@ -915,15 +752,15 @@ def speak(cfg, text, mode_="clear", lang=None, recipe=None, d=None, lead=None, e
     caller removes with cleanup(); `d`, one _private_dir() made, is used
     instead of a new one): Kokoro through the engine loaded in this
     process (clip; `engine`, else the process's own). The text never
-    rides a command line: no tool is started. "on" runs the machine's
-    character over it (recipe, else the one kept); "clear" is the plain
-    voice at SPARK_VOICE_RATE. Either way the final wav opens with the
+    rides a command line: no tool is started. "on" is the machine's
+    own speaker (recipe, else the one kept); "clear" is the clear voice
+    at SPARK_VOICE_RATE. Either way the final wav opens with the
     lead-in (lead_in; `lead` ms, lead_ms() when None): a Reader passes
     0, its player adds the lead-in where the card may sleep."""
     cfg = cfg or config.load()
     pcm, fs = clip(cfg, text, mode_, engine=engine, lang=lang, recipe=recipe)
     d = d if d and _ours(d) and os.path.isdir(d) else _private_dir()
-    path = os.path.join(d, "character.wav" if mode_ == "on" else "voice.wav")
+    path = os.path.join(d, "voice.wav")
     try:
         _write_pcm(path, pcm, fs)
     except OSError as e:
@@ -1172,15 +1009,15 @@ def process_engine(mode_="clear"):
 
 def clip(cfg, text, mode_="clear", engine=None, lang=None, recipe=None):
     """One text as (16-bit little-endian mono PCM bytes, rate): through
-    the loaded engine (`engine`, else process_engine()). Mode on runs
-    the character's chain over the samples, the peak at 0.89 of full
-    scale. No lead-in: the player adds it where the card may sleep."""
-    t, pt, sid, scale, recipe = _voice_of(cfg, text, mode_, lang, recipe)
+    the loaded engine (`engine`, else process_engine()). Mode on is
+    the recipe's speaker, with no effect over it. No lead-in: the
+    player adds it where the card may sleep."""
+    t, pt, sid, scale, _recipe = _voice_of(cfg, text, mode_, lang, recipe)
     engine = engine or process_engine(mode_)
     x, fs = engine.say(t, sid, 1.0 / scale, "pt-br" if pt else "en-us")
     if fs <= 0:
         raise VoiceError("the voice did not speak")
-    return (_pcm(chain(x, fs, recipe), 0.89) if mode_ == "on" else _pcm(x)), fs
+    return _pcm(x), fs
 
 
 # ---------------------------------------------------------------- playing
@@ -1387,8 +1224,8 @@ def anyway():
 
 
 def say_aloud(cfg, text, wait=False):
-    """The text aloud in the current mode: speak, the character or the
-    clear voice, then play. A handle (stop() ends it) or None: off, a
+    """The text aloud in the current mode: speak, the machine's own
+    voice or the clear one, then play. A handle (stop() ends it) or None: off, a
     screen reader running in clear mode, or any failure -- never a raise;
     a failure says one line on stderr, at a terminal only."""
     try:
@@ -2704,10 +2541,11 @@ HELLO = "Hello. This is how I sound."   # what the audition says, the same every
 
 
 def audition(cfg, temper, seed, ask, out=say):
-    """spark awaken's offer: a recipe from the temperament and the seed,
-    HELLO spoken in it, then keep / again / none (again takes the next
-    seed). What is missing of the engine is downloaded first, its size
-    said and asked. The recipe kept, or None; nothing is written here."""
+    """spark awaken's offer: a speaker from the temperament and the seed,
+    HELLO spoken by it, then keep / again / none (again takes the next
+    speaker of the temperament; after the last there is none). What is
+    missing of the engine is downloaded first, its size said and asked.
+    The recipe kept, or None; nothing is written here."""
     gone = missing()
     if gone:
         a = ask("a voice of its own too, %d MB to download? yes/NO: " % _mb(sum(x["size"] for x in gone)))
@@ -2718,8 +2556,8 @@ def audition(cfg, temper, seed, ask, out=say):
         except VoiceError as e:
             out("! the voice did not download: %s" % e)
             return None
-    for n in range(12):
-        r = mint(temper, seed if n == 0 else "%s:%d" % (seed, n))
+    for n in range(len(TEMPER_SIDS["plain"])):
+        r = mint(temper, seed, n)
         try:
             wav = speak(cfg, HELLO, "on", recipe=r)
             try:

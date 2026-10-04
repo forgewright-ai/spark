@@ -369,16 +369,30 @@ def cmd_edit(args):
     # brief, keeping the kind -- the turn record and the Anchors gate --
     # unchanged. The reading surfaces pass it; the editors never do.
     mode = "edit-discuss" if (kind == "answer" and opts["source"]) else "edit-" + kind
+    # the wait at a terminal: a pulse until the first chunk, only where a
+    # person watches (text.wait: stdout and stderr both terminals, the
+    # look on). An editor pipes stdout, so its plugin never sees a frame
+    busy = textmod.wait("read")
+    feed = _printable_feed(fence.feed, data)
+
+    def first(chunk):
+        busy.stop()
+        feed(chunk)
     try:
         s = session.Session(cfg, mode, shell, "", role=role,
                             history=history if kind == "answer" else None)
-        out, ms = s.ask_stream(text, context, _printable_feed(fence.feed, data), max_tokens=max_tokens, timeout=EDIT_TIMEOUT)
+        busy.start()
+        out, ms = s.ask_stream(text, context, first, max_tokens=max_tokens, timeout=EDIT_TIMEOUT)
     except wire.BrainError as e:
+        busy.stop()
         done()
         die(e.hint)
     except KeyboardInterrupt:
+        busy.stop()
         done()
         raise
+    finally:
+        busy.stop()
     done()
     counts = {"quotes": anchors.quoted, "unanchored": anchors.missed} if anchors else {}
     if held:

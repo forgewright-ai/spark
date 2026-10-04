@@ -98,8 +98,8 @@ on a Mac.
    the commands.
 10. `journalctl -f | spark watch anything that fails`, on Linux: one
     line when a line matches.
-11. `spark awaken`: a personality and a face. `spark look off` turns
-    them off.
+11. `spark awaken`: a personality, and a face that waits, answers and
+    rests above your prompt. `spark look off` turns them off.
 12. `spark memory add "short answers"`, then `spark chat`. In the chat,
     `/read @notes.txt what is due` answers from the file.
 13. `spark serve --login`: open the address on your phone. The traffic

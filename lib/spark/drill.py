@@ -123,7 +123,10 @@ def _propose(s, source, cfg, shell):
     """The grounded items the model proposes for this source (may be [])."""
     read, tail = session.reading(cfg, source, shell)
     text = read + "Turn this source into practice questions.\nSource:\n" + source + tail
-    reply, _ms = s.ask_json(text, persona.DRILL_SCHEMA, max_tokens=DRILL_TOKENS, timeout=DRILL_TIMEOUT)
+    # the wait at a terminal: a pulse while the items are made, only
+    # where a person watches (text.wait)
+    with textmod.wait("read"):
+        reply, _ms = s.ask_json(text, persona.DRILL_SCHEMA, max_tokens=DRILL_TOKENS, timeout=DRILL_TIMEOUT)
     items = reply.get("items") if isinstance(reply, dict) else []
     return _ground(items, source)
 

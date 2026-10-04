@@ -31,7 +31,7 @@ import time
 from contextlib import contextmanager
 
 from . import THREADS_DIR, log_exc, paint, state_dir, vault
-from . import memory, persona, soul
+from . import look, memory, persona, soul
 from . import text as textmod
 
 HISTORY_MAX_CHARS = 20000     # what a continued thread sends at most; oldest pairs go first
@@ -924,6 +924,9 @@ def read_refs(words, cwd=""):
 
 
 # ------------------------------------------------------------------ reply
+FINISH = [None]         # how the newest reply() ended: "stop", or "length" (the cap)
+
+
 def reply(cfg, thread, text, files=(), cwd="", shell="", mode="chat", on_delta=None, context="", line=None, brain=None,
           store=None, mem=None, said=None):
     """One turn, no terminal: the answer streams through on_delta(text).
@@ -945,6 +948,7 @@ def reply(cfg, thread, text, files=(), cwd="", shell="", mode="chat", on_delta=N
     does (history off). Nothing is printed here -- that is the caller's job."""
     from . import session          # session imports forge: resolved late on purpose
     from . import wire
+    FINISH[0] = None
     context = "\n\n".join(c for c in (context, file_context(files, cwd)) if c)
     if not text and files:
         text = SUMMARISE
@@ -986,7 +990,8 @@ def reply(cfg, thread, text, files=(), cwd="", shell="", mode="chat", on_delta=N
             raise
         land(e)
         raise
-    if (s.timings or {}).get("finish") == "length":
+    FINISH[0] = (s.timings or {}).get("finish")
+    if FINISH[0] == "length":
         # the cap ended the reply, not the model: say so on the screen
         # (never on the thread -- the record keeps the words that came)
         from . import glyph
@@ -1143,152 +1148,53 @@ FOLLOW_WAIT = 8.0
 FOLLOW_SHARE = 0.9
 FOLLOW_EARLY = 0.3
 
-# The face talks (a reply read aloud, at a terminal where the look's
-# motion and words are active): the reply opens with the idle face in the
-# mark's place, and while one of its sentences sounds the mouth opens and
-# closes every MOUTH_STEP seconds. Between sentences, after the last, on
-# a cut (Esc x) and once a key is typed at `chat>`, it rests on idle.
-MOUTH_STEP = 0.15
-FACE = [None]           # the talking face of the newest reply, while it may move
+# The face leads a reply (a terminal where the look's motion and words
+# are active): the reply opens with the idle face in the mark's place
+# (text.FaceLead). A reply read aloud talks with the voice: while one of
+# its sentences sounds the mouth opens and closes every MOUTH_STEP
+# seconds, and between sentences it rests on idle (_Face). One not read
+# aloud talks while its text flows. Either way it ends on a mood's still:
+# pleased, puzzled when the cap cut the reply, alarmed when the model
+# failed. In the chat the mood's score may play while `chat>` waits; a
+# key typed there rests it.
+MOUTH_STEP = look.MOUTH_STEP
+FACE = [None]           # the face of the newest reply, while it may move
 
 
 def _face_rest():
-    """The face rests on idle and moves no more: a key typed, a reply
-    stopped, the chat about to print a line of its own."""
+    """The face rests on its still and moves no more: a key typed, a
+    reply stopped, the chat about to print a line of its own."""
     f, FACE[0] = FACE[0], None
     if f is not None:
         f.rest()
 
 
-class _Face:
-    """The talking face of one spoken reply, and the stream the wrap
-    writes it through: every write is counted in rows (a line feed, a line
-    the terminal wrapped), under one lock with the mouth's redraw. The
-    redraw saves the cursor, goes up the rows the reply has taken to its
-    first row, writes the frame there and restores -- only while that row
-    is on screen (rows < the terminal's height - 1) and the terminal has
-    kept its size. The thread ends resting on idle, once no line of the
-    reply will sound again or rest() is called."""
+class _Face(textmod.FaceLead):
+    """The talking face of one spoken reply: text.FaceLead (the stream
+    the wrap writes through, the rows counted, the redraw in place) whose
+    source is the voice. The mouth moves while one of the reply's
+    sentences sounds (voice.Reader.sounds), and rests on idle between
+    them. The thread ends once no line of the reply will sound again,
+    on the mood's still."""
 
-    def __init__(self, stream, idle, talk, reader):
-        import threading
-        self.stream, self.reader = stream, reader
-        self.frames = (paint(idle, "accent", stream), paint(talk, "accent", stream))
-        self.lead = self.frames[0] + " "
-        self.lock = threading.Lock()
-        self.rows = self.col = 0
-        self.size = self._size()
-        self.started = False        # the lead is written: the row exists
-        self.open = False           # the talking frame is the one drawn
+    def __init__(self, stream, reader, anim=None):
+        textmod.FaceLead.__init__(self, stream, anim)
+        self.reader = reader
         self.tags = []
-        self.closed = self.halt = False
-        self.thread = threading.Thread(target=self._run, name="spark-face", daemon=True)
 
-    def _size(self):
-        try:
-            return tuple(os.get_terminal_size(self.stream.fileno()))
-        except (AttributeError, OSError, ValueError):
-            return (80, 24)
-
-    # --- the stream the wrap writes through
-    def isatty(self):
-        return self.stream.isatty()
-
-    def fileno(self):
-        return self.stream.fileno()
-
-    def flush(self):
-        self.stream.flush()
-
-    def write(self, s):
-        with self.lock:
-            self.started = self.started or bool(s)
-            self._count(s)
-            self.stream.write(s)
-
-    def line(self):
-        """A blank line of the chat's own after the reply, counted."""
-        self.write("\n")
-        self.flush()
-
-    def _count(self, s):
-        """(the lock held) The cursor's row below the lead and its column
-        after `s`: a line feed, or a character past the last column, is
-        a row more (a wide character two columns, an escape none)."""
-        import unicodedata
-        width = self.size[0]
-        for ch in textmod.SGR_RE.sub("", s):
-            if ch == "\n":
-                self.rows, self.col = self.rows + 1, 0
-            elif ch == "\r":
-                self.col = 0
-            elif ch == "\t":
-                self.col = min(width, (self.col // 8 + 1) * 8)
-            elif ch >= " " and not unicodedata.combining(ch):
-                w = 2 if unicodedata.east_asian_width(ch) in "WF" else 1
-                if self.col + w > width:
-                    self.rows, self.col = self.rows + 1, 0
-                self.col += w
-
-    # --- the mouth
     def add(self, tags):
         with self.lock:
             self.tags.extend(t for t in tags if t is not None)
 
-    def close(self):
-        """No more lines come: the thread ends once none sounds."""
-        self.closed = True
+    def _mouth(self):
+        return MOUTH_STEP
 
-    def start(self):
-        self.thread.start()
-        return self
-
-    def rest(self):
-        """Idle now, and no redraw after it."""
+    def _speaking(self):
+        """"now" while a sentence sounds, "later" while one may still,
+        "" once none will. Waits a mouth's step first, woken by a cut."""
         with self.lock:
-            if self.open:
-                self._draw(False)
-            self.halt = True
-
-    def _draw(self, talking):
-        """(the lock held) The frame on the lead's row. Skipped while the
-        cursor waits at the last column (a restore there may lose the
-        wrap); False when that row is out of reach -- scrolled off, the
-        terminal resized -- and the face moves no more."""
-        if not self.started or self.col >= self.size[0]:
-            return True
-        if self.rows >= self.size[1] - 1 or self._size() != self.size:
-            self.halt = True
-            return False
-        up = "\033[%dA" % self.rows if self.rows else ""
-        self.stream.write("\x1b7" + up + "\r" + self.frames[talking] + "\x1b8")
-        self.stream.flush()
-        self.open = talking
-        return True
-
-    def _run(self):
-        flip = 0.0
-        try:
-            while True:
-                with self.lock:
-                    tags = list(self.tags)
-                    closed = self.closed
-                now_ = self.reader.sounds(tags, MOUTH_STEP)
-                with self.lock:
-                    if self.halt:
-                        return
-                    now = time.monotonic()
-                    if now_ == "now":
-                        if now >= flip:
-                            self._draw(not self.open)
-                            flip = now + MOUTH_STEP
-                    elif self.open:
-                        self._draw(False)
-                    if closed and not now_ and not self.open:
-                        self.halt = True
-                        return
-        except Exception:   # noqa: BLE001 -- a face is never a reason to fail
-            log_exc("forge: the talking face")
+            tags = list(self.tags)
+        return self.reader.sounds(tags, MOUTH_STEP)
 
 
 class _Spoken:
@@ -1325,8 +1231,7 @@ class _Spoken:
             if not (self.want_face and VOICE["reader"] is not None and look.active("motion", out)
                     and look.active("words", out)):
                 return out, None
-            idle = look.faces()["idle"]
-            self.face = _Face(out, idle, look.talking(idle) or idle, VOICE["reader"]).start()
+            self.face = _Face(out, VOICE["reader"]).start()
         except Exception:   # noqa: BLE001 -- a face is never a reason to fail
             log_exc("forge: the talking face")
             return out, None
@@ -1522,12 +1427,15 @@ def _listening():
     return "* listening -- a pause ends it"
 
 
-def _refuse(hint):
+def _refuse(hint, mood=None):
     """A refusal inside the chat: `! <hint>` on stderr, so a piped chat's
-    stdout keeps the replies alone. Clear mode reads it aloud too."""
+    stdout keeps the replies alone. Clear mode reads it aloud too. `mood`
+    (alarmed: the model failed; puzzled: nothing came of it) puts the
+    face after the mark where the look draws one (text.faced)."""
     if VOICE["mode"] == "clear":
         _aloud(hint)
-    print("! " + hint, file=sys.stderr, flush=True)
+    line = "! " + hint
+    print(textmod.faced(line, mood, sys.stderr) if mood else line, file=sys.stderr, flush=True)
 
 
 def continuing(msgs):
@@ -1966,8 +1874,13 @@ def _slash_read(cfg, thread, args):
         _refuse("@%s is empty" % paths[0])
         return thread
     cps = reveal.auto_cps(cfg) if REVEAL[0] == "auto" else REVEAL[0]
-    wrap = textmod.Wrap(sys.stdout, cps=cps)
-    busy = textmod.Busy(sys.stderr)
+    # the face leads the answer where the look draws one, as it leads a
+    # reply; the wait says a text is being read
+    _face_rest()
+    screen, lead = textmod.reply_face(sys.stdout)
+    face = screen if lead else None
+    wrap = textmod.Wrap(screen, cps=cps, lead=lead)
+    busy = textmod.Busy(sys.stderr, kind="read")
     out = _Kept(wrap, busy)
     if thread is None:
         thread = new_thread(cfg)      # made first: the turn record names it, so /last shows this turn
@@ -1977,17 +1890,25 @@ def _slash_read(cfg, thread, args):
         busy.stop()
         if wrap.started:
             wrap.close()
-        _refuse(e.hint)
+        mood = "alarmed" if isinstance(e, wire.BrainError) else "puzzled"
+        if face:
+            face.settle(mood)
+        _refuse(e.hint, mood)
         return thread
     except KeyboardInterrupt:
         busy.stop()
         if wrap.started:
             wrap.close()
+        if face:
+            face.rest()
         _tell("stopped")
         return thread
     finally:
         busy.stop()
     wrap.close()
+    if face:
+        face.settle("pleased", play=True)       # its score may play while chat> waits
+        FACE[0] = face
     return _land(cfg, thread, ("/read " + " ".join(args)).strip(), "".join(out.text).rstrip("\n"),
                  {"mode": "read", "cwd": os.getcwd()}, {"kind": "read"})
 
@@ -2379,8 +2300,12 @@ def cmd_chat(args):
                         _aloud_reply(SAID[-1]["text"])
                 else:
                     _refuse("no command %s -- /help lists them" % verb)
-                if verb != "/clear":
-                    say()      # a blank line between turns; /clear starts clean
+                if verb == "/clear":
+                    pass       # /clear starts clean
+                elif FACE[0] is not None:
+                    FACE[0].line()  # the blank line, counted: the face still finds its row
+                else:
+                    say()      # a blank line between turns
                 continue
             words, paths = refs(text.split())
             # a reply read aloud: its text follows the voice (the reveal
@@ -2388,10 +2313,10 @@ def cmd_chat(args):
             spoken = _spoken()
             try:
                 thread = cli.stream_turn(cfg, "chat", " ".join(words), paths, thread=thread, cps=REVEAL[0],
-                                         said=SAID, voice=spoken)
+                                         said=SAID, voice=spoken, linger=True)
             except (RefError, wire.BrainError) as e:
                 _face_rest()
-                _refuse(e.hint)
+                _refuse(e.hint, "alarmed" if isinstance(e, wire.BrainError) else None)
             except KeyboardInterrupt as e:
                 _face_rest()
                 if spoken and VOICE["reader"] is not None:

@@ -2,15 +2,18 @@
 #
 # ~/.config/spark/faces is `MOOD=frame`, one a line, plus the blink rate
 # and the temperament, written by `spark awaken`. Every mood is made and
-# kept (asleep, waking, idle, thinking, pleased, puzzled, alarmed,
-# listening, blink, glance), though only some are drawn today: the rest
-# wait for later uses. The parts of a face are
+# kept, one still each (asleep, waking, idle, thinking, pleased,
+# puzzled, alarmed, listening, blink, glance). The frames a mood moves
+# through are derived from the idle one when drawn (look.Anim), never
+# stored. The parts of a face are
 # home/.config/spark/faces.kit, and the personality a temperament keeps
 # when the model's is refused is home/.config/spark/words.d/<temperament>,
 # both in this tree.
 #
-# Since v1.73 awaken writes no lines to say and there is no `spark words`:
-# the face shows in the wait and in `spark look`. A shell started before
+# Since v1.73 awaken writes no lines to say and there is no `spark words`.
+# The face says nothing: it shows in a wait, leads a reply, follows the
+# mark in spark's row, rests above an idle prompt, and is in `spark
+# look`. A shell started before
 # the update may still run `spark words greet`; bin/spark answers it,
 # silent.
 

@@ -218,13 +218,24 @@ older spark into your account.
 `spark awaken` gives this machine a personality and a look. Nothing
 changes until you run it. It asks for a temperament: plain, warm,
 playful or terse. The model writes a personality and picks a face.
-Where a player is, it offers a voice. `Ctrl-C` leaves the machine as it
-was.
+Where a player is, it offers a voice: keep it, hear another or have
+none. `Ctrl-C` leaves the machine as it was.
 
-After awaken, a face shows while a reply is on its way, and spark uses
-a few colours. `spark look on|off|auto` turns that on or off. `auto`
-draws only at a terminal, and colour only without `NO_COLOR`. A pipe
-never sees it. Your own colours win: export `SPARK_ACCENT_SGR`,
+After awaken, spark has a face and uses a few colours. The face waits
+while a reply is on its way, and what moves beside it says what spark
+is doing. It opens each reply and ends pleased, puzzled or alarmed. At
+your prompt it shows on the line spark writes, and it rests above an
+empty prompt. `Enter` erases the resting face.
+
+In zsh the resting face blinks, falls asleep after 5 minutes without a
+key and wakes on the next key. In bash it stays still. It shows only
+where your prompt starts with a blank line and the height matches the
+prompt's lines: press `Esc k`, or run `spark height N`. `Ctrl-C` at a
+prompt can leave one face in the scrollback.
+
+`spark look on|off|auto` turns the face and the colours on or off.
+`auto` draws only at a terminal, and colour only without `NO_COLOR`.
+A pipe never sees it. Your own colours win: export `SPARK_ACCENT_SGR`,
 `SPARK_MUTED_SGR`, `SPARK_WARN_SGR`, `SPARK_OK_SGR` or
 `SPARK_TROUBLE_SGR`, as SGR codes such as `1;94`.
 
@@ -234,7 +245,8 @@ The voice. `spark voice` reads aloud and listens, on this machine.
 - `off`: silent. The default.
 - `clear`: a plain voice for low vision. It reads commands with their
   symbols, the hints, the steps of `spark do` and the chat's replies.
-- `on`: the voice `spark awaken` made. It reads the chat's replies.
+- `on`: the voice `spark awaken` picked for this machine, plain, with
+  no effect. It reads the chat's replies.
 
 `Esc v` listens. A pause ends it, and your words land in the line.
 Nothing runs until you press `Enter`. `Esc x` stops the speaking. After
@@ -511,7 +523,8 @@ When something stops working:
 6. `the ledger does not open`: log in with your own token, `spark user
    login NAME`.
 7. spark's line sits on your prompt: press `Esc k`, or run `spark
-   height 2`.
+   height 2`. The resting face waits until the height matches your
+   prompt's lines. A prompt with no blank line above it shows none.
 8. `1 record in thread ID could not be read -- skipped`: part of that
    thread is damaged on disk. The rest of it reads, and new turns land.
 

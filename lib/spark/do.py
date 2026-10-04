@@ -890,14 +890,15 @@ class _Terminal:
                 % (_mark(), box["id"], _short(cwd)))
 
     def think(self, fn):
-        with textmod.Busy(sys.stderr):        # the pulse while the model proposes
+        with textmod.Busy(sys.stderr, kind="steps"):    # the pulse while the model proposes a step
             return fn()
 
     def brain(self, hint):
-        print("%s %s" % (glyph("warn"), hint), file=sys.stderr, flush=True)
+        # where the look draws it, the alarmed face after the mark
+        print(textmod.faced("%s %s" % (glyph("warn"), hint), "alarmed", sys.stderr), file=sys.stderr, flush=True)
 
     def done(self, hint, bad):
-        say("%s done  %s" % (glyph("warn") if bad else _mark(), hint))
+        say(textmod.faced("%s done  %s" % (glyph("warn") if bad else _mark(), hint), "alarmed" if bad else "pleased"))
         if bad:
             say("  " + UNCHECKED % ", ".join(bad))
 
@@ -917,7 +918,9 @@ class _Terminal:
         """The step line; a block's every line, numbered, beneath it."""
         command = reply["command"]
         if reply["danger"]:
-            say(paint("%s %d  %s   %s" % (glyph("warn"), n, _head(command), reply["hint"]), "warn", sys.stdout))
+            # a danger step: the alarmed face after the mark, the line whole in warn
+            say(paint(textmod.faced("%s %d  %s   %s" % (glyph("warn"), n, _head(command), reply["hint"]),
+                                    "alarmed", plain=True), "warn", sys.stdout))
         else:
             say("%s %d  %s   %s" % (_mark(), n, _head(command), reply["hint"]))
         if "\n" in command:

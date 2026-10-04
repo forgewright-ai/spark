@@ -63,7 +63,7 @@ def _warming(cfg, url):
         loads = [engine.last_load(files[r]) for r in engine.ROLES]
         pulse = text.Estimate("waking", sum(loads) if all(loads) else None, sys.stderr)
     else:
-        pulse = text.Busy(sys.stderr)
+        pulse = text.Busy(sys.stderr, kind="swell")     # a model loading, no estimate
     with pulse:
         return engine.warm(cfg, url)
 

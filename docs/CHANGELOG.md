@@ -1,5 +1,30 @@
 # Changelog
 
+## v1.80
+
+A plain voice, and a face you see more of. Both start with `spark
+awaken`. `spark look off` turns the face off.
+
+- A plain voice. `spark voice on` speaks in this machine's own voice,
+  with no effect over it. The radio, choir, eight bit and robot
+  effects are gone. Your machine keeps its speaker, and `spark awaken`
+  lets you hear up to 4 before you keep one.
+- The face answers. On spark's line above your prompt it follows the
+  mark: pleased on an answer, alarmed on a danger or a failed command,
+  puzzled when nothing came, listening on `Esc v`.
+- The face stays through a reply. In chat, `explain` and a question it
+  opens the reply, talks while the text comes and ends pleased,
+  puzzled or alarmed. The lines after the first start at the left
+  edge, so code copies clean.
+- The face rests above your prompt, and `Enter` erases it. In zsh it
+  blinks, falls asleep after 5 minutes and wakes on a key. In bash it
+  stays still. It needs a blank line above the prompt and the height
+  set to the prompt's lines: `Esc k`. `Ctrl-C` at a prompt can leave
+  one face on the screen.
+- The wait shows what spark is doing: thinking, reading a text,
+  planning a step, loading a model or updating. At a terminal, `spark
+  edit`, `spark read`, `spark drill` and `Esc r` show a wait too.
+
 ## v1.79
 
 Each test runs once, in the right place. Nothing is tested less. This

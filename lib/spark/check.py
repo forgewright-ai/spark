@@ -1557,15 +1557,25 @@ def render(ctx, rows, color, roles=False, every=False, named=False):
 class Counter:
     """`checking N/M` on stderr while the rows run, redrawn in place and
     cleared before the report: an awakened terminal whose motion part is
-    active, never a pipe."""
+    active, never a pipe. Where the words part is active too the thinking
+    face leads it, a frame a row: `(o.O) checking 3/42`."""
 
     def __init__(self, stream):
         self.stream = stream
         self.drawn = False
+        self.anim = None
+        try:
+            from . import look
+            if look.active("motion", stream) and look.active("words", stream):
+                self.anim = look.Anim()
+        except Exception:       # noqa: BLE001 -- the counter is never a reason to fail
+            self.anim = None
 
     def __call__(self, n, total):
         try:
-            self.stream.write("\r\033[2Kchecking %d/%d" % (n, total))
+            from . import paint
+            face = paint(self.anim.face("thinking", n), "accent", self.stream) + " " if self.anim else ""
+            self.stream.write("\r\033[2K%schecking %d/%d" % (face, n, total))
             self.stream.flush()
             self.drawn = True
         except (OSError, ValueError):

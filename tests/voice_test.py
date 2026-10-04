@@ -16,8 +16,9 @@ and `defaults` are stubs on PATH. Covered: voice.env's pins; fetch()
 refusing a size or sha256 mismatch and a tarball with `..`, an absolute
 path or a link pointing out, and installing a good one (its top
 directory stripped, its sha file last); speak() in both modes and both
-languages; every family's chain, deterministic (its output hashed);
-mint() per (temper, seed); the recipe file round trip, 0600; the SBOM
+languages, mode on the recipe's speaker with no effect over it;
+mint() per (temper, seed, n); the recipe file round trip, 0600, and
+an older spark's file read as its two speakers; the SBOM
 and uninstall naming the voice; play(),
 stop(); listen() and its private directory; spoken_command(); lang_of();
 screen_reader(); say_aloud() never raising; the `spark voice` verb under
@@ -587,10 +588,17 @@ w = voice.speak(cfg, "Hello.", "on", recipe=r)
 said = engine_said()
 with wave.open(w) as wv:
     shape = (wv.getnchannels(), wv.getsampwidth(), wv.getframerate())
-check("speak on: the recipe's speaker at speed 1, the character over it, 16-bit mono 24 kHz",
+check("speak on: the recipe's speaker at speed 1, 16-bit mono 24 kHz, the wav named as clear's",
       said["sid"] == int(r["SID"]) and said["speed"] == 1.0 and shape == (1, 2, 24000)
-      and sha(w) != sha(TONE) and os.listdir(os.path.dirname(w)) == ["character.wav"], (said, shape))
+      and os.listdir(os.path.dirname(w)) == ["voice.wav"], (said, shape))
 voice.cleanup(w)
+pcm, fs = voice.clip(cfg, "Hello.", "on", recipe=r)
+check("clip on: the engine's samples for the recipe's speaker as PCM, nothing over them",
+      pcm == voice._pcm(fake._tone()) and fs == 24000 and engine_said()["sid"] == int(r["SID"]),
+      (len(pcm), engine_said()))
+voice.cleanup(voice.speak(cfg, "Bom dia, você está bem? Não sei.", "on", recipe=r))
+check("speak on, Portuguese: the recipe's Portuguese speaker, pt-br",
+      engine_said()["sid"] == int(r["SID_PT"]) and engine_said()["lang"] == "pt-br", engine_said())
 try:
     voice.speak(cfg, "Hello.", "on")
     refused = ""
@@ -598,59 +606,58 @@ except voice.VoiceError as e:
     refused = str(e)
 check("speak on with no voice kept: refused, naming spark awaken", "spark awaken" in refused, refused)
 
-# ------------------------------------------------------------ 4. the chains
-# the output of each family's chain over the fixed tone, hashed: the same
-# recipe, the same bytes, on every machine (the hiss is a seeded Random)
-PINNED = {
-    "plain": "b095d867551c808c17a8c99c05cf4a915191d644be0ddb0a5766a2a7e6708544",
-    "warm": "2f3b4cc80bbe7370279d5ea16e46f29ac9664bdf417d2ef20209ae3fca85d666",
-    "playful": "91a2f6927d9a7f049abc3009cfbeb97ce1c45598e67458d4798cc8a8c2a94ef4",
-    "terse": "f285e71169d0bf4df362e601014a981bc1f550356e8263025dad98cae177e9b3",
-}
-for temper in ("plain", "warm", "playful", "terse"):
-    r = voice.mint(temper, "fixture-seed")
-    a = voice.character(TONE, r, os.path.join(ROOT, "a-%s.wav" % temper))
-    b = voice.character(TONE, r, os.path.join(ROOT, "b-%s.wav" % temper))
-    with wave.open(a) as wv:
-        shape = (wv.getnchannels(), wv.getsampwidth(), wv.getframerate(), wv.getnframes())
-    check("character %s (%s): 16-bit mono at the input's rate, 0600" % (temper, r["FAMILY"]),
-          shape[:3] == (1, 2, 24000) and shape[3] > 0 and stat.S_IMODE(os.stat(a).st_mode) == 0o600, shape)
-    check("character %s: deterministic, and pinned (%s)" % (temper, sha(a)[:16]),
-          sha(a) == sha(b) and sha(a) == PINNED[temper], sha(a))
-check("character playful: resampled x%s, so shorter" % voice.mint("playful", "fixture-seed")["SPEED"],
-      wave.open(os.path.join(ROOT, "a-playful.wav")).getnframes() < wave.open(TONE).getnframes())
-other = voice.character(TONE, voice.mint("plain", "another-seed"), os.path.join(ROOT, "c-plain.wav"))
-check("character: another seed, another radio", sha(other) != sha(os.path.join(ROOT, "a-plain.wav")))
+# ------------------------------------------------- 4. no effect over it
+check("the voice: no chain, no character, no family (chain, character, CHAINS, RECIPES are gone)",
+      not any(hasattr(voice, name) for name in ("chain", "character", "CHAINS", "RECIPES")))
 
 # -------------------------------------------------------------- 5. mint
-for temper, family in (("plain", "radio"), ("warm", "choir"), ("playful", "eightbit"), ("terse", "robot")):
+for temper in ("plain", "warm", "playful", "terse"):
     r1, r2 = voice.mint(temper, "box"), voice.mint(temper, "box")
-    ok_range = all(abs(float(r1[k]) - base) <= span + 1e-9 for k, base, span in voice.RECIPES[family])
-    check("mint %s: %s, the same for the same seed, a speaker of its list, every number in range" % (temper, family),
-          r1 == r2 and r1["FAMILY"] == family and int(r1["SID"]) in voice.FAMILY_SIDS[family] and ok_range
+    check("mint %s: the same for the same seed, SID and SID_PT alone, a speaker of its list" % temper,
+          r1 == r2 and sorted(r1) == ["SID", "SID_PT"] and int(r1["SID"]) in voice.TEMPER_SIDS[temper]
           and int(r1["SID_PT"]) in voice.PT_SIDS.values(), r1)
-seeds = {json.dumps(voice.mint("plain", "box:%d" % n), sort_keys=True) for n in range(6)}
-check("mint: the next seeds give other voices (again)", len(seeds) > 1, seeds)
-check("mint: an unknown temperament is plain's family", voice.mint("wistful", "box")["FAMILY"] == "radio")
-check("the speakers: Kokoro v1.0's ids, a* and b* for English, p* for Portuguese",
-      all(voice.SPEAKERS[s][:1] in "ab" for f in voice.FAMILY_SIDS.values() for s in f)
+    heard = [voice.mint(temper, "box", n)["SID"] for n in range(4)]
+    check("mint %s: n = 0..3 is 4 speakers, each another (again), the first the seed's own" % temper,
+          len(set(heard)) == 4 and heard[0] == r1["SID"]
+          and all(int(x) in voice.TEMPER_SIDS[temper] for x in heard), heard)
+check("mint: an unknown temperament is plain's", voice.mint("wistful", "box") == voice.mint("plain", "box"))
+check("mint: the Portuguese speaker is of the same register",
+      all(voice.mint(t, "box", n)["SID_PT"] == str(voice.PT_SIDS[voice.SPEAKERS[sid][1]])
+          for t in voice.TEMPER_SIDS for n in range(4) for sid in [int(voice.mint(t, "box", n)["SID"])]))
+check("the speakers: 4 a temperament, Kokoro v1.0's ids, a* and b* for English, p* for Portuguese",
+      sorted(voice.TEMPER_SIDS) == ["plain", "playful", "terse", "warm"]
+      and all(len(set(f)) == 4 and all(voice.SPEAKERS[x][:1] in "ab" for x in f) for f in voice.TEMPER_SIDS.values())
       and voice.SPEAKERS[42] == "pf_dora" and voice.SPEAKERS[43] == "pm_alex" and voice.SID_MAX == 53)
+check("describe: the speaker's name alone", voice.describe({"SID": "3", "SID_PT": "42"}) == "heart")
 
 # ------------------------------------------------------------ 6. the recipe
 r = voice.mint("warm", "box")
 voice.write_recipe(r)
-check("recipe: written 0600 as KEY=value lines, read back the same",
+body = open(voice.RECIPE_FILE).read()
+check("recipe: written 0600 as two KEY=value lines, read back the same",
       stat.S_IMODE(os.stat(voice.RECIPE_FILE).st_mode) == 0o600 and voice.read_recipe() == r
-      and all(config.LINE.match(l) for l in open(voice.RECIPE_FILE).read().splitlines()), open(voice.RECIPE_FILE).read())
+      and body == "SID=%s\nSID_PT=%s\n" % (r["SID"], r["SID_PT"])
+      and all(config.LINE.match(l) for l in body.splitlines()), body)
+OLD = "FAMILY=choir\nSID=9\nSID_PT=42\nDEPTH=3.2\nRATE=0.31\nRING=41\nWET=0.5\n"
 with open(voice.RECIPE_FILE, "w") as f:
-    f.write("FAMILY=radio\nSID=3\nSID_PT=42\nFREQ=99999\nQ=0.9\nDRIVE=2.5\nHISS=0.008\n")
-check("recipe: a number out of its range is clamped", voice.read_recipe()["FREQ"] == "1350")
-for body in ("FAMILY=opera\nSID=3\nSID_PT=42\n", "FAMILY=radio\nSID=99\nSID_PT=42\nFREQ=1200\nQ=1\nDRIVE=2\nHISS=0\n",
-             "FAMILY=radio\nSID=3\nSID_PT=42\nFREQ=nan\nQ=1\nDRIVE=2\nHISS=0\n"):
+    f.write(OLD)
+check("recipe: an older spark's file (a family and its numbers) reads as its two speakers, not rewritten",
+      voice.read_recipe() == {"SID": "9", "SID_PT": "42"} and open(voice.RECIPE_FILE).read() == OLD,
+      voice.read_recipe())
+with open(voice.RECIPE_FILE, "w") as f:
+    f.write("FAMILY=opera\nSID=3\nSID_PT=42\n")
+check("recipe: a family nobody knows with good speakers reads", voice.read_recipe() == {"SID": "3", "SID_PT": "42"})
+for name, body in (("SID=99", "SID=99\nSID_PT=42\n"), ("no SID_PT", "FAMILY=radio\nSID=3\n"),
+                   ("SID_PT=99", "SID=3\nSID_PT=99\n"), ("SID=three", "SID=three\nSID_PT=42\n")):
     with open(voice.RECIPE_FILE, "w") as f:
         f.write(body)
-    check("recipe: %r is no recipe" % body.split("\n")[0 if "opera" in body else 1 if "99" in body else 3],
-          voice.read_recipe() is None)
+    check("recipe: %s is no recipe" % name, voice.read_recipe() is None)
+try:
+    voice.write_recipe({"SID": "99", "SID_PT": "42"})
+    refused = ""
+except voice.VoiceError as e:
+    refused = str(e)
+check("recipe: a speaker out of the table is never written", refused == "not a voice recipe", refused)
 os.remove(voice.RECIPE_FILE)
 check("recipe: none kept, none read", voice.read_recipe() is None)
 
@@ -962,12 +969,25 @@ def awaken(answers, extra=None):
 
 
 open(os.path.join(LOG, "player"), "w").close()
+open(os.path.join(LOG, "tts.jsonl"), "w").close()
 rc, out = awaken("warm\nagain\nkeep\n")
 kept = voice.read_recipe()
+with open(os.path.join(LOG, "tts.jsonl")) as f:
+    heard = [json.loads(l)["sid"] for l in f.read().splitlines()]
 check("awaken: the voice offered, spoken twice (again), kept: the recipe 0600, SPARK_VOICE=on",
-      rc == 0 and out.count("keep it? (keep, again, none)") == 2 and kept and kept["FAMILY"] == "choir"
+      rc == 0 and out.count("keep it? (keep, again, none)") == 2 and kept and sorted(kept) == ["SID", "SID_PT"]
       and stat.S_IMODE(os.stat(voice.RECIPE_FILE).st_mode) == 0o600 and "SPARK_VOICE=on\n" in senv()
       and len(open(os.path.join(LOG, "player")).read().splitlines()) == 2, out[-900:])
+check("awaken: again is another speaker of the temperament, the one kept the last heard, named alone",
+      len(heard) == 2 and heard[0] != heard[1] and all(x in voice.TEMPER_SIDS["warm"] for x in heard)
+      and kept and int(kept["SID"]) == heard[1] and "* its voice: %s\n" % voice.describe(kept) in out,
+      (heard, kept, out[-600:]))
+os.remove(voice.RECIPE_FILE)
+rc, out = awaken("warm\nagain\nagain\nagain\nagain\n")
+check("awaken: again past the fourth speaker ends the offer, none kept",
+      rc == 0 and out.count("keep it? (keep, again, none)") == 4 and voice.read_recipe() is None, out[-900:])
+with open(voice.RECIPE_FILE, "w") as f:
+    f.write("SID=3\nSID_PT=42\n")
 check("awaken: the audition says the one fixed sentence (v1.73), through the engine, no tool started",
       engine_said()["text"] == voice.HELLO and tool_calls() == [], (engine_said(), tool_calls()))
 os.remove(voice.RECIPE_FILE)
@@ -1209,9 +1229,9 @@ for bad in ("1001", "-5", "loud"):
 del os.environ["SPARK_VOICE_LEAD_MS"]
 w = voice.speak(cfg, "Hello.", "on", recipe=voice.mint("terse", "fixture-seed"))
 shape, data = frames(w)
-check("lead-in: after the character chain too (mode on), still one wav in its dir",
-      data[:lead] == b"\0" * lead and data[lead:].strip(b"\0") != b"" and shape == (1, 2, 24000)
-      and os.listdir(os.path.dirname(w)) == ["character.wav"], os.listdir(os.path.dirname(w)))
+check("lead-in: in mode on too, still one wav in its dir",
+      data[:lead] == b"\0" * lead and data[lead:] == tone0 and shape == (1, 2, 24000)
+      and os.listdir(os.path.dirname(w)) == ["voice.wav"], os.listdir(os.path.dirname(w)))
 voice.cleanup(w)
 eight = os.path.join(ROOT, "eight.wav")
 with wave.open(eight, "wb") as wv:
@@ -1637,8 +1657,11 @@ forge.VOICE.update(reader=None, aloud=False)
 # v1.73, the face talks (forge._Face): a spoken reply opens with the idle
 # face, and while one of its sentences sounds the mouth opens and closes
 # in place on that first row -- save the cursor, up the rows the reply
-# took, the frame, restore. A stub timeline first: a Reader with no
-# threads, its spans set by hand through _heard, as the player sets them
+# took, the frame, restore. v1.80: the row counting and the redraw are
+# text.FaceLead's, the frames look.Anim's, and _Face is the subclass whose
+# source is the voice; the reply's later lines start at column 0. A stub
+# timeline first: a Reader with no threads, its spans set by hand through
+# _heard, as the player sets them
 import re  # noqa: E402
 from spark import look, text as textmod  # noqa: E402
 
@@ -1678,6 +1701,13 @@ def until(cond, secs=2.0):
 
 
 IDLE, TALK = "(o.o)", "(oOo)"
+
+
+def kit():
+    """The shipped face's animator (this file's machine awakened above, with a face of its own)."""
+    return look.Anim(dict(look.DEFAULT_FACES), blink=0, temper="")
+
+
 step, forge.MOUTH_STEP = forge.MOUTH_STEP, 0.05
 check("face: the talking frame is the idle face with its mouth open, every kit face ASCII and the same width",
       look.talking("(o.o)") == TALK and look.talking("[*_*]") == "[*o*]" and look.talking("<u-u>") == "<uou>"
@@ -1688,7 +1718,7 @@ check("face: the talking frame is the idle face with its mouth open, every kit f
 with look.assume_awake():
     r = voice.Reader(Cfg(SPARK_VOICE="clear"))
     out = Tty()
-    face = forge._Face(out, IDLE, TALK, r)
+    face = forge._Face(out, r, kit())
     sized(face, 40, 24)
     w = textmod.Wrap(face, lead=face.lead)
     w.width = 40
@@ -1704,20 +1734,45 @@ with look.assume_awake():
     face.close()
     ended = until(lambda: not face.thread.is_alive(), 2.0)
     after = redraws(out)
-check("face: the reply opens with the idle face in the mark's place, its lines hanging under it",
-      textmod.SGR_RE.sub("", out.getvalue()).startswith(IDLE + " one two") and face.rows == 4, repr(out.getvalue()[:120]))
+shown = textmod.SGR_RE.sub("", out.getvalue())
+check("face: _Face is text.FaceLead with the voice as its source; the reply opens with the idle face in the "
+      "mark's place, its later lines at column 0",
+      isinstance(face, textmod.FaceLead) and shown.startswith(IDLE + " one two three four five six seven\neight nine ")
+      and face.rows == 3, repr(out.getvalue()[:120]))
 check("face: nothing drawn before the sentence sounds; while it plays the mouth moves on the lead's row "
-      "(4 rows up), talking and idle in turn", before == [] and len(playing) >= 3
-      and all(up == 4 for up, _f in playing) and playing[0][1] == TALK and playing[1][1] == IDLE
+      "(3 rows up), talking and idle in turn", before == [] and len(playing) >= 3
+      and all(up == 3 for up, _f in playing) and playing[0][1] == TALK and playing[1][1] == IDLE
       and playing[2][1] == TALK, (before, playing))
 check("face: after the sentence it rests on idle, and the thread ends once no line will sound",
       ended and after[-1][1] == IDLE and len(after) <= 2 + int(0.4 / forge.MOUTH_STEP), after)
+
+# settled (cli.stream_turn at the reply's end, in the chat): once the last
+# sentence has sounded the mood's score plays, and the face rests on its still
+with look.assume_awake():
+    r = voice.Reader(Cfg(SPARK_VOICE="clear"))
+    out = Tty()
+    face = forge._Face(out, r, kit())
+    w = textmod.Wrap(face, lead=face.lead)
+    w.feed("Done.")
+    w.close()
+    face.add([1])
+    face.start()
+    sound(r, 1, 0.0, 0.3)
+    until(lambda: any(f == TALK for _u, f in redraws(out)))
+    face.settle("pleased", play=True)
+    mid = [f for _u, f in redraws(out)]
+    ended = until(lambda: not face.thread.is_alive(), 4.0)
+    frames = [f for _u, f in redraws(out)]
+check("face: settled pleased while a sentence still sounds -- the mouth goes on, then the pleased score plays "
+      "once and the face rests on its still",
+      ended and "(^.^)" not in mid and "(^v^)" in frames and frames[-1] == "(^.^)" and face.halt
+      and frames.index("(^.^)") > max(i for i, f in enumerate(frames) if f == TALK), frames)
 
 # a cut (Esc x): idle at once, then still
 with look.assume_awake():
     r = voice.Reader(Cfg(SPARK_VOICE="clear"))
     out = Tty()
-    face = forge._Face(out, IDLE, TALK, r)
+    face = forge._Face(out, r, kit())
     sized(face, 40, 24)
     w = textmod.Wrap(face, lead=face.lead)
     w.feed("A short one.")
@@ -1746,7 +1801,7 @@ check("face: a cut (Esc x) rests it on idle at once (%.3f s) and it moves no mor
 with look.assume_awake():
     r = voice.Reader(Cfg(SPARK_VOICE="clear"))
     out = Tty()
-    face = forge._Face(out, IDLE, TALK, r)
+    face = forge._Face(out, r, kit())
     w = textmod.Wrap(face, lead=face.lead)
     w.feed("Hello there.")
     face.add([1])
@@ -1761,12 +1816,13 @@ check("face: rest() (a key typed) draws idle at once and nothing after it",
       forge.FACE[0] is None and redraws(out)[-1][1] == IDLE and len(redraws(out)) == n
       and until(lambda: not face.thread.is_alive()), redraws(out)[-3:])
 
-# scrolled off: once the reply's rows reach the terminal's height - 1, the
-# lead's row is gone from the screen -- no redraw after that
+# about to scroll off: once the reply's rows reach the terminal's height
+# - 2 the face settles on its still while the lead's row can still be
+# reached -- no redraw after that
 with look.assume_awake():
     r = voice.Reader(Cfg(SPARK_VOICE="clear"))
     out = Tty()
-    face = forge._Face(out, IDLE, TALK, r)
+    face = forge._Face(out, r, kit())
     sized(face, 40, 6)
     w = textmod.Wrap(face, lead=face.lead)
     w.feed("One.\n")
@@ -1774,18 +1830,24 @@ with look.assume_awake():
     face.start()
     sound(r, 1, 0.0, 5.0)
     until(lambda: len(redraws(out)) >= 2)
-    w.feed("two\nthree\nfour\nfive\n")
+    w.feed("two\nthree\n")
+    moving = not face.halt
+    w.feed("four\n")
+    at = (face.halt, face.rows, face.shown)
     mark = len(out.getvalue())
+    w.feed("five\n")
     time.sleep(0.3)
     tail = out.getvalue()[mark:]
     face.close()
     r.cut()
     gone = until(lambda: not face.thread.is_alive())
-check("face: the lead's row scrolled off (rows %d, height 6) -- no redraw after, the thread gone" % face.rows,
-      face.rows == 5 and "\x1b7" not in tail and gone and face.halt, repr(tail))
+check("face: before the lead's row would scroll off (rows 4, height 6) it settles on idle -- no redraw after, "
+      "the thread gone", moving and at == (True, 4, IDLE) and face.rows == 5 and "\x1b7" not in tail and gone,
+      repr((at, tail)))
 # a line the terminal wrapped is a row too (the cursor's row, not the line feeds)
 out = Tty()
-face = forge._Face(out, IDLE, TALK, voice.Reader(Cfg()))
+face = forge._Face(out, voice.Reader(Cfg()), kit())
+face._going = True              # the count alone: no thread
 face.size = (10, 24)
 face.write("x" * 10)
 at_edge = (face.rows, face.col)
@@ -1929,17 +1991,13 @@ else:
     x4, _ = e.say("Bom dia, você está bem? Não sei o que fazer agora.", 42, 1.0, "en-us")
     check("engine: the language rides each call (pt-br and en-us read the same words differently)",
           abs(len(x4) - len(x2)) > fs2 // 10, (len(x2), len(x4)))
-    pcm, fs = voice.clip(Cfg(SPARK_VOICE="on"), SENT, "on", engine=e, recipe=voice.mint("warm", "fixture-seed"))
-    check("clip on: the character over the engine's samples, 16-bit, the peak at 0.89",
-          fs == 24000 and len(pcm) // 2 > 3 * fs
-          and abs(max(abs(v) for v in array.array("h", pcm)) - 29163) <= 1, (len(pcm), len(x1)))
-    costs = []
-    for temper in ("plain", "warm", "playful", "terse"):
-        t3 = time.monotonic()
-        voice._pcm(voice.chain(x1, fs1, voice.mint(temper, "fixture-seed")), 0.89)
-        costs.append("%s %.2f s" % (temper, time.monotonic() - t3))
-    print("     engine: load %.2f s; generate %.2f s for %.2f s of audio, %.2f s for %.2f s (pt-br); "
-          "the chain and the PCM over it: %s" % (load_s, g1, len(x1) / fs1, g2, len(x2) / fs2, ", ".join(costs)))
+    r = voice.mint("warm", "fixture-seed")
+    pcm, fs = voice.clip(Cfg(SPARK_VOICE="on"), SENT, "on", engine=e, recipe=r)
+    xr, _ = e.say(SENT, int(r["SID"]), 1.0, "en-us")
+    check("clip on: the recipe's speaker as the engine made it, 16-bit, nothing over it",
+          fs == 24000 and len(pcm) // 2 > 3 * fs and pcm == voice._pcm(xr), (len(pcm), len(xr)))
+    print("     engine: load %.2f s; generate %.2f s for %.2f s of audio, %.2f s for %.2f s (pt-br)"
+          % (load_s, g1, len(x1) / fs1, g2, len(x2) / fs2))
     e.close()
     # the Reader end to end: the real engine, the stream stub; loaded once
     voice.load_engine = REAL_LOAD
