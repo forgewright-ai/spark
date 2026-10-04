@@ -102,7 +102,9 @@ jobs:
     # reads `na` for services, as docs/INSTALL.md, section 6 (the container
     # note) promises.
     runs-on: ubuntu-latest
-    container: debian:13
+    # debian:13 pinned by its multi-arch index digest: a tag can move, a digest
+    # is the image. Moved by hand (Docker Hub: the manifest of debian:13)
+    container: debian:13@sha256:9cc080028c43b27d2074d63a5f9caf7166d731494965616c1a6d2827a004585c
     timeout-minutes: 20
     env:
       DEBIAN_FRONTEND: noninteractive

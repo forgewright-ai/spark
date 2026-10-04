@@ -327,7 +327,10 @@ class _Lex:
     skipped (an unquoted one's $(...) and `...` are read, they run); a
     case pattern is no stage; a comment runs to the line's end. An
     unclosed quote runs to the end as one word, read like any other.
-    `deep` is set past MAX_NEST."""
+    `deep` is set past MAX_NEST. `info` runs beside `stages`, one entry
+    a stage: (fed by a pipe, [(redirection operator, raw target)]), a
+    here-document's target ''. A stage of redirections alone is kept,
+    no words, for its info."""
 
     _OPS = ("<<<", ";;&", "&>>", "<<-", "&&", "||", ";;", ";&", "|&", "&>", ">>", ">|", ">&",
             "<<", "<>", "<&", "|", "&", ";", "(", ")", "<", ">")
@@ -336,7 +339,7 @@ class _Lex:
 
     def __init__(self, text):
         self.s, self.n = text, len(text)
-        self.stages, self.deep = [], False
+        self.stages, self.info, self.deep = [], [], False
 
     def run(self, i=0, nest=0, closing=False):
         """Lex from i to the end, or (closing) to the ")" that closes a
@@ -349,12 +352,14 @@ class _Lex:
         # depth after `in`, `;;` or a line feed closes an arm's pattern
         # (`*.txt)`), which is no command; one inside a ( ) is not
         words, opener, skip, docs, parens, cases, last_end = [], None, False, [], 0, [], -1
+        redirs, pend = [], ""
 
         def end(closer):
-            nonlocal words, opener
-            if words:
+            nonlocal words, opener, redirs
+            if words or redirs:
                 self.stages.append(words)
-            words, opener = [], closer
+                self.info.append((opener in ("|", "|&"), redirs))
+            words, opener, redirs = [], closer, []
 
         while i < n:
             ch = s[i]
@@ -375,7 +380,7 @@ class _Lex:
             elif ch == ")" and cases and parens == cases[-1] and (opener in self._ARMS or _is_case(words)):
                 if _is_case(words):
                     end(")")                            # `case W in PATTERN)`: the case's own stage
-                words, opener, skip = [], ")", False    # a pattern: dropped, no paren closed
+                words, opener, skip, redirs = [], ")", False, []   # a pattern: dropped, no paren closed
                 i += 1
             elif closing and ch == ")" and parens == 0:
                 end(")")
@@ -385,6 +390,7 @@ class _Lex:
                 last_end = i
                 if skip:
                     skip = False
+                    redirs.append((pend, raw))
                 else:
                     words.append(raw)
             elif ch in "|&;()<>":
@@ -403,13 +409,15 @@ class _Lex:
                         i += 1
                     raw, i = self.word(i, nest)
                     docs.append((re.sub(r"[\"'\\]", "", raw), op == "<<-", bool(re.search(r"[\"'\\]", raw))))
+                    redirs.append((op, ""))
                 else:
-                    skip = True
+                    skip, pend = True, op
             else:
                 raw, i = self.word(i, nest)
                 last_end = i
                 if skip:
                     skip = False
+                    redirs.append((pend, raw))
                     continue
                 if raw in ("case", "esac") and all(w in SH_KEYWORDS for w in words):
                     if raw == "case":
@@ -497,6 +505,7 @@ class _Lex:
                 sub = _Lex(s[i + 1:j].replace("\\`", "`"))
                 sub.run(0, nest + 1)
                 self.stages.extend(sub.stages)
+                self.info.extend(sub.info)
                 self.deep = self.deep or sub.deep
             return j + 1
         return self.run(i + 2, nest + 1, closing=True)
@@ -758,6 +767,64 @@ def _script(head, args):
     return False
 
 
+# --- the sender: one named line. Data that leaves this machine where the
+# line does not show what leaves: a file copied to another machine (scp,
+# rsync, sftp), a file or a pipe fed to a connection (nc, socat, ssh,
+# telnet, ftp, mail), a variable inside a URL or a header (curl, wget),
+# a body from a file (wget), a /dev/tcp or /dev/udp redirection. A
+# download, git push and fetch, ssh HOST alone, a local rsync and nc -z
+# (a port check) are not it. Opaque, so refused over --porcelain outside
+# the sandbox, like an upload; not danger: it destroys nothing, and at a
+# terminal a person reads the line before Enter. Read through _read, so
+# a wrapper or a pipeline cannot hide it.
+OFF_MACHINE = "a command that sends data off this machine"
+_NET_DEV = re.compile(r"/dev/(?:tcp|udp)/")
+_FED = frozenset(("<", "<>", "<&", "<<", "<<-", "<<<"))   # stdin from a file, a here-document, a string
+# an scp or rsync operand that names another machine: [user@]host:path,
+# host::module or a URL; a path with a / before its colon is local
+_REMOTE = re.compile(r"^(?:(?:rsync|scp|sftp)://|(?:[^/:@\s]+@)?(?:\[[^\]/]+\]|[^/:\s]+):)")
+_SCP_VALUED = frozenset("cDFiJloPSX")
+_RSYNC_VALUED = frozenset(("e", "B", "f", "M", "T", "rsh", "rsync-path", "filter", "exclude", "include",
+                           "exclude-from", "include-from", "files-from", "port", "password-file",
+                           "log-file", "temp-dir", "partial-dir", "compare-dest", "copy-dest", "link-dest",
+                           "backup-dir", "suffix", "chmod", "chown", "timeout", "contimeout", "bwlimit",
+                           "max-size", "min-size", "block-size", "out-format", "address", "remote-option",
+                           "write-batch", "only-write-batch", "read-batch", "iconv", "sockopts"))
+_SOCAT_NET = re.compile(r"(?i)^(?:tcp|udp|sctp|dccp|openssl|ssl|socks|proxy|vsock|ip)[\w-]*:")
+# the curl and wget options whose value rides to the other machine
+_SENT_OPTS = frozenset(("-H", "--header", "-u", "--user", "-b", "--cookie", "--oauth2-bearer", "--proxy-user",
+                        "--url", "--password", "--http-user", "--http-password", "--proxy-password"))
+_URLISH = re.compile(r"^[\w.-]+\.[A-Za-z]{2,}(?::\d+)?(?:[/?#]|$)")
+
+
+def _sends(head, args, fed):
+    """True when this command sends data off this machine (OFF_MACHINE): `fed`
+    says its stdin comes from a pipe, a file or a here-document."""
+    if head in ("scp", "rsync"):
+        opts, ops = _getopt(args, _SCP_VALUED if head == "scp" else _RSYNC_VALUED, stop=False)
+        return len(ops) > 1 and bool(_REMOTE.match(_deq(ops[-1])))
+    if head in ("nc", "ncat", "netcat"):
+        opts, _ops = _getopt(args, frozenset("bceIiMmOPpqsTVwXx"), stop=False)
+        return not _has(opts, "-z")
+    if head == "socat":
+        return any(_SOCAT_NET.match(_deq(a)) for a in args)
+    if head in ("ssh", "telnet", "ftp", "tftp", "lftp", "sftp", "mail", "mailx", "mutt", "sendmail", "msmtp"):
+        words = [_deq(a) for a in args]
+        return fed or (head == "sftp" and "-b" in words) or (head == "lftp" and ("-c" in words or "-e" in words)) \
+            or (head in ("mail", "mailx", "mutt") and any(w.startswith(("-a", "-A")) for w in words))
+    if head in ("curl", "wget"):
+        prev = ""
+        for raw in args:
+            w = _deq(raw)
+            if head == "wget" and w.split("=", 1)[0] in ("--post-file", "--body-file", "--post-data", "--body-data"):
+                return True
+            if "$" in _shell_text(raw) and ("://" in w or _URLISH.match(w) or prev in _SENT_OPTS
+                                            or w.split("=", 1)[0] in _SENT_OPTS):
+                return True
+            prev = w
+    return False
+
+
 CARRIERS = (
     (ON_ANOTHER, _ssh),
     (IN_SESSION, _session),
@@ -781,8 +848,11 @@ def _read(text, reread=0):
     if lex.deep:
         return TOO_DEEP, True
     what, danger, levels = "", False, []
-    for words in lex.stages:
-        w, d = _read_stage(words, reread, levels)
+    for words, (piped, redirs) in zip(lex.stages, lex.info):
+        fed = piped or any(op in _FED for op, _t in redirs)
+        w, d = _read_stage(words, reread, levels, fed)
+        if not w and any(_NET_DEV.search(_deq(t)) for _op, t in redirs):
+            w = OFF_MACHINE                         # > /dev/tcp/HOST/PORT: bash's own socket
         what, danger = what or w, danger or d
         if what and danger:
             return what, danger
@@ -790,9 +860,10 @@ def _read(text, reread=0):
     return what, danger or (bool(levels) and danger_shape(" ; ".join(levels)))
 
 
-def _read_stage(words, reread, levels):
+def _read_stage(words, reread, levels, fed=False):
     """One stage: (name or '', dangerous). Appends each command it reads,
-    from its head on, to `levels` for the DANGER patterns."""
+    from its head on, to `levels` for the DANGER patterns. `fed`: its
+    stdin is a pipe, a file or a here-document (OFF_MACHINE reads it)."""
     if reread > MAX_REREAD:
         return TOO_DEEP, True
     i, wraps, what = 0, 0, ""
@@ -838,6 +909,8 @@ def _read_stage(words, reread, levels):
                 return name, True
         if what:
             return what, True
+        if _sends(head, args, fed):
+            return OFF_MACHINE, False               # opaque, not danger: it destroys nothing
         if head in SHELLS:                          # sh -c STRING: the string is shell, read it
             opts, ops = _getopt(args, "oO")
             if any(o == "-c" for o, _v in opts) and ops:

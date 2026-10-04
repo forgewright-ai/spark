@@ -250,9 +250,9 @@ def line(cfg, tmux=True):
     ]
     s = SEP.join(p for p in parts if p and not p.endswith(" ")) + " "
     try:
+        from . import vault
         state_dir()
-        with open(BAR_CACHE, "w", encoding="utf-8") as f:
-            json.dump({"t": now, "net": net, "line": s}, f)
+        vault.write_private(BAR_CACHE, json.dumps({"t": now, "net": net, "line": s}).encode("utf-8"))
     except OSError:
         pass
     return s if tmux else MARKUP.sub("", s)

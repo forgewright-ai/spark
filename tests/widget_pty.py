@@ -40,6 +40,7 @@
 # offline through a spark symlink into the real repository).
 
 import fcntl
+import glob
 import os
 import pty
 import re
@@ -153,6 +154,7 @@ class Shell:
         pid, fd = pty.fork()
         if pid == 0:
             os.chdir(cwd)
+            os.umask(0o022)            # a common umask: what the shell creates is said against it
             os.execvpe(argv[0], argv, env)
         self.pid, self.fd = pid, fd
         fcntl.ioctl(fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
@@ -865,12 +867,24 @@ def main(shell, widget):
         ok("STREAMED-CMD" in first and "streamed hint text" not in first and "streamed hint text" in full,
            "streamed: the command lands before its hint", full[-400:])
         ok(not re.search(r"\[\d+\]\s+\d+|\bDone\b", full), "streamed: no job-control notice on the screen", full[-400:])
+        if shell == "bash":
+            # the reader keeps line 3's proof in a file: 0600 whatever the
+            # shell's umask (this one runs under 022), gone at the next question
+            pfs = []
+            end = time.time() + 3
+            while time.time() < end and not pfs:
+                pfs = glob.glob(os.path.join(state, "spark", "proof.*"))
+                time.sleep(0.05)
+            modes = [oct(os.stat(p).st_mode & 0o777) for p in pfs]
+            ok(len(pfs) == 1 and modes == ["0o600"], "streamed: the proof file is 0600 under umask 022", modes)
         sh.send("\x15")
         sh.settle()
 
         since = sh.mark()
         sh.send("? stream-danger\r")
         first, full = seen_then("DANGER-CMD", "! removes things -- read it before Enter")
+        if shell == "bash":
+            ok(not glob.glob(os.path.join(state, "spark", "proof.*")), "streamed: the next question removes the proof file")
         at_mark = first.find("-- read it before Enter")
         ok(0 <= at_mark < first.find("DANGER-CMD"),
            "streamed: a danger command never shows before its ! mark", first[-400:])

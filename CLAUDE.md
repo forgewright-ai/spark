@@ -462,19 +462,26 @@ State is `~/.local/state/spark/`, 0700:
   `forge.log`, `forge.lock`.
 - `router/` (`spark.gguf`, `ember.gguf`, `presets.ini`): the router's
   models dir, written by `spark serve`.
-- `off`, `widgets/`, `turns/`, `chat-history` 0600, `brain`,
-  `check.json`, `bar`, `bench.jsonl`, `tune.json`.
+- `off`, `widgets/`, `turns/`, `chat-history` 0600, `brain` 0600,
+  `check.json`, `bar` 0600, `bench.jsonl`, `tune.json` 0600. The 0600
+  files here are written by `vault.write_private`, after `state_dir()`.
+- `proof.<pid>` 0600: the bash widget's proof for the next prompt. The
+  prompt empties it, and the next question and the shell's exit remove
+  it.
 - `voice-anyway`: `spark voice clear --anyway` was chosen, kept until
   the next `clear` or `off`. `voice-playing`: the pid of the player
   speaking now and its private directory, for `spark voice stop`.
-- `look`: the living prompt's state for the widgets (contract 6),
+- `look` 0600: the living prompt's state for the widgets (contract 6),
   written by `look.render` alone. `news`, `news-seen` and `last-seen`
   are gone: nothing reads or writes them, and an older machine's copies
   go with the state at `spark uninstall`. `loads.json` maps a model
   file to its last load in seconds (`engine.record_load`), for the
   waking bar's estimate.
 - `threads/`: pre-v1.4 plaintext threads only. `spark user claim` seals
-  them away.
+  them away. A sealed thread of the same id is replaced only when its
+  messages start the plaintext ones, what a crashed claim leaves
+  (`forge._claimed_part`). Otherwise that plaintext thread stays, said
+  in one line.
 - `runs/<id>/` 0700: a sandboxed run. `meta.json` 0600 holds numbers and
   names only. `lock` is the flock its driver or a `--review`, `--accept`
   or `--discard` holds. `up/` and `wk/` are the overlay's on Linux.
@@ -1082,14 +1089,17 @@ and may change freely.
    holds one. The v1.3 shared ember-token is not accepted. Every route
    the server answers is one row of `forgeserve.ROUTES`: `(method,
    pattern): none|user|admin`, a `*` one path segment. `_route` consults
-   nothing else, so a request off the table is 404. `none` is open. The
-   two with a gate of their own keep it (`/api/login` the write gate,
-   `/v1/chat/completions` the bearer). `user` needs the cookie or a
-   token as a bearer, else 401. `admin` is the forge-token. A user there
-   is 403 `{error: {kind: role}}`, because the soul is the machine's one
-   identity. `tests/docs_test.py` holds this table equal to the code,
-   entry for entry, and `tests/policy_test.py` proves every row with
-   3 callers:
+   nothing else, so a request off the table is 404. A method off it is
+   the same 404 through the same path, never the stdlib's 501:
+   `Handler.__getattr__` dispatches every `do_*` the table lacks. HEAD
+   is not GET. It is off the table, a 404 with no body, and it opens no
+   stream. `none` is open. The two with a gate of their own keep it
+   (`/api/login` the write gate, `/v1/chat/completions` the bearer).
+   `user` needs the cookie or a token as a bearer, else 401. `admin` is
+   the forge-token. A user there is 403 `{error: {kind: role}}`, because
+   the soul is the machine's one identity. `tests/docs_test.py` holds
+   this table equal to the code, entry for entry, and
+   `tests/policy_test.py` proves every row with 3 callers:
 
    ```
    GET     /                          none
@@ -1257,8 +1267,12 @@ and may change freely.
    `:keepalive` comment every 15 seconds. `/v1/chat/completions` and
    `/v1/models` are OpenAI-shaped and proxied to the llama-server with
    the api-token. The request's `model` field routes, and a missing
-   `model` means `ember`. The identity is injected into the system
-   message only for an `ember` request. It is the soul, plus the
+   `model` means `ember`. Only a served role routes: `spark`, `ember`,
+   or a role's file stem or list name as `/api/health` shows them in
+   `roles` and `names` (`Handler._v1_role`). A stem or a name goes
+   upstream as its role. Any other value is 400 `{error: {kind:
+   model}}`, and nothing is sent. The identity is injected into the
+   system message only for an `ember` request. It is the soul, plus the
    requester's own remembered facts: a user's sealed memory, or the box
    account's for the admin. A `spark` request passes through untouched.
    A body with `"identity": false` keeps an `ember` request untouched
@@ -1553,7 +1567,14 @@ and may change freely.
     eval, a backslash inside a word, an interpreter handed inline code
     or a script on stdin, and a curl or wget upload. It is also
     `REWRITTEN`, the 5 `CARRIERS` and `TOO_DEEP`, named before a danger
-    reason. A block is read
+    reason. And it is `OFF_MACHINE`, a command that sends data off this
+    machine, read through `persona._read` past wrappers and pipes. That
+    is scp or rsync to a host, and nc, socat, ssh or mail fed a file or
+    a pipe. It is a variable inside a URL or a header, wget's body from
+    a file, and a /dev/tcp redirection. A download, git push and fetch,
+    ssh HOST alone, a local rsync and nc -z are not. Like the upload
+    line, it is no danger: it destroys nothing, and at a terminal a
+    person reads the line before Enter. A block is read
     whole and line by line. An edit is held to the same two. `edit
     <command>` is one line: its whitespace folds, so an edit turns a
     block into a line. Anything else runs on the program's `run` with

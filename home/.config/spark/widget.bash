@@ -174,7 +174,9 @@ _spark_say() {   # _spark_say TEXT  -- write into the row above, cursor untouche
 # background (disowned, its output nowhere) draws line 2 into the row
 # above through /dev/tty -- save the cursor, up one, clear, draw, restore:
 # text.Busy's frame, never a byte on the prompt line -- and keeps line 3's
-# proof in _spark_pf, where the next prompt picks it up. The next Enter,
+# proof in _spark_pf, where the next prompt picks it up. The file is
+# 0600; the prompt empties it with no fork, and the next question and the
+# shell's exit remove it. The next Enter,
 # Esc s, Esc r or prompt stops a reader still waiting, and its spark line.
 # One row up is the row above only while the prompt and the command fit
 # one row with room to type; past that (or before bash 4.4) the handler
@@ -189,7 +191,10 @@ _spark_reap() {   # the reader of an earlier answer, and its spark line, stop
 }
 
 _spark_keep() {   # _spark_keep CMD LINE3  -- the reader's proof, for the next prompt
-    case $2 in proof$'\t'*) printf '%s\n%s\n' "$1" "${2#proof$'\t'}" > "$_spark_pf" ;; esac
+    # a fresh file, 0600 whatever the shell's umask: umask 077 in a subshell
+    case $2 in
+        proof$'\t'*) ( umask 077; rm -f -- "$_spark_pf"; printf '%s\n%s\n' "$1" "${2#proof$'\t'}" > "$_spark_pf" ) ;;
+    esac
 }
 
 _spark_rest() {   # _spark_rest FD MARK TAIL CMD NONE  -- lines 2 and 3, in the background
@@ -260,7 +265,7 @@ _spark_asked() {
     _spark_reap
     _spark_say "$_spark_h $_spark_d"
     _spark_proof='' _spark_proof_for='' _spark_pw=''
-    [[ -s $_spark_pf ]] && : > "$_spark_pf"
+    rm -f -- "$_spark_pf"
     # the buffer as typed, before spark line starts: its pulse never
     # draws while these words are on their way
     _spark_hold "$READLINE_LINE"

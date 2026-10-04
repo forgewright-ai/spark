@@ -211,6 +211,21 @@ def main():
                                  ("POST", "/api/threads/x"), ("GET", "/nope")):
                 sts = [probe(url, method, path, cred)[0] for cred in ("", user, admin)]
                 ok(sts == [404, 404, 404], "%s %s is off the table: 404 to all three" % (method, path), sts)
+            # a method off the table is the same 404, never the stdlib's
+            # 501; HEAD is no GET in disguise: no body, and no stream opens
+            for method, path in (("HEAD", "/"), ("HEAD", "/api/health"), ("HEAD", "/api/events"),
+                                 ("OPTIONS", "/api/health"), ("OPTIONS", "*"), ("PUT", "/api/threads"),
+                                 ("PATCH", "/api/memory"), ("TRACE", "/"), ("BREW", "/api/me")):
+                sts = []
+                for cred in ("", user, admin):
+                    h = {"Authorization": "Bearer " + cred} if cred else {}
+                    t0 = time.time()
+                    st, hd, body = raw(url, method, path, headers=h)
+                    sts.append((st, (hd.get("Content-Type") or "").split(";")[0], len(body), time.time() - t0 < 5))
+                ok(all(s[0] == 404 and s[1] == "application/json" and s[3] and (s[2] == 0 if method == "HEAD" else s[2] > 0)
+                       for s in sts),
+                   "%s %s is off the table: 404 to all three%s" % (method, path, ", no body" if method == "HEAD" else ""),
+                   sts)
 
             # no login, no 500: a lone surrogate in the token is a wrong
             # token (the 1 s cost, counted), and a body nested past the

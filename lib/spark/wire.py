@@ -314,10 +314,10 @@ def _read_cache(key):
 
 def _write_cache(key, url, model, forge, roles=None):
     try:
+        from . import vault
         state_dir()
-        with open(BRAIN_CACHE, "w", encoding="utf-8") as f:
-            json.dump({"t": time.time(), "key": key, "url": url, "model": model,
-                       "forge": forge, "roles": roles or {}}, f)
+        vault.write_private(BRAIN_CACHE, json.dumps({"t": time.time(), "key": key, "url": url, "model": model,
+                                                     "forge": forge, "roles": roles or {}}).encode("utf-8"))
     except OSError:
         pass
 

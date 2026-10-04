@@ -317,11 +317,12 @@ def content(cfg, on, faces_path=None):
 
 
 def _atomic(path, text):
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        f.write(text)
-    os.replace(tmp, path)
+    """`text` at `path`, 0600, the state dir made 0700 first (state_dir):
+    vault.write_private's fresh temp and atomic replace, so a link
+    planted at the path or its temp is never written through."""
+    from . import state_dir, vault
+    state_dir()
+    vault.write_private(path, text.encode("utf-8"))
 
 
 def render(cfg=None, awake_now=None):

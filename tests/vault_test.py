@@ -677,6 +677,83 @@ def test_fails_index_redacts():
     check("the sealed ledger's note is untouched", entries[0]["note"], fix)
 
 
+def test_claim_never_seals_over():
+    # `spark user claim` once removed any sealed thread whose id a pre-v1.4
+    # plaintext thread shared, as if a claim had crashed there. Now only a
+    # sealed thread whose messages start the plaintext ones is sealed over;
+    # any other stays as it is, the plaintext beside it, said in one line
+    import contextlib
+    import io
+    import json
+    from spark import THREADS_DIR, config, forge, users
+    from spark import text as textmod
+    token = users.add("hana")
+    dk = users.unlock("hana", token)
+    st = forge.store_for("hana", dk)
+    cfg = config.load()
+    os.makedirs(THREADS_DIR, exist_ok=True)
+
+    def legacy(tid, texts):
+        msgs = [{"ts": "2000-01-01 00:00:0%d" % i, "role": "user" if i % 2 == 0 else "assistant", "text": t}
+                for i, t in enumerate(texts)]
+        with open(os.path.join(THREADS_DIR, tid + ".jsonl"), "w", encoding="utf-8") as f:
+            f.write("".join(json.dumps(m) + "\n" for m in msgs))
+        return msgs
+
+    # a claim that died after one message: its sealed part is a start
+    crashed = "2000-01-03-000000"
+    msgs = legacy(crashed, ["first", "second", "third"])
+    st._dir()
+    vault.append_sealed(st._path(crashed), dk, "thread", crashed,
+                        json.dumps(textmod.clean(msgs[0]), ensure_ascii=False).encode("utf-8"))
+    # the user's own thread that happens to share an id
+    own = "2000-01-04-000000"
+    legacy(own, ["older words", "older reply"])
+    st.open_thread(cfg, own)
+    st.append(cfg, own, "user", "my own words")
+    st.append(cfg, own, "assistant", "my own reply")
+
+    err = io.StringIO()
+    with contextlib.redirect_stderr(err):
+        moved = forge.claim_legacy("hana", dk)
+    check("the crashed claim's thread moved, the user's own did not", moved, 1)
+    check("the crashed one is sealed whole", [m["text"] for m in st.load(crashed)], ["first", "second", "third"])
+    check("its plaintext is gone", os.path.exists(os.path.join(THREADS_DIR, crashed + ".jsonl")), False)
+    check("the user's own sealed thread is untouched", [m["text"] for m in st.load(own)],
+          ["my own words", "my own reply"])
+    check("the plaintext of that id stays", os.path.exists(os.path.join(THREADS_DIR, own + ".jsonl")), True)
+    check("one line says so", err.getvalue(),
+          "! thread %s is already sealed with other messages -- its older copy is left as it is\n" % own)
+    os.remove(os.path.join(THREADS_DIR, own + ".jsonl"))
+
+
+def test_state_files_private():
+    # the look file, the bar's cache and the brain cache were written with
+    # the process umask, and the look file could make the state dir 0755
+    # when it ran first. Each is vault.write_private now, after state_dir()
+    import subprocess
+    home = tempfile.mkdtemp(prefix="spark-umask-")
+    env = {k: v for k, v in os.environ.items() if not k.startswith(("SPARK_", "XDG_", "SITE_"))}
+    env.update({"HOME": home, "XDG_CONFIG_HOME": home + "/.config", "XDG_STATE_HOME": home + "/.local/state",
+                "XDG_DATA_HOME": home + "/.local/share", "SPARK_NO_REFRESH": "1"})
+    code = ("import os, sys; os.umask(0o022); sys.path.insert(0, sys.argv[1])\n"
+            "from spark import STATE_DIR, bar, config, look, wire\n"
+            "look.render()\n"
+            "wire._write_cache('k', 'http://192.0.2.1:8080', 'm', False)\n"
+            "bar.line(config.load())\n"
+            "print(oct(os.stat(STATE_DIR).st_mode & 0o777))\n"
+            "for n in ('look', 'brain', 'bar'):\n"
+            "    print(n, oct(os.stat(os.path.join(STATE_DIR, n)).st_mode & 0o777))\n")
+    try:
+        p = subprocess.run([sys.executable, "-c", code, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "lib")],
+                           capture_output=True, text=True, env=env, timeout=60)
+        check("the writers run under umask 022", (p.returncode, p.stderr), (0, ""))
+        check("the state dir the look file made is 0700, the files 0600", p.stdout.split("\n"),
+              ["0o700", "look 0o600", "brain 0o600", "bar 0o600", ""])
+    finally:
+        shutil.rmtree(home, ignore_errors=True)
+
+
 def main():
     test_block_2_3_2()
     test_stream_2_4_2()
@@ -696,6 +773,8 @@ def main():
     test_remove_validates_the_name()
     test_a_bad_record_is_skipped()
     test_token_change_is_crash_safe()
+    test_claim_never_seals_over()
+    test_state_files_private()
     test_fails_index_redacts()
     test_throughput_floor()
     if FAILED:

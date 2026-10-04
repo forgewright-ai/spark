@@ -256,11 +256,12 @@ def cmd_bench(args):
         now = [r for r in results if r[2] == cur]
         if now and best != cur and tg < now[0][0] * 1.05:
             tg, pp, best = now[0]
+        from . import vault
         state_dir()
-        with open(TUNE_FILE, "w", encoding="utf-8") as f:
-            json.dump({"ts": time.strftime("%Y-%m-%d %H:%M:%S"), "model": os.path.basename(model), "current": cur,
-                       "winner": best, "winner_pp": round(pp, 1), "winner_tg": round(tg, 1),
-                       "table": [{"settings": s, "pp": round(p, 1), "tg": round(t, 1)} for t, p, s in results]}, f)
+        vault.write_private(TUNE_FILE, json.dumps(
+            {"ts": time.strftime("%Y-%m-%d %H:%M:%S"), "model": os.path.basename(model), "current": cur,
+             "winner": best, "winner_pp": round(pp, 1), "winner_tg": round(tg, 1),
+             "table": [{"settings": s, "pp": round(p, 1), "tg": round(t, 1)} for t, p, s in results]}).encode("utf-8"))
         if porcelain:
             for t, p, s in results:
                 say("%s\t%.1f\t%.1f" % (key_of(s), p, t))

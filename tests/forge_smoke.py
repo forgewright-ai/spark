@@ -370,6 +370,30 @@ def main():
             c = SEEN.get("body", {}).get("messages", [{}])[0].get("content", "")
             ok(st == 200 and SEEN.get("body", {}).get("model") == "ember" and c.startswith("Call yourself Fixture."),
                "model ember explicit: the identity goes in", c[:200])
+            # v1.78: only the served roles route -- spark, ember, or a
+            # role's stem or name as /api/health shows it; the role goes up
+            _st, _, _hraw = req(url, "GET", "/api/health")
+            _roles = json.loads(_hraw).get("roles") or {}
+            for _name, _role in ((_roles.get("ember"), "ember"), (_roles.get("spark"), "spark")):
+                SEEN.clear()
+                st, _, raw = req(url, "POST", "/v1/chat/completions",
+                                 {"model": _name, "messages": [{"role": "user", "content": "what"}], "stream": False},
+                                 headers=bearer)
+                c = json.dumps(SEEN.get("body", {}))
+                ok(st == 200 and bool(_name) and SEEN.get("body", {}).get("model") == _role
+                   and ("Call yourself Fixture." in c) == (_role == "ember"),
+                   "model %r (the %s role's stem): %s goes upstream" % (_name, _role, _role), (st, c[:200]))
+            for _bad in ("gpt-4", "../ember", "Ember", 5, ["ember"], {"x": 1}):
+                SEEN.clear()
+                st, _, raw = req(url, "POST", "/v1/chat/completions",
+                                 {"model": _bad, "messages": [{"role": "user", "content": "what"}], "stream": False},
+                                 headers=bearer)
+                ok(st == 400 and json.loads(raw)["error"]["kind"] == "model" and not SEEN,
+                   "model %r is no role served here -> 400 model, nothing upstream" % (_bad,), (st, raw[:200]))
+            SEEN.clear()
+            st, _, raw = req(url, "POST", "/v1/chat/completions",
+                             {"model": "", "messages": [{"role": "user", "content": "what"}], "stream": False}, headers=bearer)
+            ok(st == 200 and SEEN.get("body", {}).get("model") == "ember", "model empty: ember, as when missing", st)
             # "identity": false asks for the chat model bare
             SEEN.clear()
             st, _, raw = req(url, "POST", "/v1/chat/completions",

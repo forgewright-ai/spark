@@ -137,6 +137,8 @@ ROUTES = {
     ("POST", "/api/check/refresh"): "admin",
     ("POST", "/api/soul"): "admin",
 }
+METHOD = re.compile(r"^[A-Z]{1,16}$")       # a method the log may name as sent
+V1_ROLES = ("spark", "ember")             # the roles /v1/chat/completions serves
 SECRET_KEY = re.compile("KEY|TOKEN|SECRET")   # a config key /api/config never returns
 ID_HINT = "a thread id is 1 to 64 letters, digits, - and _"   # forge.valid_id, said to a client
 
@@ -776,14 +778,21 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         self._dispatch("GET")
 
-    def do_HEAD(self):
-        self._dispatch("GET")
-
     def do_POST(self):
         self._dispatch("POST")
 
     def do_DELETE(self):
         self._dispatch("DELETE")
+
+    def __getattr__(self, name):
+        """Every other method (HEAD, OPTIONS, PUT, PATCH...) is off ROUTES,
+        so it is the same 404 an unknown route gets, never the stdlib's
+        501. HEAD is no GET in disguise: it opens no stream and sends no
+        body. The log names an odd method `?`."""
+        if not name.startswith("do_"):
+            raise AttributeError(name)
+        method = name[3:] if METHOD.match(name[3:]) else "?"
+        return lambda: self._dispatch(method)
 
     def _dispatch(self, method):
         t0 = time.time()
@@ -940,8 +949,7 @@ class Handler(BaseHTTPRequestHandler):
             self._status = 304
             return None
         self._start(200, STATIC[name], h, len(data))
-        if self.command != "HEAD":
-            self.wfile.write(data)
+        self.wfile.write(data)
         self._status = 200
         return None
 
@@ -953,8 +961,7 @@ class Handler(BaseHTTPRequestHandler):
             self._status = 304
             return None
         self._start(200, "image/png", h, len(png))
-        if self.command != "HEAD":
-            self.wfile.write(png)
+        self.wfile.write(png)
         self._status = 200
         return None
 
@@ -977,6 +984,23 @@ class Handler(BaseHTTPRequestHandler):
         self._status = 200
         return None
 
+    def _v1_role(self, model):
+        """The role a /v1 request's `model` names, or None: spark or ember
+        as such, or a role's file stem or list name as /api/health shows
+        it (`roles`, `names`). The role goes upstream, so the router
+        routes it. Anything else is refused before it leaves."""
+        if model in V1_ROLES:
+            return model
+        if not isinstance(model, str):
+            return None
+        url, _m, st = self.server.upstream.resolve()
+        roles = self.server.role_models(url if st == "ok" else "")
+        for role in V1_ROLES:
+            stem = roles.get(role)
+            if stem and model in (stem, config.model_name(stem)):
+                return role
+        return None
+
     def v1_chat(self, body):
         """The api-token goes on and the answer comes back as it is: JSON,
         or the SSE bytes straight through. A missing model means ember;
@@ -995,7 +1019,9 @@ class Handler(BaseHTTPRequestHandler):
         identity = body.pop("identity", True)
         if not isinstance(identity, bool):
             return self._error(400, "bad", "identity is true or false")
-        model = body.get("model") or "ember"
+        model = self._v1_role(body.get("model") or "ember")
+        if model is None:
+            return self._error(400, "model", "model is spark or ember, or a name /api/health shows for one")
         body["model"] = model
         if model == "ember" and identity:
             mem = self._mstore()        # a user's own memory rides their request

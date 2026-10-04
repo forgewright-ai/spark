@@ -429,7 +429,7 @@ def cmd_claim():
     if moved or not left:
         say("ok     claim        %d thread%s sealed into %s%s"
             % (moved, "" if moved == 1 else "s", name,
-               "" if not left else "; %d left (unreadable)" % left))
+               "" if not left else "; %d left as they are" % left))
         return 0
     say("! nothing moved -- %d older thread%s left" % (left, "" if left == 1 else "s"))
     return 1

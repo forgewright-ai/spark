@@ -1,5 +1,24 @@
 # Changelog
 
+## v1.78
+
+Six more fixes from the audit.
+
+- The page's server answers a chat only for the models it serves. Any
+  other model name is refused, and nothing is sent.
+- A request with a method the server does not know, such as HEAD or
+  PUT, gets the same "not found" as an unknown page. HEAD opens no
+  stream.
+- `spark user claim` never writes over a thread you already have. It
+  leaves the older copy where it is and says so.
+- The look file, the bar's cache and the other small state files are
+  private to you, whatever your umask. So is the proof file the bash
+  prompt keeps.
+- An app that drives `spark do` cannot send data off this machine
+  outside the sandbox: `scp` or `rsync` to a host, `nc`, a token in a
+  URL.
+- The Debian image in the tests is pinned by its digest.
+
 ## v1.77
 
 The last four fixes from the audit.

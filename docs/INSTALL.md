@@ -536,6 +536,8 @@ is the trust boundary.
   `Enter`. A command that can destroy data needs `yes` typed.
 - An app that drives `spark do --porcelain` can approve steps for you.
   So can `spark do --accept`.
+- Outside the sandbox, such an app cannot run a step that sends data
+  off this machine, such as `scp FILE host:`.
 - `spark do --sandbox` runs steps in a copy with no network. A step can
   still read most of the system: see section 6.
 - `spark read`, `spark do`, `recall` (`Esc r`) and `spark edit ?

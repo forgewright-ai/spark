@@ -793,10 +793,25 @@ def prune_stores(cfg, keys):
 
 
 # ------------------------------------------------------------------ claim
+def _claimed_part(st, tid, msgs):
+    """True when sealed thread `tid` reads whole and its messages are the
+    first of `msgs`: what a claim that died part way leaves behind."""
+    try:
+        recs, bad = vault.read_sealed_records(st._path(tid), st.dk, "thread", tid)
+        have = [json.loads(r.decode("utf-8")) for r in recs]
+    except (vault.SealError, OSError, ValueError):
+        return False
+    want = [textmod.clean(d) for d in msgs]
+    return not bad and have == want[:len(have)]
+
+
 def claim_legacy(name, dk):
     """Move the pre-v1.4 plaintext threads into a user's sealed store:
     seal every message, prove the sealed copy opens, then remove the
-    plaintext. Re-runnable; returns how many threads moved."""
+    plaintext. Re-runnable; returns how many threads moved. A sealed
+    thread of the same id is replaced only when a crashed claim left it
+    (_claimed_part); otherwise that plaintext thread is skipped, said in
+    one line."""
     st = store_for(name, dk)
     moved = 0
     try:
@@ -828,7 +843,14 @@ def claim_legacy(name, dk):
                 os.remove(src)
                 moved += 1
             continue
-        if st.exists(tid):                     # a crashed earlier claim: re-seal fresh
+        if st.exists(tid):
+            # only a crashed earlier claim is sealed over: its messages a
+            # start of these. Any other sealed thread of that id is the
+            # user's own, and the older copy waits beside it untouched
+            if not _claimed_part(st, tid, msgs):
+                print("! thread %s is already sealed with other messages -- its older copy is left as it is"
+                      % tid, file=sys.stderr, flush=True)
+                continue
             os.remove(st._path(tid))
         for d in msgs:
             vault.append_sealed(st._path(tid), dk, "thread", tid,

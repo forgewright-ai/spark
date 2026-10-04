@@ -80,6 +80,8 @@ def main():
         ok(rc == 0 and "winner:" in out and "ngl=999 fa=on kv=q8_0" in out.split("winner:")[1], "tune finds GPU + flash attention + q8_0", out)
         t = json.load(open(state + "/tune.json"))
         ok(t["winner"]["fa"] == "on" and t["winner"]["kv"] == "q8_0" and t["winner"]["ngl"] == "999", "tune.json holds the winner", t["winner"])
+        ok(oct(os.stat(state + "/tune.json").st_mode & 0o777) == "0o600", "tune.json is 0600",
+           oct(os.stat(state + "/tune.json").st_mode))
         rc, out, _ = spark("bench", "tune", "show")
         ok(rc == 0 and "winner:" in out and "now:" in out, "tune show", out)
         rc, out, _ = spark("bench", "tune", "apply")
