@@ -924,6 +924,101 @@ def voice_keys(shell, widget, tmp, env, ok):
            out[-300:])
 
 
+def moved_keys(shell, widget, tmp, env, ok):
+    """`spark keys NAME KEY` writes ~/.config/spark/keys.env; the widget
+    reads it as the shell starts. A moved key asks spark and the key it
+    left does not; a key set to none is not bound; the hint names the key
+    in use; and what each key did before is recorded once, in
+    state/replaced.<shell>, not written again by the next shell."""
+    khome = os.path.join(tmp, "khome")
+    conf = os.path.join(khome, ".config", "spark")
+    state = os.path.join(khome, ".local", "state")
+    os.makedirs(conf, exist_ok=True)
+    os.makedirs(state, exist_ok=True)
+    with open(os.path.join(conf, "keys.env"), "w") as f:
+        f.write("# spark keys\nKEYS_ASK=Ctrl-g\nKEYS_RECALL=Alt-b\nKEYS_HEIGHT=none\nKEYS_STOP=Ctrl-c\n")
+    log, hlog = os.path.join(tmp, "keys-asked.log"), os.path.join(tmp, "keys-height.log")
+    e = dict(env, HOME=khome, XDG_STATE_HOME=state, ZDOTDIR=khome, STUB_LOG=log, STUB_HEIGHT=hlog, STUB_RECALL=os.path.join(tmp, "keys-recall.log"))
+    record = os.path.join(state, "spark", "replaced." + shell)
+
+    def lines(path):
+        try:
+            with open(path) as f:
+                return f.read().splitlines()
+        except OSError:
+            return []
+
+    if shell == "bash":
+        argv = ["bash", "--norc", "--noprofile", "-i"]
+        bound = ("bind -X | grep -c _spark_height_key; bind -X | grep -cF '\\C-c'; "
+                 "bind -X | grep -cF '\\ex'; echo KEYS-$((6*7))")
+    else:
+        argv, bound = ["zsh", "-f", "-i"], "bindkey '\\ek'; bindkey '\\ex'; bindkey '^C'; echo KEYS-$((6*7))"
+    stamp = None
+    for run in (1, 2):
+        sh = Shell(argv, e, os.path.join(tmp, "work"))
+        try:
+            sh.send("%s; source %s; echo SOURCED\n" % ("PS1='\\nKP> '" if shell == "bash" else "PROMPT=$'\\nKP> '", widget))
+            sh.expect("SOURCED")
+            sh.settle()
+            if run == 2:
+                break
+            since = sh.mark()
+            sh.send("moved key words")
+            time.sleep(0.3)
+            sh.send("\x07")                              # Ctrl-g: ask, moved here
+            got = sh.expect("A hint about it")
+            ok(got and lines(log)[-1:] == ["moved key words"], "a moved key works: Ctrl-g asks about the line", since())
+            sh.send("\x15")
+            sh.settle()
+            n = len(lines(log))
+            sh.send("old key words")
+            time.sleep(0.3)
+            sh.send("\x1bs")                             # Esc s: the shell's own again
+            sh.read(1.6)
+            ok(len(lines(log)) == n, "the key it left does not call spark: Esc s asks nothing", lines(log)[n:])
+            sh.send("\x03")
+            sh.settle()
+            since = sh.mark()
+            sh.send("\x07")                              # on an empty line: the hint names the key
+            ok(sh.expect("type a question, then Ctrl-g"), "the hint names the key in use (Ctrl-g, not Esc s)", since())
+            since = sh.mark()
+            sh.send("find the amend")
+            time.sleep(0.3)
+            sh.send("\x1bb")                             # Esc b (written Alt-b): recall, moved here
+            ok(sh.expect("Esc b for the next"), "Alt-b in keys.env is Esc b: recall runs there and names it", since())
+            sh.send("\x15")
+            sh.settle()
+            sh.send("\x1bk")                             # Esc k: set to none
+            sh.read(1.6)
+            sh.send("\x03")
+            sh.settle()
+            since = sh.mark()
+            sh.send(bound + "\n")
+            sh.expect("KEYS-42", 5)
+            sh.settle()
+            out = since()
+            if shell == "bash":
+                n = [l.strip() for l in out.splitlines() if l.strip().isdigit()]
+                free = n[-3:] == ["0", "0", "1"]
+            else:
+                free = ('"^[k" undefined-key' in out and '"^[x" spark-hush' in out and '"^C" spark' not in out)
+            ok(free and not lines(hlog), "a key set to none is not bound; a value spark cannot take (Ctrl-c) keeps "
+               "the default key and binds no other", out[-300:])
+            rec = lines(record)
+            ok(any(l.startswith("ask\tCtrl-g\t") for l in rec) and any(l.startswith("recall\tEsc b\t") for l in rec)
+               and not any(l.startswith("height\t") for l in rec),
+               "what each key did before is recorded for spark keys (state/replaced.%s)" % shell, rec)
+            stamp = os.stat(record).st_mtime_ns if os.path.exists(record) else None
+            time.sleep(1.1)
+        finally:
+            sh.send("exit\n")
+            sh.read(0.5)
+            sh.close()
+    ok(stamp is not None and os.stat(record).st_mtime_ns == stamp,
+       "the next shell finds the record as it is and does not write it again")
+
+
 def rendered_height(shell, widget, tmp, env, ok):
     """A real screen: tmux renders a two-line prompt at height 2 -- the
     hint sits on the blank row above INFO-LINE, and INFO-LINE is intact."""
@@ -1672,6 +1767,9 @@ def main(shell, widget):
 
         # 9c. the voice keys are bound only where the voice is on or clear
         voice_keys(shell, widget, tmp, env, ok)
+
+        # 9d. the keys move (spark keys): keys.env read as the shell starts
+        moved_keys(shell, widget, tmp, env, ok)
 
         # 10. nothing the widget started outlives its shell: a streamed
         #     answer's reader and its spark line stop with it

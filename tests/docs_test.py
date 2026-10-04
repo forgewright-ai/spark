@@ -478,7 +478,7 @@ def spoken():
               "docs/CHEATSHEET.txt has a spark voice line with %s (voice.VOICE_USAGE)" % w)
     bound = []
     for f in WIDGETS:
-        bound.append(sorted(set(re.findall(r"""(?:bindkey '|bind -x '")\\e([a-z])['"]""", read(f)))))
+        bound.append(sorted(set(re.findall(r"\b_spark_k_[a-z]+='Esc ([a-z])'", read(f)))))
     check(bool(bound[0]) and bound[0] == bound[1], "the two widgets bind the same Esc keys (%s)" % " ".join(bound[0]))
     for k in bound[0]:
         for name, text in (("docs/CHEATSHEET.txt", cheat), ("docs/INSTALL.md", inst)):
@@ -504,6 +504,44 @@ def spoken():
     check(bool(keys), "config.SPARK_KEYS holds the SPARK_VOICE keys")
     for k in keys:
         check(k in table, "docs/INSTALL.md's key table has a row for %s" % k)
+
+
+def shell_keys():
+    """`spark keys` (v1.81) as the tree holds it: the names and default
+    keys of keys.NAMES are the two widgets' own, every name is in INSTALL
+    and in the verb's usage and both completion files, the verb is in the
+    cheatsheet, SITE_KEYS is a key of config, site.env.example, env.sh,
+    INSTALL's table and CLAUDE.md's contract 3, and SPARK_OFF is told."""
+    from spark import keys as keysmod
+    inst, cheat, claude = read("docs/INSTALL.md"), read("docs/CHEATSHEET.txt"), read("CLAUDE.md")
+    want = sorted((n, k) for n, k, _ in keysmod.NAMES)
+    for f in WIDGETS:
+        text = read(f)
+        got = sorted(re.findall(r"\b_spark_k_([a-z]+)='([^']+)'", text))
+        check(got == want, "%s: the keys and their defaults are keys.NAMES (%s)" % (f, " ".join(n for n, _ in want)))
+        for n, _ in want:
+            check(re.search(r"(?m)^\s*KEYS_%s\) _spark_k_%s=" % (n.upper(), n), text) is not None
+                  and re.search(r"\b_spark_key %s \S+" % n, text) is not None,
+                  "%s reads KEYS_%s and binds %s through _spark_key" % (f, n.upper(), n))
+        check("Ctrl-[%s]" % keysmod.CTRL_OK in text, "%s takes the Ctrl letters keys.CTRL_OK names" % f)
+    for n, _ in want:
+        check(re.search(r"`%s`" % n, inst) is not None, "docs/INSTALL.md names the key %s (keys.NAMES)" % n)
+        check(re.search(r"\b%s\b" % n, keysmod.USAGE) is not None, "spark keys -h names %s" % n)
+        for f in ("home/.config/spark/completion.bash", "home/.config/spark/completion.zsh"):
+            m = re.search(r"(?m)^\s*keys\)\s+(?:words=\"|comp=\()([^\")]*)", read(f))
+            check(m is not None and n in m.group(1).split(), "%s completes spark keys %s" % (f, n))
+    for word in ("spark keys", "spark keys off", "SPARK_OFF=1"):
+        check(word in inst, "docs/INSTALL.md says %s" % word)
+    check(re.search(r"(?m)^\s*spark keys\b", cheat) is not None, "docs/CHEATSHEET.txt has a spark keys line")
+    check("spark keys" in read("README.md"), "README.md names spark keys where it says spark adds one rc line")
+    check("SITE_KEYS" in config.SITE_KEYS, "config.SITE_KEYS holds SITE_KEYS")
+    check(re.search(r"(?m)^SITE_KEYS=on$", read("site.env.example")) is not None, "site.env.example: SITE_KEYS=on")
+    check(re.search(r"(?m)^\| `SITE_KEYS`", inst) is not None, "docs/INSTALL.md's key table has a SITE_KEYS row")
+    check('"${SITE_KEYS:=on}"' in read("lib/env.sh"), "lib/env.sh defaults SITE_KEYS to on")
+    m = re.search(r"- `site\.env`: `([A-Z_\s]+)`", claude)
+    check(m is not None and m.group(1).split() == list(config.SITE_KEYS),
+          "CLAUDE.md contract 3 lists site.env's keys as config.SITE_KEYS holds them")
+    check("keys.env" in claude and "replaced." in claude, "CLAUDE.md names keys.env and the widgets' record")
 
 
 def quiet():
@@ -922,6 +960,7 @@ def main():
     spoken()
     # v1.72: spark ver without credits, spark check --all
     quiet()
+    shell_keys()
     # v1.80: a plain voice, the face's presence, the progress kinds
     presence()
     # the voice's mechanical half, and the two nouns in what spark prints

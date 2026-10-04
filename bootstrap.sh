@@ -488,7 +488,8 @@ fi
 # the rc hook: one marked line at the end of the login shell's rc file
 # (after fzf: the widget wraps Enter, so it loads last). The marker is
 # `config/spark/hook.`, so the line lands once -- in a file or through a
-# symlink of yours alike.
+# symlink of yours alike. SITE_KEYS=off (spark keys off): the two rows
+# add nothing and leave the rc file alone, whatever it holds.
 rc_bin=$(login_shell); rc_shell=${rc_bin##*/}; rc_major=
 case $rc_shell in
     bash) rc="$HOME/.bashrc"; rc_line='[ -r ~/.config/spark/hook.bash ] && . ~/.config/spark/hook.bash   # spark: the AI at the prompt'
@@ -496,7 +497,9 @@ case $rc_shell in
     zsh)  rc="$HOME/.zshrc";  rc_line='[[ -r ~/.config/spark/hook.zsh ]] && source ~/.config/spark/hook.zsh   # spark: the AI at the prompt' ;;
     *)    rc=; rc_line= ;;
 esac
-if [ -z "$rc" ]; then
+if [ "$SITE_KEYS" = off ]; then
+    skip rc "the keys are off -- spark keys on"
+elif [ -z "$rc" ]; then
     row todo rc "shell $rc_shell has no prompt line -- chsh -s /bin/zsh"
 elif [ "$rc_shell" = bash ] && [ "${rc_major:-0}" -lt 4 ]; then
     row todo rc "bash ${rc_major:-3} is too old for the prompt line -- chsh -s /bin/zsh"
@@ -515,7 +518,9 @@ rc_prof="$HOME/.bash_profile"
 if [ "$rc_shell" = bash ] && [ "${rc_major:-0}" -ge 4 ] && [ -f "$rc_prof" ] && [ ! -L "$rc_prof" ] \
    && ! grep -qF 'config/spark/hook.' "$rc_prof" 2>/dev/null \
    && ! grep -qE '\.bashrc|\.profile' "$rc_prof" 2>/dev/null; then
-    if need rc-login "add one line to ~${rc_prof#"$HOME"}"; then
+    if [ "$SITE_KEYS" = off ]; then
+        skip rc-login "the keys are off -- spark keys on"
+    elif need rc-login "add one line to ~${rc_prof#"$HOME"}"; then
         printf '\n%s\n' "$rc_line" >> "$rc_prof"
         ok rc-login "~${rc_prof#"$HOME"} sources the hook"
     fi

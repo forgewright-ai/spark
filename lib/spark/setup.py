@@ -205,7 +205,7 @@ def _rc_line():
     is a todo: bootstrap already showed the ok."""
     shell = site.login_shell()
     state, path = site.rc_hook_state(shell)
-    if state in ("link", "hook"):
+    if state in ("link", "hook") or not config.load().keys:
         return
     if path:
         say("todo   rc           ~%s lacks the spark line -- spark update" % path[len(HOME):])
@@ -358,6 +358,44 @@ def _voice(want):
         voice.cmd_voice(["clear"])
 
 
+KEYS_QUESTION = "   add them? [Y/n]: "
+KEYS_NO = "* no key added -- spark keys on adds them later"
+
+
+def _keys(cfg, yes):
+    """Before the rc line: the keys spark adds to this user's shell, what
+    each replaces there, then one question, default yes. Not asked when
+    SITE_KEYS is already set, the rc file already has the line, the shell
+    has no prompt line, or nobody is there to answer. A no is kept as
+    SITE_KEYS=off, so bootstrap's rc rows add nothing."""
+    global ASKED
+    from . import keys
+    shell = site.login_shell()
+    state, path = site.rc_hook_state(shell)
+    if yes or "SITE_KEYS" in os.environ or "SITE_KEYS" in cfg.site_file or state == "hook" or not path:
+        return
+    ASKED = True
+    say("* spark adds one line to ~%s, and these keys to %s:" % (path[len(HOME):], shell))
+    for _, key, does, old in keys.rows(shell):
+        say(("   %-7s %-36s %s" % (key, does, "was " + old if old else "")).rstrip())
+    say("   %s keep what they did" % ", ".join(k for k, _ in keys.wrapped(shell)))
+    say("   " + keys.ESC_WAIT)
+    say("   spark keys moves one, or takes them all back")
+    try:
+        ans = input(KEYS_QUESTION).strip().lower()
+    except EOFError:
+        say()
+        return
+    if ans in ("", "y", "yes"):
+        return
+    if not os.path.exists(SITE_ENV):
+        os.makedirs(os.path.dirname(SITE_ENV), exist_ok=True)
+        shutil.copy(os.path.join(REPO, "site.env.example"), SITE_ENV)
+        os.chmod(SITE_ENV, 0o600)
+    site.set_keys(_quiet=True, SITE_KEYS="off")
+    say(KEYS_NO)
+
+
 def _joining(yes):
     """This box shares an engine; join it? Default yes (it is the point of a
     shared box, and running your own would need root a joining user lacks)."""
@@ -413,6 +451,7 @@ def _run(opts):
     # a shared engine already runs on this box (spark serve share on) and this user
     # has no server of their own: join it -- no model to download, no root
     voice = _voice_question(cfg, yes)
+    _keys(cfg, yes)
     if os.access(SHARE_TOKEN, os.R_OK) and not os.path.exists(TOKEN_FILE) and _joining(yes):
         return _join(name, user, opts, yes, voice)
     if ASKED:

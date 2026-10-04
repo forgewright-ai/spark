@@ -3530,8 +3530,8 @@ def living_widget_cases(t):
              "%s passes its height to both spark line calls and to spark recall (SPARK_HINT_ROW=N)" % name)
         say = body(text, "_spark_say")
         t.ok("_spark_height" in say and "[1A" not in say, "%s draws its row _spark_height rows up" % name, say)
-        t.ok("spark writes here -- Esc k moves it" in text
-             and ("bindkey '\\ek'" in text or "bind -x '\"\\ek\"" in text),
+        t.ok("spark writes here -- $_spark_k_height moves it" in text and "_spark_k_height='Esc k'" in text
+             and re.search(r"^_spark_key height \S+$", text, re.M),
              "%s binds Esc k and draws the test line" % name)
         for fallback in ("no hint came", "no answer came", "no model answers"):
             t.ok(fallback in text, "%s says %r" % (name, fallback))
@@ -7886,6 +7886,176 @@ def main():
              "setup prints the measured tok/s of that question", out)
         t.ok("SITE_AI_MODEL=qwen3-5-2b\n" in open(home + "/.config/spark/site.env").read(),
              "setup --model NAME writes the name", out)
+
+        # spark keys (v1.81): the list, a key moved, left to the shell or
+        # reset, the refusals, off and on -- in a HOME of its own, nothing
+        # applied; then setup's question at a terminal
+        kh = os.path.join(home, "keys-home")
+        os.makedirs(kh + "/.config/spark")
+        kx = dict(off, HOME=kh, XDG_CONFIG_HOME=kh + "/.config", XDG_STATE_HOME=kh + "/.local/state", SHELL="/bin/zsh")
+        kenv, ksite = kh + "/.config/spark/keys.env", kh + "/.config/spark/site.env"
+
+        def kread(path):
+            return open(path).read() if os.path.exists(path) else ""
+
+        rc, out, _ = spark("keys", "-h")
+        t.ok(rc == 0 and out.splitlines()[0] == "spark keys -- the keys spark adds to your shell"
+             and all(len(l) <= 80 for l in out.splitlines()), "spark keys -h signs (contract 8), 80 columns", out)
+        rc, out, _ = spark("keys", extra=kx)
+        rows = out.splitlines()
+        t.ok(rc == 0 and rows[0] == "spark keys -- on, in zsh"
+             and re.search(r"^ask +Esc s +ask about the line you are on +was spell-word$", out, re.M)
+             and re.search(r"^stop +Esc x .* was execute-named-cmd$", out, re.M)
+             and re.search(r"^recall +Esc r +find a past command by what it did$", out, re.M)
+             and re.search(r"^ +Enter ", out, re.M) and re.search(r"^ +Ctrl-L ", out, re.M)
+             and "a lone Esc waits up to 1 s" in rows[-1] and all(len(l) <= 80 for l in rows) and not os.path.exists(kenv),
+             "spark keys lists each key, what it does and what it replaced in zsh, the wrapped ones, the Esc wait; "
+             "bare, it writes nothing", out)
+        rc, out, _ = spark("keys", "status", extra=dict(kx, SHELL="/bin/bash"))
+        t.ok(rc == 0 and re.search(r"^recall +Esc r .* was revert-line$", out, re.M) and "Ctrl-L" not in out
+             and not re.search(r"^ask .* was ", out, re.M),
+             "spark keys in bash: Esc r replaced revert-line, Esc s nothing, no Ctrl-L row", out)
+        os.makedirs(kh + "/.local/state/spark")
+        with open(kh + "/.local/state/spark/replaced.zsh", "w") as f:
+            f.write("ask\tEsc s\tmy-own-widget\nstop\tEsc x\t-\n")
+        rc, out, _ = spark("keys", extra=kx)
+        t.ok(re.search(r"^ask +Esc s .* was my-own-widget$", out, re.M) and not re.search(r"^stop .* was ", out, re.M),
+             "spark keys: the widget's own record wins over the shell's stock binding", out)
+        os.remove(kh + "/.local/state/spark/replaced.zsh")
+        rc, out, _ = spark("keys", "ask", "Alt-a", extra=kx)
+        t.ok(rc == 0 and out == "* ask is Esc a now, in place of zsh's accept-and-hold -- the next shell has it\n"
+             and kread(kenv) == "KEYS_ASK=Esc a\n" and oct(os.stat(kenv).st_mode & 0o777) == "0o600",
+             "spark keys ask Alt-a: kept as Esc a in keys.env (0600), the next shell named", out + kread(kenv))
+        rc, out, _ = spark("keys", "ask", "Esc", "a", extra=kx)
+        t.ok(rc == 0 and out == "* nothing changed\n", "spark keys: the same key again changes nothing", out)
+        rc, out, _ = spark("keys", "height", "Ctrl-g", extra=kx)
+        rc2, out2, _ = spark("keys", "stop", "none", extra=kx)
+        rc3, shown, _ = spark("keys", extra=kx)
+        t.ok(rc == 0 and rc2 == 0 and "KEYS_HEIGHT=Ctrl-g\n" in kread(kenv) and "KEYS_STOP=none\n" in kread(kenv)
+             and "stop has no key now" in out2 and re.search(r"^height +Ctrl-g .* was send-break$", shown, re.M)
+             and re.search(r"^stop +none +stop the speaking, with the voice on$", shown, re.M)
+             and re.search(r"^ask +Esc a .* was accept-and-hold$", shown, re.M),
+             "spark keys NAME Ctrl-g and NAME none: written, and the list shows them", out + out2 + shown)
+        _cl = __import__("spark.config", fromlist=["x"]).LINE
+        t.ok(all(_cl.match(l) for l in kread(kenv).splitlines()), "keys.env: every line fits contract 3", kread(kenv))
+        before = kread(kenv)
+        for words, want in ((("recall", "Esc", "a"), "Esc a is ask's key; move ask first, or pick another"),
+                            (("ask", "Ctrl-c"), "Ctrl-c is not free; a key is Esc a, Alt-a or Ctrl-g"),
+                            (("ask", "Ctrl-x"), "Ctrl-x is not free"),
+                            (("ask", "F5"), "no key named F5; a key is Esc a, Alt-a or Ctrl-g"),
+                            (("ask", "Esc", "O"), "no key named Esc O"),
+                            (("ask", "Enter"), "Enter is wrapped: it keeps what it did, and no key moves there"),
+                            (("ask", "Ctrl-U"), "Ctrl-U is wrapped"),
+                            (("ask", "Ctrl-l"), "Ctrl-L is wrapped"),
+                            (("ask", "paste"), "paste is wrapped"),
+                            (("enter", "Esc", "b"), "Enter is wrapped: it keeps what it did, and it does not move"),
+                            (("paste", "none"), "paste is wrapped"),
+                            (("bogus", "Esc", "b"), "no word bogus; spark keys -h lists them"),
+                            (("ask",), "ask needs a key: spark keys ask Esc a")):
+            rc, out, _ = spark("keys", *words, extra=kx)
+            t.ok(rc == 2 and out.startswith("spark keys -- " + want) and len(out.splitlines()) == 1 and len(out) <= 81
+                 and kread(kenv) == before, "spark keys %s: refused in one line, exit 2, nothing written" % " ".join(words), out)
+        rc, out, _ = spark("keys", "reset", extra=kx)
+        rc2, out2, _ = spark("keys", "reset", extra=kx)
+        t.ok(rc == 0 and "the keys are spark's own again -- the next shell has them" in out and not os.path.exists(kenv)
+             and rc2 == 0 and out2 == "* nothing changed\n",
+             "spark keys reset: keys.env gone, the defaults back; again, nothing changed", out + out2)
+        # off: the marked line leaves the rc file -- through a symlink of
+        # yours too, the link kept -- and SITE_KEYS=off is written; the
+        # prompt row then says so; on writes the key back
+        hookline = "[[ -r ~/.config/spark/hook.zsh ]] && source ~/.config/spark/hook.zsh   # spark: the AI at the prompt"
+        os.makedirs(kh + "/dotfiles")
+        with open(kh + "/dotfiles/zshrc", "w") as f:
+            f.write("# mine\nalias l=ls\n\n%s\n" % hookline)
+        os.symlink(kh + "/dotfiles/zshrc", kh + "/.zshrc")
+        rc, out, _ = spark("keys", "off", extra=kx)
+        t.ok(rc == 0 and out == "* spark's line is out of ~/.zshrc -- open a new shell\n"
+             and kread(kh + "/dotfiles/zshrc") == "# mine\nalias l=ls\n" and os.path.islink(kh + "/.zshrc")
+             and "SITE_KEYS=off\n" in kread(ksite),
+             "spark keys off: the line leaves a symlinked rc file, the link stays, SITE_KEYS=off", out + kread(kh + "/dotfiles/zshrc"))
+        rc, out, _ = spark("keys", "off", extra=kx)
+        rc2, shown, _ = spark("keys", extra=kx)
+        t.ok(rc == 0 and out == "* nothing changed\n"
+             and shown.splitlines()[0] == "spark keys -- off: spark adds no key to your shell -- spark keys on adds them",
+             "spark keys off again: nothing changed; bare says off and how to turn it on", out + shown)
+        for sh_ in ("bash", "zsh"):
+            _w = kh + "/.config/spark/widget." + sh_
+            if not os.path.exists(_w):
+                open(_w, "w").close()
+        rc, out, _ = spark("check", "--porcelain", extra=kx)
+        prow = [l.split("\t") for l in out.splitlines() if l.split("\t")[2:3] == ["prompt"]]
+        t.ok(prow and prow[0][1] == "na" and prow[0][3] == "the keys are off" and prow[0][4] == "spark keys on",
+             "check: with the keys off the prompt row is na, its remedy spark keys on", repr(prow))
+        rc, out, _ = spark("keys", "on", extra=kx)
+        t.ok(rc == 0 and "SITE_KEYS=on\n" in kread(ksite) and "SITE_KEYS=off" not in kread(ksite) and "open a new shell" in out,
+             "spark keys on: SITE_KEYS=on (the rc rows are bootstrap's: nothing applied here)", out + kread(ksite))
+        rc, out, _ = spark("keys", "what", "are", "these?", extra=kx)
+        t.ok(rc == 2 and out.startswith("spark keys -- no word what"), "spark keys with other words: refused, exit 2", out)
+
+        # setup asks before the rc line, at a terminal only: a no is
+        # SITE_KEYS=off and one line; --yes, or no terminal, asks nothing
+        import pty as _pty
+        import select as _select
+
+        def setup_tty(answer, home_):
+            os.makedirs(home_ + "/.config/spark", exist_ok=True)
+            e = dict(env, **off)
+            e.update(HOME=home_, XDG_CONFIG_HOME=home_ + "/.config", XDG_STATE_HOME=home_ + "/.local/state",
+                     XDG_DATA_HOME=home_ + "/.local/share", SHELL="/bin/zsh", SPARK_VOICE="off")
+            m, s = _pty.openpty()
+            q = subprocess.Popen([sys.executable, SPARK, "setup", "--no-serve", "--model", "none", "--name", "box",
+                                  "--user", "ana"], stdin=s, stdout=s, stderr=s, env=e)
+            os.close(s)
+            got, end, sent = b"", time.time() + 30, False
+            while time.time() < end:
+                r, _, _ = _select.select([m], [], [], 0.2)
+                if r:
+                    try:
+                        chunk = os.read(m, 4096)
+                    except OSError:
+                        break
+                    if not chunk:
+                        break
+                    got += chunk
+                    if not sent and b"add them? [Y/n]: " in got:
+                        os.write(m, answer.encode())
+                        sent = True
+                elif q.poll() is not None:
+                    break
+            os.close(m)
+            try:
+                rc_ = q.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                q.kill()
+                rc_ = None
+            return rc_, got.decode("utf-8", "replace").replace("\r\n", "\n")
+
+        sh1 = os.path.join(home, "setup-no")
+        rc, out = setup_tty("n\n", sh1)
+        senv = kread(sh1 + "/.config/spark/site.env")
+        t.ok(rc == 0 and "* spark adds one line to ~/.zshrc, and these keys to zsh:" in out
+             and re.search(r"^   Esc s +ask about the line you are on +was spell-word$", out, re.M)
+             and "a lone Esc waits up to 1 s" in out and "spark keys moves one, or takes them all back" in out
+             and "* no key added -- spark keys on adds them later" in out and "SITE_KEYS=off\n" in senv
+             and "SITE_KEYS=on" not in senv and "SITE_NAME=box\n" in senv and "# --- the shell" in senv
+             and "todo   rc" not in out,
+             "setup at a terminal lists the keys and asks; a no writes SITE_KEYS=off beside the other keys, one line, no rc todo",
+             out + senv)
+        rc, out = setup_tty("n\n", sh1)
+        t.ok(rc == 0 and "add them?" not in out, "setup again: SITE_KEYS is set, so nothing is asked", out)
+        sh2 = os.path.join(home, "setup-yes")
+        rc, out = setup_tty("\n", sh2)
+        senv = kread(sh2 + "/.config/spark/site.env")
+        t.ok(rc == 0 and "add them? [Y/n]: " in out and "no key added" not in out and "SITE_KEYS=on\n" in senv,
+             "setup at a terminal: Enter is yes, the keys stay on", out + senv)
+        sh3 = os.path.join(home, "setup-pipe")
+        os.makedirs(sh3 + "/.config/spark")
+        rc, out, _ = spark("setup", "--yes", "--no-serve", "--model", "none",
+                           extra=dict(off, HOME=sh3, XDG_CONFIG_HOME=sh3 + "/.config", XDG_STATE_HOME=sh3 + "/.local/state",
+                                      XDG_DATA_HOME=sh3 + "/.local/share", SHELL="/bin/zsh"))
+        senv = kread(sh3 + "/.config/spark/site.env")
+        t.ok(rc == 0 and "add them?" not in out and "these keys" not in out and "SITE_KEYS=on\n" in senv,
+             "setup --yes, no terminal: no key list, no question, the keys on as before", out + senv)
 
         # spark uninstall: signed, shows and never mutates without the word;
         # SPARK_NO_APPLY = the plan only (the real run is tests/uninstall_test.sh)

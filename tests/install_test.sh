@@ -198,6 +198,29 @@ out=$(PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootst
 printf '%s\n' "$out" | grep -qE "^ok +rc +~/$rc sources the hook" && ok "rc: a symlinked rc that has the line is found through the link" || bad "rc: symlink hooked: $(printf '%s\n' "$out" | grep -E ' rc ')"
 printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "dry-run called sudo (rc symlink)" || ok "dry-run never called sudo (rc symlink)"
 rm -f "$HOME/$rc"
+# SITE_KEYS=off (spark keys off): the rc row adds nothing -- a skip naming
+# the way back -- and an apply, as spark update runs it, leaves an rc file
+# without the line byte for byte; on again, the same apply adds the line.
+# keys_off_apply runs a client's apply (no root, nothing downloaded) with
+# the caller's environment words in front.
+printf '# mine\n' > "$HOME/$rc"
+printf 'SITE_AI_MODEL=none\nSITE_KEYS=off\n' > "$HOME/.config/spark/site.env"
+out=$(PATH="$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (keys off) failed"
+printf '%s\n' "$out" | grep -qE '^skip +rc +the keys are off -- spark keys on$' && ok "SITE_KEYS=off: the rc row is a skip naming spark keys on" || bad "keys off: $(printf '%s\n' "$out" | grep -E ' rc ')"
+printf '%s\n' "$out" | grep -qE '^(would|todo) +rc(-login)? ' && bad "SITE_KEYS=off: an rc row would still act" || ok "SITE_KEYS=off: no rc row would act"
+keys_off_apply() {
+    printf '# mine\n' > "$HOME/$rc"; cp "$HOME/$rc" "$T/rc.before"
+    printf 'SITE_AI_MODEL=none\nSITE_PEER_AI_URL=http://192.0.2.10:8081\nSITE_KEYS=off\n' > "$HOME/.config/spark/site.env"
+    out=$(env "$@" sh "$REPO/bootstrap.sh" 2>&1) || bad "bootstrap apply (keys off) failed: $out"
+    cmp -s "$HOME/$rc" "$T/rc.before" && ok "SITE_KEYS=off: an apply leaves the rc file byte for byte" || bad "keys off: the apply changed the rc file: $(cat "$HOME/$rc")"
+    printf 'SITE_AI_MODEL=none\nSITE_PEER_AI_URL=http://192.0.2.10:8081\n' > "$HOME/.config/spark/site.env"
+    out=$(env "$@" sh "$REPO/bootstrap.sh" 2>&1) || bad "bootstrap apply (keys on) failed: $out"
+    grep -qF 'config/spark/hook.' "$HOME/$rc" && ok "SITE_KEYS unset: the same apply adds the line" || bad "keys on: the apply added no line: $out"
+    rm -f "$HOME/$rc" "$T/rc.before"
+}
+[ "$(uname -s)" != Darwin ] || keys_off_apply PATH="$T/bin:$PATH"
+rm -f "$HOME/$rc"
+printf 'SITE_HEADLESS=no\nSITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
 
 # 8. bootstrap --list-models names both roles' picks (the choosing rule;
 #    lib/spark engine.chosen_rows is the twin, tests/smoke.py pins it the
@@ -536,6 +559,7 @@ if [ "$(uname -s)" != Darwin ]; then
     printf '%s\n' "$out" | grep -qi 'sudo' && bad "client dry-run holds a sudo word: $(printf '%s\n' "$out" | grep -i sudo | head -2 | tr '\n' ' ')" || ok "client dry-run: no sudo word anywhere"
     out=$(SPARK_OS_RELEASE="$T/os-release-arch" PATH="$T/arch:$T/bin:$PATH" sh "$REPO/bootstrap.sh" 2>&1) || bad "bootstrap apply (client) failed: $out"
     printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "client apply called as_root: $out" || ok "client apply: no as_root call"
+    rc=.bashrc; keys_off_apply SPARK_OS_RELEASE="$T/os-release-arch" PATH="$T/arch:$T/bin:$PATH"
     printf 'SITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
 fi
 

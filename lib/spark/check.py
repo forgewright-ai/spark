@@ -531,6 +531,8 @@ def row_prompt(ctx):
     absent = [os.path.basename(f) for f in files if not os.path.isfile(f)]
     if absent:
         return warn("missing: %s" % " ".join(absent), "spark update")
+    if not ctx.cfg.keys:
+        return na("the keys are off", "spark keys on")
     # the rc hook: the one marked line in the rc file, or not
     shell = site.login_shell()
     state, rc = site.rc_hook_state(shell)

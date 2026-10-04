@@ -25,6 +25,11 @@
 #              every Enter and on the failing path, so one `spark off`
 #              reaches every pane at once)
 #   SPARK_OFF=1                 in the environment: bind nothing at all
+#   spark keys                  lists the keys; `spark keys NAME KEY` moves
+#              one (ask, recall, height, listen, stop), `none` leaves it to
+#              the shell. ~/.config/spark/keys.env holds the choice, read
+#              here as the shell starts; the hints name the key you chose.
+#              Enter, Ctrl-U and paste are wrapped and do not move.
 #
 # The look file ($STATE_DIR/look, written by `spark awaken`, `spark look`
 # and `spark height`) is read line by line when it changes -- never
@@ -80,6 +85,56 @@ _spark_exit=${_spark_exit%\' EXIT}
 _spark_exit=${_spark_exit//\'\\\'\'/\'}
 trap -- "_spark_rc=\$?; _spark_gone${_spark_exit:+; (exit \$_spark_rc); $_spark_exit}" EXIT
 unset _spark_exit
+
+# --- the keys: today's defaults, moved by ~/.config/spark/keys.env -----------
+# `spark keys` writes that file: KEYS_<NAME>=Esc a | Ctrl-g | none (Alt-a
+# reads as Esc a). Read line by line, never sourced; a value of any other
+# shape keeps the default. _spark_key NAME FUNCTION binds it: nothing for
+# none, else the sequence -- and notes what the key did before, a line of
+# _spark_rec. _spark_binds is readline's own list, asked once for every
+# key spark takes (one fork, builtins only).
+_spark_k_ask='Esc s' _spark_k_recall='Esc r' _spark_k_height='Esc k'
+_spark_k_listen='Esc v' _spark_k_stop='Esc x' _spark_rec='' _spark_esc='' _spark_sq=''
+_spark_kf=${XDG_CONFIG_HOME:-$HOME/.config}/spark/keys.env
+if [[ -r $_spark_kf ]]; then
+    _spark_kn=0
+    while (( _spark_kn++ < 32 )) && { IFS= read -r _spark_kl || [[ -n $_spark_kl ]]; }; do
+        [[ $_spark_kl == KEYS_[A-Z]*=* ]] || continue
+        _spark_kv=${_spark_kl#*=}; _spark_kv=${_spark_kv#\"}; _spark_kv=${_spark_kv%\"}
+        [[ $_spark_kv == Alt-? ]] && _spark_kv="Esc ${_spark_kv#Alt-}"
+        [[ $_spark_kv == none || $_spark_kv == 'Esc '[a-z0-9] || $_spark_kv == Ctrl-[abefgknoprtvwy] ]] || continue
+        case ${_spark_kl%%=*} in
+            KEYS_ASK) _spark_k_ask=$_spark_kv ;;
+            KEYS_RECALL) _spark_k_recall=$_spark_kv ;;
+            KEYS_HEIGHT) _spark_k_height=$_spark_kv ;;
+            KEYS_LISTEN) _spark_k_listen=$_spark_kv ;;
+            KEYS_STOP) _spark_k_stop=$_spark_kv ;;
+        esac
+    done < "$_spark_kf"
+fi
+unset _spark_kf _spark_kn _spark_kl _spark_kv
+# the sequence bind takes for a key's name: sets _spark_sq ('' for none)
+_spark_seq() {
+    case $1 in
+        'Esc '?) _spark_sq="\\e${1#Esc }" ;;
+        Ctrl-?) _spark_sq="\\C-${1#Ctrl-}" ;;
+        *) _spark_sq='' ;;
+    esac
+}
+_spark_binds=$(bind -p 2>/dev/null; bind -s 2>/dev/null; bind -X 2>/dev/null)
+_spark_key() {
+    local v=_spark_k_$1 key was=- line
+    key=${!v}
+    _spark_seq "$key"
+    [[ -n $_spark_sq ]] || return 0
+    while IFS= read -r line; do
+        if [[ $line == "\"$_spark_sq\": "* ]]; then was=${line#*\": }; break; fi
+    done <<< "$_spark_binds"
+    [[ -z $was || $was == self-insert || $was == *_spark_* || $was == *[[:cntrl:]]* ]] && was=-
+    _spark_rec+="$1"$'\t'"$key"$'\t'"${was:0:40}"$'\n'
+    [[ $key == Esc* ]] && _spark_esc=1
+    bind -x "\"$_spark_sq\": $2"
+}
 
 # --- the look: read line by line, never sourced -----------------------------
 # KEY=value lines; a value holding a control character (an escape) is
@@ -575,7 +630,8 @@ _spark_failure() {
             # contract 4's proof line: the proposed command just ran --
             # the read-only check is one Esc s away
             _spark_offer_proof=$_spark_proof
-            _spark_note "$_spark_h done -- Esc s checks it: $_spark_proof" pleased
+            if [[ $_spark_k_ask == none ]]; then _spark_note "$_spark_h done -- check it: $_spark_proof" pleased
+            else _spark_note "$_spark_h done -- $_spark_k_ask checks it: $_spark_proof" pleased; fi
             _spark_proof='' _spark_proof_for=''
         fi
         _spark_fail=''
@@ -607,10 +663,12 @@ _spark_failure() {
         fi
         if [[ -n $_fk ]]; then
             _spark_note "$_spark_h failed ($rc)$took -- last time this fixed it: $_fk" alarmed
+        elif [[ $_spark_k_ask == none ]]; then
+            _spark_note "$_spark_h failed ($rc)$took -- ? words asks about it" alarmed
         elif (( rc == 127 )); then
-            _spark_note "$_spark_h failed (127)$took -- $_spark_head not found; Esc s gets the install line" alarmed
+            _spark_note "$_spark_h failed (127)$took -- $_spark_head not found; $_spark_k_ask gets the install line" alarmed
         else
-            _spark_note "$_spark_h failed ($rc)$took -- Esc s asks why" alarmed
+            _spark_note "$_spark_h failed ($rc)$took -- $_spark_k_ask asks why" alarmed
         fi
     fi
     return 0
@@ -673,7 +731,11 @@ _spark_unhint() {
 bind -x '"\C-x\C-o": _spark_unhint'
 # Ctrl-U keeps the function it had (an inputrc's kill-whole-line too);
 # a Ctrl-U that is a macro or a bind -x of the user's is left alone
-_spark_ctrlu=$(bind -p 2>/dev/null | sed -n 's/^"\\C-u": \([a-z-]*\)$/\1/p' | head -n 1)
+_spark_ctrlu='' _spark_re='^"\\C-u": ([a-z-]*)$'
+while IFS= read -r _spark_bl; do
+    if [[ $_spark_bl =~ $_spark_re ]]; then _spark_ctrlu=${BASH_REMATCH[1]}; break; fi
+done <<< "$_spark_binds"
+unset _spark_re _spark_bl
 if [[ -n $_spark_ctrlu && $_spark_ctrlu != self-insert ]]; then
     bind "\"\\C-x\\C-k\": $_spark_ctrlu"
     bind '"\C-u": "\C-x\C-k\C-x\C-o"'
@@ -724,10 +786,10 @@ _spark_ask_line() {
         _spark_say "$_spark_h Enter remembers the fix"
     else
         _spark_mood=puzzled
-        _spark_say "$_spark_h type a question, then Esc s"
+        _spark_say "$_spark_h type a question, then $_spark_k_ask"
     fi
 }
-bind -x '"\es": _spark_ask_line'
+_spark_key ask _spark_ask_line
 
 # --- Esc r: intent search over the shell's own history ---------------------
 # First press: the buffer is what you are looking for; the shell's history
@@ -746,7 +808,7 @@ _spark_recall_show() {
     READLINE_LINE=$cand
     READLINE_POINT=${#cand}
     _spark_recall_for=$cand
-    _spark_say "$mark $(( _spark_recall_i + 1 ))/${#_spark_recall_cands[@]}$note -- Esc r for the next"
+    _spark_say "$mark $(( _spark_recall_i + 1 ))/${#_spark_recall_cands[@]}$note -- $_spark_k_recall for the next"
 }
 _spark_recall() {
     _spark_reap
@@ -760,7 +822,7 @@ _spark_recall() {
     local intent=$READLINE_LINE
     if [[ -z $intent ]]; then
         _spark_mood=puzzled
-        _spark_say "$_spark_h type what the command did, then Esc r"
+        _spark_say "$_spark_h type what the command did, then $_spark_k_recall"
         return
     fi
     _spark_mood=thinking
@@ -779,7 +841,7 @@ _spark_recall() {
     _spark_recall_i=0
     _spark_recall_show
 }
-bind -x '"\er": _spark_recall'
+_spark_key recall _spark_recall
 
 # --- Esc k: move spark's row -------------------------------------------------
 # 1, 2, 3, then 1 again: the row spark writes in, counted up from the line
@@ -797,9 +859,9 @@ _spark_height_key() {
     _spark_height=$n
     [[ -n ${SPARK_HEIGHT:-} ]] && SPARK_HEIGHT=$n
     "$SPARK_BIN" height "$n" </dev/null >/dev/null 2>&1
-    _spark_say "$_spark_h spark writes here -- Esc k moves it"
+    _spark_say "$_spark_h spark writes here -- $_spark_k_height moves it"
 }
-bind -x '"\ek": _spark_height_key'
+_spark_key height _spark_height_key
 
 # --- Esc v: listen; Esc x: stop speaking -------------------------------------
 # Esc v hands the hearing to `spark voice listen --buffer` (the words on
@@ -832,7 +894,7 @@ _spark_listen() {
         _spark_mood=puzzled
         _spark_say "$_spark_h nothing heard"
     else
-        _spark_say "$_spark_h Esc v needs the voice -- spark voice on"
+        _spark_say "$_spark_h $_spark_k_listen needs the voice -- spark voice on"
     fi
 }
 _spark_hush() { "$SPARK_BIN" voice stop </dev/null >/dev/null 2>&1; }
@@ -849,9 +911,17 @@ if [[ -z $_spark_voice && -r $_spark_vf ]]; then
 fi
 _spark_voice=${_spark_voice#\"}; _spark_voice=${_spark_voice%\"}
 case ${_spark_voice,,} in
-    on|clear) bind -x '"\ev": _spark_listen'; bind -x '"\ex": _spark_hush' ;;
+    on|clear) _spark_key listen _spark_listen; _spark_key stop _spark_hush ;;
 esac
 unset _spark_vf _spark_vl _spark_vn
+# what each key did before spark took it, for `spark keys`: written only
+# when it is not what the file already says
+_spark_ro=''
+{
+    [[ -r $SPARK_DIR/replaced.bash ]] && IFS= read -r -d '' _spark_ro < "$SPARK_DIR/replaced.bash"
+    [[ $_spark_ro == "$_spark_rec" ]] || printf '%s' "$_spark_rec" >| "$SPARK_DIR/replaced.bash"
+} 2>/dev/null
+unset _spark_ro _spark_rec _spark_binds
 
 # --- paste inspection: a multi-line paste into an EMPTY prompt --------------
 # Rebinding the paste-begin sequence takes the paste from readline: the
@@ -885,4 +955,6 @@ _spark_paste() {
 bind -x '"\e[200~": _spark_paste'
 
 # Esc and s are two keystrokes: give them a full second to be one chord
-bind 'set keyseq-timeout 1000'
+# (only where a key of spark's starts with Esc)
+if [[ -n $_spark_esc ]]; then bind 'set keyseq-timeout 1000'; fi
+unset _spark_esc

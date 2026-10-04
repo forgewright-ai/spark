@@ -40,7 +40,7 @@ _spark() {
               ver last status history stats clear bench model
               soul memory bar look height off
               on user explain edit ask read drill watch reveal help uninstall
-              awaken voice)
+              awaken voice keys)
     elif (( CURRENT == 3 )); then
         case ${words[2]} in
             model)   comp=(list verify budget rm add auto none status --chat ${(f)"$(_spark_model_names)"}) ;;
@@ -49,6 +49,7 @@ _spark() {
             look)    comp=(on off auto status) ;;
             voice)   comp=(clear on off rate test listen stop status) ;;
             height)  comp=(1 2 3 4 5) ;;
+            keys)    comp=(ask recall height listen stop off on reset status) ;;
             bar)     comp=(line) ;;
             check)   comp=(--watch --porcelain --report --fresh --fetch --selftest --chaos) ;;
             uninstall) comp=(--dry-run --yes --purge --packages --keep-packages) ;;
