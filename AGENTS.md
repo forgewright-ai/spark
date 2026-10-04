@@ -1,13 +1,14 @@
 # spark -- for agents and contributors
 
-spark is a local AI at the shell prompt, for Linux (the Debian, Arch
-and Void families), macOS and Windows through WSL 2. Nothing leaves
-the machine except pinned downloads and your own words to a model you
-run. One line installs it, and spark is live. A tool becomes a spark
-app as a client of `spark edit`, in its own `spark-<app>` repository,
-and no shell code lives in this tree. `CLAUDE.md` is the full
-reference: the principles, the layout, the 15 contracts, the grammar
-and the release steps. This file is the short brief.
+spark is a local AI at the shell prompt, for Linux (the Debian, Arch,
+Void, Fedora and openSUSE families), macOS and Windows through WSL 2.
+Nothing leaves the machine except pinned downloads and your own words
+to a model you run. One line installs it, and spark is live. A tool
+becomes a spark app as a client of `spark edit`, in its own
+`spark-<app>` repository, and no shell code lives in this tree.
+`CLAUDE.md` is the full reference: the principles, the layout, the 15
+contracts, the grammar and the release steps. This file is the short
+brief.
 
 ## The landing rule
 
@@ -104,9 +105,9 @@ a push to `main` or to a `try/` branch, on a pull request and by hand.
 A tag push runs `release.yml` alone. A newer push cancels an older run
 on a `try/` branch or a pull request, never on `main`. The `linux` and
 `macos` jobs run `tests/gate.sh full`, one job per group. The `rest`
-job then runs a real bootstrap on the runner. The `debian`, `arch` and
-`void` jobs run the one-liner as a new
-user in a container. The `void` job starts a runsvdir first, so it
+job then runs a real bootstrap on the runner. The `debian`, `arch`,
+`void`, `fedora` and `opensuse` jobs run the one-liner as a new user
+in a container. The `void` job starts a runsvdir first, so it
 proves `spark-check` running supervised. The `workflows` job runs
 zizmor over the workflows, medium and above failing. `codeql.yml` is
 GitHub's static analysis over the python and the javascript.

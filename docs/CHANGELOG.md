@@ -1,5 +1,31 @@
 # Changelog
 
+## v1.81
+
+Two more Linux families: Fedora and openSUSE. The install line is the
+same one.
+
+- Fedora. Packages come through `dnf`. Install the basics with
+  `sudo dnf install -y git openssh-clients python3 curl`, then run the
+  install line.
+- openSUSE Tumbleweed and Leap. Packages come through `zypper`. Install
+  the basics with
+  `sudo zypper install -y git openssh-clients python3 curl`.
+- On both, the services work as on Debian and Arch, and so does `spark
+  serve boot on`.
+- CI runs the install line in a Fedora container and in a Tumbleweed
+  container. Neither family is proven on a real machine yet: the
+  engine, the GPU and the services.
+- Both turn a firewall on, and spark does not change it. To let other
+  machines reach the page, run `sudo firewall-cmd --permanent
+  --add-port=8081/tcp`, then `sudo firewall-cmd --reload`.
+- Not supported in this version: the atomic systems, such as Fedora
+  Silverblue and openSUSE MicroOS. Rocky Linux and AlmaLinux are
+  treated as Fedora and are not proven.
+- `docs/INSTALL.md`, section 1, sets up a bare Fedora machine step by
+  step. A minimal Fedora installed over Wi-Fi boots with no Wi-Fi, and
+  the section says what to add.
+
 ## v1.80
 
 A plain voice, and a face you see more of. Both start with `spark

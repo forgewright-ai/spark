@@ -17,9 +17,9 @@ git config core.hooksPath .githooks
 A commit runs the fast half of the gate, in seconds: privacy, secrets,
 syntax, shellcheck and the docs. The full gate runs in CI, once for
 each commit, on Ubuntu and macOS. CI also runs the one-liner in Debian
-13, Arch and Void containers. `sh tests/gate.sh full` runs the full
-gate on your own machine, in about 10 minutes. `AGENTS.md`, "The gate",
-lists every step.
+13, Arch, Void, Fedora and openSUSE Tumbleweed containers. `sh
+tests/gate.sh full` runs the full gate on your own machine, in about
+10 minutes. `AGENTS.md`, "The gate", lists every step.
 
 A pull request runs CI for you. With push rights, `sh tests/land.sh`
 sends your commit to a `try/` branch and waits for CI. On green it
@@ -28,10 +28,10 @@ commit, amend it and run it again. A push to `main` that CI has not
 passed is refused.
 
 shellcheck is a contributor's tool, not a user's package: `apt-get
-install shellcheck`, `pacman -S shellcheck`, `xbps-install shellcheck`
-or `brew install shellcheck`. The gate skips it with a notice when
-absent. `gh`, GitHub's command line, is what `tests/land.sh` asks CI
-with.
+install shellcheck`, `pacman -S shellcheck`, `xbps-install shellcheck`,
+`dnf install ShellCheck`, `zypper install ShellCheck` or `brew install
+shellcheck`. The gate skips it with a notice when absent. `gh`,
+GitHub's command line, is what `tests/land.sh` asks CI with.
 
 A change to one of the editor's briefs (`persona.MODE_EDIT_*`) needs
 more. Run `tests/audition.py` against a live model and put its before

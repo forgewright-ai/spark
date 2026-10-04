@@ -25,6 +25,10 @@ marked `!`.
    sudo pacman -S --needed git curl python openssh
    # Void Linux
    sudo xbps-install -Sy git curl python3
+   # Fedora
+   sudo dnf install -y git openssh-clients python3 curl
+   # openSUSE Tumbleweed
+   sudo zypper install -y git openssh-clients python3 curl
    # macOS
    xcode-select --install
    ```

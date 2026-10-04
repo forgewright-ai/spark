@@ -81,11 +81,21 @@ main() {
                 || refuse "the command line tools are missing -- xcode-select --install, then run this again"
             ;;
         Linux)
+            # an atomic system has no manager to install with: rpm-ostree
+            # marks its boot (Fedora Silverblue, Kinoite), and openSUSE's
+            # MicroOS and Aeon carry transactional-update; SPARK_OSTREE_BOOTED
+            # pins the mark in tests
+            [ ! -e "${SPARK_OSTREE_BOOTED:-/run/ostree-booted}" ] \
+                || refuse "an atomic system (rpm-ostree): no package manager to install with -- Fedora Workstation or Server runs spark"
+            ! command -v transactional-update >/dev/null 2>&1 \
+                || refuse "an atomic system (transactional-update): no package manager to install with -- openSUSE Tumbleweed runs spark"
             # the family by its package manager: the fix line below names it
             if command -v apt-get >/dev/null 2>&1; then fix="sudo apt-get install -y git openssh-client python3 curl"
             elif command -v pacman >/dev/null 2>&1; then fix="sudo pacman -S --needed git openssh python curl"
             elif command -v xbps-install >/dev/null 2>&1; then fix="sudo xbps-install -Sy git python3 curl"
-            else refuse "no apt-get, pacman or xbps-install -- a Debian-family, Arch or Void Linux in this version"; fi
+            elif command -v dnf >/dev/null 2>&1; then fix="sudo dnf install -y git openssh-clients python3 curl"
+            elif command -v zypper >/dev/null 2>&1; then fix="sudo zypper install -y git openssh-clients python3 curl"
+            else refuse "no apt-get, pacman, xbps-install, dnf or zypper -- a Debian-family, Arch, Void, Fedora or openSUSE Linux in this version"; fi
             # the pinned engine is a glibc build: a musl libc (Void's second
             # flavour, its loader at /lib/ld-musl-*.so.1) has nothing to run
             # it; SPARK_LD_MUSL pins the pattern in tests
@@ -97,7 +107,7 @@ main() {
                 *) notice "no engine download for $(uname -m) (SPARK_ENGINE_DIR names your own)" ;;
             esac
             ;;
-        *) refuse "$os: Linux (Debian, Arch or Void family) or macOS only" ;;
+        *) refuse "$os: Linux (Debian, Arch, Void, Fedora or openSUSE family) or macOS only" ;;
     esac
     missing=''
     command -v git >/dev/null 2>&1 || missing="$missing git"

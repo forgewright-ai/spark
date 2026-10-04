@@ -698,4 +698,76 @@ n=$(grep -c '^down-first ' "$D/cp.log" 2>/dev/null || true)
     && ok "runit: every file of a new service dir lands after its down file ($n files)" \
     || bad "runit down-first: $(tr '\n' ' ' < "$D/cp.log" 2>/dev/null)"
 
+# 13. Fedora (the fourth family): ID=fedora in os-release, pinned by
+#     SPARK_OS_RELEASE; Rocky says ID_LIKE="rhel centos fedora" and lands
+#     in the same family. rpm answers "is it installed" by provider (a
+#     stub: --whatprovides exits 0), dnf "is it in a repository" (repoquery
+#     prints a line). The names come from distro/fedora.env (both OSes, the
+#     uname stub); the dry runs are Linux's (the rows are); never sudo.
+printf 'ID=fedora\nPRETTY_NAME="Fedora Linux 44 (Workstation Edition)"\n' > "$T/os-release-fedora"
+printf 'ID="rocky"\nID_LIKE="rhel centos fedora"\nPRETTY_NAME="Rocky Linux 9.5 (Blue Onyx)"\n' > "$T/os-release-rocky"
+out=$(lp "$T/os-release-fedora")
+printf '%s\n' "$out" | grep -qx libgomp && printf '%s\n' "$out" | grep -qx python3 \
+    && ! printf '%s\n' "$out" | grep -qxE 'gcc-libs|libgomp1|python|vulkan-loader' \
+    && ok "Fedora: --list-packages speaks dnf's names (libgomp, python3; no vulkan without a GPU)" || bad "Fedora --list-packages: $(printf '%s' "$out" | tr '\n' ' ')"
+[ "$(lp "$T/os-release-rocky")" = "$out" ] && ok "Rocky (ID_LIKE names fedora): the same list" || bad "Rocky list differs"
+out=$(env PATH="$T/os:$PATH" SPARK_SYSFS_DRM="$T/drm" SPARK_OS_RELEASE="$T/os-release-fedora" sh "$REPO/bootstrap.sh" --list-packages 2>&1)
+printf '%s\n' "$out" | grep -qx vulkan-loader && printf '%s\n' "$out" | grep -qx mesa-vulkan-drivers \
+    && ok "Fedora with a GPU: the loader and Mesa's drivers, in Fedora's names" || bad "Fedora vulkan names: $(printf '%s' "$out" | tr '\n' ' ')"
+if [ "$(uname -s)" != Darwin ]; then
+    mkdir -p "$T/fedora"
+    printf '#!/bin/sh\n[ "$1 $2" = "-q --whatprovides" ] && exit 0\nexit 1\n' > "$T/fedora/rpm"
+    printf '#!/bin/sh\ncase "$*" in "-q repoquery --whatprovides "*) echo "$4-0:1.0-1.fc44.x86_64" ;; *) exit 1 ;; esac\n' > "$T/fedora/dnf"
+    chmod +x "$T/fedora/rpm" "$T/fedora/dnf"
+    out=$(SPARK_OS_RELEASE="$T/os-release-fedora" PATH="$T/fedora:$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Fedora) failed: $out"
+    printf '%s\n' "$out" | grep -qE '^ok +packages ' && ok "Fedora: the packages row answers through rpm's providers (everything installed)" || bad "Fedora packages row: $(printf '%s\n' "$out" | grep -E ' packages ' | head -1)"
+    printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "Fedora dry-run called sudo" || ok "Fedora dry-run: no sudo"
+    # an rpm that knows no provider: the row would install, as root, in dnf's names
+    printf '#!/bin/sh\nexit 1\n' > "$T/fedora/rpm"
+    out=$(SPARK_OS_RELEASE="$T/os-release-rocky" PATH="$T/fedora:$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Rocky, bare) failed: $out"
+    printf '%s\n' "$out" | grep -qE '^would +packages +install:.* libgomp \(sudo\)$' && ! printf '%s\n' "$out" | grep -qE '^would +packages +.*(gcc-libs|libgomp1)' \
+        && ok "Rocky, nothing installed: the packages row would install (sudo), in dnf's names (libgomp)" || bad "Rocky bare packages row: $(printf '%s\n' "$out" | grep -E ' packages ' | head -1)"
+    printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "Rocky bare dry-run called sudo" || ok "Rocky bare dry-run: no sudo"
+    # a dnf whose repositories hold none of the names: the row skips, naming the target
+    printf '#!/bin/sh\nexit 0\n' > "$T/fedora/dnf"
+    out=$(SPARK_OS_RELEASE="$T/os-release-fedora" PATH="$T/fedora:$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Fedora, no repository) failed: $out"
+    printf '%s\n' "$out" | grep -qE '^skip +packages +not in this dnf:.* libgomp \(spark targets Fedora\)$' && ok "Fedora, a name no repository holds: the row skips and names its target" || bad "Fedora absent row: $(printf '%s\n' "$out" | grep -E ' packages ' | head -2 | tr '\n' ' ')"
+fi
+
+# 14. openSUSE (the fifth family): Tumbleweed's os-release says
+#     ID="opensuse-tumbleweed" and ID_LIKE="opensuse suse", Leap's
+#     ID="opensuse-leap" and ID_LIKE="suse opensuse" -- the family is the
+#     ID_LIKE word, in either order. rpm answers "is it installed" by
+#     provider (python3 is python313's capability there), zypper "is it in
+#     a repository" (search --provides exits 0, 104 when nothing matches).
+printf 'ID="opensuse-tumbleweed"\nID_LIKE="opensuse suse"\nPRETTY_NAME="openSUSE Tumbleweed"\n' > "$T/os-release-tumbleweed"
+printf 'ID="opensuse-leap"\nID_LIKE="suse opensuse"\nPRETTY_NAME="openSUSE Leap 16.0"\n' > "$T/os-release-leap"
+out=$(lp "$T/os-release-tumbleweed")
+printf '%s\n' "$out" | grep -qx libgomp1 && printf '%s\n' "$out" | grep -qx python3 \
+    && ! printf '%s\n' "$out" | grep -qxE 'gcc-libs|libgomp|python|libvulkan1' \
+    && ok "openSUSE: --list-packages speaks zypper's names (libgomp1, python3; no vulkan without a GPU)" || bad "openSUSE --list-packages: $(printf '%s' "$out" | tr '\n' ' ')"
+[ "$(lp "$T/os-release-leap")" = "$out" ] && ok "Leap (ID_LIKE names opensuse second): the same list" || bad "Leap list differs"
+out=$(env PATH="$T/os:$PATH" SPARK_SYSFS_DRM="$T/drm" SPARK_OS_RELEASE="$T/os-release-tumbleweed" sh "$REPO/bootstrap.sh" --list-packages 2>&1)
+printf '%s\n' "$out" | grep -qx libvulkan_radeon && printf '%s\n' "$out" | grep -qx libvulkan_intel && ! printf '%s\n' "$out" | grep -qx mesa-vulkan-drivers \
+    && ok "openSUSE with a GPU: the loader and Mesa's two drivers, in openSUSE's names" || bad "openSUSE vulkan names: $(printf '%s' "$out" | tr '\n' ' ')"
+if [ "$(uname -s)" != Darwin ]; then
+    mkdir -p "$T/opensuse"
+    printf '#!/bin/sh\n[ "$1 $2" = "-q --whatprovides" ] && exit 0\nexit 1\n' > "$T/opensuse/rpm"
+    printf '#!/bin/sh\ncase "$*" in "--non-interactive --no-refresh search --match-exact --provides "*) exit 0 ;; *) exit 1 ;; esac\n' > "$T/opensuse/zypper"
+    chmod +x "$T/opensuse/rpm" "$T/opensuse/zypper"
+    out=$(SPARK_OS_RELEASE="$T/os-release-tumbleweed" PATH="$T/opensuse:$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (openSUSE) failed: $out"
+    printf '%s\n' "$out" | grep -qE '^ok +packages ' && ok "openSUSE: the packages row answers through rpm's providers (everything installed)" || bad "openSUSE packages row: $(printf '%s\n' "$out" | grep -E ' packages ' | head -1)"
+    printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "openSUSE dry-run called sudo" || ok "openSUSE dry-run: no sudo"
+    # an rpm that knows no provider: the row would install, as root, in zypper's names
+    printf '#!/bin/sh\nexit 1\n' > "$T/opensuse/rpm"
+    out=$(SPARK_OS_RELEASE="$T/os-release-leap" PATH="$T/opensuse:$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (Leap, bare) failed: $out"
+    printf '%s\n' "$out" | grep -qE '^would +packages +install:.* libgomp1 \(sudo\)$' && ! printf '%s\n' "$out" | grep -qE '^would +packages +.*(gcc-libs|libgomp )' \
+        && ok "Leap, nothing installed: the packages row would install (sudo), in zypper's names (libgomp1)" || bad "Leap bare packages row: $(printf '%s\n' "$out" | grep -E ' packages ' | head -1)"
+    printf '%s\n' "$out" | grep -q 'SUDO CALLED' && bad "Leap bare dry-run called sudo" || ok "Leap bare dry-run: no sudo"
+    # a zypper that finds no provider (104): the row skips, naming the target
+    printf '#!/bin/sh\nexit 104\n' > "$T/opensuse/zypper"
+    out=$(SPARK_OS_RELEASE="$T/os-release-tumbleweed" PATH="$T/opensuse:$T/bin:$PATH" sh "$REPO/bootstrap.sh" --dry-run 2>&1) || bad "bootstrap --dry-run (openSUSE, no repository) failed: $out"
+    printf '%s\n' "$out" | grep -qE '^skip +packages +not in this zypper:.* libgomp1 \(spark targets openSUSE Tumbleweed\)$' && ok "openSUSE, a name no repository holds: the row skips and names its target" || bad "openSUSE absent row: $(printf '%s\n' "$out" | grep -E ' packages ' | head -2 | tr '\n' ' ')"
+fi
+
 [ "$fail" -eq 0 ] && echo "install_test: all ok" || { echo "install_test: FAILED"; exit 1; }

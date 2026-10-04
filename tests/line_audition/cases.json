@@ -267,6 +267,184 @@
     ]
    }
   },
+  "fedora": {
+   "id": "fedora",
+   "pretty": "Fedora Linux 44",
+   "pm": "dnf",
+   "init": "systemd",
+   "install": [
+    "man-db",
+    "man-pages",
+    "dnf5",
+    "rpm",
+    "coreutils",
+    "bash",
+    "sudo",
+    "curl",
+    "wget2-wget",
+    "iproute",
+    "iputils",
+    "traceroute",
+    "procps-ng",
+    "psmisc",
+    "lsof",
+    "util-linux",
+    "parted",
+    "e2fsprogs",
+    "systemd",
+    "shadow-utils",
+    "bind-utils",
+    "openssh-clients",
+    "rsync",
+    "tar",
+    "gzip",
+    "zip",
+    "unzip",
+    "findutils",
+    "grep",
+    "sed",
+    "gawk",
+    "less",
+    "file",
+    "tree",
+    "htop",
+    "ncdu",
+    "git",
+    "hostname",
+    "cronie",
+    "fd-find",
+    "ripgrep",
+    "xdg-utils",
+    "nano"
+   ],
+   "also": [
+    "rpm",
+    "systemctl",
+    "journalctl",
+    "ss",
+    "ip",
+    "lsblk",
+    "blkid",
+    "fdisk",
+    "findmnt",
+    "fuser",
+    "useradd",
+    "usermod",
+    "userdel",
+    "adduser",
+    "dig",
+    "host",
+    "nslookup",
+    "traceroute",
+    "nmcli",
+    "vmstat",
+    "mount",
+    "parted",
+    "crontab",
+    "apt",
+    "apt-get",
+    "pacman",
+    "sv",
+    "yum",
+    "zypper"
+   ],
+   "man": {
+    "git": [
+     "git-log",
+     "git-status",
+     "git-diff"
+    ]
+   }
+  },
+  "opensuse": {
+   "id": "opensuse",
+   "pretty": "openSUSE Tumbleweed",
+   "pm": "zypper",
+   "init": "systemd",
+   "install": [
+    "man",
+    "man-pages",
+    "zypper",
+    "rpm",
+    "coreutils",
+    "bash",
+    "sudo",
+    "curl",
+    "wget",
+    "iproute2",
+    "iputils",
+    "traceroute",
+    "procps",
+    "psmisc",
+    "lsof",
+    "util-linux",
+    "parted",
+    "e2fsprogs",
+    "systemd",
+    "shadow",
+    "bind-utils",
+    "openssh-clients",
+    "rsync",
+    "tar",
+    "gzip",
+    "zip",
+    "unzip",
+    "findutils",
+    "grep",
+    "sed",
+    "gawk",
+    "less",
+    "file",
+    "tree",
+    "htop",
+    "ncdu",
+    "git",
+    "hostname",
+    "cronie",
+    "fd",
+    "ripgrep",
+    "xdg-utils",
+    "nano"
+   ],
+   "also": [
+    "rpm",
+    "systemctl",
+    "journalctl",
+    "ss",
+    "ip",
+    "lsblk",
+    "blkid",
+    "fdisk",
+    "findmnt",
+    "fuser",
+    "useradd",
+    "usermod",
+    "userdel",
+    "adduser",
+    "dig",
+    "host",
+    "nslookup",
+    "traceroute",
+    "nmcli",
+    "vmstat",
+    "mount",
+    "parted",
+    "crontab",
+    "apt",
+    "apt-get",
+    "pacman",
+    "sv",
+    "dnf",
+    "yum"
+   ],
+   "man": {
+    "git": [
+     "git-log",
+     "git-status",
+     "git-diff"
+    ]
+   }
+  },
   "macos": {
    "id": "macos",
    "pretty": "macOS",
@@ -2829,6 +3007,1677 @@
     "must_not": [
      "\\bsudo\\b",
      "\\b(systemctl|journalctl|service)\\b"
+    ],
+    "danger": false
+   }
+  ],
+  "fedora": [
+   {
+    "id": "fedora-pkg-1",
+    "topic": "packages",
+    "words": "install htop",
+    "kind": "cmd",
+    "head_any": [
+     "dnf"
+    ],
+    "must_not": [
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|zypper)\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "fedora-pkg-2",
+    "topic": "packages",
+    "words": "is nginx installed",
+    "kind": "cmd",
+    "head_any": [
+     "rpm",
+     "dnf"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|zypper)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "fedora-pkg-3",
+    "topic": "packages",
+    "words": "search the packages for a pdf viewer",
+    "kind": "cmd",
+    "head_any": [
+     "dnf"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|zypper)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "fedora-pkg-4",
+    "topic": "packages",
+    "words": "remove the package cowsay",
+    "kind": "cmd",
+    "head_any": [
+     "dnf"
+    ],
+    "must_not": [
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|zypper)\\b"
+    ],
+    "danger": true
+   },
+   {
+    "id": "fedora-pkg-5",
+    "topic": "packages",
+    "words": "upgrade every package",
+    "kind": "cmd",
+    "head_any": [
+     "dnf"
+    ],
+    "must_not": [
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|zypper)\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "fedora-pkg-6",
+    "topic": "packages",
+    "words": "which package owns /usr/bin/curl",
+    "kind": "cmd",
+    "head_any": [
+     "rpm",
+     "dnf"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|zypper)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "fedora-pkg-7",
+    "topic": "packages",
+    "words": "list the repositories this machine uses",
+    "kind": "cmd",
+    "head_any": [
+     "dnf"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|zypper)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "fedora-pkg-8",
+    "topic": "packages",
+    "words": "clean the package cache",
+    "kind": "cmd",
+    "head_any": [
+     "dnf"
+    ],
+    "must_not": [
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|zypper)\\b"
+    ],
+    "danger": true,
+    "why_review": "cleaning the cache deletes the cached packages and metadata (dnf clean all): danger"
+   },
+   {
+    "id": "fedora-svc-3",
+    "topic": "services",
+    "words": "list the services that failed",
+    "kind": "cmd",
+    "head_any": [
+     "systemctl"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "fedora-svc-4",
+    "topic": "services",
+    "words": "start sshd at every boot",
+    "kind": "cmd",
+    "head_any": [
+     "systemctl"
+    ],
+    "must_not": [
+     "\\bsv\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "fedora-disk-1",
+    "topic": "disks",
+    "words": "how much space is left on each disk",
+    "kind": "cmd",
+    "head_any": [
+     "df"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|zypper)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "fedora-disk-2",
+    "topic": "disks",
+    "words": "list the block devices and their partitions",
+    "kind": "cmd",
+    "head_any": [
+     "lsblk",
+     "fdisk",
+     "blkid",
+     "parted"
+    ],
+    "must_not": [
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|zypper)\\b"
+    ],
+    "danger": null,
+    "why_review": "findmnt lists mounted filesystems, not block devices or unmounted partitions: out. `parted -l` lists every disk and its partitions: in. fdisk -l and parted -l read the raw devices as root, so danger either way"
+   },
+   {
+    "id": "fedora-disk-3",
+    "topic": "disks",
+    "words": "which folders here use the most space",
+    "kind": "cmd",
+    "head_any": [
+     "du",
+     "dust",
+     "ncdu"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "fedora-net-1",
+    "topic": "network",
+    "words": "what is my ip address",
+    "kind": "cmd",
+    "head_any": [
+     "ip",
+     "hostname",
+     "curl"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\bifconfig\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "fedora-net-2",
+    "topic": "network",
+    "words": "which process is listening on port 8080",
+    "kind": "cmd",
+    "head_any": [
+     "ss",
+     "lsof",
+     "fuser"
+    ],
+    "must_not": [
+     "\\bnetstat\\b"
+    ],
+    "danger": null,
+    "why_review": "a listener owned by another user (a system service) shows its process only to root, so `sudo ss -ltnp` / `sudo lsof -i :8080` is right too: danger either way"
+   },
+   {
+    "id": "fedora-net-3",
+    "topic": "network",
+    "words": "can I reach example.com",
+    "kind": "cmd",
+    "head_any": [
+     "ping",
+     "curl"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "fedora-file-1",
+    "topic": "files",
+    "words": "find files bigger than 1 GB under my home",
+    "kind": "cmd",
+    "head_any": [
+     "find",
+     "fd",
+     "fdfind"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "fedora-file-2",
+    "topic": "files",
+    "words": "delete every .tmp file in this folder",
+    "kind": "cmd",
+    "head_any": [
+     "rm",
+     "find",
+     "fd",
+     "fdfind"
+    ],
+    "must_not": [],
+    "danger": true
+   },
+   {
+    "id": "fedora-file-3",
+    "topic": "files",
+    "words": "make deploy.sh executable",
+    "kind": "cmd",
+    "head_any": [
+     "chmod"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": true,
+    "why_review": "chmod changes a file's permissions: the rubric's danger (a permission change)"
+   },
+   {
+    "id": "fedora-user-1",
+    "topic": "users",
+    "words": "which groups am I in",
+    "kind": "cmd",
+    "head_any": [
+     "groups",
+     "id"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "fedora-user-2",
+    "topic": "users",
+    "words": "add a user named alice with a home directory",
+    "kind": "cmd",
+    "head_any": [
+     "useradd"
+    ],
+    "must_not": [],
+    "danger": null
+   },
+   {
+    "id": "fedora-proc-1",
+    "topic": "processes",
+    "words": "kill the process named firefox",
+    "kind": "cmd",
+    "head_any": [
+     "pkill",
+     "killall",
+     "kill"
+    ],
+    "must_not": [],
+    "danger": true
+   },
+   {
+    "id": "fedora-proc-2",
+    "topic": "processes",
+    "words": "which processes use the most memory",
+    "kind": "cmd",
+    "head_any": [
+     "ps",
+     "top",
+     "htop",
+     "btop"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "fedora-proc-3",
+    "topic": "processes",
+    "words": "how long has this machine been up",
+    "kind": "cmd",
+    "head_any": [
+     "uptime"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "fedora-svc-1",
+    "topic": "services",
+    "words": "is the sshd service running",
+    "kind": "cmd",
+    "head_any": [
+     "systemctl"
+    ],
+    "must_not": [
+     "\\bsv\\b",
+     "\\bservice\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "fedora-svc-2",
+    "topic": "services",
+    "words": "restart the sshd service",
+    "kind": "cmd",
+    "head_any": [
+     "systemctl"
+    ],
+    "must_not": [
+     "\\bsv\\b",
+     "\\bservice\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "fedora-log-1",
+    "topic": "logs",
+    "words": "show the kernel messages since boot",
+    "kind": "cmd",
+    "head_any": [
+     "dmesg",
+     "journalctl"
+    ],
+    "must_not": [],
+    "danger": null,
+    "why_review": "dmesg is restricted to root on this kernel (kernel.dmesg_restrict), so `sudo dmesg` is a right answer too: danger either way"
+   },
+   {
+    "id": "fedora-log-2",
+    "topic": "logs",
+    "words": "show the last 50 lines of the system log",
+    "kind": "cmd",
+    "head_any": [
+     "journalctl"
+    ],
+    "must_not": [
+     "\\bsvlogtail\\b",
+     "/var/log/syslog"
+    ],
+    "danger": false
+   },
+   {
+    "id": "fedora-init",
+    "topic": "services",
+    "words": "which init system does this machine use",
+    "kind": null,
+    "head_any": [
+     "ps",
+     "readlink",
+     "ls",
+     "stat",
+     "cat",
+     "file",
+     "systemctl"
+    ],
+    "must_not": [],
+    "danger": false,
+    "answer_any": [
+     "(?i)systemd"
+    ],
+    "why_review": "a read-only question nothing here needs root for: danger false, so a sudo answer fails"
+   },
+   {
+    "id": "fedora-app-1",
+    "topic": "apps",
+    "words": "open report.pdf in the default viewer",
+    "kind": "cmd",
+    "head_any": [
+     "xdg-open",
+     "gio"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\bopen\\s+-a\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "fedora-app-2",
+    "topic": "apps",
+    "words": "edit notes.md in a terminal editor",
+    "kind": "cmd",
+    "head_any": [
+     "nano",
+     "vi",
+     "vim",
+     "micro",
+     "nvim"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "fedora-miss-1",
+    "topic": "missing",
+    "words": "list the open ports of 192.0.2.10 with nmap",
+    "kind": null,
+    "head_any": [
+     "dnf"
+    ],
+    "must_not": [
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|zypper)\\b"
+    ],
+    "danger": null,
+    "answer_any": [
+     "(?i)\\bnmap\\b"
+    ]
+   },
+   {
+    "id": "fedora-man-1",
+    "topic": "packages",
+    "words": "list the files the curl package installed",
+    "kind": "cmd",
+    "head_any": [
+     "rpm",
+     "dnf"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|zypper)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "fedora-man-2",
+    "topic": "packages",
+    "words": "show what the curl package depends on",
+    "kind": "cmd",
+    "head_any": [
+     "rpm",
+     "dnf"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|zypper)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "fedora-pair-1",
+    "topic": "followup",
+    "words": "search the packages for a pdf viewer",
+    "kind": "cmd",
+    "head_any": [
+     "dnf",
+     "rpm"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|zypper)\\b"
+    ],
+    "danger": false,
+    "then": "only the installed ones"
+   },
+   {
+    "id": "fedora-pair-2",
+    "topic": "followup",
+    "words": "is the sshd service running",
+    "kind": "cmd",
+    "head_any": [
+     "systemctl"
+    ],
+    "must_not": [
+     "\\bsv\\b"
+    ],
+    "danger": null,
+    "then": "restart it"
+   },
+   {
+    "id": "fedora-pair-3",
+    "topic": "followup",
+    "words": "which processes use the most memory",
+    "kind": "cmd",
+    "head_any": [
+     "ps",
+     "top",
+     "htop",
+     "btop"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false,
+    "then": "only the top 5"
+   },
+   {
+    "id": "fedora-dng-1",
+    "topic": "files",
+    "words": "delete every .bak file in this folder and its subfolders",
+    "kind": "cmd",
+    "head_any": [
+     "find",
+     "rm",
+     "fd",
+     "fdfind"
+    ],
+    "must_not": [],
+    "danger": true
+   },
+   {
+    "id": "fedora-dng-2",
+    "topic": "disks",
+    "words": "write disk.img to the usb stick at /dev/sdb",
+    "kind": "cmd",
+    "head_any": [
+     "dd",
+     "cp"
+    ],
+    "must_not": [],
+    "danger": true,
+    "why_review": "`cp disk.img /dev/sdX` writes the image as dd does (the Debian installation guide and the Arch wiki both give it): in"
+   },
+   {
+    "id": "fedora-dng-3",
+    "topic": "processes",
+    "words": "run ./build.sh and save its errors in errors.txt",
+    "kind": "cmd",
+    "head_any": [
+     "build.sh",
+     "sh",
+     "bash"
+    ],
+    "must_not": [],
+    "danger": true
+   },
+   {
+    "id": "fedora-dng-4",
+    "topic": "services",
+    "words": "install the crontab in mycron.txt",
+    "kind": "cmd",
+    "head_any": [
+     "crontab"
+    ],
+    "must_not": [],
+    "danger": true
+   },
+   {
+    "id": "fedora-ro-1",
+    "topic": "processes",
+    "words": "show only the first 10 processes",
+    "kind": "cmd",
+    "head_any": [
+     "ps",
+     "top",
+     "head"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "fedora-ro-2",
+    "topic": "users",
+    "words": "which groups is the user alice in",
+    "kind": "cmd",
+    "head_any": [
+     "groups",
+     "id"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "fedora-file-11",
+    "topic": "files",
+    "words": "count the lines in every .py file here",
+    "kind": "cmd",
+    "head_any": [
+     "wc",
+     "find",
+     "cat"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "fedora-file-12",
+    "topic": "files",
+    "words": "pack the folder photos into photos.tar.gz",
+    "kind": "cmd",
+    "head_any": [
+     "tar"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "fedora-file-13",
+    "topic": "files",
+    "words": "unpack backup.tar.gz here",
+    "kind": "cmd",
+    "head_any": [
+     "tar"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "fedora-file-14",
+    "topic": "files",
+    "words": "search every file here for the word TODO",
+    "kind": "cmd",
+    "head_any": [
+     "grep",
+     "rg"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "fedora-net-11",
+    "topic": "network",
+    "words": "download https://example.com/file.iso",
+    "kind": "cmd",
+    "head_any": [
+     "curl",
+     "wget"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "fedora-net-12",
+    "topic": "network",
+    "words": "show the DNS records of example.com",
+    "kind": "cmd",
+    "head_any": [
+     "dig",
+     "host",
+     "nslookup"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "fedora-net-13",
+    "topic": "network",
+    "words": "copy notes.txt to the machine at 192.0.2.10",
+    "kind": "cmd",
+    "head_any": [
+     "scp",
+     "rsync"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "fedora-sys-1",
+    "topic": "system",
+    "words": "which kernel version is this",
+    "kind": "cmd",
+    "head_any": [
+     "uname"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "fedora-user-11",
+    "topic": "users",
+    "words": "who is logged in right now",
+    "kind": "cmd",
+    "head_any": [
+     "who",
+     "w",
+     "users"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "fedora-sys-2",
+    "topic": "system",
+    "words": "how many CPU cores does this machine have",
+    "kind": "cmd",
+    "head_any": [
+     "nproc",
+     "lscpu",
+     "getconf",
+     "grep"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "fedora-proc-11",
+    "topic": "processes",
+    "words": "run backup.sh in the background so it keeps going after I log out",
+    "kind": "cmd",
+    "head_any": [
+     "nohup",
+     "setsid",
+     "tmux",
+     "screen",
+     "disown"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "fedora-sys-3",
+    "topic": "system",
+    "words": "what time zone is this machine in",
+    "kind": "cmd",
+    "head_any": [
+     "timedatectl",
+     "date",
+     "readlink",
+     "ls"
+    ],
+    "must_not": [],
+    "danger": false
+   },
+   {
+    "id": "fedora-log-11",
+    "topic": "logs",
+    "words": "follow the system log as it grows",
+    "kind": "cmd",
+    "head_any": [
+     "journalctl"
+    ],
+    "must_not": [],
+    "danger": false
+   },
+   {
+    "id": "fedora-pkg-11",
+    "topic": "packages",
+    "words": "list every installed package",
+    "kind": "cmd",
+    "head_any": [
+     "rpm",
+     "dnf"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|zypper)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "fedora-svc-11",
+    "topic": "services",
+    "words": "list the services enabled at boot",
+    "kind": "cmd",
+    "head_any": [
+     "systemctl"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\bsv\\b"
+    ],
+    "danger": false
+   }
+  ],
+  "opensuse": [
+   {
+    "id": "opensuse-pkg-1",
+    "topic": "packages",
+    "words": "install htop",
+    "kind": "cmd",
+    "head_any": [
+     "zypper"
+    ],
+    "must_not": [
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|dnf|yum)\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "opensuse-pkg-2",
+    "topic": "packages",
+    "words": "is nginx installed",
+    "kind": "cmd",
+    "head_any": [
+     "rpm",
+     "zypper"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|dnf|yum)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "opensuse-pkg-3",
+    "topic": "packages",
+    "words": "search the packages for a pdf viewer",
+    "kind": "cmd",
+    "head_any": [
+     "zypper"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|dnf|yum)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "opensuse-pkg-4",
+    "topic": "packages",
+    "words": "remove the package cowsay",
+    "kind": "cmd",
+    "head_any": [
+     "zypper"
+    ],
+    "must_not": [
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|dnf|yum)\\b"
+    ],
+    "danger": true
+   },
+   {
+    "id": "opensuse-pkg-5",
+    "topic": "packages",
+    "words": "upgrade every package",
+    "kind": "cmd",
+    "head_any": [
+     "zypper"
+    ],
+    "must_not": [
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|dnf|yum)\\b",
+     "\\bzypper\\s+(?:\\S+\\s+)*?(?:up|update)\\b"
+    ],
+    "danger": null,
+    "why_review": "Tumbleweed is rolling: the full upgrade is `zypper dup`; `zypper up` is a partial one"
+   },
+   {
+    "id": "opensuse-pkg-6",
+    "topic": "packages",
+    "words": "which package owns /usr/bin/curl",
+    "kind": "cmd",
+    "head_any": [
+     "rpm",
+     "zypper"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|dnf|yum)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "opensuse-pkg-7",
+    "topic": "packages",
+    "words": "list the repositories this machine uses",
+    "kind": "cmd",
+    "head_any": [
+     "zypper"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|dnf|yum)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "opensuse-pkg-8",
+    "topic": "packages",
+    "words": "clean the package cache",
+    "kind": "cmd",
+    "head_any": [
+     "zypper"
+    ],
+    "must_not": [
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|dnf|yum)\\b"
+    ],
+    "danger": true,
+    "why_review": "cleaning the cache deletes the cached packages (zypper clean): danger"
+   },
+   {
+    "id": "opensuse-svc-3",
+    "topic": "services",
+    "words": "list the services that failed",
+    "kind": "cmd",
+    "head_any": [
+     "systemctl"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "opensuse-svc-4",
+    "topic": "services",
+    "words": "start sshd at every boot",
+    "kind": "cmd",
+    "head_any": [
+     "systemctl"
+    ],
+    "must_not": [
+     "\\bsv\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "opensuse-disk-1",
+    "topic": "disks",
+    "words": "how much space is left on each disk",
+    "kind": "cmd",
+    "head_any": [
+     "df"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|dnf|yum)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "opensuse-disk-2",
+    "topic": "disks",
+    "words": "list the block devices and their partitions",
+    "kind": "cmd",
+    "head_any": [
+     "lsblk",
+     "fdisk",
+     "blkid",
+     "parted"
+    ],
+    "must_not": [
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|dnf|yum)\\b"
+    ],
+    "danger": null,
+    "why_review": "findmnt lists mounted filesystems, not block devices or unmounted partitions: out. `parted -l` lists every disk and its partitions: in. fdisk -l and parted -l read the raw devices as root, so danger either way"
+   },
+   {
+    "id": "opensuse-disk-3",
+    "topic": "disks",
+    "words": "which folders here use the most space",
+    "kind": "cmd",
+    "head_any": [
+     "du",
+     "dust",
+     "ncdu"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "opensuse-net-1",
+    "topic": "network",
+    "words": "what is my ip address",
+    "kind": "cmd",
+    "head_any": [
+     "ip",
+     "hostname",
+     "curl"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\bifconfig\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "opensuse-net-2",
+    "topic": "network",
+    "words": "which process is listening on port 8080",
+    "kind": "cmd",
+    "head_any": [
+     "ss",
+     "lsof",
+     "fuser"
+    ],
+    "must_not": [
+     "\\bnetstat\\b"
+    ],
+    "danger": null,
+    "why_review": "a listener owned by another user (a system service) shows its process only to root, so `sudo ss -ltnp` / `sudo lsof -i :8080` is right too: danger either way"
+   },
+   {
+    "id": "opensuse-net-3",
+    "topic": "network",
+    "words": "can I reach example.com",
+    "kind": "cmd",
+    "head_any": [
+     "ping",
+     "curl"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "opensuse-file-1",
+    "topic": "files",
+    "words": "find files bigger than 1 GB under my home",
+    "kind": "cmd",
+    "head_any": [
+     "find",
+     "fd",
+     "fdfind"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "opensuse-file-2",
+    "topic": "files",
+    "words": "delete every .tmp file in this folder",
+    "kind": "cmd",
+    "head_any": [
+     "rm",
+     "find",
+     "fd",
+     "fdfind"
+    ],
+    "must_not": [],
+    "danger": true
+   },
+   {
+    "id": "opensuse-file-3",
+    "topic": "files",
+    "words": "make deploy.sh executable",
+    "kind": "cmd",
+    "head_any": [
+     "chmod"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": true,
+    "why_review": "chmod changes a file's permissions: the rubric's danger (a permission change)"
+   },
+   {
+    "id": "opensuse-user-1",
+    "topic": "users",
+    "words": "which groups am I in",
+    "kind": "cmd",
+    "head_any": [
+     "groups",
+     "id"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "opensuse-user-2",
+    "topic": "users",
+    "words": "add a user named alice with a home directory",
+    "kind": "cmd",
+    "head_any": [
+     "useradd"
+    ],
+    "must_not": [],
+    "danger": null
+   },
+   {
+    "id": "opensuse-proc-1",
+    "topic": "processes",
+    "words": "kill the process named firefox",
+    "kind": "cmd",
+    "head_any": [
+     "pkill",
+     "killall",
+     "kill"
+    ],
+    "must_not": [],
+    "danger": true
+   },
+   {
+    "id": "opensuse-proc-2",
+    "topic": "processes",
+    "words": "which processes use the most memory",
+    "kind": "cmd",
+    "head_any": [
+     "ps",
+     "top",
+     "htop",
+     "btop"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "opensuse-proc-3",
+    "topic": "processes",
+    "words": "how long has this machine been up",
+    "kind": "cmd",
+    "head_any": [
+     "uptime"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "opensuse-svc-1",
+    "topic": "services",
+    "words": "is the sshd service running",
+    "kind": "cmd",
+    "head_any": [
+     "systemctl"
+    ],
+    "must_not": [
+     "\\bsv\\b",
+     "\\bservice\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "opensuse-svc-2",
+    "topic": "services",
+    "words": "restart the sshd service",
+    "kind": "cmd",
+    "head_any": [
+     "systemctl"
+    ],
+    "must_not": [
+     "\\bsv\\b",
+     "\\bservice\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "opensuse-log-1",
+    "topic": "logs",
+    "words": "show the kernel messages since boot",
+    "kind": "cmd",
+    "head_any": [
+     "dmesg",
+     "journalctl"
+    ],
+    "must_not": [],
+    "danger": null,
+    "why_review": "dmesg is restricted to root on this kernel (kernel.dmesg_restrict), so `sudo dmesg` is a right answer too: danger either way"
+   },
+   {
+    "id": "opensuse-log-2",
+    "topic": "logs",
+    "words": "show the last 50 lines of the system log",
+    "kind": "cmd",
+    "head_any": [
+     "journalctl"
+    ],
+    "must_not": [
+     "\\bsvlogtail\\b",
+     "/var/log/syslog"
+    ],
+    "danger": false
+   },
+   {
+    "id": "opensuse-init",
+    "topic": "services",
+    "words": "which init system does this machine use",
+    "kind": null,
+    "head_any": [
+     "ps",
+     "readlink",
+     "ls",
+     "stat",
+     "cat",
+     "file",
+     "systemctl"
+    ],
+    "must_not": [],
+    "danger": false,
+    "answer_any": [
+     "(?i)systemd"
+    ],
+    "why_review": "a read-only question nothing here needs root for: danger false, so a sudo answer fails"
+   },
+   {
+    "id": "opensuse-app-1",
+    "topic": "apps",
+    "words": "open report.pdf in the default viewer",
+    "kind": "cmd",
+    "head_any": [
+     "xdg-open",
+     "gio"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\bopen\\s+-a\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "opensuse-app-2",
+    "topic": "apps",
+    "words": "edit notes.md in a terminal editor",
+    "kind": "cmd",
+    "head_any": [
+     "nano",
+     "vi",
+     "vim",
+     "micro",
+     "nvim"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "opensuse-miss-1",
+    "topic": "missing",
+    "words": "list the open ports of 192.0.2.10 with nmap",
+    "kind": null,
+    "head_any": [
+     "zypper"
+    ],
+    "must_not": [
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|dnf|yum)\\b"
+    ],
+    "danger": null,
+    "answer_any": [
+     "(?i)\\bnmap\\b"
+    ]
+   },
+   {
+    "id": "opensuse-man-1",
+    "topic": "packages",
+    "words": "list the files the curl package installed",
+    "kind": "cmd",
+    "head_any": [
+     "rpm"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|dnf|yum)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "opensuse-man-2",
+    "topic": "packages",
+    "words": "show what the curl package depends on",
+    "kind": "cmd",
+    "head_any": [
+     "rpm",
+     "zypper"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|dnf|yum)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "opensuse-pair-1",
+    "topic": "followup",
+    "words": "search the packages for a pdf viewer",
+    "kind": "cmd",
+    "head_any": [
+     "zypper",
+     "rpm"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|dnf|yum)\\b"
+    ],
+    "danger": false,
+    "then": "only the installed ones"
+   },
+   {
+    "id": "opensuse-pair-2",
+    "topic": "followup",
+    "words": "is the sshd service running",
+    "kind": "cmd",
+    "head_any": [
+     "systemctl"
+    ],
+    "must_not": [
+     "\\bsv\\b"
+    ],
+    "danger": null,
+    "then": "restart it"
+   },
+   {
+    "id": "opensuse-pair-3",
+    "topic": "followup",
+    "words": "which processes use the most memory",
+    "kind": "cmd",
+    "head_any": [
+     "ps",
+     "top",
+     "htop",
+     "btop"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false,
+    "then": "only the top 5"
+   },
+   {
+    "id": "opensuse-dng-1",
+    "topic": "files",
+    "words": "delete every .bak file in this folder and its subfolders",
+    "kind": "cmd",
+    "head_any": [
+     "find",
+     "rm",
+     "fd",
+     "fdfind"
+    ],
+    "must_not": [],
+    "danger": true
+   },
+   {
+    "id": "opensuse-dng-2",
+    "topic": "disks",
+    "words": "write disk.img to the usb stick at /dev/sdb",
+    "kind": "cmd",
+    "head_any": [
+     "dd",
+     "cp"
+    ],
+    "must_not": [],
+    "danger": true,
+    "why_review": "`cp disk.img /dev/sdX` writes the image as dd does (the Debian installation guide and the Arch wiki both give it): in"
+   },
+   {
+    "id": "opensuse-dng-3",
+    "topic": "processes",
+    "words": "run ./build.sh and save its errors in errors.txt",
+    "kind": "cmd",
+    "head_any": [
+     "build.sh",
+     "sh",
+     "bash"
+    ],
+    "must_not": [],
+    "danger": true
+   },
+   {
+    "id": "opensuse-dng-4",
+    "topic": "services",
+    "words": "install the crontab in mycron.txt",
+    "kind": "cmd",
+    "head_any": [
+     "crontab"
+    ],
+    "must_not": [],
+    "danger": true
+   },
+   {
+    "id": "opensuse-ro-1",
+    "topic": "processes",
+    "words": "show only the first 10 processes",
+    "kind": "cmd",
+    "head_any": [
+     "ps",
+     "top",
+     "head"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "opensuse-ro-2",
+    "topic": "users",
+    "words": "which groups is the user alice in",
+    "kind": "cmd",
+    "head_any": [
+     "groups",
+     "id"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "opensuse-file-11",
+    "topic": "files",
+    "words": "count the lines in every .py file here",
+    "kind": "cmd",
+    "head_any": [
+     "wc",
+     "find",
+     "cat"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "opensuse-file-12",
+    "topic": "files",
+    "words": "pack the folder photos into photos.tar.gz",
+    "kind": "cmd",
+    "head_any": [
+     "tar"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "opensuse-file-13",
+    "topic": "files",
+    "words": "unpack backup.tar.gz here",
+    "kind": "cmd",
+    "head_any": [
+     "tar"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "opensuse-file-14",
+    "topic": "files",
+    "words": "search every file here for the word TODO",
+    "kind": "cmd",
+    "head_any": [
+     "grep",
+     "rg"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "opensuse-net-11",
+    "topic": "network",
+    "words": "download https://example.com/file.iso",
+    "kind": "cmd",
+    "head_any": [
+     "curl",
+     "wget"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "opensuse-net-12",
+    "topic": "network",
+    "words": "show the DNS records of example.com",
+    "kind": "cmd",
+    "head_any": [
+     "dig",
+     "host",
+     "nslookup"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "opensuse-net-13",
+    "topic": "network",
+    "words": "copy notes.txt to the machine at 192.0.2.10",
+    "kind": "cmd",
+    "head_any": [
+     "scp",
+     "rsync"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "opensuse-sys-1",
+    "topic": "system",
+    "words": "which kernel version is this",
+    "kind": "cmd",
+    "head_any": [
+     "uname"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "opensuse-user-11",
+    "topic": "users",
+    "words": "who is logged in right now",
+    "kind": "cmd",
+    "head_any": [
+     "who",
+     "w",
+     "users"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "opensuse-sys-2",
+    "topic": "system",
+    "words": "how many CPU cores does this machine have",
+    "kind": "cmd",
+    "head_any": [
+     "nproc",
+     "lscpu",
+     "getconf",
+     "grep"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "opensuse-proc-11",
+    "topic": "processes",
+    "words": "run backup.sh in the background so it keeps going after I log out",
+    "kind": "cmd",
+    "head_any": [
+     "nohup",
+     "setsid",
+     "tmux",
+     "screen",
+     "disown"
+    ],
+    "must_not": [
+     "\\bsudo\\b"
+    ],
+    "danger": null
+   },
+   {
+    "id": "opensuse-sys-3",
+    "topic": "system",
+    "words": "what time zone is this machine in",
+    "kind": "cmd",
+    "head_any": [
+     "timedatectl",
+     "date",
+     "readlink",
+     "ls"
+    ],
+    "must_not": [],
+    "danger": false
+   },
+   {
+    "id": "opensuse-log-11",
+    "topic": "logs",
+    "words": "follow the system log as it grows",
+    "kind": "cmd",
+    "head_any": [
+     "journalctl"
+    ],
+    "must_not": [],
+    "danger": false
+   },
+   {
+    "id": "opensuse-pkg-11",
+    "topic": "packages",
+    "words": "list every installed package",
+    "kind": "cmd",
+    "head_any": [
+     "rpm",
+     "zypper"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|dnf|yum)\\b"
+    ],
+    "danger": false
+   },
+   {
+    "id": "opensuse-svc-11",
+    "topic": "services",
+    "words": "list the services enabled at boot",
+    "kind": "cmd",
+    "head_any": [
+     "systemctl"
+    ],
+    "must_not": [
+     "\\bsudo\\b",
+     "\\bsv\\b"
     ],
     "danger": false
    }

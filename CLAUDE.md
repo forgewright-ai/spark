@@ -5,16 +5,16 @@ the full reference. It describes how things are, not how they came to
 be.
 
 spark is a local AI at the shell prompt that never leaves your LAN. It
-runs on a fresh Debian-family, Arch or Void Linux, on macOS, and on
-Ubuntu under WSL 2. Its spine is 3 lines. Choose your OS, run one line,
-spark is live. A tool becomes a spark app as a client of `spark edit`
-(contract 10), in its own `spark-<app>` repository. When apps ask for
-it, another contract is defined and apps connect the same way. Inside,
-the `FORGE` is the identity spark builds and keeps on this machine: the
-model, one soul, one memory and the threads, served on the LAN by
-`spark serve`. It is one identity per machine, the same one for the
-prompt line, the page and any program. `FORGE` is the code's name for
-it, and no verb carries the word.
+runs on a fresh Debian-family, Arch, Void, Fedora or openSUSE Linux, on
+macOS, and on Ubuntu under WSL 2. Its spine is 3 lines. Choose your OS,
+run one line, spark is live. A tool becomes a spark app as a client of
+`spark edit` (contract 10), in its own `spark-<app>` repository. When
+apps ask for it, another contract is defined and apps connect the same
+way. Inside, the `FORGE` is the identity spark builds and keeps on this
+machine: the model, one soul, one memory and the threads, served on the
+LAN by `spark serve`. It is one identity per machine, the same one for
+the prompt line, the page and any program. `FORGE` is the code's name
+for it, and no verb carries the word.
 
 ## Principles
 
@@ -183,11 +183,20 @@ it, and no verb carries the word.
   vision, is accessibility, not a look: it works before awaken, and
   `spark setup` offers it.
 - **Symmetric.** Every feature exists on both OSes, through each OS's
-  native mechanism. That is apt, pacman or xbps for the packages,
-  systemd, launchd or runit for the services, bash or zsh for the shell.
+  native mechanism. That is apt, pacman, xbps, dnf or zypper for the
+  packages, systemd, launchd or runit for the services, bash or zsh for
+  the shell.
   Nothing OS-only ships. A Linux package family is one oracle beside
   `is_wsl()`: `distro()` reads `ID`, then `ID_LIKE`, from os-release,
-  and `SPARK_OS_RELEASE` pins it. Its names are one data file,
+  and `SPARK_OS_RELEASE` pins it. Fedora answers by its `ID`, and
+  openSUSE Tumbleweed and Leap by the `ID_LIKE` word `opensuse`. Rocky
+  and AlmaLinux say `ID_LIKE` `fedora` and so match that family. They
+  are not proven, and their older glibc may not run the pinned engine.
+  Fedora and openSUSE are systemd and glibc: the services, linger and
+  `spark serve boot` work as on Debian and Arch. Their atomic systems
+  are not supported. Both turn firewalld on, and spark never changes
+  it: `docs/INSTALL.md` gives the line to open the page's port by
+  hand. Its names are one data file,
   `distro/<id>.env`. The verbs that ask a package manager switch once on
   `PM`: bootstrap's `pkg_*` and `lib/spark/packages.py`. The init is one
   oracle too, `init_shape()` beside `distro()`: launchd on macOS, runit
@@ -203,9 +212,10 @@ it, and no verb carries the word.
   `get`: `musl libc: the pinned engine is a glibc build -- Void's glibc
   flavour runs spark`. The voice's runtime is a glibc build too, and its
   fetch refuses on musl in one line. What a family lacks refuses in one
-  signed line, and its rows say so, never fail. `check.ARCH_ROWS` and
-  `check.VOID_ROWS` name those rows, none today, and the fifth and sixth
-  selftest passes run there. Windows is reached through WSL 2. Ubuntu
+  signed line, and its rows say so, never fail. `check.ARCH_ROWS`,
+  `check.VOID_ROWS`, `check.FEDORA_ROWS` and `check.OPENSUSE_ROWS` name
+  those rows, none today, and the fifth to eighth selftest passes run
+  there. Windows is reached through WSL 2. Ubuntu
   there is Linux to spark, minus what WSL cannot do. `is_wsl()` sits
   beside `os_pretty`. A verb WSL cannot serve refuses in one signed
   line, such as `spark serve boot`, and a row says so, never fails. CI
@@ -255,8 +265,8 @@ bootstrap.sh    POSIX sh, both OSes. --dry-run --list-packages --list-tools --li
 install.sh      POSIX sh, both OSes. Links home/ + <os>/home/ into $HOME; renders templates/
 lib/env.sh      the KEY=value reader for the two scripts (config.py is the python twin)
 distro/         one KEY=value file per Linux package family (debian.env, arch.env,
-                void.env): the manager, its install line, the doc's name, the 3
-                package groups
+                void.env, fedora.env, opensuse.env): the manager, its install
+                line, the doc's name, the 3 package groups
 site.env.example, models.env, engine.env, voice.env   KEY=value data
                 (engine.env is the llama.cpp pin: version + one sha per flavour;
                 voice.env the voice's: the sherpa-onnx runtime per flavour and
@@ -442,10 +452,11 @@ tests/          smoke.py serve_smoke.py forge_smoke.py bench_smoke.py
 .github/        workflows/ci.yml: on a push to main or a try/ branch, a pull
                 request, by hand, never a tag; linux and macos run
                 tests/gate.sh full, one job per group (smoke, serve, rest),
-                then a real bootstrap in the rest job; debian, arch and void
-                containers run the one-liner as a new user (void under a
-                runsvdir started for the job: the supervised spark-check is
-                proven there); workflows runs zizmor over the workflows
+                then a real bootstrap in the rest job; debian, arch, void,
+                fedora and opensuse containers run the one-liner as a new
+                user (void under a runsvdir started for the job: the
+                supervised spark-check is proven there); workflows runs
+                zizmor over the workflows
                 workflows/release.yml: the GitHub Release from the CHANGELOG
                 section, on a signed v* tag whose commit ci.yml passed
                 workflows/codeql.yml: GitHub's static analysis over the python
@@ -664,7 +675,8 @@ and may change freely.
      model beside it (`engine._choose`). A name in both files is
      refused, naming both.
    - `distro/<id>.env`, one per Linux package family the oracle
-     `distro()` knows (`debian`, `arch`, `void`): `PM PM_INSTALL
+     `distro()` knows (`debian`, `arch`, `void`, `fedora`,
+     `opensuse`): `PM PM_INSTALL
      PM_TARGET PKG_CORE PKG_ENGINE PKG_AI`, the same 6 keys in every
      file (`packages.KEYS`, and `tests/docs_test.py` asserts it).
      `distro()` lives in `lib/spark/__init__.py` beside `is_wsl()`,
@@ -2004,15 +2016,19 @@ sh tests/land.sh --passed SHA   # ci.yml passed for that commit: what main and a
 
 `spark check` has 39 rows today, by category `8 SOFTWARE, 22
 CAPABILITY, 9 NONFUNCTIONAL` (`grep -c '^@row' lib/spark/check.py`
-counts them). `--selftest` runs 6 passes. The first two prove every
+counts them). `--selftest` runs 8 passes. The first two prove every
 fixture-testable row flips between a good and a bad fixture. The third
 is the client shape: the 7 rows in `check.CLIENT_ROWS` answer `na`. On
 Linux the fourth runs under a WSL 2 kernel line, where the 1 row in
 `check.WSL_ROWS` says so and never fails. The fifth runs under
 `ID=arch`: the packages row answers through a pacman stub. The sixth
 runs under `ID=void`: the packages row answers through an xbps stub and
-the services row through an sv stub. `check.ARCH_ROWS` and
-`check.VOID_ROWS` are empty, so no row there says it cannot serve.
+the services row through an sv stub. The seventh runs under
+`ID=fedora`, and the packages row answers through a dnf stub. The
+eighth runs under an `ID_LIKE` that says `opensuse`, and the packages
+row answers through a zypper stub. `check.ARCH_ROWS`, `check.VOID_ROWS`,
+`check.FEDORA_ROWS` and `check.OPENSUSE_ROWS` are empty, so no row
+there says it cannot serve.
 
 ## Releasing
 

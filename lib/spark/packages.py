@@ -13,6 +13,7 @@ from . import IS_MAC, REPO, config, distro, run
 KEYS = ("PM", "PM_INSTALL", "PM_TARGET", "PKG_CORE", "PKG_ENGINE", "PKG_AI")
 GROUPS = ("PKG_CORE", "PKG_ENGINE", "PKG_AI")
 NEVER_REMOVED = ("bash",)          # the login shell, whatever the family
+RPM = ("dnf", "zypper")            # the two managers over one rpm database
 
 
 def table(repo=REPO):
@@ -55,6 +56,18 @@ def installed(pkgs):
         if rc == -1:
             return None
         return parse_xbps_list(out) & set(pkgs)
+    if pm in RPM:
+        # rpm counts a provider (python3 is python313's capability on
+        # Tumbleweed, no package of its own): one question per name,
+        # --whatprovides exits 0 when an installed package provides it
+        have = set()
+        for p in pkgs:
+            rc, _out = run(["rpm", "-q", "--whatprovides", p], timeout=30)
+            if rc == -1:
+                return None
+            if rc == 0:
+                have.add(p)
+        return have
     return None
 
 
@@ -82,13 +95,22 @@ def pending():
         # -un: what a full upgrade would do, dry (`name-ver update ...`)
         rc, out = run(["xbps-install", "-un"], timeout=120)
         return -1 if rc != 0 else parse_xbps_pending(out)
+    if pm == "dnf":
+        # check-update exits 100 when updates wait, 0 when none do
+        rc, out = run(["dnf", "-q", "check-update"], timeout=120)
+        return parse_dnf_pending(out) if rc in (0, 100) else -1
+    if pm == "zypper":
+        # --no-refresh: the index as root last left it, no root asked for
+        rc, out = run(["zypper", "--non-interactive", "--no-refresh", "list-updates"], timeout=120)
+        return -1 if rc != 0 else parse_zypper_pending(out)
     return -1
 
 
 def upgrade_line():
     """The one line a human runs to take the pending updates."""
     return {"brew": "brew upgrade", "apt": "sudo apt upgrade", "pacman": "sudo pacman -Syu",
-            "xbps": "sudo xbps-install -Su"}.get(manager(), "")
+            "xbps": "sudo xbps-install -Su", "dnf": "sudo dnf upgrade",
+            "zypper": "sudo zypper dup"}.get(manager(), "")
 
 
 def parse_xbps_list(out):
@@ -109,6 +131,28 @@ def parse_xbps_pending(out):
     `name-ver update arch repo size` (an `install` line is a new
     dependency, not an update; a `configure` line neither). Pure."""
     return sum(1 for line in out.splitlines() if len(line.split()) >= 2 and line.split()[1] == "update")
+
+
+def parse_dnf_pending(out):
+    """How many lines of a `dnf check-update` transcript are updates:
+    `name.arch version repository`, three fields, the first with a dot.
+    The `Obsoleting Packages` section that may follow repeats names, so
+    the count stops there. Pure."""
+    n = 0
+    for line in out.splitlines():
+        if line.startswith("Obsoleting"):
+            break
+        f = line.split()
+        if len(f) == 3 and "." in f[0] and not line[:1].isspace():
+            n += 1
+    return n
+
+
+def parse_zypper_pending(out):
+    """How many rows of a `zypper list-updates` table are updates: the
+    rows whose first cell is `v` (`v | repo | name | current | available
+    | arch`); the header and the rule are not. Pure."""
+    return sum(1 for line in out.splitlines() if "|" in line and line.split("|")[0].strip() == "v")
 
 
 # the pending row's words for an Arch box with no arch-audit: the
@@ -171,27 +215,29 @@ def install_line(pkgs):
 # tools an exit-127 hint may name, where the package name differs from
 # the command or a family renames it (Debian ships fd as fd-find, bat as
 # batcat). Anything not here is left to the model to name -- this map
-# only spares a model call for tools spark already knows.
+# only spares a model call for tools spark already knows. An empty name
+# is a family without that package (starship is in no Fedora repository).
 _TOOL_PKG = {
-    "fd": {"apt": "fd-find", "pacman": "fd", "xbps": "fd", "brew": "fd"},
-    "fdfind": {"apt": "fd-find", "pacman": "fd", "xbps": "fd", "brew": "fd"},
-    "rg": {"apt": "ripgrep", "pacman": "ripgrep", "xbps": "ripgrep", "brew": "ripgrep"},
-    "bat": {"apt": "bat", "pacman": "bat", "xbps": "bat", "brew": "bat"},
-    "batcat": {"apt": "bat", "pacman": "bat", "xbps": "bat", "brew": "bat"},
-    "eza": {"apt": "eza", "pacman": "eza", "xbps": "eza", "brew": "eza"},
-    "fzf": {"apt": "fzf", "pacman": "fzf", "xbps": "fzf", "brew": "fzf"},
-    "zoxide": {"apt": "zoxide", "pacman": "zoxide", "xbps": "zoxide", "brew": "zoxide"},
-    "btop": {"apt": "btop", "pacman": "btop", "xbps": "btop", "brew": "btop"},
-    "jq": {"apt": "jq", "pacman": "jq", "xbps": "jq", "brew": "jq"},
-    "tmux": {"apt": "tmux", "pacman": "tmux", "xbps": "tmux", "brew": "tmux"},
-    "starship": {"apt": "starship", "pacman": "starship", "xbps": "starship", "brew": "starship"},
+    "fd": {"apt": "fd-find", "pacman": "fd", "xbps": "fd", "dnf": "fd-find", "zypper": "fd", "brew": "fd"},
+    "fdfind": {"apt": "fd-find", "pacman": "fd", "xbps": "fd", "dnf": "fd-find", "zypper": "fd", "brew": "fd"},
+    "rg": {"apt": "ripgrep", "pacman": "ripgrep", "xbps": "ripgrep", "dnf": "ripgrep", "zypper": "ripgrep", "brew": "ripgrep"},
+    "bat": {"apt": "bat", "pacman": "bat", "xbps": "bat", "dnf": "bat", "zypper": "bat", "brew": "bat"},
+    "batcat": {"apt": "bat", "pacman": "bat", "xbps": "bat", "dnf": "bat", "zypper": "bat", "brew": "bat"},
+    "eza": {"apt": "eza", "pacman": "eza", "xbps": "eza", "dnf": "eza", "zypper": "eza", "brew": "eza"},
+    "fzf": {"apt": "fzf", "pacman": "fzf", "xbps": "fzf", "dnf": "fzf", "zypper": "fzf", "brew": "fzf"},
+    "zoxide": {"apt": "zoxide", "pacman": "zoxide", "xbps": "zoxide", "dnf": "zoxide", "zypper": "zoxide", "brew": "zoxide"},
+    "btop": {"apt": "btop", "pacman": "btop", "xbps": "btop", "dnf": "btop", "zypper": "btop", "brew": "btop"},
+    "jq": {"apt": "jq", "pacman": "jq", "xbps": "jq", "dnf": "jq", "zypper": "jq", "brew": "jq"},
+    "tmux": {"apt": "tmux", "pacman": "tmux", "xbps": "tmux", "dnf": "tmux", "zypper": "tmux", "brew": "tmux"},
+    "starship": {"apt": "starship", "pacman": "starship", "xbps": "starship", "dnf": "", "zypper": "starship", "brew": "starship"},
 }
 
 
 def package_for(binary):
     """The package that provides `binary` on this machine, when spark knows
     it (`_TOOL_PKG`), else '' -- the caller then asks the model. The family
-    is this machine's: fd is fd-find on Debian, fd on Arch, Void and macOS."""
+    is this machine's: fd is fd-find on Debian and Fedora, fd on Arch,
+    Void, openSUSE and macOS."""
     row = _TOOL_PKG.get(binary)
     if not row:
         return ""
@@ -204,8 +250,11 @@ def remove_argv(pkgs):
     apt-get remove leaves them)."""
     if IS_MAC:
         return ["brew", "uninstall"] + list(pkgs)
+    # dnf would take the unused dependencies too: the setopt keeps them
     return {"apt": ["apt-get", "remove", "-y"], "pacman": ["pacman", "-R", "--noconfirm"],
-            "xbps": ["xbps-remove", "-y"]}.get(manager(), []) + list(pkgs)
+            "xbps": ["xbps-remove", "-y"],
+            "dnf": ["dnf", "remove", "-y", "--setopt=clean_requirements_on_remove=False"],
+            "zypper": ["zypper", "--non-interactive", "remove"]}.get(manager(), []) + list(pkgs)
 
 
 def remove_line(pkgs):
@@ -248,13 +297,18 @@ def remove_would(pkgs):
     if pm == "xbps":
         rc, out = run(["xbps-remove", "-ny"] + list(pkgs), timeout=180)
         return parse_xbps_removal(out) if rc == 0 else None
+    if pm in RPM:
+        # rpm's own dry run: it passes only when nothing installed needs
+        # any of them, and then exactly the named ones would go
+        rc, out = run(["rpm", "-e", "--test"] + list(pkgs), timeout=180)
+        return sorted(set(pkgs)) if rc == 0 else None
     return None
 
 
 def essential(pkg):
     """A package the manager refuses to remove (apt: dpkg's Essential flag,
-    ncurses-bin is one; pacman and xbps: one another package requires): it
-    never appears in a removal list."""
+    ncurses-bin is one; pacman, xbps and rpm: one another package
+    requires): it never appears in a removal list."""
     pm = manager()
     if pm == "apt":
         rc, out = run(["dpkg-query", "-W", "-f=${Essential}", pkg], timeout=10)
@@ -269,6 +323,11 @@ def essential(pkg):
         # -X lists the reverse dependencies; any means xbps-remove refuses
         rc, out = run(["xbps-query", "-X", pkg], timeout=10)
         return rc == 0 and bool(out.strip())
+    if pm in RPM:
+        # rpm's dry run of the one removal fails when an installed package
+        # needs it (or when rpm cannot say: kept either way)
+        rc, out = run(["rpm", "-e", "--test", pkg], timeout=30)
+        return rc != 0
     return False
 
 

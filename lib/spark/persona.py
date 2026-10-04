@@ -108,6 +108,7 @@ _DANGER = [
     r"\bpacman\s+(?:\S+\s+)*?(?:-R[a-zA-Z]*(?=\s|$)|--remove\b)",   # pacman -R, -Rns
     r"\bbrew\s+(?:uninstall|remove|rm)\b",      # brew uninstall
     r"\b(?:dnf|yum|zypper)\s+(?:\S+\s+)*?(?:remove|erase|rm)\b",   # dnf/yum/zypper remove
+    r"\brpm\s+(?:[^\s|;&]+\s+)*?(?:(?<=\s)-[a-zA-Z]*e[a-zA-Z]*(?=\s|$)|--erase\b)",   # rpm -e, -ev (its own words only)
     r"\bapk\s+del\b",                            # apk del
     # v1.53: what the reviewed audition still found unmarked
     r"\b(?:chmod|chown|chgrp)\b",                 # any permission or owner change (the brief's own rule)
