@@ -743,14 +743,18 @@ def row_peer(ctx):
     if ctx.cfg.peer_ai_url:
         # a FORGE answers /api/health (and 404 to /health); a raw llama-server the reverse
         host = ctx.cfg.peer_ai_url.split("//")[-1]
-        fh = wire.forge_health(ctx.cfg.peer_ai_url)
+        fh = wire.forge_health(ctx.cfg.peer_ai_url, cfg=ctx.cfg)
         if isinstance(fh, dict):
             up = fh.get("upstream", "down")
             h = "ok" if up == "ok" else "up, its model %s" % up
             parts.append("%s %s" % (host, h))
+            wire.note_peer(ctx.cfg, ctx.cfg.peer_ai_url, "spark")
         else:
             h = "down" if fh == "down" else wire.health(ctx.cfg.peer_ai_url)
-            parts.append("engine %s %s" % (host, h))
+            if h in ("ok", "loading"):
+                wire.note_peer(ctx.cfg, ctx.cfg.peer_ai_url, "engine")
+            # the user's own llama-server is named as theirs
+            parts.append("%s %s %s" % ("your engine" if wire.plain(ctx.cfg) else "engine", host, h))
         if h != "ok":
             worst = WARN
         elif isinstance(fh, dict) and ctx.cfg.client:
@@ -1451,6 +1455,9 @@ CLIENT_ROWS = ("engine", "services", "watchdog", "ai", "serve", "forge", "ember"
 
 
 def client_of(cfg):
+    from . import wire
+    if wire.plain(cfg):
+        return "your engine at %s answers (spark client off ends it)" % cfg.peer_ai_url.split("//")[-1]
     return "a client of %s (spark client off ends it)" % cfg.peer_ai_url.split("//")[-1]
 
 
@@ -2029,9 +2036,11 @@ def knowledge_fixture(env):
         pass
 
 
-def _stub_server():
+def _stub_server(plain=False):
     """A fake llama-server on loopback for the good fixture: /health 200,
-    /v1/models with a bearer; and a fake FORGE at /api/health."""
+    /v1/models with a bearer; and a fake FORGE at /api/health. plain=True
+    is a llama-server the user runs: no /api/health (404), one model
+    with no alias, and /props with its context size."""
     import threading
     from http.server import BaseHTTPRequestHandler, HTTPServer
 
@@ -2042,6 +2051,14 @@ def _stub_server():
         def do_GET(self):
             if self.path == "/health":
                 body = b'{"status":"ok"}'
+            elif plain:
+                if self.path == "/v1/models":
+                    body = b'{"data":[{"id":"fixture.gguf"}]}'
+                elif self.path == "/props":
+                    body = b'{"default_generation_settings":{"n_ctx":4096}}'
+                else:
+                    self.send_error(404)
+                    return
             elif self.path == "/api/health":
                 # 1.1 is the fixture repo's own tag (make_fixture tags
                 # v1.1): the forge row compares this against the tree it
@@ -2107,6 +2124,23 @@ def selftest():
             parts = line.split("\t")
             if len(parts) == 5:
                 results["client"][parts[2]] = (parts[1], parts[3])
+        # the third pass again, as a client of a plain llama-server (the
+        # user's own): the same rows are na, and the peer row names it theirs
+        psrv, plain_url = _stub_server(plain=True)
+        root = os.path.join(tmp, "plain")
+        os.makedirs(root)
+        env = dict(base)
+        env.update(make_fixture(root, True, stub_url))
+        env["SITE_AI_MODEL"] = "none"
+        env["SITE_PEER_AI_URL"] = plain_url
+        p = subprocess.run([sys.executable, os.path.join(REPO, "bin", "spark"), "check", "--porcelain", "--fresh"],
+                           env=env, capture_output=True, text=True, timeout=180)
+        psrv.shutdown()
+        results["plain"] = {}
+        for line in p.stdout.splitlines():
+            parts = line.split("\t")
+            if len(parts) == 5:
+                results["plain"][parts[2]] = (parts[1], parts[3])
         # the fourth pass, Linux only: the good fixture under WSL 2 (a kernel
         # line naming microsoft) -- gpu says so, never fails
         results["wsl"] = {}
@@ -2183,6 +2217,13 @@ def selftest():
                                               len(CLIENT_ROWS) - len(not_na), peer,
                                               "" if not not_na else "   not na: " + " ".join(not_na)))
     bad += bool(not_na) or peer != OK
+    not_na = [n for n in CLIENT_ROWS if results["plain"].get(n, ("missing", ""))[0] != NA]
+    peer, said = results["plain"].get("peer", ("missing", ""))
+    yours = peer == OK and said.startswith("your engine ")
+    say("  %s client of your own engine: %d rows na, peer %s%s"
+        % (GLYPH[OK] if not not_na and yours else GLYPH[FAIL], len(CLIENT_ROWS) - len(not_na), peer,
+           "" if not not_na and yours else "   not na: %s; peer says %r" % (" ".join(not_na), said)))
+    bad += bool(not_na) or not yours
     if IS_MAC:
         say("  %s wsl: skipped on macOS (a Linux gate proves it)" % GLYPH[NA])
     else:

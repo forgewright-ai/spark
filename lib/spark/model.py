@@ -60,6 +60,10 @@ def _client_no(cfg, what):
     """The one line a client answers to a model choice: nothing is served
     here, so a budget, a model or a chat model chosen here would silently
     make this machine a server (that is spark client off, by name)."""
+    from . import wire
+    if wire.plain(cfg):
+        say("%s %s -- the model is your engine's: change it there, or spark client off" % (MARK, what))
+        return 2
     say("%s %s -- a client of %s serves nothing: choose there, or spark client off"
         % (MARK, what, cfg.peer_ai_url))
     return 2
@@ -255,7 +259,21 @@ def print_model_table(cfg):
     tok/s` an estimate for this backend, `N tok/s` measured here (spark
     bench, or a real turn); nothing for a row that does not fit. A row's
     note follows it, indented. Every row stays within 80 columns."""
-    from . import engine
+    from . import engine, wire
+    if wire.plain(cfg):
+        # the user's own llama-server: its one model, named; spark's list
+        # is not printed as if it applied there
+        try:
+            stem = wire.model_stem(cfg, cfg.peer_ai_url)
+        except wire.BrainError as e:
+            say("%s model -- %s" % (MARK, e.hint))
+            return
+        if stem == "?":
+            say("%s model -- your engine at %s does not answer" % (MARK, cfg.peer_ai_url))
+            return
+        say("%s model -- your engine at %s serves %s" % (MARK, cfg.peer_ai_url, config.model_name(stem)))
+        say("  its models are yours to manage: spark downloads and serves none here")
+        return
     if cfg.client:
         # a client: never this machine's RAM. The peer's table when its
         # FORGE answers /api/models (the box's RAM, budget, picks,

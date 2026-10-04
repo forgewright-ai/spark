@@ -104,6 +104,7 @@ THE SERVER AND OTHER MACHINES
   spark user token --new          a new token. Other logins end
   spark user claim                move older chats into your account
   spark client [URL|off]          use another machine's model
+  spark client URL --key-file F   use your own llama-server, its key in F
   Traffic between machines is plain HTTP. The admin token can run any
   command on the machine.
 

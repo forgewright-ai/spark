@@ -1600,6 +1600,316 @@ def model_name_cases(t):
          "config.model_name: bare spark and status, the chat's opening and /model, and do's notes use it")
 
 
+# a llama-server the user runs, as a process of its own: the command line
+# reads `python3 DIR/llama-server --port N`, so ps shows what spark looks
+# for. One model with no alias, /props with its context size, no
+# /api/health; --api-key K asks for the key. Every request's
+# Authorization lands in --log.
+OWN_ENGINE = r"""
+import json, sys
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+a = sys.argv
+port = int(a[a.index("--port") + 1])
+key = a[a.index("--api-key") + 1] if "--api-key" in a else ""
+log = a[a.index("--log") + 1]
+
+
+class H(BaseHTTPRequestHandler):
+    def log_message(self, *x):
+        pass
+
+    def _send(self, code, body):
+        data = json.dumps(body).encode()
+        try:
+            self.send_response(code)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+    def _seen(self):
+        with open(log, "a") as f:
+            f.write("%s %s %s\n" % (self.command, self.path, self.headers.get("Authorization") or "-"))
+        return not key or self.headers.get("Authorization") == "Bearer " + key
+
+    def do_GET(self):
+        ok = self._seen()
+        if self.path == "/health":
+            return self._send(200, {"status": "ok"})
+        if not ok:
+            return self._send(401, {"error": "Invalid API Key"})
+        if self.path == "/v1/models":
+            return self._send(200, {"data": [{"id": "my-own-7b-q4.gguf"}]})
+        if self.path == "/props":
+            return self._send(200, {"default_generation_settings": {"n_ctx": 4096}})
+        self._send(404, {})
+
+    def do_POST(self):
+        ok = self._seen()
+        body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
+        if not ok:
+            return self._send(401, {"error": "Invalid API Key"})
+        doc = json.dumps({"kind": "answer", "command": "", "hint": "ok", "danger": False})
+        if not body.get("stream"):
+            return self._send(200, {"choices": [{"message": {"content": doc}}], "timings": {}})
+        try:
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.end_headers()
+            for d in ({"choices": [{"delta": {"content": doc if "response_format" in body else "kept."}}]},
+                      {"choices": [{"delta": {}, "finish_reason": "stop"}], "timings": {}}):
+                self.wfile.write(("data: " + json.dumps(d) + "\n\n").encode())
+            self.wfile.write(b"data: [DONE]\n\n")
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+
+
+ThreadingHTTPServer(("127.0.0.1", port), H).serve_forever()
+"""
+
+
+def own_engine_cases(t):
+    """Your own llama-server: spark is its client and never touches it.
+    It survives `spark client URL`, `spark client off` refuses while it
+    holds SPARK_PORT, every message says whose it is, the key is a file
+    the user names, the store is kept here, and /props gives the context
+    size unless SPARK_CTX is set."""
+    import socket
+    import urllib.request
+    tmp = tempfile.mkdtemp(prefix="spark-own-engine-")
+    home = os.path.join(tmp, "home")
+    theirs = os.path.join(tmp, "theirs")
+    os.makedirs(home + "/.config/spark")
+    os.makedirs(theirs)
+    script = os.path.join(theirs, "llama-server")
+    with open(script, "w") as f:
+        f.write(OWN_ENGINE)
+    procs = []
+
+    def serve(*more):
+        with socket.socket() as sk:
+            sk.bind(("127.0.0.1", 0))
+            port = sk.getsockname()[1]
+        log = os.path.join(tmp, "seen-%d" % port)
+        open(log, "w").close()
+        p = subprocess.Popen([sys.executable, script, "--port", str(port), "--log", log] + list(more),
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        procs.append(p)
+        url = "http://127.0.0.1:%d" % port
+        end = time.time() + 15
+        while time.time() < end:
+            try:
+                urllib.request.urlopen(url + "/health", timeout=1).close()
+                break
+            except OSError:
+                time.sleep(0.1)
+        return p, port, url, log
+
+    def seen(log):
+        with open(log) as f:
+            return f.read().splitlines()
+
+    try:
+        eng, port, url, log = serve()
+        env = {k: v for k, v in os.environ.items() if not k.startswith(("SPARK_", "XDG_", "SITE_", "GIT_"))}
+        env.update({"HOME": home, "XDG_CONFIG_HOME": home + "/.config", "XDG_STATE_HOME": home + "/.local/state",
+                    "XDG_DATA_HOME": home + "/.local/share", "SPARK_TIMEOUT": "5", "SPARK_NO_REFRESH": "1",
+                    "SPARK_NO_APPLY": "1", "SPARK_PORT": str(port), "SPARK_SHARE_TOKEN": tmp + "/no-share-token",
+                    "SPARK_ENGINE_DIR": tmp + "/no-engine", "SPARK_LUA_MUTE": "1",
+                    "SHELL": "/bin/bash", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "TERM": "xterm-256color"})
+
+        def spark(*args, stdin="", extra=None, exe=SPARK):
+            e = dict(env)
+            e.update(extra or {})
+            p = subprocess.run([sys.executable, exe] + list(args), input=stdin, capture_output=True, text=True, env=e, timeout=60)
+            return p.returncode, p.stdout, p.stderr
+        state = home + "/.local/state/spark"
+        site_env = home + "/.config/spark/site.env"
+        spark_env = home + "/.config/spark/spark.env"
+
+        # the server is the user's: spark client URL leaves it alive
+        rc, out, err = spark("client", url)
+        t.ok(rc == 0 and eng.poll() is None and "the engine that ran here is stopped" not in out,
+             "own engine: a llama-server spark did not start survives spark client URL", out + err)
+        t.ok("* using your engine at %s -- spark never starts or stops it" % url in out and "log in" not in out,
+             "own engine: spark client URL says whose it is, with no login line", out)
+        rc, out, _ = spark("client")
+        t.ok(rc == 0 and out.splitlines()[0] == "spark client -- of your engine at " + url
+             and re.search(r"engine +ok, my-own-7b-q4", out) and "login" not in out and "spark user" not in out,
+             "own engine: spark client names the engine and its model, no login", out)
+        rc, out, _ = spark("model")
+        t.ok(rc == 0 and out.splitlines() == ["spark model -- your engine at %s serves my-own-7b-q4" % url,
+                                             "  its models are yours to manage: spark downloads and serves none here"],
+             "own engine: spark model names the model it serves, and prints no list of spark's", out)
+        rc, out, _ = spark("model", "auto")
+        t.ok(rc == 2 and out.strip() == "spark model -- the model is your engine's: change it there, or spark client off",
+             "own engine: a model choice is refused in one line that tells the truth", out)
+        rc, out, _ = spark("status")
+        t.ok(rc == 0 and "  service  your engine -- spark never starts or stops it" in out and "starts when needed" not in out,
+             "own engine: spark status has no `starts when needed`", out)
+        rc, out, _ = spark("serve", "--login")
+        t.ok(rc == 0 and "no page is served here" in out and "there" not in out,
+             "own engine: spark serve --login has no `run it there`", out)
+        rc, out, _ = spark("serve")
+        t.ok(rc == 0 and out.startswith("spark serve -- your engine at 127.0.0.1:%d answers" % port),
+             "own engine: spark serve says whose engine answers", out)
+        rc, out, _ = spark("check", "peer")
+        t.ok("your engine 127.0.0.1:%d ok" % port in out, "own engine: the peer row says your engine", out)
+
+        # its own sealed store, minted at the first write; a thread is kept
+        t.ok(not os.path.exists(state + "/account"), "own engine: no account before the first chat")
+        rc, out, err = spark("chat", "count")
+        kept = glob.glob(state + "/users/*/threads/*")
+        t.ok(rc == 0 and "kept." in out and os.path.exists(state + "/account") and len(kept) == 1,
+             "own engine: the first chat mints this machine's own store and keeps the thread", out + err + repr(kept))
+        rc, out, err = spark("memory", "add", "the engine is mine")
+        rc2, out2, _ = spark("memory")
+        t.ok(rc == 0 and "the engine is mine" in out2, "own engine: spark memory add keeps a fact here", out + err + out2)
+        rc, out, err = spark("line", stdin="?? and again")
+        t.ok(rc == 0 and out.split()[:2] == ["answer", "ok"] and len(glob.glob(state + "/users/*/threads/*")) == 1,
+             "own engine: ?? answers and goes on with the thread kept here", out + err)
+        hits = seen(log)
+        t.ok(hits and not any("Bearer" in h for h in hits) and not os.path.exists(state + "/api-token")
+             and not any("/api/threads" in h for h in hits),
+             "own engine: with no key file no token is sent, none is minted, and no login request is made",
+             "\n".join(h for h in hits if "Bearer" in h or "/api/threads" in h)[:300])
+
+        # the context size is the engine's own, unless SPARK_CTX says
+        snip = os.path.join(tmp, "ctx.py")
+        with open(snip, "w") as f:
+            f.write("import sys\nsys.path.insert(0, %r)\nfrom spark import config, do, forge, wire\n"
+                    "c = config.load()\nprint(wire.ctx(c), do.budget(c, 0), forge.chat_model(c))\n" % os.path.join(REPO, "lib"))
+        rc, out, _ = spark(exe=snip)
+        rc2, out2, _ = spark(exe=snip, extra={"SPARK_CTX": "2048"})
+        rc3, out3, _ = spark(exe=snip, extra={"SITE_AI_MODEL": "auto"})
+        t.ok(rc == 0 and out.split()[0] == "4096" and out2.split()[0] == "2048" and out3.split()[0] == "8192"
+             and int(out2.split()[1]) < int(out.split()[1]) < int(out3.split()[1]),
+             "own engine: /props n_ctx sizes the budget, SPARK_CTX wins, a machine that serves keeps its own",
+             repr((out, out2, out3)))
+        t.ok(out.split()[2:] == ["my-own-7b-q4"], "own engine: the chat opens with the model's name from /v1/models, no alias needed", out)
+
+        # spark client off never starts an engine into the user's port
+        rc, out, _ = spark("client", "off")
+        t.ok(rc == 2 and out.strip() == "spark client -- your engine holds port %d -- stop it, or set SPARK_PORT" % port
+             and "SITE_AI_MODEL=none\n" in open(site_env).read() and eng.poll() is None,
+             "own engine: spark client off refuses while the user's server holds SPARK_PORT, nothing written", out)
+
+        # a server that asks for a key: the 401 names the remedy, the file is recorded, the probes carry it
+        keyed, kport, kurl, klog = serve("--api-key", "their-engine-key")
+        rc, out, err = spark("client", kurl)
+        rc, out, err = spark("chat", "count")
+        t.ok(rc == 1 and "the engine refused the key -- spark client URL --key-file FILE" in err
+             and "machine that serves" not in err, "own engine: a refused key names --key-file", out + err)
+        rc, out, _ = spark("client", kurl, "--key-file", tmp + "/no-such-file")
+        t.ok(rc == 2 and out.strip() == "spark client -- --key-file names a file this user can read",
+             "own engine: --key-file refuses a file that is not there", out)
+        keyfile = os.path.join(tmp, "engine-key")
+        with open(keyfile, "w") as f:
+            f.write("their-engine-key\n")
+        os.chmod(keyfile, 0o600)
+        rc, out, err = spark("client", kurl, "--key-file", keyfile)
+        t.ok(rc == 0 and "SPARK_API_KEY_FILE=%s\n" % keyfile in open(spark_env).read() and "their-engine-key" not in out,
+             "own engine: --key-file records the file in spark.env, never the key", out + err)
+        open(klog, "w").close()
+        rc, out, _ = spark("client")
+        rc2, out2, _ = spark("check", "peer")
+        rc3, out3, err3 = spark("chat", "count")
+        hits = seen(klog)
+        t.ok(re.search(r"engine +ok, my-own-7b-q4", out) and "your engine 127.0.0.1:%d ok" % kport in out2
+             and rc3 == 0 and "kept." in out3 and sum("GET /api/health Bearer their-engine-key" == h for h in hits) >= 2
+             and all(h.endswith("Bearer their-engine-key") for h in hits if " /health " not in h),
+             "own engine: with the key file every request but the open /health carries the key, the two bare probes too",
+             out + out2 + out3 + err3 + "\n".join(h for h in hits if "Bearer" not in h)[:300])
+        rc, out, _ = spark(exe=os.path.join(tmp, "ctx.py"))
+        t.ok(out.split()[0] == "4096", "own engine: /props is read with the key", out)
+
+        # the servers gone, spark client off goes back; the key file's line goes too
+        for p in (eng, keyed):
+            p.terminate()
+            p.wait(timeout=10)
+        rc, out, _ = spark("client", "off")
+        t.ok(rc == 0 and "SITE_AI_MODEL=auto\n" in open(site_env).read() and "SPARK_API_KEY_FILE=\n" in open(spark_env).read()
+             and not os.path.exists(state + "/peer"),
+             "own engine: spark client off goes back once the port is free, and drops the key file's line", out)
+
+        # ours or not: the same process under spark's engine dir IS spark's, and spark client URL stops it
+        mine, mport, murl, _mlog = serve()
+        rc, out, _ = spark("client", murl, extra={"SPARK_PORT": str(mport), "SPARK_ENGINE_DIR": theirs})
+        gone = True
+        try:
+            mine.wait(timeout=20)
+        except subprocess.TimeoutExpired:
+            gone = False
+        t.ok(rc == 0 and gone and "the engine that ran here is stopped" in out,
+             "ours: a llama-server run from spark's engine dir is spark's own, and is stopped", out)
+
+        # spark setup --engine URL, with nobody to ask
+        home2 = os.path.join(tmp, "home2")
+        os.makedirs(home2 + "/.config/spark")
+        eng2, port2, url2, log2 = serve()
+        e2 = {"HOME": home2, "XDG_CONFIG_HOME": home2 + "/.config", "XDG_STATE_HOME": home2 + "/.local/state",
+              "XDG_DATA_HOME": home2 + "/.local/share", "SPARK_PORT": str(port2)}
+        rc, out, _ = spark("setup", "--engine", "127.0.0.1:%d" % port2, extra=e2)
+        t.ok(rc == 2 and out.strip().endswith("spark setup -- --engine URL is http://host:port")
+             and not os.path.exists(home2 + "/.config/spark/site.env"),
+             "setup --engine: an address with no scheme is refused, nothing written", out)
+        rc, out, err = spark("setup", "--engine", url2 + "/", extra=e2)
+        site2 = open(home2 + "/.config/spark/site.env").read()
+        try:
+            senv2 = open(home2 + "/.config/spark/spark.env").read()
+        except OSError:
+            senv2 = ""
+        t.ok(rc == 0 and "SITE_AI_MODEL=none\n" in site2 and "SITE_PEER_AI_URL=%s\n" % url2 in site2
+             and "SPARK_API_KEY_FILE" not in senv2 and "ok     engine       %s, your own llama-server" % url2 in out
+             and "GB for models" not in out and eng2.poll() is None,
+             "setup --engine URL: the client shape for that server, no model table, no download, the server untouched",
+             out + err)
+        t.ok("ok     account      " in out and re.search(r"^\* ok$", out, re.M) and os.path.isdir(home2 + "/.local/state/spark/users"),
+             "setup --engine URL: this machine's own store is made, and the first question is answered", out)
+        rc, out, _ = spark("setup", "--yes", "--no-serve", "--model", "none",
+                           extra={"HOME": tmp + "/home3", "XDG_CONFIG_HOME": tmp + "/home3/.config",
+                                  "XDG_STATE_HOME": tmp + "/home3/.local/state", "SPARK_PORT": str(port2)})
+        t.ok(rc == 0 and "your own llama-server" not in out and "SITE_PEER_AI_URL=http" not in open(tmp + "/home3/.config/spark/site.env").read(),
+             "setup with nobody to ask and no --engine never picks a server up by itself", out)
+
+        # at a terminal setup asks once, in the join's shape, when a server
+        # that is not spark's answers on SPARK_PORT and no model is chosen
+        ask = os.path.join(tmp, "ask.py")
+        with open(ask, "w") as f:
+            f.write("import builtins, sys\nsys.path.insert(0, %r)\nfrom spark import config, setup\n"
+                    "asked = []\nbuiltins.input = lambda q='': asked.append(q) or sys.argv[1]\n"
+                    "setup._join = lambda *a: 'join ' + a[-1]\n"
+                    "opts = {'engine': None, 'model': sys.argv[2] or None}\n"
+                    "print(setup._own_engine(config.load(), 'n', 'u', opts, False, False), asked)\n" % os.path.join(REPO, "lib"))
+        e5 = {"HOME": tmp + "/home5", "XDG_CONFIG_HOME": tmp + "/home5/.config", "XDG_STATE_HOME": tmp + "/home5/.local/state",
+              "SPARK_PORT": str(port2)}
+        got = [spark("", "", exe=ask, extra=e5)[1], spark("n", "", exe=ask, extra=e5)[1],
+               spark("", "qwen3-4b", exe=ask, extra=e5)[1], spark("", "", exe=ask, extra=dict(e5, SPARK_ENGINE_DIR=theirs))[1],
+               spark("", "", exe=ask, extra=dict(e5, SPARK_PORT="9"))[1]]
+        t.ok("* a llama-server of yours answers at %s" % url2 in got[0]
+             and got[0].splitlines()[-1] == "join %s ['   use it? nothing to download [Y/n]: ']" % url2,
+             "setup at a terminal: a server of the user's on SPARK_PORT is offered once, Enter takes it", got[0])
+        t.ok(got[1].splitlines()[-1].startswith("None [") and [g.strip() for g in got[2:]] == ["None []"] * 3,
+             "setup at a terminal: n declines; a model named, spark's own engine or nothing on the port asks nothing", repr(got[1:]))
+
+        # bootstrap's token row mints nothing on a client
+        benv = dict(env, SITE_AI_MODEL="none", SITE_PEER_AI_URL=url2, HOME=tmp + "/home4", XDG_CONFIG_HOME=tmp + "/home4/.config",
+                    XDG_STATE_HOME=tmp + "/home4/.local/state")
+        os.makedirs(tmp + "/home4")
+        p = subprocess.run(["sh", os.path.join(REPO, "bootstrap.sh"), "--dry-run"], capture_output=True, text=True, env=benv, timeout=60)
+        rows = [ln for ln in p.stdout.splitlines() if re.match(r"^\w+\s+token\b", ln)]
+        t.ok(len(rows) == 1 and rows[0].startswith("skip") and "a client mints no key" in rows[0],
+             "bootstrap: a client's token row mints nothing", "\n".join(rows) + p.stderr[-200:])
+    finally:
+        for p in procs:
+            if p.poll() is None:
+                p.kill()
+                p.wait()
+        shutil.rmtree(tmp, True)
+
+
 def server_pids_cases(t):
     """v1.64: a process counts as the engine only when its program IS
     llama-server -- a shell whose command line mentions it is not."""
@@ -7917,8 +8227,11 @@ def main():
         t.ok(rc == 0 and "ana removed" in out and not os.path.exists(home + "/.local/state-users/spark/users/ana"),
              "SPARK_YES=1 answers the remove question, and the store goes whole, kept/ too", out)
         # a client with no login answers and keeps nothing: the FORGE it
-        # answers from is the account authority, nothing is minted here
-        _xdg6 = {"XDG_STATE_HOME": home + "/.local/state-client", "SITE_AI_MODEL": "none", "SITE_PEER_AI_URL": url}
+        # answers from is the account authority, nothing is minted here.
+        # The peer named is not known to be a plain engine (nothing
+        # answers there), so the rule holds; SPARK_BASE_URL answers
+        _xdg6 = {"XDG_STATE_HOME": home + "/.local/state-client", "SITE_AI_MODEL": "none",
+                 "SITE_PEER_AI_URL": "http://127.0.0.1:9"}
         rc, out, err = spark("chat", "count", extra=_xdg6)
         t.ok(rc == 0 and out.strip() and not os.path.exists(home + "/.local/state-client/spark/users")
              and not os.path.exists(home + "/.local/state-client/spark/account"),
@@ -8908,6 +9221,7 @@ site.cmd_headless([])
     continuing_tag_cases(t)
     model_name_cases(t)
     server_pids_cases(t)
+    own_engine_cases(t)
     living_core_cases(t)
     chat_awake_cases(t)
     living_awaken_cases(t)

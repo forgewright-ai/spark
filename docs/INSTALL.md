@@ -343,6 +343,22 @@ Another machine of yours:
 A client runs no model of its own. `spark client off` gives it one
 again.
 
+Your own llama-server:
+
+1. `spark client http://127.0.0.1:8080` uses a `llama-server` you
+   already run, at that address. On a new install, `spark setup --engine
+   URL` does the same.
+2. When the server asks for a key, put the key in a file. Then run
+   `spark client URL --key-file FILE`.
+3. `spark client` says whether the server answers.
+
+spark uses the one model the server has loaded. Router mode is not
+supported. spark downloads no model for it, and never starts or stops
+it. Your threads and memory stay on this machine, encrypted. `spark
+client off` goes back to a model spark runs here. Stop your server
+first when it holds port 8080, or set `SPARK_PORT`. Ollama is not
+supported yet.
+
 A browser or a phone:
 
 1. `spark serve --login` prints the page's address, the admin token and

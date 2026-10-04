@@ -319,6 +319,7 @@ def cmd_share(args):
 
 
 # ----------------------------------------------------------------- client
+CLIENT_URL = re.compile(r"^https?://[^/\s]+$")
 CLIENT_USAGE = """%s client -- use another machine's model
 
   spark client          what is set, and whether the other machine answers
@@ -326,6 +327,7 @@ CLIENT_USAGE = """%s client -- use another machine's model
   spark client off      stop; spark model auto picks a model for here
 
   to log in: spark user add NAME there, then spark user login NAME here
+  your own llama-server: spark client URL [--key-file FILE]
 """ % MARK
 
 
@@ -339,13 +341,30 @@ def cmd_client(args):
         if not cfg.client:
             say("%s client -- off: this machine runs its own model" % MARK)
             return 0
+        fh = wire.forge_health(cfg.peer_ai_url, cfg=cfg)
+        st = "" if isinstance(fh, dict) or fh == "down" else wire.health(cfg.peer_ai_url)
+        if isinstance(fh, dict) or st in ("ok", "loading"):
+            wire.note_peer(cfg, cfg.peer_ai_url, "spark" if isinstance(fh, dict) else "engine")
+        if wire.plain(cfg):
+            # the user's own llama-server: no login, nothing to run there
+            say("%s client -- of your engine at %s" % (MARK, cfg.peer_ai_url))
+            peer = "down" if fh == "down" else st
+            if st == "ok":
+                try:
+                    peer = "ok, " + config.model_name(wire.model_stem(cfg, cfg.peer_ai_url))
+                except wire.BrainError as e:
+                    peer = e.hint
+            say("  %s %-12s %s" % (glyph("ok") if peer.startswith("ok") else "!", "engine", peer))
+            me = users.account()[0]
+            say("  %s %-12s %s" % (glyph("ok"), "account", "this machine is %s" % me if me
+                                   else "made here at the first chat"))
+            return 0
         say("%s client -- of %s, nothing runs here" % (MARK, cfg.peer_ai_url))
-        fh = wire.forge_health(cfg.peer_ai_url)
         if isinstance(fh, dict):
             up = fh.get("upstream", "down")
             peer = "ok, " + config.model_name(str(fh.get("model", "?"))) if up == "ok" else "up, its model " + up
         else:
-            peer = "down" if fh == "down" else "engine " + wire.health(cfg.peer_ai_url)
+            peer = "down" if fh == "down" else "engine " + st
         say("  %s %-12s %s" % (glyph("ok") if "ok" in peer else "!", "peer", peer))
         me = users.account()[0]
         say("  %s %-12s %s" % (glyph("ok") if me else "!", "account",
@@ -357,12 +376,22 @@ def cmd_client(args):
         # choice while the shape holds). Off means off: SITE_PEER_AI_URL
         # goes too, so the other machine is never a candidate again (the
         # brain's order, wire.candidates) until `spark client URL`
+        from . import engine
+        own = engine.own_pids(cfg)
+        if [p for p in engine.server_pids(cfg.port) if p not in own]:
+            # a llama-server spark did not start holds the port: spark's
+            # own engine would collide with it, and spark never stops it
+            say("%s client -- your engine holds port %d -- stop it, or set SPARK_PORT" % (MARK, cfg.port))
+            return 2
+        was_plain = wire.plain(cfg)
         say("* this machine runs its own model now")
         set_keys(SITE_AI_MODEL="auto", SITE_PEER_AI_URL="")
-        # a joiner's shared token and a preference for the other machine
-        # go too: either would still send this machine there
+        wire.forget_peer()
+        # a joiner's shared token, the key file of the user's own engine
+        # and a preference for the other machine go too: each would still
+        # send this machine there, or hand its key to spark's own engine
         gone = {}
-        if cfg.get("SPARK_API_KEY_FILE", "") == SHARE_TOKEN:
+        if cfg.get("SPARK_API_KEY_FILE", "") == SHARE_TOKEN or (was_plain and cfg.spark_file.get("SPARK_API_KEY_FILE")):
             gone["SPARK_API_KEY_FILE"] = ""
         prefer = cfg.get("SPARK_PREFER_URL", "")
         if prefer and urlsplit(prefer).hostname == urlsplit(cfg.peer_ai_url or "").hostname:
@@ -371,19 +400,39 @@ def cmd_client(args):
             set_keys(_file=SPARK_ENV, **gone)
         from . import model
         return model.cmd_model(["auto"])
+    key_file = None
+    if "--key-file" in args:
+        i = args.index("--key-file")
+        key_file = os.path.abspath(os.path.expanduser(args[i + 1])) if i + 1 < len(args) else ""
+        args = args[:i] + args[i + 2:]
+        if (not key_file or not os.path.isfile(key_file) or not os.access(key_file, os.R_OK)
+                or re.search(r"[;`$()|&<>]", key_file)):
+            say("%s client -- --key-file names a file this user can read" % MARK)
+            return 2
+    if len(args) != 1:
+        say(CLIENT_USAGE.rstrip())
+        return 2
     url = args[0].rstrip("/")
-    if not re.match(r"^https?://[^/\s]+$", url):
+    if not CLIENT_URL.match(url):
         say("%s client -- URL is http://host:port (spark serve --login there shows it)" % MARK)
         return 2
     set_keys(SITE_PEER_AI_URL=url, SITE_AI_MODEL="none")
-    if not cfg.get("SPARK_API_KEY_FILE", "") and os.access(SHARE_TOKEN, os.R_OK):
+    wire.forget_peer()
+    wire.drop_cache()
+    if key_file:
+        set_keys(_file=SPARK_ENV, SPARK_API_KEY_FILE=key_file)
+    if not key_file and not cfg.get("SPARK_API_KEY_FILE", "") and os.access(SHARE_TOKEN, os.R_OK):
         # a shared engine on this box: use its group-readable token rather
         # than mint one of our own (which the engine would not accept)
         set_keys(_file=SPARK_ENV, SPARK_API_KEY_FILE=SHARE_TOKEN)
         say("* using this machine's shared model")
+    cfg = config.load()
+    its = wire.plain(cfg, probe=True)       # the user's own llama-server answers there
     rc = apply(["configs", "rc", "engine", "model", "services", "token"])
     if rc == 0:
-        if not users.account()[0]:
+        if its:
+            say("* using your engine at %s -- spark never starts or stops it" % url)
+        elif not users.account()[0]:
             say("* then log in: " + _login_hint(url))
         from . import engine
         # a machine that served: the unit would bring the engine back at
@@ -410,7 +459,9 @@ def cmd_client(args):
             if os.path.lexists(link):
                 os.remove(link)
                 engine.sysctl(["daemon-reload"])
-        pids = engine.server_pids(cfg.port)
+        # spark's own engine alone: a llama-server spark did not start
+        # on this port (the user's own) is never signalled
+        pids = engine.own_pids(cfg)
         if pids:
             engine.terminate(pids)
             left = engine.wait_gone(pids, 15)

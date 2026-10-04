@@ -190,7 +190,7 @@ def step_services(ctx):
             left = engine.wait_gone([pid], 10)
             if left:
                 engine.terminate(left, force=True)
-        pids = engine.server_pids(cfg.port)
+        pids = engine.own_pids(cfg)          # never a llama-server spark did not start
         if pids:
             engine.terminate(pids)
             left = engine.wait_gone(pids, 15)

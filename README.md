@@ -147,7 +147,8 @@ Tasks:
 ## What leaves this machine
 
 Your words go to the model's server. It runs on this machine, or on
-another machine of yours (`spark client URL`). What each command sends:
+another machine of yours (`spark client URL`). The same command uses
+a `llama-server` you already run. What each command sends:
 
 - `line`: the line you typed, your shell, your OS and the folder's
   path. With a question, the matching lines of your manuals, 600
