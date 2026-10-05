@@ -78,8 +78,9 @@ spark chat                      talk with the model
   machine.
 - `spark voice on`: spark reads aloud.
 - `spark awaken`: give spark a personality and a look.
-- `spark check`: what needs you. Your prompt says when something
-  breaks. `spark uninstall` removes spark.
+- `spark check`: is spark ok, and what to fix. Your prompt says when
+  something breaks. `spark status` is the full report.
+- `spark uninstall` removes spark from this machine.
 
 Every command is in `docs/CHEATSHEET.txt`.
 

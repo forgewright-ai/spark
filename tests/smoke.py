@@ -674,6 +674,18 @@ def know_answer(asked, again):
         return cmd("micro <file>", "opens the editor")
     if "knowverb" in asked:         # a spark verb the tree does not have
         return cmd("spark off" if again else "spark engine stop", "stops the engine")
+    # v1.87, the line's own failures on spark's verbs
+    if "knowslot" in asked:         # a capital slot left as written: it lands at once, never asked again
+        return cmd("spark user add NAME", "adds a user for the page")
+    if "knowsister" in asked:       # a placeholder with an apostrophe; the re-ask writes the slot
+        return cmd("spark user add NAME" if again else "spark user add <sister's_username>",
+                   "adds a user for the page")
+    if "knowflag" in asked:         # an option the verb's own help does not name
+        return cmd("spark bench" if again else "spark bench --model qwen3-4b", "measures the model's speed")
+    if "knowdash" in asked:         # a leading option spark does not answer
+        return cmd("spark ver" if again else "spark --ver", "shows the version")
+    if "knowquote" in asked:        # a quote the re-ask leaves open too
+        return cmd('echo "it is so' if again else 'echo "it is', "prints the words")
     if "knowdanger" in asked:       # the model's ! on a command the read-only proof holds
         return cmd("ls -la", "lists everything here", danger=True)
     if "knowrm" in asked:           # the model's ! on a command that writes: it stays
@@ -700,11 +712,12 @@ def know_answer(asked, again):
     return None
 
 
-def know_store(path):
+def know_store(path, more=None):
     """A tiny snapshot store for the judged line (the measuring seam
     SPARK_KNOWLEDGE_SNAPSHOT, read under SPARK_LINE_BENCH=1 alone): ps
     with BSD options, tar, micro, sv, ls -- the index built the store's
-    way, through intake's own index builder. Returns the path."""
+    way, through intake's own index builder. `more` adds entries, the
+    same shape. Returns the path."""
     entries = {
         "ps": {"kind": "program", "source": "man", "what": "process status",
                "synopsis": "ps [-AaCcEefhjlMmrSTvwXx] [-O fmt | -o fmt] [-p pid]",
@@ -734,6 +747,7 @@ def know_store(path):
                "options": {"long": [], "short": "ABCFGHLOPRSTUWabcdefghiklmnopqrstuvwxy1", "words": []},
                "lines": [["-a", "Include directory entries whose names begin with a dot"]]},
     }
+    entries.update(more or {})
     # the index built by intake's own builder (the one format there is),
     # so this store can never drift from what a machine's store holds
     from spark import intake
@@ -902,22 +916,87 @@ def knowledge_cases(t):
     t.ok(set(re.findall(r"\bgrounding\.(\w+)", psrc)) == {"shell_map"},
          "knowledge: persona takes shell_map alone from grounding", str(set(re.findall(r"\bgrounding\.(\w+)", psrc))))
 
-    # shell_map: every verb TAB completes is in it, the ones that went
-    # missing before by name; byte-stable for a tree; the prefix carries
-    # it and no hand-kept flag list
+    # shell_map (v1.87): the help's rows, each with its meaning. A head
+    # line, then one row a line -- `FORM[, FORM]... -- description`, every
+    # form written out in full -- then the tail line. The audition's grader
+    # reads the forms before a row's first ` -- `, so the shape is held
+    # here; byte-stable for a tree; the prefix carries it and no
+    # hand-kept flag list
     comp = open(os.path.join(REPO, "home", ".config", "spark", "completion.bash")).read()
     cverbs = re.search(r'COMP_CWORD" -eq 1 \]; then\s+words="([^"]*)"', comp).group(1).split()
     smap = grounding.shell_map()
-    said = set(re.findall(r"(?:\bspark |\|)([a-z]+)", smap)) | set(re.findall(r"\| (explain)\b", smap))
-    t.ok(not set(cverbs) - said and {"ver", "serve", "off", "on", "recall", "reveal"} <= said,
-         "knowledge: shell_map names every verb completion.bash completes (ver, serve, off, on, recall, reveal)",
-         "missing: %s" % sorted(set(cverbs) - said))
+    mlines = smap.split("\n")
+    mrows = [(r.split(" -- ", 1)[0].split(", "), r.split(" -- ", 1)[1]) for r in mlines[1:-1] if " -- " in r]
+    shell_forms = ("cmd 2>&1 | explain",)
+    bad = [r for r in mlines[1:-1] if " -- " not in r] + [
+        ", ".join(forms) for forms, desc in mrows
+        if not desc.strip() or " -- " in desc
+        or not all(f in shell_forms or (f.startswith("spark ") and not re.search(r"[|\[\]]|<\w", f)) for f in forms)]
+    t.ok(mlines[0] == grounding.SHELL_HEAD and " -- " not in mlines[0] and mlines[-1] == grounding.SHELL_TAIL
+         and len(mrows) > 30 and not bad,
+         "knowledge: shell_map is a head line, a help row a line as `FORM[, FORM]... -- description` (every form "
+         "in full: no a|b, no bracket, no <name>), then the settings line", "\n".join(bad) or smap[:300])
+    means = {f: desc for forms, desc in mrows for f in forms}
+    t.ok("is spark ok" in means.get("spark check", "") and "last answer" in means.get("spark last", "")
+         and "spark ver --sbom" in means and "stops" in means.get("spark client off", "")
+         and "phone" in means.get("spark serve --login", "") and "sent" in means.get("spark stats --sends", "")
+         and "prompt line" in means.get("spark off", "") and "remembers a fact" in means.get("spark memory add WORDS", "")
+         and "headless" in means.get("spark serve boot on", "") and "admin token" in means.get("spark serve --login --new", "")
+         and means.get("spark user", "").startswith("the users") and "full report" in means.get("spark status", ""),
+         "knowledge: shell_map says what the line lacked -- check is `is spark ok`, last the last answer, ver --sbom, "
+         "client off, serve --login for a phone, stats --sends, off for the prompt line, memory add, serve boot, "
+         "the bare user and status", smap)
+    # every verb the help gives a row is in the map; the two TAB completes
+    # that have none are named here, so a new verb without a row is loud
+    usrc = open(os.path.join(REPO, "bin", "spark"), encoding="utf-8").read()
+    urows = grounding._usage_lines(usrc)
+    rowed = set()
+    for left, _d in urows:
+        w = left.split()
+        if w[:1] == ["spark"]:      # the verb, and the one after a `|` (spark off | on)
+            rowed.update(x for x in w[1:2] + [w[i + 1] for i, y in enumerate(w[:-1]) if y == "|"] if x in cverbs)
+    said = {f.split()[1] for f in means if f.startswith("spark ")} | ({"explain"} if "cmd 2>&1 | explain" in means else set())
+    t.ok(rowed and rowed <= said and set(cverbs) - said == {"recall", "help"}
+         and {"ver", "serve", "off", "on", "status", "reveal", "explain"} <= said,
+         "knowledge: shell_map names every verb the help gives a row (ver, serve, off, on, status, reveal, "
+         "explain); recall and help have none", "missing: %s" % sorted(set(cverbs) - said))
+    own = {d for _l, d in urows} | {d[:-len(" (-h)")] for _l, d in urows if d.endswith(" (-h)")}
+    t.ok(all(desc in own for _f, desc in mrows) and "(-h)" not in smap,
+         "knowledge: a map row's description is the help row's own words, its (-h) pointer left out",
+         str([desc for _f, desc in mrows if desc not in own]))
     grounding._MAP.clear()
     grounding._TREE.clear()
-    t.ok(grounding.shell_map() == smap and len(smap) <= 1000 and smap.isascii()
-         and "spark look on|off|auto" in smap and "spark memory on|off" in smap and "quiet" not in smap,
-         "knowledge: shell_map is byte-stable, ASCII, <= 1000 characters, on|off filled, no spark quiet",
+    t.ok(grounding.shell_map() == smap and grounding.MAP_MAX == 3200 and len(smap) <= grounding.MAP_MAX and smap.isascii()
+         and "quiet" not in smap,
+         "knowledge: shell_map is byte-stable, ASCII, within MAP_MAX (3200) characters, no spark quiet",
          "%d: %s" % (len(smap), smap))
+    # the row reader: every word through one helper, so <words> and
+    # [words] are WORDS wherever they sit, and an optional group expands
+    t.ok(grounding._slots("spark memory [add <words>]") == ["spark", "memory", "add", "WORDS"]
+         and grounding._slots("spark edit [?] [words]") == ["spark", "edit", "[?]", "WORDS"]
+         and grounding._slots("spark read <words> < FILE") == ["spark", "read", "WORDS", "<", "FILE"]
+         and grounding._forms("spark serve [on|off]") == ["spark serve", "spark serve on", "spark serve off"]
+         and grounding._forms("spark memory [add <words>]") == ["spark memory", "spark memory add WORDS"]
+         and grounding._forms("spark do [--sandbox] <words>") == ["spark do WORDS", "spark do --sandbox WORDS"]
+         and grounding._forms("spark off | on") == ["spark off", "spark on"]
+         and grounding._forms("spark keys NAME KEY") == ["spark keys NAME KEY"],
+         "knowledge: a help row's words -- <words> and [words] are WORDS wherever they sit; a bracket group "
+         "expands to every form it writes")
+    # the tree the judge reads: a NAME slot is closed by completion's own
+    # words (keys, as a model is by its names); a two-slot row fills the
+    # next slot (serve boot on|off|status); a word its row ends with takes
+    # no word after it
+    tree = grounding.spark_tree()
+    t.ok({"ask", "recall", "height", "listen", "stop", "off", "on"} <= set(tree.words.get("keys", ()))
+         and tree.third.get(("serve", "boot")) == ("on", "off", "status")
+         and tree.third.get(("serve", "share")) == ("on", "off", "status")
+         and tree.third.get(("keys", "off")) == () and tree.third.get(("look", "auto")) == ()
+         and "client" not in tree.words and "reveal" not in tree.words,
+         "knowledge: the tree -- keys is closed by completion's words, serve boot takes on|off|status, "
+         "a switch ends its command, a URL or N slot stays open", "%s %s" % (tree.words.get("keys"), tree.third))
+    row = next(c for c in tree.clauses if c.verb == "check")
+    t.ok(row.left == "spark check" and row.desc.startswith("is spark ok") and row.slots == (),
+         "knowledge: a clause keeps its help row -- the command column and the description")
     example = open(os.path.join(REPO, "home", ".config", "spark", "spark.env.example")).read()
     keys = re.findall(r"SPARK_[A-Z_]+", grounding.SHELL_TAIL)
     t.ok(keys and all(re.search(r"^#? *%s=" % k, example, re.M) for k in keys),
@@ -1200,7 +1279,44 @@ def knowledge_cases(t):
                 ("frobnicate --now", [("missing", "frobnicate", "frobnicate")]),
                 ("kill -TERM 12", []), ("kill -FOO 12", [("flag", "kill", "-FOO")]),
                 ("cd /tmp && ls", []), ("A=1 B=2 ls", []), ("nohup ps -m &", []),
-                ('echo "unclosed', []), ("", []),
+                ("", []),
+                # v1.87, the line's own failures on spark's verbs. A quote
+                # never closed is a finding (the shell would wait), a
+                # placeholder is read first, apostrophe and all
+                ('echo "unclosed', [("quote", "echo", "quote")]),
+                ("ls $(echo", [("quote", "ls", "substitution")]),
+                ("ls `echo", [("quote", "ls", "backtick")]),
+                ("spark user add <sister's_username>", [("placeholder", "spark", "<sister's_username>")]),
+                ("grep -c \"<it's>\" f", []),
+                # a quote inside a $( ) this reader cannot follow: a
+                # second reading must agree, or the line is unknown
+                ('echo $(echo ")")', []), ('echo $(echo "(")', []), ('echo "$(basename "$f")"', []),
+                # a leading option is one bin/spark answers
+                ("spark --ver", [("verb", "spark", "--ver")]), ("spark --version", []), ("spark -h", []),
+                ("spark --help", []), ("spark -- what is this", []),
+                # the next slot, from the help's two-slot rows; a word its
+                # row ends with takes none; keys is closed by completion
+                ("spark serve boot maybe", [("verb", "spark serve boot", "maybe")]),
+                ("spark serve boot status", []), ("spark serve boot", []), ("spark serve share off", []),
+                ("spark keys off prompt_line", [("verb", "spark keys off", "prompt_line")]),
+                ("spark keys off", []), ("spark keys ask Esc a", []), ("spark keys reset", []),
+                ("spark keys prompt off", [("verb", "spark keys", "prompt")]),
+                ("spark serve off --force", []), ("spark serve on now", [("verb", "spark serve on", "now")]),
+                ("spark look off --force", []),
+                # the map's a|b notation, copied: a pipeline of nothing
+                ("spark keys off|on|NAME KEY", [("missing", "on", "on"), ("missing", "NAME", "NAME")]),
+                # a capital slot left as written is the user's own value;
+                # free words are theirs too
+                ("spark user add NAME", [("slot", "spark user", "NAME")]),
+                ("spark client URL", [("slot", "spark client", "URL")]),
+                ("spark client http://192.0.2.7:8081", []),
+                ("spark model --chat NAME", [("slot", "spark model", "NAME")]),
+                ("spark keys NAME KEY", [("slot", "spark keys", "NAME"), ("slot", "spark keys", "KEY")]),
+                ("spark memory add WORDS", [("slot", "spark memory", "WORDS")]),
+                ("spark memory add my editor is micro", []),
+                ("spark do rename the ID column to NAME", []),
+                # no `spark VERB` entry in this store: an option is unknown, never wrong
+                ("spark bench --model", []), ("spark ver --sbom", []),
             ]
             bad = []
             t0 = time.time()
@@ -1218,6 +1334,62 @@ def knowledge_cases(t):
             os.environ["PATH"] = old_path
             judge._WHICH.clear()
             judge._ENTRIES.clear()
+
+    # v1.87: a spark verb's options against the store's own `spark VERB`
+    # entry, built the way intake builds it -- from the verb's own -h
+    # (intake.spark_help, intake.spark_entry). An option no help names is
+    # a flag finding; past the first free word the text is the user's.
+    subs, sverbs = intake.spark_words()
+    sslots = intake.spark_slots()
+    sbodies, sentries = {}, []
+    with tempfile.TemporaryDirectory(prefix="spark-verbs-") as scratch:
+        for v in sverbs:
+            if v == "help":
+                continue
+            sbodies[v] = intake.spark_help(v, scratch)
+            name, what, synopsis, opts, slines = intake.spark_entry(v, sbodies[v], subs, sslots)
+            sentries.append(E(name, "spark", "tree", what, synopsis, opts, slines, "spark", ()))
+    sst = Fixture(sentries)
+    bad = []
+    for cmd, want in (
+            ("spark bench --model", [("flag", "spark bench", "--model")]),
+            ("spark bench --model qwen3-4b", [("flag", "spark bench", "--model")]),
+            ("spark stats --send", [("flag", "spark stats", "--send")]),
+            ("spark do --frob fix it", [("flag", "spark do", "--frob")]),
+            ("spark ver --sbom", []), ("spark ver --credits", []), ("spark stats --sends", []),
+            ("spark stats --week --porcelain", []), ("spark serve --login --new", []),
+            ("spark serve off --force", []), ("spark uninstall --purge", []), ("spark model -h", []),
+            ("spark bench --help", []), ("spark clear --history", []), ("spark check --history serve", []),
+            ("spark do fix the --verbose flag in main.py", []), ("spark memory add use -la with ls", []),
+            ("spark chat --thread 3 what does -x do", []),
+            ("spark model add https://example.org/m.gguf --license 'MIT https://example.org/l' --sha256 0a", []),
+            ("spark user add NAME --no-qr", [("slot", "spark user", "NAME")])):
+        got = [tuple(f) for f in judge.verdict(cmd, sst).findings]
+        if got != want:
+            bad.append("%s -> %s (want %s)" % (cmd, got, want))
+    t.ok(len(sentries) > 30 and not bad,
+         "knowledge: a spark verb's options are read against its own -h -- bench --model and stats --send are "
+         "findings, ver --sbom and serve --login --new are clean, free words are the user's", "; ".join(bad))
+    # and the tree never refuses what a verb's own help writes: every
+    # form of every -h, cut at its first slot, passes the judge
+    forms, bad = 0, []
+    for v, body in sorted(sbodies.items()):
+        for line in body.splitlines():
+            m = re.match(r"^  (spark \S.*?)(?:\s{2,}|$)", line)
+            for form in (m.group(1).split(" | ") if m else ()):
+                words = []
+                for w in (form if form.startswith("spark ") else "spark %s %s" % (v, form)).split():
+                    w = w.split("|")[0]
+                    if not re.match(r"^(?:--?)?[a-z][a-z0-9-]*$", w):
+                        break                       # a slot, a bracket, a placeholder: the form's words end
+                    words.append(w)
+                forms += 1
+                got = [tuple(f) for f in judge.verdict(" ".join(words), sst).findings]
+                if got:
+                    bad.append("%s -> %s" % (" ".join(words), got))
+    t.ok(forms > 100 and not bad,
+         "knowledge: every form a verb's own -h writes passes the judge (%d forms)" % forms, "; ".join(bad))
+    judge._ENTRIES.clear()
 
     # read_only: each stage whole through persona.proof_ok; nothing
     # unwraps a wrapper or drops a redirection. v1.53 (the maintainer's
@@ -1356,6 +1528,72 @@ def line_knowledge_cases(t, spark, home):
     t.ok(rc == 0 and len(bodies) == 2 and lines[:2] == ["cmd\tspark off", "Stops the engine."]
          and "spark has no engine command." in bodies[-1]["messages"][-1]["content"],
          "line knowledge: a spark verb the tree lacks is asked again; the passing verb lands", repr(lines))
+
+    # v1.87, the line's own failures on spark's verbs. A capital slot the
+    # model left as written is the user's own value: nothing is asked
+    # again, the line lands at once and the hint asks for it
+    rc, lines, took, bodies, err = ask("? knowslot add an account on the page for my sister")
+    rec = last_turn()
+    slot_hint = "Adds a user for the page; type the NAME before Enter."
+    t.ok(rc == 0 and len(bodies) == 1 and lines[:2] == ["cmd\tspark user add NAME", slot_hint]
+         and rec.get("reasked") == 0 and rec.get("findings") == 1,
+         "line knowledge: a slot left as written (NAME) lands at once, never asked again; the hint asks for it",
+         repr(lines) + json.dumps(rec)[:200])
+    # a placeholder with an apostrophe is read as a placeholder, not as
+    # a line nobody can read; the re-ask's slot lands with its hint
+    rc, lines, took, bodies, err = ask("? knowsister add an account on the page for my sister")
+    um = bodies[-1]["messages"][-1]["content"] if bodies else ""
+    t.ok(rc == 0 and len(bodies) == 2 and lines[:2] == ["cmd\tspark user add NAME", slot_hint]
+         and "<sister's_username> is a placeholder; write the real name, leave it out, or write ONE word in capitals" in um,
+         "line knowledge: <sister's_username> is asked again as a placeholder; the slot that comes back lands",
+         repr(lines) + repr(um[-200:]))
+    # an option the verb's own help does not name, and a leading option
+    # spark does not answer: asked again, in the help's words
+    spark_snap = know_store(os.path.join(home, "know-store-spark.json"), more={
+        "spark bench": {"kind": "spark", "source": "tree", "what": "how fast this machine runs a model",
+                        "synopsis": "spark bench [--line|tune]",
+                        "options": {"long": ["--chat", "--line", "--quick", "--spark"], "short": [], "words": ["tune"]},
+                        "lines": ["spark bench --line [N]   time N prompt-line questions (5 by default)"]}})
+    rc, lines, took, bodies, err = ask("? knowflag how fast is my model", SPARK_KNOWLEDGE_SNAPSHOT=spark_snap)
+    um = bodies[-1]["messages"][-1]["content"] if bodies else ""
+    t.ok(rc == 0 and len(bodies) == 2 and lines[:2] == ["cmd\tspark bench", "Measures the model's speed."]
+         and "--model is not in spark bench's help." in um and "manual" not in um.split(_gr.HEAD)[0],
+         "line knowledge: an option spark bench's own help lacks is asked again -- `help`, never `manual`",
+         repr(lines) + repr(um[-300:]))
+    rc, lines, took, bodies, err = ask("? knowdash what version of spark is this")
+    um = bodies[-1]["messages"][-1]["content"] if bodies else ""
+    t.ok(rc == 0 and len(bodies) == 2 and lines[:2] == ["cmd\tspark ver", "Shows the version."]
+         and "spark has no --ver option." in um,
+         "line knowledge: spark --ver is asked again; spark ver lands", repr(lines) + repr(um[-200:]))
+    # a quote never closed: asked again once; still open, it lands and
+    # the hint says what to close
+    rc, lines, took, bodies, err = ask("? knowquote print the words")
+    um = bodies[-1]["messages"][-1]["content"] if bodies else ""
+    t.ok(rc == 0 and len(bodies) == 2 and lines[0].endswith('\techo "it is so')
+         and lines[1].endswith("a quote is not closed -- close it before Enter.")
+         and "A quote in the command is never closed." in um,
+         "line knowledge: an unclosed quote is asked again; still open, the hint says to close it",
+         repr(lines) + repr(um[-200:]))
+    from spark import judge as _jdg
+    F = _jdg.Finding
+    t.ok(_cli._said(F("flag", "spark bench", "--model")) == "--model is not in spark bench's help."
+         and _cli._gap(F("flag", "spark bench", "--model")) == "the spark bench help has no --model"
+         and _cli._left(F("flag", "spark bench", "--model")) == "the spark bench help has no --model -- check it before Enter"
+         and _cli._said(F("flag", "ps", "--sort")) == "--sort is not in ps's manual here."
+         and _cli._gap(F("flag", "ps", "--sort")) == "the ps manual has no --sort"
+         and _cli._said(F("verb", "spark", "--ver")) == "spark has no --ver option."
+         and _cli._gap(F("verb", "spark", "engine")) == "spark has no engine command"
+         and _cli._said(F("verb", "spark keys off", "prompt_line")) == "prompt_line is not a word spark keys off takes."
+         and _cli._gap(F("verb", "spark serve boot", "maybe")) == "spark serve boot takes no maybe"
+         and _cli._said(F("quote", "echo", "quote")) == "A quote in the command is never closed."
+         and _cli._gap(F("quote", "ls", "substitution")) == "a $( is not closed"
+         and _cli._left(F("quote", "ls", "backtick")) == "a backtick is not closed -- close it before Enter"
+         and _cli._left(F("slot", "spark user", "NAME")) == "type the NAME before Enter"
+         and _cli._gap(F("slot", "spark client", "URL")) == "the command still holds URL"
+         and _cli._left(F("placeholder", "spark", "<sister's_username>")) == "type the sister's username before Enter"
+         and _cli._asked([F("slot", "spark user", "NAME"), F("verb", "spark", "x")]) == [F("verb", "spark", "x")],
+         "line knowledge: the new findings in words -- a spark option is in its help, never a manual; a quote "
+         "names what to close; a slot asks for its value and is never asked of the model")
 
     # a command word the manual does not list: asked again with the sv
     # manual's commands on its card
@@ -6184,6 +6422,43 @@ def main():
         t.ok(rc == 0 and "line     stub-7b-q4" in out and "chat     stub-ember-q4" in out and "'s spark on" in out
              and len(out.splitlines()) > 3,
              "spark status stays the full report: each role's model by name", out)
+        # v1.87: the report says what the last check found, one row read
+        # from the check's snapshot as the bar reads it -- nothing is run.
+        # Three states: no snapshot, rows that need you, ok and its age
+        _cj = home + "/.local/state/spark/check.json"
+        _kept = open(_cj).read() if os.path.exists(_cj) else None
+
+        _ran = []
+
+        def _check_row(snap):
+            if snap is None:
+                if os.path.exists(_cj):
+                    os.remove(_cj)
+            else:
+                with open(_cj, "w") as f:
+                    json.dump(snap, f)
+            rows = [l for l in spark("status")[1].splitlines() if l.startswith("  check ")]
+            _ran.append(os.path.exists(_cj) if snap is None else json.load(open(_cj)) != snap)
+            return rows[0] if len(rows) == 1 else repr(rows)
+        _now = int(time.time())
+        _got = [_check_row(None),
+                _check_row({"ts": _now - 12 * 60 - 5, "counts": {"ok": 30, "warn": 0, "fail": 0, "na": 9}, "rows": []}),
+                _check_row({"ts": _now - 30, "counts": {"ok": 28, "warn": 1, "fail": 1, "na": 9}, "rows": []}),
+                _check_row({"ts": _now - 30, "counts": {"ok": 29, "warn": 1, "fail": 0, "na": 9}, "rows": []}),
+                _check_row({"ts": "soon", "counts": []})]
+        if _kept is None:
+            os.remove(_cj)
+        else:
+            with open(_cj, "w") as f:
+                f.write(_kept)
+        t.ok(_got == ["  check    not run yet -- spark check", "  check    ok, 12 min ago",
+                      "  check    2 need you -- spark check", "  check    1 needs you -- spark check",
+                      "  check    not run yet -- spark check"] and not any(_ran),
+             "spark status: the check row -- not run yet, ok and its age, N need you; the snapshot is read, "
+             "no check is run", repr(_got) + repr(_ran))
+        rc, out, _ = spark("status", "-h")
+        t.ok(rc == 0 and "the last check found" in out and all(len(l) <= 80 for l in out.splitlines()),
+             "spark status -h names the check among what it shows", out)
 
         # the brain cache is keyed on the candidates
         rc, out, _ = spark("brain", "--porcelain", extra={"SPARK_BASE_URL": "http://127.0.0.1:9"})
@@ -7539,8 +7814,9 @@ def main():
         t.ok("Preferred when installed" in esys and "Flags that exist" not in esys,
              "ask keeps the full shell prefix, and no hand-kept flag list (v1.53: the judge reads the manuals)",
              esys[:200])
-        t.ok("spark's own commands" in esys and "spark look on|off|auto" in esys and "SPARK_REVEAL" in esys
-             and "spark shell on|off" not in esys and "spark quiet" not in esys,
+        t.ok("spark's own commands" in esys and "SPARK_REVEAL" in esys
+             and "\nspark look, spark look on, spark look off, spark look auto -- the look: " in esys
+             and "spark shell" not in esys and "spark quiet" not in esys,
              "ask knows spark's own commands (the machine can explain itself)", esys[:200])
         t.ok("spark's own commands" in system1, "the line prompt knows spark's own commands too", system1[:200])
         from spark import persona as _persona
@@ -9436,16 +9712,41 @@ def main():
         # one of them still answers as an alias
         _grp = re.search(r"(?m)^the model and the server\n(.*?)(?:\n\n|\Z)", out, re.S)
         t.ok(_grp is not None and _grp.group(1).splitlines() == [
-            " spark serve [on|off]         serve the model and the page on your network",
-            " spark serve boot [on|off]    start at boot",
+            " spark serve [on|off]         start or stop the engine and the page",
+            " spark serve boot [on|off]    always on: a headless box, up from boot",
             " spark serve share [on|off]   one model for every user here (Linux)",
-            " spark serve --login          the page's address and the login",
+            " spark serve --login          the page's address and login, QR for a phone",
+            " spark serve --login --new    a new admin token; old logins end",
             " spark serve --audit [N]      what the admin did",
-            " spark model [NAME|auto|none] choose the model (-h)",
+            " spark model [NAME|auto|none] choose the model this machine runs (-h)",
             " spark model --chat NAME      choose a second model for chat",
-            " spark client [URL|off]       use another machine's model",
+            " spark client [URL|off]       use another machine's model; off stops it",
             " spark user [add NAME]        the users; add shows a token once"],
              "spark help: the group 'the model and the server', line for line", _grp.group(1) if _grp else out)
+        # v1.87: the help's rows are what the prompt line knows of spark
+        # (grounding.shell_map), so each says what its command is for in
+        # the words people ask with -- in 50 characters, the left column
+        # 30 wide -- and each of these has a row of its own
+        _rows = {l[1:30].strip(): l[30:] for l in out.splitlines() if l.startswith(" ")}
+        _long = [l for l in out.splitlines() if l.startswith(" ") and len(l[30:]) > 50]
+        _cut = [l for l in out.splitlines() if l.startswith(" spark ") and l[29:30] != " "]
+        t.ok(not _long and not _cut, "spark help: every description within 50 characters, after a left column of 30",
+             "\n".join(_long + _cut))
+        t.ok(_rows.get("spark") == "what answers now"
+             and _rows.get("spark status") == "the full report, and what needs you"
+             and _rows.get("spark off | on") == "turn the prompt line (? words) off or on"
+             and _rows.get("spark memory [add <words>]") == "what spark remembers; add remembers a fact"
+             and _rows.get("spark ver --sbom") == "what spark depends on"
+             and _rows.get("spark check") == "is spark ok: every check, what to fix"
+             and _rows.get("spark uninstall [--purge]") == "remove spark from this machine (asks first)"
+             and _rows.get("spark keys [off|on]") == "the keys spark adds to your shell (-h)"
+             and _rows.get("spark keys NAME KEY") == "move a key, such as ask to Esc a"
+             and _rows.get("spark last") == "the last answer again"
+             and _rows.get("spark history") == "past threads (conversations)"
+             and _rows.get("spark stats [--week]") == "how fast the model answers"
+             and _rows.get("spark stats --sends") == "what spark sent over the network",
+             "spark help: status, ver --sbom, stats --sends and keys NAME KEY have rows of their own; check, last, "
+             "off, memory and uninstall say what they are for", out)
         t.ok(not re.search(r"\bspark (?:forge|ember|headless|share|brain)\b|\bbrain,", out),
              "spark help names no older spelling (forge, ember, headless, share, brain)", out)
         for _args, _want in ((("forge", "-h"), "spark forge -- "), (("forge", "audit", "x"), "spark serve -- --audit takes a count"),
@@ -10999,6 +11300,14 @@ site.cmd_headless([])
         want = set(_dod.OPTIONS) - {"-h", "--help"}
         t.ok(have == want, "%s completes every spark do option (do.OPTIONS)" % cf,
              "have %s, want %s" % (sorted(have), sorted(want)))
+        # v1.87: ver and stats complete the options their own usage names
+        from spark import cli as _clim, stats as _statsm
+        for verb, usage in (("ver", _clim.VER_USAGE), ("stats", _statsm.USAGE)):
+            m = re.search(r"^\s*%s\)\s+(?:words=\"|comp=\()([^\")]*)" % verb, src, re.M)
+            have = set(m.group(1).split()) if m else set()
+            want = set(re.findall(r"(?<![\w-])--[a-z][a-z-]*", usage))
+            t.ok(have == want and len(want) > 1, "%s completes every option of spark %s (its usage)" % (cf, verb),
+                 "have %s, want %s" % (sorted(have), sorted(want)))
 
     # the page's own palettes: theme.builtin is the page's alone (the
     # viewer's picker) -- every row is a name and 20 #rrggbb values, bg fg

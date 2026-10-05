@@ -468,15 +468,18 @@ def alike(question, missing, store=None, present=None, k=ALIKE):
 # ------------------------------------------------------------ spark's tree
 # spark's verbs and the words each takes, read from the tree: TAB
 # completion's table (home/.config/spark/completion.bash, which smoke's
-# drift guard holds equal to bin/spark's VERBS) and the help's left
-# column (bin/spark's USAGE_* blocks: `spark model [NAME|auto|none]`).
-# An upper-case slot takes any word; SUB is the one the help fills from
-# completion (a help line `spark VERB [SUB on|off]`).
-Clause = namedtuple("Clause", "verb slots")
+# drift guard holds equal to bin/spark's VERBS) and the help's rows
+# (bin/spark's USAGE_* blocks: `spark model [NAME|auto|none]` and the
+# words that say what it does). An upper-case slot takes any word.
+# verb: the verb a row runs; slots: its words after the verb; left and
+# desc: the help row as written, its command column and its description
+# ('' for a verb only completion names)
+Clause = namedtuple("Clause", "verb slots left desc")
 # verbs: every word bin/spark dispatches; order: the help's order;
 # words: {verb: the words its first slot takes} for a closed verb;
 # dynamic: verbs whose words the tree fills (a model);
-# third: {(verb, word): the words the next slot takes}
+# third: {(verb, word): the words the next slot takes} -- none at all
+# for a word its help row ends with
 Tree = namedtuple("Tree", "verbs order clauses words dynamic third comp")
 
 _TREE = {}
@@ -507,9 +510,9 @@ def _completion(src):
 
 
 def _usage_lines(src):
-    """The help's left column: every line of the USAGE_* blocks, cut at
-    column 30 where the description starts; a continuation line joins
-    the description of the line it continues."""
+    """The help's rows as [left, description]: every line of the USAGE_*
+    blocks, cut at column 30 where the description starts; a
+    continuation line joins the description of the line it continues."""
     rows = []
     for m in re.finditer(r'^USAGE_\w+ = """(.*?)"""', src, re.S | re.M):
         for line in m.group(1).split("\n"):
@@ -523,35 +526,66 @@ def _usage_lines(src):
     return rows
 
 
+_ROW_WORD = re.compile(r"\[[^\]]*\]|<[^>]*>|\S+")      # a bracket group, a <name>, a word
+LITERAL = re.compile(r"^[a-z][a-z0-9-]*$")             # a word a row writes as it is typed: on, boot
+
+
+def _word(s):
+    """One word of a help row as the tree and the map say it: <words>
+    and words are WORDS, any other <name> its name in capitals -- inside
+    an alternation too (N|<words>). Nothing else changes."""
+    out = []
+    for a in s.split("|"):
+        if len(a) > 2 and a[0] == "<" and a[-1] == ">":
+            a = a[1:-1].upper()
+        out.append("WORDS" if a == "words" else a)
+    return "|".join(out)
+
+
 def _slots(left):
     """`spark user [add NAME]` -> ['spark', 'user', 'add', 'NAME']: a
     bracket holding words loses its brackets, an option or `?` keeps
-    them; <words> and [words] are WORDS."""
+    them; every word goes through _word, wherever it sits."""
     out = []
-    for tok in re.findall(r"\[[^\]]*\]|<[^>]*>|\S+", left):
-        if tok.startswith("<") and tok.endswith(">") and len(tok) > 2:
-            out.append(tok[1:-1].upper())
-        elif tok.startswith("[") and tok.endswith("]"):
+    for tok in _ROW_WORD.findall(left):
+        if tok.startswith("[") and tok.endswith("]"):
             inner = tok[1:-1]
             if inner.startswith(("-", "?")):
                 out.append(tok)
             else:
-                out.extend("WORDS" if s == "words" else s for s in inner.split())
+                out.extend(_word(s) for s in inner.split())
         else:
-            out.append(tok)
+            out.append(_word(tok))
     return out
 
 
+def _forms(left):
+    """Every command a help row's left column writes, each in full:
+    `spark serve [on|off]` -> spark serve, spark serve on, spark serve
+    off. A bracket group is there or not, an alternation is one of its
+    words, and `spark off | on` is two verbs."""
+    toks = _ROW_WORD.findall(left)
+    if "|" in toks:
+        return ["%s %s" % (toks[0], _word(v)) for v in toks[1:] if v != "|"]
+    forms = [""]
+    for tok in toks:
+        if tok.startswith("[") and tok.endswith("]"):
+            alts = [""] + [" ".join(_word(w) for w in a.split()) for a in tok[1:-1].split("|")]
+        else:
+            alts = _word(tok).split("|")
+        forms = [(f + " " + a).strip() for f in forms for a in alts]
+    return list(dict.fromkeys(forms))
+
+
 def _clauses(src, cverbs):
-    """(verb order, [Clause]) from the help's left column."""
+    """(verb order, [Clause]) from the help's rows."""
     order, clauses = [], []
 
-    def add(verb, slots):
+    def add(verb, slots, left="", desc=""):
         if verb not in order:
             order.append(verb)
-        clauses.append(Clause(verb, tuple(slots)))
+        clauses.append(Clause(verb, tuple(slots), left, desc))
 
-    item = r"[a-z]+(?: \[[^\]]*\]| --[a-z]+)?"     # `stats [--week|--sends]`, `clear --history`
     for left, desc in _usage_lines(src):
         toks = _slots(left)
         if toks[:1] != ["spark"]:
@@ -559,22 +593,15 @@ def _clauses(src, cverbs):
             for v in cverbs:
                 if v not in order and not left.startswith(("?", "Esc")) \
                         and re.search(r"(?<![\w-])%s(?![\w-])" % re.escape(v), left):
-                    add(v, ["=" + left])
+                    add(v, ["=" + left], left, desc)
             continue
         rest = toks[1:]
-        listed = desc.split(" -- ")[0]
-        if not rest and re.match(r"^%s(?:, %s)*$" % (item, item), listed):
-            # a bare `spark` listing verbs: `last, history, clear --history, ...`
-            for it in listed.split(", "):
-                s = _slots(it)
-                if s[0] in cverbs:
-                    add(s[0], s[1:])
-        elif "|" in rest and all(t in cverbs for t in rest if t != "|"):
+        if "|" in rest and all(t in cverbs for t in rest if t != "|"):
             for v in rest:                       # `spark off | on`: two verbs
                 if v != "|":
-                    add(v, [])
+                    add(v, [], left, desc)
         elif rest and rest[0] in cverbs:
-            add(rest[0], rest[1:])
+            add(rest[0], rest[1:], left, desc)
     for v in cverbs:                              # every completed verb has a clause
         if v not in order:
             add(v, [])
@@ -582,7 +609,7 @@ def _clauses(src, cverbs):
 
 
 def spark_tree(repo=None):
-    """spark's verbs, the help's clauses for each, and the words each
+    """spark's verbs, the help's rows for each, and the words each
     verb's first slot takes -- read once per process for a tree."""
     repo = repo or REPO
     got = _TREE.get(repo)
@@ -597,91 +624,88 @@ def spark_tree(repo=None):
     order, clauses = _clauses(src, cverbs)
     words, third = {}, {}
     for v in order:
-        mine = [c.slots for c in clauses if c.verb == v]
-        first = [a for s in mine if s and not s[0].startswith(("=", "-", "["))
-                 for a in s[0].split("|")]
-        if any(a[:1].isupper() and a != "SUB" for a in first) and v not in dynamic:
-            continue                              # an open slot: any word
+        # the rows whose first slot is a word: not a shell form, an option
+        # or a group that holds one
+        mine = [c.slots for c in clauses if c.verb == v and c.slots
+                and not c.slots[0].startswith(("=", "-", "["))]
+        first = [a for s in mine for a in s[0].split("|")]
+        named = {a for a in first if a[:1].isupper()}
+        # an open slot takes any word (URL, N, WORDS). A NAME is one the
+        # tree lists: the names completion fills in (a model), or
+        # completion's own words (a key)
+        if named and v not in dynamic and not (named == {"NAME"} and v in cwords):
+            continue
         if v not in cwords:
             continue                              # completion lists nothing: unknown, not closed
-        closed = [w for w in dict.fromkeys([a for a in first if a.islower()] + cwords[v])
+        closed = [w for w in dict.fromkeys([a for a in first if LITERAL.match(a)] + cwords[v])
                   if not w.startswith("-")]
-        if closed:
-            words[v] = tuple(closed)
+        if not closed:
+            continue
+        words[v] = tuple(closed)
         for s in mine:
-            if s[:1] == ("SUB",) and len(s) > 1 and all(a.islower() for a in s[1].split("|")):
-                for w in cwords[v]:
-                    if w not in s[1].split("|") and w != "status":
-                        third[(v, w)] = tuple(s[1].split("|"))
+            alts = s[0].split("|")
+            if len(s) == 1:
+                # the row ends with this word: an option may follow it,
+                # never a word (`spark keys off`, `spark look auto`)
+                for a in alts:
+                    if LITERAL.match(a):
+                        third.setdefault((v, a), ())
+            elif all(LITERAL.match(a) for a in alts + s[1].split("|")):
+                # `spark serve boot [on|off]`: the next word is one of
+                # these, or status (the grammar: an alias of bare)
+                for a in alts:
+                    third[(v, a)] = tuple(dict.fromkeys(s[1].split("|") + ["status"]))
     tree = Tree(frozenset(verbs), tuple(order), tuple(clauses), words, frozenset(dynamic), third, cwords)
     _TREE[repo] = tree
     return tree
 
 
-def _map_parts(tree):
-    """One clause per help line; a verb's one-slot lines merged into one;
-    SUB filled from completion; an option (the verb's -h holds those)
-    left out; verbs the help gives no words grouped at the end."""
-    parts, bare = [], []
-    for v in tree.order:
-        out, merged = [], []
-        forms = [[x for x in c.slots if not x.startswith("[-")] for c in tree.clauses if c.verb == v]
-        # a verb whose every form is an option (`spark clear --history`)
-        # names it: the option is the verb's one way to run
-        only_opts = bool(forms) and all(s and s[0].startswith("-") for s in forms)
-        for s in forms:
-            if s and s[0].startswith("-"):
-                if only_opts:
-                    out.append("spark %s %s" % (v, " ".join(s)))
-                continue
-            if s and s[0].startswith("="):
-                out.append(s[0][1:])
-                continue
-            if "SUB" in s:
-                named = {a for x in s for a in x.split("|")}
-                s[s.index("SUB")] = "|".join(w for w in tree.comp.get(v, ())
-                                             if w not in named and w != "status")
-            if len(s) == 1:
-                if not merged:
-                    out.append(None)              # the merged clause's place
-                merged.extend(a for a in s[0].split("|") if a not in merged)
-            elif s:
-                out.append("spark %s %s" % (v, " ".join(s)))
-        # on|off is the one switch vocabulary (CLAUDE.md, the grammar):
-        # a verb completion switches is named with it
-        said = {a for c in tree.clauses if c.verb == v for x in c.slots for a in x.split("|")}
-        if {"on", "off"} <= set(tree.comp.get(v, ())) and not {"on", "off"} & said:
-            if not merged:
-                out.append(None)
-            merged.extend(("on", "off"))
-        out =["spark %s %s" % (v, "|".join(merged)) if o is None else o for o in out]
-        if out:
-            parts.extend(o for o in dict.fromkeys(out))
-        else:
-            bare.append(v)
-    if bare:
-        parts.append("spark " + "|".join(bare))
-    return parts
+def _map_lines(tree):
+    """One line per help row that runs a verb, in the help's order:
+    every command the row writes, in full, `, ` between them, then
+    ` -- ` and the help's own words for it. No a|b notation: a model
+    copies what it reads. The row's pointer to the verb's own help,
+    `(-h)`, is for a person and is left out. The bare `spark` rows
+    (what answers, a question) and the key rows run no verb and are not
+    here; a verb the help gives no row is not here either -- its own -h
+    is in the store."""
+    lines, seen = [], set()
+    for c in tree.clauses:
+        if not c.left or not c.desc or c.left in seen:
+            continue
+        seen.add(c.left)
+        forms = [c.left] if c.slots[:1] and c.slots[0].startswith("=") else _forms(c.left)
+        desc = c.desc[:-len(" (-h)")] if c.desc.endswith(" (-h)") else c.desc
+        lines.append("%s -- %s" % (", ".join(forms), desc))
+    return lines
 
 
-SHELL_HEAD = ("spark's own commands -- when the user asks how to change or run spark itself, "
-              "answer with these: ")
+# The map is three parts, a line each: the head, the help's rows
+# (_map_lines), the tail. The audition's grader reads the rows -- every
+# form before a row's first ` -- ` -- so the head carries no ` -- `.
+SHELL_HEAD = ("spark's own commands, one a line. Copy a command as it is written. "
+              "A word in capitals is the user's own value.")
 # the settings keys a question about a reply's pace, length, wait or
 # history reaches for (spark.env.example holds every key; smoke holds
 # these to it)
-SHELL_TAIL = (". Settings live in ~/.config/spark/spark.env (SPARK_REVEAL, SPARK_MAX_TOKENS, "
+SHELL_TAIL = ("Settings live in ~/.config/spark/spark.env (SPARK_REVEAL, SPARK_MAX_TOKENS, "
               "SPARK_TIMEOUT, SPARK_HISTORY) and site.env.")
+# The map rides the system prefix, which the engine caches: its size
+# costs at a cold start alone. The cap is there so a help that grows is
+# noticed (smoke holds the map under it).
+MAP_MAX = 3200
 
 _MAP = {}
 
 
 def shell_map(store=None):
-    """spark's own commands for the prefix, from the tree: byte-stable for
-    a given tree (nothing dynamic -- no model, no version), so
-    the prompt cache holds. `store` is accepted for the interface; spark's
-    verbs come from the tree, never the index."""
+    """spark's own commands for the prefix, from the tree: the help's
+    rows, each with its meaning. Byte-stable for a given tree (nothing
+    dynamic -- no model, no version), so the prompt cache holds. `store`
+    is accepted for the interface; spark's verbs come from the tree,
+    never the index."""
     got = _MAP.get(REPO)
     if got is None:
-        got = SHELL_HEAD + "; ".join(_map_parts(spark_tree())) + SHELL_TAIL
+        got = "\n".join([SHELL_HEAD] + _map_lines(spark_tree()) + [SHELL_TAIL])
         _MAP[REPO] = got
     return got

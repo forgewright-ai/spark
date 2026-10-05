@@ -62,6 +62,8 @@ _spark_complete() {
         do)      words="--sandbox --detach --porcelain --review --accept --discard" ;;
         soul)    words="show edit reset" ;;
         bench)   words="--line" ;;
+        ver)     words="--credits --sbom" ;;
+        stats)   words="--week --all --sends --porcelain" ;;
         clear)   words="--history" ;;
         client)  words="off status --key-file" ;;
         setup)   words="--yes --model --engine --name --user --no-serve" ;;

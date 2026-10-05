@@ -58,6 +58,8 @@ _spark() {
             do)      comp=(--sandbox --detach --porcelain --review --accept --discard) ;;
             soul)    comp=(show edit reset) ;;
             bench)   comp=(--line) ;;
+            ver)     comp=(--credits --sbom) ;;
+            stats)   comp=(--week --all --sends --porcelain) ;;
             clear)   comp=(--history) ;;
             client)  comp=(off status --key-file) ;;
             setup)   comp=(--yes --model --engine --name --user --no-serve) ;;

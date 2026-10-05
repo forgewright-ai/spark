@@ -41,7 +41,8 @@ LAST_USAGE = """spark last -- the last exchange
 STATUS_USAGE = """spark status -- what answers, and how this machine is set
 
   spark status                the model, the prompt line, the server, the
-                              soul, the memory and the last answer
+                              soul, the memory, the last answer and what
+                              the last check found
   spark brain --porcelain     for a program: url<TAB>model<TAB>forge|model,
                               exit 1 when nothing answers (--fresh asks again)
 """
@@ -592,19 +593,37 @@ def _nw(s):
     return _one_line(s, NOTE_WORD)
 
 
+def _own(f):
+    """Is the finding about spark itself: its words are its help's, not
+    a manual's."""
+    return f.head == "spark" or f.head.startswith("spark ")
+
+
+def _open(f):
+    """What a quote finding found open, as a person names it."""
+    return {"substitution": "a $(", "backtick": "a backtick"}.get(f.word, "a quote")
+
+
 def _said(f):
     """A finding as the re-ask tells the model: one whole sentence."""
     if f.kind == "missing":
         return "%s is not installed on this machine." % f.head
     if f.kind == "flag":
+        if _own(f):
+            return "%s is not in %s's help." % (f.word, f.head)
         return "%s is not in %s's manual here." % (f.word, f.head)
     if f.kind == "command":
         return "%s is not a command in %s's manual here." % (f.word, f.head)
     if f.kind == "verb":
         if f.head == "spark":
-            return "spark has no %s command." % f.word
+            return "spark has no %s %s." % (f.word, "option" if f.word.startswith("-") else "command")
         return "%s is not a word %s takes." % (f.word, f.head)
-    return "%s is a placeholder; write the real name, or leave it out." % f.word
+    if f.kind == "quote":
+        return "%s in the command is never closed." % _open(f).capitalize()
+    if f.kind == "slot":
+        return "%s stands for a value only the user knows; keep it as it is." % f.word
+    return ("%s is a placeholder; write the real name, leave it out, or write ONE word in capitals such as NAME."
+            % f.word)
 
 
 def _gap(f):
@@ -612,25 +631,38 @@ def _gap(f):
     if f.kind == "missing":
         return "%s is not on this machine" % _nw(f.head)
     if f.kind == "flag":
-        return "the %s manual has no %s" % (_nw(f.head), _nw(f.word))
+        return "the %s %s has no %s" % (_nw(f.head), "help" if _own(f) else "manual", _nw(f.word))
     if f.kind == "command":
         return "%s has no command %s" % (_nw(f.head), _nw(f.word))
     if f.kind == "verb":
         if f.head == "spark":
-            return "spark has no %s command" % _nw(f.word)
+            return "spark has no %s %s" % (_nw(f.word), "option" if f.word.startswith("-") else "command")
         return "%s takes no %s" % (_nw(f.head), _nw(f.word))
+    if f.kind == "quote":
+        return "%s is not closed" % _open(f)
     return "the command still holds %s" % _nw(f.word)
 
 
 def _left(f):
-    """The note on a command that still has a finding after the re-ask:
-    it lands (never blocked) and the hint says what to check."""
+    """The note on a command that lands with a finding -- still there
+    after the re-ask, or a slot, which is never asked again: it is
+    never blocked, and the hint says what to check."""
     if f.kind == "placeholder":
         name = " ".join(f.word.strip("<>[]").replace("_", " ").replace("-", " ").split())
         return "type the %s before Enter" % ("file name" if name in ("file", "filename") else _nw(name))
+    if f.kind == "slot":
+        return "type the %s before Enter" % _nw(f.word)
+    if f.kind == "quote":
+        return _gap(f) + " -- close it before Enter"
     if f.kind == "command":
         return "the %s manual has no command %s -- check it before Enter" % (_nw(f.head), _nw(f.word))
     return _gap(f) + " -- check it before Enter"
+
+
+def _asked(found):
+    """The findings a re-ask is for: a slot is the user's own value, so
+    asking the model again could only invent one."""
+    return [f for f in found if f.kind != "slot"]
 
 
 def _noted(lead, hint, note, width=HINT_COLS):
@@ -736,7 +768,7 @@ class _Early:
             if persona.missing_word(command):
                 self.off = True
                 return False
-        elif self.know.verdict(command):
+        elif _asked(self.know.verdict(command)):
             # the judge found it wrong: line 1 never shows it. The first
             # stream stops here; a re-ask's runs on, for the end weighs
             # it whole against the first
@@ -744,6 +776,11 @@ class _Early:
             if not self.retry:
                 raise _Stop()
             return False
+        elif self.know.verdict(command):
+            # a slot left as written (NAME, URL): it lands at once, and
+            # the hint asks the person for the value
+            found = self.know.verdict(command)
+            self.know.findings, self.note = len(found), _left(found[0])
         if not persona.is_dangerous(command) and "danger" not in f:
             return False
         danger = self.know.flagged(command, f.get("danger"), self.rode)
@@ -874,8 +911,11 @@ def _judged(s, reply, command, hint, text, asked, ms, know, early):
     know.findings = len(found)
     repeat = early.more and command == _last_proposed(early.history)
     rode = early.rode
-    if found or repeat:
-        said = [_said(f) for f in found] + ([REPEATED] if repeat else [])
+    if found and not _asked(found) and not repeat:
+        early.note = _left(found[0])            # a slot alone: no re-ask, the hint asks for the value
+    elif found or repeat:
+        found = _asked(found) + [f for f in found if f.kind == "slot"]     # what is asked again leads
+        said = [_said(f) for f in _asked(found)] + ([REPEATED] if repeat else [])
         # a head that is not here: the installed programs that do its job
         # are named, and their entries ride as the evidence
         gone = [f.head for f in found if f.kind == "missing"]
@@ -884,7 +924,7 @@ def _judged(s, reply, command, hint, text, asked, ms, know, early):
         if alike:
             said.append("Installed here: %s." % ", ".join("%s (%s)" % (n, w) if w else n for n, w in alike))
         ev = know.evidence(text, [f.head for f in found if f.kind != "missing"] + [n for n, _w in alike])
-        if found:
+        if _asked(found):
             early.busy.tell(_gap(found[0]) + " -- asking again")
         s.history.extend([{"role": "user", "content": asked},
                           {"role": "assistant", "content": "`%s`" % command}])
@@ -1531,6 +1571,24 @@ def live_widgets():
     return out
 
 
+def _health():
+    """spark status's check row, from the last check's snapshot as the
+    bar reads it (check.json): nothing is run. The rows that need you,
+    warn and fail, with the command that names them; else ok and the
+    snapshot's age; no snapshot is said too."""
+    from . import CHECK_JSON, check
+    try:
+        with open(CHECK_JSON, encoding="utf-8") as f:
+            d = json.load(f)
+        n = int(d["counts"]["warn"]) + int(d["counts"]["fail"])
+        age = time.time() - float(d["ts"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return "not run yet -- spark check"
+    if n:
+        return "%d need%s you -- spark check" % (n, "s" if n == 1 else "")
+    return "ok, %s ago" % check._span(age)
+
+
 def cmd_status(args, _bare=False):
     if _help(args, STATUS_USAGE):
         return 0
@@ -1591,6 +1649,7 @@ def cmd_status(args, _bare=False):
     say("  history  %s" % ("off" if cfg.history <= 0 else "%d days, %d thread%s"
                            % (cfg.history, n, "" if n == 1 else "s")))
     say("  last     " + _fmt_turn(session.last_turn(), short=True).replace("\n", "\n           "))
+    say("  check    " + _health())
     runs = bar.waiting()
     if runs:
         say("  runs     %s -- spark do --review" % runs)

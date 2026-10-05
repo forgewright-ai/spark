@@ -18,20 +18,20 @@ AT THE PROMPT
   a paste of 2 or more lines      one line about it. Nothing runs
 
 SPARK
-  spark                           what answers
-  spark status                    the model, the server, soul, memory
-  spark off | on                  turn the prompt line off or on
+  spark                           what answers now
+  spark status                    the full report, and what needs you
+  spark off | on                  turn the prompt line (? words) off or on
   spark <words>                   one answer
   spark @FILE <words>             ask about a file
   spark last                      the last answer again
   spark soul                      who spark is
   spark soul edit [--core]        change it (--core: all of it)
   spark soul reset                back to the default
-  spark memory                    the facts, numbered
-  spark memory add <words>        keep a fact (40 at most)
+  spark memory                    what spark remembers: the facts, numbered
+  spark memory add <words>        remember a fact (40 at most)
   spark memory forget N|<words>   forget one
   spark memory on|off|clear       use the facts, or forget them all
-  spark history                   past threads and remembered fixes
+  spark history                   past threads (conversations), and fixes
   spark clear --history           forget past threads (kept ones stay)
                                   and what spark check --history shows
   spark ver                       the version
@@ -85,7 +85,7 @@ READING AND WRITING
 
 THE MODEL
   spark model                     the models and their licences
-  spark model NAME | auto | none  choose one
+  spark model NAME | auto | none  choose the model this machine runs
   spark model --chat [NAME|auto|none|list]  a second model for chat
   spark model budget [N]          the share of memory models may use
   spark model add URL             your own (--license, --sha256)
@@ -95,9 +95,9 @@ THE MODEL
 THE SERVER AND OTHER MACHINES
   spark serve                     what answers, the models, the page
   spark serve on | off [--force]  start or stop the engine and the page
-  spark serve boot [on|off]       start at boot
+  spark serve boot [on|off]       always on: a headless box, up from boot
   spark serve share [on|off]      one model for every user here (Linux)
-  spark serve --login             the page's address and the admin login
+  spark serve --login             the page's address and login, QR for a phone
   spark serve --login --new       a new admin token. Old logins end
   spark serve --audit [N]         what the admin did
   spark user [list]               the users here
@@ -106,7 +106,7 @@ THE SERVER AND OTHER MACHINES
   spark user login [NAME] | logout
   spark user token --new          a new token. Other logins end
   spark user claim                move older chats into your account
-  spark client [URL|off]          use another machine's model
+  spark client [URL|off]          use another machine's model; off stops it
   spark client URL --key-file F   use your own llama-server, its key in F
   Traffic between machines is plain HTTP. The admin token can run any
   command on the machine.
@@ -120,16 +120,17 @@ THE PAGE (open the address spark serve --login prints)
 THE MACHINE
   spark setup [--yes]             name, user, model and voice
   spark setup --engine URL        set up with your own llama-server
-  spark check                     what needs you. exit 0 = nothing failed
-  spark check --all | NAME...     every row, or those rows
+  spark check                     is spark ok: every check, what to fix
+  spark check --all | NAME...     every row, or those rows. exit 0 = no failure
   spark check --history [NAME]    what changed and when, newest first
   spark check --fresh | --watch N ask again now, or every N seconds
   spark check --report            a block to paste into an issue
   spark check --porcelain         every row, tab separated
   spark update [--dry-run]        the newest signed release
-  spark uninstall [--dry-run]     remove spark (asks first). --purge: yours too
-  spark stats [--week|--all]      speed, waits and cache hits
-  spark stats --sends             what left this machine, by day
+  spark uninstall [--dry-run]     remove spark from this machine (asks first)
+  spark uninstall --purge         your soul, memory and users too
+  spark stats [--week|--all]      how fast the model answers, waits, cache hits
+  spark stats --sends             what spark sent over the network, by day
   spark bench [--spark|--chat]    measure the model's speed
   spark bench --line [N]          time N prompt-line questions
   spark bench tune [show|apply]   find the fastest settings, then use them

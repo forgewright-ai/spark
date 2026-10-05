@@ -20,6 +20,7 @@
 
 import os
 import re
+import shlex
 import shutil
 import signal
 from collections import namedtuple
@@ -29,7 +30,10 @@ from . import CONFIG_DIR, HOME, REPO, grounding, intake, persona
 # kind: missing (no such program here) | flag (not in its entry) | command
 # (a program whose manual lists its commands, given a word it does not
 # list: sv enable) | verb (not a spark verb or word) | placeholder (a
-# <word> the shell would read as a redirect)
+# <word> the shell would read as a redirect) | quote (a quote, a $( or a
+# backtick the line never closes: the shell would wait for the rest) |
+# slot (a capital word of spark's own help left as written, NAME or URL:
+# a value only the user knows, so nothing is asked again)
 Finding = namedtuple("Finding", "kind head word")
 
 
@@ -483,18 +487,16 @@ def _dynamic(verb):
     return names
 
 
-def _spark(args):
-    """spark's own verbs and words, against the tree. A question (a ?,
-    an @FILE) is words, never a verb."""
-    if not args or args[0].startswith("-"):
-        return []
-    verb = args[0]
-    if verb.startswith("@") or any("?" in a for a in args):
-        return []
-    tree = grounding.spark_tree()
-    if verb not in tree.verbs:
-        return [Finding("verb", "spark", verb)]
-    rest = args[1:]
+# every verb answers these before anything else (the grammar, rule 4),
+# whether its own -h names them or not
+_HELP = ("-h", "--help")
+_SLOT = re.compile(r"(?<![\w-])[A-Z]+(?![\w-])")       # NAME, URL, WORDS, N in a help row's slot
+
+
+def _spark_words(tree, verb, rest):
+    """The verb's own words: a first word its closed slot does not take,
+    or a word after one that takes another (`spark serve boot maybe`) or
+    none (`spark keys off x`). A slot left as written is not read here."""
     known = tree.words.get(verb)
     if not rest or rest[0].startswith("-") or known is None:
         return []
@@ -502,20 +504,66 @@ def _spark(args):
     if w not in known and not (verb in tree.dynamic and w in _dynamic(verb)):
         return [Finding("verb", "spark " + verb, w)]
     nxt = tree.third.get((verb, w))
-    if nxt and len(rest) > 1 and not rest[1].startswith("-") and rest[1] not in nxt:
+    if nxt is not None and len(rest) > 1 and not rest[1].startswith("-") and rest[1] not in nxt:
         return [Finding("verb", "spark %s %s" % (verb, w), rest[1])]
     return []
 
 
-_ANGLE = re.compile(r"(?<![<\w])<([A-Za-z][\w.-]*(?: [\w.-]+)*)>(?!>)")
+def _spark(args, store=None):
+    """spark's own verbs, words and options, against the tree and the
+    verb's own -h (the store's `spark VERB` entry: none is unknown,
+    never a finding). A question (a ?, an @FILE) is words, never a verb."""
+    if not args:
+        return []
+    verb = args[0]
+    if verb.startswith("@") or any("?" in a for a in args):
+        return []
+    tree = grounding.spark_tree()
+    if verb.startswith("-"):
+        # a leading option is one bin/spark answers itself: -h, --help,
+        # --version (`--` alone starts a question's words)
+        return [] if verb == "--" or verb in _HELP or verb in tree.verbs else [Finding("verb", "spark", verb)]
+    if verb not in tree.verbs:
+        return [Finding("verb", "spark", verb)]
+    rest = args[1:]
+    slots = [s for c in tree.clauses if c.verb == verb for s in c.slots if not s.startswith("=")]
+    caps = {a for s in slots for a in _SLOT.findall(s)}
+    lits = {a for s in slots for a in s.split("|") if grounding.LITERAL.match(a)}
+    words = [a for a in rest if not a.startswith("-")]
+    free = "WORDS" in caps
+    # a capital word of the verb's own help row, copied as it is written
+    # (`spark user add NAME`). Free words are the user's own: there the
+    # slot is read only when nothing else was written
+    held = [a for a in words if a in caps]
+    if free and any(a not in caps and a not in lits for a in words):
+        held = []
+    out = _spark_words(tree, verb, [a for a in rest if a not in held])
+    entry = _entry(store, "spark " + verb) if store is not None else None
+    if entry is not None:
+        # the options, against the verb's own -h; past the first free
+        # word everything is the user's text
+        end = next((i for i, a in enumerate(rest) if not a.startswith("-") and a not in lits), len(rest)) \
+            if free else len(rest)
+        out.extend(_flags("spark " + verb, [a for a in rest[:end] if a not in _HELP], entry))
+    return out + [Finding("slot", "spark " + verb, a) for a in dict.fromkeys(held)]
+
+
+_ANGLE = re.compile(r"(?<![<\w])<([A-Za-z][\w.'-]*(?: [\w.'-]+)*)>(?!>)")
 _SQUARE = re.compile(r"(?:^|(?<=[\s;&|(]))\[([A-Za-z][\w.-]*)\](?=$|[\s;&|)])")
 
 
 def _unquoted(line):
     """`line` with every quoted span blanked: a <div> inside quotes is a
-    pattern, not a placeholder."""
-    out, quote = [], ""
-    for ch in line:
+    pattern, not a placeholder. A <name> outside quotes stays whole, and
+    an apostrophe inside it opens no quote (<sister's_name>)."""
+    out, quote, i = [], "", 0
+    while i < len(line):
+        ch = line[i]
+        m = _ANGLE.match(line, i) if ch == "<" and not quote else None
+        if m:
+            out.append(m.group(0))
+            i = m.end()
+            continue
         if quote:
             out.append(" ")
             if ch == quote:
@@ -525,6 +573,7 @@ def _unquoted(line):
             out.append(" ")
         else:
             out.append(ch)
+        i += 1
     return "".join(out)
 
 
@@ -556,7 +605,7 @@ def _stage(words, store):
         if head in BUILTINS:
             continue
         if head in ("spark", "explain"):
-            out.extend(_spark(args) if head == "spark" else [])
+            out.extend(_spark(args, store) if head == "spark" else [])
             continue
         if "/" in head:
             if not os.path.isabs(head):
@@ -597,15 +646,51 @@ def _stage(words, store):
     return out
 
 
+def _unclosed(line, what):
+    """Is `what` (quote, substitution, backtick) really left open: this
+    module's reader reads no quote inside a $( ), so a second, plainer
+    reading must agree -- else the line is unknown, never wrong."""
+    if what == "quote":
+        try:
+            shlex.split(line)
+        except ValueError:
+            return True
+        return False
+    bare = _unquoted(line)
+    if what == "backtick":
+        return bare.count("`") % 2 == 1
+    return bare.count("(") > bare.count(")")
+
+
 def verdict(command, store=None):
     """The Verdict on one command line: what is missing, which flag no
-    manual here names, which spark verb or word the tree lacks, which
-    placeholder is left in. Never raises; a line it cannot read is ok."""
+    manual here names, which spark verb, word or option the tree and
+    the verb's own help lack, which placeholder or slot is left in, a
+    quote left open. Never raises; a line it cannot read is ok."""
     line = command or ""
     try:
-        stages = _stages(line)
-        store = grounding.default_store(store)
+        # the placeholders first: one may hold the apostrophe that
+        # leaves the line unreadable (<sister's_name>)
         found = list(_placeholders(line))
+        try:
+            stages = _stages(line)
+        except ValueError as e:
+            bare, why, stages = line, e, None
+            for f in found:
+                bare = bare.replace(f.word, " ")
+            if found:
+                try:
+                    stages = _stages(bare)
+                except ValueError as e2:
+                    why = e2
+            if stages is None:
+                # a quote, a $( or a backtick never closed: the shell
+                # would wait for the rest of it
+                what = str(why).split()[-1]
+                if _unclosed(bare, what):
+                    found.append(Finding("quote", (line.split() or [""])[0], what))
+                return Verdict(tuple(dict.fromkeys(found)))
+        store = grounding.default_store(store)
         for words in stages:
             found.extend(_stage(words, store))
     except Exception:                               # the line never breaks on the judge: unknown, not wrong

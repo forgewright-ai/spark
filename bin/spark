@@ -6,8 +6,9 @@
 #   spark do <words>           a task, one confirmed command at a time
 #   ? how big is this dir?     at the prompt: the answer lands in your line
 #   cmd 2>&1 | explain         what went wrong (explain is a symlink to spark)
-#   spark serve [on|off]       the engine and the page on the LAN, kept
-#   spark check                the machine row by row; exit 0 = every row ok
+#   spark serve [on|off]       start or stop the engine and the page
+#   spark check                is spark ok: every check, what to fix
+#   spark status               the full report, and what needs you
 #   spark bar                  the machine's one-line status
 #
 # Python 3.9+, stdlib only. The package lives in lib/spark/ beside the real
@@ -30,11 +31,13 @@ from spark import MARK, page, say  # noqa: E402
 USAGE_HEAD = """%s -- your own AI, on a machine you own: no account, no cloud, nothing leaves
 
 spark
- spark                        what answers; spark status for more
- spark off | on               turn the prompt line off or on
+ spark                        what answers now
+ spark status                 the full report, and what needs you
+ spark off | on               turn the prompt line (? words) off or on
  spark soul [edit|reset]      who spark is
- spark memory [add <words>]   what spark remembers; add keeps a fact
+ spark memory [add <words>]   what spark remembers; add remembers a fact
  spark ver [--credits]        the version
+ spark ver --sbom             what spark depends on
  spark chat [words]           talk with the model (Esc ends, /help)
  spark [@FILE] <words>        ask anything, or ask about a file
  spark do [--sandbox] <words> do a task, one command at a time
@@ -55,28 +58,30 @@ spark
  spark <TAB>                  complete commands and names
 
 the model and the server
- spark serve [on|off]         serve the model and the page on your network
- spark serve boot [on|off]    start at boot
+ spark serve [on|off]         start or stop the engine and the page
+ spark serve boot [on|off]    always on: a headless box, up from boot
  spark serve share [on|off]   one model for every user here (Linux)
- spark serve --login          the page's address and the login
+ spark serve --login          the page's address and login, QR for a phone
+ spark serve --login --new    a new admin token; old logins end
  spark serve --audit [N]      what the admin did
- spark model [NAME|auto|none] choose the model (-h)
+ spark model [NAME|auto|none] choose the model this machine runs (-h)
  spark model --chat NAME      choose a second model for chat
- spark client [URL|off]       use another machine's model
+ spark client [URL|off]       use another machine's model; off stops it
  spark user [add NAME]        the users; add shows a token once
 """ % MARK
 
 USAGE_MACHINE = """the machine
  spark setup                  set up the name, user, model and voice
- spark check                  check this machine; exit 0 when nothing fails
+ spark check                  is spark ok: every check, what to fix
  spark update [--dry-run]     update to the newest release
- spark uninstall [--purge]    remove spark (asks first)
+ spark uninstall [--purge]    remove spark from this machine (asks first)
 """
 
 USAGE_INTERFACE = """the interface
  spark bar [line]             the machine's status in one line
  spark voice [clear|on|off]   read aloud and listen (-h)
- spark keys [off|on|NAME KEY] the keys spark adds to your shell (-h)
+ spark keys [off|on]          the keys spark adds to your shell (-h)
+ spark keys NAME KEY          move a key, such as ask to Esc a
 """
 
 USAGE_LIVING = """the living prompt
@@ -88,9 +93,10 @@ USAGE_LIVING = """the living prompt
 
 USAGE_TAIL = """less often used (each has -h)
  spark last                   the last answer again
- spark history                past threads
+ spark history                past threads (conversations)
  spark clear --history        forget past threads
- spark stats [--week|--sends] speed, and what left this machine
+ spark stats [--week]         how fast the model answers
+ spark stats --sends          what spark sent over the network
  spark bench [--line|tune]    measure this machine's speed
 
 docs/

@@ -302,7 +302,8 @@ These work on a text on stdin:
 
 `spark soul edit` changes who spark is, in 4000 characters at most.
 `spark soul reset` goes back to the default. `spark memory add <words>`
-keeps a fact, up to 40. The soul and the facts go with every question.
+remembers a fact, up to 40. The soul and the facts go with every
+question.
 
 `spark history` lists past threads. `spark clear --history` forgets
 them, except the ones you kept. It also forgets what `spark check
@@ -421,7 +422,8 @@ network can read it.
 - `spark serve on` starts the engine and the page's server. They come
   back after a restart. `spark serve off` stops them.
 - `spark serve` shows what runs and where.
-- `spark serve boot on` keeps them up from boot, with nobody logged in.
+- `spark serve boot on` makes this an always-on, headless box: both
+  stay up from boot, with nobody logged in.
 
 Fedora and openSUSE turn a firewall on, firewalld, and spark does not
 change it. Other machines reach this one only after you open the port:
@@ -675,7 +677,8 @@ row. They are kept `SPARK_HISTORY` days.
 When something stops working:
 
 1. `spark check` names the row and the fix.
-2. `spark` says which model answers. `spark status` says more.
+2. `spark` says which model answers now. `spark status` is the full
+   report, with what the last check found.
 3. After the address changes: `spark serve off; spark serve on`.
 4. `SPARK_DEBUG=1 spark ...` writes `~/.local/state/spark/debug.log`.
 5. The page's server logs each request in
@@ -726,7 +729,8 @@ is the trust boundary.
 
 `spark ver --sbom` lists what spark depends on. `spark ver --credits`
 names who made spark and what it uses, with the notice. `spark stats
---sends` shows what left this machine, by destination and day.
+--sends` shows what spark sent over the network, by destination and
+day.
 
 ## How it fits together
 
