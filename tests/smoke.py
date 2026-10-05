@@ -5583,6 +5583,11 @@ def own_mark_cases(t, url):
         ("brew cleanup",
          ["brew cleanup", "brew cleanup -s", "brew cleanup --prune=all", "(brew cleanup)"],
          ["brew info cleanup", "brew search cleanup", "brew list", "brew cleanups"]),
+        ("paccache -r",
+         ["paccache -r", "paccache -rk1", "paccache -k1 -r", "paccache -ruk0", "paccache --remove",
+          "paccache -r -k1", "nice paccache -r"],
+         ["paccache -d", "paccache -dk1", "paccache -m /tmp/old", "paccache", "pacman -Qi pacman-contrib",
+          "paccache -h"]),
     )
     for _name, _dang, _safe in _cache:
         t.ok(all(_pers.is_dangerous(c) for c in _dang) and not any(_pers.is_dangerous(c) for c in _safe),
@@ -5595,7 +5600,7 @@ def own_mark_cases(t, url):
     # the five lines alone, on 100 kB of their worst shapes
     _new = [p for p in _pers.DANGER if _pers._PM_OPTS in p.pattern]
     _slow = []
-    for _h in ("apt-get", "dnf", "zypper", "pacman", "brew"):
+    for _h in ("apt-get", "dnf", "zypper", "pacman", "brew", "paccache"):
         for _w in (_h + " " + "-x " * 34000, (_h + " -x;") * 14000, (_h + " -x|") * 14000, (_h + " ") * 14000,
                    _h + " -S" + "c" * 99000 + "9", (_h + " -Sx ") * 12000, ";" * 50000 + _h + " " * 40000,
                    ("(" + _h + " -S") * 12000, _h + " " + "-" * 99000):
@@ -5604,7 +5609,7 @@ def own_mark_cases(t, url):
                 _p.search(_w[:100000])
             if time.time() - _t0 >= 1.0:
                 _slow.append((_w[:14], round(time.time() - _t0, 2)))
-    t.ok(len(_new) == 5 and not _slow, "danger: the v1.87 lines read 100 kB of their worst shapes in under 1 s",
+    t.ok(len(_new) == 6 and not _slow, "danger: the v1.87 lines read 100 kB of their worst shapes in under 1 s",
          "%d lines; %s" % (len(_new), _slow))
 
     # spark's own list: serve off joins it, --force or not; the verbs the
@@ -5830,6 +5835,9 @@ def own_mark_cases(t, url):
         sys.path.insert(0, os.path.join(REPO, "lib"))
         from spark import cli as _cl0
         t.ok(_cl0._tool_named("Use 'ls' or 'cat'.") == ["ls"] and _cl0._tool_named("USE ls here") == ["ls"]
+             and _cl0._tool_named("You will need to use the 'ls' command manually.") == ["ls"]
+             and _cl0._tool_named("use a tool like ls or cat from your terminal") == ["ls"]
+             and _cl0._tool_named("use the force") == []
              and _cl0._tool_named("use spark check") == [] and _cl0._tool_named("be of use to you") == [],
              "line: the cue is read in any case, a quote before the program allowed; spark is not a program of the "
              "system", repr(_cl0._tool_named("Use 'ls' or 'cat'.")))

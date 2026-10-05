@@ -55,7 +55,7 @@ asked again if it still has none.
 - More commands carry `!`: a package cache cleaned, on every system.
   That is `apt clean` and `apt autoclean`, with `apt-get` and
   `aptitude` too, `dnf clean`, `yum clean`, `zypper clean`, `zypper
-  cc`, `pacman -Sc` and `brew cleanup`.
+  cc`, `pacman -Sc`, `paccache -r` and `brew cleanup`.
 - `spark serve off` carries `!` too: it stops the engine and the page.
   `spark do` asks you to type `yes` for it, and the page asks you to
   confirm.

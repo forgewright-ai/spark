@@ -488,14 +488,17 @@ ASK_AGAIN = "Answer again with a command that works on this machine."
 OWN_AGAIN = "That answer names one of spark's own commands. Reply kind=cmd with the command itself in `command`."
 OWN_TOLD = "that is one of spark's commands -- asking for it"
 # The same for an answer that tells the user which program to run (`please
-# use wget or curl`): the word right after use, run, try, type, execute or
-# via, when it is a program on this machine. The second reply lands when
+# use wget or curl`, `use the 'crontab' command`, `use a tool like scp`):
+# the word after use, run, try, type, execute or via, past an article and
+# `tool like`, when it is a program on this machine. The second reply lands when
 # the judge clears it and it is a command of the system, not spark's:
 # the answer may have named the wrong program (`use xbps-install` where
 # xbps-remove does the job).
 TOLD_AGAIN = "That answer tells the user which command to run. Reply kind=cmd with the command itself in `command`."
 TOLD_TOLD = "that names a command -- asking for it"
-TOLD_CUE = re.compile(r"\b(?:use|using|run|running|try|type|execute|via)\s+[`'\"]?([A-Za-z0-9][\w.+-]*)", re.I)
+TOLD_CUE = re.compile(r"\b(?:use|using|run|running|try|type|execute|via)\s+(?:(?:the|a|an)\s+)?"
+                      r"(?:(?:tool|command|program|utility)\s+(?:like|called|named)\s+)?"
+                      r"[`'\"]?([A-Za-z0-9][\w.+-]*)", re.I)
 OWN_NAMED = re.compile(r"(?<![\w/.-])(?:(the|a|an|this|that|your|its|my)\s+)?spark\s+([a-z][a-z-]*)")
 
 

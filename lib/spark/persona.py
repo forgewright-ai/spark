@@ -178,6 +178,9 @@ _DANGER = [
     _CMD + r"pacman\s+" + _PM_OPTS + r"(?:-S[a-zA-Z]*c|--clean\b)",   # pacman -Sc, -Scc, --clean: any -S cluster
                                                   # holding c (in -Qc and -Rc the c is another word)
     _CMD + r"brew\s+" + _PM_OPTS + r"cleanup(?=[\s;&|)]|$)",   # brew cleanup: old versions and the download cache
+    _CMD + r"paccache\s+" + _PM_OPTS + r"(?:-[a-zA-Z]*r[a-zA-Z0-9]*|--remove)(?=[\s;&|)]|$)",
+                                                  # paccache -r, -rk1, --remove: Arch's cache cleaner (-d only
+                                                  # lists, -m moves: neither is marked)
 ]
 # rm with a recursive (or force) flag, short or long -- ONE pattern pair,
 # shared by is_dangerous and blast, so the danger mark and the blast count

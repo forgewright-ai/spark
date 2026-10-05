@@ -947,8 +947,9 @@ and may change freely.
    deep to read (`TOO_DEEP`). `persona._DANGER` is the list of named
    lines, a pattern each. A package cache cleaned is one on every
    family: `apt`, `apt-get` and `aptitude` with `clean` or `autoclean`,
-   `dnf` and `yum` with `clean`, `zypper` with `clean` or `cc`, `pacman
-   -Sc` and `brew cleanup`. Its options are read only before the
+   `dnf` and `yum` with `clean`, and `zypper` with `clean` or `cc`.
+   So are `pacman -Sc`, `paccache -r` and `brew cleanup`. Its options
+   are read only before the
    command word, so `dnf search clean` stays plain. spark's own lines
    hold the verbs that destroy or end logins, and `spark serve off`,
    which stops the engine and the page. They hold a sandboxed run
