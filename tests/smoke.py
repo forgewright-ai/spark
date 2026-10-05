@@ -59,6 +59,9 @@ def read_thread(home, path):
     return [json.loads(r.decode("utf-8")) for r in vault.read_sealed(path, dk)]
 TOKEN = "stub-token"
 TIMINGS = {"prompt_n": 40, "prompt_per_second": 96.5, "predicted_n": 12, "predicted_per_second": 12.3, "cache_n": 30}
+# the smallest schema inside wire.gbnf's subset, for a request that only needs to be a JSON one
+TOY_SCHEMA = {"type": "object", "properties": {"a": {"type": "string"}}, "required": ["a"]}
+
 STATE = {"mode": "ok", "hits": 0}
 
 
@@ -204,7 +207,7 @@ class Stub(BaseHTTPRequestHandler):
         STATE.setdefault("bodies", []).append(body)   # every request, for the editor's checks
         STATE.setdefault("lengths", []).append(n)     # and what each weighed on the wire, in step with bodies
         system = messages[0]["content"]
-        if "think_after" in STATE and body.get("response_format"):
+        if "think_after" in STATE and body.get("grammar"):
             # think_after N: N requests shaped by a schema pass, then
             # the next one thinks (a turn's second ask, say)
             if STATE["think_after"] > 0:
@@ -212,7 +215,7 @@ class Stub(BaseHTTPRequestHandler):
             else:
                 del STATE["think_after"]
                 STATE["think_out"] = 1
-        if STATE.get("think_out") and body.get("response_format"):
+        if STATE.get("think_out") and body.get("grammar"):
             # a thinking model that ignores the switch, on the next N
             # requests shaped by a schema (think_out is the count), and
             # then it answers: the whole cap spent in reasoning_content,
@@ -222,7 +225,7 @@ class Stub(BaseHTTPRequestHandler):
                 return self._send(200, {"choices": [{"message": {"content": "", "reasoning_content": "Let me think."},
                                                      "finish_reason": "length"}], "timings": TIMINGS})
             return self._sse_thought()
-        if STATE.get("cut_out") and body.get("response_format") and not body.get("stream"):
+        if STATE.get("cut_out") and body.get("grammar") and not body.get("stream"):
             # the cap ended the JSON mid-string: a long command written as
             # a here-document (the 26B, /do in chat, 2026-10-01)
             return self._send(200, {"choices": [{"message": {"content": '{"kind": "cmd", "command": "cat << EOF > s'},
@@ -237,7 +240,7 @@ class Stub(BaseHTTPRequestHandler):
             return self._send(200, {"choices": [{"message": {"content": json.dumps({"language": "Portuguese", "kind": "fiction"})}}], "timings": TIMINGS})
         if "turn it into practice questions" in system:   # spark drill (contract 13), a JSON reply
             return self._send(200, {"choices": [{"message": {"content": json.dumps(drill_items(user))}}], "timings": TIMINGS})
-        if body.get("stream") and body.get("response_format"):   # spark line (contract 4): its JSON, streamed
+        if body.get("stream") and body.get("grammar"):   # spark line (contract 4): its JSON, streamed
             if STATE.get("no_slot") and "id_slot" in body:     # a server that refuses the slot field
                 return self._send(400, {"error": {"message": "unknown field id_slot"}})
             doc = json.dumps(answer_json(messages))
@@ -1776,7 +1779,7 @@ def engine_wire_cases(t, spark, home, url):
     n0 = len(STATE["bodies"])
     rc, out, _ = spark("what", "does", "this", "mean")
     plain = STATE["bodies"][n0:]
-    t.ok(rc == 0 and len(plain) == 1 and plain[0].get("stream") and "response_format" not in plain[0]
+    t.ok(rc == 0 and len(plain) == 1 and plain[0].get("stream") and "grammar" not in plain[0] and "response_format" not in plain[0]
          and "chat_template_kwargs" not in plain[0] and "reasoning_budget_tokens" not in plain[0],
          "thinking: a streamed answer with no schema keeps the model's default", json.dumps(plain)[:300])
 
@@ -1795,7 +1798,7 @@ def engine_wire_cases(t, spark, home, url):
             import types as _types
             cfg = _types.SimpleNamespace(token_file=os.path.join(home, "no-token"), timeout=5)
             _wire.chat_json(cfg, url, [{"role": "system", "content": "x"}, {"role": "user", "content": "y"}],
-                            {"type": "object"})
+                            TOY_SCHEMA)
             said = "no error"
         except _wire.BrainError as e:
             said = "%s: %s" % (e.kind, e.hint)
@@ -1820,7 +1823,7 @@ def engine_wire_cases(t, spark, home, url):
         import types as _types
         cfg = _types.SimpleNamespace(token_file=os.path.join(home, "no-token"), timeout=5)
         _wire.chat_json(cfg, url, [{"role": "system", "content": "x"}, {"role": "user", "content": "y"}],
-                        {"type": "object"}, max_tokens=600)
+                        TOY_SCHEMA, max_tokens=600)
         said = "no error"
     except _wire.BrainError as e:
         said = "%s: %s" % (e.kind, e.hint)
@@ -2038,10 +2041,10 @@ def empty_answer_cases(t, spark, home, url, env):
         b0, l0 = len(STATE["bodies"]), len(STATE["lengths"])
         STATE["think_out"] = 1
         try:
-            _wire.chat_stream(cfg, url, msgs, fed.append, schema={"type": "object"}, sent=sent.append)
+            _wire.chat_stream(cfg, url, msgs, fed.append, schema=TOY_SCHEMA, sent=sent.append)
         except _wire.BrainError as e:
             said = (e.kind, e.hint, e.thought, e.clean, e.capped)
-        text, timings = _wire.chat_stream(cfg, url, msgs, fed.append, schema={"type": "object"}, sent=sent.append,
+        text, timings = _wire.chat_stream(cfg, url, msgs, fed.append, schema=TOY_SCHEMA, sent=sent.append,
                                           extra={"temperature": 0.9, "seed": 7})
         probe = STATE["bodies"][b0:]
         weighed = STATE["lengths"][l0:]
@@ -2266,7 +2269,7 @@ class H(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header("Content-Type", "text/event-stream")
             self.end_headers()
-            for d in ({"choices": [{"delta": {"content": doc if "response_format" in body else "kept."}}]},
+            for d in ({"choices": [{"delta": {"content": doc if "grammar" in body else "kept."}}]},
                       {"choices": [{"delta": {}, "finish_reason": "stop"}], "timings": {}}):
                 self.wfile.write(("data: " + json.dumps(d) + "\n\n").encode())
             self.wfile.write(b"data: [DONE]\n\n")
@@ -4427,9 +4430,9 @@ def living_awaken_cases(t):
     _wire._send = lambda cfg, url, data, timeout, forge=False: sent.append(json.loads(data)) or _Reply()
     try:
         for forge in (True, False):
-            _wire.chat_json(_cfgm.load(), "http://127.0.0.1:9", [], {"type": "object"}, forge=forge, model="ember",
+            _wire.chat_json(_cfgm.load(), "http://127.0.0.1:9", [], TOY_SCHEMA, forge=forge, model="ember",
                             identity=False)
-        _wire.chat_json(_cfgm.load(), "http://127.0.0.1:9", [], {"type": "object"}, forge=True, model="ember")
+        _wire.chat_json(_cfgm.load(), "http://127.0.0.1:9", [], TOY_SCHEMA, forge=True, model="ember")
     finally:
         _wire._send = real_send
     t.ok([b.get("identity", "none") for b in sent] == [False, "none", "none"],
@@ -5743,6 +5746,66 @@ def own_mark_cases(t, url):
              repr((out, out2)))
 
 
+def grammar_cases(t):
+    """v1.87: a request shaped by a schema carries a GRAMMAR (wire.gbnf).
+    llama-server binds a response_format only after a template's thought
+    channel closes; a grammar binds from the first token. The line's
+    grammar is pinned whole: a change to it is proven on a live engine
+    first (every schema below answered valid JSON there, 2026-10-04)."""
+    sys.path.insert(0, os.path.join(REPO, "lib"))
+    from spark import awaken as _aw, do as _do, persona as _pe, wire as _wi
+    want = (
+        'root ::= obj\n'
+        'obj-kind ::= "\\"cmd\\"" | "\\"answer\\""\n'
+        'obj ::= "{" ws "\\"kind\\"" ws ":" ws obj-kind ws "," ws "\\"danger\\"" ws ":" ws boolean ws "," ws '
+        '"\\"command\\"" ws ":" ws string ws "," ws "\\"hint\\"" ws ":" ws string ws "," ws '
+        '"\\"proof\\"" ws ":" ws string ws "}"\n'
+        'ws ::= | " " | "\\n" [ \\t]{0,20}\n'
+        'string ::= "\\"" char* "\\""\n'
+        'char ::= [^"\\\\\\x7F\\x00-\\x1F] | "\\\\" (["\\\\bfnrt/] | "u" [0-9a-fA-F]{4})\n'
+        'boolean ::= "true" | "false"\n'
+        'integer ::= "-"? ("0" | [1-9] [0-9]{0,15})\n'
+        'number ::= integer ("." [0-9]{1,16})? ([eE] [-+]? [0-9]{1,3})?\n')
+    got = _wi.gbnf(_pe.LINE_SCHEMA)
+    t.ok(got == want, "grammar: the line's schema is this grammar, byte for byte", got)
+    kit = {"EYES": ["o.O", "^_^", '"q"'], "MOUTH": ["-", "\\"]}
+    made = {}
+    for name, sch in (("do", _do.DO_SCHEMA), ("paste", _pe.PASTE_SCHEMA), ("read", _pe.READ_SCHEMA),
+                      ("recall", _pe.RECALL_SCHEMA), ("drill", _pe.DRILL_SCHEMA), ("awaken", _aw._schema(kit))):
+        try:
+            made[name] = _wi.gbnf(sch)
+        except ValueError as e:
+            made[name] = "ValueError: %s" % e
+    t.ok(all(g.startswith("root ::= obj\n") and g.endswith(_wi.GRAMMAR_BASE) and g.isascii() for g in made.values()),
+         "grammar: every schema spark sends has one (do, paste, read, recall, drill, awaken)",
+         json.dumps({k: v[:60] for k, v in made.items()}))
+    t.ok('obj-kind ::= "\\"cmd\\"" | "\\"done\\""' in made["do"]
+         and 'obj-candidates ::= "[" ws (string (ws "," ws string)*)? ws "]"' in made["recall"]
+         and 'obj-items-item ::= "{" ws "\\"question\\"" ws ":" ws string ws "," ws "\\"answer\\"" ws ":" ws string ws "}"'
+         in made["drill"]
+         and 'obj-eyes ::= "\\"o.O\\"" | "\\"^_^\\"" | "\\"\\\\\\"q\\\\\\"\\""' in made["awaken"]
+         and 'obj-mouth ::= "\\"-\\"" | "\\"\\\\\\\\\\""' in made["awaken"],
+         "grammar: an enum is its strings, an array its item shape, a quote or a backslash in a value escaped twice",
+         json.dumps(made)[:400])
+    bad = []
+    for sch in ({"type": "object", "properties": {"a": {"type": "string"}, "b": {"type": "string"}}, "required": ["a"]},
+                {"type": "object", "properties": {"a": {"type": "null"}}, "required": ["a"]},
+                {"type": "object", "properties": {"a": {"enum": [1, 2]}}, "required": ["a"]},
+                {"type": "object", "properties": {}, "required": []},
+                {"type": "string", "enum": []}):
+        try:
+            _wi.gbnf(sch)
+            bad.append(sch)
+        except ValueError:
+            pass
+    t.ok(not bad, "grammar: a shape outside the subset is refused, never loosened", json.dumps(bad))
+    body = _wi._json_body({"messages": []}, _pe.LINE_SCHEMA)
+    t.ok(body.get("grammar") == want and "response_format" not in body and "json_schema" not in body
+         and body.get("chat_template_kwargs") == {"enable_thinking": False} and body.get("reasoning_budget_tokens") == 0,
+         "grammar: a JSON request carries the grammar and the no-thinking switches, never a response_format",
+         json.dumps({k: v for k, v in body.items() if k != "grammar"}))
+
+
 def main():
     srv, url = start_stub()
     t = T()
@@ -6148,12 +6211,14 @@ def main():
         # model writes it (kind, danger, command, hint, proof), stream on,
         # the line's own slot
         _lb = STATE["bodies"][-1]
-        _sch = _lb.get("response_format", {}).get("json_schema", {}).get("schema", {})
-        t.ok(_lb.get("stream") is True and _lb.get("id_slot") == 0
-             and list(_sch.get("properties", {})) == ["kind", "danger", "command", "hint", "proof"]
-             and _sch.get("required") == ["kind", "danger", "command", "hint", "proof"],
-             "line: streamed, slot 0, the schema ordered kind, danger, command, hint, proof",
-             json.dumps({k: _lb.get(k) for k in ("stream", "id_slot")}) + json.dumps(_sch)[:200])
+        # v1.87: the schema goes as a grammar (it binds from the first
+        # token; a response_format waits for a thought to end)
+        _gr = _lb.get("grammar", "")
+        _at = [_gr.find('"\\"%s\\""' % k) for k in ("kind", "danger", "command", "hint", "proof")]
+        t.ok(_lb.get("stream") is True and _lb.get("id_slot") == 0 and "response_format" not in _lb
+             and _gr.startswith("root ::= obj\n") and -1 not in _at and _at == sorted(_at),
+             "line: streamed, slot 0, the schema as a grammar ordered kind, danger, command, hint, proof",
+             json.dumps({k: _lb.get(k) for k in ("stream", "id_slot")}) + _gr[:300])
 
         def _timed(words):
             """spark line's lines, each with the seconds it took to arrive"""
@@ -6964,7 +7029,7 @@ def main():
         t.ok(rc == 0 and out == "1. line 2: typo\n", "edit: ? streams the answer", repr(out))
         t.ok(len(STATE["bodies"]) == n0 + 2, "edit: a question is two requests -- the reading, then the answer", str(len(STATE["bodies"]) - n0))
         reading, answer = STATE["bodies"][-2], STATE["bodies"][-1]
-        t.ok(reading.get("model") == "spark" and "json_schema" in json.dumps(reading.get("response_format", {})), "edit: the reading is a spark-role JSON request", json.dumps(reading)[:200])
+        t.ok(reading.get("model") == "spark" and '\\"language\\"' in reading.get("grammar", ""), "edit: the reading is a spark-role JSON request", json.dumps(reading)[:200])
         t.ok(reading["messages"][-1]["content"] == "Some prose.\n", "edit: the reading gets the text alone", repr(reading["messages"][-1]["content"]))
         umsg = answer["messages"][-1]["content"]
         t.ok(umsg.startswith("why\n\nYou read this as: Portuguese, fiction.\nText (markdown):\nSome prose."), "edit: the answer restates the reading", repr(umsg[:120]))
@@ -7418,7 +7483,7 @@ def main():
              and isinstance(rt.get("ms"), int) and not any(k in rt for k in ("line", "answer", "context")),
              "read: the reading pass is a turn of its own, numbers only, right before the answer's", json.dumps(rt)[:200])
         rb = STATE["bodies"][-2]        # the reading pass, right before the answer
-        t.ok(rb.get("model") == "spark" and "json_schema" in str(rb) and rb.get("temperature") == 0,
+        t.ok(rb.get("model") == "spark" and "grammar" in rb and rb.get("temperature") == 0,
              "read: the reading pass is greedy, so the restated reading is the same bytes on the same source",
              "%s %s" % (rb.get("model"), rb.get("temperature")))
         rc, _out, _ = spark("read", stdin=READ_TEXT)
@@ -11388,6 +11453,7 @@ site.cmd_headless([])
     handback_cases(t)
     check_history_cases(t)
     own_mark_cases(t, url)
+    grammar_cases(t)
     srv.shutdown()
     print("smoke: %s" % ("all ok" if not t.fail else "%d FAILED" % t.fail))
     return 1 if t.fail else 0

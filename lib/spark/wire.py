@@ -6,6 +6,7 @@
 import collections
 import json
 import os
+import re
 import time
 import urllib.error
 import urllib.request
@@ -603,9 +604,15 @@ def _send(cfg, url, data, timeout, forge=False, sent=None):
 # is not a field llama-server reads; `reasoning_budget_tokens` is.) A
 # streamed chat or explain carries no schema and keeps the default.
 # A model may think past both (Gemma 4 E4B, 14 of 551 prompt-line
-# questions): a streamed request with a schema stops at the first
-# reasoning delta (chat_stream), and the error says whether asking again
-# repeats nothing (_thought).
+# questions). llama-server binds a `response_format` schema only after
+# the template's thought channel closes, so the model was free to open
+# it and spend the cap there. The schema therefore goes as a GRAMMAR
+# (gbnf, below): a `grammar` binds from the first token, the reply opens
+# with `{`, and a thought cannot start. Measured on that model, on the
+# questions that had come back empty: 0 of 120 with the grammar, 15 of
+# 72 without. The net stays: a streamed request with a schema stops at
+# the first reasoning delta (chat_stream), and the error says whether
+# asking again repeats nothing (_thought).
 NO_THINKING = {"enable_thinking": False}
 NO_THINK_BUDGET = {"reasoning_budget_tokens": 0}
 THOUGHT_OUT = "the model gave no answer -- ask again"
@@ -621,9 +628,76 @@ def _thought(clean):
     return e
 
 
+# The grammar's fixed rules, llama.cpp's GBNF. `ws` is what may stand
+# between two tokens of the object: nothing, one space, or a line break
+# and its indent -- bounded, so a model cannot write white space to the
+# cap. A string is JSON's: no raw control character, the JSON escapes.
+GRAMMAR_BASE = (
+    'ws ::= | " " | "\\n" [ \\t]{0,20}\n'
+    'string ::= "\\"" char* "\\""\n'
+    'char ::= [^"\\\\\\x7F\\x00-\\x1F] | "\\\\" (["\\\\bfnrt/] | "u" [0-9a-fA-F]{4})\n'
+    'boolean ::= "true" | "false"\n'
+    'integer ::= "-"? ("0" | [1-9] [0-9]{0,15})\n'
+    'number ::= integer ("." [0-9]{1,16})? ([eE] [-+]? [0-9]{1,3})?\n'
+)
+_GRAMMARS = {}
+
+
+def _lit(value):
+    """A JSON value as a GBNF literal: its JSON text, quoted once more."""
+    return json.dumps(json.dumps(value))
+
+
+def gbnf(schema):
+    """The grammar (GBNF) that holds a reply to `schema`, for the subset
+    spark's own schemas use: an object's properties in the order listed,
+    every one of them; a string, a string enum, a boolean, an integer, a
+    number; an array of one item shape. A shape outside it raises
+    ValueError: a schema spark cannot hold the model to fails in a test,
+    it never loosens in silence."""
+    key = json.dumps(schema, sort_keys=False)
+    got = _GRAMMARS.get(key)
+    if got is not None:
+        return got
+    rules = {}
+
+    def rule(node, name):
+        if not isinstance(node, dict):
+            raise ValueError("schema %s: not an object" % name)
+        kind = node.get("type")
+        if "enum" in node:
+            if not node["enum"] or not all(isinstance(v, str) for v in node["enum"]):
+                raise ValueError("schema %s: an enum of strings" % name)
+            body = " | ".join(_lit(v) for v in node["enum"])
+        elif kind == "object":
+            props = list((node.get("properties") or {}).items())
+            if not props or set(node.get("required", ())) != {k for k, _ in props}:
+                raise ValueError("schema %s: every property is required" % name)
+            parts = ['"{" ws']
+            for i, (prop, sub) in enumerate(props):
+                parts.append('%s ws ":" ws %s' % (_lit(prop), rule(sub, "%s-%s" % (name, re.sub(r"[^A-Za-z0-9]", "-", prop)))))
+                parts.append('ws "," ws' if i < len(props) - 1 else 'ws "}"')
+            body = " ".join(parts)
+        elif kind == "array":
+            item = rule(node.get("items") or {}, name + "-item")
+            body = '"[" ws (%s (ws "," ws %s)*)? ws "]"' % (item, item)
+        elif kind in ("string", "boolean", "integer", "number"):
+            return kind
+        else:
+            raise ValueError("schema %s: type %r" % (name, kind))
+        rules[name] = body
+        return name
+
+    top = rule(schema, "obj")
+    got = "\n".join(["root ::= %s" % top] + ["%s ::= %s" % kv for kv in rules.items()]) + "\n" + GRAMMAR_BASE
+    _GRAMMARS[key] = got
+    return got
+
+
 def _json_body(body, schema):
-    """A request's JSON shape: the schema, and no thinking before it."""
-    body["response_format"] = {"type": "json_schema", "json_schema": {"name": "spark_line", "schema": schema}}
+    """A request's JSON shape: the schema as a grammar (it binds from the
+    first token), and no thinking before it."""
+    body["grammar"] = gbnf(schema)
     body["chat_template_kwargs"] = dict(NO_THINKING)
     body.update(NO_THINK_BUDGET)
     return body
