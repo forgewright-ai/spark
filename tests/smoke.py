@@ -720,6 +720,8 @@ def know_answer(asked, again):
     if "knowsv" in asked:           # a command word sv's manual does not list (knowsvstuck: kept)
         return cmd("ln -s /etc/sv/sshd /var/service/" if again and "knowsvstuck" not in asked else "sv enable sshd",
                    "enables sshd at boot")
+    if "knowgone" in asked:         # v1.87: a head not on this machine, and nothing here does its job
+        return cmd("sockview -l" if again else "frobzap --record", "does the thing")
     if "knowmissing" in asked:      # a head not on this machine; the re-ask names the installed one
         return cmd("sockview -l" if again else "frobstat -tlnp", "lists the listening ports")
     if "knowgit" in asked:          # git's own alias is a command (knowgitalias); a word that is none is not
@@ -960,7 +962,7 @@ def knowledge_cases(t):
          and "prompt line" in means.get("spark off", "") and "remembers a fact" in means.get("spark memory add WORDS", "")
          and "headless" in means.get("spark serve boot on", "") and "every boot" in means.get("spark serve boot on", "")
          and "left this machine" in means.get("spark stats --sends", "") and "admin token" in means.get("spark serve --login --new", "")
-         and means.get("spark user", "").startswith("the users") and "full report" in means.get("spark status", ""),
+         and means.get("spark user", "").startswith("the page's users") and "full report" in means.get("spark status", ""),
          "knowledge: shell_map says what the line lacked -- check is `is spark ok`, last the last answer, ver --sbom, "
          "client off, serve --login for a phone, stats --sends, off for the prompt line, memory add, serve boot, "
          "the bare user and status", smap)
@@ -984,9 +986,9 @@ def knowledge_cases(t):
          str([desc for _f, desc in mrows if desc not in own]))
     grounding._MAP.clear()
     grounding._TREE.clear()
-    t.ok(grounding.shell_map() == smap and grounding.MAP_MAX == 3400 and len(smap) <= grounding.MAP_MAX and smap.isascii()
+    t.ok(grounding.shell_map() == smap and grounding.MAP_MAX == 3600 and len(smap) <= grounding.MAP_MAX and smap.isascii()
          and "quiet" not in smap,
-         "knowledge: shell_map is byte-stable, ASCII, within MAP_MAX (3400) characters, no spark quiet",
+         "knowledge: shell_map is byte-stable, ASCII, within MAP_MAX (3600) characters, no spark quiet",
          "%d: %s" % (len(smap), smap))
     # the row reader: every word through one helper, so <words> and
     # [words] are WORDS wherever they sit, and an optional group expands
@@ -1685,6 +1687,15 @@ def line_knowledge_cases(t, spark, home):
          "its entry as the Reference; one in the index but not installed is never named", repr(lines) + repr(um[-400:]))
     t.ok("spark: SPARK_KNOWLEDGE_DIR=%s -- a test seam" % kstore in err,
          "line knowledge: the SPARK_KNOWLEDGE_DIR seam is said on stderr", repr(err[-300:]))
+    # v1.87: nothing installed does the missing program's job -- the
+    # re-ask asks for the command that installs it
+    rc, lines, took, bodies, err = ask("? knowgone zap the quux", **menv)
+    um = bodies[-1]["messages"][-1]["content"] if bodies else ""
+    t.ok(rc == 0 and len(bodies) == 2 and "frobzap is not installed on this machine." in um
+         and "Nothing installed here does its job: answer with the package manager's command that installs it." in um
+         and "Installed here:" not in um,
+         "line knowledge: a re-ask for a program not on this machine, with nothing installed that does its job, asks "
+         "for the command that installs it", repr(lines) + repr(um[-300:]))
 
     f = _judge.Finding("command", "sv", "enable")
     t.ok(_cli._gap(f) + " -- asking again" == "sv has no command enable -- asking again"
@@ -5668,8 +5679,9 @@ def own_mark_cases(t, url):
     _with, _without = _pers.runit_lines(True), _pers.runit_lines(False)
     t.ok(_with == ["System tools: sv, svlogtail, ip.", _pers.RUNIT_BOOT]
          and _without == ["System tools: sv, ip.", _pers.RUNIT_BOOT]
-         and _pers.RUNIT_BOOT == ("On this machine a service of the system (sshd, nginx) runs at every boot once it is linked: "
-                                  "ln -s /etc/sv/NAME /var/service/ -- sv up NAME starts it now, and never enables it.")
+         and _pers.RUNIT_BOOT == ("On this machine a service of the system (sshd, nginx) runs at every boot once it is "
+                                  "linked: ln -s /etc/sv/NAME /var/service/ -- ls /var/service lists the linked ones, "
+                                  "and sv up NAME starts one now and never enables it.")
          and "svlogd" not in " ".join(_with + _without) and (_pers.RUNIT_BOOT + _with[0]).isascii(),
          "prefix, runit: System tools names svlogtail only where it is installed and never svlogd; one line says "
          "a service is enabled by its link in /var/service", repr((_with, _without)))
@@ -9841,7 +9853,7 @@ def main():
         _grp = re.search(r"(?m)^the model and the server\n(.*?)(?:\n\n|\Z)", out, re.S)
         t.ok(_grp is not None and _grp.group(1).splitlines() == [
             " spark serve [on|off]         start or stop the engine and the page",
-            " spark serve boot [on|off]    start at every boot: always on, a headless box",
+            " spark serve boot [on|off]    start spark at every boot: always on, headless",
             " spark serve share [on|off]   one model for every user here (Linux)",
             " spark serve --login          the page's address and login, QR for a phone",
             " spark serve --login --new    a new admin token; old logins end",
@@ -9849,7 +9861,7 @@ def main():
             " spark model [NAME|auto|none] choose the model this machine runs (-h)",
             " spark model --chat NAME      choose a second model for chat",
             " spark client [URL|off]       use another machine's model; off: your own again",
-            " spark user [add NAME]        the users; add shows a token once"],
+            " spark user [add NAME]        the page's users; add shows a token once"],
              "spark help: the group 'the model and the server', line for line", _grp.group(1) if _grp else out)
         # v1.87: the help's rows are what the prompt line knows of spark
         # (grounding.shell_map), so each says what its command is for in

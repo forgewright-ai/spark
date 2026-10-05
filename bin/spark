@@ -42,11 +42,11 @@ spark
  spark [@FILE] <words>        ask anything, or ask about a file
  spark do [--sandbox] <words> do a task, one command at a time
  spark do --review [ID]       review a sandboxed task's changes
- spark edit [?] [words]       rewrite text on stdin, or ask about it (-h)
+ spark edit [?] [words]       the model rewrites stdin, or answers on it (-h)
  spark ask < FILE             what the text does not answer (-h)
  spark read <words> < FILE    answers that quote the text (-h)
  spark drill < FILE           practice questions from the text (-h)
- spark watch <words> < STREAM speak up when a line matches (-h)
+ spark watch <words> < STREAM the model speaks up when a line matches (-h)
  spark reveal [N|auto|off]    how fast replies appear (-h)
  try:
  ? words or words? Enter      the command lands in your line
@@ -59,7 +59,7 @@ spark
 
 the model and the server
  spark serve [on|off]         start or stop the engine and the page
- spark serve boot [on|off]    start at every boot: always on, a headless box
+ spark serve boot [on|off]    start spark at every boot: always on, headless
  spark serve share [on|off]   one model for every user here (Linux)
  spark serve --login          the page's address and login, QR for a phone
  spark serve --login --new    a new admin token; old logins end
@@ -67,7 +67,7 @@ the model and the server
  spark model [NAME|auto|none] choose the model this machine runs (-h)
  spark model --chat NAME      choose a second model for chat
  spark client [URL|off]       use another machine's model; off: your own again
- spark user [add NAME]        the users; add shows a token once
+ spark user [add NAME]        the page's users; add shows a token once
 """ % MARK
 
 USAGE_MACHINE = """the machine

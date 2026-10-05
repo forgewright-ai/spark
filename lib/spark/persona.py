@@ -1131,6 +1131,8 @@ MODE_LINE = (
     "health, updates, start at boot, look, voice, keys, what it sent or what left this machine, the "
     "other machine -- is kind=cmd with "
     "one of spark's own commands listed above; never say spark cannot do it. "
+    "A question about the system itself -- its users, services, packages, files, logs or network -- "
+    "takes the system's own commands, never one of spark's. "
     "You hold nothing between questions yourself, and spark does: a question about an earlier answer, "
     "or a request to remember, note or keep something, is one of spark's own commands, never an "
     "answer about your own memory. "
@@ -1460,7 +1462,8 @@ def _tools_line():
 # path is the literal /var/service -- what a person types on Void --
 # never the SPARK_VAR_SERVICE seam: a test's path must not reach a prompt
 RUNIT_BOOT = ("On this machine a service of the system (sshd, nginx) runs at every boot once it is "
-              "linked: ln -s /etc/sv/NAME /var/service/ -- sv up NAME starts it now, and never enables it.")
+              "linked: ln -s /etc/sv/NAME /var/service/ -- ls /var/service lists the linked ones, and "
+              "sv up NAME starts one now and never enables it.")
 
 
 def runit_lines(svlogtail):

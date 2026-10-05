@@ -95,7 +95,7 @@ THE MODEL
 THE SERVER AND OTHER MACHINES
   spark serve                     what answers, the models, the page
   spark serve on | off [--force]  start or stop the engine and the page
-  spark serve boot [on|off]       start at every boot: always on, a headless box
+  spark serve boot [on|off]       start spark at every boot: always on, headless
   spark serve share [on|off]      one model for every user here (Linux)
   spark serve --login             the page's address and login, QR for a phone
   spark serve --login --new       a new admin token. Old logins end

@@ -499,6 +499,7 @@ def _own_named(text):
     verbs = grounding.spark_tree().verbs
     return [m.group(2) for m in OWN_NAMED.finditer(text) if not m.group(1) and m.group(2) in verbs]
 REPEATED = "that exact command was already tried and failed; propose a different one."
+NOT_HERE = "Nothing installed here does its job: answer with the package manager's command that installs it."
 NOTE_WORD = 24             # a flag or a head in a note: never the whole hint
 NOTE_ROOM = 24             # a hint cut shorter than this beside a note is dropped
 
@@ -950,6 +951,10 @@ def _judged(s, reply, command, hint, text, asked, ms, know, early):
         alike = know._timed(judge.installed_alike, text, gone) if gone else []
         if alike:
             said.append("Installed here: %s." % ", ".join("%s (%s)" % (n, w) if w else n for n, w in alike))
+        elif gone:
+            # nothing here does its job: the command that works on this
+            # machine is the one that installs it
+            said.append(NOT_HERE)
         ev = know.evidence(text, [f.head for f in found if f.kind != "missing"] + [n for n, _w in alike])
         if _asked(found):
             early.busy.tell(_gap(found[0]) + " -- asking again")
