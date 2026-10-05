@@ -831,14 +831,17 @@ and may change freely.
    writes, in full, then ` -- ` and the row's own words. No `a|b` is
    written, because a model copies what it reads, and `<words>` is
    `WORDS`. `tests/smoke.py` holds the map within `grounding.MAP_MAX`,
-   3600 characters. Its first line says whose commands these are: they
-   answer a question about spark itself, never one about the system's
-   own users, services, files or logs. It says a word in capitals
-   stands for the user's own text, written as they wrote it. The brief
-   (`persona.MODE_LINE`) names the topics that are spark's own, and
-   says a question about the system takes the system's own commands.
-   It asks for the user's own words and names as written, and for the
-   help's own word (`NAME`, `URL`) where the user gave no value. It
+   3600 characters. Its first line says the commands are for a
+   question about spark itself, and that a word in capitals stands for
+   the user's own text, written as they wrote it. The brief
+   (`persona.MODE_LINE`) puts the machine first: every question about
+   it takes the system's own command. Then it names the topics that
+   are spark's own, and says the system's users, services, packages,
+   files, logs and network are never spark's. It never says what the
+   model itself can or cannot do: such a sentence bred answers that
+   refused. It asks for the user's own words and names as written, and
+   for the help's own word (`NAME`, `URL`) where the user gave no
+   value. It
    says spark keeps the last answer and the facts it was told. An
    answer in words may name one of spark's own commands: `spark VERB`
    with a verb of the tree, never inside a noun phrase
@@ -847,13 +850,15 @@ and may change freely.
    via, when it is a program on this machine (`judge.present`). Such an
    answer is asked again once for the command itself
    (`cli._as_command`, `OWN_AGAIN`, `TOLD_AGAIN`). The second reply
-   lands only when the judge clears it and it is a spark command, or
-   runs a program the answer named (`_Early.only`). Else the answer
+   lands only when the judge clears it (`_Early.only`). It must be a
+   spark command, or for a named program a command of the system. The
+   answer may have named the wrong program. Else the answer
    stands as it came. Such an answer's line 1 waits for its words, and
    with `SPARK_KNOWLEDGE=off` no answer is asked again. A second ask
    about a program that is not installed names the installed ones that
-   do its job. With none, it asks for the package manager's command
-   that installs it (`cli.NOT_HERE`). The
+   do its job. With none, or when the user asked for the program by
+   name, it asks for the package manager's command that installs it
+   (`cli.NOT_HERE`, `cli.BY_NAME`). The
    request
    asks the engine for slot 0 (`id_slot`), so the line's prefix stays
    warm; a server that refuses the field is asked again without it. The

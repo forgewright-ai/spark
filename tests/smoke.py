@@ -1697,6 +1697,13 @@ def line_knowledge_cases(t, spark, home):
          "line knowledge: the SPARK_KNOWLEDGE_DIR seam is said on stderr", repr(err[-300:]))
     # v1.87: nothing installed does the missing program's job -- the
     # re-ask asks for the command that installs it
+    rc, lines, took, bodies, err = ask("? knowgone run frobzap on the quux", **menv)
+    um = bodies[-1]["messages"][-1]["content"] if bodies else ""
+    t.ok(rc == 0 and len(bodies) == 2 and "frobzap is not installed on this machine." in um
+         and "The user asked for frobzap by name: answer with the package manager's command that installs it." in um
+         and "Installed here:" not in um and "Nothing installed here" not in um,
+         "line knowledge: a missing program the user asked for by name is not swapped for an installed one: the "
+         "re-ask asks for the command that installs it", repr(lines) + repr(um[-300:]))
     rc, lines, took, bodies, err = ask("? knowgone zap the quux", **menv)
     um = bodies[-1]["messages"][-1]["content"] if bodies else ""
     t.ok(rc == 0 and len(bodies) == 2 and "frobzap is not installed on this machine." in um
@@ -5817,9 +5824,15 @@ def own_mark_cases(t, url):
              "line: an answer that tells the user which program to run is asked again for the command", repr((rc, out)))
         n0 = len(STATE["bodies"])
         rc, out, _ = run("line", stdin="? knowtold knowtoldother list the files")
-        t.ok(rc == 0 and out.splitlines()[:2] == ["answer", "I cannot list files myself; please use ls to see them."]
-             and len(STATE["bodies"]) == n0 + 2,
-             "line: a second reply that runs another program than the one the answer named does not land", repr((rc, out)))
+        t.ok(rc == 0 and out.splitlines()[:1] == ["danger\trm x"] and len(STATE["bodies"]) == n0 + 2,
+             "line: the second reply may run another program than the answer named (the answer may have named the "
+             "wrong one), and spark's own danger reading marks it", repr((rc, out)))
+        sys.path.insert(0, os.path.join(REPO, "lib"))
+        from spark import cli as _cl0
+        t.ok(_cl0._tool_named("Use 'ls' or 'cat'.") == ["ls"] and _cl0._tool_named("USE ls here") == ["ls"]
+             and _cl0._tool_named("use spark check") == [] and _cl0._tool_named("be of use to you") == [],
+             "line: the cue is read in any case, a quote before the program allowed; spark is not a program of the "
+             "system", repr(_cl0._tool_named("Use 'ls' or 'cat'.")))
         n0 = len(STATE["bodies"])
         rc, out, _ = run("line", stdin="? knowtoldnone be calm")
         t.ok(rc == 0 and out.splitlines()[:2] == ["answer", "You can use patience here."]

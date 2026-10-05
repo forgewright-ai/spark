@@ -33,7 +33,8 @@ asked again if it still has none.
 - spark's commands answer for spark, and the system's for the system.
   `? add a user named alice` is `useradd`, never `spark user add`.
 - A question about a program you do not have gets the command that
-  installs it, when nothing installed does its job.
+  installs it, when you named the program or nothing installed does
+  its job.
 - A small model's silent thought no longer costs you the answer.
   `gemma4-e4b` sometimes thought in silence and spent its whole reply
   there: 14 of 551 questions got `the model gave no answer -- ask

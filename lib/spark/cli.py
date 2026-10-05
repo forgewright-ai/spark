@@ -489,11 +489,13 @@ OWN_AGAIN = "That answer names one of spark's own commands. Reply kind=cmd with 
 OWN_TOLD = "that is one of spark's commands -- asking for it"
 # The same for an answer that tells the user which program to run (`please
 # use wget or curl`): the word right after use, run, try, type, execute or
-# via, when it is a program on this machine. The second reply lands only
-# when its command runs one of the programs the answer named.
+# via, when it is a program on this machine. The second reply lands when
+# the judge clears it and it is a command of the system, not spark's:
+# the answer may have named the wrong program (`use xbps-install` where
+# xbps-remove does the job).
 TOLD_AGAIN = "That answer tells the user which command to run. Reply kind=cmd with the command itself in `command`."
 TOLD_TOLD = "that names a command -- asking for it"
-TOLD_CUE = re.compile(r"\b(?:use|using|run|running|try|type|execute|via)\s+[`'\"]?([A-Za-z0-9][\w.+-]*)")
+TOLD_CUE = re.compile(r"\b(?:use|using|run|running|try|type|execute|via)\s+[`'\"]?([A-Za-z0-9][\w.+-]*)", re.I)
 OWN_NAMED = re.compile(r"(?<![\w/.-])(?:(the|a|an|this|that|your|its|my)\s+)?spark\s+([a-z][a-z-]*)")
 
 
@@ -527,6 +529,7 @@ def _names_command(text):
     return bool(_own_named(text) or _tool_named(text))
 REPEATED = "that exact command was already tried and failed; propose a different one."
 NOT_HERE = "Nothing installed here does its job: answer with the package manager's command that installs it."
+BY_NAME = "The user asked for %s by name: answer with the package manager's command that installs it."
 NOTE_WORD = 24             # a flag or a head in a note: never the whole hint
 NOTE_ROOM = 24             # a hint cut shorter than this beside a note is dropped
 
@@ -979,12 +982,17 @@ def _judged(s, reply, command, hint, text, asked, ms, know, early):
         # are named, and their entries ride as the evidence
         gone = [f.head for f in found if f.kind == "missing"]
         from . import judge
-        alike = know._timed(judge.installed_alike, text, gone) if gone else []
+        # one the user asked for by name is not swapped for another: the
+        # command that works on this machine is the one that installs it
+        named = [h for h in gone if re.search(r"(?<![\w-])%s(?![\w-])" % re.escape(h), text)]
+        others = [h for h in gone if h not in named]
+        alike = know._timed(judge.installed_alike, text, others) if others else []
         if alike:
             said.append("Installed here: %s." % ", ".join("%s (%s)" % (n, w) if w else n for n, w in alike))
-        elif gone:
-            # nothing here does its job: the command that works on this
-            # machine is the one that installs it
+        if named:
+            said.append(BY_NAME % ", ".join(named))
+        elif gone and not alike:
+            # nothing here does its job: the same answer
             said.append(NOT_HERE)
         ev = know.evidence(text, [f.head for f in found if f.kind != "missing"] + [n for n, _w in alike])
         if _asked(found):
@@ -1020,7 +1028,7 @@ def _as_command(s, reply, hint, asked, ms, know, early):
     or a program of this machine it tells the user to run (TOLD_AGAIN)
     -- asked again once for the command itself. The second reply lands
     only when the judge finds nothing to ask about and it is a spark
-    command, or runs one of the programs the answer named; else the
+    command, or for a named program a command of the system; else the
     answer stands as it came, and a failure of the second ask is not the
     turn's: the answer was whole. Returns _judged's tuple, the kind
     `answer` when the answer stands."""
@@ -1031,7 +1039,7 @@ def _as_command(s, reply, hint, asked, ms, know, early):
     early.busy.tell(OWN_TOLD if spark_own else TOLD_TOLD)
     s.history.extend([{"role": "user", "content": asked}, {"role": "assistant", "content": said}])
     def fits(command):
-        return judge.own(command) if spark_own else _head(command) in tools
+        return judge.own(command) if spark_own else _head(command) != "spark"
     again = _Early(early.cwd, early.more, early.history, early.busy, know, retry=True, t0=early.t0)
     again.only = fits
     retry, ms2, err = _line_stream(s, OWN_AGAIN if spark_own else TOLD_AGAIN, again, "")

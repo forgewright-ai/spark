@@ -694,9 +694,8 @@ def _map_lines(tree):
 # The map is three parts, a line each: the head, the help's rows
 # (_map_lines), the tail. The audition's grader reads the rows -- every
 # form before a row's first ` -- ` -- so the head carries no ` -- `.
-SHELL_HEAD = ("spark's own commands, one a line. They answer a question about spark itself, never one "
-              "about the system's own users, services, files or logs. Copy a command as it is written. "
-              "A word in capitals (NAME, URL, WORDS) stands for the user's own text: "
+SHELL_HEAD = ("spark's own commands, one a line, for a question about spark itself. Copy a command as "
+              "it is written. A word in capitals (NAME, URL, WORDS) stands for the user's own text: "
               "put their words there, as they wrote them.")
 # the settings keys a question about a reply's pace, length, wait or
 # history reaches for (spark.env.example holds every key; smoke holds
