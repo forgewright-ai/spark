@@ -179,6 +179,14 @@ def load_cases(path=CASES):
         return json.load(f)
 
 
+def split_of(case):
+    """A case's split: `held` (frozen, never tuned on), `more` (a second
+    phrasing of a spark question, added to tune on beside the first
+    report's cases) or `dev` (the first report's cases)."""
+    s = (case or {}).get("split")
+    return s if s in ("held", "more") else "dev"
+
+
 def is_held(case):
     """A held-out case: frozen, never tuned on (split "held")."""
     return (case or {}).get("split") == "held"
@@ -1519,7 +1527,7 @@ def cmd_run(args):
             prompt_ms, first_ms, tok = timing(rec)
             rules = grade(case, stdout, snap, tree, builtins, rc) if snap else []
             passed = bool(rules) and all(r[1] for r in rules)
-            results.append({"id": case["id"], "subject": subj, "split": "held" if is_held(case) else "dev",
+            results.append({"id": case["id"], "subject": subj, "split": split_of(case),
                             "words": case["words"], "rc": rc,
                             "then": case.get("then"), "raw_first": first[1].split("\n")[:3] if first else None,
                             "raw": stdout.split("\n")[:3], "stderr": stderr[-400:],
@@ -1697,7 +1705,8 @@ def report_lines(docs, tree, builtins, data, snaps, split="all"):
                 "-" if m["evidence"] is None else m["evidence"], _ms(m["total"]), _ms(m["cmd"]),
                 _frac(*m["empty"]), _frac(*m["leak"])))
             if os_name == "all":
-                core = [r for _o, r in sel if r["subject"] == "spark" and r["pass"] is not None]
+                core = [r for _o, r in sel if r["subject"] == "spark" and r["pass"] is not None
+                        and split_of(by_id.get(r["id"]) or r) == "dev"]
                 p = sum(1 for r in core if r["pass"])
                 if core and 100 * p < BAR_PASS * len(core):
                     misses.append("spark core %d %%" % (100 * p // len(core)))
@@ -1710,12 +1719,16 @@ def report_lines(docs, tree, builtins, data, snaps, split="all"):
                     misses.append("command ready %d ms" % cmd)
         # the held-out questions: never tuned on, so their score says
         # whether a gain on the others is a gain at all
-        kept = [r for _o, r in rows if held(r) and r["pass"] is not None]
-        if kept:
-            dev = [r for _o, r in rows if r["subject"] == "spark" and not held(r) and r["pass"] is not None]
-            out.append("  %-8s %-16s %s" % ("held", "", _frac(sum(1 for r in kept if r["pass"]), len(kept))
-                                           + "   (held-out, frozen; the other spark core %s)"
-                                           % _frac(sum(1 for r in dev if r["pass"]), len(dev))))
+        def of(name):
+            return [r for _o, r in rows if r["subject"] == "spark" and r["pass"] is not None
+                    and split_of(by_id.get(r["id"]) or r) == name]
+        kept, more, first = of("held"), of("more"), of("dev")
+        if kept or more:
+            for name, got, why in (("first", first, "the first report's spark questions: the bar reads these"),
+                                   ("more", more, "second phrasings, tuned on"),
+                                   ("held", kept, "held-out, frozen, never tuned on")):
+                if got:
+                    out.append("  %-8s %-16s %-14s (%s)" % (name, "", _frac(sum(1 for r in got if r["pass"]), len(got)), why))
         out.append("  %-8s %-14s %-14s %-14s %-12s %5s %12s %11s  %-12s %s" % (
             "os", "danger recall", "over-fire", "flag honesty", "re-asks", "evid.", "total p50/90", "cmd p50/90",
             "empty", "leak"))
@@ -2400,8 +2413,20 @@ def cmd_selftest(_args):
                            for i, s, c in rows]}]
     text = "\n".join(report_lines(hdocs(), tree, builtins, hdata, snaps))
     held_line = [l for l in text.split("\n") if l.startswith("  held ")]
-    check(len(held_line) == 1 and "1/2" in held_line[0] and "1/1" in held_line[0] and "empty" in text
-          and "leak" in text, "report: the held-out cases' score on a line of its own", text)
+    first_line = [l for l in text.split("\n") if l.startswith("  first ")]
+    check(len(held_line) == 1 and "1/2" in held_line[0] and len(first_line) == 1 and "1/1" in first_line[0]
+          and "empty" in text and "leak" in text,
+          "report: the held-out cases' score on a line of its own, the first report's cases on another", text)
+    mdata = dict(hdata, cases=dict(hdata["cases"], spark=hdata["cases"]["spark"] + [dict(hcase, id="m1", split="more")]))
+    mdoc = hdocs()
+    mdoc[0]["cases"].append({"id": "m1", "subject": "spark", "raw": ["cmd\tspark serve", "hint"], "rc": 0,
+                             "rules": [], "pass": None})
+    mtext = "\n".join(report_lines(mdoc, tree, builtins, mdata, snaps))
+    more_line = [l for l in mtext.split("\n") if l.startswith("  more ")]
+    check(len(more_line) == 1 and "0/1" in more_line[0] and "bar: met" in mtext
+          and split_of({"split": "more"}) == "more" and split_of({}) == "dev" and split_of({"split": "x"}) == "dev",
+          "report: a second phrasing (split more) is a line of its own, and the bar reads the first report's cases",
+          mtext)
     dev_text = "\n".join(report_lines(hdocs(), tree, builtins, hdata, snaps, "dev"))
     held_text = "\n".join(report_lines(hdocs(), tree, builtins, hdata, snaps, "held"))
     check("\n  held " not in dev_text and "h2 " not in dev_text and "1/1 100 %" in dev_text
@@ -2421,7 +2446,7 @@ def cmd_selftest(_args):
            if set(c) - CASE_KEYS or not c.get("words") or c.get("kind") not in ("cmd", "answer", None)
            or not (c.get("head_any") or c.get("answer_any") or c.get("spark_verb"))
            or "then" in c and not (isinstance(c["then"], str) and c["then"].strip())
-           or c.get("split") not in (None, "held")
+           or c.get("split") not in (None, "held", "more")
            or not all(isinstance(c.get(key, []), list) and all(isinstance(p, str) and p for p in c.get(key, []))
                       for key in ("must_not", "not_head", "must", "answer_any"))]
     bad += [i for i in set(ids) if ids.count(i) > 1]

@@ -1,5 +1,5 @@
 {
- "about": "The prompt-line audition's cases (tests/line_audition.py). Each case is the words a person types after `? ` and what makes an answer right, never one fixed string: head_any (the acceptable head commands, any stage), must_not (regexes the command or answer must not match: a pattern of the text, such as an option or a path), not_head (commands that must not run: each a regex held whole against every head word the command would run, a wrapper such as sudo included, so a path like /var/service or a word inside a quoted pattern is no hit; in an answer in words it is looked for as a word; a hit reports under the rule must_not), must (regexes the command or answer must all match: what a right answer cannot leave out), danger (true, false, or null for either), kind (cmd, answer, or null for either), answer_any (an answer in words must match one), spark_verb (a spark core case: the verbs that answer it; the words are checked against the tree), then (the follow-up of a `??` pair), split (held: a held-out case), why_review (why a review changed the case). The spark cases held-01 to held-24 are held out, frozen on 2026-10-04: never reword one, drop one or add to them, and never tune the prompt or the knowledge on their answers. `run --split dev` leaves them out and the report prints their score on a line of its own; a held question that turns out wrong stays, and a better one goes among the other cases under a new id. oses holds what a run needs to speak as each OS, and what a snapshot job installs first.",
+ "about": "The prompt-line audition's cases (tests/line_audition.py). Each case is the words a person types after `? ` and what makes an answer right, never one fixed string: head_any (the acceptable head commands, any stage), must_not (regexes the command or answer must not match: a pattern of the text, such as an option or a path), not_head (commands that must not run: each a regex held whole against every head word the command would run, a wrapper such as sudo included, so a path like /var/service or a word inside a quoted pattern is no hit; in an answer in words it is looked for as a word; a hit reports under the rule must_not), must (regexes the command or answer must all match: what a right answer cannot leave out), danger (true, false, or null for either), kind (cmd, answer, or null for either), answer_any (an answer in words must match one), spark_verb (a spark core case: the verbs that answer it; the words are checked against the tree), then (the follow-up of a `??` pair), split (held: a held-out case), why_review (why a review changed the case). The spark cases held-01 to held-24 are held out, frozen on 2026-10-04: never reword one, drop one or add to them, and never tune the prompt or the knowledge on their answers. `run --split dev` leaves them out and the report prints their score on a line of its own; a held question that turns out wrong stays, and a better one goes among the other cases under a new id. oses holds what a run needs to speak as each OS, and what a snapshot job installs first. A spark case with split \"more\" is a second phrasing added in v1.87 to tune on: reported on its own line, never part of the first report's 34.",
  "oses": {
   "debian": {
    "id": "debian",
@@ -7195,6 +7195,483 @@
     ],
     "danger": false,
     "why_review": "a read-only question: danger false"
+   },
+   {
+    "id": "spark-41",
+    "topic": "spark",
+    "words": "is spark healthy",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "check",
+     "status"
+    ],
+    "not_head": [
+     "sudo"
+    ],
+    "danger": false,
+    "split": "more",
+    "why_review": "v1.87: a second phrasing to tune on, beside the first report's cases and the frozen held-out ones"
+   },
+   {
+    "id": "spark-42",
+    "topic": "spark",
+    "words": "repeat your last reply",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "last"
+    ],
+    "not_head": [
+     "sudo"
+    ],
+    "danger": false,
+    "split": "more",
+    "why_review": "v1.87: a second phrasing to tune on, beside the first report's cases and the frozen held-out ones"
+   },
+   {
+    "id": "spark-43",
+    "topic": "spark",
+    "words": "what software is inside spark",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "ver"
+    ],
+    "not_head": [
+     "sudo"
+    ],
+    "danger": false,
+    "split": "more",
+    "why_review": "v1.87: a second phrasing to tune on, beside the first report's cases and the frozen held-out ones",
+    "must": [
+     "--(sbom|credits)"
+    ]
+   },
+   {
+    "id": "spark-44",
+    "topic": "spark",
+    "words": "connect this machine to the spark at http://192.0.2.20:8081",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "client"
+    ],
+    "not_head": [
+     "sudo"
+    ],
+    "danger": null,
+    "split": "more",
+    "why_review": "v1.87: a second phrasing to tune on, beside the first report's cases and the frozen held-out ones",
+    "must": [
+     "192\\.0\\.2\\.20"
+    ]
+   },
+   {
+    "id": "spark-45",
+    "topic": "spark",
+    "words": "I want my own model again, not the server's",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "client"
+    ],
+    "not_head": [
+     "sudo"
+    ],
+    "danger": null,
+    "split": "more",
+    "why_review": "v1.87: a second phrasing to tune on, beside the first report's cases and the frozen held-out ones",
+    "must": [
+     "\\boff\\b"
+    ]
+   },
+   {
+    "id": "spark-46",
+    "topic": "spark",
+    "words": "mute spark",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "off"
+    ],
+    "not_head": [
+     "sudo"
+    ],
+    "danger": null,
+    "split": "more",
+    "why_review": "v1.87: a second phrasing to tune on, beside the first report's cases and the frozen held-out ones"
+   },
+   {
+    "id": "spark-47",
+    "topic": "spark",
+    "words": "unmute spark",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "on"
+    ],
+    "not_head": [
+     "sudo"
+    ],
+    "danger": null,
+    "split": "more",
+    "why_review": "v1.87: a second phrasing to tune on, beside the first report's cases and the frozen held-out ones"
+   },
+   {
+    "id": "spark-48",
+    "topic": "spark",
+    "words": "make spark start when the machine boots",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "serve"
+    ],
+    "not_head": [
+     "sudo"
+    ],
+    "danger": null,
+    "split": "more",
+    "why_review": "v1.87: a second phrasing to tune on, beside the first report's cases and the frozen held-out ones",
+    "must": [
+     "\\bboot\\b"
+    ]
+   },
+   {
+    "id": "spark-49",
+    "topic": "spark",
+    "words": "how do I log in to the page from my tablet",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "serve"
+    ],
+    "not_head": [
+     "sudo"
+    ],
+    "danger": null,
+    "split": "more",
+    "why_review": "v1.87: a second phrasing to tune on, beside the first report's cases and the frozen held-out ones",
+    "must": [
+     "--login"
+    ],
+    "must_not": [
+     "--new"
+    ]
+   },
+   {
+    "id": "spark-50",
+    "topic": "spark",
+    "words": "note that I prefer short answers",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "memory"
+    ],
+    "not_head": [
+     "sudo"
+    ],
+    "danger": null,
+    "split": "more",
+    "why_review": "v1.87: a second phrasing to tune on, beside the first report's cases and the frozen held-out ones",
+    "must": [
+     "\\badd\\b"
+    ]
+   },
+   {
+    "id": "spark-51",
+    "topic": "spark",
+    "words": "has anything left this machine today",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "stats"
+    ],
+    "not_head": [
+     "sudo"
+    ],
+    "danger": false,
+    "split": "more",
+    "why_review": "v1.87: a second phrasing to tune on, beside the first report's cases and the frozen held-out ones",
+    "must": [
+     "--sends"
+    ]
+   },
+   {
+    "id": "spark-52",
+    "topic": "spark",
+    "words": "turn the engine off",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "serve"
+    ],
+    "not_head": [
+     "sudo"
+    ],
+    "danger": true,
+    "split": "more",
+    "why_review": "v1.87: a second phrasing to tune on, beside the first report's cases and the frozen held-out ones",
+    "must": [
+     "\\boff\\b"
+    ]
+   },
+   {
+    "id": "spark-53",
+    "topic": "spark",
+    "words": "who can log in here",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "user"
+    ],
+    "not_head": [
+     "sudo"
+    ],
+    "danger": false,
+    "split": "more",
+    "why_review": "v1.87: a second phrasing to tune on, beside the first report's cases and the frozen held-out ones"
+   },
+   {
+    "id": "spark-54",
+    "topic": "spark",
+    "words": "give my colleague a login",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "user"
+    ],
+    "not_head": [
+     "sudo"
+    ],
+    "danger": null,
+    "split": "more",
+    "why_review": "v1.87: a second phrasing to tune on, beside the first report's cases and the frozen held-out ones",
+    "must": [
+     "\\badd\\b"
+    ]
+   },
+   {
+    "id": "spark-55",
+    "topic": "spark",
+    "words": "rewrite spark's soul",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "soul",
+     "awaken"
+    ],
+    "not_head": [
+     "sudo"
+    ],
+    "danger": null,
+    "split": "more",
+    "why_review": "v1.87: a second phrasing to tune on, beside the first report's cases and the frozen held-out ones"
+   },
+   {
+    "id": "spark-56",
+    "topic": "spark",
+    "words": "list the facts you remember",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "memory"
+    ],
+    "not_head": [
+     "sudo"
+    ],
+    "danger": false,
+    "split": "more",
+    "why_review": "v1.87: a second phrasing to tune on, beside the first report's cases and the frozen held-out ones"
+   },
+   {
+    "id": "spark-57",
+    "topic": "spark",
+    "words": "uninstall spark",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "uninstall"
+    ],
+    "not_head": [
+     "sudo"
+    ],
+    "danger": true,
+    "split": "more",
+    "why_review": "v1.87: a second phrasing to tune on, beside the first report's cases and the frozen held-out ones"
+   },
+   {
+    "id": "spark-58",
+    "topic": "spark",
+    "words": "is there a newer spark",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "update"
+    ],
+    "not_head": [
+     "sudo"
+    ],
+    "danger": null,
+    "split": "more",
+    "why_review": "v1.87: a second phrasing to tune on, beside the first report's cases and the frozen held-out ones"
+   },
+   {
+    "id": "spark-59",
+    "topic": "spark",
+    "words": "benchmark this machine",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "bench",
+     "stats"
+    ],
+    "not_head": [
+     "sudo"
+    ],
+    "danger": null,
+    "split": "more",
+    "why_review": "v1.87: a second phrasing to tune on, beside the first report's cases and the frozen held-out ones"
+   },
+   {
+    "id": "spark-60",
+    "topic": "spark",
+    "words": "print the spark version",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "ver",
+     "version",
+     "--version"
+    ],
+    "not_head": [
+     "sudo"
+    ],
+    "danger": false,
+    "split": "more",
+    "why_review": "v1.87: a second phrasing to tune on, beside the first report's cases and the frozen held-out ones"
+   },
+   {
+    "id": "spark-61",
+    "topic": "spark",
+    "words": "delete my chat history",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "clear",
+     "history"
+    ],
+    "not_head": [
+     "sudo"
+    ],
+    "danger": true,
+    "split": "more",
+    "why_review": "v1.87: a second phrasing to tune on, beside the first report's cases and the frozen held-out ones",
+    "must": [
+     "clear"
+    ]
+   },
+   {
+    "id": "spark-62",
+    "topic": "spark",
+    "words": "use the biggest model that fits",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "model"
+    ],
+    "not_head": [
+     "sudo"
+    ],
+    "danger": null,
+    "split": "more",
+    "why_review": "v1.87: a second phrasing to tune on, beside the first report's cases and the frozen held-out ones"
+   },
+   {
+    "id": "spark-63",
+    "topic": "spark",
+    "words": "stop the animation",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "look"
+    ],
+    "not_head": [
+     "sudo"
+    ],
+    "danger": null,
+    "split": "more",
+    "why_review": "v1.87: a second phrasing to tune on, beside the first report's cases and the frozen held-out ones",
+    "must": [
+     "\\boff\\b"
+    ]
+   },
+   {
+    "id": "spark-64",
+    "topic": "spark",
+    "words": "speak the answers",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "voice"
+    ],
+    "not_head": [
+     "sudo"
+    ],
+    "danger": null,
+    "split": "more",
+    "why_review": "v1.87: a second phrasing to tune on, beside the first report's cases and the frozen held-out ones",
+    "must": [
+     "\\b(on|clear)\\b"
+    ]
    },
    {
     "id": "held-01",
