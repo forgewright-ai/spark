@@ -498,7 +498,11 @@ class _Know:
         (judge.read_only, the proof lists unchanged) holds for every
         stage, and a command whose effect the line cannot show
         (persona.opaque) is marked whenever evidence rode the request
-        that produced it. Arm off: v1.52's rule."""
+        that produced it. On a line that is spark's own, whole
+        (judge.own), spark's list is the whole answer (v1.87): past
+        is_dangerous it is never marked, whatever the model says -- the
+        audition's model marked `spark update` 5 times in 12. Arm off:
+        v1.52's rule."""
         if persona.is_dangerous(command):
             return True
         if self.arm == "off":
@@ -506,6 +510,8 @@ class _Know:
         if rode and persona.opaque(command):
             return True
         from . import judge
+        if judge.own(command):
+            return False
         return bool(model_danger) and not judge.read_only(command)
 
     def numbers(self):

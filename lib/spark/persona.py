@@ -59,6 +59,9 @@ SENDS = (
 # word of the line
 _CMD = r"(?:^|[;&|(]\s*)(?:[^\s;&|()]*/)?"
 _HOME_DOT = (r"[\"']?(?:~|\$HOME|\$\{HOME\}|/(?:home|Users)/[^/\s;&|]+|/root)/\.[^\s;&|)]*\s*(?=$|[;&|)\n])")
+# a package manager's options before its command word: `-X` words, each
+# stopping at a separator as the shell's word does, so the run is linear
+_PM_OPTS = r"(?:-[^\s;&|()]*\s+)*"
 _DANGER = [
     r"\brm\s+.*\s/\s*$", r"\brm\s+-[a-zA-Z]*\s+/(\s|$)",
     r"\bdd\s+.*\bof=/dev/",
@@ -113,7 +116,17 @@ _DANGER = [
     # v1.53: what the reviewed audition still found unmarked
     r"\b(?:chmod|chown|chgrp)\b",                 # any permission or owner change (the brief's own rule)
     r"\bspark\s+(?:uninstall|clear\s+--history|history\s+clear|memory\s+(?:forget|clear)"
-    r"|user\s+remove|model\s+rm|soul\s+reset|(?:forge|user)\s+token\s+--new|serve\s+--login\s+--new)\b",   # spark's own verbs that destroy or end logins
+    r"|user\s+remove|model\s+rm|soul\s+reset|(?:forge|user)\s+token\s+--new|serve\s+--login\s+--new"
+    r"|serve\s+off)\b",                           # spark's own verbs that destroy or end logins, and serve off
+                                                  # (--force or not): the engine and the page stopped, as
+                                                  # systemctl stop is marked
+    # v1.87 (the maintainer's word): the line above is the whole answer
+    # on a spark command. Deliberately unmarked: spark off and spark on
+    # (the prompt line muted, and back), spark update, spark user add,
+    # spark model NAME|auto|none, spark client off. A model marked some
+    # of them about one time in two, so the prompt line drops the model's
+    # own mark on a line that is spark's alone (judge.own,
+    # cli._Know.flagged)
     # v1.56: what the lines above still let through -- a named line each.
     # Linear by construction: the option runs are `-X` words split by
     # whitespace, never an \S+ that can also eat a space-free neighbour
@@ -142,6 +155,22 @@ _DANGER = [
     _CMD + r"sv\s+(?:-v\s+|-w\s*\d+\s+)*(?:[dDxXeEkp]\S*|stop|shutdown)(?=\s|$)",
                                                   # runit's sv reads its first letter: d(own) x/e(xit)
                                                   # k(ill) p(ause) D X E, and stop, shutdown
+    # v1.87: a package cache cleaned, on every family -- a named line
+    # each. The audition found `dnf clean all` and `zypper clean --all`
+    # unmarked: without sudo no line held. As the command (_CMD), with
+    # options only BEFORE the command word (_PM_OPTS), so `dnf search
+    # clean`, `apt-get install clean-something` and `zypper search
+    # cleaner` stay plain. An option that takes its value as the next
+    # word (`zypper -R /x clean`, `apt -o K=V clean`) hides the command
+    # word and the line is missed, knowingly. (xbps-remove -O is
+    # xbps-remove's line above)
+    _CMD + r"(?:apt|apt-get|aptitude)\s+" + _PM_OPTS + r"(?:clean|autoclean)(?=[\s;&|)]|$)",
+                                                  # apt clean / autoclean: the downloaded packages, gone
+    _CMD + r"(?:dnf|yum)\s+" + _PM_OPTS + r"clean(?=[\s;&|)]|$)",   # dnf / yum clean all, packages, metadata
+    _CMD + r"zypper\s+" + _PM_OPTS + r"(?:clean|cc)(?=[\s;&|)]|$)",   # zypper clean / cc, --all or not
+    _CMD + r"pacman\s+" + _PM_OPTS + r"(?:-S[a-zA-Z]*c|--clean\b)",   # pacman -Sc, -Scc, --clean: any -S cluster
+                                                  # holding c (in -Qc and -Rc the c is another word)
+    _CMD + r"brew\s+" + _PM_OPTS + r"cleanup(?=[\s;&|)]|$)",   # brew cleanup: old versions and the download cache
 ]
 # rm with a recursive (or force) flag, short or long -- ONE pattern pair,
 # shared by is_dangerous and blast, so the danger mark and the blast count
@@ -1412,6 +1441,23 @@ def _tools_line():
     return ("Preferred when installed (they are): " + ", ".join(have) + ".") if have else ""
 
 
+# runit's own way to enable a service, in the prefix on runit alone: a
+# small model answered `sv up sshd` for "start sshd at every boot". The
+# path is the literal /var/service -- what a person types on Void --
+# never the SPARK_VAR_SERVICE seam: a test's path must not reach a prompt
+RUNIT_BOOT = ("On this machine a service runs at every boot once it is linked: "
+              "ln -s /etc/sv/NAME /var/service/ -- sv up NAME starts it now, and never enables it.")
+
+
+def runit_lines(svlogtail):
+    """The prefix's two lines on runit, pure, so any OS can test them:
+    the System tools line and RUNIT_BOOT. `svlogtail` says that program
+    is installed: it READS the logs, and is named only then. svlogd is
+    never named -- it WRITES them, and a small model told of it wrote
+    `svlogd -n 50` to read a log."""
+    return ["System tools: sv, svlogtail, ip." if svlogtail else "System tools: sv, ip.", RUNIT_BOOT]
+
+
 def prefix(cfg, shell):
     """The stable part of the system prompt for this machine and shell."""
     pm = package_manager()
@@ -1423,9 +1469,12 @@ def prefix(cfg, shell):
         lines.append("Package manager: %s." % pm)
     mac = platform.system() == "Darwin"
     from . import init_shape
-    runit = not mac and init_shape() == "runit"       # Void: sv in place of systemctl, svlogd in place of the journal
-    lines.append("System tools: " + ("launchctl, pbcopy, pbpaste, open, mdfind, diskutil." if mac
-                                     else "sv, svlogd, ip." if runit else "systemctl --user, journalctl, ip."))
+    runit = not mac and init_shape() == "runit"       # Void: sv in place of systemctl, svlogtail (where installed) to read the logs
+    if runit:
+        lines.extend(runit_lines(bool(shutil.which("svlogtail"))))
+    else:
+        lines.append("System tools: " + ("launchctl, pbcopy, pbpaste, open, mdfind, diskutil." if mac
+                                         else "systemctl --user, journalctl, ip."))
     # a command pasted from a page is written for someone else's machine.
     # These are this OS's side of the pairs a paste crosses most; the model
     # is told to rewrite the other side and say so. This OS's half only, so

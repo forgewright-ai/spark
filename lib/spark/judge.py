@@ -3,7 +3,9 @@
 # must be a builtin, a spark verb from the tree, or a program on PATH, and
 # every option must be in that program's own entry. A finding names one
 # problem; a verdict with none is ok. read_only() lets spark's own argv
-# proof lower a model's `!` -- persona.is_dangerous always wins.
+# proof lower a model's `!` -- persona.is_dangerous always wins. own()
+# says a line is spark's own, whole: there spark's list alone decides
+# the `!`.
 #
 # Unknown is not wrong: a program with no entry, or an entry whose manual
 # named no options, earns no flag finding; one whose manual lists no
@@ -657,3 +659,67 @@ def read_only(command):
         return False
     stages = _raw_stages(c)
     return bool(stages) and all(s.strip() and persona.proof_ok(s) for s in stages)
+
+
+# ------------------------------------------------------------ spark's own
+# The wrappers own() does not read past, a named line each. Past any
+# other wrapper the command is still the words the line shows
+OWN_STOPS = frozenset((
+    "xargs",        # it adds words from its stdin: the line does not show the whole command
+    "watch",        # it hands its words to sh -c: a string read again as shell, not a command
+    "chroot",       # the spark of another root is not this machine's
+))
+# What a shell at a prompt may read another way than the lexer does: a #
+# opens a comment in bash and is a plain word in zsh, where the words
+# after it run; a ! may bring a history line in; a carriage return is
+# Enter to a terminal
+OWN_UNSURE = re.compile(r"[#!\r]")
+
+
+def _own_stage(words):
+    """One stage as persona's lexer cut it, the words as written: is its
+    command word, past its wrappers, the word spark."""
+    i = 0
+    for _ in range(persona.MAX_WRAPS + 1):
+        if i >= len(words):
+            return False
+        w = words[i]
+        if w == "spark":
+            return True
+        if w not in WRAPPERS or w in OWN_STOPS:
+            return False
+        n = persona._past_wrapper(w, words[i + 1:])
+        if n < 0:
+            return False                            # the wrapper carries a command in an option
+        i += 1 + n
+    return False
+
+
+def own(command):
+    """True when `command` is spark's own, whole: it has at least one
+    stage, and every stage's command word, past its wrappers, is the
+    word `spark`. Then spark's own list (persona.is_dangerous, which the
+    caller asks first) is the whole answer on its danger, and a model's
+    mark is dropped (cli._Know.flagged).
+
+    Read as the danger reading reads it: persona's lexer cuts the
+    stages and persona.WRAPPERS is unwrapped with persona's own
+    _past_wrapper, OWN_STOPS apart. It errs toward False, which keeps
+    the model's mark. The word is `spark` as written, found on PATH: a
+    path before it, a quote, an assignment before it (PATH=... spark, or
+    after env) or a shell keyword is not it. One stage of anything else
+    -- `spark update && make` -- is not it. A line whose effect cannot
+    be read (persona.opaque: a substitution, a carrier, a rewritten
+    word), that holds a control character, or that a shell may read
+    another way (OWN_UNSURE) is not it."""
+    c = command or ""
+    if not c.strip() or grounding.CONTROL.search(c) or OWN_UNSURE.search(c) or persona.opaque(c):
+        return False
+    try:
+        lex = persona._Lex(c)
+        lex.run()
+    except (RecursionError, ValueError, IndexError):
+        return False
+    if lex.deep or not lex.stages:
+        return False
+    return all(_own_stage(words) for words in lex.stages)

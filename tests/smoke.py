@@ -619,6 +619,12 @@ def know_answer(asked, again):
         return cmd("ls -la", "lists everything here", danger=True)
     if "knowrm" in asked:           # the model's ! on a command that writes: it stays
         return cmd("rm x", "removes x", danger=True)
+    if "knowownmix" in asked:       # v1.87: spark beside another command, marked by the model: it stays
+        return cmd("spark update && make install", "updates spark, then installs", danger=True)
+    if "knowownoff" in asked:       # ... spark serve off beside rm, and the model says safe: spark marks it
+        return cmd("spark serve off && rm -rf x", "stops spark, then removes x")
+    if "knowown" in asked:          # ... the model's ! on a spark command that is not on spark's list
+        return cmd("spark update", "updates spark", danger=True)
     if "knowopaque" in asked:       # an effect the line cannot show
         return cmd("ls $(echo .)", "lists the directory")
     if "knowanswer" in asked:
@@ -4898,6 +4904,245 @@ def check_history_cases(t):
          and os.path.exists(os.path.join(state, "check.json")),
          "clear --history: the check's history goes too, the snapshot stays", repr((rc, out, sorted(os.listdir(state)))))
     shutil.rmtree(base, True)
+
+
+def own_mark_cases(t, url):
+    """v1.87: the danger mark is a rule where spark knows. A package
+    cache cleaned is a named line on every family. `spark serve off` is
+    on spark's own list. On a line that is spark's own, whole
+    (judge.own), that list is the whole answer: the prompt line drops
+    the model's mark there, and never on a line that mixes spark with
+    another command, hides its effect or runs as root. And Void's own
+    words in the prefix (persona.runit_lines)."""
+    import spark as _spark
+    from spark import cli as _cli, config as _config, do as _do, judge as _judge, persona as _pers
+
+    # a package cache cleaned: marked on every family, with options before
+    # the command word; the same word as a package or a search stays plain
+    _cache = (
+        ("apt, apt-get, aptitude clean|autoclean",
+         ["apt clean", "apt-get clean", "apt-get autoclean", "apt autoclean", "aptitude clean", "aptitude autoclean",
+          "apt-get -y clean", "/usr/bin/apt-get clean", "cd /tmp && apt-get clean", "nice apt-get clean"],
+         ["apt-get install clean-something", "apt search clean", "apt-cache search clean", "apt install autoclean",
+          "apt-get update", "apt clean-x", "grep clean notes.txt"]),
+        ("dnf, yum clean",
+         ["dnf clean all", "dnf -y clean all", "dnf clean packages", "yum clean all", "dnf clean all; ls",
+          "time dnf clean all"],
+         ["dnf search clean", "dnf install clean", "dnf info clean", "yum search clean", "dnf check-update",
+          "dnf cleanup"]),
+        ("zypper clean|cc",
+         ["zypper clean --all", "zypper clean", "zypper cc -a", "zypper --non-interactive clean", "zypper -n cc"],
+         ["zypper search cleaner", "zypper search cc", "zypper info cc", "zypper list-updates", "zypper ccx"]),
+        ("pacman -Sc, -Scc, --clean",
+         ["pacman -Sc", "pacman -Scc", "pacman -Scc --noconfirm", "pacman --noconfirm -Sc", "pacman -S --clean",
+          "pacman -Syc", "echo y | pacman -Scc"],
+         ["pacman -S clean", "pacman -S ccache", "pacman -Ss cache", "pacman -Qc bash", "pacman -Syu",
+          "pacman -S --needed cmake"]),
+        ("brew cleanup",
+         ["brew cleanup", "brew cleanup -s", "brew cleanup --prune=all", "(brew cleanup)"],
+         ["brew info cleanup", "brew search cleanup", "brew list", "brew cleanups"]),
+    )
+    for _name, _dang, _safe in _cache:
+        t.ok(all(_pers.is_dangerous(c) for c in _dang) and not any(_pers.is_dangerous(c) for c in _safe),
+             "danger: %s is marked (a package cache cleaned); its near-misses stay plain" % _name,
+             str([c for c in _dang if not _pers.is_dangerous(c)] + ["!" + c for c in _safe if _pers.is_dangerous(c)]))
+    _missed = ["zypper -R /x clean", "apt -o Dir::Cache=/x clean"]
+    t.ok(not any(_pers.is_dangerous(c) for c in _missed),
+         "danger: an option that takes its value as the next word hides the command word -- missed, knowingly",
+         str([c for c in _missed if _pers.is_dangerous(c)]))
+    # the five lines alone, on 100 kB of their worst shapes
+    _new = [p for p in _pers.DANGER if _pers._PM_OPTS in p.pattern]
+    _slow = []
+    for _h in ("apt-get", "dnf", "zypper", "pacman", "brew"):
+        for _w in (_h + " " + "-x " * 34000, (_h + " -x;") * 14000, (_h + " -x|") * 14000, (_h + " ") * 14000,
+                   _h + " -S" + "c" * 99000 + "9", (_h + " -Sx ") * 12000, ";" * 50000 + _h + " " * 40000,
+                   ("(" + _h + " -S") * 12000, _h + " " + "-" * 99000):
+            _t0 = time.time()
+            for _p in _new:
+                _p.search(_w[:100000])
+            if time.time() - _t0 >= 1.0:
+                _slow.append((_w[:14], round(time.time() - _t0, 2)))
+    t.ok(len(_new) == 5 and not _slow, "danger: the v1.87 lines read 100 kB of their worst shapes in under 1 s",
+         "%d lines; %s" % (len(_new), _slow))
+
+    # spark's own list: serve off joins it, --force or not; the verbs the
+    # maintainer left off it stay off it
+    _dang = ["spark serve off", "spark serve off --force", "nohup spark serve off", "spark check && spark serve off"]
+    _safe = ["spark off", "spark on", "spark update", "spark user add ana", "spark model qwen3-4b", "spark model auto",
+             "spark model none", "spark client off", "spark serve", "spark serve on", "spark serve boot off",
+             "spark serve share off", "spark serve offline"]
+    t.ok(all(_pers.is_dangerous(c) for c in _dang) and not any(_pers.is_dangerous(c) for c in _safe)
+         and _do.danger("spark serve off") and not _do.danger("spark update"),
+         "danger: spark serve off is on spark's own list (the typed yes in spark do too); spark off, on, update, "
+         "user add, model NAME|auto|none and client off are deliberately not",
+         str([c for c in _dang if not _pers.is_dangerous(c)] + ["!" + c for c in _safe if _pers.is_dangerous(c)]))
+
+    # judge.own: every stage's command word, past its wrappers, is spark
+    _yes = ["spark update", "spark off", "spark", "spark user add ana", "spark model none", "spark check && spark update",
+            "spark off; spark on", "nohup spark serve on &", "timeout 60 spark update", "nice -n 5 spark bench",
+            "env -i spark check", "(spark update)", "spark check >> log.txt", "spark ask 'what; now?'",
+            "spark check | spark explain", "spark user add $USER", "spark uninstall", "sudo spark update"]
+    _no = ["", "  ", "ls", "explain", "sparkle update",
+           # spark beside another command
+           "spark update && make install", "spark serve off && rm -rf x", "spark check | grep fail", "cat f | spark read",
+           "spark update; frob --wipe", "spark update & frob", "frob || spark update", "spark update\nfrob --wipe",
+           "x=1; spark off", "{ spark off; }", "if spark check; then spark update; fi",
+           "for i in 1 2; do spark user add u$i; done", "spark() { frob; }; spark update", "alias spark=frob; spark update",
+           # a line whose effect cannot be read, and a carrier
+           "spark user add $(whoami)", "spark user add `whoami`", "spark read <(frob)", "sp\\ark update",
+           "\"spark\" update", "'spark' update", "ssh host spark update", "eval spark update", "sh -c 'spark update'",
+           "env -S 'spark update'", "flock -c 'spark update' f", "runuser w -c 'spark update'", "nice " * 9 + "spark update",
+           # another program named spark, or words the line does not show
+           "/usr/local/bin/spark update", "./spark update", "~/.spark/bin/spark update", "PATH=/x spark update",
+           "SPARK_REF=main spark update", "env PATH=/x spark update", "xargs spark memory", "xargs -a f spark memory",
+           "watch spark check", "watch 'spark check; frob'", "chroot /mnt spark update",
+           # a keyword or a builtin before it, and what a shell may read another way
+           "time spark update", "! spark check", "command spark update", "spark update # ; frob --wipe",
+           "spark ask !!", "spark update\rfrob", "spark update ‮"]
+    _bad = [c for c in _yes if not _judge.own(c)] + ["!" + c for c in _no if _judge.own(c)]
+    t.ok(not _bad, "judge.own: a line is spark's own when every stage's command word, past its wrappers, is spark -- "
+         "never beside another command, behind a substitution, a quote, a path, an assignment, xargs, watch or chroot",
+         str(_bad))
+
+    # the mark on the prompt line (_Know.flagged). On spark's own line the
+    # model's mark is dropped in the judge arms, and arm off keeps v1.52's
+    # rule; every line that is not spark's alone keeps the result it had
+    _K = _cli._Know
+    _rows = (                                           # (command, the model's mark, evidence rode, want)
+        ("spark update", True, False, False), ("spark off", True, False, False),
+        ("spark user add ana", True, False, False), ("spark model none", True, False, False),
+        ("spark model auto", True, False, False), ("spark client off", True, False, False),
+        ("spark update", True, True, False), ("spark update", False, False, False),
+        # spark's own list always wins
+        ("spark serve off", False, False, True), ("spark serve off --force", False, False, True),
+        ("spark uninstall", False, False, True),
+        # spark beside another command
+        ("spark serve off && rm -rf x", False, False, True), ("spark update && make install", True, False, True),
+        ("spark update && make install", False, False, False), ("spark check | grep fail", True, False, True),
+        # a line whose effect cannot be read, and a carrier
+        ("spark user add $(whoami)", True, False, True), ("spark user add $(whoami)", False, True, True),
+        ("spark user add $(whoami)", False, False, False), ("ssh host spark update", False, False, True),
+        # root is danger by its own line
+        ("sudo spark update", False, False, True), ("doas spark update", False, False, True),
+        # another program named spark, or words the line does not show
+        ("PATH=/x spark update", True, False, True), ("xargs spark memory", True, False, True),
+        ("watch 'spark check; frob'", True, False, True),
+        # the read-only proof still lowers, and a writer still stays
+        ("ls -la", True, False, False), ("rm x", True, False, True),
+    )
+    _bad = [(c, m, r, a) for c, m, r, want in _rows for a in ("judge", "full") if _K(a).flagged(c, m, r) is not want]
+    t.ok(not _bad, "line knowledge: on a line that is spark's own, spark's list is the whole mark (the model's is "
+         "dropped); beside another command, behind a substitution, over ssh or under sudo the mark stays as it was",
+         str(_bad))
+    _bad = [(c, m) for c, m, _r, _w in _rows
+            if _K("off").flagged(c, m, False) is not (bool(m) or _pers.is_dangerous(c))]
+    t.ok(not _bad and _K("off").flagged("spark update", True, False) is True,
+         "line knowledge: arm off keeps v1.52's rule -- the model's mark, or spark's list", str(_bad))
+
+    # Void's own words: the two lines the prefix carries on runit, pure
+    _with, _without = _pers.runit_lines(True), _pers.runit_lines(False)
+    t.ok(_with == ["System tools: sv, svlogtail, ip.", _pers.RUNIT_BOOT]
+         and _without == ["System tools: sv, ip.", _pers.RUNIT_BOOT]
+         and _pers.RUNIT_BOOT == ("On this machine a service runs at every boot once it is linked: "
+                                  "ln -s /etc/sv/NAME /var/service/ -- sv up NAME starts it now, and never enables it.")
+         and "svlogd" not in " ".join(_with + _without) and (_pers.RUNIT_BOOT + _with[0]).isascii(),
+         "prefix, runit: System tools names svlogtail only where it is installed and never svlogd; one line says "
+         "a service is enabled by its link in /var/service", repr((_with, _without)))
+
+    # ... and the prefix itself on runit, on any OS: persona's platform and
+    # shutil stand in, and the init is pinned through its seam
+    class _Linux:
+        system = staticmethod(lambda: "Linux")
+        machine = staticmethod(lambda: "x86_64")
+
+    class _Installed:
+        def __init__(self, *names):
+            self.names = names
+
+        def which(self, name):
+            return "/usr/bin/" + name if name in self.names else None
+
+    base = tempfile.mkdtemp(prefix="spark-own-mark-")
+    runit, seam = os.path.join(base, "etc-runit"), os.path.join(base, "var-service-seam")
+    os.makedirs(runit)
+    saved = (_pers.platform, _pers.shutil, _spark.RUNIT_DIR, _spark.VAR_SERVICE)
+    saved_env = {k: os.environ.get(k) for k in ("SPARK_ETC_RUNIT", "SPARK_VAR_SERVICE")}
+    try:
+        _pers.platform = _Linux
+        _spark.RUNIT_DIR, _spark.VAR_SERVICE = runit, seam
+        os.environ.update(SPARK_ETC_RUNIT=runit, SPARK_VAR_SERVICE=seam)
+        cfg = _config.load()
+        _pers.shutil = _Installed("svlogtail", "git")
+        p_with, p_again = _pers.prefix(cfg, "bash"), _pers.prefix(cfg, "bash")
+        _pers.shutil = _Installed("git")
+        p_without = _pers.prefix(cfg, "bash")
+        _spark.RUNIT_DIR = os.path.join(base, "no-runit")
+        p_systemd = _pers.prefix(cfg, "bash")
+    finally:
+        _pers.platform, _pers.shutil, _spark.RUNIT_DIR, _spark.VAR_SERVICE = saved
+        for k, v in saved_env.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+        shutil.rmtree(base, True)
+    t.ok(("\nSystem tools: sv, svlogtail, ip.\n" + _pers.RUNIT_BOOT + "\n") in p_with
+         and ("\nSystem tools: sv, ip.\n" + _pers.RUNIT_BOOT + "\n") in p_without and "svlogtail" not in p_without
+         and p_with == p_again and "svlogd" not in p_with + p_without
+         and base not in p_with + p_without and "launchctl is sv" in p_with,
+         "prefix, runit: the System tools line, then the boot line right after it; byte-stable; the literal "
+         "/var/service, never the seam's path", p_with[:400])
+    t.ok("\nSystem tools: systemctl --user, journalctl, ip.\n" in p_systemd and _pers.RUNIT_BOOT not in p_systemd
+         and "svlogtail" not in p_systemd,
+         "prefix, systemd: the runit lines are runit's alone", p_systemd[:400])
+
+    # the stub model: the prompt line, as a shell runs it
+    with tempfile.TemporaryDirectory(prefix="spark-smoke-own-") as home:
+        env = {k: v for k, v in os.environ.items() if not k.startswith(("SPARK_", "XDG_", "SITE_", "GIT_"))}
+        env.update({"HOME": home, "XDG_CONFIG_HOME": home + "/.config", "XDG_STATE_HOME": home + "/.local/state",
+                    "XDG_DATA_HOME": home + "/.local/share", "SPARK_BASE_URL": url, "SPARK_API_KEY": TOKEN,
+                    "SPARK_TIMEOUT": "5", "SPARK_NO_REFRESH": "1", "SHELL": "/bin/bash", "LANG": "C.UTF-8",
+                    "LC_ALL": "C.UTF-8", "TERM": "xterm-256color"})
+        os.makedirs(home + "/.config/spark")
+        bench = {"SPARK_LINE_BENCH": "1", "SPARK_KNOWLEDGE_SNAPSHOT": know_store(os.path.join(home, "know-store.json"))}
+
+        def run(*args, stdin="", **extra):
+            p = subprocess.run([sys.executable, SPARK] + list(args), input=stdin, capture_output=True, text=True,
+                               env=dict(env, **extra), timeout=30)
+            return p.returncode, p.stdout, p.stderr
+
+        def first(words, **extra):
+            return run("line", stdin=words, **extra)[1].splitlines()[:1]
+
+        # the model marks `spark update`: spark's list is the whole answer
+        # in the default arm; SPARK_KNOWLEDGE=off keeps the model's mark
+        own = first("? knowown update spark")
+        own_off = first("? knowown update spark", SPARK_KNOWLEDGE="off")
+        arms = [first("? knowown update spark", **dict(bench, SPARK_LINE_KNOW=a)) for a in ("full", "judge", "off")]
+        t.ok(own == ["cmd\tspark update"] and own_off == ["danger\tspark update"]
+             and arms == [["cmd\tspark update"], ["cmd\tspark update"], ["danger\tspark update"]],
+             "line: the model marks spark update -- cmd in the default arm (spark's own list decides), danger with "
+             "SPARK_KNOWLEDGE=off", repr((own, own_off, arms)))
+        # spark serve off beside rm, and the model says safe: danger, every arm
+        mix = [first("? knowownoff stop spark and remove x", **bench),
+               first("? knowownoff stop spark and remove x", SPARK_KNOWLEDGE="off")]
+        t.ok(mix == [["danger\tspark serve off && rm -rf x"]] * 2,
+             "line: spark serve off && rm -rf x is danger, with the knowledge and without", repr(mix))
+        # spark beside another command, marked by the model: the mark stays
+        kept = first("? knowownmix update and install", **bench)
+        t.ok(kept == ["danger\tspark update && make install"],
+             "line: a line that mixes spark with another command keeps the model's mark", repr(kept))
+        # the consumers of spark's list beyond line 1: a turn's display
+        # (spark last) and the paste check
+        run("line", stdin="? knowownoff stop spark and remove x")
+        rc, out, _ = run("last")
+        t.ok(rc == 0 and "  danger  " in out.splitlines()[0],
+             "last: the turn that proposed spark serve off is kept as a danger turn", out)
+        rc, out, _ = run("line", "--paste", stdin="echo one\nspark serve off\n")
+        rc2, out2, _ = run("line", "--paste", stdin="echo one\nspark update\n")
+        t.ok(rc == 0 and out.splitlines()[:1] == ["danger"] and rc2 == 0 and out2.splitlines()[:1] == ["answer"],
+             "paste: a pasted spark serve off is danger whatever the model says; a pasted spark update is not",
+             repr((out, out2)))
 
 
 def main():
@@ -10472,6 +10717,7 @@ site.cmd_headless([])
     lan_wait_cases(t)
     handback_cases(t)
     check_history_cases(t)
+    own_mark_cases(t, url)
     srv.shutdown()
     print("smoke: %s" % ("all ok" if not t.fail else "%d FAILED" % t.fail))
     return 1 if t.fail else 0
