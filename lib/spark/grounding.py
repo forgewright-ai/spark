@@ -134,7 +134,10 @@ def _as_entry(name, d):
 class _SnapshotFile(intake.Store):
     """The audition's prebuilt store, one JSON file: {"line_audition_store":
     1, "entries": {name: fields}, "index": index.json's shape}. Read
-    only under SPARK_LINE_BENCH=1 with SPARK_KNOWLEDGE_SNAPSHOT set."""
+    only under SPARK_LINE_BENCH=1 with SPARK_KNOWLEDGE_SNAPSHOT set.
+    Two optional keys: "closed": true says the entries are that OS's
+    whole PATH, and "absent" names the programs looked for there and
+    not found."""
 
     def __init__(self, path):
         try:
@@ -145,6 +148,9 @@ class _SnapshotFile(intake.Store):
         raw = raw if isinstance(raw, dict) and raw.get("line_audition_store") == 1 else {}
         self.raw_entries = raw.get("entries") or {}
         self.raw_index = raw.get("index")
+        self.closed = raw.get("closed") is True
+        absent = raw.get("absent")
+        self.absent = frozenset(n for n in absent if isinstance(n, str)) if isinstance(absent, list) else frozenset()
 
     def names(self):
         return list(self.raw_entries)
@@ -157,8 +163,13 @@ class _SnapshotFile(intake.Store):
         return self.raw_index if isinstance(self.raw_index, dict) else None
 
     def has_program(self, name):
-        """A program of that OS: True when the snapshot holds it, else
-        unknown (None) -- the snapshot is not that machine's whole PATH."""
+        """A program of that OS. A closed snapshot is that machine's whole
+        PATH: True for a program it holds, False for one it lacks or
+        marks absent -- so the judge finds it not installed, as on a real
+        machine. A snapshot without the flag is not the whole PATH: True
+        when it holds the program, else unknown (None)."""
+        if self.closed:
+            return name in self.raw_entries and name not in self.absent
         return True if name in self.raw_entries else None
 
 

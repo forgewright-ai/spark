@@ -131,7 +131,9 @@ one test that judges words. `tests/audition.py` runs 8 fixtures in
 Portuguese prose, Go, Python, shell) through the real `spark edit`
 (complete, rewrite, `?`). It scores every answer with mechanical lints
 only. `tests/audition/ground/` holds 10 cases for the grounded
-contracts, scored the same way, and `--ground` runs only those. It
+contracts, scored the same way. `--ground` runs those and nothing
+else, and a run without it runs the fixtures alone. `--selftest` needs
+no model: it proves the lints on canned rewrites. A run
 prints a table and never an answer unless `-v`. A change to any
 `edit-*` brief in `persona.py` carries the audition's before and after
 totals in the pull request (`--times 3`: a small model is not
@@ -141,17 +143,31 @@ number, never by taste.
 
 `tests/line_audition.py` is the prompt line's audition, not in the
 gate either. `tests/line_audition/cases.json` holds about 58 questions
-per OS (debian, arch, void, fedora, opensuse, macos) and 39 about spark
-itself. A case names what makes an answer right: the head commands, the
-must-nots, the danger flag. A case with `then` is a `??` pair: the
-follow-up must keep the tool. `run --os OS --model NAME` sends each
-case through the real `spark line`. The OS comes from spark's own
-seams, so one Linux speaks as another family too. macOS runs on a Mac.
+per OS (debian, arch, void, fedora, opensuse, macos) and 58 about spark
+itself: 34 to tune on and 24 held out. A case names what makes an
+answer right: the head commands, the must-nots and the danger flag.
+`not_head` names the commands that must not run, and `must` what the
+answer cannot leave out. A case with `then` is a `??` pair: the
+follow-up must keep the tool. The held-out cases (`split` is `held`)
+never change. Never reword one, and never tune the prompt on their
+answers. `run --split dev` leaves them out, `--split held` runs them
+alone, and the report prints their score on a line of its own.
+
+`run --os OS --model NAME` sends each case through the real `spark
+line`. The OS comes from spark's own seams, so one Linux speaks as
+another family too. macOS runs on a Mac.
+For `spark line`, `PATH` is one directory of stubs: one for every tool
+that OS's snapshot has, and nothing else. So the prompt names that OS's
+tools, never the tools of the machine the audition runs on. `run`
+checks the prompt first and refuses to start when it names another.
 The grader trusts outcomes and shares no code with the line's own
 judge. The head command must
 exist in that OS's help snapshot, `help-<os>.json`, and every option
 must appear in its help. A spark verb must appear in the TAB completion
-files or the cheatsheet's command column. `collect` writes a snapshot
+files or the cheatsheet's command column. A reply that exits non-zero
+fails. A run keeps each reply's first lines and its exit code.
+`report` grades them again with today's grader, cases and snapshots, so
+a new rule judges an old run with no model. `collect` writes a snapshot
 on the OS it describes, and `line-audition-help.yml` runs it in the CI
 images. A snapshot also keeps what a store indexes: each tool's one
 line, its synopsis and its option lines. `serve-candidate` starts a
@@ -162,7 +178,9 @@ second engine for a model on trial. `selftest` needs no model:
 snapshot into a store (`SnapshotStore`, spark's own verbs included). It
 asks `grounding.search` for each case's words and counts a case whose
 head is in the top 3. It prints the share per topic and the search's
-p50 and p95. A stub search exits 2.
+p50 and p95. A stub search exits 2. The search is tuned on recall, so
+it leaves the held-out cases out unless `--split held` or `--split
+all` asks for them.
 
 The A/B runs each OS three times, once per arm: `run --arm off`, `run
 --arm judge` and `run --arm full`. The arm is `SPARK_LINE_KNOW` for
@@ -170,7 +188,9 @@ The A/B runs each OS three times, once per arm: `run --arm off`, `run
 front too. `report FILE...` prints one block per model and arm. Its
 second table holds danger recall, danger over-fire, flag honesty, the
 re-ask share, the evidence characters, and total and command-ready ms
-at p50 and p90. Its last line says whether the bar is met.
+at p50 and p90. It also counts the empty replies and the leaks: a
+question about the OS answered with a spark command. Its last line
+says whether the bar is met.
 
 The production bar, before a release tag that changes the line:
 
@@ -185,10 +205,13 @@ A run sets 3 seams, honoured only with `SPARK_LINE_BENCH=1` and never
 on a person's line. `SPARK_LINE_KNOW` is the arm.
 `SPARK_KNOWLEDGE_SNAPSHOT=FILE` is the store the line grounds and judges
 in: that OS's snapshot, so a Void machine grounds a debian question in
-debian's manuals. When it is set, `spark line` prints one line on
-stderr naming it, so it never passes silently. `run` warns when no turn
-did. `SPARK_LINE_BENCH_HISTORY=FILE` is a `??` pair's first turn, as the
-history a bench turn otherwise lacks. All 3 are for measuring only.
+debian's manuals. The store a run writes is closed: a program the
+snapshot lacks is not installed there, and the line's judge says so as
+it does on a real machine. When it is set, `spark line` prints one
+line on stderr naming it, so it never passes silently. `run` warns
+when no turn did. `SPARK_LINE_BENCH_HISTORY=FILE` is a `??` pair's
+first turn, as the history a bench turn otherwise lacks. All 3 are for
+measuring only.
 
 ## Contracts
 

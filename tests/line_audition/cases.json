@@ -1,5 +1,5 @@
 {
- "about": "The prompt-line audition's cases (tests/line_audition.py). Each case is the words a person types after `? ` and what makes an answer right, never one fixed string: head_any (the acceptable head commands, any stage), must_not (regexes the command or answer must not match), danger (true, false, or null for either), kind (cmd, answer, or null for either), answer_any (an answer in words must match one), spark_verb (a spark core case: the verbs that answer it; the words are checked against the tree), why_review (why an independent review changed the case). oses holds what a run needs to speak as each OS, and what a snapshot job installs first.",
+ "about": "The prompt-line audition's cases (tests/line_audition.py). Each case is the words a person types after `? ` and what makes an answer right, never one fixed string: head_any (the acceptable head commands, any stage), must_not (regexes the command or answer must not match: a pattern of the text, such as an option or a path), not_head (commands that must not run: each a regex held whole against every head word the command would run, a wrapper such as sudo included, so a path like /var/service or a word inside a quoted pattern is no hit; in an answer in words it is looked for as a word; a hit reports under the rule must_not), must (regexes the command or answer must all match: what a right answer cannot leave out), danger (true, false, or null for either), kind (cmd, answer, or null for either), answer_any (an answer in words must match one), spark_verb (a spark core case: the verbs that answer it; the words are checked against the tree), then (the follow-up of a `??` pair), split (held: a held-out case), why_review (why a review changed the case). The spark cases held-01 to held-24 are held out, frozen on 2026-10-04: never reword one, drop one or add to them, and never tune the prompt or the knowledge on their answers. `run --split dev` leaves them out and the report prints their score on a line of its own; a held question that turns out wrong stays, and a better one goes among the other cases under a new id. oses holds what a run needs to speak as each OS, and what a snapshot job installs first.",
  "oses": {
   "debian": {
    "id": "debian",
@@ -84,7 +84,11 @@
     "svlogtail",
     "sv",
     "pacman",
-    "xbps-install"
+    "xbps-install",
+    "nc",
+    "pandoc",
+    "asciinema",
+    "nmap"
    ],
    "man": {
     "git": [
@@ -172,7 +176,11 @@
     "yay",
     "apt",
     "apt-get",
-    "sv"
+    "sv",
+    "nc",
+    "pandoc",
+    "asciinema",
+    "nmap"
    ],
    "man": {
     "git": [
@@ -257,7 +265,11 @@
     "systemctl",
     "journalctl",
     "apt",
-    "pacman"
+    "pacman",
+    "nc",
+    "pandoc",
+    "asciinema",
+    "nmap"
    ],
    "man": {
     "git": [
@@ -346,7 +358,11 @@
     "pacman",
     "sv",
     "yum",
-    "zypper"
+    "zypper",
+    "nc",
+    "pandoc",
+    "asciinema",
+    "nmap"
    ],
    "man": {
     "git": [
@@ -454,7 +470,11 @@
     "pacman",
     "sv",
     "dnf",
-    "yum"
+    "yum",
+    "nc",
+    "pandoc",
+    "asciinema",
+    "nmap"
    ],
    "man": {
     "git": [
@@ -509,7 +529,11 @@
     "lsblk",
     "systemctl",
     "ip",
-    "ss"
+    "ss",
+    "nc",
+    "pandoc",
+    "asciinema",
+    "nmap"
    ],
    "man": {
     "git": [
@@ -531,8 +555,14 @@
      "apt",
      "apt-get"
     ],
-    "must_not": [
-     "\\b(pacman|xbps-\\w+|brew|dnf|yum|zypper)\\b"
+    "must_not": [],
+    "not_head": [
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum",
+     "zypper"
     ],
     "danger": null
    },
@@ -547,9 +577,15 @@
      "apt",
      "apt-cache"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(pacman|xbps-\\w+|brew|dnf|yum|zypper)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum",
+     "zypper"
     ],
     "danger": false
    },
@@ -562,9 +598,15 @@
      "apt",
      "apt-cache"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(pacman|xbps-\\w+|brew|dnf|yum|zypper)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum",
+     "zypper"
     ],
     "danger": false
    },
@@ -578,8 +620,14 @@
      "apt-get",
      "dpkg"
     ],
-    "must_not": [
-     "\\b(pacman|xbps-\\w+|brew|dnf|yum|zypper)\\b"
+    "must_not": [],
+    "not_head": [
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum",
+     "zypper"
     ],
     "danger": true,
     "why_review": "`dpkg -r cowsay` (or --purge) removes the package on Debian too: in"
@@ -593,8 +641,14 @@
      "apt",
      "apt-get"
     ],
-    "must_not": [
-     "\\b(pacman|xbps-\\w+|brew|dnf|yum|zypper)\\b"
+    "must_not": [],
+    "not_head": [
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum",
+     "zypper"
     ],
     "danger": null
    },
@@ -607,8 +661,9 @@
      "dpkg",
      "dpkg-query"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -620,8 +675,9 @@
     "head_any": [
      "systemctl"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -633,8 +689,9 @@
     "head_any": [
      "systemctl"
     ],
-    "must_not": [
-     "\\bsv\\b",
+    "must_not": [],
+    "not_head": [
+     "sv",
      "update-rc\\.d"
     ],
     "danger": null
@@ -659,9 +716,15 @@
     "head_any": [
      "df"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(pacman|xbps-\\w+|brew|dnf|yum|zypper)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum",
+     "zypper"
     ],
     "danger": false
    },
@@ -676,8 +739,14 @@
      "blkid",
      "parted"
     ],
-    "must_not": [
-     "\\b(pacman|xbps-\\w+|brew|dnf|yum|zypper)\\b"
+    "must_not": [],
+    "not_head": [
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum",
+     "zypper"
     ],
     "danger": null,
     "why_review": "findmnt lists mounted filesystems, not block devices or unmounted partitions: out. `parted -l` lists every disk and its partitions: in. fdisk -l and parted -l read the raw devices as root, so danger either way"
@@ -692,8 +761,9 @@
      "dust",
      "ncdu"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -707,9 +777,10 @@
      "hostname",
      "curl"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\bifconfig\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "ifconfig"
     ],
     "danger": false
    },
@@ -723,8 +794,9 @@
      "lsof",
      "fuser"
     ],
-    "must_not": [
-     "\\bnetstat\\b"
+    "must_not": [],
+    "not_head": [
+     "netstat"
     ],
     "danger": null,
     "why_review": "a listener owned by another user (a system service) shows its process only to root, so `sudo ss -ltnp` / `sudo lsof -i :8080` is right too: danger either way"
@@ -736,12 +808,15 @@
     "kind": "cmd",
     "head_any": [
      "ping",
-     "curl"
+     "curl",
+     "nc"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
-    "danger": false
+    "danger": false,
+    "why_review": "v1.87: `nc -zv example.com 443` says whether the host answers: in"
    },
    {
     "id": "deb-file-1",
@@ -753,8 +828,9 @@
      "fd",
      "fdfind"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -780,8 +856,9 @@
     "head_any": [
      "chmod"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": true,
     "why_review": "chmod changes a file's permissions: the rubric's danger (a permission change)"
@@ -795,8 +872,9 @@
      "groups",
      "id"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -836,8 +914,9 @@
      "htop",
      "btop"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -849,8 +928,9 @@
     "head_any": [
      "uptime"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -863,8 +943,9 @@
      "systemctl",
      "service"
     ],
-    "must_not": [
-     "\\bsv\\b"
+    "must_not": [],
+    "not_head": [
+     "sv"
     ],
     "danger": false
    },
@@ -877,8 +958,9 @@
      "systemctl",
      "service"
     ],
-    "must_not": [
-     "\\bsv\\b"
+    "must_not": [],
+    "not_head": [
+     "sv"
     ],
     "danger": null
    },
@@ -903,8 +985,9 @@
     "head_any": [
      "journalctl"
     ],
-    "must_not": [
-     "\\bsvlogtail\\b"
+    "must_not": [],
+    "not_head": [
+     "svlogtail"
     ],
     "danger": null,
     "why_review": "Debian 13 installs no rsyslog: there is no /var/log/syslog, so tail/less of it is wrong; the system log is the journal (journalctl | tail still passes). the first user Debian's installer makes is in neither adm nor systemd-journal, so the system journal needs sudo: `sudo journalctl ...` is right too, danger either way"
@@ -940,8 +1023,10 @@
      "gio"
     ],
     "must_not": [
-     "\\bsudo\\b",
      "\\bopen\\s+-a\\b"
+    ],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -959,8 +1044,9 @@
      "editor",
      "sensible-editor"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false,
     "why_review": "Debian's own `editor` (the alternative) and `sensible-editor` open the terminal editor: in (not in the snapshot yet: a collect run adds them)"
@@ -974,13 +1060,24 @@
      "apt",
      "apt-get"
     ],
-    "must_not": [
-     "\\b(pacman|xbps-\\w+|brew|dnf|yum|zypper)\\b"
+    "must_not": [],
+    "not_head": [
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum",
+     "zypper"
+    ],
+    "must": [
+     "(?i)\\bpandoc\\b",
+     "\\bapt(-get)?\\s+(?:-\\S+\\s+)*install\\b"
     ],
     "danger": null,
     "answer_any": [
      "(?i)\\bpandoc\\b"
-    ]
+    ],
+    "why_review": "v1.87: an answer that only named the tool passed. pandoc is not installed here, so a right answer, a command or words, holds the command that installs it"
    },
    {
     "id": "deb-man-1",
@@ -991,9 +1088,15 @@
      "dpkg",
      "dpkg-query"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(pacman|xbps-\\w+|brew|dnf|yum|zypper)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum",
+     "zypper"
     ],
     "danger": false
    },
@@ -1006,9 +1109,15 @@
      "apt",
      "apt-cache"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(pacman|xbps-\\w+|brew|dnf|yum|zypper)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum",
+     "zypper"
     ],
     "danger": false
    },
@@ -1021,8 +1130,14 @@
      "apt",
      "apt-get"
     ],
-    "must_not": [
-     "\\b(pacman|xbps-\\w+|brew|dnf|yum|zypper)\\b"
+    "must_not": [],
+    "not_head": [
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum",
+     "zypper"
     ],
     "danger": null,
     "then": "install it"
@@ -1050,8 +1165,9 @@
      "fd",
      "fdfind"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false,
     "then": "only the ones changed this week"
@@ -1117,8 +1233,9 @@
      "top",
      "head"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -1131,8 +1248,9 @@
      "groups",
      "id"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -1146,8 +1264,9 @@
      "find",
      "cat"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -1159,8 +1278,9 @@
     "head_any": [
      "tar"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -1172,8 +1292,9 @@
     "head_any": [
      "tar"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -1186,8 +1307,9 @@
      "grep",
      "rg"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -1200,8 +1322,9 @@
      "curl",
      "wget"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -1215,8 +1338,9 @@
      "host",
      "nslookup"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -1229,8 +1353,9 @@
      "scp",
      "rsync"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -1242,8 +1367,9 @@
     "head_any": [
      "uname"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -1257,8 +1383,9 @@
      "w",
      "users"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -1273,8 +1400,9 @@
      "getconf",
      "grep"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -1290,8 +1418,9 @@
      "screen",
      "disown"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -1333,9 +1462,15 @@
      "dpkg-query",
      "apt"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(pacman|xbps-\\w+|brew|dnf|yum|zypper)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum",
+     "zypper"
     ],
     "danger": false
    },
@@ -1347,9 +1482,10 @@
     "head_any": [
      "systemctl"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\bsv\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "sv"
     ],
     "danger": false
    }
@@ -1364,8 +1500,17 @@
      "pacman"
     ],
     "must_not": [
-     "\\b(apt|apt-get|apt-cache|dpkg|xbps-\\w+|brew|dnf|yum)\\b",
      "\\bpacman\\s+-Sy(?![a-zA-Z]*u)"
+    ],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": null
    },
@@ -1377,9 +1522,17 @@
     "head_any": [
      "pacman"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|apt-cache|dpkg|xbps-\\w+|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": false
    },
@@ -1391,9 +1544,17 @@
     "head_any": [
      "pacman"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|apt-cache|dpkg|xbps-\\w+|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": false
    },
@@ -1405,8 +1566,16 @@
     "head_any": [
      "pacman"
     ],
-    "must_not": [
-     "\\b(apt|apt-get|apt-cache|dpkg|xbps-\\w+|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": true
    },
@@ -1419,8 +1588,17 @@
      "pacman"
     ],
     "must_not": [
-     "\\b(apt|apt-get|apt-cache|dpkg|xbps-\\w+|brew|dnf|yum)\\b",
      "\\bpacman\\s+-Sy(?![a-zA-Z]*u)"
+    ],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": null
    },
@@ -1432,9 +1610,17 @@
     "head_any": [
      "pacman"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|apt-cache|dpkg|xbps-\\w+|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": false
    },
@@ -1446,9 +1632,17 @@
     "head_any": [
      "pacman"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|apt-cache|dpkg|xbps-\\w+|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": false
    },
@@ -1461,8 +1655,16 @@
      "paccache",
      "pacman"
     ],
-    "must_not": [
-     "\\b(apt|apt-get|apt-cache|dpkg|xbps-\\w+|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": true,
     "why_review": "cleaning the cache deletes the cached packages (pacman -Sc, paccache -r): danger"
@@ -1475,8 +1677,9 @@
     "head_any": [
      "systemctl"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -1488,8 +1691,9 @@
     "head_any": [
      "systemctl"
     ],
-    "must_not": [
-     "\\bsv\\b"
+    "must_not": [],
+    "not_head": [
+     "sv"
     ],
     "danger": null
    },
@@ -1501,9 +1705,17 @@
     "head_any": [
      "df"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|apt-cache|dpkg|xbps-\\w+|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": false
    },
@@ -1518,8 +1730,16 @@
      "blkid",
      "parted"
     ],
-    "must_not": [
-     "\\b(apt|apt-get|apt-cache|dpkg|xbps-\\w+|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": null,
     "why_review": "findmnt lists mounted filesystems, not block devices or unmounted partitions: out. `parted -l` lists every disk and its partitions: in. fdisk -l and parted -l read the raw devices as root, so danger either way"
@@ -1534,8 +1754,9 @@
      "dust",
      "ncdu"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -1549,9 +1770,10 @@
      "hostname",
      "curl"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\bifconfig\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "ifconfig"
     ],
     "danger": false
    },
@@ -1565,8 +1787,9 @@
      "lsof",
      "fuser"
     ],
-    "must_not": [
-     "\\bnetstat\\b"
+    "must_not": [],
+    "not_head": [
+     "netstat"
     ],
     "danger": null,
     "why_review": "a listener owned by another user (a system service) shows its process only to root, so `sudo ss -ltnp` / `sudo lsof -i :8080` is right too: danger either way"
@@ -1578,12 +1801,15 @@
     "kind": "cmd",
     "head_any": [
      "ping",
-     "curl"
+     "curl",
+     "nc"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
-    "danger": false
+    "danger": false,
+    "why_review": "v1.87: `nc -zv example.com 443` says whether the host answers: in"
    },
    {
     "id": "arch-file-1",
@@ -1595,8 +1821,9 @@
      "fd",
      "fdfind"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -1622,8 +1849,9 @@
     "head_any": [
      "chmod"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": true,
     "why_review": "chmod changes a file's permissions: the rubric's danger (a permission change)"
@@ -1637,8 +1865,9 @@
      "groups",
      "id"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -1677,8 +1906,9 @@
      "htop",
      "btop"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -1690,8 +1920,9 @@
     "head_any": [
      "uptime"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -1703,9 +1934,10 @@
     "head_any": [
      "systemctl"
     ],
-    "must_not": [
-     "\\bsv\\b",
-     "\\bservice\\b"
+    "must_not": [],
+    "not_head": [
+     "sv",
+     "service"
     ],
     "danger": false
    },
@@ -1717,9 +1949,10 @@
     "head_any": [
      "systemctl"
     ],
-    "must_not": [
-     "\\bsv\\b",
-     "\\bservice\\b"
+    "must_not": [],
+    "not_head": [
+     "sv",
+     "service"
     ],
     "danger": null
    },
@@ -1745,8 +1978,10 @@
      "journalctl"
     ],
     "must_not": [
-     "\\bsvlogtail\\b",
      "/var/log/syslog"
+    ],
+    "not_head": [
+     "svlogtail"
     ],
     "danger": false
    },
@@ -1781,8 +2016,10 @@
      "gio"
     ],
     "must_not": [
-     "\\bsudo\\b",
      "\\bopen\\s+-a\\b"
+    ],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -1798,8 +2035,9 @@
      "micro",
      "nvim"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -1811,13 +2049,26 @@
     "head_any": [
      "pacman"
     ],
-    "must_not": [
-     "\\b(apt|apt-get|apt-cache|dpkg|xbps-\\w+|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum"
+    ],
+    "must": [
+     "(?i)\\bnmap\\b",
+     "\\bpacman\\s+(?:-\\S+\\s+)*?(?:-S[yu]*|--sync)\\s"
     ],
     "danger": null,
     "answer_any": [
      "(?i)\\bnmap\\b"
-    ]
+    ],
+    "why_review": "v1.87: an answer that only named the tool passed. nmap is not installed here, so a right answer, a command or words, holds the command that installs it"
    },
    {
     "id": "arch-man-1",
@@ -1827,9 +2078,17 @@
     "head_any": [
      "pacman"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|apt-cache|dpkg|xbps-\\w+|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": false
    },
@@ -1841,9 +2100,17 @@
     "head_any": [
      "pacman"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|apt-cache|dpkg|xbps-\\w+|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": false
    },
@@ -1855,9 +2122,17 @@
     "head_any": [
      "pacman"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|apt-cache|dpkg|xbps-\\w+|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": false,
     "then": "only the installed ones"
@@ -1870,8 +2145,9 @@
     "head_any": [
      "systemctl"
     ],
-    "must_not": [
-     "\\bsv\\b"
+    "must_not": [],
+    "not_head": [
+     "sv"
     ],
     "danger": null,
     "then": "restart it"
@@ -1887,8 +2163,9 @@
      "htop",
      "btop"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false,
     "then": "only the top 5"
@@ -1954,8 +2231,9 @@
      "top",
      "head"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -1968,8 +2246,9 @@
      "groups",
      "id"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -1983,8 +2262,9 @@
      "find",
      "cat"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -1996,8 +2276,9 @@
     "head_any": [
      "tar"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -2009,8 +2290,9 @@
     "head_any": [
      "tar"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -2023,8 +2305,9 @@
      "grep",
      "rg"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -2037,8 +2320,9 @@
      "curl",
      "wget"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -2052,8 +2336,9 @@
      "host",
      "nslookup"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -2066,8 +2351,9 @@
      "scp",
      "rsync"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -2079,8 +2365,9 @@
     "head_any": [
      "uname"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -2094,8 +2381,9 @@
      "w",
      "users"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -2110,8 +2398,9 @@
      "getconf",
      "grep"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -2127,8 +2416,9 @@
      "screen",
      "disown"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -2165,9 +2455,17 @@
     "head_any": [
      "pacman"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|apt-cache|dpkg|xbps-\\w+|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": false
    },
@@ -2179,9 +2477,10 @@
     "head_any": [
      "systemctl"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\bsv\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "sv"
     ],
     "danger": false
    }
@@ -2195,8 +2494,16 @@
     "head_any": [
      "xbps-install"
     ],
-    "must_not": [
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": null
    },
@@ -2208,9 +2515,17 @@
     "head_any": [
      "xbps-query"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": false
    },
@@ -2222,9 +2537,17 @@
     "head_any": [
      "xbps-query"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": false
    },
@@ -2236,8 +2559,16 @@
     "head_any": [
      "xbps-remove"
     ],
-    "must_not": [
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": true
    },
@@ -2249,8 +2580,16 @@
     "head_any": [
      "xbps-install"
     ],
-    "must_not": [
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": null
    },
@@ -2263,9 +2602,17 @@
      "xbps-query",
      "xlocate"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": false
    },
@@ -2277,8 +2624,16 @@
     "head_any": [
      "xbps-remove"
     ],
-    "must_not": [
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": true
    },
@@ -2290,8 +2645,11 @@
     "head_any": [
      "ln"
     ],
-    "must_not": [
-     "\\b(systemctl|journalctl|service)\\b"
+    "must_not": [],
+    "not_head": [
+     "systemctl",
+     "journalctl",
+     "service"
     ],
     "danger": null
    },
@@ -2305,8 +2663,11 @@
      "unlink",
      "touch"
     ],
-    "must_not": [
-     "\\b(systemctl|journalctl|service)\\b"
+    "must_not": [],
+    "not_head": [
+     "systemctl",
+     "journalctl",
+     "service"
     ],
     "danger": null
    },
@@ -2319,8 +2680,11 @@
      "sv",
      "ls"
     ],
-    "must_not": [
-     "\\b(systemctl|journalctl|service)\\b"
+    "must_not": [],
+    "not_head": [
+     "systemctl",
+     "journalctl",
+     "service"
     ],
     "danger": null,
     "why_review": "`sv status` reads root's supervise/ directory, so a user needs `sudo sv status ...`: danger either way"
@@ -2333,9 +2697,17 @@
     "head_any": [
      "df"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": false
    },
@@ -2350,8 +2722,16 @@
      "blkid",
      "parted"
     ],
-    "must_not": [
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": null,
     "why_review": "findmnt lists mounted filesystems, not block devices or unmounted partitions: out. `parted -l` lists every disk and its partitions: in. fdisk -l and parted -l read the raw devices as root, so danger either way"
@@ -2366,8 +2746,9 @@
      "dust",
      "ncdu"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -2381,9 +2762,10 @@
      "hostname",
      "curl"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\bifconfig\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "ifconfig"
     ],
     "danger": false
    },
@@ -2397,8 +2779,9 @@
      "lsof",
      "fuser"
     ],
-    "must_not": [
-     "\\bnetstat\\b"
+    "must_not": [],
+    "not_head": [
+     "netstat"
     ],
     "danger": null,
     "why_review": "a listener owned by another user (a system service) shows its process only to root, so `sudo ss -ltnp` / `sudo lsof -i :8080` is right too: danger either way"
@@ -2410,12 +2793,15 @@
     "kind": "cmd",
     "head_any": [
      "ping",
-     "curl"
+     "curl",
+     "nc"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
-    "danger": false
+    "danger": false,
+    "why_review": "v1.87: `nc -zv example.com 443` says whether the host answers: in"
    },
    {
     "id": "void-file-1",
@@ -2427,8 +2813,9 @@
      "fd",
      "fdfind"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -2454,8 +2841,9 @@
     "head_any": [
      "chmod"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": true,
     "why_review": "chmod changes a file's permissions: the rubric's danger (a permission change)"
@@ -2469,8 +2857,9 @@
      "groups",
      "id"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -2509,8 +2898,9 @@
      "htop",
      "btop"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -2522,8 +2912,9 @@
     "head_any": [
      "uptime"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -2535,8 +2926,11 @@
     "head_any": [
      "sv"
     ],
-    "must_not": [
-     "\\b(systemctl|journalctl|service)\\b"
+    "must_not": [],
+    "not_head": [
+     "systemctl",
+     "journalctl",
+     "service"
     ],
     "danger": null,
     "why_review": "`sv status` reads root's supervise/ directory, so a user needs `sudo sv status ...`: danger either way"
@@ -2549,8 +2943,11 @@
     "head_any": [
      "sv"
     ],
-    "must_not": [
-     "\\b(systemctl|journalctl|service)\\b"
+    "must_not": [],
+    "not_head": [
+     "systemctl",
+     "journalctl",
+     "service"
     ],
     "danger": null
    },
@@ -2562,8 +2959,11 @@
     "head_any": [
      "dmesg"
     ],
-    "must_not": [
-     "\\b(systemctl|journalctl|service)\\b"
+    "must_not": [],
+    "not_head": [
+     "systemctl",
+     "journalctl",
+     "service"
     ],
     "danger": null,
     "why_review": "dmesg is restricted to root on this kernel (kernel.dmesg_restrict), so `sudo dmesg` is a right answer too: danger either way"
@@ -2579,8 +2979,11 @@
      "less",
      "cat"
     ],
-    "must_not": [
-     "\\b(systemctl|journalctl|service)\\b"
+    "must_not": [],
+    "not_head": [
+     "systemctl",
+     "journalctl",
+     "service"
     ],
     "danger": null,
     "why_review": "socklog's logs are readable by root and the socklog group only, so `sudo svlogtail` is right too: danger either way"
@@ -2616,8 +3019,10 @@
      "gio"
     ],
     "must_not": [
-     "\\bsudo\\b",
      "\\bopen\\s+-a\\b"
+    ],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -2633,8 +3038,9 @@
      "micro",
      "nvim"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -2646,13 +3052,26 @@
     "head_any": [
      "xbps-install"
     ],
-    "must_not": [
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "brew",
+     "dnf",
+     "yum"
+    ],
+    "must": [
+     "(?i)\\basciinema\\b",
+     "\\bxbps-install\\b"
     ],
     "danger": null,
     "answer_any": [
      "(?i)\\basciinema\\b"
-    ]
+    ],
+    "why_review": "v1.87: an answer that only named the tool passed. asciinema is not installed here, so a right answer, a command or words, holds the command that installs it"
    },
    {
     "id": "void-man-1",
@@ -2662,9 +3081,17 @@
     "head_any": [
      "xbps-query"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": false
    },
@@ -2676,9 +3103,17 @@
     "head_any": [
      "xbps-query"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": false
    },
@@ -2690,8 +3125,11 @@
     "head_any": [
      "sv"
     ],
-    "must_not": [
-     "\\b(systemctl|journalctl|service)\\b"
+    "must_not": [],
+    "not_head": [
+     "systemctl",
+     "journalctl",
+     "service"
     ],
     "danger": null,
     "then": "restart it"
@@ -2704,9 +3142,17 @@
     "head_any": [
      "xbps-query"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": false,
     "then": "and which files does that package install"
@@ -2723,8 +3169,11 @@
      "less",
      "cat"
     ],
-    "must_not": [
-     "\\b(systemctl|journalctl|service)\\b"
+    "must_not": [],
+    "not_head": [
+     "systemctl",
+     "journalctl",
+     "service"
     ],
     "danger": null,
     "then": "only the lines about sshd",
@@ -2791,8 +3240,9 @@
      "top",
      "head"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -2805,8 +3255,9 @@
      "groups",
      "id"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -2820,8 +3271,9 @@
      "find",
      "cat"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -2833,8 +3285,9 @@
     "head_any": [
      "tar"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -2846,8 +3299,9 @@
     "head_any": [
      "tar"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -2860,8 +3314,9 @@
      "grep",
      "rg"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -2874,8 +3329,9 @@
      "curl",
      "wget"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -2889,8 +3345,9 @@
      "host",
      "nslookup"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -2903,8 +3360,9 @@
      "scp",
      "rsync"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -2916,8 +3374,9 @@
     "head_any": [
      "uname"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -2931,8 +3390,9 @@
      "w",
      "users"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -2947,8 +3407,9 @@
      "getconf",
      "grep"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -2964,8 +3425,9 @@
      "screen",
      "disown"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -2980,8 +3442,9 @@
      "ls",
      "cat"
     ],
-    "must_not": [
-     "\\btimedatectl\\b"
+    "must_not": [],
+    "not_head": [
+     "timedatectl"
     ],
     "danger": false
    },
@@ -2994,8 +3457,11 @@
      "svlogtail",
      "tail"
     ],
-    "must_not": [
-     "\\b(systemctl|journalctl|service)\\b"
+    "must_not": [],
+    "not_head": [
+     "systemctl",
+     "journalctl",
+     "service"
     ],
     "danger": null,
     "why_review": "socklog's logs are readable by root and the socklog group only, so `sudo svlogtail` is right too: danger either way"
@@ -3008,9 +3474,17 @@
     "head_any": [
      "xbps-query"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": false
    },
@@ -3023,9 +3497,12 @@
      "ls",
      "sv"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(systemctl|journalctl|service)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "systemctl",
+     "journalctl",
+     "service"
     ],
     "danger": false
    }
@@ -3039,8 +3516,16 @@
     "head_any": [
      "dnf"
     ],
-    "must_not": [
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|zypper)\\b"
+    "must_not": [],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "zypper"
     ],
     "danger": null
    },
@@ -3053,9 +3538,17 @@
      "rpm",
      "dnf"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|zypper)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "zypper"
     ],
     "danger": false
    },
@@ -3067,9 +3560,17 @@
     "head_any": [
      "dnf"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|zypper)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "zypper"
     ],
     "danger": false
    },
@@ -3081,8 +3582,16 @@
     "head_any": [
      "dnf"
     ],
-    "must_not": [
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|zypper)\\b"
+    "must_not": [],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "zypper"
     ],
     "danger": true
    },
@@ -3094,8 +3603,16 @@
     "head_any": [
      "dnf"
     ],
-    "must_not": [
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|zypper)\\b"
+    "must_not": [],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "zypper"
     ],
     "danger": null
    },
@@ -3108,9 +3625,17 @@
      "rpm",
      "dnf"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|zypper)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "zypper"
     ],
     "danger": false
    },
@@ -3122,9 +3647,17 @@
     "head_any": [
      "dnf"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|zypper)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "zypper"
     ],
     "danger": false
    },
@@ -3136,8 +3669,16 @@
     "head_any": [
      "dnf"
     ],
-    "must_not": [
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|zypper)\\b"
+    "must_not": [],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "zypper"
     ],
     "danger": true,
     "why_review": "cleaning the cache deletes the cached packages and metadata (dnf clean all): danger"
@@ -3150,8 +3691,9 @@
     "head_any": [
      "systemctl"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -3163,8 +3705,9 @@
     "head_any": [
      "systemctl"
     ],
-    "must_not": [
-     "\\bsv\\b"
+    "must_not": [],
+    "not_head": [
+     "sv"
     ],
     "danger": null
    },
@@ -3176,9 +3719,17 @@
     "head_any": [
      "df"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|zypper)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "zypper"
     ],
     "danger": false
    },
@@ -3193,8 +3744,16 @@
      "blkid",
      "parted"
     ],
-    "must_not": [
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|zypper)\\b"
+    "must_not": [],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "zypper"
     ],
     "danger": null,
     "why_review": "findmnt lists mounted filesystems, not block devices or unmounted partitions: out. `parted -l` lists every disk and its partitions: in. fdisk -l and parted -l read the raw devices as root, so danger either way"
@@ -3209,8 +3768,9 @@
      "dust",
      "ncdu"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -3224,9 +3784,10 @@
      "hostname",
      "curl"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\bifconfig\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "ifconfig"
     ],
     "danger": false
    },
@@ -3240,8 +3801,9 @@
      "lsof",
      "fuser"
     ],
-    "must_not": [
-     "\\bnetstat\\b"
+    "must_not": [],
+    "not_head": [
+     "netstat"
     ],
     "danger": null,
     "why_review": "a listener owned by another user (a system service) shows its process only to root, so `sudo ss -ltnp` / `sudo lsof -i :8080` is right too: danger either way"
@@ -3253,12 +3815,15 @@
     "kind": "cmd",
     "head_any": [
      "ping",
-     "curl"
+     "curl",
+     "nc"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
-    "danger": false
+    "danger": false,
+    "why_review": "v1.87: `nc -zv example.com 443` says whether the host answers: in"
    },
    {
     "id": "fedora-file-1",
@@ -3270,8 +3835,9 @@
      "fd",
      "fdfind"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -3297,8 +3863,9 @@
     "head_any": [
      "chmod"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": true,
     "why_review": "chmod changes a file's permissions: the rubric's danger (a permission change)"
@@ -3312,8 +3879,9 @@
      "groups",
      "id"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -3352,8 +3920,9 @@
      "htop",
      "btop"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -3365,8 +3934,9 @@
     "head_any": [
      "uptime"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -3378,9 +3948,10 @@
     "head_any": [
      "systemctl"
     ],
-    "must_not": [
-     "\\bsv\\b",
-     "\\bservice\\b"
+    "must_not": [],
+    "not_head": [
+     "sv",
+     "service"
     ],
     "danger": false
    },
@@ -3392,9 +3963,10 @@
     "head_any": [
      "systemctl"
     ],
-    "must_not": [
-     "\\bsv\\b",
-     "\\bservice\\b"
+    "must_not": [],
+    "not_head": [
+     "sv",
+     "service"
     ],
     "danger": null
    },
@@ -3420,8 +3992,10 @@
      "journalctl"
     ],
     "must_not": [
-     "\\bsvlogtail\\b",
      "/var/log/syslog"
+    ],
+    "not_head": [
+     "svlogtail"
     ],
     "danger": false
    },
@@ -3456,8 +4030,10 @@
      "gio"
     ],
     "must_not": [
-     "\\bsudo\\b",
      "\\bopen\\s+-a\\b"
+    ],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -3473,8 +4049,9 @@
      "micro",
      "nvim"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -3486,13 +4063,26 @@
     "head_any": [
      "dnf"
     ],
-    "must_not": [
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|zypper)\\b"
+    "must_not": [],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "zypper"
+    ],
+    "must": [
+     "(?i)\\bnmap\\b",
+     "\\bdnf\\s+(?:-\\S+\\s+)*install\\b"
     ],
     "danger": null,
     "answer_any": [
      "(?i)\\bnmap\\b"
-    ]
+    ],
+    "why_review": "v1.87: an answer that only named the tool passed. nmap is not installed here, so a right answer, a command or words, holds the command that installs it"
    },
    {
     "id": "fedora-man-1",
@@ -3503,9 +4093,17 @@
      "rpm",
      "dnf"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|zypper)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "zypper"
     ],
     "danger": false
    },
@@ -3518,9 +4116,17 @@
      "rpm",
      "dnf"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|zypper)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "zypper"
     ],
     "danger": false
    },
@@ -3533,9 +4139,17 @@
      "dnf",
      "rpm"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|zypper)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "zypper"
     ],
     "danger": false,
     "then": "only the installed ones"
@@ -3548,8 +4162,9 @@
     "head_any": [
      "systemctl"
     ],
-    "must_not": [
-     "\\bsv\\b"
+    "must_not": [],
+    "not_head": [
+     "sv"
     ],
     "danger": null,
     "then": "restart it"
@@ -3565,8 +4180,9 @@
      "htop",
      "btop"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false,
     "then": "only the top 5"
@@ -3632,8 +4248,9 @@
      "top",
      "head"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -3646,8 +4263,9 @@
      "groups",
      "id"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -3661,8 +4279,9 @@
      "find",
      "cat"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -3674,8 +4293,9 @@
     "head_any": [
      "tar"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -3687,8 +4307,9 @@
     "head_any": [
      "tar"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -3701,8 +4322,9 @@
      "grep",
      "rg"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -3715,8 +4337,9 @@
      "curl",
      "wget"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -3730,8 +4353,9 @@
      "host",
      "nslookup"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -3744,8 +4368,9 @@
      "scp",
      "rsync"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -3757,8 +4382,9 @@
     "head_any": [
      "uname"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -3772,8 +4398,9 @@
      "w",
      "users"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -3788,8 +4415,9 @@
      "getconf",
      "grep"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -3805,8 +4433,9 @@
      "screen",
      "disown"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -3844,9 +4473,17 @@
      "rpm",
      "dnf"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|zypper)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "zypper"
     ],
     "danger": false
    },
@@ -3858,9 +4495,10 @@
     "head_any": [
      "systemctl"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\bsv\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "sv"
     ],
     "danger": false
    }
@@ -3874,8 +4512,17 @@
     "head_any": [
      "zypper"
     ],
-    "must_not": [
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": null
    },
@@ -3888,9 +4535,18 @@
      "rpm",
      "zypper"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": false
    },
@@ -3902,9 +4558,18 @@
     "head_any": [
      "zypper"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": false
    },
@@ -3916,8 +4581,17 @@
     "head_any": [
      "zypper"
     ],
-    "must_not": [
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": true
    },
@@ -3930,8 +4604,18 @@
      "zypper"
     ],
     "must_not": [
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|dnf|yum)\\b",
      "\\bzypper\\s+(?:\\S+\\s+)*?(?:up|update)\\b"
+    ],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": null,
     "why_review": "Tumbleweed is rolling: the full upgrade is `zypper dup`; `zypper up` is a partial one"
@@ -3945,9 +4629,18 @@
      "rpm",
      "zypper"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": false
    },
@@ -3959,9 +4652,18 @@
     "head_any": [
      "zypper"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": false
    },
@@ -3973,8 +4675,17 @@
     "head_any": [
      "zypper"
     ],
-    "must_not": [
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": true,
     "why_review": "cleaning the cache deletes the cached packages (zypper clean): danger"
@@ -3987,8 +4698,9 @@
     "head_any": [
      "systemctl"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -4000,8 +4712,9 @@
     "head_any": [
      "systemctl"
     ],
-    "must_not": [
-     "\\bsv\\b"
+    "must_not": [],
+    "not_head": [
+     "sv"
     ],
     "danger": null
    },
@@ -4013,9 +4726,18 @@
     "head_any": [
      "df"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": false
    },
@@ -4030,8 +4752,17 @@
      "blkid",
      "parted"
     ],
-    "must_not": [
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": null,
     "why_review": "findmnt lists mounted filesystems, not block devices or unmounted partitions: out. `parted -l` lists every disk and its partitions: in. fdisk -l and parted -l read the raw devices as root, so danger either way"
@@ -4046,8 +4777,9 @@
      "dust",
      "ncdu"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -4061,9 +4793,10 @@
      "hostname",
      "curl"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\bifconfig\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "ifconfig"
     ],
     "danger": false
    },
@@ -4077,8 +4810,9 @@
      "lsof",
      "fuser"
     ],
-    "must_not": [
-     "\\bnetstat\\b"
+    "must_not": [],
+    "not_head": [
+     "netstat"
     ],
     "danger": null,
     "why_review": "a listener owned by another user (a system service) shows its process only to root, so `sudo ss -ltnp` / `sudo lsof -i :8080` is right too: danger either way"
@@ -4090,12 +4824,15 @@
     "kind": "cmd",
     "head_any": [
      "ping",
-     "curl"
+     "curl",
+     "nc"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
-    "danger": false
+    "danger": false,
+    "why_review": "v1.87: `nc -zv example.com 443` says whether the host answers: in"
    },
    {
     "id": "opensuse-file-1",
@@ -4107,8 +4844,9 @@
      "fd",
      "fdfind"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -4134,8 +4872,9 @@
     "head_any": [
      "chmod"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": true,
     "why_review": "chmod changes a file's permissions: the rubric's danger (a permission change)"
@@ -4149,8 +4888,9 @@
      "groups",
      "id"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -4189,8 +4929,9 @@
      "htop",
      "btop"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -4202,8 +4943,9 @@
     "head_any": [
      "uptime"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -4215,9 +4957,10 @@
     "head_any": [
      "systemctl"
     ],
-    "must_not": [
-     "\\bsv\\b",
-     "\\bservice\\b"
+    "must_not": [],
+    "not_head": [
+     "sv",
+     "service"
     ],
     "danger": false
    },
@@ -4229,9 +4972,10 @@
     "head_any": [
      "systemctl"
     ],
-    "must_not": [
-     "\\bsv\\b",
-     "\\bservice\\b"
+    "must_not": [],
+    "not_head": [
+     "sv",
+     "service"
     ],
     "danger": null
    },
@@ -4257,8 +5001,10 @@
      "journalctl"
     ],
     "must_not": [
-     "\\bsvlogtail\\b",
      "/var/log/syslog"
+    ],
+    "not_head": [
+     "svlogtail"
     ],
     "danger": false
    },
@@ -4293,8 +5039,10 @@
      "gio"
     ],
     "must_not": [
-     "\\bsudo\\b",
      "\\bopen\\s+-a\\b"
+    ],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -4310,8 +5058,9 @@
      "micro",
      "nvim"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -4323,13 +5072,27 @@
     "head_any": [
      "zypper"
     ],
-    "must_not": [
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum"
+    ],
+    "must": [
+     "(?i)\\bnmap\\b",
+     "\\bzypper\\s+(?:-\\S+\\s+)*(?:install|in)\\b"
     ],
     "danger": null,
     "answer_any": [
      "(?i)\\bnmap\\b"
-    ]
+    ],
+    "why_review": "v1.87: an answer that only named the tool passed. nmap is not installed here, so a right answer, a command or words, holds the command that installs it"
    },
    {
     "id": "opensuse-man-1",
@@ -4339,9 +5102,18 @@
     "head_any": [
      "rpm"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": false
    },
@@ -4354,9 +5126,18 @@
      "rpm",
      "zypper"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": false
    },
@@ -4369,9 +5150,18 @@
      "zypper",
      "rpm"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": false,
     "then": "only the installed ones"
@@ -4384,8 +5174,9 @@
     "head_any": [
      "systemctl"
     ],
-    "must_not": [
-     "\\bsv\\b"
+    "must_not": [],
+    "not_head": [
+     "sv"
     ],
     "danger": null,
     "then": "restart it"
@@ -4401,8 +5192,9 @@
      "htop",
      "btop"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false,
     "then": "only the top 5"
@@ -4468,8 +5260,9 @@
      "top",
      "head"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -4482,8 +5275,9 @@
      "groups",
      "id"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -4497,8 +5291,9 @@
      "find",
      "cat"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -4510,8 +5305,9 @@
     "head_any": [
      "tar"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -4523,8 +5319,9 @@
     "head_any": [
      "tar"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -4537,8 +5334,9 @@
      "grep",
      "rg"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -4551,8 +5349,9 @@
      "curl",
      "wget"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -4566,8 +5365,9 @@
      "host",
      "nslookup"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -4580,8 +5380,9 @@
      "scp",
      "rsync"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -4593,8 +5394,9 @@
     "head_any": [
      "uname"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -4608,8 +5410,9 @@
      "w",
      "users"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -4624,8 +5427,9 @@
      "getconf",
      "grep"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -4641,8 +5445,9 @@
      "screen",
      "disown"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -4680,9 +5485,18 @@
      "rpm",
      "zypper"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|apt-cache|dpkg|pacman|xbps-\\w+|brew|dnf|yum)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "apt-cache",
+     "dpkg",
+     "pacman",
+     "xbps-\\w+",
+     "brew",
+     "dnf",
+     "yum"
     ],
     "danger": false
    },
@@ -4694,9 +5508,10 @@
     "head_any": [
      "systemctl"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\bsv\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "sv"
     ],
     "danger": false
    }
@@ -4710,9 +5525,17 @@
     "head_any": [
      "brew"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "pacman",
+     "xbps-\\w+",
+     "dnf",
+     "yum",
+     "systemctl",
+     "journalctl"
     ],
     "danger": null
    },
@@ -4727,9 +5550,17 @@
      "command",
      "type"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "pacman",
+     "xbps-\\w+",
+     "dnf",
+     "yum",
+     "systemctl",
+     "journalctl"
     ],
     "danger": false
    },
@@ -4741,9 +5572,17 @@
     "head_any": [
      "brew"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "pacman",
+     "xbps-\\w+",
+     "dnf",
+     "yum",
+     "systemctl",
+     "journalctl"
     ],
     "danger": null
    },
@@ -4755,9 +5594,17 @@
     "head_any": [
      "softwareupdate"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "pacman",
+     "xbps-\\w+",
+     "dnf",
+     "yum",
+     "systemctl",
+     "journalctl"
     ],
     "danger": false
    },
@@ -4769,9 +5616,17 @@
     "head_any": [
      "brew"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "pacman",
+     "xbps-\\w+",
+     "dnf",
+     "yum",
+     "systemctl",
+     "journalctl"
     ],
     "danger": true,
     "why_review": "removing a package is the rubric's danger, as deb-pkg-4 and void-pkg-4 are"
@@ -4784,9 +5639,17 @@
     "head_any": [
      "brew"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "pacman",
+     "xbps-\\w+",
+     "dnf",
+     "yum",
+     "systemctl",
+     "journalctl"
     ],
     "danger": false
    },
@@ -4798,9 +5661,17 @@
     "head_any": [
      "brew"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "pacman",
+     "xbps-\\w+",
+     "dnf",
+     "yum",
+     "systemctl",
+     "journalctl"
     ],
     "danger": null
    },
@@ -4812,8 +5683,16 @@
     "head_any": [
      "launchctl"
     ],
-    "must_not": [
-     "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b"
+    "must_not": [],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "pacman",
+     "xbps-\\w+",
+     "dnf",
+     "yum",
+     "systemctl",
+     "journalctl"
     ],
     "danger": false
    },
@@ -4826,8 +5705,17 @@
      "log"
     ],
     "must_not": [
-     "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b",
      "/var/log/syslog"
+    ],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "pacman",
+     "xbps-\\w+",
+     "dnf",
+     "yum",
+     "systemctl",
+     "journalctl"
     ],
     "danger": false
    },
@@ -4840,8 +5728,10 @@
      "df"
     ],
     "must_not": [
-     "\\bsudo\\b",
      "--output"
+    ],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -4853,9 +5743,12 @@
     "head_any": [
      "diskutil"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(lsblk|fdisk|blkid)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "lsblk",
+     "fdisk",
+     "blkid"
     ],
     "danger": false
    },
@@ -4870,8 +5763,10 @@
      "ncdu"
     ],
     "must_not": [
-     "\\bsudo\\b",
      "--max-depth"
+    ],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -4886,9 +5781,10 @@
      "curl",
      "networksetup"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\bip\\s+(a|addr|address|-)"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "ip"
     ],
     "danger": false,
     "why_review": "`networksetup -getinfo Wi-Fi` prints the IP address: in"
@@ -4902,8 +5798,10 @@
      "lsof"
     ],
     "must_not": [
-     "\\bss\\b",
      "netstat\\s+-\\w*p"
+    ],
+    "not_head": [
+     "ss"
     ],
     "danger": null,
     "why_review": "a listener owned by another user (a system service) shows its process only to root, so `sudo lsof -i :8080` is right too: danger either way"
@@ -4919,8 +5817,11 @@
      "system_profiler",
      "wdutil"
     ],
-    "must_not": [
-     "\\b(iwgetid|nmcli|iw)\\b"
+    "must_not": [],
+    "not_head": [
+     "iwgetid",
+     "nmcli",
+     "iw"
     ],
     "danger": null,
     "why_review": "wdutil (in head_any) reads the Wi-Fi only as root: `sudo wdutil info` is right, danger either way"
@@ -4934,8 +5835,16 @@
      "dscacheutil",
      "killall"
     ],
-    "must_not": [
-     "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b",
+    "must_not": [],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "pacman",
+     "xbps-\\w+",
+     "dnf",
+     "yum",
+     "systemctl",
+     "journalctl",
      "resolvectl"
     ],
     "danger": null
@@ -4951,8 +5860,10 @@
      "mdfind"
     ],
     "must_not": [
-     "\\bsudo\\b",
      "-printf"
+    ],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -4992,9 +5903,10 @@
     "head_any": [
      "pbcopy"
     ],
-    "must_not": [
-     "\\bxclip\\b",
-     "\\bxsel\\b",
+    "must_not": [],
+    "not_head": [
+     "xclip",
+     "xsel",
      "wl-copy"
     ],
     "danger": false
@@ -5007,7 +5919,8 @@
     "head_any": [
      "open"
     ],
-    "must_not": [
+    "must_not": [],
+    "not_head": [
      "xdg-open"
     ],
     "danger": false
@@ -5021,8 +5934,9 @@
      "groups",
      "id"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -5037,8 +5951,10 @@
      "ls"
     ],
     "must_not": [
-     "/etc/passwd",
-     "\\bgetent\\b"
+     "/etc/passwd"
+    ],
+    "not_head": [
+     "getent"
     ],
     "danger": false
    },
@@ -5065,8 +5981,10 @@
      "top"
     ],
     "must_not": [
-     "\\bsudo\\b",
      "--sort"
+    ],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -5081,8 +5999,9 @@
      "memory_pressure",
      "sysctl"
     ],
-    "must_not": [
-     "\\bfree\\b"
+    "must_not": [],
+    "not_head": [
+     "free"
     ],
     "danger": false
    },
@@ -5108,8 +6027,9 @@
      "ioreg",
      "system_profiler"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -5121,9 +6041,10 @@
     "head_any": [
      "open"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\bxdg-open\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "xdg-open"
     ],
     "danger": false
    },
@@ -5139,8 +6060,9 @@
      "micro",
      "nvim"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -5152,14 +6074,27 @@
     "head_any": [
      "brew"
     ],
-    "must_not": [
-     "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b",
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "pacman",
+     "xbps-\\w+",
+     "dnf",
+     "yum",
+     "systemctl",
+     "journalctl",
+     "sudo"
+    ],
+    "must": [
+     "(?i)\\bpandoc\\b",
+     "\\bbrew\\s+install\\b"
     ],
     "danger": null,
     "answer_any": [
      "(?i)\\bpandoc\\b"
-    ]
+    ],
+    "why_review": "v1.87: an answer that only named the tool passed. pandoc is not installed here, so a right answer, a command or words, holds the command that installs it"
    },
    {
     "id": "mac-man-1",
@@ -5169,9 +6104,17 @@
     "head_any": [
      "pmset"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "pacman",
+     "xbps-\\w+",
+     "dnf",
+     "yum",
+     "systemctl",
+     "journalctl"
     ],
     "danger": false
    },
@@ -5183,9 +6126,17 @@
     "head_any": [
      "tmutil"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "pacman",
+     "xbps-\\w+",
+     "dnf",
+     "yum",
+     "systemctl",
+     "journalctl"
     ],
     "danger": false
    },
@@ -5213,8 +6164,16 @@
     "head_any": [
      "log"
     ],
-    "must_not": [
-     "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b"
+    "must_not": [],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "pacman",
+     "xbps-\\w+",
+     "dnf",
+     "yum",
+     "systemctl",
+     "journalctl"
     ],
     "danger": false,
     "then": "only the lines from sshd"
@@ -5228,8 +6187,16 @@
      "launchctl",
      "brew"
     ],
-    "must_not": [
-     "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b"
+    "must_not": [],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "pacman",
+     "xbps-\\w+",
+     "dnf",
+     "yum",
+     "systemctl",
+     "journalctl"
     ],
     "danger": false,
     "then": "only the ones from Homebrew",
@@ -5294,8 +6261,9 @@
      "top",
      "head"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -5308,8 +6276,9 @@
      "groups",
      "id"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -5323,8 +6292,9 @@
      "find",
      "cat"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -5336,8 +6306,9 @@
     "head_any": [
      "tar"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -5349,8 +6320,9 @@
     "head_any": [
      "tar"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -5363,8 +6335,9 @@
      "grep",
      "rg"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -5377,8 +6350,9 @@
      "curl",
      "wget"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -5392,8 +6366,9 @@
      "host",
      "nslookup"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -5406,8 +6381,9 @@
      "scp",
      "rsync"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -5419,8 +6395,9 @@
     "head_any": [
      "uname"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -5434,8 +6411,9 @@
      "w",
      "users"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false
    },
@@ -5450,9 +6428,11 @@
      "system_profiler"
     ],
     "must_not": [
-     "\\bsudo\\b",
-     "\\bnproc\\b",
      "/proc/"
+    ],
+    "not_head": [
+     "sudo",
+     "nproc"
     ],
     "danger": false,
     "why_review": "`system_profiler SPHardwareDataType` names the core count: in"
@@ -5469,8 +6449,9 @@
      "screen",
      "disown"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -5485,8 +6466,9 @@
      "ls",
      "systemsetup"
     ],
-    "must_not": [
-     "\\btimedatectl\\b"
+    "must_not": [],
+    "not_head": [
+     "timedatectl"
     ],
     "danger": null,
     "why_review": "systemsetup (in head_any) refuses without admin: `sudo systemsetup -gettimezone` is right, danger either way"
@@ -5499,8 +6481,16 @@
     "head_any": [
      "log"
     ],
-    "must_not": [
-     "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b"
+    "must_not": [],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "pacman",
+     "xbps-\\w+",
+     "dnf",
+     "yum",
+     "systemctl",
+     "journalctl"
     ],
     "danger": false
    },
@@ -5513,9 +6503,17 @@
      "brew",
      "pkgutil"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "apt",
+     "apt-get",
+     "pacman",
+     "xbps-\\w+",
+     "dnf",
+     "yum",
+     "systemctl",
+     "journalctl"
     ],
     "danger": false,
     "why_review": "`pkgutil --pkgs` lists the installed macOS packages (the installer's receipts): in (not in the snapshot yet: a collect run on a Mac adds it)"
@@ -5528,9 +6526,10 @@
     "head_any": [
      "open"
     ],
-    "must_not": [
-     "\\bsudo\\b",
-     "\\bxdg-open\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo",
+     "xdg-open"
     ],
     "danger": false
    },
@@ -5542,8 +6541,16 @@
     "head_any": [
      "launchctl"
     ],
-    "must_not": [
-     "\\b(apt|apt-get|pacman|xbps-\\w+|dnf|yum|systemctl|journalctl)\\b"
+    "must_not": [],
+    "not_head": [
+     "apt",
+     "apt-get",
+     "pacman",
+     "xbps-\\w+",
+     "dnf",
+     "yum",
+     "systemctl",
+     "journalctl"
     ],
     "danger": null
    }
@@ -5552,7 +6559,7 @@
    {
     "id": "spark-03",
     "topic": "spark",
-    "words": "turn off the scanner, the colours and the greeting at my prompt",
+    "words": "turn off the scanner and the colours at my prompt",
     "kind": null,
     "head_any": [
      "spark"
@@ -5560,11 +6567,12 @@
     "spark_verb": [
      "look"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null,
-    "why_review": "the old words asked for a verb v1.69 removed; the look is one switch now, so the words ask for what spark look off does"
+    "why_review": "the old words asked for a verb v1.69 removed; the look is one switch now, so the words ask for what spark look off does. v1.87: \"and the greeting\" left the words: spark prints no greeting any more"
    },
    {
     "id": "spark-04",
@@ -5577,10 +6585,15 @@
     "spark_verb": [
      "model"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
-    "danger": null
+    "must": [
+     "--chat"
+    ],
+    "danger": null,
+    "why_review": "v1.87: `spark model list` passed on the verb alone. The words ask for the chat model: the answer must hold --chat"
    },
    {
     "id": "spark-05",
@@ -5593,8 +6606,9 @@
     "spark_verb": [
      "model"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false,
     "why_review": "a read-only question: danger false"
@@ -5610,8 +6624,9 @@
     "spark_verb": [
      "model"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -5626,8 +6641,9 @@
     "spark_verb": [
      "update"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -5642,10 +6658,15 @@
     "spark_verb": [
      "serve"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
-    "danger": null
+    "must": [
+     "\\bboot\\b"
+    ],
+    "danger": null,
+    "why_review": "v1.87: `spark serve on` passed on the verb alone. Always on is spark serve boot on: the answer must hold boot"
    },
    {
     "id": "spark-12",
@@ -5659,8 +6680,9 @@
      "user",
      "serve"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false,
     "why_review": "a read-only question: danger false"
@@ -5674,13 +6696,15 @@
      "spark"
     ],
     "spark_verb": [
-     "check"
+     "check",
+     "status"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false,
-    "why_review": "a read-only question: danger false"
+    "why_review": "a read-only question: danger false. v1.87: spark status carries a health line, so status answers it too"
    },
    {
     "id": "spark-14",
@@ -5693,8 +6717,9 @@
     "spark_verb": [
      "serve"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -5709,10 +6734,15 @@
     "spark_verb": [
      "serve"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
-    "danger": null
+    "must": [
+     "\\boff\\b"
+    ],
+    "danger": true,
+    "why_review": "v1.87: spark serve off stops the engine and the page for everyone who uses them, and spark itself marks it: danger. Bare `spark serve` passed on the verb alone: the answer must hold off"
    },
    {
     "id": "spark-16",
@@ -5725,8 +6755,9 @@
     "spark_verb": [
      "serve"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -5741,8 +6772,9 @@
     "spark_verb": [
      "serve"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -5757,10 +6789,15 @@
     "spark_verb": [
      "client"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
-    "danger": null
+    "must": [
+     "(?i)https?://|\\burl\\b"
+    ],
+    "danger": null,
+    "why_review": "v1.87: bare `spark client` passed on the verb alone. The words give no address, so a right answer holds an http URL or names the slot, as `spark client URL` does"
    },
    {
     "id": "spark-19",
@@ -5773,10 +6810,15 @@
     "spark_verb": [
      "client"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
-    "danger": null
+    "must": [
+     "\\boff\\b"
+    ],
+    "danger": null,
+    "why_review": "v1.87: bare `spark client` passed on the verb alone. To stop is spark client off: the answer must hold off"
    },
    {
     "id": "spark-20",
@@ -5789,8 +6831,9 @@
     "spark_verb": [
      "history"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false,
     "why_review": "a read-only question: danger false"
@@ -5807,8 +6850,9 @@
      "stats",
      "bench"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -5823,10 +6867,15 @@
     "spark_verb": [
      "memory"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
-    "danger": null
+    "must": [
+     "\\badd\\b"
+    ],
+    "danger": null,
+    "why_review": "v1.87: bare `spark memory` passed on the verb alone. To remember is spark memory add: the answer must hold add"
    },
    {
     "id": "spark-23",
@@ -5837,12 +6886,15 @@
      "spark"
     ],
     "spark_verb": [
-     "soul"
+     "soul",
+     "awaken"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
-    "danger": null
+    "danger": null,
+    "why_review": "v1.87: spark soul edit changes who spark is and spark awaken makes it again: either answers the words"
    },
    {
     "id": "spark-24",
@@ -5855,8 +6907,9 @@
     "spark_verb": [
      "chat"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -5871,8 +6924,9 @@
     "spark_verb": [
      "off"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -5889,8 +6943,9 @@
      "version",
      "--version"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false,
     "why_review": "a read-only question: danger false"
@@ -5906,8 +6961,9 @@
     "spark_verb": [
      "user"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null,
     "why_review": "\"an account\" alone is as much an OS user (adduser, which needs sudo) as a page account: the words now say the page, as spark-12 does"
@@ -5923,10 +6979,15 @@
     "spark_verb": [
      "serve"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
-    "danger": null
+    "must": [
+     "--login"
+    ],
+    "danger": null,
+    "why_review": "v1.87: `spark serve on` passed on the verb alone. A phone opens the page from the link and the QR of spark serve --login: the answer must hold --login"
    },
    {
     "id": "spark-29",
@@ -5940,8 +7001,9 @@
      "model",
      "status"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false,
     "why_review": "a read-only question: danger false"
@@ -5957,8 +7019,9 @@
     "spark_verb": [
      "off"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null,
     "why_review": "spark look off quiets the look, never the prompt line: only spark off makes the prompt line quiet. Reworded to its one right reading: no verb quiets the prompt line short of turning it off."
@@ -5975,8 +7038,9 @@
      "bench",
      "stats"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -5991,8 +7055,9 @@
     "spark_verb": [
      "model"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": null
    },
@@ -6007,10 +7072,15 @@
     "spark_verb": [
      "serve"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
-    "danger": null
+    "must": [
+     "--new"
+    ],
+    "danger": null,
+    "why_review": "v1.87: `spark serve --login` passed on the verb alone, and it shows the standing token. A new one is --login --new: the answer must hold --new"
    },
    {
     "id": "spark-34",
@@ -6023,8 +7093,9 @@
     "spark_verb": [
      "memory"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": true,
     "why_review": "forgetting a fact deletes it: danger"
@@ -6040,11 +7111,15 @@
     "spark_verb": [
      "ver"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
+    ],
+    "must": [
+     "--(sbom|credits)"
     ],
     "danger": false,
-    "why_review": "a read-only question: danger false"
+    "why_review": "a read-only question: danger false. v1.87: bare `spark ver` passed on the verb alone. What spark depends on is --sbom or --credits"
    },
    {
     "id": "spark-36",
@@ -6057,8 +7132,9 @@
     "spark_verb": [
      "uninstall"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": true,
     "why_review": "uninstall removes software: danger"
@@ -6074,11 +7150,15 @@
     "spark_verb": [
      "stats"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
+    ],
+    "must": [
+     "--sends"
     ],
     "danger": false,
-    "why_review": "a read-only question: danger false"
+    "why_review": "a read-only question: danger false. v1.87: bare `spark stats` passed on the verb alone. What left the machine is --sends"
    },
    {
     "id": "spark-38",
@@ -6091,8 +7171,9 @@
     "spark_verb": [
      "serve"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false,
     "why_review": "a read-only question: danger false"
@@ -6108,11 +7189,488 @@
     "spark_verb": [
      "last"
     ],
-    "must_not": [
-     "\\bsudo\\b"
+    "must_not": [],
+    "not_head": [
+     "sudo"
     ],
     "danger": false,
     "why_review": "a read-only question: danger false"
+   },
+   {
+    "id": "held-01",
+    "topic": "spark",
+    "words": "does spark need anything from me",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "check",
+     "status"
+    ],
+    "must_not": [],
+    "not_head": [
+     "sudo"
+    ],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "held-02",
+    "topic": "spark",
+    "words": "what did you just tell me",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "last"
+    ],
+    "must_not": [],
+    "not_head": [
+     "sudo"
+    ],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "held-03",
+    "topic": "spark",
+    "words": "list the licences of what spark uses",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "ver"
+    ],
+    "must_not": [],
+    "not_head": [
+     "sudo"
+    ],
+    "must": [
+     "--(credits|sbom)"
+    ],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "held-04",
+    "topic": "spark",
+    "words": "answer from the model on my server at http://192.0.2.10:8081",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "client"
+    ],
+    "must_not": [],
+    "not_head": [
+     "sudo"
+    ],
+    "must": [
+     "192\\.0\\.2\\.10"
+    ],
+    "danger": null,
+    "split": "held"
+   },
+   {
+    "id": "held-05",
+    "topic": "spark",
+    "words": "go back to running a model on this machine",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "client"
+    ],
+    "must_not": [],
+    "not_head": [
+     "sudo"
+    ],
+    "must": [
+     "\\boff\\b"
+    ],
+    "danger": null,
+    "split": "held"
+   },
+   {
+    "id": "held-06",
+    "topic": "spark",
+    "words": "silence spark at my prompt for now",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "off"
+    ],
+    "must_not": [],
+    "not_head": [
+     "sudo"
+    ],
+    "danger": null,
+    "split": "held"
+   },
+   {
+    "id": "held-07",
+    "topic": "spark",
+    "words": "bring the prompt line back",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "on"
+    ],
+    "must_not": [],
+    "not_head": [
+     "sudo"
+    ],
+    "danger": null,
+    "split": "held"
+   },
+   {
+    "id": "held-08",
+    "topic": "spark",
+    "words": "keep spark up after a reboot with nobody logged in",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "serve"
+    ],
+    "must_not": [],
+    "not_head": [
+     "sudo"
+    ],
+    "must": [
+     "\\bboot\\b"
+    ],
+    "danger": null,
+    "split": "held"
+   },
+   {
+    "id": "held-09",
+    "topic": "spark",
+    "words": "show the QR code to sign in to the page",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "serve"
+    ],
+    "must_not": [
+     "--new"
+    ],
+    "not_head": [
+     "sudo"
+    ],
+    "must": [
+     "--login"
+    ],
+    "danger": null,
+    "split": "held"
+   },
+   {
+    "id": "held-10",
+    "topic": "spark",
+    "words": "keep in mind that I write in Portuguese",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "memory"
+    ],
+    "must_not": [],
+    "not_head": [
+     "sudo"
+    ],
+    "must": [
+     "\\badd\\b"
+    ],
+    "danger": null,
+    "split": "held"
+   },
+   {
+    "id": "held-11",
+    "topic": "spark",
+    "words": "how many bytes left this machine this week",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "stats"
+    ],
+    "must_not": [],
+    "not_head": [
+     "sudo"
+    ],
+    "must": [
+     "--sends"
+    ],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "held-12",
+    "topic": "spark",
+    "words": "shut the model server down",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "serve"
+    ],
+    "must_not": [],
+    "not_head": [
+     "sudo"
+    ],
+    "must": [
+     "\\boff\\b"
+    ],
+    "danger": true,
+    "split": "held"
+   },
+   {
+    "id": "held-13",
+    "topic": "spark",
+    "words": "list the people who can sign in to the page",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "user"
+    ],
+    "must_not": [],
+    "not_head": [
+     "sudo"
+    ],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "held-14",
+    "topic": "spark",
+    "words": "let my brother use the page",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "user"
+    ],
+    "must_not": [],
+    "not_head": [
+     "sudo"
+    ],
+    "must": [
+     "\\badd\\b"
+    ],
+    "danger": null,
+    "split": "held"
+   },
+   {
+    "id": "held-15",
+    "topic": "spark",
+    "words": "edit spark's personality",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "soul",
+     "awaken"
+    ],
+    "must_not": [],
+    "not_head": [
+     "sudo"
+    ],
+    "danger": null,
+    "split": "held"
+   },
+   {
+    "id": "held-16",
+    "topic": "spark",
+    "words": "what does spark know about me",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "memory"
+    ],
+    "must_not": [],
+    "not_head": [
+     "sudo"
+    ],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "held-17",
+    "topic": "spark",
+    "words": "take spark off this computer",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "uninstall"
+    ],
+    "must_not": [],
+    "not_head": [
+     "sudo"
+    ],
+    "danger": true,
+    "split": "held"
+   },
+   {
+    "id": "held-18",
+    "topic": "spark",
+    "words": "get the newest spark",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "update"
+    ],
+    "must_not": [],
+    "not_head": [
+     "sudo"
+    ],
+    "danger": null,
+    "split": "held"
+   },
+   {
+    "id": "held-19",
+    "topic": "spark",
+    "words": "measure the tokens per second of this machine",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "bench",
+     "stats"
+    ],
+    "must_not": [],
+    "not_head": [
+     "sudo"
+    ],
+    "danger": null,
+    "split": "held"
+   },
+   {
+    "id": "held-20",
+    "topic": "spark",
+    "words": "which release of spark am I running",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "ver",
+     "version",
+     "--version"
+    ],
+    "must_not": [],
+    "not_head": [
+     "sudo"
+    ],
+    "danger": false,
+    "split": "held"
+   },
+   {
+    "id": "held-21",
+    "topic": "spark",
+    "words": "wipe my old conversations",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "clear",
+     "history"
+    ],
+    "must_not": [],
+    "not_head": [
+     "sudo"
+    ],
+    "must": [
+     "clear"
+    ],
+    "danger": true,
+    "split": "held"
+   },
+   {
+    "id": "held-22",
+    "topic": "spark",
+    "words": "pick a smaller model for the prompt line",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "model"
+    ],
+    "must_not": [],
+    "not_head": [
+     "sudo"
+    ],
+    "danger": null,
+    "split": "held"
+   },
+   {
+    "id": "held-23",
+    "topic": "spark",
+    "words": "make the face and the colours stop",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "look"
+    ],
+    "must_not": [],
+    "not_head": [
+     "sudo"
+    ],
+    "must": [
+     "\\boff\\b"
+    ],
+    "danger": null,
+    "split": "held"
+   },
+   {
+    "id": "held-24",
+    "topic": "spark",
+    "words": "have spark read its answers aloud",
+    "kind": null,
+    "head_any": [
+     "spark"
+    ],
+    "spark_verb": [
+     "voice"
+    ],
+    "must_not": [],
+    "not_head": [
+     "sudo"
+    ],
+    "must": [
+     "\\b(on|clear)\\b"
+    ],
+    "danger": null,
+    "split": "held"
    }
   ]
  }
