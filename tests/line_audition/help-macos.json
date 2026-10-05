@@ -1,8 +1,12 @@
 {
- "collected": "2026-09-26",
+ "collected": "2026-10-05",
  "os": "macos",
  "pretty": "macOS 26.6.2",
  "tools": {
+  "[[": {
+   "exists": false,
+   "path": ""
+  },
   "arp": {
    "exists": true,
    "help": "/usr/sbin/arp: illegal option -- -\nusage: arp [-n] [-i interface] hostname\n       arp [-n] [-i interface] [-l] -a\n       arp -d hostname [pub] [ifscope interface]\n       arp -d [-i interface] -a\n       arp -s hostname ether_addr [temp] [reject] [blackhole] [pub [only]] [ifscope interface]\n       arp -S hostname ether_addr [temp] [reject] [blackhole] [pub [only]] [ifscope interface]\n       arp -f filename",
@@ -65,6 +69,10 @@
     "-s",
     "-x"
    ]
+  },
+  "asciinema": {
+   "exists": false,
+   "path": ""
   },
   "awk": {
    "exists": true,
@@ -451,6 +459,27 @@
   "brew": {
    "commands": {
     "prefix": false,
+    "seen": [
+     "cask",
+     "keg-only",
+     "opt",
+     "external",
+     "subcommand",
+     "cmd",
+     "exec",
+     "with",
+     "cmdname",
+     "all_proxy",
+     "ftp_proxy",
+     "http_proxy",
+     "https_proxy",
+     "no_proxy",
+     "git",
+     "to",
+     "in",
+     "calls"
+    ],
+    "v": 2,
     "words": [
      "install",
      "uninstall",
@@ -535,6 +564,7 @@
      "bump-revision",
      "bump-unversioned-casks",
      "cat",
+     "contributions",
      "create",
      "debugger",
      "edit",
@@ -1241,6 +1271,10 @@
    "exists": false,
    "path": ""
   },
+  "builtin": {
+   "exists": false,
+   "path": ""
+  },
   "caffeinate": {
    "exists": true,
    "help": "caffeinate [-disu] [-t timeout] [-w pid] [utility arguments...]",
@@ -1541,6 +1575,22 @@
     "-t",
     "-tx",
     "-x"
+   ]
+  },
+  "command": {
+   "exists": true,
+   "help": "/usr/bin/command: line 4: command: --: invalid option\ncommand: usage: command [-pVv] command [arg ...]",
+   "lines": [],
+   "long": [],
+   "man": true,
+   "path": "/usr/bin/command",
+   "short": "Vpv",
+   "synopsis": [
+    "See the built-in command description in the appropriate shell manual page."
+   ],
+   "what": "shell built-in commands",
+   "words": [
+    "-pVv"
    ]
   },
   "cp": {
@@ -3345,6 +3395,10 @@
     "-xid"
    ]
   },
+  "disown": {
+   "exists": false,
+   "path": ""
+  },
   "dmesg": {
    "exists": true,
    "help": "dmesg [-M core] [-N system]",
@@ -4403,6 +4457,18 @@
   "git": {
    "commands": {
     "prefix": false,
+    "seen": [
+     "program",
+     "will",
+     "as",
+     "developer",
+     "other",
+     "finds",
+     "transport",
+     "commands",
+     "for"
+    ],
+    "v": 2,
     "words": [
      "add",
      "am",
@@ -4424,6 +4490,7 @@
      "gc",
      "grep",
      "gui",
+     "history",
      "init",
      "log",
      "maintenance",
@@ -4513,13 +4580,16 @@
      "diff-tree",
      "for-each-ref",
      "for-each-repo",
+     "format-rev",
      "get-tar-commit-id",
+     "last-modified",
      "ls-files",
      "ls-remote",
      "ls-tree",
      "merge-base",
      "name-rev",
      "pack-redundant",
+     "repo",
      "rev-list",
      "rev-parse",
      "show-index",
@@ -4555,7 +4625,8 @@
      "patch-id",
      "sh-i18n",
      "sh-setup",
-     "stripspace"
+     "stripspace",
+     "url-parse"
     ]
    },
    "exists": true,
@@ -5683,6 +5754,24 @@
     "-v"
    ]
   },
+  "hash": {
+   "exists": true,
+   "help": "/usr/bin/hash: line 4: hash: --: invalid option\nhash: usage: hash [-lr] [-p pathname] [-dt] [name ...]",
+   "lines": [],
+   "long": [],
+   "man": true,
+   "path": "/usr/bin/hash",
+   "short": "dlprt",
+   "synopsis": [
+    "See the built-in command description in the appropriate shell manual page."
+   ],
+   "what": "shell built-in commands",
+   "words": [
+    "-dt",
+    "-lr",
+    "-p"
+   ]
+  },
   "head": {
    "exists": true,
    "help": "head: unrecognized option `--help'\nusage: head [-n lines | -c bytes] [file ...]",
@@ -5712,6 +5801,10 @@
     "-c",
     "-n"
    ]
+  },
+  "history": {
+   "exists": false,
+   "path": ""
   },
   "host": {
    "exists": true,
@@ -6812,11 +6905,25 @@
   "launchctl": {
    "commands": {
     "prefix": false,
+    "seen": [
+     "subcommand",
+     "interfaces",
+     "allows",
+     "take",
+     "path",
+     "will",
+     "to",
+     "no"
+    ],
+    "v": 2,
     "words": [
+     "bootstrap",
+     "bootout",
      "enable",
      "disable",
      "kickstart",
      "attach",
+     "debug",
      "kill",
      "blame",
      "print",
@@ -6832,6 +6939,9 @@
      "error",
      "variant",
      "version",
+     "load",
+     "unload",
+     "submit",
      "remove",
      "start",
      "stop",
@@ -6841,6 +6951,7 @@
      "getenv",
      "export",
      "getrusage",
+     "limit",
      "shutdown",
      "umask",
      "bslist",
@@ -8507,6 +8618,226 @@
     "-z"
    ]
   },
+  "nc": {
+   "exists": true,
+   "help": "nc: unrecognized option `--help'\nusage: nc [-46AacCDdEFhklMnOortUuvz] [-K tc] [-b boundif] [-i interval] [-p source_port]\n\t  [--apple-recv-anyif] [--apple-awdl-unres]\n\t  [--apple-boundif ifbound]\n\t  [--apple-no-cellular] [--apple-no-expensive]\n\t  [--apple-no-flowadv] [--apple-tcp-timeout conntimo]\n\t  [--apple-tcp-keepalive keepidle] [--apple-tcp-keepintvl keepintvl]\n\t  [--apple-tcp-keepcnt keepcnt] [--apple-tclass tclass]\n\t  [--tcp-adp-rtimo num_probes] [--apple-intcoproc-allow]\n\t  [--apple-tcp-adp-wtimo num_probes]\n\t  [--setsockopt-later] [--apple-no-connectx]\n\t  [--apple-delegate-pid pid] [--apple-delegate-uuid uuid]\n\t  [--apple-kao] [--apple-ext-bk-idle]\n\t  [--apple-netsvctype svc] [---apple-nowakefromsleep]\n\t  [--apple-notify-ack] [--apple-sockev]\n\t  [--apple-tos tos] [--apple-tos-cmsg]\n\t  [--apple-tcp-maxseg mss]\n\t  [-s source_ip_address] [-w timeout] [-X proxy_version]\n\t  [-x proxy_address[:port]] [hostname] [port[s]]",
+   "lines": [
+    [
+     "-4",
+     "Forces nc to use IPv4 addresses only."
+    ],
+    [
+     "-6",
+     "Forces nc to use IPv6 addresses only."
+    ],
+    [
+     "-A",
+     "Set SO_RECV_ANYIF on socket."
+    ],
+    [
+     "-b boundif",
+     "Specifies the interface to bind the socket to."
+    ],
+    [
+     "-c",
+     "Send CRLF as line-ending"
+    ],
+    [
+     "-D",
+     "Enable debugging on the socket."
+    ],
+    [
+     "-C",
+     "Forces nc not to use cellular data context."
+    ],
+    [
+     "-d",
+     "Do not attempt to read from stdin."
+    ],
+    [
+     "-h",
+     "Prints out nc help."
+    ],
+    [
+     "-i interval",
+     "Specifies a delay time interval between lines of text sent and received."
+    ],
+    [
+     "-G conntimeout",
+     "TCP connection timeout in seconds."
+    ],
+    [
+     "-H keepidle",
+     "Initial TCP keep alive timeout in seconds."
+    ],
+    [
+     "-I keepintvl",
+     "Interval for repeating TCP keep alive timeouts in seconds."
+    ],
+    [
+     "-J keepcnt",
+     "Number of times to repeat TCP keep alive packets."
+    ],
+    [
+     "-k",
+     "Forces nc to stay listening for another connection after its current connection is completed."
+    ],
+    [
+     "-l",
+     "Used to specify that nc should listen for an incoming connection rather than initiate a connectio..."
+    ],
+    [
+     "-p, -s,",
+     "or -z options."
+    ],
+    [
+     "-L num_probes",
+     "Number of probes to send to the peer before declaring that the peer is not reachable and generati..."
+    ],
+    [
+     "-n",
+     "Do not do any DNS or service lookups on any specified addresses, hostnames or ports."
+    ],
+    [
+     "-p source_port",
+     "Specifies the source port nc should use, subject to privilege restrictions and availability."
+    ],
+    [
+     "-r",
+     "Specifies that source and/or destination ports should be chosen randomly instead of sequentially..."
+    ],
+    [
+     "-s source_ip_address",
+     "Specifies the IP of the interface which is used to send the packets."
+    ],
+    [
+     "-t",
+     "Causes nc to send RFC 854 DON'T and WON'T responses to RFC 854 DO and WILL requests."
+    ],
+    [
+     "-U",
+     "Specifies to use Unix Domain Sockets."
+    ],
+    [
+     "-u",
+     "Use UDP instead of the default option of TCP."
+    ],
+    [
+     "-v",
+     "Have nc give more verbose output."
+    ],
+    [
+     "-w timeout",
+     "If a connection and stdin are idle for more than timeout seconds, then the connection is silently..."
+    ],
+    [
+     "-X proxy_version",
+     "Requests that nc should use the specified protocol when talking to the proxy server."
+    ],
+    [
+     "-x proxy_address[:port]",
+     "Requests that nc should connect to hostname using a proxy at proxy_address and port."
+    ],
+    [
+     "-z",
+     "Specifies that nc should just scan for listening daemons, without sending any data to them."
+    ],
+    [
+     "--apple-delegate-pid",
+     "Requests that nc should delegate the socket for the specified PID."
+    ],
+    [
+     "--apple-delegate-uuid",
+     "Requests that nc should delegate the socket for the specified UUID."
+    ],
+    [
+     "--apple-ext-bk-idle",
+     "Requests that nc marks its socket for extended background idle time when the process becomes susp..."
+    ],
+    [
+     "--apple-nowakefromsleep",
+     "When the parameter n is greater than 0, requests that nc marks its socket to exclude the local po..."
+    ],
+    [
+     "--apple-ecn",
+     "Requests that nc marks to use the socket option TCP_ECN_MODE to set the ECN mode (default, enable..."
+    ]
+   ],
+   "long": [
+    "--apple-awdl-unres",
+    "--apple-boundif",
+    "--apple-delegate-pid",
+    "--apple-delegate-uuid",
+    "--apple-ecn",
+    "--apple-ext-bk-idle",
+    "--apple-intcoproc-allow",
+    "--apple-kao",
+    "--apple-netsvctype",
+    "--apple-no-cellular",
+    "--apple-no-connectx",
+    "--apple-no-expensive",
+    "--apple-no-flowadv",
+    "--apple-notify-ack",
+    "--apple-nowakefromsleep",
+    "--apple-recv-anyif",
+    "--apple-sockev",
+    "--apple-tclass",
+    "--apple-tcp-adp-wtimo",
+    "--apple-tcp-keepalive",
+    "--apple-tcp-keepcnt",
+    "--apple-tcp-keepintvl",
+    "--apple-tcp-maxseg",
+    "--apple-tcp-timeout",
+    "--apple-tos",
+    "--apple-tos-cmsg",
+    "--help",
+    "--setsockopt-later",
+    "--tcp-adp-rtimo"
+   ],
+   "man": true,
+   "path": "/usr/bin/nc",
+   "short": "46ACDEFGHIJKLMOUXabcdhiklnoprstuvwxz",
+   "synopsis": [
+    "nc [-46AcDCdhklnrtUuvz] [-b boundif] [-i interval] [-p source_port] [-s source_ip_address]",
+    "[-w timeout] [-X proxy_protocol] [-x proxy_address[:port]] [--apple-delegate-pid pid]",
+    "[--apple-delegate-uuid uuid] [--apple-ext-bk-idle] [--apple-nowakefromsleep n]"
+   ],
+   "what": "arbitrary TCP and UDP connections and listens",
+   "words": [
+    "-A",
+    "-C",
+    "-D",
+    "-G",
+    "-H",
+    "-I",
+    "-J",
+    "-K",
+    "-L",
+    "-U",
+    "-X",
+    "-Xconnect",
+    "-b",
+    "-c",
+    "-d",
+    "-h",
+    "-i",
+    "-k",
+    "-l",
+    "-lU",
+    "-n",
+    "-p",
+    "-r",
+    "-s",
+    "-t",
+    "-u",
+    "-uz",
+    "-v",
+    "-w",
+    "-x",
+    "-x10",
+    "-z"
+   ]
+  },
   "ncdu": {
    "exists": false,
    "path": ""
@@ -9054,6 +9385,10 @@
     "-n"
    ]
   },
+  "nmap": {
+   "exists": false,
+   "path": ""
+  },
   "nohup": {
    "exists": true,
    "help": "nohup [--] utility [arguments]",
@@ -9305,6 +9640,10 @@
     "-t",
     "-u"
    ]
+  },
+  "pandoc": {
+   "exists": false,
+   "path": ""
   },
   "pbcopy": {
    "exists": true,
@@ -10571,6 +10910,32 @@
     "-v",
     "-w",
     "-x"
+   ]
+  },
+  "pwd": {
+   "exists": true,
+   "help": "/bin/pwd: illegal option -- -\nusage: pwd [-L | -P]",
+   "lines": [
+    [
+     "-L",
+     "Display the logical current working directory."
+    ],
+    [
+     "-P",
+     "Display the physical current working directory (all symbolic links resolved)."
+    ]
+   ],
+   "long": [],
+   "man": true,
+   "path": "/bin/pwd",
+   "short": "LP",
+   "synopsis": [
+    "pwd [-L | -P]"
+   ],
+   "what": "return working directory name",
+   "words": [
+    "-L",
+    "-P"
    ]
   },
   "readlink": {
@@ -13783,6 +14148,48 @@
     "-i"
    ]
   },
+  "time": {
+   "exists": true,
+   "help": "/usr/bin/time: illegal option -- -\nusage: time [-al] [-h | -p] [-o file] utility [argument ...]",
+   "lines": [
+    [
+     "-a",
+     "If the -o flag is used, append to the specified file rather than overwriting it."
+    ],
+    [
+     "-h",
+     "Print times in a human friendly format."
+    ],
+    [
+     "-l",
+     "The contents of the rusage structure are printed as well."
+    ],
+    [
+     "-o file",
+     "Write the output to file instead of stderr."
+    ],
+    [
+     "-p",
+     "Makes time output POSIX.2 compliant (each time is printed on its own line)."
+    ]
+   ],
+   "long": [],
+   "man": true,
+   "path": "/usr/bin/time",
+   "short": "ahlop",
+   "synopsis": [
+    "time [-al] [-h | -p] [-o file] utility [argument ...]"
+   ],
+   "what": "time command execution",
+   "words": [
+    "-a",
+    "-al",
+    "-h",
+    "-l",
+    "-o",
+    "-p"
+   ]
+  },
   "timeout": {
    "exists": false,
    "path": ""
@@ -13790,20 +14197,43 @@
   "tmutil": {
    "commands": {
     "prefix": false,
+    "seen": [
+     "verb",
+     "provides",
+     "from",
+     "backup",
+     "machine",
+     "local",
+     "volume",
+     "will",
+     "assumes",
+     "behaves",
+     "as",
+     "exits"
+    ],
+    "v": 2,
     "words": [
      "setdestination",
      "destinationinfo",
      "setquota",
      "removedestination",
+     "addexclusion",
+     "removeexclusion",
+     "isexcluded",
      "enable",
      "disable",
+     "startbackup",
      "stopbackup",
+     "compare",
+     "verifychecksums",
+     "restore",
      "delete",
      "deleteinprogress",
      "latestbackup",
      "listbackups",
      "machinedirectory",
      "calculatedrift",
+     "uniquesize",
      "inheritbackup",
      "associatedisk",
      "localsnapshot",
@@ -14353,6 +14783,22 @@
    "what": "shell built-in commands",
    "words": [
     "-afptP"
+   ]
+  },
+  "ulimit": {
+   "exists": true,
+   "help": "/usr/bin/ulimit: line 4: ulimit: --: invalid option\nulimit: usage: ulimit [-SHacdfilmnpqstuvx] [limit]",
+   "lines": [],
+   "long": [],
+   "man": true,
+   "path": "/usr/bin/ulimit",
+   "short": "HSacdfilmnpqstuvx",
+   "synopsis": [
+    "See the built-in command description in the appropriate shell manual page."
+   ],
+   "what": "shell built-in commands",
+   "words": [
+    "-SHacdfilmnpqstuvx"
    ]
   },
   "uname": {
@@ -15531,15 +15977,6 @@
    ]
   },
   "wdutil": {
-   "commands": {
-    "prefix": false,
-    "words": [
-     "diagnose",
-     "info",
-     "log",
-     "dump"
-    ]
-   },
    "exists": true,
    "help": "usage: sudo wdutil diagnose [-q] [-f outputDirectoryPath]\n            -q may be specified to suppress legal prompt and Finder window\n       sudo wdutil info\n       sudo wdutil log [{+|-} {system|wifi}]+\n       sudo wdutil dump\n       sudo wdutil clean\n       sudo wdutil privateMAC={0/1}",
    "lines": [

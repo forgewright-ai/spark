@@ -21,6 +21,7 @@
 #   python3 tests/line_audition.py report [--split dev|held|all] FILE...
 #   python3 tests/line_audition.py serve-candidate --model-file PATH [--port 8090]
 #   python3 tests/line_audition.py packages --os OS
+#   python3 tests/line_audition.py precision [--os OS|all] [-v]
 #   python3 tests/line_audition.py selftest
 #
 # Not part of the gate: `run` needs a live model. `recall` and `selftest`
@@ -2467,12 +2468,81 @@ def cmd_selftest(_args):
           and all("nc" in data["oses"][o]["also"] for o in OSES),
           "collect: every OS's next snapshot asks about nc, the three missing tools and the shell's own words "
           "that are programs too (pwd)")
+    # the judge's precision, on every OS's snapshot: no command the grader
+    # accepted is asked again about, and the wrong ones are still caught
+    if _IN and os.path.exists(ACCEPTED):
+        wrong = []
+        for o in OSES:
+            refused, missed, _n = precision(o)
+            wrong += ["%s: refused %s %s" % (o, c, f) for c, f in refused]
+            wrong += ["%s: missed %s (%s)" % (o, c, k) for c, k, _got in missed]
+        check(not wrong, "precision: the judge refuses no accepted command on any OS, and still catches the wrong ones",
+              "; ".join(wrong)[:600])
     print("%s: %d failed" % ("line_audition selftest", len(fails)) if fails else "line_audition selftest: all ok")
     return 1 if fails else 0
 
 
+ACCEPTED = os.path.join(DATA, "accepted.json")
+
+
+def precision(os_name, snap=None):
+    """The judge's precision on one OS: (refused, missed, n).
+
+    `refused` lists (command, findings) for every command of
+    accepted.json -- that OS's and spark's own -- the line's judge would
+    ask again about, over that OS's closed snapshot store; a finding of
+    kind `slot` never asks again, so it is no refusal. `missed` lists the
+    must_find commands that got no finding of the kind named. Both empty
+    is the pass. No model: the judge and the snapshot alone."""
+    from spark import grounding, judge
+    with open(ACCEPTED, encoding="utf-8") as f:
+        doc = json.load(f)
+    st = SnapshotStore(snap=snap or load_snapshot(os_name))
+    tmp = tempfile.mkdtemp(prefix="line-audition-precision-")
+    try:
+        gs = grounding._SnapshotFile(st.save(os.path.join(tmp, "store.json")))
+        refused, missed, n = [], [], 0
+        for key in (os_name, "spark"):
+            for cmd in doc["accepted"].get(key, ()):
+                n += 1
+                found = [tuple(x) for x in judge.verdict(cmd, gs).findings if x.kind != "slot"]
+                if found:
+                    refused.append((cmd, found))
+            for cmd, kind in doc["must_find"].get(key, ()):
+                n += 1
+                kinds = [x.kind for x in judge.verdict(cmd, gs).findings]
+                if kind not in kinds:
+                    missed.append((cmd, kind, kinds))
+        return refused, missed, n
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def cmd_precision(args):
+    """precision [--os OS|all] [-v]: the judge against the commands the
+    grader accepted, and against the wrong ones it must still catch."""
+    rest = [a for a in args if a != "-v"]
+    opts = dict(zip(rest[::2], rest[1::2]))
+    which = opts.get("--os", "all")
+    names = OSES if which == "all" else (which,)
+    if len(rest) % 2 or any(o not in OSES for o in names):
+        die("precision takes [--os OS|all] [-v]")
+    bad = 0
+    for o in names:
+        refused, missed, n = precision(o)
+        bad += len(refused) + len(missed)
+        print("%-9s %3d commands  refused %d  missed %d" % (o, n, len(refused), len(missed)))
+        for cmd, found in refused:
+            print("  refused  %s   %s" % (cmd, found))
+        for cmd, kind, kinds in missed:
+            print("  missed   %s   wanted %s, got %s" % (cmd, kind, kinds or "nothing"))
+    print("line_audition precision: %s" % ("all ok" if not bad else "%d wrong" % bad))
+    return 1 if bad else 0
+
+
 COMMANDS = {"run": cmd_run, "collect": cmd_collect, "report": cmd_report, "packages": cmd_packages,
-            "recall": cmd_recall, "serve-candidate": cmd_serve_candidate, "selftest": cmd_selftest}
+            "recall": cmd_recall, "serve-candidate": cmd_serve_candidate, "selftest": cmd_selftest,
+            "precision": cmd_precision}
 
 
 def main(argv):

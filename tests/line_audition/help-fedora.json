@@ -1,8 +1,12 @@
 {
- "collected": "2026-10-04",
+ "collected": "2026-10-05",
  "os": "fedora",
  "pretty": "Fedora Linux 44 (Container Image)",
  "tools": {
+  "[[": {
+   "exists": false,
+   "path": ""
+  },
   "adduser": {
    "exists": true,
    "help": "Usage: useradd [options] LOGIN\n       useradd -D\n       useradd -D [options]\n\nOptions:\n      --badname                 do not check for bad names\n  -b, --base-dir BASE_DIR       base directory for the home directory of the\n                                new account\n      --btrfs-subvolume-home    use BTRFS subvolume for home directory\n  -c, --comment COMMENT         GECOS field of the new account\n  -d, --home-dir HOME_DIR       home directory of the new account\n  -D, --defaults                print or change default useradd configuration\n  -e, --expiredate EXPIRE_DATE  expiration date of the new account\n  -f, --inactive INACTIVE       password inactivity period of the new account\n  -F, --add-subids-for-system   add entries to sub[ud]id even when adding a system user\n  -g, --gid GROUP               name or ID of the primary group of the new\n                                account\n  -G, --groups GROUPS           list of supplementary groups of the new\n                                account\n  -h, --help                    display this help message and exit\n  -k, --skel SKEL_DIR           use this alternative skeleton directory\n  -K, --key KEY=VALUE           override /etc/login.defs defaults\n  -m, --create-home             create the user's home directory\n  -M, --no-create-home          do not create the user's home directory\n  -N, --no-user-group           do not create a group with the same name as\n                                the user\n  -o, --non-unique              allow to create users with duplicate\n                                (non-unique) UID\n  -p, --password PASSWORD       encrypted password of the new account\n  -r, --system                  create a system account\n  -R, --root CHROOT_DIR         directory to chroot into\n  -P, --prefix PREFIX_DIR       prefix directory where are located the /etc/* files\n  -s, --shell SHELL             login shell of the new account\n  -u, --uid UID                 user ID of the new account\n  -U, --user-group              create a group with the same name as the user\n  -Z, --selinux-user SEUSER     use a specific SEUSER for the SELinux user mapping\n      --selinux-range SERANGE   use a specific MLS range for the SELinux user mapping",
@@ -196,6 +200,10 @@
    "path": ""
   },
   "apt-get": {
+   "exists": false,
+   "path": ""
+  },
+  "asciinema": {
    "exists": false,
    "path": ""
   },
@@ -1434,6 +1442,10 @@
    "exists": false,
    "path": ""
   },
+  "builtin": {
+   "exists": false,
+   "path": ""
+  },
   "cat": {
    "exists": true,
    "help": "cat [OPTION]... [FILE]...",
@@ -1977,6 +1989,335 @@
     "-r",
     "-s",
     "-t",
+    "-x"
+   ]
+  },
+  "command": {
+   "exists": true,
+   "help": "command: command [-pVv] command [arg ...]\n    Execute a simple command or display information about commands.\n    \n    Runs COMMAND with ARGS suppressing  shell function lookup, or display\n    information about the specified COMMANDs.  Can be used to invoke commands\n    on disk when a function with the same name exists.\n    \n    Options:\n      -p    use a default value for PATH that is guaranteed to find all of\n            the standard utilities\n      -v    print a single word indicating the command or filename that\n            invokes COMMAND\n      -V    print a more verbose description of each COMMAND\n    \n    Exit Status:\n    Returns exit status of COMMAND, or failure if COMMAND is not found.",
+   "lines": [
+    [
+     "preceded",
+     "by - accepts -- to signify the end of the options."
+    ],
+    [
+     "out",
+     "requiring --."
+    ],
+    [
+     "source [-p path] filename [arguments]",
+     "The ."
+    ],
+    [
+     "alias [-p] [name[=value] ...]",
+     "With no arguments or with the -p option, alias prints the list of aliases in the form alias name=..."
+    ],
+    [
+     "bg [jobspec ...]",
+     "Resume each suspended job jobspec in the background, as if it had been started with &."
+    ],
+    [
+     "bind readline-command-line",
+     "Display current readline key and function bindings, bind a key sequence to a readline function or..."
+    ],
+    [
+     "-m keymap",
+     "Use keymap as the keymap to be affected by the subsequent bindings."
+    ],
+    [
+     "-l",
+     "List the names of all readline functions."
+    ],
+    [
+     "-p",
+     "Display readline function names and bindings in such a way that they can be used as an argument t..."
+    ],
+    [
+     "-P",
+     "List current readline function names and bindings."
+    ],
+    [
+     "-s",
+     "Display readline key sequences bound to macros and the strings they output in such a way that the..."
+    ],
+    [
+     "-S",
+     "Display readline key sequences bound to macros and the strings they output."
+    ],
+    [
+     "-v",
+     "Display readline variable names and values in such a way that they can be used as an argument to..."
+    ],
+    [
+     "-V",
+     "List current readline variable names and values."
+    ],
+    [
+     "-f filename",
+     "Read key bindings from filename."
+    ],
+    [
+     "-q function",
+     "Display key sequences that invoke the named readline function."
+    ],
+    [
+     "-u function",
+     "Unbind all key sequences bound to the named readline function."
+    ],
+    [
+     "-r keyseq",
+     "Remove any current binding for keyseq."
+    ],
+    [
+     "-x keyseq[: ]shell-command",
+     "Cause shell-command to be executed whenever keyseq is entered."
+    ],
+    [
+     "-X",
+     "List all key sequences bound to shell commands and the associated commands in a format that can b..."
+    ],
+    [
+     "break [n]",
+     "Exit from within a for, while, until, or select loop."
+    ],
+    [
+     "builtin shell-builtin [arguments]",
+     "Execute the specified shell builtin shell-builtin, passing it arguments, and return its exit status."
+    ],
+    [
+     "caller [expr]",
+     "Returns the context of any active subroutine call (a shell function or a script exe- cuted with t..."
+    ],
+    [
+     "cd -P [-e] [-@] [dir]",
+     "Change the current directory to dir."
+    ],
+    [
+     "-P option",
+     "to the set builtin command)."
+    ],
+    [
+     "command [-pVv] command [arg ...]",
+     "The command builtin runs command with args suppressing the normal shell function lookup for command."
+    ],
+    [
+     "compgen [-V varname] [option] [word]",
+     "Generate possible completion matches for word according to the options, which may be any option a..."
+    ],
+    [
+     "complete [-abcdefgjksuv] [-o comp-option]",
+     "[-G globpat] [-W wordlist] [-F function] [-C command] [-X filterpat] [-P prefix] [-S suffix] name..."
+    ],
+    [
+     "complete -pr [-DEI] [name ...]",
+     "Specify how arguments to each name should be completed."
+    ],
+    [
+     "-W,",
+     "and -X options (and, if necessary, the -P and -S options) should be quoted to"
+    ],
+    [
+     "-o comp-option",
+     "The comp-option controls several aspects of the compspec's behavior beyond the simple generation..."
+    ],
+    [
+     "-A action",
+     "The action may be one of the following to generate a list of possible comple- tions: alias Alias..."
+    ],
+    [
+     "-C command",
+     "command is executed in a subshell environment, and its output is used as the possible completions."
+    ],
+    [
+     "-F function",
+     "The shell function function is executed in the current shell environment."
+    ],
+    [
+     "-G globpat",
+     "Expand the pathname expansion pattern globpat to generate the possible com- pletions."
+    ],
+    [
+     "-P prefix",
+     "Add prefix to the beginning of each possible completion after all other op- tions have been applied."
+    ],
+    [
+     "-S suffix",
+     "Append suffix to each possible completion after all other options have been applied."
+    ],
+    [
+     "-W wordlist",
+     "Split the wordlist using the characters in the IFS special variable as delim- iters, and expand e..."
+    ],
+    [
+     "-X filterpat",
+     "filterpat is a pattern as used for pathname expansion."
+    ],
+    [
+     "-p, -r,",
+     "-D, -E, or -I is supplied without a name argument, an attempt is made to re-"
+    ],
+    [
+     "compopt [-o option] [-DEI] [+o option] [name]",
+     "Modify completion options for each name according to the options, or for the cur- rently-executin..."
+    ],
+    [
+     "continue [n]",
+     "continue resumes the next iteration of the enclosing for, while, until, or select loop."
+    ],
+    [
+     "typeset [-aAfFgiIlnrtux] [-p] [name[=value] ...]",
+     "Declare variables and/or give them attributes."
+    ],
+    [
+     "-a",
+     "Each name is an indexed array variable (see Arrays in bash(1))."
+    ],
+    [
+     "-A",
+     "Each name is an associative array variable (see Arrays in bash(1))."
+    ],
+    [
+     "-f",
+     "Each name refers to a shell function."
+    ],
+    [
+     "-i",
+     "The variable is treated as an integer; arithmetic evaluation (see ARITHMETIC EVALUATION in bash(1..."
+    ],
+    [
+     "-n",
+     "Give each name the nameref attribute, making it a name reference to another variable."
+    ],
+    [
+     "-r",
+     "Make names readonly."
+    ],
+    [
+     "-t",
+     "Give each name the trace attribute."
+    ],
+    [
+     "-u",
+     "When the variable is assigned a value, all lower-case characters are converted to upper-case."
+    ],
+    [
+     "-x",
+     "Mark each name for export to subsequent commands via the environment."
+    ],
+    [
+     "dirs [-clpv] [+n] [-n]",
+     "Without options, display the list of currently remembered directories."
+    ],
+    [
+     "-c",
+     "Clears the directory stack by deleting all of the entries."
+    ],
+    [
+     "disown [-ar] [-h] [id ...]",
+     "Without options, remove each id from the table of active jobs."
+    ],
+    [
+     "echo [-neE] [arg ...]",
+     "Output the args, separated by spaces, followed by a newline."
+    ],
+    [
+     "enable [-a] [-dnps] [-f filename] [name ...]",
+     "Enable and disable builtin shell commands."
+    ],
+    [
+     "eval [arg ...]",
+     "Concatenate the args together into a single command, separating them with spaces."
+    ],
+    [
+     "exec [-cl] [-a name] [command [arguments]]",
+     "If command is specified, it replaces the shell without creating a new process."
+    ],
+    [
+     "exit [n]",
+     "Cause the shell to exit with a status of n."
+    ]
+   ],
+   "long": [
+    "--debugger",
+    "--noediting"
+   ],
+   "man": true,
+   "path": "/usr/sbin/command",
+   "short": "012@ABCDEFGHILNOPRSTVWXabcdefghijklmnopqrstuvwx",
+   "synopsis": [],
+   "what": "bash built-in commands, see bash(1)",
+   "words": [
+    "-A",
+    "-B",
+    "-C",
+    "-D",
+    "-DEI",
+    "-E",
+    "-Eers",
+    "-F",
+    "-G",
+    "-H",
+    "-HS",
+    "-I",
+    "-L",
+    "-LP",
+    "-N",
+    "-O",
+    "-P",
+    "-R",
+    "-S",
+    "-T",
+    "-V",
+    "-W",
+    "-X",
+    "-a",
+    "-aAf",
+    "-aAfFgiIlnrtux",
+    "-abcdefgjksuv",
+    "-abefhkmnptuvxBCEHPT",
+    "-aftpP",
+    "-anrw",
+    "-ar",
+    "-b",
+    "-bcdefiklmnpqrstuvxPRT",
+    "-c",
+    "-cl",
+    "-clpv",
+    "-d",
+    "-dms",
+    "-dnps",
+    "-dt",
+    "-e",
+    "-f",
+    "-fn",
+    "-fv",
+    "-g",
+    "-h",
+    "-i",
+    "-j",
+    "-k",
+    "-l",
+    "-lnprs",
+    "-lnr",
+    "-lpP",
+    "-lr",
+    "-lsvSVX",
+    "-m",
+    "-n",
+    "-neE",
+    "-o",
+    "-p",
+    "-pVv",
+    "-pqsu",
+    "-pr",
+    "-q",
+    "-r",
+    "-s",
+    "-sigspec",
+    "-t",
+    "-u",
+    "-v",
+    "-w",
     "-x"
    ]
   },
@@ -3694,6 +4035,10 @@
    "words": [
     "-z"
    ]
+  },
+  "disown": {
+   "exists": false,
+   "path": ""
   },
   "dmesg": {
    "exists": true,
@@ -6831,6 +7176,18 @@
   "git": {
    "commands": {
     "prefix": false,
+    "seen": [
+     "program",
+     "will",
+     "as",
+     "developer",
+     "other",
+     "finds",
+     "transport",
+     "commands",
+     "for"
+    ],
+    "v": 2,
     "words": [
      "add",
      "am",
@@ -8166,6 +8523,335 @@
     "-z"
    ]
   },
+  "hash": {
+   "exists": true,
+   "help": "hash: hash [-lr] [-p pathname] [-dt] [name ...]\n    Remember or display program locations.\n    \n    Determine and remember the full pathname of each command NAME.  If\n    no arguments are given, information about remembered commands is displayed.\n    \n    Options:\n      -d\tforget the remembered location of each NAME\n      -l\tdisplay in a format that may be reused as input\n      -p pathname\tuse PATHNAME as the full pathname of NAME\n      -r\tforget all remembered locations\n      -t\tprint the remembered location of each NAME, preceding\n    \t\teach location with the corresponding NAME if multiple\n    \t\tNAMEs are given\n    Arguments:\n      NAME\tEach NAME is searched for in $PATH and added to the list\n    \t\tof remembered commands.\n    \n    Exit Status:\n    Returns success unless NAME is not found or an invalid option is given.",
+   "lines": [
+    [
+     "preceded",
+     "by - accepts -- to signify the end of the options."
+    ],
+    [
+     "out",
+     "requiring --."
+    ],
+    [
+     "source [-p path] filename [arguments]",
+     "The ."
+    ],
+    [
+     "alias [-p] [name[=value] ...]",
+     "With no arguments or with the -p option, alias prints the list of aliases in the form alias name=..."
+    ],
+    [
+     "bg [jobspec ...]",
+     "Resume each suspended job jobspec in the background, as if it had been started with &."
+    ],
+    [
+     "bind readline-command-line",
+     "Display current readline key and function bindings, bind a key sequence to a readline function or..."
+    ],
+    [
+     "-m keymap",
+     "Use keymap as the keymap to be affected by the subsequent bindings."
+    ],
+    [
+     "-l",
+     "List the names of all readline functions."
+    ],
+    [
+     "-p",
+     "Display readline function names and bindings in such a way that they can be used as an argument t..."
+    ],
+    [
+     "-P",
+     "List current readline function names and bindings."
+    ],
+    [
+     "-s",
+     "Display readline key sequences bound to macros and the strings they output in such a way that the..."
+    ],
+    [
+     "-S",
+     "Display readline key sequences bound to macros and the strings they output."
+    ],
+    [
+     "-v",
+     "Display readline variable names and values in such a way that they can be used as an argument to..."
+    ],
+    [
+     "-V",
+     "List current readline variable names and values."
+    ],
+    [
+     "-f filename",
+     "Read key bindings from filename."
+    ],
+    [
+     "-q function",
+     "Display key sequences that invoke the named readline function."
+    ],
+    [
+     "-u function",
+     "Unbind all key sequences bound to the named readline function."
+    ],
+    [
+     "-r keyseq",
+     "Remove any current binding for keyseq."
+    ],
+    [
+     "-x keyseq[: ]shell-command",
+     "Cause shell-command to be executed whenever keyseq is entered."
+    ],
+    [
+     "-X",
+     "List all key sequences bound to shell commands and the associated commands in a format that can b..."
+    ],
+    [
+     "break [n]",
+     "Exit from within a for, while, until, or select loop."
+    ],
+    [
+     "builtin shell-builtin [arguments]",
+     "Execute the specified shell builtin shell-builtin, passing it arguments, and return its exit status."
+    ],
+    [
+     "caller [expr]",
+     "Returns the context of any active subroutine call (a shell function or a script exe- cuted with t..."
+    ],
+    [
+     "cd -P [-e] [-@] [dir]",
+     "Change the current directory to dir."
+    ],
+    [
+     "-P option",
+     "to the set builtin command)."
+    ],
+    [
+     "command [-pVv] command [arg ...]",
+     "The command builtin runs command with args suppressing the normal shell function lookup for command."
+    ],
+    [
+     "compgen [-V varname] [option] [word]",
+     "Generate possible completion matches for word according to the options, which may be any option a..."
+    ],
+    [
+     "complete [-abcdefgjksuv] [-o comp-option]",
+     "[-G globpat] [-W wordlist] [-F function] [-C command] [-X filterpat] [-P prefix] [-S suffix] name..."
+    ],
+    [
+     "complete -pr [-DEI] [name ...]",
+     "Specify how arguments to each name should be completed."
+    ],
+    [
+     "-W,",
+     "and -X options (and, if necessary, the -P and -S options) should be quoted to"
+    ],
+    [
+     "-o comp-option",
+     "The comp-option controls several aspects of the compspec's behavior beyond the simple generation..."
+    ],
+    [
+     "-A action",
+     "The action may be one of the following to generate a list of possible comple- tions: alias Alias..."
+    ],
+    [
+     "-C command",
+     "command is executed in a subshell environment, and its output is used as the possible completions."
+    ],
+    [
+     "-F function",
+     "The shell function function is executed in the current shell environment."
+    ],
+    [
+     "-G globpat",
+     "Expand the pathname expansion pattern globpat to generate the possible com- pletions."
+    ],
+    [
+     "-P prefix",
+     "Add prefix to the beginning of each possible completion after all other op- tions have been applied."
+    ],
+    [
+     "-S suffix",
+     "Append suffix to each possible completion after all other options have been applied."
+    ],
+    [
+     "-W wordlist",
+     "Split the wordlist using the characters in the IFS special variable as delim- iters, and expand e..."
+    ],
+    [
+     "-X filterpat",
+     "filterpat is a pattern as used for pathname expansion."
+    ],
+    [
+     "-p, -r,",
+     "-D, -E, or -I is supplied without a name argument, an attempt is made to re-"
+    ],
+    [
+     "compopt [-o option] [-DEI] [+o option] [name]",
+     "Modify completion options for each name according to the options, or for the cur- rently-executin..."
+    ],
+    [
+     "continue [n]",
+     "continue resumes the next iteration of the enclosing for, while, until, or select loop."
+    ],
+    [
+     "typeset [-aAfFgiIlnrtux] [-p] [name[=value] ...]",
+     "Declare variables and/or give them attributes."
+    ],
+    [
+     "-a",
+     "Each name is an indexed array variable (see Arrays in bash(1))."
+    ],
+    [
+     "-A",
+     "Each name is an associative array variable (see Arrays in bash(1))."
+    ],
+    [
+     "-f",
+     "Each name refers to a shell function."
+    ],
+    [
+     "-i",
+     "The variable is treated as an integer; arithmetic evaluation (see ARITHMETIC EVALUATION in bash(1..."
+    ],
+    [
+     "-n",
+     "Give each name the nameref attribute, making it a name reference to another variable."
+    ],
+    [
+     "-r",
+     "Make names readonly."
+    ],
+    [
+     "-t",
+     "Give each name the trace attribute."
+    ],
+    [
+     "-u",
+     "When the variable is assigned a value, all lower-case characters are converted to upper-case."
+    ],
+    [
+     "-x",
+     "Mark each name for export to subsequent commands via the environment."
+    ],
+    [
+     "dirs [-clpv] [+n] [-n]",
+     "Without options, display the list of currently remembered directories."
+    ],
+    [
+     "-c",
+     "Clears the directory stack by deleting all of the entries."
+    ],
+    [
+     "disown [-ar] [-h] [id ...]",
+     "Without options, remove each id from the table of active jobs."
+    ],
+    [
+     "echo [-neE] [arg ...]",
+     "Output the args, separated by spaces, followed by a newline."
+    ],
+    [
+     "enable [-a] [-dnps] [-f filename] [name ...]",
+     "Enable and disable builtin shell commands."
+    ],
+    [
+     "eval [arg ...]",
+     "Concatenate the args together into a single command, separating them with spaces."
+    ],
+    [
+     "exec [-cl] [-a name] [command [arguments]]",
+     "If command is specified, it replaces the shell without creating a new process."
+    ],
+    [
+     "exit [n]",
+     "Cause the shell to exit with a status of n."
+    ]
+   ],
+   "long": [
+    "--debugger",
+    "--noediting"
+   ],
+   "man": true,
+   "path": "/usr/sbin/hash",
+   "short": "012@ABCDEFGHILNOPRSTVWXabcdefghijklmnopqrstuvwx",
+   "synopsis": [],
+   "what": "bash built-in commands, see bash(1)",
+   "words": [
+    "-A",
+    "-B",
+    "-C",
+    "-D",
+    "-DEI",
+    "-E",
+    "-Eers",
+    "-F",
+    "-G",
+    "-H",
+    "-HS",
+    "-I",
+    "-L",
+    "-LP",
+    "-N",
+    "-O",
+    "-P",
+    "-R",
+    "-S",
+    "-T",
+    "-V",
+    "-W",
+    "-X",
+    "-a",
+    "-aAf",
+    "-aAfFgiIlnrtux",
+    "-abcdefgjksuv",
+    "-abefhkmnptuvxBCEHPT",
+    "-aftpP",
+    "-anrw",
+    "-ar",
+    "-b",
+    "-bcdefiklmnpqrstuvxPRT",
+    "-c",
+    "-cl",
+    "-clpv",
+    "-d",
+    "-dms",
+    "-dnps",
+    "-dt",
+    "-e",
+    "-f",
+    "-fn",
+    "-fv",
+    "-g",
+    "-h",
+    "-i",
+    "-j",
+    "-k",
+    "-l",
+    "-lnprs",
+    "-lnr",
+    "-lpP",
+    "-lr",
+    "-lsvSVX",
+    "-m",
+    "-n",
+    "-neE",
+    "-o",
+    "-p",
+    "-pVv",
+    "-pqsu",
+    "-pr",
+    "-q",
+    "-r",
+    "-s",
+    "-sigspec",
+    "-t",
+    "-u",
+    "-v",
+    "-w",
+    "-x"
+   ]
+  },
   "head": {
    "exists": true,
    "help": "Usage: /usr/sbin/head [OPTION]... [FILE]...\nPrint the first 10 lines of each FILE to standard output.\nWith more than one FILE, precede each with a header giving the file name.\n\nWith no FILE, or when FILE is -, read standard input.\n\nMandatory arguments to long options are mandatory for short options too.\n  -c, --bytes=[-]NUM\n         print the first NUM bytes of each file;\n         with the leading '-', print all but the last NUM bytes of each file\n  -n, --lines=[-]NUM\n         print the first NUM lines instead of the first 10;\n         with the leading '-', print all but the last NUM lines of each file\n  -q, --quiet, --silent\n         never print headers giving file names\n  -v, --verbose\n         always print headers giving file names\n  -z, --zero-terminated\n         line delimiter is NUL, not newline\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nNUM may have a multiplier suffix:\nb 512, kB 1000, K 1024, MB 1000*1000, M 1024*1024,\nGB 1000*1000*1000, G 1024*1024*1024, and so on for T, P, E, Z, Y, R, Q.\nBinary prefixes can be used, too: KiB=K, MiB=M, and so on.\n\nReport bugs to: <e-mail>\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nReport any translation bugs to <https://translationproject.org/team/>\nFull documentation <https://www.gnu.org/software/coreutils/head>\nor available locally via: info '(coreutils) head invocation'",
@@ -8227,6 +8913,10 @@
     "-v",
     "-z"
    ]
+  },
+  "history": {
+   "exists": false,
+   "path": ""
   },
   "host": {
    "exists": true,
@@ -8680,42 +9370,6 @@
    ]
   },
   "ip": {
-   "commands": {
-    "prefix": true,
-    "words": [
-     "address",
-     "addrlabel",
-     "fou",
-     "help",
-     "ila",
-     "ioam",
-     "l2tp",
-     "link",
-     "macsec",
-     "maddress",
-     "monitor",
-     "mptcp",
-     "mroute",
-     "mrule",
-     "neighbor",
-     "neighbour",
-     "netconf",
-     "netns",
-     "nex-",
-     "ntable",
-     "ntbl",
-     "route",
-     "rule",
-     "sr",
-     "tap",
-     "tcpmetrics",
-     "token",
-     "tunnel",
-     "tun-",
-     "vrf",
-     "xfrm"
-    ]
-   },
    "exists": true,
    "help": "Usage: ip [ OPTIONS ] OBJECT { COMMAND | help }\n       ip [ -force ] -batch filename\nwhere  OBJECT := { address | addrlabel | fou | help | ila | ioam | l2tp | link |\n                   macsec | maddress | monitor | mptcp | mroute | mrule |\n                   neighbor | neighbour | netconf | netns | nexthop | ntable |\n                   ntbl | route | rule | sr | stats | tap | tcpmetrics |\n                   token | tunnel | tuntap | vrf | xfrm }\n       OPTIONS := { -V[ersion] | -s[tatistics] | -d[etails] | -r[esolve] |\n                    -h[uman-readable] | -iec | -j[son] | -p[retty] |\n                    -f[amily] { inet | inet6 | mpls | bridge | link } |\n                    -4 | -6 | -M | -B | -0 |\n                    -l[oops] { maximum-addr-flush-attempts } | -echo | -br[ief] |\n                    -o[neline] | -t[imestamp] | -ts[hort] | -b[atch] [filename] |\n                    -rc[vbuf] [size] | -n[etns] name | -N[umeric] | -a[ll] |\n                    -c[olor]}",
    "lines": [
@@ -12216,6 +12870,10 @@
     "-z"
    ]
   },
+  "nc": {
+   "exists": false,
+   "path": ""
+  },
   "ncdu": {
    "exists": true,
    "help": "ncdu <options> <directory>\n\nMode selection:\n  -h, --help                 This help message\n  -v, -V, --version          Print version\n  -f FILE                    Import scanned directory from FILE\n  -o FILE                    Export scanned directory to FILE in JSON format\n  -O FILE                    Export scanned directory to FILE in binary format\n  -e, --extended             Enable extended information\n  --ignore-config            Don't load config files\n\nScan options:\n  -x, --one-file-system      Stay on the same filesystem\n  --exclude PATTERN          Exclude files that match PATTERN\n  -X, --exclude-from FILE    Exclude files that match any pattern in FILE\n  --exclude-caches           Exclude directories containing CACHEDIR.TAG\n  -L, --follow-symlinks      Follow symbolic links (excluding directories)\n  --exclude-kernfs           Exclude Linux pseudo filesystems (procfs,sysfs,cgroup,...)\n  -t NUM                     Scan with NUM threads\n\nExport options:\n  -c, --compress             Use Zstandard compression with `-o`\n  --compress-level NUM       Set compression level\n  --export-block-size KIB    Set export block size with `-O`\n\nInterface options:\n  -0, -1, -2                 UI to use when scanning (0=none,2=full ncurses)\n  -q, --slow-ui-updates      \"Quiet\" mode, refresh interval 2 seconds\n  --enable-shell             Enable/disable shell spawning feature\n  --enable-delete            Enable/disable file deletion feature\n  --enable-refresh           Enable/disable directory refresh feature\n  -r                         Read only (--disable-delete)\n  -rr                        Read only++ (--disable-delete & --disable-shell)\n  --si                       Use base 10 (SI) prefixes instead of base 2\n  --apparent-size            Show apparent size instead of disk usage by default\n  --hide-hidden              Hide \"hidden\" or excluded files by default\n  --show-itemcount           Show item count column by default\n  --show-mtime               Show mtime column by default (requires `-e`)\n  --show-graph               Show graph column by default\n  --show-percent             Show percent column by default\n  --graph-style STYLE        hash / half-block / eighth-block\n  --shared-column            off / shared / unique\n  --sort COLUMN-(asc/desc)   disk-usage / name / apparent-size / itemcount / mtime\n  --enable-natsort           Use natural order when sorting by name\n  --group-directories-first  Sort directories before files\n  --confirm-quit             Ask confirmation before quitting ncdu\n  --no-confirm-delete        Don't ask confirmation before deletion\n  --delete-command CMD       Command to run for file deletion\n  --color SCHEME             off / dark / dark-bg\n\nRefer to `man ncdu` for more information.",
@@ -12590,6 +13248,10 @@
     "-n"
    ]
   },
+  "nmap": {
+   "exists": false,
+   "path": ""
+  },
   "nmcli": {
    "exists": false,
    "path": ""
@@ -12718,6 +13380,10 @@
    "path": ""
   },
   "pacman": {
+   "exists": false,
+   "path": ""
+  },
+  "pandoc": {
    "exists": false,
    "path": ""
   },
@@ -13718,6 +14384,49 @@
     "-u",
     "-w",
     "-y"
+   ]
+  },
+  "pwd": {
+   "exists": true,
+   "help": "Usage: /usr/sbin/pwd [OPTION]...\nPrint the full filename of the current working directory.\n\n  -L, --logical\n         use PWD from environment, even if it contains symlinks\n  -P, --physical\n         resolve all symlinks\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nIf no option is specified, -P is assumed.\n\nYour shell may have its own version of pwd, which usually supersedes\nthe version described here.  Please refer to your shell's documentation\nfor details about the options it supports.\n\nReport bugs to: <e-mail>\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nReport any translation bugs to <https://translationproject.org/team/>\nFull documentation <https://www.gnu.org/software/coreutils/pwd>\nor available locally via: info '(coreutils) pwd invocation'",
+   "lines": [
+    [
+     "-L, --logical",
+     "use PWD from environment, even if it contains symlinks"
+    ],
+    [
+     "-P, --physical",
+     "resolve all symlinks"
+    ],
+    [
+     "--help display",
+     "this help and exit"
+    ],
+    [
+     "--version",
+     "output version information and exit"
+    ],
+    [
+     "--help",
+     "display this help and exit"
+    ]
+   ],
+   "long": [
+    "--help",
+    "--logical",
+    "--physical",
+    "--version"
+   ],
+   "man": true,
+   "path": "/usr/sbin/pwd",
+   "short": "LP",
+   "synopsis": [
+    "pwd [OPTION]..."
+   ],
+   "what": "print name of current/working directory",
+   "words": [
+    "-L",
+    "-P"
    ]
   },
   "readlink": {
@@ -17097,17 +17806,49 @@
   "systemctl": {
    "commands": {
     "prefix": false,
+    "seen": [
+     "may",
+     "bluetooth.service",
+     "add-requires",
+     "as",
+     "will",
+     "command",
+     "itself",
+     "pretty",
+     "unix",
+     "us",
+     "utc",
+     "use",
+     "uses",
+     "systemd"
+    ],
+    "v": 2,
     "words": [
      "list-units",
      "list-automounts",
      "list-paths",
      "list-sockets",
      "list-timers",
+     "is-active",
      "is-failed",
      "status",
      "show",
+     "cat",
+     "help",
      "list-dependencies",
+     "start",
+     "stop",
+     "reload",
+     "restart",
+     "try-restart",
+     "reload-or-restart",
+     "try-reload-or-restart",
      "isolate",
+     "kill",
+     "clean",
+     "freeze",
+     "thaw",
+     "set-property",
      "bind",
      "mount-image",
      "service-log-level",
@@ -17115,13 +17856,27 @@
      "reset-failed",
      "whoami",
      "list-unit-files",
+     "enable",
+     "disable",
+     "reenable",
+     "preset",
      "preset-all",
+     "is-enabled",
+     "mask",
+     "unmask",
+     "link",
+     "revert",
+     "add-wants",
+     "edit",
      "get-default",
      "set-default",
      "list-machines",
      "list-jobs",
      "cancel",
      "show-environment",
+     "set-environment",
+     "unset-environment",
+     "import-environment",
      "daemon-reload",
      "daemon-reexec",
      "log-level",
@@ -17142,10 +17897,7 @@
      "suspend",
      "hibernate",
      "hybrid-sleep",
-     "suspend-then-hibernate",
-     "and",
-     "are",
-     "or"
+     "suspend-then-hibernate"
     ]
    },
    "exists": true,
@@ -18124,6 +18876,10 @@
     "-i",
     "-p"
    ]
+  },
+  "time": {
+   "exists": false,
+   "path": ""
   },
   "timedatectl": {
    "exists": true,
@@ -19242,6 +19998,336 @@
     "-v",
     "-x",
     "-xdev"
+   ]
+  },
+  "ulimit": {
+   "exists": true,
+   "help": "ulimit: ulimit [-SHabcdefiklmnpqrstuvxPRT] [limit]\n    Modify shell resource limits.\n    \n    Provides control over the resources available to the shell and processes\n    it creates, on systems that allow such control.\n    \n    Options:\n      -S\tuse the `soft' resource limit\n      -H\tuse the `hard' resource limit\n      -a\tall current limits are reported\n      -b\tthe socket buffer size\n      -c\tthe maximum size of core files created\n      -d\tthe maximum size of a process's data segment\n      -e\tthe maximum scheduling priority (`nice')\n      -f\tthe maximum size of files written by the shell and its children\n      -i\tthe maximum number of pending signals\n      -k\tthe maximum number of kqueues allocated for this process\n      -l\tthe maximum size a process may lock into memory\n      -m\tthe maximum resident set size\n      -n\tthe maximum number of open file descriptors\n      -p\tthe pipe buffer size\n      -q\tthe maximum number of bytes in POSIX message queues\n      -r\tthe maximum real-time scheduling priority\n      -s\tthe maximum stack size\n      -t\tthe maximum amount of cpu time in seconds\n      -u\tthe maximum number of user processes\n      -v\tthe size of virtual memory\n      -x\tthe maximum number of file locks\n      -P\tthe maximum number of pseudoterminals\n      -R\tthe maximum time a real-time process can run before blocking\n      -T\tthe maximum number of threads\n    \n    Not all options are available on all platforms.\n    \n    If LIMIT is given, it is the new value of the specified resource; the\n    special LIMIT values `soft', `hard', and `unlimited' stand for the\n    current soft limit, the current hard limit, and no limit, respectively.\n    Otherwise, the current value of the specified resource is printed.  If\n    no option is given, then -f is assumed.\n    \n    Values are in 1024-byte increments, except for -t, which is in seconds;\n    -p, which is in increments of 512 bytes; -R, which is in microseconds;\n    -b, which is in bytes; and -e, -i, -k, -n, -q, -r, -u, -x, and -P,\n    which accept unscaled values.\n    \n    When in posix mode, values supplied with -c and -f are in 512-byte\n    increments.\n    \n    Exit Status:\n    Returns success unless an invalid option is supplied or an error occurs.",
+   "lines": [
+    [
+     "preceded",
+     "by - accepts -- to signify the end of the options."
+    ],
+    [
+     "out",
+     "requiring --."
+    ],
+    [
+     "source [-p path] filename [arguments]",
+     "The ."
+    ],
+    [
+     "alias [-p] [name[=value] ...]",
+     "With no arguments or with the -p option, alias prints the list of aliases in the form alias name=..."
+    ],
+    [
+     "bg [jobspec ...]",
+     "Resume each suspended job jobspec in the background, as if it had been started with &."
+    ],
+    [
+     "bind readline-command-line",
+     "Display current readline key and function bindings, bind a key sequence to a readline function or..."
+    ],
+    [
+     "-m keymap",
+     "Use keymap as the keymap to be affected by the subsequent bindings."
+    ],
+    [
+     "-l",
+     "List the names of all readline functions."
+    ],
+    [
+     "-p",
+     "Display readline function names and bindings in such a way that they can be used as an argument t..."
+    ],
+    [
+     "-P",
+     "List current readline function names and bindings."
+    ],
+    [
+     "-s",
+     "Display readline key sequences bound to macros and the strings they output in such a way that the..."
+    ],
+    [
+     "-S",
+     "Display readline key sequences bound to macros and the strings they output."
+    ],
+    [
+     "-v",
+     "Display readline variable names and values in such a way that they can be used as an argument to..."
+    ],
+    [
+     "-V",
+     "List current readline variable names and values."
+    ],
+    [
+     "-f filename",
+     "Read key bindings from filename."
+    ],
+    [
+     "-q function",
+     "Display key sequences that invoke the named readline function."
+    ],
+    [
+     "-u function",
+     "Unbind all key sequences bound to the named readline function."
+    ],
+    [
+     "-r keyseq",
+     "Remove any current binding for keyseq."
+    ],
+    [
+     "-x keyseq[: ]shell-command",
+     "Cause shell-command to be executed whenever keyseq is entered."
+    ],
+    [
+     "-X",
+     "List all key sequences bound to shell commands and the associated commands in a format that can b..."
+    ],
+    [
+     "break [n]",
+     "Exit from within a for, while, until, or select loop."
+    ],
+    [
+     "builtin shell-builtin [arguments]",
+     "Execute the specified shell builtin shell-builtin, passing it arguments, and return its exit status."
+    ],
+    [
+     "caller [expr]",
+     "Returns the context of any active subroutine call (a shell function or a script exe- cuted with t..."
+    ],
+    [
+     "cd -P [-e] [-@] [dir]",
+     "Change the current directory to dir."
+    ],
+    [
+     "-P option",
+     "to the set builtin command)."
+    ],
+    [
+     "command [-pVv] command [arg ...]",
+     "The command builtin runs command with args suppressing the normal shell function lookup for command."
+    ],
+    [
+     "compgen [-V varname] [option] [word]",
+     "Generate possible completion matches for word according to the options, which may be any option a..."
+    ],
+    [
+     "complete [-abcdefgjksuv] [-o comp-option]",
+     "[-G globpat] [-W wordlist] [-F function] [-C command] [-X filterpat] [-P prefix] [-S suffix] name..."
+    ],
+    [
+     "complete -pr [-DEI] [name ...]",
+     "Specify how arguments to each name should be completed."
+    ],
+    [
+     "-W,",
+     "and -X options (and, if necessary, the -P and -S options) should be quoted to"
+    ],
+    [
+     "-o comp-option",
+     "The comp-option controls several aspects of the compspec's behavior beyond the simple generation..."
+    ],
+    [
+     "-A action",
+     "The action may be one of the following to generate a list of possible comple- tions: alias Alias..."
+    ],
+    [
+     "-C command",
+     "command is executed in a subshell environment, and its output is used as the possible completions."
+    ],
+    [
+     "-F function",
+     "The shell function function is executed in the current shell environment."
+    ],
+    [
+     "-G globpat",
+     "Expand the pathname expansion pattern globpat to generate the possible com- pletions."
+    ],
+    [
+     "-P prefix",
+     "Add prefix to the beginning of each possible completion after all other op- tions have been applied."
+    ],
+    [
+     "-S suffix",
+     "Append suffix to each possible completion after all other options have been applied."
+    ],
+    [
+     "-W wordlist",
+     "Split the wordlist using the characters in the IFS special variable as delim- iters, and expand e..."
+    ],
+    [
+     "-X filterpat",
+     "filterpat is a pattern as used for pathname expansion."
+    ],
+    [
+     "-p, -r,",
+     "-D, -E, or -I is supplied without a name argument, an attempt is made to re-"
+    ],
+    [
+     "compopt [-o option] [-DEI] [+o option] [name]",
+     "Modify completion options for each name according to the options, or for the cur- rently-executin..."
+    ],
+    [
+     "continue [n]",
+     "continue resumes the next iteration of the enclosing for, while, until, or select loop."
+    ],
+    [
+     "typeset [-aAfFgiIlnrtux] [-p] [name[=value] ...]",
+     "Declare variables and/or give them attributes."
+    ],
+    [
+     "-a",
+     "Each name is an indexed array variable (see Arrays in bash(1))."
+    ],
+    [
+     "-A",
+     "Each name is an associative array variable (see Arrays in bash(1))."
+    ],
+    [
+     "-f",
+     "Each name refers to a shell function."
+    ],
+    [
+     "-i",
+     "The variable is treated as an integer; arithmetic evaluation (see ARITHMETIC EVALUATION in bash(1..."
+    ],
+    [
+     "-n",
+     "Give each name the nameref attribute, making it a name reference to another variable."
+    ],
+    [
+     "-r",
+     "Make names readonly."
+    ],
+    [
+     "-t",
+     "Give each name the trace attribute."
+    ],
+    [
+     "-u",
+     "When the variable is assigned a value, all lower-case characters are converted to upper-case."
+    ],
+    [
+     "-x",
+     "Mark each name for export to subsequent commands via the environment."
+    ],
+    [
+     "dirs [-clpv] [+n] [-n]",
+     "Without options, display the list of currently remembered directories."
+    ],
+    [
+     "-c",
+     "Clears the directory stack by deleting all of the entries."
+    ],
+    [
+     "disown [-ar] [-h] [id ...]",
+     "Without options, remove each id from the table of active jobs."
+    ],
+    [
+     "echo [-neE] [arg ...]",
+     "Output the args, separated by spaces, followed by a newline."
+    ],
+    [
+     "enable [-a] [-dnps] [-f filename] [name ...]",
+     "Enable and disable builtin shell commands."
+    ],
+    [
+     "eval [arg ...]",
+     "Concatenate the args together into a single command, separating them with spaces."
+    ],
+    [
+     "exec [-cl] [-a name] [command [arguments]]",
+     "If command is specified, it replaces the shell without creating a new process."
+    ],
+    [
+     "exit [n]",
+     "Cause the shell to exit with a status of n."
+    ]
+   ],
+   "long": [
+    "--debugger",
+    "--noediting"
+   ],
+   "man": true,
+   "path": "/usr/sbin/ulimit",
+   "short": "012@ABCDEFGHILNOPRSTVWXabcdefghijklmnopqrstuvwx",
+   "synopsis": [],
+   "what": "bash built-in commands, see bash(1)",
+   "words": [
+    "-A",
+    "-B",
+    "-C",
+    "-D",
+    "-DEI",
+    "-E",
+    "-Eers",
+    "-F",
+    "-G",
+    "-H",
+    "-HS",
+    "-I",
+    "-L",
+    "-LP",
+    "-N",
+    "-O",
+    "-P",
+    "-R",
+    "-S",
+    "-SHabcdefiklmnpqrstuvxPRT",
+    "-T",
+    "-V",
+    "-W",
+    "-X",
+    "-a",
+    "-aAf",
+    "-aAfFgiIlnrtux",
+    "-abcdefgjksuv",
+    "-abefhkmnptuvxBCEHPT",
+    "-aftpP",
+    "-anrw",
+    "-ar",
+    "-b",
+    "-bcdefiklmnpqrstuvxPRT",
+    "-c",
+    "-cl",
+    "-clpv",
+    "-d",
+    "-dms",
+    "-dnps",
+    "-dt",
+    "-e",
+    "-f",
+    "-fn",
+    "-fv",
+    "-g",
+    "-h",
+    "-i",
+    "-j",
+    "-k",
+    "-l",
+    "-lnprs",
+    "-lnr",
+    "-lpP",
+    "-lr",
+    "-lsvSVX",
+    "-m",
+    "-n",
+    "-neE",
+    "-o",
+    "-p",
+    "-pVv",
+    "-pqsu",
+    "-pr",
+    "-q",
+    "-r",
+    "-s",
+    "-sigspec",
+    "-t",
+    "-u",
+    "-v",
+    "-w",
+    "-x"
    ]
   },
   "uname": {

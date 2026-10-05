@@ -1,8 +1,12 @@
 {
- "collected": "2026-10-04",
+ "collected": "2026-10-05",
  "os": "opensuse",
  "pretty": "openSUSE Tumbleweed",
  "tools": {
+  "[[": {
+   "exists": false,
+   "path": ""
+  },
   "adduser": {
    "exists": false,
    "path": ""
@@ -12,6 +16,10 @@
    "path": ""
   },
   "apt-get": {
+   "exists": false,
+   "path": ""
+  },
+  "asciinema": {
    "exists": false,
    "path": ""
   },
@@ -921,6 +929,10 @@
    "exists": false,
    "path": ""
   },
+  "builtin": {
+   "exists": false,
+   "path": ""
+  },
   "cat": {
    "exists": true,
    "help": "cat [OPTION]... [FILE]...",
@@ -1500,6 +1512,10 @@
     "-t",
     "-x"
    ]
+  },
+  "command": {
+   "exists": false,
+   "path": ""
   },
   "cp": {
    "exists": true,
@@ -3229,6 +3245,10 @@
    "words": [
     "-z"
    ]
+  },
+  "disown": {
+   "exists": false,
+   "path": ""
   },
   "dmesg": {
    "exists": true,
@@ -6009,6 +6029,18 @@
   "git": {
    "commands": {
     "prefix": false,
+    "seen": [
+     "program",
+     "will",
+     "as",
+     "developer",
+     "other",
+     "finds",
+     "transport",
+     "commands",
+     "for"
+    ],
+    "v": 2,
     "words": [
      "add",
      "am",
@@ -7345,6 +7377,10 @@
     "-z"
    ]
   },
+  "hash": {
+   "exists": false,
+   "path": ""
+  },
   "head": {
    "exists": true,
    "help": "Usage: /usr/bin/head [OPTION]... [FILE]...\nPrint the first 10 lines of each FILE to standard output.\nWith more than one FILE, precede each with a header giving the file name.\n\nWith no FILE, or when FILE is -, read standard input.\n\nMandatory arguments to long options are mandatory for short options too.\n  -c, --bytes=[-]NUM\n         print the first NUM bytes of each file;\n         with the leading '-', print all but the last NUM bytes of each file\n  -n, --lines=[-]NUM\n         print the first NUM lines instead of the first 10;\n         with the leading '-', print all but the last NUM lines of each file\n  -q, --quiet, --silent\n         never print headers giving file names\n  -v, --verbose\n         always print headers giving file names\n  -z, --zero-terminated\n         line delimiter is NUL, not newline\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nNUM may have a multiplier suffix:\nb 512, kB 1000, K 1024, MB 1000*1000, M 1024*1024,\nGB 1000*1000*1000, G 1024*1024*1024, and so on for T, P, E, Z, Y, R, Q.\nBinary prefixes can be used, too: KiB=K, MiB=M, and so on.\n\nReport bugs to: <<e-mail>>.\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nFull documentation <https://www.gnu.org/software/coreutils/head>\nor available locally via: info '(coreutils) head invocation'",
@@ -7406,6 +7442,10 @@
     "-v",
     "-z"
    ]
+  },
+  "history": {
+   "exists": false,
+   "path": ""
   },
   "host": {
    "exists": true,
@@ -7874,42 +7914,6 @@
    ]
   },
   "ip": {
-   "commands": {
-    "prefix": true,
-    "words": [
-     "address",
-     "addrlabel",
-     "fou",
-     "help",
-     "ila",
-     "ioam",
-     "l2tp",
-     "link",
-     "macsec",
-     "maddress",
-     "monitor",
-     "mptcp",
-     "mroute",
-     "mrule",
-     "neighbor",
-     "neighbour",
-     "netconf",
-     "netns",
-     "nex-",
-     "ntable",
-     "ntbl",
-     "route",
-     "rule",
-     "sr",
-     "tap",
-     "tcpmetrics",
-     "token",
-     "tunnel",
-     "tun-",
-     "vrf",
-     "xfrm"
-    ]
-   },
    "exists": true,
    "help": "Usage: ip [ OPTIONS ] OBJECT { COMMAND | help }\n       ip [ -force ] -batch filename\nwhere  OBJECT := { address | addrlabel | fou | help | ila | ioam | l2tp | link |\n                   macsec | maddress | monitor | mptcp | mroute | mrule |\n                   neighbor | neighbour | netconf | netns | nexthop | ntable |\n                   ntbl | route | rule | sr | stats | tap | tcpmetrics |\n                   token | tunnel | tuntap | vrf | xfrm }\n       OPTIONS := { -V[ersion] | -s[tatistics] | -d[etails] | -r[esolve] |\n                    -h[uman-readable] | -iec | -j[son] | -p[retty] |\n                    -f[amily] { inet | inet6 | mpls | bridge | link } |\n                    -4 | -6 | -M | -B | -0 |\n                    -l[oops] { maximum-addr-flush-attempts } | -echo | -br[ief] |\n                    -o[neline] | -t[imestamp] | -ts[hort] | -b[atch] [filename] |\n                    -rc[vbuf] [size] | -n[etns] name | -N[umeric] | -a[ll] |\n                    -c[olor]}",
    "lines": [
@@ -11499,6 +11503,10 @@
     "-z"
    ]
   },
+  "nc": {
+   "exists": false,
+   "path": ""
+  },
   "ncdu": {
    "exists": true,
    "help": "ncdu <options> <directory>\n\nMode selection:\n  -h, --help                 This help message\n  -v, -V, --version          Print version\n  -f FILE                    Import scanned directory from FILE\n  -o FILE                    Export scanned directory to FILE in JSON format\n  -e, --extended             Enable extended information\n  --ignore-config            Don't load config files\n\nScan options:\n  -x, --one-file-system      Stay on the same filesystem\n  --exclude PATTERN          Exclude files that match PATTERN\n  -X, --exclude-from FILE    Exclude files that match any pattern in FILE\n  --exclude-caches           Exclude directories containing CACHEDIR.TAG\n  -L, --follow-symlinks      Follow symbolic links (excluding directories)\n  --exclude-kernfs           Exclude Linux pseudo filesystems (procfs,sysfs,cgroup,...)\n\nInterface options:\n  -0, -1, -2                 UI to use when scanning (0=none,2=full ncurses)\n  -q, --slow-ui-updates      \"Quiet\" mode, refresh interval 2 seconds\n  --enable-shell             Enable/disable shell spawning feature\n  --enable-delete            Enable/disable file deletion feature\n  --enable-refresh           Enable/disable directory refresh feature\n  -r                         Read only (--disable-delete)\n  -rr                        Read only++ (--disable-delete & --disable-shell)\n  --si                       Use base 10 (SI) prefixes instead of base 2\n  --apparent-size            Show apparent size instead of disk usage by default\n  --hide-hidden              Hide \"hidden\" or excluded files by default\n  --show-itemcount           Show item count column by default\n  --show-mtime               Show mtime column by default (requires `-e`)\n  --show-graph               Show graph column by default\n  --show-percent             Show percent column by default\n  --graph-style STYLE        hash / half-block / eighth-block\n  --sort COLUMN-(asc/desc)   disk-usage / name / apparent-size / itemcount / mtime\n  --enable-natsort           Use natural order when sorting by name\n  --group-directories-first  Sort directories before files\n  --confirm-quit             Ask confirmation before quitting ncdu\n  --no-confirm-delete        Don't ask confirmation before deletion\n  --color SCHEME             off / dark / dark-bg\n\nRefer to `man ncdu` for more information.",
@@ -11864,6 +11872,10 @@
     "-n"
    ]
   },
+  "nmap": {
+   "exists": false,
+   "path": ""
+  },
   "nmcli": {
    "exists": false,
    "path": ""
@@ -11992,6 +12004,10 @@
    "path": ""
   },
   "pacman": {
+   "exists": false,
+   "path": ""
+  },
+  "pandoc": {
    "exists": false,
    "path": ""
   },
@@ -13236,6 +13252,49 @@
     "-u",
     "-w",
     "-y"
+   ]
+  },
+  "pwd": {
+   "exists": true,
+   "help": "Usage: /usr/bin/pwd [OPTION]...\nPrint the full filename of the current working directory.\n\n  -L, --logical\n         use PWD from environment, even if it contains symlinks\n  -P, --physical\n         resolve all symlinks\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nIf no option is specified, -P is assumed.\n\nYour shell may have its own version of pwd, which usually supersedes\nthe version described here.  Please refer to your shell's documentation\nfor details about the options it supports.\n\nReport bugs to: <<e-mail>>.\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nFull documentation <https://www.gnu.org/software/coreutils/pwd>\nor available locally via: info '(coreutils) pwd invocation'",
+   "lines": [
+    [
+     "-L, --logical",
+     "use PWD from environment, even if it contains symlinks"
+    ],
+    [
+     "-P, --physical",
+     "resolve all symlinks"
+    ],
+    [
+     "--help display",
+     "this help and exit"
+    ],
+    [
+     "--version",
+     "output version information and exit"
+    ],
+    [
+     "--help",
+     "display this help and exit"
+    ]
+   ],
+   "long": [
+    "--help",
+    "--logical",
+    "--physical",
+    "--version"
+   ],
+   "man": true,
+   "path": "/usr/bin/pwd",
+   "short": "LP",
+   "synopsis": [
+    "pwd [OPTION]..."
+   ],
+   "what": "print name of current/working directory",
+   "words": [
+    "-L",
+    "-P"
    ]
   },
   "readlink": {
@@ -16308,18 +16367,52 @@
   "systemctl": {
    "commands": {
     "prefix": false,
+    "seen": [
+     "may",
+     "bluetooth.service",
+     "add-requires",
+     "as",
+     "will",
+     "command",
+     "itself",
+     "pretty",
+     "unix",
+     "us",
+     "utc",
+     "use",
+     "uses",
+     "true",
+     "false",
+     "systemd"
+    ],
+    "v": 2,
     "words": [
      "list-units",
      "list-automounts",
      "list-paths",
      "list-sockets",
      "list-timers",
+     "is-active",
      "is-failed",
      "status",
      "show",
+     "cat",
+     "help",
      "list-dependencies",
+     "start",
+     "stop",
+     "reload",
+     "restart",
+     "try-restart",
      "enqueue-marked",
+     "reload-or-restart",
+     "try-reload-or-restart",
      "isolate",
+     "kill",
+     "clean",
+     "freeze",
+     "thaw",
+     "set-property",
      "bind",
      "mount-image",
      "service-log-level",
@@ -16327,13 +16420,27 @@
      "reset-failed",
      "whoami",
      "list-unit-files",
+     "enable",
+     "disable",
+     "reenable",
+     "preset",
      "preset-all",
+     "is-enabled",
+     "mask",
+     "unmask",
+     "link",
+     "revert",
+     "add-wants",
+     "edit",
      "get-default",
      "set-default",
      "list-machines",
      "list-jobs",
      "cancel",
      "show-environment",
+     "set-environment",
+     "unset-environment",
+     "import-environment",
      "daemon-reload",
      "daemon-reexec",
      "log-level",
@@ -16354,10 +16461,7 @@
      "suspend",
      "hibernate",
      "hybrid-sleep",
-     "suspend-then-hibernate",
-     "and",
-     "are",
-     "or"
+     "suspend-then-hibernate"
     ]
    },
    "exists": true,
@@ -17337,6 +17441,10 @@
     "-i",
     "-p"
    ]
+  },
+  "time": {
+   "exists": false,
+   "path": ""
   },
   "timedatectl": {
    "exists": true,
@@ -18460,6 +18568,10 @@
     "-x",
     "-xdev"
    ]
+  },
+  "ulimit": {
+   "exists": false,
+   "path": ""
   },
   "uname": {
    "exists": true,
@@ -21286,42 +21398,161 @@
   "zypper": {
    "commands": {
     "prefix": false,
+    "seen": [
+     "commands",
+     "will",
+     "command",
+     "package",
+     "pattern",
+     "product",
+     "srcpackage",
+     "application",
+     "intended",
+     "for",
+     "always",
+     "to",
+     "none",
+     "rebuild",
+     "i",
+     "v",
+     "empty",
+     "provides",
+     "displays",
+     "returns",
+     "proceeds",
+     "ensures",
+     "suggests",
+     "shows",
+     "acts",
+     "patch-info",
+     "ar",
+     "tried",
+     "print",
+     "version",
+     "config",
+     "doesn",
+     "expects",
+     "return",
+     "call",
+     "itself",
+     "prints",
+     "in",
+     "work",
+     "easier",
+     "extensions",
+     "mytask",
+     "global-options",
+     "starts",
+     "0",
+     "1",
+     "2",
+     "3",
+     "4",
+     "5",
+     "6",
+     "7",
+     "8",
+     "100",
+     "101",
+     "102",
+     "103",
+     "104",
+     "105",
+     "106",
+     "107",
+     "built-in",
+     "source",
+     "with",
+     "has",
+     "project"
+    ],
+    "v": 2,
     "words": [
-     "section",
      "help",
      "shell",
+     "sh",
+     "info",
+     "if",
      "install",
+     "source-install",
+     "si",
      "verify",
+     "ve",
      "install-new-recommends",
+     "inr",
+     "remove",
+     "rm",
+     "removeptf",
+     "rmptf",
      "purge-kernels",
      "list-updates",
+     "lu",
+     "update",
+     "up",
      "list-patches",
+     "lp",
      "patch-check",
+     "pchk",
      "patch",
      "dist-upgrade",
+     "dup",
+     "search",
+     "se",
+     "packages",
+     "pa",
      "patches",
+     "patterns",
+     "pt",
+     "products",
+     "pd",
      "what-provides",
+     "wp",
+     "section",
      "addrepo",
+     "removerepo",
+     "rr",
+     "repos",
+     "lr",
      "renamerepo",
+     "nr",
      "modifyrepo",
+     "mr",
      "refresh",
+     "clean",
+     "cc",
      "addservice",
+     "as",
+     "removeservice",
+     "rs",
      "modifyservice",
+     "ms",
      "services",
+     "ls",
+     "refresh-services",
+     "refs",
      "locks",
+     "ll",
      "addlock",
+     "removelock",
+     "rl",
      "cleanlocks",
+     "cl",
      "locales",
+     "addlocale",
+     "aloc",
+     "removelocale",
+     "rloc",
      "system-architecture",
      "versioncmp",
+     "vcmp",
      "targetos",
+     "tos",
      "licenses",
      "download",
      "source-download",
      "ps",
      "needs-rebooting",
-     "subcommand",
-     "o"
+     "subcommand"
     ]
    },
    "exists": true,

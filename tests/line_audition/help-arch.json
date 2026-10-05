@@ -1,8 +1,12 @@
 {
- "collected": "2026-09-26",
+ "collected": "2026-10-05",
  "os": "arch",
  "pretty": "Arch Linux",
  "tools": {
+  "[[": {
+   "exists": false,
+   "path": ""
+  },
   "adduser": {
    "exists": false,
    "path": ""
@@ -12,6 +16,10 @@
    "path": ""
   },
   "apt-get": {
+   "exists": false,
+   "path": ""
+  },
+  "asciinema": {
    "exists": false,
    "path": ""
   },
@@ -243,7 +251,7 @@
   },
   "basename": {
    "exists": true,
-   "help": "Usage: /usr/sbin/basename NAME [SUFFIX]\n  or:  /usr/sbin/basename OPTION... NAME...\nPrint NAME with any leading directory components removed.\nIf specified, also remove a trailing SUFFIX.\n\nMandatory arguments to long options are mandatory for short options too.\n  -a, --multiple\n         support multiple arguments and treat each as a NAME\n  -s, --suffix=SUFFIX\n         remove a trailing SUFFIX; implies -a\n  -z, --zero\n         end each output line with NUL, not newline\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nExamples:\n  /usr/sbin/basename /usr/bin/sort          -> \"sort\"\n  /usr/sbin/basename include/stdio.h .h     -> \"stdio\"\n  /usr/sbin/basename -s .h include/stdio.h  -> \"stdio\"\n  /usr/sbin/basename -a any/str1 any/str2   -> \"str1\" followed by \"str2\"\n\nReport bugs to: <e-mail>\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nReport any translation bugs to <https://translationproject.org/team/>\nFull documentation <https://www.gnu.org/software/coreutils/basename>\nor available locally via: info '(coreutils) basename invocation'",
+   "help": "Usage: /usr/sbin/basename NAME [SUFFIX]\n  or:  /usr/sbin/basename OPTION... NAME...\nPrint NAME with any leading directory components removed.\nIf specified, also remove a trailing SUFFIX.\n\nMandatory arguments to long options are mandatory for short options too.\n  -a, --multiple\n         support multiple arguments and treat each as a NAME\n  -s, --suffix=SUFFIX\n         remove a trailing SUFFIX; implies -a\n  -z, --zero\n         end each output line with NUL, not newline\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nExamples:\n  /usr/sbin/basename /usr/bin/sort          -> \"sort\"\n  /usr/sbin/basename include/stdio.h .h     -> \"stdio\"\n  /usr/sbin/basename -s .h include/stdio.h  -> \"stdio\"\n  /usr/sbin/basename -a any/str1 any/str2   -> \"str1\" followed by \"str2\"\n\nReport bugs to: <<e-mail>>.\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nFull documentation <https://www.gnu.org/software/coreutils/basename>\nor available locally via: info '(coreutils) basename invocation'",
    "lines": [
     [
      "-a, --multiple",
@@ -799,6 +807,10 @@
    "exists": false,
    "path": ""
   },
+  "builtin": {
+   "exists": false,
+   "path": ""
+  },
   "cat": {
    "exists": true,
    "help": "cat [OPTION]... [FILE]...",
@@ -941,7 +953,7 @@
   },
   "chmod": {
    "exists": true,
-   "help": "Usage: /usr/sbin/chmod [OPTION]... MODE[,MODE]... FILE...\n  or:  /usr/sbin/chmod [OPTION]... OCTAL-MODE FILE...\n  or:  /usr/sbin/chmod [OPTION]... --reference=RFILE FILE...\nChange the mode of each FILE to MODE.\nWith --reference, change the mode of each FILE to that of RFILE.\n\n  -c, --changes\n         like verbose but report only when a change is made\n  -f, --silent, --quiet\n         suppress most error messages\n  -v, --verbose\n         output a diagnostic for every file processed\n      --dereference\n         affect the referent of each symbolic link,\n         rather than the symbolic link itself\n  -h, --no-dereference\n         affect each symbolic link, rather than the referent\n      --no-preserve-root\n         do not treat '/' specially (the default)\n      --preserve-root\n         fail to operate recursively on '/'\n      --reference=RFILE\n         use RFILE's mode instead of specifying MODE values.\n         RFILE is always dereferenced if a symbolic link.\n  -R, --recursive\n         change files and directories recursively\n\nThe following options modify how a hierarchy is traversed when the -R\noption is also specified.  If more than one is specified, only the final\none takes effect. -H is the default.\n\n  -H\n         if a command line argument is a symlink to a directory, traverse it\n  -L\n         traverse every symbolic link to a directory encountered\n  -P\n         do not traverse any symbolic links\n\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nEach MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=][0-7]+'.\n\nReport bugs to: <e-mail>\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nReport any translation bugs to <https://translationproject.org/team/>\nFull documentation <https://www.gnu.org/software/coreutils/chmod>\nor available locally via: info '(coreutils) chmod invocation'",
+   "help": "Usage: /usr/sbin/chmod [OPTION]... MODE[,MODE]... FILE...\n  or:  /usr/sbin/chmod [OPTION]... OCTAL-MODE FILE...\n  or:  /usr/sbin/chmod [OPTION]... --reference=RFILE FILE...\nChange the mode of each FILE to MODE.\nWith --reference, change the mode of each FILE to that of RFILE.\n\n  -c, --changes\n         like verbose but report only when a change is made\n  -f, --silent, --quiet\n         suppress most error messages\n  -v, --verbose\n         output a diagnostic for every file processed\n      --dereference\n         affect the referent of each symbolic link,\n         rather than the symbolic link itself\n  -h, --no-dereference\n         affect each symbolic link, rather than the referent\n      --no-preserve-root\n         do not treat '/' specially (the default)\n      --preserve-root\n         fail to operate recursively on '/'\n      --reference=RFILE\n         use RFILE's mode instead of specifying MODE values.\n         RFILE is always dereferenced if a symbolic link.\n  -R, --recursive\n         change files and directories recursively\n\nThe following options modify how a hierarchy is traversed when the -R\noption is also specified.  If more than one is specified, only the final\none takes effect. -H is the default.\n\n  -H\n         if a command line argument is a symlink to a directory, traverse it\n  -L\n         traverse every symbolic link to a directory encountered\n  -P\n         do not traverse any symbolic links\n\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nEach MODE is of the form '[ugoa]*([-+=]([rwxXst]*|[ugo]))+|[-+=][0-7]+'.\n\nReport bugs to: <<e-mail>>.\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nFull documentation <https://www.gnu.org/software/coreutils/chmod>\nor available locally via: info '(coreutils) chmod invocation'",
    "lines": [
     [
      "-c, --changes",
@@ -1036,7 +1048,7 @@
   },
   "chown": {
    "exists": true,
-   "help": "Usage: /usr/sbin/chown [OPTION]... [OWNER][:[GROUP]] FILE...\n  or:  /usr/sbin/chown [OPTION]... --reference=RFILE FILE...\nChange the owner and/or group of each FILE to OWNER and/or GROUP.\nWith --reference, change the owner and group of each FILE to those of RFILE.\n\n  -c, --changes\n         like verbose but report only when a change is made\n  -f, --silent, --quiet\n         suppress most error messages\n  -v, --verbose\n         output a diagnostic for every file processed\n      --dereference\n         affect the referent of each symbolic link (this is\n         the default), rather than the symbolic link itself\n  -h, --no-dereference\n         affect symbolic links instead of any referenced file;\n         useful only on systems that can change the ownership of a symlink\n      --from=CURRENT_OWNER:CURRENT_GROUP\n         change the ownership of each file only if its\n         current owner and/or group match those specified here.\n         Either may be omitted, in which case a match\n         is not required for the omitted attribute\n      --no-preserve-root\n         do not treat '/' specially (the default)\n      --preserve-root\n         fail to operate recursively on '/'\n      --reference=RFILE\n         use RFILE's ownership rather than specifying values.\n         RFILE is always dereferenced if a symbolic link.\n  -R, --recursive\n         operate on files and directories recursively\n\nThe following options modify how a hierarchy is traversed when the -R\noption is also specified.  If more than one is specified, only the final\none takes effect. -P is the default.\n\n  -H\n         if a command line argument is a symlink to a directory, traverse it\n  -L\n         traverse every symbolic link to a directory encountered\n  -P\n         do not traverse any symbolic links\n\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nOwner is unchanged if missing.  Group is unchanged if missing, but changed\nto login group if implied by a ':' following a symbolic OWNER.\nOWNER and GROUP may be numeric as well as symbolic.\n\nExamples:\n  /usr/sbin/chown root /u        Change the owner of /u to \"root\".\n  /usr/sbin/chown root:staff /u  Likewise, but also change its group to \"staff\".\n  /usr/sbin/chown -hR root /u    Change the owner of /u and subfiles to \"root\".\n\nReport bugs to: <e-mail>\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nReport any translation bugs to <https://translationproject.org/team/>\nFull documentation <https://www.gnu.org/software/coreutils/chown>\nor available locally via: info '(coreutils) chown invocation'",
+   "help": "Usage: /usr/sbin/chown [OPTION]... [OWNER][:[GROUP]] FILE...\n  or:  /usr/sbin/chown [OPTION]... --reference=RFILE FILE...\nChange the owner and/or group of each FILE to OWNER and/or GROUP.\nWith --reference, change the owner and group of each FILE to those of RFILE.\n\n  -c, --changes\n         like verbose but report only when a change is made\n  -f, --silent, --quiet\n         suppress most error messages\n  -v, --verbose\n         output a diagnostic for every file processed\n      --dereference\n         affect the referent of each symbolic link (this is\n         the default), rather than the symbolic link itself\n  -h, --no-dereference\n         affect symbolic links instead of any referenced file;\n         useful only on systems that can change the ownership of a symlink\n      --from=CURRENT_OWNER:CURRENT_GROUP\n         change the ownership of each file only if its\n         current owner and/or group match those specified here.\n         Either may be omitted, in which case a match\n         is not required for the omitted attribute\n      --no-preserve-root\n         do not treat '/' specially (the default)\n      --preserve-root\n         fail to operate recursively on '/'\n      --reference=RFILE\n         use RFILE's ownership rather than specifying values.\n         RFILE is always dereferenced if a symbolic link.\n  -R, --recursive\n         operate on files and directories recursively\n\nThe following options modify how a hierarchy is traversed when the -R\noption is also specified.  If more than one is specified, only the final\none takes effect. -P is the default.\n\n  -H\n         if a command line argument is a symlink to a directory, traverse it\n  -L\n         traverse every symbolic link to a directory encountered\n  -P\n         do not traverse any symbolic links\n\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nOwner is unchanged if missing.  Group is unchanged if missing, but changed\nto login group if implied by a ':' following a symbolic OWNER.\nOWNER and GROUP may be numeric as well as symbolic.\n\nExamples:\n  /usr/sbin/chown root /u        Change the owner of /u to \"root\".\n  /usr/sbin/chown root:staff /u  Likewise, but also change its group to \"staff\".\n  /usr/sbin/chown -hR root /u    Change the owner of /u and subfiles to \"root\".\n\nReport bugs to: <<e-mail>>.\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nFull documentation <https://www.gnu.org/software/coreutils/chown>\nor available locally via: info '(coreutils) chown invocation'",
    "lines": [
     [
      "-c, --changes",
@@ -1416,6 +1428,10 @@
     "-t",
     "-x"
    ]
+  },
+  "command": {
+   "exists": false,
+   "path": ""
   },
   "cp": {
    "exists": true,
@@ -2356,7 +2372,7 @@
   },
   "cut": {
    "exists": true,
-   "help": "Usage: /usr/sbin/cut OPTION... [FILE]...\nPrint selected parts of lines from each FILE to standard output.\n\nWith no FILE, or when FILE is -, read standard input.\n\nMandatory arguments to long options are mandatory for short options too.\n  -b, --bytes=LIST\n         select only these byte positions\n  -c, --characters=LIST\n         select only these character positions\n      --complement\n         complement the set of selected bytes, characters or fields\n  -d, --delimiter=DELIM\n         use DELIM instead of TAB for field delimiter\n  -f, --fields=LIST\n         select only these fields;  also print any line that contains\n         no delimiter character, unless the -s option is specified\n  -F LIST\n         like -f, but also implies -w and -O ' '\n  -n, --no-partial\n         with -b, don't output partial multi-byte characters\n  -O, --output-delimiter=STRING\n         use STRING as the output delimiter;\n         the default is to use the input delimiter\n  -s, --only-delimited\n         do not print lines not containing delimiters\n  -w, --whitespace-delimited[=trimmed]\n         use a run of blank characters as the field delimiter;\n         with 'trimmed', ignore leading and trailing blanks\n  -z, --zero-terminated\n         line delimiter is NUL, not newline\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nUse one, and only one of -b, -c, -f or -F.  Each LIST is made up of one\nrange, or many ranges separated by commas.  Selected input is written\nin the same order that it is read, and is written exactly once.\nEach range is one of:\n\n  N     N'th byte, character or field, counted from 1\n  N-    from N'th byte, character or field, to end of line\n  N-M   from N'th to M'th (included) byte, character or field\n  -M    from first to M'th (included) byte, character or field\n\nReport bugs to: <e-mail>\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nReport any translation bugs to <https://translationproject.org/team/>\nFull documentation <https://www.gnu.org/software/coreutils/cut>\nor available locally via: info '(coreutils) cut invocation'",
+   "help": "Usage: /usr/sbin/cut OPTION... [FILE]...\nPrint selected parts of lines from each FILE to standard output.\n\nWith no FILE, or when FILE is -, read standard input.\n\nMandatory arguments to long options are mandatory for short options too.\n  -b, --bytes=LIST\n         select only these byte positions\n  -c, --characters=LIST\n         select only these character positions\n      --complement\n         complement the set of selected bytes, characters or fields\n  -d, --delimiter=DELIM\n         use DELIM instead of TAB for field delimiter\n  -f, --fields=LIST\n         select only these fields;  also print any line that contains\n         no delimiter character, unless the -s option is specified\n  -F LIST\n         like -f, but also implies -w and -O ' '\n  -n, --no-partial\n         with -b, don't output partial multi-byte characters\n  -O, --output-delimiter=STRING\n         use STRING as the output delimiter;\n         the default is to use the input delimiter\n  -s, --only-delimited\n         do not print lines not containing delimiters\n  -w, --whitespace-delimited[=trimmed]\n         use a run of blank characters as the field delimiter;\n         with 'trimmed', ignore leading and trailing blanks\n  -z, --zero-terminated\n         line delimiter is NUL, not newline\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nUse one, and only one of -b, -c, -f or -F.  Each LIST is made up of one\nrange, or many ranges separated by commas.  Selected input is written\nin the same order that it is read, and is written exactly once.\nEach range is one of:\n\n  N     N'th byte, character or field, counted from 1\n  N-    from N'th byte, character or field, to end of line\n  N-M   from N'th to M'th (included) byte, character or field\n  -M    from first to M'th (included) byte, character or field\n\nReport bugs to: <<e-mail>>.\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nFull documentation <https://www.gnu.org/software/coreutils/cut>\nor available locally via: info '(coreutils) cut invocation'",
    "lines": [
     [
      "-b, --bytes=LIST",
@@ -2452,7 +2468,7 @@
   },
   "date": {
    "exists": true,
-   "help": "Usage: /usr/sbin/date [OPTION]... [+FORMAT]\n  or:  /usr/sbin/date [OPTION]... MMDDhhmm[[CC]YY][.ss]\nDisplay date and time in the given FORMAT.\nWith -s, or with MMDDhhmm[[CC]YY][.ss], set the date and time first.\n\nMandatory arguments to long options are mandatory for short options too.\n  -d, --date=STRING\n         display time described by STRING, not 'now'\n      --debug\n         annotate the parsed date,\n         and warn about questionable usage to standard error\n  -f, --file=DATEFILE\n         like --date; once for each line of DATEFILE;\n         if DATEFILE is -, read names from standard input\n  -I[FMT], --iso-8601[=FMT]\n         output date/time in ISO 8601 format.\n         FMT='date' (default), 'hours', 'minutes', 'seconds', or 'ns'\n         for date and time to the indicated precision.\n         Example: 2006-08-14T02:34:56-06:00\n      --resolution\n         output the available resolution of timestamps.\n         Example: 0.000000001\n  -R, --rfc-email\n         output date and time in RFC 5322 format.\n         Example: Mon, 14 Aug 2006 02:34:56 +0000\n      --rfc-3339=FMT\n         output date/time in RFC 3339 format.\n         FMT='date', 'seconds', or 'ns'\n         for date and time to the indicated precision.\n         Example: 2006-08-14 02:34:56-06:00\n  -r, --reference=FILE\n         display the last modification time of FILE\n  -s, --set=STRING\n         set time described by STRING\n  -u, --utc, --universal\n         print or set Coordinated Universal Time (UTC)\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nAll options that specify the date to display are mutually exclusive.\nI.e.: --date, --file, --reference, --resolution.\n\nFORMAT controls the output.  Interpreted sequences are:\n\n  %%   a literal %\n  %a   locale's abbreviated weekday name (e.g., Sun)\n  %A   locale's full weekday name (e.g., Sunday)\n  %b   locale's abbreviated month name (e.g., Jan)\n  %B   locale's full month name (e.g., January)\n  %c   locale's date and time (e.g., Thu Mar  3 23:05:25 2005)\n  %C   century; like %Y, except omit last two digits (e.g., 20)\n  %d   day of month (e.g., 01)\n  %D   date (ambiguous); same as %m/%d/%y\n  %e   day of month, space padded; same as %_d\n  %F   full date; like %+4Y-%m-%d\n  %g   last two digits of year of ISO week number (ambiguous; 00-99); see %G\n  %G   year of ISO week number; normally useful only with %V\n  %h   same as %b\n  %H   hour (00..23)\n  %I   hour (01..12)\n  %j   day of year (001..366)\n  %k   hour, space padded ( 0..23); same as %_H\n  %l   hour, space padded ( 1..12); same as %_I\n  %m   month (01..12)\n  %M   minute (00..59)\n  %n   a newline\n  %N   nanoseconds (000000000..999999999)\n  %p   locale's equivalent of either AM or PM; blank if not known\n  %P   like %p, but lower case\n  %q   quarter of year (1..4)\n  %r   locale's 12-hour clock time (e.g., 11:11:04 PM)\n  %R   24-hour hour and minute; same as %H:%M\n  %s   seconds since the Epoch (1970-01-01 00:00 UTC)\n  %S   second (00..60)\n  %t   a tab\n  %T   time; same as %H:%M:%S\n  %u   day of week (1..7); 1 is Monday\n  %U   week number of year, with Sunday as first day of week (00..53)\n  %V   ISO week number, with Monday as first day of week (01..53)\n  %w   day of week (0..6); 0 is Sunday\n  %W   week number of year, with Monday as first day of week (00..53)\n  %x   locale's date (can be ambiguous; e.g., 12/31/99)\n  %X   locale's time representation (e.g., 23:13:48)\n  %y   last two digits of year (ambiguous; 00..99)\n  %Y   year\n  %z   +hhmm numeric time zone (e.g., -0400)\n  %:z  +hh:mm numeric time zone (e.g., -04:00)\n  %::z  +hh:mm:ss numeric time zone (e.g., -04:00:00)\n  %:::z  numeric time zone with : to necessary precision (e.g., -04, +05:30)\n  %Z   alphabetic time zone abbreviation (e.g., EDT)\n\nBy default, date pads numeric fields with zeroes.\nThe following optional flags may follow '%':\n\n  -  (hyphen) do not pad the field\n  _  (underscore) pad with spaces\n  0  (zero) pad with zeros\n  +  pad with zeros, and put '+' before future years with >4 digits\n  ^  use upper case if possible\n  #  use opposite ca",
+   "help": "Usage: /usr/sbin/date [OPTION]... [+FORMAT]\n  or:  /usr/sbin/date [OPTION]... MMDDhhmm[[CC]YY][.ss]\nDisplay date and time in the given FORMAT.\nWith -s, or with MMDDhhmm[[CC]YY][.ss], set the date and time first.\n\nMandatory arguments to long options are mandatory for short options too.\n  -d, --date=STRING\n         display time described by STRING, not 'now'\n      --debug\n         annotate the parsed date,\n         and warn about questionable usage to standard error\n  -f, --file=DATEFILE\n         like --date; once for each line of DATEFILE;\n         if DATEFILE is -, read names from standard input\n  -I[FMT], --iso-8601[=FMT]\n         output date/time in ISO 8601 format.\n         FMT='date' (default), 'hours', 'minutes', 'seconds', or 'ns'\n         for date and time to the indicated precision.\n         Example: 2006-08-14T02:34:56-06:00\n      --resolution\n         output the available resolution of timestamps.\n         Example: 0.000000001\n  -R, --rfc-email\n         output date and time in RFC 5322 format.\n         Example: Mon, 14 Aug 2006 02:34:56 +0000\n      --rfc-3339=FMT\n         output date/time in RFC 3339 format.\n         FMT='date', 'seconds', or 'ns'\n         for date and time to the indicated precision.\n         Example: 2006-08-14 02:34:56-06:00\n  -r, --reference=FILE\n         display the last modification time of FILE\n  -s, --set=STRING\n         set time described by STRING\n  -u, --utc, --universal\n         print or set Coordinated Universal Time (UTC)\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nAll options that specify the date to display are mutually exclusive.\nI.e.: --date, --file, --reference, --resolution.\n\nFORMAT controls the output.  Interpreted sequences are:\n\nFORMAT  Example    Description\n\n  %%    %           a literal %\n  %n    \\n          a newline\n  %t    \\t          a tab\n\n  %C    20          century; like %Y, except omit last two digits\n  %y    99          year (last two digits; 00..99)\n  %Y    1999        year\n  %g    99          year of ISO week number (last 2 digits; 00-99); see %G\n  %G    1999        year of ISO week number; normally useful only with %V\n\n  %a    Sun         locale's abbreviated weekday name\n  %A    Sunday      locale's full weekday name\n  %b    Mar         locale's abbreviated month name\n  %h    Mar         same as %b\n  %B    March       locale's full month name\n  %m    12          month (01..12)\n  %d    31          day of month (01..31)\n  %e     1          day of month, space padded; same as %_d\n  %D    12/31/99    date (ambiguous); same as %m/%d/%y\n  %F    1999-12-31  full date; like %+4Y-%m-%d\n  %x    12/31/99    locale's date (can be ambiguous)\n  %c    ...         locale's date and time (e.g., Thu Mar  3 23:05 2005)\n\n  %H    23          hour (00..23)\n  %I    01          hour (01..12)\n  %k     8          hour, space padded ( 0..23); same as %_H\n  %l     9          hour, space padded ( 1..12); same as %_I\n  %M    59          minute (00..59)\n  %S    60          second (00..60)\n  %N    123456789   nanoseconds (000000000..999999999)\n  %s    1970010100  seconds since the Epoch (1970-01-01 00:00 UTC)\n  %p    PM          locale's equivalent of AM or PM; blank if not known\n  %P    am          like %p, but lower case\n  %r    1:11:04 PM  locale's 12-hour clock time\n  %R    23:59       24-hour hour and minute; same as %H:%M\n  %T    23:59:59    time; same as %H:%M:%S\n  %X    23:59:59    locale's time representation\n\n  %j    365         day of year (001..366)\n  %q    4           quarter of year (1..4)\n  %u    7           day of week (1..7); 1 is Monday\n  %w    6           day of week (0..6); 0 is Sunday\n  %U    52          week of year; Sunday as first day of week (00..53)\n  %V    52          ISO week number; Monday as first day of week (01..53)\n  %W    52          week of year; Monday as first day of week (00..53)\n\n  %z     +0400      +hhmm numeric time zone\n  %:z    +04:00     +hh:mm numeric time zone\n  %::z   +04:00:00  +hh:mm:ss numeric time zone\n  %:::z  +04        numeric time zone to necessary precision; with :\n ",
    "lines": [
     [
      "-d, --date=STRING",
@@ -2569,7 +2585,7 @@
   },
   "df": {
    "exists": true,
-   "help": "Usage: /usr/sbin/df [OPTION]... [FILE]...\nShow information about the file system on which each FILE resides,\nor all file systems by default.\n\nMandatory arguments to long options are mandatory for short options too.\n  -a, --all\n         include pseudo, duplicate, inaccessible file systems\n  -B, --block-size=SIZE\n         scale sizes by SIZE before printing them; see SIZE format below;\n         E.g., '-BM' prints sizes in units of 1,048,576 bytes\n  -h, --human-readable\n         print sizes in powers of 1024 (e.g., 1023M)\n  -H, --si\n         print sizes in powers of 1000 (e.g., 1.1G)\n  -i, --inodes\n         list inode information instead of block usage\n  -k\n         like --block-size=1K\n  -l, --local\n         limit listing to local file systems\n      --no-sync\n         do not invoke sync before getting usage info (default)\n      --output[=FIELD_LIST]\n         use the output format defined by FIELD_LIST,\n         or print all fields if FIELD_LIST is omitted\n  -P, --portability\n         use the POSIX output format\n      --sync\n         invoke sync before getting usage info\n      --total\n         elide all entries insignificant to available space,\n         and produce a grand total\n  -t, --type=TYPE\n         limit listing to file systems of type TYPE\n  -T, --print-type\n         print file system type\n  -x, --exclude-type=TYPE\n         limit listing to file systems not of type TYPE\n  -v\n         (ignored)\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nDisplay values are in units of the first available SIZE from --block-size,\nand the DF_BLOCK_SIZE, BLOCK_SIZE and BLOCKSIZE environment variables.\nOtherwise, units default to 1024 bytes (or 512 if POSIXLY_CORRECT is set).\n\nThe SIZE argument is an integer and optional unit (example: 10K is 10*1024).\nUnits are K,M,G,T,P,E,Z,Y,R,Q (powers of 1024) or KB,MB,... (powers of 1000).\nBinary prefixes can be used, too: KiB=K, MiB=M, and so on.\n\nFIELD_LIST is a comma-separated list of columns to be included.  Valid\nfield names are: 'source', 'fstype', 'itotal', 'iused', 'iavail', 'ipcent',\n'size', 'used', 'avail', 'pcent', 'file' and 'target' (see info page).\n\nReport bugs to: <e-mail>\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nReport any translation bugs to <https://translationproject.org/team/>\nFull documentation <https://www.gnu.org/software/coreutils/df>\nor available locally via: info '(coreutils) df invocation'",
+   "help": "Usage: /usr/sbin/df [OPTION]... [FILE]...\nShow information about the file system on which each FILE resides,\nor all file systems by default.\n\nMandatory arguments to long options are mandatory for short options too.\n  -a, --all\n         include pseudo, duplicate, inaccessible file systems\n  -B, --block-size=SIZE\n         scale sizes by SIZE before printing them; see SIZE format below;\n         E.g., '-BM' prints sizes in units of 1,048,576 bytes\n  -h, --human-readable\n         print sizes in powers of 1024 (e.g., 1023M)\n  -H, --si\n         print sizes in powers of 1000 (e.g., 1.1G)\n  -i, --inodes\n         list inode information instead of block usage\n  -k\n         like --block-size=1K\n  -l, --local\n         limit listing to local file systems\n      --no-sync\n         do not invoke sync before getting usage info (default)\n      --output[=FIELD_LIST]\n         use the output format defined by FIELD_LIST,\n         or print all fields if FIELD_LIST is omitted\n  -P, --portability\n         use the POSIX output format\n      --sync\n         invoke sync before getting usage info\n      --total\n         elide all entries insignificant to available space,\n         and produce a grand total\n  -t, --type=TYPE\n         limit listing to file systems of type TYPE\n  -T, --print-type\n         print file system type\n  -x, --exclude-type=TYPE\n         limit listing to file systems not of type TYPE\n  -v\n         (ignored)\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nDisplay values are in units of the first available SIZE from --block-size,\nand the DF_BLOCK_SIZE, BLOCK_SIZE and BLOCKSIZE environment variables.\nOtherwise, units default to 1024 bytes (or 512 if POSIXLY_CORRECT is set).\n\nThe SIZE argument is an integer and optional unit (example: 10K is 10*1024).\nUnits are K,M,G,T,P,E,Z,Y,R,Q (powers of 1024) or KB,MB,... (powers of 1000).\nBinary prefixes can be used, too: KiB=K, MiB=M, and so on.\n\nFIELD_LIST is a comma-separated list of columns to be included.  Valid\nfield names are: 'source', 'fstype', 'itotal', 'iused', 'iavail', 'ipcent',\n'size', 'used', 'avail', 'pcent', 'file' and 'target' (see info page).\n\nReport bugs to: <<e-mail>>.\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nFull documentation <https://www.gnu.org/software/coreutils/df>\nor available locally via: info '(coreutils) df invocation'",
    "lines": [
     [
      "-a, --all",
@@ -2788,7 +2804,7 @@
   },
   "dirname": {
    "exists": true,
-   "help": "Usage: /usr/sbin/dirname [OPTION] NAME...\nOutput each NAME with its last non-slash component and trailing slashes\nremoved; if NAME contains no /'s, output '.' (meaning the current directory).\n\n  -z, --zero\n         end each output line with NUL, not newline\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nExamples:\n  /usr/sbin/dirname /usr/bin/          -> \"/usr\"\n  /usr/sbin/dirname dir1/str dir2/str  -> \"dir1\" followed by \"dir2\"\n  /usr/sbin/dirname stdio.h            -> \".\"\n\nReport bugs to: <e-mail>\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nReport any translation bugs to <https://translationproject.org/team/>\nFull documentation <https://www.gnu.org/software/coreutils/dirname>\nor available locally via: info '(coreutils) dirname invocation'",
+   "help": "Usage: /usr/sbin/dirname [OPTION] NAME...\nOutput each NAME with its last non-slash component and trailing slashes\nremoved; if NAME contains no /'s, output '.' (meaning the current directory).\n\n  -z, --zero\n         end each output line with NUL, not newline\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nExamples:\n  /usr/sbin/dirname /usr/bin/          -> \"/usr\"\n  /usr/sbin/dirname dir1/str dir2/str  -> \"dir1\" followed by \"dir2\"\n  /usr/sbin/dirname stdio.h            -> \".\"\n\nReport bugs to: <<e-mail>>.\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nFull documentation <https://www.gnu.org/software/coreutils/dirname>\nor available locally via: info '(coreutils) dirname invocation'",
    "lines": [
     [
      "-z, --zero",
@@ -2818,6 +2834,10 @@
    "words": [
     "-z"
    ]
+  },
+  "disown": {
+   "exists": false,
+   "path": ""
   },
   "dmesg": {
    "exists": true,
@@ -3080,7 +3100,7 @@
   },
   "du": {
    "exists": true,
-   "help": "Usage: /usr/sbin/du [OPTION]... [FILE]...\n  or:  /usr/sbin/du [OPTION]... --files0-from=F\nSummarize device usage of the set of FILEs, recursively for directories.\n\nMandatory arguments to long options are mandatory for short options too.\n  -0, --null\n         end each output line with NUL, not newline\n  -a, --all\n         write counts for all files, not just directories\n  -A, --apparent-size\n         print apparent sizes rather than device usage;\n         although the apparent size is usually smaller, it may be\n         larger due to holes in ('sparse') files,\n         internal fragmentation, indirect blocks, etc.\n  -B, --block-size=SIZE\n         scale sizes by SIZE before printing them; See SIZE format below;\n         E.g., '-BM' prints sizes in units of 1,048,576 bytes\n  -b, --bytes\n         equivalent to '--apparent-size --block-size=1'\n  -c, --total\n         produce a grand total\n  -D, --dereference-args\n         dereference only symlinks that are listed on the command line\n  -d, --max-depth=N\n         print the total for a directory (or file, with --all)\n         only if it is N or fewer levels below the command\n         line argument;  --max-depth=0 is the same as --summarize\n      --files0-from=F\n         summarize device usage of the NUL-terminated file names\n         specified in file F;  if F is -, read names from standard input\n  -H\n         equivalent to --dereference-args (-D)\n  -h, --human-readable\n         print sizes in human readable format (e.g., 1K 234M 2G)\n      --inodes\n         list inode usage information instead of block usage\n  -k\n         like --block-size=1K\n  -L, --dereference\n         dereference all symbolic links\n  -l, --count-links\n         count sizes many times if hard linked\n  -m\n         like --block-size=1M\n  -P, --no-dereference\n         don't follow any symbolic links (this is the default)\n  -S, --separate-dirs\n         for directories do not include size of subdirectories\n      --si\n         like -h, but use powers of 1000 not 1024\n  -s, --summarize\n         display only a total for each argument\n  -t, --threshold=SIZE\n         exclude entries smaller than SIZE if positive,\n         or entries greater than SIZE if negative\n      --time\n         show time of the last modification of any file in the directory,\n         or any of its subdirectories\n      --time=WORD\n         show time as WORD instead of modification time:\n         atime, access, use, ctime or status\n      --time-style=STYLE\n         time/date format with --time; see TIME_STYLE below\n  -X, --exclude-from=FILE\n         exclude files that match any pattern in FILE\n      --exclude=PATTERN\n         exclude files that match PATTERN\n  -x, --one-file-system\n         skip directories on different file systems\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nDisplay values are in units of the first available SIZE from --block-size,\nand the DU_BLOCK_SIZE, BLOCK_SIZE and BLOCKSIZE environment variables.\nOtherwise, units default to 1024 bytes (or 512 if POSIXLY_CORRECT is set).\n\nThe SIZE argument is an integer and optional unit (example: 10K is 10*1024).\nUnits are K,M,G,T,P,E,Z,Y,R,Q (powers of 1024) or KB,MB,... (powers of 1000).\nBinary prefixes can be used, too: KiB=K, MiB=M, and so on.\n\nThe --time-style STYLE argument can be full-iso, long-iso, iso, or +FORMAT.\nFORMAT is interpreted like in date(1).\nAlso the TIME_STYLE environment variable sets the default style to use.\n\nReport bugs to: <e-mail>\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nReport any translation bugs to <https://translationproject.org/team/>\nFull documentation <https://www.gnu.org/software/coreutils/du>\nor available locally via: info '(coreutils) du invocation'",
+   "help": "Usage: /usr/sbin/du [OPTION]... [FILE]...\n  or:  /usr/sbin/du [OPTION]... --files0-from=F\nSummarize device usage of the set of FILEs, recursively for directories.\n\nMandatory arguments to long options are mandatory for short options too.\n  -0, --null\n         end each output line with NUL, not newline\n  -a, --all\n         write counts for all files, not just directories\n  -A, --apparent-size\n         print apparent sizes rather than device usage;\n         although the apparent size is usually smaller, it may be\n         larger due to holes in ('sparse') files,\n         internal fragmentation, indirect blocks, etc.\n  -B, --block-size=SIZE\n         scale sizes by SIZE before printing them; See SIZE format below;\n         E.g., '-BM' prints sizes in units of 1,048,576 bytes\n  -b, --bytes\n         equivalent to '--apparent-size --block-size=1'\n  -c, --total\n         produce a grand total\n  -D, --dereference-args\n         dereference only symlinks that are listed on the command line\n  -d, --max-depth=N\n         print the total for a directory (or file, with --all)\n         only if it is N or fewer levels below the command\n         line argument;  --max-depth=0 is the same as --summarize\n      --files0-from=F\n         summarize device usage of the NUL-terminated file names\n         specified in file F;  if F is -, read names from standard input\n  -H\n         equivalent to --dereference-args (-D)\n  -h, --human-readable\n         print sizes in human readable format (e.g., 1K 234M 2G)\n      --inodes\n         list inode usage information instead of block usage\n  -k\n         like --block-size=1K\n  -L, --dereference\n         dereference all symbolic links\n  -l, --count-links\n         count sizes many times if hard linked\n  -m\n         like --block-size=1M\n  -P, --no-dereference\n         don't follow any symbolic links (this is the default)\n  -S, --separate-dirs\n         for directories do not include size of subdirectories\n      --si\n         like -h, but use powers of 1000 not 1024\n  -s, --summarize\n         display only a total for each argument\n  -t, --threshold=SIZE\n         exclude entries smaller than SIZE if positive,\n         or entries greater than SIZE if negative\n      --time\n         show time of the last modification of any file in the directory,\n         or any of its subdirectories\n      --time=WORD\n         show time as WORD instead of modification time:\n         atime, access, use, ctime or status\n      --time-style=STYLE\n         time/date format with --time; see TIME_STYLE below\n  -X, --exclude-from=FILE\n         exclude files that match any pattern in FILE\n      --exclude=PATTERN\n         exclude files that match PATTERN\n  -x, --one-file-system\n         skip directories on different file systems\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nDisplay values are in units of the first available SIZE from --block-size,\nand the DU_BLOCK_SIZE, BLOCK_SIZE and BLOCKSIZE environment variables.\nOtherwise, units default to 1024 bytes (or 512 if POSIXLY_CORRECT is set).\n\nThe SIZE argument is an integer and optional unit (example: 10K is 10*1024).\nUnits are K,M,G,T,P,E,Z,Y,R,Q (powers of 1024) or KB,MB,... (powers of 1000).\nBinary prefixes can be used, too: KiB=K, MiB=M, and so on.\n\nThe --time-style STYLE argument can be full-iso, long-iso, iso, or +FORMAT.\nFORMAT is interpreted like in date(1).\nAlso the TIME_STYLE environment variable sets the default style to use.\n\nReport bugs to: <<e-mail>>.\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nFull documentation <https://www.gnu.org/software/coreutils/du>\nor available locally via: info '(coreutils) du invocation'",
    "lines": [
     [
      "-0, --null",
@@ -3274,6 +3294,10 @@
      "start with an empty environment"
     ],
     [
+     "--env0-from=FILE",
+     "read NUL-delimited environment entries from FILE"
+    ],
+    [
      "-0, --null",
      "end each output line with NUL, not newline"
     ],
@@ -3324,6 +3348,7 @@
     "--chdir",
     "--debug",
     "--default-signal",
+    "--env0-from",
     "--help",
     "--ignore-environment",
     "--ignore-signal",
@@ -5222,6 +5247,28 @@
   "git": {
    "commands": {
     "prefix": false,
+    "seen": [
+     "tells",
+     "tell",
+     "cated",
+     "program",
+     "will",
+     "as",
+     "developer",
+     "named",
+     "other",
+     "whether",
+     "file",
+     "data",
+     "from",
+     "figured",
+     "then",
+     "finds",
+     "transport",
+     "commands",
+     "for"
+    ],
+    "v": 2,
     "words": [
      "add",
      "am",
@@ -5494,8 +5541,8 @@
      "Read gitattributes from <tree-ish> instead of the worktree."
     ],
     [
-     "defining",
-     "command aliases, see git-config(1) and look for descriptions of alias.*."
+     "stalling",
+     "custom \"git\" subcommands, see the description for the PATH environment variable in"
     ],
     [
      "--follow",
@@ -5714,6 +5761,7 @@
     "--glob",
     "--glob-pathspecs",
     "--graph",
+    "--graph-indent",
     "--graph-lane-limit",
     "--grep",
     "--grep-reflog",
@@ -5774,6 +5822,7 @@
     "--no-diff-merges",
     "--no-expand-tabs",
     "--no-ext-diff",
+    "--no-graph-indent",
     "--no-indent-heuristic",
     "--no-index",
     "--no-lazy-fetch",
@@ -6313,7 +6362,7 @@
   },
   "groups": {
    "exists": true,
-   "help": "Usage: /usr/sbin/groups [OPTION]... [USERNAME]...\nPrint group memberships for each USERNAME or, if no USERNAME is specified, for\nthe current process (which may differ if the groups database has changed).\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nReport bugs to: <e-mail>\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nReport any translation bugs to <https://translationproject.org/team/>\nFull documentation <https://www.gnu.org/software/coreutils/groups>\nor available locally via: info '(coreutils) groups invocation'",
+   "help": "Usage: /usr/sbin/groups [OPTION]... [USERNAME]...\nPrint group memberships for each USERNAME or, if no USERNAME is specified, for\nthe current process (which may differ if the groups database has changed).\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nReport bugs to: <<e-mail>>.\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nFull documentation <https://www.gnu.org/software/coreutils/groups>\nor available locally via: info '(coreutils) groups invocation'",
    "lines": [
     [
      "--help",
@@ -6559,9 +6608,13 @@
     "-z"
    ]
   },
+  "hash": {
+   "exists": false,
+   "path": ""
+  },
   "head": {
    "exists": true,
-   "help": "Usage: /usr/sbin/head [OPTION]... [FILE]...\nPrint the first 10 lines of each FILE to standard output.\nWith more than one FILE, precede each with a header giving the file name.\n\nWith no FILE, or when FILE is -, read standard input.\n\nMandatory arguments to long options are mandatory for short options too.\n  -c, --bytes=[-]NUM\n         print the first NUM bytes of each file;\n         with the leading '-', print all but the last NUM bytes of each file\n  -n, --lines=[-]NUM\n         print the first NUM lines instead of the first 10;\n         with the leading '-', print all but the last NUM lines of each file\n  -q, --quiet, --silent\n         never print headers giving file names\n  -v, --verbose\n         always print headers giving file names\n  -z, --zero-terminated\n         line delimiter is NUL, not newline\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nNUM may have a multiplier suffix:\nb 512, kB 1000, K 1024, MB 1000*1000, M 1024*1024,\nGB 1000*1000*1000, G 1024*1024*1024, and so on for T, P, E, Z, Y, R, Q.\nBinary prefixes can be used, too: KiB=K, MiB=M, and so on.\n\nReport bugs to: <e-mail>\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nReport any translation bugs to <https://translationproject.org/team/>\nFull documentation <https://www.gnu.org/software/coreutils/head>\nor available locally via: info '(coreutils) head invocation'",
+   "help": "Usage: /usr/sbin/head [OPTION]... [FILE]...\nPrint the first 10 lines of each FILE to standard output.\nWith more than one FILE, precede each with a header giving the file name.\n\nWith no FILE, or when FILE is -, read standard input.\n\nMandatory arguments to long options are mandatory for short options too.\n  -c, --bytes=[-]NUM\n         print the first NUM bytes of each file;\n         with the leading '-', print all but the last NUM bytes of each file\n  -n, --lines=[-]NUM\n         print the first NUM lines instead of the first 10;\n         with the leading '-', print all but the last NUM lines of each file\n  -q, --quiet, --silent\n         never print headers giving file names\n  -v, --verbose\n         always print headers giving file names\n  -z, --zero-terminated\n         line delimiter is NUL, not newline\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nNUM may have a multiplier suffix:\nb 512, kB 1000, K 1024, MB 1000*1000, M 1024*1024,\nGB 1000*1000*1000, G 1024*1024*1024, and so on for T, P, E, Z, Y, R, Q.\nBinary prefixes can be used, too: KiB=K, MiB=M, and so on.\n\nReport bugs to: <<e-mail>>.\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nFull documentation <https://www.gnu.org/software/coreutils/head>\nor available locally via: info '(coreutils) head invocation'",
    "lines": [
     [
      "-c, --bytes=[-]NUM",
@@ -6616,6 +6669,10 @@
     "-v",
     "-z"
    ]
+  },
+  "history": {
+   "exists": false,
+   "path": ""
   },
   "host": {
    "exists": true,
@@ -6979,7 +7036,7 @@
   },
   "id": {
    "exists": true,
-   "help": "Usage: /usr/sbin/id [OPTION]... [USER]...\nPrint user and group information for each specified USER,\nor (when USER omitted) for the current process.\n\n  -a\n         ignore, for compatibility with other versions\n  -Z, --context\n         print only the security context of the process\n  -g, --group\n         print only the effective group ID\n  -G, --groups\n         print all group IDs\n  -n, --name\n         print a name instead of a number, for -u,-g,-G\n  -r, --real\n         print the real ID instead of the effective ID, with -u,-g,-G\n  -u, --user\n         print only the effective user ID\n  -z, --zero\n         delimit entries with NUL characters, not whitespace;\n         not permitted in default format\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nWithout any OPTION, print some useful set of identified information.\n\nReport bugs to: <e-mail>\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nReport any translation bugs to <https://translationproject.org/team/>\nFull documentation <https://www.gnu.org/software/coreutils/id>\nor available locally via: info '(coreutils) id invocation'",
+   "help": "Usage: /usr/sbin/id [OPTION]... [USER]...\nPrint user and group information for each specified USER,\nor (when USER omitted) for the current process.\n\n  -a\n         ignore, for compatibility with other versions\n  -Z, --context\n         print only the security context of the process\n  -g, --group\n         print only the effective group ID\n  -G, --groups\n         print all group IDs\n  -n, --name\n         print a name instead of a number, for -u, -g, -G\n  -r, --real\n         print the real ID instead of the effective ID, with -u, -g, -G\n  -u, --user\n         print only the effective user ID\n  -z, --zero\n         delimit entries with NUL characters, not whitespace;\n         not permitted in default format\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nWithout any OPTION, print some useful set of identified information.\n\nReport bugs to: <<e-mail>>.\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nFull documentation <https://www.gnu.org/software/coreutils/id>\nor available locally via: info '(coreutils) id invocation'",
    "lines": [
     [
      "-a",
@@ -6999,11 +7056,11 @@
     ],
     [
      "-n, --name",
-     "print a name instead of a number, for -u,-g,-G"
+     "print a name instead of a number, for -u, -g, -G"
     ],
     [
      "-r, --real",
-     "print the real ID instead of the effective ID, with -u,-g,-G"
+     "print the real ID instead of the effective ID, with -u, -g, -G"
     ],
     [
      "-u, --user",
@@ -7054,6 +7111,16 @@
   "ip": {
    "commands": {
     "prefix": true,
+    "seen": [
+     "utility",
+     "on",
+     "falls",
+     "to",
+     "addr",
+     "neigh",
+     "stats"
+    ],
+    "v": 2,
     "words": [
      "address",
      "addrlabel",
@@ -8533,7 +8600,7 @@
   },
   "ln": {
    "exists": true,
-   "help": "Usage: /usr/sbin/ln [OPTION]... [-T] TARGET LINK_NAME\n  or:  /usr/sbin/ln [OPTION]... TARGET\n  or:  /usr/sbin/ln [OPTION]... TARGET... DIRECTORY\n  or:  /usr/sbin/ln [OPTION]... -t DIRECTORY TARGET...\nIn the 1st form, create a link to TARGET with the name LINK_NAME.\nIn the 2nd form, create a link to TARGET in the current directory.\nIn the 3rd and 4th forms, create links to each TARGET in DIRECTORY.\nCreate hard links by default, symbolic links with --symbolic.\nBy default, each destination (name of new link) should not already exist.\nWhen creating hard links, each TARGET must exist.  Symbolic links\ncan hold arbitrary text; if later resolved, a relative link is\ninterpreted in relation to its parent directory.\n\nMandatory arguments to long options are mandatory for short options too.\n      --backup[=CONTROL]\n         make a backup of each existing destination file\n  -b\n         like --backup but does not accept an argument\n  -d, -F, --directory\n         allow the superuser to attempt to hard link directories,\n         if supported by the system\n  -f, --force\n         remove existing destination files\n  -i, --interactive\n         prompt whether to remove destinations\n  -L, --logical\n         dereference TARGETs that are symbolic links\n  -n, --no-dereference\n         treat LINK_NAME as a normal file\n         if it is a symbolic link to a directory\n  -P, --physical\n         make hard links directly to symbolic links\n  -r, --relative\n         with -s, create links relative to link location\n  -s, --symbolic\n         make symbolic links instead of hard links\n  -S, --suffix=SUFFIX\n         override the usual backup suffix\n  -t, --target-directory=DIRECTORY\n         specify the DIRECTORY in which to create the links\n  -T, --no-target-directory\n         treat LINK_NAME as a normal file always\n  -v, --verbose\n         print name of each linked file\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nThe backup suffix is '~', unless set with --suffix or SIMPLE_BACKUP_SUFFIX.\nThe version control method may be selected via the --backup option or through\nthe VERSION_CONTROL environment variable.  Here are the values:\n\n  none, off       never make backups (even if --backup is given)\n  numbered, t     make numbered backups\n  existing, nil   numbered if numbered backups exist, simple otherwise\n  simple, never   always make simple backups\n\nUsing -s ignores -L and -P.  Otherwise, the last option specified controls\nbehavior when a TARGET is a symbolic link, defaulting to -P.\n\nReport bugs to: <e-mail>\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nReport any translation bugs to <https://translationproject.org/team/>\nFull documentation <https://www.gnu.org/software/coreutils/ln>\nor available locally via: info '(coreutils) ln invocation'",
+   "help": "Usage: /usr/sbin/ln [OPTION]... [-T] TARGET LINK_NAME\n  or:  /usr/sbin/ln [OPTION]... TARGET\n  or:  /usr/sbin/ln [OPTION]... TARGET... DIRECTORY\n  or:  /usr/sbin/ln [OPTION]... -t DIRECTORY TARGET...\nIn the 1st form, create a link to TARGET with the name LINK_NAME.\nIn the 2nd form, create a link to TARGET in the current directory.\nIn the 3rd and 4th forms, create links to each TARGET in DIRECTORY.\nCreate hard links by default, symbolic links with --symbolic.\nBy default, each destination (name of new link) should not already exist.\nWhen creating hard links, each TARGET must exist.  Symbolic links\ncan hold arbitrary text; if later resolved, a relative link is\ninterpreted in relation to its parent directory.\n\nMandatory arguments to long options are mandatory for short options too.\n      --backup[=CONTROL]\n         make a backup of each existing destination file\n  -b\n         like --backup but does not accept an argument\n  -d, -F, --directory\n         allow the superuser to attempt to hard link directories,\n         if supported by the system\n  -f, --force\n         remove existing destination files\n  -i, --interactive\n         prompt whether to remove destinations\n  -L, --logical\n         dereference TARGETs that are symbolic links\n  -n, --no-dereference\n         treat LINK_NAME as a normal file\n         if it is a symbolic link to a directory\n  -P, --physical\n         make hard links directly to symbolic links\n  -r, --relative\n         with -s, create links relative to link location\n  -s, --symbolic\n         make symbolic links instead of hard links\n  -S, --suffix=SUFFIX\n         override the usual backup suffix\n  -t, --target-directory=DIRECTORY\n         specify the DIRECTORY in which to create the links\n  -T, --no-target-directory\n         treat LINK_NAME as a normal file always\n  -v, --verbose\n         print name of each linked file\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nThe backup suffix is '~', unless set with --suffix or SIMPLE_BACKUP_SUFFIX.\nThe version control method may be selected via the --backup option or through\nthe VERSION_CONTROL environment variable.  Here are the values:\n\n  none, off       never make backups (even if --backup is given)\n  numbered, t     make numbered backups\n  existing, nil   numbered if numbered backups exist, simple otherwise\n  simple, never   always make simple backups\n\nUsing -s ignores -L and -P.  Otherwise, the last option specified controls\nbehavior when a TARGET is a symbolic link, defaulting to -P.\n\nReport bugs to: <<e-mail>>.\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nFull documentation <https://www.gnu.org/software/coreutils/ln>\nor available locally via: info '(coreutils) ln invocation'",
    "lines": [
     [
      "--backup[=CONTROL]",
@@ -9826,7 +9893,7 @@
   },
   "mkdir": {
    "exists": true,
-   "help": "Usage: /usr/sbin/mkdir [OPTION]... DIRECTORY...\nCreate the DIRECTORY(ies), if they do not already exist.\n\nMandatory arguments to long options are mandatory for short options too.\n  -m, --mode=MODE\n         set file mode (as in chmod), not a=rwx - umask\n  -p, --parents\n         no error if existing, make parent directories as needed,\n         with their file modes unaffected by any -m option\n  -v, --verbose\n         print a message for each created directory\n  -Z\n         set SELinux security context of each created directory\n         to the default type\n      --context[=CTX]\n         like -Z, or if CTX is specified then set the\n         SELinux or SMACK security context to CTX\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nReport bugs to: <e-mail>\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nReport any translation bugs to <https://translationproject.org/team/>\nFull documentation <https://www.gnu.org/software/coreutils/mkdir>\nor available locally via: info '(coreutils) mkdir invocation'",
+   "help": "Usage: /usr/sbin/mkdir [OPTION]... DIRECTORY...\nCreate the DIRECTORY(ies), if they do not already exist.\n\nMandatory arguments to long options are mandatory for short options too.\n  -m, --mode=MODE\n         set file mode (as in chmod), not a=rwx - umask\n  -p, --parents\n         no error if existing, make parent directories as needed,\n         with their file modes unaffected by any -m option\n  -v, --verbose\n         print a message for each created directory\n  -Z\n         set SELinux security context of each created directory\n         to the default type\n      --context[=CTX]\n         like -Z, or if CTX is specified then set the\n         SELinux or SMACK security context to CTX\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nReport bugs to: <<e-mail>>.\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nFull documentation <https://www.gnu.org/software/coreutils/mkdir>\nor available locally via: info '(coreutils) mkdir invocation'",
    "lines": [
     [
      "-m, --mode=MODE",
@@ -10231,7 +10298,7 @@
   },
   "mv": {
    "exists": true,
-   "help": "Usage: /usr/sbin/mv [OPTION]... [-T] SOURCE DEST\n  or:  /usr/sbin/mv [OPTION]... SOURCE... DIRECTORY\n  or:  /usr/sbin/mv [OPTION]... -t DIRECTORY SOURCE...\nRename SOURCE to DEST, or move SOURCE(s) to DIRECTORY.\n\nMandatory arguments to long options are mandatory for short options too.\n      --backup[=CONTROL]\n         make a backup of each existing destination file\n  -b\n         like --backup but does not accept an argument\n      --debug\n         explain how a file is copied.  Implies -v\n      --exchange\n         exchange source and destination\n  -f, --force\n         do not prompt before overwriting\n  -i, --interactive\n         prompt before overwrite\n  -n, --no-clobber\n         do not overwrite an existing file\nIf you specify more than one of -i, -f, -n, only the final one takes effect.\n      --no-copy\n         do not copy if renaming fails\n      --strip-trailing-slashes\n         remove any trailing slashes from each SOURCE argument\n  -S, --suffix=SUFFIX\n         override the usual backup suffix\n  -t, --target-directory=DIRECTORY\n         move all SOURCE arguments into DIRECTORY\n  -T, --no-target-directory\n         treat DEST as a normal file\n      --update[=UPDATE]\n         control which existing files are updated;\n         UPDATE={all,none,none-fail,older(default)}\n  -u\n         equivalent to --update[=older].  See below\n  -v, --verbose\n         explain what is being done\n  -Z, --context\n         set SELinux security context of destination file to default type\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nUPDATE controls which existing files in the destination are replaced.\n'all' is the default operation when an --update option is not specified,\nand results in all existing files in the destination being replaced.\n'none' is like the --no-clobber option, in that no files in the\ndestination are replaced, and skipped files do not induce a failure.\n'none-fail' also ensures no files are replaced in the destination,\nbut any skipped files are diagnosed and induce a failure.\n'older' is the default operation when --update is specified, and results\nin files being replaced if they're older than the corresponding source file.\n\nThe backup suffix is '~', unless set with --suffix or SIMPLE_BACKUP_SUFFIX.\nThe version control method may be selected via the --backup option or through\nthe VERSION_CONTROL environment variable.  Here are the values:\n\n  none, off       never make backups (even if --backup is given)\n  numbered, t     make numbered backups\n  existing, nil   numbered if numbered backups exist, simple otherwise\n  simple, never   always make simple backups\n\nReport bugs to: <e-mail>\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nReport any translation bugs to <https://translationproject.org/team/>\nFull documentation <https://www.gnu.org/software/coreutils/mv>\nor available locally via: info '(coreutils) mv invocation'",
+   "help": "Usage: /usr/sbin/mv [OPTION]... [-T] SOURCE DEST\n  or:  /usr/sbin/mv [OPTION]... SOURCE... DIRECTORY\n  or:  /usr/sbin/mv [OPTION]... -t DIRECTORY SOURCE...\nRename SOURCE to DEST, or move SOURCE(s) to DIRECTORY.\n\nMandatory arguments to long options are mandatory for short options too.\n      --backup[=CONTROL]\n         make a backup of each existing destination file\n  -b\n         like --backup but does not accept an argument\n      --debug\n         explain how a file is copied.  Implies -v\n      --exchange\n         exchange source and destination\n  -f, --force\n         do not prompt before overwriting\n  -i, --interactive\n         prompt before overwrite\n  -n, --no-clobber\n         (deprecated) silently skip existing files.  See also --update\nIf you specify more than one of -i, -f, -n, only the final one takes effect.\n      --no-copy\n         do not copy if renaming fails\n      --strip-trailing-slashes\n         remove any trailing slashes from each SOURCE argument\n  -S, --suffix=SUFFIX\n         override the usual backup suffix\n  -t, --target-directory=DIRECTORY\n         move all SOURCE arguments into DIRECTORY\n  -T, --no-target-directory\n         treat DEST as a normal file\n      --update[=UPDATE]\n         control which existing files are updated;\n         UPDATE={all,none,none-fail,older(default)}\n  -u\n         equivalent to --update[=older].  See below\n  -v, --verbose\n         explain what is being done\n  -Z, --context\n         set SELinux security context of destination file to default type\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nUPDATE controls which existing files in the destination are replaced.\n'all' is the default operation when an --update option is not specified,\nand results in all existing files in the destination being replaced.\n'none' is like the --no-clobber option, in that no files in the\ndestination are replaced, and skipped files do not induce a failure.\n'none-fail' also ensures no files are replaced in the destination,\nbut any skipped files are diagnosed and induce a failure.\n'older' is the default operation when --update is specified, and results\nin files being replaced if they're older than the corresponding source file.\n\nThe backup suffix is '~', unless set with --suffix or SIMPLE_BACKUP_SUFFIX.\nThe version control method may be selected via the --backup option or through\nthe VERSION_CONTROL environment variable.  Here are the values:\n\n  none, off       never make backups (even if --backup is given)\n  numbered, t     make numbered backups\n  existing, nil   numbered if numbered backups exist, simple otherwise\n  simple, never   always make simple backups\n\nReport bugs to: <<e-mail>>.\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nFull documentation <https://www.gnu.org/software/coreutils/mv>\nor available locally via: info '(coreutils) mv invocation'",
    "lines": [
     [
      "--backup[=CONTROL]",
@@ -10259,7 +10326,7 @@
     ],
     [
      "-n, --no-clobber",
-     "do not overwrite an existing file"
+     "(deprecated) silently skip existing files."
     ],
     [
      "--no-copy",
@@ -10701,6 +10768,10 @@
     "-z"
    ]
   },
+  "nc": {
+   "exists": false,
+   "path": ""
+  },
   "ncdu": {
    "exists": true,
    "help": "ncdu <options> <directory>\n\nMode selection:\n  -h, --help                 This help message\n  -v, -V, --version          Print version\n  -f FILE                    Import scanned directory from FILE\n  -o FILE                    Export scanned directory to FILE in JSON format\n  -O FILE                    Export scanned directory to FILE in binary format\n  -e, --extended             Enable extended information\n  --ignore-config            Don't load config files\n\nScan options:\n  -x, --one-file-system      Stay on the same filesystem\n  --exclude PATTERN          Exclude files that match PATTERN\n  -X, --exclude-from FILE    Exclude files that match any pattern in FILE\n  --exclude-caches           Exclude directories containing CACHEDIR.TAG\n  -L, --follow-symlinks      Follow symbolic links (excluding directories)\n  --exclude-kernfs           Exclude Linux pseudo filesystems (procfs,sysfs,cgroup,...)\n  -t NUM                     Scan with NUM threads\n\nExport options:\n  -c, --compress             Use Zstandard compression with `-o`\n  --compress-level NUM       Set compression level\n  --export-block-size KIB    Set export block size with `-O`\n\nInterface options:\n  -0, -1, -2                 UI to use when scanning (0=none,2=full ncurses)\n  -q, --slow-ui-updates      \"Quiet\" mode, refresh interval 2 seconds\n  --enable-shell             Enable/disable shell spawning feature\n  --enable-delete            Enable/disable file deletion feature\n  --enable-refresh           Enable/disable directory refresh feature\n  -r                         Read only (--disable-delete)\n  -rr                        Read only++ (--disable-delete & --disable-shell)\n  --si                       Use base 10 (SI) prefixes instead of base 2\n  --apparent-size            Show apparent size instead of disk usage by default\n  --hide-hidden              Hide \"hidden\" or excluded files by default\n  --show-itemcount           Show item count column by default\n  --show-mtime               Show mtime column by default (requires `-e`)\n  --show-graph               Show graph column by default\n  --show-percent             Show percent column by default\n  --graph-style STYLE        hash / half-block / eighth-block\n  --shared-column            off / shared / unique\n  --sort COLUMN-(asc/desc)   disk-usage / name / apparent-size / itemcount / mtime\n  --enable-natsort           Use natural order when sorting by name\n  --group-directories-first  Sort directories before files\n  --confirm-quit             Ask confirmation before quitting ncdu\n  --no-confirm-delete        Don't ask confirmation before deletion\n  --delete-command CMD       Command to run for file deletion\n  --color SCHEME             off / dark / dark-bg\n\nRefer to `man ncdu` for more information.",
@@ -11036,7 +11107,7 @@
   },
   "nice": {
    "exists": true,
-   "help": "Usage: /usr/sbin/nice [OPTION] [COMMAND [ARG]...]\nRun COMMAND with an adjusted niceness, which affects process scheduling.\nWith no COMMAND, print the current niceness.  Niceness values range from\n-20 (most favorable to the process) to 19 (least favorable to the process).\n\nMandatory arguments to long options are mandatory for short options too.\n  -n, --adjustment=N\n         add integer N to the niceness (default 10)\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nYour shell may have its own version of nice, which usually supersedes\nthe version described here.  Please refer to your shell's documentation\nfor details about the options it supports.\n\nExit status:\n  125  if the nice command itself fails\n  126  if COMMAND is found but cannot be invoked\n  127  if COMMAND cannot be found\n  -    the exit status of COMMAND otherwise\n\nReport bugs to: <e-mail>\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nReport any translation bugs to <https://translationproject.org/team/>\nFull documentation <https://www.gnu.org/software/coreutils/nice>\nor available locally via: info '(coreutils) nice invocation'",
+   "help": "Usage: /usr/sbin/nice [OPTION] [COMMAND [ARG]...]\nRun COMMAND with an adjusted niceness, which affects process scheduling.\nWith no COMMAND, print the current niceness.  Niceness values range from\n-20 (most favorable to the process) to 19 (least favorable to the process).\n\nMandatory arguments to long options are mandatory for short options too.\n  -n, --adjustment=N\n         add integer N to the niceness (default 10)\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nYour shell may have its own version of nice, which usually supersedes\nthe version described here.  Please refer to your shell's documentation\nfor details about the options it supports.\n\nExit status:\n  125  if the nice command itself fails\n  126  if COMMAND is found but cannot be invoked\n  127  if COMMAND cannot be found\n  -    the exit status of COMMAND otherwise\n\nReport bugs to: <<e-mail>>.\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nFull documentation <https://www.gnu.org/software/coreutils/nice>\nor available locally via: info '(coreutils) nice invocation'",
    "lines": [
     [
      "-n, --adjustment=N",
@@ -11071,6 +11142,10 @@
     "-n"
    ]
   },
+  "nmap": {
+   "exists": false,
+   "path": ""
+  },
   "nmcli": {
    "exists": false,
    "path": ""
@@ -11104,7 +11179,7 @@
   },
   "nproc": {
    "exists": true,
-   "help": "Usage: /usr/sbin/nproc [OPTION]...\nPrint the number of processing units available to the current process,\nwhich may be less than the number of online processors.\nIf the 'OMP_NUM_THREADS' or 'OMP_THREAD_LIMIT' environment variables are set,\nthen they will determine the minimum and maximum returned value respectively.\n\n      --all\n         print the number of installed processors,\n         disregarding any OpenMP environment variables, or CPU quotas.\n      --ignore=N\n         if possible, exclude N processing units.\n         The result is guaranteed to be at least 1.\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nReport bugs to: <e-mail>\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nReport any translation bugs to <https://translationproject.org/team/>\nFull documentation <https://www.gnu.org/software/coreutils/nproc>\nor available locally via: info '(coreutils) nproc invocation'",
+   "help": "Usage: /usr/sbin/nproc [OPTION]...\nPrint the number of processing units available to the current process,\nwhich may be less than the number of online processors.\nIf the 'OMP_NUM_THREADS' or 'OMP_THREAD_LIMIT' environment variables are set,\nthen they will determine the minimum and maximum returned value respectively.\n\n      --all\n         print the number of installed processors,\n         disregarding any OpenMP environment variables, or CPU quotas.\n      --ignore=N\n         if possible, exclude N processing units.\n         The result is guaranteed to be at least 1.\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nReport bugs to: <<e-mail>>.\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nFull documentation <https://www.gnu.org/software/coreutils/nproc>\nor available locally via: info '(coreutils) nproc invocation'",
    "lines": [
     [
      "--all",
@@ -11676,6 +11751,10 @@
     "-x",
     "-y"
    ]
+  },
+  "pandoc": {
+   "exists": false,
+   "path": ""
   },
   "parted": {
    "exists": true,
@@ -12906,9 +12985,48 @@
     "-y"
    ]
   },
+  "pwd": {
+   "exists": true,
+   "help": "Usage: /usr/sbin/pwd [OPTION]...\nPrint the full filename of the current working directory.\n\n  -L, --logical\n         use PWD from environment, even if it contains symlinks\n  -P, --physical\n         resolve all symlinks\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nIf no option is specified, -P is assumed.\n\nYour shell may have its own version of pwd, which usually supersedes\nthe version described here.  Please refer to your shell's documentation\nfor details about the options it supports.\n\nReport bugs to: <<e-mail>>.\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nFull documentation <https://www.gnu.org/software/coreutils/pwd>\nor available locally via: info '(coreutils) pwd invocation'",
+   "lines": [
+    [
+     "-L, --logical",
+     "use PWD from environment, even if it contains symlinks"
+    ],
+    [
+     "-P, --physical",
+     "resolve all symlinks"
+    ],
+    [
+     "--help",
+     "display this help and exit"
+    ],
+    [
+     "--version",
+     "output version information and exit"
+    ]
+   ],
+   "long": [
+    "--help",
+    "--logical",
+    "--physical",
+    "--version"
+   ],
+   "man": true,
+   "path": "/usr/sbin/pwd",
+   "short": "LP",
+   "synopsis": [
+    "pwd [OPTION]..."
+   ],
+   "what": "print name of current/working directory",
+   "words": [
+    "-L",
+    "-P"
+   ]
+  },
   "readlink": {
    "exists": true,
-   "help": "Usage: /usr/sbin/readlink [OPTION]... FILE...\nPrint value of a symbolic link or canonical file name\n\n  -f, --canonicalize\n         canonicalize by following every symlink\n         in every component of the given name recursively;\n         all but the last component must exist\n  -e, --canonicalize-existing\n         canonicalize by following every symlink\n         in every component of the given name recursively;\n         all components must exist\n  -m, --canonicalize-missing\n         canonicalize by following every symlink\n         in every component of the given name recursively,\n         without requirements on components existence\n  -n, --no-newline\n         do not output the trailing delimiter\n  -q, --quiet\n  -s, --silent\n         suppress most error messages\n         (on by default if POSIXLY_CORRECT is not set)\n  -v, --verbose\n         report error messages\n         (on by default if POSIXLY_CORRECT is set)\n  -z, --zero\n         end each output line with NUL, not newline\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nReport bugs to: <e-mail>\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nReport any translation bugs to <https://translationproject.org/team/>\nFull documentation <https://www.gnu.org/software/coreutils/readlink>\nor available locally via: info '(coreutils) readlink invocation'",
+   "help": "Usage: /usr/sbin/readlink [OPTION]... FILE...\nPrint value of a symbolic link or canonical file name\n\n  -f, --canonicalize\n         canonicalize by following every symlink\n         in every component of the given name recursively;\n         all but the last component must exist\n  -e, --canonicalize-existing\n         canonicalize by following every symlink\n         in every component of the given name recursively;\n         all components must exist\n  -m, --canonicalize-missing\n         canonicalize by following every symlink\n         in every component of the given name recursively,\n         without requirements on components existence\n  -n, --no-newline\n         do not output the trailing delimiter\n  -q, --quiet\n  -s, --silent\n         suppress most error messages\n         (on by default if POSIXLY_CORRECT is not set)\n  -v, --verbose\n         report error messages\n         (on by default if POSIXLY_CORRECT is set)\n  -z, --zero\n         end each output line with NUL, not newline\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nReport bugs to: <<e-mail>>.\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nFull documentation <https://www.gnu.org/software/coreutils/readlink>\nor available locally via: info '(coreutils) readlink invocation'",
    "lines": [
     [
      "-f, --canonicalize",
@@ -12983,7 +13101,7 @@
   },
   "realpath": {
    "exists": true,
-   "help": "Usage: /usr/sbin/realpath [OPTION]... FILE...\nPrint the resolved absolute file name.\n  -E, --canonicalize           all but the last component must exist (default)\n  -e, --canonicalize-existing  all components of the path must exist\n  -m, --canonicalize-missing   no path components need exist or be a directory\n  -L, --logical                resolve '..' components before symlinks\n  -P, --physical               resolve symlinks as encountered (default)\n  -q, --quiet                  suppress most error messages\n      --relative-to=DIR        print the resolved path relative to DIR\n      --relative-base=DIR      print absolute paths unless paths below DIR\n  -s, --strip, --no-symlinks   don't expand symlinks\n  -z, --zero                   end each output line with NUL, not newline\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nReport bugs to: <e-mail>\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nReport any translation bugs to <https://translationproject.org/team/>\nFull documentation <https://www.gnu.org/software/coreutils/realpath>\nor available locally via: info '(coreutils) realpath invocation'",
+   "help": "Usage: /usr/sbin/realpath [OPTION]... FILE...\nPrint the resolved absolute file name.\n  -E, --canonicalize           all but the last component must exist (default)\n  -e, --canonicalize-existing  all components of the path must exist\n  -m, --canonicalize-missing   no path components need exist or be a directory\n  -L, --logical                resolve '..' components before symlinks\n  -P, --physical               resolve symlinks as encountered (default)\n  -q, --quiet                  suppress most error messages\n      --relative-to=DIR        print the resolved path relative to DIR\n      --relative-base=DIR      print absolute paths unless paths below DIR\n  -s, --strip, --no-symlinks   don't expand symlinks\n  -z, --zero                   end each output line with NUL, not newline\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nReport bugs to: <<e-mail>>.\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nFull documentation <https://www.gnu.org/software/coreutils/realpath>\nor available locally via: info '(coreutils) realpath invocation'",
    "lines": [
     [
      "-E, --canonicalize",
@@ -14498,7 +14616,7 @@
   },
   "sort": {
    "exists": true,
-   "help": "Usage: /usr/sbin/sort [OPTION]... [FILE]...\n  or:  /usr/sbin/sort [OPTION]... --files0-from=F\nWrite sorted concatenation of all FILE(s) to standard output.\n\nWith no FILE, or when FILE is -, read standard input.\n\nMandatory arguments to long options are mandatory for short options too.\nOrdering options:\n\n  -b, --ignore-leading-blanks\n         ignore leading blanks when finding sort keys in each line\n  -d, --dictionary-order\n         consider only blanks and alphanumeric characters\n  -f, --ignore-case\n         fold lower case to upper case characters\n  -g, --general-numeric-sort\n         compare according to general numerical value\n  -i, --ignore-nonprinting\n         consider only printable characters\n  -M, --month-sort\n         compare (unknown) < 'JAN' < ... < 'DEC'\n  -h, --human-numeric-sort\n         compare human readable numbers (e.g., 2K 1G)\n  -n, --numeric-sort\n         compare according to string numerical value;\n         see full documentation for supported strings\n  -R, --random-sort\n         shuffle, but group identical keys.  See also shuf(1)\n      --random-source=FILE\n         get random bytes from FILE\n  -r, --reverse\n         reverse the result of comparisons\n      --sort=WORD\n         sort according to WORD:\n           general-numeric -g, human-numeric -h, month -M,\n           numeric -n, random -R, version -V\n  -V, --version-sort\n         natural sort of (version) numbers within text\n\nOther options:\n\n      --batch-size=NMERGE\n         merge at most NMERGE inputs at once; for more use temp files\n  -c, --check, --check=diagnose-first\n         check for sorted input; do not sort\n  -C, --check=quiet, --check=silent\n         like -c, but do not report first bad line\n      --compress-program=PROG\n         compress temporaries with PROG; decompress them with PROG -d\n      --debug\n         annotate the part of the line used to sort,\n         and warn about questionable usage to standard error\n      --files0-from=F\n         read input from the files specified by NUL-terminated names in file F;\n         If F is -, read names from standard input\n  -k, --key=KEYDEF\n         sort via a key; KEYDEF gives location and type\n  -m, --merge\n         merge already sorted files; do not sort\n  -o, --output=FILE\n         write result to FILE instead of standard output\n  -s, --stable\n         stabilize sort by disabling last-resort comparison\n  -S, --buffer-size=SIZE\n         use SIZE for main memory buffer\n  -t, --field-separator=SEP\n         use SEP instead of non-blank to blank transition\n  -T, --temporary-directory=DIR\n         use DIR for temporaries, not $TMPDIR or /tmp;\n         multiple options specify multiple directories\n      --parallel=N\n         change the number of sorts run concurrently to N\n  -u, --unique\n         output only the first of lines with equal keys;\n         with -c, check for strict ordering\n  -z, --zero-terminated\n         line delimiter is NUL, not newline\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nKEYDEF is F[.C][OPTS][,F[.C][OPTS]] for start and stop position, where F is a\nfield number and C a character position in the field; both are origin 1, and\nthe stop position defaults to the line's end.  If neither -t nor -b is in\neffect, characters in a field are counted from the beginning of the preceding\nwhitespace.  OPTS is one or more single-letter ordering options [bdfgiMhnRrV],\nwhich override global ordering options for that key.  If no key is given, use\nthe entire line as the key.  Use --debug to diagnose incorrect key usage.\n\nSIZE may be followed by the following multiplicative suffixes:\n% 1% of memory, b 1, K 1024 (default), and so on for M, G, T, P, E, Z, Y, R, Q.\n\n*** WARNING ***\nThe locale specified by the environment affects sort order.\nSet LC_ALL=C to get the traditional sort order that uses\nnative byte values.\n\nReport bugs to: <e-mail>\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nReport any translation bugs to <https://translationproject.org",
+   "help": "Usage: /usr/sbin/sort [OPTION]... [FILE]...\n  or:  /usr/sbin/sort [OPTION]... --files0-from=F\nWrite sorted concatenation of all FILE(s) to standard output.\n\nWith no FILE, or when FILE is -, read standard input.\n\nMandatory arguments to long options are mandatory for short options too.\nOrdering options:\n\n  -b, --ignore-leading-blanks\n         ignore leading blanks when finding sort keys in each line\n  -d, --dictionary-order\n         consider only blanks and alphanumeric characters\n  -f, --ignore-case\n         fold lower case to upper case characters\n  -g, --general-numeric-sort\n         compare according to general numerical value\n  -i, --ignore-nonprinting\n         consider only printable characters\n  -M, --month-sort\n         compare (unknown) < 'JAN' < ... < 'DEC'\n  -h, --human-numeric-sort\n         compare human readable numbers (e.g., 2K 1G)\n  -n, --numeric-sort\n         compare according to string numerical value;\n         see full documentation for supported strings\n  -R, --random-sort\n         shuffle, but group identical keys.  See also shuf(1)\n      --random-source=FILE\n         get random bytes from FILE\n  -r, --reverse\n         reverse the result of comparisons\n      --sort=WORD\n         sort according to WORD:\n           general-numeric -g, human-numeric -h, month -M,\n           numeric -n, random -R, version -V\n  -V, --version-sort\n         natural sort of (version) numbers within text\n\nOther options:\n\n      --batch-size=NMERGE\n         merge at most NMERGE inputs at once; for more use temp files\n  -c, --check, --check=diagnose-first\n         check for sorted input; do not sort\n  -C, --check=quiet, --check=silent\n         like -c, but do not report first bad line\n      --compress-program=PROG\n         compress temporaries with PROG; decompress them with PROG -d\n      --debug\n         annotate the part of the line used to sort,\n         and warn about questionable usage to standard error\n      --files0-from=F\n         read input from the files specified by NUL-terminated names in file F;\n         If F is -, read names from standard input\n  -k, --key=KEYDEF\n         sort via a key; KEYDEF gives location and type\n  -m, --merge\n         merge already sorted files; do not sort\n  -o, --output=FILE\n         write result to FILE instead of standard output\n  -s, --stable\n         stabilize sort by disabling last-resort comparison\n  -S, --buffer-size=SIZE\n         use SIZE for main memory buffer\n  -t, --field-separator=SEP\n         use SEP instead of non-blank to blank transition\n  -T, --temporary-directory=DIR\n         use DIR for temporaries, not $TMPDIR or /tmp;\n         multiple options specify multiple directories\n      --parallel=N\n         change the number of sorts run concurrently to N\n  -u, --unique\n         output only the first of lines with equal keys;\n         with -c, check for strict ordering\n  -z, --zero-terminated\n         line delimiter is NUL, not newline\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nKEYDEF is F[.C][OPTS][,F[.C][OPTS]] for start and stop position, where F is a\nfield number and C a character position in the field; both are origin 1, and\nthe stop position defaults to the line's end.  If neither -t nor -b is in\neffect, characters in a field are counted from the beginning of the preceding\nwhitespace.  OPTS is one or more single-letter ordering options [bdfgiMhnRrV],\nwhich override global ordering options for that key.  If no key is given, use\nthe entire line as the key.  Use --debug to diagnose incorrect key usage.\n\nSIZE may be followed by the following multiplicative suffixes:\n% 1% of memory, b 1, K 1024 (default), and so on for M, G, T, P, E, Z, Y, R, Q.\n\n*** WARNING ***\nThe locale specified by the environment affects sort order.\nSet LC_ALL=C to get the traditional sort order that uses\nnative byte values.\n\nReport bugs to: <<e-mail>>.\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nFull documentation <https://www.gnu.org/software/coreutils/",
    "lines": [
     [
      "-b, --ignore-leading-blanks",
@@ -15295,7 +15413,7 @@
   },
   "stat": {
    "exists": true,
-   "help": "Usage: /usr/sbin/stat [OPTION]... FILE...\nDisplay file or file system status.\n\nMandatory arguments to long options are mandatory for short options too.\n  -L, --dereference\n         follow links\n  -f, --file-system\n         display file system status instead of file status\n      --cached=MODE\n         specify how to use cached attributes;\n         useful on remote file systems. See MODE below\n  -c, --format=FORMAT\n         use the specified FORMAT instead of the default;\n         output a newline after each use of FORMAT\n      --printf=FORMAT\n         like --format, but interpret backslash escapes,\n         and do not output a mandatory trailing newline;\n         if you want a newline, include \\n in FORMAT\n  -t, --terse\n         print the information in terse form\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nThe MODE argument of --cached can be: always, never, or default.\n'always' will use cached attributes if available, while\n'never' will try to synchronize with the latest attributes, and\n'default' will leave it up to the underlying file system.\n\nThe valid format sequences for files (without --file-system):\n\n  %a   permission bits in octal (see '#' and '0' printf flags)\n  %A   permission bits and file type in human readable form\n  %b   number of blocks allocated (see %B)\n  %B   the size in bytes of each block reported by %b\n  %C   SELinux security context string\n  %d   device number in decimal (st_dev)\n  %D   device number in hex (st_dev)\n  %Hd  major device number in decimal\n  %Ld  minor device number in decimal\n  %f   raw mode in hex\n  %F   file type\n  %g   group ID of owner\n  %G   group name of owner\n  %h   number of hard links\n  %i   inode number\n  %m   mount point\n  %n   file name\n  %N   quoted file name with dereference if symbolic link\n  %o   optimal I/O transfer size hint\n  %s   total size, in bytes\n  %r   device type in decimal (st_rdev)\n  %R   device type in hex (st_rdev)\n  %Hr  major device type in decimal, for character/block device special files\n  %Lr  minor device type in decimal, for character/block device special files\n  %t   major device type in hex, for character/block device special files\n  %T   minor device type in hex, for character/block device special files\n  %u   user ID of owner\n  %U   user name of owner\n  %w   time of file birth, human-readable; - if unknown\n  %W   time of file birth, seconds since Epoch; 0 if unknown\n  %x   time of last access, human-readable\n  %X   time of last access, seconds since Epoch\n  %y   time of last data modification, human-readable\n  %Y   time of last data modification, seconds since Epoch\n  %z   time of last status change, human-readable\n  %Z   time of last status change, seconds since Epoch\n\nValid format sequences for file systems:\n\n  %a   free blocks available to non-superuser\n  %b   total data blocks in file system\n  %c   total file nodes in file system\n  %d   free file nodes in file system\n  %f   free blocks in file system\n  %i   file system ID in hex\n  %l   maximum length of filenames\n  %n   file name\n  %s   block size (for faster transfers)\n  %S   fundamental block size (for block counts)\n  %t   file system type in hex\n  %T   file system type in human readable form\n\n--terse is equivalent to the following FORMAT:\n    %n %s %b %f %u %g %D %i %h %t %T %X %Y %Z %W %o\n--terse --file-system is equivalent to the following FORMAT:\n    %n %i %l %t %s %S %b %f %a %c %d\n\nYour shell may have its own version of stat, which usually supersedes\nthe version described here.  Please refer to your shell's documentation\nfor details about the options it supports.\n\nReport bugs to: <e-mail>\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nReport any translation bugs to <https://translationproject.org/team/>\nFull documentation <https://www.gnu.org/software/coreutils/stat>\nor available locally via: info '(coreutils) stat invocation'",
+   "help": "Usage: /usr/sbin/stat [OPTION]... FILE...\nDisplay file or file system status.\n\nMandatory arguments to long options are mandatory for short options too.\n  -L, --dereference\n         follow links\n  -f, --file-system\n         display file system status instead of file status\n      --cached=MODE\n         specify how to use cached attributes;\n         useful on remote file systems. See MODE below\n  -c, --format=FORMAT\n         use the specified FORMAT instead of the default;\n         output a newline after each use of FORMAT\n      --printf=FORMAT\n         like --format, but interpret backslash escapes,\n         and do not output a mandatory trailing newline;\n         if you want a newline, include \\n in FORMAT\n  -t, --terse\n         print the information in terse form\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nThe MODE argument of --cached can be: always, never, or default.\n'always' will use cached attributes if available, while\n'never' will try to synchronize with the latest attributes, and\n'default' will leave it up to the underlying file system.\n\nThe valid format sequences for files (without --file-system):\n\n  %a   permission bits in octal (see '#' and '0' printf flags)\n  %A   permission bits and file type in human readable form\n  %b   number of blocks allocated (see %B)\n  %B   the size in bytes of each block reported by %b\n  %C   SELinux security context string\n  %d   device number in decimal (st_dev)\n  %D   device number in hex (st_dev)\n  %Hd  major device number in decimal\n  %Ld  minor device number in decimal\n  %f   raw mode in hex\n  %F   file type\n  %g   group ID of owner\n  %G   group name of owner\n  %h   number of hard links\n  %i   inode number\n  %m   mount point\n  %n   file name\n  %Qn  quoted file name\n  %N   quoted file name with dereference if symbolic link\n  %o   optimal I/O transfer size hint\n  %s   total size, in bytes\n  %r   device type in decimal (st_rdev)\n  %R   device type in hex (st_rdev)\n  %Hr  major device type in decimal, for character/block device special files\n  %Lr  minor device type in decimal, for character/block device special files\n  %t   major device type in hex, for character/block device special files\n  %T   minor device type in hex, for character/block device special files\n  %u   user ID of owner\n  %U   user name of owner\n  %w   time of file birth, human-readable; - if unknown\n  %W   time of file birth, seconds since Epoch; 0 if unknown\n  %x   time of last access, human-readable\n  %X   time of last access, seconds since Epoch\n  %y   time of last data modification, human-readable\n  %Y   time of last data modification, seconds since Epoch\n  %z   time of last status change, human-readable\n  %Z   time of last status change, seconds since Epoch\n\nValid format sequences for file systems:\n\n  %a   free blocks available to non-superuser\n  %b   total data blocks in file system\n  %c   total file nodes in file system\n  %d   free file nodes in file system\n  %f   free blocks in file system\n  %i   file system ID in hex\n  %l   maximum length of filenames\n  %n   file name\n  %Qn  quoted file name\n  %s   block size (for faster transfers)\n  %S   fundamental block size (for block counts)\n  %t   file system type in hex\n  %T   file system type in human readable form\n\n--terse is equivalent to the following FORMAT:\n    %Qn %s %b %f %u %g %D %i %h %t %T %X %Y %Z %W %o\n--terse --file-system is equivalent to the following FORMAT:\n    %Qn %i %l %t %s %S %b %f %a %c %d\n\nYour shell may have its own version of stat, which usually supersedes\nthe version described here.  Please refer to your shell's documentation\nfor details about the options it supports.\n\nReport bugs to: <<e-mail>>.\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nFull documentation <https://www.gnu.org/software/coreutils/stat>\nor available locally via: info '(coreutils) stat invocation'",
    "lines": [
     [
      "-L, --dereference",
@@ -15331,11 +15449,11 @@
     ],
     [
      "--terse is",
-     "equivalent to the following FORMAT: %n %s %b %f %u %g %D %i %h %t %T %X %Y %Z %W %o"
+     "equivalent to the following FORMAT: %Qn %s %b %f %u %g %D %i %h %t %T %X %Y %Z %W %o"
     ],
     [
      "--terse --file-system",
-     "is equivalent to the following FORMAT: %n %i %l %t %s %S %b %f %a %c %d"
+     "is equivalent to the following FORMAT: %Qn %i %l %t %s %S %b %f %a %c %d"
     ]
    ],
    "long": [
@@ -15560,18 +15678,61 @@
   "systemctl": {
    "commands": {
     "prefix": false,
+    "seen": [
+     "may",
+     "bluetooth.service",
+     "will",
+     "processes",
+     "add-requires",
+     "combined",
+     "formed",
+     "unless",
+     "as",
+     "process",
+     "itself",
+     "ample",
+     "to",
+     "pretty",
+     "unix",
+     "us",
+     "s",
+     "utc",
+     "separating",
+     "uses",
+     "auto",
+     "tools",
+     "true",
+     "false",
+     "systemd"
+    ],
+    "v": 2,
     "words": [
      "list-units",
      "list-automounts",
      "list-paths",
      "list-sockets",
      "list-timers",
+     "is-active",
      "is-failed",
      "status",
      "show",
+     "cat",
+     "help",
      "list-dependencies",
+     "start",
+     "stop",
+     "reload",
+     "restart",
+     "try-restart",
      "enqueue-marked",
+     "reload-or-restart",
+     "try-reload-or-restart",
      "isolate",
+     "kill",
+     "clean",
+     "freeze",
+     "thaw",
+     "set-property",
      "bind",
      "mount-image",
      "service-log-level",
@@ -15579,13 +15740,27 @@
      "reset-failed",
      "whoami",
      "list-unit-files",
+     "enable",
+     "disable",
+     "reenable",
+     "preset",
      "preset-all",
+     "is-enabled",
+     "mask",
+     "unmask",
+     "link",
+     "revert",
+     "add-wants",
+     "edit",
      "get-default",
      "set-default",
      "list-machines",
      "list-jobs",
      "cancel",
      "show-environment",
+     "set-environment",
+     "unset-environment",
+     "import-environment",
      "daemon-reload",
      "daemon-reexec",
      "log-level",
@@ -15606,10 +15781,7 @@
      "suspend",
      "hibernate",
      "hybrid-sleep",
-     "suspend-then-hibernate",
-     "and",
-     "are",
-     "or"
+     "suspend-then-hibernate"
     ]
    },
    "exists": true,
@@ -15960,7 +16132,7 @@
   },
   "tail": {
    "exists": true,
-   "help": "Usage: /usr/sbin/tail [OPTION]... [FILE]...\nPrint the last 10 lines of each FILE to standard output.\nWith more than one FILE, precede each with a header giving the file name.\n\nWith no FILE, or when FILE is -, read standard input.\n\nMandatory arguments to long options are mandatory for short options too.\n  -c, --bytes=[+]NUM\n         output the last NUM bytes;\n         or use -c +NUM to output starting with byte NUM of each file\n      --debug\n         indicate which --follow implementation is used\n  -f, --follow[={name|descriptor}]\n         output appended data as the file grows;\n         an absent option argument means 'descriptor'\n  -F\n         same as --follow=name --retry\n  -n, --lines=[+]NUM\n         output the last NUM lines, instead of the last 10;\n         or use -n +NUM to skip NUM-1 lines at the start\n      --max-unchanged-stats=N\n         with --follow=name, reopen a FILE which has not\n         changed size after N (default 5) iterations\n         to see if it has been unlinked or renamed\n         (this is the usual case of rotated log files);\n         with inotify, this option is rarely useful\n      --pid=PID\n         with -f, exit after PID no longer exists;\n         can be repeated to watch multiple processes\n  -q, --quiet, --silent\n         never output headers giving file names\n      --retry\n         keep trying to open a file if it is inaccessible\n  -s, --sleep-interval=N\n         with -f, sleep for approximately N seconds\n         (default 1.0) between iterations;\n         with inotify and --pid=P,\n         check process P at least once every N seconds\n  -v, --verbose\n         always output headers giving file names\n  -z, --zero-terminated\n         line delimiter is NUL, not newline\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nNUM may have a multiplier suffix:\nb 512, kB 1000, K 1024, MB 1000*1000, M 1024*1024,\nGB 1000*1000*1000, G 1024*1024*1024, and so on for T, P, E, Z, Y, R, Q.\nBinary prefixes can be used, too: KiB=K, MiB=M, and so on.\n\nWith --follow (-f), tail defaults to following the file descriptor, which\nmeans that even if a tail'ed file is renamed, tail will continue to track\nits end.  This default behavior is not desirable when you really want to\ntrack the actual name of the file, not the file descriptor (e.g., log\nrotation).  Use --follow=name in that case.  That causes tail to track the\nnamed file in a way that accommodates renaming, removal and creation.\n\nReport bugs to: <e-mail>\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nReport any translation bugs to <https://translationproject.org/team/>\nFull documentation <https://www.gnu.org/software/coreutils/tail>\nor available locally via: info '(coreutils) tail invocation'",
+   "help": "Usage: /usr/sbin/tail [OPTION]... [FILE]...\nPrint the last 10 lines of each FILE to standard output.\nWith more than one FILE, precede each with a header giving the file name.\n\nWith no FILE, or when FILE is -, read standard input.\n\nMandatory arguments to long options are mandatory for short options too.\n  -c, --bytes=[+]NUM\n         output the last NUM bytes;\n         or use -c +NUM to output starting with byte NUM of each file\n      --debug\n         indicate which --follow implementation is used\n  -f, --follow[={name|descriptor}]\n         output appended data as the file grows;\n         an absent option argument means 'descriptor'\n  -F\n         same as --follow=name --retry\n  -n, --lines=[+]NUM\n         output the last NUM lines, instead of the last 10;\n         or use -n +NUM to skip NUM-1 lines at the start\n      --max-unchanged-stats=N\n         with --follow=name, reopen a FILE which has not\n         changed size after N (default 5) iterations\n         to see if it has been unlinked or renamed\n         (this is the usual case of rotated log files);\n         with inotify, this option is rarely useful\n      --pid=PID\n         with -f, exit after PID no longer exists;\n         can be repeated to watch multiple processes\n  -q, --quiet, --silent\n         never output headers giving file names\n      --retry\n         keep trying to open a file if it is inaccessible\n  -s, --sleep-interval=N\n         with -f, sleep for approximately N seconds\n         (default 1.0) between iterations;\n         with inotify and --pid=P,\n         check process P at least once every N seconds\n  -v, --verbose\n         always output headers giving file names\n  -z, --zero-terminated\n         line delimiter is NUL, not newline\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nNUM may have a multiplier suffix:\nb 512, kB 1000, K 1024, MB 1000*1000, M 1024*1024,\nGB 1000*1000*1000, G 1024*1024*1024, and so on for T, P, E, Z, Y, R, Q.\nBinary prefixes can be used, too: KiB=K, MiB=M, and so on.\n\nWith --follow (-f), tail defaults to following the file descriptor, which\nmeans that even if a tail'ed file is renamed, tail will continue to track\nits end.  This default behavior is not desirable when you really want to\ntrack the actual name of the file, not the file descriptor (e.g., log\nrotation).  Use --follow=name in that case.  That causes tail to track the\nnamed file in a way that accommodates renaming, removal and creation.\n\nReport bugs to: <<e-mail>>.\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nFull documentation <https://www.gnu.org/software/coreutils/tail>\nor available locally via: info '(coreutils) tail invocation'",
    "lines": [
     [
      "-c, --bytes=[+]NUM",
@@ -16592,6 +16764,10 @@
     "-p"
    ]
   },
+  "time": {
+   "exists": false,
+   "path": ""
+  },
   "timedatectl": {
    "exists": true,
    "help": "> timedatectl [OPTION\u2026] COMMAND \u2026\n\nQuery or change system time and date settings.\n\nCommands:\n  [status]                 Show current time settings\n  show                     Show properties of systemd-timedated\n  set-time TIME            Set system time\n  set-timezone ZONE        Set system time zone\n  list-timezones           Show known time zones\n  set-local-rtc BOOL       Control whether RTC is in local time\n  set-ntp BOOL             Enable or disable network time synchronization\n\nsystemd-timesyncd Commands:\n  timesync-status          Show status of systemd-timesyncd\n  show-timesync            Show properties of systemd-timesyncd\n  ntp-servers INTERFACE    Set the interface specific NTP servers\n    SERVER\u2026                \n  revert INTERFACE         Revert the interface specific NTP servers\n\nOptions:\n  -h --help                Show this help\n     --version             Show package version\n     --no-pager            Do not start a pager\n     --no-ask-password     Do not prompt for password\n  -H --host=[USER@]HOST    Operate on remote host\n  -M --machine=CONTAINER   Operate on local container\n     --adjust-system-clock Adjust system clock when changing local RTC mode\n     --monitor             Monitor status of systemd-timesyncd\n  -p --property=NAME       Show only properties by this name\n  -P NAME                  Equivalent to --value --property=NAME\n     --value               When showing properties, only print the value\n  -a --all                 Show all properties, including empty ones\n\nSee the timedatectl(1) man page for details.",
@@ -16930,7 +17106,7 @@
   },
   "touch": {
    "exists": true,
-   "help": "Usage: /usr/sbin/touch [OPTION]... FILE...\nUpdate the access and modification times of each FILE to the current time.\n\nA FILE argument that does not exist is created empty, unless -c or -h\nis supplied.\n\nA FILE argument string of - is handled specially and causes touch to\nchange the times of the file associated with standard output.\n\nMandatory arguments to long options are mandatory for short options too.\n  -a\n         change only the access time\n  -c, --no-create\n         do not create any files\n  -d, --date=STRING\n         parse STRING and use it instead of current time\n  -f\n         (ignored)\n  -h, --no-dereference\n         affect each symbolic link instead of any referenced file;\n         useful only on systems that can change the timestamps of a symlink\n  -m\n         change only the modification time\n  -r, --reference=FILE\n         use this file's times instead of current time\n  -t [[CC]YY]MMDDhhmm[.ss]\n         use specified time instead of current time,\n         with a date-time format that differs from -d's\n      --time=WORD\n         specify which time to change:\n         access time (-a): 'access', 'atime', 'use';\n         modification time (-m): 'modify', 'mtime'\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nReport bugs to: <e-mail>\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nReport any translation bugs to <https://translationproject.org/team/>\nFull documentation <https://www.gnu.org/software/coreutils/touch>\nor available locally via: info '(coreutils) touch invocation'",
+   "help": "Usage: /usr/sbin/touch [OPTION]... FILE...\nUpdate the access and modification times of each FILE to the current time.\n\nA FILE argument that does not exist is created empty, unless -c or -h\nis supplied.\n\nA FILE argument string of - is handled specially and causes touch to\nchange the times of the file associated with standard output.\n\nMandatory arguments to long options are mandatory for short options too.\n  -a\n         change only the access time\n  -c, --no-create\n         do not create any files\n  -d, --date=STRING\n         parse STRING and use it instead of current time\n  -f\n         (ignored)\n  -h, --no-dereference\n         affect each symbolic link instead of any referenced file;\n         useful only on systems that can change the timestamps of a symlink\n  -m\n         change only the modification time\n  -r, --reference=FILE\n         use this file's times instead of current time\n  -t [[CC]YY]MMDDhhmm[.ss]\n         use specified time instead of current time,\n         with a date-time format that differs from -d's\n      --time=WORD\n         specify which time to change:\n         access time (-a): 'access', 'atime', 'use';\n         modification time (-m): 'modify', 'mtime'\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nReport bugs to: <<e-mail>>.\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nFull documentation <https://www.gnu.org/software/coreutils/touch>\nor available locally via: info '(coreutils) touch invocation'",
    "lines": [
     [
      "-a",
@@ -17010,7 +17186,7 @@
   },
   "tr": {
    "exists": true,
-   "help": "Usage: /usr/sbin/tr [OPTION]... STRING1 [STRING2]\nTranslate, squeeze, and/or delete characters from standard input,\nwriting to standard output.  STRING1 and STRING2 specify arrays of\ncharacters ARRAY1 and ARRAY2 that control the action.\n\n  -c, -C, --complement\n         use the complement of ARRAY1\n  -d, --delete\n         delete characters in ARRAY1, do not translate\n  -s, --squeeze-repeats\n         replace each sequence of a repeated character\n         that is listed in the last specified ARRAY,\n         with a single occurrence of that character\n  -t, --truncate-set1\n         first truncate ARRAY1 to length of ARRAY2\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nARRAYs are specified as strings of characters.  Most represent themselves.\nInterpreted sequences are:\n\n  \\NNN            character with octal value NNN (1 to 3 octal digits)\n  \\\\              backslash\n  \\a              audible BEL\n  \\b              backspace\n  \\f              form feed\n  \\n              new line\n  \\r              return\n  \\t              horizontal tab\n  \\v              vertical tab\n  CHAR1-CHAR2     all characters from CHAR1 to CHAR2 in ascending order\n  [CHAR*]         in ARRAY2, copies of CHAR until length of ARRAY1\n  [CHAR*REPEAT]   REPEAT copies of CHAR, REPEAT octal if starting with 0\n  [:alnum:]       all letters and digits\n  [:alpha:]       all letters\n  [:blank:]       all horizontal whitespace\n  [:cntrl:]       all control characters\n  [:digit:]       all digits\n  [:graph:]       all printable characters, not including space\n  [:lower:]       all lower case letters\n  [:print:]       all printable characters, including space\n  [:punct:]       all punctuation characters\n  [:space:]       all horizontal or vertical whitespace\n  [:upper:]       all upper case letters\n  [:xdigit:]      all hexadecimal digits\n  [=CHAR=]        all characters which are equivalent to CHAR\n\nTranslation occurs if -d is not given and both STRING1 and STRING2 appear.\n-t is only significant when translating.  ARRAY2 is extended to length of\nARRAY1 by repeating its last character as necessary.  Excess characters\nof ARRAY2 are ignored.  Character classes expand in unspecified order;\nwhile translating, '[:lower:]' and '[:upper:]' may be used in pairs to\nspecify case conversion.  Squeezing occurs after translation or deletion.\nArguments like '[...]' should be quoted, to avoid potential shell globbing.\n\nReport bugs to: <e-mail>\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nReport any translation bugs to <https://translationproject.org/team/>\nFull documentation <https://www.gnu.org/software/coreutils/tr>\nor available locally via: info '(coreutils) tr invocation'",
+   "help": "Usage: /usr/sbin/tr [OPTION]... STRING1 [STRING2]\nTranslate, squeeze, and/or delete characters from standard input,\nwriting to standard output.  STRING1 and STRING2 specify arrays of\ncharacters ARRAY1 and ARRAY2 that control the action.\n\n  -c, -C, --complement\n         use the complement of ARRAY1\n  -d, --delete\n         delete characters in ARRAY1, do not translate\n  -s, --squeeze-repeats\n         replace each sequence of a repeated character\n         that is listed in the last specified ARRAY,\n         with a single occurrence of that character\n  -t, --truncate-set1\n         first truncate ARRAY1 to length of ARRAY2\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nARRAYs are specified as strings of characters.  Most represent themselves.\nInterpreted sequences are:\n\n  \\NNN            character with octal value NNN (1 to 3 octal digits)\n  \\\\              backslash\n  \\a              audible BEL\n  \\b              backspace\n  \\f              form feed\n  \\n              new line\n  \\r              return\n  \\t              horizontal tab\n  \\v              vertical tab\n  CHAR1-CHAR2     all characters from CHAR1 to CHAR2 in ascending order\n  [CHAR*]         in ARRAY2, copies of CHAR until length of ARRAY1\n  [CHAR*REPEAT]   REPEAT copies of CHAR, REPEAT octal if starting with 0\n  [:alnum:]       all letters and digits\n  [:alpha:]       all letters\n  [:blank:]       all horizontal whitespace\n  [:cntrl:]       all control characters\n  [:digit:]       all digits\n  [:graph:]       all printable characters, not including space\n  [:lower:]       all lower case letters\n  [:print:]       all printable characters, including space\n  [:punct:]       all punctuation characters\n  [:space:]       all horizontal or vertical whitespace\n  [:upper:]       all upper case letters\n  [:xdigit:]      all hexadecimal digits\n  [=CHAR=]        all characters which are equivalent to CHAR\n\nTranslation occurs if -d is not given and both STRING1 and STRING2 appear.\n-t is only significant when translating.  ARRAY2 is extended to length of\nARRAY1 by repeating its last character as necessary.  Excess characters\nof ARRAY2 are ignored.  Character classes expand in unspecified order;\nwhile translating, '[:lower:]' and '[:upper:]' may be used in pairs to\nspecify case conversion.  Squeezing occurs after translation or deletion.\nArguments like '[...]' should be quoted, to avoid potential shell globbing.\n\nReport bugs to: <<e-mail>>.\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nFull documentation <https://www.gnu.org/software/coreutils/tr>\nor available locally via: info '(coreutils) tr invocation'",
    "lines": [
     [
      "-c, -C, --complement",
@@ -17715,13 +17891,21 @@
     "-xdev"
    ]
   },
+  "ulimit": {
+   "exists": false,
+   "path": ""
+  },
   "uname": {
    "exists": true,
-   "help": "Usage: /usr/sbin/uname [OPTION]...\nPrint certain system information.  With no OPTION, same as -s.\n\n  -a, --all                print all information, in the following order,\n                             except omit -p and -i if unknown\n  -s, --kernel-name        print the kernel name\n  -n, --nodename           print the network node hostname\n  -r, --kernel-release     print the kernel release\n  -v, --kernel-version     print the kernel version\n  -m, --machine            print the machine hardware name\n  -p, --processor          print the processor type (non-portable)\n  -i, --hardware-platform  print the hardware platform (non-portable)\n  -o, --operating-system   print the operating system\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nReport bugs to: <e-mail>\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nReport any translation bugs to <https://translationproject.org/team/>\nFull documentation <https://www.gnu.org/software/coreutils/uname>\nor available locally via: info '(coreutils) uname invocation'",
+   "help": "Usage: /usr/sbin/uname [OPTION]...\nPrint certain system information.  With no OPTION, same as -s.\n\n  -a, --all                print all information, in the following order,\n                             except omit -p and -i if unknown\n  -A, --all-labeled        print all information, one labeled field per line,\n                             except omit -p and -i if unknown\n  -s, --kernel-name        print the kernel name\n  -n, --nodename           print the network node hostname\n  -r, --kernel-release     print the kernel release\n  -v, --kernel-version     print the kernel version\n  -m, --machine            print the machine hardware name\n  -p, --processor          print the processor type (non-portable)\n  -i, --hardware-platform  print the hardware platform (non-portable)\n  -o, --operating-system   print the operating system\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nReport bugs to: <<e-mail>>.\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nFull documentation <https://www.gnu.org/software/coreutils/uname>\nor available locally via: info '(coreutils) uname invocation'",
    "lines": [
     [
      "-a, --all",
      "print all information, in the following order, except omit -p and -i if unknown"
+    ],
+    [
+     "-A, --all-labeled",
+     "print all information, one labeled field per line, except omit -p and -i if unknown"
     ],
     [
      "-s, --kernel-name",
@@ -17766,6 +17950,7 @@
    ],
    "long": [
     "--all",
+    "--all-labeled",
     "--hardware-platform",
     "--help",
     "--kernel-name",
@@ -17779,12 +17964,13 @@
    ],
    "man": true,
    "path": "/usr/sbin/uname",
-   "short": "aimnoprsv",
+   "short": "Aaimnoprsv",
    "synopsis": [
     "uname [OPTION]..."
    ],
    "what": "print system information",
    "words": [
+    "-A",
     "-a",
     "-i",
     "-m",
@@ -17798,7 +17984,7 @@
   },
   "uniq": {
    "exists": true,
-   "help": "Usage: /usr/sbin/uniq [OPTION]... [INPUT [OUTPUT]]\nFilter adjacent matching lines from INPUT (or standard input),\nwriting to OUTPUT (or standard output).\n\nWith no options, matching lines are merged to the first occurrence.\n\nMandatory arguments to long options are mandatory for short options too.\n  -c, --count\n         prefix lines by the number of occurrences\n  -d, --repeated\n         only print duplicate lines, one for each group\n  -D\n         print all duplicate lines\n      --all-repeated[=METHOD]\n         like -D, but allow separating groups with an empty line;\n         METHOD={none(default),prepend,separate}\n  -f, --skip-fields=N\n         avoid comparing the first N fields\n      --group[=METHOD]\n         show all items, separating groups with an empty line;\n         METHOD={separate(default),prepend,append,both}\n  -i, --ignore-case\n         ignore differences in case when comparing\n  -s, --skip-chars=N\n         avoid comparing the first N characters\n  -u, --unique\n         only print unique lines\n  -z, --zero-terminated\n         line delimiter is NUL, not newline\n  -w, --check-chars=N\n         compare no more than N characters in lines\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nA field is a run of blanks (usually spaces and/or TABs), then non-blank\ncharacters.  Fields are skipped before chars.\n\n'uniq' does not detect repeated lines unless they are adjacent.\nYou may want to sort the input first, or use 'sort -u' without 'uniq'.\n\nReport bugs to: <e-mail>\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nReport any translation bugs to <https://translationproject.org/team/>\nFull documentation <https://www.gnu.org/software/coreutils/uniq>\nor available locally via: info '(coreutils) uniq invocation'",
+   "help": "Usage: /usr/sbin/uniq [OPTION]... [INPUT [OUTPUT]]\nFilter adjacent matching lines from INPUT (or standard input),\nwriting to OUTPUT (or standard output).\n\nWith no options, matching lines are merged to the first occurrence.\n\nMandatory arguments to long options are mandatory for short options too.\n  -c, --count\n         prefix lines by the number of occurrences\n  -d, --repeated\n         only print duplicate lines, one for each group\n  -D\n         print all duplicate lines\n      --all-repeated[=METHOD]\n         like -D, but allow separating groups with an empty line;\n         METHOD={none(default),prepend,separate}\n  -f, --skip-fields=N\n         avoid comparing the first N fields\n      --group[=METHOD]\n         show all items, separating groups with an empty line;\n         METHOD={separate(default),prepend,append,both}\n  -i, --ignore-case\n         ignore differences in case when comparing\n  -s, --skip-chars=N\n         avoid comparing the first N characters\n  -u, --unique\n         only print unique lines\n  -z, --zero-terminated\n         line delimiter is NUL, not newline\n  -w, --check-chars=N\n         compare no more than N characters in lines\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nA field is a run of blanks (usually spaces and/or TABs), then non-blank\ncharacters.  Fields are skipped before chars.\n\n'uniq' does not detect repeated lines unless they are adjacent.\nYou may want to sort the input first, or use 'sort -u' without 'uniq'.\n\nReport bugs to: <<e-mail>>.\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nFull documentation <https://www.gnu.org/software/coreutils/uniq>\nor available locally via: info '(coreutils) uniq invocation'",
    "lines": [
     [
      "-c, --count",
@@ -18649,7 +18835,7 @@
   },
   "users": {
    "exists": true,
-   "help": "Usage: /usr/sbin/users [OPTION]... [FILE]\nOutput who is currently logged in according to FILE.\nIf FILE is not specified, use /var/run/utmp.  /var/log/wtmp as FILE is common.\n\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nReport bugs to: <e-mail>\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nReport any translation bugs to <https://translationproject.org/team/>\nFull documentation <https://www.gnu.org/software/coreutils/users>\nor available locally via: info '(coreutils) users invocation'",
+   "help": "Usage: /usr/sbin/users [OPTION]... [FILE]\nOutput who is currently logged in according to FILE.\nIf FILE is not specified, use /var/run/utmp.  /var/log/wtmp as FILE is common.\n\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nReport bugs to: <<e-mail>>.\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nFull documentation <https://www.gnu.org/software/coreutils/users>\nor available locally via: info '(coreutils) users invocation'",
    "lines": [
     [
      "--help",
@@ -19003,7 +19189,7 @@
   },
   "wc": {
    "exists": true,
-   "help": "Usage: /usr/sbin/wc [OPTION]... [FILE]...\n  or:  /usr/sbin/wc [OPTION]... --files0-from=F\nPrint newline, word, and byte counts for each FILE, and a total line if\nmore than one FILE is specified.  A word is a nonempty sequence of non white\nspace delimited by white space characters or by start or end of input.\n\nWith no FILE, or when FILE is -, read standard input.\n\nThe options below may be used to select which counts are printed, always in\nthe following order: newline, word, character, byte, maximum line length.\n  -c, --bytes\n         print the byte counts\n  -m, --chars\n         print the character counts\n  -l, --lines\n         print the newline counts\n      --debug\n         indicate what line count acceleration is used\n      --files0-from=F\n         read input from the files specified by\n         NUL-terminated names in file F;\n         If F is -, read names from standard input\n  -L, --max-line-length\n         print the maximum display width\n  -w, --words\n         print the word counts\n      --total=WHEN\n         when to print a line with total counts;\n         WHEN can be: auto, always, only, never\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nReport bugs to: <e-mail>\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nReport any translation bugs to <https://translationproject.org/team/>\nFull documentation <https://www.gnu.org/software/coreutils/wc>\nor available locally via: info '(coreutils) wc invocation'",
+   "help": "Usage: /usr/sbin/wc [OPTION]... [FILE]...\n  or:  /usr/sbin/wc [OPTION]... --files0-from=F\nPrint newline, word, and byte counts for each FILE, and a total line if\nmore than one FILE is specified.  A word is a nonempty sequence of non white\nspace delimited by white space characters or by start or end of input.\n\nWith no FILE, or when FILE is -, read standard input.\n\nThe options below may be used to select which counts are printed, always in\nthe following order: newline, word, character, byte, maximum line length.\n  -c, --bytes\n         print the byte counts\n  -m, --chars\n         print the character counts\n  -l, --lines\n         print the newline counts\n      --debug\n         indicate what line count acceleration is used\n      --files0-from=F\n         read input from the files specified by\n         NUL-terminated names in file F;\n         If F is -, read names from standard input\n  -L, --max-line-length\n         print the maximum display width\n  -w, --words\n         print the word counts\n      --total=WHEN\n         when to print a line with total counts;\n         WHEN can be: auto, always, only, never\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nReport bugs to: <<e-mail>>.\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nFull documentation <https://www.gnu.org/software/coreutils/wc>\nor available locally via: info '(coreutils) wc invocation'",
    "lines": [
     [
      "-c, --bytes",
@@ -19065,7 +19251,7 @@
     "wc [OPTION]... [FILE]...",
     "wc [OPTION]... --files0-from=F"
    ],
-   "what": "print newline, word, and byte counts for each file",
+   "what": "word, line, and byte or character count",
    "words": [
     "-L",
     "-c",
@@ -19564,7 +19750,7 @@
   },
   "who": {
    "exists": true,
-   "help": "Usage: /usr/sbin/who [OPTION]... [ FILE | ARG1 ARG2 ]\nPrint information about users who are currently logged in.\n\n  -a, --all         same as -b -d --login -p -r -t -T -u\n  -b, --boot        time of last system boot\n  -d, --dead        print dead processes\n  -H, --heading     print line of column headings\n  -l, --login       print system login processes\n      --lookup      attempt to canonicalize hostnames via DNS\n  -m                only hostname and user associated with standard input\n  -p, --process     print active processes spawned by init\n  -q, --count       all login names and number of users logged on\n  -r, --runlevel    print current runlevel\n  -s, --short       print only name, line, and time (default)\n  -t, --time        print last system clock change\n  -T, -w, --mesg    add user's message status as +, - or ?\n  -u, --users       list users logged in, including idle time\n      --message     same as -T\n      --writable    same as -T\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nIf FILE is not specified, use /var/run/utmp.  /var/log/wtmp as FILE is common.\nIf ARG1 ARG2 given, -m presumed: 'am i' or 'mom likes' are usual.\n\nReport bugs to: <e-mail>\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nReport any translation bugs to <https://translationproject.org/team/>\nFull documentation <https://www.gnu.org/software/coreutils/who>\nor available locally via: info '(coreutils) who invocation'",
+   "help": "Usage: /usr/sbin/who [OPTION]... [ FILE | ARG1 ARG2 ]\nPrint information about users who are currently logged in.\n\n  -a, --all         same as -b -d --login -p -r -t -T -u\n  -b, --boot        time of last system boot\n  -d, --dead        print dead processes\n  -H, --heading     print line of column headings\n  -l, --login       print system login processes\n      --lookup      attempt to canonicalize hostnames via DNS\n  -m                only hostname and user associated with standard input\n  -p, --process     print active processes spawned by init\n  -q, --count       all login names and number of users logged on\n  -r, --runlevel    print current runlevel\n  -s, --short       print only name, line, and time (default)\n  -t, --time        print last system clock change\n  -T, -w, --mesg    add user's message status as +, - or ?\n  -u, --users       list users logged in, including idle time\n      --message     same as -T\n      --writable    same as -T\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nIf FILE is not specified, use /var/run/utmp.  /var/log/wtmp as FILE is common.\nIf ARG1 ARG2 given, -m presumed: 'am i' or 'mom likes' are usual.\n\nReport bugs to: <<e-mail>>.\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nFull documentation <https://www.gnu.org/software/coreutils/who>\nor available locally via: info '(coreutils) who invocation'",
    "lines": [
     [
      "-a, --all",
@@ -19684,7 +19870,7 @@
   },
   "whoami": {
    "exists": true,
-   "help": "Usage: /usr/sbin/whoami [OPTION]...\nPrint the user name associated with the current effective user ID.\nSame as id -un.\n\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nReport bugs to: <e-mail>\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nReport any translation bugs to <https://translationproject.org/team/>\nFull documentation <https://www.gnu.org/software/coreutils/whoami>\nor available locally via: info '(coreutils) whoami invocation'",
+   "help": "Usage: /usr/sbin/whoami [OPTION]...\nPrint the user name associated with the current effective user ID.\nSame as id -un.\n\n      --help\n         display this help and exit\n      --version\n         output version information and exit\n\nReport bugs to: <<e-mail>>.\nGNU coreutils home page: <https://www.gnu.org/software/coreutils/>\nGeneral help using GNU software: <https://www.gnu.org/gethelp/>\nFull documentation <https://www.gnu.org/software/coreutils/whoami>\nor available locally via: info '(coreutils) whoami invocation'",
    "lines": [
     [
      "--help",

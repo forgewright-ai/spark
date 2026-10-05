@@ -1,9 +1,17 @@
 {
- "collected": "2026-09-26",
+ "collected": "2026-10-05",
  "os": "void",
  "pretty": "Void Linux",
  "tools": {
+  "[[": {
+   "exists": false,
+   "path": ""
+  },
   "apt": {
+   "exists": false,
+   "path": ""
+  },
+  "asciinema": {
    "exists": false,
    "path": ""
   },
@@ -871,6 +879,10 @@
    "exists": false,
    "path": ""
   },
+  "builtin": {
+   "exists": false,
+   "path": ""
+  },
   "cat": {
    "exists": true,
    "help": "cat [OPTION]... [FILE]...",
@@ -1402,6 +1414,10 @@
     "-t",
     "-x"
    ]
+  },
+  "command": {
+   "exists": false,
+   "path": ""
   },
   "cp": {
    "exists": true,
@@ -3099,6 +3115,10 @@
    "words": [
     "-z"
    ]
+  },
+  "disown": {
+   "exists": false,
+   "path": ""
   },
   "dmesg": {
    "exists": true,
@@ -5543,6 +5563,18 @@
   "git": {
    "commands": {
     "prefix": false,
+    "seen": [
+     "program",
+     "will",
+     "as",
+     "developer",
+     "other",
+     "finds",
+     "transport",
+     "commands",
+     "for"
+    ],
+    "v": 2,
     "words": [
      "add",
      "am",
@@ -6874,6 +6906,10 @@
     "-z"
    ]
   },
+  "hash": {
+   "exists": false,
+   "path": ""
+  },
   "head": {
    "exists": true,
    "help": "Usage: /usr/bin/head [OPTION]... [FILE]...\nPrint the first 10 lines of each FILE to standard output.\nWith more than one FILE, precede each with a header giving the file name.\n\nWith no FILE, or when FILE is -, read standard input.\n\nMandatory arguments to long options are mandatory for short options too.\n  -c, --bytes=[-]NUM       print the first NUM bytes of each file;\n                             with the leading '-', print all but the last\n                             NUM bytes of each file\n  -n, --lines=[-]NUM       print the first NUM lines instead of the first 10;\n                             with the leading '-', print all but the last\n                             NUM lines of each file\n  -q, --quiet, --silent    never print headers giving file names\n  -v, --verbose            always print headers giving file names\n  -z, --zero-terminated    line delimiter is NUL, not newline\n      --help        display this help and exit\n      --version     output version information and exit\n\nNUM may have a multiplier suffix:\nb 512, kB 1000, K 1024, MB 1000*1000, M 1024*1024,\nGB 1000*1000*1000, G 1024*1024*1024, and so on for T, P, E, Z, Y, R, Q.\nBinary prefixes can be used, too: KiB=K, MiB=M, and so on.\n\nGNU coreutils online help: <https://www.gnu.org/software/coreutils/>\nReport any translation bugs to <https://translationproject.org/team/>\nFull documentation <https://www.gnu.org/software/coreutils/head>\nor available locally via: info '(coreutils) head invocation'",
@@ -6935,6 +6971,10 @@
     "-v",
     "-z"
    ]
+  },
+  "history": {
+   "exists": false,
+   "path": ""
   },
   "host": {
    "exists": true,
@@ -7320,6 +7360,16 @@
   "ip": {
    "commands": {
     "prefix": true,
+    "seen": [
+     "utility",
+     "on",
+     "falls",
+     "to",
+     "addr",
+     "neigh",
+     "stats"
+    ],
+    "v": 2,
     "words": [
      "address",
      "addrlabel",
@@ -10537,6 +10587,10 @@
     "-z"
    ]
   },
+  "nc": {
+   "exists": false,
+   "path": ""
+  },
   "ncdu": {
    "exists": true,
    "help": "ncdu <options> <directory>\n\nMode selection:\n  -h, --help                 This help message\n  -v, -V, --version          Print version\n  -f FILE                    Import scanned directory from FILE\n  -o FILE                    Export scanned directory to FILE in JSON format\n  -e, --extended             Enable extended information\n  --ignore-config            Don't load config files\n\nScan options:\n  -x, --one-file-system      Stay on the same filesystem\n  --exclude PATTERN          Exclude files that match PATTERN\n  -X, --exclude-from FILE    Exclude files that match any pattern in FILE\n  --exclude-caches           Exclude directories containing CACHEDIR.TAG\n  -L, --follow-symlinks      Follow symbolic links (excluding directories)\n  --exclude-kernfs           Exclude Linux pseudo filesystems (procfs,sysfs,cgroup,...)\n\nInterface options:\n  -0, -1, -2                 UI to use when scanning (0=none,2=full ncurses)\n  -q, --slow-ui-updates      \"Quiet\" mode, refresh interval 2 seconds\n  --enable-shell             Enable/disable shell spawning feature\n  --enable-delete            Enable/disable file deletion feature\n  --enable-refresh           Enable/disable directory refresh feature\n  -r                         Read only (--disable-delete)\n  -rr                        Read only++ (--disable-delete & --disable-shell)\n  --si                       Use base 10 (SI) prefixes instead of base 2\n  --apparent-size            Show apparent size instead of disk usage by default\n  --hide-hidden              Hide \"hidden\" or excluded files by default\n  --show-itemcount           Show item count column by default\n  --show-mtime               Show mtime column by default (requires `-e`)\n  --show-graph               Show graph column by default\n  --show-percent             Show percent column by default\n  --graph-style STYLE        hash / half-block / eighth-block\n  --sort COLUMN-(asc/desc)   disk-usage / name / apparent-size / itemcount / mtime\n  --enable-natsort           Use natural order when sorting by name\n  --group-directories-first  Sort directories before files\n  --confirm-quit             Ask confirmation before quitting ncdu\n  --no-confirm-delete        Don't ask confirmation before deletion\n  --color SCHEME             off / dark / dark-bg\n\nRefer to `man ncdu` for more information.",
@@ -10902,6 +10956,10 @@
     "-n"
    ]
   },
+  "nmap": {
+   "exists": false,
+   "path": ""
+  },
   "nohup": {
    "exists": true,
    "help": "nohup COMMAND [ARG]...\n       nohup OPTION",
@@ -11026,6 +11084,10 @@
    "path": ""
   },
   "pacman": {
+   "exists": false,
+   "path": ""
+  },
+  "pandoc": {
    "exists": false,
    "path": ""
   },
@@ -12256,6 +12318,49 @@
     "-u",
     "-w",
     "-y"
+   ]
+  },
+  "pwd": {
+   "exists": true,
+   "help": "Usage: /usr/bin/pwd [OPTION]...\nPrint the full filename of the current working directory.\n\n  -L, --logical   use PWD from environment, even if it contains symlinks\n  -P, --physical  avoid all symlinks\n      --help        display this help and exit\n      --version     output version information and exit\n\nIf no option is specified, -P is assumed.\n\nNOTE: your shell may have its own version of pwd, which usually supersedes\nthe version described here.  Please refer to your shell's documentation\nfor details about the options it supports.\n\nGNU coreutils online help: <https://www.gnu.org/software/coreutils/>\nReport any translation bugs to <https://translationproject.org/team/>\nFull documentation <https://www.gnu.org/software/coreutils/pwd>\nor available locally via: info '(coreutils) pwd invocation'",
+   "lines": [
+    [
+     "-L, --logical",
+     "use PWD from environment, even if it contains symlinks"
+    ],
+    [
+     "-P, --physical",
+     "avoid all symlinks"
+    ],
+    [
+     "--help display",
+     "this help and exit"
+    ],
+    [
+     "--version",
+     "output version information and exit"
+    ],
+    [
+     "--help",
+     "display this help and exit"
+    ]
+   ],
+   "long": [
+    "--help",
+    "--logical",
+    "--physical",
+    "--version"
+   ],
+   "man": true,
+   "path": "/usr/bin/pwd",
+   "short": "LP",
+   "synopsis": [
+    "pwd [OPTION]..."
+   ],
+   "what": "print name of current/working directory",
+   "words": [
+    "-L",
+    "-P"
    ]
   },
   "readlink": {
@@ -15170,6 +15275,14 @@
   "sv": {
    "commands": {
     "prefix": false,
+    "seen": [
+     "program",
+     "actually",
+     "runs",
+     "exits",
+     "timed"
+    ],
+    "v": 2,
     "words": [
      "status",
      "up",
@@ -15925,6 +16038,10 @@
     "-i",
     "-p"
    ]
+  },
+  "time": {
+   "exists": false,
+   "path": ""
   },
   "timeout": {
    "exists": true,
@@ -16921,6 +17038,10 @@
     "-x",
     "-xdev"
    ]
+  },
+  "ulimit": {
+   "exists": false,
+   "path": ""
   },
   "uname": {
    "exists": true,

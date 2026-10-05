@@ -1,8 +1,12 @@
 {
- "collected": "2026-09-26",
+ "collected": "2026-10-05",
  "os": "debian",
  "pretty": "Debian GNU/Linux 13 (trixie)",
  "tools": {
+  "[[": {
+   "exists": false,
+   "path": ""
+  },
   "adduser": {
    "exists": true,
    "help": "adduser [--uid id] [--firstuid id] [--lastuid id]\n        [--gid id] [--firstgid id] [--lastgid id] [--ingroup group]\n        [--add-extra-groups] [--shell shell]\n        [--comment comment] [--home dir] [--no-create-home]\n        [--allow-all-names] [--allow-bad-names]\n        [--disabled-password] [--disabled-login]\n        [--conf file] [--quiet] [--verbose] [--debug]\n        user\n    Add a regular user\n\nadduser --system\n        [--uid id] [--group] [--ingroup group] [--gid id]\n        [--shell shell] [--comment comment] [--home dir] [--no-create-home]\n        [--conf file] [--quiet] [--verbose] [--debug]\n        user\n   Add a system user\n\nadduser --group\n        [--gid ID] [--firstgid id] [--lastgid id]\n        [--conf file] [--quiet] [--verbose] [--debug]\n        group\naddgroup\n        [--gid ID] [--firstgid id] [--lastgid id]\n        [--conf file] [--quiet] [--verbose] [--debug]\n        group\n   Add a user group\n\naddgroup --system\n        [--gid id]\n        [--conf file] [--quiet] [--verbose] [--debug]\n        group\n   Add a system group\n\nadduser USER GROUP\n   Add an existing user to an existing group",
@@ -198,6 +202,17 @@
   "apt": {
    "commands": {
     "prefix": false,
+    "seen": [
+     "reinstall",
+     "purge",
+     "autoremove",
+     "satisfy",
+     "work-in-progress",
+     "provides",
+     "itself",
+     "returns"
+    ],
+    "v": 2,
     "words": [
      "list",
      "search",
@@ -242,6 +257,13 @@
   "apt-cache": {
    "commands": {
     "prefix": false,
+    "seen": [
+     "performs",
+     "does",
+     "works",
+     "returns"
+    ],
+    "v": 2,
     "words": [
      "gencaches",
      "showpkg",
@@ -412,6 +434,20 @@
   "apt-get": {
    "commands": {
     "prefix": false,
+    "seen": [
+     "reinstall",
+     "satisfy",
+     "distclean",
+     "autopurge",
+     "changelog",
+     "indextargets",
+     "has",
+     "to",
+     "will",
+     "immediately",
+     "returns"
+    ],
+    "v": 2,
     "words": [
      "update",
      "upgrade",
@@ -763,6 +799,10 @@
     "-v",
     "-y"
    ]
+  },
+  "asciinema": {
+   "exists": false,
+   "path": ""
   },
   "awk": {
    "exists": true,
@@ -1447,6 +1487,10 @@
    "exists": false,
    "path": ""
   },
+  "builtin": {
+   "exists": false,
+   "path": ""
+  },
   "cat": {
    "exists": true,
    "help": "cat [OPTION]... [FILE]...",
@@ -1992,6 +2036,10 @@
     "-t",
     "-x"
    ]
+  },
+  "command": {
+   "exists": false,
+   "path": ""
   },
   "cp": {
    "exists": true,
@@ -3675,6 +3723,10 @@
    "words": [
     "-z"
    ]
+  },
+  "disown": {
+   "exists": false,
+   "path": ""
   },
   "dmesg": {
    "exists": true,
@@ -7002,6 +7054,18 @@
   "git": {
    "commands": {
     "prefix": false,
+    "seen": [
+     "program",
+     "will",
+     "as",
+     "hooks",
+     "developer",
+     "other",
+     "transport",
+     "commands",
+     "for"
+    ],
+    "v": 2,
     "words": [
      "add",
      "am",
@@ -8326,6 +8390,10 @@
     "-z"
    ]
   },
+  "hash": {
+   "exists": false,
+   "path": ""
+  },
   "head": {
    "exists": true,
    "help": "Usage: /usr/bin/head [OPTION]... [FILE]...\nPrint the first 10 lines of each FILE to standard output.\nWith more than one FILE, precede each with a header giving the file name.\n\nWith no FILE, or when FILE is -, read standard input.\n\nMandatory arguments to long options are mandatory for short options too.\n  -c, --bytes=[-]NUM       print the first NUM bytes of each file;\n                             with the leading '-', print all but the last\n                             NUM bytes of each file\n  -n, --lines=[-]NUM       print the first NUM lines instead of the first 10;\n                             with the leading '-', print all but the last\n                             NUM lines of each file\n  -q, --quiet, --silent    never print headers giving file names\n  -v, --verbose            always print headers giving file names\n  -z, --zero-terminated    line delimiter is NUL, not newline\n      --help        display this help and exit\n      --version     output version information and exit\n\nNUM may have a multiplier suffix:\nb 512, kB 1000, K 1024, MB 1000*1000, M 1024*1024,\nGB 1000*1000*1000, G 1024*1024*1024, and so on for T, P, E, Z, Y, R, Q.\nBinary prefixes can be used, too: KiB=K, MiB=M, and so on.\n\nGNU coreutils online help: <https://www.gnu.org/software/coreutils/>\nReport any translation bugs to <https://translationproject.org/team/>\nFull documentation <https://www.gnu.org/software/coreutils/head>\nor available locally via: info '(coreutils) head invocation'",
@@ -8387,6 +8455,10 @@
     "-v",
     "-z"
    ]
+  },
+  "history": {
+   "exists": false,
+   "path": ""
   },
   "host": {
    "exists": true,
@@ -8844,42 +8916,6 @@
    "path": ""
   },
   "ip": {
-   "commands": {
-    "prefix": true,
-    "words": [
-     "address",
-     "addrlabel",
-     "fou",
-     "help",
-     "ila",
-     "ioam",
-     "l2tp",
-     "link",
-     "macsec",
-     "maddress",
-     "monitor",
-     "mptcp",
-     "mroute",
-     "mrule",
-     "neighbor",
-     "neighbour",
-     "netconf",
-     "netns",
-     "nex-",
-     "ntable",
-     "ntbl",
-     "route",
-     "rule",
-     "sr",
-     "tap",
-     "tcpmetrics",
-     "token",
-     "tunnel",
-     "tun-",
-     "vrf",
-     "xfrm"
-    ]
-   },
    "exists": true,
    "help": "Usage: ip [ OPTIONS ] OBJECT { COMMAND | help }\n       ip [ -force ] -batch filename\nwhere  OBJECT := { address | addrlabel | fou | help | ila | ioam | l2tp | link |\n                   macsec | maddress | monitor | mptcp | mroute | mrule |\n                   neighbor | neighbour | netconf | netns | nexthop | ntable |\n                   ntbl | route | rule | sr | stats | tap | tcpmetrics |\n                   token | tunnel | tuntap | vrf | xfrm }\n       OPTIONS := { -V[ersion] | -s[tatistics] | -d[etails] | -r[esolve] |\n                    -h[uman-readable] | -iec | -j[son] | -p[retty] |\n                    -f[amily] { inet | inet6 | mpls | bridge | link } |\n                    -4 | -6 | -M | -B | -0 |\n                    -l[oops] { maximum-addr-flush-attempts } | -echo | -br[ief] |\n                    -o[neline] | -t[imestamp] | -ts[hort] | -b[atch] [filename] |\n                    -rc[vbuf] [size] | -n[etns] name | -N[umeric] | -a[ll] |\n                    -c[olor]}",
    "lines": [
@@ -12185,6 +12221,10 @@
     "-z"
    ]
   },
+  "nc": {
+   "exists": false,
+   "path": ""
+  },
   "ncdu": {
    "exists": true,
    "help": "ncdu <options> <directory>\n\nMode selection:\n  -h, --help                 This help message\n  -v, -V, --version          Print version\n  -f FILE                    Import scanned directory from FILE\n  -o FILE                    Export scanned directory to FILE in JSON format\n  -e, --extended             Enable extended information\n  --ignore-config            Don't load config files\n\nScan options:\n  -x, --one-file-system      Stay on the same filesystem\n  --exclude PATTERN          Exclude files that match PATTERN\n  -X, --exclude-from FILE    Exclude files that match any pattern in FILE\n  --exclude-caches           Exclude directories containing CACHEDIR.TAG\n  -L, --follow-symlinks      Follow symbolic links (excluding directories)\n  --exclude-kernfs           Exclude Linux pseudo filesystems (procfs,sysfs,cgroup,...)\n\nInterface options:\n  -0, -1, -2                 UI to use when scanning (0=none,2=full ncurses)\n  -q, --slow-ui-updates      \"Quiet\" mode, refresh interval 2 seconds\n  --enable-shell             Enable/disable shell spawning feature\n  --enable-delete            Enable/disable file deletion feature\n  --enable-refresh           Enable/disable directory refresh feature\n  -r                         Read only (--disable-delete)\n  -rr                        Read only++ (--disable-delete & --disable-shell)\n  --si                       Use base 10 (SI) prefixes instead of base 2\n  --apparent-size            Show apparent size instead of disk usage by default\n  --hide-hidden              Hide \"hidden\" or excluded files by default\n  --show-itemcount           Show item count column by default\n  --show-mtime               Show mtime column by default (requires `-e`)\n  --show-graph               Show graph column by default\n  --show-percent             Show percent column by default\n  --graph-style STYLE        hash / half-block / eighth-block\n  --sort COLUMN-(asc/desc)   disk-usage / name / apparent-size / itemcount / mtime\n  --enable-natsort           Use natural order when sorting by name\n  --group-directories-first  Sort directories before files\n  --confirm-quit             Ask confirmation before quitting ncdu\n  --no-confirm-delete        Don't ask confirmation before deletion\n  --color SCHEME             off / dark / dark-bg\n\nRefer to `man ncdu` for more information.",
@@ -12554,6 +12594,10 @@
     "-n"
    ]
   },
+  "nmap": {
+   "exists": false,
+   "path": ""
+  },
   "nmcli": {
    "exists": false,
    "path": ""
@@ -12682,6 +12726,10 @@
    "path": ""
   },
   "pacman": {
+   "exists": false,
+   "path": ""
+  },
+  "pandoc": {
    "exists": false,
    "path": ""
   },
@@ -13849,6 +13897,49 @@
     "-y"
    ]
   },
+  "pwd": {
+   "exists": true,
+   "help": "Usage: /usr/bin/pwd [OPTION]...\nPrint the full filename of the current working directory.\n\n  -L, --logical   use PWD from environment, even if it contains symlinks\n  -P, --physical  resolve all symlinks\n      --help        display this help and exit\n      --version     output version information and exit\n\nIf no option is specified, -P is assumed.\n\nYour shell may have its own version of pwd, which usually supersedes\nthe version described here.  Please refer to your shell's documentation\nfor details about the options it supports.\n\nGNU coreutils online help: <https://www.gnu.org/software/coreutils/>\nReport any translation bugs to <https://translationproject.org/team/>\nFull documentation <https://www.gnu.org/software/coreutils/pwd>\nor available locally via: info '(coreutils) pwd invocation'",
+   "lines": [
+    [
+     "-L, --logical",
+     "use PWD from environment, even if it contains symlinks"
+    ],
+    [
+     "-P, --physical",
+     "resolve all symlinks"
+    ],
+    [
+     "--help display",
+     "this help and exit"
+    ],
+    [
+     "--version",
+     "output version information and exit"
+    ],
+    [
+     "--help",
+     "display this help and exit"
+    ]
+   ],
+   "long": [
+    "--help",
+    "--logical",
+    "--physical",
+    "--version"
+   ],
+   "man": true,
+   "path": "/usr/bin/pwd",
+   "short": "LP",
+   "synopsis": [
+    "pwd [OPTION]..."
+   ],
+   "what": "print name of current/working directory",
+   "words": [
+    "-L",
+    "-P"
+   ]
+  },
   "readlink": {
    "exists": true,
    "help": "Usage: /usr/bin/readlink [OPTION]... FILE...\nPrint value of a symbolic link or canonical file name\n\n  -f, --canonicalize            canonicalize by following every symlink in\n                                every component of the given name recursively;\n                                all but the last component must exist\n  -e, --canonicalize-existing   canonicalize by following every symlink in\n                                every component of the given name recursively,\n                                all components must exist\n  -m, --canonicalize-missing    canonicalize by following every symlink in\n                                every component of the given name recursively,\n                                without requirements on components existence\n  -n, --no-newline              do not output the trailing delimiter\n  -q, --quiet\n  -s, --silent                  suppress most error messages (on by default)\n  -v, --verbose                 report error messages\n  -z, --zero                    end each output line with NUL, not newline\n      --help        display this help and exit\n      --version     output version information and exit\n\nGNU coreutils online help: <https://www.gnu.org/software/coreutils/>\nReport any translation bugs to <https://translationproject.org/team/>\nFull documentation <https://www.gnu.org/software/coreutils/readlink>\nor available locally via: info '(coreutils) readlink invocation'",
@@ -14564,8 +14655,20 @@
   },
   "rsync": {
    "exists": true,
-   "help": "rsync  version 3.4.1  protocol version 32\nCopyright (C) 1996-2025 by Andrew Tridgell, Wayne Davison, and others.\nWeb site: https://rsync.samba.org/\nCapabilities:\n    64-bit files, 64-bit inums, 64-bit timestamps, 64-bit long ints,\n    socketpairs, symlinks, symtimes, hardlinks, hardlink-specials,\n    hardlink-symlinks, IPv6, atimes, batchfiles, inplace, append, ACLs,\n    xattrs, optional secluded-args, iconv, prealloc, stop-at, no crtimes\nOptimizations:\n    SIMD-roll, no asm-roll, openssl-crypto, no asm-MD5\nChecksum list:\n    xxh128 xxh3 xxh64 (xxhash) md5 md4 sha1 none\nCompress list:\n    zstd lz4 zlibx zlib none\nDaemon auth list:\n    sha512 sha256 sha1 md5 md4\n\nrsync comes with ABSOLUTELY NO WARRANTY.  This is free software, and you\nare welcome to redistribute it under certain conditions.  See the GNU\nGeneral Public Licence for details.\n\nrsync is a file transfer program capable of efficient remote update\nvia a fast differencing algorithm.\n\nUsage: rsync [OPTION]... SRC [SRC]... DEST\n  or   rsync [OPTION]... SRC [SRC]... [USER@]HOST:DEST\n  or   rsync [OPTION]... SRC [SRC]... [USER@]HOST::DEST\n  or   rsync [OPTION]... SRC [SRC]... rsync://[USER@]HOST[:PORT]/DEST\n  or   rsync [OPTION]... [USER@]HOST:SRC [DEST]\n  or   rsync [OPTION]... [USER@]HOST::SRC [DEST]\n  or   rsync [OPTION]... rsync://[USER@]HOST[:PORT]/SRC [DEST]\nThe ':' usages connect via remote shell, while '::' & 'rsync://' usages connect\nto an rsync daemon, and require SRC or DEST to start with a module name.\n\nOptions\n--verbose, -v            increase verbosity\n--info=FLAGS             fine-grained informational verbosity\n--debug=FLAGS            fine-grained debug verbosity\n--stderr=e|a|c           change stderr output mode (default: errors)\n--quiet, -q              suppress non-error messages\n--no-motd                suppress daemon-mode MOTD\n--checksum, -c           skip based on checksum, not mod-time & size\n--archive, -a            archive mode is -rlptgoD (no -A,-X,-U,-N,-H)\n--no-OPTION              turn off an implied OPTION (e.g. --no-D)\n--recursive, -r          recurse into directories\n--relative, -R           use relative path names\n--no-implied-dirs        don't send implied dirs with --relative\n--backup, -b             make backups (see --suffix & --backup-dir)\n--backup-dir=DIR         make backups into hierarchy based in DIR\n--suffix=SUFFIX          backup suffix (default ~ w/o --backup-dir)\n--update, -u             skip files that are newer on the receiver\n--inplace                update destination files in-place\n--append                 append data onto shorter files\n--append-verify          --append w/old data in file checksum\n--dirs, -d               transfer directories without recursing\n--old-dirs, --old-d      works like --dirs when talking to old rsync\n--mkpath                 create destination's missing path components\n--links, -l              copy symlinks as symlinks\n--copy-links, -L         transform symlink into referent file/dir\n--copy-unsafe-links      only \"unsafe\" symlinks are transformed\n--safe-links             ignore symlinks that point outside the tree\n--munge-links            munge symlinks to make them safe & unusable\n--copy-dirlinks, -k      transform symlink to dir into referent dir\n--keep-dirlinks, -K      treat symlinked dir on receiver as dir\n--hard-links, -H         preserve hard links\n--perms, -p              preserve permissions\n--executability, -E      preserve executability\n--chmod=CHMOD            affect file and/or directory permissions\n--acls, -A               preserve ACLs (implies --perms)\n--xattrs, -X             preserve extended attributes\n--owner, -o              preserve owner (super-user only)\n--group, -g              preserve group\n--devices                preserve device files (super-user only)\n--copy-devices           copy device contents as a regular file\n--write-devices          write to devices as files (implies --inplace)\n--specials               preserve special files\n-D                       same as --devices --specials\n--times, -t              preserve modification times\n--atimes, -U            ",
+   "help": "rsync  version 3.5.0  protocol version 32\nCopyright (C) 1996-2026 by Andrew Tridgell, Wayne Davison, and others.\nWeb site: https://rsync.samba.org/\nCapabilities:\n    64-bit files, 64-bit inums, 64-bit timestamps, 64-bit long ints,\n    socketpairs, symlinks, symtimes, hardlinks, hardlink-specials,\n    hardlink-symlinks, IPv6, atimes, batchfiles, inplace, append, ACLs,\n    ACL-at, xattrs, optional secluded-args, iconv, prealloc, stop-at,\n    no crtimes\nOptimizations:\n    SIMD-roll, no asm-roll, openssl-crypto, no asm-MD5\nChecksum list:\n    xxh128 xxh3 xxh64 (xxhash) md5 md4 sha1 none\nCompress list:\n    zstd lz4 zlibx zlib none\nDaemon auth list:\n    sha512 sha256 sha1 md5 md4\n\nrsync comes with ABSOLUTELY NO WARRANTY.  This is free software, and you\nare welcome to redistribute it under certain conditions.  See the GNU\nGeneral Public Licence for details.\n\nrsync is a file transfer program capable of efficient remote update\nvia a fast differencing algorithm.\n\nUsage: rsync [OPTION]... SRC [SRC]... DEST\n  or   rsync [OPTION]... SRC [SRC]... [USER@]HOST:DEST\n  or   rsync [OPTION]... SRC [SRC]... [USER@]HOST::DEST\n  or   rsync [OPTION]... SRC [SRC]... rsync://[USER@]HOST[:PORT]/DEST\n  or   rsync [OPTION]... [USER@]HOST:SRC [DEST]\n  or   rsync [OPTION]... [USER@]HOST::SRC [DEST]\n  or   rsync [OPTION]... rsync://[USER@]HOST[:PORT]/SRC [DEST]\nThe ':' usages connect via remote shell, while '::' & 'rsync://' usages connect\nto an rsync daemon, and require SRC or DEST to start with a module name.\n\nOptions\n--verbose, -v            increase verbosity\n--info=FLAGS             fine-grained informational verbosity\n--debug=FLAGS            fine-grained debug verbosity\n--stderr=e|a|c           change stderr output mode (default: errors)\n--quiet, -q              suppress non-error messages\n--no-motd                suppress daemon-mode MOTD\n--checksum, -c           skip based on checksum, not mod-time & size\n--archive, -a            archive mode is -rlptgoD (no -A,-X,-U,-N,-H)\n--no-OPTION              turn off an implied OPTION (e.g. --no-D)\n--recursive, -r          recurse into directories\n--inc-recursive, --i-r   enable incremental recursion\n--no-inc-recursive       disable incremental recursion\n--no-i-r                 same as --no-inc-recursive\n--relative, -R           use relative path names\n--no-implied-dirs        don't send implied directories with --relative\n--backup, -b             make backups (see --suffix & --backup-dir)\n--backup-dir=DIR         make backups into hierarchy based in DIR\n--suffix=SUFFIX          backup suffix (default ~ w/o --backup-dir)\n--update, -u             skip files that are newer on the receiver\n--inplace                update destination files in-place\n--append                 append data onto shorter files\n--append-verify          --append w/old data in file checksum\n--dirs, -d               transfer directories without recursing\n--old-dirs               works like --dirs when talking to old rsync\n--old-d                  same as --old-dirs\n--mkpath                 create destination's missing path components\n--links, -l              copy symlinks as symlinks\n--copy-links, -L         transform symlink into referent file/directory\n--copy-unsafe-links      only \"unsafe\" symlinks are transformed\n--safe-links             ignore symlinks that point outside the tree\n--insecure-links         follow attacker-owned symlinks in operator paths\n--confine-root=DIR       refuse operator paths resolving outside DIR\n--munge-links            munge symlinks to make them safe & unusable\n--copy-dirlinks, -k      transform symlink to directory into referent directory\n--keep-dirlinks, -K      treat symlinked directory on receiver as directory\n--hard-links, -H         preserve hard links\n--perms, -p              preserve permissions\n--executability, -E      preserve executability\n--chmod=CHMOD            affect file and/or directory permissions\n--acls, -A               preserve ACLs (implies --perms)\n--xattrs, -X             preserve extended attributes\n--owner, -o              preserve owner (super-user only)\n--group, -g           ",
    "lines": [
+    [
+     "--munge-links (and",
+     "make sure you use the right local or remote option)."
+    ],
+    [
+     "--backup-dir,",
+     "--temp-dir, --partial-dir, the --link-dest/--compare-dest/--copy-dest basis"
+    ],
+    [
+     "--write-batch/--read-batch,",
+     "and the destination itself -- are resolved so that a symlink"
+    ],
     [
      "--rsh=COMMAND",
      "option."
@@ -14611,12 +14714,24 @@
      "recurse into directories"
     ],
     [
+     "--inc-recursive, --i-r",
+     "enable incremental recursion"
+    ],
+    [
+     "--no-inc-recursive",
+     "disable incremental recursion"
+    ],
+    [
+     "--no-i-r",
+     "same as --no-inc-recursive"
+    ],
+    [
      "--relative, -R",
      "use relative path names"
     ],
     [
      "--no-implied-dirs",
-     "don't send implied dirs with --relative"
+     "don't send implied directories with --relative"
     ],
     [
      "--backup, -b",
@@ -14651,8 +14766,12 @@
      "transfer directories without recursing"
     ],
     [
-     "--old-dirs, --old-d",
+     "--old-dirs",
      "works like --dirs when talking to old rsync"
+    ],
+    [
+     "--old-d",
+     "same as --old-dirs"
     ],
     [
      "--mkpath",
@@ -14664,7 +14783,7 @@
     ],
     [
      "--copy-links, -L",
-     "transform symlink into referent file/dir"
+     "transform symlink into referent file/directory"
     ],
     [
      "--copy-unsafe-links",
@@ -14675,16 +14794,24 @@
      "ignore symlinks that point outside the tree"
     ],
     [
+     "--insecure-links",
+     "follow attacker-owned symlinks in operator paths"
+    ],
+    [
+     "--confine-root=DIR",
+     "refuse operator paths resolving outside DIR"
+    ],
+    [
      "--munge-links",
      "munge symlinks to make them safe & unusable"
     ],
     [
      "--copy-dirlinks, -k",
-     "transform symlink to dir into referent dir"
+     "transform symlink to directory into referent directory"
     ],
     [
      "--keep-dirlinks, -K",
-     "treat symlinked dir on receiver as dir"
+     "treat symlinked directory on receiver as directory"
     ],
     [
      "--hard-links, -H",
@@ -14735,6 +14862,10 @@
      "preserve special files"
     ],
     [
+     "--drop-D",
+     "receiver refuses to create devices/specials"
+    ],
+    [
      "-D",
      "same as --devices --specials"
     ],
@@ -14765,52 +14896,13 @@
     [
      "--super",
      "receiver attempts super-user activities"
-    ],
-    [
-     "--fake-super",
-     "store/recover privileged attrs using xattrs"
-    ],
-    [
-     "--sparse, -S",
-     "turn sequences of nulls into sparse blocks"
-    ],
-    [
-     "--preallocate",
-     "allocate dest files before writing them"
-    ],
-    [
-     "--dry-run, -n",
-     "perform a trial run with no changes made"
-    ],
-    [
-     "--whole-file, -W",
-     "copy files whole (w/o delta-xfer algorithm)"
-    ],
-    [
-     "--checksum-choice=STR",
-     "choose the checksum algorithm (aka --cc)"
-    ],
-    [
-     "--one-file-system, -x",
-     "don't cross filesystem boundaries"
-    ],
-    [
-     "--block-size=SIZE, -B",
-     "force a fixed checksum block-size"
-    ],
-    [
-     "--rsh=COMMAND, -e",
-     "specify the remote shell to use"
-    ],
-    [
-     "--rsync-path=PROGRAM",
-     "specify the rsync to run on remote machine"
     ]
    ],
    "long": [
     "--8-bit-output",
     "--acls",
     "--address",
+    "--ap",
     "--append",
     "--append-verify",
     "--archive",
@@ -14826,18 +14918,21 @@
     "--checksum-seed",
     "--chmod",
     "--chown",
+    "--com",
     "--compare-dest",
     "--compress",
     "--compress-choice",
     "--compress-level",
+    "--compress-threads",
     "--config",
+    "--confine-root",
     "--contimeout",
     "--copy-as",
     "--copy-dest",
     "--copy-devices",
     "--copy-dirlinks",
     "--copy-links",
-    "--copy-unsafe",
+    "--copy-un",
     "--copy-unsafe-links",
     "--crtimes",
     "--cvs-exclude",
@@ -14856,6 +14951,7 @@
     "--devices",
     "--dirs",
     "--dparam",
+    "--drop-D",
     "--dry-run",
     "--early-input",
     "--exclude",
@@ -14871,13 +14967,12 @@
     "--fuzzy",
     "--group",
     "--groupmap",
-    "--hard",
     "--hard-links",
     "--help",
     "--human-readable",
     "--i-r",
     "--iconv",
-    "--ignore",
+    "--ig",
     "--ignore-errors",
     "--ignore-ex",
     "--ignore-existing",
@@ -14885,12 +14980,13 @@
     "--ignore-non-existing",
     "--ignore-times",
     "--in",
-    "--inc",
+    "--inc-recur",
     "--inc-recursive",
     "--include",
     "--include-from",
     "--info",
     "--inplace",
+    "--insecure-links",
     "--ipv4",
     "--ipv6",
     "--itemize-changes",
@@ -14898,10 +14994,8 @@
     "--link-dest",
     "--links",
     "--list-only",
-    "--log",
     "--log-file",
     "--log-file-format",
-    "--max",
     "--max-alloc",
     "--max-delete",
     "--max-size",
@@ -14941,7 +15035,7 @@
     "--no-secluded-args",
     "--no-super",
     "--no-whole-file",
-    "--numeric",
+    "--nu",
     "--numeric-ids",
     "--old-args",
     "--old-compress",
@@ -14960,6 +15054,7 @@
     "--par",
     "--partial",
     "--partial-dir",
+    "--pass",
     "--password-file",
     "--perms",
     "--port",
@@ -14972,7 +15067,6 @@
     "--re",
     "--read-batch",
     "--recursive",
-    "--rela",
     "--relative",
     "--remote-option",
     "--remove-source-files",
@@ -14980,6 +15074,7 @@
     "--rsync-path",
     "--safe-links",
     "--secluded-args",
+    "--server",
     "--size-only",
     "--skip-compress",
     "--sockopts",
@@ -14992,12 +15087,12 @@
     "--suffix",
     "--super",
     "--temp-dir",
-    "--time-limit",
     "--timeout",
     "--times",
     "--trust-sender",
     "--update",
     "--usermap",
+    "--ver",
     "--verbose",
     "--version",
     "--whole-file",
@@ -15005,7 +15100,8 @@
     "--write-devices",
     "--xattrs",
     "--zc",
-    "--zl"
+    "--zl",
+    "--zt"
    ],
    "man": true,
    "path": "/usr/bin/rsync",
@@ -15015,7 +15111,7 @@
     "rsync [OPTION...] SRC... [DEST]",
     "Access via remote shell:"
    ],
-   "what": "a fast, versatile, remote (and local) file-copying tool",
+   "what": "a fast, versatile, local/remote file-copying tool",
    "words": [
     "-A",
     "-B",
@@ -15030,9 +15126,10 @@
     "-L",
     "-M",
     "-M--copy-as",
+    "-M--drop-D",
     "-M--fake-super",
     "-M--log-file",
-    "-M--munge",
+    "-M--munge-links",
     "-M--no-x",
     "-M--super",
     "-N",
@@ -15057,7 +15154,6 @@
     "-avA",
     "-avR",
     "-avZ",
-    "-avm",
     "-avv",
     "-avvv",
     "-avz",
@@ -15081,7 +15177,6 @@
     "-r",
     "-rlptgD",
     "-rlptgoD",
-    "-rw-rw-r",
     "-s",
     "-sr",
     "-t",
@@ -17121,17 +17216,49 @@
   "systemctl": {
    "commands": {
     "prefix": false,
+    "seen": [
+     "may",
+     "bluetooth.service",
+     "add-requires",
+     "as",
+     "will",
+     "command",
+     "itself",
+     "pretty",
+     "unix",
+     "us",
+     "utc",
+     "use",
+     "uses",
+     "systemd"
+    ],
+    "v": 2,
     "words": [
      "list-units",
      "list-automounts",
      "list-paths",
      "list-sockets",
      "list-timers",
+     "is-active",
      "is-failed",
      "status",
      "show",
+     "cat",
+     "help",
      "list-dependencies",
+     "start",
+     "stop",
+     "reload",
+     "restart",
+     "try-restart",
+     "reload-or-restart",
+     "try-reload-or-restart",
      "isolate",
+     "kill",
+     "clean",
+     "freeze",
+     "thaw",
+     "set-property",
      "bind",
      "mount-image",
      "service-log-level",
@@ -17139,13 +17266,27 @@
      "reset-failed",
      "whoami",
      "list-unit-files",
+     "enable",
+     "disable",
+     "reenable",
+     "preset",
      "preset-all",
+     "is-enabled",
+     "mask",
+     "unmask",
+     "link",
+     "revert",
+     "add-wants",
+     "edit",
      "get-default",
      "set-default",
      "list-machines",
      "list-jobs",
      "cancel",
      "show-environment",
+     "set-environment",
+     "unset-environment",
+     "import-environment",
      "daemon-reload",
      "daemon-reexec",
      "log-level",
@@ -17166,10 +17307,7 @@
      "suspend",
      "hibernate",
      "hybrid-sleep",
-     "suspend-then-hibernate",
-     "and",
-     "are",
-     "or"
+     "suspend-then-hibernate"
     ]
    },
    "exists": true,
@@ -18140,6 +18278,10 @@
     "-i",
     "-p"
    ]
+  },
+  "time": {
+   "exists": false,
+   "path": ""
   },
   "timedatectl": {
    "exists": true,
@@ -19254,6 +19396,10 @@
     "-x",
     "-xdev"
    ]
+  },
+  "ulimit": {
+   "exists": false,
+   "path": ""
   },
   "uname": {
    "exists": true,
