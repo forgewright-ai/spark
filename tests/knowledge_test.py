@@ -33,6 +33,12 @@ ok and never stale), a build with no deadline not capped at 16, a moved
 spark tree keeping every program entry while a changed reader reads
 again, a spark verb the deadline cut read by the next refresh, and the
 app dirs remembered so two XDG_DATA_DIRS give one fingerprint.
+Since v1.87: a manual's commands read whole, on two pages shaped by hand
+(systemctl's `start PATTERN...`, zypper's `search (se)`): no word of
+prose and no bullet in a list, a list that cannot be trusted whole
+closing nothing (a hyphen-cut word, a word of prose), `seen` beside the
+list, the stored shape's own version (an older one reads as no list),
+and the judge refusing no right command on entries built from them.
 """
 import fcntl
 import gzip
@@ -357,6 +363,242 @@ IP - COMMAND SYNTAX
        The names of all objects may be written in full or abbreviated form,
        for example address can be abbreviated as addr or just a.
 """
+# Two pages shaped by hand in their real layout (v1.87). systemctl: an
+# argument list that ends in an ellipsis, two commands on one tag, and
+# lone words of prose above indented examples. zypper: an alias in
+# parentheses, ASCII bullets, and a command only its EXAMPLES show.
+SYSTEMCTL = """NAME
+       systemctl - Control the systemd system and service manager
+
+SYNOPSIS
+       systemctl [OPTIONS...] COMMAND [UNIT...]
+
+DESCRIPTION
+       systemctl may be used to introspect and control the state of the
+       "systemd" system and service manager.
+
+COMMANDS
+       The following commands are understood:
+
+   Unit Commands (Introspection and Modification)
+       list-units [PATTERN...]
+           List units that systemd currently has in memory.
+
+       is-active PATTERN...
+           Check whether any of the specified units are active (i.e.
+           running).
+
+       status [PATTERN...|PID...]]
+           Show runtime status information about the whole system or about
+           one or more units.
+
+       start PATTERN...
+           Start (activate) one or more units specified on the command line.
+
+       stop PATTERN...
+           Stop (deactivate) one or more units specified on the command line.
+
+       restart PATTERN...
+           Stop and then start one or more units specified on the command
+           line.
+
+       kill PATTERN...
+           Send a UNIX process signal to one or more processes of the unit.
+
+   Unit File Commands
+       list-unit-files [PATTERN...]
+           List unit files installed on the system.
+
+       enable UNIT..., enable PATH...
+           Enable one or more units or unit instances.
+
+       disable UNIT...
+           Disables one or more units.
+
+       add-wants TARGET UNIT..., add-requires TARGET UNIT...
+           Adds "Wants=" or "Requires=" dependencies, respectively, to the
+           specified TARGET for one or more units.
+
+   Manager State Commands
+       daemon-reload
+           Reload the systemd manager configuration.
+
+   System Commands
+       poweroff
+           Shut down and power-off the system.
+
+       reboot
+           Shut down and reboot the system.
+
+   Parameter Syntax
+       Unit commands listed above take either a single unit name (designated
+       as UNIT), or multiple unit specifications (designated as PATTERN...).
+       If the suffix is not specified, systemctl will append a suitable
+       suffix. For example,
+
+           # systemctl start sshd
+
+       and
+
+           # systemctl start sshd.service
+
+       are equivalent, as are
+
+           # systemctl isolate default
+
+       and
+
+           # systemctl isolate default.target
+
+       The following are equivalent to each other:
+
+           # systemctl status /dev/sda
+           # systemctl status /home
+
+       or
+
+           # systemctl enable foo.service
+
+OPTIONS
+       -t, --type=
+           The argument is a comma-separated list of unit types such as
+           service and socket.
+
+       --now
+           When used with enable, the units will also be started.
+"""
+ZYPPER = """NAME
+       zypper - Command-line interface to ZYpp system management library
+       (libzypp)
+
+SYNOPSIS
+       zypper [--global-opts] command [--command-opts] [command-arguments]
+
+       zypper subcommand [--command-opts] [command-arguments]
+
+       zypper help command
+
+DESCRIPTION
+       zypper is a command-line interface to ZYpp system management library
+       (libzypp). It can be used to install, update, remove software, manage
+       repositories, perform various queries, and more.
+
+COMMANDS
+       zypper provides a number of commands. Each command accepts the options
+       listed in the GLOBAL OPTIONS section.
+
+   General Commands
+       help [command]
+           Displays the help text.
+
+       shell (sh)
+           Starts a shell for entering multiple commands in one session.
+
+   Package Management Commands
+       The package commands look a name up in this order:
+
+       o   Repository: the enabled repositories, by their priority.
+
+       o   System: the packages already installed.
+
+       info (if) [options] name...
+           Displays full information about the specified packages.
+
+       install (in) [options] name|capability|rpm_file_uri...
+           Install or update packages.
+
+       remove (rm) [options] name|capability...
+           Remove (uninstall) packages.
+
+       verify (ve) [options]
+           Check whether dependencies of installed packages are satisfied.
+
+   Update Management Commands
+       list-updates (lu) [options]
+           List available updates.
+
+       update (up) [options] [packagename]...
+           Update installed packages with newer versions, where possible.
+
+       dist-upgrade (dup) [options]
+           Perform a distribution upgrade.
+
+   Query Commands
+       search (se) [options] [querystring|capability]...
+           Search for packages matching any of the given search strings.
+
+   Repository Management
+       repos (lr) [options] [alias|name|#|URI]...
+           List all defined repositories.
+
+       refresh (ref) [alias|name|#|URI]...
+           Refresh repositories specified by their alias, number or URI.
+
+       clean (cc) [options] [alias|name|#|URI]...
+           Clean the local caches for all known or specified repositories.
+
+   Other Commands
+       ps
+           After each upgrade or removal of packages, there may be running
+           processes on the system which use files deleted by the upgrade.
+
+   Subcommands
+       subcommand
+           Lists available subcommands in zypper_execdir and from elsewhere
+           on your $PATH.
+
+EXAMPLES
+       zypper search --installed-only pdf
+           Search the installed packages for pdf.
+
+       zypper lp
+           List the needed patches.
+"""
+# apt: the synopsis braces list its commands, and the item tags of its
+# DESCRIPTION name two more (T2 takes them; T3, off, would open the list)
+APT = """NAME
+       apt - command-line interface
+
+SYNOPSIS
+       apt [-h] [-o=config_string] [-t=target_release]
+           {list | search | show | update | install pkg... | remove pkg... |
+           upgrade | full-upgrade | edit-sources | {-v | --version} |
+           {-h | --help}}
+
+DESCRIPTION
+       apt provides a high-level commandline interface for the package
+       management system.
+
+       update (apt-get(8))
+           update is used to download package information from all
+           configured sources.
+
+       install, reinstall, remove, purge (apt-get(8))
+           Performs the requested action on one or more packages.
+
+       autoremove (apt-get(8))
+           autoremove is used to remove packages that were automatically
+           installed.
+
+       list
+           list is somewhat similar to dpkg-query --list.
+"""
+# a tag above a blank line, its words under it: a list for the old reader,
+# none for this one (every tag alone on its line) -- no list, no finding
+BLANK_UNDER = """SYNOPSIS
+     wtool [command]
+
+COMMANDS
+     The following commands are available:
+
+     info
+
+           Displays all of the content.
+
+     dump
+
+           Dumps the log buffer.
+"""
 
 
 def test_commands():
@@ -385,6 +627,145 @@ def test_commands():
                              "tool", ["sub"])
     check("command_set: item tags (H-S(1), a | chain) and the H-S pages", got and got.words == (
         "log", "enable", "disable", "sub"), got)
+    # v1.87: a manual's commands read whole
+    sc = intake.command_set(SYSTEMCTL, "systemctl")
+    shown = set(sc.words) | set(sc.seen) if sc else set()
+    check("systemctl: an argument list that ends in an ellipsis is a tag (start PATTERN...), in the manual's order",
+          sc and sc.words == ("list-units", "is-active", "status", "start", "stop", "restart", "kill",
+                              "list-unit-files", "enable", "disable", "add-wants", "daemon-reload", "poweroff",
+                              "reboot") and not sc.prefix, sc)
+    check("systemctl: a lone word of prose above an indented example is no command, in the list or in seen",
+          sc and not shown & {"and", "are", "or"}, sc)
+    check("systemctl: seen holds the second command of a tag (add-requires) and the word an example writes "
+          "after the name (isolate)", sc and {"add-requires", "isolate"} <= set(sc.seen)
+          and not set(sc.seen) & set(sc.words), sc and sc.seen)
+    zc = intake.command_set(ZYPPER, "zypper")
+    shown = set(zc.words) | set(zc.seen) if zc else set()
+    check("zypper: the alias in parentheses is a command too, beside its command (search se, install in)",
+          zc and zc.words == ("help", "shell", "sh", "info", "if", "install", "in", "remove", "rm", "verify", "ve",
+                              "list-updates", "lu", "update", "up", "dist-upgrade", "dup", "search", "se", "repos",
+                              "lr", "refresh", "ref", "clean", "cc", "ps", "subcommand"), zc)
+    check("zypper: an ASCII bullet (o   Repository: ...) is no command, in the list or in seen; its own name "
+          "is not one either", zc and not shown & {"o", "zypper"}, zc)
+    check("zypper: seen holds a command only the EXAMPLES show (zypper lp)", zc and "lp" in zc.seen, zc and zc.seen)
+    for tag, want in (("search (se) [options] [querystring|capability]...", ["search", "se"]),
+                      ("shell (sh)", ["shell", "sh"]), ("list, ls [options]", ["list", "ls"]),
+                      ("update (apt-get(8))", ["update"]), ("status [PATTERN...|PID...]]", ["status"])):
+        got = intake._tag_words(tag, "tool")
+        check("_tag_words: %s -> %s" % (tag, " ".join(want)), got == want, got)
+    # T1: a list that cannot be trusted whole closes nothing
+    got = intake.command_set(IP.replace("neighbor |\n               route", "nex-\n               thop | route"), "ip")
+    check("command_set: none for a list a hyphenated line break cut (ip's nex-)", got == (), got)
+    got = intake.command_set("SYNOPSIS\n     tool command [args]\n\nCOMMANDS\n     up\n          Start it.\n\n"
+                             "     down\n          Stop it.\n\n     and\n          # tool up now\n", "tool")
+    check("command_set: none for a list that holds a word of prose (and)", got == (), got)
+    check("command_set: the prose words are not the index's stop words -- zypper's in, if and as are commands",
+          {"and", "are", "or"} <= intake.PROSE_WORDS and not intake.PROSE_WORDS & {"in", "if", "as", "up"}
+          and {"in", "if", "as"} <= intake.STOPWORDS, sorted(intake.PROSE_WORDS))
+    saved = intake.COMMANDS_MAX
+    intake.COMMANDS_MAX = 5
+    try:
+        got = intake.command_set(SYSTEMCTL, "systemctl")
+    finally:
+        intake.COMMANDS_MAX = saved
+    check("command_set: none for a list longer than COMMANDS_MAX -- never cut short", got == (), got)
+    got = intake.command_set(BLANK_UNDER, "wtool")
+    check("command_set: none where every tag stands alone above a blank line (no list, so no finding)", got == (), got)
+    # T2 on the apt case, and T3 written and off
+    ac = intake.command_set(APT, "apt")
+    check("apt: the list is its synopsis braces; seen holds the commands its item tags add (purge, autoremove)",
+          ac and ac.words == ("list", "search", "show", "update", "install", "remove", "upgrade", "full-upgrade",
+                              "edit-sources") and {"reinstall", "purge", "autoremove"} <= set(ac.seen), ac)
+    check("T3 is written and off: apt's tags contradict its list, and the list still stands",
+          intake.TAGS_OPEN_A_LIST is False and ac
+          and intake.tags_contradict(intake.sections(APT), "apt", ac.words)
+          and not intake.tags_contradict(intake.sections(SYSTEMCTL), "systemctl", sc.words)
+          and not intake.tags_contradict(intake.sections(ZYPPER), "zypper", zc.words), ac)
+    intake.TAGS_OPEN_A_LIST = True
+    try:
+        got = (intake.command_set(APT, "apt"), bool(intake.command_set(SYSTEMCTL, "systemctl")))
+    finally:
+        intake.TAGS_OPEN_A_LIST = False
+    check("T3 on: a list its page's own tags contradict is no list; one they agree with stays",
+          got == ((), True), got)
+    # the stored shape: a version of its own, and any other reads as no list
+    v2 = {"words": ["up", "down"], "prefix": True, "seen": ["once"], "v": intake.COMMANDS_V}
+    check("commands_of: COMMANDS_V is 2 -- {words, prefix, seen, v}", intake.COMMANDS_V == 2
+          and intake.commands_of(v2) == intake.CommandSet(("up", "down"), True, ("once",)), intake.commands_of(v2))
+    check("commands_of: a list an older reader stored (no v, v 1, a plain list) reads as no list",
+          intake.commands_of({"words": ["up", "down"], "prefix": False}) == ()
+          and intake.commands_of(dict(v2, v=1)) == () and intake.commands_of(["up", "down"]) == ()
+          and intake.commands_of(None) == () and intake.commands_of(dict(v2, words=[])) == ())
+    check("CommandSet: seen is its third field, () by default",
+          intake.CommandSet(("up",), False) == intake.CommandSet(("up",), False, ())
+          and intake.CommandSet._fields == ("words", "prefix", "seen"))
+    held = intake._Clean()
+    got = held.words(intake.CommandSet(("up", "down"), False, ("once", GH)))
+    check("_Clean.words: seen rides through, a word that looks like a secret dropped and counted",
+          got == intake.CommandSet(("up", "down"), False, ("once",)) and held.held == 1, (got, held.held))
+
+
+def test_judged_commands():
+    """v1.87: the judge on entries built from the shaped pages -- each
+    written by the store's own writer and read back by its own reader. A
+    right command is never refused; a wrong word still is where the list
+    is trusted; a list that is not trusted, or that an older reader
+    stored, says nothing."""
+    from spark import judge
+    root = os.path.join(T, "store-judged")
+    intake._open_store(root)
+    b = intake._Build(root, None)
+    cut = IP.replace("neighbor |\n               route", "nex-\n               thop | route")
+    for name, text in (("systemctl", SYSTEMCTL), ("zypper", ZYPPER), ("apt", APT), ("ip", cut)):
+        clean = intake._Clean()
+        what, synopsis, lines, opts = clean.parsed(*intake.read_page(text))
+        b._save(name, ["test"], "program", "man", what, synopsis, opts, lines, "local", [], clean.held,
+                commands=clean.words(intake.command_set(text, name)))
+    # a store an older reader built: the same entry, its commands in the
+    # old shape (no seen, no v) and cut short the way the old reader cut it
+    old = json.load(open(os.path.join(root, "entries", intake.entry_file("systemctl")), encoding="utf-8"))
+    raw = dict(old["commands"])
+    old.update(name="oldctl", commands={"words": ["list-units", "status", "and", "are", "or"], "prefix": False})
+    write(os.path.join(root, "entries", intake.entry_file("oldctl")), json.dumps(old), 0o600)
+
+    class There(intake.LocalStore):
+        def has_program(self, head):                # this store speaks for its machine: no PATH is asked
+            return True
+    s = There(root)
+    check("store: an entry's commands are kept as {words, prefix, seen, v}, v COMMANDS_V",
+          sorted(raw) == ["prefix", "seen", "v", "words"] and raw["v"] == intake.COMMANDS_V == 2
+          and "restart" in raw["words"] and "isolate" in raw["seen"], raw)
+    e = s.entry("systemctl")
+    check("store: the reader gives the CommandSet back, seen with it",
+          e and e.commands == intake.command_set(SYSTEMCTL, "systemctl") and "add-requires" in e.commands.seen,
+          e and e.commands)
+    check("store: a list in an older shape reads as no list; one T1 refused was never stored",
+          s.entry("oldctl") is not None and s.entry("oldctl").commands == ()
+          and s.entry("ip") is not None and s.entry("ip").commands == (),
+          (s.entry("oldctl"), s.entry("ip")))
+    right = ("systemctl restart sshd", "systemctl start sshd.service", "systemctl stop sshd",
+             "systemctl enable --now sshd", "systemctl disable sshd", "systemctl is-active sshd",
+             "systemctl add-requires multi-user.target sshd.service", "systemctl isolate default.target",
+             "zypper search --installed-only pdf", "zypper se pdf", "zypper remove pdf", "zypper rm pdf",
+             "zypper clean", "zypper in vim", "zypper up", "zypper lr", "zypper info vim", "zypper lp",
+             "apt purge vim", "apt autoremove", "apt install vim",
+             "ip nexthop show", "ip frobnicate", "oldctl restart sshd", "oldctl frobnicate sshd")
+    wrong = {"systemctl frobnicate sshd": [("command", "systemctl", "frobnicate")],
+             "systemctl and sshd": [("command", "systemctl", "and")],
+             "zypper frobnicate pdf": [("command", "zypper", "frobnicate")],
+             "zypper o": [("command", "zypper", "o")],
+             "apt frobnicate vim": [("command", "apt", "frobnicate")]}
+    judge._ENTRIES.clear()
+    try:
+        got = {c: [tuple(f) for f in judge.verdict(c, s).findings if f.kind == "command"]
+               for c in right + tuple(wrong)}
+    finally:
+        judge._ENTRIES.clear()
+    bad = {c: f for c, f in got.items() if c in right and f}
+    check("judge: no command finding on a right command -- one the list holds, an alias, a word only seen, "
+          "a list not trusted (ip), a list an older reader stored (oldctl)", not bad, bad)
+    check("judge: a word the manual never shows is still a command finding where the list is trusted",
+          {c: got[c] for c in wrong} == wrong, {c: got[c] for c in wrong})
 
 
 def test_owners():
@@ -505,6 +886,9 @@ def test_build():
         check("sv: its commands from its COMMANDS section, the subsection's too, the manual's order",
               sv and sv.commands and sv.commands.words == ("status", "up", "down", "1", "exit", "start", "force-stop")
               and not sv.commands.prefix, sv and sv.commands)
+        check("sv: seen holds no word of its list and no word its page never shows (enable)",
+              sv and sv.commands and not set(sv.commands.seen) & (set(sv.commands.words) | {"enable"}),
+              sv and sv.commands)
         ag = s.entry("apt-get")
         check("apt-get: its commands from its synopsis braces, never an option alternative",
               ag and ag.commands and ag.commands.words == ("update", "upgrade", "install", "remove", "purge", "source"),
@@ -830,6 +1214,14 @@ def test_spark_and_row():
     check("spark model: the models completion fills from models.env ride in its words too",
           m and names and set(names) <= set(m.options.words) and not any(n.endswith("-license") for n in names),
           m and m.options.words)
+    # a row's attribute keys are not models: the names are exactly the
+    # rows config reads from the same file (it tells the two apart)
+    from spark import config
+    rows = [r[0] for r in config.model_tables() if r[6] == "repo"]
+    check("tree_names: models.env's rows and nothing else -- no _GROUND, _LICENSE, _TESTED or _NOTE key as a model",
+          names == rows and not any(n.endswith(("-ground", "-license", "-tested", "-note")) for n in names)
+          and not any(w.endswith("-ground") for w in (m.options.words if m else ())),
+          sorted(set(names) ^ set(rows)))
     top = s.entry("spark")
     check("spark: the help itself is an entry", top and top.what.startswith("your own AI"), top)
     raw = "".join(open(os.path.join(T, "store-spark", "entries", f), encoding="utf-8").read()
@@ -1110,7 +1502,8 @@ def test_services():
 
 def main():
     fixture()
-    for t in (test_words, test_parsers, test_commands, test_owners, test_build, test_fingerprint, test_help_contained, test_waiting,
+    for t in (test_words, test_parsers, test_commands, test_judged_commands, test_owners, test_build, test_fingerprint,
+              test_help_contained, test_waiting,
               test_spark_cut, test_app_dirs, test_lock,
               test_missing_store, test_spark_and_row, test_real_contained, test_includes, test_owners_clean,
               test_seam_banner, test_services):

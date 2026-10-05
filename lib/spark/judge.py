@@ -345,13 +345,15 @@ def _command(head, args, entry, valued):
     """A command finding: the entry lists its program's commands and the
     command word -- the first positional word past the options -- is none
     of them (a prefix of one, when the manual says they may be
-    abbreviated). A word right after an option may be that option's
-    value, so a later word that is a command clears it. A word that is
-    not word-shaped (a path, a $VAR, a glob) is unknown, never wrong."""
+    abbreviated), nor a word its page shows the program taking anywhere
+    else (the list's `seen`: an item tag, the word after its name in an
+    example). A word right after an option may be that option's value, so
+    a later word that is a command clears it. A word that is not
+    word-shaped (a path, a $VAR, a glob) is unknown, never wrong."""
     cs = intake.commands_of(getattr(entry, "commands", None))
     if not cs:
         return []
-    names = frozenset(cs.words)
+    names = frozenset(cs.words) | frozenset(cs.seen)
     own = _aliases(head)
 
     def known(w):

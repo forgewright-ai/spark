@@ -99,9 +99,18 @@ Entry = namedtuple("Entry", "name kind source what synopsis options lines origin
 # the words a program takes as its first positional word, as its manual
 # lists them (sv status, systemctl restart, apt-get install), in the
 # manual's order; prefix: the manual says a command may be abbreviated
-# (ip a). The judge says nothing about the positional words of an entry
-# with none: unknown is not wrong.
-CommandSet = namedtuple("CommandSet", "words prefix")
+# (ip a); seen: the command-shaped words the page shows the program
+# taking that the list lacks (an item tag anywhere in it, the word after
+# the program's name in an example) -- the judge takes a word of either.
+# The judge says nothing about the positional words of an entry with
+# none: unknown is not wrong.
+CommandSet = namedtuple("CommandSet", "words prefix seen", defaults=((),))
+# the stored shape of an entry's `commands`: {"words", "prefix", "seen",
+# "v"}. 2: the list read whole (an ellipsis, an alias, the next line) and
+# `seen` beside it. A dict of any other version -- an older store's, an
+# older snapshot's -- reads as no list at all (commands_of), so a list an
+# older reader cut short closes nothing until the store is rebuilt.
+COMMANDS_V = 2
 
 KNOW_DIR = os.path.join(STATE_DIR, "knowledge")
 INDEX_FILE = "index.json"
@@ -568,6 +577,18 @@ def read_help(text):
 # first, in any of its forms, gives none, whatever its sections say: the
 # plain text cannot tell `defaults read` from `dnctl pathname`, and unknown
 # is not wrong.
+#
+# A list closes a program's commands only when it can be trusted whole,
+# because the judge refuses a word it lacks:
+#   T1  a list that holds a word of prose (PROSE_WORDS: a line of text read
+#       as a tag) or a word a line break cut (ip's `nex-`), or that
+#       COMMANDS_MAX cut short, closes nothing: no list.
+#   T2  `seen` rides beside the list: every command-shaped word an item tag
+#       names anywhere in the page, and every word the page writes right
+#       after the program's own name (`# systemctl start sshd.service`).
+#       The judge takes a word of either, so a list one tag short costs
+#       no finding.
+#   T3  (off, TAGS_OPEN_A_LIST) a list the page's own tags contradict.
 CMD_SLOT = re.compile(r"(?i)^<?(?:sub)?(?:command|cmd|operation|verb)s?>?\W*$")
 CMD_OPTIONS = re.compile(r"(?i)^(?:global[-_ ])?(?:options?|flags?|opts?)\W*$")
 CMD_SECTION = re.compile(r"\b(?:SUB)?COMMANDS?\b|\bOPERATIONS?\b|\bVERBS?\b")
@@ -578,7 +599,17 @@ CMD_WORD = re.compile(r"^[a-z0-9][a-z0-9._-]{0,39}$")
 CMD_ABBREV = re.compile(r"(?i)\babbreviated form|\b(?:may|can) be (?:\w+ ){0,3}abbreviated"
                         r"|\bunambiguous (?:prefix|abbreviation)")
 COMMANDS_MIN = 2             # fewer words than this is no list
-COMMANDS_MAX = 400
+COMMANDS_MAX = 400           # more than this is no list either: cut short, it would refuse the rest
+SEEN_MAX = 400               # the words `seen` keeps, in the page's order
+# T1's canary: the words that only join or assert in a sentence, which no
+# manual lists as a command. Not STOPWORDS: zypper's `in`, `if` and `as`
+# are commands (install, info, addservice).
+PROSE_WORDS = frozenset("and are but is nor or the was were".split())
+# T3 ships only once the six CI containers show which lists it opens:
+# apt's synopsis braces list 9 commands while its item tags also name
+# purge and autoremove. T2 already takes those two words; T3 would say
+# the whole list is not closed.
+TAGS_OPEN_A_LIST = False
 
 
 def _forms(body):
@@ -674,9 +705,14 @@ def _first_positional(items):
     return None, None
 
 
+_TAG_ALIAS = re.compile(r"^\(([a-z0-9][a-z0-9._-]{0,39})\)$")
+
+
 def _tag_words(tag, name):
     """The commands one item tag names: `status`, `bootstrap | bootout
-    domain-target`, `list, ls [options]`, `git-add(1)`."""
+    domain-target`, `list, ls [options]`, `git-add(1)`, `search (se)
+    [options]` -- a word in parentheses right after a command is its
+    other name, the one people type."""
     toks = tag.replace(",", " , ").replace("|", " | ").split()
     out, i = [], 0
     while i < len(toks):
@@ -686,23 +722,34 @@ def _tag_words(tag, name):
         if not CMD_WORD.match(w):
             break
         out.append(w)
-        if i + 1 < len(toks) and toks[i + 1] in ("|", ","):
-            i += 2
+        i += 1
+        alias = _TAG_ALIAS.match(toks[i]) if i < len(toks) else None
+        if alias:
+            out.append(alias.group(1))
+            i += 1
+        if i < len(toks) and toks[i] in ("|", ","):
+            i += 1
             continue
         break
     return out
 
 
-def section_commands(body, name):
-    """The commands a command section's item tags name. A tag is a line
-    whose words follow on the more indented lines under it, or past a gap
-    on the same line as a sentence or an argument list (never a line of
-    justified prose); a line opening with a capital is a title or prose.
-    Only the tags at the least indent any tag has count -- deeper ones are
-    a command's own words (brew analytics on). A section whose tags there
-    are mostly not words (gpg's --sign, pacman's -S, a /let) names no
-    commands."""
+def _tags(body, loose=False):
+    """[(indent, tag)]: a section's item tags, in its order. A tag is a
+    line whose words follow on the more indented line right under it, or
+    past a gap on the same line as a sentence or an argument list (never
+    a line of justified prose); a line opening with a capital is a title
+    or prose. Only an argument list past the gap may have its words under
+    a blank line: a line alone above one is prose (a lone `and` before an
+    indented example) -- unless `loose`, the reading `seen` takes, where
+    a word too many costs nothing. An ellipsis ends an argument list,
+    never a sentence (`start PATTERN...`). A lone `o` with words after it
+    is a bullet, the ASCII a page draws one with."""
     ind = lambda l: len(l) - len(l.lstrip())       # noqa: E731
+
+    def deeper(i):              # do words follow line i, more indented, a blank line between or not
+        below = next((body[j] for j in range(i + 1, len(body)) if body[j].strip()), "")
+        return bool(below) and ind(below) > ind(body[i])
     # the column the items' words start at, where a tag leaves room for
     # them on its own line (`up     If the service ...`): a tag one short
     # of it keeps a single space (`status Report ...`)
@@ -711,22 +758,32 @@ def section_commands(body, name):
     found = []
     for i, line in enumerate(body):
         s = line.strip()
-        if not s or not re.match(r"^[a-z0-9/+:@.-]", s):
+        if not s or not re.match(r"^[a-z0-9/+:@.-]", s) or re.match(r"^o\s", s):
             continue
         parts = re.split(r"\s{2,}|\t", s, maxsplit=1)
         if len(parts) == 1 and col and line[col - 1:col] == " " and re.match(r"[A-Z\"'`(]", line[col:col + 1]) \
                 and line[:col].strip() and " " not in line[:col].strip():
             parts = [line[:col].strip(), line[col:].strip()]
         tag, rest = parts[0], (parts[1] if len(parts) > 1 else "")
-        below = next((l for l in body[i + 1:] if l.strip()), "")
-        deeper = bool(below) and ind(below) > ind(line)
-        if rest and not re.match(r"^(?:[A-Z\"'`(]|- )", rest) and not (deeper and re.match(r"^[-\[<{|]", rest)):
+        if rest and not re.match(r"^(?:[A-Z\"'`(]|- )", rest) and not (re.match(r"^[-\[<{|]", rest) and deeper(i)):
             continue                                # a justified line of prose, not a tag and its words
-        if not rest and not deeper:
+        nxt = body[i + 1] if i + 1 < len(body) else ""
+        if not rest and not (nxt.strip() and ind(nxt) > ind(line)) and not (loose and deeper(i)):
+            continue                                # alone on its line, and nothing right under it
+        end = tag.replace("...", "").rstrip()
+        if not end or len(tag) > 72 or end[-1] in ".:;," or ". " in end:
             continue
-        if not tag or len(tag) > 72 or tag[-1] in ".:;," or ". " in tag:
-            continue
-        found.append((ind(line), [] if tag[0] in "/+:@.-" else _tag_words(tag, name)))
+        found.append((ind(line), tag))
+    return found
+
+
+def section_commands(body, name):
+    """The commands a command section's item tags name (_tags). Only the
+    tags at the least indent any tag has count -- deeper ones are a
+    command's own words (brew analytics on). A section whose tags there
+    are mostly not words (gpg's --sign, pacman's -S, a /let) names no
+    commands."""
+    found = [(n, [] if tag[0] in "/+:@.-" else _tag_words(tag, name)) for n, tag in _tags(body)]
     base = min((n for n, _w in found), default=0)
     top = [ws for n, ws in found if n == base]
     if sum(1 for ws in top if ws) * 2 < len(top):
@@ -734,9 +791,44 @@ def section_commands(body, name):
     return [w for ws in top for w in ws]
 
 
+def page_seen(secs, name):
+    """T2: every command-shaped word the page shows `name` taking, in the
+    page's order -- the words of every item tag in any section, at any
+    indent, read the loose way (_tags), each `, ` part of a tag on its own
+    (`add-wants TARGET UNIT..., add-requires TARGET UNIT...`), and the
+    word written right after the program's own name on a line (`#
+    systemctl start sshd.service`, `zypper search foo`). A word a line
+    break cut, a word of prose and the name itself are not ones."""
+    after = re.compile(r"(?<![\w.-])%s[ \t]+([a-z0-9][a-z0-9._-]*)" % re.escape(name))
+    out = []
+    for _head, body in secs:
+        for _n, tag in _tags(body, loose=True):
+            if tag[0] not in "/+:@.-":
+                for part in tag.split(","):
+                    out.extend(_tag_words(part.strip(), name))
+        for line in body:
+            out.extend(m.group(1).rstrip(".") for m in after.finditer(line))
+    return [w for w in dict.fromkeys(out)
+            if CMD_WORD.match(w) and not w.endswith("-") and w not in PROSE_WORDS and w != name]
+
+
+def tags_contradict(secs, name, words):
+    """T3 (off, TAGS_OPEN_A_LIST): does a section whose item tags are
+    this list's own commands -- COMMANDS_MIN of them or more -- name one
+    the list lacks? Then the page itself says the list is not whole
+    (apt's braces against its tags)."""
+    have = set(words)
+    for _head, body in secs:
+        tagged = section_commands(body, name)
+        if sum(1 for w in tagged if w in have) >= COMMANDS_MIN and any(w not in have for w in tagged):
+            return True
+    return False
+
+
 def command_set(text, name, extra=()):
     """The CommandSet a rendered page gives the program `name` (see
-    above), or () when its manual lists none."""
+    above), or () when its manual lists none -- or lists them in a way
+    that cannot be trusted whole (T1)."""
     secs = sections(text)
     syn = next((b for h, b in secs if h == "SYNOPSIS"), [])
     defs, slots, words = {}, [], []
@@ -766,11 +858,17 @@ def command_set(text, name, extra=()):
             other.append(slot)
     if words:
         words.extend(w for w in extra if CMD_WORD.match(w))
-    words = list(dict.fromkeys(words))[:COMMANDS_MAX]
+    words = list(dict.fromkeys(words))
     if len(words) < COMMANDS_MIN or any(s not in words for s in other):
         return ()
+    if len(words) > COMMANDS_MAX or any(w in PROSE_WORDS or w.endswith("-") for w in words):
+        return ()                                   # T1: not a list to trust whole
+    if TAGS_OPEN_A_LIST and tags_contradict(secs, name, words):
+        return ()                                   # T3
     said = "\n".join([" ".join(syn)] + [" ".join(b) for b in listed])
-    return CommandSet(tuple(words), CMD_ABBREV.search(said) is not None)
+    have = set(words)
+    seen = [w for w in page_seen(secs, name) if w not in have][:SEEN_MAX]
+    return CommandSet(tuple(words), CMD_ABBREV.search(said) is not None, tuple(seen))
 
 
 class _Clean:
@@ -812,16 +910,20 @@ class _Clean:
 
     def words(self, cmds):
         """A CommandSet with every word that looks like a secret dropped
-        and counted; () stays ()."""
+        and counted, in its list and in `seen`; () stays ()."""
         if not cmds:
             return ()
-        keep = []
-        for w in cmds.words:
-            if textmod.held_spans(w)[0]:
-                self.held += 1
-            else:
-                keep.append(w)
-        return CommandSet(tuple(keep), cmds.prefix) if keep else ()
+
+        def kept(ws):
+            keep = []
+            for w in ws:
+                if textmod.held_spans(w)[0]:
+                    self.held += 1
+                else:
+                    keep.append(w)
+            return tuple(keep)
+        words = kept(cmds.words)
+        return CommandSet(words, cmds.prefix, kept(cmds.seen)) if words else ()
 
 
 def _visible_name(s, n=80):
@@ -1801,17 +1903,23 @@ def spark_words():
     return subs, verbs
 
 
+# a models.env key that is a row's attribute, never a row: the rule
+# config's reader tells the two apart by (a knowledge test holds the two
+# equal -- this module imports no config)
+MODEL_SIDE_KEYS = ("_LICENSE", "_NOTE", "_TESTED", "_GROUND")
+
+
 def tree_names():
     """What completion.bash's helpers fill a slot with, read from the tree
     the same way they read it: {"_spark_model_names": models.env's
-    MODEL_X keys as x (the _LICENSE, _NOTE and _TESTED keys are not
+    MODEL_X keys as x (a row's attribute keys, MODEL_SIDE_KEYS, are not
     models)}. The repository's own only: a person's models are theirs."""
     try:
         with open(os.path.join(REPO, "models.env"), encoding="utf-8") as f:
             keys = re.findall(r"^MODEL_([A-Z0-9_]*)=", f.read(), re.M)
     except OSError:
         keys = []
-    models = [k.lower().replace("_", "-") for k in keys if not k.endswith(("_LICENSE", "_NOTE", "_TESTED"))]
+    models = [k.lower().replace("_", "-") for k in keys if not k.endswith(MODEL_SIDE_KEYS)]
     return {"_spark_model_names": list(dict.fromkeys(models))}
 
 
@@ -1946,18 +2054,20 @@ def _write(path, obj, sync=True):
 
 
 def commands_of(d):
-    """A CommandSet from an entry's stored `commands` ({words, prefix},
-    or a plain list of words), () when there is none."""
+    """A CommandSet from an entry's stored `commands` ({words, prefix,
+    seen, v}), () when there is none -- or when it is not COMMANDS_V's
+    shape: a list an older reader stored (no `v`, a plain list of words)
+    may be cut short, so it closes nothing until the store is rebuilt."""
     if isinstance(d, CommandSet):
         return d
-    if isinstance(d, dict):
-        words, prefix = d.get("words") or (), bool(d.get("prefix"))
-    elif isinstance(d, (list, tuple)) and all(isinstance(w, str) for w in d):
-        words, prefix = d, False
-    else:
+    if not isinstance(d, dict) or d.get("v") != COMMANDS_V:
         return ()
-    words = tuple(str(w) for w in words)
-    return CommandSet(words, prefix) if words else ()
+
+    def strs(key):
+        got = d.get(key)
+        return tuple(str(w) for w in got) if isinstance(got, (list, tuple)) else ()
+    words = strs("words")
+    return CommandSet(words, bool(d.get("prefix")), strs("seen")) if words else ()
 
 
 def _entry_from(d):
@@ -2511,7 +2621,8 @@ class _Build:
                                                      "words": list(opts.words)},
              "lines": list(lines), "origin": origin, "stamp": list(stamp), "held": held}
         if commands:
-            e["commands"] = {"words": list(commands.words), "prefix": bool(commands.prefix)}
+            e["commands"] = {"words": list(commands.words), "prefix": bool(commands.prefix),
+                             "seen": list(commands.seen), "v": COMMANDS_V}
         data = json.dumps(e)
         while len(data.encode("utf-8")) > ENTRY_MAX and (e["lines"] or e["options"]["words"]):
             if e["lines"]:
