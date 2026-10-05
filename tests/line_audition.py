@@ -410,14 +410,25 @@ def collect_tool(tool, path_env, man_extra=()):
     return entry
 
 
-def commands_text(tool, mans):
-    """{words, prefix}: the commands the tool's manual lists (sv status,
-    apt-get install), read by intake's own command_set -- the same words
-    a machine's store keeps -- or None."""
+def commands_text(tool, mans, render=True):
+    """{words, prefix, seen, v}: the commands the tool's manual lists (sv
+    status, apt-get install), read by intake's own command_set -- the
+    same words a machine's store keeps -- or None. The page is rendered
+    once more the way a store renders it (intake's own environment and
+    width), so a snapshot holds the list a machine holds; `mans[0]`, the
+    page as collect read it, is the fallback (and, with render False, the
+    only text read: the selftest's fixture page)."""
     if not mans or not (_IN and hasattr(_IN, "command_set")):
         return None
-    cs = _IN.command_set(mans[0], tool)
-    return {"words": list(cs.words), "prefix": bool(cs.prefix)} if cs else None
+    page = ""
+    man = shutil.which("man", path=_IN.abs_path())
+    if man and render:
+        rc, out = _IN.bounded([man, tool], "/", _IN._man_env(), _IN.MAN_TIMEOUT, _IN.MAN_TEXT_MAX)
+        page = _IN._scrub(out) if rc == 0 and len(out) > 200 else ""
+    cs = _IN.command_set(page or mans[0], tool)
+    if not cs:
+        return None
+    return {"words": list(cs.words), "prefix": bool(cs.prefix), "seen": list(cs.seen), "v": _IN.COMMANDS_V}
 
 
 def tools_for(data, os_name):
@@ -1115,8 +1126,13 @@ def tool_entry(name, t, os_name):
     # a snapshot collected before commands were kept has none: its 3
     # synopsis lines and 60 option lines are a list cut short, never a
     # list (the workflow collects them again)
-    if isinstance(t.get("commands"), dict) and t["commands"].get("words"):
-        d["commands"] = {"words": list(t["commands"]["words"]), "prefix": bool(t["commands"].get("prefix"))}
+    # one from before v1.87 has a list with no `v`: intake.commands_of
+    # reads it as none, since the older reader could cut a list short
+    c = t.get("commands")
+    if isinstance(c, dict) and c.get("words"):
+        d["commands"] = {"words": list(c["words"]), "prefix": bool(c.get("prefix"))}
+        if "v" in c:
+            d["commands"].update(seen=list(c.get("seen", ())), v=c["v"])
     return d
 
 
@@ -2226,15 +2242,21 @@ def cmd_selftest(_args):
     # the store's entry carries them; an older snapshot's entry has none
     sv_man = ("NAME\n       sv - control services\n\nSYNOPSIS\n       sv [-v] [-w sec] command services\n\n"
               "COMMANDS\n       status Report the status.\n\n       up     Start it.\n\n       down   Stop it.\n")
-    got = commands_text("sv", [sv_man])
-    check(got == {"words": ["status", "up", "down"], "prefix": False} if _IN else got is None,
-          "collect: a manual's command list is kept, read by intake's own command_set")
+    got = commands_text("sv", [sv_man], render=False)
+    check((got["words"] == ["status", "up", "down"] and got["prefix"] is False and got["v"] == _IN.COMMANDS_V
+           and isinstance(got["seen"], list)) if _IN else got is None,
+          "collect: a manual's command list is kept, read by intake's own command_set, in the store's own shape")
     cs = SnapshotStore(snap={"os": "fake", "tools": {
         "sv": {"exists": True, "man": True, "what": "x", "synopsis": ["sv command"], "lines": [], "commands": got},
         "du": dict(fake["tools"]["du"])}}, spark=False)
-    check(_IN is None or (cs.entry("sv").commands == {"words": ["status", "up", "down"], "prefix": False}
-                          and not cs.entry("du").commands),
-          "SnapshotStore: an entry carries the commands its snapshot kept, none when it kept none")
+    old = SnapshotStore(snap={"os": "fake", "tools": {
+        "sv": {"exists": True, "man": True, "what": "x", "synopsis": ["sv command"], "lines": [],
+               "commands": {"words": ["status", "up", "down"], "prefix": False}}}}, spark=False)
+    check(_IN is None or (cs.entry("sv").commands == got and _IN.commands_of(cs.entry("sv").commands).words
+                          == ("status", "up", "down") and not cs.entry("du").commands
+                          and _IN.commands_of(old.entry("sv").commands) == ()),
+          "SnapshotStore: an entry carries the commands its snapshot kept, none when it kept none, "
+          "and a list from before v1.87 closes nothing")
     tmp = tempfile.mkdtemp(prefix="line-audition-self-")
     try:
         saved = st.save(os.path.join(tmp, "store.json"))
