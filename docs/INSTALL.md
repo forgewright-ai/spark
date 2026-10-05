@@ -413,6 +413,12 @@ what real turns measured.
 The prompt line checks each command against the manuals on this
 machine. `SPARK_KNOWLEDGE=off` in `spark.env` turns that off.
 
+When the model gives no answer at the prompt, spark asks once more by
+itself. `spark stats` counts the questions that still got none. The
+`answers` row of `spark check` warns when 2 or more questions got none
+in 7 days, and they are 2 % of your questions or more. A larger model
+answers more often: `spark model list` shows them.
+
 ## 5. Other machines and your phone
 
 This machine can serve its model to other machines and to a browser,

@@ -143,14 +143,16 @@ number, never by taste.
 
 `tests/line_audition.py` is the prompt line's audition, not in the
 gate either. `tests/line_audition/cases.json` holds about 58 questions
-per OS (debian, arch, void, fedora, opensuse, macos) and 58 about spark
-itself: 34 to tune on and 24 held out. A case names what makes an
+per OS (debian, arch, void, fedora, opensuse, macos) and 82 about spark
+itself. Those are the first report's 34, 24 second phrasings to tune on
+(split `more`) and 24 held out. A case names what makes an
 answer right: the head commands, the must-nots and the danger flag.
 `not_head` names the commands that must not run, and `must` what the
 answer cannot leave out. A case with `then` is a `??` pair: the
 follow-up must keep the tool. The held-out cases (`split` is `held`)
 never change. Never reword one, and never tune the prompt on their
-answers. `run --split dev` leaves them out, `--split held` runs them
+answers. `selftest` fails when one is reworded, added or dropped.
+`run --split dev` leaves them out, `--split held` runs them
 alone, and the report prints their score on a line of its own.
 
 `run --os OS --model NAME` sends each case through the real `spark
@@ -167,7 +169,9 @@ must appear in its help. A spark verb must appear in the TAB completion
 files or the cheatsheet's command column. A reply that exits non-zero
 fails. A run keeps each reply's first lines and its exit code.
 `report` grades them again with today's grader, cases and snapshots, so
-a new rule judges an old run with no model. `collect` writes a snapshot
+a new rule judges an old run with no model. The rules come in a fixed
+order, and a new one goes last: `must`, then `answered`. So an old
+answer keeps the first rule it failed. `collect` writes a snapshot
 on the OS it describes, and `line-audition-help.yml` runs it in the CI
 images. A snapshot also keeps what a store indexes: each tool's one
 line, its synopsis and its option lines. `serve-candidate` starts a
@@ -181,6 +185,13 @@ head is in the top 3. It prints the share per topic and the search's
 p50 and p95. A stub search exits 2. The search is tuned on recall, so
 it leaves the held-out cases out unless `--split held` or `--split
 all` asks for them.
+
+`precision [--os OS|all]` needs no model either. It holds the line's
+judge to `tests/line_audition/accepted.json`: commands the grader
+accepted in a measured report, per OS and for spark itself. Over that
+OS's snapshot, the judge may ask again about none of them. The file
+also lists wrong commands, each with the finding the judge must still
+make. `selftest` runs it for every OS.
 
 The A/B runs each OS three times, once per arm: `run --arm off`, `run
 --arm judge` and `run --arm full`. The arm is `SPARK_LINE_KNOW` for

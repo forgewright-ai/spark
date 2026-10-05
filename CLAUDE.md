@@ -210,7 +210,11 @@ for it, and no verb carries the word.
   spark runs sv for them in one place, `engine.svctl`. A verb that waits
   for the service (`restart`, `stop`, `start`) carries `sv -w 60`
   (`engine.SV_WAIT`): a big model takes longer than sv's own 7 seconds
-  to unload.
+  to unload. On runit the prompt line's prefix names `sv` and `ip`
+  (`persona.runit_lines`). It names `svlogtail`, which reads the logs,
+  only where that program is installed. It never names `svlogd`, which
+  writes them. One line there says how runit enables a service
+  (`persona.RUNIT_BOOT`): a link in `/var/service`.
   The engine pin is a glibc build, so Void's musl flavour refuses at
   `get`: `musl libc: the pinned engine is a glibc build -- Void's glibc
   flavour runs spark`. The voice's runtime is a glibc build too, and its
@@ -341,8 +345,14 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 intake grounding judge (the prompt line's knowledge, three
                 contexts: intake reads what this machine can run -- its
                 manuals, its apps, its services, spark's own verbs -- into
-                the store outside the hot path; grounding picks the entries that go with one
-                question; judge checks a proposed command against them)
+                the store outside the hot path, and a manual's list of
+                commands whole or not at all: command_set, stored with its
+                version, COMMANDS_V; grounding picks the entries that go
+                with one question, and makes the map of spark's own
+                commands the prefix carries from the help's rows:
+                shell_map, a help row a line, within MAP_MAX; judge checks
+                a proposed command against them: verdict and its findings,
+                and own, a line that is spark's own, whole)
                 sandbox (spark do --sandbox: the probe, the copy the kernel keeps
                 the steps inside, the review, the apply bound to it, a run's
                 life and its lock; every list that decides is a named line)
@@ -418,6 +428,9 @@ tests/          smoke.py serve_smoke.py forge_smoke.py bench_smoke.py
                 policy_test.py (every row of forgeserve.ROUTES with 3
                 callers: nobody, a user, the admin)
                 vault_test.py (RFC 8439 vectors, round-trips, refusals)
+                knowledge_test.py (the knowledge on a fixture machine: the
+                readers, the store, a manual's commands on pages shaped by
+                hand, the judge on the entries built from them)
                 sandbox_test.py (the review, every named apply refusal, a run's
                 life and its lock, and the real escapes where the probe says
                 this machine has a sandbox)
@@ -441,11 +454,18 @@ tests/          smoke.py serve_smoke.py forge_smoke.py bench_smoke.py
                 and a bare repository)
                 audition.py + audition/ (the editor's briefs against a live
                 model, lints as the judge; audition/ground/ holds the grounded
-                contracts' set of 10 cases, scored the same blind way, the
-                score written by hand as MODEL_<NAME>_GROUND; not in the gate)
+                contracts' set of 10 cases, run under --ground alone, scored
+                the same blind way, the score written by hand as
+                MODEL_<NAME>_GROUND; --selftest proves the lints with no
+                model; not in the gate)
                 line_audition.py + line_audition/ (the prompt line per OS and on
                 spark's own verbs against a live model; answers graded by each
-                OS's --help snapshot and spark's tree; its selftest in smoke)
+                OS's --help snapshot and spark's tree; cases.json holds the
+                questions, 24 of those about spark held out and never tuned
+                on, 24 more second phrasings to tune on; accepted.json
+                holds commands the grader accepted: the
+                line's judge may ask again about none of them (precision);
+                its selftest in smoke)
                 forge_probe.py URL (the page's server's gates asked from the wire --
                 wire.probe_gates, the hardening row's probes -- one line per
                 gate, exit 1 when any does not hold; against a real server)
@@ -774,9 +794,82 @@ and may change freely.
    wrong is asked again once, with the tool's own manual lines as a
    Reference block in the user message. Line 1 is never repainted:
    still wrong, it lands and the hint names what to check.
-   `SPARK_KNOWLEDGE=off` is the line without it. The request asks the
-   engine for slot 0 (`id_slot`), so the line's prefix stays warm; a
-   server that refuses the field is asked again without it.
+   `SPARK_KNOWLEDGE=off` is the line without it. A finding has a kind
+   (`judge.Finding`). `missing` is a program that is not on this
+   machine, and `flag` an option its manual does not name. `command` is
+   a word the manual's list of commands lacks. `verb` is a word or an
+   option spark does not take, and `placeholder` a `<name>` left in the
+   line. `quote` is a quote, a `$(` or a backtick left open. `slot` is
+   a capital word of spark's own help copied as it stands, such as
+   `NAME` or `URL`. A slot is the user's own value, so it is never
+   asked again: the line lands and its hint ends `type the NAME before
+   Enter`. Unknown is not wrong: a program with no entry, or a line the
+   judge cannot read, earns no finding. On spark's own commands the
+   judge reads the help's rows and the completion's words
+   (`grounding.spark_tree`). A leading option must be one `bin/spark`
+   answers, such as `--version`. A verb's options are held to its own
+   `-h`, the store's `spark VERB` entry, and a verb with no entry is
+   unknown. Where the words a verb takes first are a closed set, the
+   word must be one its rows or the completion list. Where a row writes
+   two words, the second is held too: `spark serve boot maybe` is a
+   finding. So is a word after one its row ends with (`spark keys off
+   x`). The words of `spark keys` are closed by the completion's own
+   list. A manual's list of commands closes a program's first word
+   only when it can be trusted whole (`intake.command_set`). The reader
+   takes an alias in parentheses, as in `search (se)`, and a tag that
+   ends in `...`. A list that holds a word of prose
+   (`intake.PROSE_WORDS`) or a word a line break cut is no list.
+   Neither is one over `intake.COMMANDS_MAX` words. A list keeps `seen`
+   beside it: the other command words the page shows the program
+   taking. The judge takes a word of either. The list is stored with a
+   version (`intake.COMMANDS_V`). One of another version reads as no
+   list, so it closes nothing until the store is built again. The
+   line's prefix carries spark's own commands as a map
+   (`grounding.shell_map`), made from the rows of `spark help`. It is
+   one help row a line (`grounding._map_lines`): every form the row
+   writes, in full, then ` -- ` and the row's own words. No `a|b` is
+   written, because a model copies what it reads, and `<words>` is
+   `WORDS`. `tests/smoke.py` holds the map within `grounding.MAP_MAX`,
+   3400 characters. Its first line says a word in capitals stands for
+   the user's own text, written as they wrote it. The brief
+   (`persona.MODE_LINE`) names the topics that are spark's own. It asks
+   for the user's own words and names as written, and for the help's
+   own word (`NAME`, `URL`) where the user gave no value. It says the
+   prompt line keeps nothing between questions, and that `spark memory
+   add` remembers a fact. An answer in words may name one of spark's
+   own commands: `spark VERB` with a verb of the tree, never inside a
+   noun phrase (`cli._own_named`). It is asked again once for the
+   command itself (`cli._as_command`, `OWN_AGAIN`). The second reply
+   lands only when it is a spark command the judge clears. Else the
+   answer stands as it came. Such an answer's line 1 waits for its
+   words, and with `SPARK_KNOWLEDGE=off` no answer is asked again. The
+   request
+   asks the engine for slot 0 (`id_slot`), so the line's prefix stays
+   warm; a server that refuses the field is asked again without it. The
+   reply is one JSON object (`persona.LINE_SCHEMA`), held by a grammar:
+   `wire.gbnf(schema)` rides the request as `grammar`. Every request a
+   schema shapes sends it, and none sends `response_format`.
+   llama-server binds a `response_format` schema only after the
+   template's thought channel closes. So a model could open a thought,
+   spend the whole cap there and answer nothing. A grammar binds from
+   the first token. Measured on `gemma4-e4b`, on the questions that had
+   come back empty: 0 of 120 asks were empty with the grammar, 15 of 72
+   without. A net stays under it. A streamed request with a schema
+   stops at the first reasoning delta (`wire.chat_stream`). When
+   nothing of that reply had been written, the prompt line asks once
+   more (`cli._line_ask`). The second ask is the same messages with
+   `cli.LINE_RETRY_NUDGE` on a line of its own after the last user
+   message, and `cli.LINE_RETRY_BODY` merged into the body. The system
+   message stays byte for byte the same. The hint row says `no answer
+   came -- asking again` meanwhile. When no answer comes, asked again
+   or not, the reply is `error` with the reason in line 2, exit 1. That
+   turn is recorded with the kind `empty`: numbers alone, on no thread.
+   A turn records `empties`, its replies that were a thought and no
+   answer. A reply the model ended after line 1, by a thought or the
+   cap, says `cli.HINT_LOST` in line 2: `the reply was cut before its
+   hint -- read the command before Enter`. A reply the cap cut before
+   line 1 says so (`wire.CUT_OUT`), never the raw JSON. The wire's own
+   failures keep their reasons.
    `SPARK_LINE_BENCH=1` (`spark bench --line`, the audition) keeps the
    turn's numbers, marked `bench`, and opens no thread. A `danger`
    line's hint may open with `<- <facts> -- `: `persona.blast`'s count
@@ -835,7 +928,23 @@ and may change freely.
    a backslash). One is a command carrier (`persona.CARRIERS`: ssh with
    a command, a session's exec, a deferred run, a command inside an
    option or a variable, a tool's own script). The last is a text too
-   deep to read (`TOO_DEEP`). `proof_ok` denies any abbreviation of a
+   deep to read (`TOO_DEEP`). `persona._DANGER` is the list of named
+   lines, a pattern each. A package cache cleaned is one on every
+   family: `apt`, `apt-get` and `aptitude` with `clean` or `autoclean`,
+   `dnf` and `yum` with `clean`, `zypper` with `clean` or `cc`, `pacman
+   -Sc` and `brew cleanup`. Its options are read only before the
+   command word, so `dnf search clean` stays plain. spark's own line
+   holds the verbs that destroy or end logins, and `spark serve off`,
+   which stops the engine and the page. So `spark do` asks for the
+   typed `yes` there, and the page for its confirm. On the prompt line
+   `persona.is_dangerous` always wins. Past it the model's own flag
+   marks a command, lowered when spark's read-only proof holds for
+   every stage (`judge.read_only`). On a command whose every stage is
+   `spark` (`judge.own`) that flag is dropped: spark's own list is the
+   whole answer there (`cli._Know.flagged`). A line that mixes spark
+   with another command, or whose effect cannot be read, is not spark's
+   own and keeps the model's flag. So do `SPARK_KNOWLEDGE=off` and
+   `spark do`. `proof_ok` denies any abbreviation of a
    denied long option. `do.danger` reads past one shape alone
    (`do.heredoc_file`): the whole step is one here-document writing
    one file, with nothing before or after it. The file is named
@@ -1234,7 +1343,15 @@ and may change freely.
    asks bootstrap's own question (`intake.fresh`), so its remedy,
    `spark update`, heals it. It warns `read N ago, this machine
    changed since`. Programs that wait their turn are ok, said in
-   words: `37 waiting their turn`, or `still reading`.
+   words: `37 waiting their turn`, or `still reading`. The `answers`
+   row reads the prompt line's turns of the last `check.ANSWERS_DAYS`
+   (7) days, for the model served now (`stats.answers`). It counts the
+   questions that got no answer, the turns of kind `empty` (contract
+   4). With no question asked it is `na`. It warns when those are
+   `check.ANSWERS_MIN` (2) or more, and `check.ANSWERS_SHARE` (2 %) of
+   the questions or more. Its remedy is `spark model list`, because a
+   larger model answers more often. Below that it is ok and says the
+   count. It is a `CAPABILITY` row and never fails.
 8. Signing. The first line of `spark --help` and of every subcommand's
    help is `spark <sub> -- <one line>`, plain ASCII, so every terminal
    can draw it. A refusal signs the same way. An invocation mistake is
@@ -1839,7 +1956,10 @@ One grammar for every verb. A verb that breaks a rule is a bug.
 3. `status` is an alias of bare for every stateful verb. The one
    exception is spark itself: bare `spark` is one line, what answers,
    and `spark status` is the full report, with what the engine answers
-   (`spark brain --porcelain` stays contract 5). `list` is the table
+   (`spark brain --porcelain` stays contract 5). Its `check` row says
+   what the last check found, read from the snapshot and never run
+   (`cli._health`): `N need you -- spark check`, `ok, N ago` or `not
+   run yet -- spark check`. `list` is the table
    word (`model list`, `model --chat list`). A noun keeps its own verbs
    as sub-words rather than taking top-level ones: `spark soul
    edit|reset`, `spark memory add|forget|clear`. A command reads verb
@@ -1938,7 +2058,11 @@ One grammar for every verb. A verb that breaks a rule is a bug.
   it is a promise the machine makes. Add contract 3 above if it is a
   key, and `README.md`, `docs/INSTALL.md`, `docs/CHEATSHEET.txt` and
   `docs/CHANGELOG.md`. A key without a command, or a command without a
-  row and a doc line, is half a feature. A choice is a `SITE_*` key
+  row and a doc line, is half a feature. A verb or an option lands in
+  its help row, the verb's own `-h` and both completion files. The
+  prompt line's map of spark is made from the help's rows
+  (`grounding.shell_map`), and its judge reads that `-h` and the
+  completion. A choice is a `SITE_*` key
   with a default in `site.env.example`, applied by `bootstrap.sh` or
   rendered by `install.sh`. Its `spark <verb>` sets and applies it
   (`site.set_keys`, `site.apply`): editing `site.env` by hand is the
@@ -1996,8 +2120,16 @@ One grammar for every verb. A verb that breaks a rule is a bug.
   7). What a request weighed and
   where it went do ride the record: `out_bytes` and `dest` (`host:port`,
   or `local` for loopback), `wire._sent`'s pair on every chat shape's
-  timings. So the `sends` row and `spark stats --sends` count what left
-  by destination and day without a word of it. The `hardening` row asks
+  timings. A turn that made more than one request records their sum
+  (`Session.note_sent`). A request the prompt line asked again, one
+  stopped at a thought and one the server refused all count. So the
+  `sends` row and `spark stats --sends` count what left
+  by destination and day without a word of it. A prompt-line question
+  that got no answer is a turn of the kind `empty` (contract 4).
+  `spark stats` prints `no answer N of M questions (asked again: K)`
+  when N or K is above 0, and `--porcelain` always carries `line_empty`
+  and `line_reasked_empty`. `spark last` says `(no answer came)` for
+  such a turn. The `hardening` row asks
   contract 9's gates of the served `FORGE` (the other machine's, on a
   client) from the wire: `wire.probe_gates`, the probes
   `tests/forge_probe.py` runs against a real server.

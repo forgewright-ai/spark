@@ -1,5 +1,70 @@
 # Changelog
 
+## v1.87
+
+The prompt line knows spark's own commands and stops doubting right
+ones. A small model that came back with no answer is held to one, and
+asked again if it still has none.
+
+- The prompt line reads `spark help`: every command, with what it is
+  for. Before, it saw the names alone. Ask in your own words. `? is
+  everything ok with spark` is `spark check` or `spark status`. `? show
+  the last answer again` is `spark last`. `? turn the prompt line off`
+  is `spark off`.
+- `spark help` says what each command is for, in the words people ask
+  with. These have a row of their own: `spark status`, `spark ver
+  --sbom`, `spark serve --login --new`, `spark stats --sends` and
+  `spark keys NAME KEY`. `TAB` completes the options of `spark ver` and
+  `spark stats`.
+- A right command is no longer doubted. The hint said `the systemctl
+  manual has no command restart` about `systemctl restart`, and the
+  same about `zypper search`. spark had read the manual's list of
+  commands cut short. Each false doubt also cost a second ask, and its
+  wait. The update reads this machine's manuals again, once.
+- spark checks its own commands closer before one lands in your line.
+  It asks again about an option spark does not have, such as `spark
+  --ver`, a wrong word, such as `spark serve boot maybe`, and a quote
+  left open.
+- A value only you know is one word in capitals, as in `spark user add
+  NAME`. The hint says `type the NAME before Enter`.
+- When the model explains a spark command in words, spark asks it once
+  for the command itself, so the command lands in your line.
+- A small model's silent thought no longer costs you the answer.
+  `gemma4-e4b` sometimes thought in silence and spent its whole reply
+  there: 14 of 551 questions got `the model gave no answer -- ask
+  again`. spark now holds the reply to its shape from the first word,
+  so a thought cannot start. On the questions that had come back
+  empty, none of 120 asks did, against 15 of 72 before.
+- If an answer still comes back empty, spark asks once more by itself.
+  The row above your prompt says `no answer came -- asking again`.
+- A reply cut after its command says so: `the reply was cut before its
+  hint -- read the command before Enter`.
+- `spark stats` has a `no answer` line: the questions that got none,
+  and how many were asked again. `spark last` says `(no answer came)`
+  for one.
+- A new row of `spark check`, `answers`. It warns when 2 or more
+  questions got no answer in 7 days, and they are 2 % of your questions
+  or more. It points to `spark model list`: a larger model answers more
+  often. `spark check` has 40 rows.
+- More commands carry `!`: a package cache cleaned, on every system.
+  That is `apt clean` and `apt autoclean`, with `apt-get` and
+  `aptitude` too, `dnf clean`, `yum clean`, `zypper clean`, `zypper
+  cc`, `pacman -Sc` and `brew cleanup`.
+- `spark serve off` carries `!` too: it stops the engine and the page.
+  `spark do` asks you to type `yes` for it, and the page asks you to
+  confirm.
+- The `!` is steady on spark's own commands. A model marked `spark
+  update` 5 times in 12. spark now decides the mark on its own
+  commands itself.
+- On Void, the prompt line names `svlogtail` to read logs, where it is
+  installed. It no longer names `svlogd`, which writes them. It also
+  knows how a service starts at every boot there: a link in
+  `/var/service`. `sv up` only starts it now.
+- `spark status` says what needs you. Its new `check` row shows what
+  the last check found: `2 need you -- spark check`, `ok, 3 min ago` or
+  `not run yet -- spark check`. It runs no check itself.
+- MEASURED: (numbers land here once the audition has run)
+
 ## v1.86
 
 - A machine that becomes a client stops its own page's server. `spark

@@ -45,6 +45,10 @@ the line knows (the store, the search, the verdict) adds `recall` per
 OS and the 3 arms of `run --arm`. `AGENTS.md`, "The audition", holds
 the bar.
 
+The audition's held-out questions never change. Never tune a help
+row, a brief or the knowledge on them. A change to the line reports
+the held-out score beside the other.
+
 ## Branch model
 
 `main` is development. A git tag signed by a release key, a line in
