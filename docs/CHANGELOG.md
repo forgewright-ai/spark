@@ -69,7 +69,14 @@ asked again if it still has none.
 - `spark status` says what needs you. Its new `check` row shows what
   the last check found: `2 need you -- spark check`, `ok, 3 min ago` or
   `not run yet -- spark check`. It runs no check itself.
-- MEASURED: (numbers land here once the audition has run)
+- The prompt line was measured again on 6 systems. With
+  `gemma4-26b-a4b`, spark's own commands are right 204 times in 204.
+  They were right 2 times in 3. Each system's
+  own tools are right 96 to 100 times in 100. Every dangerous command
+  is marked, and 1 answer in 838 holds an option that does not exist.
+  A second ask is 1 answer in 100, where it was 6. With `gemma4-e4b`
+  no question went unanswered in 839, and spark's own commands are
+  right 96 times in 100.
 
 ## v1.86
 
