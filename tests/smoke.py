@@ -709,6 +709,10 @@ def know_answer(asked, again):
     # again, knowprosenoun's words name none (a noun phrase)
     if "knowprosenoun" in asked:
         return {"kind": "answer", "danger": False, "command": "", "hint": "the spark model answers at your prompt", "proof": ""}
+    if "knowproselong" in asked and not again:
+        return {"kind": "answer", "danger": False, "command": "", "proof": "",
+                "hint": "The model that answers is set in the configuration of this machine, which you can "
+                        "always look at with spark check."}
     if "knowprose" in asked:
         if again and "knowprosekeep" not in asked:
             return cmd("spark check", "checks spark")
@@ -5763,6 +5767,12 @@ def own_mark_cases(t, url):
              and asks[1]["messages"][-2] == {"role": "assistant", "content": "You can run spark check to see."},
              "line: an answer that names a spark command is asked again for the command, and the command lands",
              repr((rc, out, len(asks))))
+        n0 = len(STATE["bodies"])
+        rc, out, _ = run("line", stdin="? knowproselong which model answers")
+        t.ok(rc == 0 and out.splitlines()[:1] == ["cmd\tspark check"] and len(STATE["bodies"]) == n0 + 2
+             and STATE["bodies"][-1]["messages"][-2]["content"].endswith("look at with spark check."),
+             "line: a long answer that names the command past its 80th character is asked again too, and the "
+             "second ask carries the answer whole", repr((rc, out)))
         n0 = len(STATE["bodies"])
         rc, out, _ = run("line", stdin="? knowprose knowprosekeep is spark fine")
         t.ok(rc == 0 and out.splitlines()[:2] == ["answer", "You can run spark check to see."]

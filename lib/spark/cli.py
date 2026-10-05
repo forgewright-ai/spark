@@ -988,7 +988,8 @@ def _as_command(s, reply, hint, asked, ms, know, early):
     `answer` when the answer stands."""
     from . import judge
     early.busy.tell(OWN_TOLD)
-    s.history.extend([{"role": "user", "content": asked}, {"role": "assistant", "content": hint}])
+    said = reply.get("hint") if isinstance(reply.get("hint"), str) else hint
+    s.history.extend([{"role": "user", "content": asked}, {"role": "assistant", "content": said}])
     again = _Early(early.cwd, early.more, early.history, early.busy, know, retry=True, t0=early.t0)
     retry, ms2, err = _line_stream(s, OWN_AGAIN, again, "")
     know.reasked, ms = 1, ms + ms2
@@ -1161,7 +1162,9 @@ def _cmd_line(args):
                 reply, command, hint, kind, ms, early, err = _judged(s, reply, command, hint, text, asked,
                                                                      ms, know, early)
             refused = LINE_CONTROL.search(str(reply.get("command")))      # a re-ask's command too
-        elif not is_cmd and know.arm != "off" and _own_named(hint):
+        elif not is_cmd and know.arm != "off" and _own_named(reply.get("hint")):
+            # the answer whole: the hint's one-line cut can drop the
+            # command a long answer names at its end
             asked = persona.user_message(ask_text, cwd, context)
             reply, command, hint, kind, ms, early, err = _as_command(s, reply, hint, asked, ms, know, early)
             is_cmd = kind != "answer"
