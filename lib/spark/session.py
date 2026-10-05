@@ -28,7 +28,10 @@ def _turns_dir():
 # (the encoded body) and `dest` (`host:port`, or `local`), wire._sent's
 # pair, carried in the timings every chat shape returns -- so `spark
 # stats --sends` and check's `sends` row can count what left by
-# destination without a word of it.
+# destination without a word of it. A turn that made more than one
+# request (the prompt line asked again, a stream stopped at a thought)
+# records the SUM of them: Session.note_sent adds each one up, and the
+# destination is the same for all.
 TEXT_FIELDS = ("line", "command", "hint", "answer", "cwd", "context", "proof")
 
 
@@ -226,6 +229,8 @@ class Session:
         self.role = role or ("spark" if mode == "line" else "ember")
         self.history = list(history or [])      # earlier turns of a continued thread
         self.timings = {}
+        self.sent_bytes, self.sent_dest = 0, ""     # this turn's requests so far, summed (note_sent)
+        self.empties = 0        # the prompt line: replies of this turn that were a thought and no answer
         self._brain = brain or (lambda fresh: _resolve(cfg, fresh))
         self.url, self.model, self.forge = self._brain(False)
 
@@ -268,14 +273,26 @@ class Session:
         reply, self.timings = self._retry_fresh(lambda: wire.chat_json(
             self.cfg, self.url, self._messages(text), schema, max_tokens=max_tokens or 200,
             forge=self.forge, model=self.role, timeout=timeout, **kw))
+        self.note_sent(self.timings)        # the one request that answered: its pair is in its timings
         return reply, int((time.time() - t0) * 1000)
 
     def ask_stream(self, text, context, on_delta, max_tokens=None, timeout=None):
         t0 = time.time()
         out, self.timings = self._retry_fresh(lambda: wire.chat_stream(
             self.cfg, self.url, self._messages(text, context), on_delta, max_tokens=max_tokens or 600,
-            forge=self.forge, model=self.role, timeout=timeout))
+            forge=self.forge, model=self.role, timeout=timeout, sent=self.note_sent))
         return out, int((time.time() - t0) * 1000)
+
+    def note_sent(self, pair):
+        """One request of this turn left the machine (wire._sent's pair,
+        from wire.chat_stream as it makes each one): its bytes add to
+        the turn's. An answered request, one stopped at a thought and
+        one the server refused all count; record() writes the sum."""
+        try:
+            self.sent_bytes += int(pair["out_bytes"])
+            self.sent_dest = pair.get("dest") or self.sent_dest
+        except (KeyError, TypeError, ValueError, AttributeError):
+            pass
 
     def answered_model(self):
         """The stem of the model this session's role got: the roles map
@@ -295,6 +312,12 @@ class Session:
         return m
 
     def record(self, **fields):
-        """One turn, with the throughput the server reported for it and
-        the request's own weight and destination (out_bytes, dest)."""
-        record(self.cfg, backend=self.url, model=self.answered_model(), mode=self.mode, **dict(getattr(self, "timings", {}) or {}, **fields))
+        """One turn, with the throughput the server reported for its last
+        request and what the turn sent: out_bytes summed over every
+        request note_sent heard of since the last record (else the last
+        request's own, from its timings), and where they went (dest)."""
+        timings = dict(getattr(self, "timings", {}) or {})
+        if getattr(self, "sent_bytes", 0):
+            timings["out_bytes"], timings["dest"] = self.sent_bytes, self.sent_dest
+            self.sent_bytes = 0
+        record(self.cfg, backend=self.url, model=self.answered_model(), mode=self.mode, **dict(timings, **fields))

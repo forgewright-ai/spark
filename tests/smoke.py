@@ -112,6 +112,33 @@ class Stub(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError):
             STATE["know_hung_up"] = STATE.get("know_hung_up", 0) + 1
 
+    THINK_STEPS = 20        # a thought here: 20 reasoning deltas, 0.1 s apart, then the cap
+
+    def _sse_thought(self):
+        """A streamed reply that is a thought and no answer: a reasoning
+        delta, 0.1 s, the next, up to THINK_STEPS -- then the cap
+        (finish_reason length, no content at all). A client may hang up
+        in between (the line stops at the first delta): counted in
+        think_hung_up, and think_step keeps the delta it was seen
+        after. A thought nobody stopped is counted in think_capped."""
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream")
+        self.end_headers()
+        step = 0
+        try:
+            for step in range(1, self.THINK_STEPS + 1):
+                self.wfile.write(("data: " + json.dumps({"choices": [{"delta": {"reasoning_content": "thinking "}}]}) + "\n\n").encode())
+                self.wfile.flush()
+                time.sleep(0.1)
+                if self._hung_up():
+                    raise BrokenPipeError
+            self.wfile.write(("data: " + json.dumps({"choices": [{"delta": {}, "finish_reason": "length"}], "timings": TIMINGS}) + "\n\n").encode())
+            self.wfile.write(b"data: [DONE]\n\n")
+            STATE["think_capped"] = STATE.get("think_capped", 0) + 1
+        except (BrokenPipeError, ConnectionResetError):
+            STATE["think_hung_up"] = STATE.get("think_hung_up", 0) + 1
+            STATE["think_step"] = step
+
     def _sse(self, pieces, finish="stop"):
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
@@ -175,21 +202,26 @@ class Stub(BaseHTTPRequestHandler):
         user = messages[-1]["content"]
         STATE["last_user"] = user                     # the newest user message, for the failure checks
         STATE.setdefault("bodies", []).append(body)   # every request, for the editor's checks
+        STATE.setdefault("lengths", []).append(n)     # and what each weighed on the wire, in step with bodies
         system = messages[0]["content"]
+        if "think_after" in STATE and body.get("response_format"):
+            # think_after N: N requests shaped by a schema pass, then
+            # the next one thinks (a turn's second ask, say)
+            if STATE["think_after"] > 0:
+                STATE["think_after"] -= 1
+            else:
+                del STATE["think_after"]
+                STATE["think_out"] = 1
         if STATE.get("think_out") and body.get("response_format"):
-            # a thinking model that ignores the switch: the whole cap
-            # spent in reasoning_content, content empty, finish length
+            # a thinking model that ignores the switch, on the next N
+            # requests shaped by a schema (think_out is the count), and
+            # then it answers: the whole cap spent in reasoning_content,
+            # content empty, finish length
+            STATE["think_out"] = int(STATE["think_out"]) - 1
             if not body.get("stream"):
                 return self._send(200, {"choices": [{"message": {"content": "", "reasoning_content": "Let me think."},
                                                      "finish_reason": "length"}], "timings": TIMINGS})
-            self.send_response(200)
-            self.send_header("Content-Type", "text/event-stream")
-            self.end_headers()
-            for part in ("Let me ", "think."):
-                self.wfile.write(("data: " + json.dumps({"choices": [{"delta": {"reasoning_content": part}}]}) + "\n\n").encode())
-            self.wfile.write(("data: " + json.dumps({"choices": [{"delta": {}, "finish_reason": "length"}], "timings": TIMINGS}) + "\n\n").encode())
-            self.wfile.write(b"data: [DONE]\n\n")
-            return
+            return self._sse_thought()
         if STATE.get("cut_out") and body.get("response_format") and not body.get("stream"):
             # the cap ended the JSON mid-string: a long command written as
             # a here-document (the 26B, /do in chat, 2026-10-01)
@@ -218,9 +250,16 @@ class Stub(BaseHTTPRequestHandler):
                 return self._sse_held(doc, 3)
             if "knowslow" in asked and again:
                 time.sleep(1.5)             # the re-ask thinks a while: the pulse says why
-            if any(w in user for w in ("midcut", "slowhint", "slowdanger")):
-                # line 1's fields, then the wire dies (midcut) or the
-                # model thinks a while before the hint (slow...)
+            if "againslow" in asked:
+                time.sleep(1.2)             # an answer that takes a while (after think_out: the second ask's)
+            if "capnone" in user:
+                # the cap ends the reply inside its command: half a JSON
+                # object, finish_reason length, no thought anywhere
+                return self._sse((doc[:doc.index('"command"') + 14],), finish="length")
+            if any(w in user for w in ("midcut", "slowhint", "slowdanger", "capcut")):
+                # line 1's fields, then the wire dies (midcut), the cap
+                # ends the reply (capcut) or the model thinks a while
+                # before the hint (slow...)
                 self.send_response(200)
                 self.send_header("Content-Type", "text/event-stream")
                 self.end_headers()
@@ -232,6 +271,10 @@ class Stub(BaseHTTPRequestHandler):
                 chunk(doc[:cut])
                 if "midcut" in user:
                     self.close_connection = True
+                    return
+                if "capcut" in user:
+                    self.wfile.write(("data: " + json.dumps({"choices": [{"delta": {}, "finish_reason": "length"}], "timings": TIMINGS}) + "\n\n").encode())
+                    self.wfile.write(b"data: [DONE]\n\n")
                     return
                 time.sleep(1.5)
                 chunk(doc[cut:])
@@ -297,6 +340,20 @@ class Stub(BaseHTTPRequestHandler):
                 for piece in ("ond one holds 3.", "14 and e.g. more. ", "Last"):
                     chunk(piece)
                     time.sleep(0.2)
+                self.wfile.write(("data: " + json.dumps({"choices": [{"delta": {}, "finish_reason": "stop"}], "timings": TIMINGS}) + "\n\n").encode())
+                self.wfile.write(b"data: [DONE]\n\n")
+                return
+            elif "thinkfirst" in user:
+                # a reply with no schema that thinks before it answers:
+                # two reasoning deltas, then the words -- a chat's own
+                # business, never stopped
+                self.send_response(200)
+                self.send_header("Content-Type", "text/event-stream")
+                self.end_headers()
+                for part in ("Let me ", "think."):
+                    self.wfile.write(("data: " + json.dumps({"choices": [{"delta": {"reasoning_content": part}}]}) + "\n\n").encode())
+                for part in ("Thought, ", "then said."):
+                    self.wfile.write(("data: " + json.dumps({"choices": [{"delta": {"content": part}}]}) + "\n\n").encode())
                 self.wfile.write(("data: " + json.dumps({"choices": [{"delta": {}, "finish_reason": "stop"}], "timings": TIMINGS}) + "\n\n").encode())
                 self.wfile.write(b"data: [DONE]\n\n")
                 return
@@ -550,9 +607,11 @@ def answer_json(messages):
             return got
     # the streamed line (v1.52): the schema's own order -- kind, danger,
     # command, hint, proof -- so line 1 can go the moment the command closes
-    if "midcut" in user or "slowhint" in user:
+    if "midcut" in user or "slowhint" in user or "capcut" in user:
         return {"kind": "cmd", "danger": False, "command": "ls -la", "hint": "lists everything here",
                 "proof": "test -d ."}
+    if "capnone" in user:           # the cap ends the reply inside its command: no line 1, no JSON
+        return {"kind": "cmd", "danger": False, "command": "ls -la", "hint": "lists everything here", "proof": ""}
     if "slowdanger" in user:        # the model says safe; the command is not
         return {"kind": "cmd", "danger": False, "command": "rm -rf build", "hint": "removes the build",
                 "proof": ""}
@@ -1483,10 +1542,15 @@ def engine_wire_cases(t, spark, home, url):
          and "chat_template_kwargs" not in plain[0] and "reasoning_budget_tokens" not in plain[0],
          "thinking: a streamed answer with no schema keeps the model's default", json.dumps(plain)[:300])
 
-    # a model that ignores the switch: the cap spent thinking, no JSON
-    STATE["think_out"] = True
+    # a model that ignores the switch: the cap spent thinking, no JSON.
+    # The line stops such a stream at its first thought and asks once
+    # more (empty_answer_cases holds the whole of it), so two thoughts in
+    # a row are its error; a JSON ask in one piece (chat_json) says so
+    # after the one
+    STATE["think_out"] = 2
     try:
         rc, out, _ = spark("line", stdin="? files bigger than 1G this week")
+        STATE["think_out"] = 1
         saved = os.environ.get("SPARK_API_KEY")
         os.environ["SPARK_API_KEY"] = TOKEN
         try:
@@ -1503,9 +1567,9 @@ def engine_wire_cases(t, spark, home, url):
             else:
                 os.environ["SPARK_API_KEY"] = saved
     finally:
-        STATE["think_out"] = False
+        STATE["think_out"] = 0
     t.ok(rc == 1 and out.splitlines() == ["error", _wire.THOUGHT_OUT],
-         "thinking: a streamed reply that thought its whole cap away says so in a sentence", repr(out))
+         "thinking: a streamed reply that was a thought, twice, says so in a sentence", repr(out))
     t.ok(said == "bad: " + _wire.THOUGHT_OUT,
          "thinking: a JSON reply in one piece that thought its whole cap away says so (kind bad)", said)
 
@@ -1582,6 +1646,302 @@ def engine_wire_cases(t, spark, home, url):
     t.ok(seam and "pasted these lines" not in seam[-1]["messages"][0]["content"]
          and seam[-1]["messages"][0]["content"] == line_bodies[-1]["messages"][0]["content"],
          "line: the role seam keeps the line's own system message (no identity for the ember)")
+
+
+def empty_answer_cases(t, spark, home, url, env):
+    """v1.87, an answer every time. A model may open a thought where the
+    line's JSON was asked: the stream stops at the first reasoning delta
+    (a hang-up the stub counts, long before its cap), and the line asks
+    once more with a changed request -- the nudge and LINE_RETRY_BODY,
+    nothing else. The answer lands as contract 4's two lines; the turn
+    keeps `empties` and the bytes of BOTH requests. Two thoughts are the
+    error, and a turn of kind `empty` with no word in it. A reply the
+    cap cut after line 1 says so in line 2; cut before it, the error is
+    the cut, never the raw JSON. spark stats and check's answers row
+    count them. A reply with no schema is never stopped."""
+    from spark import cli as _cli, session as _session, stats as _stats, wire as _wire
+    tdir = os.path.join(home, ".local", "state", "spark", "turns")
+
+    def turns():
+        return [json.loads(l) for f in sorted(os.listdir(tdir)) for l in open(os.path.join(tdir, f)) if l.strip()]
+
+    def ask(words, think=0, **extra):
+        """spark line with the stub thinking on the next `think` requests:
+        (rc, lines, bodies, lengths, hang-ups, thoughts run to the cap)"""
+        b0, l0 = len(STATE.setdefault("bodies", [])), len(STATE.setdefault("lengths", []))
+        h0, c0 = STATE.get("think_hung_up", 0), STATE.get("think_capped", 0)
+        STATE["think_out"] = think
+        try:
+            rc, out, _err = spark("line", stdin=words, extra=extra or None)
+        finally:
+            STATE["think_out"] = 0
+
+        def ended():
+            return STATE.get("think_hung_up", 0) - h0, STATE.get("think_capped", 0) - c0
+        # the stub meets a hang-up 0.1 s after its delta: spark may be
+        # gone before the last thought's handler has counted it
+        stop = time.time() + 5
+        while sum(ended()) < think and time.time() < stop:
+            time.sleep(0.02)
+        return (rc, out.splitlines(), STATE["bodies"][b0:], STATE["lengths"][l0:]) + ended()
+
+    q = "? files bigger than 1G this week"
+    want = ["cmd\tfind . -type f -size +1G -mtime -7", "Files over 1G changed this week."]
+    t.ok(len(_cli.HINT_LOST) < 80 and len(_cli.ASKING_AGAIN) < 60
+         and all(ord(c) < 128 for c in _cli.HINT_LOST + _cli.ASKING_AGAIN + _cli.LINE_RETRY_NUDGE)
+         and bool(_cli.LINE_RETRY_NUDGE or _cli.LINE_RETRY_BODY),
+         "empty answer: the retry differs from the first ask (a nudge or a body field); its lines are short ASCII")
+
+    # one thought, then the answer
+    STATE.pop("think_step", None)
+    rc, lines, bodies, lengths, hung, capped = ask(q, think=1)
+    t.ok(rc == 0 and lines == want,
+         "empty answer: a reply that was a thought is asked again at once -- the answer lands, two lines, exit 0",
+         repr((rc, lines)))
+    # the stub would write THINK_STEPS deltas, 0.1 s apart, before its
+    # cap: the hang-up it met after the first few is the stop
+    t.ok(len(bodies) == 2 and hung == 1 and capped == 0 and 1 <= STATE.get("think_step", 99) < Stub.THINK_STEPS // 2,
+         "empty answer: the stream stops at the first reasoning delta -- one hang-up, long before the stub's cap "
+         "of %d deltas; two requests in all" % Stub.THINK_STEPS,
+         "%d requests, %d hang-ups, %d capped, at delta %s" % (len(bodies), hung, capped, STATE.get("think_step")))
+    if len(bodies) == 2:
+        first, second = bodies
+        expect = json.loads(json.dumps(first))
+        if _cli.LINE_RETRY_NUDGE:
+            expect["messages"][-1]["content"] += "\n" + _cli.LINE_RETRY_NUDGE
+        expect.update(_cli.LINE_RETRY_BODY)
+        t.ok(second == expect and second != first and second["messages"][:-1] == first["messages"][:-1]
+             and first["messages"][-1]["content"].endswith("files bigger than 1G this week"),
+             "empty answer: the second ask is the first plus the nudge on a line of its own and LINE_RETRY_BODY, "
+             "nothing else -- the system message byte for byte the same",
+             repr(second["messages"][-1])[:200] + json.dumps({k: v for k, v in second.items() if first.get(k) != v})[:200])
+    rec = turns()[-1]
+    t.ok(rec.get("kind") == "cmd" and rec.get("empties") == 1 and "failed" not in rec,
+         "empty answer: the turn the second ask answered keeps empties=1", json.dumps(rec)[:300])
+    t.ok(len(lengths) == 2 and rec.get("out_bytes") == sum(lengths) and rec.get("dest") == "local",
+         "empty answer: the turn's out_bytes is the sum of both requests, the stopped one too",
+         "%r recorded, %r sent" % (rec.get("out_bytes"), lengths))
+    rc, lines1, bodies1, lengths1, hung1, _c = ask(q)
+    rec1 = turns()[-1]
+    t.ok(rc == 0 and lines1 == want and len(bodies1) == 1 and hung1 == 0 and "empties" not in rec1
+         and rec1.get("out_bytes") == lengths1[0],
+         "empty answer: the control -- a reply that answers is one request, no empties, its own bytes",
+         json.dumps(rec1)[:200])
+
+    # two thoughts: the error, and a turn of kind empty with no word in it
+    n0 = len(turns())
+    rc, lines, bodies, lengths, hung, capped = ask(q, think=2)
+    after = turns()
+    rec = after[-1]
+    t.ok(rc == 1 and lines == ["error", _wire.THOUGHT_OUT] and len(bodies) == 2 and hung == 2 and capped == 0,
+         "empty answer: a second thought is the error -- asked twice, never three times, both streams stopped",
+         repr((rc, lines, len(bodies), hung, capped)))
+    t.ok(len(after) == n0 + 1 and rec.get("kind") == "empty" and rec.get("empties") == 2 and rec.get("mode") == "line"
+         and isinstance(rec.get("ms"), int) and rec.get("arm") in _cli.LINE_KNOW_ARMS and "reasked" in rec
+         and rec.get("out_bytes") == sum(lengths) and "thread" not in rec
+         and not any(k in rec for k in _session.TEXT_FIELDS)
+         and not any("bigger" in str(v) for v in rec.values()),
+         "empty answer: the question that got none is one turn of kind empty -- ms, empties=2, the arm, the bytes "
+         "of both asks, no word and no thread", json.dumps(rec)[:300])
+    rc, out, _ = spark("last")
+    t.ok(rc == 0 and "(no answer came)" in out and "(the words are gone)" not in out,
+         "empty answer: spark last says no answer came for such a turn", repr(out))
+
+    # the judge's second ask shares the function: a thought there is asked
+    # again too, and the turn's bytes are all three requests
+    snap = know_store(os.path.join(home, "know-store-empty.json"))
+    bench = {"SPARK_LINE_BENCH": "1", "SPARK_KNOWLEDGE_SNAPSHOT": snap, "SPARK_LINE_KNOW": "judge"}
+    b0, l0, h0 = len(STATE["bodies"]), len(STATE["lengths"]), STATE.get("think_hung_up", 0)
+    STATE["think_after"] = 1                # the first request answers; the one after it thinks
+    try:
+        rc, out, _ = spark("line", stdin="? knowps show processes by memory", extra=bench)
+    finally:
+        STATE.pop("think_after", None)
+        STATE["think_out"] = 0
+    bodies, lengths, rec = STATE["bodies"][b0:], STATE["lengths"][l0:], turns()[-1]
+    users = [b["messages"][-1]["content"] for b in bodies]
+    t.ok(rc == 0 and out.splitlines()[:1] == ["cmd\tps aux -m"] and len(bodies) == 3
+         and STATE.get("think_hung_up", 0) == h0 + 1
+         and KNOW_AGAIN in users[1] and _cli.LINE_RETRY_NUDGE not in users[1]
+         and users[2] == users[1] + "\n" + _cli.LINE_RETRY_NUDGE,
+         "empty answer: the judge's re-ask that comes back a thought is asked again the same way",
+         repr((rc, out, STATE.get("think_hung_up", 0) - h0, [u[-120:] for u in users])))
+    t.ok(rec.get("empties") == 1 and rec.get("reasked") == 1 and len(lengths) == 3 and rec.get("out_bytes") == sum(lengths),
+         "empty answer: that turn keeps empties=1 beside reasked=1, and the bytes of all three requests",
+         "%r sent, " % lengths + json.dumps(rec)[:300])
+
+    # the cap, not a thought: after line 1 the hint is lost and line 2
+    # says so; before line 1 the error is the cut, never the raw JSON
+    rc, lines, bodies, _l, hung, _c = ask("capcut?")
+    rec = turns()[-1]
+    t.ok(rc == 1 and lines == ["cmd\tls -la", _cli.HINT_LOST] and len(bodies) == 1 and hung == 0
+         and rec.get("kind") == "cmd" and rec.get("failed") == "bad" and "empties" not in rec,
+         "empty answer: a reply the cap cut after line 1 keeps the command and says the hint was lost, exit 1; "
+         "the turn is recorded failed", repr((rc, lines)) + json.dumps(rec)[:200])
+    rc, lines, bodies, _l, _h, _c = ask("capnone?")
+    t.ok(rc == 1 and len(lines) == 2 and lines[0] == "error" and lines[1].startswith("the answer was cut at %d tokens" % _cli.LINE_TOKENS)
+         and len(lines[1]) <= 80 and "{" not in lines[1] and len(bodies) == 1,
+         "empty answer: a reply the cap cut before line 1 says it was cut at the line's cap, never the raw JSON",
+         repr((rc, lines)))
+    rc, out, _ = spark("line", stdin="midcut?")
+    ml = out.splitlines()
+    t.ok(rc == 1 and len(ml) == 2 and ml[0] == "cmd\tls -la" and "mid-reply" in ml[1] and ml[1] != _cli.HINT_LOST,
+         "empty answer: the wire's own failure after line 1 keeps its reason", repr(out))
+
+    # wire.chat_stream itself: the marks on the error, the extra fields,
+    # every request reported -- and no schema, no stop
+    import types as _types
+    cfg = _types.SimpleNamespace(token_file=os.path.join(home, "no-token"), timeout=5)
+    msgs = [{"role": "system", "content": "x"}, {"role": "user", "content": "y"}]
+    saved = os.environ.get("SPARK_API_KEY")
+    os.environ["SPARK_API_KEY"] = TOKEN
+    fed, sent, said = [], [], None
+    try:
+        b0, l0 = len(STATE["bodies"]), len(STATE["lengths"])
+        STATE["think_out"] = 1
+        try:
+            _wire.chat_stream(cfg, url, msgs, fed.append, schema={"type": "object"}, sent=sent.append)
+        except _wire.BrainError as e:
+            said = (e.kind, e.hint, e.thought, e.clean, e.capped)
+        text, timings = _wire.chat_stream(cfg, url, msgs, fed.append, schema={"type": "object"}, sent=sent.append,
+                                          extra={"temperature": 0.9, "seed": 7})
+        probe = STATE["bodies"][b0:]
+        weighed = STATE["lengths"][l0:]
+        plain, _tm = _wire.chat_stream(cfg, url, [msgs[0], {"role": "user", "content": "thinkfirst"}], lambda d: None)
+    finally:
+        STATE["think_out"] = 0
+        if saved is None:
+            os.environ.pop("SPARK_API_KEY", None)
+        else:
+            os.environ["SPARK_API_KEY"] = saved
+    t.ok(said == ("bad", _wire.THOUGHT_OUT, True, True, False) and _wire.BrainError("bad", "x").thought is False,
+         "empty answer: chat_stream's error is kind bad, THOUGHT_OUT, marked thought and clean (nothing was fed)", repr(said))
+    t.ok(len(probe) == 2 and probe[1].get("temperature") == 0.9 and probe[1].get("seed") == 7 and "seed" not in probe[0]
+         and probe[0].get("temperature") == 0.3 and probe[1]["messages"] == probe[0]["messages"],
+         "empty answer: chat_stream's extra fields are merged into the body, over its own",
+         json.dumps([{k: b.get(k) for k in ("temperature", "seed")} for b in probe]))
+    t.ok([p.get("out_bytes") for p in sent] == weighed and all(p.get("dest") == "local" for p in sent)
+         and timings.get("out_bytes") == weighed[-1],
+         "empty answer: chat_stream reports every request it makes, the stopped one too, with what it weighed",
+         repr((sent, weighed)))
+    t.ok(plain == "Thought, then said.",
+         "empty answer: a reply with no schema that thinks first is never stopped (chat, explain)", repr(plain))
+
+    # _line_ask, the one place the two retry constants are applied: other
+    # values land in the second request alone, and the callback is told
+    script = os.path.join(home, "line-ask-probe.py")
+    with open(script, "w") as f:
+        f.write("import json, sys\nsys.path.insert(0, %r)\n"
+                "from spark import cli, config, session\n"
+                "cli.LINE_RETRY_BODY = {'temperature': 0.7, 'top_k': 5}\n"
+                "cli.LINE_RETRY_NUDGE = 'Reply with the object.'\n"
+                "s = session.Session(config.load(), 'line', 'sh', '')\n"
+                "told = []\n"
+                "reply, ms = cli._line_ask(s, 'files bigger than 1G', again=lambda: told.append(1))\n"
+                "print(json.dumps([reply.get('kind'), s.empties, told, s.sent_bytes]))\n" % os.path.join(REPO, "lib"))
+    b0, l0 = len(STATE["bodies"]), len(STATE["lengths"])
+    STATE["think_out"] = 1
+    try:
+        rc, out, err = spark(exe=script)
+    finally:
+        STATE["think_out"] = 0
+    probe, weighed = STATE["bodies"][b0:], STATE["lengths"][l0:]
+    try:
+        got = json.loads(out)
+    except ValueError:
+        got = None
+    t.ok(rc == 0 and got == ["cmd", 1, [1], sum(weighed)] and len(probe) == 2
+         and probe[0].get("temperature") == 0.2 and "top_k" not in probe[0]
+         and probe[1].get("temperature") == 0.7 and probe[1].get("top_k") == 5
+         and probe[1]["messages"][-1]["content"] == probe[0]["messages"][-1]["content"] + "\nReply with the object."
+         and probe[1]["messages"][0] == probe[0]["messages"][0],
+         "empty answer: LINE_RETRY_BODY and LINE_RETRY_NUDGE are applied in _line_ask to the second ask alone; "
+         "the pulse's callback is told once", repr((rc, out, err[-300:])))
+
+    # the pulse: while the second ask runs the hint row says so, and
+    # stdout stays the two lines
+    h = os.path.join(home, "pty-empty")
+    os.makedirs(os.path.join(h, ".config", "spark"), exist_ok=True)
+    e = dict(env, HOME=h, XDG_CONFIG_HOME=h + "/.config", XDG_STATE_HOME=h + "/.local/state",
+             XDG_DATA_HOME=h + "/.local/share", TERM="xterm", SPARK_HINT_ROW="1", SPARK_HISTORY="off",
+             T_PY=sys.executable, T_SPARK=SPARK)
+    for k in ("NO_COLOR", "SPARK_LOOK", "SPARK_VOICE"):
+        e.pop(k, None)
+    STATE["think_out"] = 1
+    try:
+        rc, raw = pty_run(["/bin/sh", "-c", 'printf "? againslow files bigger than 1G" | "$T_PY" "$T_SPARK" line > out.txt'],
+                          e, h)
+    finally:
+        STATE["think_out"] = 0
+    frames = re.findall(rb"\x1b7\x1b\[1A\r\x1b\[2K(.*?)\x1b8", raw)
+    try:
+        with open(os.path.join(h, "out.txt")) as f:
+            landed = f.read()
+    except OSError:
+        landed = ""
+    t.ok(rc == 0 and any(f.startswith(b"* " + _cli.ASKING_AGAIN.encode() + b".") for f in frames)
+         and landed.splitlines() == want and _cli.ASKING_AGAIN not in landed,
+         "empty answer: the hint row says `%s` while the second ask runs; stdout is the two lines alone" % _cli.ASKING_AGAIN,
+         repr(frames[:6]) + repr(landed))
+
+    # spark stats: one line when a question got no answer or was asked
+    # again, the two counts for a program; nothing when there was none
+    asked, empty, reasked = _stats.answers(turns())
+    rc, out, _ = spark("stats")
+    rc2, por, _ = spark("stats", "--porcelain")
+    t.ok(rc == 0 and empty >= 1 and reasked > empty
+         and "  no answer   %d of %d questions (asked again: %d)\n" % (empty, asked, reasked) in out
+         and rc2 == 0 and "line_empty\t%d\n" % empty in por and "line_reasked_empty\t%d\n" % reasked in por,
+         "empty answer: spark stats says how many questions got no answer and how many were asked again (%d of %d, %d)"
+         % (empty, asked, reasked), out + por)
+    line = {"mode": "line", "kind": "cmd", "ms": 900}
+    t.ok(_stats.answers([line, dict(line, empties=1), dict(line, kind="empty", empties=2), dict(line, kind="empty", empties=1),
+                         {"mode": "chat", "kind": "empty", "empties": 2}, dict(line, kind="answer")]) == (5, 2, 2),
+         "empty answer: stats.answers counts the line's questions, the empty ones, and those asked again "
+         "(an empty turn stopped mid-reply was not)")
+
+    def machine(name, rows, **more):
+        """a throwaway state dir holding `rows` as today's turns: the env"""
+        sdir = os.path.join(home, "answers-" + name)
+        os.makedirs(os.path.join(sdir, "spark", "turns"), exist_ok=True)
+        with open(os.path.join(sdir, "spark", "turns", time.strftime("%Y-%m-%d") + ".jsonl"), "w") as f:
+            for r in rows:
+                f.write(json.dumps(dict(r, ts=time.strftime("%Y-%m-%d %H:%M:%S"))) + "\n")
+        return dict(more, XDG_STATE_HOME=sdir)
+
+    rc, out, _ = spark("stats", extra=machine("none", [line] * 3))
+    rc2, por, _ = spark("stats", "--porcelain", extra=machine("none", [line] * 3))
+    t.ok(rc == 0 and "turns       3" in out and "no answer" not in out and "line_empty\t0\n" in por
+         and "line_reasked_empty\t0\n" in por,
+         "empty answer: with every question answered spark stats has no such line; the porcelain says 0", out + por)
+
+    # check's answers row: na with no question, ok when all were
+    # answered, a warn from 2 empty AND 2 % of the questions; the turns of
+    # a model no longer served say nothing
+    gone = dict(line, kind="empty", empties=2)
+
+    def answers_row(name, rows, **more):
+        rc, out, err = spark("check", "answers", "--porcelain", extra=machine(name, rows, **more))
+        got = [l.split("\t") for l in out.splitlines() if l.split("\t")[2:3] == ["answers"]]
+        return (rc, got[0][0], got[0][1], got[0][3], got[0][4]) if len(got) == 1 else (rc, out, err)
+    remedy = "spark model list  (a larger model answers more often)"
+    served = os.path.join(home, "answers-served-now.gguf")
+    open(served, "w").close()
+    got = [answers_row("a", []),
+           answers_row("b", [line] * 120),
+           answers_row("c", [line] * 117 + [gone] * 3),
+           answers_row("d", [line] * 119 + [gone]),
+           answers_row("e", [line] * 198 + [gone] * 2),
+           answers_row("f", [dict(gone, model="older-model")] * 5 + [dict(line, model="answers-served-now")] * 3,
+                       SPARK_MODEL=served)]
+    t.ok(got == [(0, "CAPABILITY", "na", "no question at the prompt yet (7 days)", ""),
+                 (0, "CAPABILITY", "ok", "every question answered (7 days)", ""),
+                 (0, "CAPABILITY", "warn", "3 of 120 questions got no answer (7 days)", remedy),
+                 (0, "CAPABILITY", "ok", "1 of 120 questions got no answer (7 days)", ""),
+                 (0, "CAPABILITY", "ok", "2 of 200 questions got no answer (7 days)", ""),
+                 (0, "CAPABILITY", "ok", "every question answered (7 days)", "")],
+         "check answers: na with no question, ok when all were answered, a warn from 2 empty and 2 % of them "
+         "with the larger-model remedy -- and a model no longer served is not counted", repr(got))
 
 
 def continuing_tag_cases(t):
@@ -5742,6 +6102,7 @@ def main():
              "guard: SPARK_KNOWLEDGE=off -- a stubborn retry shows the original with v1.52's label", out)
         line_knowledge_cases(t, spark, home)
         engine_wire_cases(t, spark, home, url)
+        empty_answer_cases(t, spark, home, url, env)
 
         # ask / explain / the explain symlink
         rc, out, _ = spark("what", "does", "this", "mean")

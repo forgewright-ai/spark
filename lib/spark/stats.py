@@ -84,6 +84,25 @@ def by_mode(rows):
     return out
 
 
+def answers(rows):
+    """(questions, empty, reasked) of the prompt line's turns in `rows`.
+    `questions` is every turn of mode `line`. `empty` is those of kind
+    `empty`: the model wrote a thought and no answer, and no answer came
+    when it was asked again. `reasked` is the questions asked again
+    after such a reply, whether the second ask answered or not (the
+    turn's `empties`: 1 on a turn that then answered, 2 on an `empty`
+    one). Counts alone: a turn holds no word of the question."""
+    line = [t for t in rows if t.get("mode") == "line"]
+    empty = reasked = 0
+    for t in line:
+        gone = t.get("kind") == "empty"
+        n = t.get("empties")
+        n = n if isinstance(n, int) and not isinstance(n, bool) else 0
+        empty += gone
+        reasked += n >= (2 if gone else 1)
+    return len(line), empty, reasked
+
+
 def sends(rows):
     """[(day, dest, bytes, turns)] of the turns that carry `out_bytes` --
     what left this machine, where, per day (wire._sent's pair on the
@@ -163,6 +182,7 @@ def _report(argv):
     cfg = config.load()
     rows = turns(days)
     s = summarise(rows)
+    asked, empty, reasked = answers(rows)
     base = bench.baseline(cfg)
     sep = glyph("sep")
     if porcelain:
@@ -175,6 +195,10 @@ def _report(argv):
         say("cache_pct\t%.0f" % s["cache"])
         for mode, m in s["modes"]:
             say("mode_%s\tturns=%d cache_pct=%.0f ms_p50=%d first_p50=%d" % (mode, m["turns"], m["cache"], m["ms_p50"], m["first_p50"]))
+        # the prompt line's questions that got no answer, and those asked
+        # again after an empty reply (answers)
+        say("line_empty\t%d" % empty)
+        say("line_reasked_empty\t%d" % reasked)
         say("baseline_tg\t%s" % (base["tg"] if base else ""))
         lp = bench.line_pace()
         if lp:
@@ -195,6 +219,10 @@ def _report(argv):
         say("  generate    %.1f tok/s mean, %.1f p50, %.1f p05" % (s["tg_mean"], s["tg_p50"], s["tg_p05"]))
         say("  prompt      %.0f tok/s mean, %.0f%% from the cache" % (s["pp_mean"], s["cache"]))
         say("  latency     %.1f s p50, %.1f s p95" % (s["ms_p50"] / 1000.0, s["ms_p95"] / 1000.0))
+        # the prompt line's empty replies, said only when there was one:
+        # how many questions got no answer, how many were asked again
+        if empty or reasked:
+            say("  no answer   %d of %d questions (asked again: %d)" % (empty, asked, reasked))
         # per mode: the cache hit rate is where a slow rerun shows -- a read
         # that carries its source again and hits 0 % is paying the prefill
         # twice; first line is the wait a reader feels (spark read keeps it)

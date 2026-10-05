@@ -935,6 +935,46 @@ def row_throughput(ctx):
     return ok("; ".join(parts) + tail)
 
 
+ANSWERS_DAYS = 7            # the turns the answers row reads
+ANSWERS_MIN = 2             # fewer questions without an answer is never a warning
+ANSWERS_SHARE = 0.02        # nor is a smaller share of the questions asked
+
+
+@row("CAPABILITY")
+def row_answers(ctx):
+    """Did every question at the prompt get an answer: the prompt line's
+    turns of the last ANSWERS_DAYS days (stats.answers -- numbers, never
+    a word of a question). A turn of kind `empty` is a question the
+    model answered with a thought and no JSON, twice: the first reply
+    was stopped and asked again at once, and the second came back empty
+    too. A warn needs ANSWERS_MIN of them AND ANSWERS_SHARE of the
+    questions, so one stray reply never turns the row. Like throughput,
+    it reads the turns of the model served NOW: once another model is
+    chosen (where the remedy leads), the old one's turns say nothing
+    and the row heals. A client serves none, and every line turn there
+    counts. A capability: never fail."""
+    from . import engine, stats
+    live = []
+    for role in engine.ROLES:
+        f = engine.model_file(ctx.cfg, role)
+        stem = os.path.basename(f)
+        stem = stem[:-5] if stem.endswith(".gguf") else stem
+        if stem and stem not in live:
+            live.append(stem)
+    turns = stats.turns(ANSWERS_DAYS)
+    if live:
+        turns = [t for t in turns if t.get("model", live[0]) in live]
+    asked, empty, _again = stats.answers(turns)
+    if not asked:
+        return na("no question at the prompt yet (%d days)" % ANSWERS_DAYS)
+    if not empty:
+        return ok("every question answered (%d days)" % ANSWERS_DAYS)
+    said = "%d of %d questions got no answer (%d days)" % (empty, asked, ANSWERS_DAYS)
+    if empty >= ANSWERS_MIN and empty >= ANSWERS_SHARE * asked:
+        return warn(said, "spark model list  (a larger model answers more often)")
+    return ok(said)
+
+
 @row("CAPABILITY")
 def row_gpu(ctx):
     from . import engine
@@ -2270,6 +2310,14 @@ def make_fixture(root, good, stub_url="", real_spark=False):
         # ignores the record
         f.write(json.dumps({"ts": time.strftime("%Y-%m-%d %H:%M:%S"), "kind": "answer", "mode": "chat",
                             "ms": 1200, "out_bytes": 2048, "dest": "local" if good else "203.0.113.9:8081"}) + "\n")
+        # the answers row: every question at the prompt was answered
+        # (good: the three line turns above), or two of the five got a
+        # thought and no answer, asked again and empty again (bad) -- no
+        # tg_tps and no out_bytes, so throughput and sends ignore them
+        if not good:
+            for _ in range(2):
+                f.write(json.dumps({"ts": time.strftime("%Y-%m-%d %H:%M:%S"), "kind": "empty", "mode": "line",
+                                    "ms": 2400, "empties": 2}) + "\n")
     os.makedirs(os.path.join(home, ".local", "share", "spark", "models"), exist_ok=True)
     # fixture.gguf is written LAST so it is the newest .gguf -- with no
     # SITE_AI_MODEL the spark role serves the newest, and the throughput

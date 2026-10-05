@@ -24,7 +24,13 @@ Brain = collections.namedtuple("Brain", "url model forge")
 
 class BrainError(Exception):
     """kind: down | loading | auth | bad | timeout | cut ; hint: one line
-    for a human"""
+    for a human. Three marks say the MODEL ended a reply, not the wire,
+    each False unless set: `thought` (it opened a thought where a JSON
+    reply was asked), `clean` (and nothing of that reply had reached the
+    caller yet, so asking again repeats nothing), `capped` (the token
+    cap ended the reply before its JSON closed)."""
+
+    thought = clean = capped = False
 
     def __init__(self, kind, hint):
         super().__init__(hint)
@@ -535,11 +541,17 @@ def _sent(url, data):
     return {"out_bytes": len(data), "dest": dest_of(url)}
 
 
-def _send(cfg, url, data, timeout, forge=False):
+def _send(cfg, url, data, timeout, forge=False, sent=None):
+    """POST `data` to the chat endpoint: the open response, or BrainError.
+    `sent`, when given, is called with _sent(url, data) once the server
+    answered -- with a reply or with an HTTP refusal: the request left
+    this machine either way. A server nothing reached is not a send."""
     req = urllib.request.Request(url + "/v1/chat/completions", data=data, headers=_headers(cfg, forge=forge))
     try:
-        return urllib.request.urlopen(req, timeout=timeout)
+        r = urllib.request.urlopen(req, timeout=timeout)
     except urllib.error.HTTPError as e:
+        if sent is not None:
+            sent(_sent(url, data))
         if e.code == 401:
             raise BrainError("auth", _auth_hint(cfg, url, forge))
         if e.code == 503:
@@ -573,6 +585,9 @@ def _send(cfg, url, data, timeout, forge=False):
         if "timed out" in str(e):
             raise BrainError("timeout", "%s took longer than %ss" % (url, timeout))
         raise BrainError("down", "%s: %s" % (url, e))
+    if sent is not None:
+        sent(_sent(url, data))
+    return r
 
 
 # A request shaped by a schema never thinks. A thinking model (qwen3-8b
@@ -587,10 +602,23 @@ def _send(cfg, url, data, timeout, forge=False):
 # many tokens, on a template with thinking tags alone. (`reasoning_budget`
 # is not a field llama-server reads; `reasoning_budget_tokens` is.) A
 # streamed chat or explain carries no schema and keeps the default.
+# A model may think past both (Gemma 4 E4B, 14 of 551 prompt-line
+# questions): a streamed request with a schema stops at the first
+# reasoning delta (chat_stream), and the error says whether asking again
+# repeats nothing (_thought).
 NO_THINKING = {"enable_thinking": False}
 NO_THINK_BUDGET = {"reasoning_budget_tokens": 0}
 THOUGHT_OUT = "the model gave no answer -- ask again"
 CUT_OUT = "the answer was cut at %d tokens before it finished -- say the goal in smaller steps"
+
+
+def _thought(clean):
+    """THOUGHT_OUT as chat_stream raises it: kind `bad` (a FORGE hands the
+    kind on over its API), marked `thought`, and `clean` when nothing of
+    the reply had been written to the caller's on_delta."""
+    e = BrainError("bad", THOUGHT_OUT)
+    e.thought, e.clean = True, bool(clean)
+    return e
 
 
 def _json_body(body, schema):
@@ -678,7 +706,7 @@ LINE_SLOT = 0
 
 
 def chat_stream(cfg, url, messages, on_delta, max_tokens=600, temperature=0.3, forge=False, model=None, timeout=None,
-                schema=None, slot=None):
+                schema=None, slot=None, extra=None, sent=None):
     """Stream the answer through on_delta(text); returns (text, timings).
     `model` as in chat_json: the role, or None for no model field;
     `timeout` as in chat_json (the socket timeout: the connect, then each
@@ -687,7 +715,18 @@ def chat_stream(cfg, url, messages, on_delta, max_tokens=600, temperature=0.3, f
     streams, with no thinking before it (NO_THINKING); `slot` asks for one
     llama-server slot (LINE_SLOT). A server that refuses the request with
     the slot in it is asked once more without it: the slot is a speed,
-    never a reason to fail."""
+    never a reason to fail. `extra` is top-level body fields merged in
+    last, over any field above (the prompt line's second ask). `sent` is
+    called with _sent's pair for every request made here, before its
+    reply is read: a caller sums what one turn sent, a stopped or failed
+    request too.
+
+    With a schema, the first reasoning delta ends the stream at once:
+    BrainError `bad`, THOUGHT_OUT, marked `thought`, and `clean` when no
+    chunk had gone to on_delta. Leaving the response closes the socket,
+    which is how the server learns to stop writing a thought nobody will
+    read. Without a schema (chat, explain) a thought is the model's own
+    business and the stream runs on."""
     body = {"messages": messages, "max_tokens": max_tokens, "temperature": temperature,
             "stream": True, "cache_prompt": True}
     if model is not None:
@@ -696,17 +735,19 @@ def chat_stream(cfg, url, messages, on_delta, max_tokens=600, temperature=0.3, f
         _json_body(body, schema)
     if slot is not None:
         body["id_slot"] = slot
+    if extra:
+        body.update(extra)
     out, timings, done, thought = [], {}, False, False
     data = _encode(body)
     try:
-        r = _send(cfg, url, data, timeout or cfg.timeout, forge=forge)
+        r = _send(cfg, url, data, timeout or cfg.timeout, forge=forge, sent=sent)
     except BrainError as e:
         if slot is None or e.kind != "bad":
             raise
         debug("the server refused id_slot (%s): asked again without it" % e.hint[:80])
-        body.pop("id_slot")
+        body.pop("id_slot", None)
         data = _encode(body)
-        r = _send(cfg, url, data, timeout or cfg.timeout, forge=forge)
+        r = _send(cfg, url, data, timeout or cfg.timeout, forge=forge, sent=sent)
     with r:
         try:
             for raw in r:
@@ -732,9 +773,18 @@ def chat_stream(cfg, url, messages, on_delta, max_tokens=600, temperature=0.3, f
                 try:
                     part = chunk["choices"][0]["delta"]
                     delta = part.get("content") or ""
-                    thought = thought or bool(part.get("reasoning_content"))
+                    thinking = bool(part.get("reasoning_content"))
                 except (KeyError, IndexError, TypeError, AttributeError):
                     continue
+                if thinking:
+                    thought = True
+                    if schema is not None:
+                        # stop at the thought: the cap would be spent on
+                        # it and the reply come back empty at the end.
+                        # The raise leaves `with r`, the socket closes,
+                        # and the server drops the task (as _Stop does)
+                        debug("the model opened a thought where JSON was asked: the stream stopped there")
+                        raise _thought(not out)
                 if delta:
                     out.append(delta)
                     on_delta(delta)
@@ -755,5 +805,7 @@ def chat_stream(cfg, url, messages, on_delta, max_tokens=600, temperature=0.3, f
         raise BrainError("cut", "%s stopped mid-reply -- the answer above is incomplete" % url)
     text = "".join(out)
     if schema is not None and _thought_out(text, timings.get("finish"), thought):
-        raise BrainError("bad", THOUGHT_OUT)
+        # the net under the stop above: a reply that reached its end with
+        # a thought seen, the cap spent and no JSON
+        raise _thought(not out)
     return text, dict(timings, **_sent(url, data))

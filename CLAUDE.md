@@ -1885,7 +1885,7 @@ One grammar for every verb. A verb that breaks a rule is a bug.
    Past the estimate it says `longer than last time (N s) -- spark check
    says why`. With no measure it is the `swell` and the seconds.
    Awakened, `spark check` counts its rows on stderr while they run,
-   the thinking face first: `(o.O) checking 3/39`.
+   the thinking face first: `(o.O) checking 3/40`.
 7. Exit codes: 0 ok or show, 1 the world (stderr), 2 the invocation
    (stdout, signed), 78 misconfiguration, 130 `SIGINT`.
 
@@ -2210,7 +2210,7 @@ sh tests/gate.sh full           # every suite for this OS, about 10 minutes; CI 
 sh tests/land.sh --passed SHA   # ci.yml passed for that commit: what main and a tag need
 ```
 
-`spark check` has 39 rows today, by category `8 SOFTWARE, 22
+`spark check` has 40 rows today, by category `8 SOFTWARE, 23
 CAPABILITY, 9 NONFUNCTIONAL` (`grep -c '^@row' lib/spark/check.py`
 counts them). `--selftest` runs 8 passes. The first two prove every
 fixture-testable row flips between a good and a bad fixture. The good

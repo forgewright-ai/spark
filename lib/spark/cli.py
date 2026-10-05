@@ -241,22 +241,89 @@ LINE_CONTROL = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f‎‏‪-‮⁦-
 LINE_REFUSED = "the model's command carried control characters -- refused"
 LINE_TOKENS = 200          # what a line reply may write: five short fields
 
+# An empty answer is asked again at once (v1.87). A model may open a
+# thought where the line's JSON was asked and spend the whole cap there;
+# wire.chat_stream stops such a stream at its first reasoning delta, and
+# _line_ask asks ONE more time. The same request failed the same way
+# twice in a row, so the second ask differs from the first by these two
+# and by nothing else -- each applied to the retry alone, in _line_ask:
+# LINE_RETRY_BODY is top-level fields merged into the request body
+# (wire.chat_stream's `extra`: it wins over the first ask's fields), and
+# LINE_RETRY_NUDGE one line appended to the retry's last user message
+# ('' appends none). The system message and every earlier message stay
+# byte-identical: the slot's cached prefix is read again, not rebuilt.
+LINE_RETRY_BODY = {}
+LINE_RETRY_NUDGE = "Answer now, with the JSON object alone."
+ASKING_AGAIN = "no answer came -- asking again"      # the hint row, while the second ask runs
+# line 2 when the MODEL ended a reply after line 1 was written (a
+# thought, the cap): the command in the line is whole, its hint is not
+HINT_LOST = "the reply was cut before its hint -- read the command before Enter"
 
-def _line_ask(s, text, on_delta=None, context=""):
+
+def _nudged(messages):
+    """The retry's messages: `messages` with LINE_RETRY_NUDGE on a line of
+    its own after the last user message. A new list; nothing before that
+    message changes by a byte."""
+    out = list(messages)
+    if LINE_RETRY_NUDGE:
+        for i in range(len(out) - 1, -1, -1):
+            if out[i].get("role") == "user":
+                out[i] = dict(out[i], content=out[i].get("content", "") + "\n" + LINE_RETRY_NUDGE)
+                break
+    return out
+
+
+def _line_ask(s, text, on_delta=None, context="", again=None):
     """One prompt-line request: streamed, the line's schema, the line's own
     slot (wire.LINE_SLOT), every chunk to on_delta as it comes. Returns
     (reply, ms). A reply that is not one JSON object is BrainError `bad`,
-    worded as chat_json words it. `context` is a Reference block (the
-    knowledge's evidence): it rides the user message, never the prefix."""
+    worded as chat_json words it: wire.CUT_OUT (marked `capped`) when the
+    cap ended it. `context` is a Reference block (the knowledge's
+    evidence): it rides the user message, never the prefix.
+
+    A reply that was a thought and no answer (BrainError `thought`) is
+    asked again ONCE when nothing of it reached on_delta (`clean`): the
+    same messages with LINE_RETRY_NUDGE, the same body with
+    LINE_RETRY_BODY, the same on_delta. `again()` is called first, for
+    the pulse. A second thought is the error. s.empties counts every
+    such reply of the turn; every request's bytes go to s.note_sent."""
     t0 = time.time()
-    raw, s.timings = s._retry_fresh(lambda: wire.chat_stream(
-        s.cfg, s.url, s._messages(text, context), on_delta or (lambda d: None), max_tokens=LINE_TOKENS,
-        temperature=0.2, forge=s.forge, model=s.role, schema=persona.LINE_SCHEMA, slot=wire.LINE_SLOT))
+    feed = on_delta or (lambda d: None)
+
+    def ask(retry=False):
+        messages = s._messages(text, context)
+        return wire.chat_stream(
+            s.cfg, s.url, _nudged(messages) if retry else messages, feed, max_tokens=LINE_TOKENS,
+            temperature=0.2, forge=s.forge, model=s.role, schema=persona.LINE_SCHEMA, slot=wire.LINE_SLOT,
+            extra=dict(LINE_RETRY_BODY) if retry else None, sent=s.note_sent)
+
+    def counted(fn):
+        try:
+            return s._retry_fresh(fn)
+        except wire.BrainError as e:
+            if e.thought:
+                s.empties += 1
+            raise
+
+    try:
+        raw, s.timings = counted(ask)
+    except wire.BrainError as e:
+        if not (e.thought and e.clean):
+            raise
+        if again is not None:
+            again()
+        raw, s.timings = counted(lambda: ask(True))
     try:
         reply = json.loads(raw)
         if not isinstance(reply, dict):
             raise ValueError
     except ValueError:
+        if s.timings.get("finish") == "length":
+            # the cap ended the JSON before it closed: said as chat_json
+            # says it, never the raw JSON in the hint row
+            e = wire.BrainError("bad", wire.CUT_OUT % LINE_TOKENS)
+            e.capped = True
+            raise e
         raise wire.BrainError("bad", "the model did not return JSON: %s" % raw[:80].replace("\n", " "))
     return reply, int((time.time() - t0) * 1000)
 
@@ -771,14 +838,25 @@ def _guards(s, reply, command, hint, text, cwd, more, history, ms):
 def _line_stream(s, text, early, context=""):
     """One streamed ask through `early`: (reply, ms, error). A _Stop ends
     the stream at the command the judge found wrong -- the reply is the
-    fields so far. A BrainError comes back third, never raised."""
+    fields so far. A BrainError comes back third, never raised. When the
+    reply was a thought and no answer, the hint row says ASKING_AGAIN
+    while _line_ask asks once more (the pulse alone: stdout stays
+    contract 4's lines)."""
+    told = []
+
+    def again():
+        told.append(1)
+        early.busy.tell(ASKING_AGAIN)
     try:
-        reply, ms = _line_ask(s, text, early.feed, context)
+        reply, ms = _line_ask(s, text, early.feed, context, again)
         return dict(reply, **early.parse.fields), ms, None     # a key's first value is the one printed
     except _Stop:
         return dict(early.parse.fields), early.ms(), None
     except wire.BrainError as e:
         return None, early.ms(), e
+    finally:
+        if told and early.head is None:
+            early.busy.tell("")         # no line 1 yet: the row goes back to the dots
 
 
 def _judged(s, reply, command, hint, text, asked, ms, know, early):
@@ -993,16 +1071,28 @@ def _cmd_line(args):
                                                                      ms, know, early)
             refused = LINE_CONTROL.search(str(reply.get("command")))      # a re-ask's command too
     extra = dict(extra, **know.numbers())
+    if s is not None and s.empties:
+        # replies of this turn that were a thought and no answer: 1 on a
+        # turn the second ask answered, 2 when it did not
+        extra["empties"] = s.empties
     if err is not None:
         busy.stop()
         if early.head is None:
             say("error")
             say(_reason(err))
+            if err.thought:
+                # no answer came, asked again or not: the turn is counted
+                # (kind `empty`, numbers alone, on no thread), so spark
+                # stats and check's answers row can see it
+                s.record(kind="empty", ms=early.ms(), **extra)
             return 1
         ms = early.ms()
         if early.hint is None:
-            # line 1 is out: the reason is line 2, and the exit says so
-            early.line2(_reason(err))
+            # line 1 is out: the reason is line 2, and the exit says so.
+            # The model's own end (a thought, the cap) is said as what
+            # the reader holds, a command without its hint; the wire's
+            # (down, a timeout, a cut socket) keeps its reason
+            early.line2(HINT_LOST if err.thought or err.capped else _reason(err))
             s.record(kind=early.head, failed=err.kind, cmd_ms=early.cmd_ms, ms=ms, thread=thread, **extra)
             return 1
         # lines 1 and 2 are whole: the reply stands, without its proof
@@ -1278,7 +1368,12 @@ def _fmt_turn(t, short=False):
             body = _first_line(body) or body.strip()[:70]
     head = "%s  %s  %s" % (t.get("ts", "?"), t.get("kind", "?"), line)
     mark = glyph("warn") if t.get("kind") == "danger" else glyph("hammer")
-    body = "  %s %s" % (mark, body) if body else "  (the words are gone)"
+    if t.get("kind") == "empty":
+        # the prompt line asked and the model gave no answer: the turn is
+        # numbers alone, on no thread -- there were never words to lose
+        body = "  (no answer came)"
+    else:
+        body = "  %s %s" % (mark, body) if body else "  (the words are gone)"
     tail = "  %s, %s" % (config.model_name(t.get("model") or "?"), speed(t))
     if t.get("thread"):
         tail += "  thread %s" % t["thread"]

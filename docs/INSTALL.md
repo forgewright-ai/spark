@@ -657,7 +657,7 @@ Keep passwordless `sudo` off a machine that serves your network. The
 admin token can run any command here. With passwordless `sudo`, that
 means root.
 
-The check. `spark check` has 39 rows and exits 0 when no row fails.
+The check. `spark check` has 40 rows and exits 0 when no row fails.
 Bare, it shows only the rows that need you, each with its fix. `spark
 check --all` shows every row. `spark check --report` prints a block for
 an issue, with no names or paths.
