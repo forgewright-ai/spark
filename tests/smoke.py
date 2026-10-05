@@ -1917,6 +1917,47 @@ def own_engine_cases(t):
              "ours: a llama-server that carries spark's --api-key-file is spark's own, and is stopped", out)
         rc, out, _ = spark("client", "off", extra={"SPARK_PORT": str(mport)})
 
+        # the page's server too: on a client it serves nothing and spark
+        # serve off has nothing to switch, so spark client URL stops the
+        # one forge.pid names (its command line checked) and says so
+        both, bport, burl, _blog = serve("--api-key-file", state + "/api-token")
+        pager = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)", "forge --foreground"])
+        # reaped as soon as it ends: a stopped child nobody waited for still
+        # answers a signal 0, and spark would wait for it in vain
+        threading.Thread(target=pager.wait, daemon=True).start()
+        with open(state + "/forge.pid", "w") as f:
+            f.write("%d\n" % pager.pid)
+        rc, out, _ = spark("client", burl, extra={"SPARK_PORT": str(bport)})
+        gone = True
+        try:
+            pager.wait(timeout=20)
+            both.wait(timeout=20)
+        except subprocess.TimeoutExpired:
+            gone = False
+            pager.kill()
+        t.ok(rc == 0 and gone and "the page's server that ran here is stopped" in out
+             and "the engine that ran here is stopped" in out and not os.path.exists(state + "/forge.pid"),
+             "ours: spark client URL stops the page's server that ran here too, and says so", out)
+        # a client made before this: spark serve off stops a page's server left over
+        pager = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)", "forge --foreground"])
+        # reaped as soon as it ends: a stopped child nobody waited for still
+        # answers a signal 0, and spark would wait for it in vain
+        threading.Thread(target=pager.wait, daemon=True).start()
+        with open(state + "/forge.pid", "w") as f:
+            f.write("%d\n" % pager.pid)
+        rc, out, _ = spark("serve", "off", extra={"SPARK_PORT": str(bport)})
+        gone = True
+        try:
+            pager.wait(timeout=25)
+        except subprocess.TimeoutExpired:
+            gone = False
+            pager.kill()
+        t.ok(rc == 0 and gone and "the page stopped" in out,
+             "client: spark serve off stops a page's server left over from when this machine served", out)
+        rc, out, _ = spark("serve", "off", extra={"SPARK_PORT": str(bport)})
+        t.ok(rc == 0 and "nothing serves here" in out, "client: and with none left, spark serve off says nothing serves here", out)
+        rc, out, _ = spark("client", "off", extra={"SPARK_PORT": str(bport)})
+
         # spark serve off, the unit loaded (pinned) and its stop a no-op:
         # spark's own engine that outlives the wait is killed, and a
         # llama-server spark did not start on the same port is not

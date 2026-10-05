@@ -502,7 +502,12 @@ def cmd_off(args):
     if cfg.base_url:
         return cmd_stop(args)                 # a client by SPARK_BASE_URL: nothing kept here to switch
     if cfg.client:
+        from . import forgeserve
         from .check import client_of
+        if engine.forge_service_state(cfg) == "loaded" or forgeserve._pid():
+            # a page's server left over from when this machine served
+            # (a client made by a spark before 1.86): this is its stop
+            return forgeserve.cmd_stop(["--force"])
         say("%s serve -- nothing serves here: %s" % (MARK, client_of(cfg)))
 
         return 0

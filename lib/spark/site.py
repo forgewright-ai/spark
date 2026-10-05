@@ -445,30 +445,48 @@ def cmd_client(args):
             say("* using your engine at %s -- spark never starts or stops it" % url)
         elif not users.account()[0]:
             say("* then log in: " + _login_hint(url))
-        # a machine that served: the unit would bring the engine back at
-        # boot -- stop and disable it here, remove its links, and say so
-        stopped = False
-        name = engine.unit_name("serve")
-        if IS_MAC:
-            plist = os.path.join(HOME, "Library", "LaunchAgents", name + ".plist")
-            if engine.service_state(cfg) == "loaded" or os.path.exists(plist):
-                subprocess.run(["launchctl", "bootout", "gui/%d/%s" % (os.getuid(), name)], capture_output=True)
-                stopped = True
-            if os.path.exists(plist):
-                os.remove(plist)
-        elif init_shape() == "runit":
-            # the service dir stays rendered; its `down` file keeps the engine off
-            if engine.service_state(cfg) == "loaded":
-                engine.service_stop(True)
-                stopped = True
-        else:
-            link = os.path.join(HOME, ".config", "systemd", "user", name)
-            if engine.service_state(cfg) == "loaded" or os.path.lexists(link):
-                engine.sysctl(["disable", "--now", name])
-                stopped = True
-            if os.path.lexists(link):
-                os.remove(link)
-                engine.sysctl(["daemon-reload"])
+        # a machine that served: each unit would bring its server back at
+        # boot -- stop and disable both here, remove their links, and say
+        # so. The page's server too: it serves nothing on a client, and
+        # `spark serve off` has nothing to switch there
+        def drop(unit):
+            done = False
+            name = engine.unit_name(unit)
+            if IS_MAC:
+                plist = os.path.join(HOME, "Library", "LaunchAgents", name + ".plist")
+                if engine.service_state(cfg, unit) == "loaded" or os.path.exists(plist):
+                    subprocess.run(["launchctl", "bootout", "gui/%d/%s" % (os.getuid(), name)], capture_output=True)
+                    done = True
+                if os.path.exists(plist):
+                    os.remove(plist)
+            elif init_shape() == "runit":
+                # the service dir stays rendered; its `down` file keeps the server off
+                if engine.service_state(cfg, unit) == "loaded":
+                    engine.service_stop(True, unit)
+                    done = True
+            else:
+                link = os.path.join(HOME, ".config", "systemd", "user", name)
+                if engine.service_state(cfg, unit) == "loaded" or os.path.lexists(link):
+                    engine.sysctl(["disable", "--now", name])
+                    done = True
+                if os.path.lexists(link):
+                    os.remove(link)
+                    engine.sysctl(["daemon-reload"])
+            return done
+
+        stopped = drop("serve")
+        from . import forgeserve
+        page = drop("forge")
+        pid = forgeserve._pid()
+        if pid:
+            # a page's server started by hand, or one its unit has not let go of yet
+            engine.terminate([pid])
+            left = engine.wait_gone([pid], 15)
+            if left:
+                engine.terminate(left, force=True)
+            page = True
+        if page:
+            forgeserve.forget()
         # spark's own engine alone: a llama-server spark did not start
         # on this port (the user's own) is never signalled
         now = engine.own_pids(cfg)
@@ -482,6 +500,8 @@ def cmd_client(args):
         if stopped:
             engine.forget()
             say("* the engine that ran here is stopped")
+        if page:
+            say("* the page's server that ran here is stopped")
     return rc
 
 

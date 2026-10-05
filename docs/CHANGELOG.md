@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.86
+
+- A machine that becomes a client stops its own page's server. `spark
+  client URL` stopped the engine that ran there, but the page's server
+  kept running and listening on your network, and `spark serve off`
+  would not stop it. Both are stopped now, and the run says so. On a
+  client made by an older spark, `spark serve off` stops it.
+
 ## v1.85
 
 - The prompt line names your system's own package manager. On a

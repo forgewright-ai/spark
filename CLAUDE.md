@@ -2077,7 +2077,10 @@ One grammar for every verb. A verb that breaks a rule is a bug.
   rows in `check.CLIENT_ROWS` (engine, services, watchdog, ai, serve,
   forge, ember) read `na`. `--selftest`'s third pass asserts that with
   the `peer` row ok. The `peer` row is where a client's health lives. A
-  client stays a client until `spark client off`. `spark model`, `model
+  machine that served stops both of its servers when it becomes a
+  client: `spark client URL` stops and removes the engine's unit and
+  the page's unit, and says each. A client stays a client until `spark
+  client off`. `spark model`, `model
   --chat list` and `model budget` there print the other machine's table,
   never this machine's RAM as a budget (`model.peer_models`, `GET
   /api/models` with the login token). When the other machine is down, a

@@ -329,10 +329,11 @@ fi
 if [ "$(uname -s)" != Darwin ]; then
     mkdir -p "$HOME/.config/systemd/user" "$T/sysd"
     ln -sf "$REPO/linux/home/.config/systemd/user/spark-serve.service" "$HOME/.config/systemd/user/spark-serve.service"
+    ln -sf "$REPO/linux/home/.config/systemd/user/spark-forge.service" "$HOME/.config/systemd/user/spark-forge.service"
     cat > "$T/sysd/systemctl" <<'SH'
 #!/bin/sh
 echo "systemctl $*" >> "$SYSD_LOG"
-case "$*" in *is-enabled*spark-serve*) echo enabled ;; *is-enabled*) echo disabled ;; esac
+case "$*" in *is-enabled*spark-serve*|*is-enabled*spark-forge*) echo enabled ;; *is-enabled*) echo disabled ;; esac
 exit 0
 SH
     chmod +x "$T/sysd/systemctl"
@@ -342,6 +343,12 @@ SH
         && ok "client URL: the serve unit is stopped and disabled" || bad "client URL: no disable logged: $(cat "$T/sysd.log" 2>/dev/null | tr '\n' ' ')"
     [ ! -e "$HOME/.config/systemd/user/spark-serve.service" ] && ok "client URL: the unit link is removed" || bad "client URL: the link stayed"
     printf '%s\n' "$out" | grep -q "the engine that ran here is stopped" && ok "client URL: the stop is said" || bad "client URL says nothing: $out"
+    # the page's server too: it serves nothing on a client, and spark
+    # serve off has nothing to switch there, so it would run for ever
+    grep -q -- "--user disable --now spark-forge.service" "$T/sysd.log" 2>/dev/null \
+        && ok "client URL: the page's unit is stopped and disabled" || bad "client URL: the page's unit stayed: $(cat "$T/sysd.log" 2>/dev/null | tr '\n' ' ')"
+    [ ! -e "$HOME/.config/systemd/user/spark-forge.service" ] && ok "client URL: the page's unit link is removed" || bad "client URL: the page's link stayed"
+    printf '%s\n' "$out" | grep -q "the page's server that ran here is stopped" && ok "client URL: the page's stop is said" || bad "client URL says nothing of the page: $out"
     printf 'SITE_AI_MODEL=none\n' > "$HOME/.config/spark/site.env"
 fi
 
