@@ -780,6 +780,16 @@ def _own_stage(words):
     return False
 
 
+def present(head):
+    """Is `head` a program on this machine, asked the way the verdict
+    asks it (_present): True only when the store, or this machine's
+    PATH, says so. Never raises."""
+    try:
+        return _present(grounding.default_store(None), head) is True
+    except Exception:       # noqa: BLE001 -- a question about a word, never a failure
+        return False
+
+
 def own(command):
     """True when `command` is spark's own, whole: it has at least one
     stage, and every stage's command word, past its wrappers, is the

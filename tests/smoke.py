@@ -605,7 +605,7 @@ def answer_json(messages):
     # the judged line (v1.53): the first reply, and the re-ask's
     asked = " ".join(m.get("content", "") for m in messages if m.get("role") == "user")
     if "know" in asked:
-        got = know_answer(asked, KNOW_AGAIN in user or OWN_AGAIN in user)
+        got = know_answer(asked, KNOW_AGAIN in user or OWN_AGAIN in user or TOLD_AGAIN in user)
         if got:
             return got
     # the streamed line (v1.52): the schema's own order -- kind, danger,
@@ -656,6 +656,7 @@ def answer_json(messages):
 
 KNOW_AGAIN = "Answer again with a command"      # cli.ASK_AGAIN's opening: the judge's one re-ask
 OWN_AGAIN = "names one of spark's own commands"  # cli.OWN_AGAIN's words: an answer asked for its command
+TOLD_AGAIN = "tells the user which command to run"   # cli.TOLD_AGAIN's: an answer that names a program
 KNOW_PS = "every process, the biggest memory first"
 
 
@@ -709,6 +710,13 @@ def know_answer(asked, again):
     # again, knowprosenoun's words name none (a noun phrase)
     if "knowprosenoun" in asked:
         return {"kind": "answer", "danger": False, "command": "", "hint": "the spark model answers at your prompt", "proof": ""}
+    if "knowtoldnone" in asked:     # words after `use` that are no program
+        return {"kind": "answer", "danger": False, "command": "", "hint": "You can use patience here.", "proof": ""}
+    if "knowtold" in asked:         # an answer that tells the user which program to run
+        if again:
+            return cmd("rm x" if "knowtoldother" in asked else "ls -la", "lists everything here")
+        return {"kind": "answer", "danger": False, "command": "", "proof": "",
+                "hint": "I cannot list files myself; please use ls to see them."}
     if "knowproselong" in asked and not again:
         return {"kind": "answer", "danger": False, "command": "", "proof": "",
                 "hint": "The model that answers is set in the configuration of this machine, which you can "
@@ -962,7 +970,7 @@ def knowledge_cases(t):
          and "prompt line" in means.get("spark off", "") and "remembers a fact" in means.get("spark memory add WORDS", "")
          and "headless" in means.get("spark serve boot on", "") and "every boot" in means.get("spark serve boot on", "")
          and "left this machine" in means.get("spark stats --sends", "") and "admin token" in means.get("spark serve --login --new", "")
-         and means.get("spark user", "").startswith("the page's users") and "full report" in means.get("spark status", ""),
+         and means.get("spark user", "").startswith("page logins (not system users)") and "full report" in means.get("spark status", ""),
          "knowledge: shell_map says what the line lacked -- check is `is spark ok`, last the last answer, ver --sbom, "
          "client off, serve --login for a phone, stats --sends, off for the prompt line, memory add, serve boot, "
          "the bare user and status", smap)
@@ -5800,6 +5808,23 @@ def own_mark_cases(t, url):
         rc, out, _ = run("line", stdin="? knowprose is spark fine", SPARK_KNOWLEDGE="off")
         t.ok(rc == 0 and out.splitlines()[:1] == ["answer"] and len(STATE["bodies"]) == n0 + 1,
              "line: with the knowledge off an answer is never asked again", repr((rc, out)))
+        # ... and one that tells the user which program to run, the same
+        n0 = len(STATE["bodies"])
+        rc, out, _ = run("line", stdin="? knowtold list the files")
+        asks = STATE["bodies"][n0:]
+        t.ok(rc == 0 and out.splitlines()[:1] == ["cmd\tls -la"] and len(asks) == 2
+             and "tells the user which command to run" in asks[1]["messages"][-1]["content"],
+             "line: an answer that tells the user which program to run is asked again for the command", repr((rc, out)))
+        n0 = len(STATE["bodies"])
+        rc, out, _ = run("line", stdin="? knowtold knowtoldother list the files")
+        t.ok(rc == 0 and out.splitlines()[:2] == ["answer", "I cannot list files myself; please use ls to see them."]
+             and len(STATE["bodies"]) == n0 + 2,
+             "line: a second reply that runs another program than the one the answer named does not land", repr((rc, out)))
+        n0 = len(STATE["bodies"])
+        rc, out, _ = run("line", stdin="? knowtoldnone be calm")
+        t.ok(rc == 0 and out.splitlines()[:2] == ["answer", "You can use patience here."]
+             and len(STATE["bodies"]) == n0 + 1,
+             "line: a word after `use` that is no program here names no command: one request", repr((rc, out)))
         sys.path.insert(0, os.path.join(REPO, "lib"))
         from spark import cli as _cl
         named = [_cl._own_named(x) for x in (
@@ -9861,7 +9886,7 @@ def main():
             " spark model [NAME|auto|none] choose the model this machine runs (-h)",
             " spark model --chat NAME      choose a second model for chat",
             " spark client [URL|off]       use another machine's model; off: your own again",
-            " spark user [add NAME]        the page's users; add shows a token once"],
+            " spark user [add NAME]        page logins (not system users); add shows a token"],
              "spark help: the group 'the model and the server', line for line", _grp.group(1) if _grp else out)
         # v1.87: the help's rows are what the prompt line knows of spark
         # (grounding.shell_map), so each says what its command is for in
