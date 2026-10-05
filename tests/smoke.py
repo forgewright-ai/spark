@@ -5593,6 +5593,16 @@ def own_mark_cases(t, url):
         t.ok(all(_pers.is_dangerous(c) for c in _dang) and not any(_pers.is_dangerous(c) for c in _safe),
              "danger: %s is marked (a package cache cleaned); its near-misses stay plain" % _name,
              str([c for c in _dang if not _pers.is_dangerous(c)] + ["!" + c for c in _safe if _pers.is_dangerous(c)]))
+    # the scan joins the lines anchored "as the command" into one pattern
+    # (one walk over a long line, not thirteen): it says what the list says
+    _both = [c for _n, _d, _s in _cache for c in _d + _s] + [
+        "rm -rf /", "ls", "truncate -s 0 f", "ln -sf a b", "cp /dev/null f", "doas ls", "sv down x", "sv status x",
+        "rsync -a --remove-source-files a b", "cp x ~/.bashrc", "echo hi", "cd /tmp && truncate -s 0 f",
+        "/usr/bin/doas ls", "(sv down x)", "nice ls", "spark serve off", "git push --force", "x > f"]
+    _differ = [c for c in _both if any(p.search(c) for p in _pers.DANGER) != _pers.danger_shape(c)]
+    t.ok(not _differ and len(_pers.DANGER_SCAN) < len(_pers.DANGER) and len(_pers._AS_CMD) >= 13,
+         "danger: the scan joins the lines anchored as the command into one pattern, and says what the list says",
+         str(_differ))
     _missed = ["zypper -R /x clean", "apt -o Dir::Cache=/x clean"]
     t.ok(not any(_pers.is_dangerous(c) for c in _missed),
          "danger: an option that takes its value as the next word hides the command word -- missed, knowingly",

@@ -189,11 +189,21 @@ _RM_FLAG = r"(?:-[a-zA-Z]+|--\S+)"
 RM_RECURSIVE = re.compile(r"\brm\s+(?:%s\s+)*(?:-[a-zA-Z]*[rR][a-zA-Z]*|--recursive)(?=\s|$)" % _RM_FLAG)
 RM_FORCE = re.compile(r"\brm\s+(?:%s\s+)*(?:-[a-zA-Z]*f[a-zA-Z]*|--force)(?=\s|$)" % _RM_FLAG)
 DANGER = [re.compile(p) for p in _DANGER] + [RM_RECURSIVE, RM_FORCE]
+# What danger_shape scans: the same list, with the lines anchored "as the
+# command" (_CMD) joined into one pattern. Each of those starts at every
+# separator of a line, so thirteen of them were thirteen walks over a
+# 100 kB line of thousands of stages; joined, the walk is one, and the
+# line stays inside its second on a slow machine. The same truth: _CMD
+# then any of the lines matches exactly where one of them did.
+_AS_CMD = [p[len(_CMD):] for p in _DANGER if p.startswith(_CMD)]
+DANGER_SCAN = ([re.compile(p) for p in _DANGER if not p.startswith(_CMD)]
+               + [re.compile(_CMD + "(?:" + "|".join("(?:%s)" % p for p in _AS_CMD) + ")")]
+               + [RM_RECURSIVE, RM_FORCE])
 
 
 def danger_shape(text):
     """The DANGER patterns alone, over the text as written."""
-    return any(p.search(text) for p in DANGER)
+    return any(p.search(text) for p in DANGER_SCAN)
 
 
 def is_dangerous(command):
