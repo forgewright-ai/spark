@@ -480,6 +480,24 @@ class _Pulse(textmod.Busy):
 LINE_KNOW_DEFAULT = "full"
 LINE_KNOW_ARMS = ("off", "judge", "full")
 ASK_AGAIN = "Answer again with a command that works on this machine."
+# An answer in words that names one of spark's own commands (`You can
+# check with spark check.`) is asked again, once, for the command itself:
+# the brief's own rule for a question about spark (persona.MODE_LINE),
+# held by the code. A small model explains the command where it should
+# give it. `the spark model`, `a spark user`: a noun phrase names none.
+OWN_AGAIN = "That answer names one of spark's own commands. Reply kind=cmd with the command itself in `command`."
+OWN_TOLD = "that is one of spark's commands -- asking for it"
+OWN_NAMED = re.compile(r"(?<![\w/.-])(?:(the|a|an|this|that|your|its|my)\s+)?spark\s+([a-z][a-z-]*)")
+
+
+def _own_named(text):
+    """The spark verbs an answer's words name as commands: the tree's own
+    verbs, never one a noun phrase holds (`the spark model answers`)."""
+    if not isinstance(text, str) or "spark" not in text:
+        return []
+    from . import grounding
+    verbs = grounding.spark_tree().verbs
+    return [m.group(2) for m in OWN_NAMED.finditer(text) if not m.group(1) and m.group(2) in verbs]
 REPEATED = "that exact command was already tried and failed; propose a different one."
 NOTE_WORD = 24             # a flag or a head in a note: never the whole hint
 NOTE_ROOM = 24             # a hint cut shorter than this beside a note is dropped
@@ -760,6 +778,15 @@ class _Early:
             if self.retry:
                 self.off = True             # a re-ask lands a command early, or waits for the end
                 return False
+            if self.know.arm != "off":
+                # an answer waits for its own words: one that names a
+                # spark command is asked again for the command (the end
+                # does it, _as_command), so line 1 must not be out
+                if "hint" not in f:
+                    return False
+                if _own_named(f.get("hint")):
+                    self.off = True
+                    return False
             return self._first("answer")
         if self.more and command == _last_proposed(self.history):
             self.off = True
@@ -952,6 +979,30 @@ def _judged(s, reply, command, hint, text, asked, ms, know, early):
     return reply, command, hint, kind, ms, early, None
 
 
+def _as_command(s, reply, hint, asked, ms, know, early):
+    """An answer that names one of spark's own commands, asked again once
+    for the command itself (OWN_AGAIN). The second reply lands only when
+    it is a spark command the judge finds nothing to ask about; else the
+    answer stands as it came, and a failure of the second ask is not the
+    turn's: the answer was whole. Returns _judged's tuple, the kind
+    `answer` when the answer stands."""
+    from . import judge
+    early.busy.tell(OWN_TOLD)
+    s.history.extend([{"role": "user", "content": asked}, {"role": "assistant", "content": hint}])
+    again = _Early(early.cwd, early.more, early.history, early.busy, know, retry=True, t0=early.t0)
+    retry, ms2, err = _line_stream(s, OWN_AGAIN, again, "")
+    know.reasked, ms = 1, ms + ms2
+    if again.head is not None:              # its command passed the judge and is out
+        return retry or dict(again.parse.fields), again.command, again.hint or "", again.head, ms, again, err
+    early.busy.tell("")
+    raw = (retry or {}).get("command")
+    c2 = _one_line(raw, 1000) if isinstance(raw, str) and not LINE_CONTROL.search(raw) else ""
+    if err is None and retry and retry.get("kind") == "cmd" and c2 and judge.own(c2) and not _asked(know.verdict(c2)):
+        kind = "danger" if know.flagged(c2, retry.get("danger"), False) else "cmd"
+        return retry, c2, _one_line(retry.get("hint", "")), kind, ms, early, None
+    return reply, "", hint, "answer", ms, early, None
+
+
 class _Tee:
     """stdout as it was, every byte the same, and a copy kept: what clear
     mode reads once spark line has written its lines."""
@@ -1110,6 +1161,11 @@ def _cmd_line(args):
                 reply, command, hint, kind, ms, early, err = _judged(s, reply, command, hint, text, asked,
                                                                      ms, know, early)
             refused = LINE_CONTROL.search(str(reply.get("command")))      # a re-ask's command too
+        elif not is_cmd and know.arm != "off" and _own_named(hint):
+            asked = persona.user_message(ask_text, cwd, context)
+            reply, command, hint, kind, ms, early, err = _as_command(s, reply, hint, asked, ms, know, early)
+            is_cmd = kind != "answer"
+            refused = is_cmd and LINE_CONTROL.search(str(reply.get("command")))
     extra = dict(extra, **know.numbers())
     if s is not None and s.empties:
         # replies of this turn that were a thought and no answer: 1 on a

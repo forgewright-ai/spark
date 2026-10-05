@@ -695,7 +695,8 @@ def _map_lines(tree):
 # (_map_lines), the tail. The audition's grader reads the rows -- every
 # form before a row's first ` -- ` -- so the head carries no ` -- `.
 SHELL_HEAD = ("spark's own commands, one a line. Copy a command as it is written. "
-              "A word in capitals is the user's own value.")
+              "A word in capitals (NAME, URL, WORDS) stands for the user's own text: "
+              "put their words there, as they wrote them.")
 # the settings keys a question about a reply's pace, length, wait or
 # history reaches for (spark.env.example holds every key; smoke holds
 # these to it)
@@ -704,7 +705,7 @@ SHELL_TAIL = ("Settings live in ~/.config/spark/spark.env (SPARK_REVEAL, SPARK_M
 # The map rides the system prefix, which the engine caches: its size
 # costs at a cold start alone. The cap is there so a help that grows is
 # noticed (smoke holds the map under it).
-MAP_MAX = 3200
+MAP_MAX = 3400
 
 _MAP = {}
 

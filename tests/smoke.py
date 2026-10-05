@@ -605,7 +605,7 @@ def answer_json(messages):
     # the judged line (v1.53): the first reply, and the re-ask's
     asked = " ".join(m.get("content", "") for m in messages if m.get("role") == "user")
     if "know" in asked:
-        got = know_answer(asked, KNOW_AGAIN in user)
+        got = know_answer(asked, KNOW_AGAIN in user or OWN_AGAIN in user)
         if got:
             return got
     # the streamed line (v1.52): the schema's own order -- kind, danger,
@@ -655,6 +655,7 @@ def answer_json(messages):
 
 
 KNOW_AGAIN = "Answer again with a command"      # cli.ASK_AGAIN's opening: the judge's one re-ask
+OWN_AGAIN = "names one of spark's own commands"  # cli.OWN_AGAIN's words: an answer asked for its command
 KNOW_PS = "every process, the biggest memory first"
 
 
@@ -703,6 +704,15 @@ def know_answer(asked, again):
         return cmd("ls $(echo .)", "lists the directory")
     if "knowanswer" in asked:
         return {"kind": "answer", "danger": False, "command": "", "hint": "sv down stops a service", "proof": ""}
+    # v1.87: an answer in words that names one of spark's own commands is
+    # asked again for the command; knowprosekeep's second reply is words
+    # again, knowprosenoun's words name none (a noun phrase)
+    if "knowprosenoun" in asked:
+        return {"kind": "answer", "danger": False, "command": "", "hint": "the spark model answers at your prompt", "proof": ""}
+    if "knowprose" in asked:
+        if again and "knowprosekeep" not in asked:
+            return cmd("spark check", "checks spark")
+        return {"kind": "answer", "danger": False, "command": "", "hint": "You can run spark check to see.", "proof": ""}
     if "knowsv" in asked:           # a command word sv's manual does not list (knowsvstuck: kept)
         return cmd("ln -s /etc/sv/sshd /var/service/" if again and "knowsvstuck" not in asked else "sv enable sshd",
                    "enables sshd at boot")
@@ -969,9 +979,9 @@ def knowledge_cases(t):
          str([desc for _f, desc in mrows if desc not in own]))
     grounding._MAP.clear()
     grounding._TREE.clear()
-    t.ok(grounding.shell_map() == smap and grounding.MAP_MAX == 3200 and len(smap) <= grounding.MAP_MAX and smap.isascii()
+    t.ok(grounding.shell_map() == smap and grounding.MAP_MAX == 3400 and len(smap) <= grounding.MAP_MAX and smap.isascii()
          and "quiet" not in smap,
-         "knowledge: shell_map is byte-stable, ASCII, within MAP_MAX (3200) characters, no spark quiet",
+         "knowledge: shell_map is byte-stable, ASCII, within MAP_MAX (3400) characters, no spark quiet",
          "%d: %s" % (len(smap), smap))
     # the row reader: every word through one helper, so <words> and
     # [words] are WORDS wherever they sit, and an optional group expands
@@ -5733,6 +5743,39 @@ def own_mark_cases(t, url):
         kept = first("? knowownmix update and install", **bench)
         t.ok(kept == ["danger\tspark update && make install"],
              "line: a line that mixes spark with another command keeps the model's mark", repr(kept))
+        # v1.87: an answer in words that names one of spark's commands is
+        # asked again, once, for the command itself
+        n0 = len(STATE["bodies"])
+        rc, out, _ = run("line", stdin="? knowprose is spark fine")
+        asks = STATE["bodies"][n0:]
+        t.ok(rc == 0 and out.splitlines()[:2] == ["cmd\tspark check", "Checks spark."] and len(asks) == 2
+             and "names one of spark's own commands" in asks[1]["messages"][-1]["content"]
+             and asks[1]["messages"][-2] == {"role": "assistant", "content": "You can run spark check to see."},
+             "line: an answer that names a spark command is asked again for the command, and the command lands",
+             repr((rc, out, len(asks))))
+        n0 = len(STATE["bodies"])
+        rc, out, _ = run("line", stdin="? knowprose knowprosekeep is spark fine")
+        t.ok(rc == 0 and out.splitlines()[:2] == ["answer", "You can run spark check to see."]
+             and len(STATE["bodies"]) == n0 + 2,
+             "line: when the second reply is words again, the answer stands as it came", repr((rc, out)))
+        n0 = len(STATE["bodies"])
+        rc, out, _ = run("line", stdin="? knowprosenoun what answers here")
+        t.ok(rc == 0 and out.splitlines()[:2] == ["answer", "the spark model answers at your prompt"]
+             and len(STATE["bodies"]) == n0 + 1,
+             "line: a noun phrase (the spark model) names no command: one request, the answer as it came",
+             repr((rc, out)))
+        n0 = len(STATE["bodies"])
+        rc, out, _ = run("line", stdin="? knowprose is spark fine", SPARK_KNOWLEDGE="off")
+        t.ok(rc == 0 and out.splitlines()[:1] == ["answer"] and len(STATE["bodies"]) == n0 + 1,
+             "line: with the knowledge off an answer is never asked again", repr((rc, out)))
+        sys.path.insert(0, os.path.join(REPO, "lib"))
+        from spark import cli as _cl
+        named = [_cl._own_named(x) for x in (
+            "You can run spark check to see.", "Use `spark model list` or spark stats.", "the spark model answers",
+            "a spark user can sign in", "spark is a local AI", "ask spark anything", "/usr/bin/spark check", "")]
+        t.ok(named == [["check"], ["model", "stats"], [], [], [], [], [], []],
+             "line: an answer names a spark command only as `spark VERB` with a verb of the tree, never in a noun "
+             "phrase or a path", repr(named))
         # the consumers of spark's list beyond line 1: a turn's display
         # (spark last) and the paste check
         run("line", stdin="? knowownoff stop spark and remove x")
