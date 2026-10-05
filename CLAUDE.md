@@ -213,8 +213,9 @@ for it, and no verb carries the word.
   to unload. On runit the prompt line's prefix names `sv` and `ip`
   (`persona.runit_lines`). It names `svlogtail`, which reads the logs,
   only where that program is installed. It never names `svlogd`, which
-  writes them. One line there says how runit enables a service
-  (`persona.RUNIT_BOOT`): a link in `/var/service`.
+  writes them. One line there says how runit enables a service of the
+  system (`persona.RUNIT_BOOT`): a link in `/var/service`, which `ls`
+  lists.
   The engine pin is a glibc build, so Void's musl flavour refuses at
   `get`: `musl libc: the pinned engine is a glibc build -- Void's glibc
   flavour runs spark`. The voice's runtime is a glibc build too, and its
@@ -830,19 +831,29 @@ and may change freely.
    writes, in full, then ` -- ` and the row's own words. No `a|b` is
    written, because a model copies what it reads, and `<words>` is
    `WORDS`. `tests/smoke.py` holds the map within `grounding.MAP_MAX`,
-   3400 characters. Its first line says a word in capitals stands for
-   the user's own text, written as they wrote it. The brief
-   (`persona.MODE_LINE`) names the topics that are spark's own. It asks
-   for the user's own words and names as written, and for the help's
-   own word (`NAME`, `URL`) where the user gave no value. It says the
-   prompt line keeps nothing between questions, and that `spark memory
-   add` remembers a fact. An answer in words may name one of spark's
-   own commands: `spark VERB` with a verb of the tree, never inside a
-   noun phrase (`cli._own_named`). It is asked again once for the
-   command itself (`cli._as_command`, `OWN_AGAIN`). The second reply
-   lands only when it is a spark command the judge clears. Else the
-   answer stands as it came. Such an answer's line 1 waits for its
-   words, and with `SPARK_KNOWLEDGE=off` no answer is asked again. The
+   3600 characters. Its first line says whose commands these are: they
+   answer a question about spark itself, never one about the system's
+   own users, services, files or logs. It says a word in capitals
+   stands for the user's own text, written as they wrote it. The brief
+   (`persona.MODE_LINE`) names the topics that are spark's own, and
+   says a question about the system takes the system's own commands.
+   It asks for the user's own words and names as written, and for the
+   help's own word (`NAME`, `URL`) where the user gave no value. It
+   says spark keeps the last answer and the facts it was told. An
+   answer in words may name one of spark's own commands: `spark VERB`
+   with a verb of the tree, never inside a noun phrase
+   (`cli._own_named`). Or it may tell the user which program to run
+   (`cli._tool_named`): the word after use, run, try, type, execute or
+   via, when it is a program on this machine (`judge.present`). Such an
+   answer is asked again once for the command itself
+   (`cli._as_command`, `OWN_AGAIN`, `TOLD_AGAIN`). The second reply
+   lands only when the judge clears it and it is a spark command, or
+   runs a program the answer named (`_Early.only`). Else the answer
+   stands as it came. Such an answer's line 1 waits for its words, and
+   with `SPARK_KNOWLEDGE=off` no answer is asked again. A second ask
+   about a program that is not installed names the installed ones that
+   do its job. With none, it asks for the package manager's command
+   that installs it (`cli.NOT_HERE`). The
    request
    asks the engine for slot 0 (`id_slot`), so the line's prefix stays
    warm; a server that refuses the field is asked again without it. The
@@ -933,9 +944,11 @@ and may change freely.
    family: `apt`, `apt-get` and `aptitude` with `clean` or `autoclean`,
    `dnf` and `yum` with `clean`, `zypper` with `clean` or `cc`, `pacman
    -Sc` and `brew cleanup`. Its options are read only before the
-   command word, so `dnf search clean` stays plain. spark's own line
-   holds the verbs that destroy or end logins, and `spark serve off`,
-   which stops the engine and the page. So `spark do` asks for the
+   command word, so `dnf search clean` stays plain. spark's own lines
+   hold the verbs that destroy or end logins, and `spark serve off`,
+   which stops the engine and the page. They hold a sandboxed run
+   applied unseen or dropped (`spark do --accept`, `--discard`) and a
+   ledger cleared (`--ledger clear`) too. So `spark do` asks for the
    typed `yes` there, and the page for its confirm. On the prompt line
    `persona.is_dangerous` always wins. Past it the model's own flag
    marks a command, lowered when spark's read-only proof holds for

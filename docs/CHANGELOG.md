@@ -27,8 +27,13 @@ asked again if it still has none.
   left open.
 - A value only you know is one word in capitals, as in `spark user add
   NAME`. The hint says `type the NAME before Enter`.
-- When the model explains a spark command in words, spark asks it once
-  for the command itself, so the command lands in your line.
+- When the model explains a command in words, spark asks it once for
+  the command itself, so the command lands in your line. That is one
+  of spark's own commands, or a program it tells you to use.
+- spark's commands answer for spark, and the system's for the system.
+  `? add a user named alice` is `useradd`, never `spark user add`.
+- A question about a program you do not have gets the command that
+  installs it, when nothing installed does its job.
 - A small model's silent thought no longer costs you the answer.
   `gemma4-e4b` sometimes thought in silence and spent its whole reply
   there: 14 of 551 questions got `the model gave no answer -- ask
