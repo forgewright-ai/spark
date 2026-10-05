@@ -37,7 +37,7 @@ spark
  spark soul [edit|reset]      who spark is
  spark memory [add <words>]   what spark remembers; add remembers a fact
  spark ver [--credits]        the version
- spark ver --sbom             what spark depends on
+ spark ver --sbom             the software inside spark: what it depends on
  spark chat [words]           talk with the model (Esc ends, /help)
  spark [@FILE] <words>        ask anything, or ask about a file
  spark do [--sandbox] <words> do a task, one command at a time
@@ -59,14 +59,14 @@ spark
 
 the model and the server
  spark serve [on|off]         start or stop the engine and the page
- spark serve boot [on|off]    always on: a headless box, up from boot
+ spark serve boot [on|off]    start at every boot: always on, a headless box
  spark serve share [on|off]   one model for every user here (Linux)
  spark serve --login          the page's address and login, QR for a phone
  spark serve --login --new    a new admin token; old logins end
  spark serve --audit [N]      what the admin did
  spark model [NAME|auto|none] choose the model this machine runs (-h)
  spark model --chat NAME      choose a second model for chat
- spark client [URL|off]       use another machine's model; off stops it
+ spark client [URL|off]       use another machine's model; off: your own again
  spark user [add NAME]        the users; add shows a token once
 """ % MARK
 
@@ -96,7 +96,7 @@ USAGE_TAIL = """less often used (each has -h)
  spark history                past threads (conversations)
  spark clear --history        forget past threads
  spark stats [--week]         how fast the model answers
- spark stats --sends          what spark sent over the network
+ spark stats --sends          what left this machine, sent over the network
  spark bench [--line|tune]    measure this machine's speed
 
 docs/

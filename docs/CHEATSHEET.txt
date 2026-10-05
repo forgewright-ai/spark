@@ -95,7 +95,7 @@ THE MODEL
 THE SERVER AND OTHER MACHINES
   spark serve                     what answers, the models, the page
   spark serve on | off [--force]  start or stop the engine and the page
-  spark serve boot [on|off]       always on: a headless box, up from boot
+  spark serve boot [on|off]       start at every boot: always on, a headless box
   spark serve share [on|off]      one model for every user here (Linux)
   spark serve --login             the page's address and login, QR for a phone
   spark serve --login --new       a new admin token. Old logins end
@@ -106,7 +106,7 @@ THE SERVER AND OTHER MACHINES
   spark user login [NAME] | logout
   spark user token --new          a new token. Other logins end
   spark user claim                move older chats into your account
-  spark client [URL|off]          use another machine's model; off stops it
+  spark client [URL|off]          another machine's model; off: your own again
   spark client URL --key-file F   use your own llama-server, its key in F
   Traffic between machines is plain HTTP. The admin token can run any
   command on the machine.
@@ -130,7 +130,7 @@ THE MACHINE
   spark uninstall [--dry-run]     remove spark from this machine (asks first)
   spark uninstall --purge         your soul, memory and users too
   spark stats [--week|--all]      how fast the model answers, waits, cache hits
-  spark stats --sends             what spark sent over the network, by day
+  spark stats --sends             what left this machine, over the network
   spark bench [--spark|--chat]    measure the model's speed
   spark bench --line [N]          time N prompt-line questions
   spark bench tune [show|apply]   find the fastest settings, then use them

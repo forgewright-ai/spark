@@ -951,10 +951,11 @@ def knowledge_cases(t):
          "in full: no a|b, no bracket, no <name>), then the settings line", "\n".join(bad) or smap[:300])
     means = {f: desc for forms, desc in mrows for f in forms}
     t.ok("is spark ok" in means.get("spark check", "") and "last answer" in means.get("spark last", "")
-         and "spark ver --sbom" in means and "stops" in means.get("spark client off", "")
+         and "depends on" in means.get("spark ver --sbom", "") and "your own again" in means.get("spark client off", "")
          and "phone" in means.get("spark serve --login", "") and "sent" in means.get("spark stats --sends", "")
          and "prompt line" in means.get("spark off", "") and "remembers a fact" in means.get("spark memory add WORDS", "")
-         and "headless" in means.get("spark serve boot on", "") and "admin token" in means.get("spark serve --login --new", "")
+         and "headless" in means.get("spark serve boot on", "") and "every boot" in means.get("spark serve boot on", "")
+         and "left this machine" in means.get("spark stats --sends", "") and "admin token" in means.get("spark serve --login --new", "")
          and means.get("spark user", "").startswith("the users") and "full report" in means.get("spark status", ""),
          "knowledge: shell_map says what the line lacked -- check is `is spark ok`, last the last answer, ver --sbom, "
          "client off, serve --login for a phone, stats --sends, off for the prompt line, memory add, serve boot, "
@@ -5578,10 +5579,19 @@ def own_mark_cases(t, url):
 
     # spark's own list: serve off joins it, --force or not; the verbs the
     # maintainer left off it stay off it
-    _dang = ["spark serve off", "spark serve off --force", "nohup spark serve off", "spark check && spark serve off"]
+    _dang = ["spark serve off", "spark serve off --force", "nohup spark serve off", "spark check && spark serve off",
+             # every spark verb that destroys is on the list: on a spark
+             # command the list is the whole answer
+             "spark do --discard 3", "spark do --accept 3", "spark drill --ledger clear --name verbs",
+             "spark edit --ledger clear --name notes.md", "spark read --name page --ledger clear",
+             "spark uninstall", "spark clear --history", "spark memory forget 3", "spark memory clear",
+             "spark user remove ana", "spark model rm qwen3-4b", "spark soul reset", "spark user token --new",
+             "spark serve --login --new"]
     _safe = ["spark off", "spark on", "spark update", "spark user add ana", "spark model qwen3-4b", "spark model auto",
              "spark model none", "spark client off", "spark serve", "spark serve on", "spark serve boot off",
-             "spark serve share off", "spark serve offline"]
+             "spark serve share off", "spark serve offline", "spark do --review 3", "spark do --sandbox tidy up",
+             "spark edit --ledger --name notes.md", "spark read what is this < page.txt", "spark drill < notes.md",
+             "spark do clear the ledger", "spark serve --login", "spark memory add I use micro"]
     t.ok(all(_pers.is_dangerous(c) for c in _dang) and not any(_pers.is_dangerous(c) for c in _safe)
          and _do.danger("spark serve off") and not _do.danger("spark update"),
          "danger: spark serve off is on spark's own list (the typed yes in spark do too); spark off, on, update, "
@@ -5654,7 +5664,7 @@ def own_mark_cases(t, url):
     _with, _without = _pers.runit_lines(True), _pers.runit_lines(False)
     t.ok(_with == ["System tools: sv, svlogtail, ip.", _pers.RUNIT_BOOT]
          and _without == ["System tools: sv, ip.", _pers.RUNIT_BOOT]
-         and _pers.RUNIT_BOOT == ("On this machine a service runs at every boot once it is linked: "
+         and _pers.RUNIT_BOOT == ("On this machine a service of the system (sshd, nginx) runs at every boot once it is linked: "
                                   "ln -s /etc/sv/NAME /var/service/ -- sv up NAME starts it now, and never enables it.")
          and "svlogd" not in " ".join(_with + _without) and (_pers.RUNIT_BOOT + _with[0]).isascii(),
          "prefix, runit: System tools names svlogtail only where it is installed and never svlogd; one line says "
@@ -9821,14 +9831,14 @@ def main():
         _grp = re.search(r"(?m)^the model and the server\n(.*?)(?:\n\n|\Z)", out, re.S)
         t.ok(_grp is not None and _grp.group(1).splitlines() == [
             " spark serve [on|off]         start or stop the engine and the page",
-            " spark serve boot [on|off]    always on: a headless box, up from boot",
+            " spark serve boot [on|off]    start at every boot: always on, a headless box",
             " spark serve share [on|off]   one model for every user here (Linux)",
             " spark serve --login          the page's address and login, QR for a phone",
             " spark serve --login --new    a new admin token; old logins end",
             " spark serve --audit [N]      what the admin did",
             " spark model [NAME|auto|none] choose the model this machine runs (-h)",
             " spark model --chat NAME      choose a second model for chat",
-            " spark client [URL|off]       use another machine's model; off stops it",
+            " spark client [URL|off]       use another machine's model; off: your own again",
             " spark user [add NAME]        the users; add shows a token once"],
              "spark help: the group 'the model and the server', line for line", _grp.group(1) if _grp else out)
         # v1.87: the help's rows are what the prompt line knows of spark
@@ -9844,7 +9854,7 @@ def main():
              and _rows.get("spark status") == "the full report, and what needs you"
              and _rows.get("spark off | on") == "turn the prompt line (? words) off or on"
              and _rows.get("spark memory [add <words>]") == "what spark remembers; add remembers a fact"
-             and _rows.get("spark ver --sbom") == "what spark depends on"
+             and _rows.get("spark ver --sbom") == "the software inside spark: what it depends on"
              and _rows.get("spark check") == "is spark ok: every check, what to fix"
              and _rows.get("spark uninstall [--purge]") == "remove spark from this machine (asks first)"
              and _rows.get("spark keys [off|on]") == "the keys spark adds to your shell (-h)"
@@ -9852,7 +9862,7 @@ def main():
              and _rows.get("spark last") == "the last answer again"
              and _rows.get("spark history") == "past threads (conversations)"
              and _rows.get("spark stats [--week]") == "how fast the model answers"
-             and _rows.get("spark stats --sends") == "what spark sent over the network",
+             and _rows.get("spark stats --sends") == "what left this machine, sent over the network",
              "spark help: status, ver --sbom, stats --sends and keys NAME KEY have rows of their own; check, last, "
              "off, memory and uninstall say what they are for", out)
         t.ok(not re.search(r"\bspark (?:forge|ember|headless|share|brain)\b|\bbrain,", out),

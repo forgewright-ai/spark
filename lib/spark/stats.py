@@ -14,7 +14,7 @@ USAGE = """%s stats -- how fast spark answers
 
   spark stats                  today: speed, waits and cache hits
   spark stats --week | --all   a wider window
-  spark stats --sends          what spark sent over the network (7 days)
+  spark stats --sends          what left this machine, over the network (7 days)
   spark stats --porcelain      the same, tab separated, for a program
 """ % MARK
 

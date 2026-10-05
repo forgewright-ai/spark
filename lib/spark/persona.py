@@ -120,6 +120,13 @@ _DANGER = [
     r"|serve\s+off)\b",                           # spark's own verbs that destroy or end logins, and serve off
                                                   # (--force or not): the engine and the page stopped, as
                                                   # systemctl stop is marked
+    # v1.87: on a spark command this list is the whole answer (the line
+    # below it), so it holds every spark verb that destroys -- a named
+    # line each. The scan before --ledger is bounded: linear on any line
+    r"\bspark\s+do\s+--(?:accept|discard)\b",     # a sandboxed run applied unseen, or its changes dropped
+    r"\bspark\s+(?:edit|ask|read|drill)\b[^;&|\n]{0,200}?\s--ledger\s+clear\b",
+                                                  # a ledger cleared: declined notes, asked questions, a
+                                                  # drill's schedule
     # v1.87 (the maintainer's word): the line above is the whole answer
     # on a spark command. Deliberately unmarked: spark off and spark on
     # (the prompt line muted, and back), spark update, spark user add,
@@ -1119,11 +1126,14 @@ LINE_SCHEMA = {
 }
 
 MODE_LINE = (
-    "The user typed a question at the shell prompt. A question about spark itself -- its model, chat "
-    "model, engine, page, users and logins, history, memory, speed, version, health, updates, look, "
-    "voice, keys, what it sent or the other machine -- is kind=cmd with "
+    "The user typed a question at the shell prompt. A question about spark itself -- what it is made "
+    "of, its model, chat model, engine, page, users and logins, history, memory, speed, version, "
+    "health, updates, start at boot, look, voice, keys, what it sent or what left this machine, the "
+    "other machine -- is kind=cmd with "
     "one of spark's own commands listed above; never say spark cannot do it. "
-    "The prompt line keeps nothing between questions; `spark memory add` remembers a fact. "
+    "You hold nothing between questions yourself, and spark does: a question about an earlier answer, "
+    "or a request to remember, note or keep something, is one of spark's own commands, never an "
+    "answer about your own memory. "
     "If it asks for something a shell command can do, "
     "reply kind=cmd. Set danger=true when the command deletes, overwrites, kills, reboots, or changes "
     "permissions or history. Put ONE command line in `command` (no comments, no explanation inside it, "
@@ -1449,8 +1459,8 @@ def _tools_line():
 # small model answered `sv up sshd` for "start sshd at every boot". The
 # path is the literal /var/service -- what a person types on Void --
 # never the SPARK_VAR_SERVICE seam: a test's path must not reach a prompt
-RUNIT_BOOT = ("On this machine a service runs at every boot once it is linked: "
-              "ln -s /etc/sv/NAME /var/service/ -- sv up NAME starts it now, and never enables it.")
+RUNIT_BOOT = ("On this machine a service of the system (sshd, nginx) runs at every boot once it is "
+              "linked: ln -s /etc/sv/NAME /var/service/ -- sv up NAME starts it now, and never enables it.")
 
 
 def runit_lines(svlogtail):

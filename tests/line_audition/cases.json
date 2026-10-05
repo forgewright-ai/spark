@@ -7299,7 +7299,7 @@
    {
     "id": "spark-46",
     "topic": "spark",
-    "words": "mute spark",
+    "words": "stop spark answering at my prompt",
     "kind": null,
     "head_any": [
      "spark"
@@ -7317,7 +7317,7 @@
    {
     "id": "spark-47",
     "topic": "spark",
-    "words": "unmute spark",
+    "words": "let spark answer at my prompt again",
     "kind": null,
     "head_any": [
      "spark"
