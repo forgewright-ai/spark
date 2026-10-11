@@ -2413,10 +2413,15 @@ Two kinds of tag come off `main`. A major, `vX.Y`, is a planned piece
 of work, and a person signs it. A patch, `vX.Y.Z`, is reported bugs
 fixed through the patch lane (`AGENTS.md`, "The patch lane"), and a
 machine signs it. `tests/tag.sh` is that machine's rule. It tags
-`origin/main` when the CHANGELOG's top heading has three parts. The
-turn is at once when the section has an S1 or S2 bullet, and Sunday
-when it has S3 and S4 alone. Either way, only on a commit `ci.yml`
-passed. A patch section opens
+`origin/main` when the CHANGELOG's top heading has three parts. With
+an S1 or S2 bullet in the section, the turn comes once the fix has
+rested 6 hours on `main`. With S3 and S4 alone, it comes on Sunday. The
+rest gives a person time to see the issue and the commit. `--now` is a
+person's word and skips the wait. The tagger keeps its own gates,
+whatever CI said. No protected path may differ from the tag it patches.
+Each bullet's issue must exist on GitHub, be `approved` and carry the
+bullet's severity. And `ci.yml` must have passed for the exact commit.
+A patch section opens
 only when the top heading is the newest tag. So `main` stays one line
 and every tag sits on it. `tests/patch_test.py` is the fence, in the
 fast gate and in CI. Under a three-part heading, no protected path

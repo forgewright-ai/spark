@@ -1,12 +1,16 @@
 #!/bin/sh
 # spark tests/tag_test.sh -- tests/tag.sh against a bare repository standing
-# in for GitHub, a stub gh and a scratch release key. Hermetic: no network,
-# no real key, config only in the scratch clone. Proves: a two-part heading
-# is a major and nothing is done; a section of S3 and S4 waits off the
-# weekly day and is tagged on it, or with --now; an S1 is tagged at once;
-# ci.yml not passed refuses; --dry-run touches nothing; the pushed tag is
-# annotated, signed by the key, named as the ref and points at main; a
-# second run finds it and stops; a section without a severity bullet
+# in for GitHub, a stub gh, a stub curl serving issues from files and a
+# scratch release key. Hermetic: no network, no real key, config only in
+# the scratch clone. Proves: a two-part heading is a major and nothing is
+# done; a section of S3 and S4 waits off the weekly day and is tagged on
+# it, or with --now; a fresh fix waits the cooling hours and --now skips
+# them; an S1 is tagged without the weekly day; a protected path changed
+# since the tag it patches refuses; an issue missing, not approved or
+# labelled another severity refuses; ci.yml not passed refuses; --dry-run
+# touches nothing; the pushed tag is annotated, signed by the key, named
+# as the ref and points at main; a refused push undoes the local tag; a
+# second run finds the tag and stops; a bullet without a severity
 # refuses. NOTICE and exit 0 where ssh-keygen is missing (a container).
 set -eu
 REPO=$(cd "$(dirname "$0")/.." && pwd)
@@ -32,7 +36,24 @@ case "$1" in
 esac
 STUB
 chmod +x "$T/bin/gh"
-export STUB="$T" SPARK_GH="$T/bin/gh" SPARK_CURL="$T/bin/absent"
+# the stub curl: GitHub's issues API from files, $T/issues/N.json; a
+# missing file or $T/issues/down is a failed request
+cat > "$T/bin/curl" <<'STUB'
+#!/bin/sh
+for a; do case $a in https://*) url=$a ;; esac; done
+n=${url##*/}
+[ ! -e "$STUB/issues/down" ] && [ -f "$STUB/issues/$n.json" ] || exit 22
+cat "$STUB/issues/$n.json"
+STUB
+chmod +x "$T/bin/curl"
+mkdir -p "$T/issues"
+issue() {
+    n=$1; shift
+    body=""; sep=""
+    for l; do body="$body$sep{\"name\": \"$l\"}"; sep=", "; done
+    printf '{"number": %s, "state": "open", "labels": [%s]}\n' "$n" "$body" > "$T/issues/$n.json"
+}
+export STUB="$T" SPARK_GH="$T/bin/gh" SPARK_CURL="$T/bin/curl" SPARK_TAG_COOL=0
 echo 1 > "$T/count"
 HUB=https://github.com/example/scratch
 
@@ -46,7 +67,7 @@ git init -q --bare -b main "$T/origin.git"
 git init -q -b main "$T/w"
 W="$T/w"
 mkdir -p "$W/tests" "$W/docs"
-cp "$REPO/tests/land.sh" "$REPO/tests/tag.sh" "$W/tests/"
+cp "$REPO/tests/land.sh" "$REPO/tests/tag.sh" "$REPO/tests/patch_test.py" "$W/tests/"
 git -C "$W" config "url.$T/origin.git.insteadOf" "$HUB"
 git -C "$W" remote add origin "$HUB"
 git -C "$W" config gpg.format ssh
@@ -70,13 +91,38 @@ rc=0; out=$(tagsh) || rc=$?
     && ok "a two-part heading is a major: said, nothing tagged" || bad "major: rc $rc: $out"
 git -C "$W" tag -a -m v9.9 v9.9 && git -C "$W" push -q origin v9.9
 
-# --- S3 alone: waits for the weekly day ----------------------------------
+# --- S3 alone: the issue, the fence, then the weekly day ------------------
 log v9.9.1 '- S3: a wording fixed (#7)'
+m=$(git -C "$W" rev-parse HEAD)
+rc=0; out=$(tagsh --now) || rc=$?
+[ "$rc" -eq 1 ] && [ "$out" = "! tag: could not read issue #7 from GitHub -- nothing tagged" ] && [ "$(at refs/tags/v9.9.1)" = none ] \
+    && ok "an issue GitHub does not answer for: refused, nothing tagged" || bad "issue missing: rc $rc: $out"
+issue 7 S3
+rc=0; out=$(tagsh --now) || rc=$?
+[ "$rc" -eq 1 ] && [ "$out" = "! tag: issue #7 is not labelled approved -- nothing tagged" ] \
+    && ok "an issue not approved: refused" || bad "not approved: rc $rc: $out"
+issue 7 S2 approved
+rc=0; out=$(tagsh --now) || rc=$?
+[ "$rc" -eq 1 ] && [ "$out" = "! tag: issue #7 is not labelled S3, as its bullet says -- nothing tagged" ] \
+    && ok "a bullet whose severity the issue does not carry: refused" || bad "severity mismatch: rc $rc: $out"
+issue 7 S3 approved
+mkdir -p "$W/.github/workflows"
+echo "touched" > "$W/.github/workflows/ci.yml"
+git -C "$W" add -A; git -C "$W" commit -q -m "a workflow"; git -C "$W" push -q origin main
+rc=0; out=$(tagsh --now) || rc=$?
+[ "$rc" -eq 1 ] && [ "$out" = "! tag: v9.9.1 changes a protected path since v9.9: .github/workflows/ci.yml -- not a patch, nothing tagged" ] \
+    && [ "$(at refs/tags/v9.9.1)" = none ] && ok "a protected path changed since the tag it patches: refused, whatever CI said" || bad "fence: rc $rc: $out"
+git -C "$W" rm -q -r .github; git -C "$W" commit -q -m "undone"; git -C "$W" push -q origin main
 m=$(git -C "$W" rev-parse HEAD)
 rc=0; out=$(tagsh --weekday "$other") || rc=$?
 [ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -q "^tag: v9.9.1 waits for weekday $other, today is $today: S3 -- " \
     && [ "$(at refs/tags/v9.9.1)" = none ] \
     && ok "S3 alone waits off the weekly day, says until when" || bad "S3 waits: rc $rc: $out"
+rc=0; out=$(SPARK_TAG_COOL=6 tagsh --weekday "$today") || rc=$?
+[ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -q "^tag: v9.9.1 waits: main at .* is 0 min old, a fix rests 6 hours before its tag" \
+    && [ "$(at refs/tags/v9.9.1)" = none ] && ok "a fresh fix rests the cooling hours" || bad "cool: rc $rc: $out"
+rc=0; out=$(SPARK_TAG_COOL=6 tagsh --dry-run --now) || rc=$?
+[ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -q "^tag: would tag v9.9.1" && ok "--now skips the cooling hours" || bad "cool --now: rc $rc: $out"
 echo 0 > "$T/count"
 rc=0; out=$(tagsh --now) || rc=$?
 [ "$rc" -eq 1 ] && [ "$out" = "! tag: ci.yml has not passed for main at $(printf '%s' "$m" | cut -c1-7) -- nothing tagged" ] \
@@ -114,19 +160,28 @@ git -C "$W" verify-tag v9.9.1 >/dev/null 2>&1 && ok "the tag is signed by the ke
 rc=0; out=$(tagsh --now) || rc=$?
 [ "$rc" -eq 0 ] && [ "$out" = "tag: v9.9.1 exists; nothing to do" ] && ok "a second run finds the tag and stops" || bad "again: rc $rc: $out"
 
-# --- an S1: at once, whatever the day --------------------------------------
+# --- an S1: without the weekly day; the base is the patch before -------------
+issue 8 S1 approved
 log v9.9.2 '- S1: the install died on a missing tar (#8)'
 m2=$(git -C "$W" rev-parse HEAD)
 rc=0; out=$(tagsh --weekday "$other") || rc=$?
-[ "$rc" -eq 0 ] && [ "$out" = "tag: v9.9.2 at $(printf '%s' "$m2" | cut -c1-7) (an S1 or S2 fix ships at once)" ] \
-    && [ "$(at 'refs/tags/v9.9.2^{commit}')" = "$m2" ] && ok "an S1 is tagged at once, off the weekly day" || bad "S1: rc $rc: $out"
+[ "$rc" -eq 0 ] && [ "$out" = "tag: v9.9.2 at $(printf '%s' "$m2" | cut -c1-7) (an S1 or S2 fix)" ] \
+    && [ "$(at 'refs/tags/v9.9.2^{commit}')" = "$m2" ] && ok "an S1 is tagged off the weekly day, once rested" || bad "S1: rc $rc: $out"
+touch "$T/issues/down"
+log v9.9.3 '- S2: a second fix (#8)'
+rc=0; out=$(tagsh --now) || rc=$?
+[ "$rc" -eq 1 ] && [ "$out" = "! tag: could not read issue #8 from GitHub -- nothing tagged" ] \
+    && ok "GitHub unreachable: refused, could not read" || bad "down: rc $rc: $out"
+rm -f "$T/issues/down"
 
 # --- a section without a severity bullet -----------------------------------
 log v9.9.3 '- a bullet without a severity (#9)'
 rc=0; out=$(tagsh --now) || rc=$?
-[ "$rc" -eq 1 ] && printf '%s\n' "$out" | grep -q "^! tag: the ## v9.9.3 section has no '- S<n>: ... (#N)' bullet" \
+[ "$rc" -eq 1 ] && printf '%s\n' "$out" | grep -q "^! tag: the ## v9.9.3 section has a bullet that is not '- S<n>: ... (#N)'" \
     && [ "$(at refs/tags/v9.9.3)" = none ] && ok "no severity bullet: refused, nothing tagged" || bad "no severity: rc $rc: $out"
 rc=0; out=$(tagsh --weekday 9) || rc=$?
 [ "$rc" -eq 2 ] && ok "--weekday outside 1..7 is usage" || bad "usage: rc $rc: $out"
+rc=0; out=$(tagsh --cool x) || rc=$?
+[ "$rc" -eq 2 ] && ok "--cool that is not a number is usage" || bad "usage cool: rc $rc: $out"
 
 [ "$fail" -eq 0 ] && echo "tag_test: all ok" || { echo "tag_test: FAILED"; exit 1; }

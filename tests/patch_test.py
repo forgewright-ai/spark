@@ -16,7 +16,9 @@ tree, only a patch's shape may differ:
 
 Under a two-part heading (a major) it prints one `na` line and exits 0.
 The gate runs it, fast and full. `--selftest` proves it on a scratch
-repository built from this tree. Exit 0 ok or na, 1 a finding (one line
+repository built from this tree. `--protected` prints the protected
+paths, one a line: tests/tag.sh asks for them and refuses a patch tag
+on its own, whatever CI said. Exit 0 ok or na, 1 a finding (one line
 each), 2 it could not judge.
 """
 import os
@@ -286,8 +288,11 @@ def selftest():
 def main(argv):
     if argv[1:] == ["--selftest"]:
         return selftest()
+    if argv[1:] == ["--protected"]:
+        print("\n".join(PROTECTED))
+        return 0
     if argv[1:]:
-        print("usage: python3 tests/patch_test.py [--selftest]", file=sys.stderr)
+        print("usage: python3 tests/patch_test.py [--selftest | --protected]", file=sys.stderr)
         return 2
     try:
         found = judge(ROOT)

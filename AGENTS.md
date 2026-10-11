@@ -118,7 +118,9 @@ job then runs a real bootstrap on the runner. The `debian`, `arch`,
 `void`, `fedora` and `opensuse` jobs run the one-liner as a new user
 in a container. The `void` job starts a runsvdir first, so it
 proves `spark-check` running supervised. The `workflows` job runs
-zizmor over the workflows, medium and above failing. `codeql.yml` is
+zizmor over the workflows, medium and above failing. The `green`
+job needs every other job: the one name a ruleset on `main` can
+require. `codeql.yml` is
 GitHub's static analysis over the python and the javascript.
 `advisories.yml` opens one issue when llama.cpp publishes a security
 advisory after the engine pin's date, and one when sherpa-onnx does
@@ -179,7 +181,9 @@ Fix. One `approved` issue a run: S1 first, then S2, then the oldest.
 Label it `in-progress`. Clone, `git fetch --unshallow --tags` (a
 shallow clone has no tag to describe), `git config core.hooksPath
 .githooks`, branch from `origin/main`. Write the failing test first,
-then the fix. Add the CHANGELOG bullet, `- S<n>: what was wrong, what
+then the fix. A test that passes before the fix means the bug is not
+reproduced: label `needs-human`, say so in one comment, make no fix.
+Add the CHANGELOG bullet, `- S<n>: what was wrong, what
 is right now (#N)`. It goes under `## vX.Y.Z` when the top heading is
 the newest tag: open that section, Z is 1 after a major and the last
 patch plus 1 after a patch. Under an open major, the bullet goes under
@@ -195,7 +199,7 @@ and leave the branch.
 
 After landing, one comment:
 
-- an S1 or S2: `landed on main at COMMIT; tagged vX.Y.Z within the hour`
+- an S1 or S2: `landed on main at COMMIT; vX.Y.Z follows after 6 hours`
 - an S3 or S4: `landed on main at COMMIT; ships Sunday in vX.Y.Z`
 - under an open major: `landed on main at COMMIT; ships with vX.Y`. An
   S1 or S2 there is also `needs-human`: shipping or cutting the arc is
@@ -204,6 +208,11 @@ After landing, one comment:
 Overdue. Each run looks at the open issues labelled `approved` or
 `in-progress`. An S1 or S2 older than 24 hours, or an S3 or S4 older
 than 8 days, gets `needs-human` and one comment, once.
+
+The tagger keeps its own gates, whatever CI said. A fix rests 6 hours
+on `main` before its tag. No protected path may differ from the tag it
+patches. Each bullet's issue must exist, be `approved` and carry the
+bullet's severity. A patch that fails one of them is never tagged.
 
 Never, in this lane:
 

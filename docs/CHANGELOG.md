@@ -18,10 +18,15 @@ a machine that holds a release key.
 - A patch release is `vX.Y.Z`. `spark ver` and `spark update` know the
   shape. A patch never adds a command, an option, a key, a check row or
   a help row, and `tests/patch_test.py` holds it to that, in the gate.
-- `tests/tag.sh` tags a patch by the CHANGELOG's word: at once for S1
-  and S2, on Sunday for the rest, only on a commit CI passed. A second
-  release key signs patch tags; `allowed-signers` and `get` carry both.
-  Its private half is sealed to one machine and is never in the cloud.
+- `tests/tag.sh` tags a patch by the CHANGELOG's word: S1 and S2 once
+  the fix has rested 6 hours on `main`, S3 and S4 on Sunday, only on a
+  commit CI passed. It checks for itself that no protected path changed
+  and that each bullet's issue exists, is approved and carries its
+  severity. A second release key signs patch tags; `allowed-signers`
+  and `get` carry both. Its private half is sealed to one machine and
+  is never in the cloud.
+- CI ends in one `green` job that needs every other: the name a rule
+  on `main` can require.
 - `tests/land.sh --passed` asks GitHub through `curl` when `gh` is
   absent: a public repository answers without a token.
 

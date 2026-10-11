@@ -162,6 +162,11 @@ def tests_gated():
     groups = set(re.findall(r"(?m)^\s+(\w+)\)\s+group_\w+ ;;$", read("tests/gate.sh")))
     check(groups == {"smoke", "serve", "rest"}, "tests/gate.sh full takes the groups ci.yml names (smoke, serve, rest)")
     check("tags:" not in ci.split("\njobs:")[0], "ci.yml runs on no tag push: the tag's commit already passed")
+    jobs = set(re.findall(r"(?m)^  ([a-z]+):$", ci.split("\njobs:")[1]))
+    m = re.search(r"(?ms)^  green:\n.*?^    needs: \[([^\]]+)\]", ci)
+    needs = set(x.strip() for x in m.group(1).split(",")) if m else set()
+    check(m is not None and needs == jobs - {"green"},
+          "ci.yml: the green job needs every other job (%s)" % ", ".join(sorted(jobs - {"green"})))
     check("sh tests/land.sh --passed" in read(".github/workflows/release.yml"),
           "release.yml asks tests/land.sh --passed before it releases")
 
@@ -755,6 +760,12 @@ def patch_lane():
     if m:
         for doc in ("docs/CONTRIBUTING.md", "CLAUDE.md", "AGENTS.md"):
             check(day[m.group(1)] in read(doc), "%s names tag.sh's weekly day, %s" % (doc, day[m.group(1)]))
+    m = re.search(r"^cool=\$\{SPARK_TAG_COOL:-(\d+)\}$", read("tests/tag.sh"), re.M)
+    check(m is not None, "tests/tag.sh has default cooling hours")
+    if m:
+        for doc in ("CLAUDE.md", "AGENTS.md", "docs/CONTRIBUTING.md"):
+            check(re.search(r"\b%s hours\b" % m.group(1), read(doc)) is not None,
+                  "%s states tag.sh's cooling hours, %s" % (doc, m.group(1)))
     m = re.search(r"^PATCH_MAX_LINES = (\d+)$", read("tests/patch_test.py"), re.M)
     check(m is not None, "tests/patch_test.py has PATCH_MAX_LINES")
     if m:
