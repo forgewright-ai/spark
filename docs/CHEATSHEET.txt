@@ -124,7 +124,7 @@ THE MACHINE
   spark check --all | NAME...     every row, or those rows. exit 0 = no failure
   spark check --history [NAME]    what changed and when, newest first
   spark check --fresh | --watch N ask again now, or every N seconds
-  spark check --report            a block to paste into an issue
+  spark check --report            a block to paste into a bug report
   spark check --porcelain         every row, tab separated
   spark update [--dry-run]        the newest signed release
   spark uninstall [--dry-run]     remove spark from this machine (asks first)

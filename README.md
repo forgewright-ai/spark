@@ -153,6 +153,13 @@ Tasks:
 - `docs/ROADMAP.md`: what comes next.
 - `docs/CONTRIBUTING.md`: how to send a change.
 
+## Bugs
+
+Something does not match what spark promises? Open an issue with the
+steps to reproduce: https://github.com/forgewright-ai/spark/issues.
+An agent reads it within the hour and answers there. Questions and
+ideas go to https://github.com/forgewright-ai/spark/discussions.
+
 ## What leaves this machine
 
 Your words go to the model's server. It runs on this machine, or on

@@ -1,5 +1,30 @@
 # Changelog
 
+## v1.88
+
+Bug reports have a door, and small fixes ship without waiting for the
+next release. A major release, `v1.88`, is still a planned piece of
+work. A patch, `v1.88.1`, is one or more reported bugs fixed, tagged by
+a machine that holds a release key.
+
+- Bug reports: GitHub Issues are open, with a form. Steps to reproduce
+  are required. An agent reads each report within the hour, follows the
+  steps, sets a severity and answers on the issue. Questions and ideas
+  go to Discussions.
+- Severity and the promise. S1 and S2 (spark unusable, or a documented
+  behaviour broken with no workaround) are fixed and released within 24
+  hours of approval. S3 and S4 (a workaround exists, or a wording) ship
+  in the weekly patch, on Sunday.
+- A patch release is `vX.Y.Z`. `spark ver` and `spark update` know the
+  shape. A patch never adds a command, an option, a key, a check row or
+  a help row, and `tests/patch_test.py` holds it to that, in the gate.
+- `tests/tag.sh` tags a patch by the CHANGELOG's word: at once for S1
+  and S2, on Sunday for the rest, only on a commit CI passed. A second
+  release key signs patch tags; `allowed-signers` and `get` carry both.
+  Its private half is sealed to one machine and is never in the cloud.
+- `tests/land.sh --passed` asks GitHub through `curl` when `gh` is
+  absent: a public repository answers without a token.
+
 ## v1.87
 
 The prompt line knows spark's own commands and stops doubting right

@@ -11,12 +11,16 @@
 #                                 commit": the pre-push hook, this script
 #                                 and release.yml all ask it here
 #
-# --passed exits 0 passed, 1 not passed, 2 could not ask (no gh, no
-# network, a bad sha), 3 the remote is not on github.com. A red run leaves
-# main untouched and the try branch in place. SPARK_GH names the gh
-# program (a test seam: tests/land_test.sh puts a stub there).
+# --passed exits 0 passed, 1 not passed, 2 could not ask (no gh and no
+# curl, no network, a bad sha), 3 the remote is not on github.com. Without
+# gh, --passed asks the public API through curl: a public repository
+# answers without a token, so a machine that only tags (tests/tag.sh)
+# needs no login. A red run leaves main untouched and the try branch in
+# place. SPARK_GH and SPARK_CURL name the programs (test seams:
+# tests/land_test.sh puts stubs there).
 set -eu
 GH=${SPARK_GH:-gh}
+CURL=${SPARK_CURL:-curl}
 usage() { echo "usage: sh tests/land.sh [--dry-run] | --passed SHA [OWNER/REPO | URL]" >&2; exit 2; }
 say() { printf 'land: %s\n' "$*"; }
 no() { printf '! land: %s\n' "$*"; }
@@ -44,9 +48,16 @@ repo_of() {
 passed() {
     case $1 in *[!0-9a-f]*|'') return 2 ;; esac
     [ "${#1}" -eq 40 ] || return 2
-    command -v "$GH" >/dev/null 2>&1 || return 2
-    n=$("$GH" api "repos/$2/actions/workflows/ci.yml/runs?head_sha=$1&status=success" \
-        --jq '[.workflow_runs[] | select(.event != "pull_request")] | length' 2>/dev/null) || return 2
+    q="repos/$2/actions/workflows/ci.yml/runs?head_sha=$1&status=success"
+    if command -v "$GH" >/dev/null 2>&1; then
+        n=$("$GH" api "$q" --jq '[.workflow_runs[] | select(.event != "pull_request")] | length' 2>/dev/null) || return 2
+    elif command -v "$CURL" >/dev/null 2>&1; then
+        n=$("$CURL" -fsS -H 'Accept: application/vnd.github+json' "https://api.github.com/$q" 2>/dev/null \
+            | python3 -c 'import json, sys
+print(len([r for r in json.load(sys.stdin).get("workflow_runs", []) if r.get("event") != "pull_request"]))' 2>/dev/null) || return 2
+    else
+        return 2
+    fi
     case $n in ''|*[!0-9]*) return 2 ;; 0) return 1 ;; esac
     return 0
 }
@@ -61,7 +72,7 @@ if [ "${1:-}" = --passed ]; then
     case $rc in
         0) say "ci.yml passed for $short" ;;
         1) no "ci.yml has not passed for $short -- sh tests/land.sh" ;;
-        *) no "could not ask GitHub whether ci.yml passed for $short -- gh auth status" ;;
+        *) no "could not ask GitHub whether ci.yml passed for $short -- gh auth status, or the network" ;;
     esac
     exit "$rc"
 fi

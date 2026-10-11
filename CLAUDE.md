@@ -451,8 +451,17 @@ tests/          smoke.py serve_smoke.py forge_smoke.py bench_smoke.py
                 land.sh (lands a commit: a try/ branch, CI, then main moved
                 forward to the same commit; `--passed SHA` is the one check
                 "ci.yml passed", asked by the pre-push hook and release.yml)
-                land_test.sh (the pre-push hook and land.sh, against a stub gh
-                and a bare repository)
+                land_test.sh (the pre-push hook and land.sh, against a stub gh,
+                a stub curl and a bare repository)
+                tag.sh (the patch tagger: tags origin/main when the CHANGELOG's
+                top heading has three parts, at once for an S1 or S2, on the
+                weekly day for S3 and S4, only on a commit ci.yml passed)
+                tag_test.sh (tag.sh against a bare repository, a stub gh and a
+                scratch key)
+                patch_test.py (the patch lane's fence: under a three-part
+                heading no protected path changes, the help and the row count
+                stay, the diff is under the cap, every bullet is
+                `- S<n>: ... (#N)`; --selftest proves it on a scratch repository)
                 audition.py + audition/ (the editor's briefs against a live
                 model, lints as the judge; audition/ground/ holds the grounded
                 contracts' set of 10 cases, run under --ground alone, scored
@@ -494,7 +503,8 @@ tests/          smoke.py serve_smoke.py forge_smoke.py bench_smoke.py
                 workflows/line-audition-help.yml: by hand, each OS's --help for
                 the commands the prompt-line audition names, as artifacts
                 dependabot.yml: the workflows' action sha pins, kept current weekly
-                PULL_REQUEST_TEMPLATE.md, ISSUE_TEMPLATE/bug.md and model-row.md
+                PULL_REQUEST_TEMPLATE.md; ISSUE_TEMPLATE/bug.yml (the bug form,
+                its fields required), config.yml (no blank issue) and model-row.md
 LICENSE         MIT, verbatim, ASCII (the hook checks it with the docs)
 assets/         banner.svg -- the banner as rectangles, for the README and the project site
                 (banner-light.svg is the site's light-theme variant; the site reads
@@ -2399,6 +2409,29 @@ pushed tag alone runs nothing on anyone's install. A key in that file
 does. The `signed` row of `spark check` names the key's principal on a
 release clone. Update `CREDITS.md` when a pin or a model row changes.
 
+Two kinds of tag come off `main`. A major, `vX.Y`, is a planned piece
+of work, and a person signs it. A patch, `vX.Y.Z`, is reported bugs
+fixed through the patch lane (`AGENTS.md`, "The patch lane"), and a
+machine signs it. `tests/tag.sh` is that machine's rule. It tags
+`origin/main` when the CHANGELOG's top heading has three parts. The
+turn is at once when the section has an S1 or S2 bullet, and Sunday
+when it has S3 and S4 alone. Either way, only on a commit `ci.yml`
+passed. A patch section opens
+only when the top heading is the newest tag. So `main` stays one line
+and every tag sits on it. `tests/patch_test.py` is the fence, in the
+fast gate and in CI. Under a three-part heading, no protected path
+changes: the workflows, the hooks, the keys, `get`, the landing and
+tagging scripts, the model and distro tables, the completion files.
+`spark help` and the check row count stay as they were. The diff
+outside `tests/` and the CHANGELOG is at most 400 lines, and every
+bullet is `- S<n>: ... (#N)`. The second line of `allowed-signers` is
+the tagging machine's key. Its private half is sealed to that
+machine's hardware and unsealed for a run, never a secret in the cloud.
+Whoever has that machine can sign a release: a known exposure, taken
+by choice. A key change reaches the page's repository too. Its deploy
+pins its own copy of `allowed-signers`, so copy spark's there right
+after the release that adds the key.
+
 Signing, once per machine: `git config gpg.format ssh` and `git config
 user.signingkey ~/.ssh/id_ed25519.pub`, with the private half beside it
 or in the agent. Key rotation is a commit that adds the new key's line
@@ -2409,9 +2442,10 @@ the new key. The old line comes out in a later release, signed by the
 new one. `verify-tag` with an ssh signature needs git 2.34 or newer and
 ssh-keygen (openssh). `get` asks for both before it clones.
 
-1. Write the `## vX.Y` section at the top of `docs/CHANGELOG.md`,
-   bullets, newest first. The project site shows the section only once
-   the tag exists, because it renders the newest release tag.
+1. Write the `## vX.Y` section (a patch: `## vX.Y.Z`) at the top of
+   `docs/CHANGELOG.md`, bullets, newest first. The project site shows
+   the section only once the tag exists, because it renders the newest
+   release tag.
    `tests/docs_test.py` refuses a heading more than one release ahead
    of that tag.
    Commit: the pre-commit hook runs the fast gate. Land it with `sh
@@ -2420,10 +2454,13 @@ ssh-keygen (openssh). `get` asks for both before it clones.
    red `main` is untouched: amend and run it again. The pre-push hook
    refuses `main` and a `v*` tag for a commit CI has not passed.
 2. Tag only what CI passed: `git tag -s vX.Y -m 'spark vX.Y' && git
-   push origin vX.Y`. The tag push runs `release.yml` and no test. Its
+   push origin vX.Y`. A patch is tagged the same way by `tests/tag.sh`
+   on the machine with the second key. The tag push runs `release.yml`
+   and no test. Its
    first step refuses a tag whose commit has no green `ci.yml` run. It
    verifies the signature against `allowed-signers`. It checks the
-   CHANGELOG heading, and that `spark ver` says `spark X.Y` at the tag.
+   CHANGELOG heading, and that `spark ver` says `spark X.Y` (or
+   `spark X.Y.Z`) at the tag.
    Then it creates the GitHub Release with that CHANGELOG section as
    its notes and two assets. The assets
    are `get` (`releases/latest/download/get`, the one-liner) and

@@ -117,6 +117,7 @@ def tests_named():
 NOT_IN_GATE = (
     ("gate.sh", "the gate itself"),
     ("land.sh", "the landing command, not a test: land_test.sh proves it"),
+    ("tag.sh", "the tagging command, not a test: tag_test.sh proves it"),
     ("audition.py", "needs a live model"),
     ("line_audition.py", "needs a live model; smoke.py runs its selftest"),
     ("forge_probe.py", "asks a live server"),
@@ -713,6 +714,55 @@ def warns():
             check(word not in text, "%s does not say '%s'" % (doc, word))
 
 
+# the labels the patch lane's agent sets (AGENTS.md, The patch lane); the
+# first nine a reporter sees, so CONTRIBUTING explains them
+LANE_LABELS = ("triage", "S1", "S2", "S3", "S4", "approved", "needs-steps", "arc", "not-a-bug",
+               "in-progress", "needs-human")
+
+
+def patch_lane():
+    """The patch lane as the docs state it is what the tree does: the bug
+    form requires its fields and lands as triage; blank issues are off and
+    questions go to Discussions; AGENTS.md's brief names every label and
+    CONTRIBUTING the ones a reporter sees; README and CONTRIBUTING point
+    to Issues and Discussions; the weekly day tag.sh defaults to is the
+    day the docs name; the fence's cap is the number the docs state."""
+    form = read(".github/ISSUE_TEMPLATE/bug.yml")
+    check(form.count("required: true") >= 5 and "label: Steps to reproduce" in form,
+          "the bug form requires at least five fields, steps to reproduce among them")
+    check("labels: [bug, triage]" in form, "a bug report lands labelled bug and triage")
+    cfg = read(".github/ISSUE_TEMPLATE/config.yml")
+    check("blank_issues_enabled: false" in cfg and "github.com/forgewright-ai/spark/discussions" in cfg,
+          ".github/ISSUE_TEMPLATE/config.yml turns blank issues off and points questions to Discussions")
+    check(not os.path.exists(os.path.join(ROOT, ".github", "ISSUE_TEMPLATE", "bug.md")),
+          "the markdown bug template is gone: the form requires its fields")
+    agents = read("AGENTS.md")
+    m = re.search(r"^## The patch lane\n(.*?)(?=^## )", agents, re.S | re.M)
+    check(m is not None, "AGENTS.md has a '## The patch lane' section")
+    lane = m.group(1) if m else ""
+    contrib = read("docs/CONTRIBUTING.md")
+    for label in LANE_LABELS:
+        check("`%s`" % label in lane, "AGENTS.md, The patch lane, names the label `%s`" % label)
+    for label in LANE_LABELS[:9]:
+        check("`%s`" % label in contrib, "docs/CONTRIBUTING.md explains the label `%s`" % label)
+    for doc in ("README.md", "docs/CONTRIBUTING.md"):
+        text = read(doc)
+        check("github.com/forgewright-ai/spark/issues" in text and "github.com/forgewright-ai/spark/discussions" in text,
+              "%s points to Issues and to Discussions" % doc)
+    m = re.search(r"^weekday=\$\{SPARK_TAG_WEEKDAY:-(\d)\}$", read("tests/tag.sh"), re.M)
+    day = {"1": "Monday", "2": "Tuesday", "3": "Wednesday", "4": "Thursday", "5": "Friday", "6": "Saturday", "7": "Sunday"}
+    check(m is not None, "tests/tag.sh has a default weekly day")
+    if m:
+        for doc in ("docs/CONTRIBUTING.md", "CLAUDE.md", "AGENTS.md"):
+            check(day[m.group(1)] in read(doc), "%s names tag.sh's weekly day, %s" % (doc, day[m.group(1)]))
+    m = re.search(r"^PATCH_MAX_LINES = (\d+)$", read("tests/patch_test.py"), re.M)
+    check(m is not None, "tests/patch_test.py has PATCH_MAX_LINES")
+    if m:
+        for doc in ("CLAUDE.md", "AGENTS.md"):
+            check(re.search(r"\b%s (changed )?lines\b" % m.group(1), read(doc)) is not None,
+                  "%s states the fence's cap, %s lines" % (doc, m.group(1)))
+
+
 def main():
     tests_named()
     tests_gated()
@@ -849,7 +899,7 @@ def main():
     check(not stale, "every signed line names a verb that exists%s"
           % ("" if not stale else " (found %s)" % ", ".join(stale[:3])))
     # the roadmap starts where the changelog's top section is
-    top = re.search(r"^## v(\d+\.\d+)", read("docs/CHANGELOG.md"), re.M).group(1)
+    top = re.search(r"^## v(\d+\.\d+)(?:\.\d+)?$", read("docs/CHANGELOG.md"), re.M).group(1)
     m = re.search(r"What comes after v(\d+\.\d+)", read("docs/ROADMAP.md"))
     check(m is not None and m.group(1) == top, "docs/ROADMAP.md: 'What comes after v%s' names docs/CHANGELOG.md's top section" % top)
     # the gated row lists: CLAUDE.md states their counts, and names the
@@ -875,19 +925,23 @@ def main():
             check(int(m.group(1)) == n_models, "%s: '%s' is models.env's count (%d)" % (doc, m.group(0), n_models))
     # the CHANGELOG's top section is the newest tag or the one right after it
     # (written before its tag, CLAUDE.md Releasing) -- never further ahead,
-    # never behind
+    # never behind. After a tag a.b or a.b.c the one right after is its next
+    # patch (a.b.1, a.b.c+1), the next minor (a.b+1) or the next major (a+1.0)
     import subprocess
     try:
         tag = subprocess.run(["git", "describe", "--tags", "--abbrev=0", "--match", "v*"], cwd=ROOT,
                              capture_output=True, text=True, check=True).stdout.strip()[1:]
     except (OSError, subprocess.CalledProcessError):
         tag = ""
-    top = re.search(r"^## v(\d+)\.(\d+)$", read("docs/CHANGELOG.md"), re.M)
-    if tag and top and re.match(r"^\d+\.\d+$", tag):
-        major, minor = int(top.group(1)), int(top.group(2))
-        tmaj, tmin = (int(x) for x in tag.split("."))
-        check((major, minor) in ((tmaj, tmin), (tmaj, tmin + 1), (tmaj + 1, 0)),
-              "docs/CHANGELOG.md: the top section v%d.%d is the newest tag v%s or the next release" % (major, minor, tag))
+    top = re.search(r"^## v(\d+)\.(\d+)(?:\.(\d+))?$", read("docs/CHANGELOG.md"), re.M)
+    if tag and top and re.match(r"^\d+\.\d+(?:\.\d+)?$", tag):
+        head = (int(top.group(1)), int(top.group(2)), int(top.group(3) or 0))
+        t = [int(x) for x in tag.split(".")] + [0]
+        tmaj, tmin, tpat = t[0], t[1], t[2]
+        allowed = ((tmaj, tmin, tpat), (tmaj, tmin, tpat + 1), (tmaj, tmin + 1, 0), (tmaj + 1, 0, 0))
+        check(head in allowed,
+              "docs/CHANGELOG.md: the top section v%s is the newest tag v%s, its next patch, the next minor or the next major"
+              % (top.group(0)[4:], tag))
     # the customer-facing docs speak two nouns, spark and spark apps: the
     # names the code keeps (the FORGE, an ember, the brain, the seed) stay
     # in the maintainer's docs; no doc calls anything frozen or
@@ -1024,6 +1078,8 @@ def main():
           "get's embedded release key is allowed-signers, byte for byte")
     # the living prompt: its verbs, keys and temperaments in the docs
     living()
+    # the patch lane: the form, the labels, the weekly day, the fence
+    patch_lane()
     # one server: the old spellings nowhere, the group in the cheatsheet
     one_server()
     # the chat's commands: each in the cheatsheet and INSTALL's table

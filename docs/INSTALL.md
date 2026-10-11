@@ -668,7 +668,7 @@ means root.
 The check. `spark check` has 40 rows and exits 0 when no row fails.
 Bare, it shows only the rows that need you, each with its fix. `spark
 check --all` shows every row. `spark check --report` prints a block for
-an issue, with no names or paths.
+a bug report, with no names or paths.
 
 When a row turns worse, your next prompt says so on the line spark
 writes, with the fix: `! serve: nothing answers at 127.0.0.1:8080 --

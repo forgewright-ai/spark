@@ -9,6 +9,7 @@ set -eu
 remote=${1:-}
 url=${2:-}
 GH=${SPARK_GH:-gh}
+CURL=${SPARK_CURL:-curl}
 top=$(git rev-parse --show-toplevel)
 # a rewritten URL (insteadOf, pushurl) is still the remote it was
 case $url in
@@ -23,8 +24,8 @@ while read -r _ lsha rref _; do
         *github.com[:/]*) ;;
         *) echo "NOTICE: pre-push: not a github.com remote; ci.yml not asked for ${rref#refs/*/}"; continue ;;
     esac
-    if ! command -v "$GH" >/dev/null 2>&1; then
-        echo "NOTICE: pre-push: gh not found; ci.yml not asked for ${rref#refs/*/}"
+    if ! command -v "$GH" >/dev/null 2>&1 && ! command -v "$CURL" >/dev/null 2>&1; then
+        echo "NOTICE: pre-push: neither gh nor curl found; ci.yml not asked for ${rref#refs/*/}"
         continue
     fi
     # an annotated tag: the commit it points at
@@ -33,7 +34,7 @@ while read -r _ lsha rref _; do
     sh "$top/tests/land.sh" --passed "$commit" "$url" >/dev/null 2>&1 && continue
     case $? in
         1) echo "! pre-push: ci.yml has not passed for $(printf '%s' "$commit" | cut -c1-7) (${rref#refs/*/}) -- sh tests/land.sh" ;;
-        *) echo "! pre-push: could not ask GitHub whether ci.yml passed for ${rref#refs/*/} -- gh auth status, then sh tests/land.sh" ;;
+        *) echo "! pre-push: could not ask GitHub whether ci.yml passed for ${rref#refs/*/} -- gh auth status or the network, then sh tests/land.sh" ;;
     esac
     exit 1
 done

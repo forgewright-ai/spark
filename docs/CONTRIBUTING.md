@@ -57,6 +57,15 @@ release tag, and a developer clone follows `main`. `spark update` moves
 either one forward and converges the machine. A tag no release key
 signed moves nothing.
 
+Two kinds of release come off `main`. A major, `v1.88`, is a planned
+piece of work, tagged by a person. A patch, `v1.88.1`, is one or more
+reported bugs fixed, tagged by a machine with a release key:
+`tests/tag.sh` is the rule it follows. An S1 or S2 fix is tagged at
+once, an S3 or S4 fix on Sunday. A patch opens only when `main` holds
+nothing unreleased. It never adds a command, an option, a key, a check
+row or a help row, and `tests/patch_test.py` refuses one that does.
+`AGENTS.md`, "The patch lane", has the whole of it.
+
 ## Three ways to contribute without writing code
 
 1. A model row. One row per pull request, in `models.env`: the 5
@@ -98,13 +107,44 @@ personal word list that does not exist in your fork, so you will see a
 notice that it is missing. That is expected. Never add a real name, a
 machine name or a project name to the tree regardless.
 
-## Where to ask
+## Report a bug
 
-Open an issue. `.github/ISSUE_TEMPLATE/` has a form for a model row and
-one for a bug, and anything else is a blank issue. For a bug, paste
-`spark check --report`. It is statuses only, with no value, no path and
-no name, and it runs your privacy word list over itself before
+Open an issue: https://github.com/forgewright-ai/spark/issues/new/choose.
+The form asks for `spark ver`, your OS, the steps to reproduce, what
+you saw and what you expected. Steps are required. `spark check
+--report` is welcome too. It is statuses only, with no value, no path
+and no name, and it runs your privacy word list over itself before
 printing.
+
+An agent reads each new report within the hour. It follows your steps
+in a fresh install, sets one severity label and answers on the issue.
+A new report carries `triage` until it does.
+
+- `S1`: spark is unusable for every user of a family. The install or
+  the update fails, the prompt line or the chat is dead, data is lost,
+  or something private leaks.
+- `S2`: a documented behaviour does not work on a family or OS, with
+  no workaround.
+- `S3`: wrong, with a workaround. An edge case, or a check row that is
+  wrong.
+- `S4`: a doc, a help text or a wording is wrong.
+
+Its verdict is one more label:
+
+- `approved`: a patch fixes it. An S1 or S2 is fixed and released
+  within 24 hours. An S3 or S4 ships in the weekly patch, on Sunday.
+- `needs-steps`: the steps could not be followed, and the comment says
+  what is missing.
+- `arc`: the fix needs a new command, option, key, check row or help
+  row, so it goes to the roadmap for a planned release.
+- `not-a-bug`: the comment says what spark promises instead.
+
+A fixed issue closes when the fix lands on `main`, and a comment names
+the release that carries it.
+
+Questions and ideas go to Discussions:
+https://github.com/forgewright-ai/spark/discussions. A model row has
+its own form.
 
 ## Roadmap
 

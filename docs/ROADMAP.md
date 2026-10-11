@@ -1,6 +1,6 @@
 # Roadmap
 
-What comes after v1.87, in rough order. Nothing here is a promise.
+What comes after v1.88, in rough order. Nothing here is a promise.
 `docs/CHANGELOG.md` says what shipped.
 
 No new verb until items 1 and 2 are done.
@@ -16,7 +16,7 @@ No new verb until items 1 and 2 are done.
    nobody runs. Then two small hints: an alias you keep typing, and a
    tool you have but do not use.
 5. A first new user installs spark from `README.md` alone and says
-   what broke. Issues open after that.
+   what broke.
 6. Failure tests on a real machine: the engine killed mid-reply, a
    full disk, no GPU, the server lost mid-answer.
 7. `spark do` knows more "bad option" messages, such as procps's

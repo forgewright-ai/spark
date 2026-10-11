@@ -27,7 +27,10 @@ echo "land_test: $T"
 # the stub gh: `api` logs the URL and prints the count in $T/count (or
 # fails when the file holds "down"); `run list` prints a run id; `run
 # watch` exits as $T/watch says, and a green watch is a passed run from
-# then on; `run view` prints one line of a failed log
+# then on; `run view` prints one line of a failed log. The stub curl logs
+# the URL and answers the public API's JSON with that many push runs, or
+# fails on "down". Every case names both seams: a real curl would reach
+# the network.
 cat > "$T/bin/gh" <<'EOF'
 #!/bin/sh
 case "$1 ${2:-}" in
@@ -41,7 +44,17 @@ case "$1 ${2:-}" in
 esac
 EOF
 chmod +x "$T/bin/gh"
-export STUB="$T" SPARK_GH="$T/bin/gh"
+cat > "$T/bin/curl" <<'EOF'
+#!/bin/sh
+for a; do case $a in https://*) printf '%s\n' "$a" >> "$STUB/asked" ;; esac; done
+[ "$(cat "$STUB/count")" != down ] || exit 22
+n=$(cat "$STUB/count"); i=0
+printf '{"workflow_runs": ['
+while [ "$i" -lt "$n" ]; do [ "$i" -eq 0 ] || printf ','; printf '{"event": "push"}'; i=$((i + 1)); done
+printf ']}\n'
+EOF
+chmod +x "$T/bin/curl"
+export STUB="$T" SPARK_GH="$T/bin/gh" SPARK_CURL="$T/bin/absent"
 echo 0 > "$T/count"; echo 0 > "$T/watch"; : > "$T/asked"
 HUB=https://github.com/example/scratch
 
@@ -85,7 +98,18 @@ echo 1 > "$T/count"
 rc=0; out=$(land --passed "$c1; id" example/scratch) || rc=$?
 [ "$rc" -eq 2 ] && ok "--passed: a sha that is not 40 hex digits is never sent" || bad "--passed bad sha: rc $rc: $out"
 rc=0; out=$(SPARK_GH="$T/bin/absent" sh "$W/tests/land.sh" --passed "$c1" example/scratch 2>&1) || rc=$?
-[ "$rc" -eq 2 ] && ok "--passed: no gh is exit 2" || bad "--passed no gh: rc $rc: $out"
+[ "$rc" -eq 2 ] && ok "--passed: no gh and no curl is exit 2" || bad "--passed no gh: rc $rc: $out"
+: > "$T/asked"
+rc=0; out=$(SPARK_GH="$T/bin/absent" SPARK_CURL="$T/bin/curl" sh "$W/tests/land.sh" --passed "$c1" example/scratch 2>&1) || rc=$?
+[ "$rc" -eq 0 ] && grep -q "^https://api.github.com/repos/example/scratch/actions/workflows/ci.yml/runs?head_sha=$c1&status=success$" "$T/asked" \
+    && ok "--passed: without gh, curl asks the public API for the same runs, no token" || bad "--passed curl: rc $rc: $out: $(cat "$T/asked")"
+echo 0 > "$T/count"
+rc=0; out=$(SPARK_GH="$T/bin/absent" SPARK_CURL="$T/bin/curl" sh "$W/tests/land.sh" --passed "$c1" example/scratch 2>&1) || rc=$?
+[ "$rc" -eq 1 ] && ok "--passed through curl: no run is exit 1" || bad "--passed curl none: rc $rc: $out"
+echo down > "$T/count"
+rc=0; out=$(SPARK_GH="$T/bin/absent" SPARK_CURL="$T/bin/curl" sh "$W/tests/land.sh" --passed "$c1" example/scratch 2>&1) || rc=$?
+[ "$rc" -eq 2 ] && ok "--passed through curl: a curl that fails is exit 2" || bad "--passed curl down: rc $rc: $out"
+echo 1 > "$T/count"
 rc=0; out=$(land --passed "$c1" "$T/origin.git") || rc=$?
 [ "$rc" -eq 3 ] && ok "--passed: a remote that is not on github.com is exit 3" || bad "--passed not github: rc $rc: $out"
 
@@ -114,8 +138,13 @@ rc=0; out=$(git -C "$W" push -q origin main 2>&1) || rc=$?
 [ "$rc" -ne 0 ] && [ "$(at refs/heads/main)" = none ] && printf '%s\n' "$out" | grep -q '^! pre-push: could not ask GitHub' \
     && ok "guard: a gh that fails refuses main, could not ask" || bad "guard down: rc $rc: $out"
 rc=0; out=$(SPARK_GH="$T/bin/absent" git -C "$W" push -q origin main:refs/heads/main 2>&1) || rc=$?
-[ "$rc" -eq 0 ] && [ "$(at refs/heads/main)" = "$c1" ] && printf '%s\n' "$out" | grep -q '^NOTICE: pre-push: gh not found' \
-    && ok "guard: no gh is a NOTICE, the push goes on" || bad "guard no gh: rc $rc: $out"
+[ "$rc" -eq 0 ] && [ "$(at refs/heads/main)" = "$c1" ] && printf '%s\n' "$out" | grep -q '^NOTICE: pre-push: neither gh nor curl found' \
+    && ok "guard: no gh and no curl is a NOTICE, the push goes on" || bad "guard no gh: rc $rc: $out"
+git -C "$W" push -q origin :refs/heads/main
+echo 0 > "$T/count"
+rc=0; out=$(SPARK_GH="$T/bin/absent" SPARK_CURL="$T/bin/curl" git -C "$W" push -q origin main 2>&1) || rc=$?
+[ "$rc" -ne 0 ] && [ "$(at refs/heads/main)" = none ] && printf '%s\n' "$out" | grep -q '^! pre-push: ci.yml has not passed for .* (main)' \
+    && ok "guard: without gh, curl asks and main is refused the same" || bad "guard curl: rc $rc: $out"
 echo 0 > "$T/count"; : > "$T/asked"
 rc=0; out=$(git -C "$W" push -q origin :refs/heads/main 2>&1) || rc=$?
 [ "$rc" -eq 0 ] && [ "$(at refs/heads/main)" = none ] && [ ! -s "$T/asked" ] \

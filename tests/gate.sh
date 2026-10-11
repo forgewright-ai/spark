@@ -7,7 +7,7 @@
 #   sh tests/gate.sh full GROUP     smoke | serve | rest (one CI job each)
 #
 # fast: the privacy gate over the staged change, syntax, the cheatsheet's
-# 80 columns, ASCII docs, shellcheck, docs_test.
+# 80 columns, ASCII docs, shellcheck, docs_test, patch_test.
 # full: fast's checks over the tree, the whole-tree privacy gate, and every
 # suite for this OS. A tool that is missing on this machine prints a NOTICE
 # and is skipped; it never silently passes. The privacy gate has no skip
@@ -197,7 +197,7 @@ $hit"
 lint() {
     if command -v shellcheck >/dev/null 2>&1; then
         shellcheck -S warning bootstrap.sh install.sh lib/env.sh get \
-            .githooks/pre-commit .githooks/pre-push .githooks/commit-msg tests/gate.sh tests/land.sh \
+            .githooks/pre-commit .githooks/pre-push .githooks/commit-msg tests/gate.sh tests/land.sh tests/tag.sh \
             || bad "shellcheck"
     elif [ -n "${CI:-}" ] && [ "$os" = Linux ]; then
         bad "shellcheck not found (ci.yml installs it)"
@@ -228,6 +228,8 @@ group_rest() {
     run finish_test.sh sh tests/finish_test.sh
     # the pre-push guard and land.sh, against a stub gh and a bare repository
     run land_test.sh sh tests/land_test.sh
+    # the tagging rule, against a bare repository and a scratch key
+    run tag_test.sh sh tests/tag_test.sh
     run forge_smoke.py "$PY" tests/forge_smoke.py
     run bench_smoke.py "$PY" tests/bench_smoke.py
     run vault_test.py "$PY" tests/vault_test.py
@@ -237,6 +239,9 @@ group_rest() {
     run voice_test.py "$PY" tests/voice_test.py
     run docs_test.py "$PY" tests/docs_test.py
     run policy_test.py "$PY" tests/policy_test.py
+    # the patch lane's fence: the tree, then the fence proven on a scratch repository
+    run patch_test.py "$PY" tests/patch_test.py
+    run "patch_test selftest" "$PY" tests/patch_test.py --selftest
     # the widgets at a pty: zsh on a Mac, bash on Linux; the pager on both
     case $os in
         Darwin) run "widget_pty shell" "$PY" tests/widget_pty.py zsh home/.config/spark/widget.zsh
@@ -254,6 +259,7 @@ case $mode in
         [ -z "$group" ] || { echo "usage: sh tests/gate.sh fast | full [smoke|serve|rest]" >&2; exit 2; }
         static
         run docs_test.py "$PY" tests/docs_test.py
+        run patch_test.py "$PY" tests/patch_test.py
         ;;
     full)
         # git hands a hook GIT_DIR; the clone-based tests must see the tree

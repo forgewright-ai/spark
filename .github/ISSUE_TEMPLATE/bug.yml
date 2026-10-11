@@ -1,0 +1,70 @@
+name: Bug report
+description: Something on your machine does not match what spark promises
+labels: [bug, triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        spark sends nothing off this machine except pinned downloads and,
+        with a model configured, your own line to it. Nothing private is
+        asked here. Paste freely.
+
+        An agent reads this report within the hour, follows your steps
+        and answers here. Steps it cannot follow come back as a question.
+  - type: input
+    id: version
+    attributes:
+      label: spark ver
+      description: The first line `spark ver` prints
+      placeholder: spark 1.88
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      options:
+        - Debian or Ubuntu
+        - Arch
+        - Void
+        - Fedora
+        - openSUSE
+        - macOS
+        - WSL 2
+    validations:
+      required: true
+  - type: input
+    id: os_version
+    attributes:
+      label: OS version
+      placeholder: Debian 13, Ubuntu 24.04, macOS 26, Tumbleweed 20261011
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: What you typed, one command a line, from a fresh shell
+      render: sh
+    validations:
+      required: true
+  - type: textarea
+    id: saw
+    attributes:
+      label: What you saw
+      description: The exact output
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+  - type: textarea
+    id: report
+    attributes:
+      label: spark check --report
+      description: Statuses only, safe to paste. `spark check --porcelain` adds values, if you are comfortable sharing them.
+      render: text

@@ -8079,7 +8079,7 @@ def main():
         # stderr, ever.
         gd = subprocess.run(["git", "-C", REPO, "describe", "--tags", "--abbrev=7"], capture_output=True, text=True, timeout=5)
         tag = gd.stdout.strip()
-        m = re.match(r"^v(\d+\.\d+)(?:-(\d+)-g[0-9a-f]+)?$", tag) if gd.returncode == 0 and tag else None
+        m = re.match(r"^v(\d+\.\d+(?:\.\d+)?)(?:-(\d+)-g[0-9a-f]+)?$", tag) if gd.returncode == 0 and tag else None
         if m:
             version = m.group(1) + ("+" + m.group(2) if m.group(2) else "")
         else:
@@ -8091,6 +8091,30 @@ def main():
              "ver: the version line matches git describe", out + err)
         t.ok("\u2588" in out and "\033" not in out and "\\033" not in out, "ver: the logo is drawn, without escapes, when piped", out)
         t.ok("CREDITS.md" in spark("ver", "--credits")[1], "ver --credits: names CREDITS.md for the rest of the licenses", out)
+        # a patch release is a three-part tag (CLAUDE.md, Releasing): the
+        # version reads it, and counts commits past it. A scratch repository
+        # from this tree, so the real cache and the real tags stay untouched.
+        with tempfile.TemporaryDirectory(prefix="spark-ver.") as scratch:
+            tree = os.path.join(scratch, "tree")
+            os.makedirs(tree)
+            ar = subprocess.run(["git", "-C", REPO, "archive", "HEAD"], capture_output=True, check=True)
+            subprocess.run(["tar", "-x", "-C", tree], input=ar.stdout, check=True)
+            genv = dict(env, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t", GIT_COMMITTER_NAME="t",
+                        GIT_COMMITTER_EMAIL="t@t", GIT_CONFIG_NOSYSTEM="1")
+            for args in (["init", "-q", "-b", "main"], ["add", "-A"], ["commit", "-q", "-m", "one"],
+                         ["tag", "-a", "-m", "v9.9.1", "v9.9.1"]):
+                subprocess.run(["git", "-C", tree] + args, check=True, capture_output=True, env=genv)
+            p = subprocess.run([sys.executable, os.path.join(tree, "bin", "spark"), "ver"],
+                               capture_output=True, text=True, env=env, timeout=30)
+            t.ok(p.returncode == 0 and re.search(r"^spark 9\.9\.1$", p.stdout, re.M) is not None,
+                 "ver: a patch tag v9.9.1 reads as spark 9.9.1", p.stdout + p.stderr)
+            open(os.path.join(tree, "two"), "w").write("two\n")
+            for args in (["add", "-A"], ["commit", "-q", "-m", "two"]):
+                subprocess.run(["git", "-C", tree] + args, check=True, capture_output=True, env=genv)
+            p = subprocess.run([sys.executable, os.path.join(tree, "bin", "spark"), "ver"],
+                               capture_output=True, text=True, env=env, timeout=30)
+            t.ok(p.returncode == 0 and re.search(r"^spark 9\.9\.1\+1$", p.stdout, re.M) is not None,
+                 "ver: one commit past a patch tag reads as spark 9.9.1+1", p.stdout + p.stderr)
         rc, out, _ = spark("memory", "add", "-h")
         t.ok(rc == 0 and out.startswith("spark memory -- "), "remember -h is help, not a fact", out)
         rc, out, _ = spark("memory", "forget", "-h")

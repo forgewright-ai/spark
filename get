@@ -27,7 +27,8 @@ set -eu
 # the release key(s): exactly the lines of allowed-signers at this
 # release, byte for byte (tests/docs_test.py holds the two equal, so a
 # key rotation changes both in one commit)
-SIGNERS='spark-release namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPxyUnv3kjSao3vcdPBrkrKvt5HkEc1UPJmUHO3kuzRo'
+SIGNERS='spark-release namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPxyUnv3kjSao3vcdPBrkrKvt5HkEc1UPJmUHO3kuzRo
+spark-release namespaces="git" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHWFn/BBzVEs9ujbat9VD7u/Uq6Yt1ZgXJEj0vArOtrY'
 
 notice() { printf 'NOTICE: %s\n' "$*"; }
 refuse() { printf 'spark get: %s\n' "$*" >&2; exit 1; }
