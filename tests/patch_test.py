@@ -225,17 +225,20 @@ def selftest():
         def g(*args):
             subprocess.run(["git", "-C", clone] + list(args), check=True, capture_output=True, env=env)
 
+        # the scratch CHANGELOG is its own: the tree's top heading may be a
+        # patch's, and this test must not read it
+        log = os.path.join(clone, "docs", "CHANGELOG.md")
+        base_log = "# Changelog\n\n## v9.9\n\n- the release.\n"
+        with open(log, "w", encoding="utf-8") as f:
+            f.write(base_log)
         g("init", "-q", "-b", "main")
         g("add", "-A")
         g("commit", "-q", "-m", "v9.9")
         g("tag", "-a", "-m", "v9.9", "v9.9")
-        log = os.path.join(clone, "docs", "CHANGELOG.md")
-        with open(log, encoding="utf-8") as f:
-            base_log = f.read()
 
         def write_log(heading, bullet):
             with open(log, "w", encoding="utf-8") as f:
-                f.write("# Changelog\n\n%s\n\n%s\n\n" % (heading, bullet) + base_log.split("\n", 1)[1].lstrip("\n"))
+                f.write("# Changelog\n\n%s\n\n%s\n\n" % (heading, bullet) + base_log.split("\n", 2)[2])
 
         ok(judge(clone) is None, "a two-part top heading is a major: na")
         write_log("## v9.9.1", "- S3: the version line read a patch tag as\n  nothing; it reads it now (#7)")

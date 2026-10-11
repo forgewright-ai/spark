@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.89
+
+The first real pass of the patch lane found one fault in its own
+fence, and the fence refused to let a patch carry the fix. That is the
+rule working: a change to the fence is a release a person tags.
+
+- The fence's self-test read the tree's own CHANGELOG heading, so the
+  first `## vX.Y.Z` heading on `main` failed every patch in CI. The
+  self-test builds its own CHANGELOG now.
+- The brief says how a pass resumes an issue a previous pass left
+  `in-progress`: from its `try/` branch, never from scratch.
+
 ## v1.88
 
 Bug reports have a door, and small fixes ship without waiting for the

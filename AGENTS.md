@@ -195,7 +195,10 @@ were, and changes at most 400 lines outside `tests/` and the CHANGELOG.
 Land with `sh tests/land.sh`. A fast-forward refused: rebase on
 `origin/main` once and land again. CI red: fix once. Red twice: label
 `needs-human`, comment with the run's address, take `in-progress` off
-and leave the branch.
+and leave the branch. An issue already `in-progress` from an earlier
+pass is resumed, not redone: its commit sits on a `try/` branch, with
+`Fixes #N` in the message. CI green for it: land that commit. CI red:
+the red rule. No branch: start from the beginning.
 
 After landing, one comment:
 
