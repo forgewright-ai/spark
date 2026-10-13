@@ -5937,6 +5937,27 @@ def grammar_cases(t):
          json.dumps({k: v for k, v in body.items() if k != "grammar"}))
 
 
+def own_imports_cases(t):
+    """A function here imports no name the module already imports: such an
+    import makes the name local to the whole function, so a use above it
+    fails with UnboundLocalError (#17)."""
+    import ast
+    tree = ast.parse(open(os.path.abspath(__file__)).read())
+    top = set()
+    for node in tree.body:
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            top.update((a.asname or a.name).split(".")[0] for a in node.names)
+    shadow = []
+    for fn in tree.body:
+        if not isinstance(fn, ast.FunctionDef):
+            continue
+        for node in ast.walk(fn):
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                shadow += ["%s:%d %s" % (fn.name, node.lineno, n) for n in
+                           ((a.asname or a.name).split(".")[0] for a in node.names) if n in top]
+    t.ok(not shadow, "smoke: no function imports again a name the module imports", ", ".join(shadow))
+
+
 def main():
     srv, url = start_stub()
     t = T()
@@ -9145,7 +9166,6 @@ def main():
             subprocess.run(["pkill", "-f", _mark], capture_output=True)
             for r in waiting():
                 spark("do", "--discard", r, cwd=box)
-            import shutil
             shutil.rmtree(box, ignore_errors=True)
         # the chat model (spark model --chat; spark ember is its older
         # spelling): status, choose, refuse, the shared table's marks
@@ -11609,6 +11629,7 @@ site.cmd_headless([])
     check_history_cases(t)
     own_mark_cases(t, url)
     grammar_cases(t)
+    own_imports_cases(t)
     srv.shutdown()
     print("smoke: %s" % ("all ok" if not t.fail else "%d FAILED" % t.fail))
     return 1 if t.fail else 0

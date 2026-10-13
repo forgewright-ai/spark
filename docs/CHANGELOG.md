@@ -1,5 +1,10 @@
 # Changelog
 
+## v1.89.1
+
+- S3: tests/smoke.py imported shutil again inside main(), so a test that
+  used it earlier in main() failed; the module's import serves it now (#17)
+
 ## v1.89
 
 The first real pass of the patch lane found one fault in its own
