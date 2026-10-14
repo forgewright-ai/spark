@@ -2,6 +2,9 @@
 
 ## v1.89.1
 
+- S3: a warning at the prompt was said in every new shell for as long
+  as the alert file kept it, and on a client no check drops it; the
+  widgets pass over a line a day old now, as a check does (#18)
 - S3: tests/smoke.py imported shutil again inside main(), so a test that
   used it earlier in main() failed; the module's import serves it now (#17)
 

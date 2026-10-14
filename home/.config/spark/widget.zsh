@@ -239,9 +239,10 @@ _spark_look_read
 # unless its seq is 1 to 12 digits, its mark ! or *, its row a-z, and its
 # text printable ASCII, 200 characters at most. The mark and the mood
 # shown are this widget's own, chosen by the file's mark; the file's
-# mood and epoch are not used. Said once per pane, in memory alone:
-# _spark_al_seen is the highest seq shown, _spark_al_rows the rows whose
-# warning this pane showed. A ! line shows when its seq is past the seen
+# mood is not used. A line whose epoch is a day or more from now is
+# passed over, the age a check run applies (check.ALERT_HOURS). Said
+# once per pane, in memory alone: _spark_al_seen is the highest seq
+# shown, _spark_al_rows the rows whose warning this pane showed. A ! line shows when its seq is past the seen
 # one (or equal to it for a row not shown yet: two rows of one run). A *
 # line shows only for a row in the list, and takes it off: a pane that
 # never showed the warning says no heal. One line a prompt, through
@@ -258,6 +259,10 @@ _spark_alert() {
             [[ $s == [1-9]* && -z ${s//[0-9]/} && ${#s} -le 12 ]] || continue
             [[ -n $row && -z ${row//[a-z]/} && ${#row} -le 32 ]] || continue
             [[ -n $text && ${#text} -le 200 && $text != *[[:cntrl:]]* && $text != *[![:ascii:]]* ]] || continue
+            # a day old or more: never said (check.ALERT_HOURS); a client
+            # has no check timer to drop the line
+            [[ -n $e && -z ${e//[0-9]/} && ${#e} -le 12 && -n $EPOCHSECONDS ]] &&
+                (( EPOCHSECONDS - e >= 86400 || e - EPOCHSECONDS >= 86400 )) && continue
             if [[ $k == "$_spark_w" ]]; then
                 (( s > _spark_al_seen )) || { (( s == _spark_al_seen )) && [[ $_spark_al_rows != *" $row "* ]]; } || continue
             elif [[ $k == "$_spark_h" ]]; then

@@ -234,7 +234,9 @@ _spark_look_read
 # unless its seq is 1 to 12 digits, its mark ! or *, its row a-z, and its
 # text printable ASCII, 200 characters at most. The mark and the mood
 # shown are this widget's own, chosen by the file's mark; the file's
-# mood and epoch are not used (read into _). Said once per pane, in
+# mood is not used (read into _). A line whose epoch is a day or more
+# from now is passed over, the age a check run applies
+# (check.ALERT_HOURS). Said once per pane, in
 # memory alone: _spark_al_seen is the highest seq shown, _spark_al_rows
 # the rows whose warning this pane showed. A ! line shows when its seq
 # is past the seen one (or equal to it for a row not shown yet: two rows
@@ -243,15 +245,20 @@ _spark_look_read
 # prompt, through _spark_note: the width and the face are the row's own.
 _spark_al_due=1 _spark_al_rows=' ' _spark_al_seen=0
 _spark_alert() {
-    local f=$SPARK_DIR/alert m=$SPARK_DIR/widgets/$$ s k row text shown='' more='' n=0
+    local f=$SPARK_DIR/alert m=$SPARK_DIR/widgets/$$ s e k row text now shown='' more='' n=0
     [[ -n $_spark_al_due ]] || return 0
     [[ -z $_spark_hinted ]] || return 0   # a note took this prompt: the warning waits one
     [[ ! -e $SPARK_DIR/off ]] || return 0 # spark off: silent, and nothing is marked seen
+    printf -v now '%(%s)T' -1 2>/dev/null || now=''
     if [[ -r $f ]]; then
-        while (( n++ < 8 )) && { IFS=' ' read -r s _ k _ row text || [[ -n $s ]]; }; do
+        while (( n++ < 8 )) && { IFS=' ' read -r s e k _ row text || [[ -n $s ]]; }; do
             [[ $s == [1-9]* && -z ${s//[0-9]/} && ${#s} -le 12 ]] || continue
             [[ -n $row && -z ${row//[a-z]/} && ${#row} -le 32 ]] || continue
             [[ -n $text && ${#text} -le 200 && $text != *[[:cntrl:]]* && $text != *[![:ascii:]]* ]] || continue
+            # a day old or more: never said (check.ALERT_HOURS); a client
+            # has no check timer to drop the line
+            [[ -n $e && -z ${e//[0-9]/} && ${#e} -le 12 && -n $now && -z ${now//[0-9]/} ]] &&
+                (( 10#$now - 10#$e >= 86400 || 10#$e - 10#$now >= 86400 )) && continue
             if [[ $k == "$_spark_w" ]]; then
                 (( s > _spark_al_seen )) || { (( s == _spark_al_seen )) && [[ $_spark_al_rows != *" $row "* ]]; } || continue
             elif [[ $k == "$_spark_h" ]]; then

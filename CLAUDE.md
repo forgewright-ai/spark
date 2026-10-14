@@ -1321,8 +1321,10 @@ and may change freely.
    changes at once. A widget cleans each
    line. It keeps one whose seq is 1 to 12 digits, whose mark is `!`
    or `*` and whose row is a-z. The text must be printable ASCII, 200
-   characters at most. Any other line is dropped. It uses
-   neither the mood nor the epoch: the mark picks the face. It shows
+   characters at most. Any other line is dropped. A line whose epoch
+   is 24 hours or more from now is passed over, the age a check's run
+   applies: a client has no check timer to drop it. It does not use
+   the mood: the mark picks the face. It shows
    one line a prompt in spark's row (contract 4), once in each pane.
    What a pane has said lives in memory alone: the highest seq shown
    and the rows whose warning it showed. A heal shows only in a pane

@@ -819,10 +819,11 @@ def idle_motion(widget, tmp, env, ok):
 ALERT_SEQ = 1791099000
 
 
-def alert_line(n, mark, row, text, mood=None):
+def alert_line(n, mark, row, text, mood=None, hours=0):
     """One line of the alert file as `spark check` writes it: seq, epoch,
-    mark, mood, row, then the text."""
-    return "%d %d %s %s %s %s\n" % (ALERT_SEQ + n, ALERT_SEQ + n, mark,
+    mark, mood, row, then the text. The epoch is now, or `hours` ago: a
+    line a day old or more is never said (check.ALERT_HOURS)."""
+    return "%d %d %s %s %s %s\n" % (ALERT_SEQ + n, int(time.time()) - hours * 3600, mark,
                                     mood or ("alarmed" if mark == "!" else "pleased"), row, text)
 
 
@@ -885,6 +886,16 @@ def alert_row(shell, widget, tmp, env, ok):
         if shell == "zsh":
             return (ROW % (height, text)) in seen
         return re.search(re.escape(text) + r"(\x1b\[\?2004h)?\r*\n" + re.escape(top or prompt), seen) is not None
+
+    # a line a day old or more is never said, on any machine: a client
+    # has no check timer to drop it (#18)
+    put(alert, alert_line(-20, "!", "peer", "peer: engine 192.0.2.10:8081 down -- spark check peer", hours=48))
+    sh, seen = start("\\n" + prompt)
+    try:
+        seen += enter(sh)
+        ok("engine 192.0.2.10" not in seen, "alert: a warning two days old is not said in a new shell", seen[-300:])
+    finally:
+        sh.close()
 
     down = "serve: nothing answers on 127.0.0.1:8080 -- spark serve on"
     put(alert, alert_line(-10, "*", "forge", "forge: ok again, after 3 min") + alert_line(0, "!", "serve", down))
@@ -990,7 +1001,8 @@ def alert_row(shell, widget, tmp, env, ok):
            "look changed after an alert was read: it is read again", seen[-300:])
         # both changed, and a failure took the prompt: the warning waits
         # past the marker the look's read wrote
-        put(alert, alert_line(90, "!", "fff", "fff: waited for the failure -- y"))
+        waited = alert_line(90, "!", "fff", "fff: waited for the failure -- y")
+        put(alert, waited)
         put(look, LOOK_AWAKE.replace("HEIGHT=2", "HEIGHT=1").replace("COLOUR=on", "COLOUR=off"))
         seen = enter(sh, "sh -c 'exit 5'")
         ok("* (O.O) failed (5) -- Esc s asks why" in seen and "waited for the failure" not in seen,
@@ -1000,7 +1012,7 @@ def alert_row(shell, widget, tmp, env, ok):
            "alert: the warning that waited is said, though the marker is newer now", seen[-300:])
         seen = enter(sh)
         ok("waited for the failure" not in seen, "alert: and once", seen[-300:])
-        ok(open(alert).read() == alert_line(90, "!", "fff", "fff: waited for the failure -- y"),
+        ok(open(alert).read() == waited,
            "alert: the file is as it was written -- no pane writes it")
     finally:
         sh.send("\x15exit\r")
