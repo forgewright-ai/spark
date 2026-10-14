@@ -448,7 +448,8 @@ def cmd_client(args):
         # a machine that served: each unit would bring its server back at
         # boot -- stop and disable both here, remove their links, and say
         # so. The page's server too: it serves nothing on a client, and
-        # `spark serve off` has nothing to switch there
+        # `spark serve off` has nothing to switch there. The check's unit
+        # goes the same way: a client has no check timer
         def drop(unit):
             done = False
             name = engine.unit_name(unit)
@@ -465,13 +466,17 @@ def cmd_client(args):
                     engine.service_stop(True, unit)
                     done = True
             else:
-                link = os.path.join(HOME, ".config", "systemd", "user", name)
-                if engine.service_state(cfg, unit) == "loaded" or os.path.lexists(link):
-                    engine.sysctl(["disable", "--now", name])
-                    done = True
-                if os.path.lexists(link):
-                    os.remove(link)
-                    engine.sysctl(["daemon-reload"])
+                # the check's timer is what is enabled; its service rides it
+                for name in (["spark-check.timer", name] if unit == "check" else [name]):
+                    link = os.path.join(HOME, ".config", "systemd", "user", name)
+                    on = (engine.sysctl(["is-enabled", name], timeout=5)[1].strip() == "enabled"
+                          if name.endswith(".timer") else engine.service_state(cfg, unit) == "loaded")
+                    if on or os.path.lexists(link):
+                        engine.sysctl(["disable", "--now", name])
+                        done = True
+                    if os.path.lexists(link):
+                        os.remove(link)
+                        engine.sysctl(["daemon-reload"])
             return done
 
         stopped = drop("serve")
@@ -502,6 +507,8 @@ def cmd_client(args):
             say("* the engine that ran here is stopped")
         if page:
             say("* the page's server that ran here is stopped")
+        if drop("check"):
+            say("* the check that ran here is stopped")
     return rc
 
 

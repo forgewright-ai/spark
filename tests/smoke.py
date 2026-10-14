@@ -2777,6 +2777,76 @@ def server_pids_cases(t):
     t.ok(_en.pids_in_ps(ps, 8080) == [101, 505], "engine: only a real llama-server on the port is one", str(_en.pids_in_ps(ps, 8080)))
 
 
+def client_units_cases(t):
+    """v1.89.1 (#19): `spark client URL` stops and removes the check unit
+    as it does the engine's and the page's, on each init: a client has no
+    check timer. Every service manager is a stub, recorded."""
+    from spark import config as _cf, engine as _en, forgeserve as _fs, site as _si, wire as _wi
+
+    class Cfg:
+        port = 8080
+        token_file = ""
+
+        def get(self, key, default=""):
+            return default
+
+    for shape in ("systemd", "launchd", "runit"):
+        home = tempfile.mkdtemp(prefix="spark-client-units-")
+        calls = []
+        unitdir = os.path.join(home, ".config", "systemd", "user")
+        agents = os.path.join(home, "Library", "LaunchAgents")
+        os.makedirs(unitdir)
+        os.makedirs(agents)
+        for name in ("spark-check.timer", "spark-check.service"):
+            os.symlink("/nonexistent/" + name, os.path.join(unitdir, name))
+        open(os.path.join(agents, "spark.check.plist"), "w").close()
+
+        def sysctl(args, timeout=20):
+            calls.append(" ".join(args))
+            return 0, "enabled\n" if args[:2] == ["is-enabled", "spark-check.timer"] else "", ""
+
+        def state(cfg, unit="serve"):
+            return "loaded" if unit == "check" and shape == "runit" else "absent"
+
+        class Sub:
+            @staticmethod
+            def run(argv, **kw):
+                calls.append(" ".join(argv))
+
+        patches = [(_si, "HOME", home), (_si, "IS_MAC", shape == "launchd"), (_en, "IS_MAC", shape == "launchd"),
+                   (_si, "init_shape", lambda: "runit" if shape == "runit" else "systemd"),
+                   (_en, "_runit", lambda: shape == "runit"),
+                   (_si, "set_keys", lambda *a, **k: None), (_si, "apply", lambda rows: 0),
+                   (_si, "say", lambda line: calls.append("say " + line)), (_si, "subprocess", Sub),
+                   (_cf, "load", lambda: Cfg()), (_wi, "forget_peer", lambda: None), (_wi, "drop_cache", lambda: None),
+                   (_wi, "plain", lambda cfg, probe=False: True), (_en, "own_pids", lambda cfg: []),
+                   (_en, "server_pids", lambda port: []), (_en, "service_state", state), (_en, "sysctl", sysctl),
+                   (_en, "service_stop", lambda noreload, unit="serve": calls.append("stop %s %s" % (noreload, unit))),
+                   (_fs, "_pid", lambda: None)]
+        saved = [(o, k, getattr(o, k)) for o, k, _ in patches]
+        try:
+            for o, k, v in patches:
+                setattr(o, k, v)
+            rc = _si.cmd_client(["http://192.0.2.10:8081"])
+        finally:
+            for o, k, v in saved:
+                setattr(o, k, v)
+        said = "say * the check that ran here is stopped" in calls
+        if shape == "systemd":
+            gone = not os.path.lexists(os.path.join(unitdir, "spark-check.timer")) \
+                and not os.path.lexists(os.path.join(unitdir, "spark-check.service"))
+            t.ok(rc == 0 and said and gone and "disable --now spark-check.timer" in calls,
+                 "client: spark client URL disables the check timer and removes its links (systemd)", repr(calls))
+        elif shape == "launchd":
+            t.ok(rc == 0 and said and not os.path.exists(os.path.join(agents, "spark.check.plist"))
+                 and any(c.startswith("launchctl bootout") and c.endswith("/spark.check") for c in calls),
+                 "client: spark client URL boots out the check agent and removes its plist (launchd)", repr(calls))
+        else:
+            t.ok(rc == 0 and said and "stop True check" in calls,
+                 "client: spark client URL takes the check service down and keeps it down (runit)", repr(calls))
+        shutil.rmtree(home, ignore_errors=True)
+
+
 def chat_awake_cases(t):
     """v1.65, the chat in process: the wrap's lead and its hanging indent
     (piped, today's bytes), back in v1.73 for a reply read aloud; v1.72, one UI -- the opening is one line, the
@@ -11618,6 +11688,7 @@ site.cmd_headless([])
     continuing_tag_cases(t)
     model_name_cases(t)
     server_pids_cases(t)
+    client_units_cases(t)
     own_engine_cases(t)
     living_core_cases(t)
     chat_awake_cases(t)

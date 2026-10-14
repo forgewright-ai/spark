@@ -2,6 +2,9 @@
 
 ## v1.89.1
 
+- S3: `spark client URL` stopped the engine and the page but left the
+  check unit, so a client ran a check every 5 minutes; it stops and
+  removes the check unit too now, on launchd, systemd and runit (#19)
 - S3: a warning at the prompt was said in every new shell for as long
   as the alert file kept it, and on a client no check drops it; the
   widgets pass over a line a day old now, as a check does (#18)
