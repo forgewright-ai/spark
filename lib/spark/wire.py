@@ -285,6 +285,13 @@ def dest_of(url):
     return "%s:%d" % (host, port) if port else host
 
 
+def host_of(dest):
+    """The host of a destination label `dest_of` made: `host:port`
+    without its port, a bare host as it is. A label with more than one
+    colon (an IPv6 literal) is returned whole."""
+    return dest.rsplit(":", 1)[0] if dest.count(":") == 1 else dest
+
+
 # ------------------------------------------------------------------ brain
 def serve_url():
     try:

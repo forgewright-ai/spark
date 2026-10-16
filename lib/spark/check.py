@@ -1279,18 +1279,20 @@ def row_privacy(ctx):
 def row_sends(ctx):
     """What left this machine today, by destination, from the turn
     records (`out_bytes`, `dest`: a count and a host, never a word). The
-    promise is that spark sends only to the server you named: local, the
-    peer, the FORGE or the engine served here, SPARK_BASE_URL. Bytes to
-    any other host are a warn, never a fail -- the records say where
-    they went, and `spark stats --sends` shows the days."""
-    from . import forge_url, stats, wire
+    promise is that spark sends only to the server you named: local, an
+    address this machine owns (a wire and a Wi-Fi are both this machine,
+    whichever one the servers hold now), the peer, the FORGE or the
+    engine served here, SPARK_BASE_URL. Bytes to any other host are a
+    warn, never a fail -- the records say where they went, and `spark
+    stats --sends` shows the days."""
+    from . import forge_url, own_address, stats, wire
     today = time.strftime("%Y-%m-%d")
     rows = stats.sends([t for t in stats.turns(1) if str(t.get("ts", "")).startswith(today)])
     if not rows:
         return ok("nothing sent today")
     known = {"local"} | {wire.dest_of(u) for u in (ctx.cfg.base_url, ctx.cfg.prefer_url, ctx.cfg.peer_ai_url,
                                                   forge_url(), wire.serve_url()) if u}
-    strange = [(dest, b) for _day, dest, b, _n in rows if dest not in known]
+    strange = [(dest, b) for _day, dest, b, _n in rows if dest not in known and not own_address(wire.host_of(dest))]
     if strange:
         dest, b = strange[0]
         return warn("%s went to %s today, not the address you configured" % (stats.kb(b), dest),

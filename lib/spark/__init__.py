@@ -468,6 +468,29 @@ def lan_ip():
     return "" if ip.startswith("169.254.") else ip
 
 
+def own_address(host):
+    """Whether `host` is an address this machine owns: an IP literal a
+    socket here can bind, with no packet sent and no port left open. A
+    machine with a wire and a Wi-Fi owns both addresses, whichever one
+    its servers hold at the minute. A name is never looked up here:
+    that would ask the network."""
+    import ipaddress
+    import socket
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    try:
+        s = socket.socket(socket.AF_INET6 if ip.version == 6 else socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.bind((host, 0))
+        finally:
+            s.close()
+    except OSError:
+        return False
+    return True
+
+
 
 LAN_WAIT_SECONDS = 5
 

@@ -2,6 +2,11 @@
 
 ## v1.89.1
 
+- S3: the sends row said this machine's own second address was not
+  the one configured once the servers had moved between the wire and
+  the Wi-Fi, and the prompt said so in red in every new shell; an
+  address this machine owns is this machine now, and the warning stays
+  for a host nothing here names (#21)
 - S3: a server that came up on a Wi-Fi backup's address stayed there
   when a slower wire took over, and the check only asked a person to
   restart it; the timer's check restarts the unit once the new address

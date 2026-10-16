@@ -8322,6 +8322,31 @@ def main():
         rc, out, _ = spark("check", "sends", "--porcelain")
         t.ok(rc == 0 and "\twarn\tsends\t4.0 kB went to 203.0.113.9:8081 today, not the address you configured\t" in out,
              "check sends: bytes to a host nothing here names -- warn, naming the host", out)
+        # #21: an address this machine owns is this machine, whichever
+        # one the servers hold at the minute (a wire and a Wi-Fi); the
+        # stranger beside it is still named
+        from spark import lan_ip as _lan_ip, own_address as _own
+        t.ok(_wire.host_of("192.0.2.7:8081") == "192.0.2.7" and _wire.host_of("box.local") == "box.local"
+             and _wire.host_of("local") == "local" and _wire.host_of("2001:db8::7:8081") == "2001:db8::7:8081",
+             "wire.host_of: the host of a destination label, an IPv6 label whole")
+        t.ok(_own("127.0.0.1") and not _own("203.0.113.9") and not _own("box.local") and not _own(""),
+             "own_address: loopback is owned, a documentation address and a name are not")
+        mine = _lan_ip()
+        if mine:
+            with open(home + "/.local/state/spark/turns/" + today + ".jsonl", "w") as f:
+                f.write(json.dumps({"ts": today + " 12:00:00", "kind": "answer", "mode": "chat", "ms": 5,
+                                    "out_bytes": 4000, "dest": mine + ":8081"}) + "\n")
+            rc, out, _ = spark("check", "sends", "--porcelain")
+            t.ok(rc == 0 and "\tok\tsends\t4.0 kB to %s:8081 today\t" % mine in out,
+                 "check sends: bytes to an address this machine owns, not the one the servers hold -- ok (#21)", out)
+            with open(home + "/.local/state/spark/turns/" + today + ".jsonl", "a") as f:
+                f.write(json.dumps({"ts": today + " 12:00:00", "kind": "answer", "mode": "chat", "ms": 5,
+                                    "out_bytes": 3000, "dest": "203.0.113.9:8081"}) + "\n")
+            rc, out, _ = spark("check", "sends", "--porcelain")
+            t.ok(rc == 0 and "\twarn\tsends\t3.0 kB went to 203.0.113.9:8081 today, not the address you configured\t" in out,
+                 "check sends: the stranger beside this machine's own address is still the one named", out)
+        else:
+            t.skip("check sends: an address this machine owns is this machine (#21)", "no route off this machine")
         rc, out, _ = spark("check", "hardening", "--porcelain")
         t.ok(rc == 0 and "\tna\thardening\t" in out, "check hardening: no FORGE served here and no peer -- na", out)
         spark("history", "clear")
