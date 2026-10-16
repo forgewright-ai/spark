@@ -5531,6 +5531,54 @@ def check_history_cases(t):
         go([R("serve", "ok"), R("privacy", "ok")])
         t.ok(len(said("serve")) == 1 and " * pleased serve serve: ok again, after " in said("serve")[0],
              "check: once said, its heal is said too", str(alert()))
+        # ---- a server left on an address the machine moved off (#20): the
+        # timer's run restarts its unit once the new address has stood
+        from spark import engine as _eng
+        saved_eng = (_eng.service_state, _eng.kickstart)
+        kicks, units = [], {"serve": "loaded", "forge": "loaded"}
+        _eng.service_state = lambda cfg, unit="serve": units[unit]
+        _eng.kickstart = lambda cfg, unit="serve", restart=False: kicks.append((unit, restart)) or True
+        moved = "serving on 192.0.2.50, but this machine is 192.0.2.49 now"
+
+        def timer(unattended=True):
+            rows = [R("serve", "warn", moved, "sv restart ~/.config/spark/sv/spark-serve"),
+                    R("forge", "warn", moved, "sv restart ~/.config/spark/sv/spark-forge")]
+            ctx = _Ctx(clock.now)
+            ctx.unattended = unattended
+            _c.follow_address(ctx, rows)
+            go(rows)
+            return rows
+        try:
+            fresh()
+            go([R("serve", "ok"), R("forge", "ok")])
+            clock.now += 300
+            timer()
+            t.ok(kicks == [] and said("serve") == [],
+                 "check: an address that just moved is held like any settling row; no unit restarts yet", str(kicks))
+            clock.now += 300
+            rows = timer(unattended=False)
+            t.ok(kicks == [] and rows[0].value == moved,
+                 "check: a person's run never restarts a unit; it names the remedy", str(kicks))
+            clock.now += 300
+            rows = timer()
+            t.ok(kicks == [("serve", True), ("forge", True)]
+                 and rows[0].value == "the address changed to 192.0.2.49 -- restarted"
+                 and stored("serve").get("moved") == clock.now,
+                 "check: the timer's run restarts each unit once the new address has stood 3 minutes", str(kicks))
+            t.ok(len(said("serve")) == 1 and said("serve")[0].endswith(
+                " serve serve: the address changed to 192.0.2.49 -- restarted"),
+                 "check: the restart is said once at the prompt", str(alert()))
+            clock.now += 300
+            timer()
+            t.ok(len(kicks) == 2, "check: a unit restarts at most once an hour, so a flapping link makes no loop",
+                 str(kicks))
+            clock.now += 3600
+            units["forge"] = "absent"
+            timer()
+            t.ok(kicks[2:] == [("serve", True)],
+                 "check: an hour on it restarts again; a server started by hand is left alone", str(kicks))
+        finally:
+            _eng.service_state, _eng.kickstart = saved_eng
     finally:
         for k, v in saved.items():
             setattr(_c, k, v)

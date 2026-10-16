@@ -1318,7 +1318,16 @@ and may change freely.
    worse is held in the row's `held` key, and said only when the row
    is still red 180 seconds later (`check.ALERT_SETTLE_SECONDS`). One
    that heals before that is never said. The history records both
-   changes at once. A widget cleans each
+   changes at once. A server may come up on a Wi-Fi backup at boot,
+   before a slow wire. When the `serve` or `forge` row says the
+   machine's address moved under it, the timer fixes it
+   (`check.follow_address`). Once the
+   same row has stood red 180 seconds, the timer's run restarts that
+   unit, at most once an hour a unit (`check.MOVE_GAP`, the row's
+   `moved` key). The line is `ROW: the address changed to IP --
+   restarted`, said once and logged. A server started by hand has no
+   unit and keeps the row's remedy. A person's run never restarts
+   anything. A widget cleans each
    line. It keeps one whose seq is 1 to 12 digits, whose mark is `!`
    or `*` and whose row is a-z. The text must be printable ASCII, 200
    characters at most. Any other line is dropped. A line whose epoch

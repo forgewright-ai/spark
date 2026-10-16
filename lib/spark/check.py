@@ -34,11 +34,12 @@ CATEGORIES = ("SOFTWARE", "CAPABILITY", "NONFUNCTIONAL")
 
 
 class Row:
-    __slots__ = ("status", "value", "remedy", "name", "category")
+    __slots__ = ("status", "value", "remedy", "name", "category", "moved", "alert")
 
     def __init__(self, status, value, remedy=""):
         self.status, self.value, self.remedy = status, value, remedy
-        self.name = self.category = ""
+        self.name = self.category = self.alert = ""
+        self.moved = 0              # follow_address restarted its unit then
 
 
 def ok(value):
@@ -1543,6 +1544,35 @@ def run_rows(ctx, names=None, tick=None):
     return rows
 
 
+def follow_address(ctx, rows):
+    """The timer's run: restart the serve or forge unit whose row says the
+    machine's address moved, once the same row has stood red
+    ALERT_SETTLE_SECONDS (MOVED, MOVE_GAP). The row then says so, and the
+    merge says it once at the prompt and stamps `moved`."""
+    import contextlib
+    from . import engine
+    snap = read_snapshot() if getattr(ctx, "unattended", False) else None
+    if snap is None:
+        return
+    old, now = _stored(snap), int(time.time())
+    for r in rows:
+        m = MOVED.match(r.value or "") if r.name in ("serve", "forge") else None
+        was = old.get(r.name)
+        if not m or was is None or was.get("value") != r.value:
+            continue
+        if now - (_int(was.get("red")) or now) < ALERT_SETTLE_SECONDS or now - _int(was.get("moved")) < MOVE_GAP:
+            continue
+        if engine.service_state(ctx.cfg, r.name) != "loaded":
+            continue
+        r.moved = now               # tried: once an hour, whatever the manager said
+        with contextlib.redirect_stdout(sys.stderr):    # stdout is the porcelain
+            done = engine.kickstart(ctx.cfg, r.name, restart=True)
+        if done:
+            r.value = "the address changed to %s -- restarted" % m.group(1)
+            r.alert = alert_text(r.name, "%s: %s" % (r.name, r.value))
+            print("* %s: %s" % (r.name, r.value), file=sys.stderr, flush=True)
+
+
 def _tally(statuses):
     statuses = list(statuses)
     return {s: statuses.count(s) for s in (OK, FAIL, WARN, NA)}
@@ -1575,6 +1605,14 @@ ALERT_QUIET = ("prompt", "failure")
 # said. The history records both changes at once, as for any row.
 ALERT_SETTLE = ("serve", "forge", "ember", "peer")
 ALERT_SETTLE_SECONDS = 180
+# A server bound at boot to the first address up (a Wi-Fi backup before a
+# slow wire) stays there when the machine's address moves. The timer's run
+# restarts its unit once the new address has stood ALERT_SETTLE_SECONDS,
+# and says so once; at most once in MOVE_GAP a unit, so a flapping link
+# makes no loop. A server started by hand has no unit: its row keeps the
+# remedy. A person's run never restarts anything.
+MOVED = re.compile(r"serving on \S+, but this machine is (\S+) now\Z")
+MOVE_GAP = 3600
 _ALERT_ROW = re.compile(r"[a-z]+\Z")
 _ALERT_NUM = re.compile(r"[0-9]{1,12}\Z")
 _ALERT_KINDS = {"!": "alarmed", "*": "pleased"}
@@ -1682,6 +1720,7 @@ def _merge(ctx, rows, full):
     merged = {} if full else dict(old)
     changes = []            # (name, from, to, red seconds or None, the Row)
     said, late = [], []     # the changes the prompt hears now; held ones whose time came
+    restarted = []          # units follow_address restarted: said once
     for r in rows:
         was = old.get(r.name)
         # observed after this run started: it knows better. An `at` ahead
@@ -1707,6 +1746,12 @@ def _merge(ctx, rows, full):
                 late.append((r.name, OK, r.status, None, r))
             else:
                 e["held"] = held
+        if r.moved:
+            e["moved"] = r.moved
+            if r.alert:
+                restarted.append((r.name, OK, r.status, None, r))
+        elif was is not None and _int(was.get("moved")):
+            e["moved"] = _int(was["moved"])
         if was is None or same:
             continue                    # a row never seen is the baseline
         a, b = SEVERITY[was["status"]], SEVERITY[r.status]
@@ -1717,6 +1762,8 @@ def _merge(ctx, rows, full):
                 e["held"] = now         # red just now: wait and see
             elif not held:
                 said.append(change)     # a held row's later changes are not said: its break never was
+    named = {c[0] for c in said + late}
+    said += [c for c in restarted if c[0] not in named]
     if full:
         out = list(merged.values())
     else:
@@ -1965,7 +2012,8 @@ def _alert_update(changes, names, now, full):
         a, b = SEVERITY[was], SEVERITY[to]
         if b > a:
             top = max(top + 1, now)
-            by[name] = {"seq": top, "epoch": now, "mark": "!", "mood": "alarmed", "row": name, "text": worse_text(r)}
+            by[name] = {"seq": top, "epoch": now, "mark": "!", "mood": "alarmed", "row": name,
+                        "text": r.alert or worse_text(r)}
         elif to == OK:
             top = max(top + 1, now)
             by[name] = {"seq": top, "epoch": now, "mark": "*", "mood": "pleased", "row": name,
@@ -2981,6 +3029,8 @@ def main(argv):
         finally:            # Ctrl-C too: `checking N/M` never stays on the line
             if counter is not None:
                 counter.clear()
+        if not names:
+            follow_address(ctx, rows)
         write_snapshot(ctx, rows, full=not names)
         if report_out:
             page(report(ctx, rows))

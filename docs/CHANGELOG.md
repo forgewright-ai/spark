@@ -2,6 +2,10 @@
 
 ## v1.89.1
 
+- S3: a server that came up on a Wi-Fi backup's address stayed there
+  when a slower wire took over, and the check only asked a person to
+  restart it; the timer's check restarts the unit once the new address
+  has stood 3 minutes, at most once an hour, and says so once (#20)
 - S3: `spark client URL` stopped the engine and the page but left the
   check unit, so a client ran a check every 5 minutes; it stops and
   removes the check unit too now, on launchd, systemd and runit (#19)
