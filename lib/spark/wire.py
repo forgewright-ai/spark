@@ -701,6 +701,118 @@ def gbnf(schema):
     return got
 
 
+GRAMMAR_STRING_MAX = 256    # a string a tool's schema caps at this or less is capped in its grammar too
+
+
+def tools_gbnf(tools, steps_max):
+    """The grammar (GBNF) of contract 16's reply: {"answer": string,
+    "steps": [step, ...]}, `steps_max` steps at most, each step one of the
+    tools -- {"name": its name, "arguments": its arguments}, the name a
+    literal and each argument typed by its schema. `tools` is [(name,
+    [(arg, schema, required)])], the credentials already left out: a
+    model never writes one. An argument is a string (bounded where its
+    schema bounds it at GRAMMAR_STRING_MAX or less), a string enum, an
+    integer, a number, a boolean, or an array of one of those; an
+    optional one may be left out. A tool with a required argument of
+    another shape cannot be held to a grammar: ValueError, and the
+    caller does not offer it. The client checks every step after."""
+    rules = {}
+
+    def value(p, name):
+        if not isinstance(p, dict):
+            raise ValueError("schema %s: not an object" % name)
+        if isinstance(p.get("enum"), list):
+            if not p["enum"] or not all(isinstance(v, str) for v in p["enum"]):
+                raise ValueError("schema %s: an enum of strings" % name)
+            rules[name] = " | ".join(_lit(v) for v in p["enum"])
+            return name
+        t = p.get("type")
+        if t == "string":
+            n = p.get("maxLength")
+            if isinstance(n, int) and not isinstance(n, bool) and 0 < n <= GRAMMAR_STRING_MAX:
+                rules[name] = '"\\"" char{0,%d} "\\""' % n
+                return name
+            return "string"
+        if t in ("integer", "number", "boolean"):
+            return t
+        if t == "array":
+            items = p.get("items") or {}
+            if not isinstance(items, dict) or items.get("type") in ("array", "object"):
+                raise ValueError("schema %s: an array of arrays or objects" % name)
+            item = value(items, name + "-item")
+            rules[name] = '"[" ws (%s (ws "," ws %s)*)? ws "]"' % (item, item)
+            return name
+        raise ValueError("schema %s: type %r" % (name, t))
+
+    def members(props, i, started, name):
+        """The arguments from the i-th on, a comma before each but the
+        first written: an optional one may be left out."""
+        if i == len(props):
+            return ""
+        arg, sch, req = props[i]
+        key = "%s-%d%s" % (name, i, "s" if started else "")
+        if key in rules:
+            return key
+        sep = 'ws "," ws ' if started else ""
+        this = '%s%s ws ":" ws %s' % (sep, _lit(arg), value(sch, "%s-v%d" % (name, i)))
+        rest = members(props, i + 1, True, name)
+        with_it = ("%s %s" % (this, rest)).strip()
+        without = "" if req else members(props, i + 1, started, name)
+        if req:
+            rules[key] = with_it
+        elif without:
+            rules[key] = "(%s) | %s" % (with_it, without)
+        else:
+            rules[key] = "(%s)?" % with_it
+        return key
+
+    alts = []
+    for n, (tool, props) in enumerate(tools):
+        name = "t%d" % n
+        inner = members(list(props), 0, False, name)
+        args = '"{" ws %s ws "}"' % inner if inner else '"{" ws "}"'
+        rules[name + "-args"] = args
+        rules[name] = '"{" ws "\\"name\\"" ws ":" ws %s ws "," ws "\\"arguments\\"" ws ":" ws %s ws "}"' % (
+            _lit(tool), name + "-args")
+        alts.append(name)
+    if not alts:
+        raise ValueError("no tool to hold a step to")
+    rules["step"] = " | ".join(alts)
+    more = '(ws "," ws step){0,%d}' % (steps_max - 1) if steps_max > 1 else ""
+    rules["steps"] = '"[" ws (step %s)? ws "]"' % more
+    top = '"{" ws "\\"answer\\"" ws ":" ws string ws "," ws "\\"steps\\"" ws ":" ws steps ws "}"'
+    return "\n".join(["root ::= %s" % top] + ["%s ::= %s" % kv for kv in rules.items()]) + "\n" + GRAMMAR_BASE
+
+
+def chat_grammar(cfg, url, messages, grammar, max_tokens=400, temperature=0.2, forge=False, model=None, timeout=None):
+    """One JSON object held by `grammar`, parsed: chat_json for a grammar
+    made elsewhere (tools_gbnf). (reply, timings)."""
+    body = {"messages": messages, "max_tokens": max_tokens, "temperature": temperature,
+            "stream": False, "cache_prompt": True, "grammar": grammar,
+            "chat_template_kwargs": dict(NO_THINKING)}
+    body.update(NO_THINK_BUDGET)
+    if model is not None:
+        body["model"] = model
+    data = _encode(body)
+    with _send(cfg, url, data, timeout or cfg.timeout, forge=forge) as r:
+        try:
+            d = json.load(r)
+            choice = d["choices"][0]
+            text = choice["message"]["content"]
+        except OSError as e:
+            if "timed out" in str(e):
+                raise BrainError("timeout", "%s went quiet for %ss mid-reply" % (url, timeout or cfg.timeout))
+            raise BrainError("cut", "%s dropped mid-reply (%s)" % (url, e))
+        except (ValueError, KeyError, IndexError):
+            raise BrainError("bad", "%s returned something that is not a chat completion" % url)
+    try:
+        return json.loads(text), dict(timings_of(d), **_sent(url, data))
+    except (ValueError, TypeError):
+        if isinstance(choice, dict) and choice.get("finish_reason") == "length":
+            raise BrainError("bad", CUT_OUT % max_tokens)
+        raise BrainError("bad", "the model did not return JSON: %s" % str(text or "")[:80].replace("\n", " "))
+
+
 def _json_body(body, schema):
     """A request's JSON shape: the schema as a grammar (it binds from the
     first token), and no thinking before it."""

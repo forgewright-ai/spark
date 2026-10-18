@@ -300,6 +300,42 @@ These work on a text on stdin:
   matches.
 - `spark edit`: for editors. `README.md` lists the apps that use it.
 
+MCP servers. An MCP server is a program that offers tools to an AI,
+such as the sound or the windows of a desktop. spark starts only the
+servers on its list, one line each in `~/.config/spark/mcp.env`:
+
+```sh
+spark mcp add notes /opt/notes/bin/notes-mcp
+spark mcp                           # the servers and their tools
+spark mcp call notes add_note text=milk
+```
+
+- `spark mcp NAME` shows one server's tools and their arguments.
+- `spark mcp call NAME TOOL KEY=VALUE` runs one tool. A value is typed
+  as the tool takes it: a number, `yes` or `no`, or text. A password is
+  asked for, never typed on the line.
+- A tool that changes something asks you to type `yes`, unless its
+  server is trusted and the tool says it destroys nothing. spark's own
+  programs are trusted, and `spark mcp` says which server is. `spark
+  mcp trust NAME on` trusts another, `off` takes it back.
+- The prompt line, `spark do` and `/do` in a chat know the tools
+  `spark mcp` listed last. A tool step is a `spark mcp call` line: you
+  read it before `Enter`, as any other step. Inside `--sandbox` a tool
+  step does not run, because a tool acts outside the copy.
+- `spark mcp read NAME` lists a server's resources, and `spark mcp read
+  NAME URI --watch` shows one again each time it changes.
+- `spark mcp rm NAME` takes a server off the list.
+- `spark steps <words> < tools.json` turns your words into tool calls,
+  from an MCP tools list on stdin. It prints them as JSON and runs
+  nothing. A desktop's dialog is its first user.
+
+A server runs with no shell, in your home, with a short list of
+environment variables. It talks to spark over its stdin and stdout
+alone, never the network. A tool's description never goes to the model:
+only its name, its arguments and its title. Each call is a record in
+the audit trail, its names and a digest of its arguments: `spark serve
+--audit`.
+
 `spark soul edit` changes who spark is, in 4000 characters at most.
 `spark soul reset` goes back to the default. `spark memory add <words>`
 remembers a fact, up to 40. The soul and the facts go with every
@@ -655,6 +691,14 @@ every key. The common ones:
 | `SPARK_VOICE_DEVICE` | the sound card on Linux, such as `plughw:1,0` | ALSA's default |
 | `SPARK_KNOWLEDGE` | `off`: the prompt line skips the manuals | `on` |
 
+`~/.config/spark/mcp.env` is the list of MCP servers, written by `spark
+mcp add`, `rm` and `trust`:
+
+| key | what | default |
+|---|---|---|
+| `MCP_SERVER_<NAME>` | a server: its program's absolute path, then its words | none |
+| `MCP_SERVER_<NAME>_TRUST` | `yes` or `no`: believe what its tools say of themselves | `yes` for spark's own programs |
+
 Root. spark uses `sudo` for the package manager, the hostname, the
 `render` group, Void's one service, `spark serve boot on` and `spark
 serve share on`.
@@ -665,7 +709,7 @@ Keep passwordless `sudo` off a machine that serves your network. The
 admin token can run any command here. With passwordless `sudo`, that
 means root.
 
-The check. `spark check` has 40 rows and exits 0 when no row fails.
+The check. `spark check` has 41 rows and exits 0 when no row fails.
 Bare, it shows only the rows that need you, each with its fix. `spark
 check --all` shows every row. `spark check --report` prints a block for
 a bug report, with no names or paths.

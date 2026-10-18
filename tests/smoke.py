@@ -994,9 +994,9 @@ def knowledge_cases(t):
          str([desc for _f, desc in mrows if desc not in own]))
     grounding._MAP.clear()
     grounding._TREE.clear()
-    t.ok(grounding.shell_map() == smap and grounding.MAP_MAX == 3600 and len(smap) <= grounding.MAP_MAX and smap.isascii()
+    t.ok(grounding.shell_map() == smap and grounding.MAP_MAX == 3800 and len(smap) <= grounding.MAP_MAX and smap.isascii()
          and "quiet" not in smap,
-         "knowledge: shell_map is byte-stable, ASCII, within MAP_MAX (3600) characters, no spark quiet",
+         "knowledge: shell_map is byte-stable, ASCII, within MAP_MAX (3800) characters, no spark quiet",
          "%d: %s" % (len(smap), smap))
     # the row reader: every word through one helper, so <words> and
     # [words] are WORDS wherever they sit, and an optional group expands
@@ -6815,11 +6815,11 @@ def main():
         t.ok(rc == 1 and "no answer from SPARK_BASE_URL" in out, "down -> hint names the URL", out)
 
         rc, out, _ = spark("ver", "--credits")
-        t.ok(rc == 0 and re.search(r"^spark (\d+\.\d+(\+\d+)?|0\+[0-9a-f]+|dev)$", out, re.M)
+        t.ok(rc == 0 and re.search(r"^spark (\d+\.\d+(\.\d+)?(\+\d+)?|0\+[0-9a-f]+|dev)$", out, re.M)
              and re.search(r"by \S+ [·|] github\.com/\S+/\S+", out),
              "spark ver --credits: the version, credited", out)
         rc, out2, _ = spark("ver")
-        t.ok(rc == 0 and re.search(r"^spark (\d+\.\d+(\+\d+)?|0\+[0-9a-f]+|dev)$", out2, re.M)
+        t.ok(rc == 0 and re.search(r"^spark (\d+\.\d+(\.\d+)?(\+\d+)?|0\+[0-9a-f]+|dev)$", out2, re.M)
              and "github.com" not in out2 and "CREDITS.md" not in out2 and out.startswith(out2),
              "spark ver (a login's lines): the logo and the version, no credits", out2)
         from spark import setup as _nsu
@@ -11710,6 +11710,10 @@ site.cmd_headless([])
     # palette any renderer may write), the three SPARK_*_SGR variables,
     # `spark bar line`. A hit names file:line.
     _guard = re.compile(r"spark-shell|(?i:shell layer)|SITE_SHELL|shell-moved|THEME_BTOP|state/prompt")
+    # v1.90: the trusted chain is his word (spark, spark-shell, spark-acp),
+    # and issue 23's review names it: one named line of mcp.TRUSTED_CHAIN
+    # may carry the name, and no other line of a core file
+    _CHAIN_FILE, _CHAIN_LINE = os.path.join(REPO, "lib", "spark", "mcp.py"), '"spark-shell",'
     _hits = []
     for _r in ("bin", "lib", "home", "linux", "templates", "themes", "get", "bootstrap.sh", "install.sh", "uninstall"):
         _p = os.path.join(REPO, _r)
@@ -11726,6 +11730,8 @@ site.cmd_headless([])
             if b"\0" in _raw:
                 continue                    # an image, a font
             for _n, _l in enumerate(_raw.decode("utf-8", "replace").split("\n"), 1):
+                if _f == _CHAIN_FILE and _l.lstrip().startswith(_CHAIN_LINE):
+                    continue                # the one named line, below
                 if _guard.search(_l):
                     _hits.append("%s:%d" % (os.path.relpath(_f, REPO), _n))
     t.ok(not _hits, "core knows nothing of a shell layer: no core file names one (bin, lib, home, linux, templates, themes, get, bootstrap.sh, install.sh)",

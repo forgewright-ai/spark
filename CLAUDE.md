@@ -26,7 +26,10 @@ for it, and no verb carries the word.
   line, and nothing else touched. A spark app is a client of one spark
   surface. The surfaces are text on stdin (`spark edit`, contract 10,
   and `spark line`, contract 4), the shell (`? words`, `spark do`,
-  `explain`, `$EDITOR`) and the `FORGE` API (contract 9). Its plugin
+  `explain`, `$EDITOR`) and the `FORGE` API (contract 9). spark is an
+  MCP host too (contract 16): the servers on its list offer their tools
+  to the prompt line and `spark do`, and `spark steps` plans with any
+  program's tools. Its plugin
   lives in its own repository, named `spark-<app>`, installed the app's
   way. micro came first: forgewright-ai/spark-micro. spark ships no app,
   no app package, no app check row and no per-app verb. A machine's
@@ -360,6 +363,12 @@ lib/spark/      __init__ config wire engine serve session persona cli check
                 audit (the sealed audit trail: one record per admin action in
                 the box account's store, numbers and names only; spark serve
                 --audit [N] reads it)
+                mcp (spark mcp: contract 16's MCP client, stdio only -- the
+                list, the server on its wire, the gate, the audit record, the
+                tools file the prompt line reads; every list that decides a
+                named line)
+                steps (spark steps: contract 16's planner, the tools on stdin,
+                the steps out under a grammar made from them)
                 version (the version, from git, cached: spark ver, check's
                 header, forgeserve)
                 update (spark update: the newest release tag signed by a key in
@@ -436,6 +445,9 @@ tests/          smoke.py serve_smoke.py forge_smoke.py bench_smoke.py
                 life and its lock, and the real escapes where the probe says
                 this machine has a sandbox)
                 qr_test.py (ISO 18004 format table, the RS vector, a decode-back)
+                mcp_test.py (contract 16 against a stub MCP server and a stub
+                engine: every gate of the client, a named check each, and
+                spark steps)
                 voice_test.py (the voice: a stub runtime, player and recorder;
                 the fetch's refusals, the speaker awaken picks, the clear reading;
                 the splitter, the lead-in, the Reader's two stages timed)
@@ -523,10 +535,10 @@ docs/           every document but the 4 at the root. With a release (the
 ```
 
 Runtime paths. Config is `~/.config/spark/`: `site.env`, `spark.env`,
-`theme.env`, `keys.env`, `models.env` (yours), `privacy-terms`, `soul`,
-`personality`, `faces`, `voice` and `memory` (the pre-v1.4 facts file,
-read until the first write). `voice` (0600) is the
-machine's own voice, `KEY=value`: `SID` and `SID_PT`, its two
+`theme.env`, `keys.env`, `mcp.env`, `models.env` (yours),
+`privacy-terms`, `soul`, `personality`, `faces`, `voice` and `memory`
+(the pre-v1.4 facts file, read until the first write). `voice` (0600)
+is the machine's own voice, `KEY=value`: `SID` and `SID_PT`, its two
 speakers. Awaken writes it, or `spark voice on` on an awake
 machine that has none. `personality` (0600) is the paragraph
 `spark awaken` writes after the soul's fixed core. `faces` (0600) is
@@ -550,6 +562,8 @@ State is `~/.local/state/spark/`, 0700:
   `forge.log`, `forge.lock`.
 - `router/` (`spark.gguf`, `ember.gguf`, `presets.ini`): the router's
   models dir, written by `spark serve`.
+- `mcp-tools` 0600: the tools `spark mcp` last listed, one line a tool
+  (contract 16), read by the prompt line's prefix and by `spark do`.
 - `off`, `widgets/`, `turns/`, `chat-history` 0600, `brain` 0600,
   `check.json` 0600, `bar` 0600, `bench.jsonl`, `tune.json` 0600. The
   0600 files here are written by `vault.write_private`, after
@@ -793,6 +807,11 @@ and may change freely.
      the Esc wait alone. Enter, Ctrl-U, Ctrl-L, paste, the `? words`
      line and the row work as with the keys on. The per-key lines are
      kept across off and on.
+   - `~/.config/spark/mcp.env`: the MCP servers spark may start
+     (contract 16), written by `spark mcp add`, `rm` and `trust`, 0600:
+     `MCP_SERVER_<NAME>="<absolute path> [words]"`, `NAME` matching
+     `[A-Z][A-Z0-9_]{0,31}`, and `MCP_SERVER_<NAME>_TRUST`, `yes` or
+     `no`. A key that ends `_TRUST` is no server.
    Precedence: environment, then file, then default.
 4. `spark line --cwd D --shell S` reads the prompt buffer on stdin and
    prints two lines. Line 1 is `cmd<TAB>command`, `danger<TAB>command`,
@@ -841,7 +860,7 @@ and may change freely.
    writes, in full, then ` -- ` and the row's own words. No `a|b` is
    written, because a model copies what it reads, and `<words>` is
    `WORDS`. `tests/smoke.py` holds the map within `grounding.MAP_MAX`,
-   3600 characters. Its first line says the commands are for a
+   3800 characters. Its first line says the commands are for a
    question about spark itself, and that a word in capitals stands for
    the user's own text, written as they wrote it. The brief
    (`persona.MODE_LINE`) puts the machine first: every question about
@@ -995,7 +1014,9 @@ and may change freely.
    `spark do --sandbox --detach`: a systemd user timer, launchd, cron, a
    `spark watch` line. The memory and the audit are the `FORGE`'s sealed
    threads. No tool schema rides a request: a small model's context
-   holds the task, not the harness. `spark do` is bounded, measured and
+   holds the task, not the harness. The MCP tools `spark mcp` listed
+   ride as `spark mcp call` lines, names and titles alone (contract 16).
+   `spark do` is bounded, measured and
    held. A proposal's messages fit the served context (`do.budget`):
    `SPARK_CTX`, 8192 when unknown, at `reveal.CHARS_PER_TOKEN`, a
    `CTX_SHARE` of 0.8, less the system message and the reply's
@@ -1618,8 +1639,10 @@ and may change freely.
    `vault.append_sealed`). The records are `do/run` `{ts, ip, action,
    digest, rc}`, `/api/run` `{ts, ip, action, verb, rc}`, a user minted,
    removed or rotated `{ts, ip|cli, action, name}` (`spark user
-   add|remove|token --new`, `POST /api/user/token`), and `spark serve
-   --login --new` `{ts, cli, action}`. Numbers and names, never a
+   add|remove|token --new`, `POST /api/user/token`), `spark serve
+   --login --new` `{ts, cli, action}`, and a tools/call `{ts, cli,
+   action, who, server, tool, args, error}` (`mcp/call`, contract 16).
+   Numbers and names, never a
    command's text or its arguments. `spark serve --audit [N]
    [--porcelain]` prints the newest N (50 by default), one line each. A
    trail that does not open is one signed line, exit 2, never written
@@ -1971,6 +1994,143 @@ and may change freely.
     The exit code is the `end` event's rc. Its first app is spark-acp
     (README.md, Apps), an Agent Client Protocol agent: a step is a
     Run or a Skip, a review one Accept or Discard.
+16. `spark mcp` and `spark steps` are spark as an MCP host, stdio only
+    (`lib/spark/mcp.py`, `lib/spark/steps.py`). A server is a named line
+    in `~/.config/spark/mcp.env`, read by contract 3's reader:
+    `MCP_SERVER_<NAME>="<absolute path> [words]"`. A server not on the
+    list is never started. `spark mcp add NAME PATH [WORDS]` writes the
+    line. It refuses a path that is not absolute, and a program that
+    others may write, it or any directory above it, the link resolved
+    (`mcp.program_problem`, ssh's StrictModes). A group may write one
+    only when it is the owner's private group (`mcp.private_group`), and
+    a root-owned sticky directory such as /tmp is safe. It refuses a
+    word holding a quote, a space or ``;`$()|&<>`` too. `spark mcp rm
+    NAME` removes it. A list that others may write is refused, never
+    read. spark starts a server with no shell: argv, the program's
+    resolved path, cwd `HOME`, the environment `mcp.ENV_KEEP` names and
+    nothing else, a named line each. stdin and stdout are the wire,
+    stderr is thrown away, and the server has its own process group.
+    Closing it is stdin closed, then `SIGTERM` and `SIGKILL` to its
+    whole group, 2 seconds apart, whatever its leader did. A server that
+    fails its handshake is closed. The protocol is JSON-RPC 2.0, one
+    message a line, `mcp.PROTOCOL` pinned: 2025-06-18. A server that
+    answers initialize with another version is closed. spark declares
+    `elicitation` alone: never sampling and never roots, and a sampling
+    request is answered as no method. There is no HTTP transport. A line
+    from a server over `mcp.LINE_MAX` (64 kB) closes it, but for the
+    answer to a resources/read. So does one that is not a JSON-RPC 2.0
+    object. A resource read is `RESOURCE_MAX` (256 kB) at most.
+    initialize and tools/list wait 5 seconds, a resource read 10. A
+    tools/call waits `mcp.CALL_TIMEOUT`, `do.STEP_TIMEOUT` (120
+    seconds), a ceiling no progress extends. A request past its wait is
+    cancelled at the server (`notifications/cancelled`) and refused. A
+    message to a server is written within `WRITE_TIMEOUT` (5 seconds). A
+    server that sends more than `SERVER_ASKS_MAX` (64) requests of its
+    own while spark waits on one is closed. Progress is heard for the
+    call's own token alone, and only while it increases. A server's list
+    is read `PAGES_MAX` (8) pages, `TOOLS_MAX` (128) tools. A tool is
+    offered only when its name matches `mcp.TOOL_NAME`
+    (`^[a-z][a-z0-9_]{0,63}$`), its title as sent matches `mcp.TITLE`,
+    and its input schema is an object whose property names match
+    `mcp.ARG_WORD`. Every string a server hands on passes `mcp.scrub`:
+    `text.printable`, then `mcp.ZERO_WIDTH`, a named line each. A tool's
+    description never rides a request, a brief or a record. Trust. A
+    tool's annotations are believed only from a trusted server. That is
+    `mcp.TRUSTED_CHAIN`, spark's own programs, a named line each. A
+    program counts when its name, the link resolved, is one of them. It
+    must live in a clone of that very forgewright-ai repository
+    (`mcp.chain_member`, by the clone's origin). Another program of that
+    name is not the chain. Or it is a server whose
+    `MCP_SERVER_<NAME>_TRUST` is `yes` (`spark mcp trust NAME on|off`),
+    and `no` turns a chain member off. The spec's defaults hold: no
+    readOnlyHint is false, and no destructiveHint is true. From a
+    trusted server a tool that may destroy takes the typed `yes`. From
+    any other server every tool does (`Tool.needs_yes`). The gate comes
+    before every tools/call (`mcp.call_line`, `mcp.prepare`). The tool
+    is in the server's tools/list now. The arguments validate against
+    its input schema (`mcp.validate`): an object, no argument it does
+    not name, every required one, each its type, enum, range and length.
+    A string carries no control, bidi or zero-width character, and with
+    no `maxLength` it is 4096 characters at most. An array is 32 items
+    at most. A server may list a resource named `rows`, in the rows
+    schema of the desktop's providers. Where it names the tool with its
+    required arguments, the call names one of those rows exactly,
+    credentials aside (`mcp.rows_gate`). A rows resource that does not
+    read refuses the call. And a person saw the step: the command line
+    they entered, then the typed `yes` where `needs_yes` asks it. With
+    nobody at a terminal, a tool that asks the yes is refused. A
+    credential (`mcp.CREDENTIAL_WORDS`, or `format: password`) is never
+    a word on the line: `spark mcp call` refuses `password=...`, and a
+    row's `ask` names the credential spark asks for through getpass.
+    Elicitation is answered at the prompt, and only while a tools/call
+    is in flight. The server's name and its message go on stderr, then
+    each field, a credential through getpass and never echoed. The march
+    stops first. A server that is not trusted never gets a credential
+    asked. A server asks `ELICIT_PER_CALL` (3) questions a call and
+    `ELICIT_PER_MINUTE` (6) a minute over every spark process
+    (`mcp-asked` in the state dir), and the rest are declined. With
+    nobody to ask, every one is declined. Every tools/call sent is one
+    sealed audit record (`audit.record`, action `mcp/call`): `{ts, ip,
+    action, who, server, tool, args, error}`. `args` is the first 16 hex
+    digits of the sha256 over the arguments' JSON with every credential
+    out (`mcp.digest`). Numbers and names, never an argument or a
+    result. A trail that will not take the record never stops the call.
+    `spark mcp` bare lists every server on the list and its tools, and
+    writes `mcp-tools` in the state dir, 0600: one line a tool,
+    `server<TAB>tool<TAB>flags<TAB>arguments<TAB>title`. The flags are
+    `t`, trusted, `r`, read-only and believed, and `y`, the typed `yes`.
+    `spark mcp NAME` is one server, with its optional arguments and its
+    resources. `spark mcp call NAME TOOL [KEY=VALUE ...]` is one call,
+    each value typed by the schema: a number, `yes` or `no`, a comma
+    list, else text. Exit 0 is the tool's result on stdout, 1 a refusal
+    or the tool's own error on stderr, 2 the usage. At a terminal a call
+    shows the march while it runs. `spark mcp read NAME [URI] [--watch]`
+    lists the resources or reads one. `--watch` subscribes and reads it
+    again on each `notifications/resources/updated`, until `Ctrl-C`. The
+    prompt line never starts a server or talks to one (contract 4).
+    `persona.prefix` carries `mcp.brief_tools()`: the tools file, read
+    line by line and never sourced. Each line is held to its shape
+    (`mcp._LINE`, `mcp._ARG`) and dropped when its server is off the
+    list. The names, the required arguments and the titles of trusted
+    servers ride as `spark mcp call` lines, `BRIEF_MAX` (1500)
+    characters at most, and none under `SPARK_LINE_BENCH=1`. With no
+    tools file the prefix is byte for byte what it was. A `spark mcp
+    call` line whose tool asks the yes, or is not listed, is a danger
+    line (`persona.tool_danger`) at the prompt and in `spark do`. `spark
+    do` runs a step that is one `spark mcp call` line of plain words
+    itself (`do.tool_step`, `mcp.call_words`), through the same gate.
+    The typed `yes` of a danger step stands as the call's, and a tool
+    that asks a yes nobody typed is refused. Over `--porcelain` a danger
+    tool step is refused as any `do.danger` step is (contract 15). In
+    the sandbox a tool step is refused, because a tool acts outside the
+    copy (`do.TOOL_IN_SANDBOX`). A result rides the next turn as the
+    step's output, after `do.hold`, as data: no call follows it without
+    a person's Enter. `spark steps [--about TEXT] [--] <words>` is the
+    planner's protocol: an MCP tools/list result, or its list, on stdin,
+    256 kB at most, and one JSON object out, `{"answer", "steps",
+    "refused"}`. A step is `{"name", "arguments"}`, and nothing runs.
+    The request carries each tool as one line (`steps.tool_brief`). That
+    is its name, then its arguments as `KEY=KIND`, the optional ones in
+    brackets with a range where the schema has one, then its title. The
+    lines are `STEPS_BRIEF_MAX` (16 kB) at most, else exit 2, and
+    `STEPS_TOOLS_MAX` (64) tools. The words and `--about` are 2000
+    characters at most. The reply is held by `wire.tools_gbnf`:
+    `{"answer": string, "steps": [...]}`, 8 steps at most, each one of
+    the tools, its name a literal and its arguments typed by its schema.
+    An optional argument may be left out, and a credential is never in
+    it. A tool a grammar cannot hold is not offered, and stderr says how
+    many were not. The client gates after: a step whose tool was not
+    offered, whose arguments `mcp.validate` refuses or that writes a
+    credential is a line in `refused`, never a step. The brief is
+    `persona.MODE_STEPS`, the spark role, with the machine line for its
+    prefix. No path, no `[cwd]` line, no thread. Exit 0 with the object,
+    1 when no model answers, 2 the usage. The turn record is numbers:
+    kind `steps`, `tools`, `steps`, `refused`, `chars` and `ms`.
+    `persona.SENDS` names what leaves: the steps row, the line's tool
+    lines and a tool's result in do. The `mcp` check row reads the list
+    and never starts a server. It is na with no server, and a warn when
+    others may write `mcp.env`, a line is not `KEY=value`, or a program
+    is one spark would refuse to start.
 
 ## The grammar
 
@@ -2382,8 +2542,8 @@ sh tests/gate.sh full           # every suite for this OS, about 10 minutes; CI 
 sh tests/land.sh --passed SHA   # ci.yml passed for that commit: what main and a tag need
 ```
 
-`spark check` has 40 rows today, by category `8 SOFTWARE, 23
-CAPABILITY, 9 NONFUNCTIONAL` (`grep -c '^@row' lib/spark/check.py`
+`spark check` has 41 rows today, by category `8 SOFTWARE, 23
+CAPABILITY, 10 NONFUNCTIONAL` (`grep -c '^@row' lib/spark/check.py`
 counts them). `--selftest` runs 8 passes. The first two prove every
 fixture-testable row flips between a good and a bad fixture. The good
 one also proves a healed row is recorded once and said once. The third

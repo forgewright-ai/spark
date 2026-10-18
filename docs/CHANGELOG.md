@@ -1,5 +1,62 @@
 # Changelog
 
+## v1.90
+
+spark is an MCP host. The servers on its list offer their tools to the
+prompt line, `spark do` and `/do` in a chat, on any machine, and
+`spark steps` turns a person's words into calls of any program's tools.
+spark-shell's providers, the parts of its desktop, are the first
+servers. Contract 16.
+
+- `spark mcp`: the list of MCP servers spark may start,
+  `~/.config/spark/mcp.env`, one `MCP_SERVER_<NAME>` line a server.
+  `spark mcp add NAME PATH [WORDS]`, `rm NAME`, `trust NAME on|off`,
+  `call NAME TOOL KEY=VALUE`, `read NAME [URI] [--watch]`. Bare, it lists
+  every server and its tools, and keeps that list for the prompt line.
+- A server starts with no shell, in your home, with a named list of
+  environment variables, its stdin and stdout the wire and nothing
+  else. stdio only: there is no HTTP transport. MCP 2025-06-18 is
+  pinned, the version spark-shell's providers speak; a server that
+  answers another is closed. spark declares elicitation alone, never
+  sampling.
+- The gate before every call: the tool is in the server's list now,
+  its arguments fit its schema, an argument naming a thing names one
+  the server lists, and a person saw the step. A tool that may destroy
+  asks the typed `yes`; from a server that is not trusted, every tool
+  does. spark, spark-shell and spark-acp are trusted by default, each
+  when it lives in a clone of its own repository and only its owner
+  can write it or a directory above it.
+- A credential is never a word on the line, never in a record and
+  never sent to the model. A server's question is asked at the prompt,
+  3 a call and 6 a minute at most, a password without echo.
+- Every call is one sealed audit record, `mcp/call`: who, the server,
+  the tool, a digest of the arguments and whether it failed. Never an
+  argument or a result.
+- The prompt line reads the tools from the file `spark mcp` wrote and
+  never starts a server. A tool step is a `spark mcp call` line you
+  read before `Enter`. In `spark do` it runs through the same gate;
+  over `--porcelain` a tool that asks the yes is refused, and inside
+  `--sandbox` no tool runs.
+- `spark steps <words> < TOOLS`: an MCP tools list on stdin, the tool
+  calls out as JSON, held by a grammar made from the tools and checked
+  again after. A tool's description never rides, only its name, its
+  arguments and its title.
+- What leaves the machine has three new lines: the steps verb, the
+  tool names and titles in the prompt line, and a tool's result in
+  `spark do`. The `mcp` check row reads the list: `spark check` has 41
+  rows.
+- `spark voice listen` needed nothing new: the dialog's talk chip runs
+  `spark voice listen --buffer` and stops it with `SIGINT`.
+- Measured before the tag, gemma4-26b-a4b. `spark steps` with the 39
+  tools of the desktop's 12 providers: 66 of 66 wants right, against 39
+  of 66 for spark-shell's own want path, 3.0 s against 4.4 s at the
+  median. The prompt line on all six systems: tools 94 to 100 %, spark's
+  own 96 to 100 %, flag honesty 100 %, danger over-fire 5 to 6 %. Danger
+  recall was 105 of 106: Void's "remove the packages nothing needs
+  anymore" came back as words. v1.89.1 answers that case right 1 time in
+  5 and this release 4 in 5. Tagged on the owner's word, the bar short
+  by that one case.
+
 ## v1.89.1
 
 - S3: the sends row said this machine's own second address was not

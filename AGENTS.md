@@ -6,7 +6,7 @@ Nothing leaves the machine except pinned downloads and your own words
 to a model you run. One line installs it, and spark is live. A tool
 becomes a spark app as a client of `spark edit`, in its own
 `spark-<app>` repository, and no shell code lives in this tree.
-`CLAUDE.md` is the full reference: the principles, the layout, the 15
+`CLAUDE.md` is the full reference: the principles, the layout, the 16
 contracts, the grammar and the release steps. This file is the short
 brief.
 
@@ -63,6 +63,7 @@ python3 tests/vault_test.py
 python3 tests/sandbox_test.py
 python3 tests/knowledge_test.py
 python3 tests/qr_test.py
+python3 tests/mcp_test.py
 python3 tests/voice_test.py
 python3 tests/docs_test.py
 python3 tests/policy_test.py

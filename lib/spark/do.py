@@ -57,7 +57,7 @@ import time
 
 from . import (ACCOUNT_KEY_FILE, EMBER_TOKEN_FILE, MARK, SHARE_TOKEN, TOKEN_FILE, config, die, glyph, page,
                paint, say)
-from . import forge, intake, persona, reveal, sandbox, session, users, wire
+from . import forge, intake, mcp, persona, reveal, sandbox, session, users, wire
 from . import text as textmod
 from .cli import _one_line, _short
 
@@ -202,6 +202,8 @@ DO_USAGE = """%s do -- a task, step by step
   At each step: Enter runs it, e edits it, s skips it, q quits, and r
   reads a long step again. A step that can destroy data runs only when
   you type yes. After a step, a check that it worked is offered too.
+  A step may be a tool of an MCP server on the list (spark mcp): a
+  spark mcp call line, held to that tool's own checks.
   The model can be wrong: read each command before you run it.
   In the sandbox, steps run on their own, %d seconds each at most.
   A run is %d steps at most.
@@ -413,6 +415,8 @@ def danger(command, cwd=""):
     the text and each line), the verdict v1.69 gave every step -- but for
     the one step read past, heredoc_file(): a here-document writing one
     new file, and nothing else, loses nothing."""
+    if persona.tool_danger(command):
+        return True
     if not _dangerous(command):
         return False
     return not heredoc_file(command, cwd)
@@ -605,6 +609,28 @@ def run(command, shell, cwd="", echo=True, timeout=None, box=None):
     if box is not None:
         _killpg(p)
     return (124 if fired.is_set() else rc), tail
+
+
+TOOL_IN_SANDBOX = "a tool acts outside the sandbox's copy -- not run; run it without --sandbox"
+
+
+def tool_step(command, box=None, sure=False, echo=True):
+    """contract 16: a step that is one `spark mcp call` line of plain words
+    (mcp.call_words) runs here, not through a shell, through the gate of
+    mcp.call_line: the tool in its server's list now, its arguments by
+    its schema, the rows. The yes typed on this step (`sure`, when
+    danger() asked it) stands as the call's; a tool that asks one
+    otherwise is refused -- nobody is asked twice, and a program never
+    answers it. In the sandbox a tool is refused: it acts outside the
+    copy. (rc, the result's last 4 kB)."""
+    if box is not None:
+        return 1, TOOL_IN_SANDBOX
+    server, tool, words = mcp.call_words(command)
+    rc, out = mcp.call_line(server, tool, words=words, sure=sure, tty=False)
+    if echo and out:
+        sys.stdout.write(out.rstrip("\n") + "\n")
+        sys.stdout.flush()
+    return rc, out[-OUTPUT_TAIL:]
 
 
 def _checksum_tool(command):
@@ -1327,7 +1353,10 @@ def _drive(face, cfg, thread, goal, text, shell, cwd, box=None, timeout=None):
                 skipped.add(command.strip())
                 text = SKIPPED % command
                 continue
-            rc, tail = run(command, shell, cwd, echo=face.echo, timeout=timeout, box=box)
+            if mcp.call_words(command):
+                rc, tail = tool_step(command, box, reply["danger"], face.echo)
+            else:
+                rc, tail = run(command, shell, cwd, echo=face.echo, timeout=timeout, box=box)
             steps += 1
             tail, held, names = hold(tail, command)
             face.ran(rc, tail)

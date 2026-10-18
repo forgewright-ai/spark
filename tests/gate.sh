@@ -236,6 +236,8 @@ group_rest() {
     run sandbox_test.py "$PY" tests/sandbox_test.py
     run knowledge_test.py "$PY" tests/knowledge_test.py
     run qr_test.py "$PY" tests/qr_test.py
+    # contract 16: the MCP client's gates against a stub server, and spark steps
+    run mcp_test.py "$PY" tests/mcp_test.py
     run voice_test.py "$PY" tests/voice_test.py
     run docs_test.py "$PY" tests/docs_test.py
     run policy_test.py "$PY" tests/policy_test.py

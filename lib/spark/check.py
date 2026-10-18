@@ -1301,6 +1301,33 @@ def row_sends(ctx):
 
 
 @row("NONFUNCTIONAL")
+def row_mcp(ctx):
+    """contract 16: the MCP servers spark may start -- the list's lines
+    and their programs, read and never started (a check starts no
+    server). A list others may write, or a program spark would refuse
+    to start, is a warn; no list is na."""
+    from . import mcp
+    if not os.path.isfile(mcp.MCP_ENV):
+        return na("no MCP server on the list")
+    st = os.stat(mcp.MCP_ENV)
+    if st.st_mode & 0o002 or (st.st_mode & 0o020 and not mcp.private_group(st.st_gid, st.st_uid)):
+        return warn("others may write %s" % ctx.short(mcp.MCP_ENV), "chmod 600 %s" % ctx.short(mcp.MCP_ENV))
+    try:
+        specs = mcp.specs()
+    except SystemExit:
+        return warn("%s has a line that is not KEY=value" % ctx.short(mcp.MCP_ENV), "spark mcp")
+    except mcp.Refused as e:
+        return warn(e.hint.split(" -- ")[0], "chmod 600 %s" % ctx.short(mcp.MCP_ENV))
+    if not specs:
+        return na("no MCP server on the list")
+    bad = [s for s in specs if s.problem]
+    if bad:
+        return warn("%s: %s" % (bad[0].name, bad[0].problem), "spark mcp rm %s" % bad[0].name)
+    trusted = sum(1 for s in specs if s.trusted)
+    return ok("%d server%s on the list, %d trusted" % (len(specs), "" if len(specs) == 1 else "s", trusted))
+
+
+@row("NONFUNCTIONAL")
 def row_users(ctx):
     """The named users' sealed stores: every dir 0700, every key file
     0600, every data file (threads/ and kept/ included) carrying the
@@ -2242,6 +2269,10 @@ def make_fixture(root, good, stub_url="", real_spark=False):
               os.path.join(home, ".local", "state"), os.path.join(home, ".local", "share")):
         os.makedirs(d, exist_ok=True)
     open(os.path.join(home, ".config", "spark", "site.env"), "w").close()
+    # the MCP list (contract 16): a program spark may start, or a relative path it refuses
+    with open(os.path.join(home, ".config", "spark", "mcp.env"), "w") as f:
+        f.write('MCP_SERVER_FIXTURE="%s"\n' % ("/bin/sh" if good else "fixture-server"))
+    os.chmod(os.path.join(home, ".config", "spark", "mcp.env"), 0o600)
     if good:                    # the bad fixture has no word list (allowed) and a loose site.env (not)
         with open(os.path.join(home, ".config", "spark", "privacy-terms"), "w") as f:
             f.write("# fixture word list\nfixtureword\n")

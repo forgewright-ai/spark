@@ -472,8 +472,18 @@ def _flags(head, args, entry):
 
 
 def _dynamic(verb):
-    """The names the tree fills a slot with: a model."""
+    """The names the tree fills a slot with: a model, or for `spark mcp`
+    a server on the list (contract 16: its MCP_SERVER_<NAME> lines, read
+    as text, never a server started)."""
     names = set()
+    if verb == "mcp":
+        try:
+            with open(os.path.join(CONFIG_DIR, "mcp.env"), encoding="utf-8") as fh:
+                src = fh.read(65536)
+        except OSError:
+            return names
+        return {m.group(1).lower() for m in re.finditer(r"^MCP_SERVER_([A-Z][A-Z0-9_]{0,31})=", src, re.M)
+                if not m.group(1).endswith("_TRUST")}
     for f in (os.path.join(REPO, "models.env"), os.path.join(CONFIG_DIR, "models.env")):
         try:
             with open(f, encoding="utf-8") as fh:

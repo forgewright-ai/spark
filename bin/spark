@@ -47,6 +47,7 @@ spark
  spark read <words> < FILE    answers that quote the text (-h)
  spark drill < FILE           practice questions from the text (-h)
  spark watch <words> < STREAM the model speaks up when a line matches (-h)
+ spark steps <words> < TOOLS  the tool calls that do what you say (-h)
  spark reveal [N|auto|off]    how fast replies appear (-h)
  try:
  ? words or words? Enter      the command lands in your line
@@ -84,6 +85,12 @@ USAGE_INTERFACE = """the interface
  spark keys NAME KEY          move a key, such as ask to Esc a
 """
 
+USAGE_TOOLS = """the MCP tools
+ spark mcp [NAME]             the MCP servers spark may start, and their tools
+ spark mcp add NAME PATH      put a server on the list; rm NAME takes it off
+ spark mcp call NAME TOOL     run one of a server's tools (-h)
+"""
+
 USAGE_LIVING = """the living prompt
  spark awaken                 give this machine a personality and a look
  spark look [on|off|auto]     the look: motion, colour and the face (-h)
@@ -109,13 +116,14 @@ version %s
 
 def usage():
     """The help: the bar line, the voice and the keys are the interface;
-    awaken, look and height the living prompt.
+    the MCP servers on the list are the tools; awaken, look and height the
+    living prompt.
     The version is formatted here, not at import: nothing on the `spark
     line` path may call git, and version() does, on a cache miss."""
     from spark import version
     tail = USAGE_TAIL % version.version()
     return (USAGE_HEAD + "\n" + USAGE_MACHINE + "\n" + USAGE_INTERFACE + "\n"
-            + USAGE_LIVING + "\n" + tail)
+            + USAGE_TOOLS + "\n" + USAGE_LIVING + "\n" + tail)
 
 
 def main(argv):
@@ -160,6 +168,7 @@ VERBS = {"setup": ("setup", "main", False), "check": ("check", "main", False),
          "ask": ("ask", "cmd_ask", False), "edit": ("edit", "cmd_edit", False),
          "read": ("read", "cmd_read", False), "drill": ("drill", "cmd_drill", False),
          "watch": ("watch", "cmd_watch", False),
+         "steps": ("steps", "cmd_steps", False), "mcp": ("mcp", "main", False),
          "reveal": ("reveal", "cmd_reveal", False),
          "look": ("look", "cmd_look", False), "height": ("look", "cmd_height", False),
          "voice": ("voice", "cmd_voice", False), "keys": ("keys", "main", False),

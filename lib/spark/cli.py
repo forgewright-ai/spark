@@ -623,7 +623,7 @@ class _Know:
         is_dangerous it is never marked, whatever the model says -- the
         audition's model marked `spark update` 5 times in 12. Arm off:
         v1.52's rule."""
-        if persona.is_dangerous(command):
+        if persona.is_dangerous(command) or persona.tool_danger(command):
             return True
         if self.arm == "off":
             return bool(model_danger)
@@ -933,7 +933,7 @@ def _guards(s, reply, command, hint, text, cwd, more, history, ms):
                 hint = _one_line("already tried above -- %s" % hint)
         except wire.BrainError:
             hint = _one_line("already tried above -- %s" % hint)
-    flagged = bool(reply.get("danger")) or persona.is_dangerous(command)
+    flagged = bool(reply.get("danger")) or persona.is_dangerous(command) or persona.tool_danger(command)
     return reply, command, hint, "danger" if flagged else "cmd", ms
 
 

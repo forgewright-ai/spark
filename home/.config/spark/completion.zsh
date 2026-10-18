@@ -32,6 +32,13 @@ _spark_model_names() {
         | sed -e '/_LICENSE$/d' -e '/_NOTE$/d' -e '/_TESTED$/d' | tr 'A-Z_' 'a-z-'
 }
 
+_spark_mcp_names() {
+    # MCP_SERVER_OUT= -> out: the servers on the list (contract 16); the
+    # _TRUST keys are no servers
+    sed -n 's/^MCP_SERVER_\([A-Z0-9_]*\)=.*/\1/p' "${XDG_CONFIG_HOME:-$HOME/.config}/spark/mcp.env" 2>/dev/null \
+        | sed '/_TRUST$/d' | tr 'A-Z' 'a-z'
+}
+
 # lua: excluded on purpose -- not a verb anyone is told about
 _spark() {
     local -a comp
@@ -40,7 +47,7 @@ _spark() {
               ver last status history stats clear bench model
               soul memory bar look height off
               on user explain edit ask read drill watch reveal help uninstall
-              awaken voice keys)
+              awaken voice keys mcp steps)
     elif (( CURRENT == 3 )); then
         case ${words[2]} in
             model)   comp=(list verify budget rm add auto none status --chat ${(f)"$(_spark_model_names)"}) ;;
@@ -64,6 +71,8 @@ _spark() {
             client)  comp=(off status --key-file) ;;
             setup)   comp=(--yes --model --engine --name --user --no-serve) ;;
             user)    comp=(list add remove login logout token claim status) ;;
+            mcp)     comp=(add rm trust call read status ${(f)"$(_spark_mcp_names)"}) ;;
+            steps)   comp=(--about) ;;
         esac
     fi
     (( ${#comp} )) && compadd -- "${comp[@]}"

@@ -74,6 +74,8 @@ CAPS_OK = {
     "ALSA",
     # what the code prints: the gate's marker, the three row categories
     "NOTICE", "SOFTWARE", "CAPABILITY", "NONFUNCTIONAL",
+    # contract 16 (v1.90): the placeholders of spark mcp call NAME TOOL and spark steps < TOOLS
+    "TOOL", "TOOLS",
 }
 # a contraction, any case: the n't family and the pronoun+verb pairs
 CONTRACTION = re.compile(

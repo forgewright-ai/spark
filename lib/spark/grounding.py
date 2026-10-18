@@ -704,8 +704,9 @@ SHELL_TAIL = ("Settings live in ~/.config/spark/spark.env (SPARK_REVEAL, SPARK_M
               "SPARK_TIMEOUT, SPARK_HISTORY) and site.env.")
 # The map rides the system prefix, which the engine caches: its size
 # costs at a cold start alone. The cap is there so a help that grows is
-# noticed (smoke holds the map under it).
-MAP_MAX = 3600
+# noticed (smoke holds the map under it). 3600 until v1.90, when the
+# rows of spark mcp and spark steps took it to 3653.
+MAP_MAX = 3800
 
 _MAP = {}
 

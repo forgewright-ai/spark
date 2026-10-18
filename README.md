@@ -74,6 +74,8 @@ spark chat                      talk with the model
 - `spark ask`, `spark read`, `spark drill`, `spark watch`: work with a
   text.
 - `spark model list`: the models and their licenses.
+- `spark mcp`: the tools of the MCP servers you put on its list, such
+  as the parts of a desktop. A tool that can destroy asks you first.
 - `spark serve on`: use this machine's model from a browser or another
   machine.
 - `spark voice on`: spark reads aloud.
@@ -169,11 +171,16 @@ it on a new install. What each command sends:
 
 - `line`: the line you typed, your shell, your OS and the folder's
   path. With a question, the matching lines of your manuals, 600
-  characters at most.
+  characters at most. With MCP servers on the list, the names and
+  titles of their tools, 1.5 kB at most.
 - `chat`: your soul, your remembered facts and the conversation.
 - `do`: each step's output (the last 4 kB) and the folder's path. After
-  a refused option, a few lines of that command's man page.
+  a refused option, a few lines of that command's man page. A tool's
+  result, the last 4 kB.
 - `explain`: the piped text, the last 6 kB.
+- `steps`: your words and the tools you pipe in, their names,
+  arguments and titles, up to 16 kB. Never a tool's description or a
+  password.
 - `@FILE`: the file's first 4 kB and last 12 kB.
 - `edit`: the file's name and up to 16 kB of its text.
 - `ask`: the text, up to 12 kB.
