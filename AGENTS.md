@@ -50,6 +50,7 @@ python3 tests/serve_smoke.py
 
 sh tests/gate.sh full rest
 # every fast check, and the privacy gate over the whole tree
+python3 tests/baseline_test.py
 sh tests/install_test.sh
 sh tests/get_test.sh
 sh tests/update_test.sh
@@ -79,6 +80,12 @@ python3 bin/spark check --chaos
 `sh tests/gate.sh full` runs the 3 groups in order on your own machine.
 It takes about 10 minutes, and nothing asks for it. `SPARK_GATE_PYTHON`
 names the python, and CI on macOS sets it to Apple's.
+
+For a recorded run, `python3 tests/baseline.py [smoke|serve|rest]`
+prints the runtime and runs the same gate. It reaps orphaned children
+on Linux and preserves failures. `--probe-readline` tests one chat
+input line without a model. `docs/CONTRIBUTING.md`, "A test baseline",
+records the container prerequisites and the known failure classes.
 
 `sh tests/land.sh` lands a commit. It pushes the commit to a `try/`
 branch and waits for CI. On green it moves `main` forward to the same

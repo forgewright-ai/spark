@@ -118,6 +118,7 @@ def tests_named():
 # the tests/ files tests/gate.sh does not run, each with its reason
 NOT_IN_GATE = (
     ("gate.sh", "the gate itself"),
+    ("baseline.py", "the manual gate runner and readline probe; baseline_test.py proves its runner"),
     ("land.sh", "the landing command, not a test: land_test.sh proves it"),
     ("tag.sh", "the tagging command, not a test: tag_test.sh proves it"),
     ("audition.py", "needs a live model"),

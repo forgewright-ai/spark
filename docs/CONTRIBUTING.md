@@ -5,8 +5,9 @@ is the short path to a change that lands.
 
 ## Clone and run the gate
 
-The tests are hermetic: a stub llama-server, a throwaway `HOME` and
-`XDG_*` dirs. The tests run on any machine.
+The tests use a stub llama-server, a throwaway `HOME` and `XDG_*`
+dirs. No model is needed. "A test baseline" below records the host
+prerequisites.
 
 ```sh
 git clone https://github.com/forgewright-ai/spark.git
@@ -32,6 +33,41 @@ install shellcheck`, `pacman -S shellcheck`, `xbps-install shellcheck`,
 `dnf install ShellCheck`, `zypper install ShellCheck` or `brew install
 shellcheck`. The gate skips it with a notice when absent. `gh`,
 GitHub's command line, is what `tests/land.sh` asks CI with.
+
+### A test baseline
+
+To record a run, use the Python you want to test:
+
+```sh
+python3 tests/baseline.py
+python3 tests/baseline.py smoke
+python3 tests/baseline.py --probe-readline
+```
+
+The runner prints the Python version, line editor, terminal, init
+override and ownership prerequisites. It calls the same gate and
+keeps its exit status. Each group is passed, failed, blocked or unrun;
+skipped checks remain in the output. No assertion is disabled.
+On Linux it reaps orphaned children, which a container's first
+process may leave behind. Live model and hardware checks stay unrun.
+
+The runner pins launchd or systemd; runit cases set their own seam.
+Smoke also pins its defaults when called without the runner.
+Voice pins its terminal and checks that `TERM=dumb` stays plain.
+On Linux, a libedit Python may lose a full line when the kernel
+refuses terminal input injection. The isolated readline probe records
+that failure without a model. Compare it with a GNU readline Python
+before assigning the failure to the model or the test fixture.
+
+MCP requires its executable and every ancestor to be owned by root
+or the current user, with safe write permissions. A container with
+foreign-owned paths cannot pass those checks or their selftest.
+Do not relax the checks to make the gate pass.
+
+A sandbox may put empty `.git` directories above temporary files.
+The uninstall guard treats them as checkouts and retains linked rc
+files. That detection edge is separate from an unsafe removal.
+Record missing tools as skipped and unresolved checks as failed.
 
 A change to one of the editor's briefs (`persona.MODE_EDIT_*`) needs
 more. Run `tests/audition.py` against a live model and put its before

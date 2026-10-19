@@ -79,7 +79,7 @@ os.environ.update({"HOME": HOME, "XDG_CONFIG_HOME": HOME + "/.config", "XDG_STAT
                    "XDG_DATA_HOME": HOME + "/.local/share", "SPARK_VOICE_DIR": VDIR,
                    "SPARK_PROC_DIR": os.path.join(ROOT, "proc"), "SPARK_SYS_MODULE": os.path.join(ROOT, "module"),
                    "PATH": STUBS + os.pathsep + os.environ.get("PATH", ""), "STUB_LOG": LOG,
-                   "SPARK_NO_REFRESH": "1", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8"})
+                   "SPARK_NO_REFRESH": "1", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "TERM": "xterm-256color"})
 os.makedirs(os.environ["SPARK_PROC_DIR"])
 os.makedirs(os.environ["SPARK_SYS_MODULE"])
 sys.path.insert(0, os.path.join(REPO, "lib"))
@@ -1875,6 +1875,11 @@ try:
         look.forget()
     with look.assume_awake():
         plain_reply = forge._Spoken().screen()
+        os.environ["TERM"] = "dumb"
+        try:
+            dumb = forge._Spoken(face=True).screen()
+        finally:
+            os.environ["TERM"] = "xterm-256color"
         live = forge._Spoken(face=True)
         got = live.screen()
         made = forge.FACE[0]
@@ -1884,6 +1889,8 @@ finally:
 check("face: none piped, none unawakened, none for a reply not spoken in the chat -- stdout and no lead",
       piped[1] is None and unawake[1] is None and plain_reply[1] is None
       and not isinstance(piped[0], forge._Face) and not isinstance(unawake[0], forge._Face), (piped, unawake))
+check("face: TERM=dumb keeps a spoken reply plain, even awake at a terminal",
+      dumb[1] is None and not isinstance(dumb[0], forge._Face), dumb)
 check("face: awake at a terminal, the spoken reply's wrap writes through the face, the idle face its lead",
       got[0] is live.face and made is live.face and textmod.SGR_RE.sub("", got[1]) == look.faces()["idle"] + " "
       and forge.FACE[0] is None, got)

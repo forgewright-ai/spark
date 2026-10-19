@@ -435,6 +435,9 @@ templates/      rendered, not linked: .config/spark/launchd/spark.{serve,forge,c
                 (the 3 runit service directories: run, finish, log/run; rendered
                 only where /etc/runit is a directory)
 tests/          smoke.py serve_smoke.py forge_smoke.py bench_smoke.py
+                baseline.py (the manual gate runner: runtime facts, child
+                reaping on Linux and an isolated readline input probe)
+                baseline_test.py (status, metadata, pty input and reaping)
                 policy_test.py (every row of forgeserve.ROUTES with 3
                 callers: nobody, a user, the admin)
                 vault_test.py (RFC 8439 vectors, round-trips, refusals)

@@ -33,6 +33,13 @@ _ISOLATED = tempfile.mkdtemp(prefix="spark-smoke-home-")
 atexit.register(shutil.rmtree, _ISOLATED, True)
 os.environ.update({"HOME": _ISOLATED, "XDG_CONFIG_HOME": _ISOLATED + "/.config",
                    "XDG_STATE_HOME": _ISOLATED + "/.local/state", "XDG_DATA_HOME": _ISOLATED + "/.local/share"})
+# The default service fixtures are systemd on Linux. A container may
+# carry /etc/runit without a running supervisor; the explicit runit
+# cases below pin their own directories instead of reading the host.
+for _k in ("SPARK_ETC_RUNIT", "SPARK_VAR_SERVICE"):
+    os.environ.pop(_k, None)
+if sys.platform != "darwin":
+    os.environ.update(SPARK_ETC_RUNIT=_ISOLATED + "/no-runit", SPARK_VAR_SERVICE=_ISOLATED + "/no-service")
 for _k in [k for k in os.environ if k.startswith("SPARK_LOOK") or k in ("SPARK_HEIGHT", "SPARK_REVEAL")]:
     del os.environ[_k]
 # The clipboard, fenced: a fake pbcopy, wl-copy, xclip and xsel lead PATH
@@ -6088,6 +6095,8 @@ def main():
         env.update({"HOME": home, "XDG_CONFIG_HOME": home + "/.config", "XDG_STATE_HOME": home + "/.local/state",
                     "XDG_DATA_HOME": home + "/.local/share", "SPARK_BASE_URL": url, "SPARK_API_KEY": TOKEN,
                     "SPARK_TIMEOUT": "5", "SPARK_NO_REFRESH": "1", "SPARK_LUA_MUTE": "1", "SHELL": "/bin/bash", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "TERM": "xterm-256color"})
+        if sys.platform != "darwin":
+            env.update(SPARK_ETC_RUNIT=home + "/no-runit", SPARK_VAR_SERVICE=home + "/no-service")
         os.makedirs(home + "/.config/spark")
 
         def spark(*args, stdin="", extra=None, exe=SPARK, cwd=None):
@@ -6901,7 +6910,9 @@ def main():
                                  capture_output=True, text=True, timeout=10)
             parents = ["-p", par.stdout.strip()] if par.returncode == 0 and par.stdout.strip() else []
             commit = subprocess.run(["git", "commit-tree", tree] + parents + ["-m", "smoke: the working tree"],
-                                     env=dict(genv, GIT_DIR=bare), capture_output=True, text=True,
+                                     env=dict(genv, GIT_DIR=bare, GIT_AUTHOR_NAME="fixture", GIT_AUTHOR_EMAIL="you@example.com",
+                                              GIT_COMMITTER_NAME="fixture", GIT_COMMITTER_EMAIL="you@example.com"),
+                                     capture_output=True, text=True,
                                      check=True, timeout=10).stdout.strip()
             subprocess.run(["git", "-C", bare, "update-ref", "refs/heads/smoke-test", commit],
                             env=genv, check=True, timeout=10)
@@ -10886,8 +10897,8 @@ def main():
              and twin("from spark import engine; print(engine.flavour('Linux', 'x86_64', 'cpu')[0])") == "ubuntu-x64",
              "void: on musl the engine pins nothing (the tarballs are glibc builds); glibc keeps its pin")
         from spark import init_shape as _init_shape
-        t.ok(_init_shape() == ("launchd" if sys.platform == "darwin" else ("runit" if os.path.isdir("/etc/runit") else "systemd")),
-             "init_shape unseamed: launchd on this Mac; on Linux runit only where /etc/runit is a dir, else systemd", _init_shape())
+        t.ok(_init_shape() == ("launchd" if sys.platform == "darwin" else "systemd"),
+             "init_shape default fixture: launchd on this Mac, systemd on Linux, independent of host runit", _init_shape())
         # bootstrap's view of the same, through facts.py: INIT, RUNIT_LIVE
         # and VAR_SERVICE beside DISTRO
         p = subprocess.run([sys.executable, os.path.join(REPO, "lib", "spark", "facts.py")], capture_output=True, text=True, timeout=30,

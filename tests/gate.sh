@@ -220,6 +220,7 @@ group_rest() {
     printf '== static\n'
     static
     tree_privacy
+    run baseline_test.py "$PY" tests/baseline_test.py
     run install_test.sh sh tests/install_test.sh
     run get_test.sh sh tests/get_test.sh
     run update_test.sh sh tests/update_test.sh

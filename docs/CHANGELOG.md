@@ -2,6 +2,11 @@
 
 ## v1.90
 
+- Tests: pin smoke's default init and voice's terminal, with explicit
+  runit and plain-terminal cases; give scratch commits their own identity.
+  A baseline runner records the runtime, preserves gate failures, reaps
+  orphaned children and isolates readline input without a model (#24).
+
 spark is an MCP host. The servers on its list offer their tools to the
 prompt line, `spark do` and `/do` in a chat, on any machine, and
 `spark steps` turns a person's words into calls of any program's tools.
