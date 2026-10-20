@@ -27,12 +27,18 @@ import urllib.error
 import urllib.request
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "lib"))
+from spark.wire import gbnf  # noqa: E402  spark holds a JSON reply with a grammar
 MODEL = "QWEN3_5_2B"
 SAMPLES = 3
 CASES = (
     {"messages": [{"role": "user", "content": "Reply with one short word."}]},
+    # The JSON case holds the reply as spark does, with a grammar: llama-server
+    # binds a response_format only after the template's thought channel, and
+    # spark never sends one (CLAUDE.md, the prompt line's contract).
     {"messages": [{"role": "user", "content": 'Reply with a JSON object containing a word.'}],
-     "response_format": {"type": "json_object"}},
+     "grammar": gbnf({"type": "object", "properties": {"word": {"type": "string"}},
+                      "required": ["word"]})},
 )
 SETTINGS = {"model": "spark-validation", "temperature": 0, "seed": 1,
             "max_tokens": 64, "stream": False}
@@ -212,7 +218,7 @@ def run(archive, model):
                     for sample in range(SAMPLES):
                         report["executed"] += 1
                         reply = request(base, key_value, "/v1/chat/completions", dict(SETTINGS, **case))
-                        good = compatible(reply, "response_format" in case)
+                        good = compatible(reply, "grammar" in case)
                         report["passed"] += int(good)
                         report["results"].append({"case": index, "sample": sample, "passed": good})
                 report["status"] = "passed" if report["passed"] == report["requested"] else "failed"

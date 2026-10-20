@@ -5,9 +5,9 @@ is the short path to a change that lands.
 
 ## Clone and run the gate
 
-Fixture tests use a stub llama-server, a throwaway `HOME` and
-`XDG_*` dirs. Real isolation tests also need host capabilities.
-Fixture success proves neither real isolation nor live-model quality.
+The tests are hermetic: a stub llama-server, a throwaway `HOME` and
+`XDG_*` dirs. The tests run on any machine; what a machine cannot
+prove is named as a skip ("Validation boundaries" below).
 
 ```sh
 git clone https://github.com/forgewright-ai/spark.git
@@ -52,48 +52,40 @@ the held-out score beside the other.
 
 ## Validation boundaries
 
-Keep fixture, real isolation, model compatibility and quality results
-separate. A green ordinary gate can contain capability skips. It does
-not certify an untested host, engine, model or prompt.
+Four kinds of evidence stay apart: fixtures, real isolation, model
+compatibility and held-out quality. A green gate can hold capability
+skips; it certifies no untested host, engine, model or prompt.
 
-The sandbox suite ends with `sandbox-summary: ` followed by JSON.
-It counts executed assertions, failed checks and named skips separately
-for fixtures, the probe and real isolation. A skipped section counts
-once; it does not guess how many assertions would have run.
-The record names the OS, kernel, architecture, Python and sandbox tool.
-It omits the hostname.
-
-An ordinary contributor run keeps explicit capability skips:
+The sandbox suite ends with `sandbox-summary: ` and one JSON line. It
+holds the executed, failed and skipped counts of the fixtures, the
+probe and the real section. It names the OS, kernel, architecture,
+Python and sandbox tool, never the hostname. The ordinary run keeps its
+named skips:
 
 ```sh
 python3 tests/sandbox_test.py
 ```
 
-A job that promises real isolation must use:
+A job that promises real isolation runs the real section alone, and
+fails without the capability, a real assertion or curl (on macOS,
+without the command line tools too):
 
 ```sh
 python3 tests/sandbox_test.py --real-only --require-real
 ```
 
-That command requires a fresh successful sandbox probe, real assertions
-and curl. On macOS, missing command line tools also fails the run.
-Missing capability fails, even when fixture tests pass.
-It tests writes in the copy, review and apply, and the existing
-containment assertions. Optional checks still name their skips, such
-as an absent session bus. Read those skips beside the assertion count.
-These checks are scoped evidence, not a general security guarantee.
+It needs a non-root Linux user with bubblewrap 0.11 or later, user
+namespaces and overlay support, or a Mac with APFS, sandbox-exec and
+the command line tools. Never relax a host's security settings to make
+the probe pass: a failed probe is a blocked host.
 
-Use a non-root Linux host with bubblewrap 0.11 or later, working user
-namespaces and overlay support. On macOS, use APFS, sandbox-exec and
-the command line tools. Do not relax host security settings to make
-the probe pass. Record a failed probe as a blocked host.
-
-The bounded compatibility command needs two local files: the native
-Linux CPU archive pinned in `engine.env`, and the qwen3-5-2b weights
-pinned in `models.env`. It verifies both hashes before starting the
-engine. It never downloads files, uses a remote model or reads user
-prompts. Run it as a non-root user on glibc Linux, x86_64 or aarch64,
-with space for the extracted engine and enough RAM for the model.
+The compatibility harness takes the native Linux CPU engine archive
+pinned in `engine.env` and the qwen3-5-2b weights pinned in
+`models.env`. It verifies both hashes, starts the engine on loopback
+with a temporary key, and runs two synthetic requests three times
+each. The engine gets two threads, 2048 context tokens and 64 output
+tokens at most; startup has 120 s, a request 60 s. It downloads
+nothing and reads no user file.
 
 ```sh
 umask 077
@@ -102,44 +94,17 @@ python3 tests/model_validation.py \
   --model-file /path/to/model.gguf > compatibility.json
 ```
 
-It runs two synthetic requests three times each, with two CPU threads,
-2048 context tokens and at most 64 output tokens per request. Startup
-has a 120-second limit; each request has a 60-second socket timeout.
-The server binds only to loopback, uses a temporary key and is stopped
-after the run. No existing server or user configuration is used.
+The record names the time, the host, the engine revision and hashes,
+the model's content hash, the prompt hashes and the settings. It counts
+the samples requested, executed and passed, and holds no answer, path,
+credential or server log. Compatibility means the pinned engine loads
+the weights and answers nonempty text and, held by spark's own grammar,
+a JSON object. It judges no words; GPU backends, other models and other
+platforms stay untested. Held-out quality remains the separate
+`line_audition.py` run, and the record says `not_run` for it.
 
-The JSON record names the time, OS, kernel, CPU, RAM, backend, engine
-revision and archive hash, model content hash, prompt hashes and
-settings. It counts requested, executed, passed and unfinished samples.
-The model hash is its content revision; a mutable download URL is not
-revision evidence. The record includes source hashes and the tested
-binary hash. Keep it with the checkout commit and CI run address.
-It contains no answers, local paths, credentials or server logs.
-
-Compatibility means the pinned engine loads those weights and returns
-nonempty text and a JSON object when requested. It does not judge the
-words, exercise all spark commands or establish the release quality bar.
-GPU backends, other models and other platforms remain untested by this
-command. A missing artifact, refused host or failed request exits
-nonzero. Its selftest uses fixtures and proves only the harness.
-
-Held-out quality remains the separate `line_audition.py` run and report
-described above. Keep its sample counts, prompt hashes, platform and
-verified artifact identities beside its scores. Never mark it passed
-from a compatibility run. This harness records quality as `not_run`.
-Use only repository fixtures or explicitly approved synthetic data.
-
-CI activation is pending. The current patch policy protects workflows
-and `tests/gate.sh`; this patch does not add a job or schedule.
-In a planned release, wire the strict isolation command through the
-gate into dedicated Linux and macOS jobs on verified capable hosts.
-Wire compatibility through the gate into a scheduled or release job
-with the pinned artifacts already available. Set a job deadline and
-retain the JSON result on failure too. Do not run untrusted pull
-requests on a persistent model host.
-Until those jobs exist and run, neither capability is a required CI
-check. A host that cannot run the probe, or lacks the artifacts, is
-an outstanding validation requirement.
+Neither command is a CI job yet: the workflows and `tests/gate.sh` are
+protected paths, so the jobs come with a major.
 
 ## Branch model
 

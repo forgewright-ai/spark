@@ -241,12 +241,13 @@ Never, in this lane:
 
 ## The audition
 
-Real isolation and model compatibility have separate commands and
-evidence limits in `docs/CONTRIBUTING.md`, "Validation boundaries".
-`sandbox_test.py --real-only --require-real` fails without real
-assertions. `model_validation.py` needs pinned local artifacts; its
-selftest runs through `bench_smoke.py` and proves only the harness.
-Dedicated CI jobs remain pending under the protected-workflow policy.
+Two commands outside the gate keep their evidence apart;
+`docs/CONTRIBUTING.md`, "Validation boundaries", says how.
+`tests/sandbox_test.py --real-only --require-real` fails without real
+isolation assertions. `tests/model_validation.py` runs the pinned engine
+and weights through synthetic requests; `bench_smoke.py` runs its
+selftest. Their CI jobs come with a major: the workflows are protected
+paths.
 
 The audition is not in the gate: it needs a live model, and it is the
 one test that judges words. `tests/audition.py` runs 8 fixtures in

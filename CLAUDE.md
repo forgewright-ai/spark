@@ -482,6 +482,10 @@ tests/          smoke.py serve_smoke.py forge_smoke.py bench_smoke.py
                 the same blind way, the score written by hand as
                 MODEL_<NAME>_GROUND; --selftest proves the lints with no
                 model; not in the gate)
+                model_validation.py (the pinned Linux CPU engine and the qwen3-5-2b
+                weights, hashes checked, six synthetic requests on loopback, one
+                JSON record of what was proved; not in the gate, bench_smoke.py
+                runs its selftest)
                 line_audition.py + line_audition/ (the prompt line per OS and on
                 spark's own verbs against a live model; answers graded by each
                 OS's --help snapshot and spark's tree; cases.json holds the
@@ -2252,15 +2256,6 @@ One grammar for every verb. A verb that breaks a rule is a bug.
    (stdout, signed), 78 misconfiguration, 130 `SIGINT`.
 
 ## Adding things
-
-Validation evidence has four scopes: fixtures, real isolation, model
-compatibility and held-out quality. `docs/CONTRIBUTING.md`, "Validation
-boundaries", names the commands, host requirements and report fields.
-`tests/sandbox_test.py --real-only --require-real` refuses a missing
-capability. `tests/model_validation.py` checks pinned local artifacts
-with synthetic requests; it does not grade quality. Its selftest runs
-through `bench_smoke.py`. Dedicated CI jobs are pending: a patch does
-not change the protected workflows or gate script.
 
 - **A doc.** The project site (spark.forgewright.ai) is the docs
   rendered outside this tree, at the newest signed release tag, never
