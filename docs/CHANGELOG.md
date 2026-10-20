@@ -6,6 +6,12 @@
   input before trimming context. They now bound bytes read and records
   opened, keep the newest complete turns, and refuse nonregular context
   files without waiting for a writer (#43)
+- S4: the sandbox suite could pass with its real isolation section
+  skipped, and nothing ran a pinned engine against its weights. The
+  suite now counts fixture, probe and real assertions apart, and a
+  required mode fails without real ones; a harness runs the pinned
+  engine and model through synthetic requests and records what it
+  proved (#46)
 
 ## v1.90.2
 

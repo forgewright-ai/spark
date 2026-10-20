@@ -123,6 +123,7 @@ NOT_IN_GATE = (
     ("land.sh", "the landing command, not a test: land_test.sh proves it"),
     ("tag.sh", "the tagging command, not a test: tag_test.sh proves it"),
     ("audition.py", "needs a live model"),
+    ("model_validation.py", "needs pinned local artifacts; bench_smoke.py runs its selftest"),
     ("line_audition.py", "needs a live model; smoke.py runs its selftest"),
     ("forge_probe.py", "asks a live server"),
     ("context_bench.py", "manual synthetic context scaling measurements"),
