@@ -2569,6 +2569,22 @@ sh tests/gate.sh full           # every suite for this OS, about 10 minutes; CI 
 sh tests/land.sh --passed SHA   # ci.yml passed for that commit: what main and a tag need
 ```
 
+### Host-dependent test fixtures
+
+`tests/fixtures.py` supplies test-only init defaults; explicit
+per-case overrides win. Installed runit files and a live supervisor are
+separate facts. `tests/platform_test.py` exercises ownership, ancestor
+repository markers (including worktrees), and readline prerequisites
+with synthetic facts. No production ownership or uninstall protection
+is bypassed. Integration fixtures use scratch HOME and XDG paths. An
+rc link beneath any ancestor `.git` must remain untouched, even in a
+temporary directory. The chat PTY fixtures need GNU readline or macOS
+libedit; other backends print a skip with the missing prerequisite.
+MCP integration needs user- or root-owned ancestors. An unavailable
+ownership capability exits 77 with an explicit message; the full gate
+remains unsuccessful. Native CI must pass the real integrations before
+a change is ready.
+
 `spark check` has 41 rows today, by category `8 SOFTWARE, 23
 CAPABILITY, 10 NONFUNCTIONAL` (`grep -c '^@row' lib/spark/check.py`
 counts them). `--selftest` runs 8 passes. The first two prove every

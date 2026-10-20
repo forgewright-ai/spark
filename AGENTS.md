@@ -102,7 +102,12 @@ repository built from the tree.
 run by `tests/gate.sh` or named in `NOT_IN_GATE` with its reason. The
 hooks and the workflows name no test file.
 
-The gate calls `bin/spark` directly. `tests/check_selftest.py` is a
+The gate calls `bin/spark` directly. `tests/fixtures.py` holds host
+facts for tests. `tests/platform_test.py`, called by smoke.py, proves
+explicit overrides and conservative ownership and repository rules.
+A suite exiting 77
+reports an unavailable host capability and still blocks a green full
+gate; it is never counted as a pass. `tests/check_selftest.py` is a
 standalone entry to `spark check --selftest`. The privacy gate also
 reads the staged diff for secret shapes: `SOURCE_SHAPES` in
 `lib/spark/text.py`, minus the two tuned for a paste and the two tuned

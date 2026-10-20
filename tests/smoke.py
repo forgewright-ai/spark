@@ -22,6 +22,7 @@ import tempfile
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from fixtures import init_env, chat_readline_unavailable
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SPARK = os.path.join(REPO, "bin", "spark")
@@ -33,6 +34,8 @@ _ISOLATED = tempfile.mkdtemp(prefix="spark-smoke-home-")
 atexit.register(shutil.rmtree, _ISOLATED, True)
 os.environ.update({"HOME": _ISOLATED, "XDG_CONFIG_HOME": _ISOLATED + "/.config",
                    "XDG_STATE_HOME": _ISOLATED + "/.local/state", "XDG_DATA_HOME": _ISOLATED + "/.local/share"})
+for _k, _v in init_env(_ISOLATED).items():
+    os.environ.setdefault(_k, _v)
 for _k in [k for k in os.environ if k.startswith("SPARK_LOOK") or k in ("SPARK_HEIGHT", "SPARK_REVEAL")]:
     del os.environ[_k]
 # The clipboard, fenced: a fake pbcopy, wl-copy, xclip and xsel lead PATH
@@ -793,6 +796,7 @@ def start_stub():
 class T:
     def __init__(self):
         self.fail = 0
+        self.skipped = 0
 
     def ok(self, cond, what, extra=""):
         print("  %s %s%s" % ("ok  " if cond else "FAIL", what, ("   " + extra) if extra and not cond else ""))
@@ -800,8 +804,8 @@ class T:
             self.fail += 1
 
     def skip(self, what, why):
-        """A case written before the thing it tests: it is here so the
-        contract has somewhere to land, and it never passes silently."""
+        """A missing real capability is reported separately from assertions."""
+        self.skipped += 1
         print("  skip %s   (%s)" % (what, why))
 
 
@@ -2616,6 +2620,8 @@ def own_engine_cases(t):
                     "SPARK_ENGINE_DIR": tmp + "/no-engine", "SPARK_LUA_MUTE": "1",
                     "SHELL": "/bin/bash", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "TERM": "xterm-256color"})
 
+        env.update(init_env(home))
+
         def spark(*args, stdin="", extra=None, exe=SPARK):
             e = dict(env)
             e.update(extra or {})
@@ -3666,6 +3672,15 @@ def chat_pty_cases(t, env, home):
     leads it instead and rests on a mood's still), a refusal is `! `, and
     the end -- /q or Ctrl-D -- says nothing."""
     import pty
+    try:
+        import readline
+        backend = "libedit" if "libedit" in (readline.__doc__ or "") else "GNU readline"
+    except ImportError:
+        backend = "no readline"
+    unavailable = chat_readline_unavailable(sys.platform, backend)
+    if unavailable:
+        t.skip("chat pty (unavailable)", unavailable)
+        return
     h = os.path.join(home, "pty-chat")
     os.makedirs(os.path.join(h, ".config", "spark"), exist_ok=True)
     e = dict(env)
@@ -3813,6 +3828,10 @@ def chat_voice_pty_cases(t, env, home):
         lib = "libedit" if "libedit" in (_rl.__doc__ or "") else "GNU readline"
     except ImportError:
         lib = "no readline"
+    unavailable = chat_readline_unavailable(sys.platform, lib)
+    if unavailable:
+        t.skip("voice pty (unavailable)", unavailable)
+        return
     h = os.path.join(home, "pty-voice")
     os.makedirs(os.path.join(h, ".config", "spark"), exist_ok=True)
     spoke = os.path.join(h, "spoken")
@@ -6300,6 +6319,7 @@ def main():
         env.update({"HOME": home, "XDG_CONFIG_HOME": home + "/.config", "XDG_STATE_HOME": home + "/.local/state",
                     "XDG_DATA_HOME": home + "/.local/share", "SPARK_BASE_URL": url, "SPARK_API_KEY": TOKEN,
                     "SPARK_TIMEOUT": "5", "SPARK_NO_REFRESH": "1", "SPARK_LUA_MUTE": "1", "SHELL": "/bin/bash", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "TERM": "xterm-256color"})
+        env.update(init_env(home))
         os.makedirs(home + "/.config/spark")
 
         def spark(*args, stdin="", extra=None, exe=SPARK, cwd=None):
@@ -6309,6 +6329,11 @@ def main():
             return p.returncode, p.stdout, p.stderr
 
         print("smoke: stub llama-server at %s, HOME %s" % (url, home))
+
+        platform_tests = subprocess.run([sys.executable, os.path.join(REPO, "tests", "platform_test.py")],
+                                        capture_output=True, text=True, timeout=30)
+        t.ok(platform_tests.returncode == 0, "synthetic platform and safety regressions",
+             platform_tests.stdout + platform_tests.stderr)
 
         # the line protocol
         rc, out, _ = spark("line", "--cwd", "/tmp", "--shell", "bash", stdin="? files bigger than 1G this week")
@@ -6765,8 +6790,10 @@ def main():
         from spark import engine as _eng
         _saved = {k: os.environ.pop(k, None) for k in ("XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS")}
         _mac = _eng.IS_MAC
+        _runit = _eng._runit
         try:
             _eng.IS_MAC = False
+            _eng._runit = lambda: False
             _benv = _eng.user_bus_env()
             t.ok(_benv["XDG_RUNTIME_DIR"] == "/run/user/%d" % os.getuid()
                  and _benv["DBUS_SESSION_BUS_ADDRESS"] == "unix:path=/run/user/%d/bus" % os.getuid(),
@@ -6792,6 +6819,7 @@ def main():
                 os.environ["PATH"] = _path
         finally:
             _eng.IS_MAC = _mac
+            _eng._runit = _runit
             for k, v in _saved.items():
                 if v is None:
                     os.environ.pop(k, None)
@@ -11100,9 +11128,11 @@ def main():
         t.ok(twin("from spark import engine; print(repr(engine.flavour('Linux', 'x86_64', 'cpu')))", SPARK_LD_MUSL=home + "/ld-musl-*.so.1") == "('', '')"
              and twin("from spark import engine; print(engine.flavour('Linux', 'x86_64', 'cpu')[0])") == "ubuntu-x64",
              "void: on musl the engine pins nothing (the tarballs are glibc builds); glibc keeps its pin")
-        from spark import init_shape as _init_shape
-        t.ok(_init_shape() == ("launchd" if sys.platform == "darwin" else ("runit" if os.path.isdir("/etc/runit") else "systemd")),
-             "init_shape unseamed: launchd on this Mac; on Linux runit only where /etc/runit is a dir, else systemd", _init_shape())
+        from spark import init_shape as _init_shape, IS_MAC, RUNIT_DIR
+        expected = ("launchd" if IS_MAC and "SPARK_ETC_RUNIT" not in os.environ
+                    else "runit" if os.path.isdir(RUNIT_DIR) else "systemd")
+        t.ok(_init_shape() == expected,
+             "init_shape: the selected OS and explicit marker override are honored", _init_shape())
         # bootstrap's view of the same, through facts.py: INIT, RUNIT_LIVE
         # and VAR_SERVICE beside DISTRO
         p = subprocess.run([sys.executable, os.path.join(REPO, "lib", "spark", "facts.py")], capture_output=True, text=True, timeout=30,
@@ -11996,7 +12026,7 @@ site.cmd_headless([])
     grammar_cases(t)
     own_imports_cases(t)
     srv.shutdown()
-    print("smoke: %s" % ("all ok" if not t.fail else "%d FAILED" % t.fail))
+    print("smoke: %s; %d skipped" % ("all ok" if not t.fail else "%d FAILED" % t.fail, t.skipped))
     return 1 if t.fail else 0
 
 

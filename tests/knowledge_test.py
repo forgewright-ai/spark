@@ -1257,12 +1257,21 @@ def test_real_contained():
         check("contained (macOS): no child process", "forked" not in out and "fork" in out, out)
     else:
         uid = os.getuid()
-        rc, out = sandbox.contained(["/bin/sh", "-c", "test -S /run/user/%d/bus && echo BUS; echo tmp: $(ls -A /tmp); "
+        rc, out = sandbox.contained(["/bin/sh", "-c", "test -S /run/user/%d/bus && echo BUS; "
+                                     "find /tmp -mindepth 1 -printf 'tmp: %%y %%p\\n'; "
                                      "echo proc: /proc/[0-9]*" % uid])
-        tmp = next((l for l in out.splitlines() if l.startswith("tmp:")), "")
+        # Hiding a HOME beneath /tmp creates empty mount-point ancestors
+        # inside the tmpfs. They are not host data. Require the exact empty
+        # directory scaffold, not just a permissive list of top-level names.
+        expected = {"tmp: d /tmp/h"}
+        ancestor = os.path.realpath(HOME)
+        while ancestor.startswith("/tmp/"):
+            expected.add("tmp: d " + ancestor)
+            ancestor = os.path.dirname(ancestor)
+        tmp = {l for l in out.splitlines() if l.startswith("tmp:")}
         proc = next((l for l in out.splitlines() if l.startswith("proc:")), "")
-        check("contained (Linux): no session bus, /tmp holds only its own home, /proc shows only the sandbox",
-              "BUS" not in out and tmp.split() == ["tmp:", "h"] and 1 < len(proc.split()) <= 6, out)
+        check("contained (Linux): no bus or host temp data, only empty home mount points; private /proc",
+              rc == 0 and "BUS" not in out and tmp == expected and 1 < len(proc.split()) <= 6, out)
 
 
 def test_includes():

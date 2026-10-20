@@ -173,6 +173,21 @@ def spark(*args, stdin=None, env=None):
     return p.returncode, p.stdout, p.stderr
 
 
+# This integration suite needs an executable path whose ancestors really
+# belong to this user or root. Some containers remap those owners. Report
+# that missing capability before protocol assertions; never bypass the
+# product's checks. Synthetic ownership cases run in platform_test.py.
+_ancestor = os.path.dirname(os.path.realpath(STUB_PATH))
+while True:
+    if os.stat(_ancestor).st_uid not in (0, os.getuid()):
+        print("UNAVAILABLE mcp integration: fixture ancestor ownership is neither this user nor root")
+        shutil.rmtree(TMP)
+        sys.exit(77)
+    _parent = os.path.dirname(_ancestor)
+    if _parent == _ancestor:
+        break
+    _ancestor = _parent
+
 # --- M6: the list -- named lines, an absolute program, nothing else started
 put_list('MCP_SERVER_STUB="%s ok"' % STUB_PATH)
 sp = mcp.spec("stub")

@@ -75,11 +75,14 @@ REAL_VOICE = os.environ.get("SPARK_VOICE_REAL_DIR") or os.path.join(os.path.expa
 IN_CI = bool(os.environ.get("CI"))
 for k in [k for k in os.environ if k.startswith(("SPARK_", "XDG_", "SITE_"))]:
     del os.environ[k]
+# Fake TTY assertions require a terminal that can draw. The caller's
+# TERM=dumb/NO_COLOR describes its own output, not this fixture's TTY.
+os.environ.pop("NO_COLOR", None)
 os.environ.update({"HOME": HOME, "XDG_CONFIG_HOME": HOME + "/.config", "XDG_STATE_HOME": HOME + "/.local/state",
                    "XDG_DATA_HOME": HOME + "/.local/share", "SPARK_VOICE_DIR": VDIR,
                    "SPARK_PROC_DIR": os.path.join(ROOT, "proc"), "SPARK_SYS_MODULE": os.path.join(ROOT, "module"),
                    "PATH": STUBS + os.pathsep + os.environ.get("PATH", ""), "STUB_LOG": LOG,
-                   "SPARK_NO_REFRESH": "1", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8"})
+                   "SPARK_NO_REFRESH": "1", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "TERM": "xterm-256color"})
 os.makedirs(os.environ["SPARK_PROC_DIR"])
 os.makedirs(os.environ["SPARK_SYS_MODULE"])
 sys.path.insert(0, os.path.join(REPO, "lib"))

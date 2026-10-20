@@ -11,6 +11,14 @@
 set -eu
 REPO=$(cd "$(dirname "$0")/.." && pwd)
 T=$(mktemp -d)
+T=$(cd "$T" && pwd -P)
+# Native-manager fixtures must not inherit unrelated installed runit files.
+# Individual runit cases supply their own explicit seam below.
+case $(uname -s) in
+    Darwin) unset SPARK_ETC_RUNIT ;;
+    *) export SPARK_ETC_RUNIT="$T/no-runit" ;;
+esac
+export SPARK_VAR_SERVICE="$T/no-service"
 fakes=
 # shellcheck disable=SC2086  # the pids, word by word
 trap 'kill $fakes 2>/dev/null || true; rm -rf "$T"' EXIT
@@ -133,6 +141,17 @@ rc2=0; out=$(spark uninstall </dev/null 2>&1) || rc2=$?
 [ "$rc2" = 2 ] && printf '%s\n' "$out" | grep -q -- '--yes runs it' && ok "not a terminal: refused with the --yes line, exit 2" || bad "non-tty: rc=$rc2 $out"
 [ "$(snapshot)" = "$before" ] && ok "the refusal changed nothing" || bad "the refusal changed the HOME: $(printf '%s\n' "$before" > "$T/b"; snapshot | diff "$T/b" - | tr '\n' ' ')"
 
+# An ancestor marker can belong to the host's scratch area. Uninstall
+# deliberately protects it too; platform_test.py tests the marker-free
+# case independently of where mktemp placed this integration fixture.
+profile_guarded=0
+ancestor=$HOME/dotfiles
+while :; do
+    if [ -e "$ancestor/.git" ] || [ -L "$ancestor/.git" ]; then profile_guarded=1; break; fi
+    [ "$ancestor" != / ] || break
+    ancestor=$(dirname "$ancestor")
+done
+cp "$HOME/dotfiles/profile" "$T/profile.before"
 # 3. --yes --keep-packages: all spark made goes, yours stays, root steps are todo
 out=$(spark uninstall --yes --keep-packages 2>&1) || bad "uninstall --yes failed: $out"
 [ "$(cat "$HOME/$rc")" = "# mine" ] && [ ! -e "$HOME/$rc.bak" ] && ok "an rc file of yours is left alone (no .bak made)" || bad "$rc: $(ls -la "$HOME/$rc"* 2>&1)"
@@ -140,7 +159,14 @@ out=$(spark uninstall --yes --keep-packages 2>&1) || bad "uninstall --yes failed
 grep -q 'name = me' "$HOME/.gitconfig" && ok ".gitconfig is not spark's, left alone" || bad ".gitconfig: $(cat "$HOME/.gitconfig" 2>&1)"
 grep -q 'config/spark/hook' "$HOME/$other" && bad "the marker line survived in $other" || ok "the spark line is gone from $other"
 grep -q 'MINE=1' "$HOME/$other" && ok "$other kept its own lines" || bad "$other lost its content"
-[ -L "$HOME/.bash_profile" ] && [ "$(cat "$HOME/dotfiles/profile")" = "# my profile" ] && ok "a symlinked rc file: the spark line is gone from the file it points at, the link stays" || bad "symlinked rc: $(ls -l "$HOME/.bash_profile" 2>&1) $(cat "$HOME/dotfiles/profile" 2>&1)"
+if [ "$profile_guarded" = 1 ]; then
+    [ -L "$HOME/.bash_profile" ] && cmp -s "$HOME/dotfiles/profile" "$T/profile.before" \
+        && printf '%s\n' "$out" | grep -qx "! ~/dotfiles/profile is in a git repository -- take spark's line out there" \
+        && ok "an ancestor git marker: the rc target stays byte for byte, with a warning" || bad "ancestor marker protection"
+else
+    [ -L "$HOME/.bash_profile" ] && [ "$(cat "$HOME/dotfiles/profile")" = "# my profile" ] \
+        && ok "a symlinked rc file: the spark line goes, the link stays" || bad "symlinked rc target"
+fi
 grep -q tabsize "$HOME/.config/micro/settings.json" && grep -q colorscheme "$HOME/.config/micro/settings.json" && ok "micro's settings.json is not spark's, left alone" || bad "settings.json: $(cat "$HOME/.config/micro/settings.json")"
 [ ! -e "$HOME/.local/bin/spark" ] && [ ! -e "$HOME/.local/bin/explain" ] && ok "~/.local/bin/spark and explain are gone" || bad "bin links survived"
 [ ! -e "$HOME/.local/share/spark" ] && ok "the data dir (engine, models, .part) is gone" || bad "data dir survived: $(ls -R "$HOME/.local/share/spark")"
@@ -152,7 +178,11 @@ state=$(cd "$HOME/.local/state/spark" && find . | sort | tr '\n' ' ')
 conf=$(cd "$HOME/.config/spark" && find . | sort | tr '\n' ' ')
 [ "$conf" = ". ./memory ./models.env ./privacy-terms ./soul ./themes ./themes/mine.env " ] && ok "config keeps only soul, memory, models.env, themes, privacy-terms" || bad "config left: $conf"
 printf '%s\n' "$out" | grep -qE "^(ok +handback +spark's palette files left|would +handback +spark's palette files leave) ~/.config/spark" && ok "the look an older spark painted goes through the hand-back (one undo; without root the palette row waits)" || bad "handback row: $(printf '%s\n' "$out" | grep -E ' handback ' | head -2 | tr '\n' ' ')"
-printf '%s\n' "$out" | grep -qE '^spark: |^! |^fail ' && bad "a step failed outright: $(printf '%s\n' "$out" | grep -E '^spark: |^! |^fail ' | head -2)" || ok "no step failed outright (a refusing sudo is a todo row)"
+unexpected=$(printf '%s\n' "$out" | grep -E '^spark: |^! |^fail ' || true)
+if [ "$profile_guarded" = 1 ]; then
+    unexpected=$(printf '%s\n' "$unexpected" | grep -vxF "! ~/dotfiles/profile is in a git repository -- take spark's line out there" || true)
+fi
+[ -z "$unexpected" ] && ok "no unexpected failure (a refusing sudo is a todo row)" || bad "a step failed outright: $unexpected"
 printf '%s\n' "$out" | grep -q 'kept (yours): ' && printf '%s\n' "$out" | grep -q 'is gone from this machine' && ok "the summary names what stayed and says spark is gone" || bad "summary: $(printf '%s\n' "$out" | tail -6)"
 [ -e "$HOME/.local/bin/starship" ] && ok "starship is not spark's, left alone" || bad "starship removed"
 
@@ -173,11 +203,11 @@ ln -sfn "$HOME/tracked/shell/zprofile" "$HOME/.zprofile"
 mkdir -p "$T/fake"
 printf 'import time\ntime.sleep(300)\n' > "$T/fake/llama-server"
 port=$((20000 + $$ % 20000))
-# started from a subshell, so neither is this shell's child: one that
-# stops is gone, not a zombie kill -0 still finds
-(python3 "$T/fake/llama-server" --port "$port" >/dev/null 2>&1 & echo $! > "$T/theirs.pid")
-(python3 "$T/fake/llama-server" --port "$port" --api-key-file "$XDG_STATE_HOME/spark/api-token" >/dev/null 2>&1 & echo $! > "$T/ours.pid")
-theirs=$(cat "$T/theirs.pid"); ours=$(cat "$T/ours.pid"); fakes="$theirs $ours"
+# Keep both fixtures as shell children: the shell reaps them even when
+# the container init does not reap orphans. Ownership selection is real.
+python3 "$T/fake/llama-server" --port "$port" >/dev/null 2>&1 & theirs=$!
+python3 "$T/fake/llama-server" --port "$port" --api-key-file "$XDG_STATE_HOME/spark/api-token" >/dev/null 2>&1 & ours=$!
+fakes="$theirs $ours"
 sleep 1
 out=$(SPARK_PORT=$port spark uninstall --yes --keep-packages 2>&1) || bad "uninstall --yes (3b) failed: $out"
 cmp -s "$HOME/$other" "$T/want.rc" && ok "an rc file with a byte that is not UTF-8: the spark line goes, every other byte stays" || bad "non-UTF-8 rc: $(od -c "$HOME/$other" | head -3)"
@@ -190,6 +220,8 @@ kill -0 "$ours" 2>/dev/null && bad "spark's own llama-server (its --api-key-file
 kill -0 "$theirs" 2>/dev/null && ok "a llama-server on the port without spark's key file is yours: never signalled" || bad "a llama-server spark did not start was stopped"
 # shellcheck disable=SC2086
 kill $fakes 2>/dev/null || true
+wait "$ours" 2>/dev/null || true
+wait "$theirs" 2>/dev/null || true
 fakes=
 
 # 4. --purge on a fresh HOME: nothing of spark's remains

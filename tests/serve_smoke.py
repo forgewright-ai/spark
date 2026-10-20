@@ -6,6 +6,8 @@
 # gui/ and system/, so no daemon either), and never bootstrap
 # (SPARK_NO_APPLY: `serve on|off` writes its two keys and nothing else).
 
+from fixtures import init_env
+
 import json
 import os
 import re
@@ -132,6 +134,7 @@ def main():
                     "SPARK_SERVE_HOST": "127.0.0.1", "SPARK_NO_REFRESH": "1", "SPARK_TIMEOUT": "5",
                     "SPARK_NO_APPLY": "1", "SPARK_FORGE_HOST": "127.0.0.1", "SPARK_FORGE_PORT": str(fport),
                     "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8", "TERM": "xterm-256color"})
+        env.update(init_env(tmp))
         state = home + "/.local/state/spark"
         url = "http://127.0.0.1:%d" % port
         furl = "http://127.0.0.1:%d" % fport
