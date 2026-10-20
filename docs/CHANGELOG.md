@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.90.4
+
+- S3: generation requests could wait without a deadline, and a client
+  that had left could still take the model. Browser and API requests now
+  share a small queue, an account limit and a deadline; busy callers get
+  a retry hint, and expired or disconnected waiters start no work (#42)
+
+
 ## v1.90.3
 
 - S3: file references and continued threads read and decoded their whole
