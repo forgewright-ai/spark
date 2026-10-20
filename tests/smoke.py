@@ -1822,7 +1822,11 @@ def redirect_cases(t):
                 accepted = redirected.get_header("Authorization") == "Bearer synthetic"
             except urllib.error.URLError:
                 accepted = False
-            t.ok(accepted == allowed, "redirect: origin semantics for HTTP %d: %s -> %s" % (status, original, target))
+            # Apple's Python 3.9 does not follow 308. Keep the runtime's
+            # supported redirects while checking every cross-origin refusal.
+            supported = hasattr(urllib.request.HTTPRedirectHandler, "http_error_%d" % status)
+            t.ok(accepted == (allowed and supported),
+                 "redirect: origin semantics for HTTP %d: %s -> %s" % (status, original, target))
     req = urllib.request.Request("http://example.com/a")
     t.ok(handler.redirect_request(req, None, 302, "redirect", {}, "http://other.example/b").full_url
          == "http://other.example/b", "redirect: uncredentialed requests retain urllib behavior")
