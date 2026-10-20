@@ -1797,7 +1797,10 @@ def line_knowledge_cases(t, spark, home):
 
 
 def redirect_cases(t):
-    """Synthetic credentials never leave the origin, even during a stream."""
+    """v1.90.1 (#29): a bearer follows a redirect only on the origin it
+    was sent to. The handler sits on the opener every urlopen uses, and
+    _send names a redirect it did not follow. Loopback servers and a
+    synthetic token; nothing real."""
     import urllib.error
     import urllib.request
     from types import SimpleNamespace
@@ -1817,83 +1820,128 @@ def redirect_cases(t):
             ("https://example.com/a", "https://example.com:bad/b", False)):
         for status in (301, 302, 303, 307, 308):
             req = urllib.request.Request(original, headers={"Authorization": "Bearer synthetic"})
+            shape = True
             try:
                 redirected = handler.redirect_request(req, None, status, "redirect", {}, target)
                 accepted = redirected.get_header("Authorization") == "Bearer synthetic"
-            except urllib.error.URLError:
+            except urllib.error.HTTPError as e:
                 accepted = False
-            # Apple's Python 3.9 does not follow 308. Keep the runtime's
-            # supported redirects while checking every cross-origin refusal.
+                if not allowed:  # the refusal is the HTTP error the redirect was, with the remedy
+                    shape = e.code == status and e.msg == wire.REDIRECT_REFUSED
+            # Apple's Python 3.9 does not follow 308: the runtime's own
+            # redirects are kept, every cross-origin one is refused.
             supported = hasattr(urllib.request.HTTPRedirectHandler, "http_error_%d" % status)
-            t.ok(accepted == (allowed and supported),
+            t.ok(accepted == (allowed and supported) and shape,
                  "redirect: origin semantics for HTTP %d: %s -> %s" % (status, original, target))
     req = urllib.request.Request("http://example.com/a")
     t.ok(handler.redirect_request(req, None, 302, "redirect", {}, "http://other.example/b").full_url
-         == "http://other.example/b", "redirect: uncredentialed requests retain urllib behavior")
+         == "http://other.example/b", "redirect: a request without a bearer keeps urllib's own rules")
 
     seen = []
+
     class Endpoint(BaseHTTPRequestHandler):
         def log_message(self, *args):
             pass
 
-        def do_GET(self):
-            seen.append((self.server.server_port, self.path,
-                         self.headers.get("Authorization")))
-            if self.path == "/loop":
-                target = "/loop"
-            elif self.path.endswith("/v1/chat/completions"):
-                target = self.server.target
-            else:
-                target = ""
-            if target:
-                self.send_response(302)
-                self.send_header("Location", target)
+        def answer(self):
+            route = self.path.split("?")[0]
+            seen.append((self.server.server_port, self.command, route, self.headers.get("Authorization")))
+            if route == "/loop" or (self.server.target and "?" not in self.path):
+                self.send_response(self.server.status)
+                self.send_header("Location", "/loop" if route == "/loop" else self.server.target)
                 self.end_headers()
                 return
+            if route == "/v1/chat/completions" and self.command != "POST":
+                self.send_response(405)  # a chat endpoint takes no GET
+                self.end_headers()
+                return
+            body = b'{"data":[{"id":"stub"}]}' if route == "/v1/models" else b'{"choices":[]}'
             self.send_response(200)
+            self.send_header("Content-Type", "application/json")
             self.end_headers()
-            self.wfile.write(b'data: {"choices":[{"delta":{"content":"ok"}}]}\n\ndata: [DONE]\n\n'
-                             if self.server.stream else b'{"ok":true}')
+            self.wfile.write(body)
+
+        do_GET = answer
 
         def do_POST(self):
             self.rfile.read(int(self.headers.get("Content-Length", 0)))
-            self.do_GET()
+            self.answer()
 
     servers = [HTTPServer(("127.0.0.1", 0), Endpoint) for _ in range(2)]
     for server in servers:
-        server.stream = False
+        server.target, server.status = "", 302
         threading.Thread(target=server.serve_forever, daemon=True).start()
     source, dest = servers
     base = "http://127.0.0.1:%d" % source.server_port
-    cfg = SimpleNamespace(token_file=os.path.join(_ISOLATED, "redirect-token"))
-    with open(cfg.token_file, "w") as f:
-        f.write("synthetic-redirect-token")
+    other = "http://127.0.0.1:%d" % dest.server_port
+    token = "synthetic-redirect-token"
+    cfg = SimpleNamespace(token_file=os.path.join(_ISOLATED, "no-such-token"))
+    saved = os.environ.get("SPARK_API_KEY")
+    os.environ["SPARK_API_KEY"] = token
+
+    def on_origin(n):
+        return len(seen) == n and all(row[0] == source.server_port and row[3] == "Bearer " + token for row in seen)
+
+    def chat(target, status=302):
+        seen.clear()
+        source.target, source.status = target, status
+        sends = []
+        try:
+            with wire._send(cfg, base, b"{}", 2, sent=sends.append) as r:
+                r.read()
+        except wire.BrainError as e:
+            return e.kind, e.hint, len(sends)
+        return "", "", len(sends)
+
     try:
-        for stream in (False, True):
-            source.stream = stream
-            for target, allowed in (("/reply", True),
-                                    (base + "/reply?query=1", True),
-                                    ("http://127.0.0.1:%d/reply" % dest.server_port, False),
-                                    ("http://localhost:%d/reply" % source.server_port, False),
-                                    ("/loop", False)):
-                seen.clear()
-                source.target = target
-                error = ""
-                try:
-                    with wire._send(cfg, base, b'{}', 2) as reply:
-                        body = reply.read()
-                except wire.BrainError as e:
-                    error = e.hint
-                if allowed:
-                    t.ok(not error and len(seen) == 2 and
-                         all(row[2] == "Bearer synthetic-redirect-token" for row in seen) and
-                         (b"[DONE]" in body if stream else json.loads(body) == {"ok": True}),
-                         "redirect: same origin preserves bearer and reply (stream=%s)" % stream)
-                else:
-                    t.ok(bool(error) and all(row[0] == source.server_port for row in seen) and
-                         (len(seen) == 1 if target != "/loop" else len(seen) < 12),
-                         "redirect: rejects changed origin or bounded loop (stream=%s, target=%s)" % (stream, target))
+        for target in ("/v1/models?moved", base + "/v1/models?moved"):
+            seen.clear()
+            source.target = target
+            out = wire.models(cfg, base)
+            t.ok([row[0] for row in out] == ["stub"] and on_origin(2),
+                 "redirect: a same-origin redirect of a GET is followed, the bearer with it (%s)" % target, repr(seen))
+        for target in (other + "/v1/models?moved", "http://localhost:%d/v1/models?moved" % source.server_port):
+            seen.clear()
+            source.target = target
+            out = wire.models(cfg, base)
+            t.ok(out == [] and on_origin(1),
+                 "redirect: a GET redirected to another origin stops there, the other never asked (%s)" % target, repr(seen))
+        seen.clear()
+        source.target = other + "/v1/models?moved"
+        code, msg = 0, ""
+        try:
+            urllib.request.urlopen(urllib.request.Request(base + "/v1/models", headers={"Authorization": "Bearer " + token}),
+                                   timeout=2).close()
+        except urllib.error.HTTPError as e:
+            code, msg = e.code, e.msg
+            e.close()
+        t.ok(code == 302 and msg == wire.REDIRECT_REFUSED and on_origin(1),
+             "redirect: the plain urlopen refuses it too -- the handler sits on the one opener", repr(seen))
+        seen.clear()
+        with urllib.request.urlopen(urllib.request.Request(base + "/v1/models"), timeout=2) as r:
+            body = r.read()
+        t.ok(json.loads(body) == {"data": [{"id": "stub"}]} and [row[0] for row in seen] == [source.server_port, dest.server_port]
+             and all(row[3] is None for row in seen),
+             "redirect: without a bearer a cross-origin redirect is followed as urllib always did", repr(seen))
+
+        kind, hint, sends = chat("/v1/chat/completions?moved")
+        t.ok(kind == "bad" and "HTTP 405" in hint and sends == 1 and on_origin(2) and [row[1] for row in seen] == ["POST", "GET"],
+             "redirect: a same-origin redirect of the chat POST replays as a GET the endpoint refuses; the token stayed home", hint)
+        kind, hint, sends = chat("/v1/chat/completions?moved", 307)
+        t.ok(kind == "bad" and hint == "%s answered HTTP 307, %s" % (base, wire.REDIRECT_REFUSED) and sends == 1 and on_origin(1),
+             "redirect: a 307 of the chat POST is one urllib does not follow; the line says so and the send is counted", hint)
+        kind, hint, sends = chat(other + "/v1/chat/completions?moved")
+        t.ok(kind == "bad" and hint == "%s answered HTTP 302, %s" % (base, wire.REDIRECT_REFUSED) and sends == 1 and on_origin(1),
+             "redirect: the chat POST never follows a bearer to another origin; the line says so and the send is counted", hint)
+        kind, hint, sends = chat("/loop")
+        t.ok(kind == "bad" and hint == "%s answered HTTP 302, %s" % (base, wire.REDIRECT_REFUSED) and 1 < len(seen) < 12
+             and on_origin(len(seen)),
+             "redirect: a loop is bounded by urllib and says the same line", hint)
     finally:
+        if saved is None:
+            os.environ.pop("SPARK_API_KEY", None)
+        else:
+            os.environ["SPARK_API_KEY"] = saved
         for server in servers:
             server.shutdown()
             server.server_close()

@@ -80,7 +80,7 @@ def peer_models(cfg):
         return None
     try:
         req = Request(cfg.peer_ai_url.rstrip("/") + "/api/models", headers=wire._headers(cfg, forge=True))
-        with wire.urlopen(req, timeout=wire.HEALTH_TIMEOUT) as r:
+        with urlopen(req, timeout=wire.HEALTH_TIMEOUT) as r:
             d = json.load(r)
         return d if isinstance(d, dict) and isinstance(d.get("models"), list) else None
     except (HTTPError, URLError, OSError, ValueError):

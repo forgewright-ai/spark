@@ -39,6 +39,9 @@ class BrainError(Exception):
         self.kind, self.hint = kind, hint
 
 
+REDIRECT_REFUSED = "a redirect spark did not follow -- use the server's direct URL on the configured origin"
+
+
 def _origin(url):
     """Scheme, case-insensitive host and effective port; never DNS identity."""
     parsed = urllib.parse.urlsplit(url)
@@ -49,6 +52,11 @@ def _origin(url):
 
 
 class _OriginRedirect(urllib.request.HTTPRedirectHandler):
+    """A redirect carrying a bearer is followed only on the origin the
+    request went to. Any other target is refused as the HTTP error the
+    redirect was: the caller sees the status, and the request counts
+    as sent, since it did leave, to the configured origin."""
+
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         if req.has_header("Authorization"):
             try:
@@ -56,23 +64,14 @@ class _OriginRedirect(urllib.request.HTTPRedirectHandler):
             except ValueError:
                 same = False
             if not same:
-                if fp is not None:
-                    fp.close()
-                raise urllib.error.URLError("credentialed redirect refused -- use the server's direct URL on the configured origin")
+                raise urllib.error.HTTPError(req.full_url, code, REDIRECT_REFUSED, headers, fp)
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-def urlopen(req, timeout=HEALTH_TIMEOUT):
-    """Open without forwarding authorization outside the requested origin."""
-    if not req.has_header("Authorization"):
-        return urllib.request.urlopen(req, timeout=timeout)
-    try:
-        return urllib.request.build_opener(_OriginRedirect()).open(req, timeout=timeout)
-    except urllib.error.HTTPError as e:
-        if e.code in (301, 302, 303, 307, 308):
-            e.close()
-            raise urllib.error.URLError("redirect loop or unsupported redirect -- use the server's direct URL") from e
-        raise
+# Installed once, on the opener every urlopen in the process uses (cli
+# imports wire): no call site has to remember. A request without a
+# bearer keeps urllib's own rules.
+urllib.request.install_opener(urllib.request.build_opener(_OriginRedirect()))
 
 
 # ------------------------------------------------------------------ token
@@ -165,7 +164,7 @@ LOADING = "loading the model -- ask again in a moment"
 def health(url, timeout=HEALTH_TIMEOUT):
     """'ok' | 'loading' | 'down' for a llama-server base URL"""
     try:
-        with urlopen(urllib.request.Request(url + "/health"), timeout=timeout) as r:
+        with urllib.request.urlopen(urllib.request.Request(url + "/health"), timeout=timeout) as r:
             return "ok" if r.status == 200 else "down"
     except urllib.error.HTTPError as e:
         return "loading" if e.code == 503 else "down"
@@ -183,7 +182,7 @@ def forge_health(url, timeout=HEALTH_TIMEOUT, cfg=None):
     time an upstream was resolved; a FORGE ignores the header here."""
     headers = _headers(cfg) if cfg is not None else {}
     try:
-        with urlopen(urllib.request.Request(url + "/api/health", headers=headers), timeout=timeout) as r:
+        with urllib.request.urlopen(urllib.request.Request(url + "/api/health", headers=headers), timeout=timeout) as r:
             d = json.load(r)
         return d if isinstance(d, dict) and d.get("forge") is True else None
     except urllib.error.HTTPError:
@@ -211,7 +210,7 @@ def _status(url, path, method="GET", headers=None, body=None, timeout=5.0):
     """(HTTP status, headers) of one request; (0, {}) when nothing answers."""
     req = urllib.request.Request(url + path, data=body, headers=headers or {}, method=method)
     try:
-        with urlopen(req, timeout=timeout) as r:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
             return r.status, r.headers
     except urllib.error.HTTPError as e:
         return e.code, e.headers
@@ -267,7 +266,7 @@ def models(cfg, url, timeout=HEALTH_TIMEOUT, forge=False):
     BrainError(auth) when the token is refused; [] when nothing answers."""
     try:
         req = urllib.request.Request(url + "/v1/models", headers=_headers(cfg, forge=forge))
-        with urlopen(req, timeout=timeout) as r:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
             d = json.load(r)
         out = []
         for e in d["data"]:
@@ -412,7 +411,7 @@ def props_ctx(cfg, url, timeout=HEALTH_TIMEOUT):
     """n_ctx of a llama-server (GET /props, default_generation_settings),
     0 when it does not say."""
     try:
-        with urlopen(urllib.request.Request(url + "/props", headers=_headers(cfg)), timeout=timeout) as r:
+        with urllib.request.urlopen(urllib.request.Request(url + "/props", headers=_headers(cfg)), timeout=timeout) as r:
             n = json.load(r)["default_generation_settings"]["n_ctx"]
         return n if isinstance(n, int) and not isinstance(n, bool) and n > 0 else 0
     except (urllib.error.URLError, OSError, ValueError, KeyError, TypeError):
@@ -593,7 +592,7 @@ def _send(cfg, url, data, timeout, forge=False, sent=None):
     this machine either way. A server nothing reached is not a send."""
     req = urllib.request.Request(url + "/v1/chat/completions", data=data, headers=_headers(cfg, forge=forge))
     try:
-        r = urlopen(req, timeout=timeout)
+        r = urllib.request.urlopen(req, timeout=timeout)
     except urllib.error.HTTPError as e:
         if sent is not None:
             sent(_sent(url, data))
@@ -601,6 +600,8 @@ def _send(cfg, url, data, timeout, forge=False, sent=None):
             raise BrainError("auth", _auth_hint(cfg, url, forge))
         if e.code == 503:
             raise BrainError("loading", LOADING)
+        if e.code in (301, 302, 303, 307, 308):
+            raise BrainError("bad", "%s answered HTTP %d, %s" % (url, e.code, REDIRECT_REFUSED))
         # a FORGE classifies its own failures: the body is
         # {"error": {"kind", "hint"}}. Honour it -- a 502 while the forge
         # re-resolves a just-restarted upstream is "loading", not a raw
