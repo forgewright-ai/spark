@@ -75,7 +75,9 @@ spark chat                      talk with the model
   text.
 - `spark model list`: the models and their licenses.
 - `spark mcp`: the tools of the MCP servers you put on its list, such
-  as the parts of a desktop. A tool that can destroy asks you first.
+  as the parts of a desktop. Every tool asks you to type `yes` until
+  you grant trust with `spark mcp trust NAME on`; `off` takes it back.
+  A trusted tool that can destroy still asks.
 - `spark serve on`: use this machine's model from a browser or another
   machine.
 - `spark voice on`: spark reads aloud.

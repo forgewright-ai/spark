@@ -14,7 +14,7 @@
 # name refused; where the server's rows resource names that tool with its
 # arguments, the call names one of them exactly; and a person saw the
 # step. A tool's annotations are believed only from a trusted server
-# (TRUSTED_CHAIN, or MCP_SERVER_<NAME>_TRUST=yes): there a destructive
+# (MCP_SERVER_<NAME>_TRUST=yes): there a destructive
 # tool takes the typed yes; from any other server every tool does. No
 # terminal to type it at: refused. Every tools/call sent is one sealed
 # audit record, `mcp/call`: names and a digest, never an argument or a
@@ -55,10 +55,8 @@ ARG_WORD = re.compile(r"^[a-z][a-z0-9_]{0,31}$")          # an argument's name a
 ENUM_WORD = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,39}$")   # a choice a brief may name; any other enum reads TEXT
 TRUST_SUFFIX = "_TRUST"
 
-# The programs trusted by default: the trusted chain. A server whose
-# program, its link resolved, carries one of these names, and whose file
-# and directory only its owner or root may write, is trusted unless its
-# _TRUST key says no. A named line each, so it can be argued with.
+# Former automatic-trust names, used only to explain migration.
+# A name or repository match never grants trust.
 TRUSTED_CHAIN = (
     "spark",          # spark itself
     "spark-shell",    # the seat: the desktop's providers, one server a part
@@ -146,10 +144,11 @@ USAGE = """spark mcp -- the MCP servers spark may start, and their tools
 
   The list is ~/.config/spark/mcp.env, one line a server:
   MCP_SERVER_NAME="/absolute/path words". A server not on it is never
-  started. spark's own programs, the trusted chain, are trusted; any
-  other only with spark mcp trust NAME on (spark mcp says which). A
-  tool that changes things asks you to type yes, unless a trusted
-  server says it destroys nothing.
+  started. Every server starts without trust. spark mcp trust NAME on
+  lets its tool hints govern confirmation; off takes that grant back.
+  Without trust, every tool asks you to type yes. With trust, a tool
+  that says it may destroy still asks. Existing yes and no grants stay;
+  servers once trusted by their name or repository need a local grant.
 """
 
 
@@ -294,10 +293,7 @@ def _origin(path):
 
 
 def chain_member(prog):
-    """The trusted chain's name `prog` carries, its link resolved, when
-    it lives in a clone of that very forgewright-ai repository (another
-    project's program of the same name, or a file of that name anywhere
-    else, is not the chain), or ''."""
+    """The former automatic-trust name, for migration messages only."""
     if not os.path.isabs(prog):
         return ""
     real = os.path.realpath(prog)
@@ -329,15 +325,14 @@ def specs(path=None):
         argv = val.split()
         problem = program_problem(argv[0]) if argv else "no program"
         trust = kv.get(key + TRUST_SUFFIX, "")
-        member = chain_member(argv[0]) if argv else ""
         if trust == "yes":
             trusted, why = True, "trusted (spark mcp trust)"
         elif trust == "no":
             trusted, why = False, "not trusted (spark mcp trust)"
-        elif member and not problem:
-            trusted, why = True, "trusted (the trusted chain: %s)" % member
         else:
-            trusted, why = False, "not trusted"
+            trusted = False
+            why = "automatic trust ended" if argv and chain_member(argv[0]) else "not trusted"
+            why += " -- spark mcp trust %s on to trust it" % name
         out.append(Spec(name, argv, trusted, why, problem))
     return out
 
@@ -1144,14 +1139,15 @@ _LINE = re.compile(r"^([a-z][a-z0-9_]{0,31})\t([a-z][a-z0-9_]{0,63})\t(t?r?y?|-)
 def tool_lines(path=None):
     """[(server, tool, flags, args, title)] from TOOLS_FILE, read line by
     line, never sourced: a line of another shape is dropped, and so is a
-    server no longer on the list."""
+    server no longer on the list. Cached trust never overrides the
+    current local grant."""
     try:
         with open(path or TOOLS_FILE, encoding="utf-8", errors="replace") as f:
             raw = f.read(64 * 1024).splitlines()
     except OSError:
         return []
     try:
-        on = {s.name for s in specs() if not s.problem}
+        on = {s.name: s.trusted for s in specs() if not s.problem}
     except (SystemExit, Refused):
         return []
     out = []
@@ -1160,6 +1156,8 @@ def tool_lines(path=None):
         if not m or m.group(1) not in on:
             continue
         server, tool, flags, args, title = m.groups()
+        if not on[server]:
+            flags = "y"
         if title != "-" and not TITLE.match(title):
             continue
         if args != "-" and not all(_ARG.match(a) for a in args.split(" ")):
@@ -1243,7 +1241,7 @@ def _refuse(why, rc=2):
 def _list_one(sp, verbose):
     """The lines for one server, and its tool lines for TOOLS_FILE."""
     head = "%-10s %-12s %s" % (sp.name, "trusted" if sp.trusted else "not trusted", home_short(" ".join(sp.argv)))
-    if verbose:
+    if verbose or not sp.trusted:
         head += "\n  %s" % sp.why
     if sp.problem:
         return [head, "  ! %s" % sp.problem], []

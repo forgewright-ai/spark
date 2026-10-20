@@ -21,6 +21,7 @@ import tempfile
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from unittest.mock import patch
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TMP = tempfile.mkdtemp(prefix="spark-mcp-")
@@ -33,7 +34,7 @@ os.environ.update({"HOME": HOME, "XDG_CONFIG_HOME": HOME + "/.config", "XDG_STAT
                    "XDG_DATA_HOME": HOME + "/.local/share", "SPARK_NO_REFRESH": "1", "LANG": "C.UTF-8",
                    "SPARK_TIMEOUT": "10"})
 sys.path.insert(0, os.path.join(REPO, "lib"))
-from spark import audit, do, mcp, persona, steps, wire  # noqa: E402
+from spark import audit, check as checks, do, mcp, persona, steps, wire  # noqa: E402
 
 FAILED = 0
 
@@ -178,7 +179,8 @@ put_list('MCP_SERVER_STUB="%s ok"' % STUB_PATH)
 sp = mcp.spec("stub")
 check("M6: a server is a named line: MCP_SERVER_<NAME>=\"<absolute path> [words]\"",
       sp.argv == [STUB_PATH, "ok"] and sp.problem == "", vars(sp) if hasattr(sp, "__dict__") else sp.argv)
-check("H2: a server outside the trusted chain is not trusted by default", not sp.trusted and sp.why == "not trusted", sp.why)
+check("H2: a server needs a local grant, with the command to make one",
+      not sp.trusted and "spark mcp trust stub on" in sp.why, sp.why)
 check("M6: a program that is not an absolute path is not started",
       "not an absolute path" in mcp.program_problem("stub-server"), mcp.program_problem("stub-server"))
 os.chmod(STUB_PATH, 0o777)
@@ -205,7 +207,7 @@ check("M6: spark mcp add refuses a program that is not an absolute path", rc == 
 check("M6: the server's environment is ENV_KEEP and nothing else",
       set(mcp.env()) <= set(mcp.ENV_KEEP) and "SPARK_TIMEOUT" not in mcp.env(), sorted(mcp.env()))
 
-# the trusted chain: a link named spark-shell to a program only its owner writes
+# Migration: descriptive repository metadata is not a local trust grant.
 CLONE = os.path.join(TMP, "clone")
 os.makedirs(os.path.join(CLONE, ".git"))
 os.chmod(CLONE, 0o755)
@@ -219,13 +221,77 @@ shutil.copy(STUB_PATH, ELSEWHERE)
 os.chmod(ELSEWHERE, 0o755)
 put_list('MCP_SERVER_STUB="%s ok"' % STUB_PATH, 'MCP_SERVER_SEAT="%s ok"' % CHAIN,
          'MCP_SERVER_OFF="%s ok"' % CHAIN, "MCP_SERVER_OFF_TRUST=no")
-check("H2: the trusted chain (spark-shell) is trusted by default", mcp.spec("seat").trusted, mcp.spec("seat").why)
-check("H2: trust is a separate explicit key: _TRUST=no turns a chain member off", not mcp.spec("off").trusted,
+check("H2: a formerly automatic server now needs an explicit local grant",
+      not mcp.spec("seat").trusted and "spark mcp trust seat on" in mcp.spec("seat").why, mcp.spec("seat").why)
+check("H2: an existing explicit no stays untrusted", not mcp.spec("off").trusted,
       mcp.spec("off").why)
 check("H2: a key ending _TRUST is no server", [s.name for s in mcp.specs()] == ["stub", "seat", "off"],
       [s.name for s in mcp.specs()])
-check("H2: a program named spark-shell outside a clone of that repository is not the chain",
-      mcp.chain_member(ELSEWHERE) == "" and mcp.chain_member(CHAIN) == "spark-shell", mcp.chain_member(ELSEWHERE))
+check("H2: the check row counts only explicit local grants",
+      checks.row_mcp(None).value == "3 servers on the list, 0 locally trusted", checks.row_mcp(None).value)
+rc, text = mcp.call_line("seat", "echo", args={"text": "hello"}, tty=False)
+check("H2: descriptive metadata and read-only hints do not waive confirmation",
+      rc == 1 and "asks a typed yes" in text, text)
+mcp.write_tools(["seat\techo\ttr\ttext=TEXT\told title"])
+check("H2: migration downgrades cached trust before another listing",
+      mcp.tool_lines() == [("seat", "echo", "y", "text=TEXT", "old title")]
+      and "old title" not in mcp.brief_tools()
+      and mcp.line_danger("spark mcp call seat echo text=hello"), mcp.tool_lines())
+rc, out, _ = spark("mcp", "trust", "seat", "on")
+check("H2: a local grant is explicit and kept", rc == 0 and mcp.spec("seat").trusted
+      and mcp.read_list()["MCP_SERVER_SEAT_TRUST"] == "yes", out)
+rc, text = mcp.call_line("seat", "echo", args={"text": "hello"}, tty=False)
+check("H2: an existing yes permits a read-only call", rc == 0 and text == "hello", text)
+check("H2: the check row reports a local grant",
+      checks.row_mcp(None).value == "3 servers on the list, 1 locally trusted", checks.row_mcp(None).value)
+rc, out, _ = spark("mcp", "trust", "seat", "off")
+check("H2: trust off revokes a local grant", rc == 0 and not mcp.spec("seat").trusted
+      and mcp.read_list()["MCP_SERVER_SEAT_TRUST"] == "no", out)
+rc, text = mcp.call_line("seat", "echo", args={"text": "hello"}, tty=False)
+check("H2: revocation restores confirmation", rc == 1 and "asks a typed yes" in text, text)
+for decision in ("no", "invalid", "", None):
+    put_list('MCP_SERVER_SEAT="%s ok"' % CHAIN,
+             "MCP_SERVER_SEAT_TRUST=" + decision if decision is not None else "# no local grant")
+    mcp.write_tools(["seat\techo\ttr\ttext=TEXT\told title"])
+    check("H2: cached hints cannot override local policy (%s)" % ("missing" if decision is None else decision or "empty"),
+          not mcp.spec("seat").trusted and mcp.line_danger("spark mcp call seat echo text=hello")
+          and "old title" not in mcp.brief_tools(), mcp.tool_lines())
+rc, out, _ = spark("mcp", "trust", "seat", "on")
+check("H2: revocation is reversible", rc == 0 and mcp.spec("seat").trusted, out)
+rc, out, _ = spark("mcp", "rm", "seat")
+check("H2: removing a server also removes its grant", rc == 0
+      and "MCP_SERVER_SEAT_TRUST" not in mcp.read_list() and not mcp.tool_lines(), out)
+rc, out, _ = spark("mcp", "add", "seat", ELSEWHERE, "ok")
+check("H2: adding a server starts untrusted and explains how to grant trust", rc == 0
+      and not mcp.spec("seat").trusted and "spark mcp trust seat on" in out, out)
+
+# Both policies keep the same executable, ownership and ancestor checks.
+for decision in ("yes", "no"):
+    put_list('MCP_SERVER_SEAT="%s ok"' % CHAIN, "MCP_SERVER_SEAT_TRUST=" + decision)
+    for target, mode in ((CHAIN, 0o777), (CLONE, 0o777), (CHAIN, 0o644)):
+        original = stat.S_IMODE(os.stat(target).st_mode)
+        os.chmod(target, mode)
+        before = log_lines()
+        try:
+            mcp.start("seat")
+            check("H2: unsafe paths refuse startup with trust=" + decision, False)
+        except mcp.Refused:
+            check("H2: unsafe paths refuse startup with trust=" + decision,
+                  log_lines() == before and bool(mcp.spec("seat").problem))
+        finally:
+            os.chmod(target, original)
+    real_stat = os.stat
+    def foreign_owner(path, *args, **kwargs):
+        st = real_stat(path, *args, **kwargs)
+        if path == CHAIN:
+            values = list(st)
+            values[4] = os.getuid() + 10001
+            return os.stat_result(values)
+        return st
+    with patch.object(mcp.os, "stat", side_effect=foreign_owner):
+        check("H2: ownership is required with trust=" + decision,
+              "someone else's" in mcp.spec("seat").problem, mcp.spec("seat").problem)
+put_list('MCP_SERVER_STUB="%s ok"' % STUB_PATH)
 check("credentials are whole words of a name: mapping and encode are none; api_token, apitoken and pin are",
       not mcp.secret("mapping") and not mcp.secret("encode") and mcp.secret("api_token") and mcp.secret("apitoken")
       and mcp.secret("pin"), "")

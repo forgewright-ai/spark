@@ -10,6 +10,10 @@
 
 ## v1.90.1
 
+- S1: MCP trust could follow a program's name and repository metadata.
+  Trust now needs an explicit local grant. Existing yes and no grants
+  stay, and cached tools follow the current choice immediately (#44)
+
 - S3: the first kept line of a read could take longer than its recorded
   total. Both times now include answer setup and the final output (#35)
 - S1: a failed sandbox apply could discard the copy; it now stops,

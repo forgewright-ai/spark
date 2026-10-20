@@ -2058,14 +2058,12 @@ and may change freely.
     `mcp.ARG_WORD`. Every string a server hands on passes `mcp.scrub`:
     `text.printable`, then `mcp.ZERO_WIDTH`, a named line each. A tool's
     description never rides a request, a brief or a record. Trust. A
-    tool's annotations are believed only from a trusted server. That is
-    `mcp.TRUSTED_CHAIN`, spark's own programs, a named line each. A
-    program counts when its name, the link resolved, is one of them. It
-    must live in a clone of that very forgewright-ai repository
-    (`mcp.chain_member`, by the clone's origin). Another program of that
-    name is not the chain. Or it is a server whose
-    `MCP_SERVER_<NAME>_TRUST` is `yes` (`spark mcp trust NAME on|off`),
-    and `no` turns a chain member off. The spec's defaults hold: no
+    tool's annotations are believed only with a local grant:
+    `MCP_SERVER_<NAME>_TRUST=yes` (`spark mcp trust NAME on`). `off`
+    writes `no`. Existing explicit decisions stay; missing or other
+    values grant no trust. Name and repository matches only explain
+    why former automatic trust ended (`mcp.chain_member`). Trust never
+    bypasses path checks. The spec's defaults hold: no
     readOnlyHint is false, and no destructiveHint is true. From a
     trusted server a tool that may destroy takes the typed `yes`. From
     any other server every tool does (`Tool.needs_yes`). The gate comes
@@ -2111,6 +2109,8 @@ and may change freely.
     lists the resources or reads one. `--watch` subscribes and reads it
     again on each `notifications/resources/updated`, until `Ctrl-C`. The
     prompt line never starts a server or talks to one (contract 4).
+    Cached trust flags need a local grant now; without one every cached
+    tool asks `yes`, even before a new listing.
     `persona.prefix` carries `mcp.brief_tools()`: the tools file, read
     line by line and never sourced. Each line is held to its shape
     (`mcp._LINE`, `mcp._ARG`) and dropped when its server is off the
@@ -2153,7 +2153,7 @@ and may change freely.
     lines and a tool's result in do. The `mcp` check row reads the list
     and never starts a server. It is na with no server, and a warn when
     others may write `mcp.env`, a line is not `KEY=value`, or a program
-    is one spark would refuse to start.
+    is one spark would refuse to start. Its trust count is local grants.
 
 ## The grammar
 

@@ -1324,7 +1324,7 @@ def row_mcp(ctx):
     if bad:
         return warn("%s: %s" % (bad[0].name, bad[0].problem), "spark mcp rm %s" % bad[0].name)
     trusted = sum(1 for s in specs if s.trusted)
-    return ok("%d server%s on the list, %d trusted" % (len(specs), "" if len(specs) == 1 else "s", trusted))
+    return ok("%d server%s on the list, %d locally trusted" % (len(specs), "" if len(specs) == 1 else "s", trusted))
 
 
 @row("NONFUNCTIONAL")

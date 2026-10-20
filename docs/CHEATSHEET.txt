@@ -87,8 +87,8 @@ MCP TOOLS (the servers on the list, ~/.config/spark/mcp.env)
   spark mcp [NAME]                the servers, their tools and arguments
   spark mcp add NAME PATH [WORDS] put a server on the list
   spark mcp rm NAME               take a server off the list
-  spark mcp trust NAME [on|off]   believe what its tools say of themselves
-  spark mcp call NAME TOOL K=V    run one tool. One that can destroy asks yes
+  spark mcp trust NAME [on|off]   grant trust in its tool hints, or revoke it
+  spark mcp call NAME TOOL K=V    run a tool; without trust, every tool asks yes
   spark mcp read NAME [URI]       its resources. --watch shows each change
   spark steps <words> < TOOLS     the tool calls for the words, as JSON
 

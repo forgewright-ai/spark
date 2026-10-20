@@ -11925,9 +11925,7 @@ site.cmd_headless([])
     # palette any renderer may write), the three SPARK_*_SGR variables,
     # `spark bar line`. A hit names file:line.
     _guard = re.compile(r"spark-shell|(?i:shell layer)|SITE_SHELL|shell-moved|THEME_BTOP|state/prompt")
-    # v1.90: the trusted chain is his word (spark, spark-shell, spark-acp),
-    # and issue 23's review names it: one named line of mcp.TRUSTED_CHAIN
-    # may carry the name, and no other line of a core file
+    # Historical provider names may appear only in the migration list.
     _CHAIN_FILE, _CHAIN_LINE = os.path.join(REPO, "lib", "spark", "mcp.py"), '"spark-shell",'
     _hits = []
     for _r in ("bin", "lib", "home", "linux", "templates", "themes", "get", "bootstrap.sh", "install.sh", "uninstall"):
@@ -11946,7 +11944,7 @@ site.cmd_headless([])
                 continue                    # an image, a font
             for _n, _l in enumerate(_raw.decode("utf-8", "replace").split("\n"), 1):
                 if _f == _CHAIN_FILE and _l.lstrip().startswith(_CHAIN_LINE):
-                    continue                # the one named line, below
+                    continue                # migration metadata, never a trust grant
                 if _guard.search(_l):
                     _hits.append("%s:%d" % (os.path.relpath(_f, REPO), _n))
     t.ok(not _hits, "core knows nothing of a shell layer: no core file names one (bin, lib, home, linux, templates, themes, get, bootstrap.sh, install.sh)",

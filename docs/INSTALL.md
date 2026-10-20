@@ -323,10 +323,15 @@ spark mcp call notes add_note text=milk
 - `spark mcp call NAME TOOL KEY=VALUE` runs one tool. A value is typed
   as the tool takes it: a number, `yes` or `no`, or text. A password is
   asked for, never typed on the line.
-- A tool that changes something asks you to type `yes`, unless its
-  server is trusted and the tool says it destroys nothing. spark's own
-  programs are trusted, and `spark mcp` says which server is. `spark
-  mcp trust NAME on` trusts another, `off` takes it back.
+- Every tool asks you to type `yes` until you grant trust with `spark
+  mcp trust NAME on`. Trust lets the tool's hints govern confirmation;
+  a tool that says it may destroy still asks. `off` takes trust back.
+  `spark mcp` shows which servers you trust.
+- After an update, existing explicit `yes` and `no` grants stay.
+  A server once trusted by its name or repository now needs your grant,
+  including spark's own programs. Until then every call asks for `yes`,
+  and a call without a terminal is refused. Cached tools follow that
+  choice immediately.
 - The prompt line, `spark do` and `/do` in a chat know the tools
   `spark mcp` listed last. A tool step is a `spark mcp call` line: you
   read it before `Enter`, as any other step. Inside `--sandbox` a tool
@@ -706,7 +711,7 @@ mcp add`, `rm` and `trust`:
 | key | what | default |
 |---|---|---|
 | `MCP_SERVER_<NAME>` | a server: its program's absolute path, then its words | none |
-| `MCP_SERVER_<NAME>_TRUST` | `yes` or `no`: believe what its tools say of themselves | `yes` for spark's own programs |
+| `MCP_SERVER_<NAME>_TRUST` | `yes` grants trust in its tool hints; `no` takes it back | no trust |
 
 Root. spark uses `sudo` for the package manager, the hostname, the
 `render` group, Void's one service, `spark serve boot on` and `spark
